@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>選擇註冊身份 | AI履歷平台</title>
+  <style>
+    body {
+      background-color: #ffffff;
+      font-family: "Segoe UI", "微軟正黑體", sans-serif;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      margin: 0;
+    }
+
+    #wrapper {
+      text-align: center;
+    }
+
+    h1 {
+      margin-bottom: 30px;
+      color: #000;
+    }
+
+    .register-button {
+      display: block;
+      width: 250px;
+      margin: 15px auto;
+      padding: 15px;
+      font-size: 18px;
+      font-weight: bold;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: background-color 0.3s;
+      color: white;
+    }
+
+    .Administrative {
+      background-color: #28a745;
+    }
+
+    .Administrative:hover {
+      background-color: #218838;
+    }
+
+    .teacher {
+      background-color: #28a745;
+    }
+
+    .teacher:hover {
+      background-color: #218838;
+    }
+
+    .student {
+      background-color: #28a745;
+    }
+
+    .student:hover {
+      background-color: #218838;
+    }
+
+    .back {
+      margin-top: 20px;
+      font-size: 16px;
+      color: #333;
+      text-decoration: underline;
+      cursor: pointer;
+    }
+
+    .back:hover {
+      color: #666;
+    }
+  </style>
+</head>
+
+<body>
+  <div id="wrapper">
+    <h1>請選擇註冊身份</h1>
+    <button class="register-button student" onclick="location.href='register_Administrative.html'">行政人員</button>
+    <button class="register-button teacher" onclick="location.href='register_teacher.html'">教師</button>
+    <button class="register-button student" onclick="location.href='register_student.html'">學生</button>
+    <br>
+    <input type="button" value="返回登入" class="back-button" onclick="location.href='login.html'" /></div>
+</body>
+
+</html>
