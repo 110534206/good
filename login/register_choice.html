@@ -21,16 +21,16 @@
     }
 
     h1 {
-      margin-bottom: 30px;
+      margin-bottom: 50px;
       color: #000;
     }
 
     .register-button {
       display: block;
       width: 250px;
-      margin: 15px auto;
-      padding: 15px;
-      font-size: 18px;
+      margin: 30px auto;
+      padding: 50px;
+      font-size: 20px;
       font-weight: bold;
       border: none;
       border-radius: 8px;
@@ -40,40 +40,42 @@
     }
 
     .Administrative {
-      background-color: #28a745;
+      background-color: #388f6f;
     }
 
     .Administrative:hover {
-      background-color: #218838;
+      background-color: #a5ccae;
     }
 
     .teacher {
-      background-color: #28a745;
+      background-color:#388f6f;
     }
 
     .teacher:hover {
-      background-color: #218838;
+      background-color: #a5ccae;
     }
 
     .student {
-      background-color: #28a745;
+      background-color:#388f6f;
     }
 
     .student:hover {
-      background-color: #218838;
+      background-color:#a5ccae;
     }
 
-    .back {
-      margin-top: 20px;
-      font-size: 16px;
-      color: #333;
-      text-decoration: underline;
+    .back-button {
+      margin-top: -20px;
+      color: #000000;
+      background: transparent;
+      border: none;
+      font-size: 20px;
       cursor: pointer;
+      text-decoration: underline;
+    }
+    .back-button:hover {
+      color: #5a6268;
     }
 
-    .back:hover {
-      color: #666;
-    }
   </style>
 </head>
 
@@ -84,7 +86,8 @@
     <button class="register-button teacher" onclick="location.href='register_teacher.html'">教師</button>
     <button class="register-button student" onclick="location.href='register_student.html'">學生</button>
     <br>
-    <input type="button" value="返回登入" class="back-button" onclick="location.href='login.html'" /></div>
+    <input type="button" value="返回首頁" class="back-button" onclick="location.href='login.html'" />
+  </div>
 </body>
 
 </html>

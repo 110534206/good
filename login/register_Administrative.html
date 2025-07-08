@@ -6,58 +6,36 @@
   <title>行政人員註冊 | AI履歷平台</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <style>
-    html {
+    body,html {
       height: 100%;
+      margin: 0;
       font-family: "Segoe UI", "微軟正黑體", sans-serif;
-    }
-    body {
       background: url("login_pc.png") no-repeat center center fixed;
       background-size: cover;
-      min-height: 100vh;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      margin: 0;
-      padding: 0;
     }
-    .overlay {
-      position: fixed;
-      width: 100%;
-      height: 100%;
-      backdrop-filter: blur(6px);
-      background-color: rgba(114, 110, 110, 0);
-      z-index: -1;
-    }
-    #wrapper {
+
+     #wrapper {
       max-width: 500px;
-      width: 100%;
-      margin: 0 auto;
+      margin: 140px auto;
       padding: 40px;
       border-radius: 10px;
       box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
       background-color: #ffffff;
     }
-
     h1 {
       text-align: center;
       color: #000000;
     }
-
     .field {
       margin-bottom: 20px;
       position: relative;
     }
-
     label {
       display: block;
       margin-bottom: 8px;
       color: #000000;
     }
-
-    input[type="text"],
-    input[type="password"],
-    input[type="email"],
-    select {
+    input[type="text"], input[type="password"] {
       background-color: #ffffff;
       border: 1px solid #000000;
       color: #000000;
@@ -66,14 +44,13 @@
       width: 100%;
       box-sizing: border-box;
     }
-
     input[type="submit"] {
       display: flex;
       justify-content: center;
       align-items: center;
       height: 48px;
       width: 100%;
-      background-color: #28a745;
+      background-color: #388f6f;
       color: #ffffff;
       font-size: 16px;
       font-weight: bold;
@@ -82,25 +59,21 @@
       cursor: pointer;
       transition: background-color 0.3s;
     }
-
     input[type="submit"]:hover {
-      background-color: #218838;
+      background-color: #a5ccae;
     }
-
     .back-button {
       margin-top: 10px;
       color: #000000;
-      background-color: transparent;
+      background: transparent;
       border: none;
       font-size: 16px;
       cursor: pointer;
       text-decoration: underline;
     }
-
     .back-button:hover {
       color: #5a6268;
     }
-
     .toggle-password {
       position: absolute;
       top: 70%;
@@ -132,7 +105,7 @@
         <input type="submit" value="註冊" />
       </div>
       <div class="field">
-     <input type="button" value="返回上一頁" class="back-button" onclick="location.href='register_choice.html'" />      </div>
+     <input type="button" value="返回上一頁" class="back-button" onclick="location.href='register_choice.html'" /></div>
     </form>
   </div>
   <script>
