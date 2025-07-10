@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>智慧實習平台-1登入</title>
+  <title>智慧實習平台-登入</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
 
   <style>
@@ -213,11 +213,15 @@
 
         const username = document.getElementById("username").value;
         const password = document.getElementById("password").value;
+		const roleSelect = document.getElementById("role").value;
 
         if (username === "user" && password === "1234") {
-          alert("登入成功！");
-          // 實際導向頁面可改為：
-          // window.location.href = "home.html";
+            // 儲存登入狀態
+            localStorage.setItem("username", username);
+            localStorage.setItem("role", roleSelect);
+
+            // 導向首頁
+            window.location.href = "index.html";
         } else {
           document.getElementById("error-message").style.display = "block";
         }
