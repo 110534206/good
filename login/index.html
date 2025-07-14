@@ -43,11 +43,24 @@
             left: 0;
             box-shadow: 2px 0 8px rgba(0,0,0,0.2);
         }
-        #side-menu h2 {
-            margin-bottom: 1rem;
+        #side-menu h1 {
+            margin: 40px 0 0.5rem 0;
             font-size: 1.5rem;
-            border-bottom: 1px solid #ddd;
             padding-bottom: 0.5rem;
+        }
+        .menu-divider {
+            width: 80%;
+            margin: 0.5rem 0 1rem 0;
+            border: none;
+            border-top: 3px solid #ccc;
+        }
+        #menu-search {
+            margin-bottom: 1rem;
+            padding: 0.5rem;
+            font-size: 1rem;
+            width: 90%;
+            border: 1px solid #ccc;
+            border-radius: 5px;
         }
         #side-menu a {
             margin: 0.5rem 0;
@@ -131,13 +144,11 @@
     }
 
     document.addEventListener("DOMContentLoaded", () => {
-        // 顯示個人歡迎語
         document.getElementById("welcome-name").textContent = `${username}（${role}）`;
 
-        // 控制卡片顯示
         const cards = document.querySelectorAll(".card");
         if (role === "teacher") {
-            cards[0].style.display = "none"; // 上傳履歷
+            cards[0].style.display = "none";
         } else if (role === "director") {
             cards[0].style.display = "none";
             cards[1].style.display = "none";
@@ -145,7 +156,6 @@
             cards.forEach(c => c.style.display = "none");
         }
 
-        // 點頭像前往個人資料
         const avatar = document.getElementById("login-avatar");
         if (avatar) {
             avatar.addEventListener("click", () => {
@@ -170,7 +180,10 @@
 <!-- 左側選單 -->
 <nav id="side-menu" aria-hidden="true">
     <h1>選單</h1>
-    <hr style="width: 80%; margin: 0.5rem auto; border: none; border-top: 3px solid #ccc;">
+    <hr class="menu-divider">
+
+    <input type="text" id="menu-search" placeholder="搜尋功能...">
+
     <a href="index.html">首頁</a>
     <a href="profile.html">個人資料</a>
     <a href="#">上傳履歷</a>
@@ -211,7 +224,7 @@
     </div>
 </section>
 
-<!-- JS: 漢堡選單 -->
+<!-- JS: 漢堡選單 + 搜尋篩選 -->
 <script>
     const menuBtn = document.getElementById("menu-btn");
     const sideMenu = document.getElementById("side-menu");
@@ -219,6 +232,18 @@
     menuBtn.addEventListener("click", () => {
         const isOpen = sideMenu.classList.toggle("open");
         sideMenu.setAttribute("aria-hidden", !isOpen);
+    });
+
+    // 🔍 搜尋功能
+    const searchInput = document.getElementById("menu-search");
+    const menuLinks = sideMenu.querySelectorAll("a");
+
+    searchInput.addEventListener("input", () => {
+        const keyword = searchInput.value.toLowerCase();
+        menuLinks.forEach(link => {
+            const text = link.textContent.toLowerCase();
+            link.style.display = text.includes(keyword) ? "block" : "none";
+        });
     });
 </script>
 
