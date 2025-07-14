@@ -1,0 +1,154 @@
+<!DOCTYPE HTML>
+<html lang="zh-TW">
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>學生註冊 | AI履歷平台</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    body, html {
+      height: 100%;
+      margin: 0;
+      font-family: "Segoe UI", "微軟正黑體", sans-serif;
+      background: url("login_pc.png") no-repeat center center fixed;
+      background-size: cover;
+    }
+
+    #wrapper {
+      max-width: 500px;
+      margin: 95px auto;
+      padding: 40px;
+      border-radius: 10px;
+      box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+      background-color: #ffffff;
+    }
+
+    h1 {
+      text-align: center;
+      color: #000000;
+    }
+
+    .field {
+      margin-bottom: 20px;
+      position: relative;
+    }
+
+    label {
+      display: block;
+      margin-bottom: 8px;
+      color: #000000;
+    }
+
+    input[type="text"],
+    input[type="password"],
+    input[type="email"] {
+      background-color: #ffffff;
+      border: 1px solid #000000;
+      color: #000000;
+      padding: 10px;
+      border-radius: 6px;
+      width: 100%;
+      box-sizing: border-box;
+    }
+
+    input[type="submit"] {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 48px;
+      width: 100%;
+      background-color: #388f6f;
+      color: #ffffff;
+      font-size: 16px;
+      font-weight: bold;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: background-color 0.3s;
+    }
+
+    input[type="submit"]:hover {
+      background-color: #a5ccae;
+    }
+
+    .back-button {
+      margin-top: 10px;
+      color: #000000;
+      background-color: transparent;
+      border: none;
+      font-size: 16px;
+      cursor: pointer;
+      text-decoration: underline;
+    }
+
+    .back-button:hover {
+      color: #5a6268;
+    }
+
+    .toggle-password {
+      position: absolute;
+      top: 70%;
+      right: 16px;
+      transform: translateY(-50%);
+      cursor: pointer;
+      color: #888888;
+      font-size: 18px;
+      user-select: none;
+    }
+  </style>
+</head>
+
+<body>
+  <div id="wrapper">
+    <h1>註冊帳號</h1>
+
+    <form method="post" action="http://127.0.0.1:5000/api/register_student">
+
+      <div class="field">
+        <label for="username">帳號 <span style="font-size: 0.9em; color: #666;">（請輸入學號）</span></label>
+        <input type="text" name="username" id="username" required />
+      </div>
+
+      <div class="field">
+        <label for="password">密碼 <span style="font-size: 0.9em; color: #666;">（請輸入身分證字號）</span></label>
+        <input type="password" name="password" id="password" required />
+        <span class="toggle-password" onclick="togglePassword()">
+          <i class="fas fa-eye-slash" id="eyeIcon"></i>
+        </span>
+      </div>
+
+      <div class="field">
+        <label for="email">Email</label>
+        <input type="email" name="email" id="email" required />
+      </div>
+
+      <div class="field">
+        <input type="submit" value="註冊" />
+      </div>
+
+      <div class="field">
+        <input type="button" value="返回上一頁" class="back-button" onclick="location.href='register_choice.html'" />
+      </div>
+    </form>
+  </div>
+
+  <script>
+    function togglePassword() {
+      const passwordInput = document.getElementById("password");
+      const eyeIcon = document.getElementById("eyeIcon");
+
+      if (passwordInput.type === "password") {
+        passwordInput.type = "text";
+        eyeIcon.classList.remove("fa-eye-slash");
+        eyeIcon.classList.add("fa-eye");
+      } else {
+        passwordInput.type = "password";
+        eyeIcon.classList.remove("fa-eye");
+        eyeIcon.classList.add("fa-eye-slash");
+      }
+    }
+  </script>
+</body>
+
+</html>
