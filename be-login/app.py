@@ -24,9 +24,14 @@ def register():
 def api_register():
     username = request.form['username']
     password = request.form['password']
-    
+    email = request.form['email']
+    role = request.form['role']
+
     # 寫入資料庫
-    cursor.execute("INSERT INTO users (username, password) VALUES (%s, %s)", (username, password))
+    cursor.execute(
+        "INSERT INTO users (username, password, email, role) VALUES (%s, %s, %s, %s)",
+        (username, password, email, role)
+    )
     db.commit()
     return redirect(url_for('login'))
 
