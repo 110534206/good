@@ -24,6 +24,10 @@ def is_valid_taiwan_id(id_number):
     pattern = r'^[A-Z][1-2]\d{8}$'
     return re.match(pattern, id_number)
 
+# 驗證學號格式（9 位數字）
+def is_valid_student_id(student_id):
+    return re.fullmatch(r'\d{9}', student_id)
+
 @app.route('/')
 def index():
     return redirect(url_for('register_student_page'))
@@ -42,6 +46,9 @@ def api_register_student():
     password = request.form['password']
     email = request.form['email'].lower()
     role = 'student'
+
+    if not is_valid_student_id(username):
+        return "學號格式錯誤，需為 9 位數字"
 
     if not is_valid_email(email):
         return "請使用學校信箱（例如 123456789@stu.ukn.edu.tw）"

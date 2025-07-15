@@ -7,7 +7,8 @@
   <title>學生註冊 | AI履歷平台</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <style>
-    body, html {
+    body,
+    html {
       height: 100%;
       margin: 0;
       font-family: "Segoe UI", "微軟正黑體", sans-serif;
@@ -107,7 +108,7 @@
 
       <div class="field">
         <label for="username">帳號 <span style="font-size: 0.9em; color: #666;">（請輸入學號）</span></label>
-        <input type="text" name="username" id="username" required />
+        <input type="text" name="username" id="username" required />       
       </div>
 
       <div class="field">
@@ -120,7 +121,8 @@
       </div>
 
       <div class="field">
-        <label for="email">Email <span style="font-size: 0.9em; color: #666;">（請使用學校信箱，例如 123456789@stu.ukn.edu.tw）</span></label>
+        <label for="email">Email <span style="font-size: 0.9em; color: #666;">（請使用學校信箱，例如
+            123456789@stu.ukn.edu.tw）</span></label>
         <input type="email" name="email" id="email" required />
         <div id="emailError" style="color: red; font-size: 14px; display: none;"></div>
       </div>
@@ -152,34 +154,52 @@
     }
 
     // === 前端格式驗證 ===
-    document.getElementById("registerForm").addEventListener("submit", function (e) {
-      const emailInput = document.getElementById("email");
-      const passwordInput = document.getElementById("password");
-      const emailError = document.getElementById("emailError");
-      const passwordError = document.getElementById("passwordError");
-      const email = emailInput.value.trim();
-      const password = passwordInput.value.trim();
+  document.getElementById("registerForm").addEventListener("submit", function (e) {
+    const emailInput = document.getElementById("email");
+    const passwordInput = document.getElementById("password");
+    const usernameInput = document.getElementById("username");
 
-      const emailPattern = /^[\w\.-]+@stu\.ukn\.edu\.tw$/;
-      if (!emailPattern.test(email)) {
-        e.preventDefault();
-        emailError.style.display = "block";
-        emailError.textContent = "請輸入正確的學校信箱（例如 s123456789@stu.ukn.edu.tw）";
-        return;
-      } else {
-        emailError.style.display = "none";
-      }
+    const emailError = document.getElementById("emailError");
+    const passwordError = document.getElementById("passwordError");
+    const usernameError = document.getElementById("usernameError");
 
-      const idPattern = /^[A-Z][1-2]\d{8}$/;
-      if (!idPattern.test(password)) {
-        e.preventDefault();
-        passwordError.style.display = "block";
-        passwordError.textContent = "請輸入正確的身分證格式（例如 A123456789）";
-        return;
-      } else {
-        passwordError.style.display = "none";
-      }
-    });
-  </script>
+    const email = emailInput.value.trim();
+    const password = passwordInput.value.trim();
+    const username = usernameInput.value.trim();
+
+    const emailPattern = /^[\w\.-]+@stu\.ukn\.edu\.tw$/;
+    const idPattern = /^[A-Z][1-2]\d{8}$/;
+    const studentIdPattern = /^\d{9}$/;
+
+    if (!studentIdPattern.test(username)) {
+      e.preventDefault();
+      usernameError.style.display = "block";
+      usernameError.textContent = "學號格式錯誤，需為 9 位數字";
+      return;
+    } else {
+      usernameError.style.display = "none";
+    }
+
+    if (!emailPattern.test(email)) {
+      e.preventDefault();
+      emailError.style.display = "block";
+      emailError.textContent = "請輸入正確的學校信箱（例如 123456789@stu.ukn.edu.tw）";
+      return;
+    } else {
+      emailError.style.display = "none";
+    }
+
+    if (!idPattern.test(password)) {
+      e.preventDefault();
+      passwordError.style.display = "block";
+      passwordError.textContent = "請輸入正確的身分證格式（例如 A123456789）";
+      return;
+    } else {
+      passwordError.style.display = "none";
+    }
+  });
+</script>
+
 </body>
+
 </html>
