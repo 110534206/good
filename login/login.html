@@ -213,10 +213,11 @@
 
         const username = document.getElementById("username").value;
         const password = document.getElementById("password").value;
-		const roleSelect = document.getElementById("role").value;
+		    const roleSelect = document.getElementById("role").value;
 
         if (username === "user" && password === "1234") {
             // 儲存登入狀態
+            localStorage.setItem("loggedIn","true");
             localStorage.setItem("username", username);
             localStorage.setItem("role", roleSelect);
 

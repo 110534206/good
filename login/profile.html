@@ -118,6 +118,10 @@
     </div>
 
     <script>
+        // 登入檢查
+        if (!localStorage.getItem("loggedIn")) {
+            window.location.href = "login.html";
+        }
         function saveProfile() {
             const name = document.getElementById('name').value;
             const email = document.getElementById('email').value;
