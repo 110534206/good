@@ -14,10 +14,11 @@
       box-sizing: border-box;
     }
 
-    body, html {
+    body,
+    html {
       height: 100%;
       font-family: "Segoe UI", "微軟正黑體", sans-serif;
-      background: url("images/login_pc.png") no-repeat center center fixed;
+      background: url("../images/login_pc.png") no-repeat center center fixed;
       background-size: cover;
     }
 
@@ -106,7 +107,7 @@
     }
 
     .login-button {
-      background-color:#0056b3; 
+      background-color: #0056b3;
       color: #fff;
     }
 
@@ -154,7 +155,7 @@
     <div class="center-container">
       <!-- 左側 Logo 圖 -->
       <div class="logo-side">
-        <img src="logo_name.jpg">
+        <img src="../images/logo_name.jpg">
       </div>
 
       <!-- 右側登入表單 -->
@@ -213,16 +214,16 @@
 
         const username = document.getElementById("username").value;
         const password = document.getElementById("password").value;
-		    const roleSelect = document.getElementById("role").value;
+        const roleSelect = document.getElementById("role").value;
 
         if (username === "user" && password === "1234") {
-            // 儲存登入狀態
-            localStorage.setItem("loggedIn","true");
-            localStorage.setItem("username", username);
-            localStorage.setItem("role", roleSelect);
+          // 儲存登入狀態
+          localStorage.setItem("loggedIn", "true");
+          localStorage.setItem("username", username);
+          localStorage.setItem("role", roleSelect);
 
-            // 導向首頁
-            window.location.href = "index.html";
+          // 導向首頁
+          window.location.href = "index.html";
         } else {
           document.getElementById("error-message").style.display = "block";
         }
