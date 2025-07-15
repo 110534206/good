@@ -44,7 +44,7 @@ def api_register_student():
     role = 'student'
 
     if not is_valid_email(email):
-        return "請使用學校信箱（例如 s123456789@stu.ukn.edu.tw）"
+        return "請使用學校信箱（例如 123456789@stu.ukn.edu.tw）"
 
     if not is_valid_taiwan_id(password):
         return "身分證格式錯誤，請重新輸入（例如 A123456789）"
