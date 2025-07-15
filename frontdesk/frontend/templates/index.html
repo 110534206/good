@@ -93,7 +93,20 @@
             cursor: pointer;
             border: 2px solid #ccc;
         }
+        .logout-btn {
+            background-color: #ffffff;
+            color: #000000;
+            border: none;
+            padding: 0.4em 1em;
+            border-radius: 5px;
+            font-size: 14px;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+        }
 
+        .logout-btn:hover {
+            background-color: #c2c3f8;
+        }
         .card-container {
             display: flex;
             flex-wrap: wrap;
@@ -196,7 +209,7 @@
 <!-- 登入頭像區 -->
 <div id="login-area">
     <img src="images/avatar.jpg" alt="頭像" id="login-avatar" title="點我查看個人資料">
-    <a href="#" class="button small" onclick="logout()">登出</a>
+    <button class="logout-btn" onclick="logout()">登出</button>
 </div>
 
 <!-- 標題 -->
