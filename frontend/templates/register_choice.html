@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>選擇註冊身份 | AI履歷平台</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body,
+    html {
+      height: 100%;
+      font-family: "Segoe UI", "微軟正黑體", sans-serif;
+      background: url("login_pc.png") no-repeat center center fixed;
+      background-size: cover;
+    }
+
+    #wrapper {
+      text-align: center;
+    }
+
+    h1 {
+        font-size: 40px;
+        margin-top: 180px;
+        margin-bottom: 80px;
+        color: white;
+      }
+
+    .register-button {
+      display: white;
+      width: 250px;
+      padding: 40px;
+      font-size: 30px;
+      font-weight: bold;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: background-color 0.3s;
+      color:  #388f6f;
+      margin: 0 30px;
+    }
+
+    .Administrative {
+      background-color: #ffffff;
+    }
+
+    .Administrative:hover {
+      background-color: #d9e8dd;
+    }
+
+    .teacher {
+      background-color: #ffffff;
+    }
+
+    .teacher:hover {
+      background-color: #d9e8dd;
+    }
+
+    .student {
+      background-color: #ffffff;
+    }
+
+    .student:hover {
+      background-color: #d9e8dd;
+    }
+
+    .back-button {
+      margin-top: 80px;
+      color: #ffffff;
+      background: transparent;
+      border: none;
+      font-size: 25px;
+      cursor: pointer;
+      text-decoration: underline;
+    }
+
+    .back-button:hover {
+      color: #d9e8dd;
+    }
+  </style>
+</head>
+
+<body>
+  <div id="wrapper">
+    <h1>請選擇註冊身份</h1>
+    <button class="register-button Administrative" onclick="location.href='register_Administrative.html'">行政人員</button>
+    <button class="register-button teacher" onclick="location.href='register_teacher.html'">教師</button>
+    <button class="register-button student" onclick="location.href='register_student.html'">學生</button>
+    <br>
+    <input type="button" value="返回首頁" class="back-button" onclick="location.href='login.html'" />
+  </div>
+</body>
+
+</html>

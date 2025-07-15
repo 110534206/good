@@ -10,8 +10,10 @@ db = mysql.connector.connect(
     host="localhost",
     user="root",
     password="",
-    database="ai_resume"
+    database="ai_resume",
+     connection_timeout=10
 )
+
 cursor = db.cursor()
 
 # 驗證 email 格式 + 限定網域
