@@ -25,14 +25,14 @@
     }
 
     h1 {
-        font-size: 40px;
-        margin-top: 180px;
-        margin-bottom: 80px;
-        color: white;
-      }
+      font-size: 40px;
+      margin-top: 180px;
+      margin-bottom: 80px;
+      color: white;
+    }
 
     .register-button {
-      display: white;
+      display: inline-block;
       width: 250px;
       padding: 40px;
       font-size: 30px;
@@ -41,31 +41,12 @@
       border-radius: 8px;
       cursor: pointer;
       transition: background-color 0.3s;
-      color:  #388f6f;
+      color: #388f6f;
       margin: 0 30px;
-    }
-
-    .Administrative {
       background-color: #ffffff;
     }
 
-    .Administrative:hover {
-      background-color: #d9e8dd;
-    }
-
-    .teacher {
-      background-color: #ffffff;
-    }
-
-    .teacher:hover {
-      background-color: #d9e8dd;
-    }
-
-    .student {
-      background-color: #ffffff;
-    }
-
-    .student:hover {
+    .register-button:hover {
       background-color: #d9e8dd;
     }
 
@@ -88,7 +69,7 @@
 <body>
   <div id="wrapper">
     <h1>請選擇註冊身份</h1>
-    <button class="register-button Administrative" onclick="location.href='register_Administrative.html'">行政人員</button>
+    <button class="register-button administrative" onclick="location.href='register_administrative.html'">行政人員</button>
     <button class="register-button teacher" onclick="location.href='register_teacher.html'">教師</button>
     <button class="register-button student" onclick="location.href='register_student.html'">學生</button>
     <br>

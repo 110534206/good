@@ -7,25 +7,29 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
   <style>
-    body, html {
+    body,
+    html {
       height: 100%;
       margin: 0;
       font-family: "Segoe UI", "微軟正黑體", sans-serif;
       background: url("../images/login_pc.png") no-repeat center center fixed;
       background-size: cover;
     }
+
     .center-container {
       position: absolute;
-      top: 50%; left: 50%;
+      top: 50%;
+      left: 50%;
       transform: translate(-50%, -50%);
       display: flex;
       background: #fff;
       border-radius: 15px;
-      box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
       overflow: hidden;
       max-width: 950px;
       width: 90%;
     }
+
     .logo-side {
       flex: 1;
       display: flex;
@@ -34,26 +38,32 @@
       padding: 10px;
       border-right: 1px solid #eee;
     }
+
     .logo-side img {
       width: 450px;
       height: auto;
     }
+
     .form-box {
       flex: 1;
       padding: 40px;
     }
+
     .form-box h2 {
       text-align: center;
       margin-bottom: 20px;
     }
+
     .form-group {
       margin-bottom: 15px;
     }
+
     label {
       font-weight: bold;
       display: block;
       margin-bottom: 5px;
     }
+
     input[type="text"],
     input[type="password"],
     select {
@@ -62,9 +72,11 @@
       border: 1px solid #ccc;
       border-radius: 6px;
     }
+
     .password-container {
       position: relative;
     }
+
     .toggle-password {
       position: absolute;
       top: 70%;
@@ -72,6 +84,7 @@
       transform: translateY(-50%);
       cursor: pointer;
     }
+
     .login-button,
     .register-button {
       width: 100%;
@@ -83,14 +96,17 @@
       font-weight: bold;
       cursor: pointer;
     }
+
     .login-button {
       background-color: #0056b3;
       color: #fff;
     }
+
     .register-button {
       background-color: #388f6f;
       color: #fff;
     }
+
     #error-message {
       display: none;
       font-weight: bold;
@@ -104,7 +120,7 @@
 <body>
   <div class="center-container">
     <div class="logo-side">
-      <img src="../images/logo_name.jpg" alt="Logo">
+      <img src="../images/logo_name.jpg" alt="Logo" />
     </div>
 
     <div class="form-box">
@@ -118,7 +134,7 @@
             <option value="">請選擇身份</option>
             <option value="student">學生</option>
             <option value="teacher">老師</option>
-            <option value="director">主任</option>
+            <option value="administrative">主任</option>
           </select>
         </div>
 
@@ -179,7 +195,8 @@
             localStorage.setItem("loggedIn", "true");
             localStorage.setItem("username", username);
             localStorage.setItem("role", role);
-            window.location.href = "index.html";
+            // 登入成功後導向主頁
+            window.location.href = "/dashboard";
           } else {
             document.getElementById("error-message").textContent = data.message;
             document.getElementById("error-message").style.display = "block";
@@ -192,4 +209,5 @@
     }
   </script>
 </body>
+
 </html>

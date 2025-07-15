@@ -6,13 +6,102 @@
   <title>行政人員註冊 | AI履歷平台</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <style>
-    /* 同原本樣式，略 */
+     body,
+    html {
+      height: 100%;
+      margin: 0;
+      font-family: "Segoe UI", "微軟正黑體", sans-serif;
+      background: url("../images/login_pc.png") no-repeat center center fixed;
+      background-size: cover;
+    }
+
+    #wrapper {
+      max-width: 500px;
+      margin: 95px auto;
+      padding: 40px;
+      border-radius: 10px;
+      box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+      background-color: #ffffff;
+    }
+
+    h1 {
+      text-align: center;
+      color: #000000;
+    }
+
+    .field {
+      margin-bottom: 20px;
+      position: relative;
+    }
+
+    label {
+      display: block;
+      margin-bottom: 8px;
+      color: #000000;
+    }
+
+    input[type="text"],
+    input[type="password"],
+    input[type="email"] {
+      background-color: #ffffff;
+      border: 1px solid #000000;
+      color: #000000;
+      padding: 10px;
+      border-radius: 6px;
+      width: 100%;
+      box-sizing: border-box;
+    }
+
+    input[type="submit"] {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 48px;
+      width: 100%;
+      background-color: #388f6f;
+      color: #ffffff;
+      font-size: 16px;
+      font-weight: bold;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: background-color 0.3s;
+    }
+
+    input[type="submit"]:hover {
+      background-color: #a5ccae;
+    }
+
+    .back-button {
+      margin-top: 10px;
+      color: #000000;
+      background-color: transparent;
+      border: none;
+      font-size: 16px;
+      cursor: pointer;
+      text-decoration: underline;
+    }
+
+    .back-button:hover {
+      color: #5a6268;
+    }
+
+    .toggle-password {
+      position: absolute;
+      top: 70%;
+      right: 16px;
+      transform: translateY(-50%);
+      cursor: pointer;
+      color: #888888;
+      font-size: 18px;
+      user-select: none;
+    }
   </style>
 </head>
 <body>
   <div id="wrapper">
     <h1>行政人員註冊</h1>
-    <form action="/api/register_Administrative" method="POST">
+    <form action="/api/register_administrative" method="POST">
       <div class="field">
         <label for="username">帳號</label>
         <input type="text" name="username" id="username" required />

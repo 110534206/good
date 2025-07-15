@@ -13,6 +13,10 @@ db = mysql.connector.connect(
     database="ai_resume"
 )
 cursor = db.cursor()
+# ✅ 設定靜態檔案路徑
+@app.route('/dashboard')
+def dashboard():
+    return render_template('index.html')
 
 # ✅ 驗證學校 email（學生用）
 def is_valid_student_email(email):
@@ -45,9 +49,9 @@ def register_student_page():
 def register_teacher_page():
     return render_template('register_teacher.html')
 
-@app.route('/register_Administrative')
-def register_Administrative_page():
-    return render_template('register_Administrative.html')
+@app.route('/register_administrative')
+def register_administrative_page():
+    return render_template('register_administrative.html')
 
 @app.route('/login')
 def login_page():
@@ -102,9 +106,9 @@ def api_register_student():
 def api_register_teacher():
     return register_user(role='teacher')
 
-@app.route('/api/register_Administrative', methods=['POST'])
+@app.route('/api/register_administrative', methods=['POST'])
 def api_register_Administrative():
-    return register_user(role='Administrative')
+    return register_user(role='administrative')
 
 # ✅ 登入 API
 @app.route('/api/login', methods=['POST'])
