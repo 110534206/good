@@ -1,16 +1,28 @@
 from flask import Flask, render_template, request, redirect, url_for
 import mysql.connector
+import re
+from werkzeug.security import generate_password_hash
 
 app = Flask(__name__)
 
-# 資料庫連線
+# 建立資料庫連線
 db = mysql.connector.connect(
     host="localhost",
     user="root",
-    password="",  # 預設為空
+    password="",
     database="ai_resume"
 )
 cursor = db.cursor()
+
+# 驗證 email 格式 + 限定網域
+def is_valid_email(email):
+    pattern = r'^[\w\.-]+@stu\.ukn\.edu\.tw$'
+    return re.match(pattern, email)
+
+# 驗證台灣身分證格式
+def is_valid_taiwan_id(id_number):
+    pattern = r'^[A-Z][1-2]\d{8}$'
+    return re.match(pattern, id_number)
 
 @app.route('/')
 def index():
@@ -28,20 +40,31 @@ def login():
 def api_register_student():
     username = request.form['username']
     password = request.form['password']
-    email = request.form['email']
+    email = request.form['email'].lower()
     role = 'student'
 
-    # 檢查帳號是否存在
+    if not is_valid_email(email):
+        return "請使用學校信箱（例如 123456789@stu.ukn.edu.tw）"
+
+    if not is_valid_taiwan_id(password):
+        return "身分證格式錯誤，請重新輸入（例如 A123456789）"
+
     cursor.execute("SELECT * FROM users WHERE username = %s", (username,))
     if cursor.fetchone():
         return "帳號已存在，請使用其他帳號"
 
-    # 寫入資料庫
+    cursor.execute("SELECT * FROM users WHERE email = %s", (email,))
+    if cursor.fetchone():
+        return "信箱已註冊，請使用其他信箱"
+
+    hashed_password = generate_password_hash(password)
+
     cursor.execute(
         "INSERT INTO users (username, password, email, role) VALUES (%s, %s, %s, %s)",
-        (username, password, email, role)
+        (username, hashed_password, email, role)
     )
     db.commit()
+
     return redirect(url_for('login'))
 
 if __name__ == '__main__':
