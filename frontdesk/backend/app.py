@@ -3,7 +3,7 @@ import mysql.connector
 import re
 from werkzeug.security import generate_password_hash, check_password_hash
 
-app = Flask(__name__, template_folder='../frontend/templates')
+app = Flask(__name__, template_folder='../frontend/templates', static_folder='../frontend/static')
 
 # ✅ 建立資料庫連線
 db = mysql.connector.connect(

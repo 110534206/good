@@ -4,7 +4,8 @@
     <meta charset="UTF-8" />
     <title>AI實習履歷與志願選填系統</title>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <link rel="stylesheet" href="assets/css/main.css" />
+    <!-- CSS 路徑改成 url_for -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='assets/css/main.css') }}" />
     <style>
         /* == 按鈕與選單樣式 == */
         #menu-btn {
@@ -195,7 +196,8 @@
 
 <!-- 登入頭像區 -->
 <div id="login-area">
-    <img src="/static/images/avatar.jpg" alt="頭像" id="login-avatar" title="點我查看個人資料">
+    <!-- 這邊改成 url_for -->
+    <img src="{{ url_for('static', filename='images/avatar.jpg') }}" alt="頭像" id="login-avatar" title="點我查看個人資料">
     <a href="#" class="button small" onclick="logout()">登出</a>
 </div>
 

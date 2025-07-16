@@ -1,20 +1,22 @@
 <!DOCTYPE HTML>
 <html lang="zh-TW">
+
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>行政人員註冊 | AI履歷平台</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <style>
-    body,html {
+    body,
+    html {
       height: 100%;
       margin: 0;
       font-family: "Segoe UI", "微軟正黑體", sans-serif;
-      background: url("/static/images/login_pc.png") no-repeat center center fixed;
+      background: url("images/login_pc.png") no-repeat center center fixed;
       background-size: cover;
     }
 
-     #wrapper {
+    #wrapper {
       max-width: 500px;
       margin: 140px auto;
       padding: 40px;
@@ -22,20 +24,25 @@
       box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
       background-color: #ffffff;
     }
+
     h1 {
       text-align: center;
       color: #000000;
     }
+
     .field {
       margin-bottom: 20px;
       position: relative;
     }
+
     label {
       display: block;
       margin-bottom: 8px;
       color: #000000;
     }
-    input[type="text"], input[type="password"] {
+
+    input[type="text"],
+    input[type="password"] {
       background-color: #ffffff;
       border: 1px solid #000000;
       color: #000000;
@@ -44,6 +51,7 @@
       width: 100%;
       box-sizing: border-box;
     }
+
     input[type="submit"] {
       display: flex;
       justify-content: center;
@@ -59,9 +67,11 @@
       cursor: pointer;
       transition: background-color 0.3s;
     }
+
     input[type="submit"]:hover {
       background-color: #a5ccae;
     }
+
     .back-button {
       margin-top: 10px;
       color: #000000;
@@ -71,9 +81,11 @@
       cursor: pointer;
       text-decoration: underline;
     }
+
     .back-button:hover {
       color: #5a6268;
     }
+
     .toggle-password {
       position: absolute;
       top: 70%;
@@ -86,6 +98,7 @@
     }
   </style>
 </head>
+
 <body>
   <div id="wrapper">
     <h1>註冊帳號</h1>
@@ -105,7 +118,7 @@
         <input type="submit" value="註冊" />
       </div>
       <div class="field">
-     <input type="button" value="返回上一頁" class="back-button" onclick="location.href='register_choice.html'" /></div>
+        <button type="button" onclick="location.href='{{ url_for('register_choice') }}'">返回上一頁</button>
     </form>
   </div>
   <script>
@@ -129,4 +142,5 @@
     }
   </script>
 </body>
+
 </html>

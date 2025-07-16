@@ -7,14 +7,15 @@
   <title>教師註冊 | AI履歷平台</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <style>
-    body,html {
+    body,
+    html {
       height: 100%;
       font-family: "Segoe UI", "微軟正黑體", sans-serif;
-      background: url("/static/images/login_pc.png") no-repeat center center fixed;
+      background: url("images/login_pc.png") no-repeat center center fixed;
       background-size: cover;
     }
 
-     #wrapper {
+    #wrapper {
       max-width: 500px;
       margin: 140px auto;
       padding: 40px;
@@ -114,7 +115,7 @@
         <input type="submit" value="註冊" />
       </div>
       <div class="field">
-        <input type="button" value="返回上一頁" class="back-button" onclick="location.href='register_choice.html'" />
+        <button type="button" onclick="location.href='{{ url_for('register_choice') }}'">返回上一頁</button>
       </div>
     </form>
   </div>
@@ -141,4 +142,5 @@
     }
   </script>
 </body>
+
 </html>

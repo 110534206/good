@@ -14,10 +14,11 @@
       box-sizing: border-box;
     }
 
-    body, html {
+    html,
+    body {
       height: 100%;
       font-family: "Segoe UI", "微軟正黑體", sans-serif;
-      background: url("/static/images/login_pc.png") no-repeat center center fixed;
+      background: url("{{ url_for('static', filename='images/login_pc.png') }}") no-repeat center center fixed;
       background-size: cover;
     }
 
@@ -106,12 +107,12 @@
     }
 
     .login-button {
-      background-color:#0056b3; 
+      background-color: #0056b3;
       color: #fff;
     }
 
     .login-button:hover {
-      background-color: lab(68.22% -2.98 -25.02);
+      background-color: #004a99;
     }
 
     .register-button {
@@ -120,7 +121,7 @@
     }
 
     .register-button:hover {
-      background-color: #a5ccae;
+      background-color: #2e735a;
     }
 
     #error-message {
@@ -145,6 +146,11 @@
       .form-box {
         padding: 30px;
       }
+
+      .logo-side img {
+        width: 100%;
+        max-width: 300px;
+      }
     }
   </style>
 </head>
@@ -154,7 +160,7 @@
     <div class="center-container">
       <!-- 左側 Logo 圖 -->
       <div class="logo-side">
-        <img src="/static/images/logo_name.jpg">
+        <img src="{{ url_for('static', filename='images/logo_name.jpg') }}">
       </div>
 
       <!-- 右側登入表單 -->
@@ -162,7 +168,7 @@
         <h2>智慧實習平台</h2>
         <div id="error-message">帳號或密碼錯誤，請重新輸入。</div>
 
-        <form id="loginForm">
+        <form onsubmit="return handleLogin(event)">
           <div class="form-group">
             <label for="role">身份</label>
             <select id="role" name="role" required>
@@ -188,52 +194,45 @@
           </div>
 
           <button type="submit" class="login-button">登入</button>
-          <button type="button" class="register-button" onclick="location.href='register_choice.html'">註冊帳號</button>
+          <button type="button" class="register-button"
+            onclick='location.href="{{ url_for("register_choice") }}";'>註冊帳號</button>
         </form>
       </div>
     </div>
+  </div>
 
-    <script>
-      function togglePassword() {
-        const passwordInput = document.getElementById("password");
-        const eyeIcon = document.getElementById("eyeIcon");
-        if (passwordInput.type === "password") {
-          passwordInput.type = "text";
-          eyeIcon.classList.remove("fa-eye-slash");
-          eyeIcon.classList.add("fa-eye");
-        } else {
-          passwordInput.type = "password";
-          eyeIcon.classList.remove("fa-eye");
-          eyeIcon.classList.add("fa-eye-slash");
-        }
+  <script>
+    function togglePassword() {
+      const passwordInput = document.getElementById("password");
+      const eyeIcon = document.getElementById("eyeIcon");
+      if (passwordInput.type === "password") {
+        passwordInput.type = "text";
+        eyeIcon.classList.remove("fa-eye-slash");
+        eyeIcon.classList.add("fa-eye");
+      } else {
+        passwordInput.type = "password";
+        eyeIcon.classList.remove("fa-eye");
+        eyeIcon.classList.add("fa-eye-slash");
       }
+    }
 
-      document.getElementById('loginForm').addEventListener('submit', async function(event) {
-        event.preventDefault();
-        const username = document.getElementById('username').value;
-        const password = document.getElementById('password').value;
-        const role = document.getElementById('role').value;
-        const errorMsg = document.getElementById('error-message');
-        errorMsg.style.display = 'none';
-        try {
-          const response = await fetch('/api/login', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ username, password, role })
-          });
-          if (response.ok) {
-            window.location.href = '/dashboard';
-          } else {
-            const data = await response.json();
-            errorMsg.textContent = data.message || '登入失敗';
-            errorMsg.style.display = 'block';
-          }
-        } catch (err) {
-          errorMsg.textContent = '伺服器錯誤，請稍後再試';
-          errorMsg.style.display = 'block';
-        }
-      });
-    </script>
+    function handleLogin(event) {
+      event.preventDefault();
+
+      const username = document.getElementById("username").value;
+      const password = document.getElementById("password").value;
+      const roleSelect = document.getElementById("role").value;
+
+      if (username === "user" && password === "1234") {
+        localStorage.setItem("loggedIn", "true");
+        localStorage.setItem("username", username);
+        localStorage.setItem("role", roleSelect);
+        window.location.href = "/dashboard";
+      } else {
+        document.getElementById("error-message").style.display = "block";
+      }
+    }
+  </script>
 </body>
 
 </html>

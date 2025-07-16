@@ -12,7 +12,7 @@
       height: 100%;
       margin: 0;
       font-family: "Segoe UI", "微軟正黑體", sans-serif;
-      background: url("/static/images/login_pc.png") no-repeat center center fixed;
+      background: url("images/login_pc.png") no-repeat center center fixed;
       background-size: cover;
     }
 
@@ -134,7 +134,8 @@
       </div>
 
       <div class="field">
-        <input type="button" value="返回上一頁" class="back-button" onclick="location.href='register_choice.html'" />
+<button type="button" onclick="location.href='{{ url_for('register_choice') }}'">返回上一頁</button>
+
       </div>
     </form>
   </div>
