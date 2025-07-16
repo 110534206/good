@@ -6,7 +6,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <link rel="stylesheet" href="assets/css/main.css" />
     <style>
-        /* == 按鈕與選單樣式 == */
         #menu-btn {
             position: fixed;
             top: 20px;
@@ -146,7 +145,6 @@
 </head>
 <body class="is-preload">
 
-<!-- ✅ 登入狀態檢查 + 顯示控制 -->
 <script>
     const username = localStorage.getItem("username");
     const role = localStorage.getItem("role");
@@ -162,10 +160,10 @@
         const cards = document.querySelectorAll(".card");
         if (role === "teacher") {
             cards[0].style.display = "none";
-        } else if (role === "director") {
+        } else if (role === "administrative") {
             cards[0].style.display = "none";
             cards[1].style.display = "none";
-        } else if (role === "admin") {
+        } else if (role !== "student") {
             cards.forEach(c => c.style.display = "none");
         }
 
@@ -179,18 +177,16 @@
 
     function logout() {
         localStorage.clear();
-        window.location.href = "login.html";
+        window.location.href = "/login";
     }
 </script>
 
-<!-- 漢堡選單按鈕 -->
 <div id="menu-btn" title="選單" aria-label="開啟選單" role="button" tabindex="0">
     <span></span>
     <span></span>
     <span></span>
 </div>
 
-<!-- 左側選單 -->
 <nav id="side-menu" aria-hidden="true">
     <h1>選單</h1>
     <hr class="menu-divider">
@@ -206,19 +202,16 @@
     <a href="#">通知</a>
 </nav>
 
-<!-- 登入頭像區 -->
 <div id="login-area">
-    <img src="../images/avatar.jpg" alt="頭像" id="login-avatar" title="點我查看個人資料">
+    <img src="/static/images/avatar.jpg" alt="頭像" id="login-avatar" title="點我查看個人資料">
     <button class="logout-btn" onclick="logout()">登出</button>
 </div>
 
-<!-- 標題 -->
 <header>
     <h1>AI實習履歷與志願選填系統</h1>
     <p>歡迎 <strong id="welcome-name"></strong> 使用本平台</p>
 </header>
 
-<!-- 三大功能卡片 -->
 <section class="card-container">
     <div class="card">
         <h3>上傳履歷</h3>
@@ -237,7 +230,6 @@
     </div>
 </section>
 
-<!-- JS: 漢堡選單 + 搜尋篩選 -->
 <script>
     const menuBtn = document.getElementById("menu-btn");
     const sideMenu = document.getElementById("side-menu");
@@ -247,7 +239,6 @@
         sideMenu.setAttribute("aria-hidden", !isOpen);
     });
 
-    // 🔍 搜尋功能
     const searchInput = document.getElementById("menu-search");
     const menuLinks = sideMenu.querySelectorAll("a");
 

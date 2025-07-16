@@ -12,10 +12,9 @@
       height: 100%;
       margin: 0;
       font-family: "Segoe UI", "微軟正黑體", sans-serif;
-      background: url("../images/login_pc.png") no-repeat center center fixed;
+      background: url("/static/login_pc.png") no-repeat center center fixed;
       background-size: cover;
     }
-
     .center-container {
       position: absolute;
       top: 50%;
@@ -120,7 +119,7 @@
 <body>
   <div class="center-container">
     <div class="logo-side">
-      <img src="../images/logo_name.jpg" alt="Logo" />
+      <img src="/static/logo_name.jpg" alt="Logo" />
     </div>
 
     <div class="form-box">
@@ -196,7 +195,7 @@
             localStorage.setItem("username", username);
             localStorage.setItem("role", role);
             // 登入成功後導向主頁
-            window.location.href = "/dashboard";
+            window.location.href = "login.html";
           } else {
             document.getElementById("error-message").textContent = data.message;
             document.getElementById("error-message").style.display = "block";
