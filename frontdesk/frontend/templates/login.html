@@ -3,25 +3,31 @@
 
 <head>
   <meta charset="UTF-8" />
-  <title>智慧實習平台-登入</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>智慧實習平台-登入</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+
   <style>
-    body,
-    html {
-      height: 100%;
+    * {
       margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body, html {
+      height: 100%;
       font-family: "Segoe UI", "微軟正黑體", sans-serif;
-      background: url("/static/login_pc.png") no-repeat center center fixed;
+      background: url("/static/images/login_pc.png") no-repeat center center fixed;
       background-size: cover;
     }
+
     .center-container {
       position: absolute;
       top: 50%;
       left: 50%;
       transform: translate(-50%, -50%);
       display: flex;
-      background: #fff;
+      background: #ffffff;
       border-radius: 15px;
       box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
       overflow: hidden;
@@ -31,6 +37,7 @@
 
     .logo-side {
       flex: 1;
+      background-color: #fff;
       display: flex;
       align-items: center;
       justify-content: center;
@@ -51,6 +58,7 @@
     .form-box h2 {
       text-align: center;
       margin-bottom: 20px;
+      color: #333;
     }
 
     .form-group {
@@ -82,6 +90,7 @@
       right: 12px;
       transform: translateY(-50%);
       cursor: pointer;
+      color: #999;
     }
 
     .login-button,
@@ -97,13 +106,21 @@
     }
 
     .login-button {
-      background-color: #0056b3;
+      background-color:#0056b3; 
       color: #fff;
+    }
+
+    .login-button:hover {
+      background-color: lab(68.22% -2.98 -25.02);
     }
 
     .register-button {
       background-color: #388f6f;
       color: #fff;
+    }
+
+    .register-button:hover {
+      background-color: #a5ccae;
     }
 
     #error-message {
@@ -113,100 +130,110 @@
       margin-bottom: 15px;
       text-align: center;
     }
+
+    @media (max-width: 768px) {
+      .center-container {
+        flex-direction: column;
+      }
+
+      .logo-side {
+        border-right: none;
+        border-bottom: 1px solid #eee;
+        padding: 20px;
+      }
+
+      .form-box {
+        padding: 30px;
+      }
+    }
   </style>
 </head>
 
 <body>
-  <div class="center-container">
-    <div class="logo-side">
-      <img src="/static/logo_name.jpg" alt="Logo" />
+  <div id="wrapper">
+    <div class="center-container">
+      <!-- 左側 Logo 圖 -->
+      <div class="logo-side">
+        <img src="/static/images/logo_name.jpg">
+      </div>
+
+      <!-- 右側登入表單 -->
+      <div class="form-box">
+        <h2>智慧實習平台</h2>
+        <div id="error-message">帳號或密碼錯誤，請重新輸入。</div>
+
+        <form id="loginForm">
+          <div class="form-group">
+            <label for="role">身份</label>
+            <select id="role" name="role" required>
+              <option value="">請選擇身份</option>
+              <option value="student">學生</option>
+              <option value="teacher">老師</option>
+              <option value="director">主任</option>
+              <option value="admin">系統管理員</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label for="username">帳號</label>
+            <input type="text" id="username" name="username" required />
+          </div>
+
+          <div class="form-group password-container">
+            <label for="password">密碼</label>
+            <input type="password" id="password" name="password" required />
+            <span class="toggle-password" onclick="togglePassword()">
+              <i class="fas fa-eye-slash" id="eyeIcon"></i>
+            </span>
+          </div>
+
+          <button type="submit" class="login-button">登入</button>
+          <button type="button" class="register-button" onclick="location.href='register_choice.html'">註冊帳號</button>
+        </form>
+      </div>
     </div>
 
-    <div class="form-box">
-      <h2>智慧實習平台</h2>
-      <div id="error-message">帳號或密碼錯誤，請重新輸入。</div>
-
-      <form onsubmit="return handleLogin(event)">
-        <div class="form-group">
-          <label for="role">身份</label>
-          <select id="role" name="role" required>
-            <option value="">請選擇身份</option>
-            <option value="student">學生</option>
-            <option value="teacher">老師</option>
-            <option value="administrative">主任</option>
-          </select>
-        </div>
-
-        <div class="form-group">
-          <label for="username">帳號</label>
-          <input type="text" id="username" name="username" required />
-        </div>
-
-        <div class="form-group password-container">
-          <label for="password">密碼</label>
-          <input type="password" id="password" name="password" required />
-          <span class="toggle-password" onclick="togglePassword()">
-            <i class="fas fa-eye-slash" id="eyeIcon"></i>
-          </span>
-        </div>
-
-        <button type="submit" class="login-button">登入</button>
-        <button type="button" class="register-button" onclick="location.href='register_choice.html'">註冊帳號</button>
-      </form>
-    </div>
-  </div>
-
-  <script>
-    function togglePassword() {
-      const passwordInput = document.getElementById("password");
-      const eyeIcon = document.getElementById("eyeIcon");
-      if (passwordInput.type === "password") {
-        passwordInput.type = "text";
-        eyeIcon.classList.remove("fa-eye-slash");
-        eyeIcon.classList.add("fa-eye");
-      } else {
-        passwordInput.type = "password";
-        eyeIcon.classList.remove("fa-eye");
-        eyeIcon.classList.add("fa-eye-slash");
+    <script>
+      function togglePassword() {
+        const passwordInput = document.getElementById("password");
+        const eyeIcon = document.getElementById("eyeIcon");
+        if (passwordInput.type === "password") {
+          passwordInput.type = "text";
+          eyeIcon.classList.remove("fa-eye-slash");
+          eyeIcon.classList.add("fa-eye");
+        } else {
+          passwordInput.type = "password";
+          eyeIcon.classList.remove("fa-eye");
+          eyeIcon.classList.add("fa-eye-slash");
+        }
       }
-    }
 
-    function handleLogin(event) {
-      event.preventDefault();
-
-      const username = document.getElementById("username").value;
-      const password = document.getElementById("password").value;
-      const role = document.getElementById("role").value;
-
-      fetch("/api/login", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({ username, password, role })
-      })
-        .then(response => {
-          if (!response.ok) throw new Error("登入失敗");
-          return response.json();
-        })
-        .then(data => {
-          if (data.success) {
-            localStorage.setItem("loggedIn", "true");
-            localStorage.setItem("username", username);
-            localStorage.setItem("role", role);
-            // 登入成功後導向主頁
-            window.location.href = "login.html";
+      document.getElementById('loginForm').addEventListener('submit', async function(event) {
+        event.preventDefault();
+        const username = document.getElementById('username').value;
+        const password = document.getElementById('password').value;
+        const role = document.getElementById('role').value;
+        const errorMsg = document.getElementById('error-message');
+        errorMsg.style.display = 'none';
+        try {
+          const response = await fetch('/api/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username, password, role })
+          });
+          if (response.ok) {
+            window.location.href = '/dashboard';
           } else {
-            document.getElementById("error-message").textContent = data.message;
-            document.getElementById("error-message").style.display = "block";
+            const data = await response.json();
+            errorMsg.textContent = data.message || '登入失敗';
+            errorMsg.style.display = 'block';
           }
-        })
-        .catch(error => {
-          document.getElementById("error-message").textContent = error.message;
-          document.getElementById("error-message").style.display = "block";
-        });
-    }
-  </script>
+        } catch (err) {
+          errorMsg.textContent = '伺服器錯誤，請稍後再試';
+          errorMsg.style.display = 'block';
+        }
+      });
+    </script>
 </body>
 
 </html>

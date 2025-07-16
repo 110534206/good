@@ -7,18 +7,16 @@
   <title>教師註冊 | AI履歷平台</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <style>
-    body,
-    html {
+    body,html {
       height: 100%;
-      margin: 0;
       font-family: "Segoe UI", "微軟正黑體", sans-serif;
       background: url("/static/images/login_pc.png") no-repeat center center fixed;
       background-size: cover;
     }
 
-    #wrapper {
+     #wrapper {
       max-width: 500px;
-      margin: 95px auto;
+      margin: 140px auto;
       padding: 40px;
       border-radius: 10px;
       box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
@@ -42,8 +40,7 @@
     }
 
     input[type="text"],
-    input[type="password"],
-    input[type="email"] {
+    input[type="password"] {
       background-color: #ffffff;
       border: 1px solid #000000;
       color: #000000;
@@ -54,9 +51,7 @@
     }
 
     input[type="submit"] {
-      display: flex;
-      justify-content: center;
-      align-items: center;
+      display: block;
       height: 48px;
       width: 100%;
       background-color: #388f6f;
@@ -76,7 +71,7 @@
     .back-button {
       margin-top: 10px;
       color: #000000;
-      background-color: transparent;
+      background: transparent;
       border: none;
       font-size: 16px;
       cursor: pointer;
@@ -102,8 +97,8 @@
 
 <body>
   <div id="wrapper">
-    <h1>教師註冊</h1>
-    <form action="/api/register_teacher" method="POST">
+    <h1>註冊帳號</h1>
+    <form onsubmit="handleRegister(event)">
       <div class="field">
         <label for="username">帳號</label>
         <input type="text" name="username" id="username" required />
@@ -114,10 +109,6 @@
         <span class="toggle-password" onclick="togglePassword()">
           <i class="fas fa-eye-slash" id="eyeIcon"></i>
         </span>
-      </div>
-      <div class="field">
-        <label for="email">信箱</label>
-        <input type="text" name="email" id="email" required />
       </div>
       <div class="field">
         <input type="submit" value="註冊" />
@@ -141,6 +132,12 @@
         eyeIcon.classList.remove("fa-eye");
         eyeIcon.classList.add("fa-eye-slash");
       }
+    }
+
+    function handleRegister(event) {
+      event.preventDefault();
+      alert("註冊成功！");
+      window.location.href = "login.html";
     }
   </script>
 </body>

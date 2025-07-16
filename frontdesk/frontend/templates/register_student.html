@@ -5,7 +5,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>學生註冊 | AI履歷平台</title>
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <style>
     body,
     html {
@@ -105,10 +105,12 @@
     <h1>註冊帳號</h1>
 
     <form id="registerForm" method="post" action="http://127.0.0.1:5000/api/register_student">
+
       <div class="field">
         <label for="username">帳號 <span style="font-size: 0.9em; color: #666;">（請輸入學號）</span></label>
-        <input type="text" name="username" id="username" required />
+        <input type="text" name="username" id="username" required />      
         <div id="usernameError" style="color: red; font-size: 14px; display: none;"></div>
+ 
       </div>
 
       <div class="field">
@@ -154,51 +156,52 @@
     }
 
     // === 前端格式驗證 ===
-    document.getElementById("registerForm").addEventListener("submit", function (e) {
-      const emailInput = document.getElementById("email");
-      const passwordInput = document.getElementById("password");
-      const usernameInput = document.getElementById("username");
+  document.getElementById("registerForm").addEventListener("submit", function (e) {
+    const emailInput = document.getElementById("email");
+    const passwordInput = document.getElementById("password");
+    const usernameInput = document.getElementById("username");
 
-      const emailError = document.getElementById("emailError");
-      const passwordError = document.getElementById("passwordError");
-      const usernameError = document.getElementById("usernameError");
+    const emailError = document.getElementById("emailError");
+    const passwordError = document.getElementById("passwordError");
+    const usernameError = document.getElementById("usernameError");
 
-      const email = emailInput.value.trim();
-      const password = passwordInput.value.trim();
-      const username = usernameInput.value.trim();
+    const email = emailInput.value.trim();
+    const password = passwordInput.value.trim();
+    const username = usernameInput.value.trim();
 
-      const emailPattern = /^[\w\.-]+@stu\.ukn\.edu\.tw$/;
-      const idPattern = /^[A-Z][1-2]\d{8}$/;
-      const studentIdPattern = /^\d{9}$/;
+    const emailPattern = /^[\w\.-]+@stu\.ukn\.edu\.tw$/;
+    const idPattern = /^[A-Z][1-2]\d{8}$/;
+    const studentIdPattern = /^\d{9}$/;
 
-      if (!studentIdPattern.test(username)) {
-        e.preventDefault();
-        usernameError.style.display = "block";
-        usernameError.textContent = "學號格式錯誤，需為 9 位數字";
-        return;
-      } else {
-        usernameError.style.display = "none";
-      }
+    if (!studentIdPattern.test(username)) {
+      e.preventDefault();
+      usernameError.style.display = "block";
+      usernameError.textContent = "學號格式錯誤，需為 9 位數字";
+      return;
+    } else {
+      usernameError.style.display = "none";
+    }
 
-      if (!emailPattern.test(email)) {
-        e.preventDefault();
-        emailError.style.display = "block";
-        emailError.textContent = "請輸入正確的學校信箱（例如 123456789@stu.ukn.edu.tw）";
-        return;
-      } else {
-        emailError.style.display = "none";
-      }
+    if (!emailPattern.test(email)) {
+      e.preventDefault();
+      emailError.style.display = "block";
+      emailError.textContent = "請輸入正確的學校信箱（例如 123456789@stu.ukn.edu.tw）";
+      return;
+    } else {
+      emailError.style.display = "none";
+    }
 
-      if (!idPattern.test(password)) {
-        e.preventDefault();
-        passwordError.style.display = "block";
-        passwordError.textContent = "請輸入正確的身分證格式（例如 A123456789）";
-        return;
-      } else {
-        passwordError.style.display = "none";
-      }
-    });
-  </script>
+    if (!idPattern.test(password)) {
+      e.preventDefault();
+      passwordError.style.display = "block";
+      passwordError.textContent = "請輸入正確的身分證格式（例如 A123456789）";
+      return;
+    } else {
+      passwordError.style.display = "none";
+    }
+  });
+</script>
+
 </body>
 
 </html>
