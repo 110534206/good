@@ -10,7 +10,7 @@ db = mysql.connector.connect(
     host="localhost",
     user="root",
     password="",
-    database="ai_resume"
+    database="user"
 )
 cursor = db.cursor(buffered=True)
 
