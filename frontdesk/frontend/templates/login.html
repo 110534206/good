@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>智慧實習平台-登入</title>
+  <title>智慧實習平台 | 登入</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
 
   <style>
@@ -175,8 +175,7 @@
               <option value="">請選擇身份</option>
               <option value="student">學生</option>
               <option value="teacher">老師</option>
-              <option value="director">主任</option>
-              <option value="admin">系統管理員</option>
+              <option value="administrative">主任</option>
             </select>
           </div>
 
@@ -216,17 +215,27 @@
       }
     }
 
-    function handleLogin(event) {
+    async function handleLogin(event) {
       event.preventDefault();
 
       const username = document.getElementById("username").value;
       const password = document.getElementById("password").value;
-      const roleSelect = document.getElementById("role").value;
+      const role = document.getElementById("role").value;
 
-      if (username === "user" && password === "1234") {
+      const response = await fetch("/api/login", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ username, password, role }),
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
         localStorage.setItem("loggedIn", "true");
         localStorage.setItem("username", username);
-        localStorage.setItem("role", roleSelect);
+        localStorage.setItem("role", role);
         window.location.href = "/dashboard";
       } else {
         document.getElementById("error-message").style.display = "block";

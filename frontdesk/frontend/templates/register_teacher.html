@@ -1,17 +1,15 @@
 <!DOCTYPE HTML>
 <html lang="zh-TW">
-
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>教師註冊 | AI履歷平台</title>
+  <title>智慧實習平台 | 教師註冊</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <style>
-    body,
-    html {
+    body, html {
       height: 100%;
       font-family: "Segoe UI", "微軟正黑體", sans-serif;
-      background: url("images/login_pc.png") no-repeat center center fixed;
+      background: url("{{ url_for('static', filename='images/login_pc.png') }}") no-repeat center center fixed;
       background-size: cover;
     }
 
@@ -98,8 +96,8 @@
 
 <body>
   <div id="wrapper">
-    <h1>註冊帳號</h1>
-    <form onsubmit="handleRegister(event)">
+    <h1>教師註冊</h1>
+    <form id="registerForm">
       <div class="field">
         <label for="username">帳號</label>
         <input type="text" name="username" id="username" required />
@@ -135,12 +133,38 @@
       }
     }
 
-    function handleRegister(event) {
+    document.getElementById("registerForm").addEventListener("submit", async function (event) {
       event.preventDefault();
-      alert("註冊成功！");
-      window.location.href = "login.html";
-    }
+
+      const username = document.getElementById("username").value.trim();
+      const password = document.getElementById("password").value.trim();
+
+      if (!username || !password) {
+        alert("請填寫帳號與密碼");
+        return;
+      }
+
+      try {
+        const response = await fetch("/api/register_teacher", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({ username, password })
+        });
+
+        const result = await response.json();
+        if (result.success) {
+          alert("註冊成功！");
+          window.location.href = "/login";
+        } else {
+          alert("註冊失敗：" + result.message);
+        }
+      } catch (error) {
+        alert("發生錯誤，請稍後再試");
+        console.error(error);
+      }
+    });
   </script>
 </body>
-
 </html>

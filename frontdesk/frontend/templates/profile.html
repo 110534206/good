@@ -4,7 +4,8 @@
     <meta charset="UTF-8">
     <title>個人資料</title>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <link rel="stylesheet" href="assets/css/main.css" />
+    <!-- ✅ 使用 Flask 的 url_for 引入 CSS -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='assets/css/main.css') }}">
     <style>
         body {
             font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
@@ -17,8 +18,7 @@
             max-width: 700px;
             margin: 0 auto;
             background: #fff;
-            padding: 2rem;
-			padding-right: 3rem;
+            padding: 2rem 3rem;
             border-radius: 12px;
             box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
         }
@@ -80,10 +80,10 @@
     <div class="profile-wrapper">
         <h2>個人資料</h2>
 
-        <!-- 頭貼 -->
-        <img src="images/avatar.jpg" alt="頭像" class="avatar">
+        <!-- ✅ 使用 url_for 載入頭像圖片 -->
+        <img src="{{ url_for('static', filename='images/avatar.jpg') }}" alt="頭像" class="avatar">
 
-        <!-- 可編輯欄位 -->
+        <!-- 表單欄位 -->
         <div class="profile-field">
             <label for="name">姓名</label>
             <input type="text" id="name" value="">
@@ -118,10 +118,12 @@
     </div>
 
     <script>
-        // 登入檢查
-        if (!localStorage.getItem("loggedIn")) {
-            window.location.href = "login.html";
+        // ✅ 登入檢查：若未登入則跳回 /login
+        if (!localStorage.getItem("username") || !localStorage.getItem("role")) {
+            alert("請先登入！");
+            window.location.href = "/login";
         }
+
         function saveProfile() {
             const name = document.getElementById('name').value;
             const email = document.getElementById('email').value;
@@ -137,8 +139,8 @@
                 "居住地：" + location + "\n" +
                 "證照：" + certs + "\n" +
                 "職涯方向：" + career);
-			
-			window.location.href = "index.html";
+
+            window.location.href = "/dashboard"; // 儲存完回主畫面
         }
     </script>
 

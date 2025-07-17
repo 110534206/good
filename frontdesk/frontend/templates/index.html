@@ -2,7 +2,7 @@
 <html lang="zh-Hant">
 <head>
     <meta charset="UTF-8" />
-    <title>AI實習履歷與志願選填系統</title>
+    <title>智慧實習平台</title>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <!-- CSS 路徑改成 url_for -->
     <link rel="stylesheet" href="{{ url_for('static', filename='assets/css/main.css') }}" />
@@ -167,7 +167,7 @@
 
     function logout() {
         localStorage.clear();
-        window.location.href = "login.html";
+        window.location.href = "/login";
     }
 </script>
 
@@ -247,6 +247,7 @@
             link.style.display = text.includes(keyword) ? "block" : "none";
         });
     });
+    
 </script>
 
 </body>
