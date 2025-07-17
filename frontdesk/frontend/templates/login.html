@@ -14,8 +14,7 @@
       box-sizing: border-box;
     }
 
-    html,
-    body {
+    html, body {
       height: 100%;
       font-family: "Segoe UI", "微軟正黑體", sans-serif;
       background: url("{{ url_for('static', filename='images/login_pc.png') }}") no-repeat center center fixed;
@@ -58,23 +57,23 @@
 
     .form-box h2 {
       text-align: center;
-      margin-bottom: 20px;
+      margin-bottom: 46px;
       color: #333;
+      font-size: 32px;
     }
 
     .form-group {
-      margin-bottom: 15px;
+      margin-bottom: 20px;
     }
 
     label {
-      font-weight: bold;
       display: block;
-      margin-bottom: 5px;
+      margin-bottom: 10px;
+      font-size: 20px;
     }
 
     input[type="text"],
-    input[type="password"],
-    select {
+    input[type="password"] {
       width: 100%;
       padding: 10px;
       border: 1px solid #ccc;
@@ -87,7 +86,7 @@
 
     .toggle-password {
       position: absolute;
-      top: 70%;
+      top: 55px; 
       right: 12px;
       transform: translateY(-50%);
       cursor: pointer;
@@ -170,16 +169,6 @@
 
         <form onsubmit="return handleLogin(event)">
           <div class="form-group">
-            <label for="role">身份</label>
-            <select id="role" name="role" required>
-              <option value="">請選擇身份</option>
-              <option value="student">學生</option>
-              <option value="teacher">老師</option>
-              <option value="administrative">主任</option>
-            </select>
-          </div>
-
-          <div class="form-group">
             <label for="username">帳號</label>
             <input type="text" id="username" name="username" required />
           </div>
@@ -220,14 +209,13 @@
 
       const username = document.getElementById("username").value;
       const password = document.getElementById("password").value;
-      const role = document.getElementById("role").value;
 
       const response = await fetch("/api/login", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ username, password, role }),
+        body: JSON.stringify({ username, password }),
       });
 
       const data = await response.json();
@@ -235,7 +223,7 @@
       if (data.success) {
         localStorage.setItem("loggedIn", "true");
         localStorage.setItem("username", username);
-        localStorage.setItem("role", role);
+        localStorage.setItem("role", data.role);  // 後端自動回傳的角色
         window.location.href = "/dashboard";
       } else {
         document.getElementById("error-message").style.display = "block";

@@ -53,6 +53,11 @@
       box-sizing: border-box;
     }
 
+    input[type="email"][readonly] {
+      background-color: #f0f0f0;
+      cursor: not-allowed;
+    }
+
     input[type="submit"] {
       display: flex;
       justify-content: center;
@@ -73,6 +78,17 @@
       background-color: #a5ccae;
     }
 
+    .toggle-password {
+      position: absolute;
+      top: 48px; 
+      right: 16px;
+      transform: translateY(-50%);
+      cursor: pointer;
+      color: #888888;
+      font-size: 18px;
+      user-select: none;
+    }
+
     .back-button {
       margin-top: 10px;
       color: #000000;
@@ -87,15 +103,10 @@
       color: #5a6268;
     }
 
-    .toggle-password {
-      position: absolute;
-      top: 70%;
-      right: 16px;
-      transform: translateY(-50%);
-      cursor: pointer;
-      color: #888888;
-      font-size: 18px;
-      user-select: none;
+    #responseMessage {
+      text-align: center;
+      font-weight: bold;
+      margin-bottom: 15px;
     }
   </style>
 </head>
@@ -104,18 +115,19 @@
   <div id="wrapper">
     <h1>註冊帳號</h1>
 
-    <form id="registerForm" method="post" action="http://127.0.0.1:5000/api/register_student">
+    <!-- 顯示後端回傳訊息 -->
+    <div id="responseMessage"></div>
 
+    <form id="registerForm">
       <div class="field">
         <label for="username">帳號 <span style="font-size: 0.9em; color: #666;">（請輸入學號）</span></label>
-        <input type="text" name="username" id="username" required />
+        <input type="text" name="username" id="username" required autocomplete="off" />
         <div id="usernameError" style="color: red; font-size: 14px; display: none;"></div>
-
       </div>
 
       <div class="field">
         <label for="password">密碼 <span style="font-size: 0.9em; color: #666;">（請輸入身分證字號）</span></label>
-        <input type="password" name="password" id="password" required />
+        <input type="password" name="password" id="password" required autocomplete="off" />
         <span class="toggle-password" onclick="togglePassword()">
           <i class="fas fa-eye-slash" id="eyeIcon"></i>
         </span>
@@ -123,10 +135,8 @@
       </div>
 
       <div class="field">
-        <label for="email">Email <span style="font-size: 0.9em; color: #666;">（請使用學校信箱，例如
-            123456789@stu.ukn.edu.tw）</span></label>
-        <input type="email" name="email" id="email" required />
-        <div id="emailError" style="color: red; font-size: 14px; display: none;"></div>
+        <label for="email">Email <span style="font-size: 0.9em; color: #666;">（由學號自動生成，無法修改）</span></label>
+        <input type="email" name="email" id="email" readonly />
       </div>
 
       <div class="field">
@@ -134,7 +144,7 @@
       </div>
 
       <div class="field">
-        <button type="button" onclick="location.href='{{ url_for('register_choice') }}'">返回上一頁</button>
+        <button type="button" class="back-button" onclick="location.href='{{ url_for('register_choice') }}'">返回上一頁</button>
       </div>
     </form>
   </div>
@@ -155,53 +165,79 @@
       }
     }
 
-    // === 前端格式驗證 ===
-    document.getElementById("registerForm").addEventListener("submit", function (e) {
-      const emailInput = document.getElementById("email");
-      const passwordInput = document.getElementById("password");
-      const usernameInput = document.getElementById("username");
+    // 自動生成 email
+    const studentIdInput = document.getElementById("username");
+    const emailInput = document.getElementById("email");
 
-      const emailError = document.getElementById("emailError");
-      const passwordError = document.getElementById("passwordError");
-      const usernameError = document.getElementById("usernameError");
-
-      const email = emailInput.value.trim();
-      const password = passwordInput.value.trim();
-      const username = usernameInput.value.trim();
-
-      const emailPattern = /^[\w\.-]+@stu\.ukn\.edu\.tw$/;
-      const idPattern = /^[A-Z][1-2]\d{8}$/;
+    studentIdInput.addEventListener("input", () => {
+      const studentId = studentIdInput.value.trim();
       const studentIdPattern = /^\d{9}$/;
+      if (studentIdPattern.test(studentId)) {
+        emailInput.value = studentId + "@stu.ukn.edu.tw";
+        document.getElementById("usernameError").style.display = "none";
+      } else {
+        emailInput.value = "";
+      }
+    });
+
+    // 表單提交 + 前端驗證 + 回傳訊息處理
+    document.getElementById("registerForm").addEventListener("submit", async function (e) {
+      e.preventDefault();
+
+      const username = studentIdInput.value.trim();
+      const password = document.getElementById("password").value.trim();
+      const usernameError = document.getElementById("usernameError");
+      const passwordError = document.getElementById("passwordError");
+      const responseMessage = document.getElementById("responseMessage");
+
+      const studentIdPattern = /^\d{9}$/;
+      const idPattern = /^[A-Z][1-2]\d{8}$/;
+
+      let valid = true;
 
       if (!studentIdPattern.test(username)) {
-        e.preventDefault();
         usernameError.style.display = "block";
         usernameError.textContent = "學號格式錯誤，需為 9 位數字";
-        return;
+        valid = false;
       } else {
         usernameError.style.display = "none";
       }
 
-      if (!emailPattern.test(email)) {
-        e.preventDefault();
-        emailError.style.display = "block";
-        emailError.textContent = "請輸入正確的學校信箱（例如 123456789@stu.ukn.edu.tw）";
-        return;
-      } else {
-        emailError.style.display = "none";
-      }
-
       if (!idPattern.test(password)) {
-        e.preventDefault();
         passwordError.style.display = "block";
         passwordError.textContent = "請輸入正確的身分證格式（例如 A123456789）";
-        return;
+        valid = false;
       } else {
         passwordError.style.display = "none";
       }
+
+      if (!valid) return;
+
+      try {
+        const res = await fetch("/api/register_student", {
+          method: "POST",
+          body: new URLSearchParams({ username, password }),
+        });
+
+        const data = await res.json();
+
+        if (data.success) {
+          responseMessage.style.color = "green";
+          responseMessage.textContent = data.message || "註冊成功，將為您導向登入頁...";
+          setTimeout(() => {
+            window.location.href = "/login";
+          }, 1500);
+        } else {
+          responseMessage.style.color = "red";
+          responseMessage.textContent = data.message || "註冊失敗，請重試";
+        }
+      } catch (err) {
+        responseMessage.style.color = "red";
+        responseMessage.textContent = "伺服器錯誤，請稍後再試";
+        console.error(err);
+      }
     });
   </script>
-
 </body>
 
 </html>
