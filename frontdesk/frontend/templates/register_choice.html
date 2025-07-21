@@ -41,7 +41,7 @@
       border-radius: 8px;
       cursor: pointer;
       transition: background-color 0.3s;
-      color: #388f6f;
+      color: #6c757d;
       margin: 0 30px;
       background-color: #ffffff;
     }
@@ -49,7 +49,7 @@
     .administrative:hover,
     .teacher:hover,
     .student:hover {
-      background-color: #d9e8dd;
+      background-color: #e9f6ec;
     }
 
     .back-button {
@@ -65,17 +65,40 @@
     .back-button:hover {
       color: #d9e8dd;
     }
+
+    .button.primary {
+      margin-top: 60px;
+      padding: 1em 2.5em;
+      font-size: 25px;
+      min-width: 220px;
+      display: inline-block;
+      font-weight: 600;
+      color: white;
+      background-color: #6c757d;
+      border-radius: 5px;
+      padding: 0.5em 3em;
+      border: none;
+      cursor: pointer;
+      transition: background-color 0.3s ease;
+      user-select: none;
+      text-align: center;
+    }
+
+    .button.primary:hover {
+      background-color: #5a6268;
+    }
   </style>
 </head>
 
 <body>
   <div id="wrapper">
     <h1>請選擇註冊身份</h1>
-    <button class="register-button administrative" onclick="location.href='{{ url_for('register_administrative_page') }}'">行政人員</button>
+    <button class="register-button administrative"
+      onclick="location.href='{{ url_for('register_administrative_page') }}'">行政人員</button>
     <button class="register-button teacher" onclick="location.href='{{ url_for('register_teacher_page') }}'">老師</button>
     <button class="register-button student" onclick="location.href='{{ url_for('register_student_page') }}'">學生</button>
     <br>
-    <input type="button" value="返回首頁" class="back-button" onclick="location.href='{{ url_for('login_page') }}'" />
+    <button class="button primary" onclick="location.href='{{ url_for('login_page') }}'">返回首頁</button>
   </div>
 </body>
 

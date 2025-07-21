@@ -7,7 +7,6 @@ from flask_cors import CORS
 app = Flask(__name__, template_folder='../frontend/templates', static_folder='../frontend/static')
 CORS(app, supports_credentials=True)
 
-# 建立資料庫連線
 db = mysql.connector.connect(
     host="localhost",
     user="root",
@@ -15,34 +14,28 @@ db = mysql.connector.connect(
     database="user"
 )
 
-# 註冊學生帳號（後端自動生成email）
+# 學生註冊API
 @app.route("/api/register_student", methods=["POST"])
 def register_student():
     username = request.form.get("username")
-    raw_password = request.form.get("password")  # 原始身分證字號，先不要加密
+    raw_password = request.form.get("password")
 
-    # 學號格式驗證
     if not re.match(r"^\d{9}$", username):
         return jsonify({"success": False, "message": "學號格式錯誤"}), 400
 
-    # 身分證格式驗證（用原始密碼驗證）
     if not re.match(r"^[A-Z][1-2]\d{8}$", raw_password):
         return jsonify({"success": False, "message": "身分證字號格式錯誤"}), 400
 
-    email = f"{username}@stu.ukn.edu.tw"  # 自動生成 email
-
-    password = generate_password_hash(raw_password)  # 加密密碼
-
+    email = f"{username}@stu.ukn.edu.tw"
+    password = generate_password_hash(raw_password)
     role = "student"
 
     cursor = db.cursor()
 
-    # 檢查帳號是否已存在
     cursor.execute("SELECT * FROM student WHERE username = %s", (username,))
     if cursor.fetchone():
         return jsonify({"success": False, "message": "學號已存在"}), 409
 
-    # 寫入資料庫
     cursor.execute(
         "INSERT INTO student (username, password, email, role) VALUES (%s, %s, %s, %s)",
         (username, password, email, role)
@@ -51,12 +44,103 @@ def register_student():
 
     return jsonify({"success": True, "message": "學生註冊成功"})
 
-# 其他路由、老師、行政註冊和登入部分不變，省略...
+# 教師註冊 API
+@app.route("/api/register_teacher", methods=["POST"])
+def register_teacher():
+    username = request.form.get("username")
+    raw_password = request.form.get("password")
 
-# 頁面路由（for flask 渲染 html）
+    if not username or not raw_password:
+        return jsonify({"success": False, "message": "帳號與密碼皆為必填"}), 400
+
+    # 可以視需求添加格式驗證，例如教職員代碼格式檢查
+    hashed_password = generate_password_hash(raw_password)
+    role = "teacher"
+
+    cursor = db.cursor()
+
+    # 確認帳號是否已存在
+    cursor.execute("SELECT * FROM teacher WHERE username = %s", (username,))
+    if cursor.fetchone():
+        return jsonify({"success": False, "message": "帳號已存在"}), 409
+
+    # 寫入資料庫
+    cursor.execute(
+        "INSERT INTO teacher (username, password, role) VALUES (%s, %s, %s)",
+        (username, hashed_password, role)
+    )
+    db.commit()
+
+    return jsonify({"success": True, "message": "教師註冊成功"})
+
+# 行政人員註冊 API
+@app.route("/api/register_administrative", methods=["POST"])
+def register_administrative():
+    username = request.form.get("username")
+    raw_password = request.form.get("password")
+
+    if not username or not raw_password:
+        return jsonify({"success": False, "message": "帳號與密碼皆為必填"}), 400
+
+    # 可以視需求添加格式驗證，例如教職員代碼格式檢查
+    hashed_password = generate_password_hash(raw_password)
+    role = "administrative"
+
+    cursor = db.cursor()
+
+    # 確認帳號是否已存在
+    cursor.execute("SELECT * FROM administrative WHERE username = %s", (username,))
+    if cursor.fetchone():
+        return jsonify({"success": False, "message": "帳號已存在"}), 409
+
+    # 寫入資料庫
+    cursor.execute(
+        "INSERT INTO administrative (username, password, role) VALUES (%s, %s, %s)",
+        (username, hashed_password, role)
+    )
+    db.commit()
+
+    return jsonify({"success": True, "message": "行政人員註冊成功"})
+
+# 登入API
+@app.route('/api/login', methods=['POST'])
+def login():
+    try:
+        data = request.get_json()
+        username = data.get('username')
+        password = data.get('password')
+
+        if not username or not password:
+            return jsonify({"success": False, "message": "帳號或密碼不得為空"}), 400
+
+        cursor = db.cursor(dictionary=True)
+        cursor.execute("SELECT * FROM student WHERE username = %s", (username,))
+        user = cursor.fetchone()
+
+        if user is None:
+            return jsonify({"success": False, "message": "帳號或密碼錯誤"}), 401
+
+        if check_password_hash(user['password'], password):
+            return jsonify({
+                "success": True,
+                "username": user['username'],
+                "role": user['role']
+            })
+        else:
+            return jsonify({"success": False, "message": "帳號或密碼錯誤"}), 401
+
+    except Exception as e:
+        print("後端錯誤:", e)
+        return jsonify({"success": False, "message": "伺服器錯誤，請稍後再試"}), 500
+
+# 頁面路由
 @app.route("/login")
 def login_page():
     return render_template("login.html")
+
+@app.route('/index')
+def index():
+    return render_template('index.html')
 
 @app.route("/register_choice")
 def register_choice():

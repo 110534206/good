@@ -25,6 +25,7 @@
     h1 {
       text-align: center;
       color: #000000;
+      margin-top: -10px;
     }
 
     .field {
@@ -35,6 +36,7 @@
     label {
       display: block;
       margin-bottom: 8px;
+      font-size: 20px;
       color: #000000;
     }
 
@@ -46,6 +48,7 @@
       padding: 10px;
       border-radius: 6px;
       width: 100%;
+      font-size: 18px;
       box-sizing: border-box;
     }
 
@@ -55,7 +58,7 @@
       width: 100%;
       background-color: #388f6f;
       color: #ffffff;
-      font-size: 16px;
+      font-size: 20px;
       font-weight: bold;
       border: none;
       border-radius: 6px;
@@ -68,11 +71,11 @@
     }
 
     .back-button {
-      margin-top: 10px;
+      margin-top: 30px; /* 位置往下移 */
       color: #000000;
       background: transparent;
       border: none;
-      font-size: 16px;
+      font-size: 20px;
       cursor: pointer;
       text-decoration: underline;
     }
@@ -91,12 +94,21 @@
       font-size: 18px;
       user-select: none;
     }
+
+    #responseMessage {
+      text-align: center;
+      font-weight: bold;
+      margin-bottom: 15px;
+    }
   </style>
 </head>
 
 <body>
   <div id="wrapper">
     <h1>教師註冊</h1>
+
+    <div id="responseMessage"></div>
+
     <form id="registerForm">
       <div class="field">
         <label for="username">帳號</label>
@@ -113,7 +125,7 @@
         <input type="submit" value="註冊" />
       </div>
       <div class="field">
-        <button type="button" onclick="location.href='{{ url_for('register_choice') }}'">返回上一頁</button>
+        <button type="button" class="back-button" onclick="location.href='{{ url_for('register_choice') }}'">返回上一頁</button>
       </div>
     </form>
   </div>
@@ -138,30 +150,35 @@
 
       const username = document.getElementById("username").value.trim();
       const password = document.getElementById("password").value.trim();
+      const responseMessage = document.getElementById("responseMessage");
 
       if (!username || !password) {
-        alert("請填寫帳號與密碼");
+        responseMessage.style.color = "red";
+        responseMessage.textContent = "請填寫帳號與密碼";
         return;
       }
 
       try {
         const response = await fetch("/api/register_teacher", {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify({ username, password })
+          body: new URLSearchParams({ username, password }),
         });
 
         const result = await response.json();
+
         if (result.success) {
-          alert("註冊成功！");
-          window.location.href = "/login";
+          responseMessage.style.color = "green";
+          responseMessage.textContent = result.message || "註冊成功，將為您導向登入頁...";
+          setTimeout(() => {
+            window.location.href = "/login";
+          }, 1500);
         } else {
-          alert("註冊失敗：" + result.message);
+          responseMessage.style.color = "red";
+          responseMessage.textContent = result.message || "註冊失敗，請重試";
         }
       } catch (error) {
-        alert("發生錯誤，請稍後再試");
+        responseMessage.style.color = "red";
+        responseMessage.textContent = "發生錯誤，請稍後再試";
         console.error(error);
       }
     });
