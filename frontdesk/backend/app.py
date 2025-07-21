@@ -105,33 +105,37 @@ def register_administrative():
 # 登入API
 @app.route('/api/login', methods=['POST'])
 def login():
-    try:
-        data = request.get_json()
-        username = data.get('username')
-        password = data.get('password')
+    data = request.get_json(force=True)
+    username = data.get('username')
+    password = data.get('password')
 
-        if not username or not password:
-            return jsonify({"success": False, "message": "帳號或密碼不得為空"}), 400
+    if not username or not password:
+        return jsonify({"success": False, "message": "帳號或密碼不得為空"}), 400
 
-        cursor = db.cursor(dictionary=True)
-        cursor.execute("SELECT * FROM student WHERE username = %s", (username,))
+    cursor = db.cursor(dictionary=True)
+    cursor.execute("SELECT * FROM student WHERE username = %s", (username,))
+    user = cursor.fetchone()
+
+    if user is None:
+        cursor.execute("SELECT * FROM teacher WHERE username = %s", (username,))
         user = cursor.fetchone()
-
         if user is None:
-            return jsonify({"success": False, "message": "帳號或密碼錯誤"}), 401
+            cursor.execute("SELECT * FROM administrative WHERE username = %s", (username,))
+            user = cursor.fetchone()
 
-        if check_password_hash(user['password'], password):
-            return jsonify({
-                "success": True,
-                "username": user['username'],
-                "role": user['role']
-            })
-        else:
-            return jsonify({"success": False, "message": "帳號或密碼錯誤"}), 401
+    if user and check_password_hash(user['password'], password):
+        return jsonify({
+            "success": True,
+            "username": user['username'],
+            "role": user['role']
+        })
+    else:
+        return jsonify({"success": False, "message": "帳號或密碼錯誤"}), 401
+# 頭像路由
+@app.route('/profile')
+def profile_page():
+    return render_template('profile.html') 
 
-    except Exception as e:
-        print("後端錯誤:", e)
-        return jsonify({"success": False, "message": "伺服器錯誤，請稍後再試"}), 500
 
 # 頁面路由
 @app.route("/login")

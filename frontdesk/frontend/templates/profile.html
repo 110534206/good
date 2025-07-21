@@ -1,10 +1,10 @@
 <!DOCTYPE html>
 <html lang="zh-Hant">
+
 <head>
     <meta charset="UTF-8">
     <title>個人資料</title>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <!-- ✅ 使用 Flask 的 url_for 引入 CSS -->
     <link rel="stylesheet" href="{{ url_for('static', filename='assets/css/main.css') }}">
     <style>
         body {
@@ -36,6 +36,7 @@
             object-fit: cover;
             border: 3px solid #ccc;
             margin: 0 auto 2rem;
+            cursor: pointer;
         }
 
         .profile-field {
@@ -73,17 +74,51 @@
         .save-btn:hover {
             background-color: #0056b3;
         }
+
+        /* Modal 視窗樣式 */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 2000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            justify-content: center;
+            align-items: center;
+        }
+
+        .modal-content {
+            background: #fff;
+            padding: 2rem;
+            border-radius: 8px;
+            position: relative;
+        }
+
+        .modal-content img {
+            max-width: 100%;
+            max-height: 80vh;
+            object-fit: contain;
+        }
+
+        .modal-close {
+            position: absolute;
+            top: 10px;
+            right: 15px;
+            font-size: 24px;
+            cursor: pointer;
+        }
     </style>
 </head>
+
 <body>
 
     <div class="profile-wrapper">
         <h2>個人資料</h2>
 
-        <!-- ✅ 使用 url_for 載入頭像圖片 -->
-        <img src="{{ url_for('static', filename='images/avatar.jpg') }}" alt="頭像" class="avatar">
+        <img id="login-avatar" class="avatar" src="{{ url_for('static', filename='images/avatar.jpg') }}" alt="頭像" />
 
-        <!-- 表單欄位 -->
         <div class="profile-field">
             <label for="name">姓名</label>
             <input type="text" id="name" value="">
@@ -96,53 +131,63 @@
 
         <div class="profile-field">
             <label for="school">就讀學校</label>
-            <input type="text" id="school" value="康寧大學資訊管理科（五專部）">
+            <input type="text" id="school" value="康寧大學（五專部）">
         </div>
 
         <div class="profile-field">
-            <label for="location">居住地</label>
-            <input type="text" id="location" value="">
-        </div>
-
-        <div class="profile-field">
-            <label for="certs">目前擁有的證照</label>
-            <textarea id="certs" rows="2"></textarea>
-        </div>
-
-        <div class="profile-field">
-            <label for="career">未來職涯方向</label>
-            <textarea id="career" rows="2"></textarea>
-        </div>
-
+            <label for="department">科系</label>
+            <input type="text" id="department" value="資訊管理科">
+</div>
         <button class="save-btn" onclick="saveProfile()">儲存</button>
     </div>
 
+    <!-- Modal 視窗 -->
+    <div id="image-modal" class="modal">
+        <div class="modal-content">
+            <span id="modal-close" class="modal-close">&times;</span>
+            <img id="modal-image" src="" alt="放大頭像" />
+        </div>
+    </div>
+
     <script>
-        // ✅ 登入檢查：若未登入則跳回 /login
+        // 登入檢查
         if (!localStorage.getItem("username") || !localStorage.getItem("role")) {
             alert("請先登入！");
             window.location.href = "/login";
         }
 
+        // 點擊頭像顯示大圖
+        const avatar = document.getElementById('login-avatar');
+        const modal = document.getElementById('image-modal');
+        const modalImage = document.getElementById('modal-image');
+        const modalClose = document.getElementById('modal-close');
+
+        avatar.addEventListener('click', () => {
+            modal.style.display = 'flex';
+            modalImage.src = avatar.src;
+        });
+
+        modalClose.addEventListener('click', () => {
+            modal.style.display = 'none';
+        });
+
+        // 點擊視窗外部關閉視窗
+        window.addEventListener('click', (event) => {
+            if (event.target === modal) {
+                modal.style.display = 'none';
+            }
+        });
+
+        // 儲存個人資料
         function saveProfile() {
             const name = document.getElementById('name').value;
             const email = document.getElementById('email').value;
             const school = document.getElementById('school').value;
-            const location = document.getElementById('location').value;
-            const certs = document.getElementById('certs').value;
-            const career = document.getElementById('career').value;
+            const department = document.getElementById('department').value;
 
             alert("已儲存！\n\n" +
                 "姓名：" + name + "\n" +
                 "Email：" + email + "\n" +
                 "學校：" + school + "\n" +
-                "居住地：" + location + "\n" +
-                "證照：" + certs + "\n" +
-                "職涯方向：" + career);
-
-            window.location.href = "/dashboard"; // 儲存完回主畫面
-        }
-    </script>
-
-</body>
-</html>
+                "科系：" + department + "\n" +
+::contentReference[oaicite:0]{index=0}
