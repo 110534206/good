@@ -179,8 +179,10 @@
   </nav>
 
   <div id="login-area">
-    <img src="{{ url_for('static', filename='images/avatar.jpg') }}" alt="頭像" id="login-avatar" />
-    <button onclick="logout()" class="button small">登出</button>
+<a href="/profile">
+  <img src="{{ url_for('static', filename='images/avatar.jpg') }}" alt="頭像" id="login-avatar" />
+</a>
+  <button onclick="logout()" class="button small">登出</button>
   </div>
 
   <header>
