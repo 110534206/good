@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>選擇登入身分</title>
+    <style>
+        body {
+            font-family: "Segoe UI", "微軟正黑體", sans-serif;
+            background: #f0f0f0;
+            margin: 0;
+            padding: 0;
+        }
+
+        .container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            text-align: center;
+        }
+
+        h1 {
+            font-size: 32px;
+            margin-bottom: 40px;
+        }
+
+        .role-button {
+            padding: 15px 40px;
+            margin: 10px;
+            font-size: 20px;
+            border: none;
+            border-radius: 8px;
+            background-color: #007bff;
+            color: white;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+        }
+
+        .role-button:hover {
+            background-color: #0056b3;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>請選擇登入身分</h1>
+        <button class="role-button" onclick="selectRole('teacher')">教師</button>
+        <button class="role-button" onclick="selectRole('admin')">行政人員</button>
+    </div>
+
+    <script>
+        function selectRole(role) {
+            localStorage.setItem("selectedRole", role);
+            // 導向首頁或指定的頁面，可依實際情況修改
+            window.location.href = "/index";
+        }
+    </script>
+</body>
+</html>
