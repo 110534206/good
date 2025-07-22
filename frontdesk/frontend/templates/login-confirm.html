@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>選擇登入身分</title>
+    <style>
+        body {
+            font-family: "Segoe UI", "微軟正黑體", sans-serif;
+            background: #f9f9f9;
+        }
+        .container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+        }
+        h1 {
+            font-size: 28px;
+            margin-bottom: 30px;
+        }
+        .role-button {
+            padding: 15px 40px;
+            font-size: 18px;
+            margin: 10px;
+            border: none;
+            border-radius: 8px;
+            background-color: #007bff;
+            color: white;
+            cursor: pointer;
+        }
+        .role-button:hover {
+            background-color: #0056b3;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>請選擇登入身分</h1>
+        <div id="role-buttons"></div>
+    </div>
+
+    <script>
+        const roleList = JSON.parse(localStorage.getItem("roleList") || "[]");
+        const container = document.getElementById("role-buttons");
+
+        if (roleList.length === 0) {
+            alert("角色資訊遺失，請重新登入");
+            window.location.href = "/login";
+        }
+
+        roleList.forEach(role => {
+            const btn = document.createElement("button");
+            btn.className = "role-button";
+            btn.textContent = role === "teacher" ? "教師" : "行政人員";
+            btn.onclick = () => {
+                localStorage.setItem("selectedRole", role);
+                window.location.href = "/index";
+            };
+            container.appendChild(btn);
+        });
+    </script>
+</body>
+</html>

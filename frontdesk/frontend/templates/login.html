@@ -214,15 +214,21 @@
                 const d = await resp.json();
                 if (d.success) {
                     localStorage.setItem("username", d.username);
-                    localStorage.setItem("role", d.role);
+                    localStorage.setItem("roleList", JSON.stringify(d.roles));
+                    
+                if (d.roles.length === 1) {
+                    localStorage.setItem("selectedRole", d.roles[0]); // 直接使用
                     window.location.href = "/index";
                 } else {
-                    err.textContent = d.message || "帳號或密碼錯誤";
-                    err.style.display = "block";
+                    window.location.href = "/login-confirm"; // 導向選擇角色
                 }
-            } catch {
-                err.textContent = "伺服器錯誤，請稍後再試";
+            } else {
+                err.textContent = d.message || "帳號或密碼錯誤";
                 err.style.display = "block";
+            }
+        } catch {
+            err.textContent = "伺服器錯誤，請稍後再試";
+            err.style.display = "block";
             }
         }
     </script>

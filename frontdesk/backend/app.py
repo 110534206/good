@@ -13,7 +13,6 @@ db = mysql.connector.connect(
     password="",
     database="user"
 )
-
 # 學生註冊API
 @app.route("/api/register_student", methods=["POST"])
 def register_student():
