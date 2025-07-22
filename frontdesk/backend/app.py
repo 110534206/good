@@ -143,7 +143,7 @@ def login_page():
     return render_template("login.html")
 
 @app.route('/index')
-def index():
+def index_page():
     return render_template('index.html')
 
 @app.route("/register_choice")
