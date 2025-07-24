@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <title>智慧實習平台</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <link rel="stylesheet" href="{{ url_for('static', filename='assets/css/main.css') }}">
+
   <style>
         /* == 按鈕與選單樣式 == */
         #menu-btn {
@@ -134,7 +134,7 @@
 <body class="is-preload">
   <script>
     const username = localStorage.getItem("username");
-    const role = localStorage.getItem("role");
+    const role = localStorage.getItem("selectedRole");
     if (!username || !role) {
       alert("請先登入！");
       window.location.href = "/login";
@@ -150,10 +150,6 @@
       } else if (role === "admin") {
         cards.forEach(c => c.style.display = "none");
       }
-
-      document.getElementById("login-avatar").addEventListener("click", () => {
-        window.location.href = "/profile";
-      });
     });
 
     function logout() {

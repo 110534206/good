@@ -112,24 +112,34 @@ def login():
         return jsonify({"success": False, "message": "帳號或密碼不得為空"}), 400
 
     cursor = db.cursor(dictionary=True)
+    roles = []
+    # 搜尋學生
     cursor.execute("SELECT * FROM student WHERE username = %s", (username,))
-    user = cursor.fetchone()
+    student = cursor.fetchone()
+    if student and check_password_hash(student['password'], password):
+        roles.append("student")
 
-    if user is None:
-        cursor.execute("SELECT * FROM teacher WHERE username = %s", (username,))
-        user = cursor.fetchone()
-        if user is None:
-            cursor.execute("SELECT * FROM administrative WHERE username = %s", (username,))
-            user = cursor.fetchone()
+    # 搜尋教師
+    cursor.execute("SELECT * FROM teacher WHERE username = %s", (username,))
+    teacher = cursor.fetchone()
+    if teacher and check_password_hash(teacher['password'], password):
+        roles.append("teacher")
 
-    if user and check_password_hash(user['password'], password):
+    # 搜尋行政人員
+    cursor.execute("SELECT * FROM administrative WHERE username = %s", (username,))
+    admin = cursor.fetchone()
+    if admin and check_password_hash(admin['password'], password):
+        roles.append("administrative")
+
+    if roles:
         return jsonify({
             "success": True,
-            "username": user['username'],
-            "role": user['role']
+            "username": username,
+            "roles": roles
         })
     else:
         return jsonify({"success": False, "message": "帳號或密碼錯誤"}), 401
+
 # 頭像路由
 @app.route('/profile')
 def profile_page():
@@ -160,6 +170,10 @@ def register_teacher_page():
 @app.route("/register_administrative")
 def register_administrative_page():
     return render_template("register_administrative.html")
+
+@app.route("/login-confirm")
+def login_confirm_page():
+    return render_template("login-confirm.html")
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0' , port=5000, debug=True)

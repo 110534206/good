@@ -1,11 +1,12 @@
-    <!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="zh-TW">
+
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>智慧實習平台 | 登入</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
-   <style>
+    <style>
         * {
             margin: 0;
             padding: 0;
@@ -158,6 +159,7 @@
         }
     </style>
 </head>
+
 <body>
     <div class="center-container">
         <div class="logo-side"><img src="{{ url_for('static', filename='images/logo_name.jpg') }}" alt=""></div>
@@ -179,7 +181,8 @@
                 </div>
                 <div class="button-group">
                     <button type="submit" class="button primary">登入</button>
-                    <button type="button" class="button small" onclick="window.location.href='{{ url_for('register_choice') }}'">註冊帳號</button>
+                    <button type="button" class="button small"
+                        onclick="window.location.href='{{ url_for('register_choice') }}'">註冊帳號</button>
                 </div>
             </form>
         </div>
@@ -188,7 +191,7 @@
     <script>
         function togglePassword() {
             const pwd = document.getElementById("password"),
-                  icon = document.getElementById("eyeIcon");
+                icon = document.getElementById("eyeIcon");
             if (pwd.type === "password") {
                 pwd.type = "text";
                 icon.classList.replace("fa-eye-slash", "fa-eye");
@@ -201,8 +204,8 @@
         async function handleLogin(e) {
             e.preventDefault();
             const u = document.getElementById("username").value.trim(),
-                  p = document.getElementById("password").value.trim(),
-                  err = document.getElementById("error-message");
+                p = document.getElementById("password").value.trim(),
+                err = document.getElementById("error-message");
 
             err.style.display = "none";
             try {
@@ -214,23 +217,33 @@
                 const d = await resp.json();
                 if (d.success) {
                     localStorage.setItem("username", d.username);
-                    localStorage.setItem("roleList", JSON.stringify(d.roles));
-                    
-                if (d.roles.length === 1) {
-                    localStorage.setItem("selectedRole", d.roles[0]); // 直接使用
-                    window.location.href = "/index";
+
+                    // 這裡改成讀 roles 陣列（後端回傳的 key）
+                    let roles = d.roles || [];
+
+                    localStorage.setItem("roleList", JSON.stringify(roles));
+
+                    if (roles.length === 1) {
+                        localStorage.setItem("selectedRole", roles[0]);
+                        window.location.href = "/index";
+                    } else if (roles.length > 1) {
+                        window.location.href = "/login-confirm";
+                    } else {
+                        err.textContent = "沒有可用角色，請聯絡管理員";
+                        err.style.display = "block";
+                    }
                 } else {
-                    window.location.href = "/login-confirm"; // 導向選擇角色
+                    err.textContent = d.message || "帳號或密碼錯誤";
+                    err.style.display = "block";
                 }
-            } else {
-                err.textContent = d.message || "帳號或密碼錯誤";
+
+            } catch {
+                err.textContent = "伺服器錯誤，請稍後再試";
                 err.style.display = "block";
             }
-        } catch {
-            err.textContent = "伺服器錯誤，請稍後再試";
-            err.style.display = "block";
-            }
         }
+
     </script>
 </body>
+
 </html>
