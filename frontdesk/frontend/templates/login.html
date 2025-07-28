@@ -200,7 +200,6 @@
                 icon.classList.replace("fa-eye", "fa-eye-slash");
             }
         }
-
         async function handleLogin(e) {
             e.preventDefault();
             const u = document.getElementById("username").value.trim(),
@@ -208,26 +207,28 @@
                 err = document.getElementById("error-message");
 
             err.style.display = "none";
+
             try {
                 const resp = await fetch("/api/login", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({ username: u, password: p })
                 });
+
                 const d = await resp.json();
+
                 if (d.success) {
                     localStorage.setItem("username", d.username);
-
-                    // 這裡改成讀 roles 陣列（後端回傳的 key）
-                    let roles = d.roles || [];
+                    const roles = d.roles || [];
 
                     localStorage.setItem("roleList", JSON.stringify(roles));
 
                     if (roles.length === 1) {
-                        localStorage.setItem("selectedRole", roles[0]);
-                        window.location.href = "/index";
+                        const role = roles[0];
+                        localStorage.setItem("selectedRole", role);
+                        window.location.href = `/${role}_home`;  // ✅ 根據角色自動導向
                     } else if (roles.length > 1) {
-                        window.location.href = "/login-confirm";
+                        window.location.href = "/login-confirm";  // ✅ 多角色讓使用者選
                     } else {
                         err.textContent = "沒有可用角色，請聯絡管理員";
                         err.style.display = "block";

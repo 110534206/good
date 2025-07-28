@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <title>智慧實習平台 | 學生主頁</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    /* == 按鈕與選單樣式 == */
+    #menu-btn {
+        position: fixed;
+        top: 20px;
+        left: 20px;
+        width: 30px;
+        height: 22px;
+        cursor: pointer;
+        z-index: 1001;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+    }
+    #menu-btn span {
+        display: block;
+        height: 4px;
+        background-color: #333;
+        border-radius: 2px;
+    }
+
+    #side-menu {
+        position: fixed;
+        top: 0;
+        left: -250px;
+        width: 250px;
+        height: 100vh;
+        background-color: #fff;
+        transition: left 0.3s ease, box-shadow 0.3s ease;
+        z-index: 1000;
+        padding: 2rem 1rem;
+        display: flex;
+        flex-direction: column;
+    }
+    #side-menu.open {
+        left: 0;
+        box-shadow: 2px 0 8px rgba(0,0,0,0.2);
+    }
+    #side-menu h1 {
+        margin: 40px 0 0.5rem 0;
+        font-size: 1.5rem;
+        padding-bottom: 0.5rem;
+    }
+    .menu-divider {
+        width: 80%;
+        margin: 0.5rem 0 1rem 0;
+        border: none;
+        border-top: 3px solid #ccc;
+    }
+    #menu-search {
+        margin-bottom: 1rem;
+        padding: 0.5rem;
+        font-size: 1rem;
+        width: 90%;
+        border: 1px solid #ccc;
+        border-radius: 5px;
+    }
+    #side-menu a {
+        margin: 0.5rem 0;
+        text-decoration: none;
+        color: #333;
+        font-weight: 600;
+    }
+    #side-menu a:hover {
+        color: #007bff;
+    }
+
+    #login-area {
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        z-index: 999;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+    #login-area .button {
+        font-size: 14px;
+        padding: 0.4em 1em;
+    }
+    #login-avatar {
+        width: 36px;
+        height: 36px;
+        border-radius: 50%;
+        object-fit: cover;
+        cursor: pointer;
+        border: 2px solid #ccc;
+    }
+
+    .card-container {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 2rem;
+        padding: 4rem 2rem;
+    }
+    .card {
+        flex: 1 1 280px;
+        max-width: 300px;
+        background: #fff;
+        border-radius: 12px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        padding: 2rem;
+        text-align: center;
+        transition: transform 0.3s ease;
+    }
+    .card:hover {
+        transform: translateY(-5px);
+    }
+    .card h3 {
+        margin-bottom: 1rem;
+    }
+
+    body {
+        font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+    }
+    header {
+        text-align: center;
+        padding: 2rem;
+    }
+  </style>
+</head>
+<body>
+  <script>
+    const username = localStorage.getItem("username");
+    const role = localStorage.getItem("selectedRole");
+
+    if (!username || role !== "student") {
+      alert("請以學生身份登入！");
+      window.location.href = "/login";
+    }
+
+    document.addEventListener("DOMContentLoaded", () => {
+      document.getElementById("welcome-name").textContent = `${username}（學生）`;
+    });
+
+    function logout() {
+      localStorage.clear();
+      window.location.href = "/login";
+    }
+  </script>
+
+  <!-- 選單按鈕 -->
+  <div id="menu-btn" title="選單" role="button" tabindex="0">
+    <span></span><span></span><span></span>
+  </div>
+
+  <!-- 側邊選單 -->
+  <nav id="side-menu" aria-hidden="true">
+    <h1>功能選單</h1><hr class="menu-divider">
+    <input type="text" id="menu-search" placeholder="搜尋功能..." />
+    <a href="/student_home">首頁</a>
+    <a href="/profile">個人資料</a>
+    <a href="#">上傳履歷</a>
+    <a href="#">AI修改履歷</a>
+    <a href="#">填寫志願序</a>
+    <a href="#">通知</a>
+  </nav>
+
+  <!-- 登出與頭像 -->
+  <div id="login-area">
+    <a href="/profile">
+      <img src="{{ url_for('static', filename='images/avatar.jpg') }}" alt="頭像" id="login-avatar" />
+    </a>
+    <button onclick="logout()" class="button small">登出</button>
+  </div>
+
+  <!-- 歡迎區塊 -->
+  <header>
+    <h1>智慧實習平台</h1>
+    <p>歡迎 <strong id="welcome-name"></strong> 使用此平台</p>
+  </header>
+
+  <!-- 功能卡片 -->
+  <section class="card-container">
+    <div class="card">
+      <h3>上傳履歷</h3>
+      <p>將你的履歷檔案快速上傳至平台。</p>
+      <a href="#" class="button primary">開始上傳</a>
+    </div>
+    <div class="card">
+      <h3>AI修改履歷</h3>
+      <p>讓AI幫你修飾文字，提升專業度。</p>
+      <a href="#" class="button primary">啟用AI修飾</a>
+    </div>
+    <div class="card">
+      <h3>填寫志願序</h3>
+      <p>選擇你心儀的實習廠商與排序。</p>
+      <a href="#" class="button primary">填寫志願</a>
+    </div>
+  </section>
+
+  <!-- 側邊選單控制邏輯 -->
+  <script>
+    const menuBtn = document.getElementById("menu-btn");
+    const sideMenu = document.getElementById("side-menu");
+    menuBtn.addEventListener("click", () => {
+      const open = sideMenu.classList.toggle("open");
+      sideMenu.setAttribute("aria-hidden", !open);
+    });
+
+    document.getElementById("menu-search").addEventListener("input", (e) => {
+      const kw = e.target.value.toLowerCase();
+      document.querySelectorAll("#side-menu a").forEach(a => {
+        a.style.display = a.textContent.toLowerCase().includes(kw) ? "block" : "none";
+      });
+    });
+  </script>
+</body>
+</html>

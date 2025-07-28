@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, jsonify
+from flask import Flask, render_template, request,redirect, jsonify
 import mysql.connector
 import re
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -132,28 +132,72 @@ def login():
         roles.append("administrative")
 
     if roles:
-        return jsonify({
-            "success": True,
-            "username": username,
-            "roles": roles
+      role = roles[0]  # 預設以第一個角色導向，或根據前端選擇也可以擴充
+      redirect_url = f"/{role}_home"
+      return jsonify({
+        "success": True,
+        "username": username,
+        "roles": roles,
+        "redirect_url": redirect_url
         })
     else:
         return jsonify({"success": False, "message": "帳號或密碼錯誤"}), 401
+
+# 確認角色API
+@app.route('/api/confirm_role', methods=['POST'])
+def confirm_role():
+    data = request.get_json()
+    username = data.get("username")
+    role = data.get("role")
+
+    if role not in ['student', 'teacher', 'administrative']:
+        return jsonify({"success": False, "message": "無效角色"}), 400
+
+    db = db()
+    cursor = db.cursor(dictionary=True)
+    cursor.execute(f"SELECT * FROM {role} WHERE username = %s", (username,))
+    user = cursor.fetchone()
+    cursor.close()
+    db.close()
+
+    if not user:
+        return jsonify({"success": False, "message": "帳號不存在於該角色"}), 404
+
+    return jsonify({"success": True, "redirect_url": f"/{role}_home"})
 
 # 頭像路由
 @app.route('/profile')
 def profile_page():
     return render_template('profile.html') 
 
-
-# 頁面路由
+# 頁面路由 登入-使用者主頁-註冊選擇
 @app.route("/login")
 def login_page():
     return render_template("login.html")
 
 @app.route('/index')
 def index_page():
-    return render_template('index.html')
+    role = request.args.get('role')  # 或從 session/localStorage 傳來
+    if role == "student":
+        return redirect('/student_home')
+    elif role == "teacher":
+        return redirect('/teacher_home')
+    elif role == "administrative":
+        return redirect('/administrative_home')
+    else:
+        return render_template("index.html")  # 作為預設頁（可選）
+
+@app.route('/student_home')
+def student_home():
+    return render_template('student_home.html')
+
+@app.route('/teacher_home')
+def teacher_home():
+    return render_template('teacher_home.html')
+
+@app.route('/administrative_home')
+def administrative_home():
+    return render_template('administrative_home.html')
 
 @app.route("/register_choice")
 def register_choice():
