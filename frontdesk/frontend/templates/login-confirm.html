@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>選擇登入身分</title>
+    <title>智慧實習平台 | 選擇登入身分</title>
     <style>
         body {
             font-family: "Segoe UI", "微軟正黑體", sans-serif;
@@ -20,20 +20,30 @@
         }
 
         h1 {
-            font-size: 28px;
-            margin-bottom: 30px;
+            font-size: 40px;
+            margin-top: 5px;
         }
 
         .role-button {
-            padding: 15px 40px;
-            font-size: 18px;
+            width: 200px;
+            height: 70px;
+            padding: 0;
+            font-size: 25px;
             margin: 10px;
             border: none;
             border-radius: 8px;
-            background-color: #007bff;
-            color: white;
             cursor: pointer;
             transition: background-color 0.3s ease;
+        }
+
+        .role-button[data-role="teacher"] {
+            background-color: #007bff;
+            color: white;
+        }
+
+        .role-button[data-role="administrative"] {
+            background-color: #007bff;
+            color: white;
         }
 
         .role-button:hover {
@@ -50,7 +60,6 @@
 
     <script>
         function getRoleDisplayName(role) {
-            // 可依需要擴充更多角色對應中文名稱
             const roleMap = {
                 "teacher": "教師",
                 "administrative": "行政人員",
@@ -75,6 +84,7 @@
             roleList.forEach(role => {
                 const btn = document.createElement("button");
                 btn.className = "role-button";
+                btn.setAttribute("data-role", role);
                 btn.textContent = getRoleDisplayName(role);
                 btn.onclick = () => {
                     localStorage.setItem("selectedRole", role);
