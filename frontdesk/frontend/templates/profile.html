@@ -137,7 +137,7 @@
         <div class="profile-field">
             <label for="department">科系</label>
             <input type="text" id="department" value="資訊管理科">
-</div>
+        </div>
         <button class="save-btn" onclick="saveProfile()">儲存</button>
     </div>
 
@@ -151,7 +151,7 @@
 
     <script>
         // 登入檢查
-        if (!localStorage.getItem("username") || !localStorage.getItem("role")) {
+        if (!localStorage.getItem("username") || !localStorage.getItem("selectedRole")) {
             alert("請先登入！");
             window.location.href = "/login";
         }
@@ -189,5 +189,19 @@
                 "姓名：" + name + "\n" +
                 "Email：" + email + "\n" +
                 "學校：" + school + "\n" +
-                "科系：" + department + "\n" +
-::contentReference[oaicite:0]{index=0}
+                "科系：" + department + "\n");
+
+            const role = localStorage.getItem("selectedRole");
+
+            // 根據角色導頁
+            if (role === "student") {
+                window.location.href = "/student_home";
+            } else if (role === "teacher") {
+                window.location.href = "/teacher_home";
+            } else if (role === "company") {
+                window.location.href = "/company_home";
+            } else {
+                // 預設 fallback 頁面
+                window.location.href = "/";
+            }
+        }

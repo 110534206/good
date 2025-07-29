@@ -7,12 +7,15 @@ from flask_cors import CORS
 app = Flask(__name__, template_folder='../frontend/templates', static_folder='../frontend/static')
 CORS(app, supports_credentials=True)
 
-db = mysql.connector.connect(
-    host="localhost",
-    user="root",
-    password="",
-    database="user"
-)
+# MySQL 資料庫連線設定
+def get_db():
+    return mysql.connector.connect(
+        host="localhost",
+        user="root",
+        password="",
+        database="user"
+    )
+
 # 學生註冊API
 @app.route("/api/register_student", methods=["POST"])
 def register_student():
@@ -29,7 +32,8 @@ def register_student():
     password = generate_password_hash(raw_password)
     role = "student"
 
-    cursor = db.cursor()
+    conn = get_db()
+    cursor = conn.cursor()
 
     cursor.execute("SELECT * FROM student WHERE username = %s", (username,))
     if cursor.fetchone():
@@ -39,7 +43,9 @@ def register_student():
         "INSERT INTO student (username, password, email, role) VALUES (%s, %s, %s, %s)",
         (username, password, email, role)
     )
-    db.commit()
+    conn.commit()
+    cursor.close()
+    conn.close()
 
     return jsonify({"success": True, "message": "學生註冊成功"})
 
@@ -56,7 +62,8 @@ def register_teacher():
     hashed_password = generate_password_hash(raw_password)
     role = "teacher"
 
-    cursor = db.cursor()
+    conn = get_db()
+    cursor = conn.cursor()
 
     # 確認帳號是否已存在
     cursor.execute("SELECT * FROM teacher WHERE username = %s", (username,))
@@ -68,7 +75,9 @@ def register_teacher():
         "INSERT INTO teacher (username, password, role) VALUES (%s, %s, %s)",
         (username, hashed_password, role)
     )
-    db.commit()
+    conn.commit()
+    cursor.close()
+    conn.close()
 
     return jsonify({"success": True, "message": "教師註冊成功"})
 
@@ -85,7 +94,8 @@ def register_administrative():
     hashed_password = generate_password_hash(raw_password)
     role = "administrative"
 
-    cursor = db.cursor()
+    conn = get_db()
+    cursor = conn.cursor()
 
     # 確認帳號是否已存在
     cursor.execute("SELECT * FROM administrative WHERE username = %s", (username,))
@@ -97,7 +107,9 @@ def register_administrative():
         "INSERT INTO administrative (username, password, role) VALUES (%s, %s, %s)",
         (username, hashed_password, role)
     )
-    db.commit()
+    conn.commit()
+    cursor.close()
+    conn.close()
 
     return jsonify({"success": True, "message": "行政人員註冊成功"})
 
@@ -111,37 +123,66 @@ def login():
     if not username or not password:
         return jsonify({"success": False, "message": "帳號或密碼不得為空"}), 400
 
-    cursor = db.cursor(dictionary=True)
-    roles = []
-    # 搜尋學生
-    cursor.execute("SELECT * FROM student WHERE username = %s", (username,))
-    student = cursor.fetchone()
-    if student and check_password_hash(student['password'], password):
-        roles.append("student")
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
 
-    # 搜尋教師
-    cursor.execute("SELECT * FROM teacher WHERE username = %s", (username,))
-    teacher = cursor.fetchone()
-    if teacher and check_password_hash(teacher['password'], password):
-        roles.append("teacher")
+    try:
+        roles = []
 
-    # 搜尋行政人員
-    cursor.execute("SELECT * FROM administrative WHERE username = %s", (username,))
-    admin = cursor.fetchone()
-    if admin and check_password_hash(admin['password'], password):
-        roles.append("administrative")
+        # 搜尋學生
+        cursor.execute("SELECT * FROM student WHERE username = %s", (username,))
+        student = cursor.fetchone()
+        if student and check_password_hash(student['password'], password):
+            roles.append("student")
 
-    if roles:
-      role = roles[0]  # 預設以第一個角色導向，或根據前端選擇也可以擴充
-      redirect_url = f"/{role}_home"
-      return jsonify({
-        "success": True,
-        "username": username,
-        "roles": roles,
-        "redirect_url": redirect_url
-        })
-    else:
-        return jsonify({"success": False, "message": "帳號或密碼錯誤"}), 401
+        # 搜尋教師
+        cursor.execute("SELECT * FROM teacher WHERE username = %s", (username,))
+        teacher = cursor.fetchone()
+        if teacher and check_password_hash(teacher['password'], password):
+            roles.append("teacher")
+
+        # 搜尋行政人員
+        cursor.execute("SELECT * FROM administrative WHERE username = %s", (username,))
+        admin = cursor.fetchone()
+        if admin and check_password_hash(admin['password'], password):
+            roles.append("administrative")
+
+        if roles:
+            role = roles[0]  # 預設使用第一個角色導向
+            redirect_url = f"/{role}_home"
+            return jsonify({
+                "success": True,
+                "username": username,
+                "roles": roles,
+                "redirect_url": redirect_url
+            })
+        else:
+            return jsonify({"success": False, "message": "帳號或密碼錯誤"}), 401
+
+    finally:
+        cursor.close()
+        conn.close()
+
+# 取得使用者資料API
+@app.route("/api/profile", methods=["GET"])
+def get_profile():
+    username = request.args.get("username")
+    role = request.args.get("role")
+
+    if not username or role not in ["student", "teacher", "administrative"]:
+        return jsonify({"success": False, "message": "參數錯誤"}), 400
+
+    conn = get_db() 
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute(f"SELECT username, email FROM {role} WHERE username = %s", (username,))
+    user = cursor.fetchone()
+    cursor.close()
+    conn.close()
+
+    if not user:
+        return jsonify({"success": False, "message": "使用者不存在"}), 404
+
+    return jsonify({"success": True, "user": user})
 
 # 確認角色API
 @app.route('/api/confirm_role', methods=['POST'])
@@ -153,12 +194,12 @@ def confirm_role():
     if role not in ['student', 'teacher', 'administrative']:
         return jsonify({"success": False, "message": "無效角色"}), 400
 
-    db = db()
-    cursor = db.cursor(dictionary=True)
+    conn = get_db()  # ✅ 正確取得連線
+    cursor = conn.cursor(dictionary=True)
     cursor.execute(f"SELECT * FROM {role} WHERE username = %s", (username,))
     user = cursor.fetchone()
     cursor.close()
-    db.close()
+    conn.close()  # ✅ 用 conn
 
     if not user:
         return jsonify({"success": False, "message": "帳號不存在於該角色"}), 404
