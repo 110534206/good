@@ -184,6 +184,16 @@ def get_profile():
 
     return jsonify({"success": True, "user": user})
 
+@app.route('/api/save_profile', methods=['POST'])
+def save_profile():
+    data = request.json
+    # TODO: 寫入資料庫或其他處理
+    # 假設處理成功
+    return jsonify({"message": "儲存成功"}), 200
+
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=5000)
+
 # 確認角色API
 @app.route('/api/confirm_role', methods=['POST'])
 def confirm_role():

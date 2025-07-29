@@ -5,7 +5,6 @@
     <meta charset="UTF-8">
     <title>個人資料</title>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <link rel="stylesheet" href="{{ url_for('static', filename='assets/css/main.css') }}">
     <style>
         body {
             font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
@@ -180,28 +179,38 @@
 
         // 儲存個人資料
         function saveProfile() {
-            const name = document.getElementById('name').value;
-            const email = document.getElementById('email').value;
-            const school = document.getElementById('school').value;
-            const department = document.getElementById('department').value;
+            const data = {
+                name: document.getElementById('name').value,
+                email: document.getElementById('email').value,
+                school: document.getElementById('school').value,
+                department: document.getElementById('department').value,
+            };
 
-            alert("已儲存！\n\n" +
-                "姓名：" + name + "\n" +
-                "Email：" + email + "\n" +
-                "學校：" + school + "\n" +
-                "科系：" + department + "\n");
-
-            const role = localStorage.getItem("selectedRole");
-
-            // 根據角色導頁
-            if (role === "student") {
-                window.location.href = "/student_home";
-            } else if (role === "teacher") {
-                window.location.href = "/teacher_home";
-            } else if (role === "company") {
-                window.location.href = "/company_home";
-            } else {
-                // 預設 fallback 頁面
-                window.location.href = "/";
-            }
+            fetch('/api/save_profile', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data),
+            })
+                .then(response => {
+                    if (!response.ok) throw new Error('儲存失敗');
+                    return response.json();
+                })
+                .then(result => {
+                    alert('資料已儲存！');
+                    // 導頁
+                    const role = localStorage.getItem("selectedRole");
+                    if (role === "student") {
+                        window.location.href = "/student_home";
+                    } else if (role === "teacher") {
+                        window.location.href = "/teacher_home";
+                    } else if (role === "administrative") {
+                        window.location.href = "/administrative_home";
+                    } else {
+                        window.location.href = "/";
+                    }
+                })
+                .catch(err => alert(err.message));
         }
+         </script>
+</body>
+</html>
