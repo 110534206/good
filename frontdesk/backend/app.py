@@ -41,7 +41,14 @@ def register_user(username, raw_password, role, email=""):
     cursor.close()
     conn.close()
 
-    return {"success": True, "message": f"{role} 註冊成功"}, 201
+ # 顯示中文角色名稱
+    role_display = {
+        "student": "學生",
+        "teacher": "教師",
+        "administrative": "行政人員"
+    }.get(role, role)
+    
+    return {"success": True, "message": f"{role_display}註冊成功"}, 201
 
 # 學生註冊 API
 @app.route("/api/register_student", methods=["POST"])
