@@ -79,10 +79,12 @@
         display: flex;
         align-items: center;
         gap: 10px;
+        font-weight: bold;
+        font-size: 16px;
+        color: #333;
     }
-    #login-area .button {
-        font-size: 14px;
-        padding: 0.4em 1em;
+    #login-area a {
+        display: inline-block;
     }
     #login-avatar {
         width: 36px;
@@ -136,8 +138,15 @@
       window.location.href = "/login";
     }
 
+    const roleMap = {
+      student: "學生",
+      teacher: "教師",
+      administrative: "行政人員"
+    };
+
     document.addEventListener("DOMContentLoaded", () => {
-      document.getElementById("welcome-name").textContent = `${username}（學生）`;
+      const displayRole = roleMap[role] || "訪客";
+      document.getElementById("user-role").textContent = displayRole;
     });
 
     function logout() {
@@ -165,16 +174,15 @@
 
   <!-- 登出與頭像 -->
   <div id="login-area">
+    <span id="user-role"></span>
     <a href="/profile">
       <img src="{{ url_for('static', filename='images/avatar.jpg') }}" alt="頭像" id="login-avatar" />
     </a>
-    <button onclick="logout()" class="button small">登出</button>
   </div>
 
   <!-- 歡迎區塊 -->
   <header>
     <h1>智慧實習平台</h1>
-    <p>歡迎 <strong id="welcome-name"></strong> 使用此平台</p>
   </header>
 
   <!-- 功能卡片 -->

@@ -172,27 +172,40 @@ def get_profile():
     if not username or role not in ["student", "teacher", "administrative"]:
         return jsonify({"success": False, "message": "參數錯誤"}), 400
 
-    conn = get_db() 
+    conn = get_db()
     cursor = conn.cursor(dictionary=True)
-    cursor.execute(f"SELECT username, email FROM {role} WHERE username = %s", (username,))
-    user = cursor.fetchone()
-    cursor.close()
-    conn.close()
 
-    if not user:
-        return jsonify({"success": False, "message": "使用者不存在"}), 404
+    try:
+        # 根據角色執行不同查詢
+        if role == "student":
+            cursor.execute("SELECT username, email FROM student WHERE username = %s", (username,))
+        elif role == "teacher":
+            cursor.execute("SELECT username FROM teacher WHERE username = %s", (username,))
+        elif role == "administrative":
+            cursor.execute("SELECT username FROM administrative WHERE username = %s", (username,))
+        else:
+            return jsonify({"success": False, "message": "無效角色"}), 400
 
-    return jsonify({"success": True, "user": user})
+        user = cursor.fetchone()
 
-@app.route('/api/save_profile', methods=['POST'])
-def save_profile():
-    data = request.json
-    # TODO: 寫入資料庫或其他處理
-    # 假設處理成功
-    return jsonify({"message": "儲存成功"}), 200
+        if not user:
+            return jsonify({"success": False, "message": "使用者不存在"}), 404
 
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000)
+        # 為 teacher 和 administrative 補上 email 欄位為空字串（保持前端一致性）
+        if "email" not in user:
+            user["email"] = ""
+
+        return jsonify({"success": True, "user": user, "role": role})
+    
+    except Exception as e:
+        print("Server error in /api/profile:", e)
+        return jsonify({"success": False, "message": "伺服器錯誤"}), 500
+    
+    finally:
+        cursor.close()
+        conn.close()
+
+
 
 # 確認角色API
 @app.route('/api/confirm_role', methods=['POST'])

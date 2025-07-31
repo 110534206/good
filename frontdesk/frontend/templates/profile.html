@@ -14,7 +14,7 @@
         }
 
         .profile-wrapper {
-            max-width: 700px;
+            max-width: 500px;
             margin: 0 auto;
             background: #fff;
             padding: 2rem 3rem;
@@ -48,10 +48,9 @@
             margin-bottom: 0.3rem;
         }
 
-        .profile-field input,
-        .profile-field textarea {
-            width: 100%;
-            padding: 0.7em;
+        .profile-field input {
+            width: 95%;
+            padding: 0.8em;
             border: 1px solid #ccc;
             border-radius: 6px;
             font-size: 1rem;
@@ -74,7 +73,23 @@
             background-color: #0056b3;
         }
 
-        /* Modal 視窗樣式 */
+        .loginout-btn {
+            display: block;
+            width: 100%;
+            padding: 0.8em;
+            background-color: #d9d753;
+            color: #fff;
+            border: none;
+            border-radius: 6px;
+            font-size: 1rem;
+            cursor: pointer;
+        }
+
+        .loginout-btn:hover {
+            background-color: #cfc844;
+        }
+
+
         .modal {
             display: none;
             position: fixed;
@@ -119,28 +134,22 @@
         <img id="login-avatar" class="avatar" src="{{ url_for('static', filename='images/avatar.jpg') }}" alt="頭像" />
 
         <div class="profile-field">
-            <label for="name">姓名</label>
-            <input type="text" id="name" value="">
+            <label for="role">身分</label>
+            <input type="text" id="role" readonly>
         </div>
 
-        <div class="profile-field">
+        <!-- 預設隱藏電子郵件欄位 -->
+        <div class="profile-field" id="email-field" style="display: none;">
             <label for="email">電子郵件</label>
-            <input type="email" id="email" value="XXX@gmail.com">
+            <input type="email" id="email" readonly>
         </div>
 
-        <div class="profile-field">
-            <label for="school">就讀學校</label>
-            <input type="text" id="school" value="康寧大學（五專部）">
-        </div>
-
-        <div class="profile-field">
-            <label for="department">科系</label>
-            <input type="text" id="department" value="資訊管理科">
-        </div>
-        <button class="save-btn" onclick="saveProfile()">儲存</button>
+        <button class="save-btn" onclick="goback()">返回</button>
+        </br>
+        <button class="loginout-btn" onclick="logout()">登出</button>
     </div>
 
-    <!-- Modal 視窗 -->
+    <!-- Modal -->
     <div id="image-modal" class="modal">
         <div class="modal-content">
             <span id="modal-close" class="modal-close">&times;</span>
@@ -149,13 +158,66 @@
     </div>
 
     <script>
-        // 登入檢查
-        if (!localStorage.getItem("username") || !localStorage.getItem("selectedRole")) {
+        // 頁面載入時檢查登入資訊
+        const username = localStorage.getItem("username");
+        const role = localStorage.getItem("selectedRole");
+
+        if (!username || !role) {
             alert("請先登入！");
             window.location.href = "/login";
         }
 
-        // 點擊頭像顯示大圖
+        window.addEventListener('DOMContentLoaded', () => {
+            fetch(`/api/profile?username=${encodeURIComponent(username)}&role=${encodeURIComponent(role)}`)
+                .then(res => res.json())
+                .then(data => {
+                    if (data.success) {
+                        const roleMap = {
+                            administrative: "主任",
+                            student: "學生",
+                            teacher: "教師"
+                        };
+
+                        document.getElementById('role').value = roleMap[role] || role;
+
+                        if (role === "student") {
+                            document.getElementById('email-field').style.display = 'block';
+                            document.getElementById('email').value = data.user.email || '';
+                        } else {
+                            document.getElementById('email-field').style.display = 'none';
+                        }
+                    } else {
+                        alert("取得個人資料失敗: " + data.message);
+                    }
+                })
+                .catch(err => {
+                    console.error(err);
+                    alert("伺服器錯誤");
+                });
+        });
+
+        function goback() {
+            const role = localStorage.getItem("selectedRole");
+
+            // 根據身分導向主頁（不登出）
+            if (role === "student") {
+                window.location.href = "/student_home";
+            } else if (role === "teacher") {
+                window.location.href = "/teacher_home";
+            } else if (role === "administrative") {
+                window.location.href = "/administrative_home";
+            } else {
+                alert("無法辨識身分，請重新登入！");
+                window.location.href = "/login";
+            }
+        }
+
+        function logout() {
+            localStorage.clear();
+            window.location.href = "/login";
+        }
+
+        // 頭像放大功能
         const avatar = document.getElementById('login-avatar');
         const modal = document.getElementById('image-modal');
         const modalImage = document.getElementById('modal-image');
@@ -170,47 +232,12 @@
             modal.style.display = 'none';
         });
 
-        // 點擊視窗外部關閉視窗
         window.addEventListener('click', (event) => {
             if (event.target === modal) {
                 modal.style.display = 'none';
             }
         });
-
-        // 儲存個人資料
-        function saveProfile() {
-            const data = {
-                name: document.getElementById('name').value,
-                email: document.getElementById('email').value,
-                school: document.getElementById('school').value,
-                department: document.getElementById('department').value,
-            };
-
-            fetch('/api/save_profile', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(data),
-            })
-                .then(response => {
-                    if (!response.ok) throw new Error('儲存失敗');
-                    return response.json();
-                })
-                .then(result => {
-                    alert('資料已儲存！');
-                    // 導頁
-                    const role = localStorage.getItem("selectedRole");
-                    if (role === "student") {
-                        window.location.href = "/student_home";
-                    } else if (role === "teacher") {
-                        window.location.href = "/teacher_home";
-                    } else if (role === "administrative") {
-                        window.location.href = "/administrative_home";
-                    } else {
-                        window.location.href = "/";
-                    }
-                })
-                .catch(err => alert(err.message));
-        }
-         </script>
+    </script>
 </body>
+
 </html>
