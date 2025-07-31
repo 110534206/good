@@ -20,18 +20,19 @@ def get_db():
 def register_user(username, raw_password, role, email=""):
     if not username or not raw_password or not role:
         return {"success": False, "message": "必要欄位缺失"}, 400
- # 可以視需求添加格式驗證，例如代碼格式檢查
+
     hashed_password = generate_password_hash(raw_password)
 
     conn = get_db()
     cursor = conn.cursor()
-    # 確認學號是否已存在於 users 資料表中
-    cursor.execute("SELECT * FROM users WHERE username = %s", (username,))
+
+    # 允許相同 username 不同角色，但不允許同 username+role 重複
+    cursor.execute("SELECT * FROM users WHERE username = %s AND role = %s", (username, role))
     if cursor.fetchone():
         cursor.close()
         conn.close()
-        return {"success": False, "message": "帳號已存在"}, 409
-  # 寫入 users 資料表
+        return {"success": False, "message": "此帳號已註冊為該身分"}, 409
+
     cursor.execute(
         "INSERT INTO users (username, password, role, email) VALUES (%s, %s, %s, %s)",
         (username, hashed_password, role, email)
@@ -91,30 +92,40 @@ def login():
     data = request.get_json(force=True)
     username = data.get('username')
     password = data.get('password')
-    
-    # 帳號與密碼不得為空
+
     if not username or not password:
         return jsonify({"success": False, "message": "帳號或密碼不得為空"}), 400
 
     conn = get_db()
     cursor = conn.cursor(dictionary=True)
 
-    cursor.execute("SELECT * FROM users WHERE username = %s", (username,))
-    user = cursor.fetchone()
+    try:
+        roles = []
 
-    cursor.close()
-    conn.close()
+        # 查詢三種角色
+        cursor.execute("SELECT * FROM users WHERE username = %s", (username,))
+        users = cursor.fetchall()
 
-    if user and check_password_hash(user['password'], password):
-        role = user['role']
-        return jsonify({
-            "success": True,
-            "username": user['username'],
-            "roles": [role],
-            "redirect_url": f"/{role}_home"
-        })
-    else:
-        return jsonify({"success": False, "message": "帳號或密碼錯誤"}), 401
+        for user in users:
+            if check_password_hash(user['password'], password):
+                roles.append(user['role'])
+
+        if roles:
+            # 多角色導向 /profile，單角色直接導向對應首頁
+            redirect_url = "/profile" if len(roles) > 1 else f"/{roles[0]}_home"
+
+            return jsonify({
+                "success": True,
+                "username": username,
+                "roles": roles,
+                "redirect_url": redirect_url
+            })
+        else:
+            return jsonify({"success": False, "message": "帳號或密碼錯誤"}), 401
+
+    finally:
+        cursor.close()
+        conn.close()
 
 # 取得使用者資料 API
 @app.route("/api/profile", methods=["GET"])
