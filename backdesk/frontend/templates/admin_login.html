@@ -1,211 +1,32 @@
-<!DOCTYPE html>
-<html lang="zh-TW">
+<script>
+    async function handleAdminLogin(e) {
+        e.preventDefault();
+        const u = document.getElementById("username").value.trim(),
+            p = document.getElementById("password").value.trim(),
+            err = document.getElementById("error-message");
 
-<head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>智慧實習平台 | 後台登入</title>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
+        err.style.display = "none";
 
-        html,
-        body {
-            height: 100%;
-            font-family: "Segoe UI", "微軟正黑體", sans-serif;
-            background: url("{{ url_for('static', filename='images/login_pc.png') }}") no-repeat center center fixed;
-            background-size: cover;
-        }
+        try {
+            const resp = await fetch("http://172.16.203.176:5100/api/admin/login", {  // 使用後端的完整 URL 和端口
+                method: "POST",  // 確保發送 POST 請求
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ username: u, password: p })  // 傳送 JSON 格式的帳號密碼
+            });
 
-        .center-container {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            display: flex;
-            background: #ffffff;
-            border-radius: 15px;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
-            overflow: hidden;
-            max-width: 950px;
-            width: 90%;
-        }
+            const d = await resp.json();  // 解析 JSON 回應
 
-        .logo-side {
-            flex: 1;
-            background-color: #fff;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            padding: 10px;
-            border-right: 1px solid #eee;
-        }
-
-        .logo-side img {
-            width: 450px;
-            height: auto;
-        }
-
-        .form-box {
-            flex: 1;
-            padding: 40px;
-        }
-
-        .form-box h2 {
-            text-align: center;
-            margin-bottom: 46px;
-            margin-top: 10px;
-            color: #333;
-            font-size: 32px;
-        }
-
-        .form-group {
-            margin-bottom: 10px;
-        }
-
-        label {
-            display: block;
-            margin-bottom: 10px;
-            font-size: 20px;
-        }
-
-        input[type="text"],
-        input[type="password"] {
-            width: 100%;
-            padding: 10px;
-            border: 1px solid #000000;
-            font-size: 18px;
-            border-radius: 6px;
-        }
-
-        .password-container {
-            position: relative;
-        }
-
-        .button.primary {
-            padding: 1em 2.5em;
-            font-size: 20px;
-            min-width: 220px;
-            display: inline-block;
-            font-weight: 600;
-            color: white;
-            background-color: #007bff;
-            border-radius: 5px;
-            padding: 0.5em 7em;
-            border: none;
-            cursor: pointer;
-            transition: background-color 0.3s ease;
-            user-select: none;
-            text-align: center;
-        }
-
-        .button.primary:hover {
-            background-color: #0056b3;
-        }
-
-        .toggle-password {
-            position: absolute;
-            top: 45px;
-            right: 16px;
-            font-size: 20px;
-            cursor: pointer;
-            color: #666;
-        }
-
-        #error-message {
-            display: none;
-            font-weight: bold;
-            color: rgb(184, 59, 59);
-            margin-bottom: 15px;
-            text-align: center;
-        }
-
-        .button-group {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 12px;
-            margin-top: 20px;
-        }
-    </style>
-</head>
-
-<body>
-    <div class="center-container">
-        <div class="logo-side">
-            <img src="{{ url_for('static', filename='images/logo_name.jpg') }}" alt="logo">
-        </div>
-        <div class="form-box">
-            <h2>後台管理登入</h2>
-            <div id="error-message">帳號或密碼錯誤，請重新輸入。</div>
-
-            <form onsubmit="return handleAdminLogin(event)" method="POST">
-                <div class="form-group">
-                    <label for="username">帳號</label>
-                    <input type="text" id="username" required />
-                </div>
-                <div class="form-group password-container">
-                    <label for="password">密碼</label>
-                    <input type="password" id="password" required />
-                    <span class="toggle-password" onclick="togglePassword()">
-                        <i class="fas fa-eye-slash" id="eyeIcon"></i>
-                    </span>
-                </div>
-                <div class="button-group">
-                    <button type="submit" class="button primary">登入</button>
-                </div>
-            </form>
-        </div>
-    </div>
-
-    <script>
-        function togglePassword() {
-            const pwd = document.getElementById("password"),
-                icon = document.getElementById("eyeIcon");
-            if (pwd.type === "password") {
-                pwd.type = "text";
-                icon.classList.replace("fa-eye-slash", "fa-eye");
+            if (d.success) {
+                localStorage.setItem("admin", d.username);  // 記錄登入的用戶
+                window.location.href = "/admin/dashboard";  // 登入成功後跳轉
             } else {
-                pwd.type = "password";
-                icon.classList.replace("fa-eye", "fa-eye-slash");
-            }
-        }
-
-        async function handleAdminLogin(e) {
-            e.preventDefault();
-            const u = document.getElementById("username").value.trim(),
-                p = document.getElementById("password").value.trim(),
-                err = document.getElementById("error-message");
-
-            err.style.display = "none";
-
-            try {
-                const resp = await fetch("/api/admin_login", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ username: u, password: p })
-                });
-
-                const d = await resp.json();
-
-                if (d.success) {
-                    localStorage.setItem("admin", d.username);
-                    window.location.href = "/admin/dashboard";  // ✅ 導向後台首頁
-                } else {
-                    err.textContent = d.message || "帳號或密碼錯誤";
-                    err.style.display = "block";
-                }
-
-            } catch {
-                err.textContent = "伺服器錯誤，請稍後再試";
+                err.textContent = d.message || "帳號或密碼錯誤";  // 顯示錯誤訊息
                 err.style.display = "block";
             }
-        }
-    </script>
-</body>
 
-</html>
+        } catch {
+            err.textContent = "伺服器錯誤，請稍後再試";  // 捕獲網路錯誤
+            err.style.display = "block";
+        }
+    }
+</script>

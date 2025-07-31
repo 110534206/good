@@ -1,10 +1,10 @@
 from flask import Flask, request, jsonify
-from flask_cors import CORS
-import mysql.connector
 from werkzeug.security import check_password_hash
+import mysql.connector
+from flask_cors import CORS
 
 app = Flask(__name__)
-CORS(app, supports_credentials=True)
+CORS(app, resources={r"/admin/*": {"origins": "http://127.0.0.1:5000"}})  # 允許前端的來源
 
 # 資料庫連線
 def get_db():
@@ -15,8 +15,8 @@ def get_db():
         database="admin"  # 專屬後台資料庫
     )
 
-# 後台登入（教師、主任）
-@app.route("/admin/login", methods=["POST"])
+# 後台登入（/admin/login 路徑） 
+@app.route("/api/admin/login", methods=["POST"])  # 只允許 POST 請求
 def admin_login():
     data = request.get_json()
     username = data.get("username")
@@ -40,45 +40,6 @@ def admin_login():
 
     return jsonify({"success": True, "message": f"{user['role']} 登入成功", "role": user["role"]})
 
-# 查詢公告
-@app.route("/admin/announcements", methods=["GET"])
-def get_announcements():
-    conn = get_db()
-    cursor = conn.cursor(dictionary=True)
-    cursor.execute("SELECT id, title, content, created_at FROM announcements ORDER BY created_at DESC")
-    result = cursor.fetchall()
-    cursor.close()
-    conn.close()
-    return jsonify({"success": True, "announcements": result})
-
-# 新增公告
-@app.route("/admin/announcements", methods=["POST"])
-def create_announcement():
-    data = request.get_json()
-    title = data.get("title")
-    content = data.get("content")
-
-    if not title or not content:
-        return jsonify({"success": False, "message": "標題與內容不得為空"}), 400
-
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute("INSERT INTO announcements (title, content, created_at) VALUES (%s, %s, NOW())", (title, content))
-    conn.commit()
-    cursor.close()
-    conn.close()
-    return jsonify({"success": True, "message": "公告新增成功"})
-
-# 刪除公告
-@app.route("/admin/announcements/<int:announcement_id>", methods=["DELETE"])
-def delete_announcement(announcement_id):
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute("DELETE FROM announcements WHERE id = %s", (announcement_id,))
-    conn.commit()
-    cursor.close()
-    conn.close()
-    return jsonify({"success": True, "message": "公告刪除成功"})
-
+# 其他後台相關路由，例如查詢公告、新增公告等...
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5100, debug=True)

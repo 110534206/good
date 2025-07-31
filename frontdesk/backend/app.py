@@ -55,42 +55,15 @@ def register_user(username, raw_password, role, email=""):
 def register_student():
     username = request.form.get("username")
     raw_password = request.form.get("password")
-# 學號格式檢查，必須是9位數字
+    # 學號格式檢查，必須是9位數字
     if not re.match(r"^\d{9}$", username):
         return jsonify({"success": False, "message": "學號格式錯誤"}), 400
-# 身分證字號格式檢查，第一碼大寫英文字母，第二碼1或2，後面8碼數字
-
+    # 身分證字號格式檢查，第一碼大寫英文字母，第二碼1或2，後面8碼數字
     if not re.match(r"^[A-Z][1-2]\d{8}$", raw_password):
         return jsonify({"success": False, "message": "身分證字號格式錯誤"}), 400
 
     email = f"{username}@stu.ukn.edu.tw"
     result, status_code = register_user(username, raw_password, "student", email)
-    return jsonify(result), status_code
-
-# 教師註冊 API
-@app.route("/api/register_teacher", methods=["POST"])
-def register_teacher():
-    username = request.form.get("username")
-    raw_password = request.form.get("password")
-
-# 帳號與密碼皆為必填欄位
-    if not username or not raw_password:
-        return jsonify({"success": False, "message": "帳號或密碼不得為空"}), 400
-
-    result, status_code = register_user(username, raw_password, "teacher", "")
-    return jsonify(result), status_code
-
-# 行政人員註冊 API
-@app.route("/api/register_administrative", methods=["POST"])
-def register_administrative():
-    username = request.form.get("username")
-    raw_password = request.form.get("password")
-
-    # 帳號與密碼皆為必填欄位
-    if not username or not raw_password:
-        return jsonify({"success": False, "message": "帳號或密碼不得為空"}), 400
-
-    result, status_code = register_user(username, raw_password, "administrative", "")
     return jsonify(result), status_code
 
 # 登入 API
@@ -159,28 +132,6 @@ def get_profile():
         user["email"] = ""
 
     return jsonify({"success": True, "user": user, "role": role})
-
-# 確認角色 API
-@app.route('/api/confirm_role', methods=['POST'])
-def confirm_role():
-    data = request.get_json()
-    username = data.get("username")
-    role = data.get("role")
-
-    if role not in ['student', 'teacher', 'administrative']:
-        return jsonify({"success": False, "message": "無效角色"}), 400
-
-    conn = get_db()
-    cursor = conn.cursor(dictionary=True)
-    cursor.execute("SELECT * FROM users WHERE username = %s AND role = %s", (username, role))
-    user = cursor.fetchone()
-    cursor.close()
-    conn.close()
-
-    if not user:
-        return jsonify({"success": False, "message": "帳號不存在於該角色"}), 404
-
-    return jsonify({"success": True, "redirect_url": f"/{role}_home"})
 
 # 頁面路由
 @app.route('/profile')
