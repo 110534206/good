@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8" />
+  <title>智慧實習平台 | 選擇登入身分與系統</title>
+  <style>
+    body {
+      font-family: "Segoe UI", "微軟正黑體", sans-serif;
+      background: #f9f9f9;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+    }
+    h1 {
+      font-size: 40px;
+      margin-bottom: 20px;
+    }
+    .role-button, .system-button {
+      width: 180px;
+      height: 50px;
+      margin: 10px;
+      font-size: 20px;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      color: white;
+      background-color: #007bff;
+      transition: background-color 0.3s ease;
+    }
+    .role-button:hover, .system-button:hover {
+      background-color: #0056b3;
+    }
+    #system-selection {
+      margin-top: 30px;
+      display: none;
+      flex-direction: row;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>請選擇登入身分</h1>
+  <div id="role-buttons"></div>
+
+  <div id="system-selection">
+    <button id="frontend-btn" class="system-button">前台系統</button>
+    <button id="backend-btn" class="system-button">後台系統</button>
+  </div>
+
+<script>
+  // 角色中文對照
+  function getRoleDisplayName(role) {
+    const roleMap = {
+      "teacher": "教師",
+      "administrative": "行政人員",
+      "student": "學生"
+    };
+    return roleMap[role] || role;
+  }
+
+  // 從 localStorage 讀角色清單
+  let roleList = [];
+  try {
+    const storedRoles = localStorage.getItem("roleList");
+    roleList = storedRoles ? JSON.parse(storedRoles) : [];
+  } catch (error) {
+    console.error("解析角色清單錯誤:", error);
+    roleList = [];
+  }
+
+  if (!Array.isArray(roleList) || roleList.length === 0) {
+    alert("角色資訊遺失，請重新登入");
+    window.location.href = "/login";
+  }
+
+  const roleButtonsDiv = document.getElementById("role-buttons");
+  const systemSelectionDiv = document.getElementById("system-selection");
+
+  let selectedRole = null;
+
+  // 按下角色按鈕時
+  function onRoleSelected(role) {
+    selectedRole = role;
+    localStorage.setItem("selectedRole", role);
+
+    // 如果是老師或行政人員，顯示前後台切換按鈕
+    if (role === "teacher" || role === "administrative") {
+      roleButtonsDiv.style.display = "none";
+      systemSelectionDiv.style.display = "flex";
+    } else {
+      // 其他角色直接跳前台頁面
+      window.location.href = `/${role}_home`;
+    }
+  }
+
+  // 建立角色按鈕
+  roleList.forEach(role => {
+    const btn = document.createElement("button");
+    btn.className = "role-button";
+    btn.textContent = getRoleDisplayName(role);
+    btn.onclick = () => onRoleSelected(role);
+    roleButtonsDiv.appendChild(btn);
+  });
+
+  // 前台按鈕事件
+  document.getElementById("frontend-btn").onclick = () => {
+    window.location.href = `/${selectedRole}_home`;
+  };
+
+  // 後台按鈕事件
+  document.getElementById("backend-btn").onclick = () => {
+    // 假設後台首頁都在 /admin/dashboard
+    window.location.href = "/admin/dashboard";
+  };
+
+</script>
+
+</body>
+</html>

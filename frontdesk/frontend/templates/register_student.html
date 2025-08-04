@@ -65,25 +65,27 @@
       display: flex;
       justify-content: center;
       align-items: center;
-      height: 48px;
-      width: 100%;
-      background-color: #388f6f;
+      height: 56px;
+      width: 500px;
+      background-color: #3c91e6;
       color: #ffffff;
-      font-size: 20px;
+      font-size: 22px;
       font-weight: bold;
       border: none;
-      border-radius: 6px;
+      border-radius: 10px;
       cursor: pointer;
-      transition: background-color 0.3s;
+      transition: background-color 0.3s ease, transform 0.2s ease;
+      margin: 0 auto;
     }
 
     input[type="submit"]:hover {
-      background-color: #a5ccae;
+      background-color: #2b74c2;
+      transform: translateY(-2px);
     }
 
     .toggle-password {
       position: absolute;
-      top: 56px; 
+      top: 56px;
       right: 16px;
       transform: translateY(-50%);
       cursor: pointer;
@@ -147,7 +149,8 @@
       </div>
 
       <div class="field">
-        <button type="button" class="back-button" onclick="location.href='{{ url_for('register_choice') }}'">返回上一頁</button>
+        <button type="button" class="back-button"
+          onclick="location.href='{{ url_for('register_choice') }}'">返回上一頁</button>
       </div>
     </form>
   </div>

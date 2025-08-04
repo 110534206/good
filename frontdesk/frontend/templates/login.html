@@ -86,49 +86,6 @@
             position: relative;
         }
 
-        .button.primary {
-            padding: 1em 2.5em;
-            font-size: 20px;
-            min-width: 220px;
-            display: inline-block;
-            font-weight: 600;
-            color: white;
-            background-color: #007bff;
-            border-radius: 5px;
-            padding: 0.5em 7em;
-            border: none;
-            cursor: pointer;
-            transition: background-color 0.3s ease;
-            user-select: none;
-            text-align: center;
-        }
-
-        .button.primary:hover {
-            background-color: #0056b3;
-        }
-
-        .button.small {
-            padding: 1em 2.5em;
-            font-size: 20px;
-            min-width: 220px;
-            display: inline-block;
-            font-weight: 600;
-            color: white;
-            background-color: #6c757d;
-            border-radius: 5px;
-            padding: 0.5em 6em;
-            border: none;
-            cursor: pointer;
-            transition: background-color 0.3s ease;
-            user-select: none;
-            text-align: center;
-
-        }
-
-        .button.small:hover {
-            background-color: #5a6268;
-        }
-
         .toggle-password {
             position: absolute;
             top: 45px;
@@ -146,26 +103,88 @@
             text-align: center;
         }
 
+        .button.guest {
+            width: 400px;
+            height: 50px;
+            font-size: 20px;
+            font-weight: 600;
+            border-radius: 5px;
+            cursor: pointer;
+            text-align: center;
+            transition: all 0.3s ease;
+            user-select: none;
+            display: inline-block;
+        }
+
+        .button.login,
+        .button.register {
+            width: 190px;
+            height: 60px;
+            font-size: 20px;
+            font-weight: 600;
+            border-radius: 5px;
+            cursor: pointer;
+            text-align: center;
+            transition: all 0.3s ease;
+            user-select: none;
+            display: inline-block;
+        }
+
+        .button.login {
+            color: white;
+            background-color: #007bff;
+            border: none;
+        }
+
+        .button.login:hover {
+            background-color: #0056b3;
+        }
+
+        .button.register {
+            color: white;
+            background-color: #007bff;
+            border: none;
+        }
+
+        .button.register:hover {
+            background-color: #0056b3;
+        }
+
+        .button.guest {
+            color: #007bff;
+            background-color: white;
+            border: 2px solid #007bff;
+        }
+
+        .button.guest:hover {
+            background-color: #eef4fc;
+        }
+
         /* 新增按鈕區塊 */
         .button-group {
             display: flex;
             flex-direction: column;
-            /* 垂直排列 */
             align-items: center;
-            /* 置中 */
-            gap: 12px;
-            /* 按鈕間距 */
+            gap: 16px;
             margin-top: 20px;
+        }
+
+        .button-row {
+            display: flex;
+            justify-content: center;
+            gap: 20px;
         }
     </style>
 </head>
 
 <body>
     <div class="center-container">
-        <div class="logo-side"><img src="{{ url_for('static', filename='images/logo_name.jpg') }}" alt=""></div>
+        <div class="logo-side">
+            <img src="{{ url_for('static', filename='images/logo_name.jpg') }}" alt="">
+        </div>
         <div class="form-box">
             <h2>智慧實習平台</h2>
-            <div id="error-message" style="display: none;">帳號或密碼錯誤，請重新輸入。</div>
+            <div id="error-message">帳號或密碼錯誤，請重新輸入。</div>
 
             <form onsubmit="return handleLogin(event)" method="POST">
                 <div class="form-group">
@@ -179,10 +198,15 @@
                         <i class="fas fa-eye-slash" id="eyeIcon"></i>
                     </span>
                 </div>
+
                 <div class="button-group">
-                    <button type="submit" class="button primary">登入</button>
-                    <button type="button" class="button small"
-                        onclick="window.location.href='{{ url_for('register_choice') }}'">註冊帳號</button>
+                    <button type="button" class="button guest" onclick="handleGuestLogin()">訪客</button>
+
+                    <div class="button-row">
+                        <button type="submit" class="button login">登入</button>
+                        <button type="button" class="button register"
+                            onclick="window.location.href='{{ url_for('register_choice') }}'">註冊</button>
+                    </div>
                 </div>
             </form>
         </div>
@@ -200,6 +224,7 @@
                 icon.classList.replace("fa-eye", "fa-eye-slash");
             }
         }
+
         async function handleLogin(e) {
             e.preventDefault();
             const u = document.getElementById("username").value.trim(),
@@ -220,15 +245,14 @@
                 if (d.success) {
                     localStorage.setItem("username", d.username);
                     const roles = d.roles || [];
-
                     localStorage.setItem("roleList", JSON.stringify(roles));
 
                     if (roles.length === 1) {
                         const role = roles[0];
                         localStorage.setItem("selectedRole", role);
-                        window.location.href = `/${role}_home`;  // ✅ 根據角色自動導向
+                        window.location.href = `/${role}_home`;
                     } else if (roles.length > 1) {
-                        window.location.href = "/login-confirm";  // ✅ 多角色讓使用者選
+                        window.location.href = "/login-confirm";
                     } else {
                         err.textContent = "沒有可用角色，請聯絡管理員";
                         err.style.display = "block";
@@ -244,7 +268,17 @@
             }
         }
 
+        // 🆕 這是新增的訪客登入函式
+        function handleGuestLogin() {
+            localStorage.setItem("username", "guest");
+            localStorage.setItem("selectedRole", "guest");
+            localStorage.setItem("roleList", JSON.stringify(["guest"]));
+
+            window.location.href = "/visitor_home";
+        }
     </script>
+    </script>
+
 </body>
 
 </html>

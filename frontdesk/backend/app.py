@@ -154,6 +154,10 @@ def index_page():
     else:
         return render_template("index.html")
 
+@app.route('/visitor_home')
+def visitor_home():
+    return render_template('visitor_home.html') 
+
 @app.route('/student_home')
 def student_home():
     return render_template('student_home.html')
@@ -186,5 +190,5 @@ def register_administrative_page():
 def login_confirm_page():
     return render_template("login-confirm.html")
 
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=True)
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=5000, debug=True)
