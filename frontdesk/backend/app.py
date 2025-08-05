@@ -170,6 +170,23 @@ def teacher_home():
 def administrative_home():
     return render_template('administrative_home.html')
 
+# 主頁頁面路由
+@app.route('/upload_resume')
+def upload_resume():
+    return render_template('upload_resume.html')
+
+@app.route('/ai_edit_resume')
+def ai_edit_resume():
+    return render_template('ai_edit_resume.html')
+
+@app.route('/fill_preferences')
+def fill_preferences():
+    return render_template('fill_preferences.html')
+
+@app.route('/notifications')
+def notifications():
+    return render_template('notifications.html')
+
 @app.route("/register_choice")
 def register_choice():
     return render_template("register_choice.html")
