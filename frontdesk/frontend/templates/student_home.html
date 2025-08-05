@@ -1,116 +1,48 @@
 <!DOCTYPE html>
 <html lang="zh-Hant">
-
 <head>
-  <meta charset="UTF-8">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>智慧實習平台 | 學生主頁</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
-    /* == 按鈕與選單樣式 == */
-    #menu-btn {
-      position: fixed;
-      top: 20px;
-      left: 20px;
-      width: 30px;
-      height: 22px;
-      cursor: pointer;
-      z-index: 1001;
-      display: flex;
-      flex-direction: column;
-      justify-content: space-between;
+    /* Reset 基礎樣式 */
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
     }
 
-    #menu-btn span {
-      display: block;
-      height: 4px;
-      background-color: #333;
-      border-radius: 2px;
-    }
-
-    #side-menu {
-      position: fixed;
-      top: 0;
-      left: -250px;
-      width: 250px;
-      height: 100vh;
-      background-color: #fff;
-      transition: left 0.3s ease, box-shadow 0.3s ease;
-      z-index: 1000;
-      padding: 2rem 1rem;
-      display: flex;
-      flex-direction: column;
-    }
-
-    #side-menu.open {
-      left: 0;
-      box-shadow: 2px 0 8px rgba(0, 0, 0, 0.2);
-    }
-
-    #side-menu h1 {
-      margin: 40px 0 0.5rem 0;
-      font-size: 1.5rem;
-      padding-bottom: 0.5rem;
-    }
-
-    .menu-divider {
-      width: 80%;
-      margin: 0.5rem 0 1rem 0;
-      border: none;
-      border-top: 3px solid #ccc;
-    }
-
-    #menu-search {
-      margin-bottom: 1rem;
-      padding: 0.5rem;
-      font-size: 1rem;
-      width: 90%;
-      border: 1px solid #ccc;
-      border-radius: 5px;
-    }
-
-    #side-menu a {
-      margin: 0.5rem 0;
-      text-decoration: none;
+    body {
+      font-family: 'Inter', sans-serif;
+      background: linear-gradient(to bottom right, #f0f4f8, #e0e7ef);
       color: #333;
-      font-weight: 600;
     }
 
-    #side-menu a:hover {
-      color: #007bff;
+    /* 內容區留白與置中 */
+    main {
+      max-width: 1200px;
+      margin: 2rem auto;
+      padding: 2rem;
+      background-color: white;
+      border-radius: 12px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
     }
 
-    #login-area {
-      position: fixed;
-      top: 20px;
-      right: 20px;
-      z-index: 999;
-      display: flex;
-      align-items: center;
-      gap: 10px;
+    /* 標題在最上方置中 */
+    .page-title {
+      text-align: center;
+      font-size: 2rem;
       font-weight: bold;
-      font-size: 16px;
-      color: #333;
+      margin-bottom: 3rem;
+      text-shadow: 1px 1px 4px rgba(0, 0, 0, 0.2);
     }
 
-    #login-area a {
-      display: inline-block;
-    }
-
-    #login-avatar {
-      width: 50px;
-      height: 50px;
-      border-radius: 50%;
-      object-fit: cover;
-      cursor: pointer;
-      box-shadow: 0 0 8px rgba(0, 0, 0, 0.1);
-    }
-
+    /* 卡片容器 */
     .card-container {
       display: flex;
       flex-wrap: wrap;
       justify-content: center;
       gap: 2rem;
-      padding: 4rem 2rem;
     }
 
     .card {
@@ -132,51 +64,96 @@
       margin-bottom: 1rem;
     }
 
-    body {
-      margin: 0;
-      font-family: 'Inter', sans-serif;
-      background: linear-gradient(to bottom right, #f0f4f8, #e0e7ef);
-      color: #333;
+    .card a {
+      display: inline-block;
+      margin-top: 1rem;
+      color: #4b0082;
+      text-decoration: underline;
     }
 
-    header {
-      text-align: center;
-      padding: 5rem 2rem 3rem;
-      background-image: url('https://source.unsplash.com/1600x400/?career,office');
-      background-size: cover;
-      background-position: center;
-      color: white;
-      text-shadow: 1px 1px 4px rgba(0, 0, 0, 0.5);
+    /* 登入區 */
+    #login-area {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: bold;
+    }
+
+    #login-avatar {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      object-fit: cover;
+      cursor: pointer;
+    }
+
+    /* 選單按鈕 */
+    #menu-btn {
+      position: fixed;
+      top: 20px;
+      left: 20px;
+      width: 30px;
+      height: 22px;
+      cursor: pointer;
+      z-index: 1001;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+
+    #menu-btn span {
+      display: block;
+      height: 4px;
+      background-color: #333;
+      border-radius: 2px;
+    }
+
+    /* 側邊選單 */
+    #side-menu {
+      position: fixed;
+      top: 0;
+      left: -250px;
+      width: 250px;
+      height: 100vh;
+      background-color: #fff;
+      transition: left 0.3s ease, box-shadow 0.3s ease;
+      z-index: 1000;
+      padding: 2rem 1rem;
+      display: flex;
+      flex-direction: column;
+    }
+
+    #side-menu.open {
+      left: 0;
+      box-shadow: 2px 0 8px rgba(0, 0, 0, 0.2);
+    }
+
+    #side-menu a {
+      margin: 0.5rem 0;
+      text-decoration: none;
+      color: #333;
+      font-weight: 600;
+    }
+
+    #side-menu a:hover {
+      color: #007bff;
+    }
+
+    /* 搜尋框 */
+    #menu-search {
+      margin-bottom: 1rem;
+      padding: 0.5rem;
+      font-size: 1rem;
+      width: 90%;
+      border: 1px solid #ccc;
+      border-radius: 5px;
     }
   </style>
 </head>
-
 <body>
-  <script>
-    const username = localStorage.getItem("username");
-    const role = localStorage.getItem("selectedRole");
-
-    if (!username || role !== "student") {
-      alert("請以學生身份登入！");
-      window.location.href = "/login";
-    }
-
-    const roleMap = {
-      student: "學生",
-      teacher: "教師",
-      administrative: "行政人員"
-    };
-
-    document.addEventListener("DOMContentLoaded", () => {
-      const displayRole = roleMap[role] || "訪客";
-      document.getElementById("user-role").textContent = displayRole;
-    });
-
-    function logout() {
-      localStorage.clear();
-      window.location.href = "/login";
-    }
-  </script>
 
   <!-- 選單按鈕 -->
   <div id="menu-btn" title="選單" role="button" tabindex="0">
@@ -186,7 +163,7 @@
   <!-- 側邊選單 -->
   <nav id="side-menu" aria-hidden="true">
     <h1>功能選單</h1>
-    <hr class="menu-divider">
+    <hr class="menu-divider" />
     <input type="text" id="menu-search" placeholder="搜尋功能..." />
     <a href="/student_home">首頁</a>
     <a href="/profile">個人資料</a>
@@ -196,37 +173,36 @@
     <a href="#">通知</a>
   </nav>
 
-  <!-- 登出與頭像 -->
+  <!-- 登入區與頭像 -->
   <div id="login-area">
-    <span id="user-role"></span>
+    <span id="user-role">學生</span>
     <a href="/profile">
       <img src="{{ url_for('static', filename='images/avatar.png') }}" alt="頭像" id="login-avatar" />
     </a>
   </div>
 
-  <!-- 歡迎區塊 -->
-  <header>
-    <h1>智慧實習平台</h1>
-  </header>
+  <!-- 主內容 -->
+  <main>
+    <h1 class="page-title">智慧實習平台</h1>
 
-  <!-- 功能卡片 -->
-  <section class="card-container">
-    <div class="card">
-      <h3>上傳履歷</h3>
-      <p>將你的履歷檔案快速上傳至平台。</p>
-      <a href="#" class="button primary">開始上傳</a>
-    </div>
-    <div class="card">
-      <h3>AI修改履歷</h3>
-      <p>讓AI幫你修飾文字，提升專業度。</p>
-      <a href="#" class="button primary">啟用AI修飾</a>
-    </div>
-    <div class="card">
-      <h3>填寫志願序</h3>
-      <p>選擇你心儀的實習廠商與排序。</p>
-      <a href="#" class="button primary">填寫志願</a>
-    </div>
-  </section>
+    <section class="card-container">
+      <div class="card">
+        <h3>上傳履歷</h3>
+        <p>將你的履歷檔案快速上傳至平台。</p>
+        <a href="#">開始上傳</a>
+      </div>
+      <div class="card">
+        <h3>AI修改履歷</h3>
+        <p>讓AI幫你修飾文字，提升專業度。</p>
+        <a href="#">啟用AI修飾</a>
+      </div>
+      <div class="card">
+        <h3>填寫志願序</h3>
+        <p>選擇你心儀的實習廠商與排序。</p>
+        <a href="#">填寫志願</a>
+      </div>
+    </section>
+  </main>
 
   <!-- 側邊選單控制邏輯 -->
   <script>
@@ -244,6 +220,6 @@
       });
     });
   </script>
-</body>
 
+</body>
 </html>
