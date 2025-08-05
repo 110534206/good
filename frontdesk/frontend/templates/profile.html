@@ -155,11 +155,6 @@
             <input type="text" id="number" readonly>
         </div>
 
-        <div class="profile-field">
-            <label for="role">身分</label>
-            <input type="text" id="role" readonly>
-        </div>
-
         <!-- 預設隱藏電子郵件欄位 -->
         <div class="profile-field" id="email-field" style="display: none;">
             <label for="email">電子郵件</label>
@@ -201,8 +196,6 @@
                             student: "學生",
                             teacher: "教師"
                         };
-
-                        document.getElementById('role').value = roleMap[role] || role;
 
                         document.getElementById('name').value = data.user.name || '';
                         document.getElementById('class-name').value = data.user.class || '';
