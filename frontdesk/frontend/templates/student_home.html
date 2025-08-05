@@ -18,23 +18,77 @@
       color: #333;
     }
 
+    /* 固定頂部白色橫條 */
+    .top-bar {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 60px;
+      background-color: white;
+      z-index: 999;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0 20px;
+    }
+
+    .top-bar-left #menu-btn {
+      position: relative;
+      top: 0;
+      left: 0;
+      z-index: 1000;
+      width: 30px;
+      height: 22px;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+
+    .top-bar-left #menu-btn span {
+      display: block;
+      height: 4px;
+      background-color: #333;
+      border-radius: 2px;
+    }
+
+    .top-bar-right {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: bold;
+    }
+
+    .top-bar-right #login-avatar {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      object-fit: cover;
+      cursor: pointer;
+    }
+
+    /* 原本固定的元素取消 */
+    #login-area,
+    #menu-btn {
+      display: none;
+    }
+
     header.hero {
       width: 100%;
       height: 60vh;
       background-image: url('/static/images/title.png');
-      /* 或你上傳的圖片路徑 */
       background-size: 90% 90%;
       border-radius: 12px;
-      /* 讓圖片四周留白 */
       background-repeat: no-repeat;
       background-position: center;
       background-origin: content-box;
-      padding: 5vh 5vw;
-      /* 上下左右留空間 */
+      padding: 0 5vw;
       display: flex;
       align-items: center;
       justify-content: center;
       text-align: center;
+      margin-top: 60px;
     }
 
     header.hero h1 {
@@ -106,44 +160,7 @@
       background-color: #371066;
     }
 
-    #login-area {
-      position: fixed;
-      top: 20px;
-      right: 20px;
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      font-weight: bold;
-    }
-
-    #login-avatar {
-      width: 40px;
-      height: 40px;
-      border-radius: 50%;
-      object-fit: cover;
-      cursor: pointer;
-    }
-
-    #menu-btn {
-      position: fixed;
-      top: 20px;
-      left: 20px;
-      width: 30px;
-      height: 22px;
-      cursor: pointer;
-      z-index: 1001;
-      display: flex;
-      flex-direction: column;
-      justify-content: space-between;
-    }
-
-    #menu-btn span {
-      display: block;
-      height: 4px;
-      background-color: #333;
-      border-radius: 2px;
-    }
-
+    /* 側邊選單 */
     #side-menu {
       position: fixed;
       top: 0;
@@ -152,7 +169,7 @@
       height: 100vh;
       background-color: #fff;
       transition: left 0.3s ease, box-shadow 0.3s ease;
-      z-index: 1000;
+      z-index: 998;
       padding: 2rem 1rem;
       display: flex;
       flex-direction: column;
@@ -187,14 +204,26 @@
 
 <body>
 
+  <!-- 固定頂部橫條 -->
+  <div class="top-bar">
+    <div class="top-bar-left">
+      <div id="menu-btn" title="選單" role="button" tabindex="0">
+        <span></span><span></span><span></span>
+      </div>
+    </div>
+    <div class="top-bar-right">
+      <span id="user-role">學生</span>
+      <a href="/profile">
+        <img src="{{ url_for('static', filename='images/avatar.png') }}" alt="頭像" id="login-avatar" />
+      </a>
+    </div>
+  </div>
+
   <!-- Hero Banner -->
   <header class="hero">
+    <!-- 可放 h1 文案在此 -->
+    <!-- <h1>歡迎來到智慧實習平台</h1> -->
   </header>
-
-  <!-- 選單按鈕 -->
-  <div id="menu-btn" title="選單" role="button" tabindex="0">
-    <span></span><span></span><span></span>
-  </div>
 
   <!-- 側邊選單 -->
   <nav id="side-menu" aria-hidden="true">
@@ -208,14 +237,6 @@
     <a href="/fill_preferences">填寫志願序</a>
     <a href="/notifications">通知</a>
   </nav>
-
-  <!-- 登入區與頭像 -->
-  <div id="login-area">
-    <span id="user-role">學生</span>
-    <a href="/profile">
-      <img src="{{ url_for('static', filename='images/avatar.png') }}" alt="頭像" id="login-avatar" />
-    </a>
-  </div>
 
   <!-- 主內容 -->
   <main>
