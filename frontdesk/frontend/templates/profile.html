@@ -141,6 +141,11 @@
         <img id="login-avatar" class="avatar" src="{{ url_for('static', filename='images/avatar.png') }}" alt="頭像" />
 
         <div class="profile-field">
+            <label for="role">身分</label>
+            <input type="text" id="role" readonly>
+        </div>
+
+        <div class="profile-field">
             <label for="name">姓名</label>
             <input type="text" id="name" readonly>
         </div>
@@ -197,6 +202,7 @@
                             teacher: "教師"
                         };
 
+                        document.getElementById('role').value = data.user.role || '';                        
                         document.getElementById('name').value = data.user.name || '';
                         document.getElementById('class').value = data.user.class || '';
                         document.getElementById('number').value = username;
