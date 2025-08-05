@@ -33,9 +33,14 @@
             height: 120px;
             border-radius: 50%;
             object-fit: cover;
-            border: 3px solid #ccc;
+            background-color: #fff;
+            /* 可加強背景對比 */
             margin: 0 auto 2rem;
             cursor: pointer;
+            padding: 0;
+            /* 移除任何 padding */
+            border: none;
+            /* 拿掉 border 圓框 */
         }
 
         .profile-field {
@@ -133,7 +138,7 @@
     <div class="profile-wrapper">
         <h2>個人資料</h2>
 
-        <img id="login-avatar" class="avatar" src="{{ url_for('static', filename='images/avatar.jpg') }}" alt="頭像" />
+        <img id="login-avatar" class="avatar" src="{{ url_for('static', filename='images/avatar.png') }}" alt="頭像" />
 
         <div class="profile-field">
             <label for="role">身分</label>

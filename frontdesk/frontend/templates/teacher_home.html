@@ -84,16 +84,18 @@
       font-size: 16px;
       color: #333;
     }
+    
     #login-area a {
       display: inline-block;
     }
+
     #login-avatar {
-      width: 36px;
-      height: 36px;
+      width: 50px;
+      height: 50px;
       border-radius: 50%;
       object-fit: cover;
       cursor: pointer;
-      border: 2px solid #ccc;
+      box-shadow: 0 0 8px rgba(0, 0, 0, 0.1);
     }
 
     .card-container {
@@ -184,7 +186,7 @@
     <a href="/profile" id="user-role" style="font-weight:bold; color: black; text-decoration:none; margin-right: 8px;"></a>
     <a href="/profile">
       <img
-        src="{{ url_for('static', filename='images/avatar.jpg') }}"
+        src="{{ url_for('static', filename='images/avatar.png') }}"
         alt="頭像"
         id="login-avatar"
       />
