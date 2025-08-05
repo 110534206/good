@@ -155,7 +155,7 @@
             <input type="text" id="class" readonly>
         </div>
 
-        <div class="profile-field" id="number">
+        <div class="profile-field" id="number-field" style="display: none;">
             <label for="number">學號</label>
             <input type="text" id="number" readonly>
         </div>
@@ -209,9 +209,13 @@
                         
                         
                         if (role === "student") {
+                            document.getElementById('number-field').style.display = 'block';
+                            document.getElementById('number').value = username;
+
                             document.getElementById('email-field').style.display = 'block';
                             document.getElementById('email').value = data.user.email || '';
                         } else {
+                            document.getElementById('number-field').style.display = 'none';
                             document.getElementById('email-field').style.display = 'none';
                         }
                     } else {
