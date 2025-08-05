@@ -141,6 +141,21 @@
         <img id="login-avatar" class="avatar" src="{{ url_for('static', filename='images/avatar.png') }}" alt="頭像" />
 
         <div class="profile-field">
+            <label for="name">姓名</label>
+            <input type="text" id="name" readonly>
+        </div>
+        
+        <div class="profile-field">
+            <label for="class">班級</label>
+            <input type="text" id="class" readonly>
+        </div>
+
+        <div class="profile-field">
+            <label for="number">學號</label>
+            <input type="text" id="number" readonly>
+        </div>
+
+        <div class="profile-field">
             <label for="role">身分</label>
             <input type="text" id="role" readonly>
         </div>
@@ -150,6 +165,8 @@
             <label for="email">電子郵件</label>
             <input type="email" id="email" readonly>
         </div>
+
+        
 
         <button class="save-btn" onclick="goback()">返回</button>
         </br>
