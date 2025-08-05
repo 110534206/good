@@ -150,7 +150,7 @@
             <input type="text" id="class" readonly>
         </div>
 
-        <div class="profile-field">
+        <div class="profile-field" id="number">
             <label for="number">學號</label>
             <input type="text" id="number" readonly>
         </div>
@@ -199,7 +199,7 @@
 
                         document.getElementById('name').value = data.user.name || '';
                         document.getElementById('class').value = data.user.class || '';
-                        document.getElementById('number').value = data.user.number || '';
+                        document.getElementById('number').value = username;
                         
                         
                         if (role === "student") {
