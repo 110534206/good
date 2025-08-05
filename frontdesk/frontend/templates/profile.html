@@ -155,9 +155,9 @@
             <input type="text" id="class" readonly>
         </div>
 
-        <div class="profile-field" id="number-field" style="display: none;">
+        <div class="profile-field" id="number-field">
             <label for="number">學號</label>
-            <input type="text" id="number" readonly>
+            <input type="text" id="number" name="number" readonly>
         </div>
 
         <!-- 預設隱藏電子郵件欄位 -->
@@ -183,7 +183,7 @@
 
     <script>
         // 頁面載入時檢查登入資訊
-        const username = localStorage.getItem("username");
+        const username = localStorage.getItem("username") || 'guest';
         const role = localStorage.getItem("selectedRole");
 
         if (!username || !role) {
