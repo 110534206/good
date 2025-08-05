@@ -147,12 +147,17 @@
 
         <div class="profile-field">
             <label for="name">姓名</label>
-            <input type="text" id="name" readonly>
+            <input type="text" id="name" />
         </div>
         
         <div class="profile-field">
+            <label for="department">科別</label>
+            <input type="text" id="department" />
+        </div>
+
+        <div class="profile-field">
             <label for="class">班級</label>
-            <input type="text" id="class" readonly>
+            <input type="text" id="className" />
         </div>
 
         <div class="profile-field" id="number-field">
@@ -168,9 +173,7 @@
 
         
 
-        <button class="save-btn" onclick="goback()">返回</button>
-        </br>
-        <button class="loginout-btn" onclick="logout()">登出</button>
+        <button class="save-btn" onclick="saveProfile()">儲存</button>
     </div>
 
     <!-- Modal -->
@@ -202,9 +205,10 @@
                             teacher: "教師"
                         };
 
-                        document.getElementById('role').value = data.user.role || '';                        
+                        document.getElementById('role').value = roleMap[data.user.role] || data.user.role || '';                        
                         document.getElementById('name').value = data.user.name || '';
-                        document.getElementById('class').value = data.user.class || '';
+                        document.getElementById('department').value = data.user.deparment || '';
+                        document.getElementById('className').value = data.user.class || '';
                         document.getElementById('number').value = username;
                         
                         
@@ -228,8 +232,15 @@
                 });
         });
 
-        function goback() {
-            const role = localStorage.getItem("selectedRole");
+        function saveProfile() {
+            const name = document.getElementById('name').value.trim();
+            const deparment = document.getElementById('department').value;
+            const className = document.getElementById('className').value;
+
+            if(!name){
+                alert("姓名不能為空白!");
+                return;
+            }
 
             // 根據身分導向主頁（不登出）
             if (role === "student") {
@@ -242,11 +253,7 @@
                 alert("無法辨識身分，請重新登入！");
                 window.location.href = "/login";
             }
-        }
-
-        function logout() {
-            localStorage.clear();
-            window.location.href = "/login";
+            alert("資料已儲存！");
         }
 
         // 頭像放大功能
