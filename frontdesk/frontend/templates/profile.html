@@ -204,6 +204,11 @@
 
                         document.getElementById('role').value = roleMap[role] || role;
 
+                        document.getElementById('name').value = data.user.name || '';
+                        document.getElementById('class-name').value = data.user.class || '';
+                        document.getElementById('number').value = data.user.number || '';
+                        
+                        
                         if (role === "student") {
                             document.getElementById('email-field').style.display = 'block';
                             document.getElementById('email').value = data.user.email || '';
