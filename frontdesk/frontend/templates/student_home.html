@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="zh-Hant">
+
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -13,16 +14,23 @@
 
     body {
       font-family: 'Inter', sans-serif;
-      background: #f8f9fa;
+      background: #ffffff;
       color: #333;
     }
 
     header.hero {
       width: 100%;
       height: 60vh;
-      background-image: url('/static/images/banner_student.jpg'); /* ←你可自訂這張圖片 */
-      background-size: cover;
+      background-image: url('/static/images/title.png');
+      /* 或你上傳的圖片路徑 */
+      background-size: 90% 90%;
+      border-radius: 12px;
+      /* 讓圖片四周留白 */
+      background-repeat: no-repeat;
       background-position: center;
+      background-origin: content-box;
+      padding: 5vh 5vw;
+      /* 上下左右留空間 */
       display: flex;
       align-items: center;
       justify-content: center;
@@ -33,7 +41,7 @@
       color: white;
       font-size: 3rem;
       text-shadow: 2px 2px 6px rgba(0, 0, 0, 0.5);
-      background-color: rgba(0,0,0,0.3);
+      background-color: rgba(0, 0, 0, 0.3);
       padding: 1rem 2rem;
       border-radius: 12px;
     }
@@ -176,11 +184,11 @@
     }
   </style>
 </head>
+
 <body>
 
   <!-- Hero Banner -->
   <header class="hero">
-    <h1>歡迎來到智慧實習平台</h1>
   </header>
 
   <!-- 選單按鈕 -->
@@ -255,4 +263,5 @@
     });
   </script>
 </body>
+
 </html>
