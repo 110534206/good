@@ -119,11 +119,14 @@ def get_profile():
     conn = get_db()
     cursor = conn.cursor(dictionary=True)
 
-    cursor.execute("SELECT username, email, role FROM users WHERE username = %s AND role = %s", (username, role))
+    cursor.execute("""
+    SELECT username, email, role, name, department, className AS classname
+    FROM users WHERE username = %s AND role = %s
+    """, (username, role))    
     user = cursor.fetchone()
 
     cursor.close()
-    conn.close()
+
 
     if not user:
         return jsonify({"success": False, "message": "使用者不存在"}), 404
@@ -132,6 +135,61 @@ def get_profile():
         user["email"] = ""
 
     return jsonify({"success": True, "user": user, "role": role})
+
+# 更新個人資料 API
+@app.route("/api/saveProfile", methods=["POST"])
+def save_profile():
+    data = request.get_json()
+    username = data.get("number")  # 前端使用 number 作為學號
+    role_display = data.get("role")
+    name = data.get("name")
+    department = data.get("department")
+    class_name = data.get("classname")
+
+    if not username or not role_display or not name or not department or not class_name:
+        return jsonify({"success": False, "message": "缺少必要欄位"}), 400
+
+    # 中文角色轉英文角色
+    role_map = {
+        "學生": "student",
+        "教師": "teacher",
+        "主任": "administrative",
+        "行政人員": "administrative"
+    }
+    role = role_map.get(role_display)
+    if not role:
+        return jsonify({"success": False, "message": "身分錯誤"}), 400
+
+    conn = get_db()
+    cursor = conn.cursor()
+
+    try:
+        # 更新使用者資料
+        cursor.execute("""
+            UPDATE users SET name=%s, department=%s, className=%s WHERE username=%s AND role=%s
+        """, (name, department, class_name, username, role))
+
+        if cursor.rowcount == 0:
+            # 檢查使用者是否存在
+            cursor.execute("SELECT 1 FROM users WHERE username=%s AND role=%s", (username, role))
+            if cursor.fetchone() is None:
+                return jsonify({"success": False, "message": "找不到該使用者資料"}), 404
+            else:
+                # 資料無異動也視為成功
+                return jsonify({"success": True, "message": "資料已儲存成功"}), 200
+
+        # 有異動，提交
+        conn.commit()
+        return jsonify({"success": True, "message": "資料更新成功"})
+
+    except Exception as e:
+        print("更新資料錯誤:", e)
+        return jsonify({"success": False, "message": "資料庫錯誤"}), 500
+
+    finally:
+        cursor.close()
+        conn.close()
+
 
 # 頁面路由
 @app.route('/profile')
