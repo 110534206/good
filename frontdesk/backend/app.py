@@ -66,6 +66,22 @@ def register_student():
     result, status_code = register_user(username, raw_password, "student", email)
     return jsonify(result), status_code
 
+# 教師註冊 API
+@app.route("/api/register_teacher", methods=["POST"])
+def register_teacher():
+    username = request.form.get("username")
+    password = request.form.get("password")
+    result, status = register_user(username, password, role="teacher")
+    return jsonify(result), status
+
+# 行政人員註冊 API
+@app.route("/api/register_administrative", methods=["POST"])
+def register_administrative():
+    username = request.form.get("username")
+    password = request.form.get("password")
+    result, status = register_user(username, password, role="administrative")
+    return jsonify(result), status
+
 # 登入 API
 @app.route('/api/login', methods=['POST'])
 def login():
