@@ -103,21 +103,8 @@
             text-align: center;
         }
 
+        .button.register,
         .button.guest {
-            width: 400px;
-            height: 50px;
-            font-size: 20px;
-            font-weight: 600;
-            border-radius: 5px;
-            cursor: pointer;
-            text-align: center;
-            transition: all 0.3s ease;
-            user-select: none;
-            display: inline-block;
-        }
-
-        .button.login,
-        .button.register {
             width: 190px;
             height: 60px;
             font-size: 20px;
@@ -130,14 +117,35 @@
             display: inline-block;
         }
 
-        .button.login {
+        .button.guest {
             color: white;
             background-color: #007bff;
             border: none;
         }
 
-        .button.login:hover {
+        .button.guest:hover {
             background-color: #0056b3;
+        }
+
+        .button.login {
+            width: 400px;
+            height: 60px;
+            font-size: 20px;
+            font-weight: 600;
+            border-radius: 5px;
+            cursor: pointer;
+            text-align: center;
+            transition: all 0.3s ease;
+            user-select: none;
+            display: inline-block;
+            color: #007bff;
+            background-color: white;
+            border: 2px solid #007bff;
+            margin-bottom: 16px; 
+        }
+
+        .button.login:hover {
+            background-color: #eef4fc;
         }
 
         .button.register {
@@ -148,25 +156,6 @@
 
         .button.register:hover {
             background-color: #0056b3;
-        }
-
-        .button.guest {
-            color: #007bff;
-            background-color: white;
-            border: 2px solid #007bff;
-        }
-
-        .button.guest:hover {
-            background-color: #eef4fc;
-        }
-
-        /* 新增按鈕區塊 */
-        .button-group {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 16px;
-            margin-top: 20px;
         }
 
         .button-row {
@@ -200,10 +189,10 @@
                 </div>
 
                 <div class="button-group">
-                    <button type="button" class="button guest" onclick="handleGuestLogin()">訪客</button>
+                    <button type="submit" class="button login">登入</button>
 
                     <div class="button-row">
-                        <button type="submit" class="button login">登入</button>
+                        <button type="button" class="button guest" onclick="handleguestLogin()">訪客</button>
                         <button type="button" class="button register"
                             onclick="window.location.href='{{ url_for('register_choice') }}'">註冊</button>
                     </div>
@@ -277,8 +266,6 @@
             window.location.href = "/visitor_home";
         }
     </script>
-    </script>
-
 </body>
 
 </html>
