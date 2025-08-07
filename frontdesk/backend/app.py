@@ -169,7 +169,6 @@ def save_profile():
     role_map = {
         "學生": "student",
         "教師": "teacher",
-        "主任": "administrative",
         "行政人員": "administrative"
     }
     role = role_map.get(role_display)

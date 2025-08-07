@@ -18,7 +18,7 @@
             height: 100%;
             font-family: "Segoe UI", "微軟正黑體", sans-serif;
             background-size: cover;
-            background-color: #f0f2f5;
+            background-color: #f3f6f9;
         }
 
         .center-container {
@@ -31,12 +31,13 @@
             border-radius: 15px;
             box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
             overflow: hidden;
-            max-width: 950px;
+            max-width: 1000px;
             width: 90%;
         }
 
         .logo-side {
-            flex: 1;
+            flex: 0 0 45%;
+            max-width: 45%;
             display: flex;
             align-items: stretch;
             justify-content: center;
@@ -51,8 +52,10 @@
         }
 
         .form-box {
-            flex: 1;
-            padding: 40px;
+            flex: 0 0 55%;
+            max-width: 55%;
+            padding: 30px;
+
         }
 
         .form-box h2 {
@@ -60,7 +63,7 @@
             margin-bottom: 46px;
             margin-top: 10px;
             color: #333;
-            font-size: 32px;
+            font-size: 30px;
         }
 
         .form-group {
@@ -106,8 +109,8 @@
 
         .button.register,
         .button.guest {
-            width: 220px;
-            height: 60px;
+            width: 250px;
+            height: 50px;
             font-size: 20px;
             font-weight: 600;
             border-radius: 5px;
@@ -120,18 +123,19 @@
 
         .button.guest {
             color: white;
-            background-color: #3c91e6;;
+            background-color: #3c91e6;
+            ;
             border: none;
         }
 
         .button.guest:hover {
-            background-color:  #2b74c2;
+            background-color: #2b74c2;
         }
 
         .button.login {
-            width: 100%;
-            height: 60px;
+            height: 50px;
             font-size: 20px;
+            width: 100%;
             font-weight: 600;
             border-radius: 5px;
             cursor: pointer;
@@ -151,12 +155,13 @@
 
         .button.register {
             color: white;
-            background-color: #3c91e6;;
+            background-color: #3c91e6;
+            ;
             border: none;
         }
 
         .button.register:hover {
-            background-color:  #2b74c2;
+            background-color: #2b74c2;
         }
 
         .button-row {
@@ -176,7 +181,7 @@
 
         <!-- 右邊表單 -->
         <div class="form-box">
-            <h2>Welcome</h2>
+            <h2>Welcome back!</h2>
             <div id="error-message">帳號或密碼錯誤，請重新輸入。</div>
 
             <form onsubmit="return handleLogin(event)" method="POST">
