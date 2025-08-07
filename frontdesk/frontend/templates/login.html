@@ -17,8 +17,8 @@
         body {
             height: 100%;
             font-family: "Segoe UI", "微軟正黑體", sans-serif;
-            background: url("{{ url_for('static', filename='images/login_pc.png') }}") no-repeat center center fixed;
             background-size: cover;
+            background-color: #f0f2f5;
         }
 
         .center-container {
@@ -37,17 +37,17 @@
 
         .logo-side {
             flex: 1;
-            background-color: #fff;
             display: flex;
-            align-items: center;
+            align-items: stretch;
             justify-content: center;
-            padding: 10px;
-            border-right: 1px solid #eee;
+            padding: 0px;
+            overflow: hidden;
         }
 
         .logo-side img {
-            width: 450px;
-            height: auto;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
         }
 
         .form-box {
@@ -84,6 +84,7 @@
 
         .password-container {
             position: relative;
+            margin-bottom: 24px;
         }
 
         .toggle-password {
@@ -105,7 +106,7 @@
 
         .button.register,
         .button.guest {
-            width: 190px;
+            width: 220px;
             height: 60px;
             font-size: 20px;
             font-weight: 600;
@@ -119,16 +120,16 @@
 
         .button.guest {
             color: white;
-            background-color: #007bff;
+            background-color: #3c91e6;;
             border: none;
         }
 
         .button.guest:hover {
-            background-color: #0056b3;
+            background-color:  #2b74c2;
         }
 
         .button.login {
-            width: 400px;
+            width: 100%;
             height: 60px;
             font-size: 20px;
             font-weight: 600;
@@ -138,10 +139,10 @@
             transition: all 0.3s ease;
             user-select: none;
             display: inline-block;
-            color: #007bff;
+            color: #3c91e6;
             background-color: white;
-            border: 2px solid #007bff;
-            margin-bottom: 16px; 
+            border: 2px solid #3c91e6;
+            margin-bottom: 16px;
         }
 
         .button.login:hover {
@@ -150,12 +151,12 @@
 
         .button.register {
             color: white;
-            background-color: #007bff;
+            background-color: #3c91e6;;
             border: none;
         }
 
         .button.register:hover {
-            background-color: #0056b3;
+            background-color:  #2b74c2;
         }
 
         .button-row {
@@ -168,11 +169,14 @@
 
 <body>
     <div class="center-container">
+        <!-- 左邊圖片 -->
         <div class="logo-side">
-            <img src="{{ url_for('static', filename='images/logo_name.jpg') }}" alt="">
+            <img src="{{ url_for('static', filename='images/logo.png') }}" alt="登入圖片" />
         </div>
+
+        <!-- 右邊表單 -->
         <div class="form-box">
-            <h2>智慧實習平台</h2>
+            <h2>Welcome</h2>
             <div id="error-message">帳號或密碼錯誤，請重新輸入。</div>
 
             <form onsubmit="return handleLogin(event)" method="POST">
@@ -257,12 +261,10 @@
             }
         }
 
-        // 🆕 這是新增的訪客登入函式
-        function handleGuestLogin() {
+        function handleguestLogin() {
             localStorage.setItem("username", "guest");
             localStorage.setItem("selectedRole", "guest");
             localStorage.setItem("roleList", JSON.stringify(["guest"]));
-
             window.location.href = "/visitor_home";
         }
     </script>

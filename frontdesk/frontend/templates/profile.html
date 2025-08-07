@@ -71,7 +71,7 @@
             border: 1px solid #ccc;
             border-radius: 6px;
             font-size: 0.95rem;
-            background-color: #f9f9f9;
+            background-color: #ffffff;
         }
 
         .form-group select {
@@ -82,7 +82,6 @@
             font-size: 0.95rem;
             background-color: #ffffff;
         }
-
 
         /* readonly 欄位用灰色背景 */
         .form-group input[readonly] {
@@ -97,18 +96,29 @@
             color: #333;
         }
 
-        /* 按鈕樣式 */
+        /* 新增按鈕群組統一樣式 */
+        .button-group {
+            display: flex;
+            justify-content: space-between;
+            gap: 0.5rem;
+            margin-top: 1rem;
+        }
+
+        /* 統一按鈕大小與樣式 */
+        .button-group button {
+            flex: 1;
+            padding: 0.8em;
+            font-weight: bold;
+            font-size: 1rem;
+            border: none;
+            border-radius: 6px;
+            color: #fff;
+            cursor: pointer;
+        }
+
+        /* 保留按鈕顏色設定 */
         #backBtn {
             background-color: #6c757d;
-            /* 灰色 */
-            color: white;
-            border: none;
-            padding: 10px;
-            width: 100%;
-            border-radius: 5px;
-            cursor: pointer;
-            font-weight: 600;
-            margin-bottom: 1rem;
         }
 
         #backBtn:hover {
@@ -117,7 +127,6 @@
 
         #prevBtn {
             background-color: #007bff;
-            width: 100%;
         }
 
         #prevBtn:hover {
@@ -138,21 +147,6 @@
 
         #saveBtn:hover {
             background-color: #1e7e34;
-        }
-
-        /* 上一頁按鈕容器 */
-        .top-nav {
-            margin-bottom: 0.5rem;
-        }
-
-        /* 下一頁 + 儲存容器 */
-        .bottom-nav {
-            display: flex;
-            justify-content: space-between;
-            gap: 0.3rem;
-            /* 縮小間距 */
-            margin-top: 0.5rem;
-            /* 上移一點 */
         }
 
         /* 按鈕通用樣式 */
@@ -190,14 +184,11 @@
 
         <div class="page-indicator" id="pageIndicator"></div>
 
-        <!-- 返回、上一頁按鈕獨立放上面 -->
-        <div class="form-navigation top-nav">
+
+        <!-- 按鈕放下面 -->
+        <div class="button-group">
             <button id="backBtn">返回</button>
             <button id="prevBtn" style="display:none;">上一頁</button>
-        </div>
-
-        <!-- 下一頁 + 儲存按鈕放下面 -->
-        <div class="form-navigation bottom-nav">
             <button id="nextBtn">下一頁</button>
             <button id="saveBtn" style="display:none;">儲存</button>
         </div>
@@ -318,8 +309,8 @@
             };
 
             // 簡單必填檢查
-            if (!dataToSave.name || !dataToSave.department || !dataToSave.classname) {
-                errorMsgEl.textContent = "姓名、科別、班級為必填！";
+            if (!dataToSave.name || !dataToSave.classname) {
+                errorMsgEl.textContent = "姓名、班級為必填！";
                 return;
             }
 

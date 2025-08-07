@@ -16,72 +16,76 @@
     body {
       height: 100%;
       font-family: "Segoe UI", "微軟正黑體", sans-serif;
-      background: url("{{ url_for('static', filename='images/login_pc.png') }}") no-repeat center center fixed;
-      background-size: cover;
+      background-color: #f0f2f5;
       display: flex;
       justify-content: center;
       align-items: center;
     }
 
-    .content-wrapper {
+    .card {
+      background-color: #fff;
+      width: 500px;
+      /* ← 調整寬度 */
+      padding: 40px 50px;
+      /* ← 調整內距 */
+      border-radius: 16px;
+      box-shadow: 0 6px 25px rgba(0, 0, 0, 0.15);
       text-align: center;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
     }
 
-    h1 {
-      font-size: 36px;
+    .card h1 {
+      font-size: 40px;
+      font-weight: 700;
       margin-bottom: 50px;
-      color: white;
-      letter-spacing: 2px;
+      color: #222;
     }
 
     .button-group {
       display: flex;
       flex-direction: column;
-      gap: 25px;
+      gap: 20px;
       margin-bottom: 40px;
+      align-items: center;
     }
 
     .register-button {
       background-color: #3c91e6;
       color: white;
-      font-size: 30px;
+      font-size: 28px;
       font-weight: bold;
       border: none;
       border-radius: 10px;
-      padding: 18px;
-      width: 280px;
+      padding: 20px;
+      width: 300px;
       cursor: pointer;
       transition: background-color 0.3s ease, transform 0.2s ease;
     }
 
     .register-button:hover {
       background-color: #2b74c2;
-      transform: translateY(-2px);
+      transform: translateY(-3px);
     }
 
-    .button.goback {
-      margin-top: 10px;
+    .goback {
+      margin-top: 20px;
       background-color: transparent;
-      border: 2px solid white;
-      color: white;
-      font-size: 28px;
-      padding: 12px 24px;
+      border: 2px solid #3c91e6;
+      color: #3c91e6;
+      font-size: 24px;
+      padding: 12px 28px;
       border-radius: 8px;
       cursor: pointer;
       transition: all 0.3s ease;
     }
 
-    .button.goback:hover {
-      background-color: rgba(255, 255, 255, 0.15);
+    .goback:hover {
+      background-color: rgba(60, 145, 230, 0.1);
     }
   </style>
 </head>
 
 <body>
-  <div class="content-wrapper">
+  <div class="card">
     <h1>請選擇註冊身份</h1>
     <div class="button-group">
       <button class="register-button"
@@ -89,7 +93,7 @@
       <button class="register-button" onclick="location.href='{{ url_for('register_teacher_page') }}'">老師</button>
       <button class="register-button" onclick="location.href='{{ url_for('register_student_page') }}'">學生</button>
     </div>
-    <button class="button goback" onclick="location.href='{{ url_for('login_page') }}'">← 返回首頁</button>
+    <button class="goback" onclick="location.href='{{ url_for('login_page') }}'">← 返回首頁</button>
   </div>
 </body>
 

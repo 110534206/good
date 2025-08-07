@@ -1,15 +1,17 @@
 <!DOCTYPE HTML>
 <html lang="zh-TW">
+
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>智慧實習平台 | 行政人員註冊</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <style>
-    body, html {
+    body,
+    html {
       height: 100%;
       font-family: "Segoe UI", "微軟正黑體", sans-serif;
-      background: url("{{ url_for('static', filename='images/login_pc.png') }}") no-repeat center center fixed;
+      background-color: #f0f2f5;
       background-size: cover;
     }
 
@@ -52,7 +54,7 @@
       box-sizing: border-box;
     }
 
-       input[type="submit"] {
+    input[type="submit"] {
       display: flex;
       justify-content: center;
       align-items: center;
@@ -75,7 +77,8 @@
     }
 
     .back-button {
-      margin-top: 30px; /* 位置往下移 */
+      margin-top: 30px;
+      /* 位置往下移 */
       color: #000000;
       background: transparent;
       border: none;
@@ -129,7 +132,8 @@
         <input type="submit" value="註冊" />
       </div>
       <div class="field">
-        <button type="button" class="back-button" onclick="location.href='{{ url_for('register_choice') }}'">返回上一頁</button>
+        <button type="button" class="back-button"
+          onclick="location.href='{{ url_for('register_choice') }}'">返回上一頁</button>
       </div>
     </form>
   </div>
@@ -188,4 +192,5 @@
     });
   </script>
 </body>
+
 </html>
