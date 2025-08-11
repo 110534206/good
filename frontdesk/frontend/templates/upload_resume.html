@@ -1,37 +1,206 @@
 <!DOCTYPE html>
 <html lang="zh-Hant">
+
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>上傳履歷</title>
-  <link
-    href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css"
-    rel="stylesheet"
-  />
-</head>
-<body>
-  <div class="container my-5">
-    <h2 class="mb-4">上傳履歷</h2>
-    <p>請選擇您的履歷檔案（建議格式：PDF、DOCX），完成上傳後我們將協助您管理您的履歷資料。</p>
 
-    <form action="/upload_resume" method="post" enctype="multipart/form-data">
-      <div class="mb-3">
-        <label for="resumeFile" class="form-label">履歷檔案</label>
-        <input
-          class="form-control"
-          type="file"
-          id="resumeFile"
-          name="resume"
-          accept=".pdf,.doc,.docx"
-          required
-        />
+  <!-- Bootstrap -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
+  <!-- Bootstrap Icons -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" />
+
+  <style>
+    body {
+      background-color: #f0f2f5;
+      font-family: 'Segoe UI', 'Helvetica Neue', sans-serif;
+    }
+
+    .upload-container {
+      max-width: 550px;
+      margin: 50px auto;
+      background: #fff;
+      padding: 30px;
+      border-radius: 16px;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
+      text-align: center;
+    }
+
+    .upload-icon {
+      font-size: 56px;
+      color: #0d6efd;
+      margin-bottom: 16px;
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, #0d6efd, #0a58ca);
+      border: none;
+      font-weight: 500;
+      padding: 12px;
+      border-radius: 10px;
+      transition: background 0.3s ease;
+    }
+
+    .btn-primary:hover {
+      background: linear-gradient(135deg, #0a58ca, #084298);
+    }
+
+    #reviewStatus {
+      font-size: 1.1rem;
+      font-weight: 600;
+      color: #6c757d;
+    }
+
+    .alert {
+      font-size: 0.9rem;
+    }
+
+    .file-info {
+      font-size: 0.9rem;
+      color: #495057;
+      margin-top: 8px;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="container">
+    <div class="upload-container">
+      <i class="bi bi-upload upload-icon"></i>
+      <h2 class="mb-2">上傳履歷</h2>
+      <p class="text-muted">選擇您的履歷檔案（格式：PDF 或 Word）</p>
+
+      <form id="resumeForm">
+        <input type="file" class="form-control mb-2" id="resumeFile" name="resume" accept=".pdf,.doc,.docx" required />
+        <div class="file-info text-start" id="fileInfo"></div>
+
+        <div class="text-muted text-start mb-3">
+          <i class="bi bi-info-circle me-1"></i> 檔案大小上限：5MB
+        </div>
+
+        <button type="submit" class="btn btn-primary w-100">
+          <i class="bi bi-cloud-arrow-up me-2"></i>上傳履歷
+        </button>
+      </form>
+
+      <hr class="my-4">
+
+      <h5 class="mb-3">審查進度</h5>
+      <div id="reviewStatus">尚未上傳履歷</div>
+      <!-- ⬅ 新增：查看履歷清單按鈕 -->
+      <a href="/resume_list" class="btn btn-outline-secondary mt-3 w-100">
+        <i class="bi bi-list-task me-1"></i> 查看上傳履歷清單
+      </a>
+
+      <div class="alert alert-light mt-4">
+        <i class="bi bi-lightbulb me-1"></i>
+        若需先優化履歷，請前往 <a href="/ai_edit_resume" class="text-decoration-none">AI 履歷優化</a> 頁面。
       </div>
-      <button type="submit" class="btn btn-primary">上傳履歷</button>
-    </form>
+    </div>
   </div>
 
-  <script
-    src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"
-  ></script>
+  <script>
+    let resumeId = null;
+    let statusInterval = null;
+
+    const fileInput = document.getElementById('resumeFile');
+    const fileInfo = document.getElementById('fileInfo');
+
+    fileInput.addEventListener('change', () => {
+      const file = fileInput.files[0];
+      if (file) {
+        const sizeMB = (file.size / 1024 / 1024).toFixed(2);
+        fileInfo.innerHTML = `<i class="bi bi-file-earmark-text me-1"></i> ${file.name} (${sizeMB} MB)`;
+      } else {
+        fileInfo.innerHTML = '';
+      }
+    });
+
+    document.getElementById('resumeForm').addEventListener('submit', function (e) {
+      e.preventDefault();
+      const file = fileInput.files[0];
+      if (!file) {
+        alert("請選擇檔案！");
+        return;
+      }
+      if (file.size > 5 * 1024 * 1024) {
+        alert("檔案大小超過5MB！");
+        return;
+      }
+
+      const formData = new FormData();
+      formData.append('resume', file);
+      const username = localStorage.getItem('username') || 'testuser';
+      formData.append('username', username);
+
+      updateStatusText('uploaded');
+
+      fetch('/api/upload_resume', {
+        method: 'POST',
+        body: formData
+      })
+        .then(res => res.json())
+        .then(data => {
+          if (data.success && data.resume_id) {
+            resumeId = data.resume_id;
+            statusInterval = setInterval(fetchStatus, 5000);
+          } else {
+            alert("上傳失敗或缺少履歷 ID");
+          }
+        })
+        .catch(() => {
+          alert("上傳錯誤，請稍後再試");
+        });
+    });
+
+    function fetchStatus() {
+      if (!resumeId) return;
+      fetch(`/api/resume_status?resume_id=${resumeId}`)
+        .then(res => res.json())
+        .then(data => {
+          if (data.success && data.status) {
+            updateStatusText(data.status);
+          }
+        });
+    }
+
+    function updateStatusText(status) {
+      const statusDiv = document.getElementById('reviewStatus');
+      switch (status) {
+        case 'uploaded':
+          statusDiv.innerHTML = '<i class="bi bi-hourglass-split me-2"></i>等待審查中...';
+          statusDiv.style.color = '#0d6efd';
+          break;
+        case 'reviewing':
+          statusDiv.innerHTML = '<i class="bi bi-hourglass me-2"></i>審查中...';
+          statusDiv.style.color = '#0d6efd';
+          break;
+        case 'completed':
+          statusDiv.innerHTML = '<i class="bi bi-check-circle me-2"></i>審查完成';
+          statusDiv.style.color = '#198754';
+          clearInterval(statusInterval);
+          break;
+        case 'rejected':
+          statusDiv.innerHTML = '<i class="bi bi-x-circle me-2"></i>被退件';
+          statusDiv.style.color = '#dc3545';
+          clearInterval(statusInterval);
+          break;
+        case 'cancelled':
+          statusDiv.innerHTML = '<i class="bi bi-x-circle me-2"></i>取消上傳';
+          statusDiv.style.color = '#dc3545';
+          clearInterval(statusInterval);
+          break;
+        default:
+          statusDiv.innerHTML = '尚未上傳履歷';
+          statusDiv.style.color = '#6c757d';
+          clearInterval(statusInterval);
+          break;
+      }
+    }
+  </script>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 </body>
+
 </html>

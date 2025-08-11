@@ -2,11 +2,171 @@
 <html lang="zh-Hant">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>填寫志願序</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>實習公司志願序填寫</title>
+  <style>
+    body {
+      font-family: "Noto Sans TC", sans-serif;
+      background-color: #f0f2f5;
+      margin: 0;
+      padding: 0;
+    }
+    .container {
+      max-width: 600px;
+      margin: 50px auto;
+      background: #fff;
+      padding: 30px;
+      border-radius: 16px;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+      animation: fadeIn 0.6s ease-in-out;
+    }
+    h2 {
+      text-align: center;
+      color: #4a148c;
+      margin-bottom: 20px;
+    }
+    p {
+      text-align: center;
+      color: #555;
+      margin-bottom: 30px;
+    }
+    label {
+      font-weight: bold;
+      color: #333;
+      margin-top: 10px;
+      display: block;
+    }
+    select {
+      width: 100%;
+      padding: 12px;
+      margin: 8px 0 20px 0;
+      border-radius: 8px;
+      border: 1px solid #ccc;
+      font-size: 1em;
+      background-color: #fafafa;
+      transition: border-color 0.3s;
+    }
+    select:focus {
+      border-color: #7b1fa2;
+      outline: none;
+      box-shadow: 0 0 5px rgba(123,31,162,0.3);
+    }
+    button {
+      display: block;
+      width: 100%;
+      padding: 12px;
+      font-size: 1.1em;
+      border: none;
+      border-radius: 8px;
+      background-color: #7b1fa2;
+      color: white;
+      cursor: pointer;
+      transition: background-color 0.3s, transform 0.1s;
+    }
+    button:hover {
+      background-color: #6a1b9a;
+      transform: scale(1.02);
+    }
+    option.hidden {
+      display: none;
+    }
+    @keyframes fadeIn {
+      from {opacity: 0; transform: translateY(20px);}
+      to {opacity: 1; transform: translateY(0);}
+    }
+  </style>
 </head>
 <body>
-  <h1>填寫志願序</h1>
-  <p>此頁面將提供志願填寫與排序功能。</p>
+  <div class="container">
+    <h2>填寫實習公司志願序</h2>
+    <p>請依照喜好順序選擇實習公司（不得重複）：</p>
+    <form id="priorityForm">
+      <label>第一志願：</label>
+      <select name="priority1" class="prioritySelect">
+        <option value="">請選擇公司</option>
+        <option value="Google">Google</option>
+        <option value="Microsoft">Microsoft</option>
+        <option value="TSMC">TSMC</option>
+        <option value="ASUS">ASUS</option>
+        <option value="MediaTek">MediaTek</option>
+      </select>
+      <label>第二志願：</label>
+      <select name="priority2" class="prioritySelect">
+        <option value="">請選擇公司</option>
+        <option value="Google">Google</option>
+        <option value="Microsoft">Microsoft</option>
+        <option value="TSMC">TSMC</option>
+        <option value="ASUS">ASUS</option>
+        <option value="MediaTek">MediaTek</option>
+      </select>
+      <label>第三志願：</label>
+      <select name="priority3" class="prioritySelect">
+        <option value="">請選擇公司</option>
+        <option value="Google">Google</option>
+        <option value="Microsoft">Microsoft</option>
+        <option value="TSMC">TSMC</option>
+        <option value="ASUS">ASUS</option>
+        <option value="MediaTek">MediaTek</option>
+      </select>
+      <label>第四志願：</label>
+      <select name="priority4" class="prioritySelect">
+        <option value="">請選擇公司</option>
+        <option value="Google">Google</option>
+        <option value="Microsoft">Microsoft</option>
+        <option value="TSMC">TSMC</option>
+        <option value="ASUS">ASUS</option>
+        <option value="MediaTek">MediaTek</option>
+      </select>
+      <label>第五志願：</label>
+      <select name="priority5" class="prioritySelect">
+        <option value="">請選擇公司</option>
+        <option value="Google">Google</option>
+        <option value="Microsoft">Microsoft</option>
+        <option value="TSMC">TSMC</option>
+        <option value="ASUS">ASUS</option>
+        <option value="MediaTek">MediaTek</option>
+      </select>
+      <button type="submit">送出志願序</button>
+    </form>
+  </div>
+  <script>
+    const selects = document.querySelectorAll('.prioritySelect');
+    selects.forEach(select => {
+      select.addEventListener('change', () => {
+        const selectedValues = Array.from(selects).map(s => s.value).filter(v => v);
+        selects.forEach(s => {
+          Array.from(s.options).forEach(opt => {
+            if (opt.value && opt.value !== s.value) {
+              opt.classList.toggle('hidden', selectedValues.includes(opt.value));
+            } else {
+              opt.classList.remove('hidden');
+            }
+          });
+        });
+      });
+    });
+
+    document.getElementById('priorityForm').addEventListener('submit', function(e) {
+      e.preventDefault();
+      const formData = new FormData(this);
+      const priorities = {};
+      formData.forEach((value, key) => {
+        priorities[key] = value;
+      });
+      fetch('/submit_priorities', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ priorities })
+      })
+      .then(res => res.json())
+      .then(data => {
+        alert(data.message);
+      })
+      .catch(err => {
+        console.error(err);
+        alert('送出失敗');
+      });
+    });
+  </script>
 </body>
 </html>
