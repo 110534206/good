@@ -4,153 +4,237 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>上傳履歷</title>
-
-  <!-- Bootstrap -->
+  <title>履歷管理平台</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
-  <!-- Bootstrap Icons -->
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" />
-
   <style>
     body {
-      background-color: #f0f2f5;
-      font-family: 'Segoe UI', 'Helvetica Neue', sans-serif;
+      background-color: #f8f9fa;
+      font-family: "Noto Sans TC", sans-serif;
     }
 
-    .upload-container {
-      max-width: 550px;
-      margin: 50px auto;
-      background: #fff;
+    .card {
+      box-shadow: 0 0 12px rgba(0, 0, 0, 0.05);
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: auto;
+    }
+
+    .btn-group .btn.active {
+      font-weight: bold;
+    }
+
+    .status-badge {
+      font-size: 0.9em;
+    }
+
+    #resumeFileDrop {
+      border: 2px dashed #ccc;
+      border-radius: 8px;
       padding: 30px;
-      border-radius: 16px;
-      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
+      text-align: center;
+      color: #888;
+      cursor: pointer;
+      transition: border-color 0.3s;
+    }
+
+    #resumeFileDrop.dragover {
+      border-color: #0d6efd;
+      color: #0d6efd;
+    }
+
+    /* 調整表頭全部置中 */
+    table thead th {
+      text-align: center;
+      vertical-align: middle;
+    }
+
+    /* 上傳時間、檔案名稱靠左 */
+    td.upload-time,
+    td.filename {
+      text-align: left;
+      vertical-align: middle;
+    }
+
+    /* 其餘欄位內容置中 */
+    td.status,
+    td.comment-cell,
+    td.note-cell,
+    td.actions {
+      text-align: center;
+      vertical-align: middle;
+    }
+
+    td.comment-cell,
+    td.note-cell {
+      padding: 0.25rem 0.5rem;
+      min-width: 120px;
+      max-width: 250px;
+      height: 4.5em;
+      text-align: center;
+      vertical-align: middle;
+      position: relative;
+      white-space: pre-wrap;
+      word-break: break-word;
+      cursor: pointer;
+    }
+
+    td.comment-cell .view-text,
+    td.note-cell .view-text {
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      word-break: break-word;
+      white-space: pre-wrap;
+    }
+
+    td.comment-cell .text-muted,
+    td.note-cell .text-muted {
+      display: inline-block;
+      width: 100%;
       text-align: center;
     }
 
-    .upload-icon {
-      font-size: 56px;
-      color: #0d6efd;
-      margin-bottom: 16px;
+    td.comment-cell textarea,
+    td.note-cell textarea {
+      width: 100%;
+      height: 4.5em;
+      resize: vertical;
+      font-size: 0.9em;
+      text-align: center;
+      box-sizing: border-box;
+      font-family: inherit;
     }
 
-    .btn-primary {
-      background: linear-gradient(135deg, #0d6efd, #0a58ca);
-      border: none;
-      font-weight: 500;
-      padding: 12px;
-      border-radius: 10px;
-      transition: background 0.3s ease;
+    td.comment-cell button,
+    td.note-cell button {
+      margin-top: 0.2rem;
+      font-size: 0.85em;
+      padding: 0.2rem 0.5rem;
     }
 
-    .btn-primary:hover {
-      background: linear-gradient(135deg, #0a58ca, #084298);
+    .view-text {
+      min-height: 4.5em;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      word-break: break-word;
+      white-space: pre-wrap;
     }
 
-    #reviewStatus {
-      font-size: 1.1rem;
-      font-weight: 600;
-      color: #6c757d;
-    }
-
-    .alert {
-      font-size: 0.9rem;
-    }
-
-    .file-info {
-      font-size: 0.9rem;
-      color: #495057;
-      margin-top: 8px;
+    .editor-box {
+      position: absolute;
+      top: 0;
+      left: 0;
+      z-index: 10;
+      background-color: #fff;
+      border: 1px solid #ddd;
+      padding: 0.5rem;
+      width: 100%;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
     }
   </style>
 </head>
 
 <body>
-  <div class="container">
-    <div class="upload-container">
-      <i class="bi bi-upload upload-icon"></i>
-      <h2 class="mb-2">上傳履歷</h2>
-      <p class="text-muted">選擇您的履歷檔案（格式：PDF 或 Word）</p>
 
-      <form id="resumeForm">
-        <input type="file" class="form-control mb-2" id="resumeFile" name="resume" accept=".pdf,.doc,.docx" required />
-        <div class="file-info text-start" id="fileInfo"></div>
-
-        <div class="text-muted text-start mb-3">
-          <i class="bi bi-info-circle me-1"></i> 檔案大小上限：5MB
-        </div>
-
-        <button type="submit" class="btn btn-primary w-100">
-          <i class="bi bi-cloud-arrow-up me-2"></i>上傳履歷
-        </button>
-      </form>
-
-      <hr class="my-4">
-
-      <h5 class="mb-3">審查進度</h5>
-      <div id="reviewStatus">尚未上傳履歷</div>
-      <!-- ⬅ 新增：查看履歷清單按鈕 -->
-      <a href="/resume_list" class="btn btn-outline-secondary mt-3 w-100">
-        <i class="bi bi-list-task me-1"></i> 查看上傳履歷清單
-      </a>
-
-      <div class="alert alert-light mt-4">
-        <i class="bi bi-lightbulb me-1"></i>
-        若需先優化履歷，請前往 <a href="/ai_edit_resume" class="text-decoration-none">AI 履歷優化</a> 頁面。
+  <div class="container my-5">
+    <!-- 上傳區塊 -->
+    <div class="card p-4 mb-4">
+      <h4 class="mb-3 text-center">📄 上傳履歷</h4>
+      <div id="resumeFileDrop">拖曳檔案至此或點擊選擇（限 PDF / Word，最大 5MB）</div>
+      <input type="file" id="resumeFile" accept=".pdf,.doc,.docx" hidden />
+      <div class="mt-3 d-flex justify-content-between align-items-center">
+        <span id="fileInfo" class="text-muted">尚未選擇檔案</span>
+        <button class="btn btn-primary" id="uploadBtn" disabled>上傳</button>
       </div>
+      <div class="mt-3"><strong>審查進度：</strong><span id="reviewStatus" class="text-muted">尚未上傳</span></div>
+    </div>
+
+    <!-- 篩選按鈕 -->
+    <div class="btn-group mb-3 w-100" role="group">
+      <button class="btn btn-outline-secondary active" onclick="filterStatus('all')">全部</button>
+      <button class="btn btn-outline-info" id="uploadedCountBtn" onclick="filterStatus('uploaded')">已上傳</button>
+      <button class="btn btn-outline-success" id="completedCountBtn" onclick="filterStatus('completed')">審查完成</button>
+      <button class="btn btn-outline-danger" id="rejectedCountBtn" onclick="filterStatus('rejected')">已退件</button>
+    </div>
+
+    <!-- 清單區塊 -->
+    <div class="card p-3">
+      <table class="table table-hover align-middle mb-0">
+        <thead class="table-light">
+          <tr>
+            <th>上傳時間</th>
+            <th>檔案名稱</th>
+            <th>狀態</th>
+            <th>留言</th>
+            <th>備註</th>
+            <th>操作</th>
+          </tr>
+        </thead>
+        <tbody id="resumeTableBody">
+          <tr>
+            <td colspan="6" class="text-center text-muted">載入中...</td>
+          </tr>
+        </tbody>
+      </table>
     </div>
   </div>
 
   <script>
+    let resumesData = [];
     let resumeId = null;
-    let statusInterval = null;
+    let interval = null;
+    const role = localStorage.getItem('role') || 'student';
 
+    // 拖曳上傳
+    const dropZone = document.getElementById('resumeFileDrop');
     const fileInput = document.getElementById('resumeFile');
-    const fileInfo = document.getElementById('fileInfo');
-
-    fileInput.addEventListener('change', () => {
-      const file = fileInput.files[0];
-      if (file) {
-        const sizeMB = (file.size / 1024 / 1024).toFixed(2);
-        fileInfo.innerHTML = `<i class="bi bi-file-earmark-text me-1"></i> ${file.name} (${sizeMB} MB)`;
-      } else {
-        fileInfo.innerHTML = '';
-      }
-    });
-
-    document.getElementById('resumeForm').addEventListener('submit', function (e) {
+    dropZone.addEventListener('click', () => fileInput.click());
+    dropZone.addEventListener('dragover', e => {
       e.preventDefault();
-      const file = fileInput.files[0];
-      if (!file) {
-        alert("請選擇檔案！");
-        return;
-      }
-      if (file.size > 5 * 1024 * 1024) {
-        alert("檔案大小超過5MB！");
-        return;
-      }
+      dropZone.classList.add('dragover');
+    });
+    dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+    dropZone.addEventListener('drop', e => {
+      e.preventDefault();
+      dropZone.classList.remove('dragover');
+      fileInput.files = e.dataTransfer.files;
+      handleFileChange();
+    });
+    fileInput.addEventListener('change', handleFileChange);
 
+    function handleFileChange() {
+      const file = fileInput.files[0];
+      if (!file) return;
+      document.getElementById('fileInfo').textContent = `${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)`;
+      document.getElementById('uploadBtn').disabled = file.size > 5 * 1024 * 1024;
+    }
+
+    document.getElementById('uploadBtn').addEventListener('click', () => {
+      const file = fileInput.files[0];
+      if (!file) return alert("請選擇檔案");
       const formData = new FormData();
       formData.append('resume', file);
-      const username = localStorage.getItem('username') || 'testuser';
-      formData.append('username', username);
+      formData.append('username', localStorage.getItem('username') || 'testuser');
 
       updateStatusText('uploaded');
 
-      fetch('/api/upload_resume', {
-        method: 'POST',
-        body: formData
-      })
+      fetch('/api/upload_resume', { method: 'POST', body: formData })
         .then(res => res.json())
         .then(data => {
           if (data.success && data.resume_id) {
             resumeId = data.resume_id;
-            statusInterval = setInterval(fetchStatus, 5000);
+            loadResumes();
+            if (interval) clearInterval(interval);
+            interval = setInterval(fetchStatus, 5000);
           } else {
-            alert("上傳失敗或缺少履歷 ID");
+            alert("上傳失敗");
           }
-        })
-        .catch(() => {
-          alert("上傳錯誤，請稍後再試");
         });
     });
 
@@ -159,48 +243,195 @@
       fetch(`/api/resume_status?resume_id=${resumeId}`)
         .then(res => res.json())
         .then(data => {
-          if (data.success && data.status) {
-            updateStatusText(data.status);
-          }
+          if (data.success) updateStatusText(data.status);
         });
     }
 
     function updateStatusText(status) {
-      const statusDiv = document.getElementById('reviewStatus');
-      switch (status) {
-        case 'uploaded':
-          statusDiv.innerHTML = '<i class="bi bi-hourglass-split me-2"></i>等待審查中...';
-          statusDiv.style.color = '#0d6efd';
-          break;
-        case 'reviewing':
-          statusDiv.innerHTML = '<i class="bi bi-hourglass me-2"></i>審查中...';
-          statusDiv.style.color = '#0d6efd';
-          break;
-        case 'completed':
-          statusDiv.innerHTML = '<i class="bi bi-check-circle me-2"></i>審查完成';
-          statusDiv.style.color = '#198754';
-          clearInterval(statusInterval);
-          break;
-        case 'rejected':
-          statusDiv.innerHTML = '<i class="bi bi-x-circle me-2"></i>被退件';
-          statusDiv.style.color = '#dc3545';
-          clearInterval(statusInterval);
-          break;
-        case 'cancelled':
-          statusDiv.innerHTML = '<i class="bi bi-x-circle me-2"></i>取消上傳';
-          statusDiv.style.color = '#dc3545';
-          clearInterval(statusInterval);
-          break;
-        default:
-          statusDiv.innerHTML = '尚未上傳履歷';
-          statusDiv.style.color = '#6c757d';
-          clearInterval(statusInterval);
-          break;
+      const el = document.getElementById('reviewStatus');
+      const map = {
+        uploaded: ['已上傳，待審查', '#0d6efd'],
+        completed: ['審查完成', '#198754'],
+        rejected: ['已退件', '#dc3545']
+      };
+      el.textContent = map[status]?.[0] || '尚未上傳';
+      el.style.color = map[status]?.[1] || '#6c757d';
+    }
+
+    function loadResumes() {
+      fetch(`/api/get_all_resumes?username=${localStorage.getItem('username') || 'testuser'}`)
+        .then(res => res.json())
+        .then(data => {
+          if (data.success) {
+            resumesData = data.resumes;
+            renderTable('all');
+          }
+        });
+    }
+
+    function filterStatus(filter) {
+      document.querySelectorAll('.btn-group .btn').forEach(btn => btn.classList.remove('active'));
+      event.target.classList.add('active');
+      renderTable(filter);
+    }
+
+    function renderTable(filter) {
+      const tbody = document.getElementById('resumeTableBody');
+      tbody.innerHTML = '';
+      // 計算各個狀態的數量
+      const statusCounts = {
+        uploaded: resumesData.filter(r => r.status === 'uploaded').length,
+        completed: resumesData.filter(r => r.status === 'completed').length,
+        rejected: resumesData.filter(r => r.status === 'rejected').length
+      };
+
+      // 更新篩選按鈕文字
+      document.getElementById('uploadedCountBtn').textContent = `已上傳 (${statusCounts.uploaded})`;
+      document.getElementById('completedCountBtn').textContent = `審查完成 (${statusCounts.completed})`;
+      document.getElementById('rejectedCountBtn').textContent = `已退件 (${statusCounts.rejected})`;
+
+      const commentPlaceholder = '請輸入留言...';
+
+      const notePlaceholder = '請輸入備註...';
+
+      const filtered = filter === 'all' ? resumesData : resumesData.filter(r => r.status === filter);
+      if (filtered.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="6" class="text-center text-muted">無資料</td></tr>`;
+        return;
+      }
+
+      filtered.forEach(r => {
+        const commentView = `
+  <div class="view-text" ${role !== 'student' ? `onclick="showCommentEditor(this, ${r.id})"` : ''}>
+    ${r.comment?.trim()
+            ? escapeHtml(r.comment)
+            : `<span class="text-muted">未填寫</span>`}
+          </div>
+          ${role !== 'student' ? `
+          <div class="editor-box" style="display:none;">
+            <textarea onkeydown="handleCommentKeydown(event, this, ${r.id})" placeholder="${commentPlaceholder}">${escapeHtml(r.comment)}</textarea><br/>
+            <button class="btn btn-sm btn-primary" onclick="submitComment(this, ${r.id})">送出</button>
+            <button class="btn btn-sm btn-secondary" onclick="cancelEdit(this)">取消</button>
+          </div>` : ''}
+        `;
+
+        const noteView = `
+  <div class="view-text" onclick="showNoteEditor(this, ${r.id})">
+    ${r.note?.trim()
+            ? escapeHtml(r.note)
+            : `<span class="text-muted">未填寫</span>`}
+          </div>
+          <div class="editor-box" style="display:none;">
+            <textarea onkeydown="handleNoteKeydown(event, this, ${r.id})" placeholder="${notePlaceholder}">${escapeHtml(r.note)}</textarea><br/>
+            <button class="btn btn-sm btn-primary" onclick="submitNote(this, ${r.id})">送出</button>
+            <button class="btn btn-sm btn-secondary" onclick="cancelEdit(this)">取消</button>
+          </div>
+        `;
+
+        tbody.innerHTML += `
+          <tr>
+            <td>${new Date(r.upload_time).toLocaleString()}</td>
+            <td>${r.original_filename}</td>
+            <td><span class="badge bg-${statusColor(r.status)} status-badge">${mapStatus(r.status)}</span></td>
+            <td class="comment-cell">${commentView}</td>
+            <td class="note-cell">${noteView}</td>
+            <td>
+              <a href="/api/download_resume?resume_id=${r.id}" class="btn btn-outline-primary btn-sm me-1">下載</a>
+              <button class="btn btn-outline-danger btn-sm" onclick="deleteResume(${r.id})">刪除</button>
+            </td>
+          </tr>
+        `;
+      });
+    }
+
+    function mapStatus(status) {
+      return { uploaded: '已上傳', completed: '完成', rejected: '退件' }[status] || '未知';
+    }
+
+    function statusColor(status) {
+      return { uploaded: 'info', completed: 'success', rejected: 'danger' }[status] || 'secondary';
+    }
+
+    function deleteResume(id) {
+      if (!confirm("確定要刪除這份履歷？")) return;
+      fetch(`/api/delete_resume?resume_id=${id}`, { method: 'DELETE' })
+        .then(res => res.json())
+        .then(data => {
+          if (data.success) loadResumes();
+          else alert("刪除失敗");
+        });
+    }
+
+    function showCommentEditor(container, id) {
+      const td = container.closest('td');
+      td.querySelector('.view-text').style.display = 'none';
+      td.querySelector('.editor-box').style.display = 'block';
+      td.querySelector('textarea').focus();
+    }
+
+    function showNoteEditor(container, id) {
+      const td = container.closest('td');
+      td.querySelector('.view-text').style.display = 'none';
+      td.querySelector('.editor-box').style.display = 'block';
+      td.querySelector('textarea').focus();
+    }
+
+    function handleCommentKeydown(event, textarea, id) {
+      if (event.key === 'Enter' && !event.shiftKey) {
+        event.preventDefault();
+        submitComment(textarea.closest('td').querySelector('button.btn-primary'), id);
       }
     }
-  </script>
 
-  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    function handleNoteKeydown(event, textarea, id) {
+      if (event.key === 'Enter' && !event.shiftKey) {
+        event.preventDefault();
+        submitNote(textarea.closest('td').querySelector('button.btn-primary'), id);
+      }
+    }
+
+    function submitComment(btn, id) {
+      const td = btn.closest('td');
+      const newVal = td.querySelector('textarea').value.trim();
+      updateField(id, 'comment', newVal, td);
+    }
+
+    function submitNote(btn, id) {
+      const td = btn.closest('td');
+      const newVal = td.querySelector('textarea').value.trim();
+      updateField(id, 'note', newVal, td);
+    }
+
+    function updateField(id, field, value, td) {
+      fetch(`/api/update_resume_field`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ resume_id: id, field, value })
+      }).then(res => res.json()).then(data => {
+        if (data.success) {
+          td.querySelector('.view-text').innerHTML = escapeHtml(value) || `<span class="text-muted">請輸入...</span>`;
+          cancelEdit(td.querySelector('.btn-secondary'));
+        } else {
+          alert('更新失敗');
+        }
+      });
+    }
+
+    function cancelEdit(btn) {
+      const td = btn.closest('td');
+      td.querySelector('.editor-box').style.display = 'none';
+      td.querySelector('.view-text').style.display = 'block';
+    }
+
+    function escapeHtml(text) {
+      if (!text) return '';
+      return text.replace(/&/g, "&amp;").replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;").replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+    }
+
+    document.addEventListener("DOMContentLoaded", loadResumes);
+  </script>
 </body>
 
 </html>

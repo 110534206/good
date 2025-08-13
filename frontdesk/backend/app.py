@@ -1,16 +1,18 @@
 from flask import Flask, render_template, request, send_file, redirect, jsonify
-import mysql.connector
-import re
-import os
-import traceback
-from datetime import datetime
 from werkzeug.security import generate_password_hash, check_password_hash
+from werkzeug.utils import secure_filename
 from flask_cors import CORS
+import mysql.connector
+import traceback
+import os
+import re
+from datetime import datetime
 
 # -------------------------
 # Flask 與 CORS 設定
 # -------------------------
 app = Flask(__name__, template_folder='../frontend/templates', static_folder='../frontend/static')
+app.config['UPLOAD_FOLDER'] = './uploads'
 CORS(app, supports_credentials=True)
 
 # -------------------------
@@ -215,88 +217,45 @@ def save_profile():
 # -------------------------
 # API - 上傳履歷
 # -------------------------
-# 指定上傳資料夾
-UPLOAD_FOLDER = './uploads'
-app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+@app.route('/api/update_resume_field', methods=['POST'])
+def update_resume_field():
+    data = request.get_json()
 
-@app.route('/api/upload_resume', methods=['POST'])
-def upload_resume_api():
-    conn = None
-    cursor = None
+    resume_id = data.get('resume_id')
+    field = data.get('field')
+    value = (data.get('value') or '').strip()
+
+    allowed_fields = {
+        "comment": "comment",
+        "note": "note"
+    }
+
+    # 驗證 resume_id 與 field
     try:
-        file = request.files.get('resume')
-        username = request.form.get('username') 
-        original_filename = file.filename
+        resume_id = int(resume_id)
+    except (TypeError, ValueError):
+        return jsonify({"success": False, "message": "resume_id 必須是數字"}), 400
 
-        print("收到檔案:", file.filename if file else None)
-        print("收到帳號:", username)
+    if field not in allowed_fields:
+        return jsonify({"success": False, "message": "參數錯誤"}), 400
 
-        if not file or not username:
-            return jsonify({"success": False, "message": "缺少檔案或帳號資訊"}), 400
-
-        os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
-
-        from werkzeug.utils import secure_filename
-        safe_filename = secure_filename(file.filename)
-        filename = f"{username}_{datetime.now().strftime('%Y%m%d%H%M%S')}_{safe_filename}"
-        filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-
-        file.save(filepath)
-        filesize = round(os.path.getsize(filepath) / (1024 * 1024), 3)  # MB
-
-        conn = get_db()
-        cursor = conn.cursor()
-
-        cursor.execute("SELECT id FROM users WHERE username = %s", (username,))
-        result = cursor.fetchone()
-        if not result:
-            return jsonify({"success": False, "message": "找不到對應使用者"}), 404
-
-        user_id = result[0]
-
-        # 先查該使用者是否已有履歷
-        cursor.execute("SELECT id FROM resumes WHERE user_id = %s", (user_id,))
-        resume = cursor.fetchone()
-
-        if resume:
-            # 已有履歷，更新資料
-           resume_id = resume[0]
-           cursor.execute("""
-               UPDATE resumes
-               SET filename=%s, original_filename=%s, filepath=%s, filesize=%s, status=%s
-            WHERE id=%s
-            """, (filename, original_filename, filepath, filesize, 'uploaded', resume_id))
-        else:
-            # 沒有履歷，新增一筆
-            cursor.execute("""
-               INSERT INTO resumes (user_id, filename, original_filename, filepath, filesize, status)
-               VALUES (%s, %s, %s, %s, %s, %s)
-             """, (user_id, filename, original_filename, filepath, filesize, 'uploaded'))
-            resume_id = cursor.lastrowid
-
+    conn = get_db()
+    cursor = conn.cursor()
+    try:
+        sql = f"UPDATE resumes SET {allowed_fields[field]} = %s WHERE id = %s"
+        cursor.execute(sql, (value, resume_id))
         conn.commit()
-
-        print("resume_id:", resume_id)
-
-        return jsonify({
-            "success": True,
-            "message": "履歷上傳成功",
-            "resume_id": resume_id
-        }), 201
-
+        return jsonify({"success": True, "field": field, "resume_id": resume_id}), 200
     except Exception as e:
-        tb = traceback.format_exc()
-        print("上傳履歷時發生錯誤：", tb)
-        return jsonify({"success": False, "message": str(e), "trace": tb}), 500
-
+        traceback.print_exc()
+        return jsonify({"success": False, "message": "伺服器錯誤"}), 500
     finally:
-        if cursor:
-            cursor.close()
-        if conn:
-            conn.close()
+        cursor.close()
+        conn.close()
 
 # -------------------------
-# API - 取得履歷狀態
+# API - 查詢履歷狀態
+# -------------------------
 @app.route('/api/resume_status', methods=['GET'])
 def resume_status():
     resume_id = request.args.get('resume_id')
@@ -316,7 +275,7 @@ def resume_status():
     return jsonify({"success": True, "status": resume['status']})
 
 # -------------------------
-# API - 取得所有履歷清單
+# API - 所有履歷清單
 # -------------------------
 @app.route('/api/get_all_resumes', methods=['GET'])
 def get_all_resumes():
@@ -326,35 +285,27 @@ def get_all_resumes():
 
     conn = get_db()
     cursor = conn.cursor(dictionary=True)
+    cursor.execute("SELECT id FROM users WHERE username = %s", (username,))
+    user = cursor.fetchone()
+    if not user:
+        return jsonify({"success": False, "message": "找不到使用者"}), 404
 
-    try:
-        cursor.execute("SELECT id FROM users WHERE username = %s", (username,))
-        user = cursor.fetchone()
-        if not user:
-            return jsonify({"success": False, "message": "找不到使用者"}), 404
+    user_id = user['id']
+    cursor.execute("""
+      SELECT id, original_filename, filepath, filesize, status, comment, note, created_at AS upload_time
+      FROM resumes WHERE user_id = %s ORDER BY created_at DESC
+     """, (user_id,))
+    resumes = cursor.fetchall()
+    for r in resumes:
+        if isinstance(r.get('upload_time'), datetime):
+            r['upload_time'] = r['upload_time'].strftime("%Y-%m-%d %H:%M:%S")
 
-        user_id = user['id']
-
-        cursor.execute("""
-            SELECT id, filename, filepath, filesize, status, '' AS comment, uploaded_at AS upload_time
-            FROM resumes WHERE user_id = %s
-        """, (user_id,))
-        resumes = cursor.fetchall()
-
-        # 將 datetime 轉成字串（前端會用 new Date() 解析）
-        for r in resumes:
-            if isinstance(r.get('upload_time'), datetime):
-                r['upload_time'] = r['upload_time'].strftime("%Y-%m-%d %H:%M:%S")
-
-        return jsonify({"success": True, "resumes": resumes})
-
-    finally:
-        cursor.close()
-        conn.close()
-
+    cursor.close()
+    conn.close()
+    return jsonify({"success": True, "resumes": resumes})
 
 # -------------------------
-# API - 留言提交
+# API - 留言更新
 # -------------------------
 @app.route('/api/submit_comment', methods=['POST'])
 def submit_comment():
@@ -367,25 +318,11 @@ def submit_comment():
 
     conn = get_db()
     cursor = conn.cursor()
-
-    try:
-        # 先確認履歷存在
-        cursor.execute("SELECT id FROM resumes WHERE id = %s", (resume_id,))
-        if cursor.fetchone() is None:
-            return jsonify({"success": False, "message": "找不到該履歷"}), 404
-
-        cursor.execute("UPDATE resumes SET comment = %s WHERE id = %s", (comment, resume_id))
-        conn.commit()
-
-        return jsonify({"success": True, "message": "留言更新成功"})
-
-    except Exception as e:
-        print("留言更新錯誤:", e)
-        return jsonify({"success": False, "message": "留言更新失敗"}), 500
-
-    finally:
-        cursor.close()
-        conn.close()
+    cursor.execute("UPDATE resumes SET comment = %s WHERE id = %s", (comment, resume_id))
+    conn.commit()
+    cursor.close()
+    conn.close()
+    return jsonify({"success": True, "message": "留言更新成功"})
 
 # -------------------------
 # API - 下載履歷
@@ -403,16 +340,36 @@ def download_resume():
     cursor.close()
     conn.close()
 
-    if not resume:
+    if not resume or not os.path.exists(resume['filepath']):
+        return jsonify({"success": False, "message": "找不到檔案"}), 404
+
+    return send_file(resume['filepath'], as_attachment=True, download_name=resume['original_filename'])
+
+# -------------------------
+# API - 刪除履歷
+# -------------------------
+@app.route('/api/delete_resume', methods=['DELETE'])
+def delete_resume():
+    resume_id = request.args.get('resume_id')
+    if not resume_id:
+        return jsonify({"success": False, "message": "缺少 resume_id"}), 400
+
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT filepath FROM resumes WHERE id = %s", (resume_id,))
+    result = cursor.fetchone()
+    if not result:
         return jsonify({"success": False, "message": "找不到該履歷"}), 404
 
-    filepath = resume['filepath']
-    original_filename = resume['original_filename']
+    filepath = result[0]
+    if os.path.exists(filepath):
+        os.remove(filepath)
 
-    if not os.path.exists(filepath):
-        return jsonify({"success": False, "message": "檔案不存在"}), 404
-
-    return send_file(filepath, as_attachment=True, download_name=original_filename)
+    cursor.execute("DELETE FROM resumes WHERE id = %s", (resume_id,))
+    conn.commit()
+    cursor.close()
+    conn.close()
+    return jsonify({"success": True, "message": "履歷已刪除"})
 
 # -------------------------
 # 頁面路由
@@ -456,10 +413,6 @@ def administrative_home():
 @app.route('/upload_resume')
 def upload_resume():
     return render_template('upload_resume.html')
-
-@app.route('/resume_list')
-def resume_list():
-    return render_template('resume_list.html')
 
 @app.route('/ai_edit_resume')
 def ai_edit_resume():
