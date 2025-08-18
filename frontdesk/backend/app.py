@@ -372,6 +372,71 @@ def delete_resume():
     return jsonify({"success": True, "message": "履歷已刪除"})
 
 # -------------------------
+# API - 審核履歷
+# -------------------------
+@app.route('/api/approve_resume', methods=['POST'])
+def approve_resume():
+    resume_id = request.args.get('resume_id')
+    if not resume_id:
+        return jsonify({"success": False, "message": "缺少 resume_id"}), 400
+
+    conn = get_db()
+    cursor = conn.cursor()
+
+    # 檢查履歷是否存在
+    cursor.execute("SELECT id FROM resumes WHERE id = %s", (resume_id,))
+    if not cursor.fetchone():
+        return jsonify({"success": False, "message": "找不到該履歷"}), 404
+
+    # 更新狀態為 'approved'
+    cursor.execute("UPDATE resumes SET status = %s WHERE id = %s", ("approved", resume_id))
+    conn.commit()
+
+    cursor.close()
+    conn.close()
+
+    return jsonify({"success": True, "message": "履歷已標記為完成"})
+
+# -------------------------
+# API - 取得所有學生履歷
+# -------------------------
+@app.route('/api/get_all_students_resumes', methods=['GET'])
+def get_all_students_resumes():
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute("""
+      SELECT r.*, u.username
+      FROM resumes r
+      JOIN users u ON r.user_id = u.id
+      WHERE u.role = 'student'
+      ORDER BY r.created_at DESC
+    """)
+    resumes = cursor.fetchall()
+    for r in resumes:
+        r['upload_time'] = r['created_at'].strftime("%Y-%m-%d %H:%M:%S")
+    cursor.close()
+    conn.close()
+    return jsonify({"success": True, "resumes": resumes})
+
+
+# -------------------------
+# # API - 接受履歷
+# -------------------------
+@app.route('/api/reject_resume', methods=['POST'])
+def reject_resume():
+    resume_id = request.args.get('resume_id')
+    if not resume_id:
+        return jsonify({"success": False, "message": "缺少 resume_id"})
+
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("UPDATE resumes SET status = 'rejected' WHERE id = %s", (resume_id,))
+    conn.commit()
+    cursor.close()
+    conn.close()
+    return jsonify({"success": True})
+
+# -------------------------
 # 頁面路由
 # -------------------------
 @app.route('/profile')
@@ -413,6 +478,10 @@ def administrative_home():
 @app.route('/upload_resume')
 def upload_resume():
     return render_template('upload_resume.html')
+
+@app.route('/review_resume')
+def review_resume():
+    return render_template('review_resume.html')
 
 @app.route('/ai_edit_resume')
 def ai_edit_resume():

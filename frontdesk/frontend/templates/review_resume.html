@@ -1,0 +1,440 @@
+<!-- review_resume_teacher.html -->
+<!DOCTYPE html>
+<html lang="zh-Hant">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>學生履歷審查</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
+  <style>
+  body {
+    background-color: #f8f9fa;
+    font-family: "Noto Sans TC", sans-serif;
+  }
+
+  .table-responsive {
+    overflow-x: auto;
+    overflow-y: hidden;
+    white-space: nowrap;
+    max-height: none;
+  }
+
+  table {
+    table-layout: auto;
+    min-width: 1000px;
+  }
+
+  .card {
+    box-shadow: 0 0 12px rgba(0, 0, 0, 0.05);
+  }
+
+  .container {
+    max-width: 1200px;
+    margin: auto;
+  }
+
+  .btn-group .btn.active {
+    font-weight: bold;
+  }
+
+  .status-badge {
+    font-size: 0.9em;
+  }
+
+  table thead th {
+    text-align: center;
+    vertical-align: middle;
+  }
+
+  table td {
+    text-align: center;
+    vertical-align: middle;
+  }
+
+  table td:nth-child(3),
+  table th:nth-child(3) {
+    white-space: nowrap;
+    max-width: 400px;
+  }
+
+  /* ✅ 留言與備註欄樣式 */
+  td.comment-cell .view-text,
+  td.note-cell .view-text {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 40px;
+    height: 40px;
+    text-align: center;
+    word-break: break-word;
+    white-space: pre-wrap;
+  }
+
+  td.comment-cell .view-text span,
+  td.note-cell .view-text span {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+    text-align: center;
+  }
+
+  td.comment-cell .text-muted,
+  td.note-cell .text-muted {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+    min-height: 40px;
+    text-align: center;
+    word-break: break-word;
+    white-space: pre-wrap;
+  }
+
+  /* ✅ textarea 編輯區通用設定 */
+  td.comment-cell textarea,
+  td.note-cell textarea {
+    width: 100%;
+    resize: vertical;
+    font-size: 1.1em;
+    text-align: center;
+    box-sizing: border-box;
+    font-family: inherit;
+    padding: 0.4rem;
+  }
+
+  td.comment-cell button,
+  td.note-cell button {
+    margin-top: 0.2rem;
+    font-size: 0.85em;
+    padding: 0.2rem 0.5rem;
+  }
+
+  /* ✅ 修正文字內容顯示 */
+  .view-text span,
+  .view-text span.text-muted {
+    color: #198754;
+    white-space: normal;
+    overflow: visible;
+    text-overflow: unset;
+    display: inline;
+  }
+
+  .view-text span.text-muted {
+    color: #6c757d;
+  }
+
+  .editor-box {
+    position: relative;
+    top: 0;
+    left: 0;
+    z-index: 10;
+    background-color: #fff;
+    border: 1px solid #ddd;
+    padding: 0.5rem;
+    width: 100%;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    border-radius: 4px;
+  }
+
+  /* ✅ ⭐️ 新增：限制備註欄文字區不會撐開表格 */
+  td.note-cell {
+    max-width: 600px;
+  }
+
+  td.note-cell .editor-box {
+    word-break: break-word;
+    overflow: hidden;
+    min-height: 60px;
+  }
+
+  td.note-cell .view-text {
+    min-height: 60px;
+  }
+
+  td.note-cell .editor-box textarea {
+    max-height: 100px;
+    min-height: 40px;
+    height: 60px;
+    font-size: 1em;
+    text-align: center;
+    resize: vertical;
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  /* ✅ ⭐️ 若要統一留言欄樣式，也可以加這段 */
+  td.comment-cell .editor-box {
+    min-height: 60px;
+  }
+
+  td.comment-cell .editor-box textarea {
+    max-height: 100px;
+    min-height: 40px;
+    height: 60px;
+  }
+
+  /* ✅ 操作欄固定寬度，防止跑版 */
+  td:last-child {
+    white-space: nowrap;
+    width: 140px;
+    min-width: 140px;
+  }
+
+  /* 操作欄按鈕排成一行，有間距 */
+  td:last-child>* {
+    display: inline-block;
+    margin-left: 0.4rem;
+    vertical-align: middle;
+  }
+
+  td:last-child>*:first-child {
+    margin-left: 0;
+  }
+</style>
+
+
+</head>
+
+<body>
+  <div class="container my-5">
+    <div class="card p-4">
+      <h4 class="mb-4 text-center">📑 學生履歷審查</h4>
+
+      <!-- 篩選工具列 -->
+      <div class="d-flex justify-content-between mb-3 flex-wrap gap-2">
+        <div class="d-flex gap-2">
+          <select id="statusFilter" class="form-select form-select-sm w-auto">
+            <option value="">所有狀態</option>
+            <option value="uploaded">已上傳</option>
+            <option value="approved">完成</option>
+            <option value="rejected">退件</option>
+          </select>
+          <input type="text" id="searchBox" class="form-control form-control-sm w-auto" placeholder="搜尋帳號或檔名">
+        </div>
+      </div>
+
+      <div class="table-responsive">
+        <table class="table table-hover align-middle">
+          <thead class="table-light">
+            <tr>
+              <th>學生帳號</th>
+              <th>上傳時間</th>
+              <th>檔案名稱</th>
+              <th>狀態</th>
+              <th>留言</th>
+              <th>備註</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody id="resumeTableBody">
+            <tr>
+              <td colspan="7" class="text-muted text-center">載入中...</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let allResumes = [];
+
+    document.addEventListener("DOMContentLoaded", () => {
+      fetch("/api/get_all_students_resumes")
+        .then(res => res.json())
+        .then(data => {
+          if (!data.success) {
+            document.getElementById("resumeTableBody").innerHTML =
+              `<tr><td colspan="7" class="text-center text-danger">無法載入履歷資料</td></tr>`;
+            return;
+          }
+
+          allResumes = data.resumes || [];
+          if (allResumes.length === 0) {
+            document.getElementById("resumeTableBody").innerHTML =
+              `<tr><td colspan="7" class="text-center text-muted">目前沒有任何學生上傳履歷</td></tr>`;
+            return;
+          }
+
+          renderTable(allResumes);
+        });
+
+      // 綁定篩選事件
+      document.getElementById("statusFilter").addEventListener("change", applyFilters);
+      document.getElementById("searchBox").addEventListener("input", applyFilters);
+    });
+
+    function applyFilters() {
+      const statusValue = document.getElementById("statusFilter").value;
+      const searchValue = document.getElementById("searchBox").value.toLowerCase();
+
+      const filtered = allResumes.filter(r => {
+        const matchStatus = statusValue ? r.status === statusValue : true;
+        const matchSearch =
+          r.username.toLowerCase().includes(searchValue) ||
+          r.original_filename.toLowerCase().includes(searchValue);
+        return matchStatus && matchSearch;
+      });
+
+      renderTable(filtered);
+    }
+
+    function renderTable(resumes) {
+      const tbody = document.getElementById("resumeTableBody");
+      tbody.innerHTML = "";
+
+      if (resumes.length === 0) {
+        tbody.innerHTML =
+          `<tr><td colspan="7" class="text-center text-muted">沒有符合條件的資料</td></tr>`;
+        return;
+      }
+
+      resumes.forEach(r => {
+        const commentHtml = `
+          <td class="comment-cell">
+            <div class="view-text" onclick="showCommentEditor(this, ${r.id})" style="cursor:pointer;">
+              <span class="${r.comment?.trim() ? '' : 'text-muted'}">
+                ${r.comment?.trim() ? '已填寫' : '未填寫'}
+              </span>
+            </div>
+            <div class="editor-box" style="display:none;">
+              <textarea onkeydown="handleCommentKeydown(event, this, ${r.id})" placeholder="請輸入留言...">${escapeHtml(r.comment)}</textarea><br/>
+              <button class="btn btn-sm btn-primary" onclick="submitComment(this, ${r.id})">送出</button>
+              <button class="btn btn-sm btn-secondary" onclick="cancelEdit(this)">取消</button>
+            </div>
+          </td>
+        `;
+
+        const noteHtml = `
+          <td class="note-cell">
+            <div class="view-text" onclick="showNoteViewer(this, ${r.id})" style="cursor:pointer;">
+              <span class="${r.note?.trim() ? '' : 'text-muted'}">
+                ${r.note?.trim() ? '已填寫' : '未填寫'}
+              </span>
+            </div>
+            <div class="editor-box" style="display:none;">
+              <textarea readonly style="background-color:#f1f1f1;">${escapeHtml(r.note)}</textarea><br/>
+              <button class="btn btn-sm btn-secondary" onclick="cancelEdit(this)">返回</button>
+            </div>
+          </td>
+        `;
+
+        const row = `
+          <tr>
+            <td>${r.username}</td>
+            <td>${new Date(r.upload_time).toLocaleString()}</td>
+            <td>${r.original_filename}</td>
+            <td><span class="badge bg-${getStatusColor(r.status)}">${mapStatus(r.status)}</span></td>
+            ${commentHtml}
+            ${noteHtml}
+            <td>
+              <a href="/api/download_resume?resume_id=${r.id}" class="btn btn-outline-primary btn-sm">下載</a>
+              <button class="btn btn-outline-danger btn-sm ms-1" onclick="rejectResume(${r.id})">退件</button>
+              <button class="btn btn-outline-success btn-sm ms-1" onclick="approveResume(${r.id})">審查成功</button>
+            </td>
+          </tr>
+        `;
+        tbody.innerHTML += row;
+      });
+    }
+
+    function mapStatus(status) {
+      return { uploaded: "已上傳", approved: "完成", rejected: "退件" }[status] || "未知";
+    }
+
+    function getStatusColor(status) {
+      return { uploaded: "info", approved: "success", rejected: "danger" }[status] || "secondary";
+    }
+
+    function showCommentEditor(container, id) {
+      const td = container.closest('td');
+      td.querySelector('.view-text').style.display = 'none';
+      td.querySelector('.editor-box').style.display = 'block';
+      td.querySelector('textarea').focus();
+    }
+
+    function showNoteViewer(container, id) {
+      const td = container.closest('td');
+      td.querySelector('.view-text').style.display = 'none';
+      td.querySelector('.editor-box').style.display = 'block';
+    }
+
+    function handleCommentKeydown(event, textarea, id) {
+      if (event.key === 'Enter' && !event.shiftKey) {
+        event.preventDefault();
+        submitComment(textarea.closest('td').querySelector('button.btn-primary'), id);
+      }
+    }
+
+    function submitComment(btn, id) {
+      const td = btn.closest('td');
+      const newVal = td.querySelector('textarea').value.trim();
+      fetch("/api/update_resume_field", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ resume_id: id, field: "comment", value: newVal })
+      })
+        .then(res => res.json())
+        .then(data => {
+          if (data.success) {
+            td.querySelector('.view-text').innerHTML = `
+              <span class="${newVal ? '' : 'text-muted'}">
+                ${newVal ? escapeHtml(newVal) : '未填寫'}
+              </span>
+            `;
+            cancelEdit(td.querySelector('.btn-secondary'));
+          } else {
+            alert("留言更新失敗");
+          }
+        });
+    }
+
+    function cancelEdit(btn) {
+      const td = btn.closest('td');
+      td.querySelector('.editor-box').style.display = 'none';
+      td.querySelector('.view-text').style.display = 'block';
+    }
+
+    function rejectResume(resumeId) {
+      if (!confirm("確定要將此履歷標記為退件？")) return;
+      fetch(`/api/reject_resume?resume_id=${resumeId}`, { method: "POST" })
+        .then(res => res.json())
+        .then(data => {
+          if (data.success) {
+            alert("已退件");
+            location.reload();
+          } else {
+            alert("退件失敗");
+          }
+        });
+    }
+
+    function approveResume(resumeId) {
+      if (!confirm("確定要將此履歷標記為『審查成功』？")) return;
+      fetch(`/api/approve_resume?resume_id=${resumeId}`, { method: "POST" })
+        .then(res => res.json())
+        .then(data => {
+          if (data.success) {
+            alert("已標記為審查成功");
+            location.reload();
+          } else {
+            alert("標記失敗");
+          }
+        });
+    }
+
+    function escapeHtml(text) {
+      if (!text) return '';
+      return text.replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+    }
+  </script>
+</body>
+
+</html>

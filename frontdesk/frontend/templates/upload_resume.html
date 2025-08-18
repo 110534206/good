@@ -44,48 +44,26 @@
       color: #0d6efd;
     }
 
-    /* 調整表頭全部置中 */
+    /* 表頭置中 */
     table thead th {
       text-align: center;
       vertical-align: middle;
     }
 
-    /* 上傳時間、檔案名稱靠左 */
-    td.upload-time,
-    td.filename {
-      text-align: left;
-      vertical-align: middle;
-    }
-
-    /* 其餘欄位內容置中 */
-    td.status,
-    td.comment-cell,
-    td.note-cell,
-    td.actions {
+    /* 所有表格欄位預設置中 */
+    table td {
       text-align: center;
       vertical-align: middle;
     }
 
-    td.comment-cell,
-    td.note-cell {
-      padding: 0.25rem 0.5rem;
-      min-width: 120px;
-      max-width: 250px;
-      height: 4.5em;
-      text-align: center;
-      vertical-align: middle;
-      position: relative;
-      white-space: pre-wrap;
-      word-break: break-word;
-      cursor: pointer;
-    }
-
+    /* 評語和備註欄高度與對齊調整 */
     td.comment-cell .view-text,
     td.note-cell .view-text {
-      height: 100%;
       display: flex;
-      align-items: center;
       justify-content: center;
+      align-items: center;
+      min-height: 40px;
+      height: 40px;
       text-align: center;
       word-break: break-word;
       white-space: pre-wrap;
@@ -93,20 +71,26 @@
 
     td.comment-cell .text-muted,
     td.note-cell .text-muted {
-      display: inline-block;
+      display: flex;
+      justify-content: center;
+      align-items: center;
       width: 100%;
+      min-height: 40px;
       text-align: center;
+      word-break: break-word;
+      white-space: pre-wrap;
     }
+
 
     td.comment-cell textarea,
     td.note-cell textarea {
       width: 100%;
-      height: 4.5em;
       resize: vertical;
-      font-size: 0.9em;
+      font-size: 1.2em;
       text-align: center;
       box-sizing: border-box;
       font-family: inherit;
+      padding: 0.4rem;
     }
 
     td.comment-cell button,
@@ -116,16 +100,27 @@
       padding: 0.2rem 0.5rem;
     }
 
-    .view-text {
-      min-height: 4.5em;
+    /* 顯示用的 view-text（例如備註） */
+    .view-text span {
       display: flex;
-      align-items: center;
       justify-content: center;
-      text-align: center;
-      word-break: break-word;
-      white-space: pre-wrap;
+      align-items: center;
+      height: 40px;
+      /* 和父層 min-height 一致 */
     }
 
+    /* 已填寫的文字樣式 */
+    .view-text span {
+      color: #198754;
+      /* 綠色代表已填寫 */
+    }
+
+    /* 未填寫的文字樣式 */
+    .view-text span.text-muted {
+      color: #6c757d;
+    }
+
+    /* 編輯器浮出樣式 */
     .editor-box {
       position: absolute;
       top: 0;
@@ -159,7 +154,7 @@
     <div class="btn-group mb-3 w-100" role="group">
       <button class="btn btn-outline-secondary active" onclick="filterStatus('all')">全部</button>
       <button class="btn btn-outline-info" id="uploadedCountBtn" onclick="filterStatus('uploaded')">已上傳</button>
-      <button class="btn btn-outline-success" id="completedCountBtn" onclick="filterStatus('completed')">審查完成</button>
+      <button class="btn btn-outline-success" id="approvedCountBtn" onclick="filterStatus('approved')">審查完成</button>
       <button class="btn btn-outline-danger" id="rejectedCountBtn" onclick="filterStatus('rejected')">已退件</button>
     </div>
 
@@ -251,7 +246,7 @@
       const el = document.getElementById('reviewStatus');
       const map = {
         uploaded: ['已上傳，待審查', '#0d6efd'],
-        completed: ['審查完成', '#198754'],
+        approved: ['審查完成', '#198754'],
         rejected: ['已退件', '#dc3545']
       };
       el.textContent = map[status]?.[0] || '尚未上傳';
@@ -281,13 +276,13 @@
       // 計算各個狀態的數量
       const statusCounts = {
         uploaded: resumesData.filter(r => r.status === 'uploaded').length,
-        completed: resumesData.filter(r => r.status === 'completed').length,
+        approved: resumesData.filter(r => r.status === 'approved').length,
         rejected: resumesData.filter(r => r.status === 'rejected').length
       };
 
       // 更新篩選按鈕文字
       document.getElementById('uploadedCountBtn').textContent = `已上傳 (${statusCounts.uploaded})`;
-      document.getElementById('completedCountBtn').textContent = `審查完成 (${statusCounts.completed})`;
+      document.getElementById('approvedCountBtn').textContent = `審查完成 (${statusCounts.approved})`;
       document.getElementById('rejectedCountBtn').textContent = `已退件 (${statusCounts.rejected})`;
 
       const commentPlaceholder = '請輸入留言...';
@@ -299,57 +294,53 @@
         tbody.innerHTML = `<tr><td colspan="6" class="text-center text-muted">無資料</td></tr>`;
         return;
       }
-
       filtered.forEach(r => {
+        // 留言欄：學生可查看，不能編輯
         const commentView = `
-  <div class="view-text" ${role !== 'student' ? `onclick="showCommentEditor(this, ${r.id})"` : ''}>
-    ${r.comment?.trim()
-            ? escapeHtml(r.comment)
-            : `<span class="text-muted">未填寫</span>`}
-          </div>
-          ${role !== 'student' ? `
-          <div class="editor-box" style="display:none;">
-            <textarea onkeydown="handleCommentKeydown(event, this, ${r.id})" placeholder="${commentPlaceholder}">${escapeHtml(r.comment)}</textarea><br/>
-            <button class="btn btn-sm btn-primary" onclick="submitComment(this, ${r.id})">送出</button>
-            <button class="btn btn-sm btn-secondary" onclick="cancelEdit(this)">取消</button>
-          </div>` : ''}
-        `;
+    <div class="view-text" onclick="showCommentEditor(this, ${r.id})" style="cursor:pointer;">
+      <span class="${r.comment?.trim() ? '' : 'text-muted'}">${r.comment?.trim() ? '已填寫' : '未填寫'}</span>
+    </div>
+    <div class="editor-box" style="display:none;">
+      <textarea readonly style="background-color:#f9f9f9;" placeholder="無內容">${escapeHtml(r.comment)}</textarea><br/>
+      <button class="btn btn-sm btn-secondary" onclick="cancelEdit(this)">返回</button>
+    </div>
+  `;
 
+        // 備註欄：學生可編輯
         const noteView = `
-  <div class="view-text" onclick="showNoteEditor(this, ${r.id})">
-    ${r.note?.trim()
-            ? escapeHtml(r.note)
-            : `<span class="text-muted">未填寫</span>`}
-          </div>
-          <div class="editor-box" style="display:none;">
-            <textarea onkeydown="handleNoteKeydown(event, this, ${r.id})" placeholder="${notePlaceholder}">${escapeHtml(r.note)}</textarea><br/>
-            <button class="btn btn-sm btn-primary" onclick="submitNote(this, ${r.id})">送出</button>
-            <button class="btn btn-sm btn-secondary" onclick="cancelEdit(this)">取消</button>
-          </div>
-        `;
+    <div class="view-text" onclick="showNoteEditor(this, ${r.id})" style="cursor:pointer;">
+      <span class="${r.note?.trim() ? '' : 'text-muted'}">${r.note?.trim() ? '已填寫' : '未填寫'}</span>
+    </div>
+    <div class="editor-box" style="display:none;">
+      <textarea onkeydown="handleNoteKeydown(event, this, ${r.id})" placeholder="請輸入備註...">${escapeHtml(r.note)}</textarea><br/>
+      <button class="btn btn-sm btn-primary" onclick="submitNote(this, ${r.id})">送出</button>
+      <button class="btn btn-sm btn-secondary" onclick="cancelEdit(this)">取消</button>
+    </div>
+  `;
 
         tbody.innerHTML += `
-          <tr>
-            <td>${new Date(r.upload_time).toLocaleString()}</td>
-            <td>${r.original_filename}</td>
-            <td><span class="badge bg-${statusColor(r.status)} status-badge">${mapStatus(r.status)}</span></td>
-            <td class="comment-cell">${commentView}</td>
-            <td class="note-cell">${noteView}</td>
-            <td>
-              <a href="/api/download_resume?resume_id=${r.id}" class="btn btn-outline-primary btn-sm me-1">下載</a>
-              <button class="btn btn-outline-danger btn-sm" onclick="deleteResume(${r.id})">刪除</button>
-            </td>
-          </tr>
-        `;
+    <tr>
+      <td>${new Date(r.upload_time).toLocaleString()}</td>
+      <td>${r.original_filename}</td>
+      <td><span class="badge bg-${statusColor(r.status)} status-badge">${mapStatus(r.status)}</span></td>
+      <td class="comment-cell">${commentView}</td>
+      <td class="note-cell">${noteView}</td>
+      <td>
+        <a href="/api/download_resume?resume_id=${r.id}" class="btn btn-outline-primary btn-sm me-1">下載</a>
+        <button class="btn btn-outline-danger btn-sm" onclick="deleteResume(${r.id})">刪除</button>
+      </td>
+    </tr>
+  `;
       });
+
     }
 
     function mapStatus(status) {
-      return { uploaded: '已上傳', completed: '完成', rejected: '退件' }[status] || '未知';
+      return { uploaded: '已上傳', approved: '完成', rejected: '退件' }[status] || '未知';
     }
 
     function statusColor(status) {
-      return { uploaded: 'info', completed: 'success', rejected: 'danger' }[status] || 'secondary';
+      return { uploaded: 'info', approved: 'success', rejected: 'danger' }[status] || 'secondary';
     }
 
     function deleteResume(id) {
@@ -376,21 +367,12 @@
       td.querySelector('textarea').focus();
     }
 
-    function handleCommentKeydown(event, textarea, id) {
-      if (event.key === 'Enter' && !event.shiftKey) {
-        event.preventDefault();
-        submitComment(textarea.closest('td').querySelector('button.btn-primary'), id);
-      }
-    }
-
-    function handleNoteKeydown(event, textarea, id) {
-      if (event.key === 'Enter' && !event.shiftKey) {
-        event.preventDefault();
-        submitNote(textarea.closest('td').querySelector('button.btn-primary'), id);
-      }
-    }
-
     function submitComment(btn, id) {
+      if (role === 'student') {
+        alert("學生不可編輯留言");
+        cancelEdit(btn);
+        return;
+      }
       const td = btn.closest('td');
       const newVal = td.querySelector('textarea').value.trim();
       updateField(id, 'comment', newVal, td);
@@ -402,25 +384,10 @@
       updateField(id, 'note', newVal, td);
     }
 
-    function updateField(id, field, value, td) {
-      fetch(`/api/update_resume_field`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ resume_id: id, field, value })
-      }).then(res => res.json()).then(data => {
-        if (data.success) {
-          td.querySelector('.view-text').innerHTML = escapeHtml(value) || `<span class="text-muted">請輸入...</span>`;
-          cancelEdit(td.querySelector('.btn-secondary'));
-        } else {
-          alert('更新失敗');
-        }
-      });
-    }
-
     function cancelEdit(btn) {
       const td = btn.closest('td');
       td.querySelector('.editor-box').style.display = 'none';
-      td.querySelector('.view-text').style.display = 'block';
+      td.querySelector('.view-text').style.display = 'flex';
     }
 
     function escapeHtml(text) {
@@ -430,6 +397,26 @@
         .replace(/'/g, "&#039;");
     }
 
+    function updateField(id, field, value, td) {
+      fetch('/api/update_resume_field', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ resume_id: id, field, value })
+      })
+        .then(res => res.json())
+        .then(data => {
+          if (data.success) {
+            td.querySelector('.view-text span').textContent = value ? '已填寫' : '未填寫';
+            td.querySelector('.view-text span').className = value ? '' : 'text-muted';
+            td.querySelector('.editor-box').style.display = 'none';
+            td.querySelector('.view-text').style.display = 'flex';
+          } else {
+            alert("更新失敗");
+          }
+        });
+    }
     document.addEventListener("DOMContentLoaded", loadResumes);
   </script>
 </body>
