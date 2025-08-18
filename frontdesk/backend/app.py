@@ -217,6 +217,119 @@ def save_profile():
 # -------------------------
 # API - 上傳履歷
 # -------------------------
+@app.route('/api/upload_resume', methods=['POST'])
+def upload_resume_api():
+    # 檢查是否有檔案
+    if 'resume' not in request.files:
+        return jsonify({"success": False, "message": "未上傳檔案"}), 400
+
+    file = request.files['resume']
+    username = request.form.get('username')
+
+    # 檢查使用者帳號
+    if not username:
+        return jsonify({"success": False, "message": "缺少使用者帳號"}), 400
+
+    # 檢查檔名
+    if file.filename == '':
+        return jsonify({"success": False, "message": "檔案名稱為空"}), 400
+
+    # 取得原始檔名(用於前端顯示與DB紀錄)
+    original_filename = file.filename
+
+    # 產生安全的檔名並加上時間戳
+    safe_filename = secure_filename(original_filename)
+    timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+    stored_filename = f"{timestamp}_{safe_filename}"
+
+    # 儲存檔案
+    upload_folder = app.config['UPLOAD_FOLDER']
+    save_path = os.path.join(upload_folder, stored_filename)
+    file.save(save_path)
+
+    # 查詢使用者 ID
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT id FROM users WHERE username = %s", (username,))
+    user = cursor.fetchone()
+    if not user:
+        cursor.close()
+        conn.close()
+        return jsonify({"success": False, "message": "找不到使用者"}), 404
+
+    user_id = user[0]
+    filesize = os.path.getsize(save_path)  # 取得檔案大小 (bytes)
+
+    # 寫入資料庫
+    cursor.execute("""
+        INSERT INTO resumes (user_id, original_filename, filepath, filesize, status, created_at)
+        VALUES (%s, %s, %s, %s, %s, NOW())
+    """, (user_id, original_filename, save_path, filesize, 'uploaded'))
+
+    resume_id = cursor.lastrowid
+
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+    # 回傳資訊給前端
+    return jsonify({
+        "success": True,
+        "resume_id": resume_id,
+        "filename": original_filename,  # 前端用的原始檔名
+        "filesize": filesize,
+        "status": "uploaded",
+        "message": "履歷上傳成功"
+    })
+
+# -------------------------
+# API - 審核履歷
+# -------------------------
+@app.route('/api/review_resume', methods=['POST'])
+def review_resume_api():
+    data = request.get_json()
+    resume_id = data.get('resume_id')
+    status = data.get('status')
+    comment = data.get('comment', '').strip()
+    
+    if not resume_id or status not in ['approved', 'rejected']:
+        return jsonify({"success": False, "message": "參數錯誤"}), 400
+
+    conn = get_db()
+    cursor = conn.cursor()
+
+    # 確認履歷存在
+    cursor.execute("SELECT id FROM resumes WHERE id = %s", (resume_id,))
+    if not cursor.fetchone():
+        cursor.close()
+        conn.close()
+        return jsonify({"success": False, "message": "找不到該履歷"}), 404
+
+    try:
+        # 更新狀態和備註（如果有提供）
+        if comment:
+            cursor.execute(
+                "UPDATE resumes SET status = %s, comment = %s WHERE id = %s",
+                (status, comment, resume_id)
+            )
+        else:
+            cursor.execute(
+                "UPDATE resumes SET status = %s WHERE id = %s",
+                (status, resume_id)
+            )
+        conn.commit()
+    except Exception as e:
+        conn.rollback()
+        return jsonify({"success": False, "message": "更新失敗"}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+    return jsonify({"success": True, "message": f"履歷狀態已更新為 {status}"})
+
+# -------------------------
+# API - 更新履歷
+# -------------------------
 @app.route('/api/update_resume_field', methods=['POST'])
 def update_resume_field():
     data = request.get_json()
