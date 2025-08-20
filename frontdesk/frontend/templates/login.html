@@ -108,7 +108,7 @@
         }
 
         .button.register,
-        .button.guest {
+        .button.forgot-password {
             width: 250px;
             height: 50px;
             font-size: 20px;
@@ -121,14 +121,14 @@
             display: inline-block;
         }
 
-        .button.guest {
+        .button.forgot-password {
             color: white;
             background-color: #3c91e6;
             ;
             border: none;
         }
 
-        .button.guest:hover {
+        .button.forgot-password:hover {
             background-color: #2b74c2;
         }
 
@@ -201,9 +201,9 @@
                     <button type="submit" class="button login">登入</button>
 
                     <div class="button-row">
-                        <button type="button" class="button guest" onclick="handleguestLogin()">訪客</button>
+                        <button type="button" class="button forgot-password" onclick="handleguestLogin()">忘記密碼</button>
                         <button type="button" class="button register"
-                            onclick="window.location.href='{{ url_for('register_choice') }}'">註冊</button>
+                            onclick="window.location.href='{{ url_for('show_register_student_page') }}'">註冊</button>
                     </div>
                 </div>
             </form>

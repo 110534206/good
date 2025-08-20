@@ -56,8 +56,6 @@ def register_user(username, raw_password, role, email=""):
 
     role_display = {
         "student": "學生",
-        "teacher": "教師",
-        "administrative": "行政人員"
     }.get(role, role)
     
     return {"success": True, "message": f"{role_display}註冊成功"}, 201
@@ -80,19 +78,6 @@ def register_student():
     result, status_code = register_user(username, raw_password, "student", email)
     return jsonify(result), status_code
 
-@app.route("/api/register_teacher", methods=["POST"])
-def register_teacher():
-    username = request.form.get("username")
-    password = request.form.get("password")
-    result, status = register_user(username, password, role="teacher")
-    return jsonify(result), status
-
-@app.route("/api/register_administrative", methods=["POST"])
-def register_administrative():
-    username = request.form.get("username")
-    password = request.form.get("password")
-    result, status = register_user(username, password, role="administrative")
-    return jsonify(result), status
 
 # -------------------------
 # API - 登入
@@ -128,6 +113,58 @@ def login():
             })
         else:
             return jsonify({"success": False, "message": "帳號或密碼錯誤"}), 401
+
+    finally:
+        cursor.close()
+        conn.close()
+
+@app.route("/login", methods=["GET"])
+def show_login_page():
+    return render_template("login.html")            
+
+# -------------------------
+# API - 註冊頁面    
+# -------------------------
+@app.route("/register_student", methods=["GET"])
+def show_register_student_page():
+    return render_template("register_student.html")  
+
+# -------------------------
+# API - 管理員新增使用者
+# -------------------------
+@app.route('/api/admin/create_user', methods=['POST'])
+def admin_create_user():
+    data = request.get_json(force=True)
+    admin_username = data.get('admin_username')
+    admin_password = data.get('admin_password')
+
+    # 驗證是管理員才有權限新增
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute("SELECT * FROM users WHERE username = %s", (admin_username,))
+        user = cursor.fetchone()
+        if not user or not check_password_hash(user['password'], admin_password) or user['role'] != 'admin':
+            return jsonify({"success": False, "message": "無權限"}), 403
+
+        new_username = data.get('username')
+        new_password = data.get('password')
+        new_role = data.get('role')  # 只能是 teacher 或 director
+
+        if new_role not in ['teacher', 'director']:
+            return jsonify({"success": False, "message": "角色只能是老師或主任"}), 400
+
+        # 密碼加密
+        hashed_password = generate_password_hash(new_password)
+
+        # 新增帳號
+        cursor.execute(
+            "INSERT INTO users (username, password, role) VALUES (%s, %s, %s)",
+            (new_username, hashed_password, new_role)
+        )
+        conn.commit()
+
+        return jsonify({"success": True, "message": f"{new_role} 帳號新增成功"})
 
     finally:
         cursor.close()
@@ -572,13 +609,13 @@ def index_page():
     else:
         return render_template("index.html")
 
-@app.route('/visitor_home')
-def visitor_home():
-    return render_template('visitor_home.html') 
-
 @app.route('/student_home')
 def student_home():
     return render_template('student_home.html')
+
+@app.route('/admin_home')
+def admin_home():
+    return render_template('admin_home.html')
 
 @app.route('/teacher_home')
 def teacher_home():

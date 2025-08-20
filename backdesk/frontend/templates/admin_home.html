@@ -3,7 +3,7 @@
 
 <head>
   <meta charset="UTF-8" />
-  <title>智慧實習平台 | 訪客主頁</title>
+  <title>智慧實習平台 | 管理員主頁</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <style>
     * {
@@ -26,7 +26,6 @@
       padding: 0 0.5rem;
     }
 
-    /* 頂端列 */
     .top-bar {
       position: fixed;
       top: 0;
@@ -37,9 +36,9 @@
       z-index: 1100;
       display: flex;
       align-items: center;
+      border-bottom: 1px solid #ccc;
     }
 
-    /* 頂端列內容用 container 包裹，寬度跟下方一致 */
     .top-bar>.container {
       display: flex;
       justify-content: space-between;
@@ -87,12 +86,6 @@
       color: white;
     }
 
-    .btn-link.no-hover:hover {
-      background-color: transparent;
-      color: #0066cc;
-      cursor: default;
-    }
-
     .top-bar-right #login-avatar {
       width: 60px;
       height: 60px;
@@ -102,23 +95,24 @@
       margin-top: 1px;
     }
 
-    /* Hero 區塊 */
     header.hero {
       position: relative;
       width: 100%;
       aspect-ratio: 3 / 1;
-      background-image: url('/static/images/title.png');
+      background-image: url('/static/images/admin_title.png');
       background-size: cover;
       background-repeat: no-repeat;
       background-position: center;
       margin-top: 80px;
-      /* 避開固定頂端列 */
       margin-bottom: 2rem;
       border-radius: 0;
       color: white;
       display: flex;
       align-items: center;
       justify-content: center;
+      font-size: 2rem;
+      font-weight: 700;
+      text-shadow: 1px 1px 4px rgba(0, 0, 0, 0.6);
     }
 
     main {
@@ -131,13 +125,16 @@
       text-align: center;
       max-width: 1200px;
       margin: 0 auto 3rem auto;
+      color: #0066cc;
+      font-weight: 700;
+      font-size: 1.8rem;
     }
 
     .card-container {
       max-width: 1200px;
       margin: 0 auto;
       display: grid;
-      grid-template-columns: repeat(2, 1fr);
+      grid-template-columns: repeat(3, 1fr);
       gap: 2rem;
       padding: 0;
     }
@@ -150,20 +147,24 @@
       padding: 2rem;
       text-align: center;
       transition: transform 0.3s ease;
+      cursor: pointer;
+      user-select: none;
     }
 
     .card:hover {
       transform: translateY(-5px);
+      background-color: #e6f0ff;
     }
 
     .card h3 {
       margin-bottom: 0.5rem;
-      color: #0066cc;
+      color: #004a99;
     }
 
     .card p {
       font-size: 0.95rem;
-      color: #666;
+      color: #444;
+      min-height: 60px;
     }
 
     .card a {
@@ -173,7 +174,7 @@
       background-color: #0066cc;
       color: white;
       border-radius: 8px;
-      min-width: 120px;
+      min-width: 140px;
       text-decoration: none;
       transition: background-color 0.3s ease;
     }
@@ -258,39 +259,44 @@
         <div id="menu-btn" title="選單" role="button" tabindex="0"><span></span><span></span><span></span></div>
       </div>
       <div class="top-bar-right">
-        <img src="{{ url_for('static', filename='images/avatar.png') }}" alt="頭像" id="login-avatar" />
-        <span class="btn-link no-hover">訪客</span>
-        <a href="/login" class="btn-link">註冊 / 登出</a>
+        <img src="{{ url_for('static', filename='images/admin_avatar.png') }}" alt="頭像" id="login-avatar" />
+        <span class="btn-link no-hover">管理員</span>
+        <a href="/logout" class="btn-link">登出</a>
       </div>
     </div>
   </div>
 
   <div class="container">
-    <header class="hero"></header>
+    <header class="hero">管理員主頁</header>
   </div>
 
   <main class="container">
-    <h2 class="page-title">請選擇你要瀏覽的功能</h2>
+    <h2 class="page-title">請選擇管理功能</h2>
     <section class="card-container">
-      <div class="card">
-        <h3>上傳履歷</h3>
-        <p>將你的履歷快速上傳至平台。</p>
-        <a href="#" onclick="promptLogin()">開始上傳</a>
+      <div class="card" onclick="location.href='/admin/user_management'">
+        <h3>使用者管理</h3>
+        <p>新增、刪除或編輯使用者帳號。</p>
+        <a href="/admin/user_management">前往管理</a>
       </div>
-      <div class="card">
-        <h3>AI修改履歷</h3>
-        <p>讓 AI 幫你文案修飾，提升內容質量。</p>
-        <a href="#" onclick="promptLogin()">啟用 AI 修飾</a>
+      <div class="card" onclick="location.href='/admin/system_settings'">
+        <h3>系統設定</h3>
+        <p>調整平台設定與權限管理。</p>
+        <a href="/admin/system_settings">設定系統</a>
       </div>
-      <div class="card">
-        <h3>填寫志願序</h3>
-        <p>選擇你想實習的廠商並排序志願。</p>
-        <a href="#" onclick="promptLogin()">填寫志願</a>
+      <div class="card" onclick="location.href='/admin/reports'">
+        <h3>報表與統計</h3>
+        <p>查看系統使用報表與統計資料。</p>
+        <a href="/admin/reports">查看報表</a>
       </div>
-      <div class="card">
-        <h3>查看通知</h3>
-        <p>接收平台訊息與公告。</p>
-        <a href="#" onclick="promptLogin()">查看通知</a>
+      <div class="card" onclick="location.href='/admin/logs'">
+        <h3>系統日誌</h3>
+        <p>檢視系統操作紀錄與異常事件。</p>
+        <a href="/admin/logs">查看日誌</a>
+      </div>
+      <div class="card" onclick="location.href='/admin/notifications'">
+        <h3>通知管理</h3>
+        <p>發布平台公告與通知使用者。</p>
+        <a href="/admin/notifications">管理通知</a>
       </div>
     </section>
   </main>
@@ -298,10 +304,12 @@
   <nav id="side-menu" aria-hidden="true">
     <button id="close-btn" aria-label="關閉功能選單">×</button>
     <h2>功能選單</h2>
-    <a href="/login">登入 / 註冊</a>
-    <a href="#">平台介紹</a>
-    <a href="#">常見問題</a>
-    <a href="#">聯絡我們</a>
+    <a href="/admin">主頁</a>
+    <a href="/admin/user_management">使用者管理</a>
+    <a href="/admin/system_settings">系統設定</a>
+    <a href="/admin/reports">報表與統計</a>
+    <a href="/admin/logs">系統日誌</a>
+    <a href="/logout">登出</a>
   </nav>
 
   <script>
@@ -320,11 +328,6 @@
       sideMenu.classList.remove("open");
       sideMenu.setAttribute("aria-hidden", "true");
     });
-
-    // 點擊功能提示登入
-    function promptLogin() {
-      alert("請先登入 / 註冊以使用此功能！");
-    }
   </script>
 </body>
 

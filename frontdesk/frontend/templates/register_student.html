@@ -118,7 +118,7 @@
 
 <body>
   <div id="wrapper">
-    <h1>學生註冊</h1>
+    <h1>註冊帳號</h1>
 
     <!-- 顯示後端回傳訊息 -->
     <div id="responseMessage"></div>
@@ -150,7 +150,7 @@
 
       <div class="field">
         <button type="button" class="back-button"
-          onclick="location.href='{{ url_for('register_choice') }}'">返回上一頁</button>
+          onclick="window.location.href='{{ url_for('show_login_page') }}'">返回上一頁</button>
       </div>
     </form>
   </div>
