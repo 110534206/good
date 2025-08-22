@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+
+<head>
+    <meta charset="UTF-8">
+    <title>主任審核公司</title>
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            padding: 2rem;
+            background-color: #f8f9fa;
+        }
+
+        h1 {
+            margin-bottom: 1.5rem;
+            color: #333;
+        }
+
+        ul {
+            list-style: none;
+            padding: 0;
+        }
+
+        li {
+            background-color: #fff;
+            margin-bottom: 1rem;
+            padding: 1rem;
+            border: 1px solid #ccc;
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .company-name {
+            font-weight: bold;
+            color: #0066cc;
+        }
+
+        .btn-group {
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        button {
+            padding: 0.4rem 0.8rem;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.95rem;
+        }
+
+        .approve-btn {
+            background-color: #28a745;
+            color: white;
+        }
+
+        .reject-btn {
+            background-color: #dc3545;
+            color: white;
+        }
+
+        p.no-companies {
+            color: #666;
+            font-style: italic;
+        }
+    </style>
+    <script>
+        async function reviewCompany(companyId, status) {
+            try {
+                const response = await fetch("/api/review_company", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ company_id: companyId, status: status })
+                });
+
+                if (!response.ok) {
+                    throw new Error("伺服器錯誤，請稍後再試。");
+                }
+
+                const result = await response.json();
+                alert(result.message);
+
+                if (result.success) {
+                    const companyElement = document.getElementById("company-" + companyId);
+                    if (companyElement) {
+                        companyElement.remove();
+                    }
+                }
+            } catch (error) {
+                alert("發生錯誤：" + error.message);
+            }
+        }
+    </script>
+</head>
+
+<body>
+    <h1>主任審核公司</h1>
+
+    {% if companies %}
+    <ul>
+        {% for company in companies %}
+        <li id="company-{{ company.id }}">
+            <span class="company-name">{{ company.company_name }}</span>
+            <div class="btn-group">
+                <button type="button" class="approve-btn"
+                    onclick="reviewCompany({{ company.id }}, 'approved')">核准</button>
+                <button type="button" class="reject-btn"
+                    onclick="reviewCompany({{ company.id }}, 'rejected')">拒絕</button>
+            </div>
+        </li>
+        {% endfor %}
+    </ul>
+    {% else %}
+    <p class="no-companies">目前沒有待審核的公司。</p>
+    {% endif %}
+</body>
+
+</html>

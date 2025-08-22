@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <title>上傳實習單位</title>
+</head>
+<body>
+    <h1>上傳實習單位</h1>
+
+    {% if session.username %}
+        <p>目前登入帳號：{{ session.username }}（角色：{{ session.role }}）</p>
+    {% else %}
+        <p style="color:red;">⚠️ 未登入或 session 遺失，請重新登入。</p>
+    {% endif %}
+
+    {% if error %}
+        <p style="color: red;">{{ error }}</p>
+    {% endif %}
+
+    <form method="POST" action="{{ url_for('upload_company') }}">
+        <label for="company_name">公司名稱：</label>
+        <input type="text" id="company_name" name="company_name" required>
+        <button type="submit">上傳</button>
+    </form>
+</body>
+</html>

@@ -113,7 +113,7 @@ FLASK_ENV=development  # development, production, testing
 ### 後台頁面
 - `/admin_home` - 管理員首頁
 - `/teacher_home` - 教師首頁
-- `/administrative_home` - 行政首頁
+- `/director_home` - 主任首頁
 - `/review_resume` - 審核履歷
 
 ## 啟動方式

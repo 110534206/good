@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>智慧實習平台 | 行政人員主頁</title>
+  <title>智慧實習平台 | 主任主頁</title>
    <style>
     * {
       box-sizing: border-box;
@@ -248,13 +248,13 @@
     const username = localStorage.getItem("username");
     const role = localStorage.getItem("selectedRole");
 
-    if (!username || role !== "administrative") {
-      alert("請以行政人員身份登入！");
+    if (!username || role !== "director") {
+      alert("請以主任身份登入！");
       window.location.href = "/login";
     }
 
     document.addEventListener("DOMContentLoaded", () => {
-      document.getElementById("user-role").textContent = "行政人員";
+      document.getElementById("user-role").textContent = "主任";
     });
   </script>
 
@@ -270,7 +270,7 @@
         <a href="/profile">
           <img src="{{ url_for('static', filename='images/avatar.png') }}" alt="頭像" id="login-avatar" />
         </a>
-        <a href="/profile" class="btn-link">行政人員</a>
+        <a href="/profile" class="btn-link">主任</a>
         <a href="/login" class="btn-link">登出</a>
       </div>
     </div>
@@ -287,9 +287,9 @@
       <h2 class="page-title">請選擇你要使用的功能</h2>
       <section class="card-container">
         <div class="card">
-          <h3>審核教師帳號</h3>
-          <p>管理新進教師的帳號申請。</p>
-          <a href="/review_teachers">開始審核</a>
+          <h3>審核實習公司</h3>
+          <p>管理新申請的實習公司資料與審核流程。</p>
+          <a href="/approve_company">開始審核</a>
         </div>
         <div class="card">
           <h3>管理公告</h3>
@@ -314,7 +314,7 @@
   <nav id="side-menu" aria-hidden="true">
     <button id="close-btn" aria-label="關閉選單">×</button>
     <h2>功能選單</h2>
-    <a href="/administrative_home">首頁</a>
+    <a href="/director_home">首頁</a>
     <a href="/profile">個人資料</a>
     <a href="/review_teachers">審核教師帳號</a>
     <a href="/manage_announcements">管理公告</a>

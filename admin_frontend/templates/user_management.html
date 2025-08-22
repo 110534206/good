@@ -1,0 +1,753 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+
+<head>
+    <meta charset="UTF-8" />
+    <title>智慧實習平台 | 用戶管理</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: #ffffff;
+            color: #333;
+            overflow-x: hidden;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 0.5rem;
+        }
+
+        /* 頂端列 */
+        .top-bar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 60px;
+            background-color: #fff;
+            z-index: 1100;
+            display: flex;
+            align-items: center;
+        }
+
+        .top-bar>.container {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0 0.5rem;
+            height: 100%;
+            gap: 30px;
+        }
+
+        .top-bar-left #menu-btn {
+            width: 30px;
+            height: 22px;
+            cursor: pointer;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }
+
+        .top-bar-left #menu-btn span {
+            height: 4px;
+            background-color: #333;
+            border-radius: 2px;
+        }
+
+        .top-bar-right {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-weight: bold;
+        }
+
+        .top-bar-right .btn-link {
+            color: #0066cc;
+            background-color: transparent;
+            border: 1.5px solid #0066cc;
+            padding: 0.3rem 0.7rem;
+            border-radius: 6px;
+            text-decoration: none;
+            transition: background-color 0.3s ease, color 0.3s ease;
+            font-size: 0.9rem;
+        }
+
+        .top-bar-right .btn-link:hover {
+            background-color: #0066cc;
+            color: white;
+        }
+
+        .top-bar-right #login-avatar {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            object-fit: cover;
+            cursor: pointer;
+            margin-top: 6px;
+        }
+
+        /* Hero 區塊 */
+        header.hero {
+            position: relative;
+            width: 100%;
+            aspect-ratio: 3 / 1;
+            background-image: url('/static/images/title.png');
+            background-size: cover;
+            background-repeat: no-repeat;
+            background-position: center;
+            margin-top: 80px;
+            margin-bottom: 2rem;
+            border-radius: 0;
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        main {
+            background-color: #fff;
+            padding: 2rem;
+            margin-bottom: 3rem;
+        }
+
+        .page-title {
+            text-align: center;
+            max-width: 1200px;
+            margin: 0 auto 2rem auto;
+            color: #0066cc;
+        }
+
+        /* 用戶管理區域 */
+        .user-management {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .management-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 2rem;
+            flex-wrap: wrap;
+            gap: 1rem;
+        }
+
+        .search-box {
+            display: flex;
+            gap: 0.5rem;
+            align-items: center;
+        }
+
+        .search-box input {
+            padding: 0.5rem;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            width: 250px;
+        }
+
+        .btn {
+            padding: 0.5rem 1rem;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            text-decoration: none;
+            display: inline-block;
+            transition: background-color 0.3s ease;
+            font-size: 0.9rem;
+        }
+
+        .btn-primary {
+            background-color: #0066cc;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background-color: #024689;
+        }
+
+        .btn-success {
+            background-color: #28a745;
+            color: white;
+        }
+
+        .btn-success:hover {
+            background-color: #218838;
+        }
+
+        .btn-warning {
+            background-color: #ffc107;
+            color: #212529;
+        }
+
+        .btn-warning:hover {
+            background-color: #e0a800;
+        }
+
+        .btn-danger {
+            background-color: #dc3545;
+            color: white;
+        }
+
+        .btn-danger:hover {
+            background-color: #c82333;
+        }
+
+        /* 用戶表格 */
+        .user-table {
+            width: 100%;
+            border-collapse: collapse;
+            background: white;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        .user-table th,
+        .user-table td {
+            padding: 1rem;
+            text-align: left;
+            border-bottom: 1px solid #eee;
+        }
+
+        .user-table th {
+            background-color: #f8f9fa;
+            font-weight: 600;
+            color: #495057;
+        }
+
+        .user-table tr:hover {
+            background-color: #f8f9fa;
+        }
+
+        .user-table .actions {
+            display: flex;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+        }
+
+        .user-table .btn {
+            padding: 0.3rem 0.6rem;
+            font-size: 0.8rem;
+        }
+
+        /* 角色標籤 */
+        .role-badge {
+            padding: 0.2rem 0.5rem;
+            border-radius: 12px;
+            font-size: 0.8rem;
+            font-weight: 500;
+        }
+
+        .role-student {
+            background-color: #e3f2fd;
+            color: #1976d2;
+        }
+
+        .role-teacher {
+            background-color: #f3e5f5;
+            color: #7b1fa2;
+        }
+
+        .role-admin {
+            background-color: #fff3e0;
+            color: #f57c00;
+        }
+
+        .role-director {
+            background-color: #e8f5e8;
+            color: #388e3c;
+        }
+
+        /* 模態框 */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 2000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+        }
+
+        .modal-content {
+            background-color: white;
+            margin: 5% auto;
+            padding: 2rem;
+            border-radius: 8px;
+            width: 90%;
+            max-width: 500px;
+            max-height: 80vh;
+            overflow-y: auto;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .modal-content form {
+            max-height: 80vh;
+            overflow-y: auto;
+            padding-right: 1rem;
+        }
+
+
+        .close {
+            position: absolute;
+            right: 1rem;
+            top: 1rem;
+            font-size: 1.5rem;
+            cursor: pointer;
+            color: #aaa;
+        }
+
+        .close:hover {
+            color: #000;
+        }
+
+        .form-group {
+            margin-bottom: 1rem;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: 500;
+        }
+
+        .form-group input,
+        .form-group select {
+            width: 100%;
+            padding: 0.5rem;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 0.9rem;
+        }
+
+        .form-actions {
+            display: flex;
+            gap: 1rem;
+            justify-content: flex-end;
+            margin-top: 1.5rem;
+        }
+
+        /* 側邊選單 */
+        #side-menu {
+            position: fixed;
+            top: 0;
+            left: 0;
+            height: 100vh;
+            width: 320px;
+            max-width: 80vw;
+            background-color: rgba(10, 10, 10, 0.95);
+            backdrop-filter: blur(6px);
+            box-shadow: 3px 0 12px rgb(0 0 0 / 0.7);
+            padding: 2rem 1.5rem;
+            transform: translateX(-100%);
+            transition: transform 0.3s ease-in-out;
+            z-index: 1100;
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            color: white;
+            user-select: none;
+        }
+
+        #side-menu.open {
+            transform: translateX(0);
+        }
+
+        #close-btn {
+            position: absolute;
+            top: 2rem;
+            right: 1.6rem;
+            font-size: 2.2rem;
+            background: none;
+            border: none;
+            color: white;
+            cursor: pointer;
+            line-height: 1;
+            width: 2.5rem;
+            height: 2.5rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        #side-menu h2 {
+            width: 100%;
+            margin-bottom: 1.5rem;
+            font-weight: 700;
+            font-size: 1.5rem;
+            text-align: left;
+        }
+
+        #side-menu a {
+            display: block;
+            width: 100%;
+            padding: 0.5rem 0;
+            font-size: 1.1rem;
+            color: #ddd;
+            text-decoration: none;
+            border-radius: 4px;
+            transition: background-color 0.2s ease;
+        }
+
+        #side-menu a:hover {
+            background-color: rgba(255, 255, 255, 0.15);
+            color: white;
+        }
+
+        /* 響應式設計 */
+        @media (max-width: 768px) {
+            .management-header {
+                flex-direction: column;
+                align-items: stretch;
+            }
+
+            .search-box {
+                width: 100%;
+            }
+
+            .search-box input {
+                width: 100%;
+            }
+
+            .user-table {
+                font-size: 0.8rem;
+            }
+
+            .user-table th,
+            .user-table td {
+                padding: 0.5rem;
+            }
+
+            .user-table .actions {
+                flex-direction: column;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <!-- 頂部欄 -->
+    <div class="top-bar">
+        <div class="container">
+            <div class="top-bar-left">
+                <div id="menu-btn" title="選單" role="button" tabindex="0">
+                    <span></span><span></span><span></span>
+                </div>
+            </div>
+            <div class="top-bar-right">
+                <a href="/admin_home">
+                    <img src="{{ url_for('static', filename='images/avatar.png') }}" alt="頭像" id="login-avatar" />
+                </a>
+                <a href="/admin_home" class="btn-link">返回主頁</a>
+                <a href="/logout" class="btn-link">登出</a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Hero 區塊 -->
+    <div class="container">
+        <header class="hero"></header>
+    </div>
+
+    <main class="container">
+        <div class="user-management">
+            <h2 class="page-title">用戶管理</h2>
+
+            <div class="management-header">
+                <div class="search-box">
+                    <input type="text" id="searchInput" placeholder="搜尋用戶..." />
+                    <button class="btn btn-primary" onclick="searchUsers()">搜尋</button>
+                </div>
+                <button class="btn btn-success" onclick="openAddUserModal()">新增用戶</button>
+            </div>
+
+            <table class="user-table">
+                <thead>
+                    <tr>
+                        <th>用戶名</th>
+                        <th>角色</th>
+                        <th>姓名</th>
+                        <th>部門</th>
+                        <th>班級</th>
+                        <th>電子郵件</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody id="userTableBody">
+                    <!-- 用戶數據將通過 JavaScript 動態載入 -->
+                </tbody>
+            </table>
+        </div>
+    </main>
+
+    <!-- 新增/編輯用戶模態框 -->
+    <div id="userModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeUserModal()">&times;</span>
+            <h3 id="modalTitle">新增用戶</h3>
+            <form id="userForm">
+                <input type="hidden" id="userId" />
+                <div class="form-group">
+                    <label for="username">用戶名 *</label>
+                    <input type="text" id="username" required />
+                </div>
+                <div class="form-group">
+                    <label for="password">密碼 *</label>
+                    <input type="password" id="password" required />
+                </div>
+                <div class="form-group">
+                    <label for="role">角色 *</label>
+                    <select id="role" required>
+                        <option value="">請選擇角色</option>
+                        <option value="student">學生</option>
+                        <option value="teacher">教師</option>
+                        <option value="director">主任</option>
+                        <option value="admin">管理員</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="name">姓名</label>
+                    <input type="text" id="name" />
+                </div>
+                <div class="form-group">
+                    <label for="department">部門</label>
+                    <input type="text" id="department" />
+                </div>
+                <div class="form-group">
+                    <label for="className">班級</label>
+                    <input type="text" id="className" />
+                </div>
+                <div class="form-group">
+                    <label for="email">電子郵件</label>
+                    <input type="email" id="email" />
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn btn-warning" onclick="closeUserModal()">取消</button>
+                    <button type="submit" class="btn btn-primary">儲存</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- 側邊選單 -->
+    <nav id="side-menu" aria-hidden="true">
+        <button id="close-btn" aria-label="關閉功能選單">×</button>
+        <h2>功能選單</h2>
+        <a href="/admin_home">首頁</a>
+        <a href="/admin/user_management">使用者管理</a>
+        <a href="/admin/system_settings">系統設定</a>
+        <a href="/admin/reports">報表與統計</a>
+        <a href="/admin/logs">系統日誌</a>
+        <a href="/logout">登出</a>
+    </nav>
+
+    <script>
+        // 側邊選單功能
+        const menuBtn = document.getElementById("menu-btn");
+        const sideMenu = document.getElementById("side-menu");
+        const closeBtn = document.getElementById("close-btn");
+
+        menuBtn.addEventListener("click", () => {
+            sideMenu.classList.add("open");
+            sideMenu.setAttribute("aria-hidden", "false");
+        });
+
+        closeBtn.addEventListener("click", () => {
+            sideMenu.classList.remove("open");
+            sideMenu.setAttribute("aria-hidden", "true");
+        });
+
+        // 用戶管理功能
+        let users = [];
+
+        // 載入用戶列表
+        async function loadUsers() {
+            try {
+                const response = await fetch('/api/admin/get_all_users');
+                const data = await response.json();
+                if (data.success) {
+                    users = data.users;
+                    renderUserTable();
+                } else {
+                    alert('載入用戶列表失敗: ' + data.message);
+                }
+            } catch (error) {
+                console.error('載入用戶列表錯誤:', error);
+                alert('載入用戶列表時發生錯誤');
+            }
+        }
+
+        // 渲染用戶表格
+        function renderUserTable(filteredUsers = null) {
+            const tableBody = document.getElementById('userTableBody');
+            const usersToRender = filteredUsers || users;
+
+            tableBody.innerHTML = usersToRender.map(user => `
+        <tr>
+          <td>${user.username}</td>
+          <td><span class="role-badge role-${user.role}">${getRoleDisplay(user.role)}</span></td>
+          <td>${user.name || '-'}</td>
+          <td>${user.department || '-'}</td>
+          <td>${user.className || '-'}</td>
+          <td>${user.email || '-'}</td>
+          <td class="actions">
+            <button class="btn btn-warning" onclick="editUser(${user.id})">編輯</button>
+            <button class="btn btn-danger" onclick="deleteUser(${user.id})">刪除</button>
+          </td>
+        </tr>
+      `).join('');
+        }
+
+        // 獲取角色顯示名稱
+        function getRoleDisplay(role) {
+            const roleMap = {
+                'student': '學生',
+                'teacher': '教師',
+                'director': '主任',
+                'admin': '管理員'
+            };
+            return roleMap[role] || role;
+        }
+
+        // 搜尋用戶
+        function searchUsers() {
+            const searchTerm = document.getElementById('searchInput').value.toLowerCase();
+            const filteredUsers = users.filter(user =>
+                user.username.toLowerCase().includes(searchTerm) ||
+                (user.name && user.name.toLowerCase().includes(searchTerm)) ||
+                (user.email && user.email.toLowerCase().includes(searchTerm))
+            );
+            renderUserTable(filteredUsers);
+        }
+
+        // 開啟新增用戶模態框
+        function openAddUserModal() {
+            document.getElementById('modalTitle').textContent = '新增用戶';
+            document.getElementById('userForm').reset();
+            document.getElementById('userId').value = '';
+            document.getElementById('userModal').style.display = 'block';
+        }
+
+        // 關閉用戶模態框
+        function closeUserModal() {
+            document.getElementById('userModal').style.display = 'none';
+        }
+
+        // 編輯用戶
+        async function editUser(userId) {
+            const user = users.find(u => u.id === userId);
+            if (!user) return;
+
+            document.getElementById('modalTitle').textContent = '編輯用戶';
+            document.getElementById('userId').value = user.id;
+            document.getElementById('username').value = user.username;
+            document.getElementById('password').value = ''; // 編輯時不顯示密碼
+            document.getElementById('role').value = user.role;
+            document.getElementById('name').value = user.name || '';
+            document.getElementById('department').value = user.department || '';
+            document.getElementById('className').value = user.className || '';
+            document.getElementById('email').value = user.email || '';
+
+            document.getElementById('userModal').style.display = 'block';
+        }
+
+        // 刪除用戶
+        async function deleteUser(userId) {
+            if (!confirm('確定要刪除此用戶嗎？此操作無法復原。')) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/admin/delete_user/${userId}`, {
+                    method: 'DELETE'
+                });
+                const data = await response.json();
+
+                if (data.success) {
+                    alert('用戶刪除成功');
+                    loadUsers();
+                } else {
+                    alert('刪除失敗: ' + data.message);
+                }
+            } catch (error) {
+                console.error('刪除用戶錯誤:', error);
+                alert('刪除用戶時發生錯誤');
+            }
+        }
+
+        // 處理表單提交
+        document.getElementById('userForm').addEventListener('submit', async function (e) {
+            e.preventDefault();
+
+            const userId = document.getElementById('userId').value;
+            const formData = {
+                username: document.getElementById('username').value,
+                password: document.getElementById('password').value,
+                role: document.getElementById('role').value,
+                name: document.getElementById('name').value,
+                department: document.getElementById('department').value,
+                className: document.getElementById('className').value,
+                email: document.getElementById('email').value
+            };
+
+            try {
+                const url = userId ? `/api/admin/update_user/${userId}` : '/api/admin/create_user';
+                const method = userId ? 'PUT' : 'POST';
+
+                const response = await fetch(url, {
+                    method: method,
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(formData)
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    alert(userId ? '用戶更新成功' : '用戶新增成功');
+                    closeUserModal();
+                    loadUsers();
+                } else {
+                    alert((userId ? '更新' : '新增') + '失敗: ' + data.message);
+                }
+            } catch (error) {
+                console.error('提交表單錯誤:', error);
+                alert('提交表單時發生錯誤');
+            }
+        });
+
+        // 點擊模態框外部關閉
+        window.onclick = function (event) {
+            const modal = document.getElementById('userModal');
+            if (event.target === modal) {
+                closeUserModal();
+            }
+        }
+
+        // 搜尋框按鍵事件
+        document.getElementById('searchInput').addEventListener('keyup', function (e) {
+            if (e.key === 'Enter') {
+                searchUsers();
+            }
+        });
+
+        // 頁面載入時執行
+        document.addEventListener('DOMContentLoaded', function () {
+            loadUsers();
+        });
+    </script>
+</body>
+
+</html>

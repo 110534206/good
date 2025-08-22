@@ -26,6 +26,7 @@
       padding: 0 0.5rem;
     }
 
+    /* 頂端列 */
     .top-bar {
       position: fixed;
       top: 0;
@@ -36,9 +37,9 @@
       z-index: 1100;
       display: flex;
       align-items: center;
-      border-bottom: 1px solid #ccc;
     }
 
+    /* 頂端列內容用 container 包裹，寬度跟下方一致 */
     .top-bar>.container {
       display: flex;
       justify-content: space-between;
@@ -92,27 +93,26 @@
       border-radius: 50%;
       object-fit: cover;
       cursor: pointer;
-      margin-top: 1px;
+      margin-top: 6px;
     }
 
+    /* Hero 區塊 */
     header.hero {
       position: relative;
       width: 100%;
       aspect-ratio: 3 / 1;
-      background-image: url('/static/images/admin_title.png');
+      background-image: url('/static/images/title.png');
       background-size: cover;
       background-repeat: no-repeat;
       background-position: center;
       margin-top: 80px;
+      /* 避開固定頂端列 */
       margin-bottom: 2rem;
       border-radius: 0;
       color: white;
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 2rem;
-      font-weight: 700;
-      text-shadow: 1px 1px 4px rgba(0, 0, 0, 0.6);
     }
 
     main {
@@ -125,16 +125,13 @@
       text-align: center;
       max-width: 1200px;
       margin: 0 auto 3rem auto;
-      color: #0066cc;
-      font-weight: 700;
-      font-size: 1.8rem;
     }
 
     .card-container {
       max-width: 1200px;
       margin: 0 auto;
       display: grid;
-      grid-template-columns: repeat(3, 1fr);
+      grid-template-columns: repeat(2, 1fr);
       gap: 2rem;
       padding: 0;
     }
@@ -147,24 +144,20 @@
       padding: 2rem;
       text-align: center;
       transition: transform 0.3s ease;
-      cursor: pointer;
-      user-select: none;
     }
 
     .card:hover {
       transform: translateY(-5px);
-      background-color: #e6f0ff;
     }
 
     .card h3 {
       margin-bottom: 0.5rem;
-      color: #004a99;
+      color: #0066cc;
     }
 
     .card p {
       font-size: 0.95rem;
-      color: #444;
-      min-height: 60px;
+      color: #666;
     }
 
     .card a {
@@ -174,7 +167,7 @@
       background-color: #0066cc;
       color: white;
       border-radius: 8px;
-      min-width: 140px;
+      min-width: 120px;
       text-decoration: none;
       transition: background-color 0.3s ease;
     }
@@ -253,22 +246,29 @@
 
 <body>
 
+    <!-- 頂部欄 -->
   <div class="top-bar">
     <div class="container">
       <div class="top-bar-left">
-        <div id="menu-btn" title="選單" role="button" tabindex="0"><span></span><span></span><span></span></div>
+        <div id="menu-btn" title="選單" role="button" tabindex="0">
+          <span></span><span></span><span></span>
+        </div>
       </div>
       <div class="top-bar-right">
-        <img src="{{ url_for('static', filename='images/admin_avatar.png') }}" alt="頭像" id="login-avatar" />
-        <span class="btn-link no-hover">管理員</span>
-        <a href="/logout" class="btn-link">登出</a>
+        <a href="/profile">
+          <img src="{{ url_for('static', filename='images/avatar.png') }}" alt="頭像" id="login-avatar" />
+        </a>
+        <a href="/profile" class="btn-link">管理員</a>
+        <a href="/login" class="btn-link">登出</a>
       </div>
     </div>
   </div>
 
+  <!-- Hero 區塊 -->
   <div class="container">
-    <header class="hero">管理員主頁</header>
+    <header class="hero"></header>
   </div>
+
 
   <main class="container">
     <h2 class="page-title">請選擇管理功能</h2>
@@ -304,7 +304,7 @@
   <nav id="side-menu" aria-hidden="true">
     <button id="close-btn" aria-label="關閉功能選單">×</button>
     <h2>功能選單</h2>
-    <a href="/admin">主頁</a>
+    <a href="/admin_home">首頁</a>
     <a href="/admin/user_management">使用者管理</a>
     <a href="/admin/system_settings">系統設定</a>
     <a href="/admin/reports">報表與統計</a>

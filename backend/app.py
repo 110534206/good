@@ -19,7 +19,9 @@ app = Flask(
     template_folder='../frontend/templates'
 )
 
+# -------------------------
 # 添加管理員模板目錄
+# -------------------------
 from jinja2 import ChoiceLoader, FileSystemLoader
 app.jinja_loader = ChoiceLoader([
     app.jinja_loader,
@@ -74,17 +76,18 @@ def register_user(username, raw_password, role, email=""):
     
     return {"success": True, "message": f"{role_display}註冊成功"}, 201
 
+# -------------------------
 # 首頁路由（使用者前台）
-# ======================
+# -------------------------
 @app.route("/")
 def index():
     if "username" in session and session.get("role") == "student":
         return redirect('/student_home')
     return redirect(url_for("login_page"))
 
-# ======================
+# -------------------------
 # 管理員首頁（後台）
-# ======================
+# -------------------------
 @app.route("/admin")
 def admin_index():
     if "username" in session and session.get("role") == "admin":
@@ -113,7 +116,6 @@ def register_student():
     email = f"{username}@stu.ukn.edu.tw"
     result, status_code = register_user(username, raw_password, "student", email)
     return jsonify(result), status_code
-
 
 # -------------------------
 # API - 登入
@@ -145,7 +147,7 @@ def login():
             if check_password_hash(user["password"], password):
                 matching_roles.append(user["role"])
                 session["username"] = username
-                session["role"] = user["role"]  # 使用第一個匹配的角色
+                session["role"] = user["role"]
 
         if matching_roles:
             print(f"密碼驗證成功，角色: {matching_roles}")  # 調試信息
@@ -163,12 +165,7 @@ def login():
         return jsonify({"success": False, "message": "登入失敗"}), 500
     finally:
         cursor.close()
-        conn.close()
-
-
-
-
-# 這個路由已經在後面定義了，刪除重複的            
+        conn.close()       
 
 # -------------------------
 # API - 註冊頁面    
@@ -178,42 +175,170 @@ def show_register_student_page():
     return render_template("register_student.html")  
 
 # -------------------------
-# API - 管理員新增使用者
+# API - 管理員用戶管理
 # -------------------------
-@app.route('/api/admin/create_user', methods=['POST'])
-def admin_create_user():
-    data = request.get_json(force=True)
-    admin_username = data.get('admin_username')
-    admin_password = data.get('admin_password')
 
-    # 驗證是管理員才有權限新增
+# 獲取所有用戶
+@app.route('/api/admin/get_all_users', methods=['GET'])
+def get_all_users():
     conn = get_db()
     cursor = conn.cursor(dictionary=True)
     try:
-        cursor.execute("SELECT * FROM users WHERE username = %s", (admin_username,))
-        user = cursor.fetchone()
-        if not user or not check_password_hash(user['password'], admin_password) or user['role'] != 'admin':
-            return jsonify({"success": False, "message": "無權限"}), 403
+        cursor.execute("""
+            SELECT id, username, role, name, department, className, email, created_at
+            FROM users 
+            ORDER BY created_at DESC
+        """)
+        users = cursor.fetchall()
+        
+        # 格式化日期
+        for user in users:
+            if user.get('created_at'):
+                user['created_at'] = user['created_at'].strftime("%Y-%m-%d %H:%M:%S")
+        
+        return jsonify({"success": True, "users": users})
+    except Exception as e:
+        print(f"獲取用戶列表錯誤: {e}")
+        return jsonify({"success": False, "message": "獲取用戶列表失敗"}), 500
+    finally:
+        cursor.close()
+        conn.close()
 
-        new_username = data.get('username')
-        new_password = data.get('password')
-        new_role = data.get('role')  # 只能是 teacher 或 director
+# 新增用戶
+@app.route('/api/admin/create_user', methods=['POST'])
+def admin_create_user():
+    data = request.get_json()
+    
+    username = data.get('username')
+    password = data.get('password')
+    role = data.get('role')
+    name = data.get('name', '')
+    department = data.get('department', '')
+    className = data.get('className', '')
+    email = data.get('email', '')
 
-        if new_role not in ['teacher', 'director']:
-            return jsonify({"success": False, "message": "角色只能是老師或主任"}), 400
+    if not username or not password or not role:
+        return jsonify({"success": False, "message": "用戶名、密碼和角色為必填欄位"}), 400
+
+    # 驗證角色
+    valid_roles = ['student', 'teacher', 'director', 'admin']
+    if role not in valid_roles:
+        return jsonify({"success": False, "message": "無效的角色"}), 400
+
+    conn = get_db()
+    cursor = conn.cursor()
+    try:
+        # 檢查用戶名是否已存在
+        cursor.execute("SELECT id FROM users WHERE username = %s AND role = %s", (username, role))
+        if cursor.fetchone():
+           return jsonify({"success": False, "message": "該帳號已存在此角色"}), 409
 
         # 密碼加密
-        hashed_password = generate_password_hash(new_password)
+        hashed_password = generate_password_hash(password)
 
-        # 新增帳號
-        cursor.execute(
-            "INSERT INTO users (username, password, role) VALUES (%s, %s, %s)",
-            (new_username, hashed_password, new_role)
-        )
+        # 新增用戶
+        cursor.execute("""
+            INSERT INTO users (username, password, role, name, department, className, email)
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
+        """, (username, hashed_password, role, name, department, className, email))
+        
         conn.commit()
+        return jsonify({"success": True, "message": "用戶新增成功"})
 
-        return jsonify({"success": True, "message": f"{new_role} 帳號新增成功"})
+    except Exception as e:
+        print(f"新增用戶錯誤: {e}")
+        return jsonify({"success": False, "message": "新增用戶失敗"}), 500
+    finally:
+        cursor.close()
+        conn.close()
 
+# 更新用戶
+@app.route('/api/admin/update_user/<int:user_id>', methods=['PUT'])
+def admin_update_user(user_id):
+    data = request.get_json()
+    
+    username = data.get('username')
+    password = data.get('password')
+    role = data.get('role')
+    name = data.get('name', '')
+    department = data.get('department', '')
+    className = data.get('className', '')
+    email = data.get('email', '')
+
+    if not username or not role:
+        return jsonify({"success": False, "message": "用戶名和角色為必填欄位"}), 400
+
+    # 驗證角色
+    valid_roles = ['student', 'teacher', 'director', 'admin']
+    if role not in valid_roles:
+        return jsonify({"success": False, "message": "無效的角色"}), 400
+
+    conn = get_db()
+    cursor = conn.cursor()
+    try:
+        # 檢查用戶是否存在
+        cursor.execute("SELECT id FROM users WHERE id = %s", (user_id,))
+        if not cursor.fetchone():
+            return jsonify({"success": False, "message": "用戶不存在"}), 404
+
+        # 檢查用戶名是否已被其他用戶使用
+        cursor.execute("SELECT id FROM users WHERE username = %s AND id != %s", (username, user_id))
+        if cursor.fetchone():
+            return jsonify({"success": False, "message": "用戶名已被其他用戶使用"}), 409
+
+        # 更新用戶資料
+        if password:
+            # 如果有提供新密碼，則更新密碼
+            hashed_password = generate_password_hash(password)
+            cursor.execute("""
+                UPDATE users SET username=%s, password=%s, role=%s, name=%s, department=%s, className=%s, email=%s
+                WHERE id=%s
+            """, (username, hashed_password, role, name, department, className, email, user_id))
+        else:
+            # 如果沒有提供新密碼，則不更新密碼
+            cursor.execute("""
+                UPDATE users SET username=%s, role=%s, name=%s, department=%s, className=%s, email=%s
+                WHERE id=%s
+            """, (username, role, name, department, className, email, user_id))
+        
+        conn.commit()
+        return jsonify({"success": True, "message": "用戶更新成功"})
+
+    except Exception as e:
+        print(f"更新用戶錯誤: {e}")
+        return jsonify({"success": False, "message": "更新用戶失敗"}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+# 刪除用戶
+@app.route('/api/admin/delete_user/<int:user_id>', methods=['DELETE'])
+def admin_delete_user(user_id):
+    conn = get_db()
+    cursor = conn.cursor()
+    try:
+        # 檢查用戶是否存在
+        cursor.execute("SELECT id, role FROM users WHERE id = %s", (user_id,))
+        user = cursor.fetchone()
+        if not user:
+            return jsonify({"success": False, "message": "用戶不存在"}), 404
+
+        # 防止刪除最後一個管理員
+        if user[1] == 'admin':
+            cursor.execute("SELECT COUNT(*) FROM users WHERE role = 'admin'")
+            admin_count = cursor.fetchone()[0]
+            if admin_count <= 1:
+                return jsonify({"success": False, "message": "無法刪除最後一個管理員"}), 400
+
+        # 刪除用戶
+        cursor.execute("DELETE FROM users WHERE id = %s", (user_id,))
+        conn.commit()
+        
+        return jsonify({"success": True, "message": "用戶刪除成功"})
+
+    except Exception as e:
+        print(f"刪除用戶錯誤: {e}")
+        return jsonify({"success": False, "message": "刪除用戶失敗"}), 500
     finally:
         cursor.close()
         conn.close()
@@ -226,7 +351,7 @@ def get_profile():
     username = request.args.get("username")
     role = request.args.get("role")
 
-    if not username or role not in ["student", "teacher", "administrative"]:
+    if not username or role not in ["student", "teacher", "director"]:
         return jsonify({"success": False, "message": "參數錯誤"}), 400
 
     conn = get_db()
@@ -267,7 +392,7 @@ def save_profile():
     role_map = {
         "學生": "student",
         "教師": "teacher",
-        "行政人員": "administrative"
+        "主任": "director"
     }
     role = role_map.get(role_display)
     if not role:
@@ -611,14 +736,16 @@ def get_all_students_resumes():
     """)
     resumes = cursor.fetchall()
     for r in resumes:
-        r['upload_time'] = r['created_at'].strftime("%Y-%m-%d %H:%M:%S")
+        if isinstance(r.get('created_at'), datetime):
+            r['upload_time'] = r['created_at'].strftime("%Y-%m-%d %H:%M:%S")
+
     cursor.close()
     conn.close()
     return jsonify({"success": True, "resumes": resumes})
 
 
 # -------------------------
-# # API - 接受履歷
+# API - 接受履歷
 # -------------------------
 @app.route('/api/reject_resume', methods=['POST'])
 def reject_resume():
@@ -633,6 +760,147 @@ def reject_resume():
     cursor.close()
     conn.close()
     return jsonify({"success": True, "message": "履歷已標記為拒絕"})
+
+# -------------------------
+# API - 取得已審核通過的公司清單
+# -------------------------
+@app.route("/api/approved_companies", methods=["GET"])
+def get_approved_companies():
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute("SELECT id, company_name FROM companies WHERE status = 'approved'")
+        companies = cursor.fetchall()
+        return jsonify({"success": True, "companies": companies})
+    except Exception as e:
+        print("取得公司清單錯誤:", e)
+        return jsonify({"success": False, "message": "伺服器錯誤"}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+# -------------------------
+# API - 提交志願
+# -------------------------
+@app.route('/submit_preferences', methods=['POST'])
+def submit_preferences():
+    conn = get_db()
+    cursor = conn.cursor()
+
+    student_id = session.get('user_id')  # 假設已登入
+    if not student_id:
+        return redirect('/login')
+
+    for i in range(1, 4):  # 三個志願
+        company_id = request.form.get(f'preference_{i}')
+        if company_id:
+            cursor.execute("""
+                INSERT INTO student_preferences (student_id, preference_order, company_id)
+                VALUES (%s, %s, %s)
+                ON DUPLICATE KEY UPDATE company_id = VALUES(company_id)
+            """, (student_id, i, company_id))
+
+    conn.commit()
+    return redirect('/student_home')
+
+# -------------------------
+# API - 提交實習公司
+# -------------------------
+@app.route('/upload_company', methods=['GET', 'POST'])
+def upload_company():
+    if "user_id" not in session or "role" not in session:
+        return redirect(url_for("login_page"))
+
+    if request.method == 'POST':
+        company_name = request.form.get('company_name', '').strip()
+        if not company_name:
+            error = "公司名稱不可為空"
+            return render_template('upload_company.html', error=error)
+
+        # 判斷角色：只能教師或主任上傳
+        role = session.get("role")
+        if role not in ["teacher", "director"]:
+            return render_template('upload_company.html', error="您沒有上傳公司資料的權限")
+
+        uploader_id = session.get("user_id")  # 上傳人 = 教師或主任 ID
+
+        conn = get_db()
+        cursor = conn.cursor()
+
+        try:
+            cursor.execute("""
+                INSERT INTO internship_companies (company_name, status, uploaded_by, created_at)
+                VALUES (%s, %s, %s, NOW())
+            """, (company_name, "已上傳", uploader_id))
+            conn.commit()
+            return redirect('/dashboard')  # 上傳完成導回首頁或管理頁
+        except Exception as e:
+            print(f"公司上傳錯誤: {e}")
+            conn.rollback()
+            return render_template('upload_company.html', error="上傳失敗，請稍後再試")
+        finally:
+            cursor.close()
+            conn.close()
+
+    return render_template('upload_company.html')
+
+
+# -------------------------
+# API - 主任審核實習公司名單
+# -------------------------
+@app.route('/api/review_company', methods=['POST'])
+def review_company():
+    if session.get("role") != "director":
+        return jsonify({"success": False, "message": "沒有權限"}), 403
+
+    data = request.get_json()
+    company_id = data.get("company_id")
+    status = data.get("status")  # approved / rejected
+
+    if status not in ["approved", "rejected"]:
+        return jsonify({"success": False, "message": "狀態錯誤"}), 400
+
+    conn = get_db()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("""
+            UPDATE internship_companies 
+            SET status = %s 
+            WHERE id = %s
+        """, (status, company_id))
+        conn.commit()
+    except Exception as e:
+        conn.rollback()
+        return jsonify({"success": False, "message": f"更新失敗: {str(e)}"}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+    return jsonify({"success": True, "message": f"公司已標記為 {status}"})
+
+
+# -------------------------
+# API - 選擇角色
+# -------------------------
+@app.route('/api/select_role', methods=['POST'])
+def select_role():
+    data = request.json
+    username = data.get("username")
+    role = data.get("role")
+
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute("SELECT id FROM users WHERE username=%s AND role=%s", (username, role))
+    user = cursor.fetchone()
+    cursor.close()
+    conn.close()
+
+    if user:
+        session["user_id"] = user["id"]     # ✅ 這裡才設定正確的 user_id
+        session["role"] = role
+        return jsonify({"success": True})
+    else:
+        return jsonify({"success": False, "message": "無此角色"}), 404
 
 # -------------------------
 # 頁面路由
@@ -656,10 +924,10 @@ def index_page():
         return redirect('/student_home')
     elif role == "teacher":
         return redirect('/teacher_home')
-    elif role == "administrative":
-        return redirect('/administrative_home')
+    elif role == "director":
+        return redirect('/director_home')
     else:
-        return redirect('/student_home')  # 預設導向學生首頁
+        return redirect('/student_home') 
 
 @app.route('/student_home')
 def student_home():
@@ -667,19 +935,44 @@ def student_home():
 
 @app.route('/admin_home')
 def admin_home():
+    return render_template('admin_home.html')
+
+@app.route('/admin/user_management')
+def user_management():
     try:
-        return render_template('admin_home.html')
+        return render_template('user_management.html')
     except Exception as e:
-        print(f"管理員主頁錯誤: {e}")
-        return f"管理員主頁載入錯誤: {str(e)}", 500 
+        print(f"用戶管理頁面錯誤: {e}")
+        return f"用戶管理頁面載入錯誤: {str(e)}", 500
+    
+@app.route('/approve_company')
+def approve_company():
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute("SELECT * FROM internship_companies WHERE status = 'pending'")
+    companies = cursor.fetchall()
+    cursor.close()
+    conn.close()
+    return render_template('approve_company.html', companies=companies)
 
 @app.route('/teacher_home')
 def teacher_home():
     return render_template('teacher_home.html')
 
-@app.route('/administrative_home')
-def administrative_home():
-    return render_template('administrative_home.html')
+@app.route('/director_home')
+def director_home():
+    if session.get("role") != "director":
+        return redirect(url_for("login"))
+
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute("SELECT id, company_name FROM internship_companies WHERE status = 'pending'")
+    companies = cursor.fetchall()
+    cursor.close()
+    conn.close()
+
+    return render_template("director_home.html", companies=companies)
+
 
 @app.route('/upload_resume')
 def upload_resume():
@@ -693,9 +986,25 @@ def review_resume():
 def ai_edit_resume():
     return render_template('ai_edit_resume.html')
 
-@app.route('/fill_preferences')
+@app.route('/fill_preferences', methods=['GET'])
 def fill_preferences():
-    return render_template('fill_preferences.html')
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+
+    # 撈出所有已核准公司
+    cursor.execute("""
+        SELECT id, company_name 
+        FROM internship_companies 
+        WHERE status = 'approved'
+    """)
+    companies = cursor.fetchall()
+
+    return render_template('fill_preferences.html', companies=companies)
+
+@app.route('/upload_company_success')
+def upload_company_success():
+    company = request.args.get('company', '')
+    return f"公司「{company}」已成功上傳！"
 
 @app.route('/notifications')
 def notifications():
@@ -714,8 +1023,8 @@ def register_choice():
 def register_teacher_page():
     return redirect("/register_student")
 
-@app.route("/register_administrative")
-def register_administrative_page():
+@app.route("/register_director")
+def register_director_page():
     return redirect("/register_student")
 
 @app.route("/login-confirm")
