@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, send_file, redirect, jsonify
+from flask import Flask, render_template, request, send_file, redirect,session, jsonify
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 from flask_cors import CORS
@@ -7,11 +7,25 @@ import traceback
 import os
 import re
 from datetime import datetime
+from flask import Blueprint
+from flask import url_for
 
 # -------------------------
 # Flask 與 CORS 設定
 # -------------------------
-app = Flask(__name__, template_folder='../frontend/templates', static_folder='../frontend/static')
+app = Flask(
+    __name__,
+    static_folder='../frontend/static',
+    template_folder='../frontend/templates'
+)
+
+# 添加管理員模板目錄
+from jinja2 import ChoiceLoader, FileSystemLoader
+app.jinja_loader = ChoiceLoader([
+    app.jinja_loader,
+    FileSystemLoader('../admin_frontend/templates')
+])
+app.secret_key = "your_secret_key"  
 app.config['UPLOAD_FOLDER'] = './uploads'
 CORS(app, supports_credentials=True)
 
@@ -60,6 +74,28 @@ def register_user(username, raw_password, role, email=""):
     
     return {"success": True, "message": f"{role_display}註冊成功"}, 201
 
+# 首頁路由（使用者前台）
+# ======================
+@app.route("/")
+def index():
+    if "username" in session and session.get("role") == "student":
+        return redirect('/student_home')
+    return redirect(url_for("login_page"))
+
+# ======================
+# 管理員首頁（後台）
+# ======================
+@app.route("/admin")
+def admin_index():
+    if "username" in session and session.get("role") == "admin":
+        try:
+            return render_template("admin_home.html", username=session["username"])
+        except Exception as e:
+            print(f"管理員主頁錯誤: {e}")
+            # 如果找不到 admin_home.html，重定向到管理員首頁
+            return redirect("/admin_home")
+    return redirect(url_for("login_page"))
+
 # -------------------------
 # API - 註冊
 # -------------------------
@@ -84,9 +120,11 @@ def register_student():
 # -------------------------
 @app.route('/api/login', methods=['POST'])
 def login():
-    data = request.get_json(force=True)
-    username = data.get('username')
-    password = data.get('password')
+    data = request.json
+    username = data.get("username")
+    password = data.get("password")
+
+    print(f"登入嘗試: username={username}")  # 調試信息
 
     if not username or not password:
         return jsonify({"success": False, "message": "帳號或密碼不得為空"}), 400
@@ -95,32 +133,42 @@ def login():
     cursor = conn.cursor(dictionary=True)
 
     try:
-        roles = []
+        # 查詢所有匹配用戶名的用戶
         cursor.execute("SELECT * FROM users WHERE username = %s", (username,))
         users = cursor.fetchall()
+        print(f"找到 {len(users)} 個用戶")  # 調試信息
 
+        # 檢查密碼並收集所有匹配的角色
+        matching_roles = []
         for user in users:
-            if check_password_hash(user['password'], password):
-                roles.append(user['role'])
+            print(f"檢查用戶: {user['username']}, role: {user['role']}")  # 調試信息
+            if check_password_hash(user["password"], password):
+                matching_roles.append(user["role"])
+                session["username"] = username
+                session["role"] = user["role"]  # 使用第一個匹配的角色
 
-        if roles:
-            redirect_url = "/profile" if len(roles) > 1 else f"/{roles[0]}_home"
+        if matching_roles:
+            print(f"密碼驗證成功，角色: {matching_roles}")  # 調試信息
             return jsonify({
-                "success": True,
+                "success": True, 
                 "username": username,
-                "roles": roles,
-                "redirect_url": redirect_url
+                "roles": matching_roles  # 返回角色陣列，符合前端期望
             })
         else:
+            print("密碼驗證失敗")  # 調試信息
             return jsonify({"success": False, "message": "帳號或密碼錯誤"}), 401
 
+    except Exception as e:
+        print(f"登入錯誤: {e}")  # 調試信息
+        return jsonify({"success": False, "message": "登入失敗"}), 500
     finally:
         cursor.close()
         conn.close()
 
-@app.route("/login", methods=["GET"])
-def show_login_page():
-    return render_template("login.html")            
+
+
+
+# 這個路由已經在後面定義了，刪除重複的            
 
 # -------------------------
 # API - 註冊頁面    
@@ -576,7 +624,7 @@ def get_all_students_resumes():
 def reject_resume():
     resume_id = request.args.get('resume_id')
     if not resume_id:
-        return jsonify({"success": False, "message": "缺少 resume_id"})
+        return jsonify({"success": False, "message": "缺少 resume_id"}), 400
 
     conn = get_db()
     cursor = conn.cursor()
@@ -584,7 +632,7 @@ def reject_resume():
     conn.commit()
     cursor.close()
     conn.close()
-    return jsonify({"success": True})
+    return jsonify({"success": True, "message": "履歷已標記為拒絕"})
 
 # -------------------------
 # 頁面路由
@@ -597,6 +645,10 @@ def profile_page():
 def login_page():
     return render_template("login.html")
 
+@app.route("/logout")
+def logout_page():
+    return render_template("login.html")
+
 @app.route('/index')
 def index_page():
     role = request.args.get('role')
@@ -607,7 +659,7 @@ def index_page():
     elif role == "administrative":
         return redirect('/administrative_home')
     else:
-        return render_template("index.html")
+        return redirect('/student_home')  # 預設導向學生首頁
 
 @app.route('/student_home')
 def student_home():
@@ -615,7 +667,11 @@ def student_home():
 
 @app.route('/admin_home')
 def admin_home():
-    return render_template('admin_home.html')
+    try:
+        return render_template('admin_home.html')
+    except Exception as e:
+        print(f"管理員主頁錯誤: {e}")
+        return f"管理員主頁載入錯誤: {str(e)}", 500 
 
 @app.route('/teacher_home')
 def teacher_home():
@@ -645,21 +701,22 @@ def fill_preferences():
 def notifications():
     return render_template('notifications.html')
 
-@app.route("/register_choice")
-def register_choice():
-    return render_template("register_choice.html")
-
 @app.route("/register_student")
 def register_student_page():
     return render_template("register_student.html")
 
+# 其他註冊頁面暫時重定向到學生註冊頁面
+@app.route("/register_choice")
+def register_choice():
+    return redirect("/register_student")
+
 @app.route("/register_teacher")
 def register_teacher_page():
-    return render_template("register_teacher.html")
+    return redirect("/register_student")
 
 @app.route("/register_administrative")
 def register_administrative_page():
-    return render_template("register_administrative.html")
+    return redirect("/register_student")
 
 @app.route("/login-confirm")
 def login_confirm_page():
