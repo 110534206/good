@@ -3,8 +3,8 @@
 
 <head>
   <meta charset="UTF-8" />
-  <title>智慧實習平台 | 管理員主頁</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>智慧實習平台 | 管理者主頁</title>
   <style>
     * {
       box-sizing: border-box;
@@ -245,8 +245,7 @@
 </head>
 
 <body>
-
-    <!-- 頂部欄 -->
+  <!-- 頂部欄 -->
   <div class="top-bar">
     <div class="container">
       <div class="top-bar-left">
@@ -269,7 +268,7 @@
     <header class="hero"></header>
   </div>
 
-
+  <!-- 主內容 -->
   <main class="container">
     <h2 class="page-title">請選擇管理功能</h2>
     <section class="card-container">
@@ -300,33 +299,41 @@
       </div>
     </section>
   </main>
+  </div>
 
-  <nav id="side-menu" aria-hidden="true">
+  <!-- 側邊選單 -->
+  <nav id="side-menu" aria-hidden="true" role="navigation" aria-label="功能選單">
     <button id="close-btn" aria-label="關閉功能選單">×</button>
     <h2>功能選單</h2>
-    <a href="/admin_home">首頁</a>
-    <a href="/admin/user_management">使用者管理</a>
-    <a href="/admin/system_settings">系統設定</a>
-    <a href="/admin/reports">報表與統計</a>
-    <a href="/admin/logs">系統日誌</a>
-    <a href="/logout">登出</a>
+    <nav id="side-menu" aria-hidden="true">
+        <button id="close-btn" aria-label="關閉功能選單">×</button>
+        <h2>功能選單</h2>
+        <a href="/admin_home">首頁</a>
+        <a href="/admin/user_management">使用者管理</a>
+        <a href="/admin/system_settings">系統設定</a>
+        <a href="/admin/reports">報表與統計</a>
+        <a href="/admin/logs">系統日誌</a>
+        <a href="/logout">登出</a>
+    </nav>
   </nav>
 
+  <!-- JS 控制開關 -->
   <script>
-    const menuBtn = document.getElementById("menu-btn");
-    const sideMenu = document.getElementById("side-menu");
-    const closeBtn = document.getElementById("close-btn");
+    // 驗證角色
+    const username = localStorage.getItem("username");
+    const role = localStorage.getItem("selectedRole");
 
-    // 開啟側邊選單
-    menuBtn.addEventListener("click", () => {
-      sideMenu.classList.add("open");
-      sideMenu.setAttribute("aria-hidden", "false");
+    if (!username || role !== "admin") {
+      alert("請以管理員身份登入！");
+      window.location.href = "/login";
+    }
+
+    document.getElementById('menu-btn').addEventListener('click', () => {
+      document.getElementById('side-menu').classList.add('open');
     });
 
-    // 關閉側邊選單
-    closeBtn.addEventListener("click", () => {
-      sideMenu.classList.remove("open");
-      sideMenu.setAttribute("aria-hidden", "true");
+    document.getElementById('close-btn').addEventListener('click', () => {
+      document.getElementById('side-menu').classList.remove('open');
     });
   </script>
 </body>
