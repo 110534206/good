@@ -150,100 +150,104 @@
 
       <div class="field">
         <button type="button" class="back-button"
-          onclick="window.location.href='{{ url_for('show_login_page') }}'">返回上一頁</button>
+          onclick="window.location.href='{{ url_for('login_page') }}'">返回上一頁</button>
       </div>
     </form>
   </div>
 
   <script>
-    function togglePassword() {
-      const passwordInput = document.getElementById("password");
-      const eyeIcon = document.getElementById("eyeIcon");
+  function togglePassword() {
+    const passwordInput = document.getElementById("password");
+    const eyeIcon = document.getElementById("eyeIcon");
 
-      if (passwordInput.type === "password") {
-        passwordInput.type = "text";
-        eyeIcon.classList.remove("fa-eye-slash");
-        eyeIcon.classList.add("fa-eye");
-      } else {
-        passwordInput.type = "password";
-        eyeIcon.classList.remove("fa-eye");
-        eyeIcon.classList.add("fa-eye-slash");
-      }
+    if (passwordInput.type === "password") {
+      passwordInput.type = "text";
+      eyeIcon.classList.remove("fa-eye-slash");
+      eyeIcon.classList.add("fa-eye");
+    } else {
+      passwordInput.type = "password";
+      eyeIcon.classList.remove("fa-eye");
+      eyeIcon.classList.add("fa-eye-slash");
+    }
+  }
+
+  // 自動生成 email
+  const studentIdInput = document.getElementById("username");
+  const emailInput = document.getElementById("email");
+
+  studentIdInput.addEventListener("input", () => {
+    const studentId = studentIdInput.value.trim();
+    const studentIdPattern = /^\d{9}$/;
+    if (studentIdPattern.test(studentId)) {
+      emailInput.value = studentId + "@stu.ukn.edu.tw";
+      document.getElementById("usernameError").style.display = "none";
+    } else {
+      emailInput.value = "";
+    }
+  });
+
+  // 表單提交 + 前端驗證 + 回傳訊息處理
+  document.getElementById("registerForm").addEventListener("submit", async function (e) {
+    e.preventDefault();
+
+    const username = studentIdInput.value.trim();
+    const password = document.getElementById("password").value.trim();
+    const email = emailInput.value.trim();
+    const usernameError = document.getElementById("usernameError");
+    const passwordError = document.getElementById("passwordError");
+    const responseMessage = document.getElementById("responseMessage");
+
+    const studentIdPattern = /^\d{9}$/;
+    const idPattern = /^[A-Z][1-2]\d{8}$/;
+
+    let valid = true;
+
+    if (!studentIdPattern.test(username)) {
+      usernameError.style.display = "block";
+      usernameError.textContent = "學號格式錯誤，需為 9 位數字";
+      valid = false;
+    } else {
+      usernameError.style.display = "none";
     }
 
-    // 自動生成 email
-    const studentIdInput = document.getElementById("username");
-    const emailInput = document.getElementById("email");
+    if (!idPattern.test(password)) {
+      passwordError.style.display = "block";
+      passwordError.textContent = "請輸入正確的身分證格式（例如 A123456789）";
+      valid = false;
+    } else {
+      passwordError.style.display = "none";
+    }
 
-    studentIdInput.addEventListener("input", () => {
-      const studentId = studentIdInput.value.trim();
-      const studentIdPattern = /^\d{9}$/;
-      if (studentIdPattern.test(studentId)) {
-        emailInput.value = studentId + "@stu.ukn.edu.tw";
-        document.getElementById("usernameError").style.display = "none";
+    if (!valid) return;
+
+    try {
+      const res = await fetch("/api/register_student", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ username, password, email })
+      });
+
+      const data = await res.json();
+
+      if (data.success) {
+        responseMessage.style.color = "green";
+        responseMessage.textContent = data.message || "註冊成功，將為您導向登入頁...";
+        setTimeout(() => {
+          window.location.href = "/login";
+        }, 1500);
       } else {
-        emailInput.value = "";
-      }
-    });
-
-    // 表單提交 + 前端驗證 + 回傳訊息處理
-    document.getElementById("registerForm").addEventListener("submit", async function (e) {
-      e.preventDefault();
-
-      const username = studentIdInput.value.trim();
-      const password = document.getElementById("password").value.trim();
-      const usernameError = document.getElementById("usernameError");
-      const passwordError = document.getElementById("passwordError");
-      const responseMessage = document.getElementById("responseMessage");
-
-      const studentIdPattern = /^\d{9}$/;
-      const idPattern = /^[A-Z][1-2]\d{8}$/;
-
-      let valid = true;
-
-      if (!studentIdPattern.test(username)) {
-        usernameError.style.display = "block";
-        usernameError.textContent = "學號格式錯誤，需為 9 位數字";
-        valid = false;
-      } else {
-        usernameError.style.display = "none";
-      }
-
-      if (!idPattern.test(password)) {
-        passwordError.style.display = "block";
-        passwordError.textContent = "請輸入正確的身分證格式（例如 A123456789）";
-        valid = false;
-      } else {
-        passwordError.style.display = "none";
-      }
-
-      if (!valid) return;
-
-      try {
-        const res = await fetch("/api/register_student", {
-          method: "POST",
-          body: new URLSearchParams({ username, password }),
-        });
-
-        const data = await res.json();
-
-        if (data.success) {
-          responseMessage.style.color = "green";
-          responseMessage.textContent = data.message || "註冊成功，將為您導向登入頁...";
-          setTimeout(() => {
-            window.location.href = "/login";
-          }, 1500);
-        } else {
-          responseMessage.style.color = "red";
-          responseMessage.textContent = data.message || "註冊失敗，請重試";
-        }
-      } catch (err) {
         responseMessage.style.color = "red";
-        responseMessage.textContent = "伺服器錯誤，請稍後再試";
-        console.error(err);
+        responseMessage.textContent = data.message || "註冊失敗，請重試";
       }
-    });
-  </script>
+    } catch (err) {
+      responseMessage.style.color = "red";
+      responseMessage.textContent = "伺服器錯誤，請稍後再試";
+      console.error(err);
+    }
+  });
+</script>
 </body>
 
 </html>

@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, send_file, redirect,session, jsonify
+from flask import Flask, render_template, request, send_file, redirect,session, flash, jsonify
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 from flask_cors import CORS
@@ -100,23 +100,53 @@ def admin_index():
     return redirect(url_for("login_page"))
 
 # -------------------------
-# API - 註冊
+# API - 註冊學生帳號 (POST)
 # -------------------------
 @app.route("/api/register_student", methods=["POST"])
 def register_student():
-    username = request.form.get("username")
-    raw_password = request.form.get("password")
-    # 學號格式檢查
-    if not re.match(r"^\d{9}$", username):
-        return jsonify({"success": False, "message": "學號格式錯誤"}), 400
-    # 身分證字號格式檢查
-    if not re.match(r"^[A-Z][1-2]\d{8}$", raw_password):
-        return jsonify({"success": False, "message": "身分證字號格式錯誤"}), 400
+    try:
+        data = request.json
+        username = data.get("username")
+        password = data.get("password")
+        email = data.get("email")
+        role = "student"
 
-    email = f"{username}@stu.ukn.edu.tw"
-    result, status_code = register_user(username, raw_password, "student", email)
-    return jsonify(result), status_code
+        # 格式驗證
+        if not re.match(r"^[A-Za-z0-9]{6,20}$", username):
+            return jsonify({"success": False, "message": "學號格式錯誤，需為6~20字元英數字"}), 400
+        if not re.match(r"^[A-Za-z0-9]{8,}$", password):
+            return jsonify({"success": False, "message": "密碼需至少8碼英數字"}), 400
+        if not re.match(r"^[A-Za-z0-9._%+-]+@.*\.edu\.tw$", email):
+            return jsonify({"success": False, "message": "必須使用學校信箱"}), 400
 
+        hashed_password = generate_password_hash(password)
+
+        conn = get_db()
+        cursor = conn.cursor()
+
+        # 檢查是否已有相同帳號 (在 users 表)
+        cursor.execute("SELECT * FROM users WHERE username = %s AND role = %s", (username, role))
+        if cursor.fetchone():
+            cursor.close()
+            conn.close()
+            return jsonify({"success": False, "message": "帳號已存在"}), 400
+
+        # 新增學生帳號 (存進 users)
+        cursor.execute(
+            "INSERT INTO users (username, password, email, role) VALUES (%s, %s, %s, %s)",
+            (username, hashed_password, email, role)
+        )
+        conn.commit()
+        cursor.close()
+        conn.close()
+
+        return jsonify({"success": True, "message": "註冊成功"})
+
+    except Exception as e:
+        print("Error in register_student:", e)
+        return jsonify({"success": False, "message": "伺服器錯誤"}), 500
+
+    
 # -------------------------
 # API - 登入
 # -------------------------
@@ -172,12 +202,11 @@ def login():
 # -------------------------
 @app.route("/register_student", methods=["GET"])
 def show_register_student_page():
-    return render_template("register_student.html")  
+    return render_template("register_student.html")
 
 # -------------------------
 # API - 管理員用戶管理
 # -------------------------
-
 # 獲取所有用戶
 @app.route('/api/admin/get_all_users', methods=['GET'])
 def get_all_users():
@@ -766,55 +795,72 @@ def reject_resume():
 # -------------------------
 @app.route('/submit_preferences', methods=['POST'])
 def submit_preferences():
-    conn = get_db()
-    cursor = conn.cursor()
-
-    student_id = session.get('user_id')  # 假設已登入
-    if not student_id:
-        return redirect('/login')
-
-    for i in range(1, 4):  # 三個志願
+    student_id = request.form.get('student_id')
+    preferences = []
+    
+    for i in range(1, 6):
         company_id = request.form.get(f'preference_{i}')
         if company_id:
-            cursor.execute("""
-                INSERT INTO student_preferences (student_id, preference_order, company_id)
-                VALUES (%s, %s, %s)
-                ON DUPLICATE KEY UPDATE company_id = VALUES(company_id)
-            """, (student_id, i, company_id))
+            preferences.append((student_id, i, company_id, datetime.now()))
 
-    conn.commit()
-    return redirect('/student_home')
+    try:
+        conn = get_db()
+        cursor = conn.cursor()
+
+        # 刪除學生舊資料
+        cursor.execute("DELETE FROM student_preferences WHERE student_id = %s", (student_id,))
+        conn.commit()
+
+        # 插入新志願
+        cursor.executemany("""
+            INSERT INTO student_preferences (student_id, preference_order, company_id, submitted_at)
+            VALUES (%s, %s, %s, %s)
+        """, preferences)
+
+        conn.commit()
+        cursor.close()
+        conn.close()
+
+        return render_template("fill_preferences.html", message="✅ 志願序已成功送出", companies=[])  # or redirect
+    except Exception as e:
+        print("志願儲存錯誤：", e)
+        return render_template("fill_preferences.html", message="❌ 發生錯誤，請稍後再試", companies=[])
 
 # -------------------------
-# API - 上傳公司
+# 公司資訊上傳 API
 # -------------------------
-@app.route('/upload_company', methods=['GET', 'POST'])
+@app.route("/api/upload_company", methods=["POST"])
 def upload_company():
-    if request.method == 'POST':
-        company_name = request.form.get('company_name')
+    try:
+        data = request.json
+        company_name = data.get("company_name")
+        job_title = data.get("job_title")
+        job_description = data.get("job_description")
+        job_location = data.get("job_location")
+        contact_person = data.get("contact_person")
+        contact_email = data.get("contact_email")
 
-        if not company_name:
-            return render_template('upload_company.html', error="請輸入公司名稱")
+        if not company_name or not job_title or not job_description:
+            return jsonify({"success": False, "message": "❌ 公司名稱、職位名稱與工作內容為必填"})
 
-        try:
-            conn = get_db()
-            cursor = conn.cursor()
-            cursor.execute(
-                "INSERT INTO internship_companies (company_name, status) VALUES (%s, 'pending')",
-                (company_name,)
-            )
-            conn.commit()
-            cursor.close()
-            conn.close()
+        conn = get_db()
+        cursor = conn.cursor()
 
-            return render_template('upload_company.html', error="✅ 公司已提交，等待審核")
+        cursor.execute("""
+            INSERT INTO internship_companies
+            (company_name, job_title, job_description, job_location, contact_person, contact_email, created_at)
+            VALUES (%s, %s, %s, %s, %s, %s, NOW())
+        """, (company_name, job_title, job_description, job_location, contact_person, contact_email))
 
-        except Exception as e:
-            print("上傳公司錯誤:", e)
-            return render_template('upload_company.html', error="伺服器錯誤，請稍後再試")
+        conn.commit()
+        cursor.close()
+        conn.close()
 
-    # GET 進來顯示表單
-    return render_template('upload_company.html')
+        return jsonify({"success": True, "message": "✅ 公司資訊已成功上傳"})
+
+    except Exception as e:
+        print("❌ upload_company 錯誤：", e)
+        return jsonify({"success": False, "message": "伺服器錯誤，請稍後再試"})
 
 # -------------------------
 # API - 取得已審核通過的公司清單
@@ -824,7 +870,22 @@ def get_approved_companies():
     conn = get_db()
     cursor = conn.cursor(dictionary=True)
     try:
-        cursor.execute("SELECT id, company_name FROM companies WHERE status = 'approved'")
+        cursor.execute("""
+            SELECT 
+                id,
+                company_name,
+                description,
+                location,
+                contact_person,
+                contact_email,
+                contact_phone,
+                uploaded_by_user_id,
+                submitted_at,
+                reviewed_by_user_id,
+                reviewed_at
+            FROM internship_companies
+            WHERE status = 'approved'
+        """)
         companies = cursor.fetchall()
         return jsonify({"success": True, "companies": companies})
     except Exception as e:
@@ -833,6 +894,88 @@ def get_approved_companies():
     finally:
         cursor.close()
         conn.close()
+
+@app.route("/api/review_company", methods=["POST"])
+def review_company():
+    data = request.get_json()
+    company_id = data.get("company_id")
+    status = data.get("status")
+
+    if not company_id or status not in ['approved', 'rejected']:
+        return jsonify({"success": False, "message": "參數錯誤"}), 400
+
+    try:
+        conn = get_db()
+        cursor = conn.cursor()
+        reviewed_at = datetime.now()
+        reviewed_by_user_id = 1  # 假設寫死為主任 ID
+
+        cursor.execute("""
+            UPDATE internship_companies 
+            SET status = %s, reviewed_by_user_id = %s, reviewed_at = %s
+            WHERE id = %s
+        """, (status, reviewed_by_user_id, reviewed_at, company_id))
+
+        conn.commit()
+        return jsonify({"success": True, "message": f"公司已{status == 'approved' and '核准' or '拒絕'}"})
+    except Exception as e:
+        print("審核公司錯誤：", e)
+        return jsonify({"success": False, "message": "伺服器錯誤"}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+# -------------------------
+# 填寫志願
+# -------------------------
+@app.route('/fill_preferences', methods=['GET', 'POST'])
+def fill_preferences():
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+
+    if request.method == 'POST':
+        student_id = request.form.get('student_id')
+
+        preferences = []
+        for i in range(1, 6):  
+            company_id = request.form.get(f'preference_{i}')
+            if company_id:
+                preferences.append((student_id, i, company_id, datetime.now()))
+
+        try:
+            # 先刪除舊的志願資料（避免重複）
+            cursor.execute("DELETE FROM student_preferences WHERE student_id = %s", (student_id,))
+            conn.commit()
+
+            # 批次插入新的志願
+            cursor.executemany("""
+                INSERT INTO student_preferences (student_id, preference_order, company_id, submitted_at)
+                VALUES (%s, %s, %s, %s)
+            """, preferences)
+
+            conn.commit()
+            message = "志願已成功送出！"
+        except Exception as e:
+            print("寫入志願錯誤：", e)
+            message = "送出失敗，請稍後再試"
+        finally:
+            cursor.close()
+            conn.close()
+
+        return render_template('fill_preferences.html', message=message, companies=[])
+
+    # GET：撈出核准公司清單
+    cursor.execute("""
+        SELECT id, company_name 
+        FROM internship_companies 
+        WHERE status = 'approved'
+    """)
+    companies = cursor.fetchall()
+    cursor.close()
+    conn.close()
+
+    return render_template('fill_preferences.html', companies=companies)
+       
 
 # -------------------------
 # API - 選擇角色
@@ -929,21 +1072,6 @@ def review_resume():
 @app.route('/ai_edit_resume')
 def ai_edit_resume():
     return render_template('ai_edit_resume.html')
-
-@app.route('/fill_preferences', methods=['GET'])
-def fill_preferences():
-    conn = get_db()
-    cursor = conn.cursor(dictionary=True)
-
-    # 撈出所有已核准公司
-    cursor.execute("""
-        SELECT id, company_name 
-        FROM internship_companies 
-        WHERE status = 'approved'
-    """)
-    companies = cursor.fetchall()
-
-    return render_template('fill_preferences.html', companies=companies)
 
 @app.route('/approve_company')
 def approve_company():
