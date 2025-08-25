@@ -762,24 +762,6 @@ def reject_resume():
     return jsonify({"success": True, "message": "履歷已標記為拒絕"})
 
 # -------------------------
-# API - 取得已審核通過的公司清單
-# -------------------------
-@app.route("/api/approved_companies", methods=["GET"])
-def get_approved_companies():
-    conn = get_db()
-    cursor = conn.cursor(dictionary=True)
-    try:
-        cursor.execute("SELECT id, company_name FROM companies WHERE status = 'approved'")
-        companies = cursor.fetchall()
-        return jsonify({"success": True, "companies": companies})
-    except Exception as e:
-        print("取得公司清單錯誤:", e)
-        return jsonify({"success": False, "message": "伺服器錯誤"}), 500
-    finally:
-        cursor.close()
-        conn.close()
-
-# -------------------------
 # API - 提交志願
 # -------------------------
 @app.route('/submit_preferences', methods=['POST'])
@@ -804,80 +786,53 @@ def submit_preferences():
     return redirect('/student_home')
 
 # -------------------------
-# API - 提交實習公司
+# API - 上傳公司
 # -------------------------
 @app.route('/upload_company', methods=['GET', 'POST'])
 def upload_company():
-    if "user_id" not in session or "role" not in session:
-        return redirect(url_for("login_page"))
-
     if request.method == 'POST':
-        company_name = request.form.get('company_name', '').strip()
+        company_name = request.form.get('company_name')
+
         if not company_name:
-            error = "公司名稱不可為空"
-            return render_template('upload_company.html', error=error)
-
-        # 判斷角色：只能教師或主任上傳
-        role = session.get("role")
-        if role not in ["teacher", "director"]:
-            return render_template('upload_company.html', error="您沒有上傳公司資料的權限")
-
-        uploader_id = session.get("user_id")  # 上傳人 = 教師或主任 ID
-
-        conn = get_db()
-        cursor = conn.cursor()
+            return render_template('upload_company.html', error="請輸入公司名稱")
 
         try:
-            cursor.execute("""
-                INSERT INTO internship_companies (company_name, status, uploaded_by, created_at)
-                VALUES (%s, %s, %s, NOW())
-            """, (company_name, "已上傳", uploader_id))
+            conn = get_db()
+            cursor = conn.cursor()
+            cursor.execute(
+                "INSERT INTO internship_companies (company_name, status) VALUES (%s, 'pending')",
+                (company_name,)
+            )
             conn.commit()
-            return redirect('/dashboard')  # 上傳完成導回首頁或管理頁
-        except Exception as e:
-            print(f"公司上傳錯誤: {e}")
-            conn.rollback()
-            return render_template('upload_company.html', error="上傳失敗，請稍後再試")
-        finally:
             cursor.close()
             conn.close()
 
+            return render_template('upload_company.html', error="✅ 公司已提交，等待審核")
+
+        except Exception as e:
+            print("上傳公司錯誤:", e)
+            return render_template('upload_company.html', error="伺服器錯誤，請稍後再試")
+
+    # GET 進來顯示表單
     return render_template('upload_company.html')
 
-
 # -------------------------
-# API - 主任審核實習公司名單
+# API - 取得已審核通過的公司清單
 # -------------------------
-@app.route('/api/review_company', methods=['POST'])
-def review_company():
-    if session.get("role") != "director":
-        return jsonify({"success": False, "message": "沒有權限"}), 403
-
-    data = request.get_json()
-    company_id = data.get("company_id")
-    status = data.get("status")  # approved / rejected
-
-    if status not in ["approved", "rejected"]:
-        return jsonify({"success": False, "message": "狀態錯誤"}), 400
-
+@app.route("/api/approved_companies", methods=["GET"])
+def get_approved_companies():
     conn = get_db()
-    cursor = conn.cursor()
+    cursor = conn.cursor(dictionary=True)
     try:
-        cursor.execute("""
-            UPDATE internship_companies 
-            SET status = %s 
-            WHERE id = %s
-        """, (status, company_id))
-        conn.commit()
+        cursor.execute("SELECT id, company_name FROM companies WHERE status = 'approved'")
+        companies = cursor.fetchall()
+        return jsonify({"success": True, "companies": companies})
     except Exception as e:
-        conn.rollback()
-        return jsonify({"success": False, "message": f"更新失敗: {str(e)}"}), 500
+        print("取得公司清單錯誤:", e)
+        return jsonify({"success": False, "message": "伺服器錯誤"}), 500
     finally:
         cursor.close()
         conn.close()
-
-    return jsonify({"success": True, "message": f"公司已標記為 {status}"})
-
 
 # -------------------------
 # API - 選擇角色
@@ -944,16 +899,6 @@ def user_management():
     except Exception as e:
         print(f"用戶管理頁面錯誤: {e}")
         return f"用戶管理頁面載入錯誤: {str(e)}", 500
-    
-@app.route('/approve_company')
-def approve_company():
-    conn = get_db()
-    cursor = conn.cursor(dictionary=True)
-    cursor.execute("SELECT * FROM internship_companies WHERE status = 'pending'")
-    companies = cursor.fetchall()
-    cursor.close()
-    conn.close()
-    return render_template('approve_company.html', companies=companies)
 
 @app.route('/teacher_home')
 def teacher_home():
@@ -972,7 +917,6 @@ def director_home():
     conn.close()
 
     return render_template("director_home.html", companies=companies)
-
 
 @app.route('/upload_resume')
 def upload_resume():
@@ -1001,10 +945,15 @@ def fill_preferences():
 
     return render_template('fill_preferences.html', companies=companies)
 
-@app.route('/upload_company_success')
-def upload_company_success():
-    company = request.args.get('company', '')
-    return f"公司「{company}」已成功上傳！"
+@app.route('/approve_company')
+def approve_company():
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute("SELECT * FROM internship_companies WHERE status = 'pending'")
+    companies = cursor.fetchall()
+    cursor.close()
+    conn.close()
+    return render_template('approve_company.html', companies=companies)
 
 @app.route('/notifications')
 def notifications():
@@ -1013,19 +962,6 @@ def notifications():
 @app.route("/register_student")
 def register_student_page():
     return render_template("register_student.html")
-
-# 其他註冊頁面暫時重定向到學生註冊頁面
-@app.route("/register_choice")
-def register_choice():
-    return redirect("/register_student")
-
-@app.route("/register_teacher")
-def register_teacher_page():
-    return redirect("/register_student")
-
-@app.route("/register_director")
-def register_director_page():
-    return redirect("/register_student")
 
 @app.route("/login-confirm")
 def login_confirm_page():
