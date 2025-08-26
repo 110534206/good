@@ -431,6 +431,15 @@
                 flex-direction: column;
             }
         }
+
+        /* 班級管理樣式 */
+        .class-select {
+            width: 100%;
+            padding: 0.5rem;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 0.9rem;
+        }
     </style>
 </head>
 
@@ -484,7 +493,7 @@
         </div>
     </main>
 
-    <!-- 新增/編輯用戶模態框 -->
+   <!-- 新增/編輯用戶模態框 -->
     <div id="userModal" class="modal">
         <div class="modal-content">
             <span class="close" onclick="closeUserModal()">&times;</span>
@@ -501,7 +510,7 @@
                 </div>
                 <div class="form-group">
                     <label for="role">角色 *</label>
-                    <select id="role" required>
+                    <select id="role" required onchange="toggleClassField()">
                         <option value="">請選擇角色</option>
                         <option value="student">學生</option>
                         <option value="teacher">教師</option>
@@ -517,10 +526,16 @@
                     <label for="department">部門</label>
                     <input type="text" id="department" />
                 </div>
-                <div class="form-group">
+
+                <!-- 班級選擇框，只有教師或主任才能設定 -->
+                <div class="form-group" id="classField" style="display: none;">
                     <label for="className">班級</label>
-                    <input type="text" id="className" />
+                    <select id="className" class="class-select">
+                        <option value="">請選擇班級</option>
+                        <!-- 班級選項會根據後端資料動態生成 -->
+                    </select>
                 </div>
+
                 <div class="form-group">
                     <label for="email">電子郵件</label>
                     <input type="email" id="email" />
@@ -563,6 +578,7 @@
 
         // 用戶管理功能
         let users = [];
+        let classes = [];
 
         // 載入用戶列表
         async function loadUsers() {
@@ -578,6 +594,23 @@
             } catch (error) {
                 console.error('載入用戶列表錯誤:', error);
                 alert('載入用戶列表時發生錯誤');
+            }
+        }
+
+        // 載入班級資料
+        async function loadClasses() {
+            try {
+                const response = await fetch('/api/admin/get_all_classes');
+                const data = await response.json();
+                if (data.success) {
+                    classes = data.classes;
+                    populateClassOptions();
+                } else {
+                    alert('載入班級列表失敗: ' + data.message);
+                }
+            } catch (error) {
+                console.error('載入班級資料錯誤:', error);
+                alert('載入班級資料時發生錯誤');
             }
         }
 

@@ -227,7 +227,8 @@
             const redirectMap = {
                 student: '/student_home',
                 teacher: '/teacher_home',
-                director: '/director_home'
+                director: '/director_home',
+                admin:'/admin_home'
             };
             const redirectUrl = redirectMap[selectedRole] || '/';
             window.location.href = redirectUrl;
@@ -346,7 +347,8 @@
                         const roleMap = {
                             director: "主任",
                             student: "學生",
-                            teacher: "教師"
+                            teacher: "教師",
+                            admin: "管理員"
                         };
 
                         fieldValues.role = roleMap[user.role] || user.role || '';

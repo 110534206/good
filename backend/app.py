@@ -380,7 +380,7 @@ def get_profile():
     username = request.args.get("username")
     role = request.args.get("role")
 
-    if not username or role not in ["student", "teacher", "director"]:
+    if not username or role not in ["student", "teacher", "director","admin"]:
         return jsonify({"success": False, "message": "參數錯誤"}), 400
 
     conn = get_db()
@@ -421,7 +421,8 @@ def save_profile():
     role_map = {
         "學生": "student",
         "教師": "teacher",
-        "主任": "director"
+        "主任": "director",
+        "管理員": "admin"
     }
     role = role_map.get(role_display)
     if not role:
@@ -655,6 +656,8 @@ def get_all_resumes():
     cursor.close()
     conn.close()
     return jsonify({"success": True, "resumes": resumes})
+
+
 
 # -------------------------
 # API - 留言更新
@@ -998,7 +1001,7 @@ def select_role():
     conn.close()
 
     if user:
-        session["user_id"] = user["id"]     # ✅ 這裡才設定正確的 user_id
+        session["user_id"] = user["id"]  
         session["role"] = role
         return jsonify({"success": True})
     else:
