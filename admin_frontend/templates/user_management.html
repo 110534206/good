@@ -285,21 +285,17 @@
             background-color: white;
             margin: 5% auto;
             padding: 2rem;
-            border-radius: 8px;
             width: 90%;
             max-width: 500px;
             max-height: 80vh;
             overflow-y: auto;
             position: relative;
-            overflow: hidden;
+            scrollbar-width: thin;
         }
 
-        .modal-content form {
-            max-height: 80vh;
-            overflow-y: auto;
-            padding-right: 1rem;
+        .modal-content h3 {
+            margin-bottom: 1.5rem;
         }
-
 
         .close {
             position: absolute;
@@ -542,7 +538,7 @@
         <button id="close-btn" aria-label="關閉功能選單">×</button>
         <h2>功能選單</h2>
         <a href="/admin_home">首頁</a>
-        <a href="/admin/user_management">使用者管理</a>
+        <a href="/user_management">使用者管理</a>
         <a href="/admin/system_settings">系統設定</a>
         <a href="/admin/reports">報表與統計</a>
         <a href="/admin/logs">系統日誌</a>

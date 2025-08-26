@@ -5,72 +5,149 @@
     <meta charset="UTF-8" />
     <title>主任審核公司</title>
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC&display=swap');
-
-        body {
-            font-family: 'Noto Sans TC', 'Arial', sans-serif;
-            padding: 2rem;
-            background-color: #f0f2f5;
-            color: #333;
-            max-width: 900px;
-            margin: 0 auto;
+        /* 通用樣式 */
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
         }
 
+        body {
+            font-family: "Noto Sans TC", sans-serif;
+            background-color: #ffffff;
+            margin: 0;
+            padding: 20px;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 0.5rem;
+        }
+
+        /* 頂端列 */
+        .top-bar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 60px;
+            background-color: #fff;
+            z-index: 1100;
+            display: flex;
+            align-items: center;
+        }
+
+        .top-bar>.container {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0 0.5rem;
+            height: 100%;
+            gap: 30px;
+        }
+
+        .top-bar-left #menu-btn {
+            width: 30px;
+            height: 22px;
+            cursor: pointer;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }
+
+        .top-bar-left #menu-btn span {
+            height: 4px;
+            background-color: #333;
+            border-radius: 2px;
+        }
+
+        .top-bar-right {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-weight: bold;
+        }
+
+        .top-bar-right .btn-link {
+            color: #0066cc;
+            background-color: transparent;
+            border: 1.5px solid #0066cc;
+            padding: 0.3rem 0.7rem;
+            border-radius: 6px;
+            text-decoration: none;
+            transition: background-color 0.3s ease, color 0.3s ease;
+            font-size: 0.9rem;
+        }
+
+        .top-bar-right .btn-link:hover {
+            background-color: #0066cc;
+            color: white;
+        }
+
+        .top-bar-right #login-avatar {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            object-fit: cover;
+            cursor: pointer;
+            margin-top: 6px;
+        }
+
+        /* 主要內容 */
         h1 {
+            margin-top: 80px;
             margin-bottom: 2rem;
-            color: #2c3e50;
+            color: #0066cc;
             font-weight: 700;
             font-size: 2rem;
             text-align: center;
             letter-spacing: 1px;
         }
 
-        ul {
-            list-style: none;
-            padding: 0;
+        /* 搜尋欄 */
+        .search-bar,
+        .teacher-select {
+            margin-bottom: 20px;
+            padding: 10px;
+            width: 100%;
+            border-radius: 6px;
+            border: 1px solid #ccc;
+            font-size: 1rem;
         }
 
-        li {
-            background-color: #ffffff;
-            margin-bottom: 1.5rem;
-            padding: 1.5rem;
-            border-radius: 10px;
-            box-shadow: 0 2px 6px rgb(0 0 0 / 0.1);
-            transition: box-shadow 0.3s ease;
+        /* 表格 */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 30px;
         }
 
-        li:hover {
-            box-shadow: 0 4px 12px rgb(0 0 0 / 0.15);
+        th,
+        td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
         }
 
-        .company-info {
-            margin-bottom: 1rem;
+        th {
+            background-color: #f8f9fa;
+            font-weight: bold;
         }
 
-        .company-info strong {
-            color: #007bff;
+        tr:hover {
+            background-color: #f1f1f1;
         }
 
-        .info-line {
-            margin: 0.3rem 0;
-            font-size: 0.95rem;
-        }
-
-        .btn-group {
-            display: flex;
-            gap: 0.75rem;
-            justify-content: flex-end;
-        }
-
+        /* 按鈕 */
         button {
-            padding: 0.5rem 1rem;
-            border: none;
+            padding: 10px 20px;
+            font-size: 1rem;
+            font-weight: bold;
             border-radius: 6px;
             cursor: pointer;
-            font-size: 1rem;
-            font-weight: 600;
-            box-shadow: 0 2px 6px rgb(0 0 0 / 0.12);
-            transition: background-color 0.25s ease, box-shadow 0.25s ease;
+            transition: all 0.3s ease;
         }
 
         .approve-btn {
@@ -93,6 +170,74 @@
             box-shadow: 0 4px 10px rgba(220, 53, 69, 0.5);
         }
 
+        /* 側邊選單 */
+        #side-menu {
+            position: fixed;
+            top: 0;
+            left: 0;
+            height: 100vh;
+            width: 320px;
+            max-width: 80vw;
+            background-color: rgba(10, 10, 10, 0.95);
+            backdrop-filter: blur(6px);
+            box-shadow: 3px 0 12px rgb(0 0 0 / 0.7);
+            padding: 2rem 1.5rem;
+            transform: translateX(-100%);
+            transition: transform 0.3s ease-in-out;
+            z-index: 1100;
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            color: white;
+            user-select: none;
+        }
+
+        #side-menu.open {
+            transform: translateX(0);
+        }
+
+        #close-btn {
+            position: absolute;
+            top: 2rem;
+            right: 1.6rem;
+            font-size: 2.2rem;
+            background: none;
+            border: none;
+            color: white;
+            cursor: pointer;
+            line-height: 1;
+            width: 2.5rem;
+            height: 2.5rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        #side-menu h2 {
+            width: 100%;
+            margin-bottom: 1.5rem;
+            font-weight: 700;
+            font-size: 1.5rem;
+            text-align: left;
+        }
+
+        #side-menu a {
+            display: block;
+            width: 100%;
+            padding: 0.5rem 0;
+            font-size: 1.1rem;
+            color: #ddd;
+            text-decoration: none;
+            border-radius: 4px;
+            transition: background-color 0.2s ease;
+        }
+
+        #side-menu a:hover {
+            background-color: rgba(255, 255, 255, 0.15);
+            color: white;
+        }
+
+        /* 無公司時顯示的訊息 */
         p.no-companies {
             text-align: center;
             color: #6c757d;
@@ -100,9 +245,50 @@
             font-size: 1.1rem;
             margin-top: 3rem;
         }
+
+        /* 模態框 */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            justify-content: center;
+            align-items: center;
+        }
+
+        .modal-content {
+            background-color: white;
+            padding: 20px;
+            border-radius: 6px;
+            max-width: 600px;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .modal.open {
+            display: flex;
+        }
+
     </style>
 
     <script>
+        // 打開描述的模態框
+        function openModal(description) {
+            const modal = document.getElementById("description-modal");
+            const modalContent = document.getElementById("modal-content");
+            modal.style.display = "flex";
+            modalContent.innerHTML = description;
+        }
+
+        // 關閉模態框
+        function closeModal() {
+            const modal = document.getElementById("description-modal");
+            modal.style.display = "none";
+        }
+
         async function reviewCompany(companyId, status) {
             try {
                 const response = await fetch("/api/review_company", {
@@ -128,35 +314,114 @@
 </head>
 
 <body>
+    <!-- 頂部欄 -->
+    <div class="top-bar">
+        <div class="container">
+            <div class="top-bar-left">
+                <div id="menu-btn" title="選單" role="button" tabindex="0">
+                    <span></span><span></span><span></span>
+                </div>
+            </div>
+            <div class="top-bar-right">
+                <a href="/director_home">
+                    <img src="{{ url_for('static', filename='images/avatar.png') }}" alt="頭像" id="login-avatar" />
+                </a>
+                <a href="/director_home" class="btn-link">返回主頁</a>
+                <a href="/login" class="btn-link">登出</a>
+            </div>
+        </div>
+    </div>
+
+    <!-- 主要內容 -->
     <h1>主任審核公司</h1>
 
-    {% if companies %}
-    <ul>
-        {% for company in companies %}
-        <li id="company-{{ company.id }}">
-            <div class="company-info">
-                <div class="info-line"><strong>公司名稱：</strong>{{ company.company_name }}</div>
-                <div class="info-line"><strong>描述：</strong>{{ company.description or '—' }}</div>
-                <div class="info-line"><strong>地點：</strong>{{ company.location or '—' }}</div>
-                <div class="info-line"><strong>聯絡人：</strong>{{ company.contact_person or '—' }}</div>
-                <div class="info-line"><strong>Email：</strong>{{ company.contact_email or '—' }}</div>
-                <div class="info-line"><strong>電話：</strong>{{ company.contact_phone or '—' }}</div>
-                <div class="info-line"><strong>上傳者ID：</strong>{{ company.uploaded_by_user_id }}</div>
-                <div class="info-line"><strong>提交時間：</strong>{{ company.submitted_at }}</div>
-            </div>
+    <label for="teacher-select">選擇老師</label>
+    <select class="teacher-select" id="teacher-select">
+        <option value="teacher1">老師 1</option>
+        <option value="teacher2">老師 2</option>
+        <option value="teacher3">老師 3</option>
+        <!-- 在這裡可以加入更多老師 -->
+    </select>
 
-            <div class="btn-group">
-                <button type="button" class="approve-btn"
-                    onclick="reviewCompany({{ company.id }}, 'approved')">核准</button>
-                <button type="button" class="reject-btn"
-                    onclick="reviewCompany({{ company.id }}, 'rejected')">拒絕</button>
-            </div>
-        </li>
-        {% endfor %}
-    </ul>
+    <div>
+        <input type="text" class="search-bar" id="search-bar" placeholder="搜尋老師..." onkeyup="filterCompanies()" />
+    </div>
+
+    {% if companies %}
+    <table>
+        <thead>
+            <tr>
+                <th>公司名稱</th>
+                <th>描述</th>
+                <th>地點</th>
+                <th>聯絡人</th>
+                <th>Email</th>
+                <th>電話</th>
+                <th>上傳者ID</th>
+                <th>提交時間</th>
+                <th>操作</th>
+            </tr>
+        </thead>
+        <tbody id="company-list">
+            {% for company in companies %}
+            <tr id="company-{{ company.id }}">
+                <td>{{ company.company_name }}</td>
+                <td>
+                    <button onclick="openModal('{{ company.description or '無描述' }}')">預覽</button>
+                </td>
+                <td>{{ company.location or '—' }}</td>
+                <td>{{ company.contact_person or '—' }}</td>
+                <td>{{ company.contact_email or '—' }}</td>
+                <td>{{ company.contact_phone or '—' }}</td>
+                <td>{{ company.uploaded_by_user_id }}</td>
+                <td>{{ company.submitted_at }}</td>
+                <td>
+                    <button class="approve-btn" onclick="reviewCompany({{ company.id }}, 'approved')">核准</button>
+                    <button class="reject-btn" onclick="reviewCompany({{ company.id }}, 'rejected')">拒絕</button>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
     {% else %}
     <p class="no-companies">目前沒有待審核的公司。</p>
     {% endif %}
+
+    <!-- 描述模態框 -->
+    <div class="modal" id="description-modal">
+        <div class="modal-content" id="modal-content"></div>
+        <button onclick="closeModal()">關閉</button>
+    </div>
+
+    <!-- 側邊選單 -->
+    <nav id="side-menu" aria-hidden="true">
+        <button id="close-btn" aria-label="關閉選單">×</button>
+        <h2>功能選單</h2>
+        <a href="/director_home">首頁</a>
+        <a href="/profile">個人資料</a>
+        <a href="/approve_company">審核實習單位</a>
+        <a href="/manage_announcements">管理公告</a>
+        <a href="/admin_statistics">統計資料</a>
+        <a href="/manage_roles">帳號權限設定</a>
+    </nav>
+
+    <script>
+        // 搜索功能
+        function filterCompanies() {
+            const filter = document.getElementById('search-bar').value.toLowerCase();
+            const rows = document.getElementById('company-list').getElementsByTagName('tr');
+
+            Array.from(rows).forEach(row => {
+                const companyName = row.cells[0].textContent.toLowerCase();
+                if (companyName.includes(filter)) {
+                    row.style.display = '';
+                } else {
+                    row.style.display = 'none';
+                }
+            });
+        }
+    </script>
+
 </body>
 
 </html>

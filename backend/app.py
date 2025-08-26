@@ -862,6 +862,10 @@ def upload_company():
         print("❌ upload_company 錯誤：", e)
         return jsonify({"success": False, "message": "伺服器錯誤，請稍後再試"})
 
+@app.route('/upload_company', methods=['GET'])
+def upload_company_form():
+    return render_template('upload_company.html')
+
 # -------------------------
 # API - 取得已審核通過的公司清單
 # -------------------------
