@@ -205,7 +205,12 @@
             { id: 'role', label: '身分', readonly: true, placeholder: '' },
             { id: 'department', label: '科別', readonly: true, default: '資管科' },
             { id: 'name', label: '姓名', placeholder: '請輸入姓名' },
-            { id: 'classname', label: '班級', options: ['忠', '孝'] },
+            {
+                id: 'class_id',
+                label: '班級',
+                options: [],  // 先空，之後從 API 載入
+                readonly: role === 'student'
+            },
             { id: 'number', label: '學號', readonly: true, placeholder: '' },
             { id: 'email', label: '電子郵件', readonly: true, placeholder: '' }
         ];
@@ -228,7 +233,7 @@
                 student: '/student_home',
                 teacher: '/teacher_home',
                 director: '/director_home',
-                admin:'/admin_home'
+                admin: '/admin_home'
             };
             const redirectUrl = redirectMap[selectedRole] || '/';
             window.location.href = redirectUrl;
@@ -256,8 +261,8 @@
                         // 如果有 options，就產生 <select>
                         inputHTML = `<select id="${field.id}" ${field.readonly ? 'disabled' : ''}>`;
                         field.options.forEach(opt => {
-                            const selected = fieldValues[field.id] === opt ? 'selected' : '';
-                            inputHTML += `<option value="${opt}" ${selected}>${opt}</option>`;
+                            const selected = fieldValues[field.id] == opt.value ? 'selected' : '';
+                            inputHTML += `<option value="${opt.value}" ${selected}>${opt.label}</option>`;
                         });
                         inputHTML += `</select>`;
                     } else {
@@ -304,13 +309,13 @@
                 role: document.getElementById('role').value,
                 name: document.getElementById('name').value.trim(),
                 department: document.getElementById('department').value.trim(),
-                classname: document.getElementById('classname').value.trim(),
+                class_name: document.getElementById('class_name').value.trim(),
                 number: document.getElementById('number').value,
                 email: document.getElementById('email').value
             };
 
             // 簡單必填檢查
-            if (!dataToSave.name || !dataToSave.classname) {
+            if (!dataToSave.name || !dataToSave.class_name) {
                 errorMsgEl.textContent = "姓名、班級為必填！";
                 return;
             }
@@ -339,7 +344,23 @@
         }
 
         window.addEventListener('DOMContentLoaded', () => {
-            fetch(`/api/profile?username=${encodeURIComponent(username)}&role=${encodeURIComponent(role)}`)
+            // 先載入班級列表
+            fetch('/api/admin/get_all_classes')
+                .then(res => res.json())
+                .then(classesData => {
+                    if (classesData.success) {
+                        const classOptions = classesData.classes.map(c => ({ value: c.id, label: c.name }));
+                        // 設定 options 為 {value, label} 格式，方便後續顯示
+                        const classField = fields.find(f => f.id === 'class_id');
+                        if (classField) {
+                            classField.options = classOptions;
+                        }
+                        // 再載入使用者資料
+                        return fetch(`/api/profile?username=${encodeURIComponent(username)}&role=${encodeURIComponent(role)}`);
+                    } else {
+                        throw new Error("取得班級資料失敗");
+                    }
+                })
                 .then(res => res.json())
                 .then(data => {
                     if (data.success) {
@@ -354,7 +375,7 @@
                         fieldValues.role = roleMap[user.role] || user.role || '';
                         fieldValues.name = user.name || '';
                         fieldValues.department = '資管科';
-                        fieldValues.classname = user.classname || '';
+                        fieldValues.class_id = user.class_id || '';
                         fieldValues.number = user.number || username;
                         fieldValues.email = user.email || '';
 
