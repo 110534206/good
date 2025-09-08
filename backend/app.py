@@ -722,14 +722,14 @@ def review_resume_api():
                 (status, resume_id)
             )
         conn.commit()
+        return jsonify({"success": True, "message": "履歷審核成功"})
     except Exception as e:
         conn.rollback()
-        return jsonify({"success": False, "message": "更新失敗"}), 500
+        print("履歷審核錯誤:", e)
+        return jsonify({"success": False, "message": "審核失敗"}), 500
     finally:
         cursor.close()
-        conn.close()
-
-    return jsonify({"success": True, "message": f"履歷狀態已更新為 {status}"})
+        conn.close()                                                            
 
 # -------------------------
 # API - 更新履歷
@@ -1008,30 +1008,43 @@ def upload_company_form():
         try:
             data = request.form
             company_name = data.get("company_name")
-            job_title = data.get("job_title")  
-            job_description = data.get("description")
-            job_location = data.get("location")
+            company_description = data.get("description")
+            company_location = data.get("location")
             contact_person = data.get("contact_person")
             contact_email = data.get("contact_email")
+            contact_phone = data.get("contact_phone")
 
-            if not company_name or not job_title or not job_description:
-                return render_template('upload_company.html', error="公司名稱、職位名稱與工作內容為必填")
+            # 公司名稱必填
+            if not company_name:
+                return render_template('upload_company.html', error="公司名稱為必填")
+
+            # 從 session 拿上傳者 id
+            uploaded_by_user_id = session.get("user_id")
 
             conn = get_db()
             cursor = conn.cursor()
             cursor.execute("""
                 INSERT INTO internship_companies
-                (company_name, job_title, job_description, job_location, contact_person, contact_email, created_at)
-                VALUES (%s, %s, %s, %s, %s, %s, NOW())
-            """, (company_name, job_title, job_description, job_location, contact_person, contact_email))
+                (company_name, description, location, contact_person, contact_email, contact_phone, 
+                 uploaded_by_user_id, status, submitted_at)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, 'pending', NOW())
+            """, (
+                company_name,
+                company_description,
+                company_location,
+                contact_person,
+                contact_email,
+                contact_phone,
+                uploaded_by_user_id
+            ))
             conn.commit()
             cursor.close()
             conn.close()
 
-            return render_template('upload_company.html', success="公司資訊已成功上傳")
+            return render_template('upload_company.html', success="公司資訊已成功上傳，等待審核")
 
         except Exception as e:
-            print("錯誤：", e)
+            print("❌ 錯誤：", e)
             return render_template('upload_company.html', error="伺服器錯誤，請稍後再試")
     else:
         return render_template('upload_company.html')
