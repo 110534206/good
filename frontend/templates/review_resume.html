@@ -1,18 +1,19 @@
 <!DOCTYPE html>
 <html lang="zh-Hant">
+
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>學生履歷審查</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
   <style>
- * {
+    * {
       box-sizing: border-box;
       margin: 0;
       padding: 0;
     }
 
-/* 頂端列 */
+    /* 頂端列 */
     .top-bar {
       position: fixed;
       top: 0;
@@ -103,147 +104,77 @@
     body {
       background-color: #ffffff;
       font-family: "Noto Sans TC", sans-serif;
-      margin-top: 80px; 
+      margin-top: 80px;
     }
 
-    .table-responsive {
-      overflow-x: auto;
-      overflow-y: hidden;
-      white-space: nowrap;
-      max-height: none;
+    /* 表格樣式 */
+    .table thead th {
+      text-align: center;
+      background-color: #fafafb;
     }
 
-    table {
-      table-layout: auto;
-      min-width: 1000px;
+    .table tbody td {
+      text-align: center;
+      vertical-align: middle;
     }
 
-    .card {
-      box-shadow: 0 0 12px rgba(0, 0, 0, 0.05);
+    .table-striped>tbody>tr:nth-of-type(odd) {
+      background-color: rgba(0, 0, 0, 0.02);
     }
 
-    .container {
-      max-width: 1200px;
-      margin: auto;
+    /* 狀態標籤 */
+    .status-badge {
+      font-size: 0.85em;
+      padding: 0.4em 0.7em;
+      border-radius: 0.5rem;
     }
 
-    .btn-group .btn.active {
-      font-weight: bold;
-    }
-
+    /* 按鈕群組 */
     .status-badge {
       font-size: 0.9em;
-    }
-
-    table thead th {
-      text-align: center;
-      vertical-align: middle;
-    }
-
-    table td {
-      text-align: center;
-      vertical-align: middle;
-    }
-
-    table td:nth-child(3),
-    table th:nth-child(3) {
-      white-space: nowrap;
-      max-width: 400px;
-    }
-
-    /* 留言與備註欄的格式 */
-    td.comment-cell .view-text,
-    td.note-cell .view-text {
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      min-height: 40px;
-      height: 40px;
-      text-align: center;
-      word-break: break-word;
-      white-space: pre-wrap;
-    }
-
-    /* 已填寫與未填寫顯示的樣式 */
-    .view-text span {
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      height: 40px;
-      color: #198754;
-      /* 綠色代表已填寫 */
-    }
-
-    .view-text span.text-muted {
-      color: #6c757d;
-      /* 灰色代表未填寫 */
-    }
-
-    /* 留言與備註欄的編輯區 */
-    td.comment-cell textarea,
-    td.note-cell textarea {
-      width: 100%;
-      resize: vertical;
-      font-size: 1.2em;
-      text-align: center;
-      box-sizing: border-box;
-      font-family: inherit;
-      padding: 0.4rem;
-    }
-
-    /* 編輯器浮出樣式 */
-    .editor-box {
-      position: absolute;
-      top: 0;
-      left: 0;
-      z-index: 10;
-      background-color: #fff;
-      border: 1px solid #ddd;
-      padding: 0.5rem;
-      width: 100%;
-      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-    }
-
-
-    /* 只讀備註欄的樣式 */
-    .comment-viewer-box textarea,
-    .note-viewer-box textarea {
-      font-size: 1.1rem;
-      color: #333;
-      border: 1px solid #ccc;
-      resize: vertical;
-      min-height: 60px;
-      max-height: 50px;
-      /* 限制最大高度 */
-      width: 100%;
-      /* 讓它寬度一致 */
-      padding: 0.4rem;
-      background-color: #f8f9fa;
-      /* 背景色與學生端一致 */
-      text-align: left;
-      /* 文字對齊左邊 */
-      overflow: hidden;
-      /* 防止超過顯示區域 */
-    }
-
-    /* 操作欄固定寬度，防止跑版 */
-    td:last-child {
-      white-space: nowrap;
-      width: 140px;
-      min-width: 140px;
-    }
-
-    td:last-child>* {
+      padding: 0.3em 0.6em;
+      border-radius: 0.5rem;
       display: inline-block;
-      margin-left: 0.4rem;
-      vertical-align: middle;
+      font-weight: 600;
     }
 
-    td:last-child>*:first-child {
-      margin-left: 0;
+    .status-badge.bg-success {
+      color: #fff;
+      /* 完成 */
     }
 
-     /* 側邊選單 */
+    .status-badge.bg-danger {
+      color: #fff;
+      /* 退件 */
+    }
+
+    .status-badge.bg-info {
+      color: #fff;
+      /* 待審查 */
+    }
+
+    .status-badge.bg-secondary {
+      color: #fff;
+      /* 預設 fallback */
+    }
+
+    /* 操作按鈕群組 */
+    .btn-group-sm>.btn {
+      font-size: 0.85rem;
+      padding: 0.25rem 0.6rem;
+    }
+
+    /* Modal 內文字區域 */
+    .modal textarea {
+      width: 100%;
+      resize: vertical;
+      font-size: 1rem;
+      padding: 0.5rem;
+      border-radius: 6px;
+      border: 1px solid #ccc;
+    }
+
+    /* 側邊選單 */
     #side-menu {
       position: fixed;
       top: 0;
@@ -309,6 +240,13 @@
       background-color: rgba(255, 255, 255, 0.15);
       color: white;
     }
+
+    .btn-outline-secondary:hover {
+      background-color: transparent;
+      color: inherit;
+      border-color: rgb(26, 26, 26);
+      box-shadow: none;
+    }
   </style>
 </head>
 
@@ -331,28 +269,26 @@
     </div>
   </div>
 
-  <div class="container my-5">
-    <div class="card p-4">
-      <h4 class="mb-4 text-center">📑 學生履歷審查</h4>
-
+  <div class="container my-5 pt-1">
+    <div class="card shadow-sm p-4">
       <!-- 篩選工具列 -->
+      <h4 class="mb-3 text-center">📄 審核學生履歷</h4>
       <div class="d-flex justify-content-between mb-3 flex-wrap gap-2">
         <div class="d-flex gap-2">
           <select id="statusFilter" class="form-select form-select-sm w-auto">
             <option value="">所有狀態</option>
             <option value="uploaded">待審查</option>
-            <option value="rejected">已退件</option>
             <option value="approved">完成</option>
-
-
+            <option value="rejected">退件</option>
           </select>
           <input type="text" id="searchBox" class="form-control form-control-sm w-auto" placeholder="搜尋帳號或檔名">
         </div>
       </div>
 
+      <!-- 表格 -->
       <div class="table-responsive">
         <table class="table table-hover align-middle">
-          <thead class="table-light">
+          <thead>
             <tr>
               <th>學生帳號</th>
               <th>上傳時間</th>
@@ -373,7 +309,41 @@
     </div>
   </div>
 
- <!-- 側邊選單 -->
+  <!-- 留言 Modal -->
+  <div class="modal fade" id="commentModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">編輯留言</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <textarea id="commentInput"></textarea>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+          <button class="btn btn-primary" id="saveCommentBtn">送出</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 備註 Modal -->
+  <div class="modal fade" id="noteModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">學生備註</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <textarea id="noteViewer" readonly></textarea>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 側邊選單 -->
   <nav id="side-menu" aria-hidden="true" role="navigation" aria-label="功能選單">
     <button id="close-btn" aria-label="關閉功能選單">×</button>
     <h2>功能選單</h2>
@@ -385,8 +355,10 @@
     <a href="/upload_company">建立實習機會</a>
   </nav>
 
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
   <script>
     let allResumes = [];
+    let currentResumeId = null;
 
     document.addEventListener("DOMContentLoaded", () => {
       fetch("/api/get_all_students_resumes")
@@ -397,20 +369,14 @@
               `<tr><td colspan="7" class="text-center text-danger">無法載入履歷資料</td></tr>`;
             return;
           }
-
           allResumes = data.resumes || [];
-          if (allResumes.length === 0) {
-            document.getElementById("resumeTableBody").innerHTML =
-              `<tr><td colspan="7" class="text-center text-muted">目前沒有任何學生上傳履歷</td></tr>`;
-            return;
-          }
-
           renderTable(allResumes);
         });
 
-      // 綁定篩選事件
       document.getElementById("statusFilter").addEventListener("change", applyFilters);
       document.getElementById("searchBox").addEventListener("input", applyFilters);
+
+      document.getElementById("saveCommentBtn").addEventListener("click", saveComment);
     });
 
     function applyFilters() {
@@ -434,131 +400,92 @@
 
       if (resumes.length === 0) {
         tbody.innerHTML =
-          `<tr><td colspan="7" class="text-center text-muted">沒有符合條件的資料</td></tr>`;
+          `<tr><td colspan="7" class="text-center text-muted">目前沒有資料</td></tr>`;
         return;
       }
 
       resumes.forEach(r => {
-        const commentHtml = `
-      <td class="comment-cell">
-        <div class="view-text" onclick="showCommentViewer(this)" style="cursor:pointer;">
-          <span class="${r.comment?.trim() ? '' : 'text-muted'}">
-            ${r.comment?.trim() ? '已填寫' : '未填寫'}
-          </span>
-        </div>
-        <div class="editor-box comment-viewer-box" style="display:none;">
-          <textarea class="form-control" style="background-color: #fff; min-height: 70px;">${escapeHtml(r.comment?.trim() || '')}</textarea>
-          <div class="text-center mt-2">
-            <button class="btn btn-primary btn-sm" onclick="submitCommentViewer(this, ${r.id})">送出</button>
-            <button class="btn btn-secondary btn-sm" onclick="cancelCommentView(this)">取消</button>
-          </div>
-        </div>
-      </td>
-    `;
-
-        const noteHtml = `
-      <td class="note-cell">
-        <div class="view-text" onclick="showNoteViewer(this)" style="cursor:pointer;">
-          <span class="${r.note?.trim() ? '' : 'text-muted'}">
-            ${r.note?.trim() ? '已填寫' : '未填寫'}
-          </span>
-        </div>
-        <div class="editor-box note-viewer-box" style="display:none;">
-          <textarea class="form-control" readonly style="background-color: #f8f9fa; min-height: 70px;">${escapeHtml(r.note?.trim() || '無內容')}</textarea>
-          <div class="text-center mt-2">
-            <button class="btn btn-secondary btn-sm" onclick="cancelNoteView(this)">返回</button>
-          </div>
-        </div>
-      </td>
-    `;
-
         const row = `
-      <tr>
-        <td>${r.username}</td>
-        <td>${new Date(r.upload_time).toLocaleString()}</td>
-        <td>${r.original_filename}</td>
-        <td><span class="badge bg-${statusColor(r.status)}">${mapStatus(r.status)}</span></td>
-        ${commentHtml}
-        ${noteHtml}
-        <td>
-          <a href="/api/download_resume?resume_id=${r.id}" class="btn btn-outline-primary btn-sm">下載</a>
-          <button class="btn btn-outline-danger btn-sm ms-1" onclick="rejectResume(${r.id})">退件</button>
-          <button class="btn btn-outline-success btn-sm ms-1" onclick="approveResume(${r.id})">審查成功</button>
-        </td>
-      </tr>
-    `;
+          <tr>
+            <td>${r.username}</td>
+            <td>${new Date(r.upload_time).toLocaleString()}</td>
+            <td>${r.original_filename}</td>
+            <td><span class="status-badge bg-${statusColor(r.status)}">${mapStatus(r.status)}</span></td>
+           <td>
+<button class="btn btn-sm btn-outline-secondary ${r.comment ? 'text-success' : ''}"
+    onclick="openCommentModal(${r.id}, '${escapeHtml(r.comment || '')}')">
+    ${r.comment ? '已填寫' : '未填寫'}
+  </button>
+</td>
+<td>
+<button class="btn btn-sm btn-outline-secondary ${r.note ? 'text-success' : ''}"
+    onclick="openNoteModal('${escapeHtml(r.note || '無內容')}')">
+    ${r.note ? '請查看' : '無內容'}
+  </button>
+</td>
+            <td>
+              <div class="btn-group btn-group-sm">
+                <a href="/api/download_resume?resume_id=${r.id}" class="btn btn-outline-primary">下載</a>
+                <button class="btn btn-outline-danger" onclick="rejectResume(${r.id})">退件</button>
+                <button class="btn btn-outline-success" onclick="approveResume(${r.id})">完成</button>
+              </div>
+            </td>
+          </tr>
+        `;
         tbody.innerHTML += row;
       });
     }
 
-    // 全域函式區
-
-    function showCommentViewer(container) {
-      const td = container.closest('td');
-      td.querySelector('.view-text').style.display = 'none';
-      td.querySelector('.editor-box').style.display = 'block';
-      td.querySelector('textarea').focus();
+    // 狀態顏色
+    function statusColor(status) {
+      return {
+        uploaded: 'info',
+        approved: 'success',
+        rejected: 'danger'
+      }[status] || 'secondary';
     }
 
-    function cancelCommentView(btn) {
-      const td = btn.closest('td');
-      td.querySelector('.editor-box').style.display = 'none';
-      td.querySelector('.view-text').style.display = 'block';
+    function mapStatus(status) {
+      return {
+        uploaded: '待審查',
+        approved: '完成',
+        rejected: '退件'
+      }[status] || '未知';
     }
 
-    function submitCommentViewer(btn, id) {
-      const td = btn.closest('td');
-      const newVal = td.querySelector('textarea').value.trim();
+    // 留言 Modal
+    function openCommentModal(id, comment) {
+      currentResumeId = id;
+      document.getElementById("commentInput").value = comment;
+      new bootstrap.Modal(document.getElementById("commentModal")).show();
+    }
+
+    function saveComment() {
+      const newVal = document.getElementById("commentInput").value.trim();
       fetch("/api/update_resume_field", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ resume_id: id, field: "comment", value: newVal })
+        body: JSON.stringify({ resume_id: currentResumeId, field: "comment", value: newVal })
       })
         .then(res => res.json())
         .then(data => {
           if (data.success) {
-            td.querySelector('.view-text').innerHTML = `
-          <span class="${newVal ? '' : 'text-muted'}">
-            ${newVal ? '已填寫' : '未填寫'}
-          </span>
-        `;
-            cancelCommentView(btn);
+            bootstrap.Modal.getInstance(document.getElementById("commentModal")).hide();
+            alert("留言更新成功");
+            location.reload();
           } else {
             alert("留言更新失敗");
           }
         });
     }
 
-    function showNoteViewer(container) {
-      const td = container.closest('td');
-      td.querySelector('.view-text').style.display = 'none';
-      td.querySelector('.editor-box').style.display = 'block';
+    // 備註 Modal
+    function openNoteModal(note) {
+      document.getElementById("noteViewer").value = note;
+      new bootstrap.Modal(document.getElementById("noteModal")).show();
     }
 
-    function cancelNoteView(btn) {
-      const td = btn.closest('td');
-      td.querySelector('.editor-box').style.display = 'none';
-      td.querySelector('.view-text').style.display = 'block';
-    }
-
-    function mapStatus(status) {
-      return {
-        uploaded: '待審查',
-        reviewing: '審查中',
-        approved: '完成',
-        rejected: '退件'
-      }[status] || '未知';
-    }
-
-    function statusColor(status) {
-      return {
-        uploaded: 'info',
-        reviewing: 'warning',
-        approved: 'success',
-        rejected: 'danger'
-      }[status] || 'secondary';
-    }
-
+    // 操作
     function rejectResume(resumeId) {
       if (!confirm("確定要將此履歷標記為退件？")) return;
       fetch(`/api/reject_resume?resume_id=${resumeId}`, { method: "POST" })
@@ -574,12 +501,12 @@
     }
 
     function approveResume(resumeId) {
-      if (!confirm("確定要將此履歷標記為『審查成功』？")) return;
+      if (!confirm("確定要將此履歷標記為完成？")) return;
       fetch(`/api/approve_resume?resume_id=${resumeId}`, { method: "POST" })
         .then(res => res.json())
         .then(data => {
           if (data.success) {
-            alert("已標記為審查成功");
+            alert("已標記為完成");
             location.reload();
           } else {
             alert("標記失敗");
@@ -588,7 +515,6 @@
     }
 
     function escapeHtml(text) {
-      if (!text) return '';
       return text.replace(/&/g, "&amp;")
         .replace(/</g, "&lt;")
         .replace(/>/g, "&gt;")

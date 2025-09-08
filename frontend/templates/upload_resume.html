@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="zh-Hant">
+
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -12,7 +13,7 @@
       padding: 0;
     }
 
-/* 頂端列 */
+    /* 頂端列 */
     .top-bar {
       position: fixed;
       top: 0;
@@ -103,7 +104,7 @@
     body {
       background-color: #ffffff;
       font-family: "Noto Sans TC", sans-serif;
-      margin-top: 80px; 
+      margin-top: 80px;
     }
 
     .card {
@@ -297,7 +298,7 @@
 </head>
 
 <body>
-<!-- 頂部欄 -->
+  <!-- 頂部欄 -->
   <div class="top-bar">
     <div class="container">
       <div class="top-bar-left">
@@ -330,10 +331,10 @@
 
     <!-- 篩選按鈕 -->
     <div class="btn-group mb-3 w-100" role="group">
-      <button class="btn btn-outline-secondary active" onclick="filterStatus('all')">全部</button>
-      <button class="btn btn-outline-info" id="uploadedCountBtn" onclick="filterStatus('uploaded')">已上傳</button>
-      <button class="btn btn-outline-success" id="approvedCountBtn" onclick="filterStatus('approved')">審查完成</button>
-      <button class="btn btn-outline-danger" id="rejectedCountBtn" onclick="filterStatus('rejected')">已退件</button>
+      <button class="btn btn-outline-secondary active" onclick="filterStatus('all', this)">全部</button>
+      <button class="btn btn-outline-info" id="uploadedCountBtn" onclick="filterStatus('uploaded', this)">已上傳</button>
+      <button class="btn btn-outline-success" id="approvedCountBtn"onclick="filterStatus('approved', this)">審查完成</button>
+      <button class="btn btn-outline-danger" id="rejectedCountBtn" onclick="filterStatus('rejected', this)">已退件</button>
     </div>
 
     <!-- 清單區塊 -->
@@ -488,9 +489,9 @@
       }
       filtered.forEach(r => {
         // 留言欄：學生可查看，不能編輯
-        const commentView = `
+       const commentView = ` 
     <div class="view-text" onclick="showCommentEditor(this, ${r.id})" style="cursor:pointer;">
-      <span class="${r.comment?.trim() ? '' : 'text-muted'}">${r.comment?.trim() ? '已填寫' : '未填寫'}</span>
+      <span class="${r.comment?.trim() ? '' : 'text-muted'}">${r.comment?.trim() ? '請查看' : '無內容'}</span>
     </div>
     <div class="editor-box" style="display:none;">
       <textarea readonly style="background-color:#f9f9f9;" placeholder="無內容">${escapeHtml(r.comment)}</textarea><br/>
@@ -621,7 +622,7 @@
     }
     document.addEventListener("DOMContentLoaded", loadResumes);
   </script>
- <!-- JS 控制開關 -->
+  <!-- JS 控制開關 -->
   <script>
     document.getElementById('menu-btn').addEventListener('click', () => {
       document.getElementById('side-menu').classList.add('open');
@@ -631,7 +632,7 @@
       document.getElementById('side-menu').classList.remove('open');
     });
   </script>
-</body>  
+</body>
 </body>
 
 </html>
