@@ -5,6 +5,7 @@ from flask_cors import CORS
 import mysql.connector
 import traceback
 import os
+import json
 import re
 from datetime import datetime
 from flask import Blueprint
@@ -999,78 +1000,45 @@ def submit_preferences():
         return render_template("fill_preferences.html", message="❌ 發生錯誤，請稍後再試", companies=[])
 
 # -------------------------
-# 公司資訊上傳 API
+# API - 上傳公司資訊
 # -------------------------
-@app.route("/api/upload_company", methods=["POST"])
-def upload_company():
-    try:
-        data = request.json
-        company_name = data.get("company_name")
-        job_title = data.get("job_title")
-        job_description = data.get("job_description")
-        job_location = data.get("job_location")
-        contact_person = data.get("contact_person")
-        contact_email = data.get("contact_email")
-
-        if not company_name or not job_title or not job_description:
-            return jsonify({"success": False, "message": "❌ 公司名稱、職位名稱與工作內容為必填"})
-
-        conn = get_db()
-        cursor = conn.cursor()
-
-        cursor.execute("""
-            INSERT INTO internship_companies
-            (company_name, job_title, job_description, job_location, contact_person, contact_email, created_at)
-            VALUES (%s, %s, %s, %s, %s, %s, NOW())
-        """, (company_name, job_title, job_description, job_location, contact_person, contact_email))
-
-        conn.commit()
-        cursor.close()
-        conn.close()
-
-        return jsonify({"success": True, "message": "✅ 公司資訊已成功上傳"})
-
-    except Exception as e:
-        print("❌ upload_company 錯誤：", e)
-        return jsonify({"success": False, "message": "伺服器錯誤，請稍後再試"})
-
-@app.route('/upload_company', methods=['GET'])
+@app.route('/upload_company', methods=['GET', 'POST'])
 def upload_company_form():
-    return render_template('upload_company.html')
+    if request.method == 'POST':
+        try:
+            data = request.form
+            company_name = data.get("company_name")
+            job_title = data.get("job_title")  
+            job_description = data.get("description")
+            job_location = data.get("location")
+            contact_person = data.get("contact_person")
+            contact_email = data.get("contact_email")
+
+            if not company_name or not job_title or not job_description:
+                return render_template('upload_company.html', error="公司名稱、職位名稱與工作內容為必填")
+
+            conn = get_db()
+            cursor = conn.cursor()
+            cursor.execute("""
+                INSERT INTO internship_companies
+                (company_name, job_title, job_description, job_location, contact_person, contact_email, created_at)
+                VALUES (%s, %s, %s, %s, %s, %s, NOW())
+            """, (company_name, job_title, job_description, job_location, contact_person, contact_email))
+            conn.commit()
+            cursor.close()
+            conn.close()
+
+            return render_template('upload_company.html', success="公司資訊已成功上傳")
+
+        except Exception as e:
+            print("錯誤：", e)
+            return render_template('upload_company.html', error="伺服器錯誤，請稍後再試")
+    else:
+        return render_template('upload_company.html')
 
 # -------------------------
-# API - 取得已審核通過的公司清單
+# API - 審核公司
 # -------------------------
-@app.route("/api/approved_companies", methods=["GET"])
-def get_approved_companies():
-    conn = get_db()
-    cursor = conn.cursor(dictionary=True)
-    try:
-        cursor.execute("""
-            SELECT 
-                id,
-                company_name,
-                description,
-                location,
-                contact_person,
-                contact_email,
-                contact_phone,
-                uploaded_by_user_id,
-                submitted_at,
-                reviewed_by_user_id,
-                reviewed_at
-            FROM internship_companies
-            WHERE status = 'approved'
-        """)
-        companies = cursor.fetchall()
-        return jsonify({"success": True, "companies": companies})
-    except Exception as e:
-        print("取得公司清單錯誤:", e)
-        return jsonify({"success": False, "message": "伺服器錯誤"}), 500
-    finally:
-        cursor.close()
-        conn.close()
-
 @app.route("/api/review_company", methods=["POST"])
 def review_company():
     data = request.get_json()
@@ -1083,20 +1051,51 @@ def review_company():
     try:
         conn = get_db()
         cursor = conn.cursor()
-        reviewed_at = datetime.now()
-        reviewed_by_user_id = 1  # 假設寫死為主任 ID
 
+        reviewed_at = datetime.now()
+        reviewed_by_user_id = session.get("user_id", 1)  # 預設為 1（主任）
+
+        # 取得公司名稱（為了放進公告內容）
+        cursor.execute("SELECT company_name FROM internship_companies WHERE id = %s", (company_id,))
+        company_row = cursor.fetchone()
+        company_name = company_row[0] if company_row else "未命名公司"
+
+        # 更新審核狀態
         cursor.execute("""
             UPDATE internship_companies 
             SET status = %s, reviewed_by_user_id = %s, reviewed_at = %s
             WHERE id = %s
         """, (status, reviewed_by_user_id, reviewed_at, company_id))
 
+        # ✅ 若核准，插入公告
+        if status == "approved":
+            announcement_title = "實習廠商審核通過"
+            announcement_content = f"廠商【{company_name}】已由主任審核通過，請至平台查閱詳細資訊。"
+            created_by = "主任"
+            visible_from = datetime.now()
+            target_roles = json.dumps(["student", "teacher"])
+            is_important = True
+
+            cursor.execute("""
+                INSERT INTO announcements 
+                (title, content, created_by, created_at, target_roles, status, visible_from, is_important)
+                VALUES (%s, %s, %s, NOW(), %s, 'published', %s, %s)
+            """, (
+                announcement_title, 
+                announcement_content,
+                created_by,
+                target_roles,
+                visible_from,
+                is_important
+            ))
+
         conn.commit()
         return jsonify({"success": True, "message": f"公司已{status == 'approved' and '核准' or '拒絕'}"})
+
     except Exception as e:
         print("審核公司錯誤：", e)
         return jsonify({"success": False, "message": "伺服器錯誤"}), 500
+
     finally:
         cursor.close()
         conn.close()
@@ -1263,6 +1262,48 @@ def approve_company():
 @app.route('/notifications')
 def notifications():
     return render_template('notifications.html')
+
+@app.route("/api/announcements", methods=["GET"])
+def get_announcements():
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+
+    try:
+        now = datetime.now()
+
+        cursor.execute("""
+            SELECT 
+                id, title, content, created_by, created_at,
+                target_roles, status, visible_from, visible_until,
+                is_important, view_count
+            FROM announcements
+            WHERE status = 'published'
+              AND (visible_from IS NULL OR visible_from <= %s)
+              AND (visible_until IS NULL OR visible_until >= %s)
+            ORDER BY is_important DESC, created_at DESC
+        """, (now, now))
+
+        rows = cursor.fetchall()
+
+        for row in rows:
+            row["created_at"] = row["created_at"].strftime("%Y-%m-%d %H:%M:%S")
+            row["visible_from"] = row["visible_from"].strftime("%Y-%m-%d %H:%M:%S") if row["visible_from"] else None
+            row["visible_until"] = row["visible_until"].strftime("%Y-%m-%d %H:%M:%S") if row["visible_until"] else None
+
+            # target_roles 是 JSON 字串，轉為 list
+            try:
+                row["target_roles"] = json.loads(row["target_roles"])
+            except:
+                row["target_roles"] = []
+
+        return jsonify({"success": True, "announcements": rows})
+    
+    except Exception as e:
+        print("❌ 取得公告失敗：", e)
+        return jsonify({"success": False, "message": "取得公告失敗"}), 500
+    finally:
+        cursor.close()
+        conn.close()
 
 @app.route("/register_student")
 def register_student_page():
