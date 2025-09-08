@@ -271,7 +271,6 @@
         .modal.open {
             display: flex;
         }
-
     </style>
 
     <script>
@@ -291,7 +290,7 @@
 
         async function reviewCompany(companyId, status) {
             try {
-                const response = await fetch("/api/review_company", {
+                const response = await fetch("/api/approve_company", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({ company_id: companyId, status: status })
@@ -334,15 +333,12 @@
 
     <!-- 主要內容 -->
     <h1>主任審核公司</h1>
-
-    <label for="teacher-select">選擇老師</label>
-    <select class="teacher-select" id="teacher-select">
-        <option value="teacher1">老師 1</option>
-        <option value="teacher2">老師 2</option>
-        <option value="teacher3">老師 3</option>
-        <!-- 在這裡可以加入更多老師 -->
+    <select class="teacher-select" id="teacher-select" name="teacher_id">
+        <option value="" selected>請選擇老師</option>
+        {% for teacher in teachers %}
+        <option value="{{ teacher.id }}">{{ teacher.name }}{% if teacher.role == 'director' %}（主任）{% endif %}</option>
+        {% endfor %}
     </select>
-
     <div>
         <input type="text" class="search-bar" id="search-bar" placeholder="搜尋老師..." onkeyup="filterCompanies()" />
     </div>
@@ -357,7 +353,6 @@
                 <th>聯絡人</th>
                 <th>Email</th>
                 <th>電話</th>
-                <th>上傳者ID</th>
                 <th>提交時間</th>
                 <th>操作</th>
             </tr>
@@ -373,7 +368,6 @@
                 <td>{{ company.contact_person or '—' }}</td>
                 <td>{{ company.contact_email or '—' }}</td>
                 <td>{{ company.contact_phone or '—' }}</td>
-                <td>{{ company.uploaded_by_user_id }}</td>
                 <td>{{ company.submitted_at }}</td>
                 <td>
                     <button class="approve-btn" onclick="reviewCompany({{ company.id }}, 'approved')">核准</button>
@@ -396,13 +390,14 @@
     <!-- 側邊選單 -->
     <nav id="side-menu" aria-hidden="true">
         <button id="close-btn" aria-label="關閉選單">×</button>
-        <h2>功能選單</h2>
-        <a href="/director_home">首頁</a>
-        <a href="/profile">個人資料</a>
-        <a href="/approve_company">審核實習單位</a>
-        <a href="/manage_announcements">管理公告</a>
-        <a href="/admin_statistics">統計資料</a>
-        <a href="/manage_roles">帳號權限設定</a>
+            <h2>功能選單</h2>
+            <a href="/director_home">首頁</a>
+            <a href="/profile">個人資料</a>
+            <a href="/approve_company">審核實習單位</a>
+            <a href="/notifications">管理公告</a>
+            <a href="/admin_statistics">統計資料</a>
+            <a href="/manage_roles">帳號權限設定</a>
+        </nav>
     </nav>
 
     <script>
@@ -420,6 +415,25 @@
                 }
             });
         }
+    </script>
+    <!-- JS 控制開關 -->
+    <script>
+        // 驗證角色
+        const username = localStorage.getItem("username");
+        const role = localStorage.getItem("selectedRole");
+
+        if (!username || role !== "director") {
+            alert("請以主任身份登入！");
+            window.location.href = "/login";
+        }
+
+        document.getElementById('menu-btn').addEventListener('click', () => {
+            document.getElementById('side-menu').classList.add('open');
+        });
+
+        document.getElementById('close-btn').addEventListener('click', () => {
+            document.getElementById('side-menu').classList.remove('open');
+        });
     </script>
 
 </body>

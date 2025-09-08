@@ -286,6 +286,19 @@
     <!-- 表單區塊 -->
     <div class="form-container">
         <h1 class="page-title">建立實習單位</h1>
+
+        {% if success %}
+        <p style="color: green; text-align: center; font-weight: bold; margin-bottom: 1rem;">
+            {{ success }}
+        </p>
+        {% endif %}
+
+        {% if error %}
+        <p style="color: red; text-align: center; font-weight: bold; margin-bottom: 1rem;">
+            {{ error }}
+        </p>
+        {% endif %}
+
         <form method="POST" action="/upload_company">
             <label for="company_name">公司名稱<span style="color:#d9534f;">*</span>：</label>
             <input type="text" id="company_name" name="company_name" required>

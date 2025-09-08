@@ -173,19 +173,25 @@ def login():
 
         # 檢查密碼並收集所有匹配的角色
         matching_roles = []
+        matched_user = None  # 用來儲存符合的 user
+
         for user in users:
             print(f"檢查用戶: {user['username']}, role: {user['role']}")  # 調試信息
             if check_password_hash(user["password"], password):
                 matching_roles.append(user["role"])
-                session["username"] = username
-                session["role"] = user["role"]
+                matched_user = user  # 儲存符合的 user
 
-        if matching_roles:
+        if matched_user:
+            # 設定登入 session
+            session["username"] = matched_user["username"]
+            session["role"] = matched_user["role"]
+            session["user_id"] = matched_user["id"]  # ✅ 關鍵：設定 user_id
+
             print(f"密碼驗證成功，角色: {matching_roles}")  # 調試信息
             return jsonify({
-                "success": True, 
-                "username": username,
-                "roles": matching_roles  # 返回角色陣列，符合前端期望
+                "success": True,
+                "username": matched_user["username"],
+                "roles": matching_roles
             })
         else:
             print("密碼驗證失敗")  # 調試信息
@@ -196,7 +202,7 @@ def login():
         return jsonify({"success": False, "message": "登入失敗"}), 500
     finally:
         cursor.close()
-        conn.close()       
+        conn.close()
 
 # -------------------------
 # API - 註冊頁面    
@@ -710,7 +716,7 @@ def review_resume_api():
         return jsonify({"success": False, "message": "找不到該履歷"}), 404
 
     try:
-        # 更新狀態和備註（如果有提供）
+        # 更新狀態與審核意見
         if comment:
             cursor.execute(
                 "UPDATE resumes SET status = %s, comment = %s WHERE id = %s",
@@ -721,15 +727,16 @@ def review_resume_api():
                 "UPDATE resumes SET status = %s WHERE id = %s",
                 (status, resume_id)
             )
+
         conn.commit()
-        return jsonify({"success": True, "message": "履歷審核成功"})
+        return jsonify({"success": True, "message": "履歷審核完成", "resume_id": resume_id, "status": status})
+
     except Exception as e:
-        conn.rollback()
-        print("履歷審核錯誤:", e)
-        return jsonify({"success": False, "message": "審核失敗"}), 500
+        print("審核履歷錯誤:", e)
+        return jsonify({"success": False, "message": "伺服器錯誤"}), 500
     finally:
         cursor.close()
-        conn.close()                                                            
+        conn.close()                    
 
 # -------------------------
 # API - 更新履歷
@@ -821,8 +828,6 @@ def get_all_resumes():
     conn.close()
     return jsonify({"success": True, "resumes": resumes})
 
-
-
 # -------------------------
 # API - 留言更新
 # -------------------------
@@ -830,18 +835,36 @@ def get_all_resumes():
 def submit_comment():
     data = request.get_json()
     resume_id = data.get('resume_id')
-    comment = data.get('comment', '').strip()
+    comment = (data.get('comment') or '').strip()
 
     if not resume_id or not comment:
         return jsonify({"success": False, "message": "缺少必要參數"}), 400
 
+    try:
+        resume_id = int(resume_id)
+    except (TypeError, ValueError):
+        return jsonify({"success": False, "message": "resume_id 必須是數字"}), 400
+
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("UPDATE resumes SET comment = %s WHERE id = %s", (comment, resume_id))
-    conn.commit()
-    cursor.close()
-    conn.close()
-    return jsonify({"success": True, "message": "留言更新成功"})
+    try:
+        # 檢查履歷是否存在
+        cursor.execute("SELECT id FROM resumes WHERE id=%s", (resume_id,))
+        if not cursor.fetchone():
+            return jsonify({"success": False, "message": "找不到該履歷"}), 404
+
+        # 更新留言 (note 欄位)
+        cursor.execute("UPDATE resumes SET note=%s WHERE id=%s", (comment, resume_id))
+        conn.commit()
+
+        return jsonify({"success": True, "message": "留言更新成功"})
+    except Exception as e:
+        conn.rollback()
+        print("更新留言錯誤:", e)
+        return jsonify({"success": False, "message": "伺服器錯誤"}), 500
+    finally:
+        cursor.close()
+        conn.close()
 
 # -------------------------
 # API - 下載履歷
@@ -1000,7 +1023,7 @@ def submit_preferences():
         return render_template("fill_preferences.html", message="❌ 發生錯誤，請稍後再試", companies=[])
 
 # -------------------------
-# API - 上傳公司資訊
+# 上傳公司
 # -------------------------
 @app.route('/upload_company', methods=['GET', 'POST'])
 def upload_company_form():
@@ -1020,6 +1043,8 @@ def upload_company_form():
 
             # 從 session 拿上傳者 id
             uploaded_by_user_id = session.get("user_id")
+            if not uploaded_by_user_id:
+                return render_template('upload_company.html', error="請先登入")
 
             conn = get_db()
             cursor = conn.cursor()
@@ -1041,7 +1066,9 @@ def upload_company_form():
             cursor.close()
             conn.close()
 
-            return render_template('upload_company.html', success="公司資訊已成功上傳，等待審核")
+            # 上傳成功訊息，告知狀態是待審核
+            success_msg = "公司資訊已成功上傳，狀態：待審核"
+            return render_template('upload_company.html', success=success_msg)
 
         except Exception as e:
             print("❌ 錯誤：", e)
@@ -1052,8 +1079,8 @@ def upload_company_form():
 # -------------------------
 # API - 審核公司
 # -------------------------
-@app.route("/api/review_company", methods=["POST"])
-def review_company():
+@app.route("/api/approve_company", methods=["POST"])
+def api_approve_company():
     data = request.get_json()
     company_id = data.get("company_id")
     status = data.get("status")
@@ -1066,19 +1093,26 @@ def review_company():
         cursor = conn.cursor()
 
         reviewed_at = datetime.now()
-        reviewed_by_user_id = session.get("user_id", 1)  # 預設為 1（主任）
 
-        # 取得公司名稱（為了放進公告內容）
-        cursor.execute("SELECT company_name FROM internship_companies WHERE id = %s", (company_id,))
+        # 取得公司資訊
+        cursor.execute("SELECT company_name, status FROM internship_companies WHERE id = %s", (company_id,))
         company_row = cursor.fetchone()
-        company_name = company_row[0] if company_row else "未命名公司"
 
-        # 更新審核狀態
+        if not company_row:
+            return jsonify({"success": False, "message": "查無此公司"}), 404
+
+        company_name, current_status = company_row
+
+        # 防止重複審核
+        if current_status != 'pending':
+            return jsonify({"success": False, "message": f"公司已被審核過（目前狀態為 {current_status}）"}), 400
+
+        # 更新公司狀態與審核時間
         cursor.execute("""
-            UPDATE internship_companies 
-            SET status = %s, reviewed_by_user_id = %s, reviewed_at = %s
+            UPDATE internship_companies
+            SET status = %s, reviewed_at = %s
             WHERE id = %s
-        """, (status, reviewed_by_user_id, reviewed_at, company_id))
+        """, (status, reviewed_at, company_id))
 
         # ✅ 若核准，插入公告
         if status == "approved":
@@ -1103,7 +1137,9 @@ def review_company():
             ))
 
         conn.commit()
-        return jsonify({"success": True, "message": f"公司已{status == 'approved' and '核准' or '拒絕'}"})
+
+        action_text = '核准' if status == 'approved' else '拒絕'
+        return jsonify({"success": True, "message": f"公司已{action_text}"}), 200
 
     except Exception as e:
         print("審核公司錯誤：", e)
@@ -1118,11 +1154,16 @@ def review_company():
 # -------------------------
 @app.route('/fill_preferences', methods=['GET', 'POST'])
 def fill_preferences():
+    # 檢查是否登入
+    if 'user_id' not in session:
+        return redirect(url_for('login'))  # 若沒登入導向登入頁
+
+    student_id = session['user_id']  # 從 session 拿學生ID
+
     conn = get_db()
     cursor = conn.cursor(dictionary=True)
 
     if request.method == 'POST':
-        student_id = request.form.get('student_id')
 
         preferences = []
         for i in range(1, 6):  
@@ -1163,7 +1204,6 @@ def fill_preferences():
     conn.close()
 
     return render_template('fill_preferences.html', companies=companies)
-       
 
 # -------------------------
 # API - 選擇角色
@@ -1302,6 +1342,8 @@ def get_announcements():
             row["created_at"] = row["created_at"].strftime("%Y-%m-%d %H:%M:%S")
             row["visible_from"] = row["visible_from"].strftime("%Y-%m-%d %H:%M:%S") if row["visible_from"] else None
             row["visible_until"] = row["visible_until"].strftime("%Y-%m-%d %H:%M:%S") if row["visible_until"] else None
+            row["source"] = row.pop("created_by", "平台")
+
 
             # target_roles 是 JSON 字串，轉為 list
             try:

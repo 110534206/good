@@ -281,8 +281,9 @@
     <a href="/notifications">通知</a>
   </nav>
 
-  <!-- JS 控制開關 -->
+  <!-- JS 控制開關及志願序選項互斥 -->
   <script>
+    // 側邊選單開關
     document.getElementById('menu-btn').addEventListener('click', () => {
       document.getElementById('side-menu').classList.add('open');
     });
@@ -290,6 +291,43 @@
     document.getElementById('close-btn').addEventListener('click', () => {
       document.getElementById('side-menu').classList.remove('open');
     });
+
+    // 禁止志願序重複選擇同一間公司
+    const selects = document.querySelectorAll('.preference-select');
+
+    function updateOptions() {
+      // 先收集所有已選擇的公司 id
+      const selectedValues = Array.from(selects)
+        .map(s => s.value)
+        .filter(val => val !== '');
+
+      selects.forEach(select => {
+        const currentValue = select.value;
+
+        // 遍歷每個 option
+        Array.from(select.options).forEach(option => {
+          if (option.value === '') {
+            // "-- 請選擇實習公司 --" 永遠可選
+            option.disabled = false;
+            return;
+          }
+
+          // 如果該 option 被選擇且不是目前 select 的值，禁用
+          if (selectedValues.includes(option.value) && option.value !== currentValue) {
+            option.disabled = true;
+          } else {
+            option.disabled = false;
+          }
+        });
+      });
+    }
+
+    selects.forEach(select => {
+      select.addEventListener('change', updateOptions);
+    });
+
+    // 初始化禁用狀態
+    updateOptions();
   </script>
 </body>
 
