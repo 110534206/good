@@ -1,274 +1,171 @@
 <!DOCTYPE html>
 <html lang="zh-Hant">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>通知</title>
-  <style>
-    @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC&display=swap');
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>實習通知</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC&display=swap');
 
-    /* Reset & base */
-    * {
-      box-sizing: border-box;
-    }
-    body {
-      font-family: 'Noto Sans TC', sans-serif;
-      background: #f5f7fa; /* 淺煙灰藍 */
-      margin: 0;
-      padding: 32px 24px;
-      color: #334155; /* 深煙灰藍 */
-      -webkit-font-smoothing: antialiased;
-      -moz-osx-font-smoothing: grayscale;
-    }
+body {
+  font-family: 'Noto Sans TC', sans-serif;
+  background: #f4f6f8;
+  margin: 0;
+  padding: 32px 24px;
+  color: #1f2937;
+}
 
-    h1 {
-      text-align: center;
-      font-weight: 900;
-      font-size: 3rem;
-      margin-bottom: 56px;
-      color: #475569; /* 煙藍灰 */
-      letter-spacing: 0.15em;
-      text-shadow: 0 2px 4px rgba(71, 85, 105, 0.2);
-    }
+header {
+  text-align: center;
+  margin-bottom: 40px;
+}
 
-    /* 跑馬燈容器 */
-    .marquee-container {
-      max-width: 820px;
-      margin: 0 auto 48px;
-      background: #64748b; /* 煙灰藍偏暗 */
-      color: #e0e7ff; /* 煙色淺藍霧感 */
-      border-radius: 16px;
-      overflow: hidden;
-      padding: 14px 32px;
-      box-shadow:
-        0 8px 24px rgba(100, 116, 139, 0.3),
-        inset 0 -4px 6px rgba(224, 231, 255, 0.15);
-      user-select: none;
-      border: 1.5px solid rgba(224, 231, 255, 0.3);
-      position: relative;
-    }
-    .marquee-text {
-      display: inline-block;
-      white-space: nowrap;
-      will-change: transform;
-      animation: marquee 30s linear infinite;
-      font-weight: 800;
-      font-size: 1.3rem;
-      line-height: 1.7;
-      color: #e0e7ff;
-      text-shadow: 0 1px 2px rgba(0,0,0,0.1);
-      letter-spacing: 0.03em;
-      transform: translateX(100%);
-      animation-play-state: running;
-    }
-    @keyframes marquee {
-      0% {
-        transform: translateX(100%);
-      }
-      100% {
-        transform: translateX(-100%);
-      }
-    }
+header h1 {
+  font-size: 2.6rem;
+  font-weight: 900;
+  color: #1f2937;
+}
 
-    /* 通知容器 */
-    .notification-container {
-      max-width: 820px;
-      margin: 0 auto;
-      background: #f9fafb; /* 柔和煙白 */
-      border-radius: 24px;
-      box-shadow:
-        0 14px 48px rgba(100, 116, 139, 0.12);
-      padding: 40px 56px;
-      transition: box-shadow 0.35s ease;
-      backdrop-filter: saturate(180%) blur(20px);
-      -webkit-backdrop-filter: saturate(180%) blur(20px);
-      border: 1px solid #d1d5db;
-    }
-    .notification-container:hover {
-      box-shadow:
-        0 18px 64px rgba(100, 116, 139, 0.25);
-    }
+.category-container {
+  max-width: 950px;
+  margin: 0 auto 40px;
+}
 
-    /* 單則通知 */
-    .notification {
-      border-left: 8px solid #475569; /* 煙藍灰 */
-      padding: 28px 36px 28px 32px;
-      margin-bottom: 36px;
-      background: #fefefe;
-      border-radius: 18px;
-      box-shadow:
-        inset 0 0 20px rgba(71, 85, 105, 0.08);
-      cursor: default;
-      transition: background 0.35s ease, box-shadow 0.35s ease;
-    }
-    .notification:hover {
-      background: #eef2ff;
-      box-shadow:
-        inset 0 0 28px rgba(71, 85, 105, 0.18);
-    }
-    .notification:last-child {
-      margin-bottom: 0;
-    }
+.category-title {
+  font-size: 1.7rem;
+  font-weight: 800;
+  margin-bottom: 16px;
+  color: #374151;
+  border-bottom: 3px solid #9ca3af;
+  padding-bottom: 6px;
+}
 
-    .title {
-      font-weight: 900;
-      font-size: 1.5rem;
-      color: #334155;
-      margin-bottom: 14px;
-      user-select: none;
-      letter-spacing: 0.025em;
-      text-shadow: 0 1px 2px rgba(51, 65, 85, 0.15);
-    }
+.notification-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+}
 
-    .meta {
-      display: flex;
-      justify-content: space-between;
-      font-size: 1rem;
-      color: #6b7280;
-      margin-bottom: 20px;
-      user-select: none;
-      font-weight: 700;
-      letter-spacing: 0.02em;
-    }
+.notification {
+  flex: 1 1 300px;
+  background: #fff;
+  border-radius: 16px;
+  padding: 20px;
+  box-shadow: 0 6px 18px rgba(0,0,0,0.08);
+  transition: transform 0.3s, box-shadow 0.3s;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
 
-    .source {
-      background: #475569; /* 煙藍灰 */
-      color: white;
-      padding: 6px 18px;
-      border-radius: 28px;
-      letter-spacing: 0.12em;
-      text-transform: uppercase;
-      font-size: 0.85rem;
-      box-shadow:
-        0 3px 8px rgba(71, 85, 105, 0.4);
-      align-self: center;
-      user-select: none;
-    }
+.notification:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 12px 24px rgba(0,0,0,0.15);
+}
 
-    .time {
-      font-style: italic;
-      font-weight: 400;
-      color: #9ca3af;
-      align-self: center;
-    }
+.title {
+  font-size: 1.3rem;
+  font-weight: 900;
+}
 
-    .content {
-      font-size: 1.1rem;
-      line-height: 1.8;
-      color: #334155;
-      white-space: pre-wrap;
-      user-select: text;
-      letter-spacing: 0.015em;
-    }
+.meta {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: #4b5563;
+}
 
-    /* 手機響應 */
-    @media (max-width: 600px) {
-      body {
-        padding: 20px 16px;
-      }
-      h1 {
-        font-size: 2.4rem;
-        margin-bottom: 36px;
-      }
-      .marquee-container {
-        padding: 12px 20px;
-        margin-bottom: 36px;
-      }
-      .marquee-text {
-        font-size: 1.1rem;
-      }
-      .notification-container {
-        padding: 28px 24px;
-      }
-      .notification {
-        padding: 22px 24px 22px 20px;
-        margin-bottom: 28px;
-      }
-      .title {
-        font-size: 1.3rem;
-      }
-      .meta {
-        flex-direction: column;
-        gap: 8px;
-      }
-      .source, .time {
-        align-self: flex-start;
-      }
-      .content {
-        font-size: 1rem;
-      }
-    }
-  </style>
+.source {
+  padding: 3px 10px;
+  border-radius: 12px;
+  font-size: 0.8rem;
+  color: #fff;
+  text-align: center;
+  min-width: 60px;
+}
+
+.source.老師 { background: #3b82f6; }
+.source.平台 { background: #10b981; }
+.source.學生 { background: #f97316; }
+
+.time {
+  font-style: italic;
+}
+
+.content {
+  font-size: 1rem;
+  line-height: 1.6;
+  color: #374151;
+}
+
+@media (max-width: 600px) {
+  body { padding: 20px 16px; }
+  header h1 { font-size: 2rem; margin-bottom: 30px; }
+  .notification { flex: 1 1 100%; padding: 16px; }
+  .title { font-size: 1.2rem; }
+  .meta { flex-direction: column; gap: 4px; }
+  .content { font-size: 0.95rem; }
+  .category-title { font-size: 1.4rem; }
+}
+</style>
 </head>
 <body>
-  <h1>通知</h1>
 
-  <div class="marquee-container" aria-label="重要通知跑馬燈">
-    <div class="marquee-text" id="marqueeText">
-      載入中...
-    </div>
-  </div>
+<header>
+  <h1>實習通知</h1>
+</header>
 
-  <div class="notification-container" id="notificationList">
-    <!-- 通知會動態插入這裡 -->
-  </div>
+<main id="mainContainer"></main>
 
-  <script>
-    // 重要通知陣列
-    const importantNotices = [
-      "系統維護通知：平台將於8月12日凌晨1點至4點進行系統維護，期間無法使用，敬請配合。",
-      "實習報告截止：請同學們務必於8月15日前繳交實習報告，逾期將影響成績。",
-      "實習面談安排：8月20日至22日進行實習面談，請依時段準時參加。"
-    ];
+<script>
+// 範例通知資料
+const notifications = [
+  { id: 1, title: "實習報告繳交截止提醒", source: "老師", time: "2025-08-15T23:59:00", content: "請同學們務必於8月15日前完成實習報告繳交，逾期將影響成績評定。" },
+  { id: 2, title: "實習系統維護通知", source: "平台", time: "2025-08-12T01:00:00", content: "系統將於8月12日凌晨1點至4點進行維護，期間暫停服務，敬請見諒。" },
+  { id: 3, title: "學生履歷上傳通知", source: "學生", time: "2025-09-08T10:00:00", content: "張三已上傳履歷，請確認。" },
+  { id: 4, title: "學生履歷上傳通知", source: "學生", time: "2025-09-08T10:05:00", content: "李四已上傳履歷，請確認。" }
+];
 
-    // 合併成跑馬燈訊息，中間用「｜」隔開
-    const marqueeMessage = importantNotices.join('  ｜  ');
+const categories = ["老師", "平台", "學生"];
+const mainContainer = document.getElementById("mainContainer");
 
-    // 設定跑馬燈文字內容
-    const marqueeTextEl = document.getElementById('marqueeText');
-    marqueeTextEl.textContent = marqueeMessage;
+// 分類顯示
+categories.forEach(category => {
+  const categoryDiv = document.createElement("div");
+  categoryDiv.className = "category-container";
+  categoryDiv.innerHTML = `<div class="category-title">${category}</div>`;
 
-    // 一般通知資料
-    const notifications = [
-      {
-        id: 1,
-        title: "老師：實習報告繳交截止提醒",
-        source: "老師",
-        time: "2025-08-10 09:00",
-        content: "請同學們務必於8月15日前完成實習報告繳交，逾期將影響成績評定。"
-      },
-      {
-        id: 2,
-        title: "平台：實習系統維護通知",
-        source: "平台",
-        time: "2025-08-09 18:00",
-        content: "系統將於8月12日凌晨1點至4點進行維護，期間暫停服務，敬請見諒。"
-      },
-      {
-        id: 3,
-        title: "老師：實習面談時間公告",
-        source: "老師",
-        time: "2025-08-08 14:30",
-        content: "請已報名實習的同學於8月20日至8月22日期間，依照時段參加面談。"
-      }
-    ];
+  const notificationContainer = document.createElement("div");
+  notificationContainer.className = "notification-container";
 
-    const container = document.getElementById("notificationList");
-    notifications.sort((a,b) => new Date(b.time) - new Date(a.time));
-
-    notifications.forEach(note => {
+  notifications
+    .filter(n => n.source === category)
+    .sort((a,b) => new Date(a.time) - new Date(b.time))
+    .forEach(note => {
       const div = document.createElement("div");
       div.className = "notification";
       div.innerHTML = `
         <div class="title">${note.title}</div>
         <div class="meta">
-          <span class="source">${note.source}</span>
-          <span class="time">${note.time}</span>
+          <span class="source ${note.source}">${note.source}</span>
+          <span class="time">${new Date(note.time).toLocaleString('zh-TW', { hour12: false })}</span>
         </div>
         <div class="content">${note.content}</div>
       `;
-      container.appendChild(div);
+      notificationContainer.appendChild(div);
     });
-  </script>
+
+  categoryDiv.appendChild(notificationContainer);
+  mainContainer.appendChild(categoryDiv);
+});
+</script>
+
 </body>
 </html>
+
+
+
+
+
+
