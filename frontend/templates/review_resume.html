@@ -26,7 +26,6 @@
       align-items: center;
     }
 
-    /* 頂端列內容 */
     .top-bar>.container {
       display: flex;
       justify-content: space-between;
@@ -83,24 +82,6 @@
       margin-top: 4px;
     }
 
-    /* Hero 區塊 */
-    header.hero {
-      position: relative;
-      width: 100%;
-      aspect-ratio: 3 / 1;
-      background-image: url('/static/images/title.png');
-      background-size: cover;
-      background-repeat: no-repeat;
-      background-position: center;
-      margin-top: 80px;
-      margin-bottom: 2rem;
-      border-radius: 0;
-      color: white;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
-
     body {
       background-color: #ffffff;
       font-family: "Noto Sans TC", sans-serif;
@@ -124,13 +105,6 @@
 
     /* 狀態標籤 */
     .status-badge {
-      font-size: 0.85em;
-      padding: 0.4em 0.7em;
-      border-radius: 0.5rem;
-    }
-
-    /* 按鈕群組 */
-    .status-badge {
       font-size: 0.9em;
       padding: 0.3em 0.6em;
       border-radius: 0.5rem;
@@ -140,38 +114,18 @@
 
     .status-badge.bg-success {
       color: #fff;
-      /* 完成 */
     }
 
     .status-badge.bg-danger {
       color: #fff;
-      /* 退件 */
     }
 
     .status-badge.bg-info {
       color: #fff;
-      /* 待審查 */
     }
 
     .status-badge.bg-secondary {
       color: #fff;
-      /* 預設 fallback */
-    }
-
-    /* 操作按鈕群組 */
-    .btn-group-sm>.btn {
-      font-size: 0.85rem;
-      padding: 0.25rem 0.6rem;
-    }
-
-    /* Modal 內文字區域 */
-    .modal textarea {
-      width: 100%;
-      resize: vertical;
-      font-size: 1rem;
-      padding: 0.5rem;
-      border-radius: 6px;
-      border: 1px solid #ccc;
     }
 
     /* 側邊選單 */
@@ -209,12 +163,6 @@
       border: none;
       color: white;
       cursor: pointer;
-      line-height: 1;
-      width: 2.5rem;
-      height: 2.5rem;
-      display: flex;
-      align-items: center;
-      justify-content: center;
     }
 
     #side-menu h2 {
@@ -244,8 +192,31 @@
     .btn-outline-secondary:hover {
       background-color: transparent;
       color: inherit;
-      border-color: rgb(26, 26, 26);
+      border-color: rgba(255, 255, 255, 0.15);
       box-shadow: none;
+    }
+
+    #noteViewer {
+      width: 100%;
+      height: 180px;
+      resize: vertical;
+      padding: 0.5rem;
+      font-size: 1rem;
+      line-height: 1.4;
+    }
+
+    #commentInput {
+      width: 100%;
+      height: 180px;
+      resize: vertical;
+      padding: 0.5rem;
+      font-size: 1rem;
+      line-height: 1.4;
+    }
+
+     .card h4.text-center {
+      color: #0066cc;
+      font-weight: bold;  
     }
   </style>
 </head>
@@ -271,18 +242,24 @@
 
   <div class="container my-5 pt-1">
     <div class="card shadow-sm p-4">
-      <!-- 篩選工具列 -->
-      <h4 class="mb-3 text-center">📄 審核學生履歷</h4>
-      <div class="d-flex justify-content-between mb-3 flex-wrap gap-2">
-        <div class="d-flex gap-2">
+      <h4 class="mb-4 text-center">審核學生履歷</h4>
+      <!-- 篩選 + 搜尋 -->
+      <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+        <div class="d-flex gap-2 flex-wrap">
+          <select id="departmentFilter" class="form-select form-select-sm w-auto">
+            <option value="">所有科別</option>
+          </select>
+          <select id="classFilter" class="form-select form-select-sm w-auto">
+            <option value="">所有班級</option>
+          </select>
           <select id="statusFilter" class="form-select form-select-sm w-auto">
             <option value="">所有狀態</option>
             <option value="uploaded">待審查</option>
             <option value="approved">完成</option>
             <option value="rejected">退件</option>
           </select>
-          <input type="text" id="searchBox" class="form-control form-control-sm w-auto" placeholder="搜尋帳號或檔名">
         </div>
+        <input type="text" id="searchBox" class="form-control form-control-sm w-auto" placeholder="搜尋帳號/檔案" />
       </div>
 
       <!-- 表格 -->
@@ -291,25 +268,35 @@
           <thead>
             <tr>
               <th>學生帳號</th>
+              <th>姓名</th>
               <th>上傳時間</th>
               <th>檔案名稱</th>
               <th>狀態</th>
-              <th>留言</th>
-              <th>備註</th>
+              <th>老師留言</th>
+              <th>學生備註</th>
               <th>操作</th>
             </tr>
           </thead>
           <tbody id="resumeTableBody">
             <tr>
-              <td colspan="7" class="text-muted text-center">載入中...</td>
+              <td colspan="8" class="text-muted text-center">載入中...</td>
             </tr>
           </tbody>
         </table>
       </div>
+
+      <!-- 分頁器 -->
+      <nav>
+        <ul class="pagination justify-content-center mt-3" id="pagination"></ul>
+      </nav>
+
+      </tbody>
+      </table>
     </div>
   </div>
+  </div>
 
-  <!-- 留言 Modal -->
+  <!-- Modal 區塊 (留言/備註) -->
   <div class="modal fade" id="commentModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-lg modal-dialog-centered">
       <div class="modal-content">
@@ -328,12 +315,11 @@
     </div>
   </div>
 
-  <!-- 備註 Modal -->
   <div class="modal fade" id="noteModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-lg modal-dialog-centered">
       <div class="modal-content">
         <div class="modal-header">
-          <h5 class="modal-title">學生備註</h5>
+          <h5 class="modal-title">查看備註</h5>
           <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
         </div>
         <div class="modal-body">
@@ -344,8 +330,8 @@
   </div>
 
   <!-- 側邊選單 -->
-  <nav id="side-menu" aria-hidden="true" role="navigation" aria-label="功能選單">
-    <button id="close-btn" aria-label="關閉功能選單">×</button>
+  <nav id="side-menu">
+    <button id="close-btn">×</button>
     <h2>功能選單</h2>
     <a href="/teacher_home">首頁</a>
     <a href="/profile">個人資料</a>
@@ -357,38 +343,78 @@
 
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
   <script>
+
     let allResumes = [];
     let currentResumeId = null;
+    let currentPage = 1;
+    const rowsPerPage = 10;
 
     document.addEventListener("DOMContentLoaded", () => {
+      // 取得所有學生履歷
       fetch("/api/get_all_students_resumes")
         .then(res => res.json())
         .then(data => {
-          if (!data.success) {
-            document.getElementById("resumeTableBody").innerHTML =
-              `<tr><td colspan="7" class="text-center text-danger">無法載入履歷資料</td></tr>`;
-            return;
+          if (data.success) {
+            allResumes = data.resumes;
+            populateFilters(allResumes);
+            applyFilters();
+          } else {
+            alert("載入資料失敗");
           }
-          allResumes = data.resumes || [];
-          renderTable(allResumes);
         });
 
+      // 綁定篩選事件
+      document.getElementById("departmentFilter").addEventListener("change", applyFilters);
+      document.getElementById("classFilter").addEventListener("change", applyFilters);
       document.getElementById("statusFilter").addEventListener("change", applyFilters);
       document.getElementById("searchBox").addEventListener("input", applyFilters);
-
-      document.getElementById("saveCommentBtn").addEventListener("click", saveComment);
     });
 
+    function populateFilters(data) {
+      const deptSet = new Set();
+      const classSet = new Set();
+
+      data.forEach(r => {
+        if (r.department) deptSet.add(r.department);
+        if (r.className) classSet.add(r.className);
+      });
+
+      const deptSelect = document.getElementById("departmentFilter");
+      const classSelect = document.getElementById("classFilter");
+
+      deptSelect.innerHTML = `<option value="">所有科別</option>`;
+      classSelect.innerHTML = `<option value="">所有班級</option>`;
+
+      Array.from(deptSet).sort().forEach(d => {
+        const option = document.createElement("option");
+        option.value = d;
+        option.textContent = d;
+        deptSelect.appendChild(option);
+      });
+
+      Array.from(classSet).sort().forEach(c => {
+        const option = document.createElement("option");
+        option.value = c;
+        option.textContent = c;
+        classSelect.appendChild(option);
+      });
+    }
+
     function applyFilters() {
-      const statusValue = document.getElementById("statusFilter").value;
-      const searchValue = document.getElementById("searchBox").value.toLowerCase();
+      const dept = document.getElementById("departmentFilter").value.trim();
+      const cls = document.getElementById("classFilter").value.trim();
+      const status = document.getElementById("statusFilter").value.trim();
+      const keyword = document.getElementById("searchBox").value.trim().toLowerCase();
 
       const filtered = allResumes.filter(r => {
-        const matchStatus = statusValue ? r.status === statusValue : true;
-        const matchSearch =
-          r.username.toLowerCase().includes(searchValue) ||
-          r.original_filename.toLowerCase().includes(searchValue);
-        return matchStatus && matchSearch;
+        const matchesDept = !dept || r.department === dept;
+        const matchesClass = !cls || r.className === cls;
+        const matchesStatus = !status || r.status === status;
+        const matchesKeyword =
+          r.username.toLowerCase().includes(keyword) ||
+          r.original_filename.toLowerCase().includes(keyword);
+
+        return matchesDept && matchesClass && matchesStatus && matchesKeyword;
       });
 
       renderTable(filtered);
@@ -399,61 +425,85 @@
       tbody.innerHTML = "";
 
       if (resumes.length === 0) {
-        tbody.innerHTML =
-          `<tr><td colspan="7" class="text-center text-muted">目前沒有資料</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="8" class="text-center text-muted">目前沒有資料</td></tr>`;
+        document.getElementById("pagination").innerHTML = "";
         return;
       }
 
-      resumes.forEach(r => {
+      const start = (currentPage - 1) * rowsPerPage;
+      const end = start + rowsPerPage;
+      const pageData = resumes.slice(start, end);
+
+      pageData.forEach(r => {
         const row = `
-          <tr>
-            <td>${r.username}</td>
-            <td>${new Date(r.upload_time).toLocaleString()}</td>
-            <td>${r.original_filename}</td>
-            <td><span class="status-badge bg-${statusColor(r.status)}">${mapStatus(r.status)}</span></td>
-           <td>
-<button class="btn btn-sm btn-outline-secondary ${r.comment ? 'text-success' : ''}"
-    onclick="openCommentModal(${r.id}, '${escapeHtml(r.comment || '')}')">
-    ${r.comment ? '已填寫' : '未填寫'}
-  </button>
-</td>
-<td>
-<button class="btn btn-sm btn-outline-secondary ${r.note ? 'text-success' : ''}"
-    onclick="openNoteModal('${escapeHtml(r.note || '無內容')}')">
-    ${r.note ? '請查看' : '無內容'}
-  </button>
-</td>
-            <td>
-              <div class="btn-group btn-group-sm">
-                <a href="/api/download_resume?resume_id=${r.id}" class="btn btn-outline-primary">下載</a>
-                <button class="btn btn-outline-danger" onclick="rejectResume(${r.id})">退件</button>
-                <button class="btn btn-outline-success" onclick="approveResume(${r.id})">完成</button>
-              </div>
-            </td>
-          </tr>
-        `;
+      <tr>
+        <td>${r.username}</td>
+        <td>${escapeHtml(r.name || '')}</td>
+        <td>${r.upload_time}</td>
+        <td>${escapeHtml(r.original_filename)}</td>
+        <td><span class="status-badge bg-${statusColor(r.status)}">${mapStatus(r.status)}</span></td>
+        <td>
+          <button class="btn btn-sm btn-outline-secondary ${r.comment ? 'text-success' : ''}"
+            onclick="openCommentModal(${r.id}, '${escapeHtml(r.comment || '')}')">
+            ${r.comment ? '已填寫' : '未填寫'}
+          </button>
+        </td>
+        <td>
+          <button class="btn btn-sm btn-outline-secondary ${r.note ? 'text-success' : ''}"
+            onclick="openNoteModal('${escapeHtml(r.note || '無內容')}')">
+            ${r.note ? '請查看' : '無內容'}
+          </button>
+        </td>
+        <td>
+          <div class="btn-group btn-group-sm">
+            <a href="/api/download_resume?resume_id=${r.id}" class="btn btn-outline-primary">下載</a>
+            <button class="btn btn-outline-danger" onclick="rejectResume(${r.id})">退件</button>
+            <button class="btn btn-outline-success" onclick="approveResume(${r.id})">完成</button>
+          </div>
+        </td>
+      </tr>`;
         tbody.innerHTML += row;
       });
+
+      renderPagination(resumes.length);
     }
 
-    // 狀態顏色
+    function renderPagination(totalItems) {
+      const totalPages = Math.ceil(totalItems / rowsPerPage);
+      const pagination = document.getElementById("pagination");
+      pagination.innerHTML = "";
+
+      if (totalPages <= 1) return;
+
+      for (let i = 1; i <= totalPages; i++) {
+        const li = document.createElement("li");
+        li.className = `page-item ${i === currentPage ? "active" : ""}`;
+        li.innerHTML = `<a class="page-link" href="#">${i}</a>`;
+        li.addEventListener("click", (e) => {
+          e.preventDefault();
+          currentPage = i;
+          applyFilters();
+        });
+        pagination.appendChild(li);
+      }
+    }
+
     function statusColor(status) {
-      return {
-        uploaded: 'info',
-        approved: 'success',
-        rejected: 'danger'
-      }[status] || 'secondary';
+      return { uploaded: 'info', approved: 'success', rejected: 'danger' }[status] || 'secondary';
     }
 
     function mapStatus(status) {
-      return {
-        uploaded: '待審查',
-        approved: '完成',
-        rejected: '退件'
-      }[status] || '未知';
+      return { uploaded: '待審查', approved: '完成', rejected: '退件' }[status] || '未知';
     }
 
-    // 留言 Modal
+    function escapeHtml(text) {
+      return text.replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+    }
+
     function openCommentModal(id, comment) {
       currentResumeId = id;
       document.getElementById("commentInput").value = comment;
@@ -479,13 +529,11 @@
         });
     }
 
-    // 備註 Modal
     function openNoteModal(note) {
       document.getElementById("noteViewer").value = note;
       new bootstrap.Modal(document.getElementById("noteModal")).show();
     }
 
-    // 操作
     function rejectResume(resumeId) {
       if (!confirm("確定要將此履歷標記為退件？")) return;
       fetch(`/api/reject_resume?resume_id=${resumeId}`, { method: "POST" })
@@ -514,24 +562,15 @@
         });
     }
 
-    function escapeHtml(text) {
-      return text.replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;")
-        .replace(/'/g, "&#039;");
-    }
-  </script>
-  <!-- JS 控制開關 -->
-  <script>
+    // 側邊選單控制
     document.getElementById('menu-btn').addEventListener('click', () => {
       document.getElementById('side-menu').classList.add('open');
     });
-
     document.getElementById('close-btn').addEventListener('click', () => {
       document.getElementById('side-menu').classList.remove('open');
     });
   </script>
+
 </body>
 
 </html>

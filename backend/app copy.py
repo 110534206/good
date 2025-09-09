@@ -157,6 +157,8 @@ def login():
     username = data.get("username")
     password = data.get("password")
 
+    print(f"登入嘗試: username={username}")  # 調試信息
+
     if not username or not password:
         return jsonify({"success": False, "message": "帳號或密碼不得為空"}), 400
 
@@ -164,107 +166,43 @@ def login():
     cursor = conn.cursor(dictionary=True)
 
     try:
-        # 找出所有同帳號的角色 (可能有 teacher + director)
+        # 查詢所有匹配用戶名的用戶
         cursor.execute("SELECT * FROM users WHERE username = %s", (username,))
         users = cursor.fetchall()
+        print(f"找到 {len(users)} 個用戶")  # 調試信息
 
-        if not users:
-            return jsonify({"success": False, "message": "帳號不存在"}), 404
-
+        # 檢查密碼並收集所有匹配的角色
         matching_roles = []
-        matched_user = None  
+        matched_user = None  # 用來儲存符合的 user
 
-        # 驗證密碼
         for user in users:
+            print(f"檢查用戶: {user['username']}, role: {user['role']}")  # 調試信息
             if check_password_hash(user["password"], password):
                 matching_roles.append(user["role"])
-                matched_user = user  
+                matched_user = user  # 儲存符合的 user
 
-        if not matched_user:
-            return jsonify({"success": False, "message": "帳號或密碼錯誤"}), 401
+        if matched_user:
+            # 設定登入 session
+            session["username"] = matched_user["username"]
+            session["role"] = matched_user["role"]
+            session["user_id"] = matched_user["id"]  # ✅ 關鍵：設定 user_id
 
-        # 設定 session
-        session["username"] = matched_user["username"]
-        session["user_id"] = matched_user["id"]
-
-        # 如果角色超過 1 個 → 跳 login-confirm 頁面
-        if len(matching_roles) > 1:
+            print(f"密碼驗證成功，角色: {matching_roles}")  # 調試信息
             return jsonify({
                 "success": True,
                 "username": matched_user["username"],
-                "roles": matching_roles,
-                "redirect": "/login-confirm"
+                "roles": matching_roles
             })
-
-        # 只有一個角色 → 直接判斷導向
-        single_role = matching_roles[0]
-        session["role"] = single_role  
-
-        redirect_page = "/"
-
-        if single_role == "student":
-            redirect_page = "/student_home"
-
-        elif single_role == "teacher":
-            # 檢查是否為班導
-            cursor.execute("""
-                SELECT 1 FROM classes_teacher 
-                WHERE teacher_id = %s AND role = '班導師'
-            """, (matched_user["id"],))
-            is_homeroom = cursor.fetchone()
-
-            if is_homeroom:
-                redirect_page = "/class_teacher_home"
-            else:
-                redirect_page = "/teacher_home"
-
-        elif single_role == "director":
-            redirect_page = "/director_home"
-
-        elif single_role == "admin":
-            redirect_page = "/admin_home"
-
-        return jsonify({
-            "success": True,
-            "username": matched_user["username"],
-            "roles": matching_roles,
-            "redirect": redirect_page
-        })
+        else:
+            print("密碼驗證失敗")  # 調試信息
+            return jsonify({"success": False, "message": "帳號或密碼錯誤"}), 401
 
     except Exception as e:
-        print(f"登入錯誤: {e}")
-        return jsonify({"success": False, "message": "伺服器錯誤"}), 500
+        print(f"登入錯誤: {e}")  # 調試信息
+        return jsonify({"success": False, "message": "登入失敗"}), 500
     finally:
         cursor.close()
         conn.close()
-
-# -------------------------
-# 班導首頁
-# -------------------------
-@app.route('/class_teacher_home')
-def class_teacher_home():
-    # 確認已登入
-    if "username" not in session or session.get("role") != "teacher":
-        return redirect(url_for("login_page"))
-
-    # 檢查是否為班導
-    conn = get_db()
-    cursor = conn.cursor()
-    try:
-        cursor.execute("""
-            SELECT 1 FROM classes_teacher 
-            WHERE teacher_id = %s AND role = '班導師'
-        """, (session["user_id"],))
-        is_homeroom = cursor.fetchone()
-
-        if not is_homeroom:
-            # 如果不是班導，導回老師主頁
-            return redirect(url_for("teacher_home"))
-    finally:
-        cursor.close()
-        conn.close()
-
-    return render_template("class_teacher_home.html")
 
 # -------------------------
 # API - 註冊頁面    
@@ -285,10 +223,9 @@ def get_all_users():
             SELECT 
             u.id, u.username, u.name, u.email, u.role, u.class_id,
             c.name AS class_name,
-            c.department,
-            u.created_at
+            c.department
             FROM users u
-            LEFT JOIN classes c ON u.class_id = c.id
+            LEFT JOIN classes c ON u.class_id = c.id;
             ORDER BY u.created_at DESC
         """)
         users = cursor.fetchall()
@@ -1050,6 +987,42 @@ def reject_resume():
     return jsonify({"success": True, "message": "履歷已標記為拒絕"})
 
 # -------------------------
+# API - 提交志願
+# -------------------------
+@app.route('/submit_preferences', methods=['POST'])
+def submit_preferences():
+    student_id = request.form.get('student_id')
+    preferences = []
+    
+    for i in range(1, 6):
+        company_id = request.form.get(f'preference_{i}')
+        if company_id:
+            preferences.append((student_id, i, company_id, datetime.now()))
+
+    try:
+        conn = get_db()
+        cursor = conn.cursor()
+
+        # 刪除學生舊資料
+        cursor.execute("DELETE FROM student_preferences WHERE student_id = %s", (student_id,))
+        conn.commit()
+
+        # 插入新志願
+        cursor.executemany("""
+            INSERT INTO student_preferences (student_id, preference_order, company_id, submitted_at)
+            VALUES (%s, %s, %s, %s)
+        """, preferences)
+
+        conn.commit()
+        cursor.close()
+        conn.close()
+
+        return render_template("fill_preferences.html", message="✅ 志願序已成功送出", companies=[])  # or redirect
+    except Exception as e:
+        print("志願儲存錯誤：", e)
+        return render_template("fill_preferences.html", message="❌ 發生錯誤，請稍後再試", companies=[])
+
+# -------------------------
 # 上傳公司
 # -------------------------
 @app.route('/upload_company', methods=['GET', 'POST'])
@@ -1176,71 +1149,61 @@ def api_approve_company():
         cursor.close()
         conn.close()
 
+# -------------------------
+# 填寫志願
+# -------------------------
 @app.route('/fill_preferences', methods=['GET', 'POST'])
 def fill_preferences():
-    # 1. 登入檢查
-    if 'user_id' not in session or session.get('role') != 'student':
-        return redirect(url_for('login'))
+    # 檢查是否登入
+    if 'user_id' not in session:
+        return redirect(url_for('login'))  # 若沒登入導向登入頁
 
-    student_id = session['user_id']
+    student_id = session['user_id']  # 從 session 拿學生ID
 
     conn = get_db()
     cursor = conn.cursor(dictionary=True)
 
-    message = None
-
     if request.method == 'POST':
+
         preferences = []
-        for i in range(1, 6):
+        for i in range(1, 6):  
             company_id = request.form.get(f'preference_{i}')
             if company_id:
                 preferences.append((student_id, i, company_id, datetime.now()))
 
         try:
-            # 刪除舊志願
+            # 先刪除舊的志願資料（避免重複）
             cursor.execute("DELETE FROM student_preferences WHERE student_id = %s", (student_id,))
             conn.commit()
 
-            # 新增志願
-            if preferences:
-                cursor.executemany("""
-                    INSERT INTO student_preferences (student_id, preference_order, company_id, submitted_at)
-                    VALUES (%s, %s, %s, %s)
-                """, preferences)
-                conn.commit()
-                message = "✅ 志願序已成功送出"
-            else:
-                message = "⚠️ 未選擇任何志願，公司清單已重置"
+            # 批次插入新的志願
+            cursor.executemany("""
+                INSERT INTO student_preferences (student_id, preference_order, company_id, submitted_at)
+                VALUES (%s, %s, %s, %s)
+            """, preferences)
+
+            conn.commit()
+            message = "志願已成功送出！"
         except Exception as e:
             print("寫入志願錯誤：", e)
-            message = "❌ 發生錯誤，請稍後再試"
+            message = "送出失敗，請稍後再試"
+        finally:
+            cursor.close()
+            conn.close()
 
-    # 不管是 GET 還是 POST，都要載入公司列表及該學生已填的志願（以便前端顯示）
+        return render_template('fill_preferences.html', message=message, companies=[])
+
+    # GET：撈出核准公司清單
     cursor.execute("""
-        SELECT id, company_name FROM internship_companies WHERE status = 'approved'
+        SELECT id, company_name 
+        FROM internship_companies 
+        WHERE status = 'approved'
     """)
     companies = cursor.fetchall()
-
-    cursor.execute("""
-        SELECT preference_order, company_id FROM student_preferences WHERE student_id = %s ORDER BY preference_order
-    """, (student_id,))
-    prefs = cursor.fetchall()
-
     cursor.close()
     conn.close()
 
-    # 把 prefs 轉成純 company_id 的 list，index 對應志願順序 -1
-    submitted_preferences = [None] * 5  # 預設 5 個志願空位
-    for pref in prefs:
-        order = pref['preference_order']
-        company_id = pref['company_id']
-        if 1 <= order <= 5:
-            submitted_preferences[order - 1] = company_id
-
-    return render_template('fill_preferences.html', 
-                           companies=companies, 
-                           submitted_preferences=submitted_preferences,
-                           message=message)
+    return render_template('fill_preferences.html', companies=companies)
 
 # -------------------------
 # API - 選擇角色
@@ -1282,40 +1245,15 @@ def logout_page():
 
 @app.route('/index')
 def index_page():
-    role = session.get("role")
-    user_id = session.get("user_id")
-
-    if not role:
-        return redirect(url_for("login_page"))
-
+    role = request.args.get('role')
     if role == "student":
         return redirect('/student_home')
-
     elif role == "teacher":
-        # 再檢查是否為班導
-        conn = get_db()
-        cursor = conn.cursor()
-        cursor.execute("""
-            SELECT 1 FROM classes_teacher 
-            WHERE teacher_id = %s AND role = '班導師'
-        """, (user_id,))
-        is_homeroom = cursor.fetchone()
-        cursor.close()
-        conn.close()
-
-        if is_homeroom:
-            return redirect('/class_teacher_home')
-        else:
-            return redirect('/teacher_home')
-
+        return redirect('/teacher_home')
     elif role == "director":
         return redirect('/director_home')
-
-    elif role == "admin":
-        return redirect('/admin_home')
-
-    return redirect(url_for("login_page"))
-
+    else:
+        return redirect('/student_home') 
 
 @app.route('/student_home')
 def student_home():

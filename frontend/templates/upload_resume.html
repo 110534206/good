@@ -111,6 +111,11 @@
       box-shadow: 0 0 12px rgba(0, 0, 0, 0.05);
     }
 
+    .card h4.text-center {
+      color: #0066cc;
+      font-weight: bold;  
+    }
+
     .container {
       max-width: 1200px;
       margin: auto;
@@ -319,7 +324,7 @@
   <div class="container my-5">
     <!-- 上傳區塊 -->
     <div class="card p-4 mb-4">
-      <h4 class="mb-3 text-center">📄 上傳履歷</h4>
+      <h4 class="mb-3 text-center">上傳履歷</h4>
       <div id="resumeFileDrop">拖曳檔案至此或點擊選擇（限 PDF / Word，最大 5MB）</div>
       <input type="file" id="resumeFile" accept=".pdf,.doc,.docx" hidden />
       <div class="mt-3 d-flex justify-content-between align-items-center">
@@ -333,7 +338,8 @@
     <div class="btn-group mb-3 w-100" role="group">
       <button class="btn btn-outline-secondary active" onclick="filterStatus('all', this)">全部</button>
       <button class="btn btn-outline-info" id="uploadedCountBtn" onclick="filterStatus('uploaded', this)">已上傳</button>
-      <button class="btn btn-outline-success" id="approvedCountBtn"onclick="filterStatus('approved', this)">審查完成</button>
+      <button class="btn btn-outline-success" id="approvedCountBtn"
+        onclick="filterStatus('approved', this)">審查完成</button>
       <button class="btn btn-outline-danger" id="rejectedCountBtn" onclick="filterStatus('rejected', this)">已退件</button>
     </div>
 
@@ -345,8 +351,8 @@
             <th>上傳時間</th>
             <th>檔案名稱</th>
             <th>狀態</th>
-            <th>留言</th>
-            <th>備註</th>
+            <th>老師留言</th>
+            <th>學生備註</th>
             <th>操作</th>
           </tr>
         </thead>
@@ -489,7 +495,7 @@
       }
       filtered.forEach(r => {
         // 留言欄：學生可查看，不能編輯
-       const commentView = ` 
+        const commentView = ` 
     <div class="view-text" onclick="showCommentEditor(this, ${r.id})" style="cursor:pointer;">
       <span class="${r.comment?.trim() ? '' : 'text-muted'}">${r.comment?.trim() ? '請查看' : '無內容'}</span>
     </div>

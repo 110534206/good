@@ -40,7 +40,6 @@
       align-items: center;
     }
 
-    /* 頂端列內容 */
     .top-bar>.container {
       display: flex;
       justify-content: space-between;
@@ -97,7 +96,6 @@
       margin-top: 6px;
     }
 
-    /* Hero 區塊 */
     header.hero {
       position: relative;
       width: 100%;
@@ -108,8 +106,6 @@
       background-position: center;
       margin-top: 80px;
       margin-bottom: 2rem;
-      border-radius: 0;
-      color: white;
       display: flex;
       align-items: center;
       justify-content: center;
@@ -121,26 +117,29 @@
       margin-bottom: 3rem;
     }
 
-    .page-title {
-      text-align: center;
-      max-width: 1200px;
-      margin: 0 auto 3rem auto;
-    }
-
-    /* 用戶管理區域 */
+    /* 表單樣式 */
     form {
-      max-width: 400px;
+      max-width: 600px;
       margin: auto;
       background: #fff;
-      padding: 20px;
+      padding: 40px;
       border-radius: 10px;
-      box-shadow: 0 0 10px rgba(0,0,0,0.1);
+      box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+      margin-top: 50px;
+    }
+
+    .form-title {
+      font-weight: bold;
+      color: #0066cc;
+      text-align: center;
+      margin: 0 auto 3rem auto;
+      max-width: 1200px;
     }
 
     label {
       font-weight: bold;
       display: block;
-      margin-top: 15px;
+      margin-top: 20px;
     }
 
     select {
@@ -165,6 +164,18 @@
 
     button:hover {
       background-color: #0255a9;
+    }
+
+    #editBtn {
+      background-color: #f2f2f2;
+      color: #333;
+      border: 1px solid #999;
+      font-weight: bold;
+    }
+
+    #editBtn:hover {
+      background-color: #ddd;
+      color: black;
     }
 
     /* 側邊選單 */
@@ -202,7 +213,6 @@
       border: none;
       color: white;
       cursor: pointer;
-      line-height: 1;
       width: 2.5rem;
       height: 2.5rem;
       display: flex;
@@ -211,27 +221,73 @@
     }
 
     #side-menu h2 {
-      width: 100%;
       margin-bottom: 1.5rem;
-      font-weight: 700;
       font-size: 1.5rem;
-      text-align: left;
+      font-weight: bold;
     }
 
     #side-menu a {
-      display: block;
-      width: 100%;
-      padding: 0.5rem 0;
-      font-size: 1.1rem;
       color: #ddd;
       text-decoration: none;
-      border-radius: 4px;
-      transition: background-color 0.2s ease;
+      padding: 0.5rem 0;
+      width: 100%;
+      display: block;
+      transition: 0.2s;
     }
 
     #side-menu a:hover {
       background-color: rgba(255, 255, 255, 0.15);
       color: white;
+    }
+
+    /* Toast 浮動通知樣式 */
+    #toast {
+      visibility: hidden;
+      min-width: 250px;
+      background-color: #4CAF50;
+      /* 綠色背景 */
+      color: white;
+      text-align: center;
+      border-radius: 8px;
+      padding: 16px;
+      position: fixed;
+      z-index: 1500;
+      left: 50%;
+      bottom: 30px;
+      transform: translateX(-50%);
+      font-weight: bold;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+      opacity: 0;
+      transition: opacity 0.5s ease, visibility 0.5s;
+    }
+
+    #toast.show {
+      visibility: visible;
+      opacity: 1;
+    }
+
+    #toast {
+      visibility: hidden;
+      min-width: 250px;
+      background-color: #4CAF50;
+      color: white;
+      text-align: center;
+      border-radius: 8px;
+      padding: 16px;
+      position: fixed;
+      z-index: 1500;
+      left: 50%;
+      bottom: 30px;
+      transform: translateX(-50%);
+      font-weight: bold;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+      opacity: 0;
+      transition: opacity 0.5s ease, visibility 0.5s;
+    }
+
+    #toast.show {
+      visibility: visible;
+      opacity: 1;
     }
   </style>
 </head>
@@ -242,6 +298,7 @@
     <div class="container">
       <div class="top-bar-left">
         <div id="menu-btn" title="選單" role="button" tabindex="0">
+          <div id="toast"></div>
           <span></span><span></span><span></span>
         </div>
       </div>
@@ -255,18 +312,26 @@
     </div>
   </div>
 
-  <!-- 表單內容 -->
-  <form method="POST" action="/submit_preferences" id="preferencesForm">
+  <!-- Toast 通知容器 -->
+  <div id="toast"></div>
+
+  <!-- 志願表單 -->
+  <form method="POST" action="/fill_preferences" id="preferencesForm">
+    <h2 class="form-title">請填寫實習公司志願序</h2>
     {% for i in range(1, 6) %}
-      <label for="preference_{{ i }}">第 {{ i }} 志願</label>
-      <select id="preference_{{ i }}" class="preference-select" name="preference_{{ i }}" required>
-        <option value="">-- 請選擇實習公司 --</option>
-        {% for company in companies %}
-          <option value="{{ company['id'] }}">{{ company['company_name'] }}</option>
-        {% endfor %}
-      </select>
+    <label for="preference_{{ i }}">第 {{ i }} 志願</label>
+    <select id="preference_{{ i }}" class="preference-select" name="preference_{{ i }}" required>
+      <option value="">-- 請選擇實習公司 --</option>
+      {% for company in companies %}
+      <option value="{{ company['id'] }}" {% if submitted_preferences and submitted_preferences[i-1]==company['id'] %}
+        selected {% endif %}>
+        {{ company['company_name'] }}
+      </option>
+      {% endfor %}
+    </select>
     {% endfor %}
-    <button type="submit">送出志願</button>
+    <button type="submit" id="submitBtn">送出志願</button>
+    <button type="button" id="editBtn" style="display:none;">修改</button>
   </form>
 
   <!-- 側邊選單 -->
@@ -281,43 +346,37 @@
     <a href="/notifications">通知</a>
   </nav>
 
-  <!-- JS 控制開關及志願序選項互斥 -->
+  <!-- JS 控制側邊選單開關及志願序選項互斥 -->
   <script>
     // 側邊選單開關
     document.getElementById('menu-btn').addEventListener('click', () => {
       document.getElementById('side-menu').classList.add('open');
+      document.getElementById('side-menu').setAttribute('aria-hidden', 'false');
     });
 
     document.getElementById('close-btn').addEventListener('click', () => {
       document.getElementById('side-menu').classList.remove('open');
+      document.getElementById('side-menu').setAttribute('aria-hidden', 'true');
     });
 
-    // 禁止志願序重複選擇同一間公司
     const selects = document.querySelectorAll('.preference-select');
+    const submitBtn = document.getElementById('submitBtn');
+    const editBtn = document.getElementById('editBtn');
+    const toast = document.getElementById('toast');
 
     function updateOptions() {
-      // 先收集所有已選擇的公司 id
       const selectedValues = Array.from(selects)
         .map(s => s.value)
         .filter(val => val !== '');
 
       selects.forEach(select => {
         const currentValue = select.value;
-
-        // 遍歷每個 option
         Array.from(select.options).forEach(option => {
           if (option.value === '') {
-            // "-- 請選擇實習公司 --" 永遠可選
             option.disabled = false;
             return;
           }
-
-          // 如果該 option 被選擇且不是目前 select 的值，禁用
-          if (selectedValues.includes(option.value) && option.value !== currentValue) {
-            option.disabled = true;
-          } else {
-            option.disabled = false;
-          }
+          option.disabled = selectedValues.includes(option.value) && option.value !== currentValue;
         });
       });
     }
@@ -326,8 +385,32 @@
       select.addEventListener('change', updateOptions);
     });
 
-    // 初始化禁用狀態
     updateOptions();
+
+    function showToast(message) {
+      toast.textContent = message;
+      toast.classList.add('show');
+      setTimeout(() => {
+        toast.classList.remove('show');
+      }, 3000);
+    }
+
+    editBtn.addEventListener('click', () => {
+      selects.forEach(select => select.disabled = false);
+      submitBtn.style.display = 'block';
+      editBtn.style.display = 'none';
+      updateOptions();
+    });
+
+    // ✅ 從後端接收 message
+    let toastMessage = {{ message | tojson | safe if message else 'null' }};
+
+    if (toastMessage) {
+      selects.forEach(select => select.disabled = true);
+      submitBtn.style.display = 'none';
+      editBtn.style.display = 'block';
+      showToast(toastMessage);
+    }
   </script>
 </body>
 

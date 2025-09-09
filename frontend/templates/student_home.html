@@ -241,6 +241,57 @@
       background-color: rgba(255, 255, 255, 0.15);
       color: white;
     }
+
+    /* 公告輪播樣式 */
+    #announcement-carousel {
+      max-width: 1200px;
+      margin: 0 auto 2rem auto;
+      position: relative;
+      padding: 1rem 3rem;
+      background-color: #f0f8ff;
+      font-weight: 600;
+      font-size: 1.2rem;
+      display: flex;
+      align-items: center;
+      color: #004080;
+      justify-content: center;
+      min-height: 60px;
+      user-select: none;
+    }
+
+    #announcement-carousel button {
+      position: absolute;
+      top: 50%;
+      transform: translateY(-50%);
+      background: none;
+      border: none;
+      font-size: 2rem;
+      font-weight: bold;
+      color: #0066cc;
+      cursor: pointer;
+      user-select: none;
+      padding: 0;
+      width: 40px;
+      height: 40px;
+      line-height: 40px;
+      text-align: center;
+      border-radius: 50%;
+      transition: background-color 0.3s ease;
+    }
+
+    #announcement-carousel button:hover {
+      background-color: #0066cc;
+      color: white;
+    }
+
+    #announcement-prev {
+      left: 10px;
+    }
+
+    #announcement-next {
+      right: 10px;
+    }
+
   </style>
 </head>
 
@@ -266,6 +317,13 @@
   <!-- Hero 區塊 -->
   <div class="container">
     <header class="hero"></header>
+
+    <!-- 新增公告輪播 -->
+    <div id="announcement-carousel" role="region" aria-live="polite" aria-label="最新公告">
+      <button id="announcement-prev" aria-label="上一則公告">&#8592;</button>
+      <div id="announcement-content"></div>
+      <button id="announcement-next" aria-label="下一則公告">&#8594;</button>
+    </div>
   </div>
 
   <!-- 主內容 -->
@@ -309,8 +367,9 @@
     <a href="/notifications">通知</a>
   </nav>
 
-  <!-- JS 控制開關 -->
+  <!-- JS 控制開關與公告輪播 -->
   <script>
+    // 側邊選單開關
     document.getElementById('menu-btn').addEventListener('click', () => {
       document.getElementById('side-menu').classList.add('open');
     });
@@ -318,6 +377,41 @@
     document.getElementById('close-btn').addEventListener('click', () => {
       document.getElementById('side-menu').classList.remove('open');
     });
+
+    // 公告輪播內容
+    const announcements = [
+      "【公告1】系統將於週六凌晨進行維護，請提前備份資料。",
+      "【公告2】暑期實習報名已開始，請有興趣的同學盡快申請。",
+      "【公告3】本月新增多家合作企業，實習機會更多。",
+    ];
+
+    let currentAnnouncementIndex = 0;
+    const announcementContent = document.getElementById('announcement-content');
+    const prevBtn = document.getElementById('announcement-prev');
+    const nextBtn = document.getElementById('announcement-next');
+
+    function showAnnouncement(index) {
+      announcementContent.textContent = announcements[index];
+    }
+
+    prevBtn.addEventListener('click', () => {
+      currentAnnouncementIndex = (currentAnnouncementIndex - 1 + announcements.length) % announcements.length;
+      showAnnouncement(currentAnnouncementIndex);
+    });
+
+    nextBtn.addEventListener('click', () => {
+      currentAnnouncementIndex = (currentAnnouncementIndex + 1) % announcements.length;
+      showAnnouncement(currentAnnouncementIndex);
+    });
+
+    // 初始化
+    showAnnouncement(currentAnnouncementIndex);
+
+    // 自動切換公告，每5秒
+    setInterval(() => {
+      currentAnnouncementIndex = (currentAnnouncementIndex + 1) % announcements.length;
+      showAnnouncement(currentAnnouncementIndex);
+    }, 5000);
   </script>
 </body>
 

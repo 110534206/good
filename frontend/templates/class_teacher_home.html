@@ -1,11 +1,10 @@
 <!DOCTYPE html>
 <html lang="zh-Hant">
-
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>智慧實習平台 | 教師主頁</title>
-  <style>
+  <title>智慧實習平台 | 班導主頁</title>
+    <style>
     * {
       box-sizing: border-box;
       margin: 0;
@@ -257,8 +256,8 @@
         <a href="/profile">
           <img src="{{ url_for('static', filename='images/avatar.png') }}" alt="頭像" id="login-avatar" />
         </a>
-        <a href="/profile" class="btn-link">教師</a>
-        <a href="/login" class="btn-link">登出</a>
+        <a href="/profile" class="btn-link">班導</a>
+        <a href="/logout" class="btn-link">登出</a>
       </div>
     </div>
   </div>
@@ -274,14 +273,24 @@
       <h2 class="page-title">請選擇你要使用的功能</h2>
       <section class="card-container">
         <div class="card">
-          <h3>公告</h3>
-          <p>查看最新公告。</p>
-          <a href="/notifications">查看通知</a>
+          <h3>查看學生履歷</h3>
+          <p>瀏覽與下載學生上傳的履歷檔案。</p>
+          <a href="/review_resume">查看履歷</a>
+        </div>
+        <div class="card">
+          <h3>審核志願序</h3>
+          <p>管理並確認學生的志願序設定。</p>
+          <a href="/review_preferences">開始審核</a>
+        </div>
+        <div class="card">
+          <h3>通知學生</h3>
+          <p>發送訊息與公告給指導學生。</p>
+          <a href="/messages">發送通知</a>
         </div>
         <div class="card">
           <h3>上傳實習公司</h3>
           <p>新增並上傳實習公司資料。</p>
-          <a href="/upload_company">上傳名單</a>
+          <a href="/upload_company">上傳實習公司</a>
         </div>
       </section>
     </main>
@@ -291,20 +300,22 @@
   <nav id="side-menu" aria-hidden="true" role="navigation" aria-label="功能選單">
     <button id="close-btn" aria-label="關閉功能選單">×</button>
     <h2>功能選單</h2>
-    <a href="/teacher_home">首頁</a>
+    <a href="/class_teacher_home">首頁</a>
     <a href="/profile">個人資料</a>
-    <a href="/notifications">查看公告</a>
+    <a href="/review_resume">查看學生履歷</a>
+    <a href="/review_preferences">審核志願序</a>
+    <a href="/notifications">通知學生</a>
     <a href="/upload_company">建立實習機會</a>
   </nav>
 
   <!-- JS 控制開關 -->
   <script>
-    // 驗證角色
+    // 驗證是否為班導
     const username = localStorage.getItem("username");
-    const role = localStorage.getItem("selectedRole");
+    const redirect = localStorage.getItem("redirect"); // 登入時存的導向頁
 
-    if (!username || role !== "teacher") {
-      alert("請以教師身份登入！");
+    if (!username || redirect !== "/class_teacher_home") {
+      alert("請以班導身份登入！");
       window.location.href = "/login";
     }
 
