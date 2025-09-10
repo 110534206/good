@@ -376,8 +376,7 @@
                             classField.options = classOptions;
                         }
                         // 再載入使用者資料
-                        return fetch(`/api/profile?username=${encodeURIComponent(username)}&role=${encodeURIComponent(role)}`);
-                    } else {
+                        return fetch("/api/profile", { credentials: "include" })
                         throw new Error("取得班級資料失敗");
                     }
                 })

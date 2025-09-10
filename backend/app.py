@@ -190,13 +190,13 @@ def login():
 
         # 如果角色超過 1 個 → 跳 login-confirm 頁面
         if len(matching_roles) > 1:
-            session["pending_roles"] = matching_roles 
-            return jsonify({
-                "success": True,
-                "username": matched_user["username"],
-                "roles": matching_roles,
-                "redirect": "/login-confirm"
-            })
+         session["pending_roles"] = matching_roles 
+         return jsonify({
+        "success": True,
+        "username": matched_user["username"],
+        "roles": matching_roles,
+        "redirect": "/login-confirm"
+    })
 
         # 只有一個角色 → 直接判斷導向
         single_role = matching_roles[0]
@@ -642,15 +642,16 @@ def get_all_classes():
         conn.close()
 
 # -------------------------
-# API - 取得個人資料
+# API - 個人資料
 # -------------------------
 @app.route("/api/profile", methods=["GET"])
 def get_profile():
-    username = request.args.get("username")
-    role = request.args.get("role")
+    # 檢查登入狀態
+    if "username" not in session or "role" not in session:
+        return jsonify({"success": False, "message": "尚未登入"}), 401
 
-    if not username or role not in ["student", "teacher", "director", "admin"]:
-        return jsonify({"success": False, "message": "參數錯誤"}), 400
+    username = session["username"]
+    role = session["role"]
 
     conn = get_db()
     cursor = conn.cursor(dictionary=True)
@@ -658,43 +659,48 @@ def get_profile():
     try:
         # 基本資料
         cursor.execute("""
-            SELECT u.username, u.email, u.role, u.name, c.department, c.name AS class_name
+            SELECT u.id, u.username, u.email, u.role, u.name, 
+                   c.department, c.name AS class_name, u.class_id
             FROM users u
             LEFT JOIN classes c ON u.class_id = c.id
             WHERE u.username = %s AND u.role = %s
         """, (username, role))
-
         user = cursor.fetchone()
+
         if not user:
             return jsonify({"success": False, "message": "使用者不存在"}), 404
 
-        # 取得所帶班級
-        if role in ('teacher', 'director'):
+        # 教師/主任 → 查所帶班級 & 是否為班導
+        is_homeroom = False
+        if role in ("teacher", "director"):
+            # 查詢所帶的所有班級
             cursor.execute("""
                 SELECT c.id, c.name, c.department
                 FROM classes c
                 JOIN classes_teacher ct ON c.id = ct.class_id
-                JOIN users u ON ct.teacher_id = u.id
-                WHERE u.username = %s AND u.role = %s
-            """, (username, role))
-            user['classes'] = cursor.fetchall()
+                WHERE ct.teacher_id = %s
+            """, (user["id"],))
+            user["classes"] = cursor.fetchall()
 
             # 是否為班導
             cursor.execute("""
                 SELECT 1 FROM classes_teacher 
-                WHERE teacher_id = (SELECT id FROM users WHERE username=%s AND role=%s)
-                AND role = '班導師'
-            """, (username, role))
-            user['is_homeroom'] = bool(cursor.fetchone())
+                WHERE teacher_id = %s AND role = '班導師'
+            """, (user["id"],))
+            is_homeroom = bool(cursor.fetchone())
 
+        user["is_homeroom"] = is_homeroom
+
+        # 避免前端收到 None
         if not user.get("email"):
             user["email"] = ""
 
-        return jsonify({"success": True, "user": user, "role": role})
+        return jsonify({"success": True, "user": user})
 
     except Exception as e:
         print("取得個人資料錯誤:", e)
         return jsonify({"success": False, "message": "伺服器錯誤"}), 500
+
     finally:
         cursor.close()
         conn.close()
