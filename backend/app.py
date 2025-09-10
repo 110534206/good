@@ -358,12 +358,6 @@ def get_all_users():
             if user.get('created_at'):
                 user['created_at'] = user['created_at'].strftime("%Y-%m-%d %H:%M:%S")
 
-            # 老師或主任不顯示 class_id 及班級名稱，因為他們的班級由 classes_teacher 管理
-            if user['role'] in ('teacher', 'director'):
-                user['class_id'] = None
-                user['class_name'] = None
-                user['department'] = None
-
         return jsonify({"success": True, "users": users})
     except Exception as e:
         print(f"獲取用戶列表錯誤: {e}")
@@ -642,11 +636,10 @@ def get_all_classes():
         conn.close()
 
 # -------------------------
-# API - 個人資料
+# API - 取得個人資料
 # -------------------------
 @app.route("/api/profile", methods=["GET"])
 def get_profile():
-    # 檢查登入狀態
     if "username" not in session or "role" not in session:
         return jsonify({"success": False, "message": "尚未登入"}), 401
 
@@ -657,9 +650,8 @@ def get_profile():
     cursor = conn.cursor(dictionary=True)
 
     try:
-        # 基本資料
         cursor.execute("""
-            SELECT u.id, u.username, u.email, u.role, u.name, 
+            SELECT u.id, u.username, u.email, u.role, u.name,
                    c.department, c.name AS class_name, u.class_id
             FROM users u
             LEFT JOIN classes c ON u.class_id = c.id
@@ -670,10 +662,8 @@ def get_profile():
         if not user:
             return jsonify({"success": False, "message": "使用者不存在"}), 404
 
-        # 教師/主任 → 查所帶班級 & 是否為班導
         is_homeroom = False
         if role in ("teacher", "director"):
-            # 查詢所帶的所有班級
             cursor.execute("""
                 SELECT c.id, c.name, c.department
                 FROM classes c
@@ -682,7 +672,6 @@ def get_profile():
             """, (user["id"],))
             user["classes"] = cursor.fetchall()
 
-            # 是否為班導
             cursor.execute("""
                 SELECT 1 FROM classes_teacher 
                 WHERE teacher_id = %s AND role = '班導師'
@@ -690,17 +679,14 @@ def get_profile():
             is_homeroom = bool(cursor.fetchone())
 
         user["is_homeroom"] = is_homeroom
-
-        # 避免前端收到 None
-        if not user.get("email"):
-            user["email"] = ""
-
+        user["email"] = user["email"] or ""
+        dep_short = user['department'].replace("管科", "") if user['department'] else ""
+        user["class_display_name"] = f"{dep_short}{user['class_name'] or ''}"
         return jsonify({"success": True, "user": user})
 
     except Exception as e:
-        print("取得個人資料錯誤:", e)
+        print("❌ 取得個人資料錯誤:", e)
         return jsonify({"success": False, "message": "伺服器錯誤"}), 500
-
     finally:
         cursor.close()
         conn.close()
@@ -711,7 +697,7 @@ def get_profile():
 @app.route("/api/saveProfile", methods=["POST"])
 def save_profile():
     data = request.get_json()
-    username = data.get("number")
+    username = data.get("username")
     role_display = data.get("role")
     name = data.get("name")
     class_id = data.get("class_id")
@@ -733,30 +719,108 @@ def save_profile():
     cursor = conn.cursor()
 
     try:
-        # 先檢查使用者是否存在
         cursor.execute("SELECT id FROM users WHERE username=%s AND role=%s", (username, role))
         if not cursor.fetchone():
             return jsonify({"success": False, "message": "找不到該使用者資料"}), 404
 
-        # 更新姓名
         cursor.execute("UPDATE users SET name=%s WHERE username=%s AND role=%s", (name, username, role))
 
-        # 只有學生需更新班級，且班級存在才更新
         if role == "student":
             if not class_id:
                 return jsonify({"success": False, "message": "學生需提供班級"}), 400
-            # 檢查班級是否存在
+
+            try:
+                class_id = int(class_id)
+            except ValueError:
+                return jsonify({"success": False, "message": "班級格式錯誤"}), 400
+
             cursor.execute("SELECT id FROM classes WHERE id=%s", (class_id,))
             if not cursor.fetchone():
                 return jsonify({"success": False, "message": "班級不存在"}), 404
-            cursor.execute("UPDATE users SET class_id=%s WHERE username=%s AND role=%s", (class_id, username, role))
+
+            cursor.execute("UPDATE users SET class_id=%s WHERE username=%s AND role=%s",
+                           (class_id, username, role))
 
         conn.commit()
         return jsonify({"success": True, "message": "資料更新成功"})
 
     except Exception as e:
-        print("更新資料錯誤:", e)
+        print("❌ 更新資料錯誤:", e)
         return jsonify({"success": False, "message": "資料庫錯誤"}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+
+# -------------------------
+# API - 上傳頭像
+# -------------------------
+UPLOAD_FOLDER = 'static/avatars'
+ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif'}
+app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+
+def allowed_file(filename):
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+@app.route('/api/upload_avatar', methods=['POST'])
+def upload_avatar():
+    if "user_id" not in session:
+        return jsonify({"success": False, "message": "未登入"}), 401
+
+    if 'avatar' not in request.files:
+        return jsonify({"success": False, "message": "沒有檔案"}), 400
+
+    file = request.files['avatar']
+    if file and allowed_file(file.filename):
+        filename = secure_filename(f"{session['user_id']}.png")
+        filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+
+        # 確保資料夾存在
+        os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
+
+        file.save(filepath)
+        avatar_url = url_for('static', filename=f"avatars/{filename}")
+        return jsonify({"success": True, "avatar_url": avatar_url})
+    else:
+        return jsonify({"success": False, "message": "檔案格式錯誤"}), 400
+
+
+# -------------------------
+# API - 變更密碼
+# -------------------------
+@app.route('/api/change_password', methods=['POST'])
+def change_password():
+    if "user_id" not in session:
+        return jsonify({"success": False, "message": "尚未登入"}), 401
+
+    data = request.get_json()
+    old_password = data.get("old_password")
+    new_password = data.get("new_password")
+
+    if not old_password or not new_password:
+        return jsonify({"success": False, "message": "請填寫所有欄位"}), 400
+
+    user_id = session["user_id"]
+
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+
+    try:
+        cursor.execute("SELECT password FROM users WHERE id = %s", (user_id,))
+        user = cursor.fetchone()
+
+        if not user or not check_password_hash(user["password"], old_password):
+            return jsonify({"success": False, "message": "舊密碼錯誤"}), 403
+
+        hashed_pw = generate_password_hash(new_password)
+        cursor.execute("UPDATE users SET password = %s WHERE id = %s", (hashed_pw, user_id))
+        conn.commit()
+
+        return jsonify({"success": True, "message": "密碼已更新"})
+
+    except Exception as e:
+        print("❌ 密碼變更錯誤:", e)
+        return jsonify({"success": False, "message": "伺服器錯誤"}), 500
     finally:
         cursor.close()
         conn.close()
