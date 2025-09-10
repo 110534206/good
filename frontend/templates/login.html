@@ -202,8 +202,7 @@
 
                     <div class="button-row">
                         <button type="button" class="button forgot-password" onclick="handleguestLogin()">忘記密碼</button>
-                        <button type="button" class="button register"
-                            onclick="window.location.href='{{ url_for('show_register_student_page') }}'">註冊</button>
+                        <button type="button" class="button register"onclick="window.location.href='{{ url_for('show_register_student_page') }}'">註冊</button>
                     </div>
                 </div>
             </form>
@@ -242,14 +241,16 @@
 
                 if (d.success) {
                     localStorage.setItem("username", d.username);
-                    const roles = d.roles || [];
-                    localStorage.setItem("roleList", JSON.stringify(roles));
+                    localStorage.setItem("roleList", JSON.stringify(d.roles || []));
 
-                    if (roles.length === 1) {
-                        const role = roles[0];
-                        localStorage.setItem("selectedRole", role);
-                        window.location.href = `/${role}_home`;
-                    } else if (roles.length > 1) {
+                    // 優先導向 API 回傳的 redirect
+                    if (d.redirect) {
+                        window.location.href = d.redirect;
+                    } else if (d.roles.length === 1) {
+                        // fallback，若 API 沒回 redirect，用角色導向
+                        localStorage.setItem("selectedRole", d.roles[0]);
+                        window.location.href = `/${d.roles[0]}_home`;
+                    } else if (d.roles.length > 1) {
                         window.location.href = "/login-confirm";
                     } else {
                         err.textContent = "沒有可用角色，請聯絡管理員";
@@ -260,9 +261,10 @@
                     err.style.display = "block";
                 }
 
-            } catch {
+            } catch (error) {
                 err.textContent = "伺服器錯誤，請稍後再試";
                 err.style.display = "block";
+                console.error(error);
             }
         }
 

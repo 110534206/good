@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>智慧實習平台 | 班導主頁</title>
-    <style>
+  <style>
     * {
       box-sizing: border-box;
       margin: 0;
@@ -104,8 +104,7 @@
       background-size: cover;
       background-repeat: no-repeat;
       background-position: center;
-      margin-top: 80px;
-      /* 避開固定頂端列 */
+      margin-top: 80px; /* 避開固定頂端列 */
       margin-bottom: 2rem;
       border-radius: 0;
       color: white;
@@ -116,7 +115,7 @@
 
     main {
       background-color: #fff;
-      padding: 2rem;
+      padding: 9rem;
       margin-bottom: 3rem;
     }
 
@@ -143,6 +142,7 @@
       padding: 2rem;
       text-align: center;
       transition: transform 0.3s ease;
+      cursor: pointer;
     }
 
     .card:hover {
@@ -268,33 +268,31 @@
   </div>
 
   <!-- 主內容 -->
-  <div class="container">
-    <main>
-      <h2 class="page-title">請選擇你要使用的功能</h2>
-      <section class="card-container">
-        <div class="card">
-          <h3>查看學生履歷</h3>
-          <p>瀏覽與下載學生上傳的履歷檔案。</p>
-          <a href="/review_resume">查看履歷</a>
-        </div>
-        <div class="card">
-          <h3>審核志願序</h3>
-          <p>管理並確認學生的志願序設定。</p>
-          <a href="/review_preferences">開始審核</a>
-        </div>
-        <div class="card">
-          <h3>通知學生</h3>
-          <p>發送訊息與公告給指導學生。</p>
-          <a href="/messages">發送通知</a>
-        </div>
-        <div class="card">
-          <h3>上傳實習公司</h3>
-          <p>新增並上傳實習公司資料。</p>
-          <a href="/upload_company">上傳實習公司</a>
-        </div>
-      </section>
-    </main>
-  </div>
+  <main class="container">
+    <h2 class="page-title">請選擇你要使用的功能</h2>
+    <section class="card-container">
+      <div class="card" onclick="location.href='/review_resume'">
+        <h3>查看學生履歷</h3>
+        <p>瀏覽與下載學生上傳的履歷檔案。</p>
+        <a href="/review_resume">查看履歷</a>
+      </div>
+      <div class="card" onclick="location.href='/review_preferences'">
+        <h3>審核志願序</h3>
+        <p>管理並確認學生的志願序設定。</p>
+        <a href="/review_preferences">開始審核</a>
+      </div>
+      <div class="card" onclick="location.href='/notifications'">
+        <h3>通知</h3>
+        <p>接收來自學生與平台的最新消息。</p>
+        <a href="/notifications">查看通知</a>
+      </div>
+      <div class="card" onclick="location.href='/upload_company'">
+        <h3>建立實習機會</h3>
+        <p>新增並上傳實習公司資料。</p>
+        <a href="/upload_company">上傳實習公司</a>
+      </div>
+    </section>
+  </main>
 
   <!-- 側邊選單 -->
   <nav id="side-menu" aria-hidden="true" role="navigation" aria-label="功能選單">
@@ -304,21 +302,12 @@
     <a href="/profile">個人資料</a>
     <a href="/review_resume">查看學生履歷</a>
     <a href="/review_preferences">審核志願序</a>
-    <a href="/notifications">通知學生</a>
+    <a href="/notifications">通知</a>
     <a href="/upload_company">建立實習機會</a>
   </nav>
 
   <!-- JS 控制開關 -->
   <script>
-    // 驗證是否為班導
-    const username = localStorage.getItem("username");
-    const redirect = localStorage.getItem("redirect"); // 登入時存的導向頁
-
-    if (!username || redirect !== "/class_teacher_home") {
-      alert("請以班導身份登入！");
-      window.location.href = "/login";
-    }
-
     document.getElementById('menu-btn').addEventListener('click', () => {
       document.getElementById('side-menu').classList.add('open');
     });
@@ -327,6 +316,8 @@
       document.getElementById('side-menu').classList.remove('open');
     });
   </script>
+    <!-- 預留底部空間 -->
+  <div style="height: 85px;"></div>
 </body>
 
 </html>

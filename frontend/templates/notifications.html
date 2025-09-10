@@ -9,7 +9,7 @@
 
 body {
   font-family: 'Noto Sans TC', sans-serif;
-  background: #fff; /* 背景改白 */
+  background: #fff;
   margin: 0;
   padding: 32px 24px;
   color: #1f2937;
@@ -27,6 +27,17 @@ header h1 {
   letter-spacing: 1.5px;
 }
 
+#sortContainer {
+  margin-top: 20px;
+  text-align: center;
+}
+
+#sortSelect {
+  padding: 6px 12px;
+  font-size: 1rem;
+  margin-left: 8px;
+}
+
 .category-container {
   max-width: 950px;
   margin: 0 auto 48px;
@@ -40,6 +51,7 @@ header h1 {
   border-bottom: 4px solid #3b82f6;
   padding-bottom: 8px;
   letter-spacing: 1px;
+  cursor: pointer;
 }
 
 .notification-container {
@@ -121,7 +133,7 @@ header h1 {
   header h1 { font-size: 2.4rem; margin-bottom: 30px; }
   .notification { flex: 1 1 100%; padding: 20px 22px; }
   .title { font-size: 1.3rem; }
-  .meta { flex-direction: column; gap: 6px; }
+  .meta { flex-direction: column; gap: 8px; }
   .content { font-size: 1rem; }
   .category-title { font-size: 1.6rem; }
 }
@@ -131,49 +143,84 @@ header h1 {
 
 <header>
   <h1>實習通知</h1>
+  <div id="sortContainer">
+    <label for="sortSelect"><strong>排序方式：</strong></label>
+    <select id="sortSelect">
+      <option value="desc">最新優先</option>
+      <option value="asc">最舊優先</option>
+    </select>
+  </div>
 </header>
 
 <main id="mainContainer"></main>
 
 <script>
-const categories = ["老師", "平台", "學生"];
 const mainContainer = document.getElementById("mainContainer");
+const sortSelect = document.getElementById("sortSelect");
+let announcements = [];
+
+function renderAnnouncements(sortOrder = "desc") {
+  mainContainer.innerHTML = "";
+
+  const sorted = [...announcements].sort((a, b) => {
+    return sortOrder === "asc"
+      ? new Date(a.created_at) - new Date(b.created_at)
+      : new Date(b.created_at) - new Date(a.created_at);
+  });
+
+  const categories = ["老師", "平台", "學生"];
+
+  categories.forEach(category => {
+    const filtered = sorted.filter(n =>
+      n.source === category || (Array.isArray(n.target_roles) && n.target_roles.includes(category))
+    );
+
+    if (filtered.length === 0) return;
+
+    const categoryDiv = document.createElement("div");
+    categoryDiv.className = "category-container";
+    categoryDiv.innerHTML = `<div class="category-title">${category}</div>`;
+
+    const notificationContainer = document.createElement("div");
+    notificationContainer.className = "notification-container";
+
+    filtered.forEach(note => {
+      const div = document.createElement("div");
+      div.className = "notification";
+      div.innerHTML = `
+        <div class="title">${note.title}</div>
+        <div class="meta">
+          <span class="source ${note.source}">${note.source}</span>
+          <span class="time">${new Date(note.created_at).toLocaleString('zh-TW', { hour12: false })}</span>
+        </div>
+        <div class="content">${note.content}</div>
+      `;
+      notificationContainer.appendChild(div);
+    });
+
+    categoryDiv.appendChild(notificationContainer);
+    mainContainer.appendChild(categoryDiv);
+  });
+
+  // 類別可折疊功能
+  document.querySelectorAll(".category-title").forEach(titleEl => {
+    titleEl.addEventListener("click", () => {
+      const container = titleEl.nextElementSibling;
+      container.style.display = container.style.display === "none" ? "flex" : "none";
+    });
+  });
+}
+
+sortSelect.addEventListener("change", (e) => {
+  renderAnnouncements(e.target.value);
+});
 
 fetch("/api/announcements")
   .then(res => res.json())
   .then(data => {
     if (!data.success) throw new Error("取得公告失敗");
-
-    const notifications = data.announcements;
-
-    categories.forEach(category => {
-      const categoryDiv = document.createElement("div");
-      categoryDiv.className = "category-container";
-      categoryDiv.innerHTML = `<div class="category-title">${category}</div>`;
-
-      const notificationContainer = document.createElement("div");
-      notificationContainer.className = "notification-container";
-
-      notifications
-        .filter(n => n.source === category || n.target_roles.includes(category))
-        .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
-        .forEach(note => {
-          const div = document.createElement("div");
-          div.className = "notification";
-          div.innerHTML = `
-            <div class="title">${note.title}</div>
-            <div class="meta">
-              <span class="source ${note.source}">${note.source}</span>
-              <span class="time">${new Date(note.created_at).toLocaleString('zh-TW', { hour12: false })}</span>
-            </div>
-            <div class="content">${note.content}</div>
-          `;
-          notificationContainer.appendChild(div);
-        });
-
-      categoryDiv.appendChild(notificationContainer);
-      mainContainer.appendChild(categoryDiv);
-    });
+    announcements = data.announcements;
+    renderAnnouncements("desc");
   })
   .catch(err => {
     console.error("載入公告失敗", err);
@@ -181,12 +228,5 @@ fetch("/api/announcements")
   });
 </script>
 
-
 </body>
 </html>
-
-
-
-
-
-

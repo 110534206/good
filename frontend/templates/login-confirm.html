@@ -66,6 +66,9 @@
   </div>
 
   <script>
+    // 從後端模板注入的角色列表 JSON 字串，Flask 模板要傳入 roles_json
+    const roleList = JSON.parse('{{ roles_json | safe }}');
+
     function getRoleDisplayName(role) {
       const roleMap = {
         "teacher": "教師",
@@ -74,28 +77,36 @@
       return roleMap[role] || role;
     }
 
-    let roleList = [];
-    try {
-      const storedRoles = localStorage.getItem("roleList");
-      roleList = storedRoles ? JSON.parse(storedRoles) : [];
-    } catch (error) {
-      console.error("解析角色清單錯誤:", error);
-      roleList = [];
-    }
-
     if (!Array.isArray(roleList) || roleList.length === 0) {
       alert("角色資訊遺失，請重新登入");
       window.location.href = "/login";
     } else {
       const container = document.getElementById("role-buttons");
+
       roleList.forEach(role => {
         const btn = document.createElement("button");
         btn.className = "role-button";
-        btn.setAttribute("data-role", role);
         btn.textContent = getRoleDisplayName(role);
         btn.onclick = () => {
-          localStorage.setItem("selectedRole", role);
-          window.location.href = `/${role}_home`;
+          // 按下按鈕後呼叫後端確認角色API
+          fetch('/api/confirm-role', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ role: role })
+          })
+            .then(response => response.json())
+            .then(data => {
+              if (data.success) {
+                window.location.href = data.redirect;
+              } else {
+                alert(data.message || '發生錯誤，請稍後重試');
+              }
+            })
+            .catch(() => {
+              alert('伺服器錯誤，請稍後重試');
+            });
         };
         container.appendChild(btn);
       });

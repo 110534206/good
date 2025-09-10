@@ -1,6 +1,5 @@
 <!DOCTYPE html>
 <html lang="zh-Hant">
-
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -291,7 +290,6 @@
     #announcement-next {
       right: 10px;
     }
-
   </style>
 </head>
 
@@ -379,38 +377,54 @@
     });
 
     // 公告輪播內容
-    const announcements = [
-      "【公告1】系統將於週六凌晨進行維護，請提前備份資料。",
-      "【公告2】暑期實習報名已開始，請有興趣的同學盡快申請。",
-      "【公告3】本月新增多家合作企業，實習機會更多。",
-    ];
-
+    let announcements = [];
     let currentAnnouncementIndex = 0;
     const announcementContent = document.getElementById('announcement-content');
     const prevBtn = document.getElementById('announcement-prev');
     const nextBtn = document.getElementById('announcement-next');
 
     function showAnnouncement(index) {
-      announcementContent.textContent = announcements[index];
+      if (announcements.length > 0) {
+        announcementContent.textContent = announcements[index];
+      } else {
+        announcementContent.textContent = "目前沒有公告";
+      }
     }
 
+    // 取得公告資料
+    fetch("/api/announcements")
+      .then(response => response.json())
+      .then(data => {
+        announcements = data;
+        currentAnnouncementIndex = 0;
+        showAnnouncement(currentAnnouncementIndex);
+      })
+      .catch(err => {
+        console.error("公告載入失敗:", err);
+        announcementContent.textContent = "公告載入失敗";
+      });
+
+    // 左右切換
     prevBtn.addEventListener('click', () => {
-      currentAnnouncementIndex = (currentAnnouncementIndex - 1 + announcements.length) % announcements.length;
-      showAnnouncement(currentAnnouncementIndex);
+      if (announcements.length > 0) {
+        currentAnnouncementIndex = (currentAnnouncementIndex - 1 + announcements.length) % announcements.length;
+        showAnnouncement(currentAnnouncementIndex);
+      }
     });
 
     nextBtn.addEventListener('click', () => {
-      currentAnnouncementIndex = (currentAnnouncementIndex + 1) % announcements.length;
-      showAnnouncement(currentAnnouncementIndex);
+      if (announcements.length > 0) {
+        currentAnnouncementIndex = (currentAnnouncementIndex + 1) % announcements.length;
+        showAnnouncement(currentAnnouncementIndex);
+      }
     });
 
-    // 初始化
-    showAnnouncement(currentAnnouncementIndex);
-
-    // 自動切換公告，每5秒
+    // 自動輪播
     setInterval(() => {
-      currentAnnouncementIndex = (currentAnnouncementIndex + 1) % announcements.length;
-      showAnnouncement(currentAnnouncementIndex);
+      if (announcements.length > 0) {
+        currentAnnouncementIndex = (currentAnnouncementIndex + 1) % announcements.length;
+        showAnnouncement(currentAnnouncementIndex);
+      }
     }, 5000);
   </script>
 </body>

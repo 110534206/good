@@ -9,7 +9,9 @@ import json
 import re
 from datetime import datetime
 from flask import Blueprint
+from collections import defaultdict
 from flask import url_for
+from werkzeug.security import generate_password_hash
 
 # -------------------------
 # Flask 與 CORS 設定
@@ -147,7 +149,6 @@ def register_student():
         print("Error in register_student:", e)
         return jsonify({"success": False, "message": "伺服器錯誤"}), 500
 
-    
 # -------------------------
 # API - 登入
 # -------------------------
@@ -189,6 +190,7 @@ def login():
 
         # 如果角色超過 1 個 → 跳 login-confirm 頁面
         if len(matching_roles) > 1:
+            session["pending_roles"] = matching_roles 
             return jsonify({
                 "success": True,
                 "username": matched_user["username"],
@@ -198,7 +200,8 @@ def login():
 
         # 只有一個角色 → 直接判斷導向
         single_role = matching_roles[0]
-        session["role"] = single_role  
+        session["role"] = single_role
+        session["original_role"] = single_role  
 
         redirect_page = "/"
 
@@ -239,32 +242,90 @@ def login():
         conn.close()
 
 # -------------------------
-# 班導首頁
+# API - 確認角色 (多角色登入後)
 # -------------------------
-@app.route('/class_teacher_home')
-def class_teacher_home():
-    # 確認已登入
-    if "username" not in session or session.get("role") != "teacher":
-        return redirect(url_for("login_page"))
+@app.route('/api/confirm-role', methods=['POST'])
+def api_confirm_role():
+    if "username" not in session or "user_id" not in session:
+        return jsonify({"success": False, "message": "請先登入"}), 401
 
-    # 檢查是否為班導
+    data = request.get_json()
+    role = data.get("role")
+
+    if role not in ['teacher', 'director', 'student', 'admin']:
+        return jsonify({"success": False, "message": "角色錯誤"}), 400
+
+    user_id = session["user_id"]
     conn = get_db()
     cursor = conn.cursor()
-    try:
-        cursor.execute("""
-            SELECT 1 FROM classes_teacher 
-            WHERE teacher_id = %s AND role = '班導師'
-        """, (session["user_id"],))
-        is_homeroom = cursor.fetchone()
 
-        if not is_homeroom:
-            # 如果不是班導，導回老師主頁
-            return redirect(url_for("teacher_home"))
+    try:
+        redirect_page = "/"
+        if role == "teacher" or role == "director":
+            # 檢查是否為班導
+            cursor.execute("""
+                SELECT 1 FROM classes_teacher
+                WHERE teacher_id = %s AND role = '班導師'
+            """, (user_id,))
+            is_homeroom = cursor.fetchone()
+
+            if is_homeroom:
+                redirect_page = "/class_teacher_home"
+            else:
+                redirect_page = f"/{role}_home"
+
+        else:
+            # 其他角色
+            redirect_page = f"/{role}_home"
+
+        # 設定 session 角色
+        session["role"] = role
+        session["original_role"] = role 
+
+        return jsonify({"success": True, "redirect": redirect_page})
+
+    except Exception as e:
+        print("確認角色錯誤:", e)
+        return jsonify({"success": False, "message": "伺服器錯誤"}), 500
     finally:
         cursor.close()
         conn.close()
 
-    return render_template("class_teacher_home.html")
+# -------------------------
+# API - 班導首頁
+# -------------------------
+@app.route('/class_teacher_home')
+def class_teacher_home():
+    if 'username' not in session or session.get('role') not in ['teacher', 'director']:
+        return redirect(url_for('login_page'))
+
+    user_id = session.get('user_id')
+
+    conn = get_db()
+    cursor = conn.cursor()
+    try:
+        # 確認是不是班導
+        cursor.execute("""
+            SELECT 1 FROM classes_teacher
+            WHERE teacher_id = %s AND role = '班導師'
+        """, (user_id,))
+        is_homeroom = cursor.fetchone()
+
+        if not is_homeroom:
+            if session.get('original_role') == 'teacher':
+                return redirect('/teacher_home')
+            elif session.get('original_role') == 'director':
+                return redirect('/director_home')
+    finally:
+        cursor.close()
+        conn.close()
+
+    # 傳入 original_role 到模板
+    return render_template(
+        'class_teacher_home.html',
+        username=session.get('username'),
+        original_role=session.get('original_role', 'teacher')  # fallback 預設為 teacher
+    )
 
 # -------------------------
 # API - 註冊頁面    
@@ -595,20 +656,20 @@ def get_profile():
     cursor = conn.cursor(dictionary=True)
 
     try:
-        # 先取得基本資料和學生班級
+        # 基本資料
         cursor.execute("""
             SELECT u.username, u.email, u.role, u.name, c.department, c.name AS class_name
             FROM users u
             LEFT JOIN classes c ON u.class_id = c.id
             WHERE u.username = %s AND u.role = %s
         """, (username, role))
-        
+
         user = cursor.fetchone()
         if not user:
             return jsonify({"success": False, "message": "使用者不存在"}), 404
 
+        # 取得所帶班級
         if role in ('teacher', 'director'):
-            # 老師及主任要取得他們所帶班級
             cursor.execute("""
                 SELECT c.id, c.name, c.department
                 FROM classes c
@@ -616,8 +677,15 @@ def get_profile():
                 JOIN users u ON ct.teacher_id = u.id
                 WHERE u.username = %s AND u.role = %s
             """, (username, role))
-            classes = cursor.fetchall()
-            user['classes'] = classes  # 新增帶班班級清單
+            user['classes'] = cursor.fetchall()
+
+            # 是否為班導
+            cursor.execute("""
+                SELECT 1 FROM classes_teacher 
+                WHERE teacher_id = (SELECT id FROM users WHERE username=%s AND role=%s)
+                AND role = '班導師'
+            """, (username, role))
+            user['is_homeroom'] = bool(cursor.fetchone())
 
         if not user.get("email"):
             user["email"] = ""
@@ -1141,28 +1209,6 @@ def api_approve_company():
             WHERE id = %s
         """, (status, reviewed_at, company_id))
 
-        # ✅ 若核准，插入公告
-        if status == "approved":
-            announcement_title = "實習廠商審核通過"
-            announcement_content = f"廠商【{company_name}】已由主任審核通過，請至平台查閱詳細資訊。"
-            created_by = "主任"
-            visible_from = datetime.now()
-            target_roles = json.dumps(["student", "teacher"])
-            is_important = True
-
-            cursor.execute("""
-                INSERT INTO announcements 
-                (title, content, created_by, created_at, target_roles, status, visible_from, is_important)
-                VALUES (%s, %s, %s, NOW(), %s, 'published', %s, %s)
-            """, (
-                announcement_title, 
-                announcement_content,
-                created_by,
-                target_roles,
-                visible_from,
-                is_important
-            ))
-
         conn.commit()
 
         action_text = '核准' if status == 'approved' else '拒絕'
@@ -1176,6 +1222,9 @@ def api_approve_company():
         cursor.close()
         conn.close()
 
+# -------------------------
+# API - 志願填寫
+# -------------------------
 @app.route('/fill_preferences', methods=['GET', 'POST'])
 def fill_preferences():
     # 1. 登入檢查
@@ -1266,6 +1315,66 @@ def select_role():
         return jsonify({"success": False, "message": "無此角色"}), 404
 
 # -------------------------
+# 班導查看志願序
+# -------------------------
+@app.route('/review_preferences')
+def review_preferences():
+    if 'username' not in session or session.get('role') not in ['teacher', 'director']:
+        return redirect(url_for('login_page'))
+
+    user_id = session.get('user_id')
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+
+    try:
+        # 確認是否為班導
+        cursor.execute("""
+            SELECT c.id AS class_id
+            FROM classes c
+            JOIN classes_teacher ct ON c.id = ct.class_id
+            WHERE ct.teacher_id = %s AND ct.role = '班導師'
+        """, (user_id,))
+        class_info = cursor.fetchone()
+        if not class_info:
+            return "你不是班導，無法查看志願序", 403
+
+        class_id = class_info['class_id']
+
+        # 查詢班上學生及其志願
+        cursor.execute("""
+            SELECT 
+                u.id AS student_id,
+                u.name AS student_name,
+                sp.preference_order,
+                ic.company_name,
+                sp.submitted_at
+            FROM users u
+            JOIN student_preferences sp ON u.id = sp.student_id
+            JOIN internship_companies ic ON sp.company_id = ic.id
+            WHERE u.class_id = %s
+            ORDER BY u.name, sp.preference_order
+        """, (class_id,))
+        results = cursor.fetchall()
+
+        # 整理資料結構給前端使用
+        student_data = defaultdict(list)
+        for row in results:
+            student_data[row['student_name']].append({
+                'order': row['preference_order'],
+                'company': row['company_name'],
+                'submitted_at': row['submitted_at']
+            })
+
+        return render_template('review_preferences.html', student_data=student_data)
+
+    except Exception as e:
+        print("取得志願資料錯誤：", e)
+        return "伺服器錯誤", 500
+    finally:
+        cursor.close()
+        conn.close()
+
+# -------------------------
 # 頁面路由
 # -------------------------
 @app.route('/profile')
@@ -1288,11 +1397,8 @@ def index_page():
     if not role:
         return redirect(url_for("login_page"))
 
-    if role == "student":
-        return redirect('/student_home')
-
-    elif role == "teacher":
-        # 再檢查是否為班導
+    # 老師和主任都要檢查是否為班導
+    if role in ["teacher", "director"]:
         conn = get_db()
         cursor = conn.cursor()
         cursor.execute("""
@@ -1306,10 +1412,14 @@ def index_page():
         if is_homeroom:
             return redirect('/class_teacher_home')
         else:
-            return redirect('/teacher_home')
+            # 老師導向 teacher_home，主任導向 director_home
+            if role == "teacher":
+                return redirect('/teacher_home')
+            else:
+                return redirect('/director_home')
 
-    elif role == "director":
-        return redirect('/director_home')
+    elif role == "student":
+        return redirect('/student_home')
 
     elif role == "admin":
         return redirect('/admin_home')
@@ -1324,6 +1434,16 @@ def student_home():
 @app.route('/admin_home')
 def admin_home():
     return render_template('admin_home.html')
+
+@app.route('/api/get-session')
+def get_session():
+    if "username" in session and "role" in session:
+        return jsonify({
+            "success": True,
+            "username": session["username"],
+            "role": session["role"]
+        })
+    return jsonify({"success": False}), 401
 
 @app.route('/user_management')
 def user_management():
@@ -1342,7 +1462,6 @@ def teacher_home():
 def director_home():
     if session.get("role") != "director":
         return redirect(url_for("login"))
-
     conn = get_db()
     cursor = conn.cursor(dictionary=True)
     cursor.execute("SELECT id, company_name FROM internship_companies WHERE status = 'pending'")
@@ -1382,10 +1501,8 @@ def notifications():
 def get_announcements():
     conn = get_db()
     cursor = conn.cursor(dictionary=True)
-
     try:
         now = datetime.now()
-
         cursor.execute("""
             SELECT 
                 id, title, content, created_by, created_at,
@@ -1397,38 +1514,47 @@ def get_announcements():
               AND (visible_until IS NULL OR visible_until >= %s)
             ORDER BY is_important DESC, created_at DESC
         """, (now, now))
-
         rows = cursor.fetchall()
 
         for row in rows:
             row["created_at"] = row["created_at"].strftime("%Y-%m-%d %H:%M:%S")
             row["visible_from"] = row["visible_from"].strftime("%Y-%m-%d %H:%M:%S") if row["visible_from"] else None
             row["visible_until"] = row["visible_until"].strftime("%Y-%m-%d %H:%M:%S") if row["visible_until"] else None
-            row["source"] = row.pop("created_by", "平台")
+            row["source"] = row.pop("created_by") or "平台"
 
-
-            # target_roles 是 JSON 字串，轉為 list
-            try:
-                row["target_roles"] = json.loads(row["target_roles"])
-            except:
+            if row["target_roles"]:
+                try:
+                    row["target_roles"] = json.loads(row["target_roles"])
+                except Exception:
+                    row["target_roles"] = []
+            else:
                 row["target_roles"] = []
 
         return jsonify({"success": True, "announcements": rows})
-    
+
     except Exception as e:
         print("❌ 取得公告失敗：", e)
         return jsonify({"success": False, "message": "取得公告失敗"}), 500
     finally:
-        cursor.close()
-        conn.close()
+        if cursor: cursor.close()
+        if conn: conn.close()
+
 
 @app.route("/register_student")
 def register_student_page():
     return render_template("register_student.html")
 
-@app.route("/login-confirm")
+@app.route('/login-confirm')
 def login_confirm_page():
-    return render_template("login-confirm.html")
+    roles = session.get("pending_roles")  # 登入時先把多角色放這
+    if not roles:
+        return redirect(url_for("login_page"))
+
+    return render_template("login-confirm.html", roles_json=json.dumps(roles))
+
+# 管理員密碼
+hashed_password = generate_password_hash("1234", method="scrypt")
+print(hashed_password)
 
 # -------------------------
 # 主程式入口

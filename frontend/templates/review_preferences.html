@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <title>學生志願序檢視</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 2rem;
+            background-color: #f3f3f3;
+        }
+        h2 {
+            text-align: center;
+        }
+        .student-section {
+            background: #fff;
+            margin-bottom: 1.5rem;
+            padding: 1rem 1.5rem;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.05);
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 0.5rem;
+        }
+        th, td {
+            padding: 0.6rem;
+            border: 1px solid #ccc;
+            text-align: left;
+        }
+        th {
+            background-color: #e9ecef;
+        }
+    </style>
+</head>
+<body>
+    <h2>學生志願序檢視</h2>
+
+    {% if student_data %}
+        {% for student_name, preferences in student_data.items() %}
+            <div class="student-section">
+                <h3>{{ student_name }}</h3>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>志願序</th>
+                            <th>公司名稱</th>
+                            <th>送出時間</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for p in preferences %}
+                        <tr>
+                            <td>{{ p.order }}</td>
+                            <td>{{ p.company }}</td>
+                            <td>{{ p.submitted_at }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% endfor %}
+    {% else %}
+        <p>目前尚無學生填寫志願。</p>
+    {% endif %}
+</body>
+</html>

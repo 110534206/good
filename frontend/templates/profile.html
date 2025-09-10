@@ -229,14 +229,34 @@
 
         function goBackHome() {
             const selectedRole = localStorage.getItem("selectedRole");
-            const redirectMap = {
-                student: '/student_home',
-                teacher: '/teacher_home',
-                director: '/director_home',
-                admin: '/admin_home'
-            };
-            const redirectUrl = redirectMap[selectedRole] || '/';
-            window.location.href = redirectUrl;
+            const username = localStorage.getItem("username");
+
+            fetch(`/api/profile?username=${encodeURIComponent(username)}&role=${encodeURIComponent(selectedRole)}`)
+                .then(res => res.json())
+                .then(data => {
+                    if (data.success) {
+                        const user = data.user;
+
+                        if ((user.role === 'teacher' || user.role === 'director') && user.is_homeroom) {
+                            window.location.href = '/class_teacher_home';
+                        } else {
+                            const redirectMap = {
+                                student: '/student_home',
+                                teacher: '/teacher_home',
+                                director: '/director_home',
+                                admin: '/admin_home'
+                            };
+                            window.location.href = redirectMap[user.role] || '/';
+                        }
+                    } else {
+                        alert("取得使用者資料失敗，將返回首頁");
+                        window.location.href = '/';
+                    }
+                })
+                .catch(err => {
+                    console.error("返回首頁失敗:", err);
+                    window.location.href = '/';
+                });
         }
 
         function createFormPages() {

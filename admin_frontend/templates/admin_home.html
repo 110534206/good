@@ -1,6 +1,5 @@
 <!DOCTYPE html>
 <html lang="zh-Hant">
-
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -117,7 +116,7 @@
 
     main {
       background-color: #fff;
-      padding: 2rem;
+      padding: 9rem;
       margin-bottom: 3rem;
     }
 
@@ -310,14 +309,20 @@
 
   <!-- JS 控制開關 -->
   <script>
-    // 驗證角色
-    const username = localStorage.getItem("username");
-    const role = localStorage.getItem("selectedRole");
+    // 從後端確認角色
+    fetch("/api/get-session")
+      .then(res => res.json())
+      .then(data => {
+        if (!data.success || data.role !== "admin") {
+          alert("請以管理員身份登入！");
+          window.location.href = "/login";
+        }
+      })
+      .catch(err => {
+        console.error("驗證錯誤:", err);
+        window.location.href = "/login";
+      });
 
-    if (!username || role !== "admin") {
-      alert("請以管理員身份登入！");
-      window.location.href = "/login";
-    }
 
     document.getElementById('menu-btn').addEventListener('click', () => {
       document.getElementById('side-menu').classList.add('open');
@@ -327,6 +332,9 @@
       document.getElementById('side-menu').classList.remove('open');
     });
   </script>
+    <!-- 預留底部空間 -->
+  <div style="height: 85px;"></div>
+
 </body>
 
 </html>
