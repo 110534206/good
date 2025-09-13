@@ -14,7 +14,8 @@ app = Flask(
 
 # secret_key 與檔案設定
 app.secret_key = os.getenv("SECRET_KEY", "your_secret_key")
-app.config['UPLOAD_FOLDER'] = './uploads'
+app.config['UPLOAD_FOLDER'] = os.path.join(os.path.dirname(__file__), "uploads")
+os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
 # CORS
 CORS(app, supports_credentials=True)
@@ -33,13 +34,19 @@ app.jinja_loader = ChoiceLoader([
 from auth import auth_bp
 from company import company_bp
 from resume import resume_bp
-from profile import profile_bp
+from admin import admin_bp
+from users import users_bp
+from announcements import announcements_bp
+from preferences import preferences_bp
 
 # 註冊 Blueprint
 app.register_blueprint(auth_bp)
 app.register_blueprint(company_bp)
 app.register_blueprint(resume_bp)
-app.register_blueprint(profile_bp)
+app.register_blueprint(admin_bp)
+app.register_blueprint(users_bp)
+app.register_blueprint(announcements_bp)
+app.register_blueprint(preferences_bp)
 
 # -------------------------
 # 首頁路由（使用者前台）
@@ -47,7 +54,7 @@ app.register_blueprint(profile_bp)
 @app.route("/")
 def index():
     if "username" in session and session.get("role") == "student":
-        return redirect('/student_home')
+        return redirect(url_for("users_bp.student_home")) 
     return redirect(url_for("auth_bp.login_page"))
 
 # -------------------------
@@ -56,7 +63,7 @@ def index():
 @app.route("/admin")
 def admin_index():
     if "username" in session and session.get("role") == "admin":
-        return redirect(url_for("admin_home"))
+        return redirect(url_for("admin_bp.admin_home"))
     return redirect(url_for("auth_bp.login_page"))
 
 # -------------------------

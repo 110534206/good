@@ -2,6 +2,7 @@ from flask import Blueprint, request, jsonify, render_template, session, redirec
 from werkzeug.security import check_password_hash, generate_password_hash
 from config import get_db
 import json
+import re
 
 auth_bp = Blueprint("auth_bp", __name__)
 
@@ -10,7 +11,7 @@ auth_bp = Blueprint("auth_bp", __name__)
 # -------------------------
 @auth_bp.route('/api/login', methods=['POST'])
 def login():
-    data = request.get_json()  # 改成 get_json()
+    data = request.get_json() 
     username = data.get("username")
     password = data.get("password")
 
@@ -135,13 +136,106 @@ def api_confirm_role():
         conn.close()
 
 # -------------------------
-#頁面管理  
+# API - 註冊學生帳號 (POST)
+# -------------------------
+@auth_bp.route("/api/register_student", methods=["POST"])
+def register_student():
+    try:
+        data = request.json
+        username = data.get("username")
+        password = data.get("password")
+        email = data.get("email")
+        role = "student"
+
+        # 格式驗證
+        if not re.match(r"^[A-Za-z0-9]{6,20}$", username):
+            return jsonify({"success": False, "message": "學號格式錯誤，需為6~20字元英數字"}), 400
+        if not re.match(r"^[A-Za-z0-9]{8,}$", password):
+            return jsonify({"success": False, "message": "密碼需至少8碼英數字"}), 400
+        if not re.match(r"^[A-Za-z0-9._%+-]+@.*\.edu\.tw$", email):
+            return jsonify({"success": False, "message": "必須使用學校信箱"}), 400
+
+        hashed_password = generate_password_hash(password)
+
+        conn = get_db()
+        cursor = conn.cursor()
+
+        # 檢查是否已有相同帳號 (在 users 表)
+        cursor.execute("SELECT * FROM users WHERE username = %s AND role = %s", (username, role))
+        if cursor.fetchone():
+            cursor.close()
+            conn.close()
+            return jsonify({"success": False, "message": "帳號已存在"}), 400
+
+        # 新增學生帳號 (存進 users)
+        cursor.execute(
+            "INSERT INTO users (username, password, email, role) VALUES (%s, %s, %s, %s)",
+            (username, hashed_password, email, role)
+        )
+        conn.commit()
+        cursor.close()
+        conn.close()
+
+        return jsonify({"success": True, "message": "註冊成功"})
+
+    except Exception as e:
+        print("Error in register_student:", e)
+        return jsonify({"success": False, "message": "伺服器錯誤"}), 500   
+
+# -------------------------
+# API - 首頁 (多角色登入後)
+# -------------------------
+@auth_bp.route('/index')
+def index_page():
+    role = session.get("role")
+    user_id = session.get("user_id")
+
+    if not role:
+        return redirect(url_for("auth_bp.login_page"))
+
+    # 老師和主任都要檢查是否為班導
+    if role in ["teacher", "director"]:
+        conn = get_db()
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT 1 FROM classes_teacher 
+            WHERE teacher_id = %s AND role = '班導師'
+        """, (user_id,))
+        is_homeroom = cursor.fetchone()
+        cursor.close()
+        conn.close()
+
+        if is_homeroom:
+            return redirect(url_for('users_bp.class_teacher_home'))
+        else:
+            if role == "teacher":
+                return redirect(url_for('users_bp.teacher_home'))
+            else:
+                return redirect(url_for('users_bp.director_home'))
+
+    elif role == "student":
+        return redirect(url_for('users_bp.student_home')) 
+
+    elif role == "admin":
+        return redirect(url_for('admin_bp.admin_home')) 
+
+    return redirect(url_for("auth_bp.login_page")) 
+
+
+# -------------------------
+# 頁面路由
 # -------------------------
   
 #登入
 @auth_bp.route("/login")
 def login_page():
-    return render_template("login.html")
+    return render_template("auth/login.html")
+
+#登出
+@auth_bp.route("/logout")
+def logout_page():
+    session.clear()  # 清除所有登入資訊
+    return redirect(url_for("auth_bp.login_page"))
 
 # 多角色登入後確認角色頁面
 @auth_bp.route('/login-confirm')
@@ -150,9 +244,11 @@ def login_confirm_page():
     if not roles:
         return redirect(url_for("auth_bp.login_page"))
 
-    return render_template("login-confirm.html", roles_json=json.dumps(roles))
+    return render_template("auth/login-confirm.html", roles_json=json.dumps(roles))
 
 # 學生註冊
 @auth_bp.route("/register_student")
 def show_register_student_page():
-    return render_template("register_student.html")
+    return render_template("auth/register_student.html")
+
+
