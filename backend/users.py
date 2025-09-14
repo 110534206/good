@@ -79,8 +79,9 @@ def get_profile():
         if not user:
             return jsonify({"success": False, "message": "使用者不存在"}), 404
 
-        # 檢查是否為班導
+        # 檢查是否為班導 / 主任
         is_homeroom = False
+        classes = []
         if role in ("teacher", "director"):
             cursor.execute("""
                 SELECT c.id, c.name, c.department
@@ -88,7 +89,8 @@ def get_profile():
                 JOIN classes_teacher ct ON c.id = ct.class_id
                 WHERE ct.teacher_id = %s
             """, (user["id"],))
-            user["classes"] = cursor.fetchall()
+            classes = cursor.fetchall()
+            user["classes"] = classes
 
             cursor.execute("""
                 SELECT 1 FROM classes_teacher 
@@ -98,8 +100,14 @@ def get_profile():
 
         user["is_homeroom"] = is_homeroom
         user["email"] = user["email"] or ""
-        dep_short = user['department'].replace("管科", "") if user['department'] else ""
-        user["class_display_name"] = f"{dep_short}{user['class_name'] or ''}"
+
+        # 如果有多班級，拼成一個字串顯示
+        if classes:
+            class_names = [f"{c['department'].replace('管科', '')}{c['name']}" for c in classes]
+            user["class_display_name"] = "、".join(class_names)
+        else:
+            dep_short = user['department'].replace("管科", "") if user['department'] else ""
+            user["class_display_name"] = f"{dep_short}{user['class_name'] or ''}"
 
         return jsonify({"success": True, "user": user})
     except Exception as e:
@@ -240,14 +248,9 @@ def change_password():
 # 使用者首頁（學生前台）
 @users_bp.route('/student_home')
 def student_home():
-    return render_template('student_home.html')
+    return render_template('user_shared/student_home.html')
 
-# 管理員首頁（後台）
-@users_bp.route('/admin_home')
-def admin_home():
-    return render_template('admin_home.html')
-
-# 主任首頁
+# 使用者首頁 (主任前台)
 @users_bp.route('/director_home')
 def director_home():
     if session.get("role") != "director":
@@ -260,7 +263,17 @@ def director_home():
     cursor.close()
     conn.close()
 
-    return render_template("director_home.html", companies=companies)
+    return render_template("user_shareddirector_home.html", companies=companies)
+
+# 管理員首頁（後台）
+@users_bp.route('/admin_home')
+def admin_home():
+    return render_template('admin/admin_home.html')
+
+# 個人頁面
+@users_bp.route('/profile')
+def profile():
+    return render_template('user_shared/profile.html')
 
 # 取得 session 資訊
 @users_bp.route('/api/get-session')
@@ -273,11 +286,4 @@ def get_session():
         })
     return jsonify({"success": False}), 401
 
-# 用戶管理頁面
-@users_bp.route('/user_management')
-def user_management():
-    try:
-        return render_template('user_management.html')
-    except Exception as e:
-        print(f"用戶管理頁面錯誤: {e}")
-        return f"用戶管理頁面載入錯誤: {str(e)}", 500
+

@@ -173,7 +173,13 @@
           document.getElementById('identity').value = roleMap[user.role] || '';
 
           // 班級顯示 & 存 class_id
-          document.getElementById('combinedClass').value = user.class_display_name || '';
+          if (user.classes && user.classes.length > 0) {
+            document.getElementById('combinedClass').value = user.classes
+              .map(c => (c.department.replace("管科", "") + c.name))
+              .join("、");
+          } else {
+            document.getElementById('combinedClass').value = user.class_display_name || '';
+          }
           window.classId = user.class_id || null;
 
           document.getElementById('name').value = user.name || '';

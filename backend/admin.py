@@ -4,9 +4,6 @@ from config import get_db
 
 admin_bp = Blueprint("admin_bp", __name__, url_prefix="/admin")
 
-@admin_bp.route("/home")
-def admin_home():
-    return render_template("admin_home.html")
 
 @admin_bp.route('/api/get_all_users', methods=['GET'])
 def get_all_users():
@@ -15,10 +12,16 @@ def get_all_users():
     try:
         cursor.execute("""
             SELECT 
-            u.id, u.username, u.name, u.email, u.role, u.class_id,
-            c.name AS class_name,
-            c.department,
-            u.created_at
+                u.id, u.username, u.name, u.email, u.role, u.class_id,
+                c.name AS class_name,
+                c.department,
+                (
+                    SELECT GROUP_CONCAT(c2.name SEPARATOR ', ')
+                    FROM classes_teacher ct2
+                    JOIN classes c2 ON ct2.class_id = c2.id
+                    WHERE ct2.teacher_id = u.id
+                ) AS teaching_classes,
+                u.created_at
             FROM users u
             LEFT JOIN classes c ON u.class_id = c.id
             ORDER BY u.created_at DESC
@@ -282,3 +285,12 @@ def get_all_classes():
     finally:
         cursor.close()
         conn.close()
+
+  # 用戶管理頁面
+@admin_bp.route('/user_management')
+def user_management():
+    try:
+        return render_template('admin/user_management.html')
+    except Exception as e:
+        print(f"用戶管理頁面錯誤: {e}")
+        return f"用戶管理頁面載入錯誤: {str(e)}", 500      

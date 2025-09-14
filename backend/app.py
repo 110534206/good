@@ -36,7 +36,7 @@ from company import company_bp
 from resume import resume_bp
 from admin import admin_bp
 from users import users_bp
-from announcements import announcements_bp
+from notification import notification_bp
 from preferences import preferences_bp
 
 # 註冊 Blueprint
@@ -45,7 +45,7 @@ app.register_blueprint(company_bp)
 app.register_blueprint(resume_bp)
 app.register_blueprint(admin_bp)
 app.register_blueprint(users_bp)
-app.register_blueprint(announcements_bp)
+app.register_blueprint(notification_bp)
 app.register_blueprint(preferences_bp)
 
 # -------------------------

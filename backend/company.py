@@ -56,8 +56,7 @@ def upload_company_form():
             print("❌ 錯誤：", e)
             return render_template('upload_company.html', error="伺服器錯誤，請稍後再試")
     else:
-        return render_template('upload_company.html')
-
+            return render_template('company/upload_company.html')
 
 # -------------------------
 # API - 審核公司
@@ -122,4 +121,4 @@ def approve_company():
     companies = cursor.fetchall()
     cursor.close()
     conn.close()
-    return render_template('approve_company.html', companies=companies)
+    return render_template('company/approve_company.html', companies=companies)

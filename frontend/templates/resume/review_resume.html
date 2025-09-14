@@ -214,9 +214,9 @@
       line-height: 1.4;
     }
 
-     .card h4.text-center {
+    .card h4.text-center {
       color: #0066cc;
-      font-weight: bold;  
+      font-weight: bold;
     }
   </style>
 </head>
@@ -351,7 +351,8 @@
 
     document.addEventListener("DOMContentLoaded", () => {
       // 取得所有學生履歷
-      fetch("/api/get_all_students_resumes")
+      const username = localStorage.getItem("username");  // 從 localStorage 取得老師帳號
+      fetch(`/api/get_class_resumes?username=${username}`)
         .then(res => res.json())
         .then(data => {
           if (data.success) {

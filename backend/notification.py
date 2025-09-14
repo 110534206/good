@@ -9,8 +9,8 @@ notification_bp = Blueprint("notification", __name__, url_prefix="/notifications
 def notifications():
     return render_template('notifications.html')
 
-@notification_bp.route("/api/announcements", methods=["GET"])
-def get_announcements():
+@notification_bp.route("/api/notification", methods=["GET"])
+def get_notification():
     conn = get_db()
     cursor = conn.cursor(dictionary=True)
     try:
@@ -20,7 +20,7 @@ def get_announcements():
                 id, title, content, created_by, created_at,
                 target_roles, status, visible_from, visible_until,
                 is_important, view_count
-            FROM announcements
+            FROM notification
             WHERE status = 'published'
               AND (visible_from IS NULL OR visible_from <= %s)
               AND (visible_until IS NULL OR visible_until >= %s)

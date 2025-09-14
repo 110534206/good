@@ -113,7 +113,7 @@
 
     .card h4.text-center {
       color: #0066cc;
-      font-weight: bold;  
+      font-weight: bold;
     }
 
     .container {
@@ -451,7 +451,7 @@
     }
 
     function loadResumes() {
-      fetch(`/api/get_all_resumes?username=${localStorage.getItem('username') || 'testuser'}`)
+      fetch(`/api/get_student_resumes?username=${localStorage.getItem('username')}`)
         .then(res => res.json())
         .then(data => {
           if (data.success) {

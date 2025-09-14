@@ -377,25 +377,25 @@
     });
 
     // 公告輪播內容
-    let announcements = [];
+    let notification = [];
     let currentAnnouncementIndex = 0;
-    const announcementContent = document.getElementById('announcement-content');
-    const prevBtn = document.getElementById('announcement-prev');
-    const nextBtn = document.getElementById('announcement-next');
+    const announcementContent = document.getElementById('notification-content');
+    const prevBtn = document.getElementById('notification-prev');
+    const nextBtn = document.getElementById('notification-next');
 
     function showAnnouncement(index) {
-      if (announcements.length > 0) {
-        announcementContent.textContent = announcements[index];
+      if (notification.length > 0) {
+        announcementContent.textContent = notification[index];
       } else {
         announcementContent.textContent = "目前沒有公告";
       }
     }
 
     // 取得公告資料
-    fetch("/api/announcements")
+    fetch("/api/notification")
       .then(response => response.json())
       .then(data => {
-        announcements = data;
+        notification = data;
         currentAnnouncementIndex = 0;
         showAnnouncement(currentAnnouncementIndex);
       })
@@ -406,23 +406,23 @@
 
     // 左右切換
     prevBtn.addEventListener('click', () => {
-      if (announcements.length > 0) {
-        currentAnnouncementIndex = (currentAnnouncementIndex - 1 + announcements.length) % announcements.length;
+      if (notification.length > 0) {
+        currentAnnouncementIndex = (currentAnnouncementIndex - 1 + notification.length) % notification.length;
         showAnnouncement(currentAnnouncementIndex);
       }
     });
 
     nextBtn.addEventListener('click', () => {
-      if (announcements.length > 0) {
-        currentAnnouncementIndex = (currentAnnouncementIndex + 1) % announcements.length;
+      if (notification.length > 0) {
+        currentAnnouncementIndex = (currentAnnouncementIndex + 1) % notification.length;
         showAnnouncement(currentAnnouncementIndex);
       }
     });
 
     // 自動輪播
     setInterval(() => {
-      if (announcements.length > 0) {
-        currentAnnouncementIndex = (currentAnnouncementIndex + 1) % announcements.length;
+      if (notification.length > 0) {
+        currentAnnouncementIndex = (currentAnnouncementIndex + 1) % notification.length;
         showAnnouncement(currentAnnouncementIndex);
       }
     }, 5000);

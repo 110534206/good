@@ -2,877 +2,231 @@
 <html lang="zh-Hant">
 
 <head>
-    <meta charset="UTF-8" />
-    <title>智慧實習平台 | 用戶管理</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>用戶管理</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-        }
-
         body {
-            font-family: 'Inter', sans-serif;
-            background: #ffffff;
-            color: #333;
-            overflow-x: hidden;
-        }
-
-        .container {
-            width: 100%;
-            max-width: 1200px;
-            margin: 0 auto;
-            padding: 0 0.5rem;
-        }
-
-        /* 頂端列 */
-        .top-bar {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 60px;
-            background-color: #fff;
-            z-index: 1100;
-            display: flex;
-            align-items: center;
-        }
-
-        .top-bar>.container {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 0 0.5rem;
-            height: 100%;
-            gap: 30px;
-        }
-
-        .top-bar-left #menu-btn {
-            width: 30px;
-            height: 22px;
-            cursor: pointer;
-            display: flex;
-            flex-direction: column;
-            justify-content: space-between;
-        }
-
-        .top-bar-left #menu-btn span {
-            height: 4px;
-            background-color: #333;
-            border-radius: 2px;
-        }
-
-        .top-bar-right {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            font-weight: bold;
-        }
-
-        .top-bar-right .btn-link {
-            color: #0066cc;
-            background-color: transparent;
-            border: 1.5px solid #0066cc;
-            padding: 0.3rem 0.7rem;
-            border-radius: 6px;
-            text-decoration: none;
-            transition: background-color 0.3s ease, color 0.3s ease;
-            font-size: 0.9rem;
-        }
-
-        .top-bar-right .btn-link:hover {
-            background-color: #0066cc;
-            color: white;
-        }
-
-        .top-bar-right #login-avatar {
-            width: 60px;
-            height: 60px;
-            border-radius: 50%;
-            object-fit: cover;
-            cursor: pointer;
-            margin-top: 6px;
-        }
-
-        /* Hero 區塊 */
-        header.hero {
-            position: relative;
-            width: 100%;
-            aspect-ratio: 3 / 1;
-            background-image: url('/static/images/title.png');
-            background-size: cover;
-            background-repeat: no-repeat;
-            background-position: center;
-            margin-top: 80px;
-            margin-bottom: 2rem;
-            border-radius: 0;
-            color: white;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-
-        main {
-            background-color: #fff;
-            padding: 2rem;
-            margin-bottom: 3rem;
-        }
-
-        .page-title {
-            text-align: center;
-            max-width: 1200px;
-            margin: 1rem auto 0.2rem auto;
-            margin-top: 4rem;
-            font-size: 2rem;
-            color: #0066cc;
-        }
-
-        /* 用戶管理區域 */
-        .user-management {
-            max-width: 1200px;
-            margin: 0 auto;
-        }
-
-        .management-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 2rem;
-            flex-wrap: wrap;
-            gap: 1rem;
-        }
-
-        .search-box {
-            display: flex;
-            gap: 0.5rem;
-            align-items: center;
-        }
-
-        .search-box input {
-            padding: 0.5rem;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            width: 250px;
-        }
-
-        .btn {
-            padding: 0.5rem 1rem;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            text-decoration: none;
-            display: inline-block;
-            transition: background-color 0.3s ease;
-            font-size: 0.9rem;
-        }
-
-        .btn-primary {
-            background-color: #0066cc;
-            color: white;
-        }
-
-        .btn-primary:hover {
-            background-color: #024689;
-        }
-
-        .btn-success {
-            background-color: #28a745;
-            color: white;
-        }
-
-        .btn-success:hover {
-            background-color: #218838;
-        }
-
-        .btn-warning {
-            background-color: #ffc107;
-            color: #212529;
-        }
-
-        .btn-warning:hover {
-            background-color: #e0a800;
-        }
-
-        .btn-danger {
-            background-color: #dc3545;
-            color: white;
-        }
-
-        .btn-danger:hover {
-            background-color: #c82333;
-        }
-
-        /* 用戶表格 */
-        .user-table {
-            width: 100%;
-            border-collapse: collapse;
-            background: white;
-            border-radius: 8px;
-            overflow: hidden;
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-        }
-
-        .user-table th,
-        .user-table td {
-            padding: 1rem;
-            text-align: left;
-            border-bottom: 1px solid #eee;
-        }
-
-        .user-table th {
-            background-color: #f8f9fa;
-            font-weight: 600;
-            color: #495057;
-        }
-
-        .user-table tr:hover {
             background-color: #f8f9fa;
         }
 
-        .user-table .actions {
-            display: flex;
-            gap: 0.5rem;
-            flex-wrap: wrap;
-        }
-
-        .user-table .btn {
-            padding: 0.3rem 0.6rem;
-            font-size: 0.8rem;
-        }
-
-        /* 角色標籤 */
-        .role-badge {
-            padding: 0.2rem 0.5rem;
-            border-radius: 12px;
-            font-size: 0.8rem;
-            font-weight: 500;
-        }
-
-        .role-student {
-            background-color: #e3f2fd;
-            color: #1976d2;
-        }
-
-        .role-teacher {
-            background-color: #f3e5f5;
-            color: #7b1fa2;
-        }
-
-        .role-admin {
-            background-color: #fff3e0;
-            color: #f57c00;
-        }
-
-        .role-director {
-            background-color: #e8f5e8;
-            color: #388e3c;
-        }
-
-        /* 模態框 */
-        .modal {
-            display: none;
-            position: fixed;
-            z-index: 2000;
-            left: 0;
-            top: 0;
-            width: 100%;
-            height: 100%;
-            background-color: rgba(0, 0, 0, 0.5);
-        }
-
-        .modal-content {
-            background-color: white;
-            margin: 5% auto;
-            padding: 2rem;
-            width: 90%;
-            max-width: 500px;
-            max-height: 80vh;
-            overflow-y: auto;
-            position: relative;
-            scrollbar-width: thin;
-        }
-
-        .modal-content h3 {
-            margin-bottom: 1.5rem;
-        }
-
-        .close {
-            position: absolute;
-            right: 1rem;
-            top: 1rem;
-            font-size: 1.5rem;
-            cursor: pointer;
-            color: #aaa;
-        }
-
-        .close:hover {
-            color: #000;
-        }
-
-        .form-group {
-            margin-bottom: 1rem;
-        }
-
-        .form-group label {
-            display: block;
-            margin-bottom: 0.5rem;
-            font-weight: 500;
-        }
-
-        .form-group input,
-        .form-group select {
-            width: 100%;
-            padding: 0.5rem;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            font-size: 0.9rem;
-        }
-
-        .form-actions {
-            display: flex;
-            gap: 1rem;
-            justify-content: flex-end;
-            margin-top: 1.5rem;
-        }
-
-        /* 側邊選單 */
-        #side-menu {
-            position: fixed;
-            top: 0;
-            left: 0;
-            height: 100vh;
-            width: 320px;
-            max-width: 80vw;
-            background-color: rgba(10, 10, 10, 0.95);
-            backdrop-filter: blur(6px);
-            box-shadow: 3px 0 12px rgb(0 0 0 / 0.7);
-            padding: 2rem 1.5rem;
-            transform: translateX(-100%);
-            transition: transform 0.3s ease-in-out;
-            z-index: 1100;
-            display: flex;
-            flex-direction: column;
-            align-items: flex-start;
+        .table thead th {
+            background-color: #0d6efd;
             color: white;
-            user-select: none;
-        }
-
-        #side-menu.open {
-            transform: translateX(0);
-        }
-
-        #close-btn {
-            position: absolute;
-            top: 2rem;
-            right: 1.6rem;
-            font-size: 2.2rem;
-            background: none;
-            border: none;
-            color: white;
-            cursor: pointer;
-            line-height: 1;
-            width: 2.5rem;
-            height: 2.5rem;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-
-        #side-menu h2 {
-            width: 100%;
-            margin-bottom: 1.5rem;
-            font-weight: 700;
-            font-size: 1.5rem;
-            text-align: left;
-        }
-
-        #side-menu a {
-            display: block;
-            width: 100%;
-            padding: 0.5rem 0;
-            font-size: 1.1rem;
-            color: #ddd;
-            text-decoration: none;
-            border-radius: 4px;
-            transition: background-color 0.2s ease;
-        }
-
-        #side-menu a:hover {
-            background-color: rgba(255, 255, 255, 0.15);
-            color: white;
-        }
-
-        /* 響應式設計 */
-        @media (max-width: 768px) {
-            .management-header {
-                flex-direction: column;
-                align-items: stretch;
-            }
-
-            .search-box {
-                width: 100%;
-            }
-
-            .search-box input {
-                width: 100%;
-            }
-
-            .user-table {
-                font-size: 0.8rem;
-            }
-
-            .user-table th,
-            .user-table td {
-                padding: 0.5rem;
-            }
-
-            .user-table .actions {
-                flex-direction: column;
-            }
-        }
-
-        /* 班級管理樣式 */
-        .class-select {
-            width: 100%;
-            padding: 0.5rem;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            font-size: 0.9rem;
         }
     </style>
 </head>
 
 <body>
-    <!-- 頂部欄 -->
-    <div class="top-bar">
-        <div class="container">
-            <div class="top-bar-left">
-                <div id="menu-btn" title="選單" role="button" tabindex="0">
-                    <span></span><span></span><span></span>
+    <div class="container mt-5">
+        <h2 class="mb-4">用戶管理</h2>
+        <table class="table table-bordered table-hover align-middle">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>帳號</th>
+                    <th>姓名</th>
+                    <th>Email</th>
+                    <th>角色</th>
+                    <th>所屬班級</th>
+                    <th>科系</th>
+                    <th>帶班</th>
+                    <th>建立時間</th>
+                    <th>操作</th>
+                </tr>
+            </thead>
+            <tbody id="userTableBody"></tbody>
+        </table>
+    </div>
+
+    <!-- 編輯用戶 Modal -->
+    <div class="modal fade" id="editUserModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">編輯用戶</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
-            </div>
-            <div class="top-bar-right">
-                <a href="/admin_home">
-                    <img src="{{ url_for('static', filename='images/avatar.png') }}" alt="頭像" id="login-avatar" />
-                </a>
-                <a href="/admin_home" class="btn-link">返回主頁</a>
-                <a href="/logout" class="btn-link">登出</a>
+                <div class="modal-body">
+                    <form id="editUserForm">
+                        <input type="hidden" id="editUserId">
+                        <div class="mb-3">
+                            <label class="form-label">帳號</label>
+                            <input type="text" id="editUsername" class="form-control" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">姓名</label>
+                            <input type="text" id="editName" class="form-control">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Email</label>
+                            <input type="email" id="editEmail" class="form-control">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">角色</label>
+                            <select id="editRole" class="form-select" required>
+                                <option value="student">學生</option>
+                                <option value="teacher">教師</option>
+                                <option value="director">主任</option>
+                                <option value="admin">管理員</option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">新密碼 (如不修改可留空)</label>
+                            <input type="password" id="editPassword" class="form-control">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">所屬班級 ID (學生才需要)</label>
+                            <input type="number" id="editClassId" class="form-control">
+                        </div>
+                        <button type="submit" class="btn btn-primary">儲存</button>
+                    </form>
+                </div>
             </div>
         </div>
     </div>
 
-    <main class="container">
-        <div class="user-management">
-            <h2 class="page-title">用戶管理</h2>
-
-            <div class="management-header">
-                <div class="search-box">
-                    <input type="text" id="searchInput" placeholder="搜尋用戶..." />
-                    <button class="btn btn-primary" onclick="searchUsers()">搜尋</button>
-                </div>
-                <button class="btn btn-success" onclick="openAddUserModal()">新增用戶</button>
-            </div>
-
-            <table class="user-table">
-                <thead>
-                    <tr>
-                        <th>用戶名</th>
-                        <th>角色</th>
-                        <th>姓名</th>
-                        <th>部門</th>
-                        <th>班級</th>
-                        <th>電子郵件</th>
-                        <th>操作</th>
-                    </tr>
-                </thead>
-                <tbody id="userTableBody">
-                    <!-- 用戶數據將通過 JavaScript 動態載入 -->
-                </tbody>
-            </table>
-        </div>
-    </main>
-
-    <!-- 新增/編輯用戶模態框 -->
-    <div id="userModal" class="modal">
-        <div class="modal-content">
-            <span class="close" onclick="closeUserModal()">&times;</span>
-            <h3 id="modalTitle">新增用戶</h3>
-            <form id="userForm">
-                <input type="hidden" id="userId" />
-                <div class="form-group">
-                    <label for="username">用戶名 *</label>
-                    <input type="text" id="username" required />
-                </div>
-                <div class="form-group">
-                    <label for="password">密碼 *</label>
-                    <input type="password" id="password" required />
-                </div>
-                <div class="form-group">
-                    <label for="role">角色 *</label>
-                    <select id="role" required onchange="toggleClassField()">
-                        <option value="">請選擇角色</option>
-                        <option value="student">學生</option>
-                        <option value="teacher">教師</option>
-                        <option value="director">主任</option>
-                        <option value="admin">管理員</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label for="name">姓名</label>
-                    <input type="text" id="name" />
-                </div>
-
-                <div class="form-group">
-                    <label for="department">部門</label>
-                    <input type="text" id="department" />
-                </div>
-                <div class="form-group">
-                    <label for="email">電子郵件</label>
-                    <input type="email" id="email" />
-                </div>
-
-                <div class="form-group" id="classField">
-                    <label for="class_id">班級</label>
-                    <select id="class_id" name="class_id">
-                        <!-- 選項由 JavaScript 動態載入 -->
-                    </select>
-                </div>
-
-                <div class="form-actions">
-                    <button type="button" class="btn btn-warning" onclick="closeUserModal()">取消</button>
-                    <button type="submit" class="btn btn-primary">儲存</button>
-                </div>
-            </form>
-        </div>
-    </div>
-
-    <!-- 設定班導 Modal -->
-    <div id="assignModal" class="modal">
-        <div class="modal-content">
-            <span class="close" onclick="closeAssignModal()">&times;</span>
-            <h3>設定班導</h3>
-            <form id="assignForm">
-                <input type="hidden" id="assignTeacherId" />
-                <div class="form-group">
-                    <label for="assignClassId">選擇班級</label>
-                    <select id="assignClassId" required></select>
-                </div>
-                <div class="form-group">
-                    <label for="assignRole">角色</label>
-                    <select id="assignRole" required>
-                        <option value="班導師">班導師</option>
-                        <option value="授課老師">授課老師</option>
-                    </select>
-                </div>
-                <div class="form-actions">
-                    <button type="button" class="btn btn-warning" onclick="closeAssignModal()">取消</button>
-                    <button type="submit" class="btn btn-primary">儲存</button>
-                </div>
-            </form>
-        </div>
-    </div>
-
-    <!-- 側邊選單 -->
-    <nav id="side-menu" aria-hidden="true" role="navigation" aria-label="功能選單">
-        <button id="close-btn" aria-label="關閉功能選單">×</button>
-        <h2>功能選單</h2>
-        <a href="/admin_home">首頁</a>
-        <a href="/user_management">使用者管理</a>
-        <a href="/admin/system_settings">系統設定</a>
-        <a href="/admin/reports">報表與統計</a>
-        <a href="/admin/notifications">通知管理</a>
-        <a href="/logout">登出</a>
-    </nav>
-
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
-        let users = [];
-        let classes = [];
+        const roleMap = {
+            student: '學生',
+            teacher: '教師',
+            director: '主任',
+            admin: '管理員'
+        };
 
-        // 載入用戶列表
         async function loadUsers() {
             try {
-                const response = await fetch('/api/admin/get_all_users');
-                const data = await response.json();
-                if (data.success) {
-                    users = data.users;
-                    renderUserTable();
-                } else {
-                    alert('載入用戶列表失敗: ' + data.message);
+                const res = await fetch('/admin/api/get_all_users');
+                const data = await res.json();
+                if (!data.success) {
+                    alert("載入失敗：" + data.message);
+                    return;
                 }
-            } catch (error) {
-                console.error('載入用戶列表錯誤:', error);
-                alert('載入用戶列表時發生錯誤');
-            }
-        }
 
-        // 載入班級資料
-        async function loadClasses() {
-            try {
-                const response = await fetch('/api/admin/get_all_classes');
-                const data = await response.json();
-                if (data.success) {
-                    classes = data.classes;
-                    populateClassOptions();
-                } else {
-                    alert('載入班級列表失敗: ' + data.message);
-                }
-            } catch (error) {
-                console.error('載入班級資料錯誤:', error);
-                alert('載入班級資料時發生錯誤');
-            }
-        }
+                const tbody = document.getElementById('userTableBody');
+                tbody.innerHTML = "";
 
-        // 套用班級選單
-        function populateClassOptions() {
-            const select = document.getElementById('class_id');
-            select.innerHTML = `<option value="">請選擇班級</option>`;
-            classes.forEach(cls => {
-                const option = document.createElement('option');
-                option.value = cls.id;  // 使用 ID 作為 value
-                option.textContent = cls.name;
-                select.appendChild(option);
-            });
-        }
+                data.users.forEach(user => {
+                    const tr = document.createElement('tr');
 
-        // 顯示/隱藏班級欄位
-        function toggleClassField() {
-            const role = document.getElementById('role').value;
-            const classField = document.getElementById('classField');
-            if (role === 'student' || role === 'teacher' || role === 'director') {
-                classField.style.display = 'block';
-            } else {
-                classField.style.display = 'none';
-            }
-            document.getElementById('class_id').value = '';
-        }
-
-        // 渲染用戶表格
-        function renderUserTable(filteredUsers = null) {
-            const tableBody = document.getElementById('userTableBody');
-            const usersToRender = filteredUsers || users;
-
-            tableBody.innerHTML = usersToRender.map(user => ` 
-        <tr>
+                    tr.innerHTML = `
+            <td>${user.id}</td>
             <td>${user.username}</td>
-            <td><span class="role-badge role-${user.role}">${getRoleDisplay(user.role)}</span></td>
-            <td>${user.name || '-'}</td>
-            <td>${user.department || '-'}</td>
-            <td>${user.class_name || '-'}</td>
-            <td>${user.email || '-'}</td>
-            <td class="actions">
-                <button class="btn btn-warning" onclick="editUser(${user.id})">編輯</button>
-                <button class="btn btn-danger" onclick="deleteUser(${user.id})">刪除</button>
-                ${(user.role === 'teacher' || user.role === 'director')
-                    ? `<button class="btn btn-primary" onclick="assignClassTeacher(${user.id})">設定班導</button>`
-                    : ''
-                }
+            <td>${user.name || ''}</td>
+            <td>${user.email || ''}</td>
+            <td>${roleMap[user.role] || user.role}</td>
+            <td>${user.role === 'student' ? (user.class_name || '-') : '-'}</td>
+            <td>${user.role === 'student' ? (user.department || '-') : '-'}</td>
+            <td>${['teacher', 'director'].includes(user.role) ? (user.teaching_classes || '-') : '-'}</td>
+            <td>${user.created_at || ''}</td>
+            <td>
+              <button class="btn btn-sm btn-warning" onclick="openEditModal(${user.id}, '${user.username}', '${user.name || ''}', '${user.email || ''}', '${user.role}', '${user.class_id || ''}')">編輯</button>
+              <button class="btn btn-sm btn-danger" onclick="deleteUser(${user.id})">刪除</button>
             </td>
-        </tr>
-    `).join('');
+          `;
+
+                    tbody.appendChild(tr);
+                });
+            } catch (err) {
+                console.error("載入用戶錯誤：", err);
+                alert("載入用戶失敗");
+            }
         }
 
-        // 角色中文轉換
-        function getRoleDisplay(role) {
-            const roleMap = {
-                'student': '學生',
-                'teacher': '教師',
-                'director': '主任',
-                'admin': '管理員'
+        // 打開編輯 Modal
+        function openEditModal(id, username, name, email, role, classId) {
+            const roleSelect = document.getElementById('editRole');
+            const roleGroup = roleSelect.closest('.mb-3');
+            const classIdInput = document.getElementById('editClassId');
+            const classIdGroup = classIdInput.closest('.mb-3');
+
+            // 重置角色選單
+            roleSelect.innerHTML = '';
+
+            // 根據角色控制角色選單內容與是否可修改
+            if (role === 'teacher' || role === 'director') {
+                // 教師與主任可選擇教師/主任
+                roleSelect.disabled = false;
+                ['teacher', 'director'].forEach(r => {
+                    const opt = document.createElement('option');
+                    opt.value = r;
+                    opt.textContent = roleMap[r];
+                    if (r === role) opt.selected = true;
+                    roleSelect.appendChild(opt);
+                });
+            } else {
+                // 學生與管理員不可修改角色
+                const opt = document.createElement('option');
+                opt.value = role;
+                opt.textContent = roleMap[role] || role;
+                opt.selected = true;
+                roleSelect.appendChild(opt);
+                roleSelect.disabled = true;
+            }
+
+            // 根據角色顯示/隱藏班級欄位
+            if (role === 'student') {
+                classIdGroup.style.display = '';
+                classIdInput.value = classId || '';
+            } else {
+                classIdGroup.style.display = 'none';
+                classIdInput.value = '';
+            }
+
+            // 填入其他欄位資料
+            document.getElementById('editUserId').value = id;
+            document.getElementById('editUsername').value = username;
+            document.getElementById('editName').value = name;
+            document.getElementById('editEmail').value = email;
+            document.getElementById('editPassword').value = "";
+
+            new bootstrap.Modal(document.getElementById('editUserModal')).show();
+        }
+
+
+        // 編輯用戶送出
+        document.getElementById('editUserForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const id = document.getElementById('editUserId').value;
+            const payload = {
+                username: document.getElementById('editUsername').value,
+                name: document.getElementById('editName').value,
+                email: document.getElementById('editEmail').value,
+                role: document.getElementById('editRole').value,
+                password: document.getElementById('editPassword').value,
+                class_id: document.getElementById('editClassId').value || null
             };
-            return roleMap[role] || role;
-        }
 
-        // 搜尋用戶
-        function searchUsers() {
-            const searchTerm = document.getElementById('searchInput').value.toLowerCase();
-            const filteredUsers = users.filter(user =>
-                user.username.toLowerCase().includes(searchTerm) ||
-                (user.name && user.name.toLowerCase().includes(searchTerm)) ||
-                (user.email && user.email.toLowerCase().includes(searchTerm))
-            );
-            renderUserTable(filteredUsers);
-        }
+            const res = await fetch(`/admin/api/update_user/${id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
 
-        // 開啟新增用戶表單
-        function openAddUserModal() {
-            document.getElementById('modalTitle').textContent = '新增用戶';
-            document.getElementById('userForm').reset();
-            document.getElementById('userId').value = '';
-            toggleClassField();  // 依角色初始化顯示
-            document.getElementById('userModal').style.display = 'block';
-        }
-
-        // 關閉模態框
-        function closeUserModal() {
-            document.getElementById('userModal').style.display = 'none';
-        }
-
-        // 編輯用戶
-        function editUser(userId) {
-            const user = users.find(u => u.id === userId);
-            if (!user) return;
-
-            document.getElementById('modalTitle').textContent = '編輯用戶';
-            document.getElementById('userId').value = user.id;
-            document.getElementById('username').value = user.username;
-            document.getElementById('password').value = ''; // 密碼不顯示
-            document.getElementById('role').value = user.role;
-            document.getElementById('name').value = user.name || '';
-            document.getElementById('department').value = user.department || '';
-            document.getElementById('class_id').value = user.class_id || '';
-            document.getElementById('email').value = user.email || '';
-
-            toggleClassField(); // 根據角色隱藏班級欄位
-            document.getElementById('userModal').style.display = 'block';
-        }
+            const data = await res.json();
+            alert(data.message);
+            if (data.success) {
+                bootstrap.Modal.getInstance(document.getElementById('editUserModal')).hide();
+                loadUsers();
+            }
+        });
 
         // 刪除用戶
-        async function deleteUser(userId) {
-            if (!confirm('確定要刪除此用戶嗎？此操作無法復原。')) return;
+        async function deleteUser(id) {
+            if (!confirm("確定要刪除這個用戶嗎？")) return;
 
-            try {
-                const response = await fetch(`/api/admin/delete_user/${userId}`, { method: 'DELETE' });
-                const data = await response.json();
-
-                if (data.success) {
-                    alert('用戶刪除成功');
-                    loadUsers();
-                } else {
-                    alert('刪除失敗: ' + data.message);
-                }
-            } catch (error) {
-                console.error('刪除用戶錯誤:', error);
-                alert('刪除用戶時發生錯誤');
+            const res = await fetch(`/admin/api/delete_user/${id}`, { method: 'DELETE' });
+            const data = await res.json();
+            alert(data.message);
+            if (data.success) {
+                loadUsers();
             }
         }
 
-        // 提交新增/編輯表單
-        document.getElementById('userForm').addEventListener('submit', async function (e) {
-            e.preventDefault();
-
-            const userId = document.getElementById('userId').value;
-            const formData = {
-                username: document.getElementById('username').value,
-                password: document.getElementById('password').value,
-                role: document.getElementById('role').value,
-                name: document.getElementById('name').value,
-                department: document.getElementById('department').value,
-                class_id: document.getElementById('class_id').value,
-                email: document.getElementById('email').value
-            };
-
-            try {
-                const url = userId ? `/api/admin/update_user/${userId}` : '/api/admin/create_user';
-                const method = userId ? 'PUT' : 'POST';
-
-                const response = await fetch(url, {
-                    method: method,
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(formData)
-                });
-
-                const data = await response.json();
-
-                if (data.success) {
-                    alert(userId ? '用戶更新成功' : '用戶新增成功');
-                    closeUserModal();
-                    loadUsers();
-                } else {
-                    alert((userId ? '更新' : '新增') + '失敗: ' + data.message);
-                }
-            } catch (error) {
-                console.error('提交表單錯誤:', error);
-                alert('提交表單時發生錯誤');
-            }
-        });
-
-        // 點擊模態框外部關閉
-        window.onclick = function (event) {
-            const modal = document.getElementById('userModal');
-            if (event.target === modal) {
-                closeUserModal();
-            }
-        }
-
-        // 搜尋輸入框按下 Enter 觸發
-        document.getElementById('searchInput').addEventListener('keyup', function (e) {
-            if (e.key === 'Enter') {
-                searchUsers();
-            }
-        });
-
-        // 初始載入
-        document.addEventListener('DOMContentLoaded', function () {
-            loadUsers();
-            loadClasses();
-            toggleClassField(); // 初始化根據角色顯示/隱藏班級欄位
-        });
-
-        // 開啟設定班導 Modal
-        function assignClassTeacher(userId) {
-            document.getElementById('assignTeacherId').value = userId;
-
-            // 動態載入班級選項
-            const select = document.getElementById('assignClassId');
-            select.innerHTML = `<option value="">請選擇班級</option>`;
-            classes.forEach(cls => {
-                const option = document.createElement('option');
-                option.value = cls.id;
-                option.textContent = cls.name;
-                select.appendChild(option);
-            });
-
-            document.getElementById('assignModal').style.display = 'block';
-        }
-
-        // 關閉設定班導 Modal
-        function closeAssignModal() {
-            document.getElementById('assignModal').style.display = 'none';
-        }
-
-        // 提交設定班導表單
-        document.getElementById('assignForm').addEventListener('submit', async function (e) {
-            e.preventDefault();
-
-            const teacherId = document.getElementById('assignTeacherId').value;
-            const classId = document.getElementById('assignClassId').value;
-            const role = document.getElementById('assignRole').value;
-
-            if (!teacherId || !classId) {
-                alert('請選擇班級與教師');
-                return;
-            }
-
-            try {
-                const response = await fetch('/api/admin/assign_class_teacher', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ class_id: classId, teacher_id: teacherId, role: role })
-                });
-
-                const data = await response.json();
-                if (data.success) {
-                    alert('班導設定成功');
-                    closeAssignModal();
-                } else {
-                    alert('設定失敗: ' + data.message);
-                }
-            } catch (error) {
-                console.error('設定班導錯誤:', error);
-                alert('設定班導時發生錯誤');
-            }
-        });
-
-        // JS 控制開關
-                document.getElementById('menu-btn').addEventListener('click', () => {
-                    document.getElementById('side-menu').classList.add('open');
-                });
-
-        document.getElementById('close-btn').addEventListener('click', () => {
-            document.getElementById('side-menu').classList.remove('open');
-        });
-        
+        document.addEventListener('DOMContentLoaded', loadUsers);
     </script>
 </body>
 
