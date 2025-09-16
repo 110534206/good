@@ -288,10 +288,17 @@ def get_class_resumes():
         conn = get_db()
         cursor = conn.cursor(dictionary=True)
 
-        # 先查老師的 class_id
-        cursor.execute("SELECT class_id FROM users WHERE username = %s AND role = 'teacher'", (username,))
+        # 使用 classes_teacher 表查詢該老師帶的班級
+        cursor.execute("""
+            SELECT ct.class_id 
+            FROM users u
+            JOIN classes_teacher ct ON u.id = ct.teacher_id
+            WHERE u.username = %s AND u.role = 'teacher'
+        """, (username,))
         class_row = cursor.fetchone()
         if not class_row:
+            cursor.close()
+            conn.close()
             return jsonify({"success": False, "message": "查無此老師或不是老師帳號"}), 404
 
         class_id = class_row['class_id']
@@ -318,7 +325,7 @@ def get_class_resumes():
 
     except Exception as e:
         traceback.print_exc()
-        return jsonify({"success": False, "message": f"伺服器錯誤: {str(e)}"}), 500   
+        return jsonify({"success": False, "message": f"伺服器錯誤: {str(e)}"}), 500
 
 # -------------------------
 # API - 刪除履歷
