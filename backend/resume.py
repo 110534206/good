@@ -1,4 +1,4 @@
-from flask import Blueprint, request, jsonify, send_file, render_template
+from flask import Blueprint, request, jsonify, session,send_file, render_template
 from werkzeug.utils import secure_filename
 from config import get_db
 import os
@@ -134,15 +134,22 @@ def list_resumes(username):
         return jsonify({"success": False, "message": f"查詢失敗: {str(e)}"}), 500
 
 # -------------------------
-# API - 審核履歷 (教師/主任)
+# API - 審核履歷 (僅限班導師 / 主任)
 # -------------------------
 @resume_bp.route('/api/review_resume', methods=['POST'])
 def review_resume():
     try:
+        if 'user_id' not in session:
+            return jsonify({"success": False, "message": "未登入"}), 403
+
+        role = session.get('role')
+        if role not in ["teacher", "director"]:
+            return jsonify({"success": False, "message": "角色無權限"}), 403
+
         data = request.get_json()
         resume_id = data.get("resume_id")
         status = data.get("status")
-        comment = data.get("comment", "").strip()
+        comment = (data.get("comment") or "").strip()
 
         if not resume_id or status not in ['approved', 'rejected']:
             return jsonify({"success": False, "message": "參數錯誤"}), 400
@@ -276,56 +283,76 @@ def get_student_resumes():
         return jsonify({"success": False, "message": f"伺服器錯誤: {str(e)}"}), 500
 
 # -------------------------
-# API - 查詢班級所有學生履歷
-# ------------------------- 
+# API - 取得班導 / 主任 履歷 (支援多班級 & 全系)
+# -------------------------
 @resume_bp.route('/api/get_class_resumes', methods=['GET'])
 def get_class_resumes():
+    if 'user_id' not in session:
+        return jsonify({"success": False, "message": "未授權"}), 403
+
+    user_id = session['user_id']
+    role = session.get('role')
+
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+
     try:
-        username = request.args.get('username')
-        if not username:
-            return jsonify({"success": False, "message": "缺少 username"}), 400
+        # 在班導首頁中，老師與主任皆應只看到自己擔任「班導師」的班級之履歷
+        if role in ("teacher", "director"):
+            cursor.execute(
+                """
+                SELECT class_id
+                FROM classes_teacher
+                WHERE teacher_id = %s AND role = '班導師'
+                """,
+                (user_id,)
+            )
+            class_rows = cursor.fetchall()
 
-        conn = get_db()
-        cursor = conn.cursor(dictionary=True)
+            if not class_rows:
+                return jsonify({"success": True, "resumes": []})
 
-        # 使用 classes_teacher 表查詢該老師帶的班級
-        cursor.execute("""
-            SELECT ct.class_id 
-            FROM users u
-            JOIN classes_teacher ct ON u.id = ct.teacher_id
-            WHERE u.username = %s AND u.role = 'teacher'
-        """, (username,))
-        class_row = cursor.fetchone()
-        if not class_row:
-            cursor.close()
-            conn.close()
-            return jsonify({"success": False, "message": "查無此老師或不是老師帳號"}), 404
+            class_ids = [row['class_id'] for row in class_rows]
+            format_strings = ','.join(['%s'] * len(class_ids))
 
-        class_id = class_row['class_id']
+            query = f"""
+                SELECT 
+                    r.id,
+                    r.original_filename AS original_filename,
+                    r.filepath,
+                    r.status,
+                    r.created_at AS submitted_at,
+                    u.id AS student_id,
+                    u.username,
+                    u.name,
+                    u.class_id,
+                    c.name AS className,
+                    c.department AS department
+                FROM resumes r
+                JOIN users u ON r.user_id = u.id
+                JOIN classes c ON u.class_id = c.id
+                WHERE u.class_id IN ({format_strings})
+                ORDER BY r.created_at DESC
+            """
+            cursor.execute(query, class_ids)
+            resumes = cursor.fetchall()
 
-        # 查該班所有學生的履歷
-        cursor.execute("""
-            SELECT r.id, r.original_filename, r.status, r.comment, r.note, r.created_at AS upload_time,
-                   u.username, u.name, c.name AS class_name
-            FROM resumes r
-            JOIN users u ON r.user_id = u.id
-            JOIN classes c ON u.class_id = c.id
-            WHERE u.class_id = %s
-            ORDER BY r.created_at DESC
-        """, (class_id,))
-        resumes = cursor.fetchall()
+        else:
+            return jsonify({"success": False, "message": "角色無權限"}), 403
 
+        # 時間格式化
         for r in resumes:
-            if isinstance(r.get('upload_time'), datetime):
-                r['upload_time'] = r['upload_time'].strftime("%Y-%m-%d %H:%M:%S")
+            if isinstance(r.get('submitted_at'), datetime):
+                r['submitted_at'] = r['submitted_at'].strftime("%Y-%m-%d %H:%M:%S")
 
-        cursor.close()
-        conn.close()
         return jsonify({"success": True, "resumes": resumes})
 
     except Exception as e:
         traceback.print_exc()
-        return jsonify({"success": False, "message": f"伺服器錯誤: {str(e)}"}), 500
+        return jsonify({"success": False, "message": str(e)}), 500
+    finally:
+        cursor.close()
+        conn.close()
 
 # -------------------------
 # API - 刪除履歷

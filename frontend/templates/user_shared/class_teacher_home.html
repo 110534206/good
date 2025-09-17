@@ -256,7 +256,12 @@
         <a href="/profile">
           <img src="{{ url_for('static', filename='images/avatar.png') }}" alt="頭像" id="login-avatar" />
         </a>
-        <a href="/profile" class="btn-link">班導</a>
+        {% if original_role == 'director' %}
+        <button type="button" class="btn-link" onclick="confirmRoleAndGo('director')">返回主任主頁</button>
+        {% elif original_role == 'teacher' %}
+        <button type="button" class="btn-link" onclick="confirmRoleAndGo('teacher')">返回教師主頁</button>
+        {% endif %}
+        <a href="/profile" class="btn-link">個人資料</a>
         <a href="/logout" class="btn-link">登出</a>
       </div>
     </div>
@@ -315,6 +320,20 @@
     document.getElementById('close-btn').addEventListener('click', () => {
       document.getElementById('side-menu').classList.remove('open');
     });
+
+    function confirmRoleAndGo(role) {
+      fetch('/api/confirm-role', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ role })
+      })
+      .then(res => res.json())
+      .then(data => {
+        if (data.success && data.redirect) {
+          window.location.href = data.redirect;
+        }
+      });
+    }
   </script>
     <!-- 預留底部空間 -->
   <div style="height: 85px;"></div>

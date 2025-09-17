@@ -263,7 +263,7 @@ def director_home():
     cursor.close()
     conn.close()
 
-    return render_template("user_shareddirector_home.html", companies=companies)
+    return render_template("user_shared/director_home.html", companies=companies)
 
 # 管理員首頁（後台）
 @users_bp.route('/admin_home')

@@ -40,6 +40,61 @@ def get_all_users():
         cursor.close()
         conn.close()
 
+
+@admin_bp.route('/api/search_users', methods=['GET'])
+def search_users():
+    username = (request.args.get('username') or '').strip()
+    filename = (request.args.get('filename') or '').strip()
+
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        conditions = []
+        params = []
+
+        if username:
+            conditions.append("u.username LIKE %s")
+            params.append(f"%{username}%")
+
+        if filename:
+            conditions.append("EXISTS (SELECT 1 FROM resumes r WHERE r.user_id = u.id AND r.original_filename LIKE %s)")
+            params.append(f"%{filename}%")
+
+        where_clause = ("WHERE " + " AND ".join(conditions)) if conditions else ""
+
+        sql = f"""
+            SELECT 
+                u.id, u.username, u.name, u.email, u.role, u.class_id,
+                c.name AS class_name,
+                c.department,
+                (
+                    SELECT GROUP_CONCAT(c2.name SEPARATOR ', ')
+                    FROM classes_teacher ct2
+                    JOIN classes c2 ON ct2.class_id = c2.id
+                    WHERE ct2.teacher_id = u.id
+                ) AS teaching_classes,
+                u.created_at
+            FROM users u
+            LEFT JOIN classes c ON u.class_id = c.id
+            {where_clause}
+            ORDER BY u.created_at DESC
+        """
+
+        cursor.execute(sql, params)
+        users = cursor.fetchall()
+
+        for user in users:
+            if user.get('created_at'):
+                user['created_at'] = user['created_at'].strftime("%Y-%m-%d %H:%M:%S")
+
+        return jsonify({"success": True, "users": users})
+    except Exception as e:
+        print(f"搜尋用戶錯誤: {e}")
+        return jsonify({"success": False, "message": "搜尋失敗"}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
 @admin_bp.route('/api/assign_student_class', methods=['POST'])
 def assign_student_class():
     data = request.get_json()
