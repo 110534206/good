@@ -88,6 +88,9 @@
         btn.className = "role-button";
         btn.textContent = getRoleDisplayName(role);
         btn.onclick = () => {
+          // 設定 localStorage 中的 selectedRole
+          localStorage.setItem("selectedRole", role);
+          
           // 按下按鈕後呼叫後端確認角色API
           fetch('/api/confirm-role', {
             method: 'POST',

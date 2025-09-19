@@ -257,8 +257,14 @@
         <a href="/profile">
           <img src="{{ url_for('static', filename='images/avatar.png') }}" alt="頭像" id="login-avatar" />
         </a>
-        <a href="/profile" class="btn-link">教師</a>
-        <a href="/login" class="btn-link">登出</a>
+        <div class="dropdown" style="position: relative;">
+          <button id="accountDropdownBtn" class="btn-link" aria-expanded="false">帳號 ▾</button>
+          <div id="accountDropdownMenu" class="dropdown-menu" style="position:absolute; right:0; top:120%; background:#fff; border:1px solid #ccc; border-radius:8px; padding:6px; min-width:160px; display:none; box-shadow:0 4px 12px rgba(0,0,0,.12);">
+            <a href="/profile" class="btn-link" style="display:block; border:none; margin:4px 0;">個人資料</a>
+            <a id="toHomeroomLink" href="/class_teacher_home" class="btn-link" style="display:none; border:none; margin:4px 0;">切換到班導主頁</a>
+            <a href="/login" class="btn-link" style="display:block; border:none; margin:4px 0;">登出</a>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -315,6 +321,29 @@
     document.getElementById('close-btn').addEventListener('click', () => {
       document.getElementById('side-menu').classList.remove('open');
     });
+
+    // 帳號下拉
+    const btn = document.getElementById('accountDropdownBtn');
+    const menu = document.getElementById('accountDropdownMenu');
+    btn.addEventListener('click', () => {
+      const open = menu.style.display === 'block';
+      menu.style.display = open ? 'none' : 'block';
+      btn.setAttribute('aria-expanded', String(!open));
+    });
+    document.addEventListener('click', (e) => {
+      if (!menu.contains(e.target) && !btn.contains(e.target)) {
+        menu.style.display = 'none';
+        btn.setAttribute('aria-expanded', 'false');
+      }
+    });
+
+    // 判斷是否為班導，顯示切換按鈕
+    fetch('/api/profile').then(r => r.json()).then(d => {
+      if (d.success && d.user && d.user.is_homeroom) {
+        const link = document.getElementById('toHomeroomLink');
+        if (link) link.style.display = 'block';
+      }
+    }).catch(() => {});
   </script>
 </body>
 

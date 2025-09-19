@@ -417,12 +417,11 @@
     </script>
     <!-- JS 控制開關 -->
     <script>
-        // 驗證角色
+        // 驗證登入狀態
         const username = localStorage.getItem("username");
-        const role = localStorage.getItem("selectedRole");
 
-        if (!username || role !== "director") {
-            alert("請以主任身份登入！");
+        if (!username) {
+            alert("請先登入！");
             window.location.href = "/login";
         }
 

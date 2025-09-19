@@ -234,8 +234,15 @@
         <a href="/class_teacher_home">
           <img src="{{ url_for('static', filename='images/avatar.png') }}" alt="頭像" id="login-avatar" />
         </a>
-        <a href="/class_teacher_home" class="btn-link">返回主頁</a>
-        <a href="/login" class="btn-link">登出</a>
+        <div class="dropdown" style="position: relative;">
+          <button id="accountDropdownBtn" class="btn-link" aria-expanded="false">帳號 ▾</button>
+          <div id="accountDropdownMenu" class="dropdown-menu" style="position:absolute; right:0; top:120%; background:#fff; border:1px solid #ccc; border-radius:8px; padding:6px; min-width:200px; display:none; box-shadow:0 4px 12px rgba(0,0,0,.12);">
+            <a href="/class_teacher_home" class="btn-link" style="display:block; border:none; margin:4px 0;">返回班導主頁</a>
+            <a id="toDirectorHome" href="/director_home" class="btn-link" style="display:none; border:none; margin:4px 0;">切換到主任主頁</a>
+            <a id="toTeacherHome" href="/teacher_home" class="btn-link" style="display:none; border:none; margin:4px 0;">切換到教師主頁</a>
+            <a href="/login" class="btn-link" style="display:block; border:none; margin:4px 0;">登出</a>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -370,6 +377,34 @@
       document.getElementById("statusFilter").addEventListener("change", applyFilters);
       document.getElementById("searchBox").addEventListener("input", applyFilters);
     });
+
+    // 帳號下拉
+    const btn = document.getElementById('accountDropdownBtn');
+    const menu = document.getElementById('accountDropdownMenu');
+    btn.addEventListener('click', () => {
+      const open = menu.style.display === 'block';
+      menu.style.display = open ? 'none' : 'block';
+      btn.setAttribute('aria-expanded', String(!open));
+    });
+    document.addEventListener('click', (e) => {
+      if (!menu.contains(e.target) && !btn.contains(e.target)) {
+        menu.style.display = 'none';
+        btn.setAttribute('aria-expanded', 'false');
+      }
+    });
+
+    // 若目前 session role 是 director，顯示切回主任主頁的選項；若是 teacher，顯示切回教師主頁
+    fetch('/api/get-session').then(r => r.json()).then(s => {
+      if (s.success) {
+        if (s.role === 'director') {
+          const el = document.getElementById('toDirectorHome');
+          if (el) el.style.display = 'block';
+        } else if (s.role === 'teacher') {
+          const el = document.getElementById('toTeacherHome');
+          if (el) el.style.display = 'block';
+        }
+      }
+    }).catch(() => {});
 
     function populateFilters(data) {
       const deptSet = new Set();
