@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="zh-Hant">
+
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -104,7 +105,8 @@
       background-size: cover;
       background-repeat: no-repeat;
       background-position: center;
-      margin-top: 80px; /* 避開固定頂端列 */
+      margin-top: 80px;
+      /* 避開固定頂端列 */
       margin-bottom: 2rem;
       border-radius: 0;
       color: white;
@@ -257,10 +259,10 @@
           <img src="{{ url_for('static', filename='images/avatar.png') }}" alt="頭像" id="login-avatar" />
         </a>
         {% if original_role == 'director' %}
-        <button type="button" class="btn-link" onclick="confirmRoleAndGo('director')">返回主任主頁</button>
+        <a href="/director_home" class="btn-link">返回主任主頁</a>
         {% elif original_role == 'teacher' %}
-        <button type="button" class="btn-link" onclick="confirmRoleAndGo('teacher')">返回教師主頁</button>
-        {% endif %}
+        <a href="/teacher_home" class="btn-link">返回老師主頁</a>
+        {% endif %} 
         <a href="/profile" class="btn-link">個人資料</a>
         <a href="/logout" class="btn-link">登出</a>
       </div>
@@ -321,21 +323,8 @@
       document.getElementById('side-menu').classList.remove('open');
     });
 
-    function confirmRoleAndGo(role) {
-      fetch('/api/confirm-role', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ role })
-      })
-      .then(res => res.json())
-      .then(data => {
-        if (data.success && data.redirect) {
-          window.location.href = data.redirect;
-        }
-      });
-    }
   </script>
-    <!-- 預留底部空間 -->
+  <!-- 預留底部空間 -->
   <div style="height: 85px;"></div>
 </body>
 

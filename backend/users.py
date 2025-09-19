@@ -253,9 +253,26 @@ def student_home():
 # 使用者首頁 (主任前台)
 @users_bp.route('/director_home')
 def director_home():
-    if session.get("role") != "director":
+    # 檢查用戶是否已登入
+    if 'username' not in session or 'user_id' not in session:
         return redirect(url_for("auth_bp.login_page"))
+    
+    user_id = session.get('user_id')
+    
+    # 檢查用戶是否具有主任權限
+    conn = get_db()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("SELECT 1 FROM users WHERE id = %s AND role = 'director'", (user_id,))
+        is_director = cursor.fetchone()
+        
+        if not is_director:
+            return redirect(url_for("auth_bp.login_page"))
+    finally:
+        cursor.close()
+        conn.close()
 
+    # 取得待審核公司資料
     conn = get_db()
     cursor = conn.cursor(dictionary=True)
     cursor.execute("SELECT id, company_name FROM internship_companies WHERE status = 'pending'")
