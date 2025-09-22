@@ -71,7 +71,7 @@ def fill_preferences():
             submitted_preferences[order - 1] = company_id
 
     return render_template(
-        'preferences/fill_preferences.html',
+        'fill_preferences.html',
         companies=companies,
         submitted_preferences=submitted_preferences,
         message=message
@@ -153,7 +153,7 @@ def review_preferences():
                     'submitted_at': row['submitted_at']
                 })
 
-        return render_template('preferences/review_preferences.html', student_data=student_data)
+        return render_template('review_preferences.html', student_data=student_data)
 
     except Exception as e:
         print("取得志願資料錯誤：", e)
