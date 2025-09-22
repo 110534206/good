@@ -492,14 +492,14 @@ def submit_comment():
 #上傳履歷頁面
 @resume_bp.route('/upload_resume')
 def upload_resume_page():
-    return render_template('upload_resume.html')
+    return render_template('resume/upload_resume.html')
 
 #審核履歷頁面
 @resume_bp.route('/review_resume')
 def review_resume_page():
-    return render_template('review_resume.html')
+    return render_template('resume/review_resume.html')
 
 #ai 編輯履歷頁面
 @resume_bp.route('/ai_edit_resume')
 def ai_edit_resume_page():
-    return render_template('ai_edit_resume.html')
+    return render_template('resume/ai_edit_resume.html')

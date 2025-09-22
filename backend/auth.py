@@ -229,7 +229,7 @@ def index_page():
 #登入
 @auth_bp.route("/login")
 def login_page():
-    return render_template("login.html")
+    return render_template("auth/login.html")
 
 #登出
 @auth_bp.route("/logout")
@@ -244,11 +244,11 @@ def login_confirm_page():
     if not roles:
         return redirect(url_for("auth_bp.login_page"))
 
-    return render_template("login-confirm.html", roles_json=json.dumps(roles))
-
+    return render_template("auth/login-confirm.html", roles_json=json.dumps(roles))
+  
 # 學生註冊
 @auth_bp.route("/register_student")
 def show_register_student_page():
-    return render_template("register_student.html")
+    return render_template("auth/register_student.html")
 
 

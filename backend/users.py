@@ -13,7 +13,7 @@ users_bp = Blueprint("users_bp", __name__)
 def teacher_home():
     if 'username' not in session or session.get('role') != 'teacher':
         return redirect(url_for('auth_bp.login_page'))
-    return render_template('teacher_home.html')
+    return render_template('user_shared/teacher_home.html')
 
 # -------------------------
 # 老師首頁(班導)
@@ -48,7 +48,7 @@ def class_teacher_home():
         cursor.close()
         conn.close()
 
-    return render_template('class_teacher_home.html',
+    return render_template('user_shared/class_teacher_home.html',
         username=session.get('username'),
         original_role=session.get('original_role', 'teacher')
     )
@@ -248,7 +248,7 @@ def change_password():
 # 使用者首頁（學生前台）
 @users_bp.route('/student_home')
 def student_home():
-    return render_template('student_home.html')
+    return render_template('user_shared/student_home.html')
 
 # 使用者首頁 (主任前台)
 @users_bp.route('/director_home')
@@ -280,17 +280,17 @@ def director_home():
     cursor.close()
     conn.close()
 
-    return render_template("director_home.html", companies=companies)
+    return render_template("user_shared/director_home.html", companies=companies)
 
 # 管理員首頁（後台）
 @users_bp.route('/admin_home')
 def admin_home():
-    return render_template('admin_home.html')
+    return render_template('user_shared/admin_home.html')
 
 # 個人頁面
 @users_bp.route('/profile')
 def profile():
-    return render_template('profile.html')
+    return render_template('user_shared/profile.html')
 
 # 取得 session 資訊
 @users_bp.route('/api/get-session')

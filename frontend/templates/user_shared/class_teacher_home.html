@@ -39,12 +39,10 @@
       align-items: center;
     }
 
-    /* 頂端列內容用 container 包裹，寬度跟下方一致 */
     .top-bar>.container {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      padding: 0 0.5rem;
       height: 100%;
       gap: 30px;
     }
@@ -68,32 +66,46 @@
       display: flex;
       align-items: center;
       gap: 10px;
-      font-weight: bold;
     }
 
-    .top-bar-right .btn-link {
-      color: #0066cc;
-      background-color: transparent;
-      border: 1.5px solid #0066cc;
-      padding: 0.3rem 0.7rem;
-      border-radius: 6px;
-      text-decoration: none;
-      transition: background-color 0.3s ease, color 0.3s ease;
-      font-size: 0.9rem;
-    }
-
-    .top-bar-right .btn-link:hover {
-      background-color: #0066cc;
-      color: white;
-    }
-
-    .top-bar-right #login-avatar {
-      width: 60px;
-      height: 60px;
+    #login-avatar {
+      width: 48px;
+      height: 48px;
       border-radius: 50%;
       object-fit: cover;
       cursor: pointer;
-      margin-top: 6px;
+    }
+
+    /* 下拉選單 */
+    .dropdown {
+      position: relative;
+    }
+
+    .dropdown-menu {
+      position: absolute;
+      right: 0;
+      top: 120%;
+      background: #fff;
+      border: 1px solid #ccc;
+      border-radius: 8px;
+      padding: 6px;
+      min-width: 180px;
+      display: none;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, .12);
+      z-index: 1200;
+    }
+
+    .dropdown-menu a {
+      display: block;
+      margin: 4px 0;
+      padding: 6px 12px;
+      text-decoration: none;
+      color: #0066cc;
+      border-radius: 6px;
+    }
+
+    .dropdown-menu a:hover {
+      background: #f0f8ff;
     }
 
     /* Hero 區塊 */
@@ -106,10 +118,7 @@
       background-repeat: no-repeat;
       background-position: center;
       margin-top: 80px;
-      /* 避開固定頂端列 */
       margin-bottom: 2rem;
-      border-radius: 0;
-      color: white;
       display: flex;
       align-items: center;
       justify-content: center;
@@ -123,7 +132,6 @@
 
     .page-title {
       text-align: center;
-      max-width: 1200px;
       margin: 0 auto 3rem auto;
     }
 
@@ -133,7 +141,6 @@
       display: grid;
       grid-template-columns: repeat(2, 1fr);
       gap: 2rem;
-      padding: 0;
     }
 
     .card {
@@ -168,15 +175,14 @@
       background-color: #0066cc;
       color: white;
       border-radius: 8px;
-      min-width: 120px;
       text-decoration: none;
-      transition: background-color 0.3s ease;
     }
 
     .card a:hover {
       background-color: #024689;
     }
 
+    /* 側邊選單 */
     #side-menu {
       position: fixed;
       top: 0;
@@ -193,9 +199,7 @@
       z-index: 1100;
       display: flex;
       flex-direction: column;
-      align-items: flex-start;
       color: white;
-      user-select: none;
     }
 
     #side-menu.open {
@@ -206,36 +210,19 @@
       position: absolute;
       top: 2rem;
       right: 1.6rem;
-      font-size: 2.2rem;
+      font-size: 2rem;
       background: none;
       border: none;
       color: white;
       cursor: pointer;
-      line-height: 1;
-      width: 2.5rem;
-      height: 2.5rem;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
-
-    #side-menu h2 {
-      width: 100%;
-      margin-bottom: 1.5rem;
-      font-weight: 700;
-      font-size: 1.5rem;
-      text-align: left;
     }
 
     #side-menu a {
       display: block;
-      width: 100%;
       padding: 0.5rem 0;
       font-size: 1.1rem;
       color: #ddd;
       text-decoration: none;
-      border-radius: 4px;
-      transition: background-color 0.2s ease;
     }
 
     #side-menu a:hover {
@@ -250,29 +237,28 @@
   <div class="top-bar">
     <div class="container">
       <div class="top-bar-left">
-        <div id="menu-btn" title="選單" role="button" tabindex="0">
-          <span></span><span></span><span></span>
-        </div>
+        <div id="menu-btn"><span></span><span></span><span></span></div>
       </div>
       <div class="top-bar-right">
-        <a href="/profile">
+        <div class="dropdown">
           <img src="{{ url_for('static', filename='images/avatar.png') }}" alt="頭像" id="login-avatar" />
-        </a>
-        {% if original_role == 'director' %}
-        <a href="/director_home" class="btn-link">返回主任主頁</a>
-        {% elif original_role == 'teacher' %}
-        <a href="/teacher_home" class="btn-link">返回老師主頁</a>
-        {% endif %} 
-        <a href="/profile" class="btn-link">個人資料</a>
-        <a href="/logout" class="btn-link">登出</a>
+          <div id="accountDropdownMenu" class="dropdown-menu">
+            <a href="/profile">個人資料</a>
+            {% if original_role == 'teacher' %}
+            <a href="/teacher_home">返回老師主頁</a>
+            {% elif original_role == 'director' %}
+            <a href="/director_home">返回主任主頁</a>
+            {% endif %}
+            <a id="toHomeroomLink" href="/class_teacher_home" style="display:none;">班導主頁</a>
+            <a href="/logout">登出</a>
+          </div>
+        </div>
       </div>
     </div>
   </div>
 
-  <!-- Hero 區塊 -->
-  <div class="container">
-    <header class="hero"></header>
-  </div>
+  <!-- Hero -->
+  <div class="container"><header class="hero"></header></div>
 
   <!-- 主內容 -->
   <main class="container">
@@ -302,8 +288,8 @@
   </main>
 
   <!-- 側邊選單 -->
-  <nav id="side-menu" aria-hidden="true" role="navigation" aria-label="功能選單">
-    <button id="close-btn" aria-label="關閉功能選單">×</button>
+  <nav id="side-menu">
+    <button id="close-btn">×</button>
     <h2>功能選單</h2>
     <a href="/class_teacher_home">首頁</a>
     <a href="/profile">個人資料</a>
@@ -313,19 +299,36 @@
     <a href="/upload_company">建立實習機會</a>
   </nav>
 
-  <!-- JS 控制開關 -->
+  <!-- JS -->
   <script>
+    // 側邊選單開關
     document.getElementById('menu-btn').addEventListener('click', () => {
       document.getElementById('side-menu').classList.add('open');
     });
-
     document.getElementById('close-btn').addEventListener('click', () => {
       document.getElementById('side-menu').classList.remove('open');
     });
 
+    // 下拉選單
+    const avatar = document.getElementById('login-avatar');
+    const menu = document.getElementById('accountDropdownMenu');
+    avatar.addEventListener('click', () => {
+      menu.style.display = menu.style.display === 'block' ? 'none' : 'block';
+    });
+    document.addEventListener('click', (e) => {
+      if (!menu.contains(e.target) && !avatar.contains(e.target)) {
+        menu.style.display = 'none';
+      }
+    });
+
+    // 判斷是否為班導，顯示班導主頁
+    fetch('/api/profile').then(r => r.json()).then(d => {
+      if (d.success && d.user && d.user.is_homeroom) {
+        document.getElementById('toHomeroomLink').style.display = 'block';
+      }
+    }).catch(() => { });
   </script>
-  <!-- 預留底部空間 -->
+
   <div style="height: 85px;"></div>
 </body>
-
 </html>

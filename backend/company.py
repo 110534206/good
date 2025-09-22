@@ -21,12 +21,12 @@ def upload_company_form():
 
             # 公司名稱必填
             if not company_name:
-                return render_template('upload_company.html', error="公司名稱為必填")
+                return render_template('company/upload_company.html', error="公司名稱為必填")
 
             # 從 session 拿上傳者 id
             uploaded_by_user_id = session.get("user_id")
             if not uploaded_by_user_id:
-                return render_template('upload_company.html', error="請先登入")
+                return render_template('company/upload_company.html', error="請先登入")
 
             conn = get_db()
             cursor = conn.cursor()
@@ -50,13 +50,13 @@ def upload_company_form():
 
             # 上傳成功訊息，告知狀態是待審核
             success_msg = "公司資訊已成功上傳，狀態：待審核"
-            return render_template('upload_company.html', success=success_msg)
+            return render_template('company/upload_company.html', success=success_msg)
 
         except Exception as e:
             print("❌ 錯誤：", e)
-            return render_template('upload_company.html', error="伺服器錯誤，請稍後再試")
+            return render_template('company/upload_company.html', error="伺服器錯誤，請稍後再試")
     else:
-            return render_template('upload_company.html')
+            return render_template('company/upload_company.html')
 
 # -------------------------
 # API - 審核公司
@@ -121,4 +121,4 @@ def approve_company():
     companies = cursor.fetchall()
     cursor.close()
     conn.close()
-    return render_template('approve_company.html', companies=companies)
+    return render_template('company/approve_company.html', companies=companies)
