@@ -197,7 +197,7 @@ def admin_create_user():
     if not username or not password or not role:
         return jsonify({"success": False, "message": "用戶名、密碼和角色為必填欄位"}), 400
 
-    valid_roles = ['student', 'teacher', 'director', 'admin']
+    valid_roles = ['student', 'teacher', 'director', 'ta','admin']
     if role not in valid_roles:
         return jsonify({"success": False, "message": "無效的角色"}), 400
 
@@ -243,7 +243,7 @@ def admin_update_user(user_id):
     if not username or not role:
         return jsonify({"success": False, "message": "用戶名和角色為必填欄位"}), 400
 
-    valid_roles = ['student', 'teacher', 'director', 'admin']
+    valid_roles = ['student', 'teacher', 'director','ta', 'admin']
     if role not in valid_roles:
         return jsonify({"success": False, "message": "無效的角色"}), 400
 
