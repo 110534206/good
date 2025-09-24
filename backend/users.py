@@ -282,6 +282,12 @@ def director_home():
 
     return render_template("user_shared/director_home.html", companies=companies)
 
+# 科助
+@users_bp.route('/ta_home')
+def ta_home():
+    return render_template('user_shared/ta_home.html')
+
+
 # 管理員首頁（後台）
 @users_bp.route('/admin_home')
 def admin_home():
