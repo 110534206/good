@@ -24,6 +24,8 @@ def get_all_users():
                 u.created_at
             FROM users u
             LEFT JOIN classes c ON u.class_id = c.id
+            -- 這裡不用特別限制 role，因為 ta 也是一個合法角色
+            -- 如果你只想撈出特定角色（例如 admin, teacher, student, ta），可以在這裡加 WHERE
             ORDER BY u.created_at DESC
         """)
         users = cursor.fetchall()
@@ -32,6 +34,18 @@ def get_all_users():
             if user.get('created_at'):
                 user['created_at'] = user['created_at'].strftime("%Y-%m-%d %H:%M:%S")
 
+            # 這裡可以針對新角色做額外處理（例如顯示名稱轉換）
+            if user.get('role') == 'ta':
+                user['role_display'] = '科助'
+            elif user.get('role') == 'teacher':
+                user['role_display'] = '老師'
+            elif user.get('role') == 'student':
+                user['role_display'] = '學生'
+            elif user.get('role') == 'admin':
+                user['role_display'] = '管理員'
+            else:
+                user['role_display'] = user['role']
+
         return jsonify({"success": True, "users": users})
     except Exception as e:
         print(f"獲取用戶列表錯誤: {e}")
@@ -39,6 +53,7 @@ def get_all_users():
     finally:
         cursor.close()
         conn.close()
+
 
 
 @admin_bp.route('/api/search_users', methods=['GET'])
