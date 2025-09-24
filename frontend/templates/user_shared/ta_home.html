@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>智慧實習平台 | 學生主頁</title>
+  <title>智慧實習平台 | 科助主頁</title>
   <style>
     * {
       box-sizing: border-box;
@@ -25,7 +25,6 @@
       padding: 0 0.5rem;
     }
 
-    /* 頂端列 */
     .top-bar {
       position: fixed;
       top: 0;
@@ -38,7 +37,6 @@
       align-items: center;
     }
 
-    /* 頂端列內容用 container 包裹，寬度跟下方一致 */
     .top-bar>.container {
       display: flex;
       justify-content: space-between;
@@ -95,19 +93,15 @@
       margin-top: 6px;
     }
 
-    /* Hero 區塊 */
     header.hero {
       position: relative;
       width: 100%;
       aspect-ratio: 3 / 1;
       background-image: url('/static/images/title.png');
       background-size: cover;
-      background-repeat: no-repeat;
       background-position: center;
       margin-top: 80px;
-      /* 避開固定頂端列 */
       margin-bottom: 2rem;
-      border-radius: 0;
       color: white;
       display: flex;
       align-items: center;
@@ -132,7 +126,6 @@
       display: grid;
       grid-template-columns: repeat(2, 1fr);
       gap: 2rem;
-      padding: 0;
     }
 
     .card {
@@ -191,9 +184,7 @@
       z-index: 1100;
       display: flex;
       flex-direction: column;
-      align-items: flex-start;
       color: white;
-      user-select: none;
     }
 
     #side-menu.open {
@@ -209,25 +200,15 @@
       border: none;
       color: white;
       cursor: pointer;
-      line-height: 1;
-      width: 2.5rem;
-      height: 2.5rem;
-      display: flex;
-      align-items: center;
-      justify-content: center;
     }
 
     #side-menu h2 {
-      width: 100%;
       margin-bottom: 1.5rem;
       font-weight: 700;
       font-size: 1.5rem;
-      text-align: left;
     }
 
     #side-menu a {
-      display: block;
-      width: 100%;
       padding: 0.5rem 0;
       font-size: 1.1rem;
       color: #ddd;
@@ -240,56 +221,6 @@
       background-color: rgba(255, 255, 255, 0.15);
       color: white;
     }
-
-    /* 公告輪播樣式 */
-    #announcement-carousel {
-      max-width: 1200px;
-      margin: 0 auto 2rem auto;
-      position: relative;
-      padding: 1rem 3rem;
-      background-color: #f0f8ff;
-      font-weight: 600;
-      font-size: 1.2rem;
-      display: flex;
-      align-items: center;
-      color: #004080;
-      justify-content: center;
-      min-height: 60px;
-      user-select: none;
-    }
-
-    #announcement-carousel button {
-      position: absolute;
-      top: 50%;
-      transform: translateY(-50%);
-      background: none;
-      border: none;
-      font-size: 2rem;
-      font-weight: bold;
-      color: #0066cc;
-      cursor: pointer;
-      user-select: none;
-      padding: 0;
-      width: 40px;
-      height: 40px;
-      line-height: 40px;
-      text-align: center;
-      border-radius: 50%;
-      transition: background-color 0.3s ease;
-    }
-
-    #announcement-carousel button:hover {
-      background-color: #0066cc;
-      color: white;
-    }
-
-    #announcement-prev {
-      left: 10px;
-    }
-
-    #announcement-next {
-      right: 10px;
-    }
   </style>
 </head>
 
@@ -298,15 +229,13 @@
   <div class="top-bar">
     <div class="container">
       <div class="top-bar-left">
-        <div id="menu-btn" title="選單" role="button" tabindex="0">
-          <span></span><span></span><span></span>
-        </div>
+        <div id="menu-btn" title="選單"><span></span><span></span><span></span></div>
       </div>
       <div class="top-bar-right">
         <a href="/profile">
           <img src="{{ url_for('static', filename='images/avatar.png') }}" alt="頭像" id="login-avatar" />
         </a>
-        <a href="/profile" class="btn-link">學生</a>
+        <a href="/profile" class="btn-link">科助</a>
         <a href="/login" class="btn-link">登出</a>
       </div>
     </div>
@@ -315,38 +244,31 @@
   <!-- Hero 區塊 -->
   <div class="container">
     <header class="hero"></header>
-
-    <!-- 新增公告輪播 -->
-    <div id="announcement-carousel" role="region" aria-live="polite" aria-label="最新公告">
-      <button id="announcement-prev" aria-label="上一則公告">&#8592;</button>
-      <div id="announcement-content"></div>
-      <button id="announcement-next" aria-label="下一則公告">&#8594;</button>
-    </div>
   </div>
 
   <!-- 主內容 -->
   <div class="container">
     <main>
-      <h2 class="page-title">請選擇你要使用的功能</h2>
+      <h2 class="page-title">功能選單</h2>
       <section class="card-container">
         <div class="card">
-          <h3>上傳履歷</h3>
-          <p>將你的履歷檔案快速上傳至平台。</p>
-          <a href="/upload_resume">開始上傳</a>
+          <h3>公告與作業時間管理</h3>
+          <p>新增公告、設定學生作業截止時間，系統會自動提醒。</p>
+          <a href="/manage_announcements">管理公告</a>
         </div>
         <div class="card">
-          <h3>AI修改履歷</h3>
-          <p>讓AI幫你修飾文字，提升專業度。</p>
-          <a href="/ai_edit_resume">啟用AI修飾</a>
+          <h3>實習廠商管理</h3>
+          <p>查看實習廠商清單，提供學生填寫履歷與志願序。</p>
+          <a href="/manage_companies">管理廠商</a>
         </div>
         <div class="card">
-          <h3>填寫志願序</h3>
-          <p>選擇你心儀的實習廠商與排序。</p>
-          <a href="/fill_preferences">填寫志願</a>
+          <h3>志願序最終結果</h3>
+          <p>查看與匯出學生填寫的最終志願序結果。</p>
+          <a href="/final_results">查看結果</a>
         </div>
         <div class="card">
           <h3>通知</h3>
-          <p>接收來自老師與平台的最新消息。</p>
+          <p>查看系統自動提醒與學生狀況通知。</p>
           <a href="/notifications">查看通知</a>
         </div>
       </section>
@@ -354,78 +276,25 @@
   </div>
 
   <!-- 側邊選單 -->
-  <nav id="side-menu" aria-hidden="true" role="navigation" aria-label="功能選單">
-    <button id="close-btn" aria-label="關閉功能選單">×</button>
+  <nav id="side-menu">
+    <button id="close-btn">×</button>
     <h2>功能選單</h2>
-    <a href="/student_home">首頁</a>
+    <a href="/assistant_home">首頁</a>
     <a href="/profile">個人資料</a>
-    <a href="/upload_resume">上傳履歷</a>
-    <a href="/ai_edit_resume">AI修改履歷</a>
-    <a href="/fill_preferences">填寫志願序</a>
+    <a href="/manage_announcements">公告與作業管理</a>
+    <a href="/manage_companies">實習廠商管理</a>
+    <a href="/final_results">志願序結果</a>
     <a href="/notifications">通知</a>
   </nav>
 
-  <!-- JS 控制開關與公告輪播 -->
+  <!-- JS -->
   <script>
-    // 側邊選單開關
     document.getElementById('menu-btn').addEventListener('click', () => {
       document.getElementById('side-menu').classList.add('open');
     });
-
     document.getElementById('close-btn').addEventListener('click', () => {
       document.getElementById('side-menu').classList.remove('open');
     });
-
-    // 公告輪播內容
-    let notification = [];
-    let currentAnnouncementIndex = 0;
-    const announcementContent = document.getElementById('notification-content');
-    const prevBtn = document.getElementById('notification-prev');
-    const nextBtn = document.getElementById('notification-next');
-
-    function showAnnouncement(index) {
-      if (notification.length > 0) {
-        announcementContent.textContent = notification[index];
-      } else {
-        announcementContent.textContent = "目前沒有公告";
-      }
-    }
-
-    // 取得公告資料
-    fetch("/api/notification")
-      .then(response => response.json())
-      .then(data => {
-        notification = data;
-        currentAnnouncementIndex = 0;
-        showAnnouncement(currentAnnouncementIndex);
-      })
-      .catch(err => {
-        console.error("公告載入失敗:", err);
-        announcementContent.textContent = "公告載入失敗";
-      });
-
-    // 左右切換
-    prevBtn.addEventListener('click', () => {
-      if (notification.length > 0) {
-        currentAnnouncementIndex = (currentAnnouncementIndex - 1 + notification.length) % notification.length;
-        showAnnouncement(currentAnnouncementIndex);
-      }
-    });
-
-    nextBtn.addEventListener('click', () => {
-      if (notification.length > 0) {
-        currentAnnouncementIndex = (currentAnnouncementIndex + 1) % notification.length;
-        showAnnouncement(currentAnnouncementIndex);
-      }
-    });
-
-    // 自動輪播
-    setInterval(() => {
-      if (notification.length > 0) {
-        currentAnnouncementIndex = (currentAnnouncementIndex + 1) % notification.length;
-        showAnnouncement(currentAnnouncementIndex);
-      }
-    }, 5000);
   </script>
 </body>
 

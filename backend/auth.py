@@ -59,6 +59,8 @@ def login():
 
         if single_role == "student":
             redirect_page = "/student_home"
+        if single_role == "ta":
+            redirect_page = "/ta_home"
         elif single_role == "teacher":
             cursor.execute("""
                 SELECT 1 FROM classes_teacher 
