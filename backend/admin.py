@@ -345,7 +345,7 @@ def get_all_classes():
 @admin_bp.route('/user_management')
 def user_management():
     try:
-        return render_template('user_management.html')
+        return render_template('admin/user_management.html')
     except Exception as e:
         print(f"用戶管理頁面錯誤: {e}")
         return f"用戶管理頁面載入錯誤: {str(e)}", 500      

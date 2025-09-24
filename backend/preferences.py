@@ -70,7 +70,7 @@ def fill_preferences():
         if 1 <= order <= 5:
             submitted_preferences[order - 1] = company_id
 
-    return render_template('fill_preferences.html',
+    return render_template('preferences/fill_preferences.html',
         companies=companies,
         submitted_preferences=submitted_preferences,
         message=message

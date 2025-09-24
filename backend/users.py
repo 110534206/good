@@ -285,7 +285,7 @@ def director_home():
 # 管理員首頁（後台）
 @users_bp.route('/admin_home')
 def admin_home():
-    return render_template('user_shared/admin_home.html')
+    return render_template('admin/admin_home.html')
 
 # 個人頁面
 @users_bp.route('/profile')
