@@ -323,10 +323,9 @@
     <select id="preference_{{ i }}" class="preference-select" name="preference_{{ i }}" required>
       <option value="">-- 請選擇實習公司 --</option>
       {% for company in companies %}
-      <option value="{{ company['id'] }}" {% if submitted_preferences and submitted_preferences[i-1]==company['id'] %}
-        selected {% endif %}>
-        {{ company['company_name'] }}
-      </option>
+      <option value="{{ company['id'] }}" {% if submitted_preferences and submitted_preferences[i-1]==company['id'] %} selected {% endif %}>
+  {{ company['company_name'] }}（{{ company['job_title'] }}）
+</option>
       {% endfor %}
     </select>
     {% endfor %}
@@ -403,7 +402,7 @@
     });
 
     // ✅ 從後端接收 message
-    let toastMessage = {{ message | tojson | safe if message else 'null' }};
+    let toastMessage = {{ message | tojson | safe | default('null', true) }};
 
     if (toastMessage) {
       selects.forEach(select => select.disabled = true);
