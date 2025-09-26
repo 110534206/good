@@ -1,6 +1,5 @@
 <!DOCTYPE html>
 <html lang="zh-Hant">
-
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -23,7 +22,6 @@
         <h2 class="mb-3">用戶管理</h2>
         <div class="d-flex gap-2 mb-3 flex-wrap">
             <input type="text" id="searchUsername" class="form-control w-auto" placeholder="搜尋帳號">
-            <input type="text" id="searchFilename" class="form-control w-auto" placeholder="搜尋履歷檔名">
             <button class="btn btn-primary" onclick="searchUsers()">搜尋</button>
             <button class="btn btn-secondary" onclick="resetSearch()">重置</button>
             <button class="btn btn-success ms-auto" onclick="openCreateModal()">新增用戶</button>
@@ -72,20 +70,11 @@
                         </div>
                         <div class="mb-3">
                             <label class="form-label">角色</label>
-                            <select id="editRole" class="form-select" required>
-                                <option value="student">學生</option>
-                                <option value="teacher">教師</option>
-                                <option value="director">主任</option>
-                                <option value="admin">管理員</option>
-                            </select>
+                            <select id="editRole" class="form-select" required></select>
                         </div>
                         <div class="mb-3">
                             <label class="form-label">新密碼 (如不修改可留空)</label>
                             <input type="password" id="editPassword" class="form-control">
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label">所屬班級 ID (學生才需要)</label>
-                            <input type="number" id="editClassId" class="form-control">
                         </div>
                         <button type="submit" class="btn btn-primary">儲存</button>
                     </form>
@@ -177,10 +166,6 @@
                                 <option value="admin">管理員</option>
                             </select>
                         </div>
-                        <div class="mb-3" id="createClassIdGroup" style="display: none;">
-                            <label class="form-label">所屬班級 ID (僅學生)</label>
-                            <input type="number" id="createClassId" class="form-control">
-                        </div>
                         <button type="submit" class="btn btn-primary">新增</button>
                     </form>
                 </div>
@@ -194,7 +179,7 @@
             student: '學生',
             teacher: '教師',
             director: '主任',
-            ta:'科助',
+            ta: '科助',
             admin: '管理員'
         };
 
@@ -214,22 +199,22 @@
                     const tr = document.createElement('tr');
 
                     tr.innerHTML = `
-            <td>${user.id}</td>
-            <td>${user.username}</td>
-            <td>${user.name || ''}</td>
-            <td>${user.email || ''}</td>
-            <td>${roleMap[user.role] || user.role}</td>
-            <td>${user.role === 'student' ? (user.class_name || '-') : '-'}</td>
-            <td>${user.role === 'student' ? (user.department || '-') : '-'}</td>
-            <td>${['teacher', 'director'].includes(user.role) ? (user.teaching_classes || '-') : '-'}</td>
-            <td>${user.created_at || ''}</td>
-            <td>
-              <button class="btn btn-sm btn-warning" onclick="openEditModal(${user.id}, '${user.username}', '${user.name || ''}', '${user.email || ''}', '${user.role}', '${user.class_id || ''}')">編輯</button>
-              <button class="btn btn-sm btn-danger" onclick="deleteUser(${user.id})">刪除</button>
-              ${user.role === 'student' ? `<button class=\"btn btn-sm btn-outline-primary\" onclick=\"openAssignStudentClass(${user.id})\">設定班級</button>` : ''}
-              ${['teacher', 'director'].includes(user.role) ? `<button class=\"btn btn-sm btn-outline-secondary\" onclick=\"openAssignTeacherClass(${user.id})\">設定帶班</button>` : ''}
-            </td>
-          `;
+                        <td>${user.id}</td>
+                        <td>${user.username}</td>
+                        <td>${user.name || ''}</td>
+                        <td>${user.email || ''}</td>
+                        <td>${roleMap[user.role] || user.role}</td>
+                        <td>${user.role === 'student' ? (user.class_name || '-') : '-'}</td>
+                        <td>${user.role === 'student' ? (user.department || '-') : '-'}</td>
+                        <td>${['teacher', 'director'].includes(user.role) ? (user.teaching_classes || '-') : '-'}</td>
+                        <td>${user.created_at || ''}</td>
+                        <td>
+                          <button class="btn btn-sm btn-warning" onclick="openEditModal(${user.id}, '${user.username}', '${user.name || ''}', '${user.email || ''}', '${user.role}', '${user.class_id || ''}')">編輯</button>
+                          <button class="btn btn-sm btn-danger" onclick="deleteUser(${user.id})">刪除</button>
+                          ${user.role === 'student' ? `<button class="btn btn-sm btn-outline-primary" onclick="openAssignStudentClass(${user.id})">設定班級</button>` : ''}
+                          ${['teacher', 'director'].includes(user.role) ? `<button class="btn btn-sm btn-outline-secondary" onclick="openAssignTeacherClass(${user.id})">設定帶班</button>` : ''}
+                        </td>
+                    `;
 
                     tbody.appendChild(tr);
                 });
@@ -241,11 +226,9 @@
 
         async function searchUsers() {
             const username = document.getElementById('searchUsername').value.trim();
-            const filename = document.getElementById('searchFilename').value.trim();
 
             const params = new URLSearchParams();
             if (username) params.append('username', username);
-            if (filename) params.append('filename', filename);
 
             const res = await fetch('/admin/api/search_users?' + params.toString());
             const data = await res.json();
@@ -256,26 +239,25 @@
             data.users.forEach(user => {
                 const tr = document.createElement('tr');
                 tr.innerHTML = `
-            <td>${user.id}</td>
-            <td>${user.username}</td>
-            <td>${user.name || ''}</td>
-            <td>${user.email || ''}</td>
-            <td>${roleMap[user.role] || user.role}</td>
-            <td>${user.role === 'student' ? (user.class_name || '-') : '-'}</td>
-            <td>${user.role === 'student' ? (user.department || '-') : '-'}</td>
-            <td>${['teacher', 'director'].includes(user.role) ? (user.teaching_classes || '-') : '-'}</td>
-            <td>${user.created_at || ''}</td>
-            <td>
-              <button class="btn btn-sm btn-warning" onclick="openEditModal(${user.id}, '${user.username}', '${user.name || ''}', '${user.email || ''}', '${user.role}', '${user.class_id || ''}')">編輯</button>
-              <button class="btn btn-sm btn-danger" onclick="deleteUser(${user.id})">刪除</button>
-            </td>`;
+                    <td>${user.id}</td>
+                    <td>${user.username}</td>
+                    <td>${user.name || ''}</td>
+                    <td>${user.email || ''}</td>
+                    <td>${roleMap[user.role] || user.role}</td>
+                    <td>${user.role === 'student' ? (user.class_name || '-') : '-'}</td>
+                    <td>${user.role === 'student' ? (user.department || '-') : '-'}</td>
+                    <td>${['teacher', 'director'].includes(user.role) ? (user.teaching_classes || '-') : '-'}</td>
+                    <td>${user.created_at || ''}</td>
+                    <td>
+                      <button class="btn btn-sm btn-warning" onclick="openEditModal(${user.id}, '${user.username}', '${user.name || ''}', '${user.email || ''}', '${user.role}', '${user.class_id || ''}')">編輯</button>
+                      <button class="btn btn-sm btn-danger" onclick="deleteUser(${user.id})">刪除</button>
+                    </td>`;
                 tbody.appendChild(tr);
             });
         }
 
         function resetSearch() {
             document.getElementById('searchUsername').value = '';
-            document.getElementById('searchFilename').value = '';
             loadUsers();
         }
 
@@ -311,16 +293,12 @@
         // 打開編輯 Modal
         function openEditModal(id, username, name, email, role, classId) {
             const roleSelect = document.getElementById('editRole');
-            const roleGroup = roleSelect.closest('.mb-3');
             const classIdInput = document.getElementById('editClassId');
             const classIdGroup = classIdInput.closest('.mb-3');
 
-            // 重置角色選單
             roleSelect.innerHTML = '';
 
-            // 根據角色控制角色選單內容與是否可修改
             if (role === 'teacher' || role === 'director') {
-                // 教師與主任可選擇教師/主任
                 roleSelect.disabled = false;
                 ['teacher', 'director'].forEach(r => {
                     const opt = document.createElement('option');
@@ -330,7 +308,6 @@
                     roleSelect.appendChild(opt);
                 });
             } else {
-                // 學生與管理員不可修改角色
                 const opt = document.createElement('option');
                 opt.value = role;
                 opt.textContent = roleMap[role] || role;
@@ -339,7 +316,6 @@
                 roleSelect.disabled = true;
             }
 
-            // 根據角色顯示/隱藏班級欄位
             if (role === 'student') {
                 classIdGroup.style.display = '';
                 classIdInput.value = classId || '';
@@ -348,7 +324,6 @@
                 classIdInput.value = '';
             }
 
-            // 填入其他欄位資料
             document.getElementById('editUserId').value = id;
             document.getElementById('editUsername').value = username;
             document.getElementById('editName').value = name;
@@ -357,7 +332,6 @@
 
             new bootstrap.Modal(document.getElementById('editUserModal')).show();
         }
-
 
         // 編輯用戶送出
         document.getElementById('editUserForm').addEventListener('submit', async (e) => {
@@ -424,7 +398,7 @@
         async function submitAssignStudentClass() {
             const user_id = document.getElementById('assignStudentId').value;
             const class_id = document.getElementById('assignStudentClassSelect').value;
-            const res = await fetch('/admin/api/assign_student_class', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user_id, class_id })});
+            const res = await fetch('/admin/api/assign_student_class', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user_id, class_id }) });
             const data = await res.json();
             alert(data.message);
             if (data.success) {
@@ -446,7 +420,7 @@
             const teacher_id = document.getElementById('assignTeacherId').value;
             const class_id = document.getElementById('assignTeacherClassSelect').value;
             const role = document.getElementById('assignTeacherRole').value;
-            const res = await fetch('/admin/api/assign_class_teacher', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ teacher_id, class_id, role })});
+            const res = await fetch('/admin/api/assign_class_teacher', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ teacher_id, class_id, role }) });
             const data = await res.json();
             alert(data.message);
             if (data.success) {
