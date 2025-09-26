@@ -1,0 +1,372 @@
+ <!DOCTYPE html>
+<html lang="zh-Hant">
+
+<head>
+    <meta charset="UTF-8" />
+    <title>個人資料</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style>
+        body {
+            font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+            background: #f3f6f9;
+            margin: 0;
+            padding: 2rem;
+        }
+
+        .profile-wrapper {
+            width: 450px;
+            height: 620px;
+            margin: 0 auto;
+            background: #fff;
+            padding: 1.5rem 2rem;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }
+
+        .profile-wrapper h2 {
+            text-align: center;
+            margin-bottom: 1rem;
+        }
+
+        .avatar {
+            display: block;
+            width: 100px;
+            height: 100px;
+            margin: 0 auto 1rem;
+            border-radius: 50%;
+            object-fit: cover;
+            background-color: #fff;
+            cursor: pointer;
+            border: none;
+        }
+
+        .form-page {
+            display: none;
+            flex-grow: 1;
+        }
+
+        .form-page.active {
+            display: block;
+        }
+
+        .form-group {
+            margin-bottom: 1rem;
+            text-align: center;
+            width: 100%;
+        }
+
+        .form-group label {
+            font-weight: bold;
+            display: block;
+            margin-bottom: 0.3rem;
+            text-align: left;
+        }
+
+        .form-group input {
+            width: 95%;
+            padding: 0.6em;
+            border: 1px solid #ccc;
+            border-radius: 6px;
+            font-size: 0.95rem;
+            background-color: #ffffff;
+        }
+
+        .form-group select {
+            width: 100%;
+            padding: 0.6em;
+            border: 1px solid #ccc;
+            border-radius: 6px;
+            font-size: 0.95rem;
+            background-color: #ffffff;
+        }
+
+        /* readonly 欄位用灰色背景 */
+        .form-group input[readonly] {
+            background-color: #e9ecef;
+            cursor: not-allowed;
+        }
+
+        .page-indicator {
+            text-align: center;
+            margin: 0.5rem 0;
+            font-weight: bold;
+            color: #333;
+        }
+
+        /* 新增按鈕群組統一樣式 */
+        .button-group {
+            display: flex;
+            justify-content: space-between;
+            gap: 0.5rem;
+            margin-top: 1rem;
+        }
+
+        /* 統一按鈕大小與樣式 */
+        .button-group button {
+            flex: 1;
+            padding: 0.8em;
+            font-weight: bold;
+            font-size: 1rem;
+            border: none;
+            border-radius: 6px;
+            color: #fff;
+            cursor: pointer;
+        }
+
+        /* 保留按鈕顏色設定 */
+        #backBtn {
+            background-color: #6c757d;
+        }
+
+        #backBtn:hover {
+            background-color: #5a6268;
+        }
+
+        #prevBtn {
+            background-color: #007bff;
+        }
+
+        #prevBtn:hover {
+            background-color: #0056b3;
+        }
+
+        #nextBtn {
+            background-color: #007bff;
+        }
+
+        #nextBtn:hover {
+            background-color: #0056b3;
+        }
+
+        #saveBtn {
+            background-color: #28a745;
+        }
+
+        #saveBtn:hover {
+            background-color: #1e7e34;
+        }
+
+        /* 按鈕通用樣式 */
+        .form-navigation button {
+            flex: 1;
+            padding: 0.8em;
+            font-weight: bold;
+            border: none;
+            border-radius: 6px;
+            font-size: 1rem;
+            cursor: pointer;
+            color: #fff;
+        }
+
+        /* 錯誤訊息樣式 */
+        #errorMsg {
+            color: #dc3545;
+            font-weight: bold;
+            text-align: center;
+            margin-bottom: 0.5rem;
+            min-height: 1.2em;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="profile-wrapper">
+        <div>
+            <h2>個人資料</h2>
+            <img id="login-avatar" class="avatar" src="{{ url_for('static', filename='images/avatar.png') }}" alt="頭像"
+                style="cursor: default;" />
+            <div id="form-pages"></div>
+            <div id="errorMsg"></div>
+        </div>
+
+        <div class="page-indicator" id="pageIndicator"></div>
+
+
+        <!-- 按鈕放下面 -->
+        <div class="button-group">
+            <button id="backBtn">返回</button>
+            <button id="prevBtn" style="display:none;">上一頁</button>
+            <button id="nextBtn">下一頁</button>
+            <button id="saveBtn" style="display:none;">儲存</button>
+        </div>
+    </div>
+
+    <script>
+        const username = localStorage.getItem("username") || "guest";
+        const role = localStorage.getItem("selectedRole") || "student";
+        const fieldValues = {};
+        let currentPage = 0;
+        const fieldsPerPage = 3;
+
+        const fields = [
+            { id: 'role', label: '身分', readonly: true, placeholder: '' },
+            { id: 'department', label: '科別', readonly: true, default: '資管科' },
+            { id: 'name', label: '姓名', placeholder: '請輸入姓名' },
+            { id: 'classname', label: '班級', options: ['忠', '孝'] },
+            { id: 'number', label: '學號', readonly: true, placeholder: '' },
+            { id: 'email', label: '電子郵件', readonly: true, placeholder: '' }
+        ];
+
+        const errorMsgEl = document.getElementById('errorMsg');
+        const backBtn = document.getElementById('backBtn');
+        const prevBtn = document.getElementById('prevBtn');
+        const nextBtn = document.getElementById('nextBtn');
+        const saveBtn = document.getElementById('saveBtn');
+        const avatar = document.getElementById('login-avatar');
+
+        backBtn.addEventListener('click', goBackHome);
+        prevBtn.addEventListener('click', () => changePage(-1));
+        nextBtn.addEventListener('click', () => changePage(1));
+        saveBtn.addEventListener('click', saveProfile);
+
+        function goBackHome() {
+            const selectedRole = localStorage.getItem("selectedRole");
+            const redirectMap = {
+                student: '/student_home',
+                teacher: '/teacher_home',
+                director: '/director_home'
+            };
+            const redirectUrl = redirectMap[selectedRole] || '/';
+            window.location.href = redirectUrl;
+        }
+
+        function createFormPages() {
+            const container = document.getElementById('form-pages');
+            container.innerHTML = '';
+            const pages = [];
+
+            for (let i = 0; i < fields.length; i += fieldsPerPage) {
+                const pageFields = fields.slice(i, i + fieldsPerPage);
+                const page = document.createElement('div');
+                page.className = 'form-page';
+
+                pageFields.forEach(field => {
+                    const div = document.createElement('div');
+                    div.className = 'form-group';
+
+                    const label = `<label for="${field.id}">${field.label}</label>`;
+
+                    let inputHTML = '';
+
+                    if (field.options) {
+                        // 如果有 options，就產生 <select>
+                        inputHTML = `<select id="${field.id}" ${field.readonly ? 'disabled' : ''}>`;
+                        field.options.forEach(opt => {
+                            const selected = fieldValues[field.id] === opt ? 'selected' : '';
+                            inputHTML += `<option value="${opt}" ${selected}>${opt}</option>`;
+                        });
+                        inputHTML += `</select>`;
+                    } else {
+                        const readonlyAttr = field.readonly ? 'readonly' : '';
+                        const placeholder = field.placeholder ? `placeholder="${field.placeholder}"` : '';
+                        inputHTML = `<input id="${field.id}" type="text" ${readonlyAttr} ${placeholder} value="${fieldValues[field.id] || field.default || ''}" />`;
+                    }
+
+                    div.innerHTML = label + inputHTML;
+                    page.appendChild(div);
+                });
+
+                container.appendChild(page);
+                pages.push(page);
+            }
+
+            showPage(currentPage);
+        }
+
+
+        function showPage(index) {
+            const pages = document.querySelectorAll('.form-page');
+            pages.forEach((p, i) => p.classList.toggle('active', i === index));
+
+            document.getElementById('prevBtn').style.display = index > 0 ? 'inline-block' : 'none';
+            document.getElementById('nextBtn').style.display = index < pages.length - 1 ? 'inline-block' : 'none';
+            document.getElementById('saveBtn').style.display = index === pages.length - 1 ? 'inline-block' : 'none';
+
+            // 返回按鈕只在第一頁顯示
+            document.getElementById('backBtn').style.display = index === 0 ? 'inline-block' : 'none';
+
+            document.getElementById('pageIndicator').textContent = `第 ${index + 1} / ${pages.length} 頁`;
+        }
+
+        function changePage(step) {
+            const totalPages = document.querySelectorAll('.form-page').length;
+            currentPage = Math.max(0, Math.min(currentPage + step, totalPages - 1));
+            showPage(currentPage);
+        }
+
+        function saveProfile() {
+            // 先蒐集要送出的資料
+            const dataToSave = {
+                role: document.getElementById('role').value,
+                name: document.getElementById('name').value.trim(),
+                department: document.getElementById('department').value.trim(),
+                classname: document.getElementById('classname').value.trim(),
+                number: document.getElementById('number').value,
+                email: document.getElementById('email').value
+            };
+
+            // 簡單必填檢查
+            if (!dataToSave.name || !dataToSave.classname) {
+                errorMsgEl.textContent = "姓名、班級為必填！";
+                return;
+            }
+
+            fetch('/api/saveProfile', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(dataToSave)
+            })
+                .then(res => res.json())
+                .then(result => {
+                    if (result.success) {
+                        // ✅ 成功，顯示正確訊息再導向
+                        alert(result.message || "資料已儲存！");
+                        goBackHome();
+                    } else {
+                        // ❌ 錯誤，顯示後端提供的訊息
+                        errorMsgEl.textContent = result.message || "儲存失敗，請再試一次。";
+                    }
+                })
+                .catch(() => {
+                    errorMsgEl.textContent = "伺服器錯誤，請稍後再試！";
+                });
+        }
+
+        window.addEventListener('DOMContentLoaded', () => {
+            fetch(`/api/profile?username=${encodeURIComponent(username)}&role=${encodeURIComponent(role)}`)
+                .then(res => res.json())
+                .then(data => {
+                    if (data.success) {
+                        const user = data.user;
+                        const roleMap = {
+                            director: "主任",
+                            student: "學生",
+                            teacher: "教師"
+                        };
+
+                        fieldValues.role = roleMap[user.role] || user.role || '';
+                        fieldValues.name = user.name || '';
+                        fieldValues.department = '資管科';
+                        fieldValues.classname = user.classname || '';
+                        fieldValues.number = user.number || username;
+                        fieldValues.email = user.email || '';
+
+                        createFormPages();
+                    } else {
+                        alert("取得個人資料失敗！");
+                    }
+                })
+                .catch(err => {
+                    console.error(err);
+                    alert("載入資料時發生錯誤！");
+                });
+        });
+    </script>
+</body>
+
+</html>
