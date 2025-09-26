@@ -1,304 +1,191 @@
- <!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="zh-Hant">
 
 <head>
-    <meta charset="UTF-8" />
-    <title>個人資料</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>智慧實習平台 | 個人資料</title>
     <style>
         body {
-            font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
-            background: #f3f6f9;
+            font-family: 'Inter', sans-serif;
+            background: #f5f5f5;
             margin: 0;
-            padding: 2rem;
+            padding: 0;
         }
 
-        .profile-wrapper {
-            width: 450px;
-            height: 620px;
-            margin: 0 auto;
+        .container {
+            max-width: 800px;
+            margin: 40px auto;
             background: #fff;
-            padding: 1.5rem 2rem;
+            padding: 30px;
             border-radius: 12px;
             box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-            display: flex;
-            flex-direction: column;
-            justify-content: space-between;
         }
 
-        .profile-wrapper h2 {
+        h2 {
             text-align: center;
-            margin-bottom: 1rem;
-        }
-
-        .avatar {
-            display: block;
-            width: 100px;
-            height: 100px;
-            margin: 0 auto 1rem;
-            border-radius: 50%;
-            object-fit: cover;
-            background-color: #fff;
-            cursor: pointer;
-            border: none;
-        }
-
-        .form-page {
-            display: none;
-            flex-grow: 1;
-        }
-
-        .form-page.active {
-            display: block;
-        }
-
-        .form-group {
-            margin-bottom: 1rem;
-            text-align: center;
-            width: 100%;
-        }
-
-        .form-group label {
-            font-weight: bold;
-            display: block;
-            margin-bottom: 0.3rem;
-            text-align: left;
-        }
-
-        .form-group input {
-            width: 95%;
-            padding: 0.6em;
-            border: 1px solid #ccc;
-            border-radius: 6px;
-            font-size: 0.95rem;
-            background-color: #ffffff;
-        }
-
-        .form-group select {
-            width: 100%;
-            padding: 0.6em;
-            border: 1px solid #ccc;
-            border-radius: 6px;
-            font-size: 0.95rem;
-            background-color: #ffffff;
-        }
-
-        /* readonly 欄位用灰色背景 */
-        .form-group input[readonly] {
-            background-color: #e9ecef;
-            cursor: not-allowed;
-        }
-
-        .page-indicator {
-            text-align: center;
-            margin: 0.5rem 0;
-            font-weight: bold;
+            margin-bottom: 20px;
             color: #333;
         }
 
-        /* 新增按鈕群組統一樣式 */
-        .button-group {
+        .avatar-wrapper {
             display: flex;
-            justify-content: space-between;
-            gap: 0.5rem;
-            margin-top: 1rem;
+            justify-content: center;
+            margin-bottom: 20px;
+            position: relative;
         }
 
-        /* 統一按鈕大小與樣式 */
-        .button-group button {
-            flex: 1;
-            padding: 0.8em;
-            font-weight: bold;
-            font-size: 1rem;
-            border: none;
-            border-radius: 6px;
-            color: #fff;
+        .avatar {
+            width: 120px;
+            height: 120px;
+            border-radius: 50%;
+            border: 3px solid #ddd;
+            object-fit: cover;
             cursor: pointer;
+            transition: 0.3s;
         }
 
-        /* 保留按鈕顏色設定 */
-        #backBtn {
-            background-color: #6c757d;
+        .avatar:hover {
+            opacity: 0.7;
         }
 
-        #backBtn:hover {
-            background-color: #5a6268;
+        .form-group {
+            margin-bottom: 15px;
         }
 
-        #prevBtn {
-            background-color: #007bff;
+        label {
+            display: block;
+            margin-bottom: 5px;
+            color: #555;
         }
 
-        #prevBtn:hover {
-            background-color: #0056b3;
+        input,
+        select {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            font-size: 14px;
         }
 
-        #nextBtn {
-            background-color: #007bff;
+        .btn-group {
+            display: flex;
+            justify-content: center;
+            margin-top: 20px;
+            gap: 15px;
         }
 
-        #nextBtn:hover {
-            background-color: #0056b3;
-        }
-
-        #saveBtn {
-            background-color: #28a745;
-        }
-
-        #saveBtn:hover {
-            background-color: #1e7e34;
-        }
-
-        /* 按鈕通用樣式 */
-        .form-navigation button {
-            flex: 1;
-            padding: 0.8em;
-            font-weight: bold;
+        .btn {
+            padding: 10px 20px;
             border: none;
-            border-radius: 6px;
-            font-size: 1rem;
+            border-radius: 8px;
+            font-size: 14px;
             cursor: pointer;
+            transition: 0.3s;
+        }
+
+        .btn-primary {
+            background: #007bff;
             color: #fff;
         }
 
-        /* 錯誤訊息樣式 */
-        #errorMsg {
-            color: #dc3545;
-            font-weight: bold;
+        .btn-primary:hover {
+            background: #0056b3;
+        }
+
+        .btn-secondary {
+            background: #6c757d;
+            color: #fff;
+        }
+
+        .btn-secondary:hover {
+            background: #545b62;
+        }
+
+        .error {
+            color: red;
             text-align: center;
-            margin-bottom: 0.5rem;
-            min-height: 1.2em;
+            margin-top: 10px;
         }
     </style>
 </head>
 
 <body>
-    <div class="profile-wrapper">
-        <div>
-            <h2>個人資料</h2>
-            <img id="login-avatar" class="avatar" src="{{ url_for('static', filename='images/avatar.png') }}" alt="頭像"
-                style="cursor: default;" />
-            <div id="form-pages"></div>
-            <div id="errorMsg"></div>
+    <div class="container">
+        <h2>個人資料</h2>
+
+        <!-- 頭像區 -->
+        <div class="avatar-wrapper">
+            <img id="login-avatar" class="avatar"
+                src="{{ user.avatar_url if user and user.avatar_url else url_for('static', filename='images/avatar.png') }}"
+                alt="頭像" />
+            <input type="file" id="avatarInput" accept="image/*" style="display:none;" />
         </div>
 
-        <div class="page-indicator" id="pageIndicator"></div>
-
-
-        <!-- 按鈕放下面 -->
-        <div class="button-group">
-            <button id="backBtn">返回</button>
-            <button id="prevBtn" style="display:none;">上一頁</button>
-            <button id="nextBtn">下一頁</button>
-            <button id="saveBtn" style="display:none;">儲存</button>
+        <!-- 表單區 -->
+        <div class="form-group">
+            <label for="role">身分</label>
+            <input type="text" id="role" value="{{ user.role if user else '' }}" readonly />
         </div>
+        <div class="form-group">
+            <label for="name">姓名</label>
+            <input type="text" id="name" value="{{ user.name if user else '' }}" />
+        </div>
+        <div class="form-group">
+            <label for="department">科系</label>
+            <input type="text" id="department" value="{{ user.department if user else '' }}" />
+        </div>
+        <div class="form-group">
+            <label for="classname">班級</label>
+            <input type="text" id="classname" value="{{ user.classname if user else '' }}" />
+        </div>
+        <div class="form-group">
+            <label for="number">學號 / 工號</label>
+            <input type="text" id="number" value="{{ user.number if user else '' }}" disabled />
+        </div>
+        <div class="form-group">
+            <label for="email">Email</label>
+            <input type="email" id="email" value="{{ user.email if user else '' }}" />
+        </div>
+
+        <div class="btn-group">
+            <button class="btn btn-primary" onclick="saveProfile()">儲存</button>
+            <button class="btn btn-secondary" onclick="goBackHome()">返回</button>
+        </div>
+
+        <div class="error" id="errorMsg"></div>
     </div>
 
     <script>
-        const username = localStorage.getItem("username") || "guest";
-        const role = localStorage.getItem("selectedRole") || "student";
-        const fieldValues = {};
-        let currentPage = 0;
-        const fieldsPerPage = 3;
-
-        const fields = [
-            { id: 'role', label: '身分', readonly: true, placeholder: '' },
-            { id: 'department', label: '科別', readonly: true, default: '資管科' },
-            { id: 'name', label: '姓名', placeholder: '請輸入姓名' },
-            { id: 'classname', label: '班級', options: ['忠', '孝'] },
-            { id: 'number', label: '學號', readonly: true, placeholder: '' },
-            { id: 'email', label: '電子郵件', readonly: true, placeholder: '' }
-        ];
-
-        const errorMsgEl = document.getElementById('errorMsg');
-        const backBtn = document.getElementById('backBtn');
-        const prevBtn = document.getElementById('prevBtn');
-        const nextBtn = document.getElementById('nextBtn');
-        const saveBtn = document.getElementById('saveBtn');
         const avatar = document.getElementById('login-avatar');
+        const avatarInput = document.getElementById('avatarInput');
+        let selectedAvatarFile = null;
+        const errorMsgEl = document.getElementById('errorMsg');
 
-        backBtn.addEventListener('click', goBackHome);
-        prevBtn.addEventListener('click', () => changePage(-1));
-        nextBtn.addEventListener('click', () => changePage(1));
-        saveBtn.addEventListener('click', saveProfile);
+        // 點擊頭像 → 觸發選檔
+        avatar.addEventListener('click', () => {
+            avatarInput.click();
+        });
 
-        function goBackHome() {
-            const selectedRole = localStorage.getItem("selectedRole");
-            const redirectMap = {
-                student: '/student_home',
-                teacher: '/teacher_home',
-                director: '/director_home'
-            };
-            const redirectUrl = redirectMap[selectedRole] || '/';
-            window.location.href = redirectUrl;
-        }
-
-        function createFormPages() {
-            const container = document.getElementById('form-pages');
-            container.innerHTML = '';
-            const pages = [];
-
-            for (let i = 0; i < fields.length; i += fieldsPerPage) {
-                const pageFields = fields.slice(i, i + fieldsPerPage);
-                const page = document.createElement('div');
-                page.className = 'form-page';
-
-                pageFields.forEach(field => {
-                    const div = document.createElement('div');
-                    div.className = 'form-group';
-
-                    const label = `<label for="${field.id}">${field.label}</label>`;
-
-                    let inputHTML = '';
-
-                    if (field.options) {
-                        // 如果有 options，就產生 <select>
-                        inputHTML = `<select id="${field.id}" ${field.readonly ? 'disabled' : ''}>`;
-                        field.options.forEach(opt => {
-                            const selected = fieldValues[field.id] === opt ? 'selected' : '';
-                            inputHTML += `<option value="${opt}" ${selected}>${opt}</option>`;
-                        });
-                        inputHTML += `</select>`;
-                    } else {
-                        const readonlyAttr = field.readonly ? 'readonly' : '';
-                        const placeholder = field.placeholder ? `placeholder="${field.placeholder}"` : '';
-                        inputHTML = `<input id="${field.id}" type="text" ${readonlyAttr} ${placeholder} value="${fieldValues[field.id] || field.default || ''}" />`;
-                    }
-
-                    div.innerHTML = label + inputHTML;
-                    page.appendChild(div);
-                });
-
-                container.appendChild(page);
-                pages.push(page);
+        // 選擇檔案後 → 預覽
+        avatarInput.addEventListener('change', () => {
+            const file = avatarInput.files[0];
+            if (file) {
+                if (!file.type.startsWith('image/')) {
+                    alert("請選擇圖片檔！");
+                    return;
+                }
+                selectedAvatarFile = file;
+                const reader = new FileReader();
+                reader.onload = e => {
+                    avatar.src = e.target.result;
+                };
+                reader.readAsDataURL(file);
             }
+        });
 
-            showPage(currentPage);
-        }
-
-
-        function showPage(index) {
-            const pages = document.querySelectorAll('.form-page');
-            pages.forEach((p, i) => p.classList.toggle('active', i === index));
-
-            document.getElementById('prevBtn').style.display = index > 0 ? 'inline-block' : 'none';
-            document.getElementById('nextBtn').style.display = index < pages.length - 1 ? 'inline-block' : 'none';
-            document.getElementById('saveBtn').style.display = index === pages.length - 1 ? 'inline-block' : 'none';
-
-            // 返回按鈕只在第一頁顯示
-            document.getElementById('backBtn').style.display = index === 0 ? 'inline-block' : 'none';
-
-            document.getElementById('pageIndicator').textContent = `第 ${index + 1} / ${pages.length} 頁`;
-        }
-
-        function changePage(step) {
-            const totalPages = document.querySelectorAll('.form-page').length;
-            currentPage = Math.max(0, Math.min(currentPage + step, totalPages - 1));
-            showPage(currentPage);
-        }
-
+        // 儲存個人資料
         function saveProfile() {
-            // 先蒐集要送出的資料
             const dataToSave = {
                 role: document.getElementById('role').value,
                 name: document.getElementById('name').value.trim(),
@@ -308,27 +195,29 @@
                 email: document.getElementById('email').value
             };
 
-            // 簡單必填檢查
             if (!dataToSave.name || !dataToSave.classname) {
                 errorMsgEl.textContent = "姓名、班級為必填！";
                 return;
             }
 
+            const formData = new FormData();
+            for (const key in dataToSave) {
+                formData.append(key, dataToSave[key]);
+            }
+            if (selectedAvatarFile) {
+                formData.append("avatar", selectedAvatarFile);
+            }
+
             fetch('/api/saveProfile', {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify(dataToSave)
+                body: formData
             })
                 .then(res => res.json())
                 .then(result => {
                     if (result.success) {
-                        // ✅ 成功，顯示正確訊息再導向
                         alert(result.message || "資料已儲存！");
                         goBackHome();
                     } else {
-                        // ❌ 錯誤，顯示後端提供的訊息
                         errorMsgEl.textContent = result.message || "儲存失敗，請再試一次。";
                     }
                 })
@@ -337,35 +226,31 @@
                 });
         }
 
-        window.addEventListener('DOMContentLoaded', () => {
-            fetch(`/api/profile?username=${encodeURIComponent(username)}&role=${encodeURIComponent(role)}`)
-                .then(res => res.json())
-                .then(data => {
-                    if (data.success) {
-                        const user = data.user;
-                        const roleMap = {
-                            director: "主任",
-                            student: "學生",
-                            teacher: "教師"
-                        };
+        function goBackHome() {
+            const role = document.getElementById('role').value;
+            switch (role) {
+                case '學生':
+                    window.location.href = "/student_home";
+                    break;
+                case '教師':
+                    window.location.href = "/teacher_home";
+                    break;
+                case '主任':
+                    window.location.href = "/director_home";
+                    break;
 
-                        fieldValues.role = roleMap[user.role] || user.role || '';
-                        fieldValues.name = user.name || '';
-                        fieldValues.department = '資管科';
-                        fieldValues.classname = user.classname || '';
-                        fieldValues.number = user.number || username;
-                        fieldValues.email = user.email || '';
+                case '科助':
+                    window.location.href = "/ta_home";
+                    break;
 
-                        createFormPages();
-                    } else {
-                        alert("取得個人資料失敗！");
-                    }
-                })
-                .catch(err => {
-                    console.error(err);
-                    alert("載入資料時發生錯誤！");
-                });
-        });
+                case '管理員':
+                    window.location.href = "/admin_home";
+                    break;
+                default:
+                    window.location.href = "/";
+            }
+        }
+
     </script>
 </body>
 
