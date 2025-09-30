@@ -110,25 +110,27 @@ def api_confirm_role():
     cursor = conn.cursor()
 
     try:
-        redirect_page = "/"
-        if role == "teacher" or role == "director":
+        redirect_page = f"/{role}_home"
+        is_homeroom = False
+
+        # 檢查老師/主任是否同時為班導師
+        if role in ["teacher", "director"]:
             cursor.execute("""
                 SELECT 1 FROM classes_teacher
                 WHERE teacher_id = %s AND role = '班導師'
             """, (user_id,))
-            is_homeroom = cursor.fetchone()
+            is_homeroom = bool(cursor.fetchone())
 
-            if is_homeroom:
-                redirect_page = "/class_teacher_home"
-            else:
-                redirect_page = f"/{role}_home"
-        else:
-            redirect_page = f"/{role}_home"
-
+        # 存入 session
         session["role"] = role
-        session["original_role"] = role 
+        session["original_role"] = role
+        session["is_homeroom"] = is_homeroom
 
-        return jsonify({"success": True, "redirect": redirect_page})
+        return jsonify({
+            "success": True,
+            "redirect": redirect_page,
+            "is_homeroom": is_homeroom
+        })
 
     except Exception as e:
         print("確認角色錯誤:", e)

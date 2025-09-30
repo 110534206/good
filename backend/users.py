@@ -37,20 +37,15 @@ def class_teacher_home():
         is_homeroom = cursor.fetchone()
 
         if is_homeroom is None:
-            original_role = session.get('original_role')
-            if original_role == 'teacher':
-                return redirect(url_for('users_bp.teacher_home'))
-            elif original_role == 'director':
-                return redirect(url_for('users_bp.director_home'))
-            else:
-                return redirect(url_for('auth_bp.login_page'))
+            # 沒有班導身分就不能看這頁
+            return redirect(url_for('auth_bp.login_page'))
     finally:
         cursor.close()
         conn.close()
 
     return render_template('user_shared/class_teacher_home.html',
         username=session.get('username'),
-        original_role=session.get('original_role', 'teacher')
+        original_role=session.get('role')
     )
 
 # -------------------------
