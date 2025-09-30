@@ -66,6 +66,32 @@
       display: flex;
       align-items: center;
       gap: 10px;
+      font-weight: bold;
+    }
+
+    .top-bar-right .btn-link {
+      color: #0066cc;
+      background-color: transparent;
+      border: 1.5px solid #0066cc;
+      padding: 0.3rem 0.7rem;
+      border-radius: 6px;
+      text-decoration: none;
+      transition: background-color 0.3s ease, color 0.3s ease;
+      font-size: 0.9rem;
+    }
+
+    .top-bar-right .btn-link:hover {
+      background-color: #0066cc;
+      color: white;
+    }
+
+    .top-bar-right #login-avatar {
+      width: 60px;
+      height: 60px;
+      border-radius: 50%;
+      object-fit: cover;
+      cursor: pointer;
+      margin-top: 6px;
     }
 
     #login-avatar {
@@ -250,15 +276,17 @@
             style="position:absolute; right:0; top:120%; background:#fff; border:1px solid #ccc; border-radius:8px; padding:6px; min-width:180px; display:none; box-shadow:0 4px 12px rgba(0,0,0,.12);">
             <a href="/profile" class="btn-link" style="display:block; border:none; margin:4px 0;">個人資料</a>
             {% if original_role == 'teacher' %}
-            <a href="/teacher_home">切換老師身分</a>
+            <a id="toTeacherLink" href="/teacher_home" class="btn-link"
+              style="display:block; border:none; margin:4px 0;">切換老師身分</a>
             {% elif original_role == 'director' %}
-            <a href="/director_home">切換主任身分</a>
+            <a id="toDirectorLink" href="/director_home" class="btn-link"
+              style="display:block; border:none; margin:4px 0;">切換主任身分</a>
             {% endif %}
             <a href="/login" class="btn-link" style="display:block; border:none; margin:4px 0;">登出</a>
           </div>
         </div>
-  </div>
-  </div>
+      </div>
+    </div>
   </div>
 
   <!-- Hero -->
@@ -336,7 +364,7 @@
         const link = document.getElementById('toHomeroomLink');
         if (link) link.style.display = 'block';
       }
-    }).catch(() => {});
+    }).catch(() => { });
   </script>
   </script>
 

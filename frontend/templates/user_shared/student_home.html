@@ -38,7 +38,6 @@
       align-items: center;
     }
 
-    /* 頂端列內容用 container 包裹，寬度跟下方一致 */
     .top-bar>.container {
       display: flex;
       justify-content: space-between;
@@ -79,6 +78,7 @@
       text-decoration: none;
       transition: background-color 0.3s ease, color 0.3s ease;
       font-size: 0.9rem;
+      cursor: pointer;
     }
 
     .top-bar-right .btn-link:hover {
@@ -105,7 +105,6 @@
       background-repeat: no-repeat;
       background-position: center;
       margin-top: 80px;
-      /* 避開固定頂端列 */
       margin-bottom: 2rem;
       border-radius: 0;
       color: white;
@@ -306,8 +305,13 @@
         <a href="/profile">
           <img src="{{ url_for('static', filename='images/avatar.png') }}" alt="頭像" id="login-avatar" />
         </a>
-        <a href="/profile" class="btn-link">學生</a>
-        <a href="/login" class="btn-link">登出</a>
+        <div class="dropdown" style="position: relative;">
+          <button id="accountDropdownBtn" class="btn-link" aria-expanded="false">帳號 ▾</button>
+          <div id="accountDropdownMenu" class="dropdown-menu" style="position:absolute; right:0; top:120%; background:#fff; border:1px solid #ccc; border-radius:8px; padding:6px; min-width:180px; display:none; box-shadow:0 4px 12px rgba(0,0,0,.12);">
+            <a href="/profile" class="btn-link" style="display:block; border:none; margin:4px 0;">個人資料</a>
+            <a href="/login" class="btn-link" style="display:block; border:none; margin:4px 0;">登出</a>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -316,7 +320,7 @@
   <div class="container">
     <header class="hero"></header>
 
-    <!-- 新增公告輪播 -->
+    <!-- 公告輪播 -->
     <div id="announcement-carousel" role="region" aria-live="polite" aria-label="最新公告">
       <button id="announcement-prev" aria-label="上一則公告">&#8592;</button>
       <div id="announcement-content"></div>
@@ -365,7 +369,7 @@
     <a href="/notifications">通知</a>
   </nav>
 
-  <!-- JS 控制開關與公告輪播 -->
+  <!-- JS 控制 -->
   <script>
     // 側邊選單開關
     document.getElementById('menu-btn').addEventListener('click', () => {
@@ -379,9 +383,9 @@
     // 公告輪播內容
     let notification = [];
     let currentAnnouncementIndex = 0;
-    const announcementContent = document.getElementById('notification-content');
-    const prevBtn = document.getElementById('notification-prev');
-    const nextBtn = document.getElementById('notification-next');
+    const announcementContent = document.getElementById('announcement-content');
+    const prevBtn = document.getElementById('announcement-prev');
+    const nextBtn = document.getElementById('announcement-next');
 
     function showAnnouncement(index) {
       if (notification.length > 0) {
@@ -426,7 +430,27 @@
         showAnnouncement(currentAnnouncementIndex);
       }
     }, 5000);
+
+    // 帳號下拉
+    document.addEventListener("DOMContentLoaded", function () {
+      const dropdownBtn = document.getElementById("accountDropdownBtn");
+      const dropdownMenu = document.getElementById("accountDropdownMenu");
+
+      if (dropdownBtn && dropdownMenu) {
+        dropdownBtn.addEventListener("click", function (e) {
+          e.stopPropagation();
+          const isExpanded = dropdownBtn.getAttribute("aria-expanded") === "true";
+          dropdownBtn.setAttribute("aria-expanded", !isExpanded);
+          dropdownMenu.style.display = isExpanded ? "none" : "block";
+        });
+
+        // 點擊外部時關閉選單
+        document.addEventListener("click", function () {
+          dropdownBtn.setAttribute("aria-expanded", "false");
+          dropdownMenu.style.display = "none";
+        });
+      }
+    });
   </script>
 </body>
-
 </html>
