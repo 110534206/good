@@ -31,9 +31,18 @@
       border-radius: 8px;
       text-align: center;
       padding: 2rem;
-      margin-bottom: 1.5rem;
+      margin-bottom: 1rem;
       color: #2b6cb0;
       cursor: pointer;
+      transition: background 0.3s;
+    }
+    .upload-box.dragover {
+      background: #ebf8ff;
+    }
+    .file-name {
+      margin: 0.5rem 0 1rem;
+      font-size: 0.95rem;
+      color: #4a5568;
     }
     .btn {
       display: inline-block;
@@ -69,19 +78,59 @@
 </head>
 <body>
   <header>AI 履歷修改</header>
-
   <div class="container">
-    <div class="upload-box" onclick="document.getElementById('file').click()">
+    <!-- 上傳區 -->
+    <div class="upload-box" id="uploadBox">
       📄 點擊或拖曳上傳履歷檔案
       <input type="file" id="file" accept=".doc,.docx,.pdf,.txt" style="display:none">
     </div>
+    <div class="file-name" id="fileName">尚未選擇檔案</div>
+
+    <!-- 按鈕 -->
     <button class="btn" onclick="simulateAI()">✨ 使用 AI 修改履歷</button>
     
+    <!-- 輸出區 -->
     <h2>修改後的履歷</h2>
     <textarea id="output" placeholder="AI 修改後的內容將顯示在這裡..." readonly></textarea>
   </div>
 
   <script>
+    const uploadBox = document.getElementById('uploadBox');
+    const fileInput = document.getElementById('file');
+    const fileName = document.getElementById('fileName');
+
+    // 點擊觸發
+    uploadBox.addEventListener('click', () => fileInput.click());
+
+    // 選檔顯示
+    fileInput.addEventListener('change', () => {
+      if (fileInput.files.length > 0) {
+        fileName.textContent = "已選擇檔案：" + fileInput.files[0].name;
+      } else {
+        fileName.textContent = "尚未選擇檔案";
+      }
+    });
+
+    // 拖曳效果
+    uploadBox.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      uploadBox.classList.add('dragover');
+    });
+
+    uploadBox.addEventListener('dragleave', () => {
+      uploadBox.classList.remove('dragover');
+    });
+
+    uploadBox.addEventListener('drop', (e) => {
+      e.preventDefault();
+      uploadBox.classList.remove('dragover');
+      if (e.dataTransfer.files.length > 0) {
+        fileInput.files = e.dataTransfer.files;
+        fileName.textContent = "已選擇檔案：" + fileInput.files[0].name;
+      }
+    });
+
+    // 模擬 AI 修改
     function simulateAI() {
       const output = document.getElementById("output");
       output.value = "（範例結果）\n\n• 強化了專業經歷的描述\n• 將冗長句子改為精簡有力的表達\n• 調整了技能順序，凸顯應徵職缺相關能力";
