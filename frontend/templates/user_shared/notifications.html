@@ -1,232 +1,191 @@
 <!DOCTYPE html>
 <html lang="zh-Hant">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>實習通知</title>
-<style>
-@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC&display=swap');
-
-body {
-  font-family: 'Noto Sans TC', sans-serif;
-  background: #fff;
-  margin: 0;
-  padding: 32px 24px;
-  color: #1f2937;
-}
-
-header {
-  text-align: center;
-  margin-bottom: 40px;
-}
-
-header h1 {
-  font-size: 2.8rem;
-  font-weight: 900;
-  color: #111827;
-  letter-spacing: 1.5px;
-}
-
-#sortContainer {
-  margin-top: 20px;
-  text-align: center;
-}
-
-#sortSelect {
-  padding: 6px 12px;
-  font-size: 1rem;
-  margin-left: 8px;
-}
-
-.category-container {
-  max-width: 950px;
-  margin: 0 auto 48px;
-}
-
-.category-title {
-  font-size: 2rem;
-  font-weight: 900;
-  margin-bottom: 24px;
-  color: #2563eb;
-  border-bottom: 4px solid #3b82f6;
-  padding-bottom: 8px;
-  letter-spacing: 1px;
-  cursor: pointer;
-}
-
-.notification-container {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 24px;
-}
-
-.notification {
-  flex: 1 1 320px;
-  background: #f9fafb;
-  border-radius: 16px;
-  padding: 24px 28px;
-  box-shadow: 0 10px 20px rgba(59, 130, 246, 0.15);
-  transition: transform 0.3s ease, box-shadow 0.3s ease;
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  border: 1.5px solid transparent;
-}
-
-.notification:hover {
-  transform: translateY(-6px);
-  box-shadow: 0 14px 30px rgba(59, 130, 246, 0.3);
-  border-color: #3b82f6;
-}
-
-.title {
-  font-size: 1.5rem;
-  font-weight: 900;
-  color: #1e40af;
-  line-height: 1.2;
-}
-
-.meta {
-  display: flex;
-  justify-content: space-between;
-  font-size: 0.95rem;
-  font-weight: 700;
-  color: #4b5563;
-  border-bottom: 1px solid #e5e7eb;
-  padding-bottom: 8px;
-  margin-bottom: 12px;
-}
-
-.source {
-  padding: 5px 14px;
-  border-radius: 16px;
-  font-size: 0.85rem;
-  color: #fff;
-  text-align: center;
-  min-width: 70px;
-  letter-spacing: 0.03em;
-  text-transform: uppercase;
-  user-select: none;
-}
-
-.source.老師 { background: #2563eb; }
-.source.平台 { background: #10b981; }
-.source.學生 { background: #f97316; }
-
-.time {
-  font-style: italic;
-  color: #6b7280;
-  font-weight: 500;
-  user-select: text;
-}
-
-.content {
-  font-size: 1.05rem;
-  line-height: 1.65;
-  color: #374151;
-  white-space: pre-line;
-  user-select: text;
-}
-
-@media (max-width: 600px) {
-  body { padding: 20px 16px; }
-  header h1 { font-size: 2.4rem; margin-bottom: 30px; }
-  .notification { flex: 1 1 100%; padding: 20px 22px; }
-  .title { font-size: 1.3rem; }
-  .meta { flex-direction: column; gap: 8px; }
-  .content { font-size: 1rem; }
-  .category-title { font-size: 1.6rem; }
-}
-</style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>公告通知中心</title>
+  <style>
+    body {
+      font-family: 'Inter', 'Noto Sans TC', sans-serif;
+      background-color: #f9fafb;
+      margin: 0;
+      padding: 0;
+      color: #111827;
+    }
+    header {
+      background-color: #2563eb;
+      color: white;
+      padding: 1rem;
+      text-align: center;
+      font-size: 1.5rem;
+      font-weight: bold;
+    }
+    #controls {
+      display: flex;
+      justify-content: flex-end;
+      padding: 0.5rem 1rem;
+      background: #f3f4f6;
+    }
+    #sortSelect {
+      padding: 0.3rem 0.6rem;
+      border: 1px solid #d1d5db;
+      border-radius: 6px;
+    }
+    .category-container {
+      margin: 1rem;
+      border: 1px solid #e5e7eb;
+      border-radius: 12px;
+      overflow: hidden;
+      background: white;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    }
+    .category-title {
+      background: #e5e7eb;
+      padding: 0.8rem;
+      font-weight: bold;
+      cursor: pointer;
+      user-select: none;
+    }
+    .notification-container {
+      display: flex;
+      flex-direction: column;
+      padding: 0.8rem;
+      gap: 0.8rem;
+    }
+    .notification {
+      border: 1px solid #d1d5db;
+      border-radius: 10px;
+      padding: 0.8rem;
+      background: #f9fafb;
+      transition: background 0.2s;
+    }
+    .notification:hover {
+      background: #f3f4f6;
+    }
+    .notification .title {
+      font-weight: bold;
+      margin-bottom: 0.4rem;
+    }
+    .notification .meta {
+      font-size: 0.85rem;
+      color: #6b7280;
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 0.4rem;
+    }
+    .notification .content {
+      margin-bottom: 0.5rem;
+    }
+    .notification .deadline {
+      color: #dc2626;
+      font-weight: bold;
+      margin-bottom: 0.3rem;
+    }
+    .notification .attachments {
+      margin-top: 0.3rem;
+    }
+    .notification .attachments a {
+      color: #2563eb;
+      text-decoration: none;
+    }
+    .notification .attachments a:hover {
+      text-decoration: underline;
+    }
+    .notification .type {
+      font-size: 0.85rem;
+      color: #374151;
+    }
+  </style>
 </head>
 <body>
+  <header>公告通知中心</header>
 
-<header>
-  <h1>實習通知</h1>
-  <div id="sortContainer">
-    <label for="sortSelect"><strong>排序方式：</strong></label>
+  <div id="controls">
+    <label for="sortSelect">排序：</label>
     <select id="sortSelect">
       <option value="desc">最新優先</option>
       <option value="asc">最舊優先</option>
     </select>
   </div>
-</header>
 
-<main id="mainContainer"></main>
+  <div id="mainContainer"></div>
 
-<script>
-const mainContainer = document.getElementById("mainContainer");
-const sortSelect = document.getElementById("sortSelect");
-let announcements = [];
+  <script>
+    const mainContainer = document.getElementById("mainContainer");
+    const sortSelect = document.getElementById("sortSelect");
+    let announcements = [];
 
-function renderAnnouncements(sortOrder = "desc") {
-  mainContainer.innerHTML = "";
+    function renderAnnouncements(sortOrder = "desc") {
+      mainContainer.innerHTML = "";
 
-  const sorted = [...announcements].sort((a, b) => {
-    return sortOrder === "asc"
-      ? new Date(a.created_at) - new Date(b.created_at)
-      : new Date(b.created_at) - new Date(a.created_at);
-  });
+      const sorted = [...announcements].sort((a, b) => {
+        return sortOrder === "asc"
+          ? new Date(a.created_at) - new Date(b.created_at)
+          : new Date(b.created_at) - new Date(a.created_at);
+      });
 
-  const categories = ["老師", "平台", "學生"];
+      const categories = ["老師", "平台", "學生", "系統"];
 
-  categories.forEach(category => {
-    const filtered = sorted.filter(n =>
-      n.source === category || (Array.isArray(n.target_roles) && n.target_roles.includes(category))
-    );
+      categories.forEach(category => {
+        const filtered = sorted.filter(n =>
+          n.source === category || (Array.isArray(n.target_roles) && n.target_roles.includes(category))
+        );
 
-    if (filtered.length === 0) return;
+        if (filtered.length === 0) return;
 
-    const categoryDiv = document.createElement("div");
-    categoryDiv.className = "category-container";
-    categoryDiv.innerHTML = `<div class="category-title">${category}</div>`;
+        const categoryDiv = document.createElement("div");
+        categoryDiv.className = "category-container";
+        categoryDiv.innerHTML = `<div class="category-title">${category}</div>`;
 
-    const notificationContainer = document.createElement("div");
-    notificationContainer.className = "notification-container";
+        const notificationContainer = document.createElement("div");
+        notificationContainer.className = "notification-container";
 
-    filtered.forEach(note => {
-      const div = document.createElement("div");
-      div.className = "notification";
-      div.innerHTML = `
-        <div class="title">${note.title}</div>
-        <div class="meta">
-          <span class="source ${note.source}">${note.source}</span>
-          <span class="time">${new Date(note.created_at).toLocaleString('zh-TW', { hour12: false })}</span>
-        </div>
-        <div class="content">${note.content}</div>
-      `;
-      notificationContainer.appendChild(div);
+        filtered.forEach(note => {
+          const div = document.createElement("div");
+          div.className = "notification";
+          div.innerHTML = `
+            <div class="title">${note.title}</div>
+            <div class="meta">
+              <span class="source ${note.source}">${note.source}</span>
+              <span class="time">${new Date(note.created_at).toLocaleString('zh-TW', { hour12: false })}</span>
+            </div>
+            <div class="content">${note.content}</div>
+            ${note.deadline ? `<div class="deadline">⏰ 截止時間：${note.deadline}</div>` : ""}
+            ${note.attachments ? `<div class="attachments"><a href="${note.attachments}" target="_blank">📎 附件下載</a></div>` : ""}
+            <div class="type">類型：${note.type || "公告"}</div>
+          `;
+          notificationContainer.appendChild(div);
+        });
+
+        categoryDiv.appendChild(notificationContainer);
+        mainContainer.appendChild(categoryDiv);
+      });
+
+      // 類別可折疊功能
+      document.querySelectorAll(".category-title").forEach(titleEl => {
+        titleEl.addEventListener("click", () => {
+          const container = titleEl.nextElementSibling;
+          container.style.display = container.style.display === "none" ? "flex" : "none";
+        });
+      });
+    }
+
+    sortSelect.addEventListener("change", (e) => {
+      renderAnnouncements(e.target.value);
     });
 
-    categoryDiv.appendChild(notificationContainer);
-    mainContainer.appendChild(categoryDiv);
-  });
-
-  // 類別可折疊功能
-  document.querySelectorAll(".category-title").forEach(titleEl => {
-    titleEl.addEventListener("click", () => {
-      const container = titleEl.nextElementSibling;
-      container.style.display = container.style.display === "none" ? "flex" : "none";
-    });
-  });
-}
-
-sortSelect.addEventListener("change", (e) => {
-  renderAnnouncements(e.target.value);
-});
-
-fetch("/api/announcements")
-  .then(res => res.json())
-  .then(data => {
-    if (!data.success) throw new Error("取得公告失敗");
-    announcements = data.announcements;
-    renderAnnouncements("desc");
-  })
-  .catch(err => {
-    console.error("載入公告失敗", err);
-    mainContainer.innerHTML = `<p style="color:red; text-align:center;">載入公告失敗</p>`;
-  });
-</script>
-
+    // 後端 API 取得公告
+    fetch("/notifications/api/announcements")
+      .then(res => res.json())
+      .then(data => {
+        if (!data.success) throw new Error("取得公告失敗");
+        announcements = data.announcements;
+        renderAnnouncements("desc");
+      })
+      .catch(err => {
+        console.error("載入公告失敗", err);
+        mainContainer.innerHTML = `<p style="color:red; text-align:center;">載入公告失敗</p>`;
+      });
+  </script>
 </body>
 </html>
