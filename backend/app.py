@@ -36,7 +36,7 @@ from company import company_bp
 from resume import resume_bp
 from admin import admin_bp
 from users import users_bp
-from notification import notification_bp
+from notification import notification_bp, check_and_generate_reminders
 from preferences import preferences_bp
 
 # 註冊 Blueprint
@@ -47,6 +47,16 @@ app.register_blueprint(admin_bp)
 app.register_blueprint(users_bp)
 app.register_blueprint(notification_bp)
 app.register_blueprint(preferences_bp)
+
+# -------------------------
+# APScheduler 設定
+# -------------------------
+from apscheduler.schedulers.background import BackgroundScheduler
+
+scheduler = BackgroundScheduler()
+# 每天早上 9 點執行一次檢查
+scheduler.add_job(check_and_generate_reminders, "cron", hour=9, minute=0)
+scheduler.start()
 
 # -------------------------
 # 首頁路由（使用者前台）
@@ -70,4 +80,7 @@ def admin_index():
 # 主程式入口
 # -------------------------
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    try:
+        app.run(host="0.0.0.0", port=5000, debug=True)
+    except (KeyboardInterrupt, SystemExit):
+        scheduler.shutdown()

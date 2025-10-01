@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>公告管理</title>
+  <style>
+    body {
+      font-family: 'Inter', 'Noto Sans TC', sans-serif;
+      margin: 0;
+      background: #f3f4f6;
+      color: #111827;
+      line-height: 1.6;
+    }
+
+    header {
+      background: linear-gradient(90deg, #1f2937, #374151);
+      color: white;
+      padding: 1rem;
+      text-align: center;
+      font-size: 1.5rem;
+      font-weight: bold;
+      letter-spacing: 1px;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+    }
+
+    main {
+      padding: 2rem 1rem;
+      max-width: 1100px;
+      margin: auto;
+    }
+
+    h2 {
+      margin-top: 2rem;
+      margin-bottom: 0.8rem;
+      font-size: 1.3rem;
+      color: #2563eb;
+      border-left: 4px solid #2563eb;
+      padding-left: 0.5rem;
+    }
+
+    form {
+      background: white;
+      border: 1px solid #e5e7eb;
+      border-radius: 12px;
+      padding: 1.5rem;
+      display: grid;
+      gap: 1rem;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+    }
+
+    label {
+      font-weight: 600;
+      font-size: 0.95rem;
+      margin-bottom: 0.2rem;
+      display: block;
+    }
+
+    input,
+    textarea,
+    select {
+      width: 100%;
+      padding: 0.6rem 0.75rem;
+      border: 1px solid #d1d5db;
+      border-radius: 8px;
+      transition: border 0.2s, box-shadow 0.2s;
+    }
+
+    input:focus,
+    textarea:focus,
+    select:focus {
+      border-color: #2563eb;
+      box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.2);
+      outline: none;
+    }
+
+    textarea {
+      min-height: 90px;
+      resize: vertical;
+    }
+
+    button {
+      padding: 0.65rem 1.2rem;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      font-weight: bold;
+      transition: background 0.2s, transform 0.1s;
+    }
+
+    button:hover {
+      transform: translateY(-1px);
+    }
+
+    .btn-primary {
+      background: #2563eb;
+      color: white;
+    }
+
+    .btn-primary:hover {
+      background: #1d4ed8;
+    }
+
+    .btn-danger {
+      background: #dc2626;
+      color: white;
+    }
+
+    .btn-danger:hover {
+      background: #b91c1c;
+    }
+
+    .btn-secondary {
+      background: #6b7280;
+      color: white;
+    }
+
+    .btn-secondary:hover {
+      background: #4b5563;
+    }
+
+    table {
+      width: 100%;
+      margin-top: 1.2rem;
+      border-collapse: collapse;
+      background: white;
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+    }
+
+    table th,
+    table td {
+      padding: 0.9rem 0.8rem;
+      border-bottom: 1px solid #e5e7eb;
+      text-align: left;
+      font-size: 0.95rem;
+    }
+
+    table th {
+      background: #f9fafb;
+      font-weight: 600;
+      color: #374151;
+    }
+
+    table tr:hover td {
+      background: #f3f4f6;
+    }
+
+    .actions button {
+      margin-right: 6px;
+    }
+  </style>
+</head>
+
+<body>
+  <header>公告管理後台</header>
+  <main>
+    <!-- 新增公告 -->
+    <section>
+      <h2>新增公告</h2>
+      <form id="announcementForm">
+        <div>
+          <label for="title">標題</label>
+          <input type="text" id="title" name="title" required>
+        </div>
+        <div>
+          <label for="content">內容</label>
+          <textarea id="content" name="content" required></textarea>
+        </div>
+        <div>
+          <label for="type">類型</label>
+          <select id="type" name="type" required>
+            <option value="announcement">公告</option>
+            <option value="reminder">提醒</option>
+            <option value="deadline">截止</option>
+          </select>
+        </div>
+        <div id="deadlineContainer" style="display:none;">
+          <label for="deadline">截止時間</label>
+          <input type="datetime-local" id="deadline" name="deadline">
+        </div>
+        <div>
+          <label for="target_roles">通知對象</label>
+          <select id="target_roles" name="target_roles" multiple>
+            <option value="student">學生</option>
+            <option value="teacher">老師</option>
+            <option value="director">主任</option>
+            <option value="admin">系統管理員</option>
+          </select>
+          <small>（按住 Ctrl 可多選）</small>
+        </div>
+        <div>
+          <label for="attachments">附件</label>
+          <input type="file" id="attachments" name="attachments">
+        </div>
+        <div>
+          <label>
+            <input type="checkbox" id="is_important" name="is_important" value="1">
+            設為重要公告
+          </label>
+        </div>
+        <button type="submit" class="btn-primary">新增公告</button>
+      </form>
+    </section>
+
+    <!-- 公告列表 -->
+    <section>
+      <h2>公告列表</h2>
+      <table id="announcementsTable">
+        <thead>
+          <tr>
+            <th>標題</th>
+            <th>類型</th>
+            <th>狀態</th>
+            <th>建立時間</th>
+            <th>截止時間</th>
+            <th>操作</th>
+          </tr>
+        </thead>
+        <tbody>
+          <!-- JS 生成公告列表 -->
+        </tbody>
+      </table>
+    </section>
+  </main>
+
+  <script>
+    const typeSelect = document.getElementById("type");
+    const deadlineContainer = document.getElementById("deadlineContainer");
+    const form = document.getElementById("announcementForm");
+    const tableBody = document.querySelector("#announcementsTable tbody");
+
+    // 類型改變時顯示/隱藏截止時間
+    typeSelect.addEventListener("change", () => {
+      deadlineContainer.style.display = typeSelect.value === "deadline" ? "block" : "none";
+    });
+
+    // 送出表單（新增公告）
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+
+      const formData = new FormData(form);
+      formData.set("target_roles", JSON.stringify([...formData.getAll("target_roles")]));
+
+      const res = await fetch("/api/announcements/create", {
+        method: "POST",
+        body: formData
+      });
+      const data = await res.json();
+
+      if (data.success) {
+        alert("公告新增成功！");
+        form.reset();
+        loadAnnouncements();
+      } else {
+        alert("新增失敗：" + data.message);
+      }
+    });
+
+    // 載入公告列表
+    async function loadAnnouncements() {
+      tableBody.innerHTML = "<tr><td colspan='6'>載入中...</td></tr>";
+      const res = await fetch("/api/announcements/list");
+      const data = await res.json();
+      if (data.success) {
+        tableBody.innerHTML = "";
+        data.announcements.forEach(a => {
+          const row = document.createElement("tr");
+          row.innerHTML = `
+            <td>${a.title}</td>
+            <td>${a.type}</td>
+            <td>${a.status}</td>
+            <td>${a.created_at}</td>
+            <td>${a.deadline || "-"}</td>
+            <td class="actions">
+              <button class="btn-secondary" onclick="editAnnouncement(${a.id})">編輯</button>
+              <button class="btn-danger" onclick="deleteAnnouncement(${a.id})">刪除</button>
+            </td>
+          `;
+          tableBody.appendChild(row);
+        });
+      } else {
+        tableBody.innerHTML = "<tr><td colspan='6'>無法載入公告</td></tr>";
+      }
+    }
+
+    // 編輯公告
+    function editAnnouncement(id) {
+      alert("編輯公告 ID: " + id + "（這裡可跳出編輯表單或導向編輯頁）");
+    }
+
+    // 刪除公告
+    async function deleteAnnouncement(id) {
+      if (!confirm("確定要刪除此公告嗎？")) return;
+      const res = await fetch("/api/announcements/delete/" + id, { method: "DELETE" });
+      const data = await res.json();
+      if (data.success) {
+        alert("刪除成功！");
+        loadAnnouncements();
+      } else {
+        alert("刪除失敗：" + data.message);
+      }
+    }
+
+    // 預設載入公告
+    loadAnnouncements();
+  </script>
+</body>
+
+</html>
