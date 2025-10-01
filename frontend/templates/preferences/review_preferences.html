@@ -218,6 +218,12 @@
 
   <div class="container my-5 pt-3">
     <h2 class="text-center mb-4">學生志願序檢視</h2>
+    <div class="d-flex justify-content-center mb-3">
+      <button id="generateChartBtn" class="btn btn-primary">生成圖表</button>
+    </div>
+    <div id="chartSection" class="mb-4" style="display:none;">
+      <canvas id="prefChart" height="120"></canvas>
+    </div>
 
     {% if student_data %}
       {% for student_name, preferences in student_data.items() %}
@@ -262,6 +268,7 @@
     <a href="/upload_company">建立實習機會</a>
   </nav>
 
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <script>
     // 帳號下拉
     const btn = document.getElementById('accountDropdownBtn');
@@ -296,6 +303,86 @@
     document.getElementById('close-btn').addEventListener('click', () => {
       document.getElementById('side-menu').classList.remove('open');
     });
+
+    // 生成圖表：彙整所有學生表格中的公司名稱出現次數
+    (function initPreferenceChart() {
+      const btn = document.getElementById('generateChartBtn');
+      const section = document.getElementById('chartSection');
+      const canvas = document.getElementById('prefChart');
+      let chartInstance = null;
+
+      function collectCompanyCounts() {
+        const counts = new Map();
+        // 遍歷所有表格的 tbody 中第2欄（公司名稱）
+        document.querySelectorAll('table tbody tr').forEach(tr => {
+          const companyCell = tr.children[1];
+          if (!companyCell) return;
+          const name = companyCell.textContent.trim();
+          if (!name) return;
+          counts.set(name, (counts.get(name) || 0) + 1);
+        });
+        return counts;
+      }
+
+      function buildChart() {
+        const counts = collectCompanyCounts();
+        const labels = Array.from(counts.keys());
+        const data = Array.from(counts.values());
+
+        if (chartInstance) {
+          chartInstance.destroy();
+        }
+
+        chartInstance = new Chart(canvas, {
+          type: 'bar',
+          data: {
+            labels,
+            datasets: [{
+              label: '公司被選擇次數（所有志願）',
+              data,
+              backgroundColor: 'rgba(0, 102, 204, 0.25)',
+              borderColor: 'rgba(0, 102, 204, 1)',
+              borderWidth: 1.5,
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+              x: {
+                ticks: { maxRotation: 45, minRotation: 0 },
+                title: { display: true, text: '公司名稱' }
+              },
+              y: {
+                beginAtZero: true,
+                precision: 0,
+                title: { display: true, text: '次數' }
+              }
+            },
+            plugins: {
+              legend: { display: true },
+              tooltip: { enabled: true }
+            }
+          }
+        });
+      }
+
+      btn?.addEventListener('click', () => {
+        const isHidden = section.style.display === 'none';
+        if (isHidden) {
+          section.style.display = 'block';
+          buildChart();
+          btn.textContent = '隱藏圖表';
+        } else {
+          section.style.display = 'none';
+          if (chartInstance) {
+            chartInstance.destroy();
+            chartInstance = null;
+          }
+          btn.textContent = '生成圖表';
+        }
+      });
+    })();
   </script>
 </body>
 </html>
