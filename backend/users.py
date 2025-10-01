@@ -281,6 +281,11 @@ def director_home():
 @users_bp.route('/ta_home')
 def ta_home():
     return render_template('user_shared/ta_home.html')
+    
+# 實習廠商管理
+@users_bp.route('/manage_companies')
+def manage_companies():
+    return render_template('user_shared/manage_companies.html')
 
 
 # 管理員首頁（後台）
