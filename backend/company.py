@@ -23,9 +23,10 @@ def upload_company_form():
             if not company_name:
                 return render_template('company/upload_company.html', error="公司名稱為必填")
 
-            # 從 session 拿上傳者 id
+            # 從 session 拿上傳者 id 與角色
             uploaded_by_user_id = session.get("user_id")
-            if not uploaded_by_user_id:
+            uploaded_by_role = session.get("role")
+            if not uploaded_by_user_id or not uploaded_by_role:
                 return render_template('company/upload_company.html', error="請先登入")
 
             conn = get_db()
@@ -33,8 +34,8 @@ def upload_company_form():
             cursor.execute("""
                 INSERT INTO internship_companies
                 (company_name, description, location, contact_person, contact_email, contact_phone, 
-                 uploaded_by_user_id, status, submitted_at)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, 'pending', NOW())
+                 uploaded_by_user_id, uploaded_by_role, status, submitted_at)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 'pending', NOW())
             """, (
                 company_name,
                 company_description,
@@ -42,21 +43,22 @@ def upload_company_form():
                 contact_person,
                 contact_email,
                 contact_phone,
-                uploaded_by_user_id
+                uploaded_by_user_id,
+                uploaded_by_role
             ))
             conn.commit()
             cursor.close()
             conn.close()
 
             # 上傳成功訊息，告知狀態是待審核
-            success_msg = "公司資訊已成功上傳，狀態：待審核"
+            success_msg = f"公司資訊已成功上傳（上傳者角色：{uploaded_by_role}），狀態：待審核"
             return render_template('company/upload_company.html', success=success_msg)
 
         except Exception as e:
             print("❌ 錯誤：", e)
             return render_template('company/upload_company.html', error="伺服器錯誤，請稍後再試")
     else:
-            return render_template('company/upload_company.html')
+        return render_template('company/upload_company.html')
 
 # -------------------------
 # API - 審核公司
@@ -108,7 +110,6 @@ def api_approve_company():
     finally:
         cursor.close()
         conn.close()
-
 
 # -------------------------
 # 頁面 - 公司審核清單
