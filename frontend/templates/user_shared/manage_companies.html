@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>實習廠商管理</title>
+  <style>
+    body { 
+      font-family: "Noto Sans TC", sans-serif; 
+      margin: 0; 
+      background: linear-gradient(135deg, #dff9fb, #f5f7fa); 
+      color: #2c3e50;
+    }
+    header {
+      background: #3498db;
+      color: #fff;
+      padding: 20px;
+      text-align: center;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+    }
+    h1 { margin: 0; font-size: 28px; }
+    .subtitle { margin-top: 6px; font-size: 14px; opacity: 0.95; }
+    .container { 
+      display: flex; 
+      gap: 20px; 
+      margin: 20px auto; 
+      max-width: 1000px;
+    }
+    .list, .form { 
+      flex: 1; 
+      background: #fff;
+      border: none; 
+      padding: 20px; 
+      border-radius: 16px; 
+      box-shadow: 0 6px 14px rgba(0,0,0,0.1);
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+    .list:hover, .form:hover {
+      transform: translateY(-6px);
+      box-shadow: 0 8px 18px rgba(0,0,0,0.15);
+    }
+    h2 {
+      margin-top: 0;
+      color: #34495e;
+      border-left: 6px solid #3498db;
+      padding-left: 10px;
+      margin-bottom: 15px;
+    }
+    .guide { font-size: 13px; color: #666; margin-bottom: 12px; }
+    ul { 
+      list-style: none; 
+      padding: 0; 
+      margin: 0;
+    }
+    li { 
+      padding: 12px; 
+      border-bottom: 1px solid #f0f0f0; 
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    li span { font-weight: 500; }
+    li:last-child { border-bottom: none; }
+    .badge {
+      padding: 4px 8px;
+      font-size: 12px;
+      border-radius: 12px;
+      background: #3498db;
+      color: #fff;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+    }
+    input, select, button { 
+      margin-top: 10px; 
+      padding: 12px; 
+      width: 100%; 
+      border: 1px solid #ccc; 
+      border-radius: 8px;
+      font-size: 14px;
+      box-sizing: border-box;
+    }
+    button {
+      background: #4CAF50;
+      color: white;
+      border: none;
+      cursor: pointer;
+      font-weight: bold;
+      transition: background 0.3s, transform 0.2s;
+    }
+    button:hover {
+      background: #45a049;
+      transform: scale(1.03);
+    }
+    .resume-preview {
+      margin-top: 10px;
+      font-size: 14px;
+      color: #888;
+      font-style: italic;
+    }
+    .wish-list li {
+      background: #f9f9f9;
+      border-radius: 8px;
+      margin-top: 6px;
+      padding: 8px 12px;
+      transition: background 0.3s;
+    }
+    .wish-list li:hover { background: #ecf0f1; }
+    .submit-btn { margin-top: 15px; background:#3498db; font-size: 15px; }
+    .small { font-size: 13px; color:#666; }
+    .controls { display:flex; gap:10px; }
+    .controls > * { flex:1; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>實習廠商管理系統</h1>
+    <div class="subtitle">查看廠商清單、上傳履歷，並填寫志願序（最多 6 個）</div>
+  </header>
+
+  <div class="container">
+    <!-- 廠商清單 -->
+    <div class="list">
+      <h2>廠商清單</h2>
+      <div class="guide">可搜尋、篩選並查看廠商詳情；點選「加入志願」將廠商加入右側志願序。</div>
+
+      <!-- 搜尋與篩選（示意） -->
+      <div class="controls">
+        <input id="search" placeholder="搜尋公司或職稱">
+        <select id="filterLocation">
+          <option value="">地點</option>
+          <option>台北</option>
+          <option>新北</option>
+          <option>高雄</option>
+        </select>
+      </div>
+
+      <ul id="companyList" style="margin-top:12px">
+        <li><span>雲湧科技 - 前端實習</span> <span class="badge">3 名</span></li>
+        <li><span>百匠機電 - 機構設計</span> <span class="badge">2 名</span></li>
+        <li><span>智點行銷 - 社群營運</span> <span class="badge">4 名</span></li>
+      </ul>
+
+      <div style="margin-top:12px; display:flex; justify-content:space-between; align-items:center;">
+        <div class="small">共 3 筆結果</div>
+        <div class="small">頁次 1/1</div>
+      </div>
+    </div>
+
+    <!-- 履歷與志願序 -->
+    <div class="form">
+      <h2>我的履歷</h2>
+      <div class="guide">上傳履歷（PDF / DOCX），檔案大小建議 ≤ 3MB；或貼上履歷連結。</div>
+      <input id="resumeFile" type="file" accept=".pdf,.doc,.docx">
+      <input id="resumeLink" placeholder="履歷連結（選填）">
+      <div id="resumeInfo" class="resume-preview">尚未上傳履歷</div>
+
+      <h2 style="margin-top:18px">志願序</h2>
+      <div class="guide">從下拉選單選擇廠商並新增志願；拖曳或上下按鈕調整順序，最多 6 個。</div>
+      <div class="controls">
+        <select id="companySelect">
+          <option value="">選擇廠商加入志願</option>
+          <option value="1">雲湧科技 - 前端實習</option>
+          <option value="2">百匠機電 - 機構設計</option>
+          <option value="3">智點行銷 - 社群營運</option>
+        </select>
+        <button id="addWishBtn" style="width:120px;">新增志願</button>
+      </div>
+
+      <ul id="wishList" class="wish-list" style="margin-top:12px"></ul>
+
+      <button id="submitBtn" class="submit-btn">送出志願</button>
+      <div id="msg" class="small" style="margin-top:8px"></div>
+    </div>
+  </div>
+
+  <script>
+    // 簡單互動：履歷預覽、加入志願、調整與送出（前端示意）
+    const resumeFile = document.getElementById('resumeFile');
+    const resumeLink = document.getElementById('resumeLink');
+    const resumeInfo = document.getElementById('resumeInfo');
+    const addWishBtn = document.getElementById('addWishBtn');
+    const companySelect = document.getElementById('companySelect');
+    const wishList = document.getElementById('wishList');
+    const msg = document.getElementById('msg');
+    const submitBtn = document.getElementById('submitBtn');
+
+    let wishes = [];
+    const companies = { '1': '雲湧科技 - 前端實習', '2': '百匠機電 - 機構設計', '3': '智點行銷 - 社群營運' };
+
+    resumeFile.addEventListener('change', ()=>{
+      const f = resumeFile.files[0];
+      if(!f) return;
+      resumeInfo.textContent = `已選擇：${f.name}（大小 ${Math.round(f.size/1024)} KB）`;
+    });
+
+    addWishBtn.addEventListener('click', ()=>{
+      const id = companySelect.value;
+      if(!id) { msg.textContent = '請先選擇廠商'; return; }
+      if(wishes.includes(id)) { msg.textContent = '該廠商已在志願序中'; return; }
+      if(wishes.length >= 6) { msg.textContent = '最多 6 個志願'; return; }
+      wishes.push(id);
+      renderWishes();
+      msg.textContent = '';
+    });
+
+    function renderWishes(){
+      wishList.innerHTML = '';
+      wishes.forEach((id, idx)=>{
+        const li = document.createElement('li');
+        li.textContent = `${idx+1}. ${companies[id]}`;
+        // 加上下移除按鈕
+        const btns = document.createElement('div');
+        btns.style.display = 'flex';
+        btns.style.gap = '6px';
+
+        const up = document.createElement('button'); up.textContent = '↑'; up.style.width='36px';
+        up.addEventListener('click', ()=>{ move(idx, -1); });
+        const down = document.createElement('button'); down.textContent = '↓'; down.style.width='36px';
+        down.addEventListener('click', ()=>{ move(idx, 1); });
+        const rm = document.createElement('button'); rm.textContent = '移除'; rm.style.width='56px'; rm.addEventListener('click', ()=>{ remove(idx); });
+
+        btns.appendChild(up); btns.appendChild(down); btns.appendChild(rm);
+        li.appendChild(btns);
+        wishList.appendChild(li);
+      });
+    }
+
+    function move(index, delta){
+      const j = index + delta; if(j<0||j>=wishes.length) return;
+      const tmp = wishes[index]; wishes[index] = wishes[j]; wishes[j] = tmp; renderWishes();
+    }
+    function remove(index){ wishes.splice(index,1); renderWishes(); }
+
+    submitBtn.addEventListener('click', ()=>{
+      if(wishes.length===0){ msg.textContent='請先加入至少一個志願'; return; }
+      const payload = {
+        resume: resumeFile.files[0]? resumeFile.files[0].name : (resumeLink.value||null),
+        wishes: wishes.map((id,idx)=>({ order: idx+1, company: companies[id], id }))
+      };
+      console.log('送出資料：', payload);
+      msg.textContent = '已送出（示意）';
+    });
+  </script>
+</body>
+</html>
