@@ -323,9 +323,10 @@
     <select id="preference_{{ i }}" class="preference-select" name="preference_{{ i }}" required>
       <option value="">-- 請選擇實習公司 --</option>
       {% for company in companies %}
-      <option value="{{ company['id'] }}" {% if submitted_preferences and submitted_preferences[i-1]==company['id'] %} selected {% endif %}>
-  {{ company['company_name'] }}（{{ company['job_title'] }}）
-</option>
+      <option value="{{ company['id'] }}">
+       {{ company['company_name'] }} ({{ company['job_title'] }})
+      </option>
+
       {% endfor %}
     </select>
     {% endfor %}
@@ -345,76 +346,72 @@
     <a href="/notifications">通知</a>
   </nav>
 
-  <!-- JS 控制側邊選單開關及志願序選項 -->
+  <!-- JS 控制側邊選單開關及志願序選項互斥 -->
   <script>
-  // 側邊選單開關
-  document.getElementById('menu-btn').addEventListener('click', () => {
-    document.getElementById('side-menu').classList.add('open');
-    document.getElementById('side-menu').setAttribute('aria-hidden', 'false');
-  });
+    // 側邊選單開關
+    document.getElementById('menu-btn').addEventListener('click', () => {
+      document.getElementById('side-menu').classList.add('open');
+      document.getElementById('side-menu').setAttribute('aria-hidden', 'false');
+    });
 
-  document.getElementById('close-btn').addEventListener('click', () => {
-    document.getElementById('side-menu').classList.remove('open');
-    document.getElementById('side-menu').setAttribute('aria-hidden', 'true');
-  });
+    document.getElementById('close-btn').addEventListener('click', () => {
+      document.getElementById('side-menu').classList.remove('open');
+      document.getElementById('side-menu').setAttribute('aria-hidden', 'true');
+    });
 
-  const selects = document.querySelectorAll('.preference-select');
-  const submitBtn = document.getElementById('submitBtn');
-  const editBtn = document.getElementById('editBtn');
-  const toast = document.getElementById('toast');
+    const selects = document.querySelectorAll('.preference-select');
+    const submitBtn = document.getElementById('submitBtn');
+    const editBtn = document.getElementById('editBtn');
+    const toast = document.getElementById('toast');
 
-  // 更新下拉選單顯示
-  function updateOptions() {
-    const selectedValues = Array.from(selects)
-      .map(s => s.value)
-      .filter(val => val !== '');
+    function updateOptions() {
+      const selectedValues = Array.from(selects)
+        .map(s => s.value)
+        .filter(val => val !== '');
+
+      selects.forEach(select => {
+        const currentValue = select.value;
+        Array.from(select.options).forEach(option => {
+          if (option.value === '') {
+            option.disabled = false;
+            return;
+          }
+          option.disabled = selectedValues.includes(option.value) && option.value !== currentValue;
+        });
+      });
+    }
 
     selects.forEach(select => {
-      const currentValue = select.value;
-      Array.from(select.options).forEach(option => {
-        if (option.value === '') {
-          option.hidden = false; // 空白選項要保留
-          return;
-        }
-        // 如果這個值已經被選過，且不是這個 select 的當前值 → 隱藏
-        option.hidden = selectedValues.includes(option.value) && option.value !== currentValue;
-      });
+      select.addEventListener('change', updateOptions);
     });
-  }
 
-  // 當選項改變時即時更新
-  selects.forEach(select => {
-    select.addEventListener('change', updateOptions);
-  });
-
-  // 預先初始化
-  updateOptions();
-
-  function showToast(message) {
-    toast.textContent = message;
-    toast.classList.add('show');
-    setTimeout(() => {
-      toast.classList.remove('show');
-    }, 3000);
-  }
-
-  editBtn.addEventListener('click', () => {
-    selects.forEach(select => select.disabled = false);
-    submitBtn.style.display = 'block';
-    editBtn.style.display = 'none';
     updateOptions();
-  });
 
-  // ✅ 從後端接收 message
-  let toastMessage = {{ message | tojson | safe | default('null', true) }};
+    function showToast(message) {
+      toast.textContent = message;
+      toast.classList.add('show');
+      setTimeout(() => {
+        toast.classList.remove('show');
+      }, 3000);
+    }
 
-  if (toastMessage) {
-    selects.forEach(select => select.disabled = true);
-    submitBtn.style.display = 'none';
-    editBtn.style.display = 'block';
-    showToast(toastMessage);
-  }
-</script>
+    editBtn.addEventListener('click', () => {
+      selects.forEach(select => select.disabled = false);
+      submitBtn.style.display = 'block';
+      editBtn.style.display = 'none';
+      updateOptions();
+    });
+
+    // ✅ 從後端接收 message
+    let toastMessage = {{ message | tojson | safe | default('null', true) }};
+
+    if (toastMessage) {
+      selects.forEach(select => select.disabled = true);
+      submitBtn.style.display = 'none';
+      editBtn.style.display = 'block';
+      showToast(toastMessage);
+    }
+  </script>
 </body>
 
 </html>
