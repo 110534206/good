@@ -52,7 +52,6 @@ app.register_blueprint(preferences_bp)
 # APScheduler 設定
 # -------------------------
 from apscheduler.schedulers.background import BackgroundScheduler
-
 scheduler = BackgroundScheduler()
 # 每天早上 9 點執行一次檢查
 scheduler.add_job(check_and_generate_reminders, "cron", hour=9, minute=0)
