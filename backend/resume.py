@@ -134,55 +134,69 @@ def list_resumes(username):
         return jsonify({"success": False, "message": f"查詢失敗: {str(e)}"}), 500
 
 # -------------------------
-# API - 審核履歷 (僅限班導師 / 主任)
+# API - 審核履歷 (老師 / 主任)
 # -------------------------
-@resume_bp.route('/api/review_resume', methods=['POST'])
-def review_resume():
+@resume_bp.route('/api/review_resume/<int:resume_id>', methods=['POST'])
+def review_resume(resume_id):
+    if 'user_id' not in session:
+        return jsonify({"success": False, "message": "未授權"}), 403
+
+    user_id = session['user_id']
+    role = session.get('role')
+    data = request.get_json()
+    status = data.get("status")
+    comment = data.get("comment", "")
+    note = data.get("note", "")
+
+    if status not in ["approved", "rejected"]:
+        return jsonify({"success": False, "message": "無效的狀態"}), 400
+
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+
     try:
-        if 'user_id' not in session:
-            return jsonify({"success": False, "message": "未登入"}), 403
+        # 查履歷對應學生與班級
+        cursor.execute("""
+            SELECT r.id, u.class_id
+            FROM resumes r
+            JOIN users u ON r.user_id = u.id
+            WHERE r.id = %s
+        """, (resume_id,))
+        resume = cursor.fetchone()
 
-        role = session.get('role')
-        if role not in ["teacher", "director"]:
-            return jsonify({"success": False, "message": "角色無權限"}), 403
+        if not resume:
+            return jsonify({"success": False, "message": "找不到履歷"}), 404
 
-        data = request.get_json()
-        resume_id = data.get("resume_id")
-        status = data.get("status")
-        comment = (data.get("comment") or "").strip()
+        # 如果是老師，必須確認這份履歷的學生在自己帶的班級
+        if role == "teacher":
+            cursor.execute("""
+                SELECT 1
+                FROM classes_teacher
+                WHERE teacher_id = %s AND class_id = %s AND role = '班導師'
+            """, (user_id, resume['class_id']))
+            allowed = cursor.fetchone()
+            if not allowed:
+                return jsonify({"success": False, "message": "沒有權限審核這份履歷"}), 403
 
-        if not resume_id or status not in ['approved', 'rejected']:
-            return jsonify({"success": False, "message": "參數錯誤"}), 400
+        # 主任不用限制，可以審所有履歷
 
-        conn = get_db()
-        cursor = conn.cursor()
-
-        cursor.execute("SELECT id FROM resumes WHERE id = %s", (resume_id,))
-        if not cursor.fetchone():
-            cursor.close()
-            conn.close()
-            return jsonify({"success": False, "message": "找不到該履歷"}), 404
-
-        if comment:
-            cursor.execute(
-                "UPDATE resumes SET status = %s, comment = %s WHERE id = %s",
-                (status, comment, resume_id)
-            )
-        else:
-            cursor.execute(
-                "UPDATE resumes SET status = %s WHERE id = %s",
-                (status, resume_id)
-            )
-
+        # 更新履歷狀態
+        cursor.execute("""
+            UPDATE resumes
+            SET status = %s, comment = %s, note = %s
+            WHERE id = %s
+        """, (status, comment, note, resume_id))
         conn.commit()
-        cursor.close()
-        conn.close()
 
-        return jsonify({"success": True, "message": "履歷審核完成", "resume_id": resume_id, "status": status})
+        return jsonify({"success": True, "message": "履歷審核成功"})
 
     except Exception as e:
         traceback.print_exc()
-        return jsonify({"success": False, "message": f"伺服器錯誤: {str(e)}"}), 500
+        return jsonify({"success": False, "message": str(e)}), 500
+
+    finally:
+        cursor.close()
+        conn.close()
 
 # -------------------------
 # API - 更新履歷欄位 (comment/note)
@@ -297,8 +311,8 @@ def get_class_resumes():
     cursor = conn.cursor(dictionary=True)
 
     try:
-        # 在班導首頁中，老師與主任皆應只看到自己擔任「班導師」的班級之履歷
-        if role in ("teacher", "director"):
+        # 老師：只能看自己班級
+        if role == "teacher":
             cursor.execute(
                 """
                 SELECT class_id
@@ -308,7 +322,6 @@ def get_class_resumes():
                 (user_id,)
             )
             class_rows = cursor.fetchall()
-
             if not class_rows:
                 return jsonify({"success": True, "resumes": []})
 
@@ -318,16 +331,17 @@ def get_class_resumes():
             query = f"""
                 SELECT 
                     r.id,
-                    r.original_filename AS original_filename,
-                    r.filepath,
+                    r.original_filename,
                     r.status,
+                    r.comment,
+                    r.note,
                     r.created_at AS submitted_at,
                     u.id AS student_id,
                     u.username,
                     u.name,
-                    u.class_id,
+                    c.id AS class_id,
                     c.name AS className,
-                    c.department AS department
+                    c.department
                 FROM resumes r
                 JOIN users u ON r.user_id = u.id
                 JOIN classes c ON u.class_id = c.id
@@ -337,10 +351,35 @@ def get_class_resumes():
             cursor.execute(query, class_ids)
             resumes = cursor.fetchall()
 
+        # 主任：可以看所有學生
+        elif role == "director":
+            cursor.execute(
+                """
+                SELECT 
+                    r.id,
+                    r.original_filename,
+                    r.status,
+                    r.comment,
+                    r.note,
+                    r.created_at AS submitted_at,
+                    u.id AS student_id,
+                    u.username,
+                    u.name,
+                    c.id AS class_id,
+                    c.name AS className,
+                    c.department
+                FROM resumes r
+                JOIN users u ON r.user_id = u.id
+                JOIN classes c ON u.class_id = c.id
+                ORDER BY r.created_at DESC
+                """
+            )
+            resumes = cursor.fetchall()
+
         else:
             return jsonify({"success": False, "message": "角色無權限"}), 403
 
-        # 時間格式化
+        # 格式化時間
         for r in resumes:
             if isinstance(r.get('submitted_at'), datetime):
                 r['submitted_at'] = r['submitted_at'].strftime("%Y-%m-%d %H:%M:%S")
@@ -350,10 +389,11 @@ def get_class_resumes():
     except Exception as e:
         traceback.print_exc()
         return jsonify({"success": False, "message": str(e)}), 500
+
     finally:
         cursor.close()
         conn.close()
-
+         
 # -------------------------
 # API - 刪除履歷
 # -------------------------

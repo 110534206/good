@@ -236,10 +236,13 @@
         </a>
         <div class="dropdown" style="position: relative;">
           <button id="accountDropdownBtn" class="btn-link" aria-expanded="false">帳號 ▾</button>
-          <div id="accountDropdownMenu" class="dropdown-menu" style="position:absolute; right:0; top:120%; background:#fff; border:1px solid #ccc; border-radius:8px; padding:6px; min-width:200px; display:none; box-shadow:0 4px 12px rgba(0,0,0,.12);">
+          <div id="accountDropdownMenu" class="dropdown-menu"
+            style="position:absolute; right:0; top:120%; background:#fff; border:1px solid #ccc; border-radius:8px; padding:6px; min-width:200px; display:none; box-shadow:0 4px 12px rgba(0,0,0,.12);">
             <a href="/class_teacher_home" class="btn-link" style="display:block; border:none; margin:4px 0;">返回首頁</a>
-            <a id="toDirectorHome" href="/director_home" class="btn-link" style="display:none; border:none; margin:4px 0;">切換主任身分</a>
-            <a id="toTeacherHome" href="/teacher_home" class="btn-link" style="display:none; border:none; margin:4px 0;">切換教師身分</a>
+            <a id="toDirectorHome" href="/director_home" class="btn-link"
+              style="display:none; border:none; margin:4px 0;">切換主任身分</a>
+            <a id="toTeacherHome" href="/teacher_home" class="btn-link"
+              style="display:none; border:none; margin:4px 0;">切換教師身分</a>
             <a href="/login" class="btn-link" style="display:block; border:none; margin:4px 0;">登出</a>
           </div>
         </div>
@@ -358,8 +361,11 @@
 
     document.addEventListener("DOMContentLoaded", () => {
       // 取得所有學生履歷
-      const username = localStorage.getItem("username");  // 從 localStorage 取得老師帳號
-      fetch(`/api/get_class_resumes?username=${username}`)
+      const username = localStorage.getItem("username");
+      const role = localStorage.getItem("role");
+      const pageType = window.location.pathname.includes("director_home") ? "director_home" : "teacher_home";
+
+      fetch(`/api/get_class_resumes?username=${username}&role=${role}&page=${pageType}`)
         .then(res => res.json())
         .then(data => {
           if (data.success) {
@@ -406,7 +412,7 @@
           if (el) el.style.display = 'block';
         }
       }
-    }).catch(() => {});
+    }).catch(() => { });
 
     function populateFilters(data) {
       const deptSet = new Set();
@@ -575,31 +581,40 @@
 
     function rejectResume(resumeId) {
       if (!confirm("確定要將此履歷標記為退件？")) return;
-      fetch(`/api/reject_resume?resume_id=${resumeId}`, { method: "POST" })
+      fetch(`/api/review_resume/${resumeId}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "rejected" })
+      })
         .then(res => res.json())
         .then(data => {
           if (data.success) {
             alert("已退件");
             location.reload();
           } else {
-            alert("退件失敗");
+            alert("退件失敗：" + data.message);
           }
         });
     }
 
     function approveResume(resumeId) {
       if (!confirm("確定要將此履歷標記為完成？")) return;
-      fetch(`/api/approve_resume?resume_id=${resumeId}`, { method: "POST" })
+      fetch(`/api/review_resume/${resumeId}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "approved" })
+      })
         .then(res => res.json())
         .then(data => {
           if (data.success) {
             alert("已標記為完成");
             location.reload();
           } else {
-            alert("標記失敗");
+            alert("標記失敗：" + data.message);
           }
         });
     }
+
 
     // 側邊選單控制
     document.getElementById('menu-btn').addEventListener('click', () => {
