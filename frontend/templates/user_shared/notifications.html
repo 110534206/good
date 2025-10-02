@@ -115,6 +115,22 @@
     const sortSelect = document.getElementById("sortSelect");
     let announcements = [];
 
+    // 載入公告資料
+    async function loadAnnouncements() {
+      mainContainer.innerHTML = "<p style='text-align:center;'>載入中...</p>";
+      try {
+        const res = await fetch("/notifications/api/announcements");
+        const data = await res.json();
+        if (!data.success) throw new Error("取得公告失敗");
+        announcements = data.announcements;
+        renderAnnouncements(sortSelect.value);
+      } catch (err) {
+        console.error("載入公告失敗", err);
+        mainContainer.innerHTML = `<p style="color:red; text-align:center;">載入公告失敗</p>`;
+      }
+    }
+
+    // 渲染公告
     function renderAnnouncements(sortOrder = "desc") {
       mainContainer.innerHTML = "";
 
@@ -150,7 +166,7 @@
               <span class="time">${new Date(note.created_at).toLocaleString('zh-TW', { hour12: false })}</span>
             </div>
             <div class="content">${note.content}</div>
-            ${note.deadline ? `<div class="deadline">⏰ 截止時間：${note.deadline}</div>` : ""}
+            ${note.deadline ? `<div class="deadline">⏰ 截止時間：${new Date(note.deadline).toLocaleString('zh-TW', { hour12: false })}</div>` : ""}
             ${note.attachments ? `<div class="attachments"><a href="${note.attachments}" target="_blank">📎 附件下載</a></div>` : ""}
             <div class="type">類型：${note.type || "公告"}</div>
           `;
@@ -170,22 +186,16 @@
       });
     }
 
+    // 監聽排序切換
     sortSelect.addEventListener("change", (e) => {
       renderAnnouncements(e.target.value);
     });
 
-    // 後端 API 取得公告
-    fetch("/notifications/api/announcements")
-      .then(res => res.json())
-      .then(data => {
-        if (!data.success) throw new Error("取得公告失敗");
-        announcements = data.announcements;
-        renderAnnouncements("desc");
-      })
-      .catch(err => {
-        console.error("載入公告失敗", err);
-        mainContainer.innerHTML = `<p style="color:red; text-align:center;">載入公告失敗</p>`;
-      });
+    // 首次載入
+    loadAnnouncements();
+
+    // ⏱️ 可選：每 60 秒自動更新公告（同步其他人編輯）
+    setInterval(loadAnnouncements, 60000); // 1分鐘自動更新
   </script>
 </body>
 </html>
