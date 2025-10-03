@@ -41,6 +41,8 @@ def get_all_users():
                 user['role_display'] = '老師'
             elif user.get('role') == 'student':
                 user['role_display'] = '學生'
+            elif user.get('role') == 'director':
+                user['role_display'] = '主任'
             elif user.get('role') == 'admin':
                 user['role_display'] = '管理員'
             else:

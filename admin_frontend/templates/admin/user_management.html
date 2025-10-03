@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="zh-Hant">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -72,62 +73,19 @@
                             <label class="form-label">角色</label>
                             <select id="editRole" class="form-select" required></select>
                         </div>
+                        <div class="mb-3" id="editClassIdGroup" style="display: none;">
+                            <label class="form-label">班級</label>
+                            <select id="editClassId" class="form-select"></select>
+                        </div>
                         <div class="mb-3">
-                            <label class="form-label">新密碼 (如不修改可留空)</label>
+                            <label class="form-label">密碼（留空表示不變更）</label>
                             <input type="password" id="editPassword" class="form-control">
                         </div>
-                        <button type="submit" class="btn btn-primary">儲存</button>
-                    </form>
                 </div>
+                <button type="submit" class="btn btn-primary">儲存</button>
             </div>
         </div>
     </div>
-
-    <!-- 設定學生班級 Modal -->
-    <div class="modal fade" id="assignStudentClassModal" tabindex="-1">
-        <div class="modal-dialog">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title">設定學生班級</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                </div>
-                <div class="modal-body">
-                    <input type="hidden" id="assignStudentId">
-                    <div class="mb-3">
-                        <label class="form-label">選擇班級</label>
-                        <select id="assignStudentClassSelect" class="form-select"></select>
-                    </div>
-                    <button class="btn btn-primary" onclick="submitAssignStudentClass()">儲存</button>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- 設定教師/主任帶班 Modal -->
-    <div class="modal fade" id="assignTeacherClassModal" tabindex="-1">
-        <div class="modal-dialog">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title">設定帶班</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                </div>
-                <div class="modal-body">
-                    <input type="hidden" id="assignTeacherId">
-                    <div class="mb-3">
-                        <label class="form-label">身分</label>
-                        <select id="assignTeacherRole" class="form-select">
-                            <option value="班導師">班導師</option>
-                            <option value="授課教師">授課教師</option>
-                        </select>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">選擇班級</label>
-                        <select id="assignTeacherClassSelect" class="form-select"></select>
-                    </div>
-                    <button class="btn btn-primary" onclick="submitAssignTeacherClass()">儲存</button>
-                </div>
-            </div>
-        </div>
     </div>
 
     <!-- 新增用戶 Modal -->
@@ -166,8 +124,60 @@
                                 <option value="admin">管理員</option>
                             </select>
                         </div>
+                        <!-- 🔧【1】新增班級欄位 -->
+                        <div class="mb-3" id="createClassIdGroup" style="display: none;">
+                            <label class="form-label">班級</label>
+                            <select id="createClassId" class="form-select"></select>
+                        </div>
                         <button type="submit" class="btn btn-primary">新增</button>
                     </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 設定帶班 Modal -->
+    <div class="modal fade" id="assignTeacherClassModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">設定帶班</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" id="assignTeacherId">
+                    <div class="mb-3">
+                        <label class="form-label">帶班角色</label>
+                        <select id="assignTeacherRole" class="form-select">
+                            <option value="班導師">班導師</option>
+                            <option value="主任">主任</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">班級</label>
+                        <select id="assignTeacherClassSelect" class="form-select"></select>
+                    </div>
+                    <button class="btn btn-primary" onclick="submitAssignTeacherClass()">儲存</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 設定學生班級 Modal -->
+    <div class="modal fade" id="assignStudentClassModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">設定學生班級</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" id="assignStudentId">
+                    <div class="mb-3">
+                        <label class="form-label">班級</label>
+                        <select id="assignStudentClassSelect" class="form-select"></select>
+                    </div>
+                    <button class="btn btn-primary" onclick="submitAssignStudentClass()">儲存</button>
                 </div>
             </div>
         </div>
@@ -261,40 +271,32 @@
             loadUsers();
         }
 
+        // 🔧【2】openCreateModal，學生顯示班級並載入
         function openCreateModal() {
             const roleSelect = document.getElementById('createRole');
             const classGroup = document.getElementById('createClassIdGroup');
-            roleSelect.addEventListener('change', () => {
-                classGroup.style.display = roleSelect.value === 'student' ? '' : 'none';
-            });
+            const classSelect = document.getElementById('createClassId');
+
+            // 預設選擇第一個角色
+            roleSelect.selectedIndex = 0;
+
+            roleSelect.onchange = () => {
+                const isStudent = roleSelect.value === 'student';
+                classGroup.style.display = isStudent ? '' : 'none';
+                if (isStudent) loadClasses(classSelect);
+            };
+
+            // 觸發一次以套用顯示邏輯
             roleSelect.dispatchEvent(new Event('change'));
+
             new bootstrap.Modal(document.getElementById('createUserModal')).show();
         }
-
-        document.getElementById('createUserForm').addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const payload = {
-                username: document.getElementById('createUsername').value,
-                password: document.getElementById('createPassword').value,
-                name: document.getElementById('createName').value,
-                email: document.getElementById('createEmail').value,
-                role: document.getElementById('createRole').value,
-                class_id: document.getElementById('createClassId').value || null
-            };
-            const res = await fetch('/admin/api/create_user', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-            const data = await res.json();
-            alert(data.message);
-            if (data.success) {
-                bootstrap.Modal.getInstance(document.getElementById('createUserModal')).hide();
-                loadUsers();
-            }
-        });
-
-        // 打開編輯 Modal
+        
+        // 🔧【4】openEditModal，學生顯示班級選項並載入
         function openEditModal(id, username, name, email, role, classId) {
             const roleSelect = document.getElementById('editRole');
             const classIdInput = document.getElementById('editClassId');
-            const classIdGroup = classIdInput.closest('.mb-3');
+            const classIdGroup = document.getElementById('editClassIdGroup');
 
             roleSelect.innerHTML = '';
 
@@ -318,7 +320,9 @@
 
             if (role === 'student') {
                 classIdGroup.style.display = '';
-                classIdInput.value = classId || '';
+                loadClasses(classIdInput).then(() => {
+                    classIdInput.value = classId || '';
+                });
             } else {
                 classIdGroup.style.display = 'none';
                 classIdInput.value = '';
