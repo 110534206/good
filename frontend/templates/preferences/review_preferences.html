@@ -189,6 +189,51 @@
     th {
       background-color: #f1f4f8;
     }
+
+    /* 查詢功能樣式 */
+    .input-group {
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+
+    #studentSearchInput {
+      border-right: none;
+    }
+
+    #studentSearchInput:focus {
+      border-color: #0066cc;
+      box-shadow: 0 0 0 0.2rem rgba(0, 102, 204, 0.25);
+    }
+
+    #searchStudentBtn {
+      border-left: none;
+      background-color: #f8f9fa;
+      border-color: #ced4da;
+    }
+
+    #searchStudentBtn:hover {
+      background-color: #e9ecef;
+      border-color: #adb5bd;
+    }
+
+    #searchResult {
+      margin-top: 1rem;
+    }
+
+    .alert {
+      border-radius: 8px;
+      border: none;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+
+    .alert-info {
+      background-color: #d1ecf1;
+      color: #0c5460;
+    }
+
+    .alert-warning {
+      background-color: #fff3cd;
+      color: #856404;
+    }
   </style>
 </head>
 <body>
@@ -221,7 +266,12 @@
     <h2 class="text-center mb-4">學生志願序檢視</h2>
     <div class="d-flex justify-content-center mb-3">
       <button id="generateChartBtn" class="btn btn-primary">生成圖表</button>
-      <button id="refreshBtn" class="btn btn-outline-secondary ms-2" onclick="location.reload()">重新整理</button>
+      <div class="input-group ms-2" style="width: 300px;">
+        <input type="text" id="studentSearchInput" class="form-control" placeholder="輸入學生姓名查詢志願序">
+        <button id="searchStudentBtn" class="btn btn-outline-secondary">
+          <i class="fas fa-search"></i> 查詢
+        </button>
+      </div>
       <div class="btn-group ms-2" role="group">
         <button id="exportExcelBtn" class="btn btn-success">
           <i class="fas fa-file-excel"></i> 導出 Excel
@@ -320,6 +370,109 @@
     document.getElementById('close-btn').addEventListener('click', () => {
       document.getElementById('side-menu').classList.remove('open');
     });
+
+    // 學生查詢功能
+    document.getElementById('searchStudentBtn')?.addEventListener('click', function() {
+      const searchInput = document.getElementById('studentSearchInput');
+      const searchTerm = searchInput.value.trim().toLowerCase();
+      
+      if (!searchTerm) {
+        alert('請輸入學生姓名');
+        return;
+      }
+
+      // 隱藏所有學生區塊
+      const studentSections = document.querySelectorAll('.student-section');
+      let foundCount = 0;
+
+      studentSections.forEach(section => {
+        const studentName = section.querySelector('h3').textContent.trim().toLowerCase();
+        
+        if (studentName.includes(searchTerm)) {
+          section.style.display = 'block';
+          foundCount++;
+          
+          // 高亮顯示匹配的學生姓名
+          const nameElement = section.querySelector('h3');
+          nameElement.style.backgroundColor = '#fff3cd';
+          nameElement.style.padding = '0.5rem';
+          nameElement.style.borderRadius = '4px';
+          nameElement.style.border = '2px solid #ffc107';
+        } else {
+          section.style.display = 'none';
+        }
+      });
+
+      // 顯示查詢結果
+      if (foundCount > 0) {
+        const resultDiv = document.getElementById('searchResult') || createSearchResultDiv();
+        resultDiv.innerHTML = `
+          <div class="alert alert-info">
+            <i class="fas fa-info-circle"></i> 
+            找到 ${foundCount} 位符合條件的學生
+            <button type="button" class="btn-close" onclick="clearSearch()" aria-label="關閉"></button>
+          </div>
+        `;
+        resultDiv.style.display = 'block';
+      } else {
+        const resultDiv = document.getElementById('searchResult') || createSearchResultDiv();
+        resultDiv.innerHTML = `
+          <div class="alert alert-warning">
+            <i class="fas fa-exclamation-triangle"></i> 
+            未找到符合條件的學生
+            <button type="button" class="btn-close" onclick="clearSearch()" aria-label="關閉"></button>
+          </div>
+        `;
+        resultDiv.style.display = 'block';
+      }
+    });
+
+    // 按 Enter 鍵查詢
+    document.getElementById('studentSearchInput')?.addEventListener('keypress', function(e) {
+      if (e.key === 'Enter') {
+        document.getElementById('searchStudentBtn').click();
+      }
+    });
+
+    // 創建查詢結果顯示區域
+    function createSearchResultDiv() {
+      const resultDiv = document.createElement('div');
+      resultDiv.id = 'searchResult';
+      resultDiv.style.display = 'none';
+      
+      // 插入到按鈕組後面
+      const buttonGroup = document.querySelector('.btn-group');
+      buttonGroup.parentNode.insertBefore(resultDiv, buttonGroup.nextSibling);
+      
+      return resultDiv;
+    }
+
+    // 清除查詢結果
+    window.clearSearch = function() {
+      const searchInput = document.getElementById('studentSearchInput');
+      const resultDiv = document.getElementById('searchResult');
+      
+      // 清空搜尋框
+      searchInput.value = '';
+      
+      // 隱藏結果提示
+      if (resultDiv) {
+        resultDiv.style.display = 'none';
+      }
+      
+      // 顯示所有學生區塊
+      const studentSections = document.querySelectorAll('.student-section');
+      studentSections.forEach(section => {
+        section.style.display = 'block';
+        
+        // 移除高亮樣式
+        const nameElement = section.querySelector('h3');
+        nameElement.style.backgroundColor = '';
+        nameElement.style.padding = '';
+        nameElement.style.borderRadius = '';
+        nameElement.style.border = '';
+      });
+    };
 
     // 生成圖表：彙整所有學生表格中的公司名稱出現次數
     (function initPreferenceChart() {
