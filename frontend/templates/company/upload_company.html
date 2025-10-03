@@ -3,369 +3,255 @@
 
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>上傳實習單位</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>實習公司上傳管理</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
   <style>
-    * {
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0;
-    }
-
     body {
-      font-family: "Noto Sans TC", sans-serif;
       background-color: #ffffff;
-      margin: 0;
-      padding: 20px;
-      margin-top: 60px;
-    }
-
-    .container {
-      width: 100%;
-      max-width: 1200px;
-      margin: 0 auto;
-      padding: 0 0.5rem;
-    }
-
-    form input,
-    form textarea {
-      width: 100%;
-      padding: 12px;
-      margin-top: 8px;
-      border-radius: 6px;
-      border: 1px solid #ccc;
-      font-size: 1rem;
-    }
-
-    /* 頂端列 */
-    .top-bar {
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 60px;
-      background-color: #fff;
-      z-index: 1100;
-      display: flex;
-      align-items: center;
-      box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
-    }
-
-    .top-bar>.container {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 0 0.5rem;
-      height: 100%;
-      gap: 30px;
-    }
-
-    .top-bar-left #menu-btn {
-      width: 30px;
-      height: 22px;
-      cursor: pointer;
-      display: flex;
-      flex-direction: column;
-      justify-content: space-between;
-    }
-
-    .top-bar-left #menu-btn span {
-      height: 4px;
-      background-color: #333;
-      border-radius: 2px;
-    }
-
-    .top-bar-right {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      font-weight: bold;
-    }
-
-    .top-bar-right .btn-link {
-      color: #0066cc;
-      background-color: transparent;
-      border: 1.5px solid #0066cc;
-      padding: 0.3rem 0.7rem;
-      border-radius: 6px;
-      text-decoration: none;
-      transition: background-color 0.3s ease, color 0.3s ease;
-      font-size: 0.9rem;
-    }
-
-    .top-bar-right .btn-link:hover {
-      background-color: #0255a9;
-      color: white;
-    }
-
-    .top-bar-right #login-avatar {
-      width: 45px;
-      height: 45px;
-      border-radius: 50%;
-      object-fit: cover;
-      cursor: pointer;
-    }
-
-    /* Hero 區塊 */
-    header.hero {
-      position: relative;
-      width: 100%;
-      aspect-ratio: 3 / 1;
-      background-image: url('/static/images/title.png');
-      background-size: cover;
-      background-repeat: no-repeat;
-      background-position: center;
+      font-family: "Noto Sans TC", sans-serif;
       margin-top: 80px;
-      margin-bottom: 2rem;
-      border-radius: 0;
-      color: white;
-      display: flex;
-      align-items: center;
-      justify-content: center;
     }
 
-    main {
-      background-color: #fff;
-      padding: 2rem;
-      margin-bottom: 3rem;
+    .card {
+      box-shadow: 0 0 12px rgba(0, 0, 0, 0.05);
     }
 
-    .page-title {
-      text-align: center;
-      max-width: 1200px;
-      margin: 1rem auto 1rem auto;
-      padding: 5px;
-      font-size: 2rem;
+    .card h4.text-center {
       color: #0066cc;
-    }
-
-    /* 表單 */
-    form {
-      max-width: 600px;
-      margin: auto;
-      background: #fff;
-      padding: 20px;
-      border-radius: 10px;
-      box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
-    }
-
-    label {
       font-weight: bold;
-      display: block;
-      margin-top: 15px;
-      font-size: 1rem;
     }
 
-    select {
-      width: 100%;
-      padding: 10px;
-      margin-top: 5px;
-      border-radius: 6px;
-      border: 1px solid #ccc;
-    }
-
-    button {
-      margin-top: 20px;
-      width: 100%;
-      padding: 12px;
-      background-color: #0066cc;
-      color: white;
-      border: none;
-      border-radius: 6px;
+    #fileDrop {
+      border: 2px dashed #ccc;
+      border-radius: 8px;
+      padding: 30px;
+      text-align: center;
+      color: #888;
       cursor: pointer;
-      font-size: 1em;
+      transition: border-color 0.3s;
     }
 
-    button:hover {
-      background-color: #0259b0;
+    #fileDrop.dragover {
+      border-color: #0d6efd;
+      color: #0d6efd;
     }
 
-    /* 側邊選單 */
-    #side-menu {
-      position: fixed;
-      top: 0;
-      left: 0;
-      height: 100vh;
-      width: 320px;
-      max-width: 80vw;
-      background-color: rgba(10, 10, 10, 0.95);
-      backdrop-filter: blur(6px);
-      box-shadow: 3px 0 12px rgb(0 0 0 / 0.7);
-      padding: 2rem 1.5rem;
-      transform: translateX(-100%);
-      transition: transform 0.3s ease-in-out;
-      z-index: 1100;
-      display: flex;
-      flex-direction: column;
-      align-items: flex-start;
-      color: white;
-      user-select: none;
+    table thead th,
+    table td {
+      text-align: center;
+      vertical-align: middle;
     }
 
-    #side-menu.open {
-      transform: translateX(0);
-    }
-
-    #close-btn {
-      position: absolute;
-      top: 2rem;
-      right: 1.6rem;
-      font-size: 2.2rem;
-      background: none;
-      border: none;
-      color: white;
-      cursor: pointer;
-      line-height: 1;
-      width: 2.5rem;
-      height: 2.5rem;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
-
-    #side-menu h2 {
-      width: 100%;
-      margin-bottom: 1.5rem;
-      font-weight: 700;
-      font-size: 1.5rem;
-      text-align: left;
-    }
-
-    #side-menu a {
-      display: block;
-      width: 100%;
-      padding: 0.5rem 0;
-      font-size: 1.1rem;
-      color: #ddd;
-      text-decoration: none;
-      border-radius: 4px;
-      transition: background-color 0.2s ease;
-    }
-
-    #side-menu a:hover {
-      background-color: rgba(255, 255, 255, 0.15);
-      color: white;
+    .status-badge {
+      font-size: 0.9em;
     }
   </style>
 </head>
 
 <body>
-  <!-- 頂部欄 -->
-  <div class="top-bar">
-    <div class="container">
-      <div class="top-bar-left">
-        <div id="menu-btn" title="選單" role="button" tabindex="0">
-          <span></span><span></span><span></span>
-        </div>
+  <div class="container my-5">
+    <!-- 上傳區塊 -->
+    <div class="card p-4 mb-4">
+      <h4 class="mb-3 text-center">上傳公司資訊檔案</h4>
+      <!-- 下載範例檔 -->
+      <div class="mb-3 text-center">
+        <a href="/static/examples/公司上傳範例.xlsx" class="btn btn-success">下載範例檔</a>
       </div>
-      <div class="top-bar-right">
-        <a href="#" id="home-link">
-          <img src="{{ url_for('static', filename='images/avatar.png') }}" alt="頭像" id="login-avatar" />
-        </a>
-        <a href="#" id="back-home-btn" class="btn-link">返回主頁</a>
-        <a href="/login" class="btn-link">登出</a>
+
+      <!-- 拖曳區 -->
+      <div id="fileDrop">拖曳檔案至此或點擊選擇（限 Excel，最大 5MB）</div>
+      <input type="file" id="companyFile" accept=".xlsx" hidden />
+
+      <div class="mt-3 d-flex justify-content-between align-items-center">
+        <span id="fileInfo" class="text-muted">尚未選擇檔案</span>
+        <button class="btn btn-primary" id="uploadBtn" disabled>上傳</button>
       </div>
+
+      <div class="mt-3"><strong>審核進度：</strong><span id="reviewStatus" class="text-muted">尚未上傳</span></div>
+    </div>
+
+    <!-- 篩選按鈕 -->
+    <div class="btn-group mb-3 w-100" role="group">
+      <button class="btn btn-outline-secondary active" onclick="filterStatus('all', this)">全部</button>
+      <button class="btn btn-outline-info" id="uploadedCountBtn" onclick="filterStatus('pending', this)">審核中</button>
+      <button class="btn btn-outline-success" id="approvedCountBtn"
+        onclick="filterStatus('approved', this)">已通過</button>
+      <button class="btn btn-outline-danger" id="rejectedCountBtn" onclick="filterStatus('rejected', this)">退件</button>
+    </div>
+
+    <!-- 清單區塊 -->
+    <div class="card p-3">
+      <table class="table table-hover align-middle mb-0">
+        <thead class="table-light">
+          <tr>
+            <th>上傳時間</th>
+            <th>檔案名稱</th>
+            <th>狀態</th>
+            <th>操作</th>
+          </tr>
+        </thead>
+        <tbody id="companyTableBody">
+          <tr>
+            <td colspan="4" class="text-center text-muted">載入中...</td>
+          </tr>
+        </tbody>
+      </table>
     </div>
   </div>
 
-  <!-- 側邊選單 -->
-  <nav id="side-menu" aria-hidden="true" role="navigation" aria-label="功能選單">
-    <button id="close-btn" aria-label="關閉功能選單">×</button>
-    <h2>功能選單</h2>
-    <div id="menu-items"></div>
-  </nav>
-
-  <!-- 表單區塊 -->
-  <div class="form-container">
-    <h1 class="page-title">建立實習單位</h1>
-
-    {% if success %}
-    <p style="color: green; text-align: center; font-weight: bold; margin-bottom: 1rem;">
-      {{ success }}
-    </p>
-    {% endif %}
-
-    {% if error %}
-    <p style="color: red; text-align: center; font-weight: bold; margin-bottom: 1rem;">
-      {{ error }}
-    </p>
-    {% endif %}
-
-    <form method="POST" action="/upload_company">
-      <label for="company_name">公司名稱<span style="color:#d9534f;">*</span>：</label>
-      <input type="text" id="company_name" name="company_name" required>
-
-      <label for="description">公司描述：</label>
-      <textarea id="description" name="description" placeholder="簡單描述公司或實習內容"></textarea>
-
-      <label for="location">公司地點：</label>
-      <input type="text" id="location" name="location" placeholder="例如：台北市信義區">
-
-      <label for="contact_person">聯絡人：</label>
-      <input type="text" id="contact_person" name="contact_person">
-
-      <label for="contact_email">聯絡電子郵件：</label>
-      <input type="email" id="contact_email" name="contact_email" placeholder="example@email.com">
-
-      <label for="contact_phone">聯絡電話：</label>
-      <input type="tel" id="contact_phone" name="contact_phone" placeholder="例如：02-12345678">
-
-      <button type="submit">上傳</button>
-    </form>
-  </div>
-
   <script>
-    // 開關側邊選單
-    document.getElementById('menu-btn').addEventListener('click', () => {
-      document.getElementById('side-menu').classList.add('open');
+    let companyId = null;
+    let interval = null;
+    let companiesData = [];
+
+    const dropZone = document.getElementById('fileDrop');
+    const fileInput = document.getElementById('companyFile');
+
+    dropZone.addEventListener('click', () => fileInput.click());
+    dropZone.addEventListener('dragover', e => {
+      e.preventDefault();
+      dropZone.classList.add('dragover');
     });
-    document.getElementById('close-btn').addEventListener('click', () => {
-      document.getElementById('side-menu').classList.remove('open');
+    dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+    dropZone.addEventListener('drop', e => {
+      e.preventDefault();
+      dropZone.classList.remove('dragover');
+      fileInput.files = e.dataTransfer.files;
+      handleFileChange();
     });
 
-    // 根據角色決定首頁與功能選單
-    const role = localStorage.getItem("selectedRole");
-    const homeLink = document.getElementById("home-link");
-    const backHomeBtn = document.getElementById("back-home-btn");
-    const menuItems = document.getElementById("menu-items");
+    fileInput.addEventListener('change', handleFileChange);
 
-    let homeUrl = "/";
-    let menuHtml = "";
-
-    if (role === "teacher") {
-      homeUrl = "/teacher_home";
-      menuHtml = `
-        <a href="/teacher_home">首頁</a>
-        <a href="/profile">個人資料</a>
-        <a href="/upload_company">建立實習機會</a>
-        <a href="/messages">通知</a>
-      `;
-    } else if (role === "class_teacher") {
-      homeUrl = "/class_teacher_home";
-      menuHtml = `
-        <a href="/class_teacher_home">首頁</a>
-        <a href="/profile">個人資料</a>
-        <a href="/student_resumes">查看學生履歷</a>
-        <a href="/review_preferences">審核志願序</a>
-        <a href="/upload_company">建立實習機會</a>
-        <a href="/messages">通知學生</a>
-      `;
-    } else if (role === "director") {
-      homeUrl = "/director_home";
-      menuHtml = `
-        <a href="/director_home">首頁</a>
-        <a href="/profile">個人資料</a>
-        <a href="/approve_company">審核公司</a>
-        <a href="/student_resumes">查看學生履歷</a>
-        <a href="/review_preferences">審核志願序</a>
-        <a href="/messages">通知</a>
-      `;
+    function handleFileChange() {
+      const file = fileInput.files[0];
+      if (!file) return;
+      document.getElementById('fileInfo').textContent =
+        `${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)`;
+      document.getElementById('uploadBtn').disabled = file.size > 5 * 1024 * 1024;
     }
 
-    homeLink.href = homeUrl;
-    backHomeBtn.href = homeUrl;
-    menuItems.innerHTML = menuHtml;
+    document.getElementById('uploadBtn').addEventListener('click', () => {
+      const file = fileInput.files[0];
+      if (!file) return alert("請選擇檔案");
+      const formData = new FormData();
+      formData.append('company_file', file);
+
+      updateStatusText('pending');
+
+      fetch('/api/upload_company_file', { method: 'POST', body: formData })
+        .then(res => res.json())
+        .then(data => {
+          if (data.success && data.company_id) {
+            companyId = data.company_id;
+            loadCompanies();
+            if (interval) clearInterval(interval);
+            interval = setInterval(fetchStatus, 5000);
+          } else {
+            alert("上傳失敗");
+          }
+        });
+    });
+
+    function fetchStatus() {
+      if (!companyId) return;
+      fetch(`/api/company_status?company_id=${companyId}`)
+        .then(res => res.json())
+        .then(data => {
+          if (data.success) updateStatusText(data.status);
+        });
+    }
+
+    function updateStatusText(status) {
+      const el = document.getElementById('reviewStatus');
+      const map = {
+        pending: ['審核中', '#0d6efd'],
+        approved: ['已通過', '#198754'],
+        rejected: ['退件', '#dc3545']
+      };
+      el.textContent = map[status]?.[0] || '尚未上傳';
+      el.style.color = map[status]?.[1] || '#6c757d';
+    }
+
+    function loadCompanies() {
+      fetch('/api/get_my_companies')
+        .then(res => res.json())
+        .then(data => {
+          if (data.success) {
+            companiesData = data.companies;
+            renderTable('all');
+          }
+        });
+    }
+
+    function filterStatus(filter, btn) {
+      document.querySelectorAll('.btn-group .btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      renderTable(filter);
+    }
+
+    function renderTable(filter) {
+      const tbody = document.getElementById('companyTableBody');
+      tbody.innerHTML = '';
+
+      const statusCounts = {
+        pending: companiesData.filter(c => c.status === 'pending').length,
+        approved: companiesData.filter(c => c.status === 'approved').length,
+        rejected: companiesData.filter(c => c.status === 'rejected').length
+      };
+
+      document.getElementById('uploadedCountBtn').textContent = `審核中 (${statusCounts.pending})`;
+      document.getElementById('approvedCountBtn').textContent = `已通過 (${statusCounts.approved})`;
+      document.getElementById('rejectedCountBtn').textContent = `退件 (${statusCounts.rejected})`;
+
+      const filtered = filter === 'all' ? companiesData : companiesData.filter(c => c.status === filter);
+      if (filtered.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="4" class="text-center text-muted">無資料</td></tr>`;
+        return;
+      }
+
+      filtered.forEach(c => {
+        tbody.innerHTML += `
+          <tr>
+            <td>${new Date(c.upload_time).toLocaleString()}</td>
+            <td>${c.original_filename}</td>
+            <td><span class="badge bg-${statusColor(c.status)} status-badge">${mapStatus(c.status)}</span></td>
+            <td>
+              <a href="/api/download_company_file?company_id=${c.id}" class="btn btn-outline-primary btn-sm me-1">下載</a>
+              <button class="btn btn-outline-danger btn-sm" onclick="deleteCompany(${c.id})">刪除</button>
+            </td>
+          </tr>
+        `;
+      });
+    }
+
+    function mapStatus(status) {
+      return {
+        pending: '審核中',
+        approved: '已通過',
+        rejected: '退件'
+      }[status] || '未知';
+    }
+
+    function statusColor(status) {
+      return {
+        pending: 'info',
+        approved: 'success',
+        rejected: 'danger'
+      }[status] || 'secondary';
+    }
+
+    function deleteCompany(id) {
+      if (!confirm("確定要刪除這筆公司資料？")) return;
+      fetch(`/api/delete_company?company_id=${id}`, { method: 'DELETE' })
+        .then(res => res.json())
+        .then(data => {
+          if (data.success) loadCompanies();
+          else alert("刪除失敗");
+        });
+    }
+
+    document.addEventListener("DOMContentLoaded", loadCompanies);
   </script>
 </body>
-
 </html>
