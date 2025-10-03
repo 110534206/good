@@ -348,68 +348,70 @@
 
   <!-- JS 控制側邊選單開關及志願序選項互斥 -->
   <script>
-  const selects = document.querySelectorAll('.preference-select');
-  const submitBtn = document.getElementById('submitBtn');
-  const editBtn = document.getElementById('editBtn');
-  const toast = document.getElementById('toast');
+    // 側邊選單開關
+    document.getElementById('menu-btn').addEventListener('click', () => {
+      document.getElementById('side-menu').classList.add('open');
+      document.getElementById('side-menu').setAttribute('aria-hidden', 'false');
+    });
 
-  function updateOptions() {
-    const selectedValues = Array.from(selects)
-      .map(s => s.value)
-      .filter(val => val !== '');
+    document.getElementById('close-btn').addEventListener('click', () => {
+      document.getElementById('side-menu').classList.remove('open');
+      document.getElementById('side-menu').setAttribute('aria-hidden', 'true');
+    });
+
+    const selects = document.querySelectorAll('.preference-select');
+    const submitBtn = document.getElementById('submitBtn');
+    const editBtn = document.getElementById('editBtn');
+    const toast = document.getElementById('toast');
+
+    function updateOptions() {
+      const selectedValues = Array.from(selects)
+        .map(s => s.value)
+        .filter(val => val !== '');
+
+      selects.forEach(select => {
+        const currentValue = select.value;
+        Array.from(select.options).forEach(option => {
+          if (option.value === '') {
+            option.disabled = false;
+            return;
+          }
+          option.disabled = selectedValues.includes(option.value) && option.value !== currentValue;
+        });
+      });
+    }
 
     selects.forEach(select => {
-      const currentValue = select.value;
-
-      // 保存原始選項
-      const originalOptions = Array.from(select.options);
-
-      // 清空選單
-      select.innerHTML = '';
-
-      // 添加 "-- 請選擇實習公司 --"
-      const placeholder = document.createElement('option');
-      placeholder.value = '';
-      placeholder.textContent = '-- 請選擇實習公司 --';
-      select.appendChild(placeholder);
-
-      originalOptions.forEach(option => {
-        if (option.value === '' || option.value === currentValue || !selectedValues.includes(option.value)) {
-          select.appendChild(option);
-        }
-      });
-
-      select.value = currentValue; // 保留原本選的值
+      select.addEventListener('change', updateOptions);
     });
-  }
 
-  selects.forEach(select => select.addEventListener('change', updateOptions));
-  updateOptions();
-
-  function showToast(message) {
-    toast.textContent = message;
-    toast.classList.add('show');
-    setTimeout(() => {
-      toast.classList.remove('show');
-    }, 3000);
-  }
-
-  editBtn.addEventListener('click', () => {
-    selects.forEach(select => select.disabled = false);
-    submitBtn.style.display = 'block';
-    editBtn.style.display = 'none';
     updateOptions();
-  });
 
-  let toastMessage = {{ message | tojson | safe | default('null', true) }};
-  if (toastMessage) {
-    selects.forEach(select => select.disabled = true);
-    submitBtn.style.display = 'none';
-    editBtn.style.display = 'block';
-    showToast(toastMessage);
-  }
-</script>
+    function showToast(message) {
+      toast.textContent = message;
+      toast.classList.add('show');
+      setTimeout(() => {
+        toast.classList.remove('show');
+      }, 3000);
+    }
 
+    editBtn.addEventListener('click', () => {
+      selects.forEach(select => select.disabled = false);
+      submitBtn.style.display = 'block';
+      editBtn.style.display = 'none';
+      updateOptions();
+    });
+
+    // ✅ 從後端接收 message
+    let toastMessage = {{ message | tojson | safe | default('null', true) }};
+
+    if (toastMessage) {
+      selects.forEach(select => select.disabled = true);
+      submitBtn.style.display = 'none';
+      editBtn.style.display = 'block';
+      showToast(toastMessage);
+    }
+  </script>
 </body>
 
 </html>
