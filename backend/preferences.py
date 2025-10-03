@@ -194,10 +194,10 @@ def export_preferences_excel():
     try:
         # 確認是否為班導
         cursor.execute("""
-            SELECT c.id AS class_id, c.class_name
-            FROM classes c
-            JOIN classes_teacher ct ON c.id = ct.class_id
-            WHERE ct.teacher_id = %s AND ct.role = '班導師'
+        SELECT c.id AS class_id, c.name AS class_name
+        FROM classes c
+        JOIN classes_teacher ct ON c.id = ct.class_id
+        WHERE ct.teacher_id = %s AND ct.role = '班導師'
         """, (user_id,))
         class_info = cursor.fetchone()
         if not class_info:
@@ -211,7 +211,7 @@ def export_preferences_excel():
             SELECT 
                 u.id AS student_id,
                 u.name AS student_name,
-                u.student_id AS student_number,
+                u.username AS student_number, 
                 sp.preference_order,
                 ic.company_name,
                 sp.submitted_at
@@ -373,10 +373,10 @@ def export_preferences_word():
     try:
         # 確認是否為班導
         cursor.execute("""
-            SELECT c.id AS class_id, c.class_name
-            FROM classes c
-            JOIN classes_teacher ct ON c.id = ct.class_id
-            WHERE ct.teacher_id = %s AND ct.role = '班導師'
+          SELECT c.id AS class_id, c.name AS class_name
+          FROM classes c
+          JOIN classes_teacher ct ON c.id = ct.class_id
+          WHERE ct.teacher_id = %s AND ct.role = '班導師'
         """, (user_id,))
         class_info = cursor.fetchone()
         if not class_info:
@@ -390,7 +390,7 @@ def export_preferences_word():
             SELECT 
                 u.id AS student_id,
                 u.name AS student_name,
-                u.student_id AS student_number,
+                u.username AS student_number, 
                 sp.preference_order,
                 ic.company_name,
                 sp.submitted_at
@@ -504,10 +504,10 @@ def export_preferences_pdf():
     try:
         # 確認是否為班導
         cursor.execute("""
-            SELECT c.id AS class_id, c.class_name
-            FROM classes c
-            JOIN classes_teacher ct ON c.id = ct.class_id
-            WHERE ct.teacher_id = %s AND ct.role = '班導師'
+        SELECT c.id AS class_id, c.name AS class_name
+        FROM classes c
+        JOIN classes_teacher ct ON c.id = ct.class_id
+        WHERE ct.teacher_id = %s AND ct.role = '班導師'
         """, (user_id,))
         class_info = cursor.fetchone()
         if not class_info:
@@ -521,7 +521,7 @@ def export_preferences_pdf():
             SELECT 
                 u.id AS student_id,
                 u.name AS student_name,
-                u.student_id AS student_number,
+                u.username AS student_number, 
                 sp.preference_order,
                 ic.company_name,
                 sp.submitted_at
