@@ -264,9 +264,11 @@
                   .then(data => {
                     if (!data.success) throw new Error(data.message || '變更密碼失敗');
                     alert('資料及密碼更新成功！');
+                    window.location.href = '/student_home';
                   });
               } else {
                 alert('資料更新成功！');
+                window.location.href = '/student_home';
               }
             })
             .catch(err => alert(err.message));
