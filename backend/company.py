@@ -2,8 +2,11 @@ from flask import Blueprint, request, jsonify, render_template, session
 from config import get_db
 from datetime import datetime
 import traceback
-
+import pandas as pd
+from werkzeug.utils import secure_filename
 company_bp = Blueprint("company_bp", __name__)
+import io
+from flask import send_file
 
 # -------------------------
 # 頁面 - 上傳公司（單筆手動表單）
@@ -117,7 +120,7 @@ def api_upload_company():
 # -------------------------
 # API - 審核公司
 # -------------------------
-@company_bp.route("/api/approve", methods=["POST"])
+@company_bp.route("/api/approve_company", methods=["POST"])
 def api_approve_company():
     data = request.get_json()
     company_id = data.get("company_id")
@@ -214,20 +217,86 @@ def api_upload_company_file():
     if not file:
         return jsonify({"success": False, "message": "沒有檔案"}), 400
 
-    # TODO: 檔案解析 (用 pandas/openpyxl)
-    # 暫時假設直接存入 DB 一筆紀錄，狀態 pending
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute("""
-        INSERT INTO internship_companies (company_name, uploaded_by_user_id, uploaded_by_role, status, submitted_at)
-        VALUES (%s, %s, %s, 'pending', NOW())
-    """, (file.filename, session["user_id"], session.get("role")))
-    conn.commit()
-    new_id = cursor.lastrowid
-    cursor.close()
-    conn.close()
+    try:
+        # 讀 Excel
+        df = pd.read_excel(file)
 
-    return jsonify({"success": True, "company_id": new_id})
+        # 驗證欄位
+        required_cols = ["公司名稱", "公司描述", "公司地點", "聯絡人", "聯絡電子郵件", "聯絡電話"]
+        for col in required_cols:
+            if col not in df.columns:
+                return jsonify({"success": False, "message": f"缺少欄位：{col}"}), 400
+
+        conn = get_db()
+        cursor = conn.cursor()
+        insert_sql = """
+            INSERT INTO internship_companies
+            (company_name, description, location, contact_person, contact_email, contact_phone,
+             uploaded_by_user_id, uploaded_by_role, status, submitted_at)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,'pending',NOW())
+        """
+
+        inserted_count = 0
+        for _, row in df.iterrows():
+            cursor.execute(insert_sql, (
+                row["公司名稱"], row["公司描述"], row["公司地點"],
+                row["聯絡人"], row["聯絡電子郵件"], row["聯絡電話"],
+                session["user_id"], session.get("role")
+            ))
+            inserted_count += 1
+
+        conn.commit()
+        return jsonify({"success": True, "message": f"成功上傳 {inserted_count} 筆公司，等待主任審核"})
+
+    except Exception as e:
+        print("❌ Excel 上傳錯誤：", traceback.format_exc())
+        return jsonify({"success": False, "message": "伺服器錯誤"}), 500
+
+    finally:
+        cursor.close()
+        conn.close()
+
+# -------------------------
+# API - 下載某間公司的詳細資料 (Excel)
+# -------------------------
+@company_bp.route("/api/download_company/<int:company_id>", methods=["GET"])
+def api_download_company_detail(company_id):
+    if "user_id" not in session:
+        return jsonify({"success": False, "message": "請先登入"}), 401
+
+    try:
+        conn = get_db()
+        cursor = conn.cursor(dictionary=True)
+
+        cursor.execute("""
+            SELECT company_name, description, location, contact_person, contact_email, contact_phone, status, submitted_at, reviewed_at
+            FROM internship_companies
+            WHERE id = %s AND uploaded_by_user_id = %s
+        """, (company_id, session["user_id"]))
+        company = cursor.fetchone()
+
+        if not company:
+            return jsonify({"success": False, "message": "查無資料"}), 404
+
+        # 轉換成 DataFrame
+        df = pd.DataFrame([company])
+
+        # 轉為 Excel 並回傳
+        output = io.BytesIO()
+        with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+            df.to_excel(writer, sheet_name='公司資料', index=False)
+
+        output.seek(0)
+        filename = f"{company['company_name']}_詳細資料.xlsx"
+        return send_file(output, download_name=filename, as_attachment=True, mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+
+    except Exception as e:
+        print("❌ 下載公司詳細資料錯誤：", traceback.format_exc())
+        return jsonify({"success": False, "message": "伺服器錯誤"}), 500
+
+    finally:
+        cursor.close()
+        conn.close()
 
 
 # -------------------------
@@ -271,3 +340,13 @@ def api_delete_company():
 
     return jsonify({"success": True, "message": "刪除成功"})
      
+@company_bp.route("/approve_company")
+def approve_company_page():
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute("SELECT * FROM internship_companies WHERE status='pending' ORDER BY submitted_at DESC")
+    companies = cursor.fetchall()
+    cursor.close()
+    conn.close()
+
+    return render_template("company/approve_company.html", companies=companies)    

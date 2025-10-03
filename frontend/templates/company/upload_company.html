@@ -2,256 +2,190 @@
 <html lang="zh-Hant">
 
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>實習公司上傳管理</title>
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>批次上傳公司資料</title>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
   <style>
     body {
-      background-color: #ffffff;
       font-family: "Noto Sans TC", sans-serif;
-      margin-top: 80px;
+      margin: 20px;
+      background: #f8f9fa;
     }
 
-    .card {
-      box-shadow: 0 0 12px rgba(0, 0, 0, 0.05);
-    }
-
-    .card h4.text-center {
+    h1 {
+      text-align: center;
       color: #0066cc;
-      font-weight: bold;
     }
 
-    #fileDrop {
-      border: 2px dashed #ccc;
-      border-radius: 8px;
-      padding: 30px;
-      text-align: center;
-      color: #888;
+    .container {
+      max-width: 900px;
+      margin: auto;
+      background: #fff;
+      padding: 20px;
+      border-radius: 10px;
+      box-shadow: 0 3px 6px rgba(0, 0, 0, 0.1);
+    }
+
+    .btn {
+      display: inline-block;
+      padding: 10px 16px;
+      margin: 5px;
+      border: none;
+      border-radius: 6px;
       cursor: pointer;
-      transition: border-color 0.3s;
+      font-size: 1rem;
+      color: #fff;
+      background: #0066cc;
     }
 
-    #fileDrop.dragover {
-      border-color: #0d6efd;
-      color: #0d6efd;
+    .btn:hover {
+      background: #0259b0;
     }
 
-    table thead th,
-    table td {
-      text-align: center;
-      vertical-align: middle;
+    .table-container {
+      overflow-x: auto;
+      margin-top: 20px;
     }
 
-    .status-badge {
-      font-size: 0.9em;
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    th,
+    td {
+      border: 1px solid #ddd;
+      padding: 8px 12px;
+      text-align: left;
+    }
+
+    th {
+      background: #0066cc;
+      color: #fff;
+    }
+
+    tr:nth-child(even) {
+      background: #f9f9f9;
     }
   </style>
 </head>
 
 <body>
-  <div class="container my-5">
-    <!-- 上傳區塊 -->
-    <div class="card p-4 mb-4">
-      <h4 class="mb-3 text-center">上傳公司資訊檔案</h4>
-      <!-- 下載範例檔 -->
-      <div class="mb-3 text-center">
-        <a href="/static/examples/公司上傳範例.xlsx" class="btn btn-success">下載範例檔</a>
-      </div>
+  <div class="container">
+    <h1>批次上傳公司資料</h1>
 
-      <!-- 拖曳區 -->
-      <div id="fileDrop">拖曳檔案至此或點擊選擇（限 Excel，最大 5MB）</div>
-      <input type="file" id="companyFile" accept=".xlsx" hidden />
+    <!-- 下載範例 -->
+    <button class="btn" onclick="downloadTemplate()">下載範例檔案</button>
 
-      <div class="mt-3 d-flex justify-content-between align-items-center">
-        <span id="fileInfo" class="text-muted">尚未選擇檔案</span>
-        <button class="btn btn-primary" id="uploadBtn" disabled>上傳</button>
-      </div>
+    <!-- 上傳檔案 -->
+    <form id="uploadForm">
+      <input type="file" id="fileInput" accept=".xlsx,.xls,.csv" required>
+      <button class="btn" type="submit">讀取檔案</button>
+    </form>
 
-      <div class="mt-3"><strong>審核進度：</strong><span id="reviewStatus" class="text-muted">尚未上傳</span></div>
+    <!-- 顯示預覽表格 -->
+    <div class="table-container">
+      <table id="previewTable"></table>
     </div>
 
-    <!-- 篩選按鈕 -->
-    <div class="btn-group mb-3 w-100" role="group">
-      <button class="btn btn-outline-secondary active" onclick="filterStatus('all', this)">全部</button>
-      <button class="btn btn-outline-info" id="uploadedCountBtn" onclick="filterStatus('pending', this)">審核中</button>
-      <button class="btn btn-outline-success" id="approvedCountBtn"
-        onclick="filterStatus('approved', this)">已通過</button>
-      <button class="btn btn-outline-danger" id="rejectedCountBtn" onclick="filterStatus('rejected', this)">退件</button>
-    </div>
-
-    <!-- 清單區塊 -->
-    <div class="card p-3">
-      <table class="table table-hover align-middle mb-0">
-        <thead class="table-light">
-          <tr>
-            <th>上傳時間</th>
-            <th>檔案名稱</th>
-            <th>狀態</th>
-            <th>操作</th>
-          </tr>
-        </thead>
-        <tbody id="companyTableBody">
-          <tr>
-            <td colspan="4" class="text-center text-muted">載入中...</td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
+    <!-- 送到後端 -->
+    <button id="submitBtn" class="btn" style="display:none;" onclick="submitData()">送出到後端</button>
   </div>
 
   <script>
-    let companyId = null;
-    let interval = null;
-    let companiesData = [];
+    const table = document.getElementById("previewTable");
+    let parsedData = [];
 
-    const dropZone = document.getElementById('fileDrop');
-    const fileInput = document.getElementById('companyFile');
-
-    dropZone.addEventListener('click', () => fileInput.click());
-    dropZone.addEventListener('dragover', e => {
-      e.preventDefault();
-      dropZone.classList.add('dragover');
-    });
-    dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
-    dropZone.addEventListener('drop', e => {
-      e.preventDefault();
-      dropZone.classList.remove('dragover');
-      fileInput.files = e.dataTransfer.files;
-      handleFileChange();
-    });
-
-    fileInput.addEventListener('change', handleFileChange);
-
-    function handleFileChange() {
-      const file = fileInput.files[0];
-      if (!file) return;
-      document.getElementById('fileInfo').textContent =
-        `${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)`;
-      document.getElementById('uploadBtn').disabled = file.size > 5 * 1024 * 1024;
+    // 下載範例 Excel
+    function downloadTemplate() {
+      const headers = [["公司名稱", "公司簡介", "地點", "聯絡人", "聯絡信箱", "聯絡電話"]];
+      const ws = XLSX.utils.aoa_to_sheet(headers);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "範例");
+      XLSX.writeFile(wb, "公司上傳範例.xlsx");
     }
 
-    document.getElementById('uploadBtn').addEventListener('click', () => {
-      const file = fileInput.files[0];
-      if (!file) return alert("請選擇檔案");
-      const formData = new FormData();
-      formData.append('company_file', file);
+    // 讀取上傳檔案
+    document.getElementById("uploadForm").addEventListener("submit", function (e) {
+      e.preventDefault();
+      const file = document.getElementById("fileInput").files[0];
+      if (!file) return alert("請先選擇檔案！");
 
-      updateStatusText('pending');
+      const reader = new FileReader();
+      reader.onload = function (event) {
+        const data = new Uint8Array(event.target.result);
+        const workbook = XLSX.read(data, { type: "array" });
+        const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+        const jsonData = XLSX.utils.sheet_to_json(firstSheet, { header: 1 });
 
-      fetch('/api/upload_company_file', { method: 'POST', body: formData })
-        .then(res => res.json())
-        .then(data => {
-          if (data.success && data.company_id) {
-            companyId = data.company_id;
-            loadCompanies();
-            if (interval) clearInterval(interval);
-            interval = setInterval(fetchStatus, 5000);
-          } else {
-            alert("上傳失敗");
+        // 清空表格
+        table.innerHTML = "";
+        parsedData = [];
+
+        if (jsonData.length > 1) {
+          // 表頭
+          const headerRow = document.createElement("tr");
+          jsonData[0].forEach(h => {
+            const th = document.createElement("th");
+            th.textContent = h;
+            headerRow.appendChild(th);
+          });
+          table.appendChild(headerRow);
+
+          // 內容
+          for (let i = 1; i < jsonData.length; i++) {
+            if (jsonData[i].length === 0) continue;
+            const row = document.createElement("tr");
+            jsonData[i].forEach(cell => {
+              const td = document.createElement("td");
+              td.textContent = cell ?? "";
+              row.appendChild(td);
+            });
+            table.appendChild(row);
+
+            // 存成 JSON 給後端用
+            parsedData.push({
+              company_name: jsonData[i][0] || "",
+              description: jsonData[i][1] || "",
+              location: jsonData[i][2] || "",
+              contact_person: jsonData[i][3] || "",
+              contact_email: jsonData[i][4] || "",
+              contact_phone: jsonData[i][5] || ""
+            });
           }
-        });
+
+          document.getElementById("submitBtn").style.display = "inline-block";
+        }
+      };
+      reader.readAsArrayBuffer(file);
     });
 
-    function fetchStatus() {
-      if (!companyId) return;
-      fetch(`/api/company_status?company_id=${companyId}`)
-        .then(res => res.json())
-        .then(data => {
-          if (data.success) updateStatusText(data.status);
-        });
-    }
+    // 送出到後端
+    function submitData() {
+      if (parsedData.length === 0) {
+        return alert("沒有資料可以送出！");
+      }
 
-    function updateStatusText(status) {
-      const el = document.getElementById('reviewStatus');
-      const map = {
-        pending: ['審核中', '#0d6efd'],
-        approved: ['已通過', '#198754'],
-        rejected: ['退件', '#dc3545']
-      };
-      el.textContent = map[status]?.[0] || '尚未上傳';
-      el.style.color = map[status]?.[1] || '#6c757d';
-    }
-
-    function loadCompanies() {
-      fetch('/api/get_my_companies')
+      fetch("/api/upload_company_bulk", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ companies: parsedData })
+      })
         .then(res => res.json())
         .then(data => {
           if (data.success) {
-            companiesData = data.companies;
-            renderTable('all');
+            alert("上傳成功！已送出待審核");
+          } else {
+            alert("上傳失敗：" + data.message);
           }
+        })
+        .catch(err => {
+          console.error(err);
+          alert("伺服器錯誤，請稍後再試");
         });
     }
-
-    function filterStatus(filter, btn) {
-      document.querySelectorAll('.btn-group .btn').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      renderTable(filter);
-    }
-
-    function renderTable(filter) {
-      const tbody = document.getElementById('companyTableBody');
-      tbody.innerHTML = '';
-
-      const statusCounts = {
-        pending: companiesData.filter(c => c.status === 'pending').length,
-        approved: companiesData.filter(c => c.status === 'approved').length,
-        rejected: companiesData.filter(c => c.status === 'rejected').length
-      };
-
-      document.getElementById('uploadedCountBtn').textContent = `審核中 (${statusCounts.pending})`;
-      document.getElementById('approvedCountBtn').textContent = `已通過 (${statusCounts.approved})`;
-      document.getElementById('rejectedCountBtn').textContent = `退件 (${statusCounts.rejected})`;
-
-      const filtered = filter === 'all' ? companiesData : companiesData.filter(c => c.status === filter);
-      if (filtered.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="4" class="text-center text-muted">無資料</td></tr>`;
-        return;
-      }
-
-      filtered.forEach(c => {
-        tbody.innerHTML += `
-          <tr>
-            <td>${new Date(c.upload_time).toLocaleString()}</td>
-            <td>${c.original_filename}</td>
-            <td><span class="badge bg-${statusColor(c.status)} status-badge">${mapStatus(c.status)}</span></td>
-            <td>
-              <a href="/api/download_company_file?company_id=${c.id}" class="btn btn-outline-primary btn-sm me-1">下載</a>
-              <button class="btn btn-outline-danger btn-sm" onclick="deleteCompany(${c.id})">刪除</button>
-            </td>
-          </tr>
-        `;
-      });
-    }
-
-    function mapStatus(status) {
-      return {
-        pending: '審核中',
-        approved: '已通過',
-        rejected: '退件'
-      }[status] || '未知';
-    }
-
-    function statusColor(status) {
-      return {
-        pending: 'info',
-        approved: 'success',
-        rejected: 'danger'
-      }[status] || 'secondary';
-    }
-
-    function deleteCompany(id) {
-      if (!confirm("確定要刪除這筆公司資料？")) return;
-      fetch(`/api/delete_company?company_id=${id}`, { method: 'DELETE' })
-        .then(res => res.json())
-        .then(data => {
-          if (data.success) loadCompanies();
-          else alert("刪除失敗");
-        });
-    }
-
-    document.addEventListener("DOMContentLoaded", loadCompanies);
   </script>
 </body>
+
 </html>
