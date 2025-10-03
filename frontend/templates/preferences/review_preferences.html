@@ -373,7 +373,7 @@
       const searchTerm = searchInput.value.trim().toLowerCase();
       
       if (!searchTerm) {
-        alert('請輸入學生姓名');
+        alert('請輸入學生姓名或學號');
         return;
       }
 
@@ -383,7 +383,8 @@
 
       studentSections.forEach(section => {
         const studentName = section.querySelector('h3').textContent.trim().toLowerCase();
-        
+        const studentId = section.getAttribute('data-student-id')?.toLowerCase() || '';
+
         if (studentName.includes(searchTerm)) {
           section.style.display = 'block';
           foundCount++;
