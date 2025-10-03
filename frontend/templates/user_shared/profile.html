@@ -410,4 +410,44 @@
 
     // 左右切換
     prevBtn.addEventListener('click', () => {
-      i
+      if (notification.length > 0) {
+        currentAnnouncementIndex = (currentAnnouncementIndex - 1 + notification.length) % notification.length;
+        showAnnouncement(currentAnnouncementIndex);
+      }
+    });
+
+    nextBtn.addEventListener('click', () => {
+      if (notification.length > 0) {
+        currentAnnouncementIndex = (currentAnnouncementIndex + 1) % notification.length;
+        showAnnouncement(currentAnnouncementIndex);
+      }
+    });
+
+    // 自動輪播
+    setInterval(() => {
+      if (notification.length > 1) {
+        currentAnnouncementIndex = (currentAnnouncementIndex + 1) % notification.length;
+        showAnnouncement(currentAnnouncementIndex);
+      }
+    }, 5000); // 每5秒自動切換
+
+    // 帳號下拉選單
+    const btn = document.getElementById('accountDropdownBtn');
+    const menu = document.getElementById('accountDropdownMenu');
+    
+    btn.addEventListener('click', () => {
+      const open = menu.style.display === 'block';
+      menu.style.display = open ? 'none' : 'block';
+      btn.setAttribute('aria-expanded', String(!open));
+    });
+
+    // 點擊外部關閉下拉選單
+    document.addEventListener('click', (e) => {
+      if (!menu.contains(e.target) && !btn.contains(e.target)) {
+        menu.style.display = 'none';
+        btn.setAttribute('aria-expanded', 'false');
+      }
+    });
+  </script>
+</body>
+</html>
