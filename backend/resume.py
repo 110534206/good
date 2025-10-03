@@ -207,6 +207,41 @@ def review_resume(resume_id):
         conn.close()
 
 # -------------------------
+# API - 查詢自己的履歷列表 (學生)
+# -------------------------
+@resume_bp.route('/api/get_my_resumes', methods=['GET'])
+def get_my_resumes():
+    if 'user_id' not in session or session.get('role') != 'student':
+        return jsonify({"success": False, "message": "未授權"}), 403
+
+    user_id = session['user_id']
+
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+
+    try:
+        cursor.execute("""
+            SELECT r.id, r.original_filename, r.status, r.comment, r.note, r.created_at AS upload_time
+            FROM resumes r
+            WHERE r.user_id = %s
+            ORDER BY r.created_at DESC
+        """, (user_id,))
+        resumes = cursor.fetchall()
+
+        for r in resumes:
+            if isinstance(r.get('upload_time'), datetime):
+                r['upload_time'] = r['upload_time'].strftime("%Y-%m-%d %H:%M:%S")
+
+        return jsonify({"success": True, "resumes": resumes})
+    
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"success": False, "message": str(e)}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+# -------------------------
 # API - 更新履歷欄位 (comment/note)
 # -------------------------
 @resume_bp.route('/api/update_resume_field', methods=['POST'])
