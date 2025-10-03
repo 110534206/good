@@ -17,6 +17,10 @@ from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 import xlsxwriter
 import pandas as pd
+from docx import Document
+from docx.shared import Inches, Pt
+from docx.enum.text import WD_ALIGN_PARAGRAPH
+from docx.enum.table import WD_TABLE_ALIGNMENT
 
 preferences_bp = Blueprint("preferences_bp", __name__)
 
@@ -678,6 +682,194 @@ def export_preferences_pdf():
 
     except Exception as e:
         print("導出 PDF 錯誤：", e)
+        return "伺服器錯誤", 500
+    finally:
+        cursor.close()
+        conn.close()
+
+
+# -------------------------
+# Word 導出功能
+# -------------------------
+@preferences_bp.route('/export_preferences_word')
+def export_preferences_word():
+    if 'username' not in session or session.get('role') not in ['teacher', 'director']:
+        return redirect(url_for('auth_bp.login_page'))
+
+    user_id = session.get('user_id')
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+
+    try:
+        # 確認是否為班導
+        cursor.execute("""
+            SELECT c.id AS class_id, c.class_name
+            FROM classes c
+            JOIN classes_teacher ct ON c.id = ct.class_id
+            WHERE ct.teacher_id = %s AND ct.role = '班導師'
+        """, (user_id,))
+        class_info = cursor.fetchone()
+        if not class_info:
+            return "你不是班導，無法導出志願序", 403
+
+        class_id = class_info['class_id']
+        class_name = class_info['class_name']
+
+        # 查詢班上學生及其志願
+        cursor.execute("""
+            SELECT 
+                u.id AS student_id,
+                u.name AS student_name,
+                u.student_id AS student_number,
+                sp.preference_order,
+                ic.company_name,
+                sp.submitted_at
+            FROM users u
+            LEFT JOIN student_preferences sp ON u.id = sp.student_id
+            LEFT JOIN internship_companies ic ON sp.company_id = ic.id
+            WHERE u.class_id = %s AND u.role = 'student'
+            ORDER BY u.name, sp.preference_order
+        """, (class_id,))
+        results = cursor.fetchall()
+
+        # 創建 Word 文檔
+        doc = Document()
+        
+        # 設定頁面邊距
+        sections = doc.sections
+        for section in sections:
+            section.top_margin = Inches(1)
+            section.bottom_margin = Inches(1)
+            section.left_margin = Inches(1)
+            section.right_margin = Inches(1)
+
+        # 添加標題
+        title = doc.add_heading(f"{class_name} - 學生實習志願序統計表", 0)
+        title.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        
+        # 添加日期
+        date_para = doc.add_paragraph(f"導出時間：{datetime.now().strftime('%Y年%m月%d日 %H:%M:%S')}")
+        date_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        
+        # 添加空行
+        doc.add_paragraph()
+
+        # 整理學生資料
+        student_data = defaultdict(lambda: {
+            'name': '',
+            'student_number': '',
+            'preferences': [''] * 5,
+            'submitted_times': [''] * 5
+        })
+
+        for row in results:
+            student_name = row['student_name']
+            if student_name:
+                student_data[student_name]['name'] = student_name
+                student_data[student_name]['student_number'] = row['student_number'] or ''
+                
+                if row['preference_order'] and row['company_name']:
+                    order = row['preference_order'] - 1
+                    if 0 <= order < 5:
+                        student_data[student_name]['preferences'][order] = row['company_name']
+                        if row['submitted_at']:
+                            student_data[student_name]['submitted_times'][order] = row['submitted_at'].strftime('%m/%d %H:%M')
+
+        # 創建表格
+        table = doc.add_table(rows=1, cols=7)
+        table.alignment = WD_TABLE_ALIGNMENT.CENTER
+        table.style = 'Table Grid'
+        
+        # 設定表頭
+        header_cells = table.rows[0].cells
+        headers = ['學生姓名', '學號', '第一志願', '第二志願', '第三志願', '第四志願', '第五志願']
+        
+        for i, header in enumerate(headers):
+            header_cells[i].text = header
+            # 設定表頭樣式
+            for paragraph in header_cells[i].paragraphs:
+                paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                for run in paragraph.runs:
+                    run.bold = True
+                    run.font.size = Pt(12)
+
+        # 添加學生資料
+        for student_name in sorted(student_data.keys()):
+            data = student_data[student_name]
+            row_cells = table.add_row().cells
+            
+            # 學生姓名和學號
+            row_cells[0].text = data['name']
+            row_cells[1].text = data['student_number']
+            
+            # 志願序
+            for i in range(5):
+                pref_text = data['preferences'][i]
+                if pref_text and data['submitted_times'][i]:
+                    pref_text += f"\n({data['submitted_times'][i]})"
+                row_cells[2+i].text = pref_text
+                
+                # 設定對齊
+                for paragraph in row_cells[2+i].paragraphs:
+                    paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+        # 添加統計資訊
+        doc.add_paragraph()
+        stats_heading = doc.add_heading('統計資訊', level=2)
+        stats_heading.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        
+        # 統計各公司被選擇次數
+        company_counts = defaultdict(int)
+        for data in student_data.values():
+            for pref in data['preferences']:
+                if pref:
+                    company_counts[pref] += 1
+
+        if company_counts:
+            # 創建統計表格
+            stats_table = doc.add_table(rows=1, cols=2)
+            stats_table.alignment = WD_TABLE_ALIGNMENT.CENTER
+            stats_table.style = 'Table Grid'
+            
+            # 統計表頭
+            stats_header_cells = stats_table.rows[0].cells
+            stats_header_cells[0].text = '公司名稱'
+            stats_header_cells[1].text = '被選擇次數'
+            
+            for cell in stats_header_cells:
+                for paragraph in cell.paragraphs:
+                    paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                    for run in paragraph.runs:
+                        run.bold = True
+                        run.font.size = Pt(12)
+            
+            # 統計資料
+            for company, count in sorted(company_counts.items(), key=lambda x: x[1], reverse=True):
+                stats_row_cells = stats_table.add_row().cells
+                stats_row_cells[0].text = company
+                stats_row_cells[1].text = str(count)
+                
+                for cell in stats_row_cells:
+                    for paragraph in cell.paragraphs:
+                        paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+        # 保存到記憶體
+        doc_buffer = io.BytesIO()
+        doc.save(doc_buffer)
+        doc_buffer.seek(0)
+
+        # 生成檔案名稱
+        filename = f"{class_name}_學生志願序_{datetime.now().strftime('%Y%m%d_%H%M%S')}.docx"
+
+        return send_file(
+            doc_buffer,
+            as_attachment=True,
+            download_name=filename,
+            mimetype='application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+        )
+
+    except Exception as e:
+        print("導出 Word 錯誤：", e)
         return "伺服器錯誤", 500
     finally:
         cursor.close()
