@@ -17,7 +17,6 @@ from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 import xlsxwriter
 from docx import Document
-from docx.shared import Inches, Pt
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.enum.table import WD_TABLE_ALIGNMENT
 
@@ -362,8 +361,8 @@ def export_preferences_excel():
 # -------------------------
 # CSV 導出功能
 # -------------------------
-@preferences_bp.route('/export_preferences_csv')
-def export_preferences_csv():
+@preferences_bp.route('/export_preferences_word')
+def export_preferences_word():
     if 'username' not in session or session.get('role') not in ['teacher', 'director']:
         return redirect(url_for('auth_bp.login_page'))
 
@@ -386,7 +385,7 @@ def export_preferences_csv():
         class_id = class_info['class_id']
         class_name = class_info['class_name']
 
-        # 查詢班上學生及其志願
+        # 查詢學生志願
         cursor.execute("""
             SELECT 
                 u.id AS student_id,
@@ -403,20 +402,7 @@ def export_preferences_csv():
         """, (class_id,))
         results = cursor.fetchall()
 
-        # 創建 CSV 內容
-        csv_buffer = io.StringIO()
-        writer = csv.writer(csv_buffer)
-        
-        # 寫入標題
-        writer.writerow([f"{class_name} - 學生實習志願序統計表"])
-        writer.writerow([f"導出時間：{datetime.now().strftime('%Y年%m月%d日 %H:%M:%S')}"])
-        writer.writerow([])  # 空行
-        
-        # 寫入表頭
-        headers = ['學生姓名', '學號', '第一志願', '第二志願', '第三志願', '第四志願', '第五志願']
-        writer.writerow(headers)
-
-        # 整理學生資料
+        # 整理資料
         student_data = defaultdict(lambda: {
             'name': '',
             'student_number': '',
@@ -429,59 +415,74 @@ def export_preferences_csv():
             if student_name:
                 student_data[student_name]['name'] = student_name
                 student_data[student_name]['student_number'] = row['student_number'] or ''
-                
                 if row['preference_order'] and row['company_name']:
-                    order = row['preference_order'] - 1  # 轉為 0-based index
+                    order = row['preference_order'] - 1
                     if 0 <= order < 5:
                         student_data[student_name]['preferences'][order] = row['company_name']
                         if row['submitted_at']:
                             student_data[student_name]['submitted_times'][order] = row['submitted_at'].strftime('%m/%d %H:%M')
 
-        # 寫入學生資料
+        # 建立 Word 文件
+        doc = Document()
+        title = doc.add_heading(f"{class_name} - 學生實習志願序統計表", 0)
+        title.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        doc.add_paragraph(f"導出時間：{datetime.now().strftime('%Y年%m月%d日 %H:%M:%S')}")
+        doc.add_paragraph("")
+
+        # 學生表格
+        table = doc.add_table(rows=1, cols=7)
+        table.alignment = WD_TABLE_ALIGNMENT.CENTER
+        table.style = "Table Grid"
+        headers = ['學生姓名', '學號', '第一志願', '第二志願', '第三志願', '第四志願', '第五志願']
+        for i, header in enumerate(headers):
+            table.rows[0].cells[i].text = header
+
         for student_name in sorted(student_data.keys()):
             data = student_data[student_name]
-            row_data = [data['name'], data['student_number']]
-            
-            # 志願序
+            row = table.add_row().cells
+            row[0].text = data['name']
+            row[1].text = data['student_number']
             for i in range(5):
                 pref_text = data['preferences'][i]
                 if pref_text and data['submitted_times'][i]:
-                    pref_text += f" ({data['submitted_times'][i]})"
-                row_data.append(pref_text)
-            
-            writer.writerow(row_data)
+                    pref_text += f"\n({data['submitted_times'][i]})"
+                row[2+i].text = pref_text
 
-        # 添加統計資訊
-        writer.writerow([])  # 空行
-        writer.writerow(["統計資訊："])
-        writer.writerow(["公司名稱", "被選擇次數"])
-        
-        # 統計各公司被選擇次數
+        doc.add_paragraph("")
+        doc.add_heading("統計資訊", level=1)
+
+        # 統計資訊
         company_counts = defaultdict(int)
         for data in student_data.values():
             for pref in data['preferences']:
                 if pref:
                     company_counts[pref] += 1
 
-        for company, count in sorted(company_counts.items(), key=lambda x: x[1], reverse=True):
-            writer.writerow([company, count])
+        if company_counts:
+            stats_table = doc.add_table(rows=1, cols=2)
+            stats_table.style = "Table Grid"
+            stats_table.rows[0].cells[0].text = "公司名稱"
+            stats_table.rows[0].cells[1].text = "被選擇次數"
+            for company, count in sorted(company_counts.items(), key=lambda x: x[1], reverse=True):
+                row = stats_table.add_row().cells
+                row[0].text = company
+                row[1].text = str(count)
 
-        # 轉換為 bytes
-        csv_content = csv_buffer.getvalue()
-        csv_bytes = io.BytesIO(csv_content.encode('utf-8-sig'))  # 使用 BOM 確保中文正確顯示
-
-        # 生成檔案名稱
-        filename = f"{class_name}_學生志願序_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+        # 匯出檔案
+        buffer = io.BytesIO()
+        doc.save(buffer)
+        buffer.seek(0)
+        filename = f"{class_name}_學生志願序_{datetime.now().strftime('%Y%m%d_%H%M%S')}.docx"
 
         return send_file(
-            csv_bytes,
+            buffer,
             as_attachment=True,
             download_name=filename,
-            mimetype='text/csv'
+            mimetype="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
         )
 
     except Exception as e:
-        print("導出 CSV 錯誤：", e)
+        print("Word 匯出錯誤：", e)
         return "伺服器錯誤", 500
     finally:
         cursor.close()
