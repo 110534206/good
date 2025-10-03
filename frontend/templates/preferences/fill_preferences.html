@@ -323,8 +323,8 @@
     <select id="preference_{{ i }}" class="preference-select" name="preference_{{ i }}" required>
       <option value="">-- 請選擇實習公司 --</option>
       {% for company in companies %}
-      <option value="{{ company['id'] }}" {% if submitted_preferences and submitted_preferences[i-1]==company['id'] %}
-        selected {% endif %}>
+      <option value="{{ company['id'] }}" data-original="true" {% if submitted_preferences and
+        submitted_preferences[i-1]==company['id'] %}selected {% endif %}>
         {{ company['company_name'] }}
       </option>
       {% endfor %}
@@ -364,26 +364,51 @@
     const editBtn = document.getElementById('editBtn');
     const toast = document.getElementById('toast');
 
+    // 儲存已選值並避免重複選擇公司
     function updateOptions() {
       const selectedValues = Array.from(selects)
         .map(s => s.value)
         .filter(val => val !== '');
 
-      selects.forEach(select => {
-        const currentValue = select.value;
-        Array.from(select.options).forEach(option => {
-          if (option.value === '') {
-            option.disabled = false;
-            return;
-          }
-          option.disabled = selectedValues.includes(option.value) && option.value !== currentValue;
+      selects.forEach(currentSelect => {
+        const currentValue = currentSelect.value;
+
+        // 清空選單
+        currentSelect.innerHTML = '';
+
+        // 過濾：允許空白、目前值、沒被其他 select 選的值
+        const optionsToShow = originalOptions.filter(option => {
+          return (
+            option.value === '' ||  // 空白選項
+            option.value === currentValue ||
+            !selectedValues.includes(option.value)
+          );
         });
+
+        // 加回選項
+        optionsToShow.forEach(option => {
+          currentSelect.appendChild(option.cloneNode(true));
+        });
+
+        // 設定目前值（避免被清空）
+        currentSelect.value = currentValue;
       });
     }
 
+    // 🟡 ⚠️ 新增這段：處理「記住上次選了什麼值」
     selects.forEach(select => {
-      select.addEventListener('change', updateOptions);
+      select.dataset.previous = select.value;
+
+      select.addEventListener('change', () => {
+        // 更新 data-previous
+        select.dataset.previous = select.value;
+
+        // 更新所有選項狀態
+        updateOptions();
+      });
     });
+
+    const originalOptions = Array.from(selects[0].querySelectorAll('option[data-original="true"]'));
 
     updateOptions();
 
