@@ -222,9 +222,20 @@
     <div class="d-flex justify-content-center mb-3">
       <button id="generateChartBtn" class="btn btn-primary">生成圖表</button>
       <button id="refreshBtn" class="btn btn-outline-secondary ms-2" onclick="location.reload()">重新整理</button>
-      <button id="exportExcelBtn" class="btn btn-success ms-2">
-        <i class="fas fa-file-excel"></i> 導出 Excel
-      </button>
+      <div class="btn-group ms-2" role="group">
+        <button id="exportExcelBtn" class="btn btn-success">
+          <i class="fas fa-file-excel"></i> 導出 Excel
+        </button>
+        <button id="exportCsvBtn" class="btn btn-info">
+          <i class="fas fa-file-csv"></i> 導出 CSV
+        </button>
+        <button id="exportPdfBtn" class="btn btn-danger">
+          <i class="fas fa-file-pdf"></i> 導出 PDF
+        </button>
+        <button id="exportExcelJsBtn" class="btn btn-warning">
+          <i class="fas fa-download"></i> 前端匯出
+        </button>
+      </div>
     </div>
     <div id="chartSection" class="mb-4" style="display:none;">
       <canvas id="prefChart" height="120"></canvas>
@@ -274,6 +285,7 @@
   </nav>
 
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <script>
     // 帳號下拉
     const btn = document.getElementById('accountDropdownBtn');
@@ -405,6 +417,157 @@
         btn.innerHTML = originalText;
         btn.disabled = false;
       }, 2000);
+    });
+
+    // CSV 導出功能
+    document.getElementById('exportCsvBtn')?.addEventListener('click', function() {
+      const btn = this;
+      const originalText = btn.innerHTML;
+      btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 導出中...';
+      btn.disabled = true;
+
+      window.location.href = '/export_preferences_csv';
+      
+      setTimeout(() => {
+        btn.innerHTML = originalText;
+        btn.disabled = false;
+      }, 2000);
+    });
+
+    // PDF 導出功能
+    document.getElementById('exportPdfBtn')?.addEventListener('click', function() {
+      const btn = this;
+      const originalText = btn.innerHTML;
+      btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 導出中...';
+      btn.disabled = true;
+
+      window.location.href = '/export_preferences_pdf';
+      
+      setTimeout(() => {
+        btn.innerHTML = originalText;
+        btn.disabled = false;
+      }, 2000);
+    });
+
+    // 前端 JavaScript Excel 匯出功能
+    document.getElementById('exportExcelJsBtn')?.addEventListener('click', function() {
+      const btn = this;
+      const originalText = btn.innerHTML;
+      btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 匯出中...';
+      btn.disabled = true;
+
+      try {
+        // 收集所有表格資料
+        const allData = [];
+        const studentSections = document.querySelectorAll('.student-section');
+        
+        studentSections.forEach(section => {
+          const studentName = section.querySelector('h3').textContent.trim();
+          const table = section.querySelector('table tbody');
+          const rows = table.querySelectorAll('tr');
+          
+          rows.forEach(row => {
+            const cells = row.querySelectorAll('td');
+            if (cells.length >= 3) {
+              allData.push({
+                student: studentName,
+                order: cells[0].textContent.trim(),
+                company: cells[1].textContent.trim(),
+                submittedAt: cells[2].textContent.trim()
+              });
+            }
+          });
+        });
+
+        // 整理成 Excel 格式
+        const excelData = [];
+        
+        // 標題行
+        excelData.push(['學生姓名', '學號', '第一志願', '第二志願', '第三志願', '第四志願', '第五志願']);
+        
+        // 按學生分組
+        const studentGroups = {};
+        allData.forEach(item => {
+          if (!studentGroups[item.student]) {
+            studentGroups[item.student] = {
+              name: item.student,
+              preferences: ['', '', '', '', ''],
+              submittedTimes: ['', '', '', '', '']
+            };
+          }
+          
+          const orderIndex = parseInt(item.order) - 1;
+          if (orderIndex >= 0 && orderIndex < 5) {
+            studentGroups[item.student].preferences[orderIndex] = item.company;
+            studentGroups[item.student].submittedTimes[orderIndex] = item.submittedAt;
+          }
+        });
+
+        // 添加學生資料行
+        Object.values(studentGroups).forEach(student => {
+          const row = [student.name, '']; // 學號暫時留空
+          student.preferences.forEach((pref, index) => {
+            let cellValue = pref;
+            if (pref && student.submittedTimes[index]) {
+              cellValue += `\n(${student.submittedTimes[index]})`;
+            }
+            row.push(cellValue);
+          });
+          excelData.push(row);
+        });
+
+        // 添加統計資訊
+        excelData.push([]);
+        excelData.push(['統計資訊：']);
+        excelData.push(['公司名稱', '被選擇次數']);
+        
+        // 統計各公司被選擇次數
+        const companyCounts = {};
+        Object.values(studentGroups).forEach(student => {
+          student.preferences.forEach(pref => {
+            if (pref) {
+              companyCounts[pref] = (companyCounts[pref] || 0) + 1;
+            }
+          });
+        });
+
+        Object.entries(companyCounts)
+          .sort(([,a], [,b]) => b - a)
+          .forEach(([company, count]) => {
+            excelData.push([company, count]);
+          });
+
+        // 創建工作簿
+        const wb = XLSX.utils.book_new();
+        const ws = XLSX.utils.aoa_to_sheet(excelData);
+        
+        // 設定欄寬
+        ws['!cols'] = [
+          { wch: 15 }, // 學生姓名
+          { wch: 12 }, // 學號
+          { wch: 20 }, // 第一志願
+          { wch: 20 }, // 第二志願
+          { wch: 20 }, // 第三志願
+          { wch: 20 }, // 第四志願
+          { wch: 20 }  // 第五志願
+        ];
+
+        XLSX.utils.book_append_sheet(wb, ws, '學生志願序');
+
+        // 生成檔案名稱
+        const now = new Date();
+        const filename = `學生志願序_${now.getFullYear()}${(now.getMonth()+1).toString().padStart(2,'0')}${now.getDate().toString().padStart(2,'0')}_${now.getHours().toString().padStart(2,'0')}${now.getMinutes().toString().padStart(2,'0')}${now.getSeconds().toString().padStart(2,'0')}.xlsx`;
+
+        // 下載檔案
+        XLSX.writeFile(wb, filename);
+
+      } catch (error) {
+        console.error('前端匯出錯誤：', error);
+        alert('匯出失敗，請稍後再試');
+      } finally {
+        btn.innerHTML = originalText;
+        btn.disabled = false;
+      }
     });
   </script>
 </body>

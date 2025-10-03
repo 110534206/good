@@ -7,6 +7,14 @@ from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
 from openpyxl.utils import get_column_letter
 import io
 import os
+import csv
+from reportlab.lib.pagesizes import A4, letter
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.units import inch
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+from reportlab.lib import colors
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
 
 preferences_bp = Blueprint("preferences_bp", __name__)
 
@@ -340,6 +348,334 @@ def export_preferences_excel():
 
     except Exception as e:
         print("導出 Excel 錯誤：", e)
+        return "伺服器錯誤", 500
+    finally:
+        cursor.close()
+        conn.close()
+
+
+# -------------------------
+# CSV 導出功能
+# -------------------------
+@preferences_bp.route('/export_preferences_csv')
+def export_preferences_csv():
+    if 'username' not in session or session.get('role') not in ['teacher', 'director']:
+        return redirect(url_for('auth_bp.login_page'))
+
+    user_id = session.get('user_id')
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+
+    try:
+        # 確認是否為班導
+        cursor.execute("""
+            SELECT c.id AS class_id, c.class_name
+            FROM classes c
+            JOIN classes_teacher ct ON c.id = ct.class_id
+            WHERE ct.teacher_id = %s AND ct.role = '班導師'
+        """, (user_id,))
+        class_info = cursor.fetchone()
+        if not class_info:
+            return "你不是班導，無法導出志願序", 403
+
+        class_id = class_info['class_id']
+        class_name = class_info['class_name']
+
+        # 查詢班上學生及其志願
+        cursor.execute("""
+            SELECT 
+                u.id AS student_id,
+                u.name AS student_name,
+                u.student_id AS student_number,
+                sp.preference_order,
+                ic.company_name,
+                sp.submitted_at
+            FROM users u
+            LEFT JOIN student_preferences sp ON u.id = sp.student_id
+            LEFT JOIN internship_companies ic ON sp.company_id = ic.id
+            WHERE u.class_id = %s AND u.role = 'student'
+            ORDER BY u.name, sp.preference_order
+        """, (class_id,))
+        results = cursor.fetchall()
+
+        # 創建 CSV 內容
+        csv_buffer = io.StringIO()
+        writer = csv.writer(csv_buffer)
+        
+        # 寫入標題
+        writer.writerow([f"{class_name} - 學生實習志願序統計表"])
+        writer.writerow([f"導出時間：{datetime.now().strftime('%Y年%m月%d日 %H:%M:%S')}"])
+        writer.writerow([])  # 空行
+        
+        # 寫入表頭
+        headers = ['學生姓名', '學號', '第一志願', '第二志願', '第三志願', '第四志願', '第五志願']
+        writer.writerow(headers)
+
+        # 整理學生資料
+        student_data = defaultdict(lambda: {
+            'name': '',
+            'student_number': '',
+            'preferences': [''] * 5,
+            'submitted_times': [''] * 5
+        })
+
+        for row in results:
+            student_name = row['student_name']
+            if student_name:
+                student_data[student_name]['name'] = student_name
+                student_data[student_name]['student_number'] = row['student_number'] or ''
+                
+                if row['preference_order'] and row['company_name']:
+                    order = row['preference_order'] - 1  # 轉為 0-based index
+                    if 0 <= order < 5:
+                        student_data[student_name]['preferences'][order] = row['company_name']
+                        if row['submitted_at']:
+                            student_data[student_name]['submitted_times'][order] = row['submitted_at'].strftime('%m/%d %H:%M')
+
+        # 寫入學生資料
+        for student_name in sorted(student_data.keys()):
+            data = student_data[student_name]
+            row_data = [data['name'], data['student_number']]
+            
+            # 志願序
+            for i in range(5):
+                pref_text = data['preferences'][i]
+                if pref_text and data['submitted_times'][i]:
+                    pref_text += f" ({data['submitted_times'][i]})"
+                row_data.append(pref_text)
+            
+            writer.writerow(row_data)
+
+        # 添加統計資訊
+        writer.writerow([])  # 空行
+        writer.writerow(["統計資訊："])
+        writer.writerow(["公司名稱", "被選擇次數"])
+        
+        # 統計各公司被選擇次數
+        company_counts = defaultdict(int)
+        for data in student_data.values():
+            for pref in data['preferences']:
+                if pref:
+                    company_counts[pref] += 1
+
+        for company, count in sorted(company_counts.items(), key=lambda x: x[1], reverse=True):
+            writer.writerow([company, count])
+
+        # 轉換為 bytes
+        csv_content = csv_buffer.getvalue()
+        csv_bytes = io.BytesIO(csv_content.encode('utf-8-sig'))  # 使用 BOM 確保中文正確顯示
+
+        # 生成檔案名稱
+        filename = f"{class_name}_學生志願序_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+
+        return send_file(
+            csv_bytes,
+            as_attachment=True,
+            download_name=filename,
+            mimetype='text/csv'
+        )
+
+    except Exception as e:
+        print("導出 CSV 錯誤：", e)
+        return "伺服器錯誤", 500
+    finally:
+        cursor.close()
+        conn.close()
+
+
+# -------------------------
+# PDF 導出功能
+# -------------------------
+@preferences_bp.route('/export_preferences_pdf')
+def export_preferences_pdf():
+    if 'username' not in session or session.get('role') not in ['teacher', 'director']:
+        return redirect(url_for('auth_bp.login_page'))
+
+    user_id = session.get('user_id')
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+
+    try:
+        # 確認是否為班導
+        cursor.execute("""
+            SELECT c.id AS class_id, c.class_name
+            FROM classes c
+            JOIN classes_teacher ct ON c.id = ct.class_id
+            WHERE ct.teacher_id = %s AND ct.role = '班導師'
+        """, (user_id,))
+        class_info = cursor.fetchone()
+        if not class_info:
+            return "你不是班導，無法導出志願序", 403
+
+        class_id = class_info['class_id']
+        class_name = class_info['class_name']
+
+        # 查詢班上學生及其志願
+        cursor.execute("""
+            SELECT 
+                u.id AS student_id,
+                u.name AS student_name,
+                u.student_id AS student_number,
+                sp.preference_order,
+                ic.company_name,
+                sp.submitted_at
+            FROM users u
+            LEFT JOIN student_preferences sp ON u.id = sp.student_id
+            LEFT JOIN internship_companies ic ON sp.company_id = ic.id
+            WHERE u.class_id = %s AND u.role = 'student'
+            ORDER BY u.name, sp.preference_order
+        """, (class_id,))
+        results = cursor.fetchall()
+
+        # 創建 PDF 緩衝區
+        pdf_buffer = io.BytesIO()
+        doc = SimpleDocTemplate(pdf_buffer, pagesize=A4, topMargin=1*inch, bottomMargin=1*inch)
+        
+        # 設定樣式
+        styles = getSampleStyleSheet()
+        title_style = ParagraphStyle(
+            'CustomTitle',
+            parent=styles['Heading1'],
+            fontSize=18,
+            spaceAfter=30,
+            alignment=1,  # 置中
+            textColor=colors.HexColor('#0066CC')
+        )
+        
+        normal_style = styles['Normal']
+        normal_style.fontSize = 10
+
+        # 建立內容
+        story = []
+        
+        # 標題
+        title = Paragraph(f"{class_name} - 學生實習志願序統計表", title_style)
+        story.append(title)
+        
+        # 日期
+        date_text = f"導出時間：{datetime.now().strftime('%Y年%m月%d日 %H:%M:%S')}"
+        date_para = Paragraph(date_text, normal_style)
+        story.append(date_para)
+        story.append(Spacer(1, 20))
+
+        # 整理學生資料
+        student_data = defaultdict(lambda: {
+            'name': '',
+            'student_number': '',
+            'preferences': [''] * 5,
+            'submitted_times': [''] * 5
+        })
+
+        for row in results:
+            student_name = row['student_name']
+            if student_name:
+                student_data[student_name]['name'] = student_name
+                student_data[student_name]['student_number'] = row['student_number'] or ''
+                
+                if row['preference_order'] and row['company_name']:
+                    order = row['preference_order'] - 1  # 轉為 0-based index
+                    if 0 <= order < 5:
+                        student_data[student_name]['preferences'][order] = row['company_name']
+                        if row['submitted_at']:
+                            student_data[student_name]['submitted_times'][order] = row['submitted_at'].strftime('%m/%d %H:%M')
+
+        # 建立表格資料
+        table_data = []
+        
+        # 表頭
+        headers = ['學生姓名', '學號', '第一志願', '第二志願', '第三志願', '第四志願', '第五志願']
+        table_data.append(headers)
+        
+        # 學生資料
+        for student_name in sorted(student_data.keys()):
+            data = student_data[student_name]
+            row = [data['name'], data['student_number']]
+            
+            # 志願序
+            for i in range(5):
+                pref_text = data['preferences'][i]
+                if pref_text and data['submitted_times'][i]:
+                    pref_text += f"\n({data['submitted_times'][i]})"
+                row.append(pref_text)
+            
+            table_data.append(row)
+
+        # 建立表格
+        table = Table(table_data, colWidths=[1.2*inch, 1*inch, 1.5*inch, 1.5*inch, 1.5*inch, 1.5*inch, 1.5*inch])
+        
+        # 設定表格樣式
+        table_style = TableStyle([
+            # 表頭樣式
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#0066CC')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 10),
+            
+            # 資料行樣式
+            ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+            ('TEXTCOLOR', (0, 1), (-1, -1), colors.black),
+            ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
+            ('FONTSIZE', (0, 1), (-1, -1), 8),
+            
+            # 邊框
+            ('GRID', (0, 0), (-1, -1), 1, colors.black),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            
+            # 行高
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#F5F5F5')]),
+        ])
+        
+        table.setStyle(table_style)
+        story.append(table)
+        story.append(Spacer(1, 30))
+
+        # 統計資訊
+        stats_title = Paragraph("統計資訊", styles['Heading2'])
+        story.append(stats_title)
+        
+        # 統計各公司被選擇次數
+        company_counts = defaultdict(int)
+        for data in student_data.values():
+            for pref in data['preferences']:
+                if pref:
+                    company_counts[pref] += 1
+
+        # 建立統計表格
+        stats_data = [['公司名稱', '被選擇次數']]
+        for company, count in sorted(company_counts.items(), key=lambda x: x[1], reverse=True):
+            stats_data.append([company, str(count)])
+
+        if len(stats_data) > 1:  # 有統計資料才顯示
+            stats_table = Table(stats_data, colWidths=[3*inch, 1*inch])
+            stats_table_style = TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#0066CC')),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+                ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('FONTSIZE', (0, 0), (-1, -1), 10),
+                ('GRID', (0, 0), (-1, -1), 1, colors.black),
+                ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+            ])
+            stats_table.setStyle(stats_table_style)
+            story.append(stats_table)
+
+        # 生成 PDF
+        doc.build(story)
+        pdf_buffer.seek(0)
+
+        # 生成檔案名稱
+        filename = f"{class_name}_學生志願序_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
+
+        return send_file(
+            pdf_buffer,
+            as_attachment=True,
+            download_name=filename,
+            mimetype='application/pdf'
+        )
+
+    except Exception as e:
+        print("導出 PDF 錯誤：", e)
         return "伺服器錯誤", 500
     finally:
         cursor.close()
