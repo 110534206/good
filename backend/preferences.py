@@ -667,9 +667,8 @@ def export_preferences_pdf():
 
         # 生成 PDF
         doc.build(story)
-        pdf_buffer.seek(0)
 
-        # 生成檔案名稱
+        pdf_buffer.seek(0)
         filename = f"{class_name}_學生志願序_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
 
         return send_file(
