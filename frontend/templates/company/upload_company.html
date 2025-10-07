@@ -59,20 +59,40 @@
     <div class="card p-4 mb-4">
       <div class="d-flex justify-content-between align-items-center mb-3">
         <button class="btn btn-outline-primary" onclick="downloadTemplate()">下載範本</button>
-        <button type="button" class="btn btn-success" id="submitBtn" style="display:none;"
-          onclick="submitData()">送出資料</button>
+        <button type="button" class="btn btn-success" id="submitBtn" style="display:none;" onclick="submitData()">送出資料</button>
       </div>
 
       <div id="fileDrop">拖曳檔案至此或點擊選擇（限 Excel / CSV）</div>
       <input type="file" id="fileInput" accept=".xlsx,.xls,.csv" hidden />
-
       <div class="mt-3 d-flex justify-content-between align-items-center">
         <span id="fileInfo" class="text-muted">尚未選擇檔案</span>
       </div>
     </div>
 
-    <!-- 表格區塊 -->
+    <!-- 🟢 已上傳紀錄 -->
+    <div class="card p-3 mb-4">
+      <h5 class="mb-3 text-primary">歷史紀錄</h5>
+      <table class="table table-hover align-middle">
+        <thead class="table-light">
+          <tr>
+            <th>#</th>
+            <th>公司名稱</th>
+            <th>上傳時間</th>
+            <th>審查狀態</th>
+            <th>操作</th>
+          </tr>
+        </thead>
+        <tbody id="uploadedTableBody">
+          <tr>
+            <td colspan="5" class="text-center text-muted">載入中...</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- 🟡 預覽區塊 -->
     <div class="card p-3">
+      <h5 class="mb-3 text-success">上傳區</h5>
       <table class="table table-hover align-middle">
         <thead class="table-light">
           <tr>
@@ -83,30 +103,27 @@
             <th>實習地點</th>
             <th>實習期間</th>
             <th>實習人數</th>
-            <th>審查狀態</th>
             <th>操作</th>
           </tr>
         </thead>
-        <tbody id="companyTableBody">
+        <tbody id="previewTableBody">
           <tr>
-            <td colspan="9" class="text-center text-muted">尚未上傳資料</td>
+            <td colspan="8" class="text-center text-muted">尚未上傳檔案</td>
           </tr>
         </tbody>
       </table>
     </div>
   </div>
 
-  <!-- 預覽 Modal -->
+  <!-- Modal 預覽 -->
   <div class="modal fade" id="previewModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered modal-lg">
       <div class="modal-content">
         <div class="modal-header">
-          <h5 class="modal-title">公司資料預覽</h5>
+          <h5 class="modal-title">預覽資料</h5>
           <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
         </div>
-        <div class="modal-body" id="previewContent">
-          <!-- 公司詳細資料 -->
-        </div>
+        <div class="modal-body" id="previewContent"></div>
       </div>
     </div>
   </div>
@@ -116,11 +133,12 @@
   <script>
     const fileDrop = document.getElementById("fileDrop");
     const fileInput = document.getElementById("fileInput");
-    const tableBody = document.getElementById("companyTableBody");
+    const previewTableBody = document.getElementById("previewTableBody");
+    const uploadedTableBody = document.getElementById("uploadedTableBody");
     const fileInfo = document.getElementById("fileInfo");
     let parsedData = [];
 
-    // 拖曳或點擊上傳
+    // 🟦 拖曳/點擊上傳
     fileDrop.addEventListener("click", () => fileInput.click());
     fileDrop.addEventListener("dragover", e => {
       e.preventDefault();
@@ -150,19 +168,20 @@
       reader.readAsArrayBuffer(file);
     }
 
+    // 🟨 渲染上傳預覽表格
     function renderTable(jsonData) {
-      tableBody.innerHTML = "";
+      previewTableBody.innerHTML = "";
       parsedData = [];
 
       if (jsonData.length <= 1) {
-        tableBody.innerHTML = `<tr><td colspan="8" class="text-center text-muted">檔案內容為空</td></tr>`;
+        previewTableBody.innerHTML = `<tr><td colspan="8" class="text-center text-muted">檔案內容為空</td></tr>`;
         return;
       }
 
       for (let i = 1; i < jsonData.length; i++) {
         const r = jsonData[i];
         if (r.length === 0) continue;
-        const c = {
+        parsedData.push({
           company_name: r[0] || "",
           company_intro: r[1] || "",
           company_address: r[2] || "",
@@ -178,78 +197,59 @@
           internship_quota: r[12] || "",
           remark: r[13] || "",
           status: "審查中"
-        };
-
-        parsedData.push(c);
+        });
       }
 
       parsedData.forEach((c, idx) => {
-        tableBody.innerHTML += `
-  <tr>
-    <td>${idx + 1}</td>
-    <td>${c.company_name}</td>
-    <td>${c.contact_name}</td>
-    <td>${c.internship_unit}</td>
-    <td>${c.internship_location}</td>
-    <td>${c.internship_period}</td>
-    <td>${c.internship_quota}</td>
-    <td>${c.status}</td> <!-- ✅ 新增審查狀態欄位 -->
-    <td>
-      <button class="btn btn-sm btn-outline-info me-1" onclick="previewCompany(${idx})">預覽</button>
-      <button class="btn btn-sm btn-outline-primary me-1" onclick="downloadCompany(${idx})">下載</button>
-      <button class="btn btn-sm btn-outline-danger" onclick="deleteRow(${idx})">刪除</button>
-    </td>
-  </tr>`;
+        previewTableBody.innerHTML += `
+          <tr>
+            <td>${idx + 1}</td>
+            <td>${c.company_name}</td>
+            <td>${c.contact_name}</td>
+            <td>${c.internship_unit}</td>
+            <td>${c.internship_location}</td>
+            <td>${c.internship_period}</td>
+            <td>${c.internship_quota}</td>
+            <td>
+              <button class="btn btn-sm btn-outline-info me-1" onclick="previewCompany(${idx})">預覽</button>
+              <button class="btn btn-sm btn-outline-danger" onclick="deleteRow(${idx})">刪除</button>
+            </td>
+          </tr>`;
       });
 
       document.getElementById("submitBtn").style.display = "inline-block";
     }
 
-    // 預覽公司資料
+    // 🟩 預覽公司資料（Modal）
     function previewCompany(idx) {
       const c = parsedData[idx];
-      const content = `
-        <p><strong>公司名稱：</strong>${c.company_name}</p>
-        <p><strong>公司簡介：</strong>${c.company_intro}</p>
-        <p><strong>公司地址：</strong>${c.company_address}</p>
-        <p><strong>聯絡人姓名：</strong>${c.contact_name}</p>
-        <p><strong>聯絡人職稱：</strong>${c.contact_title}</p>
-        <p><strong>聯絡電話：</strong>${c.contact_phone}</p>
-        <p><strong>聯絡信箱：</strong>${c.contact_email}</p>
-        <p><strong>實習職位：</strong>${c.internship_unit}</p>
-        <p><strong>實習內容：</strong>${c.internship_content}</p>
-        <p><strong>實習地點：</strong>${c.internship_location}</p>
-        <p><strong>實習期間：</strong>${c.internship_period}</p>
-        <p><strong>實習時段：</strong>${c.internship_time}</p>
-        <p><strong>實習人數：</strong>${c.internship_quota}</p>
-        <p><strong>備註：</strong>${c.remark}</p>`;
+      const content = Object.entries(c).map(([key, val]) => `<p><strong>${key}：</strong>${val}</p>`).join("");
       document.getElementById("previewContent").innerHTML = content;
       new bootstrap.Modal(document.getElementById("previewModal")).show();
     }
 
-    // 刪除單筆資料
+    // 🟥 刪除單筆資料
     function deleteRow(idx) {
-      if (!confirm("確定要刪除此筆公司資料？")) return;
+      if (!confirm("確定刪除此筆公司資料？")) return;
       parsedData.splice(idx, 1);
       renderTable([["公司名稱", "公司簡介", "公司地址", "聯絡人姓名", "聯絡人職稱", "聯絡電話", "聯絡信箱",
         "實習職位", "實習內容", "實習地點", "實習期間", "實習時段", "實習人數", "備註"],
       ...parsedData.map(c => Object.values(c))]);
     }
 
-    // 下載範本
+    // 🧾 下載範本
     function downloadTemplate() {
       const headers = [["公司名稱", "公司簡介", "公司地址", "聯絡人姓名", "聯絡人職稱", "聯絡電話", "聯絡信箱",
         "實習職位", "實習內容", "實習地點", "實習期間", "實習時段", "實習人數", "備註"]];
       const ws = XLSX.utils.aoa_to_sheet(headers);
       const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, "公司名稱");
+      XLSX.utils.book_append_sheet(wb, ws, "公司上傳範本");
       XLSX.writeFile(wb, "公司上傳範本.xlsx");
     }
 
-    // 送出資料到後端
+    // 🚀 送出資料到後端
     function submitData() {
       if (parsedData.length === 0) return alert("目前沒有資料可送出！");
-
       fetch("/api/upload_company_bulk", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -258,11 +258,11 @@
         .then(res => res.json())
         .then(data => {
           if (data.success) {
-            alert(data.message);  // 顯示後端回傳的訊息
-            // 不清空 parsedData，資料仍保留
-            // 不清空表格內容，讓資料持續顯示
-            // 也可以選擇禁用送出按鈕避免重複送出：
-            // document.getElementById("submitBtn").disabled = true;
+            alert("上傳成功！");
+            loadUploadedCompanies();
+            parsedData = [];
+            previewTableBody.innerHTML = `<tr><td colspan="8" class="text-center text-muted">尚未上傳檔案</td></tr>`;
+            document.getElementById("submitBtn").style.display = "none";
           } else {
             alert("上傳失敗：" + data.message);
           }
@@ -273,15 +273,61 @@
         });
     }
 
-    // 下載單筆公司資料為 Excel
-    function downloadCompany(idx) {
-      const c = parsedData[idx];
-      const ws = XLSX.utils.json_to_sheet([c]);
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, "公司資料");
-      XLSX.writeFile(wb, `${c.company_name || '公司資料'}_資料.xlsx`);
+    // 🟢 從後端撈出已上傳紀錄
+    function loadUploadedCompanies() {
+      fetch("/api/get_my_companies")
+        .then(res => res.json())
+        .then(data => {
+          if (!data.success || data.companies.length === 0) {
+            uploadedTableBody.innerHTML = `<tr><td colspan="5" class="text-center text-muted">目前沒有上傳紀錄</td></tr>`;
+            return;
+          }
+
+          uploadedTableBody.innerHTML = "";
+          data.companies.forEach((c, idx) => {
+            const statusText =
+              c.status === "pending" ? "審查中" :
+              c.status === "approved" ? "已通過" :
+              c.status === "rejected" ? "已拒絕" :
+              c.status;
+
+            uploadedTableBody.innerHTML += `
+              <tr>
+                <td>${idx + 1}</td>
+                <td>${c.original_filename || c.company_name || "未命名"}</td>
+                <td>${c.upload_time || "-"}</td>
+                <td>${statusText}</td>
+                <td>
+                  <button class="btn btn-sm btn-outline-primary me-1" onclick="downloadFromServer(${c.id})">下載</button>
+                  <button class="btn btn-sm btn-outline-danger" onclick="deleteFromServer(${c.id})">刪除</button>
+                </td>
+              </tr>`;
+          });
+        })
+        .catch(err => {
+          console.error("載入公司資料失敗：", err);
+          uploadedTableBody.innerHTML = `<tr><td colspan="5" class="text-center text-danger">載入失敗</td></tr>`;
+        });
     }
-    
+
+    // 🧩 從伺服器下載
+    function downloadFromServer(id) {
+      window.location.href = `/api/download_company/${id}`;
+    }
+
+    // ❌ 刪除伺服器資料
+    function deleteFromServer(id) {
+      if (!confirm("確定刪除此公司？")) return;
+      fetch(`/api/delete_company?company_id=${id}`, { method: "DELETE" })
+        .then(res => res.json())
+        .then(data => {
+          alert(data.message);
+          loadUploadedCompanies();
+        });
+    }
+
+    // 頁面初始化
+    document.addEventListener("DOMContentLoaded", loadUploadedCompanies);
   </script>
 </body>
 
