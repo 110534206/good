@@ -2,170 +2,253 @@
 <html lang="zh-Hant">
 
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>批次上傳公司資料</title>
   <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
   <style>
     body {
+      background-color: #ffffff;
       font-family: "Noto Sans TC", sans-serif;
-      margin: 20px;
-      background: #f8f9fa;
+      margin: 30px;
     }
 
-    h1 {
+    h2 {
       text-align: center;
       color: #0066cc;
+      margin-bottom: 20px;
     }
 
-    .container {
-      max-width: 900px;
-      margin: auto;
-      background: #fff;
-      padding: 20px;
+    .card {
+      box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
       border-radius: 10px;
-      box-shadow: 0 3px 6px rgba(0, 0, 0, 0.1);
     }
 
-    .btn {
-      display: inline-block;
-      padding: 10px 16px;
-      margin: 5px;
-      border: none;
-      border-radius: 6px;
+    #fileDrop {
+      border: 2px dashed #ccc;
+      border-radius: 8px;
+      padding: 30px;
+      text-align: center;
+      color: #888;
       cursor: pointer;
-      font-size: 1rem;
-      color: #fff;
-      background: #0066cc;
+      transition: border-color 0.3s;
     }
 
-    .btn:hover {
-      background: #0259b0;
-    }
-
-    .table-container {
-      overflow-x: auto;
-      margin-top: 20px;
+    #fileDrop.dragover {
+      border-color: #0d6efd;
+      color: #0d6efd;
     }
 
     table {
-      width: 100%;
-      border-collapse: collapse;
+      text-align: center;
+      vertical-align: middle;
     }
 
-    th,
-    td {
-      border: 1px solid #ddd;
-      padding: 8px 12px;
-      text-align: left;
-    }
-
-    th {
-      background: #0066cc;
-      color: #fff;
-    }
-
-    tr:nth-child(even) {
-      background: #f9f9f9;
+    .modal-body {
+      white-space: pre-wrap;
     }
   </style>
 </head>
 
 <body>
-  <div class="container">
-    <h1>批次上傳公司資料</h1>
+  <div class="container my-4">
+    <h2>批次上傳公司資料</h2>
 
-    <!-- 下載範例 -->
-    <button class="btn" onclick="downloadTemplate()">下載範例檔案</button>
+    <!-- 上傳區塊 -->
+    <div class="card p-4 mb-4">
+      <div class="d-flex justify-content-between align-items-center mb-3">
+        <button class="btn btn-outline-primary" onclick="downloadTemplate()">下載範本</button>
+        <button type="button" class="btn btn-success" id="submitBtn" style="display:none;"
+          onclick="submitData()">送出資料</button>
+      </div>
 
-    <!-- 上傳檔案 -->
-    <form id="uploadForm">
-      <input type="file" id="fileInput" accept=".xlsx,.xls,.csv" required>
-      <button class="btn" type="submit">讀取檔案</button>
-    </form>
+      <div id="fileDrop">拖曳檔案至此或點擊選擇（限 Excel / CSV）</div>
+      <input type="file" id="fileInput" accept=".xlsx,.xls,.csv" hidden />
 
-    <!-- 顯示預覽表格 -->
-    <div class="table-container">
-      <table id="previewTable"></table>
+      <div class="mt-3 d-flex justify-content-between align-items-center">
+        <span id="fileInfo" class="text-muted">尚未選擇檔案</span>
+      </div>
     </div>
 
-    <!-- 送到後端 -->
-    <button id="submitBtn" class="btn" style="display:none;" onclick="submitData()">送出到後端</button>
+    <!-- 表格區塊 -->
+    <div class="card p-3">
+      <table class="table table-hover align-middle">
+        <thead class="table-light">
+          <tr>
+            <th>#</th>
+            <th>公司名稱</th>
+            <th>聯絡人</th>
+            <th>實習職位</th>
+            <th>實習地點</th>
+            <th>實習期間</th>
+            <th>實習人數</th>
+            <th>審查狀態</th>
+            <th>操作</th>
+          </tr>
+        </thead>
+        <tbody id="companyTableBody">
+          <tr>
+            <td colspan="9" class="text-center text-muted">尚未上傳資料</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
   </div>
 
+  <!-- 預覽 Modal -->
+  <div class="modal fade" id="previewModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">公司資料預覽</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body" id="previewContent">
+          <!-- 公司詳細資料 -->
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
   <script>
-    const table = document.getElementById("previewTable");
+    const fileDrop = document.getElementById("fileDrop");
+    const fileInput = document.getElementById("fileInput");
+    const tableBody = document.getElementById("companyTableBody");
+    const fileInfo = document.getElementById("fileInfo");
     let parsedData = [];
 
-    // 下載範例 Excel
-    function downloadTemplate() {
-      const headers = [["公司名稱", "公司簡介", "地點", "聯絡人", "聯絡信箱", "聯絡電話"]];
-      const ws = XLSX.utils.aoa_to_sheet(headers);
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, "範例");
-      XLSX.writeFile(wb, "公司上傳範例.xlsx");
-    }
-
-    // 讀取上傳檔案
-    document.getElementById("uploadForm").addEventListener("submit", function (e) {
+    // 拖曳或點擊上傳
+    fileDrop.addEventListener("click", () => fileInput.click());
+    fileDrop.addEventListener("dragover", e => {
       e.preventDefault();
-      const file = document.getElementById("fileInput").files[0];
-      if (!file) return alert("請先選擇檔案！");
+      fileDrop.classList.add("dragover");
+    });
+    fileDrop.addEventListener("dragleave", () => fileDrop.classList.remove("dragover"));
+    fileDrop.addEventListener("drop", e => {
+      e.preventDefault();
+      fileDrop.classList.remove("dragover");
+      fileInput.files = e.dataTransfer.files;
+      handleFile();
+    });
+    fileInput.addEventListener("change", handleFile);
 
+    function handleFile() {
+      const file = fileInput.files[0];
+      if (!file) return;
+      fileInfo.textContent = `${file.name}`;
       const reader = new FileReader();
-      reader.onload = function (event) {
-        const data = new Uint8Array(event.target.result);
+      reader.onload = e => {
+        const data = new Uint8Array(e.target.result);
         const workbook = XLSX.read(data, { type: "array" });
-        const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-        const jsonData = XLSX.utils.sheet_to_json(firstSheet, { header: 1 });
-
-        // 清空表格
-        table.innerHTML = "";
-        parsedData = [];
-
-        if (jsonData.length > 1) {
-          // 表頭
-          const headerRow = document.createElement("tr");
-          jsonData[0].forEach(h => {
-            const th = document.createElement("th");
-            th.textContent = h;
-            headerRow.appendChild(th);
-          });
-          table.appendChild(headerRow);
-
-          // 內容
-          for (let i = 1; i < jsonData.length; i++) {
-            if (jsonData[i].length === 0) continue;
-            const row = document.createElement("tr");
-            jsonData[i].forEach(cell => {
-              const td = document.createElement("td");
-              td.textContent = cell ?? "";
-              row.appendChild(td);
-            });
-            table.appendChild(row);
-
-            // 存成 JSON 給後端用
-            parsedData.push({
-              company_name: jsonData[i][0] || "",
-              description: jsonData[i][1] || "",
-              location: jsonData[i][2] || "",
-              contact_person: jsonData[i][3] || "",
-              contact_email: jsonData[i][4] || "",
-              contact_phone: jsonData[i][5] || ""
-            });
-          }
-
-          document.getElementById("submitBtn").style.display = "inline-block";
-        }
+        const sheet = workbook.Sheets[workbook.SheetNames[0]];
+        const jsonData = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+        renderTable(jsonData);
       };
       reader.readAsArrayBuffer(file);
-    });
+    }
 
-    // 送出到後端
-    function submitData() {
-      if (parsedData.length === 0) {
-        return alert("沒有資料可以送出！");
+    function renderTable(jsonData) {
+      tableBody.innerHTML = "";
+      parsedData = [];
+
+      if (jsonData.length <= 1) {
+        tableBody.innerHTML = `<tr><td colspan="8" class="text-center text-muted">檔案內容為空</td></tr>`;
+        return;
       }
+
+      for (let i = 1; i < jsonData.length; i++) {
+        const r = jsonData[i];
+        if (r.length === 0) continue;
+        const c = {
+          company_name: r[0] || "",
+          company_intro: r[1] || "",
+          company_address: r[2] || "",
+          contact_name: r[3] || "",
+          contact_title: r[4] || "",
+          contact_phone: r[5] || "",
+          contact_email: r[6] || "",
+          internship_unit: r[7] || "",
+          internship_content: r[8] || "",
+          internship_location: r[9] || "",
+          internship_period: r[10] || "",
+          internship_time: r[11] || "",
+          internship_quota: r[12] || "",
+          remark: r[13] || "",
+          status: "審查中"
+        };
+
+        parsedData.push(c);
+      }
+
+      parsedData.forEach((c, idx) => {
+        tableBody.innerHTML += `
+  <tr>
+    <td>${idx + 1}</td>
+    <td>${c.company_name}</td>
+    <td>${c.contact_name}</td>
+    <td>${c.internship_unit}</td>
+    <td>${c.internship_location}</td>
+    <td>${c.internship_period}</td>
+    <td>${c.internship_quota}</td>
+    <td>${c.status}</td> <!-- ✅ 新增審查狀態欄位 -->
+    <td>
+      <button class="btn btn-sm btn-outline-info me-1" onclick="previewCompany(${idx})">預覽</button>
+      <button class="btn btn-sm btn-outline-primary me-1" onclick="downloadCompany(${idx})">下載</button>
+      <button class="btn btn-sm btn-outline-danger" onclick="deleteRow(${idx})">刪除</button>
+    </td>
+  </tr>`;
+      });
+
+      document.getElementById("submitBtn").style.display = "inline-block";
+    }
+
+    // 預覽公司資料
+    function previewCompany(idx) {
+      const c = parsedData[idx];
+      const content = `
+        <p><strong>公司名稱：</strong>${c.company_name}</p>
+        <p><strong>公司簡介：</strong>${c.company_intro}</p>
+        <p><strong>公司地址：</strong>${c.company_address}</p>
+        <p><strong>聯絡人姓名：</strong>${c.contact_name}</p>
+        <p><strong>聯絡人職稱：</strong>${c.contact_title}</p>
+        <p><strong>聯絡電話：</strong>${c.contact_phone}</p>
+        <p><strong>聯絡信箱：</strong>${c.contact_email}</p>
+        <p><strong>實習職位：</strong>${c.internship_unit}</p>
+        <p><strong>實習內容：</strong>${c.internship_content}</p>
+        <p><strong>實習地點：</strong>${c.internship_location}</p>
+        <p><strong>實習期間：</strong>${c.internship_period}</p>
+        <p><strong>實習時段：</strong>${c.internship_time}</p>
+        <p><strong>實習人數：</strong>${c.internship_quota}</p>
+        <p><strong>備註：</strong>${c.remark}</p>`;
+      document.getElementById("previewContent").innerHTML = content;
+      new bootstrap.Modal(document.getElementById("previewModal")).show();
+    }
+
+    // 刪除單筆資料
+    function deleteRow(idx) {
+      if (!confirm("確定要刪除此筆公司資料？")) return;
+      parsedData.splice(idx, 1);
+      renderTable([["公司名稱", "公司簡介", "公司地址", "聯絡人姓名", "聯絡人職稱", "聯絡電話", "聯絡信箱",
+        "實習職位", "實習內容", "實習地點", "實習期間", "實習時段", "實習人數", "備註"],
+      ...parsedData.map(c => Object.values(c))]);
+    }
+
+    // 下載範本
+    function downloadTemplate() {
+      const headers = [["公司名稱", "公司簡介", "公司地址", "聯絡人姓名", "聯絡人職稱", "聯絡電話", "聯絡信箱",
+        "實習職位", "實習內容", "實習地點", "實習期間", "實習時段", "實習人數", "備註"]];
+      const ws = XLSX.utils.aoa_to_sheet(headers);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "公司名稱");
+      XLSX.writeFile(wb, "公司上傳範本.xlsx");
+    }
+
+    // 送出資料到後端
+    function submitData() {
+      if (parsedData.length === 0) return alert("目前沒有資料可送出！");
 
       fetch("/api/upload_company_bulk", {
         method: "POST",
@@ -175,16 +258,30 @@
         .then(res => res.json())
         .then(data => {
           if (data.success) {
-            alert("上傳成功！已送出待審核");
+            alert(data.message);  // 顯示後端回傳的訊息
+            // 不清空 parsedData，資料仍保留
+            // 不清空表格內容，讓資料持續顯示
+            // 也可以選擇禁用送出按鈕避免重複送出：
+            // document.getElementById("submitBtn").disabled = true;
           } else {
             alert("上傳失敗：" + data.message);
           }
         })
         .catch(err => {
           console.error(err);
-          alert("伺服器錯誤，請稍後再試");
+          alert("伺服器錯誤");
         });
     }
+
+    // 下載單筆公司資料為 Excel
+    function downloadCompany(idx) {
+      const c = parsedData[idx];
+      const ws = XLSX.utils.json_to_sheet([c]);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "公司資料");
+      XLSX.writeFile(wb, `${c.company_name || '公司資料'}_資料.xlsx`);
+    }
+
   </script>
 </body>
 
