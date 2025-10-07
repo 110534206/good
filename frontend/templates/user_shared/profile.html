@@ -1,473 +1,297 @@
 <!DOCTYPE html>
-<html lang="zh-Hant">
+<html lang="zh-TW">
+
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>智慧實習平台 | 學生主頁</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>個人資料管理</title>
   <style>
-    * {
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0;
-    }
-
     body {
-      font-family: 'Inter', sans-serif;
-      background: #ffffff;
-      color: #333;
-      overflow-x: hidden;
+      font-family: Arial, sans-serif;
+      background: #f0f4f8;
+      padding: 20px;
     }
 
     .container {
-      width: 100%;
-      max-width: 1200px;
-      margin: 0 auto;
-      padding: 0 0.5rem;
+      max-width: 400px;
+      margin: auto;
+      background: #fff;
+      padding: 20px;
+      border-radius: 12px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
     }
 
-    /* 頂端列 */
-    .top-bar {
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 60px;
-      background-color: #fff;
-      z-index: 1100;
-      display: flex;
-      align-items: center;
+    h2 {
+      text-align: center;
+      margin-bottom: 20px;
     }
 
-    .top-bar>.container {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 0 0.5rem;
-      height: 100%;
-      gap: 30px;
-    }
-
-    .top-bar-left #menu-btn {
-      width: 30px;
-      height: 22px;
-      cursor: pointer;
-      display: flex;
-      flex-direction: column;
-      justify-content: space-between;
-    }
-
-    .top-bar-left #menu-btn span {
-      height: 4px;
-      background-color: #333;
-      border-radius: 2px;
-    }
-
-    .top-bar-right {
-      display: flex;
-      align-items: center;
-      gap: 10px;
+    label {
       font-weight: bold;
+      display: block;
+      margin-top: 15px;
     }
 
-    .top-bar-right .btn-link {
-      color: #0066cc;
-      background-color: transparent;
-      border: 1.5px solid #0066cc;
-      padding: 0.3rem 0.7rem;
+    input,
+    select {
+      width: 100%;
+      padding: 8px;
+      margin-top: 5px;
       border-radius: 6px;
-      text-decoration: none;
-      transition: background-color 0.3s ease, color 0.3s ease;
-      font-size: 0.9rem;
-      cursor: pointer;
+      border: 1px solid #ccc;
     }
 
-    .top-bar-right .btn-link:hover {
-      background-color: #0066cc;
-      color: white;
+    input[readonly] {
+      background: #eee;
     }
 
-    .top-bar-right #login-avatar {
-      width: 60px;
-      height: 60px;
+    .avatar-preview {
+      width: 100px;
+      height: 100px;
       border-radius: 50%;
       object-fit: cover;
-      cursor: pointer;
-      margin-top: 6px;
-    }
-
-    /* Hero 區塊 */
-    header.hero {
-      position: relative;
-      width: 100%;
-      aspect-ratio: 3 / 1;
-      background-image: url('/static/images/title.png');
-      background-size: cover;
-      background-repeat: no-repeat;
-      background-position: center;
-      margin-top: 80px;
-      margin-bottom: 2rem;
-      border-radius: 0;
-      color: white;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
-
-    main {
-      background-color: #fff;
-      padding: 2rem;
-      margin-bottom: 3rem;
-    }
-
-    .page-title {
-      text-align: center;
-      max-width: 1200px;
-      margin: 0 auto 3rem auto;
-    }
-
-    .card-container {
-      max-width: 1200px;
-      margin: 0 auto;
-      display: grid;
-      grid-template-columns: repeat(2, 1fr);
-      gap: 2rem;
-      padding: 0;
-    }
-
-    .card {
-      border: 2px solid #0066cc;
-      background: #fff;
-      border-radius: 12px;
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-      padding: 2rem;
-      text-align: center;
-      transition: transform 0.3s ease;
-    }
-
-    .card:hover {
-      transform: translateY(-5px);
-    }
-
-    .card h3 {
-      margin-bottom: 0.5rem;
-      color: #0066cc;
-    }
-
-    .card p {
-      font-size: 0.95rem;
-      color: #666;
-    }
-
-    .card a {
-      display: inline-block;
-      margin-top: 1rem;
-      padding: 0.6rem 2rem;
-      background-color: #0066cc;
-      color: white;
-      border-radius: 8px;
-      min-width: 120px;
-      text-decoration: none;
-      transition: background-color 0.3s ease;
-    }
-
-    .card a:hover {
-      background-color: #024689;
-    }
-
-    #side-menu {
-      position: fixed;
-      top: 0;
-      left: 0;
-      height: 100vh;
-      width: 320px;
-      max-width: 80vw;
-      background-color: rgba(10, 10, 10, 0.95);
-      backdrop-filter: blur(6px);
-      box-shadow: 3px 0 12px rgb(0 0 0 / 0.7);
-      padding: 2rem 1.5rem;
-      transform: translateX(-100%);
-      transition: transform 0.3s ease-in-out;
-      z-index: 1100;
-      display: flex;
-      flex-direction: column;
-      align-items: flex-start;
-      color: white;
-      user-select: none;
-    }
-
-    #side-menu.open {
-      transform: translateX(0);
-    }
-
-    #close-btn {
-      position: absolute;
-      top: 2rem;
-      right: 1.6rem;
-      font-size: 2.2rem;
-      background: none;
-      border: none;
-      color: white;
-      cursor: pointer;
-      line-height: 1;
-      width: 2.5rem;
-      height: 2.5rem;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
-
-    #side-menu h2 {
-      width: 100%;
-      margin-bottom: 1.5rem;
-      font-weight: 700;
-      font-size: 1.5rem;
-      text-align: left;
-    }
-
-    #side-menu a {
+      border: 1px solid #ccc;
+      margin: 0 auto 10px;
       display: block;
-      width: 100%;
-      padding: 0.5rem 0;
-      font-size: 1.1rem;
-      color: #ddd;
-      text-decoration: none;
-      border-radius: 4px;
-      transition: background-color 0.2s ease;
     }
 
-    #side-menu a:hover {
-      background-color: rgba(255, 255, 255, 0.15);
-      color: white;
+    .page {
+      display: none;
     }
 
-    /* 公告輪播樣式 */
-    #announcement-carousel {
-      max-width: 1200px;
-      margin: 0 auto 2rem auto;
-      position: relative;
-      padding: 1rem 3rem;
-      background-color: #f0f8ff;
-      font-weight: 600;
-      font-size: 1.2rem;
+    .page.active {
+      display: block;
+    }
+
+    .buttons {
+      margin-top: 20px;
       display: flex;
-      align-items: center;
-      color: #004080;
-      justify-content: center;
-      min-height: 60px;
-      user-select: none;
+      justify-content: space-between;
     }
 
-    #announcement-carousel button {
-      position: absolute;
-      top: 50%;
-      transform: translateY(-50%);
-      background: none;
+    button {
+      padding: 10px 20px;
       border: none;
-      font-size: 2rem;
-      font-weight: bold;
-      color: #0066cc;
-      cursor: pointer;
-      user-select: none;
-      padding: 0;
-      width: 40px;
-      height: 40px;
-      line-height: 40px;
-      text-align: center;
-      border-radius: 50%;
-      transition: background-color 0.3s ease;
-    }
-
-    #announcement-carousel button:hover {
-      background-color: #0066cc;
+      border-radius: 6px;
+      background: #007bff;
       color: white;
+      font-size: 16px;
+      cursor: pointer;
     }
 
-    #announcement-prev {
-      left: 10px;
-    }
-
-    #announcement-next {
-      right: 10px;
+    button:disabled {
+      background: #ccc;
+      cursor: not-allowed;
     }
   </style>
 </head>
 
 <body>
-  <!-- 頂部欄 -->
-  <div class="top-bar">
-    <div class="container">
-      <div class="top-bar-left">
-        <div id="menu-btn" title="選單" role="button" tabindex="0">
-          <span></span><span></span><span></span>
-        </div>
-      </div>
-      <div class="top-bar-right">
-        <a href="/profile">
-          <img src="{{ url_for('static', filename='images/avatar.png') }}" alt="頭像" id="login-avatar" />
-        </a>
-        <div class="dropdown" style="position: relative;">
-          <button id="accountDropdownBtn" class="btn-link" aria-expanded="false">帳號 ▾</button>
-          <div id="accountDropdownMenu" class="dropdown-menu" style="position:absolute; right:0; top:120%; background:#fff; border:1px solid #ccc; border-radius:8px; padding:6px; min-width:180px; display:none; box-shadow:0 4px 12px rgba(0,0,0,.12);">
-            <a href="/profile" class="btn-link" style="display:block; border:none; margin:4px 0;">個人資料</a>
-            <a href="/login" class="btn-link" style="display:block; border:none; margin:4px 0;">登出</a>
-          </div>
-        </div>
-      </div>
+  <div class="container">
+    <h2>個人資料</h2>
+
+    <!-- 頭像預覽 -->
+    <img id="avatarPreview" class="avatar-preview" src="https://via.placeholder.com/100?text=頭像" alt="頭像預覽" />
+
+    <!-- 頁面1 -->
+    <div id="page1" class="page active">
+      <label for="avatarUpload">上傳頭像</label>
+      <input type="file" id="avatarUpload" accept="image/*" />
+
+      <label for="identity">身分</label>
+      <input id="identity" type="text" readonly />
+
+      <label for="combinedClass">班級</label>
+      <input id="combinedClass" type="text" readonly />
+
+      <label for="name">姓名</label>
+      <input id="name" type="text" />
+
+      <label for="studentId">學號</label>
+      <input id="studentId" type="text" readonly />
+
+    </div>
+
+    <!-- 頁面2 -->
+    <div id="page2" class="page">
+      <label for="email">電子郵件</label>
+      <input id="email" type="email" readonly />
+
+      <label for="oldPassword">舊密碼</label>
+      <input type="password" id="oldPassword" />
+
+      <label for="newPassword">新密碼</label>
+      <input type="password" id="newPassword" />
+
+      <label for="confirmPassword">確認新密碼</label>
+      <input type="password" id="confirmPassword" />
+    </div>
+
+    <div class="buttons">
+      <button id="prevBtn" disabled>上一頁</button>
+      <button id="nextBtn">下一頁</button>
     </div>
   </div>
 
-  <!-- Hero 區塊 -->
-  <div class="container">
-    <header class="hero"></header>
-
-    <!-- 公告輪播 -->
-    <div id="announcement-carousel" role="region" aria-live="polite" aria-label="最新公告">
-      <button id="announcement-prev" aria-label="上一則公告">&#8592;</button>
-      <div id="announcement-content"></div>
-      <button id="announcement-next" aria-label="下一則公告">&#8594;</button>
-    </div>
-  </div>
-
-  <!-- 主內容 -->
-  <div class="container">
-    <main>
-      <h2 class="page-title">請選擇你要使用的功能</h2>
-      <section class="card-container">
-        <div class="card">
-          <h3>上傳履歷</h3>
-          <p>將你的履歷檔案快速上傳至平台。</p>
-          <a href="/upload_resume">開始上傳</a>
-        </div>
-        <div class="card">
-          <h3>AI修改履歷</h3>
-          <p>讓AI幫你修飾文字，提升專業度。</p>
-          <a href="/ai_edit_resume">啟用AI修飾</a>
-        </div>
-        <div class="card">
-          <h3>填寫志願序</h3>
-          <p>選擇你心儀的實習廠商與排序。</p>
-          <a href="/fill_preferences">填寫志願</a>
-        </div>
-        <div class="card">
-          <h3>通知</h3>
-          <p>接收來自老師與平台的最新消息。</p>
-          <a href="/notifications">查看通知</a>
-        </div>
-      </section>
-    </main>
-  </div>
-
-  <!-- 側邊選單 -->
-  <nav id="side-menu" aria-hidden="true" role="navigation" aria-label="功能選單">
-    <button id="close-btn" aria-label="關閉功能選單">×</button>
-    <h2>功能選單</h2>
-    <a href="/student_home">首頁</a>
-    <a href="/profile">個人資料</a>
-    <a href="/upload_resume">上傳履歷</a>
-    <a href="/ai_edit_resume">AI修改履歷</a>
-    <a href="/fill_preferences">填寫志願序</a>
-    <a href="/notifications">通知</a>
-  </nav>
-
-  <!-- JS 控制 -->
   <script>
-    // 側邊選單開關
-    document.getElementById('menu-btn').addEventListener('click', () => {
-      document.getElementById('side-menu').classList.add('open');
-    });
+    document.addEventListener('DOMContentLoaded', () => {
+      const pages = document.querySelectorAll('.page');
+      let currentPage = 0;
 
-    document.getElementById('close-btn').addEventListener('click', () => {
-      document.getElementById('side-menu').classList.remove('open');
-    });
+      const prevBtn = document.getElementById('prevBtn');
+      const nextBtn = document.getElementById('nextBtn');
 
-    // 公告輪播內容
-    let notification = [];
-    let currentAnnouncementIndex = 0;
-    const announcementContent = document.getElementById('announcement-content');
-    const prevBtn = document.getElementById('announcement-prev');
-    const nextBtn = document.getElementById('announcement-next');
+      // 用來儲存 class_id 後續更新用
+      window.classId = null;
 
-    function showAnnouncement(index) {
-      if (notification.length > 0) {
-        announcementContent.textContent = notification[index];
-      } else {
-        announcementContent.textContent = "目前沒有公告";
+      function showPage(index) {
+        pages.forEach((page, i) => page.classList.toggle('active', i === index));
+        prevBtn.disabled = index === 0;
+        nextBtn.textContent = index === pages.length - 1 ? '完成' : '下一頁';
       }
-    }
 
-    // 取得公告資料
-    fetch("/api/notification")
-      .then(response => response.json())
-      .then(data => {
-        notification = data;
-        currentAnnouncementIndex = 0;
-        showAnnouncement(currentAnnouncementIndex);
-      })
-      .catch(err => {
-        console.error("公告載入失敗:", err);
-        announcementContent.textContent = "公告載入失敗";
+      // 載入用戶資料
+      fetch('/api/profile')
+        .then(res => {
+          if (!res.ok) throw new Error('無法取得用戶資料');
+          return res.json();
+        })
+        .then(data => {
+          if (!data.success) throw new Error(data.message || '取得資料失敗');
+          const user = data.user;
+
+          // 頭像 - 假設後端有avatar_url欄位，沒的話用placeholder
+          document.getElementById('avatarPreview').src = user.avatar_url || 'https://via.placeholder.com/100?text=頭像';
+
+          // 身分轉換 (和你後端 role_map 對應)
+          const roleMap = {
+            "student": "學生",
+            "teacher": "教師",
+            "director": "主任",
+            "ta": "科助",
+            "admin": "管理員"
+          };
+          document.getElementById('identity').value = roleMap[user.role] || '';
+
+          // 班級顯示 & 存 class_id
+          if (user.classes && user.classes.length > 0) {
+            document.getElementById('combinedClass').value = user.classes
+              .map(c => (c.department.replace("管科", "") + c.name))
+              .join("、");
+          } else {
+            document.getElementById('combinedClass').value = user.class_display_name || '';
+          }
+          window.classId = user.class_id || null;
+
+          document.getElementById('name').value = user.name || '';
+          document.getElementById('studentId').value = user.username || '';
+          document.getElementById('email').value = user.email || '';
+        })
+        .catch(err => alert(err.message));
+
+      prevBtn.addEventListener('click', () => {
+        if (currentPage > 0) {
+          currentPage--;
+          showPage(currentPage);
+        }
       });
 
-    // 左右切換
-    prevBtn.addEventListener('click', () => {
-      if (notification.length > 0) {
-        currentAnnouncementIndex = (currentAnnouncementIndex - 1 + notification.length) % notification.length;
-        showAnnouncement(currentAnnouncementIndex);
-      }
-    });
+      nextBtn.addEventListener('click', () => {
+        if (currentPage < pages.length - 1) {
+          currentPage++;
+          showPage(currentPage);
+        } else {
+          // 完成按鈕，送出資料
 
-    nextBtn.addEventListener('click', () => {
-      if (notification.length > 0) {
-        currentAnnouncementIndex = (currentAnnouncementIndex + 1) % notification.length;
-        showAnnouncement(currentAnnouncementIndex);
-      }
-    });
+          const avatarFile = document.getElementById('avatarUpload').files[0];
 
-    // 自動輪播
-    setInterval(() => {
-      if (notification.length > 0) {
-        currentAnnouncementIndex = (currentAnnouncementIndex + 1) % notification.length;
-        showAnnouncement(currentAnnouncementIndex);
-      }
-    }, 5000);
+          // 上傳頭像（如果有）
+          function uploadAvatar() {
+            if (!avatarFile) return Promise.resolve(null);
 
-    // 載入用戶頭像
-    function loadUserAvatar() {
-      fetch('/api/profile')
-        .then(response => response.json())
-        .then(data => {
-          if (data.success && data.user && data.user.avatar_url) {
-            document.getElementById('login-avatar').src = data.user.avatar_url;
+            const formData = new FormData();
+            formData.append('avatar', avatarFile);
+
+            return fetch('/api/upload_avatar', {
+              method: 'POST',
+              body: formData,
+            })
+              .then(res => res.json())
+              .then(data => {
+                if (!data.success) throw new Error(data.message || '頭像上傳失敗');
+                return data.avatar_url; // 回傳頭像URL
+              });
           }
-        })
-        .catch(error => {
-          console.log('載入頭像失敗:', error);
-        });
-    }
 
-    // 帳號下拉
-    document.addEventListener("DOMContentLoaded", function () {
-      // 載入用戶頭像
-      loadUserAvatar();
-      
-      const dropdownBtn = document.getElementById("accountDropdownBtn");
-      const dropdownMenu = document.getElementById("accountDropdownMenu");
+          uploadAvatar()
+            .then(avatarUrl => {
+              // 更新個人資料
+              const payload = {
+                username: document.getElementById('studentId').value,
+                role: document.getElementById('identity').value,
+                name: document.getElementById('name').value,
+                class_id: window.classId,
+              };
 
-      if (dropdownBtn && dropdownMenu) {
-        dropdownBtn.addEventListener("click", function (e) {
-          e.stopPropagation();
-          const isExpanded = dropdownBtn.getAttribute("aria-expanded") === "true";
-          dropdownBtn.setAttribute("aria-expanded", !isExpanded);
-          dropdownMenu.style.display = isExpanded ? "none" : "block";
-        });
+              return fetch('/api/saveProfile', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+              })
+                .then(res => res.json())
+                .then(data => {
+                  if (!data.success) throw new Error(data.message || '更新個人資料失敗');
+                  return avatarUrl;
+                });
+            })
+            .then(() => {
+              // 變更密碼（如果有填）
+              const oldPwd = document.getElementById('oldPassword').value.trim();
+              const newPwd = document.getElementById('newPassword').value.trim();
+              const confirmPwd = document.getElementById('confirmPassword').value.trim();
 
-        // 點擊外部時關閉選單
-        document.addEventListener("click", function () {
-          dropdownBtn.setAttribute("aria-expanded", "false");
-          dropdownMenu.style.display = "none";
-        });
-      }
+              if (oldPwd || newPwd || confirmPwd) {
+                if (newPwd !== confirmPwd) {
+                  alert('新密碼與確認新密碼不符！');
+                  throw new Error('密碼確認失敗');
+                }
+                return fetch('/api/change_password', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ old_password: oldPwd, new_password: newPwd }),
+                })
+                  .then(res => res.json())
+                  .then(data => {
+                    if (!data.success) throw new Error(data.message || '變更密碼失敗');
+                    alert('資料及密碼更新成功！');
+                    // 跳轉到學生首頁
+                    window.location.href = '/student_home';
+                  });
+              } else {
+                alert('資料更新成功！');
+                // 跳轉到學生首頁
+                window.location.href = '/student_home';
+              }
+            })
+            .catch(err => alert(err.message));
+        }
+      });
+
+      // 頭像預覽功能
+      document.getElementById('avatarUpload').addEventListener('change', e => {
+        const file = e.target.files[0];
+        if (file) {
+          const reader = new FileReader();
+          reader.onload = event => {
+            document.getElementById('avatarPreview').src = event.target.result;
+          };
+          reader.readAsDataURL(file);
+        }
+      });
+
+      showPage(currentPage);
     });
   </script>
 </body>
+
 </html>
