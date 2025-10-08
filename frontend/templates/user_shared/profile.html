@@ -269,17 +269,27 @@
                   .then(data => {
                     if (!data.success) throw new Error(data.message || '變更密碼失敗');
                     alert('資料及密碼更新成功！');
-                    // 跳轉到學生首頁
-                    window.location.href = '/student_home';
-                     // 跳轉到科助首頁
-                     window.location.href = '/ta_home';
+                    // 根據身分跳轉
+                    const role = document.getElementById('identity').value;
+                    if (role === '學生') {
+                      window.location.href = '/student_home';
+                    } else if (role === '科助') {
+                      window.location.href = '/ta_home';
+                    } else {
+                      window.location.href = '/student_home'; // 預設跳轉
+                    }
                   });
               } else {
                 alert('資料更新成功！');
-                // 跳轉到學生首頁
-                window.location.href = '/student_home';
-                //跳轉到科助首頁
-                window.location.href = '/ta_home';
+                // 根據身分跳轉
+                const role = document.getElementById('identity').value;
+                if (role === '學生') {
+                  window.location.href = '/student_home';
+                } else if (role === '科助') {
+                  window.location.href = '/ta_home';
+                } else {
+                  window.location.href = '/student_home'; // 預設跳轉
+                }
               }
             })
             .catch(err => alert(err.message));
