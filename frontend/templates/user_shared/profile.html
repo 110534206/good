@@ -173,6 +173,13 @@
           };
           document.getElementById('identity').value = roleMap[user.role] || '';
 
+          if (user.role === 'ta') {
+            const classLabel = document.querySelector('label[for="combinedClass"]');
+            const classInput = document.getElementById('combinedClass');
+            if (classLabel) classLabel.style.display = 'none';
+            if (classInput) classInput.style.display = 'none';
+          }
+
           // 班級顯示 & 存 class_id
           if (user.classes && user.classes.length > 0) {
             document.getElementById('combinedClass').value = user.classes
