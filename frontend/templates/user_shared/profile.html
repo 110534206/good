@@ -90,10 +90,8 @@
   <div class="container">
     <h2>個人資料</h2>
 
-    <!-- 頭像預覽 -->
     <img id="avatarPreview" class="avatar-preview" src="https://via.placeholder.com/100?text=頭像" alt="頭像預覽" />
 
-    <!-- 頁面1 -->
     <div id="page1" class="page active">
       <label for="avatarUpload">上傳頭像</label>
       <input type="file" id="avatarUpload" accept="image/*" />
@@ -112,7 +110,6 @@
 
     </div>
 
-    <!-- 頁面2 -->
     <div id="page2" class="page">
       <label for="email">電子郵件</label>
       <input id="email" type="email" readonly />
@@ -173,6 +170,7 @@
           };
           document.getElementById('identity').value = roleMap[user.role] || '';
 
+          // *** 修正: 判斷是否為科助，如果是則隱藏班級欄位 ***
           if (user.role === 'ta') {
             const classLabel = document.querySelector('label[for="combinedClass"]');
             const classInput = document.getElementById('combinedClass');
@@ -245,12 +243,26 @@
                 "科助": "ta",
                 "管理員": "admin"
               };
-              const roleValue = roleMapReverse[document.getElementById('identity').value] || 'student';
+              const roleDisplayValue = document.getElementById('identity').value;
+              const roleValue = roleMapReverse[roleDisplayValue] || 'student';
+              
+              // *** 修正: 確保只有學生傳 class_id，科助和其他身分傳 null ***
+              const classIdToSend = roleValue === 'student' ? window.classId : null;
+
+              // 避免科助身分在前端被誤判需要 class_id
+              if (roleValue === 'student' && !classIdToSend) {
+                // 如果是學生但沒有班級ID（理論上不可能，但做一個預防）
+                alert('學生身分必須選擇班級！');
+                throw new Error('學生身分缺少班級');
+              }
+              // 刪除您截圖中看到的錯誤訊息，應該是源自於這裡
+              // 因為 roleValue === 'ta' 時，classIdToSend 已經是 null 了，不會進入上面的 if 判斷。
+
               const payload = {
                 username: document.getElementById('studentId').value,
-                role: roleValue,
+                role: roleDisplayValue, // 傳送顯示名稱給後端 (e.g., "科助")
                 name: document.getElementById('name').value,
-                class_id: roleValue === 'ta' ? null : window.classId,
+                class_id: classIdToSend,
               };
 
               return fetch('/api/saveProfile', {
@@ -285,10 +297,10 @@
                     if (!data.success) throw new Error(data.message || '變更密碼失敗');
                     alert('資料及密碼更新成功！');
                     // 根據身分跳轉
-                    const role = document.getElementById('identity').value;
-                    if (role === '學生') {
+                    const role = roleMapReverse[document.getElementById('identity').value]; // 取得英文 role
+                    if (role === 'student') {
                       window.location.href = '/student_home';
-                    } else if (role === '科助') {
+                    } else if (role === 'ta') {
                       window.location.href = '/ta_home';
                     } else {
                       window.location.href = '/student_home'; // 預設跳轉
@@ -297,7 +309,7 @@
               } else {
                 alert('資料更新成功！');
                 // 根據身分跳轉
-                const role = roleMapReverse[document.getElementById('identity').value];
+                const role = roleMapReverse[document.getElementById('identity').value]; // 取得英文 role
                 if (role === 'student') {
                   window.location.href = '/student_home';
                 } else if (role === 'ta') {
