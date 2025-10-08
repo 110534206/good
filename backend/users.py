@@ -130,6 +130,7 @@ def save_profile():
         "學生": "student",
         "教師": "teacher",
         "主任": "director",
+        "科助": "ta",
         "管理員": "admin"
     }
     role = role_map.get(role_display)
@@ -145,9 +146,9 @@ def save_profile():
 
         cursor.execute("UPDATE users SET name=%s WHERE username=%s AND role=%s", (name, username, role))
 
-        if role == "student":
+        if role in ["student", "ta"]:
             if not class_id:
-                return jsonify({"success": False, "message": "學生需提供班級"}), 400
+                return jsonify({"success": False, "message": f"{role_display}需提供班級"}), 400
             try:
                 class_id = int(class_id)
             except ValueError:
