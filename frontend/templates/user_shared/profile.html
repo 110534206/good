@@ -141,7 +141,7 @@
       // 用來儲存 class_id 後續更新用
       window.classId = null;
 
-      // *** 修正: 將 roleMap 和 roleMapReverse 放在全域（或這裡的 DOMContentLoaded 作用域） ***
+      // *** 修正: 將 roleMap 和 roleMapReverse 放在 DOMContentLoaded 的頂層作用域 ***
       const roleMap = {
         "student": "學生",
         "teacher": "教師",
@@ -156,6 +156,7 @@
         "科助": "ta",
         "管理員": "admin"
       };
+      // *** 修正結束 ***
 
       function showPage(index) {
         pages.forEach((page, i) => page.classList.toggle('active', i === index));
@@ -179,7 +180,7 @@
           // 身分轉換
           document.getElementById('identity').value = roleMap[user.role] || '';
 
-          // 判斷是否為科助，如果是則隱藏班級欄位 (修正前一個問題的邏輯)
+          // *** 修正: 判斷是否為科助，如果是則隱藏班級欄位 ***
           if (user.role === 'ta') {
             const classLabel = document.querySelector('label[for="combinedClass"]');
             const classInput = document.getElementById('combinedClass');
@@ -257,7 +258,8 @@
 
               const payload = {
                 username: document.getElementById('studentId').value,
-                role: roleDisplayValue, // 傳送顯示名稱給後端 (e.g., "科助")
+                // 後端 /api/saveProfile 預期收到中文 role 顯示值 (role_display)
+                role: roleDisplayValue, 
                 name: document.getElementById('name').value,
                 class_id: classIdToSend,
               };

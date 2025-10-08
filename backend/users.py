@@ -159,7 +159,7 @@ def save_profile():
                 return jsonify({"success": False, "message": "班級不存在"}), 404
 
             cursor.execute("UPDATE users SET class_id=%s WHERE username=%s AND role=%s",
-                           (class_id, username, role)
+                           (username, role)
             )
         else:
             # 非學生身分一律清空 class_id（避免舊資料殘留）
