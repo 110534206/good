@@ -146,7 +146,7 @@ def save_profile():
 
         cursor.execute("UPDATE users SET name=%s WHERE username=%s AND role=%s", (name, username, role))
 
-        if role in ["student", "ta"]:
+        if role in ["student"]:
             if not class_id:
                 return jsonify({"success": False, "message": f"{role_display}需提供班級"}), 400
             try:
