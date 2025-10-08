@@ -64,7 +64,7 @@ def get_profile():
     try:
         cursor.execute("""
             SELECT u.id, u.username, u.email, u.role, u.name,
-                   c.department, c.name AS class_name, u.class_id
+                   c.department, c.name AS class_name, u.class_id, u.avatar_url
             FROM users u
             LEFT JOIN classes c ON u.class_id = c.id
             WHERE u.username = %s AND u.role = %s
@@ -188,12 +188,30 @@ def upload_avatar():
     file = request.files['avatar']
     if file and allowed_file(file.filename):
         filename = secure_filename(f"{session['user_id']}.png")
-        filepath = os.path.join(current_app.config['UPLOAD_FOLDER'], filename)
-
-        os.makedirs(current_app.config['UPLOAD_FOLDER'], exist_ok=True)
+        
+        # 確保 avatars 資料夾存在
+        avatars_folder = os.path.join(current_app.static_folder, "avatars")
+        os.makedirs(avatars_folder, exist_ok=True)
+        
+        # 儲存到 static/avatars 資料夾
+        filepath = os.path.join(avatars_folder, filename)
         file.save(filepath)
 
         avatar_url = url_for('static', filename=f"avatars/{filename}")
+        
+        # 將頭像URL保存到資料庫
+        conn = get_db()
+        cursor = conn.cursor()
+        try:
+            cursor.execute("UPDATE users SET avatar_url = %s WHERE id = %s", (avatar_url, session['user_id']))
+            conn.commit()
+        except Exception as e:
+            print("❌ 更新頭像URL錯誤:", e)
+            return jsonify({"success": False, "message": "更新頭像URL失敗"}), 500
+        finally:
+            cursor.close()
+            conn.close()
+        
         return jsonify({"success": True, "avatar_url": avatar_url})
     else:
         return jsonify({"success": False, "message": "檔案格式錯誤"}), 400
@@ -285,33 +303,4 @@ def ta_home():
 # 實習廠商管理
 @users_bp.route('/manage_companies')
 def manage_companies():
-    return render_template('user_shared/manage_companies.html')
-
-#志願序最終結果 
-@users_bp.route('/final_results')
-def final_results():
-    return render_template('user_shared/final_results.html')
-
-
-# 管理員首頁（後台）
-@users_bp.route('/admin_home')
-def admin_home():
-    return render_template('admin/admin_home.html')
-
-# 個人頁面
-@users_bp.route('/profile')
-def profile():
-    return render_template('user_shared/profile.html')
-
-# 取得 session 資訊
-@users_bp.route('/api/get-session')
-def get_session():
-    if "username" in session and "role" in session:
-        return jsonify({
-            "success": True,
-            "username": session["username"],
-            "role": session["role"]
-        })
-    return jsonify({"success": False}), 401
-
-
+    return rend

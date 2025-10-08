@@ -410,47 +410,4 @@
 
     // 左右切換
     prevBtn.addEventListener('click', () => {
-      if (notification.length > 0) {
-        currentAnnouncementIndex = (currentAnnouncementIndex - 1 + notification.length) % notification.length;
-        showAnnouncement(currentAnnouncementIndex);
-      }
-    });
-
-    nextBtn.addEventListener('click', () => {
-      if (notification.length > 0) {
-        currentAnnouncementIndex = (currentAnnouncementIndex + 1) % notification.length;
-        showAnnouncement(currentAnnouncementIndex);
-      }
-    });
-
-    // 自動輪播
-    setInterval(() => {
-      if (notification.length > 0) {
-        currentAnnouncementIndex = (currentAnnouncementIndex + 1) % notification.length;
-        showAnnouncement(currentAnnouncementIndex);
-      }
-    }, 5000);
-
-    // 帳號下拉
-    document.addEventListener("DOMContentLoaded", function () {
-      const dropdownBtn = document.getElementById("accountDropdownBtn");
-      const dropdownMenu = document.getElementById("accountDropdownMenu");
-
-      if (dropdownBtn && dropdownMenu) {
-        dropdownBtn.addEventListener("click", function (e) {
-          e.stopPropagation();
-          const isExpanded = dropdownBtn.getAttribute("aria-expanded") === "true";
-          dropdownBtn.setAttribute("aria-expanded", !isExpanded);
-          dropdownMenu.style.display = isExpanded ? "none" : "block";
-        });
-
-        // 點擊外部時關閉選單
-        document.addEventListener("click", function () {
-          dropdownBtn.setAttribute("aria-expanded", "false");
-          dropdownMenu.style.display = "none";
-        });
-      }
-    });
-  </script>
-</body>
-</html>
+      i

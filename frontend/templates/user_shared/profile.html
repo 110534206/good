@@ -225,6 +225,11 @@
 
           uploadAvatar()
             .then(avatarUrl => {
+              // 如果有新的頭像URL，更新預覽
+              if (avatarUrl) {
+                document.getElementById('avatarPreview').src = avatarUrl;
+              }
+              
               // 更新個人資料
               const payload = {
                 username: document.getElementById('studentId').value,
