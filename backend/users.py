@@ -303,4 +303,4 @@ def ta_home():
 # 實習廠商管理
 @users_bp.route('/manage_companies')
 def manage_companies():
-    return rend
+    return render_template('user_shared/manage_companies.html')
