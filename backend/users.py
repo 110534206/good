@@ -305,13 +305,6 @@ def ta_home():
 def manage_companies():
     return render_template('user_shared/manage_companies.html')
 
-
-# 管理員首頁（後台）
-@users_bp.route('/admin_home')
-def admin_home():
-    return render_template('user_shared/manage_companies.html')
-
-
 # 管理員首頁（後台）
 @users_bp.route('/admin_home')
 def admin_home():

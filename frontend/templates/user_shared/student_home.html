@@ -87,8 +87,8 @@
     }
 
     .top-bar-right #login-avatar {
-      width: 60px;
-      height: 60px;
+      width: 40px;
+      height: 40px;
       border-radius: 50%;
       object-fit: cover;
       cursor: pointer;
@@ -410,4 +410,72 @@
 
     // 左右切換
     prevBtn.addEventListener('click', () => {
-      i
+       if (notification.length > 0) {
+        currentAnnouncementIndex = (currentAnnouncementIndex - 1 + notification.length) % notification.length;
+        showAnnouncement(currentAnnouncementIndex);
+      }
+    });
+
+    nextBtn.addEventListener('click', () => {
+      if (notification.length > 0) {
+        currentAnnouncementIndex = (currentAnnouncementIndex + 1) % notification.length;
+        showAnnouncement(currentAnnouncementIndex);
+      }
+    });
+
+    // 自動輪播
+    setInterval(() => {
+      if (notification.length > 0) {
+        currentAnnouncementIndex = (currentAnnouncementIndex + 1) % notification.length;
+        showAnnouncement(currentAnnouncementIndex);
+      }
+    }, 5000);
+
+    // 載入用戶頭像
+    function loadUserAvatar() {
+      fetch('/api/profile')
+        .then(res => {
+          if (!res.ok) throw new Error('無法取得用戶資料');
+          return res.json();
+        })
+        .then(data => {
+          if (data.success && data.user && data.user.avatar_url) {
+            // 確保頭像URL是完整的路徑
+            const avatarUrl = data.user.avatar_url.startsWith('http') ? 
+              data.user.avatar_url : 
+              window.location.origin + data.user.avatar_url;
+            document.getElementById('login-avatar').src = avatarUrl;
+          }
+        })
+        .catch(err => {
+          console.log('載入頭像失敗:', err);
+          // 保持預設頭像
+        });
+    }
+
+    // 帳號下拉
+    document.addEventListener("DOMContentLoaded", function () {
+      // 載入用戶頭像
+      loadUserAvatar();
+
+      const dropdownBtn = document.getElementById("accountDropdownBtn");
+      const dropdownMenu = document.getElementById("accountDropdownMenu");
+
+      if (dropdownBtn && dropdownMenu) {
+        dropdownBtn.addEventListener("click", function (e) {
+          e.stopPropagation();
+          const isExpanded = dropdownBtn.getAttribute("aria-expanded") === "true";
+          dropdownBtn.setAttribute("aria-expanded", !isExpanded);
+          dropdownMenu.style.display = isExpanded ? "none" : "block";
+        });
+
+        // 點擊外部時關閉選單
+        document.addEventListener("click", function () {
+          dropdownBtn.setAttribute("aria-expanded", "false");
+          dropdownMenu.style.display = "none";
+        });
+      }
+    });
+  </script>
+</body>
+</html>
