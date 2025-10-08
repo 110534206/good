@@ -250,7 +250,7 @@
                 username: document.getElementById('studentId').value,
                 role: roleMapReverse[document.getElementById('identity').value] || 'student',
                 name: document.getElementById('name').value,
-                class_id: window.classId,
+                class_id: roleValue === 'ta' ? null : window.classId,
               };
 
               return fetch('/api/saveProfile', {
