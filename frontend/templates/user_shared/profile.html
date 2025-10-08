@@ -271,11 +271,15 @@
                     alert('資料及密碼更新成功！');
                     // 跳轉到學生首頁
                     window.location.href = '/student_home';
+                     // 跳轉到科助首頁
+                     window.location.href = '/ta_home';
                   });
               } else {
                 alert('資料更新成功！');
                 // 跳轉到學生首頁
                 window.location.href = '/student_home';
+                //跳轉到科助首頁
+                window.location.href = '/ta_home';
               }
             })
             .catch(err => alert(err.message));
