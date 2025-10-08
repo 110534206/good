@@ -6,55 +6,94 @@
   <title>實習廠商管理</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
-    :root{
-      --bg:#f3f6fb;--card:#fff;--muted:#667085;--accent:#2563eb;
+    :root {
+      --bg: #f3f6fb;
+      --card: #fff;
+      --muted: #667085;
+      --accent: #2563eb;
     }
-    *{box-sizing:border-box;margin:0;padding:0;}
-    body{
-      font-family:"Noto Sans TC",system-ui;
-      background:var(--bg);
-      color:#1e293b;
-      line-height:1.6;
-      padding:32px;
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: "Noto Sans TC", system-ui;
+      background: var(--bg);
+      color: #1e293b;
+      line-height: 1.6;
+      padding: 32px;
     }
-    .container{max-width:960px;margin:0 auto;}
-    header{display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;}
-    h1{font-size:26px;font-weight:700;color:#1e3a8a;}
-    button{
-      background:var(--accent);color:#fff;border:none;border-radius:8px;
-      padding:10px 18px;font-size:14px;cursor:pointer;transition:.25s;
+    .container { max-width: 960px; margin: 0 auto; }
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 24px;
     }
-    button:hover{background:#1d4ed8;transform:translateY(-1px);}
-    .card{
-      background:var(--card);
-      border-radius:14px;
-      box-shadow:0 6px 16px rgba(0,0,0,0.06);
-      padding:20px;
-      margin-bottom:30px;
+    h1 {
+      font-size: 26px;
+      font-weight: 700;
+      color: #1e3a8a;
     }
-    table{width:100%;border-collapse:collapse;font-size:15px;}
-    thead th{text-align:left;padding:12px;font-weight:600;color:var(--muted);border-bottom:2px solid #e2e8f0;background:#f8fafc;}
-    tbody td{padding:12px;border-bottom:1px solid #f1f5f9;}
-    tr:hover td{background:#f9fbff;}
-    .empty{padding:40px;text-align:center;color:var(--muted);}
-    canvas{margin-top:20px;}
+    .header-actions { display: flex; gap: 10px; }
+    button {
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      padding: 10px 18px;
+      font-size: 14px;
+      cursor: pointer;
+      transition: .25s;
+    }
+    button:hover { background: #1d4ed8; transform: translateY(-1px); }
+    .card {
+      background: var(--card);
+      border-radius: 14px;
+      box-shadow: 0 6px 16px rgba(0,0,0,0.06);
+      padding: 20px;
+      margin-bottom: 30px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 15px;
+    }
+    thead th {
+      text-align: left;
+      padding: 12px;
+      font-weight: 600;
+      color: var(--muted);
+      border-bottom: 2px solid #e2e8f0;
+      background: #f8fafc;
+    }
+    tbody td {
+      padding: 12px;
+      border-bottom: 1px solid #f1f5f9;
+    }
+    tr:hover td { background: #f9fbff; }
+    .empty { padding: 40px; text-align: center; color: var(--muted); }
+    canvas { margin-top: 20px; }
   </style>
 </head>
 <body>
   <div class="container">
     <header>
       <h1>實習廠商管理</h1>
-      <button id="btnAdd">＋ 新增資料</button>
+      <div class="header-actions">
+        <button id="btnAdd">＋ 新增公司</button>
+        <button id="btnEdit">✎ 修改</button>
+        <button id="btnDelete">🗑 刪除</button>
+      </div>
     </header>
 
     <div class="card">
+      <h2 style="margin-bottom:10px;color:#1e3a8a;">新增公司</h2>
       <table>
         <thead>
           <tr>
             <th>公司名稱</th>
             <th>職位</th>
-            <th>人數</th>
+            <th>需求人數</th>
             <th>地點</th>
+            <th>修改 / 刪除</th>
           </tr>
         </thead>
         <tbody id="dataBody"></tbody>
@@ -63,14 +102,15 @@
     </div>
 
     <div class="card">
-      <h2 style="margin-bottom:10px;color:#1e3a8a;">公司清單</h2>
+      <h2 style="margin-bottom:10px;color:#1e3a8a;">公司清單（詳細資料）</h2>
       <table>
         <thead>
           <tr>
             <th>公司名稱</th>
             <th>職位</th>
-            <th>人數</th>
+            <th>需求人數</th>
             <th>地點</th>
+            <th>修改 / 刪除</th>
           </tr>
         </thead>
         <tbody id="companyList"></tbody>
@@ -137,14 +177,13 @@
       emptyBlock.style.display='none';
       records.forEach(item=>{
         const tr=document.createElement('tr');
-        tr.innerHTML=`<td>${escapeHtml(item.company)}</td><td>${escapeHtml(item.position)}</td><td>${item.count}</td><td>${escapeHtml(item.location)}</td>`;
+        tr.innerHTML=`<td>${escapeHtml(item.company)}</td><td>${escapeHtml(item.position)}</td><td>${item.count}</td><td>${escapeHtml(item.location)}</td><td><button class='edit-btn'>✎</button> <button class='delete-btn'>🗑</button></td>`;
         target.appendChild(tr);
       });
     }
 
     function escapeHtml(str){return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 
-    // 各班志願序填寫進度圖表（圓餅圖）
     const ctx=document.getElementById('progressChart').getContext('2d');
     let progressChart=new Chart(ctx, {
       type:'pie',
@@ -156,13 +195,10 @@
           backgroundColor:['#ef4444','#8b5cf6']
         }]
       },
-      options:{
-        responsive:true
-      }
+      options:{responsive:true}
     });
 
     function updateChart(){
-      // 示範隨機進度，可替換成真實資料
       progressChart.data.datasets[0].data=progressChart.data.labels.map(()=>Math.floor(Math.random()*101));
       progressChart.update();
     }
