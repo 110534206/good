@@ -48,6 +48,75 @@
     .modal-body {
       white-space: pre-wrap;
     }
+
+    .company-preview {
+      font-size: 15px;
+      color: #333;
+    }
+
+    .company-preview .status-bar {
+      color: #fff;
+      padding: 10px 15px;
+      border-radius: 8px;
+      font-weight: 600;
+      text-align: center;
+      margin-bottom: 20px;
+      font-size: 16px;
+    }
+
+    .company-preview .section {
+      background: #f9fbfd;
+      border: 1px solid #dee2e6;
+      border-radius: 8px;
+      padding: 18px 20px;
+      margin-bottom: 20px;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+    }
+
+    .company-preview .section h5 {
+      color: #0056b3;
+      font-weight: 600;
+      margin-bottom: 15px;
+      display: flex;
+      align-items: center;
+    }
+
+    .info-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 10px 20px;
+    }
+
+    .info-grid .full {
+      grid-column: 1 / -1;
+    }
+
+    .info-grid div {
+      background: #fff;
+      border: 1px solid #e2e6ea;
+      border-radius: 5px;
+      padding: 10px 12px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
+
+    .info-grid strong {
+      color: #0056b3;
+      font-size: 14px;
+      margin-bottom: 4px;
+    }
+
+    .info-grid span {
+      font-size: 15px;
+      color: #444;
+      white-space: pre-wrap;
+    }
+
+    .modal-body {
+      max-height: 70vh;
+      overflow-y: auto;
+    }
   </style>
 </head>
 
@@ -59,7 +128,8 @@
     <div class="card p-4 mb-4">
       <div class="d-flex justify-content-between align-items-center mb-3">
         <button class="btn btn-outline-primary" onclick="downloadTemplate()">下載範本</button>
-        <button type="button" class="btn btn-success" id="submitBtn" style="display:none;" onclick="submitData()">送出資料</button>
+        <button type="button" class="btn btn-success" id="submitBtn" style="display:none;"
+          onclick="submitData()">送出資料</button>
       </div>
 
       <div id="fileDrop">拖曳檔案至此或點擊選擇（限 Excel / CSV）</div>
@@ -220,13 +290,65 @@
       document.getElementById("submitBtn").style.display = "inline-block";
     }
 
-    // 🟩 預覽公司資料（Modal）
+    // 🟩 預覽公司資料
     function previewCompany(idx) {
       const c = parsedData[idx];
-      const content = Object.entries(c).map(([key, val]) => `<p><strong>${key}：</strong>${val}</p>`).join("");
+
+      const statusColor =
+        c.status === "已通過" ? "bg-success" :
+          c.status === "已拒絕" ? "bg-danger" :
+            "bg-warning text-dark";
+
+      const content = `
+  <div class="company-preview">
+
+    <!-- 狀態列 -->
+    <div class="status-bar ${statusColor}">
+      <span>${c.status}</span>
+    </div>
+
+    <!-- 公司基本資料 -->
+    <div class="section">
+      <h5><i class="bi bi-building me-2"></i>公司基本資料</h5>
+      <div class="info-grid">
+        <div><strong>公司名稱</strong><span>${c.company_name || '-'}</span></div>
+        <div><strong>公司地址</strong><span>${c.company_address || '-'}</span></div>
+        <div class="full"><strong>公司簡介</strong><span>${c.company_intro || '-'}</span></div>
+      </div>
+    </div>
+
+    <!-- 聯絡資訊 -->
+    <div class="section">
+      <h5><i class="bi bi-person-lines-fill me-2"></i>聯絡資訊</h5>
+      <div class="info-grid">
+        <div><strong>聯絡人姓名</strong><span>${c.contact_name || '-'}</span></div>
+        <div><strong>職稱</strong><span>${c.contact_title || '-'}</span></div>
+        <div><strong>聯絡電話</strong><span>${c.contact_phone || '-'}</span></div>
+        <div><strong>電子郵件</strong><span>${c.contact_email || '-'}</span></div>
+      </div>
+    </div>
+
+    <!-- 實習職缺 -->
+    <div class="section">
+      <h5><i class="bi bi-briefcase me-2"></i>實習職缺資訊</h5>
+      <div class="info-grid">
+        <div><strong>實習職位</strong><span>${c.internship_unit || '-'}</span></div>
+        <div><strong>地點</strong><span>${c.internship_location || '-'}</span></div>
+        <div><strong>期間</strong><span>${c.internship_period || '-'}</span></div>
+        <div><strong>時段</strong><span>${c.internship_time || '-'}</span></div>
+        <div><strong>名額</strong><span>${c.internship_quota || '-'}</span></div>
+        <div class="full"><strong>實習內容</strong><span>${c.internship_content || '-'}</span></div>
+        <div class="full"><strong>備註</strong><span>${c.remark || '-'}</span></div>
+      </div>
+    </div>
+
+  </div>
+  `;
+
       document.getElementById("previewContent").innerHTML = content;
       new bootstrap.Modal(document.getElementById("previewModal")).show();
     }
+
 
     // 🟥 刪除單筆資料
     function deleteRow(idx) {
@@ -287,9 +409,9 @@
           data.companies.forEach((c, idx) => {
             const statusText =
               c.status === "pending" ? "審查中" :
-              c.status === "approved" ? "已通過" :
-              c.status === "rejected" ? "已拒絕" :
-              c.status;
+                c.status === "approved" ? "已通過" :
+                  c.status === "rejected" ? "已拒絕" :
+                    c.status;
 
             uploadedTableBody.innerHTML += `
               <tr>
