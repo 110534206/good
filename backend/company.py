@@ -472,7 +472,7 @@ def api_upload_company_file():
         conn.close()
 
 # =========================================================
-# API - 下載公司詳細資料 (Excel)
+# API - 下載公司詳細資料 (Excel, 中文欄位 + 含職缺)
 # =========================================================
 @company_bp.route("/api/download_company/<int:company_id>", methods=["GET"])
 def api_download_company_detail(company_id):

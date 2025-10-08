@@ -158,7 +158,7 @@ def save_profile():
             if not cursor.fetchone():
                 return jsonify({"success": False, "message": "班級不存在"}), 404
 
-           cursor.execute("UPDATE users SET class_id=%s WHERE username=%s AND role=%s",
+            cursor.execute("UPDATE users SET class_id=%s WHERE username=%s AND role=%s",
                            (class_id, username, role)
             )
         else:
