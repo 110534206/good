@@ -304,3 +304,31 @@ def ta_home():
 @users_bp.route('/manage_companies')
 def manage_companies():
     return render_template('user_shared/manage_companies.html')
+
+
+# 管理員首頁（後台）
+@users_bp.route('/admin_home')
+def admin_home():
+    return render_template('user_shared/manage_companies.html')
+
+
+# 管理員首頁（後台）
+@users_bp.route('/admin_home')
+def admin_home():
+    return render_template('admin/admin_home.html')
+
+# 個人頁面
+@users_bp.route('/profile')
+def profile():
+    return render_template('user_shared/profile.html')
+
+# 取得 session 資訊
+@users_bp.route('/api/get-session')
+def get_session():
+    if "username" in session and "role" in session:
+        return jsonify({
+            "success": True,
+            "username": session["username"],
+            "role": session["role"]
+        })
+    return jsonify({"success": False}), 401

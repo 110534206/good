@@ -52,8 +52,16 @@
     .company-preview {
       font-size: 15px;
       color: #333;
-      margin-top: 0;   
-      padding-top: 0; 
+    }
+
+    .company-preview .status-bar {
+      color: #fff;
+      padding: 10px 15px;
+      border-radius: 8px;
+      font-weight: 600;
+      text-align: center;
+      margin-bottom: 20px;
+      font-size: 16px;
     }
 
     .company-preview .section {
@@ -286,8 +294,18 @@
     function previewCompany(idx) {
       const c = parsedData[idx];
 
+      const statusColor =
+        c.status === "已通過" ? "bg-success" :
+          c.status === "已拒絕" ? "bg-danger" :
+            "bg-warning text-dark";
+
       const content = `
   <div class="company-preview">
+
+    <!-- 狀態列 -->
+    <div class="status-bar ${statusColor}">
+      <span>${c.status}</span>
+    </div>
 
     <!-- 公司基本資料 -->
     <div class="section">
