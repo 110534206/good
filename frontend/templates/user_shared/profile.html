@@ -141,6 +141,22 @@
       // 用來儲存 class_id 後續更新用
       window.classId = null;
 
+      // *** 修正: 將 roleMap 和 roleMapReverse 放在全域（或這裡的 DOMContentLoaded 作用域） ***
+      const roleMap = {
+        "student": "學生",
+        "teacher": "教師",
+        "director": "主任",
+        "ta": "科助",
+        "admin": "管理員"
+      };
+      const roleMapReverse = {
+        "學生": "student",
+        "教師": "teacher",
+        "主任": "director",
+        "科助": "ta",
+        "管理員": "admin"
+      };
+
       function showPage(index) {
         pages.forEach((page, i) => page.classList.toggle('active', i === index));
         prevBtn.disabled = index === 0;
@@ -160,17 +176,10 @@
           // 頭像 - 假設後端有avatar_url欄位，沒的話用placeholder
           document.getElementById('avatarPreview').src = user.avatar_url || 'https://via.placeholder.com/100?text=頭像';
 
-          // 身分轉換 (和你後端 role_map 對應)
-          const roleMap = {
-            "student": "學生",
-            "teacher": "教師",
-            "director": "主任",
-            "ta": "科助",
-            "admin": "管理員"
-          };
+          // 身分轉換
           document.getElementById('identity').value = roleMap[user.role] || '';
 
-          // *** 修正: 判斷是否為科助，如果是則隱藏班級欄位 ***
+          // 判斷是否為科助，如果是則隱藏班級欄位 (修正前一個問題的邏輯)
           if (user.role === 'ta') {
             const classLabel = document.querySelector('label[for="combinedClass"]');
             const classInput = document.getElementById('combinedClass');
@@ -236,27 +245,15 @@
               }
               
               // 更新個人資料
-              const roleMapReverse = {
-                "學生": "student",
-                "教師": "teacher",
-                "主任": "director",
-                "科助": "ta",
-                "管理員": "admin"
-              };
               const roleDisplayValue = document.getElementById('identity').value;
-              const roleValue = roleMapReverse[roleDisplayValue] || 'student';
+              const roleValue = roleMapReverse[roleDisplayValue] || 'student'; // 取得英文 role
               
-              // *** 修正: 確保只有學生傳 class_id，科助和其他身分傳 null ***
               const classIdToSend = roleValue === 'student' ? window.classId : null;
 
-              // 避免科助身分在前端被誤判需要 class_id
               if (roleValue === 'student' && !classIdToSend) {
-                // 如果是學生但沒有班級ID（理論上不可能，但做一個預防）
                 alert('學生身分必須選擇班級！');
                 throw new Error('學生身分缺少班級');
               }
-              // 刪除您截圖中看到的錯誤訊息，應該是源自於這裡
-              // 因為 roleValue === 'ta' 時，classIdToSend 已經是 null 了，不會進入上面的 if 判斷。
 
               const payload = {
                 username: document.getElementById('studentId').value,
@@ -273,10 +270,10 @@
                 .then(res => res.json())
                 .then(data => {
                   if (!data.success) throw new Error(data.message || '更新個人資料失敗');
-                  return avatarUrl;
+                  return { avatarUrl, roleValue }; // 傳遞 roleValue
                 });
             })
-            .then(() => {
+            .then(({ roleValue }) => {
               // 變更密碼（如果有填）
               const oldPwd = document.getElementById('oldPassword').value.trim();
               const newPwd = document.getElementById('newPassword').value.trim();
@@ -296,11 +293,10 @@
                   .then(data => {
                     if (!data.success) throw new Error(data.message || '變更密碼失敗');
                     alert('資料及密碼更新成功！');
-                    // 根據身分跳轉
-                    const role = roleMapReverse[document.getElementById('identity').value]; // 取得英文 role
-                    if (role === 'student') {
+                    // 根據 roleValue (英文代碼) 跳轉
+                    if (roleValue === 'student') {
                       window.location.href = '/student_home';
-                    } else if (role === 'ta') {
+                    } else if (roleValue === 'ta') {
                       window.location.href = '/ta_home';
                     } else {
                       window.location.href = '/student_home'; // 預設跳轉
@@ -308,11 +304,10 @@
                   });
               } else {
                 alert('資料更新成功！');
-                // 根據身分跳轉
-                const role = roleMapReverse[document.getElementById('identity').value]; // 取得英文 role
-                if (role === 'student') {
+                // 根據 roleValue (英文代碼) 跳轉
+                if (roleValue === 'student') {
                   window.location.href = '/student_home';
-                } else if (role === 'ta') {
+                } else if (roleValue === 'ta') {
                   window.location.href = '/ta_home';
                 } else {
                   window.location.href = '/student_home'; // 預設跳轉
