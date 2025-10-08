@@ -2,436 +2,289 @@
 <html lang="zh-Hant">
 
 <head>
-    <meta charset="UTF-8" />
-    <title>主任審核公司</title>
-    <style>
-        /* --- 通用樣式 --- */
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-        }
+  <meta charset="UTF-8" />
+  <title>主任審核公司</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
+  <style>
+    body {
+      font-family: "Noto Sans TC", sans-serif;
+      background-color: #f8f9fa;
+      margin: 0;
+      padding: 40px 120px;
+    }
 
-        body {
-            font-family: "Noto Sans TC", sans-serif;
-            background-color: #ffffff;
-            margin: 0;
-            padding: 20px 180px;
-        }
+    h1 {
+      color: #0066cc;
+      font-weight: 700;
+      text-align: center;
+      margin-bottom: 40px;
+    }
 
-        .container {
-            width: 100%;
-            max-width: 1200px;
-            margin: 0 auto;
-            padding: 0 0.5rem;
-        }
+    .card {
+      border-radius: 12px;
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+      margin-bottom: 30px;
+      background: #fff;
+    }
 
-        /* --- 頂端列 --- */
-        .top-bar {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 60px;
-            background-color: #fff;
-            z-index: 1100;
-            display: flex;
-            align-items: center;
-            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
-        }
+    .card-header {
+      font-weight: 600;
+      background-color: #e9f2ff;
+      color: #004c97;
+    }
 
-        .top-bar>.container {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            height: 100%;
-            gap: 30px;
-        }
+    th {
+      text-align: center;
+      background-color: #f2f4f8;
+    }
 
-        .top-bar-left #menu-btn {
-            width: 30px;
-            height: 22px;
-            cursor: pointer;
-            display: flex;
-            flex-direction: column;
-            justify-content: space-between;
-        }
+    td {
+      text-align: center;
+      vertical-align: middle;
+    }
 
-        .top-bar-left #menu-btn span {
-            height: 4px;
-            background-color: #333;
-            border-radius: 2px;
-        }
+    tr:hover {
+      background-color: #f8fbff;
+    }
 
-        #accountDropdownBtn {
-            font-weight: normal;
-        }
+    .btn-action {
+      border: none;
+      border-radius: 6px;
+      padding: 6px 12px;
+      font-size: 0.9rem;
+      font-weight: 600;
+      cursor: pointer;
+    }
 
-        .top-bar-right {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            font-weight: bold;
-        }
+    .btn-view {
+      background-color: #0d6efd;
+      color: white;
+    }
 
-        .top-bar-right .btn-link {
-            color: #0066cc;
-            background-color: transparent;
-            border: 1.5px solid #0066cc;
-            padding: 0.3rem 0.7rem;
-            border-radius: 6px;
-            text-decoration: none;
-            transition: background-color 0.3s ease, color 0.3s ease;
-            font-size: 0.9rem;
-            display: inline-block;
-        }
+    .btn-view:hover {
+      background-color: #0b5ed7;
+    }
 
-        .top-bar-right .btn-link:hover {
-            background-color: #0066cc;
-            color: white;
-        }
+    .btn-approve {
+      background-color: #28a745;
+      color: white;
+    }
 
-        .top-bar-right #login-avatar {
-            width: 60px;
-            height: 60px;
-            border-radius: 50%;
-            object-fit: cover;
-            cursor: pointer;
-            margin-top: 6px;
-        }
+    .btn-reject {
+      background-color: #dc3545;
+      color: white;
+    }
 
-        /* --- 主要內容 --- */
-        h1 {
-            margin-top: 80px;
-            margin-bottom: 2rem;
-            color: #0066cc;
-            font-weight: 700;
-            font-size: 2rem;
-            text-align: center;
-            letter-spacing: 1px;
-        }
+    .btn-approve:hover {
+      background-color: #218838;
+    }
 
-        /* --- 搜尋 & 老師選擇 --- */
-        .search-bar,
-        .teacher-select {
-            margin-bottom: 20px;
-            padding: 10px;
-            width: 100%;
-            border-radius: 6px;
-            border: 1px solid #ccc;
-            font-size: 1rem;
-        }
+    .btn-reject:hover {
+      background-color: #c82333;
+    }
 
-        /* --- 表格 --- */
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-bottom: 30px;
-        }
-
-        th,
-        td {
-            padding: 12px;
-            text-align: left;
-            border-bottom: 1px solid #ddd;
-        }
-
-        th {
-            background-color: #f8f9fa;
-            font-weight: bold;
-        }
-
-        tr:hover {
-            background-color: #f1f1f1;
-        }
-
-        /* --- 按鈕 --- */
-        button {
-            padding: 8px 14px;
-            font-size: 0.9rem;
-            font-weight: bold;
-            border-radius: 6px;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            border: none;
-        }
-
-        .approve-btn {
-            background-color: #28a745;
-            color: white;
-        }
-
-        .approve-btn:hover {
-            background-color: #218838;
-        }
-
-        .reject-btn {
-            background-color: #dc3545;
-            color: white;
-        }
-
-        .reject-btn:hover {
-            background-color: #c82333;
-        }
-
-        /* --- 側邊選單 --- */
-        #side-menu {
-            position: fixed;
-            top: 0;
-            left: 0;
-            height: 100vh;
-            width: 300px;
-            max-width: 80vw;
-            background-color: rgba(10, 10, 10, 0.95);
-            backdrop-filter: blur(6px);
-            box-shadow: 3px 0 12px rgb(0 0 0 / 0.7);
-            padding: 2rem 1.5rem;
-            transform: translateX(-100%);
-            transition: transform 0.3s ease-in-out;
-            z-index: 1200;
-            display: flex;
-            flex-direction: column;
-            color: white;
-        }
-
-        #side-menu.open {
-            transform: translateX(0);
-        }
-
-        #close-btn {
-            position: absolute;
-            top: 1.5rem;
-            right: 1.5rem;
-            font-size: 2rem;
-            background: none;
-            border: none;
-            color: white;
-            cursor: pointer;
-        }
-
-        #side-menu h2 {
-            margin-bottom: 1.5rem;
-            font-weight: 700;
-            font-size: 1.3rem;
-        }
-
-        #side-menu a {
-            display: block;
-            padding: 0.5rem 0;
-            font-size: 1.05rem;
-            color: #ddd;
-            text-decoration: none;
-            border-radius: 4px;
-        }
-
-        #side-menu a:hover {
-            background-color: rgba(255, 255, 255, 0.15);
-            color: white;
-        }
-
-        /* --- 無公司時顯示 --- */
-        p.no-companies {
-            text-align: center;
-            color: #6c757d;
-            font-style: italic;
-            font-size: 1.1rem;
-            margin-top: 3rem;
-        }
-
-        /* --- 模態框 --- */
-        .modal {
-            display: none;
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0, 0, 0, 0.5);
-            justify-content: center;
-            align-items: center;
-            z-index: 2000;
-        }
-
-        .modal-content {
-            background-color: white;
-            padding: 20px;
-            border-radius: 6px;
-            max-width: 600px;
-            max-height: 400px;
-            overflow-y: auto;
-        }
-
-        .modal.open {
-            display: flex;
-        }
-    </style>
+    .modal-body p {
+      margin-bottom: 6px;
+    }
+  </style>
 </head>
 
 <body>
-    <!-- 頂部欄 -->
-    <div class="top-bar">
-        <div class="container">
-            <div class="top-bar-left">
-                <div id="menu-btn" role="button" tabindex="0" aria-label="選單">
-                    <span></span><span></span><span></span>
-                </div>
-            </div>
-            <div class="top-bar-right">
-                <a href="/director_home">
-                    <img src="{{ url_for('static', filename='images/avatar.png') }}" alt="頭像" id="login-avatar" />
-                </a>
-                <div class="dropdown" style="position: relative;">
-                    <button id="accountDropdownBtn" class="btn-link" aria-expanded="false">帳號 ▾</button>
-                    <div id="accountDropdownMenu" class="dropdown-menu"
-                        style="position:absolute; right:0; top:120%; background:#fff; border:1px solid #ccc; border-radius:8px; padding:6px; min-width:180px; display:none; box-shadow:0 4px 12px rgba(0,0,0,.12);">
-                        <a href="/director_home" class="btn-link"
-                            style="display:block; border:none; margin:4px 0;">返回首頁</a>
-                        <a id="toHomeroomLink" href="/class_teacher_home" class="btn-link"
-                            style="display:none; border:none; margin:4px 0;">切換班導身分</a>
-                        <a href="/login" class="btn-link" style="display:block; border:none; margin:4px 0;">登出</a>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
+  <h1>主任審核公司</h1>
 
-    <!-- 主要內容 -->
-    <h1>主任審核公司</h1>
-    <select class="teacher-select" id="teacher-select" name="teacher_id">
-        <option value="" selected>請選擇老師</option>
-        {% for teacher in teachers %}
-        <option value="{{ teacher.id }}">{{ teacher.name }}{% if teacher.role == 'director' %}（主任）{% endif %}</option>
-        {% endfor %}
-    </select>
-    <div>
-        <input type="text" class="search-bar" id="search-bar" placeholder="搜尋公司..." onkeyup="filterCompanies()" />
-    </div>
-
-    {% if companies %}
-    <table>
+  <!-- 🟦 待審核公司 -->
+  <div class="card">
+    <div class="card-header">待審核公司</div>
+    <div class="card-body">
+      <table class="table table-hover align-middle">
         <thead>
-            <tr>
-                <th>公司名稱</th>
-                <th>描述</th>
-                <th>地點</th>
-                <th>聯絡人</th>
-                <th>Email</th>
-                <th>電話</th>
-                <th>提交時間</th>
-                <th>操作</th>
-            </tr>
+          <tr>
+            <th>#</th>
+            <th>公司名稱</th>
+            <th>聯絡人</th>
+            <th>Email</th>
+            <th>上傳時間</th>
+            <th>操作</th>
+          </tr>
         </thead>
-        <tbody id="company-list">
-            {% for company in companies %}
-            <tr id="company-{{ company.id }}">
-                <td>{{ company.company_name }}</td>
-                <td><button onclick="openModal(`{{ company.description or '無描述' }}`)">預覽</button></td>
-                <td>{{ company.location or '—' }}</td>
-                <td>{{ company.contact_person or '—' }}</td>
-                <td>{{ company.contact_email or '—' }}</td>
-                <td>{{ company.contact_phone or '—' }}</td>
-                <td>{{ company.submitted_at }}</td>
-                <td>
-                    <button class="approve-btn" onclick="reviewCompany({{ company.id }}, 'approved')">核准</button>
-                    <button class="reject-btn" onclick="reviewCompany({{ company.id }}, 'rejected')">拒絕</button>
-                </td>
-            </tr>
-            {% endfor %}
+        <tbody id="pendingTable">
+          <tr>
+            <td colspan="6" class="text-muted text-center">載入中...</td>
+          </tr>
         </tbody>
-    </table>
-    {% else %}
-    <p class="no-companies">目前沒有待審核的公司。</p>
-    {% endif %}
-
-    <!-- 描述模態框 -->
-    <div class="modal" id="description-modal">
-        <div class="modal-content" id="modal-content"></div>
-        <button onclick="closeModal()">關閉</button>
+      </table>
     </div>
+  </div>
 
-    <!-- 側邊選單 -->
-    <nav id="side-menu" aria-hidden="true">
-        <button id="close-btn" aria-label="關閉選單">×</button>
-        <h2>功能選單</h2>
-        <a href="/director_home">首頁</a>
-        <a href="/profile">個人資料</a>
-        <a href="/approve_company">審核實習單位</a>
-        <a href="/notifications">管理公告</a>
-        <a href="/admin_statistics">統計資料</a>
-        <a href="/manage_roles">帳號權限設定</a>
-    </nav>
+  <!-- 🟩 歷史紀錄 -->
+  <div class="card">
+    <div class="card-header">歷史審核紀錄</div>
+    <div class="card-body">
+      <table class="table table-hover align-middle">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>公司名稱</th>
+            <th>狀態</th>
+            <th>上傳時間</th>
+            <th>審核時間</th>
+          </tr>
+        </thead>
+        <tbody id="historyTable">
+          <tr>
+            <td colspan="5" class="text-muted text-center">載入中...</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
 
-    <script>
-        // --- Modal 控制 ---
-        function openModal(description) {
-            const modal = document.getElementById("description-modal");
-            const modalContent = document.getElementById("modal-content");
-            modal.classList.add("open");
-            modalContent.textContent = description;
-        }
-        function closeModal() {
-            document.getElementById("description-modal").classList.remove("open");
-        }
+  <!-- 🔍 詳細資料 Modal -->
+  <div class="modal fade" id="companyModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">公司詳細資料</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body" id="modalBody"></div>
+        <div class="modal-footer">
+          <button id="approveBtn" class="btn btn-approve">核准</button>
+          <button id="rejectBtn" class="btn btn-reject">退件</button>
+        </div>
+      </div>
+    </div>
+  </div>
 
-        // --- 公司審核 ---
-        async function reviewCompany(companyId, status) {
-            try {
-                const response = await fetch("/api/approve_company", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ company_id: companyId, status: status })
-                });
-                const result = await response.json();
-                alert(result.message);
-                if (result.success) {
-                    const companyElement = document.getElementById("company-" + companyId);
-                    if (companyElement) companyElement.remove();
-                }
-            } catch (error) {
-                alert("發生錯誤：" + error.message);
-            }
-        }
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script>
+    const pendingTable = document.getElementById("pendingTable");
+    const historyTable = document.getElementById("historyTable");
+    const modal = new bootstrap.Modal(document.getElementById("companyModal"));
+    const modalBody = document.getElementById("modalBody");
+    const approveBtn = document.getElementById("approveBtn");
+    const rejectBtn = document.getElementById("rejectBtn");
+    let currentCompanyId = null;
 
-        // --- 搜尋公司 ---
-        function filterCompanies() {
-            const filter = document.getElementById('search-bar').value.toLowerCase();
-            const rows = document.querySelectorAll("#company-list tr");
-            rows.forEach(row => {
-                const name = row.cells[0].textContent.toLowerCase();
-                row.style.display = name.includes(filter) ? "" : "none";
-            });
-        }
+    document.addEventListener("DOMContentLoaded", () => {
+      loadPending();
+      loadHistory();
+    });
 
-        // --- 側邊選單開關 ---
-        document.getElementById('menu-btn').addEventListener('click', () => {
-            document.getElementById('side-menu').classList.add('open');
+    // 🔹 取得待審核公司
+    function loadPending() {
+      fetch("/api/get_pending_companies")
+        .then(res => res.json())
+        .then(data => {
+          if (!data.success || data.companies.length === 0) {
+            pendingTable.innerHTML = `<tr><td colspan="6" class="text-center text-muted">目前沒有待審核公司</td></tr>`;
+            return;
+          }
+          pendingTable.innerHTML = "";
+          data.companies.forEach((c, i) => {
+            pendingTable.innerHTML += `
+              <tr>
+                <td>${i + 1}</td>
+                <td>${c.company_name}</td>
+                <td>${c.contact_name || "—"}</td>
+                <td>${c.contact_email || "—"}</td>
+                <td>${c.upload_time || "—"}</td>
+                <td><button class="btn-action btn-view" onclick="viewCompany(${c.id})">查看</button></td>
+              </tr>
+            `;
+          });
+        })
+        .catch(() => {
+          pendingTable.innerHTML = `<tr><td colspan="6" class="text-center text-danger">無法載入資料</td></tr>`;
         });
-        document.getElementById('close-btn').addEventListener('click', () => {
-            document.getElementById('side-menu').classList.remove('open');
-        });
+    }
 
-        // --- 帳號下拉 ---
-        const btn = document.getElementById('accountDropdownBtn');
-        const menu = document.getElementById('accountDropdownMenu');
-        btn.addEventListener('click', () => {
-            const open = menu.style.display === 'block';
-            menu.style.display = open ? 'none' : 'block';
-            btn.setAttribute('aria-expanded', String(!open));
+    // 🔹 取得歷史審核紀錄
+    function loadHistory() {
+      fetch("/api/get_reviewed_companies")
+        .then(res => res.json())
+        .then(data => {
+          if (!data.success || data.companies.length === 0) {
+            historyTable.innerHTML = `<tr><td colspan="5" class="text-center text-muted">尚無歷史紀錄</td></tr>`;
+            return;
+          }
+          historyTable.innerHTML = "";
+          data.companies.forEach((c, i) => {
+            const statusText = c.status === "approved"
+              ? "✅ 通過"
+              : c.status === "rejected"
+                ? "❌ 退件"
+                : "—";
+            historyTable.innerHTML += `
+              <tr>
+                <td>${i + 1}</td>
+                <td>${c.company_name}</td>
+                <td>${statusText}</td>
+                <td>${c.upload_time || "—"}</td>
+                <td>${c.reviewed_at || "—"}</td>
+              </tr>
+            `;
+          });
+        })
+        .catch(() => {
+          historyTable.innerHTML = `<tr><td colspan="5" class="text-center text-danger">載入失敗</td></tr>`;
         });
-        document.addEventListener('click', (e) => {
-            if (!menu.contains(e.target) && !btn.contains(e.target)) {
-                menu.style.display = 'none';
-                btn.setAttribute('aria-expanded', 'false');
-            }
-        });
+    }
 
-        // --- 判斷是否為班導 ---
-        fetch('/api/profile').then(r => r.json()).then(d => {
-            if (d.success && d.user && d.user.is_homeroom) {
-                document.getElementById('toHomeroomLink').style.display = 'block';
-            }
-        }).catch(() => { });
-    </script>
+    // 🔍 查看公司資料
+    function viewCompany(id) {
+      currentCompanyId = id;
+      fetch(`/api/get_company_detail?company_id=${id}`)
+        .then(res => res.json())
+        .then(data => {
+          if (!data.success) return alert(data.message);
+          const c = data.company;
+          modalBody.innerHTML = `
+            <p><strong>公司名稱：</strong>${c.company_name}</p>
+            <p><strong>公司簡介：</strong>${c.company_intro || "—"}</p>
+            <p><strong>地址：</strong>${c.company_address || "—"}</p>
+            <p><strong>聯絡人：</strong>${c.contact_name || "—"}</p>
+            <p><strong>Email：</strong>${c.contact_email || "—"}</p>
+            <p><strong>電話：</strong>${c.contact_phone || "—"}</p>
+            <hr>
+            <p><strong>職缺內容：</strong></p>
+            ${(c.internship_jobs || []).map(j =>
+              `<div style='margin-left:1em'>
+                <p>職位：${j.internship_unit || "—"}</p>
+                <p>內容：${j.internship_content || "—"}</p>
+                <p>地點：${j.internship_location || "—"}</p>
+                <p>期間：${j.internship_period || "—"}</p>
+                <p>時段：${j.internship_time || "—"}</p>
+                <p>人數：${j.internship_quota || "—"}</p>
+                <p>備註：${j.remark || "—"}</p>
+                <hr>
+              </div>`
+            ).join("")}
+          `;
+          modal.show();
+        });
+    }
+
+    approveBtn.onclick = () => reviewCompany("approved");
+    rejectBtn.onclick = () => reviewCompany("rejected");
+
+    // ✅ 審核（核准/退件）
+    function reviewCompany(status) {
+      if (!currentCompanyId) return;
+      fetch("/api/approve_company", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ company_id: currentCompanyId, status })
+      })
+        .then(res => res.json())
+        .then(data => {
+          alert(data.message);
+          modal.hide();
+          loadPending();
+          loadHistory();
+        })
+        .catch(err => alert("伺服器錯誤：" + err.message));
+    }
+  </script>
 </body>
-
 </html>

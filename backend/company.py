@@ -206,7 +206,129 @@ def api_approve_company():
         cursor.close()
         conn.close()
 
+# =========================================================
+# API - 取得待審核公司清單
+# =========================================================
+@company_bp.route("/api/get_pending_companies", methods=["GET"])
+def api_get_pending_companies():
+    try:
+        conn = get_db()
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute("""
+            SELECT 
+                id,
+                company_name,
+                contact_person AS contact_name,
+                contact_email,
+                submitted_at AS upload_time,
+                status
+            FROM internship_companies
+            WHERE status = 'pending'
+            ORDER BY submitted_at DESC
+        """)
+        companies = cursor.fetchall()
+        cursor.close()
+        conn.close()
 
+        return jsonify({
+            "success": True,
+            "companies": companies
+        })
+
+    except Exception:
+        print("❌ 取得待審核公司清單錯誤：", traceback.format_exc())
+        return jsonify({"success": False, "message": "伺服器錯誤"}), 500
+
+# =========================================================
+# API - 取得已審核公司（歷史紀錄）
+# =========================================================
+@company_bp.route("/api/get_reviewed_companies", methods=["GET"])
+def api_get_reviewed_companies():
+    try:
+        conn = get_db()
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute("""
+            SELECT 
+                id,
+                company_name,
+                status,
+                submitted_at AS upload_time,
+                reviewed_at
+            FROM internship_companies
+            WHERE status IN ('approved', 'rejected')
+            ORDER BY reviewed_at DESC
+        """)
+        companies = cursor.fetchall()
+        cursor.close()
+        conn.close()
+
+        return jsonify({"success": True, "companies": companies})
+    except Exception:
+        print("❌ 取得已審核公司錯誤：", traceback.format_exc())
+        return jsonify({"success": False, "message": "伺服器錯誤"}), 500
+    
+# =========================================================
+# API - 取得單一公司詳細資料（含職缺）
+# =========================================================
+@company_bp.route("/api/get_company_detail", methods=["GET"])
+def api_get_company_detail():
+    try:
+        company_id = request.args.get("company_id", type=int)
+        if not company_id:
+            return jsonify({"success": False, "message": "缺少 company_id"}), 400
+
+        conn = get_db()
+        cursor = conn.cursor(dictionary=True)
+
+        # 取得公司基本資料
+        cursor.execute("""
+            SELECT 
+                id,
+                company_name,
+                description AS company_intro,
+                location AS company_address,
+                contact_person AS contact_name,
+                contact_email,
+                contact_phone,
+                submitted_at AS upload_time,
+                status,
+                reviewed_at
+            FROM internship_companies
+            WHERE id = %s
+        """, (company_id,))
+        company = cursor.fetchone()
+
+        if not company:
+            cursor.close()
+            conn.close()
+            return jsonify({"success": False, "message": "查無此公司"}), 404
+
+        # 取得職缺資料
+        cursor.execute("""
+            SELECT 
+                title AS internship_unit,
+                description AS internship_content,
+                location AS internship_location,
+                period AS internship_period,
+                work_time AS internship_time,
+                slots AS internship_quota,
+                remark
+            FROM internship_jobs
+            WHERE company_id = %s
+        """, (company_id,))
+        jobs = cursor.fetchall()
+
+        company["internship_jobs"] = jobs
+
+        cursor.close()
+        conn.close()
+
+        return jsonify({"success": True, "company": company})
+
+    except Exception:
+        print("❌ 取得公司詳細資料錯誤：", traceback.format_exc())
+        return jsonify({"success": False, "message": "伺服器錯誤"}), 500
+   
 # =========================================================
 # 頁面 - 公司審核清單
 # =========================================================
