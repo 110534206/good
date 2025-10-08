@@ -245,7 +245,7 @@
                 "科助": "ta",
                 "管理員": "admin"
               };
-
+              const roleValue = roleMapReverse[document.getElementById('identity').value] || 'student';
               const payload = {
                 username: document.getElementById('studentId').value,
                 role: roleValue,
