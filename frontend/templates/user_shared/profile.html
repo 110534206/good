@@ -231,9 +231,17 @@
               }
               
               // 更新個人資料
+              const roleMapReverse = {
+                "學生": "student",
+                "教師": "teacher",
+                "主任": "director",
+                "科助": "ta",
+                "管理員": "admin"
+              };
+
               const payload = {
                 username: document.getElementById('studentId').value,
-                role: document.getElementById('identity').value,
+                role: roleMapReverse[document.getElementById('identity').value] || 'student',
                 name: document.getElementById('name').value,
                 class_id: window.classId,
               };
@@ -282,10 +290,10 @@
               } else {
                 alert('資料更新成功！');
                 // 根據身分跳轉
-                const role = document.getElementById('identity').value;
-                if (role === '學生') {
+                const role = roleMapReverse[document.getElementById('identity').value];
+                if (role === 'student') {
                   window.location.href = '/student_home';
-                } else if (role === '科助') {
+                } else if (role === 'ta') {
                   window.location.href = '/ta_home';
                 } else {
                   window.location.href = '/student_home'; // 預設跳轉
