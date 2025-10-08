@@ -290,6 +290,32 @@
 
   <!-- JS -->
   <script>
+    // 載入用戶頭像
+    function loadUserAvatar() {
+      fetch('/api/profile')
+        .then(res => {
+          if (!res.ok) throw new Error('無法取得用戶資料');
+          return res.json();
+        })
+        .then(data => {
+          if (data.success && data.user && data.user.avatar_url) {
+            // 確保頭像URL是完整的路徑
+            const avatarUrl = data.user.avatar_url.startsWith('http') ? 
+              data.user.avatar_url : 
+              window.location.origin + data.user.avatar_url;
+            document.getElementById('login-avatar').src = avatarUrl;
+          }
+        })
+        .catch(err => {
+          console.log('載入頭像失敗:', err);
+          // 保持預設頭像
+        });
+    }
+    document.addEventListener("DOMContentLoaded", function () {
+      // 載入用戶頭像
+      loadUserAvatar();
+    });
+    
     document.getElementById('menu-btn').addEventListener('click', () => {
       document.getElementById('side-menu').classList.add('open');
     });
