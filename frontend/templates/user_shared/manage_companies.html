@@ -3,7 +3,8 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>實習廠商管理介面</title>
+  <title>實習廠商管理</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
     :root{
       --bg:#f3f6fb;--card:#fff;--muted:#667085;--accent:#2563eb;
@@ -36,6 +37,7 @@
     tbody td{padding:12px;border-bottom:1px solid #f1f5f9;}
     tr:hover td{background:#f9fbff;}
     .empty{padding:40px;text-align:center;color:var(--muted);}
+    canvas{margin-top:20px;}
   </style>
 </head>
 <body>
@@ -74,6 +76,11 @@
         <tbody id="companyList"></tbody>
       </table>
       <div id="emptyCompany" class="empty">目前沒有公司資料</div>
+    </div>
+
+    <div class="card">
+      <h2 style="margin-bottom:10px;color:#1e3a8a;">各班志願序填寫進度圖表</h2>
+      <canvas id="progressChart"></canvas>
     </div>
   </div>
 
@@ -116,6 +123,7 @@
       modal.style.display='none';
       renderTables();
       e.target.reset();
+      updateChart();
     }
 
     function renderTables(){
@@ -135,6 +143,29 @@
     }
 
     function escapeHtml(str){return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+
+    // 各班志願序填寫進度圖表（圓餅圖）
+    const ctx=document.getElementById('progressChart').getContext('2d');
+    let progressChart=new Chart(ctx, {
+      type:'pie',
+      data:{
+        labels:['資管四忠','資管四孝'],
+        datasets:[{
+          label:'志願序填寫完成率 (%)',
+          data:[0,0],
+          backgroundColor:['#ef4444','#8b5cf6']
+        }]
+      },
+      options:{
+        responsive:true
+      }
+    });
+
+    function updateChart(){
+      // 示範隨機進度，可替換成真實資料
+      progressChart.data.datasets[0].data=progressChart.data.labels.map(()=>Math.floor(Math.random()*101));
+      progressChart.update();
+    }
   </script>
 </body>
 </html>
