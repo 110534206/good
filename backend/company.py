@@ -18,6 +18,7 @@ def upload_company_form():
             company_name = request.form.get("company_name", "").strip()
             description = request.form.get("description", "").strip()
             location = request.form.get("location", "").strip()
+            contact_title = request.form.get("contact_title", "").strip()
             contact_person = request.form.get("contact_person", "").strip()
             contact_email = request.form.get("contact_email", "").strip()
             contact_phone = request.form.get("contact_phone", "").strip()
@@ -34,12 +35,12 @@ def upload_company_form():
             cursor = conn.cursor()
             cursor.execute("""
                 INSERT INTO internship_companies
-                (company_name, description, location, contact_person, contact_email, contact_phone,
-                 uploaded_by_user_id, uploaded_by_role, status, submitted_at)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 'pending', NOW())
+                (company_name, description, location, contact_person, contact_title, contact_email, contact_phone,
+                uploaded_by_user_id, uploaded_by_role, status, submitted_at)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 'pending', NOW())
             """, (
                 company_name, description, location,
-                contact_person, contact_email, contact_phone,
+                contact_person, contact_title, contact_email, contact_phone,
                 uploaded_by_user_id, uploaded_by_role
             ))
             conn.commit()
@@ -436,7 +437,7 @@ def api_upload_company_file():
 
     try:
         df = pd.read_excel(file)
-        required_cols = ["公司名稱", "公司描述", "公司地點", "聯絡人", "聯絡電子郵件", "聯絡電話"]
+        required_cols = ["公司名稱", "公司描述", "公司地點", "聯絡人", "聯絡人職稱", "聯絡電子郵件", "聯絡電話"]
         for col in required_cols:
             if col not in df.columns:
                 return jsonify({"success": False, "message": f"缺少欄位：{col}"}), 400
@@ -444,20 +445,20 @@ def api_upload_company_file():
         conn = get_db()
         cursor = conn.cursor()
         insert_sql = """
-            INSERT INTO internship_companies
-            (company_name, description, location, contact_person, contact_email, contact_phone,
-             uploaded_by_user_id, uploaded_by_role, status, submitted_at)
-            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,'pending',NOW())
-        """
+        INSERT INTO internship_companies
+       (company_name, description, location, contact_person, contact_title, contact_email, contact_phone,
+       uploaded_by_user_id, uploaded_by_role, status, submitted_at)
+       VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,'pending',NOW())
+       """
 
         inserted_count = 0
         for _, row in df.iterrows():
-            cursor.execute(insert_sql, (
-                row["公司名稱"], row["公司描述"], row["公司地點"],
-                row["聯絡人"], row["聯絡電子郵件"], row["聯絡電話"],
-                session["user_id"], session.get("role")
-            ))
-            inserted_count += 1
+         cursor.execute(insert_sql, (
+         row["公司名稱"], row["公司描述"], row["公司地點"],
+         row["聯絡人"], row["聯絡人職稱"], row["聯絡電子郵件"], row["聯絡電話"],
+         session["user_id"], session.get("role")
+        ))
+        inserted_count += 1
 
         conn.commit()
         return jsonify({"success": True, "message": f"成功上傳 {inserted_count} 筆公司，等待主任審核"})
@@ -469,7 +470,6 @@ def api_upload_company_file():
     finally:
         cursor.close()
         conn.close()
-
 
 # =========================================================
 # API - 下載公司詳細資料 (Excel)
