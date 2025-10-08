@@ -82,24 +82,26 @@ def upload_company_bulk():
             if not company_name:
                 continue  # 跳過無公司名稱的資料
 
-            # 預設值處理（避免 NULL）
-            description = c.get("description") or c.get("公司簡介") or ""
-            location = c.get("location") or c.get("公司地址") or ""
-            contact_person = c.get("contact_person") or c.get("聯絡人姓名") or ""
+            # ✅ 對應前端欄位名稱
+            description = c.get("company_intro") or c.get("description") or c.get("公司簡介") or ""
+            location = c.get("company_address") or c.get("location") or c.get("公司地址") or ""
+            contact_person = c.get("contact_name") or c.get("contact_person") or c.get("聯絡人姓名") or ""
+            contact_title = c.get("contact_title") or c.get("聯絡人職稱") or ""
             contact_email = c.get("contact_email") or c.get("聯絡信箱") or ""
             contact_phone = c.get("contact_phone") or c.get("聯絡電話") or ""
 
-            # 插入公司資料
+            # ✅ 插入公司資料
             cursor.execute("""
                 INSERT INTO internship_companies
-                (company_name, description, location, contact_person, contact_email, contact_phone,
+                (company_name, description, location, contact_person, contact_title, contact_email, contact_phone,
                  uploaded_by_user_id, uploaded_by_role, status, submitted_at)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 'pending', NOW())
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 'pending', NOW())
             """, (
                 company_name,
                 description,
                 location,
                 contact_person,
+                contact_title,
                 contact_email,
                 contact_phone,
                 uploaded_by_user_id,
@@ -108,7 +110,7 @@ def upload_company_bulk():
             company_id = cursor.lastrowid
             inserted_company_count += 1
 
-            # 插入職缺資料（從欄位或 fallback 單筆職缺）
+            # ✅ 插入職缺資料（從欄位或 fallback 單筆職缺）
             jobs = c.get("internship_jobs") or [{
                 "title": c.get("internship_unit") or "",
                 "description": c.get("internship_content") or "",
@@ -160,8 +162,11 @@ def upload_company_bulk():
         return jsonify({"success": False, "message": "伺服器錯誤"}), 500
 
     finally:
-        cursor.close()
-        conn.close()
+        try:
+            cursor.close()
+            conn.close()
+        except:
+            pass
 
 # =========================================================
 # API - 審核公司
@@ -280,7 +285,7 @@ def api_get_company_detail():
         conn = get_db()
         cursor = conn.cursor(dictionary=True)
 
-        # 取得公司基本資料
+        # ✅ 取得公司基本資料（含職稱）
         cursor.execute("""
             SELECT 
                 id,
@@ -288,6 +293,7 @@ def api_get_company_detail():
                 description AS company_intro,
                 location AS company_address,
                 contact_person AS contact_name,
+                contact_title,  -- 聯絡人職稱
                 contact_email,
                 contact_phone,
                 submitted_at AS upload_time,
@@ -303,11 +309,12 @@ def api_get_company_detail():
             conn.close()
             return jsonify({"success": False, "message": "查無此公司"}), 404
 
-        # 取得職缺資料
+        # ✅ 取得公司對應的所有實習職缺
         cursor.execute("""
             SELECT 
                 title AS internship_unit,
                 description AS internship_content,
+                department AS internship_department,
                 location AS internship_location,
                 period AS internship_period,
                 work_time AS internship_time,
@@ -349,9 +356,8 @@ def approve_company_list():
         cursor.close()
         conn.close()
 
-
 # =========================================================
-# API - 取得自己上傳的公司清單
+# API - 取得我上傳的公司（含職缺）
 # =========================================================
 @company_bp.route("/api/get_my_companies", methods=["GET"])
 def api_get_my_companies():
@@ -361,17 +367,60 @@ def api_get_my_companies():
     conn = get_db()
     cursor = conn.cursor(dictionary=True)
     cursor.execute("""
-        SELECT id, company_name AS original_filename, status, submitted_at AS upload_time
-        FROM internship_companies
-        WHERE uploaded_by_user_id = %s
-        ORDER BY submitted_at DESC
-    """, (session["user_id"],))
+    SELECT 
+        id,
+        company_name,
+        description AS company_intro,
+        location AS company_address,
+        contact_person AS contact_name,
+        contact_title AS contact_title,
+        contact_email,
+        contact_phone,
+        submitted_at AS upload_time,
+        status
+    FROM internship_companies
+    WHERE uploaded_by_user_id = %s
+    ORDER BY submitted_at DESC
+""", (session["user_id"],))
     companies = cursor.fetchall()
+
+    # 取得每間公司的職缺
+    for c in companies:
+        cursor.execute("""
+            SELECT 
+                title AS internship_unit,
+                description AS internship_content,
+                location AS internship_location,
+                period AS internship_period,
+                work_time AS internship_time,
+                slots AS internship_quota,
+                remark
+            FROM internship_jobs
+            WHERE company_id = %s
+        """, (c["id"],))
+        jobs = cursor.fetchall()
+        c["internship_jobs"] = jobs
+
+        # ✅ 如果有職缺，就攤平成第一筆讓前端直接使用
+        if jobs:
+            first_job = jobs[0]
+            c.update(first_job)
+        else:
+            # ✅ 若沒有職缺，仍確保前端欄位存在避免 undefined
+            c.update({
+                "internship_unit": "",
+                "internship_content": "",
+                "internship_location": "",
+                "internship_period": "",
+                "internship_time": "",
+                "internship_quota": "",
+                "remark": ""
+            })
+
     cursor.close()
     conn.close()
 
     return jsonify({"success": True, "companies": companies})
-
 
 # =========================================================
 # API - 上傳公司 Excel 檔案（純公司）
@@ -504,13 +553,6 @@ def api_delete_company():
     conn.close()
 
     return jsonify({"success": True, "message": "刪除成功"})
-
-# =========================================================
-# 頁面 - 公司上傳頁面
-# =========================================================
-@company_bp.route("/upload_company")
-def upload_company_page():
-    return render_template("company/upload_company.html")
 
 # =========================================================
 # 頁面 - 公司審核頁面

@@ -125,7 +125,7 @@
 
     <!-- 上傳區表格 -->
     <div class="card p-3 mb-4">
-      <h5 class="mb-3 text-primary">上傳區</h5>
+      <h5 class="mb-3 text-success">上傳區</h5>
       <table class="table table-hover align-middle">
         <thead class="table-light">
           <tr>
@@ -334,41 +334,47 @@
 
     // 預覽共用
     function previewCompany(idx, source = "upload") {
-      const c = source === "upload" ? parsedData[idx] : uploadedCompanies[idx];
+      let c = source === "upload" ? parsedData[idx] : uploadedCompanies[idx];
       if (!c) return;
 
+      // 🟢 若歷史紀錄是包在 c.data 裡，則展開它
+      if (source === "history" && c.data) {
+        c = { ...c.data, status: c.status, upload_time: c.upload_time };
+      }
+
       const content = `
-    <div class="company-preview">
-      <div class="section">
-        <h5>公司基本資料</h5>
-        <div class="info-grid">
-          <div><strong>公司名稱</strong><span>${c.company_name || '-'}</span></div>
-          <div><strong>公司地址</strong><span>${c.company_address || '-'}</span></div>
-          <div class="full"><strong>公司簡介</strong><span>${c.company_intro || '-'}</span></div>
-        </div>
+  <div class="company-preview">
+    <div class="section">
+      <h5>公司基本資料</h5>
+      <div class="info-grid">
+        <div><strong>公司名稱</strong><span>${c.company_name || '-'}</span></div>
+        <div><strong>公司地址</strong><span>${c.company_address || '-'}</span></div>
+        <div class="full"><strong>公司簡介</strong><span>${c.company_intro || '-'}</span></div>
       </div>
-      <div class="section">
-        <h5>聯絡資訊</h5>
-        <div class="info-grid">
-          <div><strong>聯絡人姓名</strong><span>${c.contact_name || '-'}</span></div>
-          <div><strong>職稱</strong><span>${c.contact_title || '-'}</span></div>
-          <div><strong>聯絡電話</strong><span>${c.contact_phone || '-'}</span></div>
-          <div><strong>電子郵件</strong><span>${c.contact_email || '-'}</span></div>
-        </div>
+    </div>
+    <div class="section">
+      <h5>聯絡資訊</h5>
+      <div class="info-grid">
+        <div><strong>聯絡人姓名</strong><span>${c.contact_name || '-'}</span></div>
+        <div><strong>職稱</strong><span>${c.contact_title || '-'}</span></div>
+        <div><strong>聯絡電話</strong><span>${c.contact_phone || '-'}</span></div>
+        <div><strong>電子郵件</strong><span>${c.contact_email || '-'}</span></div>
       </div>
-      <div class="section">
-        <h5>實習職缺資訊</h5>
-        <div class="info-grid">
-          <div><strong>實習職位</strong><span>${c.internship_unit || '-'}</span></div>
-          <div><strong>地點</strong><span>${c.internship_location || '-'}</span></div>
-          <div><strong>期間</strong><span>${c.internship_period || '-'}</span></div>
-          <div><strong>時段</strong><span>${c.internship_time || '-'}</span></div>
-          <div><strong>名額</strong><span>${c.internship_quota || '-'}</span></div>
-          <div class="full"><strong>實習內容</strong><span>${c.internship_content || '-'}</span></div>
-          <div class="full"><strong>備註</strong><span>${c.remark || '-'}</span></div>
-        </div>
+    </div>
+    <div class="section">
+      <h5>實習職缺資訊</h5>
+      <div class="info-grid">
+        <div><strong>實習職位</strong><span>${c.internship_unit || '-'}</span></div>
+        <div><strong>地點</strong><span>${c.internship_location || '-'}</span></div>
+        <div><strong>期間</strong><span>${c.internship_period || '-'}</span></div>
+        <div><strong>時段</strong><span>${c.internship_time || '-'}</span></div>
+        <div><strong>名額</strong><span>${c.internship_quota || '-'}</span></div>
+        <div class="full"><strong>實習內容</strong><span>${c.internship_content || '-'}</span></div>
+        <div class="full"><strong>備註</strong><span>${c.remark || '-'}</span></div>
       </div>
-    </div>`;
+    </div>
+  </div>`;
+
       document.getElementById("previewContent").innerHTML = content;
       new bootstrap.Modal(document.getElementById("previewModal")).show();
     }
@@ -395,43 +401,29 @@
       fetch("/api/get_my_companies")
         .then(res => res.json())
         .then(data => {
-          if (!data.success || !data.companies || data.companies.length === 0) {
+          if (!data.success || data.companies.length === 0) {
             uploadedTableBody.innerHTML = `<tr><td colspan="5" class="text-center text-muted">目前沒有上傳紀錄</td></tr>`;
             return;
           }
-
-          uploadedCompanies = data.companies.map(c => {
-            // 🧩 若有 json_data，就嘗試解析
-            if (c.json_data) {
-              try {
-                const parsed = typeof c.json_data === "string" ? JSON.parse(c.json_data) : c.json_data;
-                return { ...c, ...parsed };// 合併外層與內層欄位
-              } catch (err) {
-                console.warn("⚠️ JSON 解析失敗：", c.json_data);
-              }
-            }
-            return c;
-          });
-
+          uploadedCompanies = data.companies;
           uploadedTableBody.innerHTML = "";
           uploadedCompanies.forEach((c, idx) => {
             const statusText =
               c.status === "pending" ? "審查中" :
                 c.status === "approved" ? "已通過" :
                   c.status === "rejected" ? "已拒絕" : c.status;
-
             uploadedTableBody.innerHTML += `
-          <tr>
-            <td>${idx + 1}</td>
-            <td>${c.company_name || c.original_filename || "未命名"}</td>
-            <td>${c.upload_time || "-"}</td>
-            <td>${statusText}</td>
-            <td>
-              <button class="btn btn-sm btn-outline-info me-1" onclick="previewCompany(${idx}, 'history')">預覽</button>
-              <button class="btn btn-sm btn-outline-primary me-1" onclick="downloadFromServer(${c.id})">下載</button>
-              <button class="btn btn-sm btn-outline-danger" onclick="deleteFromServer(${c.id})">刪除</button>
-            </td>
-          </tr>`;
+              <tr>
+                <td>${idx + 1}</td>
+                <td>${c.company_name || c.original_filename || "未命名"}</td>
+                <td>${c.upload_time || "-"}</td>
+                <td>${statusText}</td>
+                <td>
+                  <button class="btn btn-sm btn-outline-info me-1" onclick="previewCompany(${idx}, 'history')">預覽</button>
+                  <button class="btn btn-sm btn-outline-primary me-1" onclick="downloadFromServer(${c.id})">下載</button>
+                  <button class="btn btn-sm btn-outline-danger" onclick="deleteFromServer(${c.id})">刪除</button>
+                </td>
+              </tr>`;
           });
         })
         .catch(err => {
