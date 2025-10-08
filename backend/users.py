@@ -287,6 +287,11 @@ def ta_home():
 def manage_companies():
     return render_template('user_shared/manage_companies.html')
 
+#志願序最終結果 
+@users_bp.route('/final_results')
+def final_results():
+    return render_template('user_shared/final_results.html')
+
 
 # 管理員首頁（後台）
 @users_bp.route('/admin_home')
