@@ -132,105 +132,200 @@
       <button id="nextBtn">下一頁</button>
     </div>
   </div>
-<script>
-  document.addEventListener('DOMContentLoaded', () => {
-    // 取得登入使用者資料
-    fetch('/api/get_user_info')
-      .then(res => res.json())
-      .then(data => {
-        if (!data.success) throw new Error(data.message || '取得資料失敗');
-        const user = data.user;
 
-        // 頭像
-        document.getElementById('avatarPreview').src =
-          user.avatar_url || 'https://via.placeholder.com/100?text=頭像';
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      const pages = document.querySelectorAll('.page');
+      let currentPage = 0;
 
-        // 身分轉換
-        const roleMap = {
-          "student": "學生",
-          "teacher": "教師",
-          "director": "主任",
-          "ta": "科助",
-          "admin": "管理員"
-        };
-        document.getElementById('identity').value = roleMap[user.role] || '';
+      const prevBtn = document.getElementById('prevBtn');
+      const nextBtn = document.getElementById('nextBtn');
 
-        // 如果是科助，隱藏班級欄位
-        if (user.role === 'ta') {
-          const classLabel = document.querySelector('label[for="combinedClass"]');
-          const classInput = document.getElementById('combinedClass');
-          if (classLabel) classLabel.style.display = 'none';
-          if (classInput) classInput.style.display = 'none';
+      // 用來儲存 class_id 後續更新用
+      window.classId = null;
+
+      function showPage(index) {
+        pages.forEach((page, i) => page.classList.toggle('active', i === index));
+        prevBtn.disabled = index === 0;
+        nextBtn.textContent = index === pages.length - 1 ? '完成' : '下一頁';
+      }
+
+      // 載入用戶資料
+      fetch('/api/profile')
+        .then(res => {
+          if (!res.ok) throw new Error('無法取得用戶資料');
+          return res.json();
+        })
+        .then(data => {
+          if (!data.success) throw new Error(data.message || '取得資料失敗');
+          const user = data.user;
+
+          // 頭像 - 假設後端有avatar_url欄位，沒的話用placeholder
+          document.getElementById('avatarPreview').src = user.avatar_url || 'https://via.placeholder.com/100?text=頭像';
+
+          // 身分轉換 (和你後端 role_map 對應)
+          const roleMap = {
+            "student": "學生",
+            "teacher": "教師",
+            "director": "主任",
+            "ta": "科助",
+            "admin": "管理員"
+          };
+          document.getElementById('identity').value = roleMap[user.role] || '';
+
+          if (user.role === 'ta') {
+            const classLabel = document.querySelector('label[for="combinedClass"]');
+            const classInput = document.getElementById('combinedClass');
+            if (classLabel) classLabel.style.display = 'none';
+            if (classInput) classInput.style.display = 'none';
+          }
+
+          // 班級顯示 & 存 class_id
+          if (user.classes && user.classes.length > 0) {
+            document.getElementById('combinedClass').value = user.classes
+              .map(c => (c.department.replace("管科", "") + c.name))
+              .join("、");
+          } else {
+            document.getElementById('combinedClass').value = user.class_display_name || '';
+          }
+          window.classId = user.class_id || null;
+
+          document.getElementById('name').value = user.name || '';
+          document.getElementById('studentId').value = user.username || '';
+          document.getElementById('email').value = user.email || '';
+        })
+        .catch(err => alert(err.message));
+
+      prevBtn.addEventListener('click', () => {
+        if (currentPage > 0) {
+          currentPage--;
+          showPage(currentPage);
         }
-
-        // 班級顯示 & 存 class_id
-        if (user.classes && user.classes.length > 0) {
-          document.getElementById('combinedClass').value = user.classes
-            .map(c => (c.department.replace("管科", "") + c.name))
-            .join("、");
-        } else {
-          document.getElementById('combinedClass').value = user.class_display_name || '';
-        }
-        window.classId = user.class_id || null;
-
-        // 其他欄位
-        document.getElementById('name').value = user.name || '';
-        document.getElementById('studentId').value = user.username || '';
-        document.getElementById('email').value = user.email || '';
-      })
-      .catch(err => {
-        console.error(err);
-        alert('無法取得使用者資料');
       });
 
-    // 上傳表單送出
-    document.getElementById('saveBtn').addEventListener('click', async () => {
-      try {
-        const roleMapReverse = {
-          "學生": "student",
-          "教師": "teacher",
-          "主任": "director",
-          "科助": "ta",
-          "管理員": "admin"
-        };
+      nextBtn.addEventListener('click', () => {
+        if (currentPage < pages.length - 1) {
+          currentPage++;
+          showPage(currentPage);
+        } else {
+          // 完成按鈕，送出資料
 
-        const roleValue = roleMapReverse[document.getElementById('identity').value] || 'student';
+          const avatarFile = document.getElementById('avatarUpload').files[0];
 
-        const payload = {
-          username: document.getElementById('studentId').value,
-          role: roleValue,
-          name: document.getElementById('name').value,
-          class_id: roleValue === 'ta' ? null : window.classId, // ✅ TA 不送出 class_id
-        };
+          // 上傳頭像（如果有）
+          function uploadAvatar() {
+            if (!avatarFile) return Promise.resolve(null);
 
-        const formData = new FormData();
-        formData.append('data', JSON.stringify(payload));
+            const formData = new FormData();
+            formData.append('avatar', avatarFile);
 
-        const avatarFile = document.getElementById('avatar').files[0];
-        if (avatarFile) {
-          formData.append('avatar', avatarFile);
+            return fetch('/api/upload_avatar', {
+              method: 'POST',
+              body: formData,
+            })
+              .then(res => res.json())
+              .then(data => {
+                if (!data.success) throw new Error(data.message || '頭像上傳失敗');
+                return data.avatar_url; // 回傳頭像URL
+              });
+          }
+
+          uploadAvatar()
+            .then(avatarUrl => {
+              // 如果有新的頭像URL，更新預覽
+              if (avatarUrl) {
+                document.getElementById('avatarPreview').src = avatarUrl;
+              }
+              
+              // 更新個人資料
+              const roleMapReverse = {
+                "學生": "student",
+                "教師": "teacher",
+                "主任": "director",
+                "科助": "ta",
+                "管理員": "admin"
+              };
+
+              const payload = {
+                username: document.getElementById('studentId').value,
+                role: roleValue,
+                name: document.getElementById('name').value,
+                class_id: roleValue === 'ta' ? null : window.classId,
+              };
+
+              return fetch('/api/saveProfile', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+              })
+                .then(res => res.json())
+                .then(data => {
+                  if (!data.success) throw new Error(data.message || '更新個人資料失敗');
+                  return avatarUrl;
+                });
+            })
+            .then(() => {
+              // 變更密碼（如果有填）
+              const oldPwd = document.getElementById('oldPassword').value.trim();
+              const newPwd = document.getElementById('newPassword').value.trim();
+              const confirmPwd = document.getElementById('confirmPassword').value.trim();
+
+              if (oldPwd || newPwd || confirmPwd) {
+                if (newPwd !== confirmPwd) {
+                  alert('新密碼與確認新密碼不符！');
+                  throw new Error('密碼確認失敗');
+                }
+                return fetch('/api/change_password', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ old_password: oldPwd, new_password: newPwd }),
+                })
+                  .then(res => res.json())
+                  .then(data => {
+                    if (!data.success) throw new Error(data.message || '變更密碼失敗');
+                    alert('資料及密碼更新成功！');
+                    // 根據身分跳轉
+                    const role = document.getElementById('identity').value;
+                    if (role === '學生') {
+                      window.location.href = '/student_home';
+                    } else if (role === '科助') {
+                      window.location.href = '/ta_home';
+                    } else {
+                      window.location.href = '/student_home'; // 預設跳轉
+                    }
+                  });
+              } else {
+                alert('資料更新成功！');
+                // 根據身分跳轉
+                const role = roleMapReverse[document.getElementById('identity').value];
+                if (role === 'student') {
+                  window.location.href = '/student_home';
+                } else if (role === 'ta') {
+                  window.location.href = '/ta_home';
+                } else {
+                  window.location.href = '/student_home'; // 預設跳轉
+                }
+              }
+            })
+            .catch(err => alert(err.message));
         }
+      });
 
-        const res = await fetch('/api/update_user_info', {
-          method: 'POST',
-          body: formData
-        });
+      // 頭像預覽功能
+      document.getElementById('avatarUpload').addEventListener('change', e => {
+        const file = e.target.files[0];
+        if (file) {
+          const reader = new FileReader();
+          reader.onload = event => {
+            document.getElementById('avatarPreview').src = event.target.result;
+          };
+          reader.readAsDataURL(file);
+        }
+      });
 
-        const result = await res.json();
-        if (!result.success) throw new Error(result.message || '更新失敗');
-
-        alert('更新成功！');
-        // ✅ 更新成功後導回主頁（可改為你要的頁面）
-        window.location.href = '/student-home.html';
-
-      } catch (err) {
-        console.error(err);
-        alert('更新時發生錯誤：' + err.message);
-      }
+      showPage(currentPage);
     });
-  });
-</script>
-
+  </script>
 </body>
 
 </html>
