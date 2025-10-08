@@ -299,10 +299,11 @@
         })
         .then(data => {
           if (data.success && data.user && data.user.avatar_url) {
-            // 確保頭像URL是完整的路徑
-            const avatarUrl = data.user.avatar_url.startsWith('http') ? 
-              data.user.avatar_url : 
+            // 確保頭像URL是完整的路徑，並加上時間戳避免快取
+            const rawUrl = data.user.avatar_url.startsWith('http') ?
+              data.user.avatar_url :
               window.location.origin + data.user.avatar_url;
+            const avatarUrl = rawUrl + (rawUrl.includes('?') ? '&' : '?') + 't=' + Date.now();
             document.getElementById('login-avatar').src = avatarUrl;
           }
         })
@@ -310,12 +311,12 @@
           console.log('載入頭像失敗:', err);
           // 保持預設頭像
         });
-         // 帳號下拉
-      document.addEventListener("DOMContentLoaded", function () {
-      // 載入用戶頭像
+    }
+
+    // 頁面就緒後載入頭像
+    document.addEventListener('DOMContentLoaded', () => {
       loadUserAvatar();
     });
-  }
     document.getElementById('menu-btn').addEventListener('click', () => {
       document.getElementById('side-menu').classList.add('open');
     });
