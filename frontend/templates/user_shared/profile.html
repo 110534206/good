@@ -174,8 +174,9 @@
           if (!data.success) throw new Error(data.message || '取得資料失敗');
           const user = data.user;
 
-          // 頭像 - 假設後端有avatar_url欄位，沒的話用placeholder
-          document.getElementById('avatarPreview').src = user.avatar_url || 'https://via.placeholder.com/100?text=頭像';
+          // 頭像 - 加上時間戳避免快取造成顯示舊圖
+          const initialAvatarUrl = user.avatar_url ? (user.avatar_url + '?t=' + Date.now()) : 'https://via.placeholder.com/100?text=頭像';
+          document.getElementById('avatarPreview').src = initialAvatarUrl;
 
           // 身分轉換
           document.getElementById('identity').value = roleMap[user.role] || '';
@@ -240,9 +241,9 @@
 
           uploadAvatar()
             .then(avatarUrl => {
-              // 如果有新的頭像URL，更新預覽
+              // 如果有新的頭像URL，更新預覽（加上時間戳避免被舊圖覆蓋）
               if (avatarUrl) {
-                document.getElementById('avatarPreview').src = avatarUrl;
+                document.getElementById('avatarPreview').src = avatarUrl + '?t=' + Date.now();
               }
               
               // 更新個人資料

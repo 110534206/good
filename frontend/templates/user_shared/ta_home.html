@@ -310,12 +310,12 @@
           console.log('載入頭像失敗:', err);
           // 保持預設頭像
         });
-    }
-    document.addEventListener("DOMContentLoaded", function () {
+         // 帳號下拉
+      document.addEventListener("DOMContentLoaded", function () {
       // 載入用戶頭像
       loadUserAvatar();
     });
-    
+  }
     document.getElementById('menu-btn').addEventListener('click', () => {
       document.getElementById('side-menu').classList.add('open');
     });
