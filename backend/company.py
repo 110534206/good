@@ -482,8 +482,20 @@ def api_download_company_detail(company_id):
     try:
         conn = get_db()
         cursor = conn.cursor(dictionary=True)
+
+        # 取得公司資料
         cursor.execute("""
-            SELECT company_name, description, location, contact_person, contact_email, contact_phone, status, submitted_at, reviewed_at
+            SELECT 
+                company_name,
+                description,
+                location,
+                contact_person,
+                contact_title,
+                contact_email,
+                contact_phone,
+                status,
+                submitted_at,
+                reviewed_at
             FROM internship_companies
             WHERE id = %s AND uploaded_by_user_id = %s
         """, (company_id, session["user_id"]))
@@ -492,15 +504,66 @@ def api_download_company_detail(company_id):
         if not company:
             return jsonify({"success": False, "message": "查無資料"}), 404
 
-        df = pd.DataFrame([company])
+        # 取得職缺資料
+        cursor.execute("""
+            SELECT 
+                title,
+                description AS job_description,
+                department,
+                location,
+                period,
+                work_time,
+                slots,
+                remark
+            FROM internship_jobs
+            WHERE company_id = %s
+        """, (company_id,))
+        jobs = cursor.fetchall()
+
+        # ---- 中文欄位名稱轉換 ----
+        company_data = {
+            "公司名稱": company["company_name"],
+            "公司簡介": company["description"],
+            "公司地址": company["location"],
+            "聯絡人姓名": company["contact_person"],
+            "聯絡人職稱": company["contact_title"],
+            "聯絡信箱": company["contact_email"],
+            "聯絡電話": company["contact_phone"],
+            "上傳時間": company["submitted_at"].strftime("%Y-%m-%d %H:%M:%S") if company["submitted_at"] else "",
+            "審核時間": company["reviewed_at"].strftime("%Y-%m-%d %H:%M:%S") if company["reviewed_at"] else "",
+            "目前狀態": "核准" if company["status"] == "approved" else "拒絕" if company["status"] == "rejected" else "待審核"
+        }
+
+        # ---- 建立 Excel ----
         output = io.BytesIO()
         with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-            df.to_excel(writer, sheet_name='公司資料', index=False)
+            # 公司基本資料
+            pd.DataFrame([company_data]).to_excel(writer, sheet_name='公司資料', index=False)
+
+            # 若有職缺，加入第二張工作表
+            if jobs:
+                job_df = pd.DataFrame(jobs)
+                # 改中文欄位名稱
+                job_df.rename(columns={
+                    "title": "實習單位名稱",
+                    "job_description": "工作內容",
+                    "department": "部門",
+                    "location": "工作地點",
+                    "period": "實習期間",
+                    "work_time": "實習時間",
+                    "slots": "需求人數",
+                    "remark": "備註"
+                }, inplace=True)
+                job_df.to_excel(writer, sheet_name='實習職缺', index=False)
 
         output.seek(0)
         filename = f"{company['company_name']}_詳細資料.xlsx"
-        return send_file(output, download_name=filename, as_attachment=True,
-                         mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+        return send_file(
+            output,
+            download_name=filename,
+            as_attachment=True,
+            mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        )
 
     except Exception:
         print("❌ 下載公司詳細資料錯誤：", traceback.format_exc())
@@ -509,7 +572,6 @@ def api_download_company_detail(company_id):
     finally:
         cursor.close()
         conn.close()
-
 
 # =========================================================
 # API - 查詢公司狀態
