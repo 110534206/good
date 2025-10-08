@@ -589,13 +589,19 @@
         .then(res => res.json())
         .then(data => {
           if (data.success) {
-            alert("已退件");
-            location.reload();
+            alert("已退件，請填寫退件原因。");
+            // 設定目前履歷ID
+            currentResumeId = resumeId;
+            // 清空留言欄
+            document.getElementById("commentInput").value = "";
+            // 顯示留言Modal
+            new bootstrap.Modal(document.getElementById("commentModal")).show();
           } else {
             alert("退件失敗：" + data.message);
           }
         });
     }
+
 
     function approveResume(resumeId) {
       if (!confirm("確定要將此履歷標記為完成？")) return;
