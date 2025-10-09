@@ -305,21 +305,26 @@
 
   <!-- JS 控制開關 -->
   <script>
-       // 載入用戶頭像
-       function loadUserAvatar() {
+    // 載入用戶頭像
+    function loadUserAvatar() {
+      console.log('開始載入頭像...');
       fetch('/api/profile')
         .then(res => {
           if (!res.ok) throw new Error('無法取得用戶資料');
           return res.json();
         })
         .then(data => {
+          console.log('API 回應:', data);
           if (data.success && data.user && data.user.avatar_url) {
             // 確保頭像URL是完整的路徑，並加上時間戳避免快取
             const rawUrl = data.user.avatar_url.startsWith('http') ?
               data.user.avatar_url :
               window.location.origin + data.user.avatar_url;
             const avatarUrl = rawUrl + (rawUrl.includes('?') ? '&' : '?') + 't=' + Date.now();
+            console.log('設定頭像URL:', avatarUrl);
             document.getElementById('login-avatar').src = avatarUrl;
+          } else {
+            console.log('沒有頭像URL或API失敗');
           }
         })
         .catch(err => {
