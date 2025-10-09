@@ -115,7 +115,7 @@ def upload_company_bulk():
             jobs = c.get("internship_jobs") or [{
                 "title": c.get("internship_unit") or "",
                 "description": c.get("internship_content") or "",
-                "location": c.get("internship_location") or "",
+                "department": c.get("department") or "", 
                 "period": c.get("internship_period") or "",
                 "work_time": c.get("internship_time") or "",
                 "slots": c.get("internship_quota") or "",
@@ -137,14 +137,13 @@ def upload_company_bulk():
 
                 cursor.execute("""
                     INSERT INTO internship_jobs
-                    (company_id, title, description, department, location, period, work_time, slots, remark)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    (company_id, title, description, department, period, work_time, slots, remark)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                 """, (
                     company_id,
                     title,
                     description,
                     department,
-                    location,
                     period,
                     work_time,
                     slots,
@@ -315,8 +314,7 @@ def api_get_company_detail():
             SELECT 
                 title AS internship_unit,
                 description AS internship_content,
-                department AS internship_department,
-                location AS internship_location,
+                department AS department,
                 period AS internship_period,
                 work_time AS internship_time,
                 slots AS internship_quota,
@@ -391,7 +389,6 @@ def api_get_my_companies():
             SELECT 
                 title AS internship_unit,
                 description AS internship_content,
-                location AS internship_location,
                 period AS internship_period,
                 work_time AS internship_time,
                 slots AS internship_quota,
@@ -510,7 +507,6 @@ def api_download_company_detail(company_id):
                 title,
                 description AS job_description,
                 department,
-                location,
                 period,
                 work_time,
                 slots,
@@ -548,7 +544,6 @@ def api_download_company_detail(company_id):
                     "title": "實習單位名稱",
                     "job_description": "工作內容",
                     "department": "部門",
-                    "location": "工作地點",
                     "period": "實習期間",
                     "work_time": "實習時間",
                     "slots": "需求人數",
@@ -599,22 +594,35 @@ def api_company_status():
 # API - 刪除公司
 # =========================================================
 @company_bp.route("/api/delete_company", methods=["DELETE"])
-def api_delete_company():
-    company_id = request.args.get("company_id")
-    if not company_id:
-        return jsonify({"success": False, "message": "缺少 company_id"}), 400
+def delete_company():
+    try:
+        # 登入檢查
+        if "user_id" not in session:
+            return jsonify({"success": False, "message": "未登入"}), 401
 
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute("""
-        DELETE FROM internship_companies 
-        WHERE id=%s AND uploaded_by_user_id=%s
-    """, (company_id, session.get("user_id")))
-    conn.commit()
-    cursor.close()
-    conn.close()
+        company_id = request.args.get("company_id")
+        if not company_id:
+            return jsonify({"success": False, "message": "缺少公司ID"}), 400
 
-    return jsonify({"success": True, "message": "刪除成功"})
+        db = get_db()
+        cursor = db.cursor()
+
+        # 🔹 先刪除該公司底下的所有職缺
+        cursor.execute("DELETE FROM internship_jobs WHERE company_id = %s", (company_id,))
+
+        # 🔹 再刪除公司資料
+        cursor.execute("DELETE FROM internship_companies WHERE id = %s", (company_id,))
+
+        db.commit()
+        cursor.close()
+        db.close()
+
+        return jsonify({"success": True, "message": "資料已成功刪除"})
+
+    except Exception as e:
+        print("❌ [delete_company] 發生錯誤:", e)
+        traceback.print_exc()
+        return jsonify({"success": False, "message": "刪除失敗，請稍後再試"}), 500
 
 # =========================================================
 # 頁面 - 公司審核頁面

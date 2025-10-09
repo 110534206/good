@@ -131,11 +131,11 @@
           <tr>
             <th>#</th>
             <th>公司名稱</th>
-            <th>聯絡人</th>
+            <th>公司地址</th>
             <th>實習職位</th>
-            <th>實習地點</th>
+            <th>所屬部門</th>
             <th>實習期間</th>
-            <th>實習人數</th>
+            <th>名額</th>
             <th>操作</th>
           </tr>
         </thead>
@@ -245,7 +245,7 @@
           contact_email: r[6] || "",
           internship_unit: r[7] || "",
           internship_content: r[8] || "",
-          internship_location: r[9] || "",
+          department: r[9] || "",
           internship_period: r[10] || "",
           internship_time: r[11] || "",
           internship_quota: r[12] || "",
@@ -253,15 +253,14 @@
           status: "審查中"
         });
       }
-
       parsedData.forEach((c, idx) => {
         previewTableBody.innerHTML += `
           <tr>
             <td>${idx + 1}</td>
             <td>${c.company_name}</td>
-            <td>${c.contact_name}</td>
+            <td>${c.company_address}</td>
             <td>${c.internship_unit}</td>
-            <td>${c.internship_location}</td>
+            <td>${c.department}</td>
             <td>${c.internship_period}</td>
             <td>${c.internship_quota}</td>
             <td>
@@ -360,7 +359,7 @@
         <h5>實習職缺資訊</h5>
         <div class="info-grid">
           <div><strong>實習職位</strong><span>${c.internship_unit || '-'}</span></div>
-          <div><strong>地點</strong><span>${c.internship_location || '-'}</span></div>
+          <div><strong>所屬部門</strong><span>${c.department || '-'}</span></div>
           <div><strong>期間</strong><span>${c.internship_period || '-'}</span></div>
           <div><strong>時段</strong><span>${c.internship_time || '-'}</span></div>
           <div><strong>名額</strong><span>${c.internship_quota || '-'}</span></div>
@@ -377,13 +376,13 @@
       if (!confirm("確定刪除此筆公司資料？")) return;
       parsedData.splice(idx, 1);
       renderTable([["公司名稱", "公司簡介", "公司地址", "聯絡人姓名", "聯絡人職稱", "聯絡電話", "聯絡信箱",
-        "實習職位", "實習內容", "實習地點", "實習期間", "實習時段", "實習人數", "備註"],
+        "實習職位", "實習內容", "所屬部門", "實習期間", "實習時段", "實習人數", "備註"],
       ...parsedData.map(c => Object.values(c))]);
     }
 
     function downloadTemplate() {
       const headers = [["公司名稱", "公司簡介", "公司地址", "聯絡人姓名", "聯絡人職稱", "聯絡電話", "聯絡信箱",
-        "實習職位", "實習內容", "實習地點", "實習期間", "實習時段", "實習人數", "備註"]];
+        "實習職位", "實習內容", "所屬部門", "實習期間", "實習時段", "實習人數", "備註"]];
       const ws = XLSX.utils.aoa_to_sheet(headers);
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, "公司上傳範本");
