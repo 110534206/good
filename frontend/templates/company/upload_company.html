@@ -12,6 +12,135 @@
       background-color: #ffffff;
       font-family: "Noto Sans TC", sans-serif;
       margin: 30px;
+      padding-top: 30px;
+
+    }
+
+     .top-bar {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 60px;
+      background-color: #fff;
+      z-index: 1100;
+      display: flex;
+      align-items: center;
+      box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
+    }
+
+    .top-bar>.container {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      height: 100%;
+      gap: 30px;
+    }
+
+    .top-bar-left #menu-btn {
+      width: 30px;
+      height: 22px;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+
+    .top-bar-left #menu-btn span {
+      height: 4px;
+      background-color: #333;
+      border-radius: 2px;
+    }
+
+    .top-bar-right {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-weight: bold;
+    }
+
+    .top-bar-right .btn-link {
+      color: #0066cc;
+      background-color: transparent;
+      border: 1.5px solid #0066cc;
+      padding: 0.3rem 0.7rem;
+      border-radius: 6px;
+      text-decoration: none;
+      transition: background-color 0.3s ease, color 0.3s ease;
+      font-size: 0.9rem;
+    }
+
+    .top-bar-right .btn-link:hover {
+      background-color: #0066cc;
+      color: white;
+    }
+
+    .top-bar-right #login-avatar {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      object-fit: cover;
+      cursor: pointer;
+      margin-top: 6px;
+    }
+
+    /* 側邊選單 */
+    #side-menu {
+      position: fixed;
+      top: 0;
+      left: 0;
+      height: 100vh;
+      width: 320px;
+      max-width: 80vw;
+      background-color: rgba(10, 10, 10, 0.95);
+      backdrop-filter: blur(6px);
+      box-shadow: 3px 0 12px rgb(0 0 0 / 0.7);
+      padding: 2rem 1.5rem;
+      transform: translateX(-100%);
+      transition: transform 0.3s ease-in-out;
+      z-index: 1200;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      color: white;
+      user-select: none;
+    }
+
+    #side-menu.open {
+      transform: translateX(0);
+    }
+
+    #close-btn {
+      position: absolute;
+      top: 2rem;
+      right: 1.6rem;
+      font-size: 2.2rem;
+      background: none;
+      border: none;
+      color: white;
+      cursor: pointer;
+      line-height: 1;
+      width: 2.5rem;
+      height: 2.5rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    #side-menu a {
+      display: block;
+      width: 100%;
+      padding: 0.5rem 0;
+      font-size: 1.1rem;
+      color: #ddd;
+      text-decoration: none;
+      border-radius: 4px;
+      transition: background-color 0.2s ease;
+    }
+
+    #side-menu a:hover {
+      background-color: rgba(255, 255, 255, 0.15);
+      color: white;
     }
 
     h2 {
@@ -105,6 +234,45 @@
 </head>
 
 <body>
+
+   <!-- ✅ 頂部欄（從教師主頁複製） -->
+  <div class="top-bar">
+    <div class="container">
+      <div class="top-bar-left">
+        <div id="menu-btn" title="選單" role="button" tabindex="0">
+          <span></span><span></span><span></span>
+        </div>
+      </div>
+
+      <div class="top-bar-right">
+        <a href="/profile">
+          <img src="{{ url_for('static', filename='images/avatar.png') }}" alt="頭像" id="login-avatar" />
+        </a>
+
+        <div class="dropdown" style="position: relative;">
+          <button id="accountDropdownBtn" class="btn-link" aria-expanded="false">帳號 ▾</button>
+          <div id="accountDropdownMenu" class="dropdown-menu"
+            style="position:absolute; right:0; top:120%; background:#fff; border:1px solid #ccc; border-radius:8px; padding:6px; min-width:160px; display:none; box-shadow:0 4px 12px rgba(0,0,0,.12);">
+            <a href="/profile" class="btn-link" style="display:block; border:none; margin:4px 0;">個人資料</a>
+            <a id="toHomeroomLink" href="/class_teacher_home" class="btn-link"
+              style="display:none; border:none; margin:4px 0;">切換班導身分</a>
+            <a href="/login" class="btn-link" style="display:block; border:none; margin:4px 0;">登出</a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 側邊選單 -->
+  <nav id="side-menu" aria-hidden="true" role="navigation" aria-label="功能選單">
+    <button id="close-btn" aria-label="關閉功能選單">×</button>
+    <h2>功能選單</h2>
+    <a href="/teacher_home">首頁</a>
+    <a href="/profile">個人資料</a>
+    <a href="/notifications">查看公告</a>
+    <a href="/upload_company">建立實習機會</a>
+  </nav>
+
   <div class="container my-4">
     <h2>上傳實習公司</h2>
 
@@ -454,6 +622,59 @@
     }
 
     document.addEventListener("DOMContentLoaded", loadUploadedCompanies);
+
+     // ✅ 頂端欄控制與帳號功能
+    function loadUserAvatar() {
+      fetch('/api/profile')
+        .then(res => res.json())
+        .then(data => {
+          if (data.success && data.user && data.user.avatar_url) {
+            const rawUrl = data.user.avatar_url.startsWith('http')
+              ? data.user.avatar_url
+              : window.location.origin + data.user.avatar_url;
+            document.getElementById('login-avatar').src = rawUrl + '?t=' + Date.now();
+          }
+        }).catch(() => {});
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      loadUserAvatar();
+      const username = localStorage.getItem("username");
+      const role = localStorage.getItem("selectedRole");
+      if (!username || role !== "teacher") {
+        alert("請以教師身份登入！");
+        window.location.href = "/login";
+      }
+      loadUploadedCompanies();
+    });
+
+    document.getElementById('menu-btn').addEventListener('click', () => {
+      document.getElementById('side-menu').classList.add('open');
+    });
+    document.getElementById('close-btn').addEventListener('click', () => {
+      document.getElementById('side-menu').classList.remove('open');
+    });
+
+    const btn = document.getElementById('accountDropdownBtn');
+    const menu = document.getElementById('accountDropdownMenu');
+    btn.addEventListener('click', () => {
+      const open = menu.style.display === 'block';
+      menu.style.display = open ? 'none' : 'block';
+      btn.setAttribute('aria-expanded', String(!open));
+    });
+    document.addEventListener('click', (e) => {
+      if (!menu.contains(e.target) && !btn.contains(e.target)) {
+        menu.style.display = 'none';
+        btn.setAttribute('aria-expanded', 'false');
+      }
+    });
+
+    fetch('/api/profile').then(r => r.json()).then(d => {
+      if (d.success && d.user && d.user.is_homeroom) {
+        document.getElementById('toHomeroomLink').style.display = 'block';
+      }
+    }).catch(() => {});
+
   </script>
 </body>
 
