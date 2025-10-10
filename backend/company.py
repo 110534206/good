@@ -219,18 +219,28 @@ def api_get_pending_companies():
     try:
         conn = get_db()
         cursor = conn.cursor(dictionary=True)
+
         cursor.execute("""
             SELECT 
-                id,
-                company_name,
-                contact_person AS contact_name,
-                contact_email,
-                submitted_at AS upload_time,
-                status
-            FROM internship_companies
-            WHERE status = 'pending'
-            ORDER BY submitted_at DESC
+                ic.id,
+                CONCAT(u.name, 
+                   CASE 
+                     WHEN ct.teacher_id IS NOT NULL THEN '（班導）'
+                     ELSE ''
+                   END
+                ) AS upload_teacher_name,
+                ic.company_name,
+                ic.contact_person AS contact_name,
+                ic.contact_email,
+                ic.submitted_at AS upload_time,
+                ic.status
+            FROM internship_companies ic
+            LEFT JOIN users u ON ic.uploaded_by_user_id = u.id
+            LEFT JOIN classes_teacher ct ON ct.teacher_id = u.id
+            WHERE ic.status = 'pending'
+            ORDER BY ic.submitted_at DESC
         """)
+
         companies = cursor.fetchall()
         cursor.close()
         conn.close()
@@ -252,26 +262,37 @@ def api_get_reviewed_companies():
     try:
         conn = get_db()
         cursor = conn.cursor(dictionary=True)
+
         cursor.execute("""
             SELECT 
-                id,
-                company_name,
-                status,
-                submitted_at AS upload_time,
-                reviewed_at
-            FROM internship_companies
-            WHERE status IN ('approved', 'rejected')
-            ORDER BY reviewed_at DESC
+                ic.id,
+                CONCAT(u.name, 
+                   CASE 
+                     WHEN ct.teacher_id IS NOT NULL THEN '（班導）'
+                     ELSE ''
+                   END
+                ) AS upload_teacher_name,
+                ic.company_name, 
+                ic.status,
+                ic.submitted_at AS upload_time,
+                ic.reviewed_at
+            FROM internship_companies ic
+            LEFT JOIN users u ON ic.uploaded_by_user_id = u.id
+            LEFT JOIN classes_teacher ct ON ct.teacher_id = u.id
+            WHERE ic.status IN ('approved', 'rejected')
+            ORDER BY ic.reviewed_at DESC
         """)
+
         companies = cursor.fetchall()
         cursor.close()
         conn.close()
 
         return jsonify({"success": True, "companies": companies})
+
     except Exception:
         print("❌ 取得已審核公司錯誤：", traceback.format_exc())
         return jsonify({"success": False, "message": "伺服器錯誤"}), 500
-    
+
 # =========================================================
 # API - 取得單一公司詳細資料（含職缺）
 # =========================================================

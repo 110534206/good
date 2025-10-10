@@ -1,6 +1,5 @@
 <!DOCTYPE html>
 <html lang="zh-Hant">
-
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -10,7 +9,6 @@
         body {
             background-color: #f8f9fa;
         }
-
         .table thead th {
             background-color: #0d6efd;
             color: white;
@@ -27,6 +25,7 @@
             <button class="btn btn-secondary" onclick="resetSearch()">重置</button>
             <button class="btn btn-success ms-auto" onclick="openCreateModal()">新增用戶</button>
         </div>
+
         <table class="table table-bordered table-hover align-middle">
             <thead>
                 <tr>
@@ -81,11 +80,11 @@
                             <label class="form-label">密碼（留空表示不變更）</label>
                             <input type="password" id="editPassword" class="form-control">
                         </div>
+                        <button type="submit" class="btn btn-primary">儲存</button>
+                    </form>
                 </div>
-                <button type="submit" class="btn btn-primary">儲存</button>
             </div>
         </div>
-    </div>
     </div>
 
     <!-- 新增用戶 Modal -->
@@ -124,7 +123,6 @@
                                 <option value="admin">管理員</option>
                             </select>
                         </div>
-                        <!-- 🔧【1】新增班級欄位 -->
                         <div class="mb-3" id="createClassIdGroup" style="display: none;">
                             <label class="form-label">班級</label>
                             <select id="createClassId" class="form-select"></select>
@@ -185,29 +183,60 @@
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
-        const roleMap = {
-            student: '學生',
-            teacher: '教師',
-            director: '主任',
-            ta: '科助',
-            admin: '管理員'
-        };
+        document.addEventListener('DOMContentLoaded', () => {
+            const roleMap = {
+                student: '學生',
+                teacher: '教師',
+                director: '主任',
+                ta: '科助',
+                admin: '管理員'
+            };
 
-        async function loadUsers() {
-            try {
-                const res = await fetch('/admin/api/get_all_users');
-                const data = await res.json();
-                if (!data.success) {
-                    alert("載入失敗：" + data.message);
-                    return;
+            async function loadUsers() {
+                try {
+                    const res = await fetch('/admin/api/get_all_users');
+                    const data = await res.json();
+                    if (!data.success) return alert("載入失敗：" + data.message);
+                    const tbody = document.getElementById('userTableBody');
+                    tbody.innerHTML = "";
+                    data.users.forEach(user => {
+                        const tr = document.createElement('tr');
+                        tr.innerHTML = `
+                            <td>${user.id}</td>
+                            <td>${user.username}</td>
+                            <td>${user.name || ''}</td>
+                            <td>${user.email || ''}</td>
+                            <td>${roleMap[user.role] || user.role}</td>
+                            <td>${user.role === 'student' ? (user.class_name || '-') : '-'}</td>
+                            <td>${user.role === 'student' ? (user.department || '-') : '-'}</td>
+                            <td>${['teacher', 'director'].includes(user.role) ? (user.teaching_classes || '-') : '-'}</td>
+                            <td>${user.created_at || ''}</td>
+                            <td>
+                              <button class="btn btn-sm btn-warning" onclick="openEditModal(${user.id}, '${user.username}', '${user.name || ''}', '${user.email || ''}', '${user.role}', '${user.class_id || ''}')">編輯</button>
+                              <button class="btn btn-sm btn-danger" onclick="deleteUser(${user.id})">刪除</button>
+                              ${user.role === 'student' ? `<button class="btn btn-sm btn-outline-primary" onclick="openAssignStudentClass(${user.id})">設定班級</button>` : ''}
+                              ${['teacher', 'director'].includes(user.role) ? `<button class="btn btn-sm btn-outline-secondary" onclick="openAssignTeacherClass(${user.id})">設定帶班</button>` : ''}
+                            </td>`;
+                        tbody.appendChild(tr);
+                    });
+                } catch (err) {
+                    console.error("載入用戶錯誤：", err);
+                    alert("載入用戶失敗");
                 }
+            }
 
+            window.loadUsers = loadUsers;
+            window.searchUsers = async () => {
+                const username = document.getElementById('searchUsername').value.trim();
+                const params = new URLSearchParams();
+                if (username) params.append('username', username);
+                const res = await fetch('/admin/api/search_users?' + params);
+                const data = await res.json();
+                if (!data.success) return alert('搜尋失敗');
                 const tbody = document.getElementById('userTableBody');
-                tbody.innerHTML = "";
-
+                tbody.innerHTML = '';
                 data.users.forEach(user => {
                     const tr = document.createElement('tr');
-
                     tr.innerHTML = `
                         <td>${user.id}</td>
                         <td>${user.username}</td>
@@ -219,220 +248,181 @@
                         <td>${['teacher', 'director'].includes(user.role) ? (user.teaching_classes || '-') : '-'}</td>
                         <td>${user.created_at || ''}</td>
                         <td>
-                          <button class="btn btn-sm btn-warning" onclick="openEditModal(${user.id}, '${user.username}', '${user.name || ''}', '${user.email || ''}', '${user.role}', '${user.class_id || ''}')">編輯</button>
-                          <button class="btn btn-sm btn-danger" onclick="deleteUser(${user.id})">刪除</button>
-                          ${user.role === 'student' ? `<button class="btn btn-sm btn-outline-primary" onclick="openAssignStudentClass(${user.id})">設定班級</button>` : ''}
-                          ${['teacher', 'director'].includes(user.role) ? `<button class="btn btn-sm btn-outline-secondary" onclick="openAssignTeacherClass(${user.id})">設定帶班</button>` : ''}
-                        </td>
-                    `;
-
+                            <button class="btn btn-sm btn-warning" onclick="openEditModal(${user.id}, '${user.username}', '${user.name || ''}', '${user.email || ''}', '${user.role}', '${user.class_id || ''}')">編輯</button>
+                            <button class="btn btn-sm btn-danger" onclick="deleteUser(${user.id})">刪除</button>
+                        </td>`;
                     tbody.appendChild(tr);
                 });
-            } catch (err) {
-                console.error("載入用戶錯誤：", err);
-                alert("載入用戶失敗");
+            };
+            window.resetSearch = () => {
+                document.getElementById('searchUsername').value = '';
+                loadUsers();
+            };
+
+            window.openCreateModal = () => {
+                const roleSelect = document.getElementById('createRole');
+                const classGroup = document.getElementById('createClassIdGroup');
+                const classSelect = document.getElementById('createClassId');
+                roleSelect.onchange = () => {
+                    const isStudent = roleSelect.value === 'student';
+                    classGroup.style.display = isStudent ? '' : 'none';
+                    if (isStudent) loadClasses(classSelect);
+                };
+                roleSelect.dispatchEvent(new Event('change'));
+                new bootstrap.Modal(document.getElementById('createUserModal')).show();
+            };
+
+            async function loadClasses(selectEl) {
+                const res = await fetch('/admin/api/get_all_classes');
+                const data = await res.json();
+                if (!data.success) return alert('載入班級失敗');
+                selectEl.innerHTML = '';
+                data.classes.forEach(c => {
+                    const opt = document.createElement('option');
+                    opt.value = c.id;
+                    opt.textContent = `${c.department || ''} ${c.name}`.trim();
+                    selectEl.appendChild(opt);
+                });
             }
-        }
+            window.loadClasses = loadClasses;
 
-        async function searchUsers() {
-            const username = document.getElementById('searchUsername').value.trim();
-
-            const params = new URLSearchParams();
-            if (username) params.append('username', username);
-
-            const res = await fetch('/admin/api/search_users?' + params.toString());
-            const data = await res.json();
-            if (!data.success) { alert('搜尋失敗'); return; }
-
-            const tbody = document.getElementById('userTableBody');
-            tbody.innerHTML = '';
-            data.users.forEach(user => {
-                const tr = document.createElement('tr');
-                tr.innerHTML = `
-                    <td>${user.id}</td>
-                    <td>${user.username}</td>
-                    <td>${user.name || ''}</td>
-                    <td>${user.email || ''}</td>
-                    <td>${roleMap[user.role] || user.role}</td>
-                    <td>${user.role === 'student' ? (user.class_name || '-') : '-'}</td>
-                    <td>${user.role === 'student' ? (user.department || '-') : '-'}</td>
-                    <td>${['teacher', 'director'].includes(user.role) ? (user.teaching_classes || '-') : '-'}</td>
-                    <td>${user.created_at || ''}</td>
-                    <td>
-                      <button class="btn btn-sm btn-warning" onclick="openEditModal(${user.id}, '${user.username}', '${user.name || ''}', '${user.email || ''}', '${user.role}', '${user.class_id || ''}')">編輯</button>
-                      <button class="btn btn-sm btn-danger" onclick="deleteUser(${user.id})">刪除</button>
-                    </td>`;
-                tbody.appendChild(tr);
+            // 綁定新增表單
+            document.getElementById('createUserForm').addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const payload = {
+                    username: document.getElementById('createUsername').value.trim(),
+                    password: document.getElementById('createPassword').value.trim(),
+                    name: document.getElementById('createName').value.trim(),
+                    email: document.getElementById('createEmail').value.trim(),
+                    role: document.getElementById('createRole').value,
+                    class_id: document.getElementById('createClassId').value || null
+                };
+                if (!payload.username || !payload.password || !payload.role)
+                    return alert("請填寫帳號、密碼與角色");
+                const res = await fetch('/admin/api/create_user', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+                });
+                const data = await res.json();
+                alert(data.message);
+                if (data.success) {
+                    bootstrap.Modal.getInstance(document.getElementById('createUserModal')).hide();
+                    document.getElementById('createUserForm').reset();
+                    loadUsers();
+                }
             });
-        }
 
-        function resetSearch() {
-            document.getElementById('searchUsername').value = '';
+            // 編輯表單事件
+            document.getElementById('editUserForm').addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const id = document.getElementById('editUserId').value;
+                const payload = {
+                    username: document.getElementById('editUsername').value,
+                    name: document.getElementById('editName').value,
+                    email: document.getElementById('editEmail').value,
+                    role: document.getElementById('editRole').value,
+                    password: document.getElementById('editPassword').value,
+                    class_id: document.getElementById('editClassId').value || null
+                };
+                const res = await fetch(`/admin/api/update_user/${id}`, {
+                    method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+                });
+                const data = await res.json();
+                alert(data.message);
+                if (data.success) {
+                    bootstrap.Modal.getInstance(document.getElementById('editUserModal')).hide();
+                    loadUsers();
+                }
+            });
+
+            window.deleteUser = async (id) => {
+                if (!confirm("確定要刪除這個用戶嗎？")) return;
+                const res = await fetch(`/admin/api/delete_user/${id}`, { method: 'DELETE' });
+                const data = await res.json();
+                alert(data.message);
+                if (data.success) loadUsers();
+            };
+
+             // 編輯用戶
+    window.openEditModal = (id, username, name, email, role, classId) => {
+        const modal = new bootstrap.Modal(document.getElementById('editUserModal'));
+        document.getElementById('editUserId').value = id;
+        document.getElementById('editUsername').value = username;
+        document.getElementById('editName').value = name;
+        document.getElementById('editEmail').value = email;
+
+        const roleSelect = document.getElementById('editRole');
+        roleSelect.innerHTML = `
+            <option value="student" ${role === 'student' ? 'selected' : ''}>學生</option>
+            <option value="teacher" ${role === 'teacher' ? 'selected' : ''}>教師</option>
+            <option value="director" ${role === 'director' ? 'selected' : ''}>主任</option>
+            <option value="ta" ${role === 'ta' ? 'selected' : ''}>科助</option>
+            <option value="admin" ${role === 'admin' ? 'selected' : ''}>管理員</option>
+        `;
+
+        const classGroup = document.getElementById('editClassIdGroup');
+        const classSelect = document.getElementById('editClassId');
+        const isStudent = role === 'student';
+        classGroup.style.display = isStudent ? '' : 'none';
+        if (isStudent) loadClasses(classSelect, classId);
+
+        modal.show();
+    };
+
+    // 設定帶班
+    window.openAssignTeacherClass = async (userId) => {
+        document.getElementById('assignTeacherId').value = userId;
+        const classSelect = document.getElementById('assignTeacherClassSelect');
+        await loadClasses(classSelect);
+        new bootstrap.Modal(document.getElementById('assignTeacherClassModal')).show();
+    };
+
+    // 設定學生班級
+    window.openAssignStudentClass = async (userId) => {
+        document.getElementById('assignStudentId').value = userId;
+        const classSelect = document.getElementById('assignStudentClassSelect');
+        await loadClasses(classSelect);
+        new bootstrap.Modal(document.getElementById('assignStudentClassModal')).show();
+    };
+
+    // 送出設定帶班
+    window.submitAssignTeacherClass = async () => {
+        const userId = document.getElementById('assignTeacherId').value;
+        const classId = document.getElementById('assignTeacherClassSelect').value;
+        const role = document.getElementById('assignTeacherRole').value;
+
+        const res = await fetch(`/admin/api/assign_teacher_class/${userId}`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({class_id: classId, role})
+        });
+        const data = await res.json();
+        alert(data.message);
+        if (data.success) {
+            bootstrap.Modal.getInstance(document.getElementById('assignTeacherClassModal')).hide();
             loadUsers();
         }
+    };
 
-        // 🔧【2】openCreateModal，學生顯示班級並載入
-        function openCreateModal() {
-            const roleSelect = document.getElementById('createRole');
-            const classGroup = document.getElementById('createClassIdGroup');
-            const classSelect = document.getElementById('createClassId');
+    // 送出設定學生班級
+    window.submitAssignStudentClass = async () => {
+        const userId = document.getElementById('assignStudentId').value;
+        const classId = document.getElementById('assignStudentClassSelect').value;
 
-            // 預設選擇第一個角色
-            roleSelect.selectedIndex = 0;
-
-            roleSelect.onchange = () => {
-                const isStudent = roleSelect.value === 'student';
-                classGroup.style.display = isStudent ? '' : 'none';
-                if (isStudent) loadClasses(classSelect);
-            };
-
-            // 觸發一次以套用顯示邏輯
-            roleSelect.dispatchEvent(new Event('change'));
-
-            new bootstrap.Modal(document.getElementById('createUserModal')).show();
-        }
-        
-        // 🔧【4】openEditModal，學生顯示班級選項並載入
-        function openEditModal(id, username, name, email, role, classId) {
-            const roleSelect = document.getElementById('editRole');
-            const classIdInput = document.getElementById('editClassId');
-            const classIdGroup = document.getElementById('editClassIdGroup');
-
-            roleSelect.innerHTML = '';
-
-            if (role === 'teacher' || role === 'director') {
-                roleSelect.disabled = false;
-                ['teacher', 'director'].forEach(r => {
-                    const opt = document.createElement('option');
-                    opt.value = r;
-                    opt.textContent = roleMap[r];
-                    if (r === role) opt.selected = true;
-                    roleSelect.appendChild(opt);
-                });
-            } else {
-                const opt = document.createElement('option');
-                opt.value = role;
-                opt.textContent = roleMap[role] || role;
-                opt.selected = true;
-                roleSelect.appendChild(opt);
-                roleSelect.disabled = true;
-            }
-
-            if (role === 'student') {
-                classIdGroup.style.display = '';
-                loadClasses(classIdInput).then(() => {
-                    classIdInput.value = classId || '';
-                });
-            } else {
-                classIdGroup.style.display = 'none';
-                classIdInput.value = '';
-            }
-
-            document.getElementById('editUserId').value = id;
-            document.getElementById('editUsername').value = username;
-            document.getElementById('editName').value = name;
-            document.getElementById('editEmail').value = email;
-            document.getElementById('editPassword').value = "";
-
-            new bootstrap.Modal(document.getElementById('editUserModal')).show();
-        }
-
-        // 編輯用戶送出
-        document.getElementById('editUserForm').addEventListener('submit', async (e) => {
-            e.preventDefault();
-
-            const id = document.getElementById('editUserId').value;
-            const payload = {
-                username: document.getElementById('editUsername').value,
-                name: document.getElementById('editName').value,
-                email: document.getElementById('editEmail').value,
-                role: document.getElementById('editRole').value,
-                password: document.getElementById('editPassword').value,
-                class_id: document.getElementById('editClassId').value || null
-            };
-
-            const res = await fetch(`/admin/api/update_user/${id}`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
-            });
-
-            const data = await res.json();
-            alert(data.message);
-            if (data.success) {
-                bootstrap.Modal.getInstance(document.getElementById('editUserModal')).hide();
-                loadUsers();
-            }
+        const res = await fetch(`/admin/api/assign_student_class/${userId}`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({class_id: classId})
         });
-
-        // 刪除用戶
-        async function deleteUser(id) {
-            if (!confirm("確定要刪除這個用戶嗎？")) return;
-
-            const res = await fetch(`/admin/api/delete_user/${id}`, { method: 'DELETE' });
-            const data = await res.json();
-            alert(data.message);
-            if (data.success) {
-                loadUsers();
-            }
+        const data = await res.json();
+        alert(data.message);
+        if (data.success) {
+            bootstrap.Modal.getInstance(document.getElementById('assignStudentClassModal')).hide();
+            loadUsers();
         }
-
-        document.addEventListener('DOMContentLoaded', loadUsers);
-
-        async function loadClasses(selectEl) {
-            const res = await fetch('/admin/api/get_all_classes');
-            const data = await res.json();
-            if (!data.success) { alert('載入班級失敗'); return; }
-            selectEl.innerHTML = '';
-            data.classes.forEach(c => {
-                const opt = document.createElement('option');
-                opt.value = c.id;
-                opt.textContent = `${c.department || ''} ${c.name}`.trim();
-                selectEl.appendChild(opt);
-            });
-        }
-
-        function openAssignStudentClass(userId) {
-            document.getElementById('assignStudentId').value = userId;
-            const sel = document.getElementById('assignStudentClassSelect');
-            loadClasses(sel);
-            new bootstrap.Modal(document.getElementById('assignStudentClassModal')).show();
-        }
-
-        async function submitAssignStudentClass() {
-            const user_id = document.getElementById('assignStudentId').value;
-            const class_id = document.getElementById('assignStudentClassSelect').value;
-            const res = await fetch('/admin/api/assign_student_class', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user_id, class_id }) });
-            const data = await res.json();
-            alert(data.message);
-            if (data.success) {
-                bootstrap.Modal.getInstance(document.getElementById('assignStudentClassModal')).hide();
-                loadUsers();
-            }
-        }
-
-        function openAssignTeacherClass(userId) {
-            document.getElementById('assignTeacherId').value = userId;
-            const sel = document.getElementById('assignTeacherClassSelect');
-            const roleSel = document.getElementById('assignTeacherRole');
-            loadClasses(sel);
-            roleSel.value = '班導師';
-            new bootstrap.Modal(document.getElementById('assignTeacherClassModal')).show();
-        }
-
-        async function submitAssignTeacherClass() {
-            const teacher_id = document.getElementById('assignTeacherId').value;
-            const class_id = document.getElementById('assignTeacherClassSelect').value;
-            const role = document.getElementById('assignTeacherRole').value;
-            const res = await fetch('/admin/api/assign_class_teacher', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ teacher_id, class_id, role }) });
-            const data = await res.json();
-            alert(data.message);
-            if (data.success) {
-                bootstrap.Modal.getInstance(document.getElementById('assignTeacherClassModal')).hide();
-                loadUsers();
-            }
-        }
+    };
+            // 初始化載入資料
+            loadUsers();
+        });
     </script>
 </body>
-
 </html>

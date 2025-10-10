@@ -1,6 +1,5 @@
 <!DOCTYPE html>
 <html lang="zh-Hant">
-
 <head>
   <meta charset="UTF-8" />
   <title>主任審核公司</title>
@@ -8,12 +7,13 @@
   <style>
     body {
       font-family: "Noto Sans TC", sans-serif;
-      background-color: #f8f9fa;
+      background: #ffffff;
       margin: 0;
-      padding: 40px 120px;
-      padding-top: 100px;
+      padding: 40px 100px;
+      padding-top: 90px;
     }
 
+    /* 頂端列 */
     .top-bar {
       position: fixed;
       top: 0;
@@ -24,13 +24,13 @@
       z-index: 1100;
       display: flex;
       align-items: center;
-      box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
     }
 
     .top-bar>.container {
       display: flex;
       justify-content: space-between;
       align-items: center;
+      padding: 0 0.5rem;
       height: 100%;
       gap: 30px;
     }
@@ -53,7 +53,7 @@
     .top-bar-right {
       display: flex;
       align-items: center;
-      gap: 12px;
+      gap: 10px;
       font-weight: bold;
     }
 
@@ -82,29 +82,51 @@
       margin-top: 6px;
     }
 
-    /* 側邊選單 */
+    .btn-link {
+      color: #0066cc;
+      border: 1.5px solid #0066cc;
+      padding: 0.3rem 0.7rem;
+      border-radius: 6px;
+      text-decoration: none;
+      transition: all 0.3s ease;
+      font-size: 0.9rem;
+      background-color: transparent;
+    }
+
+    .btn-link:hover {
+      background-color: #0066cc;
+      color: white;
+    }
+
+    #login-avatar {
+      width: 42px;
+      height: 42px;
+      border-radius: 50%;
+      object-fit: cover;
+      cursor: pointer;
+    }
+
+    /* ======== 側邊選單 ======== */
     #side-menu {
       position: fixed;
       top: 0;
       left: 0;
       height: 100vh;
-      width: 320px;
-      max-width: 80vw;
-      background-color: rgba(10, 10, 10, 0.95);
+      width: 300px;
+      background-color: rgba(0, 0, 0, 0.95);
       backdrop-filter: blur(6px);
-      box-shadow: 3px 0 12px rgb(0 0 0 / 0.7);
-      padding: 2rem 1.5rem;
       transform: translateX(-100%);
-      transition: transform 0.3s ease-in-out;
+      transition: transform 0.3s ease;
       z-index: 1200;
-      display: flex;
-      flex-direction: column;
-      align-items: flex-start;
       color: white;
-      user-select: none;
+      padding: 2rem 1.5rem;
     }
 
-    #side-menu h3 {
+    #side-menu.open {
+      transform: translateX(0);
+    }
+
+     #side-menu h3 {
       width: 100%;
       margin-bottom: 1.5rem;
       font-weight: 700;
@@ -112,65 +134,59 @@
       text-align: left;
     }
 
-    #side-menu.open {
-      transform: translateX(0);
+    #side-menu a {
+      display: block;
+      padding: 0.5rem 0;
+      color: #ccc;
+      text-decoration: none;
+      font-size: 1.1rem;
+      transition: color 0.2s ease;
+    }
+
+    #side-menu a:hover {
+      color: white;
     }
 
     #close-btn {
       position: absolute;
-      top: 2rem;
-      right: 1.6rem;
-      font-size: 2.2rem;
+      top: 1.5rem;
+      right: 1.5rem;
+      font-size: 2rem;
       background: none;
       border: none;
       color: white;
       cursor: pointer;
-      line-height: 1;
-      width: 2.5rem;
-      height: 2.5rem;
-      display: flex;
-      align-items: center;
-      justify-content: center;
     }
 
-    #side-menu a {
-      display: block;
-      width: 100%;
-      padding: 0.5rem 0;
-      font-size: 1.1rem;
-      color: #ddd;
-      text-decoration: none;
-      border-radius: 4px;
-      transition: background-color 0.2s ease;
-    }
-
-    #side-menu a:hover {
-      background-color: rgba(255, 255, 255, 0.15);
-      color: white;
-    }
-
+    /* ======== 標題與卡片 ======== */
     h2 {
       text-align: center;
-      color: #0066cc;
-      margin-bottom: 20px;
+      color: #004c97;
+      margin-bottom: 25px;
+      font-weight: 700;
     }
 
     .card {
-      border-radius: 12px;
-      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
-      margin-bottom: 30px;
-      background: #fff;
+      border-radius: 14px;
+      box-shadow: 0 3px 15px rgba(0, 0, 0, 0.05);
+      margin-bottom: 40px;
+      transition: transform 0.2s ease;
+    }
+
+    .card:hover {
+      transform: translateY(-3px);
     }
 
     .card-header {
       font-weight: 600;
-      background-color: #e9f2ff;
+      background-color: #e9f3ff;
       color: #004c97;
+      font-size: 1.1rem;
     }
 
     th {
       text-align: center;
-      background-color: #f2f4f8;
+      background-color: #f2f6fb;
     }
 
     td {
@@ -196,10 +212,6 @@
       color: white;
     }
 
-    .btn-view:hover {
-      background-color: #0b5ed7;
-    }
-
     .btn-approve {
       background-color: #28a745;
       color: white;
@@ -210,20 +222,41 @@
       color: white;
     }
 
-    .btn-approve:hover {
-      background-color: #218838;
+    .btn-view:hover {
+      background-color: #0b5ed7;
     }
 
-    .btn-reject:hover {
-      background-color: #c82333;
+    .filter-section {
+      display: flex;
+      justify-content: flex-end;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 15px;
     }
 
-    .modal-body p {
-      margin-bottom: 6px;
+    .filter-section select,
+    .filter-section input {
+      padding: 6px 10px;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      font-size: 0.9rem;
+    }
+
+    .filter-section button {
+      background-color: #0066cc;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      padding: 6px 12px;
+      font-size: 0.9rem;
+      cursor: pointer;
+    }
+
+    .filter-section button:hover {
+      background-color: #0056b3;
     }
   </style>
 </head>
-
 <body>
   <!-- ✅ 頂部欄 -->
   <div class="top-bar">
@@ -233,39 +266,47 @@
           <span></span><span></span><span></span>
         </div>
       </div>
-
       <div class="top-bar-right">
         <a href="/profile">
           <img src="{{ url_for('static', filename='images/avatar.png') }}" alt="頭像" id="login-avatar" />
         </a>
-
         <div class="dropdown" style="position: relative;">
           <button id="accountDropdownBtn" class="btn-link" aria-expanded="false">帳號 ▾</button>
-          <div id="accountDropdownMenu" class="dropdown-menu"
-            style="position:absolute; right:0; top:120%; background:#fff; border:1px solid #ccc; border-radius:8px; padding:6px; min-width:160px; display:none; box-shadow:0 4px 12px rgba(0,0,0,.12);">
+          <div id="accountDropdownMenu" class="dropdown-menu" style="position:absolute; right:0; top:120%; background:#fff; border:1px solid #ccc; border-radius:8px; padding:6px; min-width:180px; display:none; box-shadow:0 4px 12px rgba(0,0,0,.12);">
             <a href="/profile" class="btn-link" style="display:block; border:none; margin:4px 0;">個人資料</a>
-            <a id="toHomeroomLink" href="/class_teacher_home" class="btn-link"
-              style="display:none; border:none; margin:4px 0;">切換班導身分</a>
+            <a id="toHomeroomLink" href="/class_teacher_home" class="btn-link" style="display:none; border:none; margin:4px 0;">切換班導身分</a>
             <a href="/login" class="btn-link" style="display:block; border:none; margin:4px 0;">登出</a>
           </div>
         </div>
+    </div>
       </div>
+        </div>
     </div>
   </div>
-
   <!-- 側邊選單 -->
-  <nav id="side-menu" aria-hidden="true" role="navigation" aria-label="功能選單">
-    <button id="close-btn" aria-label="關閉功能選單">×</button>
+  <nav id="side-menu">
+    <button id="close-btn">×</button>
     <h3>功能選單</h3>
     <a href="/director_home">首頁</a>
-    <a href="/profile">個人資料</a>
     <a href="/approve_company">審核實習單位</a>
     <a href="/review_resume">審核實習履歷</a>
     <a href="/notifications">管理公告</a>
     <a href="/admin_statistics">統計資料</a>
   </nav>
 
-  <h2>主任審核公司</h2>
+  <h2>實習公司審核</h2>
+
+  <!-- 🔍 篩選列 -->
+  <div class="filter-section">
+    <input type="text" id="teacherFilter" placeholder="搜尋指導老師姓名..." />
+    <select id="statusFilter">
+      <option value="">全部狀態</option>
+      <option value="pending">待審核</option>
+      <option value="approved">已核准</option>
+      <option value="rejected">已退件</option>
+    </select>
+    <button onclick="applyFilter()">篩選</button>
+  </div>
 
   <!-- 🟦 待審核公司 -->
   <div class="card">
@@ -275,6 +316,7 @@
         <thead>
           <tr>
             <th>#</th>
+            <th>指導老師</th>
             <th>公司名稱</th>
             <th>聯絡人</th>
             <th>Email</th>
@@ -284,7 +326,7 @@
         </thead>
         <tbody id="pendingTable">
           <tr>
-            <td colspan="6" class="text-muted text-center">載入中...</td>
+            <td colspan="7" class="text-muted text-center">載入中...</td>
           </tr>
         </tbody>
       </table>
@@ -293,12 +335,13 @@
 
   <!-- 🟩 歷史紀錄 -->
   <div class="card">
-    <div class="card-header">歷史審核紀錄</div>
+    <div class="card-header">歷史紀錄</div>
     <div class="card-body">
       <table class="table table-hover align-middle">
         <thead>
           <tr>
             <th>#</th>
+            <th>指導老師</th>
             <th>公司名稱</th>
             <th>狀態</th>
             <th>上傳時間</th>
@@ -307,186 +350,87 @@
         </thead>
         <tbody id="historyTable">
           <tr>
-            <td colspan="5" class="text-muted text-center">載入中...</td>
+            <td colspan="6" class="text-muted text-center">載入中...</td>
           </tr>
         </tbody>
       </table>
     </div>
   </div>
 
-  <!-- 🔍 詳細資料 Modal -->
-  <div class="modal fade" id="companyModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered modal-lg">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h5 class="modal-title">公司詳細資料</h5>
-          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-        </div>
-        <div class="modal-body" id="modalBody"></div>
-        <div class="modal-footer">
-          <button id="approveBtn" class="btn btn-approve">核准</button>
-          <button id="rejectBtn" class="btn btn-reject">退件</button>
-        </div>
-      </div>
-    </div>
-  </div>
-
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
   <script>
-    const pendingTable = document.getElementById("pendingTable");
-    const historyTable = document.getElementById("historyTable");
-    const modal = new bootstrap.Modal(document.getElementById("companyModal"));
-    const modalBody = document.getElementById("modalBody");
-    const approveBtn = document.getElementById("approveBtn");
-    const rejectBtn = document.getElementById("rejectBtn");
-    let currentCompanyId = null;
+    let allPending = [];
+    let allHistory = [];
 
     document.addEventListener("DOMContentLoaded", () => {
       loadPending();
       loadHistory();
     });
 
-    // 🔹 取得待審核公司
     function loadPending() {
       fetch("/api/get_pending_companies")
         .then(res => res.json())
         .then(data => {
-          if (!data.success || data.companies.length === 0) {
-            pendingTable.innerHTML = `<tr><td colspan="6" class="text-center text-muted">目前沒有待審核公司</td></tr>`;
-            return;
-          }
-          pendingTable.innerHTML = "";
-          data.companies.forEach((c, i) => {
-            pendingTable.innerHTML += `
-              <tr>
-                <td>${i + 1}</td>
-                <td>${c.company_name}</td>
-                <td>${c.contact_name || "—"}</td>
-                <td>${c.contact_email || "—"}</td>
-                <td>${c.upload_time || "—"}</td>
-                <td><button class="btn-action btn-view" onclick="viewCompany(${c.id})">查看</button></td>
-              </tr>
-            `;
-          });
-        })
-        .catch(() => {
-          pendingTable.innerHTML = `<tr><td colspan="6" class="text-center text-danger">無法載入資料</td></tr>`;
+          if (!data.success) return;
+          allPending = data.companies;
+          renderTable(allPending, "pendingTable", true);
         });
     }
 
-    // 🔹 取得歷史審核紀錄
     function loadHistory() {
       fetch("/api/get_reviewed_companies")
         .then(res => res.json())
         .then(data => {
-          if (!data.success || data.companies.length === 0) {
-            historyTable.innerHTML = `<tr><td colspan="5" class="text-center text-muted">尚無歷史紀錄</td></tr>`;
-            return;
-          }
-          historyTable.innerHTML = "";
-          data.companies.forEach((c, i) => {
-            const statusText = c.status === "approved"
-              ? "✅ 通過"
-              : c.status === "rejected"
-                ? "❌ 退件"
-                : "—";
-            historyTable.innerHTML += `
-              <tr>
-                <td>${i + 1}</td>
-                <td>${c.company_name}</td>
-                <td>${statusText}</td>
-                <td>${c.upload_time || "—"}</td>
-                <td>${c.reviewed_at || "—"}</td>
-              </tr>
-            `;
-          });
-        })
-        .catch(() => {
-          historyTable.innerHTML = `<tr><td colspan="5" class="text-center text-danger">載入失敗</td></tr>`;
+          if (!data.success) return;
+          allHistory = data.companies;
+          renderTable(allHistory, "historyTable", false);
         });
     }
 
-    // 🔍 查看公司資料
-    function viewCompany(id) {
-      currentCompanyId = id;
-      fetch(`/api/get_company_detail?company_id=${id}`)
-        .then(res => res.json())
-        .then(data => {
-          if (!data.success) return alert(data.message);
-          const c = data.company;
-          modalBody.innerHTML = `
-            <p><strong>公司名稱：</strong>${c.company_name}</p>
-            <p><strong>公司簡介：</strong>${c.company_intro || "—"}</p>
-            <p><strong>地址：</strong>${c.company_address || "—"}</p>
-            <p><strong>聯絡人：</strong>${c.contact_name || "—"}</p>
-            <p><strong>Email：</strong>${c.contact_email || "—"}</p>
-            <p><strong>電話：</strong>${c.contact_phone || "—"}</p>
-            <hr>
-            <p><strong>職缺內容：</strong></p>
-            ${(c.internship_jobs || []).map(j =>
-            `<div style='margin-left:1em'>
-                <p>職位：${j.internship_unit || "—"}</p>
-                <p>內容：${j.internship_content || "—"}</p>
-                <p>地點：${j.internship_location || "—"}</p>
-                <p>期間：${j.internship_period || "—"}</p>
-                <p>時段：${j.internship_time || "—"}</p>
-                <p>人數：${j.internship_quota || "—"}</p>
-                <p>備註：${j.remark || "—"}</p>
-                <hr>
-              </div>`
-          ).join("")}
-          `;
-          modal.show();
-        });
-    }
-
-    approveBtn.onclick = () => reviewCompany("approved");
-    rejectBtn.onclick = () => reviewCompany("rejected");
-
-    // ✅ 審核（核准/退件）
-    function reviewCompany(status) {
-      if (!currentCompanyId) return;
-      fetch("/api/approve_company", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ company_id: currentCompanyId, status })
-      })
-        .then(res => res.json())
-        .then(data => {
-          alert(data.message);
-          modal.hide();
-          loadPending();
-          loadHistory();
-        })
-        .catch(err => alert("伺服器錯誤：" + err.message));
-    }
-    <!-- 選單開關邏輯 -->
-    const menuBtn = document.getElementById("menu-btn");
-    const sideMenu = document.getElementById("side-menu");
-    const closeBtn = document.getElementById("close-btn");
-
-    menuBtn.addEventListener("click", () => {
-      sideMenu.classList.add("open");
-      sideMenu.setAttribute("aria-hidden", "false");
-    });
-
-    closeBtn.addEventListener("click", () => {
-      sideMenu.classList.remove("open");
-      sideMenu.setAttribute("aria-hidden", "true");
-    });
-
-    // 如果點擊 menu 以外的地方就關閉選單
-    document.addEventListener("click", (e) => {
-      if (
-        !sideMenu.contains(e.target) &&
-        !menuBtn.contains(e.target)
-      ) {
-        sideMenu.classList.remove("open");
-        sideMenu.setAttribute("aria-hidden", "true");
+    function renderTable(list, tableId, isPending) {
+      const table = document.getElementById(tableId);
+      if (!list.length) {
+        table.innerHTML = `<tr><td colspan="${isPending ? 7 : 6}" class="text-center text-muted">無資料</td></tr>`;
+        return;
       }
-    });
+      table.innerHTML = list.map((c, i) => `
+        <tr>
+          <td>${i + 1}</td>
+          <td>${c.upload_teacher_name || "—"}</td>
+          <td>${c.company_name}</td>
+          ${isPending
+          ? `<td>${c.contact_name || "—"}</td>
+             <td>${c.contact_email || "—"}</td>
+             <td>${c.upload_time || "—"}</td>
+             <td><button class="btn-action btn-view" onclick="viewCompany(${c.id})">查看</button></td>`
+          : `<td>${c.status === "approved" ? "✅ 通過" : c.status === "rejected" ? "❌ 退件" : "—"}</td>
+             <td>${c.upload_time || "—"}</td>
+             <td>${c.reviewed_at || "—"}</td>`}
+        </tr>
+      `).join("");
+    }
 
-    // 帳號下拉
+    function applyFilter() {
+      const teacherKeyword = document.getElementById("teacherFilter").value.trim();
+      const status = document.getElementById("statusFilter").value;
+
+      const filteredPending = allPending.filter(c =>
+        (!teacherKeyword || (c.upload_teacher_name && c.upload_teacher_name.includes(teacherKeyword)))
+      );
+      const filteredHistory = allHistory.filter(c =>
+        (!teacherKeyword || (c.upload_teacher_name && c.upload_teacher_name.includes(teacherKeyword))) &&
+        (!status || c.status === status)
+      );
+
+      renderTable(filteredPending, "pendingTable", true);
+      renderTable(filteredHistory, "historyTable", false);
+    }
+
+    // 開關側邊選單
+    document.getElementById("menu-btn").onclick = () => document.getElementById("side-menu").classList.add("open");
+    document.getElementById("close-btn").onclick = () => document.getElementById("side-menu").classList.remove("open");
+  
+  // 帳號下拉
     const btn = document.getElementById('accountDropdownBtn');
     const menu = document.getElementById('accountDropdownMenu');
     btn.addEventListener('click', () => {
@@ -543,5 +487,4 @@
     }).catch(() => {});
   </script>
 </body>
-
 </html>
