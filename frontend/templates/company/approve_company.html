@@ -11,13 +11,148 @@
       background-color: #f8f9fa;
       margin: 0;
       padding: 40px 120px;
+      padding-top: 100px;
     }
 
-    h1 {
+    .top-bar {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 60px;
+      background-color: #fff;
+      z-index: 1100;
+      display: flex;
+      align-items: center;
+      box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
+    }
+
+    .top-bar>.container {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      height: 100%;
+      gap: 30px;
+    }
+
+    .top-bar-left #menu-btn {
+      width: 30px;
+      height: 22px;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+
+    .top-bar-left #menu-btn span {
+      height: 4px;
+      background-color: #333;
+      border-radius: 2px;
+    }
+
+    .top-bar-right {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-weight: bold;
+    }
+
+    .top-bar-right .btn-link {
       color: #0066cc;
+      background-color: transparent;
+      border: 1.5px solid #0066cc;
+      padding: 0.3rem 0.7rem;
+      border-radius: 6px;
+      text-decoration: none;
+      transition: background-color 0.3s ease, color 0.3s ease;
+      font-size: 0.9rem;
+    }
+
+    .top-bar-right .btn-link:hover {
+      background-color: #0066cc;
+      color: white;
+    }
+
+    .top-bar-right #login-avatar {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      object-fit: cover;
+      cursor: pointer;
+      margin-top: 6px;
+    }
+
+    /* 側邊選單 */
+    #side-menu {
+      position: fixed;
+      top: 0;
+      left: 0;
+      height: 100vh;
+      width: 320px;
+      max-width: 80vw;
+      background-color: rgba(10, 10, 10, 0.95);
+      backdrop-filter: blur(6px);
+      box-shadow: 3px 0 12px rgb(0 0 0 / 0.7);
+      padding: 2rem 1.5rem;
+      transform: translateX(-100%);
+      transition: transform 0.3s ease-in-out;
+      z-index: 1200;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      color: white;
+      user-select: none;
+    }
+
+    #side-menu h3 {
+      width: 100%;
+      margin-bottom: 1.5rem;
       font-weight: 700;
+      font-size: 1.5rem;
+      text-align: left;
+    }
+
+    #side-menu.open {
+      transform: translateX(0);
+    }
+
+    #close-btn {
+      position: absolute;
+      top: 2rem;
+      right: 1.6rem;
+      font-size: 2.2rem;
+      background: none;
+      border: none;
+      color: white;
+      cursor: pointer;
+      line-height: 1;
+      width: 2.5rem;
+      height: 2.5rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    #side-menu a {
+      display: block;
+      width: 100%;
+      padding: 0.5rem 0;
+      font-size: 1.1rem;
+      color: #ddd;
+      text-decoration: none;
+      border-radius: 4px;
+      transition: background-color 0.2s ease;
+    }
+
+    #side-menu a:hover {
+      background-color: rgba(255, 255, 255, 0.15);
+      color: white;
+    }
+
+    h2 {
       text-align: center;
-      margin-bottom: 40px;
+      color: #0066cc;
+      margin-bottom: 20px;
     }
 
     .card {
@@ -90,7 +225,47 @@
 </head>
 
 <body>
-  <h1>主任審核公司</h1>
+  <!-- ✅ 頂部欄 -->
+  <div class="top-bar">
+    <div class="container">
+      <div class="top-bar-left">
+        <div id="menu-btn" title="選單" role="button" tabindex="0">
+          <span></span><span></span><span></span>
+        </div>
+      </div>
+
+      <div class="top-bar-right">
+        <a href="/profile">
+          <img src="{{ url_for('static', filename='images/avatar.png') }}" alt="頭像" id="login-avatar" />
+        </a>
+
+        <div class="dropdown" style="position: relative;">
+          <button id="accountDropdownBtn" class="btn-link" aria-expanded="false">帳號 ▾</button>
+          <div id="accountDropdownMenu" class="dropdown-menu"
+            style="position:absolute; right:0; top:120%; background:#fff; border:1px solid #ccc; border-radius:8px; padding:6px; min-width:160px; display:none; box-shadow:0 4px 12px rgba(0,0,0,.12);">
+            <a href="/profile" class="btn-link" style="display:block; border:none; margin:4px 0;">個人資料</a>
+            <a id="toHomeroomLink" href="/class_teacher_home" class="btn-link"
+              style="display:none; border:none; margin:4px 0;">切換班導身分</a>
+            <a href="/login" class="btn-link" style="display:block; border:none; margin:4px 0;">登出</a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 側邊選單 -->
+  <nav id="side-menu" aria-hidden="true" role="navigation" aria-label="功能選單">
+    <button id="close-btn" aria-label="關閉功能選單">×</button>
+    <h3>功能選單</h3>
+    <a href="/director_home">首頁</a>
+    <a href="/profile">個人資料</a>
+    <a href="/approve_company">審核實習單位</a>
+    <a href="/review_resume">審核實習履歷</a>
+    <a href="/notifications">管理公告</a>
+    <a href="/admin_statistics">統計資料</a>
+  </nav>
+
+  <h2>主任審核公司</h2>
 
   <!-- 🟦 待審核公司 -->
   <div class="card">
@@ -249,7 +424,7 @@
             <hr>
             <p><strong>職缺內容：</strong></p>
             ${(c.internship_jobs || []).map(j =>
-              `<div style='margin-left:1em'>
+            `<div style='margin-left:1em'>
                 <p>職位：${j.internship_unit || "—"}</p>
                 <p>內容：${j.internship_content || "—"}</p>
                 <p>地點：${j.internship_location || "—"}</p>
@@ -259,7 +434,7 @@
                 <p>備註：${j.remark || "—"}</p>
                 <hr>
               </div>`
-            ).join("")}
+          ).join("")}
           `;
           modal.show();
         });
@@ -285,6 +460,88 @@
         })
         .catch(err => alert("伺服器錯誤：" + err.message));
     }
+    <!-- 選單開關邏輯 -->
+    const menuBtn = document.getElementById("menu-btn");
+    const sideMenu = document.getElementById("side-menu");
+    const closeBtn = document.getElementById("close-btn");
+
+    menuBtn.addEventListener("click", () => {
+      sideMenu.classList.add("open");
+      sideMenu.setAttribute("aria-hidden", "false");
+    });
+
+    closeBtn.addEventListener("click", () => {
+      sideMenu.classList.remove("open");
+      sideMenu.setAttribute("aria-hidden", "true");
+    });
+
+    // 如果點擊 menu 以外的地方就關閉選單
+    document.addEventListener("click", (e) => {
+      if (
+        !sideMenu.contains(e.target) &&
+        !menuBtn.contains(e.target)
+      ) {
+        sideMenu.classList.remove("open");
+        sideMenu.setAttribute("aria-hidden", "true");
+      }
+    });
+
+    // 帳號下拉
+    const btn = document.getElementById('accountDropdownBtn');
+    const menu = document.getElementById('accountDropdownMenu');
+    btn.addEventListener('click', () => {
+      const open = menu.style.display === 'block';
+      menu.style.display = open ? 'none' : 'block';
+      btn.setAttribute('aria-expanded', String(!open));
+    });
+    document.addEventListener('click', (e) => {
+      if (!menu.contains(e.target) && !btn.contains(e.target)) {
+        menu.style.display = 'none';
+        btn.setAttribute('aria-expanded', 'false');
+      }
+    });
+
+    // 載入用戶頭像
+    function loadUserAvatar() {
+      console.log('開始載入頭像...');
+      fetch('/api/profile')
+        .then(res => {
+          if (!res.ok) throw new Error('無法取得用戶資料');
+          return res.json();
+        })
+        .then(data => {
+          console.log('API 回應:', data);
+          if (data.success && data.user && data.user.avatar_url) {
+            // 確保頭像URL是完整的路徑，並加上時間戳避免快取
+            const rawUrl = data.user.avatar_url.startsWith('http') ?
+              data.user.avatar_url :
+              window.location.origin + data.user.avatar_url;
+            const avatarUrl = rawUrl + (rawUrl.includes('?') ? '&' : '?') + 't=' + Date.now();
+            console.log('設定頭像URL:', avatarUrl);
+            document.getElementById('login-avatar').src = avatarUrl;
+          } else {
+            console.log('沒有頭像URL或API失敗');
+          }
+        })
+        .catch(err => {
+          console.log('載入頭像失敗:', err);
+          // 保持預設頭像
+        });
+    }
+
+    // 頁面就緒後載入頭像
+    document.addEventListener('DOMContentLoaded', () => {
+      loadUserAvatar();
+    });
+
+    // 判斷是否為班導，顯示切換到班導主頁
+    fetch('/api/profile').then(r => r.json()).then(d => {
+      if (d.success && d.user && d.user.is_homeroom) {
+        const link = document.getElementById('toHomeroomLink');
+        if (link) link.style.display = 'block';
+      }
+    }).catch(() => {});
   </script>
 </body>
+
 </html>

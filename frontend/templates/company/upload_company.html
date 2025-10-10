@@ -13,10 +13,8 @@
       font-family: "Noto Sans TC", sans-serif;
       margin: 30px;
       padding-top: 30px;
-
     }
-
-     .top-bar {
+    .top-bar {
       position: fixed;
       top: 0;
       left: 0;
@@ -76,12 +74,12 @@
     }
 
     .top-bar-right #login-avatar {
-      width: 40px;
-      height: 40px;
+      width: 60px;
+      height: 60px;
       border-radius: 50%;
       object-fit: cover;
       cursor: pointer;
-      margin-top: 6px;
+      margin-top: 2px;
     }
 
     /* 側邊選單 */
@@ -104,6 +102,14 @@
       align-items: flex-start;
       color: white;
       user-select: none;
+    }
+
+    #side-menu h3 {
+      width: 100%;
+      margin-bottom: 1.5rem;
+      font-weight: 700;
+      font-size: 1.5rem;
+      text-align: left;
     }
 
     #side-menu.open {
@@ -235,7 +241,7 @@
 
 <body>
 
-   <!-- ✅ 頂部欄（從教師主頁複製） -->
+  <!-- ✅ 頂部欄 -->
   <div class="top-bar">
     <div class="container">
       <div class="top-bar-left">
@@ -266,7 +272,7 @@
   <!-- 側邊選單 -->
   <nav id="side-menu" aria-hidden="true" role="navigation" aria-label="功能選單">
     <button id="close-btn" aria-label="關閉功能選單">×</button>
-    <h2>功能選單</h2>
+    <h3>功能選單</h3>
     <a href="/teacher_home">首頁</a>
     <a href="/profile">個人資料</a>
     <a href="/notifications">查看公告</a>
@@ -623,7 +629,7 @@
 
     document.addEventListener("DOMContentLoaded", loadUploadedCompanies);
 
-     // ✅ 頂端欄控制與帳號功能
+    // ✅ 頂端欄控制與帳號功能
     function loadUserAvatar() {
       fetch('/api/profile')
         .then(res => res.json())
@@ -634,7 +640,7 @@
               : window.location.origin + data.user.avatar_url;
             document.getElementById('login-avatar').src = rawUrl + '?t=' + Date.now();
           }
-        }).catch(() => {});
+        }).catch(() => { });
     }
 
     document.addEventListener('DOMContentLoaded', () => {
@@ -673,7 +679,7 @@
       if (d.success && d.user && d.user.is_homeroom) {
         document.getElementById('toHomeroomLink').style.display = 'block';
       }
-    }).catch(() => {});
+    }).catch(() => { });
 
   </script>
 </body>
