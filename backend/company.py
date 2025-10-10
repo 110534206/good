@@ -389,6 +389,7 @@ def api_get_my_companies():
             SELECT 
                 title AS internship_unit,
                 description AS internship_content,
+                department AS department, 
                 period AS internship_period,
                 work_time AS internship_time,
                 slots AS internship_quota,
