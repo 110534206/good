@@ -223,12 +223,7 @@ def api_get_pending_companies():
         cursor.execute("""
             SELECT 
                 ic.id,
-                CONCAT(u.name, 
-                   CASE 
-                     WHEN ct.teacher_id IS NOT NULL THEN '（班導）'
-                     ELSE ''
-                   END
-                ) AS upload_teacher_name,
+                u.name AS upload_teacher_name,
                 ic.company_name,
                 ic.contact_person AS contact_name,
                 ic.contact_email,
@@ -266,12 +261,7 @@ def api_get_reviewed_companies():
         cursor.execute("""
             SELECT 
                 ic.id,
-                CONCAT(u.name, 
-                   CASE 
-                     WHEN ct.teacher_id IS NOT NULL THEN '（班導）'
-                     ELSE ''
-                   END
-                ) AS upload_teacher_name,
+                u.name AS upload_teacher_name,
                 ic.company_name, 
                 ic.status,
                 ic.submitted_at AS upload_time,
