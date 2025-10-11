@@ -59,7 +59,7 @@ def login():
 
         if single_role == "student":
             redirect_page = "/student_home"
-        if single_role == "ta":
+        elif single_role == "ta":
             redirect_page = "/ta_home"
         elif single_role == "teacher":
             cursor.execute("""
@@ -96,24 +96,33 @@ def login():
 # -------------------------
 @auth_bp.route('/api/confirm-role', methods=['POST'])
 def api_confirm_role():
-    if "username" not in session or "user_id" not in session:
+    if "username" not in session:
         return jsonify({"success": False, "message": "請先登入"}), 401
 
     data = request.get_json()
     role = data.get("role")
+    username = session.get("username")
 
     if role not in ['teacher', 'director', 'student', 'admin']:
         return jsonify({"success": False, "message": "角色錯誤"}), 400
 
-    user_id = session["user_id"]
     conn = get_db()
-    cursor = conn.cursor()
+    cursor = conn.cursor(dictionary=True)
 
     try:
+        # ✅ 重新查出該帳號對應此角色的使用者資料
+        cursor.execute("SELECT * FROM users WHERE username = %s AND role = %s", (username, role))
+        user = cursor.fetchone()
+
+        if not user:
+            return jsonify({"success": False, "message": "找不到該角色的使用者資料"}), 404
+
+        user_id = user["id"]
+
         redirect_page = f"/{role}_home"
         is_homeroom = False
 
-        # 檢查老師/主任是否同時為班導師
+        # 檢查是否為班導師
         if role in ["teacher", "director"]:
             cursor.execute("""
                 SELECT 1 FROM classes_teacher
@@ -121,7 +130,8 @@ def api_confirm_role():
             """, (user_id,))
             is_homeroom = bool(cursor.fetchone())
 
-        # 存入 session
+        # ✅ 更新 session — 指向正確角色的使用者
+        session["user_id"] = user_id
         session["role"] = role
         session["original_role"] = role
         session["is_homeroom"] = is_homeroom
@@ -133,7 +143,7 @@ def api_confirm_role():
         })
 
     except Exception as e:
-        print("確認角色錯誤:", e)
+        print("❌ 確認角色錯誤:", e)
         return jsonify({"success": False, "message": "伺服器錯誤"}), 500
     finally:
         cursor.close()
@@ -210,12 +220,10 @@ def index_page():
         conn.close()
 
         if is_homeroom:
-            return redirect(url_for('users_bp.class_teacher_home'))
-        else:
-            if role == "teacher":
-                return redirect(url_for('users_bp.teacher_home'))
-            else:
-                return redirect(url_for('users_bp.director_home'))
+           return redirect(url_for('users_bp.class_teacher_home'))
+        if role == "teacher":
+           return redirect(url_for('users_bp.teacher_home'))
+        return redirect(url_for('users_bp.director_home'))
 
     elif role == "student":
         return redirect(url_for('users_bp.student_home')) 
@@ -248,7 +256,7 @@ def login_confirm_page():
     if not roles:
         return redirect(url_for("auth_bp.login_page"))
 
-    return render_template("auth/login-confirm.html", roles_json=json.dumps(roles))
+    return render_template("auth/login-confirm.html", roles_json=roles)
   
 # 學生註冊
 @auth_bp.route("/register_student")

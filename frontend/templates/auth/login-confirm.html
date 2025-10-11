@@ -1,6 +1,5 @@
 <!DOCTYPE html>
 <html lang="zh-TW">
-
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -11,14 +10,12 @@
       background-color: #f3f6f9;
       margin: 0;
     }
-
     .container {
       display: flex;
       justify-content: center;
       align-items: center;
       height: 100vh;
     }
-
     .card {
       width: 550px;
       padding: 60px;
@@ -27,14 +24,12 @@
       background-color: #ffffff;
       text-align: center;
     }
-
     .card h1 {
       font-size: 35px;
       font-weight: 700;
       margin-bottom: 30px;
       color: #222;
     }
-
     .role-button {
       background-color: #3c91e6;
       color: white;
@@ -49,10 +44,13 @@
       margin: 10px auto;
       display: block;
     }
-
     .role-button:hover {
       background-color: #2b74c2;
       transform: translateY(-3px);
+    }
+    .loading {
+      opacity: 0.6;
+      pointer-events: none;
     }
   </style>
 </head>
@@ -66,15 +64,17 @@
   </div>
 
   <script>
-    // 從後端模板注入的角色列表 JSON 字串，Flask 模板要傳入 roles_json
-    const roleList = JSON.parse('{{ roles_json | safe }}');
-
+    // ✅ 使用 Flask 的 tojson 確保安全序列化
+    const roleList = {{ roles_json | tojson }};
+    
     function getRoleDisplayName(role) {
-      const roleMap = {
+      const map = {
         "teacher": "教師",
         "director": "主任",
+        "student": "學生",
+        "admin": "系統管理員"
       };
-      return roleMap[role] || role;
+      return map[role] || role;
     }
 
     if (!Array.isArray(roleList) || roleList.length === 0) {
@@ -87,34 +87,37 @@
         const btn = document.createElement("button");
         btn.className = "role-button";
         btn.textContent = getRoleDisplayName(role);
-        btn.onclick = () => {
-          // 設定 localStorage 中的 selectedRole
-          localStorage.setItem("selectedRole", role);
-          
-          // 按下按鈕後呼叫後端確認角色API
-          fetch('/api/confirm-role', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ role: role })
-          })
-            .then(response => response.json())
-            .then(data => {
-              if (data.success) {
-                window.location.href = data.redirect;
-              } else {
-                alert(data.message || '發生錯誤，請稍後重試');
-              }
-            })
-            .catch(() => {
-              alert('伺服器錯誤，請稍後重試');
-            });
-        };
+        btn.onclick = () => confirmRole(role, btn);
         container.appendChild(btn);
       });
     }
+
+    async function confirmRole(role, button) {
+      button.classList.add("loading");
+      button.textContent = "登入中...";
+
+      try {
+        const response = await fetch("/api/confirm-role", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ role })
+        });
+        const data = await response.json();
+
+        if (data.success) {
+          const redirectUrl = data.redirect.startsWith("/") ? data.redirect : "/" + data.redirect;
+          window.location.href = redirectUrl;
+        } else {
+          alert(data.message || "發生錯誤，請稍後重試");
+          button.classList.remove("loading");
+          button.textContent = getRoleDisplayName(role);
+        }
+      } catch (err) {
+        alert("伺服器連線錯誤，請稍後再試");
+        button.classList.remove("loading");
+        button.textContent = getRoleDisplayName(role);
+      }
+    }
   </script>
 </body>
-
 </html>

@@ -292,6 +292,54 @@ def api_get_reviewed_companies():
     except Exception:
         print("❌ 取得已審核公司錯誤：", traceback.format_exc())
         return jsonify({"success": False, "message": "伺服器錯誤"}), 500
+    
+# =========================================================
+# API - 公司審核通過/退件
+# =========================================================
+@company_bp.route('/api/approve_company', methods=['POST'])
+def approve_company():
+    try:
+        company_id = request.args.get('company_id')
+        conn = get_db()
+        cursor = conn.cursor()
+        cursor.execute("UPDATE company SET status='approved' WHERE id=%s", (company_id,))
+        conn.commit()
+        return jsonify(success=True, message="公司已通過審核")
+    except Exception as e:
+        print("approve_company error:", e)
+        return jsonify(success=False, message="審核失敗")
+
+
+# =========================================================
+# API - 公司退件
+# =========================================================
+@company_bp.route('/api/reject_company', methods=['POST'])
+def reject_company():
+    try:
+        data = request.get_json()
+        company_id = data.get('company_id')
+        reason = data.get('reason', '').strip()
+
+        if not company_id or not reason:
+            return jsonify(success=False, message="缺少退件參數"), 400
+
+        conn = get_db()
+        cursor = conn.cursor()
+        cursor.execute("""
+            UPDATE internship_companies
+            SET status='rejected',
+                reject_reason=%s,
+                reviewed_at=NOW()
+            WHERE id=%s
+        """, (reason, company_id))
+        conn.commit()
+        return jsonify(success=True, message="公司已退件，理由已保存")
+    except Exception as e:
+        print("❌ reject_company error:", e)
+        return jsonify(success=False, message="退件失敗，伺服器錯誤")
+    finally:
+        cursor.close()
+        conn.close()
 
 # =========================================================
 # API - 取得單一公司詳細資料（含職缺）
@@ -308,20 +356,21 @@ def api_get_company_detail():
 
         # ✅ 取得公司基本資料（含職稱）
         cursor.execute("""
-            SELECT 
-                id,
-                company_name,
-                description AS company_intro,
-                location AS company_address,
-                contact_person AS contact_name,
-                contact_title,  -- 聯絡人職稱
-                contact_email,
-                contact_phone,
-                submitted_at AS upload_time,
-                status,
-                reviewed_at
-            FROM internship_companies
-            WHERE id = %s
+        SELECT 
+          id,
+          company_name,
+          description AS company_intro,
+          location AS company_address,
+          contact_person AS contact_name,
+          contact_title,
+          contact_email,
+          contact_phone,
+          submitted_at AS upload_time,
+          status,
+          reviewed_at,
+          reject_reason
+        FROM internship_companies
+        WHERE id = %s
         """, (company_id,))
         company = cursor.fetchone()
 
