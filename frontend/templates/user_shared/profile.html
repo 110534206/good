@@ -99,14 +99,41 @@
       <label for="identity">身分</label>
       <input id="identity" type="text" readonly />
 
-      <label for="combinedClass">班級</label>
-      <input id="combinedClass" type="text" readonly />
+      <!-- 學生專用欄位 -->
+      <div id="studentFields" class="role-specific-fields" style="display: none;">
+        <label for="combinedClass">班級</label>
+        <input id="combinedClass" type="text" readonly />
+        
+        <label for="studentId">學號</label>
+        <input id="studentId" type="text" readonly />
+      </div>
+
+      <!-- 教師專用欄位 -->
+      <div id="teacherFields" class="role-specific-fields" style="display: none;">
+        <label for="teacherId">教師編號</label>
+        <input id="teacherId" type="text" readonly />
+      </div>
+
+      <!-- 主任專用欄位 -->
+      <div id="directorFields" class="role-specific-fields" style="display: none;">
+        <label for="directorId">主任編號</label>
+        <input id="directorId" type="text" readonly />
+      </div>
+
+      <!-- 科助專用欄位 -->
+      <div id="taFields" class="role-specific-fields" style="display: none;">
+        <label for="taId">科助編號</label>
+        <input id="taId" type="text" readonly />
+      </div>
+
+      <!-- 管理員專用欄位 -->
+      <div id="adminFields" class="role-specific-fields" style="display: none;">
+        <label for="adminId">管理員編號</label>
+        <input id="adminId" type="text" readonly />
+      </div>
 
       <label for="name">姓名</label>
       <input id="name" type="text" />
-
-      <label for="studentId">學號</label>
-      <input id="studentId" type="text" readonly />
 
     </div>
 
@@ -164,6 +191,34 @@
         nextBtn.textContent = index === pages.length - 1 ? '完成' : '下一頁';
       }
 
+      // 根據使用者身分顯示相應的欄位
+      function showRoleSpecificFields(role) {
+        // 隱藏所有角色專用欄位
+        const allRoleFields = document.querySelectorAll('.role-specific-fields');
+        allRoleFields.forEach(field => {
+          field.style.display = 'none';
+        });
+
+        // 根據角色顯示相應欄位
+        switch(role) {
+          case 'student':
+            document.getElementById('studentFields').style.display = 'block';
+            break;
+          case 'teacher':
+            document.getElementById('teacherFields').style.display = 'block';
+            break;
+          case 'director':
+            document.getElementById('directorFields').style.display = 'block';
+            break;
+          case 'ta':
+            document.getElementById('taFields').style.display = 'block';
+            break;
+          case 'admin':
+            document.getElementById('adminFields').style.display = 'block';
+            break;
+        }
+      }
+
       // 載入用戶資料
       fetch('/api/profile')
         .then(res => {
@@ -181,26 +236,32 @@
           // 身分轉換
           document.getElementById('identity').value = roleMap[user.role] || '';
 
-          // *** 修正: 判斷是否為科助，如果是則隱藏班級欄位 ***
-          if (user.role === 'ta') {
-            const classLabel = document.querySelector('label[for="combinedClass"]');
-            const classInput = document.getElementById('combinedClass');
-            if (classLabel) classLabel.style.display = 'none';
-            if (classInput) classInput.style.display = 'none';
-          }
+          // 根據使用者身分顯示相應的欄位
+          showRoleSpecificFields(user.role);
 
-          // 班級顯示 & 存 class_id
-          if (user.classes && user.classes.length > 0) {
-            document.getElementById('combinedClass').value = user.classes
-              .map(c => (c.department.replace("管科", "") + c.name))
-              .join("、");
-          } else {
-            document.getElementById('combinedClass').value = user.class_display_name || '';
+          // 根據身分填入相應的資料
+          if (user.role === 'student') {
+            // 班級顯示 & 存 class_id
+            if (user.classes && user.classes.length > 0) {
+              document.getElementById('combinedClass').value = user.classes
+                .map(c => (c.department.replace("管科", "") + c.name))
+                .join("、");
+            } else {
+              document.getElementById('combinedClass').value = user.class_display_name || '';
+            }
+            window.classId = user.class_id || null;
+            document.getElementById('studentId').value = user.username || '';
+          } else if (user.role === 'teacher') {
+            document.getElementById('teacherId').value = user.username || '';
+          } else if (user.role === 'director') {
+            document.getElementById('directorId').value = user.username || '';
+          } else if (user.role === 'ta') {
+            document.getElementById('taId').value = user.username || '';
+          } else if (user.role === 'admin') {
+            document.getElementById('adminId').value = user.username || '';
           }
-          window.classId = user.class_id || null;
 
           document.getElementById('name').value = user.name || '';
-          document.getElementById('studentId').value = user.username || '';
           document.getElementById('email').value = user.email || '';
         })
         .catch(err => alert(err.message));
@@ -257,8 +318,22 @@
                 throw new Error('學生身分缺少班級');
               }
 
+              // 根據身分取得相應的 username
+              let username = '';
+              if (roleValue === 'student') {
+                username = document.getElementById('studentId').value;
+              } else if (roleValue === 'teacher') {
+                username = document.getElementById('teacherId').value;
+              } else if (roleValue === 'director') {
+                username = document.getElementById('directorId').value;
+              } else if (roleValue === 'ta') {
+                username = document.getElementById('taId').value;
+              } else if (roleValue === 'admin') {
+                username = document.getElementById('adminId').value;
+              }
+
               const payload = {
-                username: document.getElementById('studentId').value,
+                username: username,
                 // 後端 /api/saveProfile 預期收到中文 role 顯示值 (role_display)
                 role: roleDisplayValue, 
                 name: document.getElementById('name').value,
