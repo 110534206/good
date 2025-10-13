@@ -152,7 +152,7 @@
     /* 主內容 */
     h2 {
       text-align: center;
-      color: #004c97;
+      color: #0066cc;
       margin-bottom: 25px;
       font-weight: 700;
     }
@@ -203,108 +203,107 @@
       color: white;
     }
 
-    /* =========================
-   ✅ Modal 統一樣式設計
-   ========================= */
-
-    /* ✅ 自動避開頂端列高度，保持垂直置中 */
-    .modal-dialog {
-      margin-top: calc(60px + 30px) !important;
-      /* 頂端列高度(60px) + 額外間距 */
+    h2 {
+      text-align: center;
+      color: #0066cc;
+      margin-bottom: 20px;
     }
 
-    @media (min-height: 700px) {
-      .modal-dialog {
-        margin-top: calc(60px + 40px) !important;
-      }
+    .card {
+      box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+      border-radius: 10px;
     }
 
-    /* 整體框樣式：圓角 + 陰影 + 白底 */
-    .modal-content {
-      border-radius: 14px;
-      border: none;
-      box-shadow: 0 5px 25px rgba(0, 0, 0, 0.15);
-      background: #ffffff;
+    #fileDrop {
+      border: 2px dashed #ccc;
+      border-radius: 8px;
+      padding: 30px;
+      text-align: center;
+      color: #888;
+      cursor: pointer;
+      transition: border-color 0.3s;
     }
 
-    /* 關閉按鈕區塊 */
-    .modal-header {
-      border-bottom: none;
-      padding: 0.8rem 1rem 0 0.8rem;
+    #fileDrop.dragover {
+      border-color: #0d6efd;
+      color: #0d6efd;
     }
 
-    /* 內文部分 */
-    .modal-body {
-      padding: 1.8rem;
-      background-color: #f9fbfd;
-      border-radius: 0 0 14px 14px;
-      max-height: 75vh;
-      overflow-y: auto;
+    table {
+      text-align: center;
+      vertical-align: middle;
     }
 
-    /* 預覽內容標題樣式 */
-    .modal-body h5 {
+    .company-preview {
+      font-size: 15px;
+      color: #333;
+    }
+
+    .company-preview .section {
+      background: #f9fbfd;
+      border: 1px solid #dee2e6;
+      border-radius: 8px;
+      padding: 18px 20px;
+      margin-bottom: 20px;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+    }
+
+    .company-preview .section h5 {
       color: #0056b3;
       font-weight: 600;
       margin-bottom: 15px;
     }
 
-    /* Grid 資訊區塊對齊與背景風格一致 */
-    .modal-body .info-grid div {
+    .reject-box {
+      background-color: #fff3f3;
+      border: 1px solid #ffb3b3;
+      color: #c00;
+      border-radius: 6px;
+      padding: 12px;
+    }
+
+
+    .info-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 10px 20px;
+    }
+
+    .info-grid .full {
+      grid-column: 1 / -1;
+    }
+
+    .info-grid div {
       background: #fff;
       border: 1px solid #e2e6ea;
-      border-radius: 6px;
+      border-radius: 5px;
       padding: 10px 12px;
       display: flex;
       flex-direction: column;
       justify-content: center;
     }
 
-    /* 標籤與內容字體調整 */
-    .modal-body strong {
+    .info-grid strong {
       color: #0056b3;
       font-size: 14px;
       margin-bottom: 4px;
     }
 
-    .modal-body span {
+    .info-grid span {
       font-size: 15px;
       color: #444;
       white-space: pre-wrap;
     }
 
-    /* 加強滾動條可視性 */
-    .modal-body::-webkit-scrollbar {
-      width: 8px;
-    }
-
-    .modal-body::-webkit-scrollbar-thumb {
-      background: #ccc;
-      border-radius: 4px;
-    }
-
-    .info-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 10px 20px;
-    }
-
-    .info-grid div {
-      text-align: left;
-    }
-
-    .reject-box {
-      background-color: #ffe9e9;
-      border: 1px solid #dc3545;
-      border-radius: 8px;
-      padding: 10px;
-      margin-top: 10px;
-      color: #b40000;
+    .modal-body {
+      max-height: 70vh;
+      overflow-y: auto;
     }
   </style>
 </head>
+
 <body>
- <!-- ✅ 頂部欄 -->
+  <!-- ✅ 頂部欄 -->
   <div class="top-bar">
     <div class="container">
       <div class="top-bar-left">
@@ -323,7 +322,8 @@
           <div id="accountDropdownMenu" class="dropdown-menu"
             style="position:absolute; right:0; top:120%; background:#fff; border:1px solid #ccc; border-radius:8px; padding:6px; min-width:160px; display:none; box-shadow:0 4px 12px rgba(0,0,0,.12);">
             <a href="/profile" class="btn-link" style="display:block; border:none; margin:4px 0;">個人資料</a>
-            <a id="toHomeroomLink" href="/class_teacher_home" class="btn-link" style="display:none; border:none; margin:4px 0;">切換班導身分</a>
+            <a id="toHomeroomLink" href="/class_teacher_home" class="btn-link"
+              style="display:none; border:none; margin:4px 0;">切換班導身分</a>
             <a href="/login" class="btn-link" style="display:block; border:none; margin:4px 0;">登出</a>
           </div>
         </div>
@@ -410,7 +410,6 @@
     <div class="modal-dialog modal-lg modal-dialog-scrollable">
       <div class="modal-content">
         <div class="modal-header">
-          <h5 class="modal-title">公司詳細資料</h5>
           <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
         </div>
         <div class="modal-body" id="modalBody">
@@ -471,25 +470,53 @@
       const footer = document.getElementById("modalFooter");
 
       body.innerHTML = `
-        <div class="info-grid">
-          <div><b>公司名稱：</b>${c.company_name || "-"}</div>
-          <div><b>公司地址：</b>${c.company_address || "-"}</div>
-          <div><b>聯絡人：</b>${c.contact_name || "-"}</div>
-          <div><b>職稱：</b>${c.contact_title || "-"}</div>
-          <div><b>聯絡電話：</b>${c.contact_phone || "-"}</div>
-          <div><b>Email：</b>${c.contact_email || "-"}</div>
-          <div class="col-12"><b>公司簡介：</b><br>${c.company_intro || "-"}</div>
-          <div class="col-12"><b>實習內容：</b><br>${c.internship_content || "-"}</div>
-        </div>
-        ${c.status === 'rejected' && c.reject_reason ?
-          `<div class="reject-box"><b>退件理由：</b><br>${c.reject_reason}</div>` : ""}
-      `;
+    <div class="company-preview">
 
+      <!-- 公司基本資料 -->
+      <div class="section">
+        <h5>公司基本資料</h5>
+        <div class="info-grid">
+          <div><strong>公司名稱</strong><span>${c.company_name || "-"}</span></div>
+          <div><strong>公司地址</strong><span>${c.company_address || "-"}</span></div>
+          <div class="full"><strong>公司簡介</strong><span>${c.company_intro || "-"}</span></div>
+        </div>
+      </div>
+
+      <!-- 聯絡資訊 -->
+      <div class="section">
+        <h5>聯絡資訊</h5>
+        <div class="info-grid">
+          <div><strong>聯絡人姓名</strong><span>${c.contact_name || "-"}</span></div>
+          <div><strong>職稱</strong><span>${c.contact_title || "-"}</span></div>
+          <div><strong>聯絡電話</strong><span>${c.company_phone || "-"}</span></div>
+          <div><strong>電子郵件</strong><span>${c.contact_email || "-"}</span></div>
+        </div>
+      </div>
+
+      <!-- 實習資訊 -->
+      <div class="section">
+        <h5>實習資訊</h5>
+        <div class="info-grid">
+          <div class="full"><strong>實習內容</strong><span>${c.internship_content || "-"}</span></div>
+          <div><strong>指導老師</strong><span>${c.upload_teacher_name || "-"}</span></div>
+          <div><strong>上傳時間</strong><span>${c.upload_time || "-"}</span></div>
+        </div>
+      </div>
+
+      ${c.status === 'rejected' && c.reject_reason ? `
+      <div class="section reject-box">
+        <h5>退件理由</h5>
+        <div><span>${c.reject_reason}</span></div>
+      </div>` : ""}
+    </div>
+  `;
+
+      // 按鈕區
       if (isPending) {
         footer.innerHTML = `
-          <button class="btn btn-success" onclick="approveCompany(${c.id})">通過</button>
-          <button class="btn btn-danger" onclick="rejectCompany(${c.id})">退件</button>
-        `;
+      <button class="btn btn-success" onclick="approveCompany(${c.id})">通過</button>
+      <button class="btn btn-danger" onclick="rejectCompany(${c.id})">退件</button>
+    `;
       } else {
         footer.innerHTML = `<button class="btn btn-secondary" data-bs-dismiss="modal">關閉</button>`;
       }
@@ -533,7 +560,7 @@
       renderTable(h, "historyTable", false);
     }
 
-     const menuBtn = document.getElementById("menu-btn");
+    const menuBtn = document.getElementById("menu-btn");
     const sideMenu = document.getElementById("side-menu");
     const closeBtn = document.getElementById("close-btn");
 
@@ -612,7 +639,7 @@
         const link = document.getElementById('toHomeroomLink');
         if (link) link.style.display = 'block';
       }
-    }).catch(() => {});
+    }).catch(() => { });
   </script>
 </body>
 
