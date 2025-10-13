@@ -282,23 +282,6 @@ def api_get_reviewed_companies():
     except Exception:
         print("❌ 取得已審核公司錯誤：", traceback.format_exc())
         return jsonify({"success": False, "message": "伺服器錯誤"}), 500
-    
-# =========================================================
-# API - 公司審核通過/退件
-# =========================================================
-@company_bp.route('/api/approve_company', methods=['POST'])
-def approve_company():
-    try:
-        company_id = request.args.get('company_id')
-        conn = get_db()
-        cursor = conn.cursor()
-        cursor.execute("UPDATE company SET status='approved' WHERE id=%s", (company_id,))
-        conn.commit()
-        return jsonify(success=True, message="公司已通過審核")
-    except Exception as e:
-        print("approve_company error:", e)
-        return jsonify(success=False, message="審核失敗")
-
 
 # =========================================================
 # API - 公司退件
