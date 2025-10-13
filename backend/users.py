@@ -13,6 +13,25 @@ users_bp = Blueprint("users_bp", __name__)
 def teacher_home():
     if 'username' not in session or session.get('role') != 'teacher':
         return redirect(url_for('auth_bp.login_page'))
+    
+    # 檢查是否為班導師，如果是則重導向到班導師頁面
+    user_id = session.get('user_id')
+    if user_id:
+        conn = get_db()
+        cursor = conn.cursor()
+        try:
+            cursor.execute("""
+                SELECT 1 FROM classes_teacher
+                WHERE teacher_id = %s AND role = '班導師'
+            """, (user_id,))
+            is_homeroom = cursor.fetchone()
+            
+            if is_homeroom:
+                return redirect(url_for('users_bp.class_teacher_home'))
+        finally:
+            cursor.close()
+            conn.close()
+    
     return render_template('user_shared/teacher_home.html')
 
 # -------------------------

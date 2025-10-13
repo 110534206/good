@@ -44,6 +44,8 @@ def login():
 
         if len(matching_roles) > 1:
             session["pending_roles"] = matching_roles 
+            session["username"] = matched_user["username"]
+            session["user_id"] = matched_user["id"]
             return jsonify({
                 "success": True,
                 "username": matched_user["username"],
@@ -129,6 +131,10 @@ def api_confirm_role():
                 WHERE teacher_id = %s AND role = '班導師'
             """, (user_id,))
             is_homeroom = bool(cursor.fetchone())
+            
+            # 如果是班導師，重導向到班導師頁面
+            if is_homeroom:
+                redirect_page = "/class_teacher_home"
 
         # ✅ 更新 session — 指向正確角色的使用者
         session["user_id"] = user_id
@@ -211,19 +217,21 @@ def index_page():
     if role in ["teacher", "director"]:
         conn = get_db()
         cursor = conn.cursor()
-        cursor.execute("""
-            SELECT 1 FROM classes_teacher 
-            WHERE teacher_id = %s AND role = '班導師'
-        """, (user_id,))
-        is_homeroom = cursor.fetchone()
-        cursor.close()
-        conn.close()
+        try:
+            cursor.execute("""
+                SELECT 1 FROM classes_teacher 
+                WHERE teacher_id = %s AND role = '班導師'
+            """, (user_id,))
+            is_homeroom = cursor.fetchone()
 
-        if is_homeroom:
-           return redirect(url_for('users_bp.class_teacher_home'))
-        if role == "teacher":
-           return redirect(url_for('users_bp.teacher_home'))
-        return redirect(url_for('users_bp.director_home'))
+            if is_homeroom:
+               return redirect(url_for('users_bp.class_teacher_home'))
+            if role == "teacher":
+               return redirect(url_for('users_bp.teacher_home'))
+            return redirect(url_for('users_bp.director_home'))
+        finally:
+            cursor.close()
+            conn.close()
 
     elif role == "student":
         return redirect(url_for('users_bp.student_home')) 
