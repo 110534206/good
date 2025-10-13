@@ -174,12 +174,10 @@
 
 <body>
     <div class="center-container">
-        <!-- 左邊圖片 -->
         <div class="logo-side">
             <img src="{{ url_for('static', filename='images/logo.png') }}" alt="登入圖片" />
         </div>
 
-        <!-- 右邊表單 -->
         <div class="form-box">
             <h2>Welcome back!</h2>
             <div id="error-message">帳號或密碼錯誤，請重新輸入。</div>
@@ -268,11 +266,15 @@
             }
         }
 
+        /**
+         * 處理訪客登入 (此處被「忘記密碼」按鈕借用)
+         * 設置角色為 'guest'，並導向至 /visitor_home
+         */
         function handleguestLogin() {
             localStorage.setItem("username", "guest");
             localStorage.setItem("selectedRole", "guest");
             localStorage.setItem("roleList", JSON.stringify(["guest"]));
-            window.location.href = "/visitor_home";
+            window.location.href = "/visitor_home"; // 導向至廠商主頁
         }
     </script>
 </body>
