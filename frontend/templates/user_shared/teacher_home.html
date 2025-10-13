@@ -370,13 +370,26 @@
       }
     });
 
-    // 判斷是否為班導，顯示切換按鈕
-    fetch('/api/profile').then(r => r.json()).then(d => {
-      if (d.success && d.user && d.user.is_homeroom) {
-        const link = document.getElementById('toHomeroomLink');
-        if (link) link.style.display = 'block';
-      }
-    }).catch(() => {});
+    // 檢查是否為班導師，顯示切換按鈕
+    function checkHomeroomStatus() {
+      fetch('/api/check_homeroom_status')
+        .then(res => res.json())
+        .then(data => {
+          if (data.success && data.is_homeroom) {
+            const link = document.getElementById('toHomeroomLink');
+            if (link) {
+              link.style.display = 'block';
+              link.textContent = '切換到班導師身分';
+            }
+          }
+        })
+        .catch(err => {
+          console.log('檢查班導師身分失敗:', err);
+        });
+    }
+
+    // 頁面載入時檢查班導師身分
+    checkHomeroomStatus();
   </script>
 </body>
 

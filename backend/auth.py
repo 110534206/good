@@ -124,17 +124,13 @@ def api_confirm_role():
         redirect_page = f"/{role}_home"
         is_homeroom = False
 
-        # 檢查是否為班導師
+        # 檢查是否為班導師（僅記錄，不自動重導向）
         if role in ["teacher", "director"]:
             cursor.execute("""
                 SELECT 1 FROM classes_teacher
                 WHERE teacher_id = %s AND role = '班導師'
             """, (user_id,))
             is_homeroom = bool(cursor.fetchone())
-            
-            # 如果是班導師，重導向到班導師頁面
-            if is_homeroom:
-                redirect_page = "/class_teacher_home"
 
         # ✅ 更新 session — 指向正確角色的使用者
         session["user_id"] = user_id
@@ -213,25 +209,11 @@ def index_page():
     if not role:
         return redirect(url_for("auth_bp.login_page"))
 
-    # 老師和主任都要檢查是否為班導
-    if role in ["teacher", "director"]:
-        conn = get_db()
-        cursor = conn.cursor()
-        try:
-            cursor.execute("""
-                SELECT 1 FROM classes_teacher 
-                WHERE teacher_id = %s AND role = '班導師'
-            """, (user_id,))
-            is_homeroom = cursor.fetchone()
-
-            if is_homeroom:
-               return redirect(url_for('users_bp.class_teacher_home'))
-            if role == "teacher":
-               return redirect(url_for('users_bp.teacher_home'))
-            return redirect(url_for('users_bp.director_home'))
-        finally:
-            cursor.close()
-            conn.close()
+    # 老師和主任統一重導向到對應頁面，不自動檢查班導師身分
+    if role == "teacher":
+        return redirect(url_for('users_bp.teacher_home'))
+    elif role == "director":
+        return redirect(url_for('users_bp.director_home'))
 
     elif role == "student":
         return redirect(url_for('users_bp.student_home')) 

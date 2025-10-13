@@ -14,25 +14,39 @@ def teacher_home():
     if 'username' not in session or session.get('role') != 'teacher':
         return redirect(url_for('auth_bp.login_page'))
     
-    # 檢查是否為班導師，如果是則重導向到班導師頁面
-    user_id = session.get('user_id')
-    if user_id:
-        conn = get_db()
-        cursor = conn.cursor()
-        try:
-            cursor.execute("""
-                SELECT 1 FROM classes_teacher
-                WHERE teacher_id = %s AND role = '班導師'
-            """, (user_id,))
-            is_homeroom = cursor.fetchone()
-            
-            if is_homeroom:
-                return redirect(url_for('users_bp.class_teacher_home'))
-        finally:
-            cursor.close()
-            conn.close()
-    
     return render_template('user_shared/teacher_home.html')
+
+# -------------------------
+# API - 檢查班導師身分
+# -------------------------
+@users_bp.route('/api/check_homeroom_status', methods=['GET'])
+def check_homeroom_status():
+    if 'username' not in session or session.get('role') != 'teacher':
+        return jsonify({"success": False, "message": "請先登入"}), 401
+    
+    user_id = session.get('user_id')
+    if not user_id:
+        return jsonify({"success": False, "message": "找不到使用者ID"}), 401
+    
+    conn = get_db()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("""
+            SELECT 1 FROM classes_teacher
+            WHERE teacher_id = %s AND role = '班導師'
+        """, (user_id,))
+        is_homeroom = cursor.fetchone() is not None
+        
+        return jsonify({
+            "success": True,
+            "is_homeroom": is_homeroom
+        })
+    except Exception as e:
+        print(f"檢查班導師身分錯誤: {e}")
+        return jsonify({"success": False, "message": "伺服器錯誤"}), 500
+    finally:
+        cursor.close()
+        conn.close()
 
 # -------------------------
 # 老師首頁(班導)
