@@ -112,14 +112,13 @@ def search_users():
         cursor.close()
         conn.close()
 
-@admin_bp.route('/api/assign_student_class', methods=['POST'])
-def assign_student_class():
+@admin_bp.route('/api/assign_student_class/<int:user_id>', methods=['POST'])
+def assign_student_class(user_id):
     data = request.get_json()
-    user_id = data.get('user_id')
     class_id = data.get('class_id')
 
-    if not user_id or not class_id:
-        return jsonify({"success": False, "message": "缺少必要參數"}), 400
+    if not class_id:
+        return jsonify({"success": False, "message": "請選擇班級"}), 400
 
     conn = get_db()
     cursor = conn.cursor()
@@ -354,6 +353,50 @@ def get_all_classes():
     except Exception as e:
         print(f"獲取班級列表錯誤: {e}")
         return jsonify({"success": False, "message": "獲取班級列表失敗"}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+@admin_bp.route('/api/assign_teacher_class/<int:user_id>', methods=['POST'])
+def assign_teacher_class(user_id):
+    data = request.get_json()
+    class_id = data.get('class_id')
+    role = data.get('role', '班導師')
+    
+    if not class_id:
+        return jsonify({"success": False, "message": "請選擇班級"}), 400
+    
+    conn = get_db()
+    cursor = conn.cursor()
+    try:
+        # 檢查用戶是否存在且為教師或主任
+        cursor.execute("SELECT id, role FROM users WHERE id = %s", (user_id,))
+        user = cursor.fetchone()
+        if not user:
+            return jsonify({"success": False, "message": "用戶不存在"}), 404
+        
+        if user[1] not in ['teacher', 'director']:
+            return jsonify({"success": False, "message": "只有教師或主任可以設定帶班"}), 400
+        
+        # 檢查班級是否存在
+        cursor.execute("SELECT id FROM classes WHERE id = %s", (class_id,))
+        if not cursor.fetchone():
+            return jsonify({"success": False, "message": "班級不存在"}), 404
+        
+        # 先刪除該教師的所有帶班記錄
+        cursor.execute("DELETE FROM classes_teacher WHERE teacher_id = %s", (user_id,))
+        
+        # 新增帶班記錄
+        cursor.execute("""
+            INSERT INTO classes_teacher (teacher_id, class_id, role)
+            VALUES (%s, %s, %s)
+        """, (user_id, class_id, role))
+        
+        conn.commit()
+        return jsonify({"success": True, "message": "帶班設定成功"})
+    except Exception as e:
+        print(f"設定帶班錯誤: {e}")
+        return jsonify({"success": False, "message": "設定帶班失敗"}), 500
     finally:
         cursor.close()
         conn.close()

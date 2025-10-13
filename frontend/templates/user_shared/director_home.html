@@ -245,15 +245,7 @@
 
 <body>
   <script>
-    const username = localStorage.getItem("username");
-    const role = localStorage.getItem("selectedRole");
-
-    // 檢查用戶是否已登入，但不限制特定角色
-    // 後端已經處理了主任權限驗證
-    if (!username) {
-      alert("請先登入！");
-      window.location.href = "/login";
-    }
+    // 後端已經處理了主任權限驗證，不需要前端檢查
 
     document.addEventListener("DOMContentLoaded", () => {
       // 如果存在 user-role 元素，則設定為主任

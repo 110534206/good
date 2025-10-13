@@ -333,18 +333,9 @@
         });
     }
 
-    // 頁面就緒後載入頭像和驗證角色
+    // 頁面就緒後載入頭像
     document.addEventListener('DOMContentLoaded', () => {
       loadUserAvatar();
-      
-      // 驗證角色
-      const username = localStorage.getItem("username");
-      const role = localStorage.getItem("selectedRole");
-
-      if (!username || role !== "teacher") {
-        alert("請以教師身份登入！");
-        window.location.href = "/login";
-      }
     });
 
     document.getElementById('menu-btn').addEventListener('click', () => {

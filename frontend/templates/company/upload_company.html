@@ -712,12 +712,6 @@
 
     document.addEventListener('DOMContentLoaded', () => {
       loadUserAvatar();
-      const username = localStorage.getItem("username");
-      const role = localStorage.getItem("selectedRole");
-      if (!username || role !== "teacher") {
-        alert("請以教師身份登入！");
-        window.location.href = "/login";
-      }
       loadUploadedCompanies();
     });
 
