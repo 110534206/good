@@ -20,7 +20,7 @@
       line-height: 1.6;
       padding: 32px;
     }
-    .container { max-width: 960px; margin: 0 auto; }
+    .container { max-width: 1100px; margin: 0 auto; }
     header {
       display: flex;
       align-items: center;
@@ -32,24 +32,12 @@
       font-weight: 700;
       color: #1e3a8a;
     }
-    .header-actions { display: flex; gap: 10px; }
-    button {
-      background: var(--accent);
-      color: #fff;
-      border: none;
-      border-radius: 8px;
-      padding: 10px 18px;
-      font-size: 14px;
-      cursor: pointer;
-      transition: .25s;
-    }
-    button:hover { background: #1d4ed8; transform: translateY(-1px); }
     .card {
       background: var(--card);
       border-radius: 14px;
       box-shadow: 0 6px 16px rgba(0,0,0,0.06);
       padding: 20px;
-      margin-bottom: 30px;
+      margin-bottom: 24px;
     }
     table {
       width: 100%;
@@ -58,30 +46,43 @@
     }
     thead th {
       text-align: left;
-      padding: 12px;
+      padding: 10px;
       font-weight: 600;
       color: var(--muted);
       border-bottom: 2px solid #e2e8f0;
       background: #f8fafc;
     }
     tbody td {
-      padding: 12px;
+      padding: 10px;
       border-bottom: 1px solid #f1f5f9;
     }
     tr:hover td { background: #f9fbff; }
-    .empty { padding: 40px; text-align: center; color: var(--muted); }
-    canvas { margin-top: 20px; }
+    .charts {
+      display: flex;
+      justify-content: space-evenly;
+      flex-wrap: wrap;
+      gap: 24px;
+    }
+    .chart-box {
+      flex: 1 1 300px;
+      max-width: 320px;
+      background: #fff;
+      border-radius: 12px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+      padding: 16px;
+      text-align: center;
+    }
+    canvas {
+      width: 100% !important;
+      height: auto !important;
+      aspect-ratio: 1 / 1;
+    }
   </style>
 </head>
 <body>
   <div class="container">
     <header>
       <h1>實習廠商管理</h1>
-      <div class="header-actions">
-        <button id="btnAdd">＋ 新增公司</button>
-        <button id="btnEdit">✎ 修改</button>
-        <button id="btnDelete">🗑 刪除</button>
-      </div>
     </header>
 
     <div class="card">
@@ -93,12 +94,13 @@
             <th>職位</th>
             <th>需求人數</th>
             <th>地點</th>
-            <th>修改 / 刪除</th>
+            <th>學生填寫狀況</th>
           </tr>
         </thead>
-        <tbody id="dataBody"></tbody>
+        <tbody id="dataBody">
+          <tr><td>---</td><td>---</td><td>---</td><td>---</td><td>---</td></tr>
+        </tbody>
       </table>
-      <div id="emptyHint" class="empty">目前沒有資料</div>
     </div>
 
     <div class="card">
@@ -110,98 +112,63 @@
             <th>職位</th>
             <th>需求人數</th>
             <th>地點</th>
-            <th>修改 / 刪除</th>
+            <th>學生履歷與志願序</th>
           </tr>
         </thead>
-        <tbody id="companyList"></tbody>
+        <tbody id="companyList">
+          <tr><td>---</td><td>---</td><td>---</td><td>---</td><td>---</td></tr>
+        </tbody>
       </table>
-      <div id="emptyCompany" class="empty">目前沒有公司資料</div>
     </div>
 
     <div class="card">
       <h2 style="margin-bottom:10px;color:#1e3a8a;">各班志願序填寫進度圖表</h2>
-      <canvas id="progressChart"></canvas>
-    </div>
-  </div>
-
-  <div class="modal-backdrop" id="modalBackdrop" style="position:fixed;inset:0;background:rgba(0,0,0,0.45);display:none;align-items:center;justify-content:center;">
-    <div class="modal" style="width:100%;max-width:480px;background:#fff;border-radius:12px;padding:24px;box-shadow:0 6px 24px rgba(0,0,0,0.2);">
-      <h2>新增實習職位</h2>
-      <form id="dataForm">
-        <label>公司名稱<input id="companyName" required></label>
-        <label>職位<input id="position" required></label>
-        <label>需求人數<input id="count" type="number" min="1" required></label>
-        <label>地點<input id="location" required></label>
-        <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px;">
-          <button type="button" id="btnCancel">取消</button>
-          <button type="submit">儲存</button>
+      <div class="charts">
+        <div class="chart-box">
+          <canvas id="progressChart"></canvas>
         </div>
-      </form>
+        <div class="chart-box">
+          <canvas id="companyRatioChart"></canvas>
+        </div>
+        <div class="chart-box">
+          <canvas id="resumeStatusChart"></canvas>
+        </div>
+      </div>
     </div>
   </div>
 
   <script>
-    const modal=document.getElementById('modalBackdrop');
-    const tableBody=document.getElementById('dataBody');
-    const companyList=document.getElementById('companyList');
-    const emptyHint=document.getElementById('emptyHint');
-    const emptyCompany=document.getElementById('emptyCompany');
-    let records=[];
-
-    document.getElementById('btnAdd').addEventListener('click',()=>{modal.style.display='flex';});
-    document.getElementById('btnCancel').addEventListener('click',()=>modal.style.display='none');
-    document.getElementById('dataForm').addEventListener('submit',saveData);
-
-    function saveData(e){
-      e.preventDefault();
-      const company=document.getElementById('companyName').value.trim();
-      const position=document.getElementById('position').value.trim();
-      const count=parseInt(document.getElementById('count').value||'0');
-      const location=document.getElementById('location').value.trim();
-      if(!company||!position||!location)return alert('請填寫完整資料');
-      records.unshift({id:Date.now(),company,position,count,location});
-      modal.style.display='none';
-      renderTables();
-      e.target.reset();
-      updateChart();
-    }
-
-    function renderTables(){
-      renderTable(tableBody, emptyHint);
-      renderTable(companyList, emptyCompany);
-    }
-
-    function renderTable(target, emptyBlock){
-      target.innerHTML='';
-      if(records.length===0){emptyBlock.style.display='block';return;}
-      emptyBlock.style.display='none';
-      records.forEach(item=>{
-        const tr=document.createElement('tr');
-        tr.innerHTML=`<td>${escapeHtml(item.company)}</td><td>${escapeHtml(item.position)}</td><td>${item.count}</td><td>${escapeHtml(item.location)}</td><td><button class='edit-btn'>✎</button> <button class='delete-btn'>🗑</button></td>`;
-        target.appendChild(tr);
-      });
-    }
-
-    function escapeHtml(str){return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
-
-    const ctx=document.getElementById('progressChart').getContext('2d');
-    let progressChart=new Chart(ctx, {
+    const progressCtx=document.getElementById('progressChart').getContext('2d');
+    new Chart(progressCtx,{
       type:'pie',
-      data:{
-        labels:['資管四忠','資管四孝'],
-        datasets:[{
-          label:'志願序填寫完成率 (%)',
-          data:[0,0],
-          backgroundColor:['#ef4444','#8b5cf6']
-        }]
-      },
-      options:{responsive:true}
+      data:{labels:['資管四忠','資管四孝'],datasets:[{data:[60,75],backgroundColor:['#60a5fa','#fbbf24']}]},
+      options:{plugins:{legend:{position:'bottom'},title:{display:true,text:'志願序完成率'}},maintainAspectRatio:true}
     });
 
-    function updateChart(){
-      progressChart.data.datasets[0].data=progressChart.data.labels.map(()=>Math.floor(Math.random()*101));
-      progressChart.update();
-    }
+    const companyRatioCtx=document.getElementById('companyRatioChart').getContext('2d');
+    new Chart(companyRatioCtx,{
+      type:'doughnut',
+      data:{labels:['公司A','公司B','公司C','公司D'],datasets:[{data:[30,40,15,15],backgroundColor:['#34d399','#60a5fa','#f472b6','#fcd34d']}]},
+      options:{plugins:{legend:{position:'bottom'},title:{display:true,text:'廠商志願序比例'}},maintainAspectRatio:true}
+    });
+
+    const resumeCtx=document.getElementById('resumeStatusChart').getContext('2d');
+    new Chart(resumeCtx,{
+      type:'bar',
+      data:{labels:['資管四忠','資管四孝'],datasets:[{label:'已繳交(%)',data:[93,86],backgroundColor:'#2563eb'},{label:'缺交(%)',data:[7,14],backgroundColor:'#f43f5e'}]},
+      options:{
+        scales:{
+          y:{
+            beginAtZero:true,
+            max:100,
+            ticks:{callback:function(value){return value+'%';}}
+          }
+        },
+        plugins:{legend:{position:'bottom'},title:{display:true,text:'履歷繳交百分比狀況'}},
+        maintainAspectRatio:true
+      }
+    });
   </script>
 </body>
 </html>
+
