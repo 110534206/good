@@ -211,39 +211,38 @@
       } else {
         const c = data.company;
         const jobsHtml = (c.internship_jobs || []).map(job => `
-          <div class="info-grid">
-          <div><strong>實習職位</strong><span>${job.title || '-'}</span></div>
-          <div><strong>所屬部門</strong><span>${job.department || '-'}</span></div>
-          <div><strong>期間</strong><span>${job.period || '-'}</span></div>
-          <div><strong>時段</strong><span>${job.work_time || '-'}</span></div>
-          <div><strong>名額</strong><span>${job.slots || '-'}</span></div>
-          <div class="full"><strong>實習內容</strong><span>${job.description || '-'}</span></div>
-          <div class="full"><strong>備註</strong><span>${job.remark || '-'}</span></div>
-          </div>
-        `).join('');
+  <div class="info-grid">
+    <div><strong>實習職位</strong><span>${job.title || '-'}</span></div>
+    <div><strong>所屬部門</strong><span>${job.department || '-'}</span></div>
+    <div><strong>期間</strong><span>${job.period || '-'}</span></div>
+    <div><strong>時段</strong><span>${job.work_time || '-'}</span></div>
+    <div><strong>名額</strong><span>${job.slots || '-'}</span></div>
+    <div class="full"><strong>實習內容</strong><span>${job.description || '-'}</span></div>
+    <div class="full"><strong>備註</strong><span>${job.remark || '-'}</span></div>
+  </div>
+`).join('');
 
         modalBody.innerHTML = `
-          <div class="section">
-            <h5>公司基本資料</h5>
-            <div class="info-grid">
-              <div><strong>公司名稱</strong><span>${c.company_name || '-'}</span></div>
-              <div><strong>統一編號</strong><span>${c.tax_id || '-'}</span></div>
-              <div><strong>地址</strong><span>${c.address || '-'}</span></div>
-              <div><strong>聯絡人</strong><span>${c.contact_person || '-'}</span></div>
-              <div><strong>聯絡電話</strong><span>${c.phone || '-'}</span></div>
-              <div><strong>Email</strong><span>${c.email || '-'}</span></div>
-            </div>
-          </div>
+  <div class="section">
+    <h5>公司基本資料</h5>
+    <div class="info-grid">
+      <div><strong>公司名稱</strong><span>${c.company_name || '-'}</span></div>
+      <div><strong>地址</strong><span>${c.location || '-'}</span></div>
+      <div><strong>聯絡人</strong><span>${c.contact_person || '-'}</span></div>
+      <div><strong>聯絡電話</strong><span>${c.contact_phone || '-'}</span></div>
+      <div><strong>Email</strong><span>${c.contact_email || '-'}</span></div>
+    </div>
+  </div>
 
-          <div class="section">
-            <h5>實習職缺資訊</h5>
-            ${jobsHtml || '<p>此公司目前沒有職缺資料。</p>'}
-          </div>
-        `;
+  <div class="section">
+    <h5>實習職缺資訊</h5>
+    ${jobsHtml || '<p>此公司目前沒有職缺資料。</p>'}
+  </div>
+`;
+
+}
+        modal.show();
       }
-
-      modal.show();
-    }
   </script>
 </body>
 
