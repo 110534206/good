@@ -20,90 +20,195 @@
     }
 
     form {
-      background: #fff;
+      background: #ffffff;
       padding: 40px;
-      border-radius: 10px;
-      box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+      border-radius: 12px;
+      box-shadow: 0 6px 20px rgba(0, 0, 0, 0.08);
       margin-top: 50px;
     }
 
-    label {
+    /* === Headings === */
+    h2 {
       font-weight: bold;
-      margin-top: 20px;
+      color: #0d6efd;
+      text-align: center;
+      margin-bottom: 2rem;
+    }
+
+    h5 {
+      margin-top: 1.5rem;
+      color: #343a40;
+      font-weight: 600;
+      border-bottom: 2px solid #dee2e6;
+      padding-bottom: 6px;
+    }
+
+    /* === Label and Select === */
+    label {
+      font-weight: 600;
+      margin-bottom: 6px;
+      display: block;
+      color: #495057;
     }
 
     select {
       width: 100%;
-      padding: 10px;
+      padding: 10px 12px;
       border-radius: 6px;
-      border: 1px solid #ccc;
+      border: 1px solid #ced4da;
       margin-top: 5px;
+      background-color: #fff;
+      font-size: 1rem;
     }
 
+    /* === Company Row Layout === */
     .company-row {
       display: grid;
       grid-template-columns: 1fr 1fr auto;
-      gap: 10px;
+      gap: 12px;
       align-items: center;
+      margin-top: 8px;
     }
 
+    /* === View Button === */
     .btn-view {
-      background-color: #eee;
-      border: 1px solid #999;
-      color: #333;
-      padding: 8px 12px;
+      background-color: #e9ecef;
+      border: 1px solid #adb5bd;
+      color: #495057;
+      padding: 8px 14px;
       border-radius: 6px;
       cursor: pointer;
+      font-size: 0.95rem;
+      transition: background-color 0.2s ease;
     }
 
     .btn-view:hover {
-      background-color: #ddd;
+      background-color: #dee2e6;
     }
 
+    /* === Submit Button === */
     button[type="submit"] {
-      margin-top: 30px;
+      margin-top: 40px;
       width: 100%;
-      padding: 10px;
-      background-color: #0066cc;
-      color: white;
+      padding: 12px;
+      font-size: 1.1rem;
+      background-color: #0d6efd;
+      color: #fff;
       border: none;
-      border-radius: 6px;
+      border-radius: 8px;
       cursor: pointer;
+      transition: background-color 0.2s ease;
     }
 
-    /* Modal */
+    button[type="submit"]:hover {
+      background-color: #0b5ed7;
+    }
+
+    /* === Modal === */
     .modal-content {
       border-radius: 12px;
-      padding: 1rem 1.5rem;
+      padding: 1.5rem;
+      background-color: #fff;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
     }
 
+    .modal-header {
+      border-bottom: 1px solid #dee2e6;
+    }
+
+    .modal-title {
+      font-weight: bold;
+      color: #0d6efd;
+    }
+
+    /* === Info Grid (Modal Details) === */
     .info-grid {
       display: grid;
       grid-template-columns: 1fr 1fr;
-      gap: 10px 20px;
+      gap: 12px 20px;
       margin-bottom: 1rem;
     }
 
     .info-grid div strong {
       display: block;
-      color: #0066cc;
+      color: #495057;
       font-size: 0.9rem;
+      margin-bottom: 4px;
     }
 
     .info-grid div span {
       display: block;
-      font-size: 0.95rem;
+      font-size: 1rem;
+      color: #212529;
     }
 
     .info-grid .full {
       grid-column: 1 / -1;
     }
 
-    h5 {
-      margin-top: 1rem;
+    /* === Responsive Design === */
+    @media (max-width: 768px) {
+      .company-row {
+        grid-template-columns: 1fr;
+      }
+
+      .info-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .btn-view {
+        width: 100%;
+        text-align: center;
+      }
+
+      button[type="submit"] {
+        font-size: 1rem;
+      }
+    }
+
+    .card {
+      box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+      border-radius: 10px;
+    }
+
+    #fileDrop {
+      border: 2px dashed #ccc;
+      border-radius: 8px;
+      padding: 30px;
+      text-align: center;
+      color: #888;
+      cursor: pointer;
+      transition: border-color 0.3s;
+    }
+
+    #fileDrop.dragover {
+      border-color: #0d6efd;
+      color: #0d6efd;
+    }
+
+    table {
+      text-align: center;
+      vertical-align: middle;
+    }
+
+    .company-preview {
+      font-size: 15px;
       color: #333;
-      border-bottom: 2px solid #ddd;
-      padding-bottom: 5px;
+    }
+
+    .company-preview .section {
+      background: #f9fbfd;
+      border: 1px solid #dee2e6;
+      border-radius: 8px;
+      padding: 18px 20px;
+      margin-bottom: 20px;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+    }
+
+    .company-preview .section h5 {
+      color: #0056b3;
+      font-weight: 600;
+      margin-bottom: 15px;
     }
   </style>
 </head>
@@ -142,10 +247,9 @@
 
   <!-- 詳細資料 Modal -->
   <div class="modal fade" id="companyModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-lg">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
       <div class="modal-content">
-        <div class="modal-header">
-          <h4 class="modal-title">公司詳細資料</h4>
+        <div class="modal-header border-0">
           <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
         </div>
         <div class="modal-body" id="modalBody">載入中...</div>
@@ -169,25 +273,31 @@
         }
 
         try {
-          const res = await fetch(`/api/get_jobs_by_company?company_id=${companyId}`);
+          const res = await fetch(`/api/get_company_detail?company_id=${companyId}`);
           const data = await res.json();
 
-          if (data.success && data.jobs.length > 0) {
-            jobSelect.innerHTML = '<option value="">-- 請選擇職位 --</option>';
-            data.jobs.forEach(job => {
-              const opt = document.createElement('option');
-              opt.value = job.id;
-              opt.textContent = job.title || '未命名職位';
-              jobSelect.appendChild(opt);
-            });
-          } else {
+          if (!data.success || !data.company || !data.company.internship_jobs.length) {
             jobSelect.innerHTML = '<option value="">此公司目前無職缺</option>';
+            return;
           }
+
+          jobSelect.innerHTML = '<option value="">-- 請選擇職位 --</option>';
+          data.company.internship_jobs.forEach(job => {
+            const opt = document.createElement('option');
+            opt.value = job.id;  // 使用 job.id 作為 value
+            opt.textContent = job.title || job.internship_unit || '未命名職位';
+            jobSelect.appendChild(opt);
+          });
+
+          // 將公司資料快取到 DOM 上，方便後續 modal 使用（可選）
+          e.target.dataset.companyDetail = JSON.stringify(data.company);
         } catch (err) {
+          console.error(err);
           jobSelect.innerHTML = '<option value="">載入失敗</option>';
         }
       });
     });
+
 
     // 查看公司詳細資料
     async function viewDetail(btn) {
@@ -211,38 +321,59 @@
       } else {
         const c = data.company;
         const jobsHtml = (c.internship_jobs || []).map(job => `
-  <div class="info-grid">
-    <div><strong>實習職位</strong><span>${job.title || '-'}</span></div>
-    <div><strong>所屬部門</strong><span>${job.department || '-'}</span></div>
-    <div><strong>期間</strong><span>${job.period || '-'}</span></div>
-    <div><strong>時段</strong><span>${job.work_time || '-'}</span></div>
-    <div><strong>名額</strong><span>${job.slots || '-'}</span></div>
-    <div class="full"><strong>實習內容</strong><span>${job.description || '-'}</span></div>
-    <div class="full"><strong>備註</strong><span>${job.remark || '-'}</span></div>
+      <div class="info-grid">
+      <div><strong>實習職位</strong><span>${job.title || '-'}</span></div>
+      <div><strong>所屬部門</strong><span>${job.department || '-'}</span></div>
+      <div><strong>期間</strong><span>${job.period || '-'}</span></div>
+      <div><strong>時段</strong><span>${job.work_time || '-'}</span></div>
+      <div><strong>名額</strong><span>${job.slots || '-'}</span></div>
+      <div class="full"><strong>實習內容</strong><span>${job.description || '-'}</span></div>
+      <div class="full"><strong>備註</strong><span>${job.remark || '-'}</span></div>
   </div>
 `).join('');
 
         modalBody.innerHTML = `
-  <div class="section">
-    <h5>公司基本資料</h5>
-    <div class="info-grid">
-      <div><strong>公司名稱</strong><span>${c.company_name || '-'}</span></div>
-      <div><strong>地址</strong><span>${c.location || '-'}</span></div>
-      <div><strong>聯絡人</strong><span>${c.contact_person || '-'}</span></div>
-      <div><strong>聯絡電話</strong><span>${c.contact_phone || '-'}</span></div>
-      <div><strong>Email</strong><span>${c.contact_email || '-'}</span></div>
+  <div class="company-preview">
+    <div class="section">
+      <h5>公司基本資料</h5>
+      <div class="info-grid">
+        <div><strong>公司名稱</strong><span>${c.company_name || "-"}</span></div>
+        <div><strong>公司地址</strong><span>${c.company_address || "-"}</span></div>
+        <div class="full"><strong>公司簡介</strong><span>${c.company_intro || "-"}</span></div>
+      </div>
     </div>
-  </div>
 
-  <div class="section">
-    <h5>實習職缺資訊</h5>
-    ${jobsHtml || '<p>此公司目前沒有職缺資料。</p>'}
+    <div class="section">
+      <h5>聯絡資訊</h5>
+      <div class="info-grid">
+        <div><strong>聯絡人姓名</strong><span>${c.contact_name || "-"}</span></div>
+        <div><strong>職稱</strong><span>${c.contact_title || "-"}</span></div>
+        <div><strong>聯絡電話</strong><span>${c.contact_phone || "-"}</span></div>
+        <div><strong>電子郵件</strong><span>${c.contact_email || "-"}</span></div>
+      </div>
+    </div>
+
+    <div class="section">
+      <h5>實習職缺資訊</h5>
+      ${c.internship_jobs.map(job => `
+        <div class="info-grid">
+          <div><strong>實習職位</strong><span>${job.internship_unit || '-'}</span></div>
+          <div><strong>所屬部門</strong><span>${job.department || '-'}</span></div>
+          <div><strong>期間</strong><span>${job.internship_period || '-'}</span></div>
+          <div><strong>時段</strong><span>${job.internship_time || '-'}</span></div>
+          <div><strong>名額</strong><span>${job.internship_quota || '-'}</span></div>
+          <div class="full"><strong>實習內容</strong><span>${job.internship_content || '-'}</span></div>
+          <div class="full"><strong>備註</strong><span>${job.remark || '-'}</span></div>
+        </div>
+      `).join('')}
+    </div>
   </div>
 `;
 
-}
-        modal.show();
+
       }
+      modal.show();
+    }
   </script>
 </body>
 
