@@ -328,7 +328,7 @@
 
   <div class="container">
     <main>
-      <h2 class="page-title">廠商功能介面 (Visitor Dashboard)</h2>
+      <h2 class="page-title">請選擇你要使用的功能</h2>
       <section class="card-container">
         <div class="card">
           <h3>學生履歷審核</h3>
@@ -454,25 +454,23 @@
 
     // 帳號下拉
     document.addEventListener("DOMContentLoaded", function () {
-      // 載入企業 Logo
-      loadUserAvatar();
 
       const dropdownBtn = document.getElementById("accountDropdownBtn");
       const dropdownMenu = document.getElementById("accountDropdownMenu");
 
       if (dropdownBtn && dropdownMenu) {
-        dropdownBtn.addEventListener("click", function (e) {
-          e.stopPropagation();
-          const isExpanded = dropdownBtn.getAttribute("aria-expanded") === "true";
-          dropdownBtn.setAttribute("aria-expanded", !isExpanded);
-          dropdownMenu.style.display = isExpanded ? "none" : "block";
-        });
+       dropdownBtn.addEventListener("click", function (e) {
+        e.stopPropagation();
+         const isExpanded = dropdownBtn.getAttribute("aria-expanded") === "true";
+        dropdownBtn.setAttribute("aria-expanded", !isExpanded);
+        dropdownMenu.style.display = isExpanded ? "none" : "block";
+  });
 
-        // 點擊外部時關閉選單
-        document.addEventListener("click", function () {
-          dropdownBtn.setAttribute("aria-expanded", "false");
-          dropdownMenu.style.display = "none";
-        });
+  // 點擊外部時關閉選單
+  document.addEventListener("click", function () {
+    dropdownBtn.setAttribute("aria-expanded", "false");
+    dropdownMenu.style.display = "none";
+  });
       }
     });
   </script>
