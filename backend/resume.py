@@ -548,9 +548,13 @@ def get_class_resumes():
     cursor = conn.cursor(dictionary=True)
 
     try:
-        # 班導：只能看自己帶的班級
+        resumes = [] # 初始化結果列表
+        sql_query = ""
+        sql_params = tuple()
+
+        # 班導 / 教師：只能看自己帶的班級（透過 classes_teacher 關聯）
         if role == "teacher":
-            cursor.execute("""
+            sql_query = """
                 SELECT 
                     r.id,
                     u.name AS student_name,
@@ -565,51 +569,80 @@ def get_class_resumes():
                     r.created_at
                 FROM resumes r
                 JOIN users u ON r.user_id = u.id
-                JOIN classes c ON u.class_id = c.id
+                LEFT JOIN classes c ON u.class_id = c.id
                 JOIN classes_teacher ct ON ct.class_id = c.id
                 WHERE ct.teacher_id = %s
                 ORDER BY c.name, u.name
-            """, (user_id,))
-
-        # 主任：可看自己所屬科系（根據他管理的任何一個班級）
+            """
+            sql_params = (user_id,)
+            
+        # 主任：可看自己所屬科系（已放寬限制）
         elif role == "director":
+            # 1. 嘗試查詢主任管理的班級所屬的 department
             cursor.execute("""
                 SELECT DISTINCT c.department
                 FROM classes c
                 JOIN classes_teacher ct ON ct.class_id = c.id
                 WHERE ct.teacher_id = %s
+                LIMIT 1
             """, (user_id,))
             dept = cursor.fetchone()
-            if not dept or not dept["department"]:
-                return jsonify({
-                    "success": False,
-                    "message": "主任未設定管理班級或班級無科系資訊"
-                }), 400
-            department = dept["department"]
+            
+            department = dept.get("department") if dept else None
 
-            cursor.execute("""
-                SELECT 
-                    r.id,
-                    u.name AS student_name,
-                    u.username AS student_number,
-                    c.name AS class_name,
-                    c.department,
-                    r.original_filename,
-                    r.filepath,
-                    r.status,
-                    r.comment,
-                    r.note,
-                    r.created_at
-                FROM resumes r
-                JOIN users u ON r.user_id = u.id
-                JOIN classes c ON u.class_id = c.id
-                WHERE c.department = %s
-                ORDER BY c.name, u.name
-            """, (department,))
-
-        # TA：可查看全校（只讀）
-        elif role == "ta":
-            cursor.execute("""
+            # ------------------------------------------------------------------
+            # 【修改邏輯】: 如果找不到主任所屬科系，則改為查詢所有履歷 (像 admin 一樣)
+            # ------------------------------------------------------------------
+            if not department:
+                print(f"⚠️ [DEBUG] Director user {user_id} department not found. Falling back to view ALL resumes.")
+                sql_query = """
+                    SELECT 
+                        r.id,
+                        u.name AS student_name,
+                        u.username AS student_number,
+                        c.name AS class_name,
+                        c.department,
+                        r.original_filename,
+                        r.filepath,
+                        r.status,
+                        r.comment,
+                        r.note,
+                        r.created_at
+                    FROM resumes r
+                    JOIN users u ON r.user_id = u.id
+                    LEFT JOIN classes c ON u.class_id = c.id
+                    ORDER BY c.name, u.name
+                """
+                sql_params = tuple()
+            else:
+                # 找到科系，執行原本的科系查詢邏輯
+                sql_query = """
+                    SELECT 
+                        r.id,
+                        u.name AS student_name,
+                        u.username AS student_number,
+                        c.name AS class_name,
+                        c.department,
+                        r.original_filename,
+                        r.filepath,
+                        r.status,
+                        r.comment,
+                        r.note,
+                        r.created_at
+                    FROM resumes r
+                    JOIN users u ON r.user_id = u.id
+                    JOIN classes c ON u.class_id = c.id
+                    WHERE c.department = %s
+                    ORDER BY c.name, u.name
+                """
+                sql_params = (department,)
+            # ------------------------------------------------------------------
+            # 【修改邏輯結束】
+            # ------------------------------------------------------------------
+            
+        # TA 或 Admin: 可查看全校（只讀 / 全部）
+        elif role in ["ta", "admin"]:
+            sql_query = """
                 SELECT 
                     r.id,
                     u.name AS student_name,
@@ -626,32 +659,14 @@ def get_class_resumes():
                 JOIN users u ON r.user_id = u.id
                 LEFT JOIN classes c ON u.class_id = c.id
                 ORDER BY c.name, u.name
-            """)
-
-        # admin: 全部
-        elif role == "admin":
-            cursor.execute("""
-                SELECT 
-                    r.id,
-                    u.name AS student_name,
-                    u.username AS student_number,
-                    c.name AS class_name,
-                    c.department,
-                    r.original_filename,
-                    r.filepath,
-                    r.status,
-                    r.comment,
-                    r.note,
-                    r.created_at
-                FROM resumes r
-                JOIN users u ON r.user_id = u.id
-                LEFT JOIN classes c ON u.class_id = c.id
-                ORDER BY c.name, u.name
-            """)
+            """
+            sql_params = tuple()
 
         else:
             return jsonify({"success": False, "message": "無效的角色或權限"}), 403
 
+        # 執行 SQL 查詢
+        cursor.execute(sql_query, sql_params)
         resumes = cursor.fetchall()
 
         # 格式化日期時間
