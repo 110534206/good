@@ -301,13 +301,13 @@
 
     body.modal-open,
     html.modal-open {
-      overflow: hidden !important;
+      overflow: auto;
       height: 100% !important;
       padding-right: 0 !important;
     }
 
-    .modal-dialog {
-      margin-top: 80px;
+    .modal.show .modal-dialog {
+      transform: translateY(39px) !important;
     }
 
     .modal-body {
@@ -559,15 +559,17 @@
 
         <div class="section">
         <h5>實習職缺資訊</h5>
+        ${c.internship_jobs.map(job => `
         <div class="info-grid">
-          <div><strong>實習職位</strong><span>${c.internship_unit || '-'}</span></div>
-          <div><strong>所屬部門</strong><span>${c.department || '-'}</span></div>
-          <div><strong>期間</strong><span>${c.internship_period || '-'}</span></div>
-          <div><strong>時段</strong><span>${c.internship_time || '-'}</span></div>
-          <div><strong>名額</strong><span>${c.internship_quota || '-'}</span></div>
-          <div class="full"><strong>實習內容</strong><span>${c.internship_content || '-'}</span></div>
-          <div class="full"><strong>備註</strong><span>${c.remark || '-'}</span></div>
+        <div><strong>實習職位</strong><span>${job.internship_unit || '-'}</span></div>
+        <div><strong>所屬部門</strong><span>${job.department || '-'}</span></div>
+        <div><strong>期間</strong><span>${job.internship_period || '-'}</span></div>
+        <div><strong>時段</strong><span>${job.internship_time || '-'}</span></div>
+        <div><strong>名額</strong><span>${job.internship_quota || '-'}</span></div>
+        <div class="full"><strong>實習內容</strong><span>${job.internship_content || '-'}</span></div>
+        <div class="full"><strong>備註</strong><span>${job.remark || '-'}</span></div>
         </div>
+        `).join('')}
         </div>
 
         ${c.status === 'rejected' && c.reject_reason ? `
