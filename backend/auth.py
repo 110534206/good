@@ -137,6 +137,7 @@ def api_confirm_role():
         session["role"] = role
         session["original_role"] = role
         session["is_homeroom"] = is_homeroom
+        
 
         return jsonify({
             "success": True,
