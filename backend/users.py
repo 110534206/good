@@ -164,7 +164,8 @@ def save_profile():
         "教師": "teacher",
         "主任": "director",
         "科助": "ta",
-        "管理員": "admin"
+        "管理員": "admin",
+        "訪客": "visitor"
     }
     role = role_map.get(role_display)
     if not role:
