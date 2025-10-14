@@ -551,9 +551,12 @@ def get_class_resumes():
         resumes = [] # 初始化結果列表
         sql_query = ""
         sql_params = tuple()
-
-        # 班導 / 教師：只能看自己帶的班級（透過 classes_teacher 關聯）
+        
+        # ------------------------------------------------------------------
+        # 1. 班導 / 教師 (role == "teacher") 
+        # ------------------------------------------------------------------
         if role == "teacher":
+            # 這是標準的 SQL 邏輯：只看自己帶的班級（透過 classes_teacher 關聯）
             sql_query = """
                 SELECT 
                     r.id,
@@ -576,7 +579,44 @@ def get_class_resumes():
             """
             sql_params = (user_id,)
             
-        # 主任：可看自己所屬科系（已放寬限制）
+            # 先執行標準查詢
+            cursor.execute(sql_query, sql_params)
+            resumes = cursor.fetchall()
+
+            # ***************************************************************
+            # 【本次新增修改】: 如果標準查詢沒有結果，則使用寬鬆權限 (看到所有履歷)
+            # ***************************************************************
+            if not resumes:
+                print(f"⚠️ [DEBUG] Teacher user {user_id} has no classes assigned in classes_teacher. Falling back to view ALL resumes.")
+                # Fallback to view ALL resumes (Admin-like privilege)
+                sql_query = """
+                    SELECT 
+                        r.id,
+                        u.name AS student_name,
+                        u.username AS student_number,
+                        c.name AS class_name,
+                        c.department,
+                        r.original_filename,
+                        r.filepath,
+                        r.status,
+                        r.comment,
+                        r.note,
+                        r.created_at
+                    FROM resumes r
+                    JOIN users u ON r.user_id = u.id
+                    LEFT JOIN classes c ON u.class_id = c.id
+                    ORDER BY c.name, u.name
+                """
+                cursor.execute(sql_query, tuple())
+                resumes = cursor.fetchall() # 重新取得所有履歷
+            # ***************************************************************
+            # 【新增修改結束】
+            # ***************************************************************
+
+
+        # ------------------------------------------------------------------
+        # 2. 主任 (role == "director")
+        # ------------------------------------------------------------------
         elif role == "director":
             # 1. 嘗試查詢主任管理的班級所屬的 department
             cursor.execute("""
@@ -591,7 +631,7 @@ def get_class_resumes():
             department = dept.get("department") if dept else None
 
             # ------------------------------------------------------------------
-            # 【修改邏輯】: 如果找不到主任所屬科系，則改為查詢所有履歷 (像 admin 一樣)
+            # 【上次修改處】: 如果找不到科系，則改為查詢所有履歷 (像 admin 一樣)
             # ------------------------------------------------------------------
             if not department:
                 print(f"⚠️ [DEBUG] Director user {user_id} department not found. Falling back to view ALL resumes.")
@@ -637,10 +677,17 @@ def get_class_resumes():
                 """
                 sql_params = (department,)
             # ------------------------------------------------------------------
-            # 【修改邏輯結束】
+            # 【上次修改處結束】
             # ------------------------------------------------------------------
+
+            # 執行 SQL 查詢 (主任邏輯在上面已完成查詢或準備好查詢字串)
+            if sql_query:
+                cursor.execute(sql_query, sql_params)
+                resumes = cursor.fetchall()
             
-        # TA 或 Admin: 可查看全校（只讀 / 全部）
+        # ------------------------------------------------------------------
+        # 3. TA 或 Admin (role == "ta" or "admin")
+        # ------------------------------------------------------------------
         elif role in ["ta", "admin"]:
             sql_query = """
                 SELECT 
@@ -660,14 +707,11 @@ def get_class_resumes():
                 LEFT JOIN classes c ON u.class_id = c.id
                 ORDER BY c.name, u.name
             """
-            sql_params = tuple()
+            cursor.execute(sql_query, tuple())
+            resumes = cursor.fetchall()
 
         else:
             return jsonify({"success": False, "message": "無效的角色或權限"}), 403
-
-        # 執行 SQL 查詢
-        cursor.execute(sql_query, sql_params)
-        resumes = cursor.fetchall()
 
         # 格式化日期時間
         for r in resumes:
