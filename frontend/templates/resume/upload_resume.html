@@ -406,28 +406,19 @@
       document.getElementById('uploadBtn').disabled = file.size > 5 * 1024 * 1024;
     }
 
-    document.getElementById('uploadBtn').addEventListener('click', () => {
-      const file = fileInput.files[0];
-      if (!file) return alert("請選擇檔案");
-      const formData = new FormData();
-      formData.append('resume', file);
-      formData.append('username', localStorage.getItem('username') || 'testuser');
+  document.getElementById('uploadBtn').addEventListener('click', () => {
+  // ... (檔案檢查)
+    const formData = new FormData();
+    formData.append('resume', file);
+  // **修改點:** 如果要讓訪客上傳，不要傳送 username
+  // formData.append('username', localStorage.getItem('username') || 'testuser'); // 移除或改用訪客識別
+    formData.append('guest_token', generateUniqueGuestToken()); // 替換成一個臨時 token 或 ID
 
-      updateStatusText('uploaded');
+    updateStatusText('uploaded');
 
-      fetch('/api/upload_resume', { method: 'POST', body: formData })
-        .then(res => res.json())
-        .then(data => {
-          if (data.success && data.resume_id) {
-            resumeId = data.resume_id;
-            loadResumes();
-            if (interval) clearInterval(interval);
-            interval = setInterval(fetchStatus, 5000);
-          } else {
-            alert("上傳失敗");
-          }
-        });
-    });
+    fetch('/api/upload_resume', { method: 'POST', body: formData })
+  // ... (其餘邏輯)
+});
 
     function fetchStatus() {
       if (!resumeId) return;
