@@ -667,6 +667,44 @@ def delete_company():
         print("❌ [delete_company] 發生錯誤:", e)
         traceback.print_exc()
         return jsonify({"success": False, "message": "刪除失敗，請稍後再試"}), 500
+    
+# =========================================================
+# API - 取得所有可選公司及其職缺
+# =========================================================
+@company_bp.route("/api/get_available_companies", methods=["GET"])
+def get_available_companies():
+    db = get_db()
+    cursor = db.cursor(dictionary=True)
+
+    cursor.execute("""
+        SELECT 
+            c.id AS company_id, 
+            c.company_name, 
+            j.id AS position_id, 
+            j.title AS position_name
+        FROM internship_companies c
+        JOIN internship_jobs j ON c.id = j.company_id
+        WHERE c.status = 'approved'
+        ORDER BY c.company_name
+    """)
+    result = cursor.fetchall()
+    db.close()
+
+    # 整理成 {公司: [職缺]} 格式
+    company_map = {}
+    for row in result:
+        company_id = row["company_id"]
+        if company_id not in company_map:
+            company_map[company_id] = {
+                "company_name": row["company_name"],
+                "positions": []
+            }
+        company_map[company_id]["positions"].append({
+            "position_id": row["position_id"],
+            "position_name": row["position_name"]
+        })
+    return jsonify(list(company_map.values()))
+
 
 # =========================================================
 # 頁面 - 公司審核頁面
