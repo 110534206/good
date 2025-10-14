@@ -304,6 +304,12 @@ def change_password():
 def student_home():
     return render_template('user_shared/student_home.html')
 
+# 實習廠商主頁 (新增：對應 visitor_home.html)
+@users_bp.route('/visitor_home')
+def visitor_home():
+    # 廠商主頁/訪客登入的頁面
+    return render_template('visitor_home.html')
+
 # 使用者首頁 (主任前台)
 @users_bp.route('/director_home')
 def director_home():
