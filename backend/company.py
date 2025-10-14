@@ -705,6 +705,38 @@ def get_available_companies():
         })
     return jsonify(list(company_map.values()))
 
+# =========================================================
+# API - 根據公司 ID 取得該公司所有職缺
+# =========================================================
+@company_bp.route('/api/get_jobs_by_company')
+def get_jobs_by_company():
+    try:
+        company_id = request.args.get('company_id', type=int)
+        if not company_id:
+            return jsonify(success=False, message="缺少公司 ID"), 400
+
+        conn = get_db()
+        cursor = conn.cursor(dictionary=True)
+
+        cursor.execute("""
+            SELECT id, title AS internship_unit
+            FROM internship_jobs
+            WHERE company_id = %s
+        """, (company_id,))
+        jobs = cursor.fetchall()
+
+        return jsonify(success=True, jobs=jobs)
+
+    except Exception as e:
+        print("❌ [get_jobs_by_company] 錯誤：", e)
+        return jsonify(success=False, message="伺服器錯誤"), 500
+
+    finally:
+        try:
+            cursor.close()
+            conn.close()
+        except:
+            pass
 
 # =========================================================
 # 頁面 - 公司審核頁面
