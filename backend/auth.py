@@ -248,6 +248,14 @@ def login_confirm_page():
 
     return render_template("auth/login-confirm.html", roles_json=roles)
   
+# 訪客首頁頁面（不需登入）
+@auth_bp.route("/visitor_home")
+def visitor_home():
+    # 不驗證 session，允許訪客進入
+    session["role"] = "guest"
+    session["username"] = "guest"
+    return render_template("user_shared/visitor_home.html")
+  
 # 學生註冊
 @auth_bp.route("/register_student")
 def show_register_student_page():

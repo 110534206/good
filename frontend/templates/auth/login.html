@@ -108,7 +108,7 @@
         }
 
         .button.register,
-        .button.forgot-password {
+        .button.guest-login {
             width: 250px;
             height: 50px;
             font-size: 20px;
@@ -121,14 +121,14 @@
             display: inline-block;
         }
 
-        .button.forgot-password {
+        .button.guest-login {
             color: white;
             background-color: #3c91e6;
             ;
             border: none;
         }
 
-        .button.forgot-password:hover {
+        .button.guest-login:hover {
             background-color: #2b74c2;
         }
 
@@ -199,8 +199,9 @@
                     <button type="submit" class="button login">登入</button>
 
                     <div class="button-row">
-                        <button type="button" class="button forgot-password" onclick="handleguestLogin()">忘記密碼</button>
-                        <button type="button" class="button register"onclick="window.location.href='{{ url_for('auth_bp.show_register_student_page') }}'">註冊</button>
+                        <button type="button" class="button guest-login" onclick="handleguestLogin()">以訪客身分進入</button>
+                        <button type="button" class="button register"
+                          onclick="window.location.href='{{ url_for('auth_bp.show_register_student_page') }}'">註冊</button>
                     </div>
                 </div>
             </form>
@@ -267,14 +268,13 @@
         }
 
         /**
-         * 處理訪客登入 (此處被「忘記密碼」按鈕借用)
-         * 設置角色為 'guest'，並導向至 /visitor_home
-         */
+        * 訪客快速進入，不需要帳號登入，導向 visitor_home
+        */
         function handleguestLogin() {
             localStorage.setItem("username", "guest");
             localStorage.setItem("selectedRole", "guest");
             localStorage.setItem("roleList", JSON.stringify(["guest"]));
-            window.location.href = "/visitor_home"; // 導向至廠商主頁
+            window.location.href = "/visitor_home"; // 導向至科助主頁
         }
     </script>
 </body>
