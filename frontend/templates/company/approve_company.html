@@ -557,18 +557,17 @@
           </div>
         </div>
 
-        <!-- 實習職缺資訊 -->
         <div class="section">
-          <h5>實習職缺資訊</h5>
-          <div class="info-grid">
-            <div><strong>實習職位</strong><span>${c.internship_unit || "-"}</span></div>
-            <div><strong>所屬部門</strong><span>${c.department || "-"}</span></div>
-            <div><strong>期間</strong><span>${c.internship_period || "-"}</span></div>
-            <div><strong>時段</strong><span>${c.internship_time || "-"}</span></div>
-            <div><strong>名額</strong><span>${c.internship_quota || "-"}</span></div>
-            <div class="full"><strong>實習內容</strong><span>${c.internship_content || "-"}</span></div>
-            <div class="full"><strong>備註</strong><span>${c.remark || "-"}</span></div>
-          </div>
+        <h5>實習職缺資訊</h5>
+        <div class="info-grid">
+          <div><strong>實習職位</strong><span>${c.internship_unit || '-'}</span></div>
+          <div><strong>所屬部門</strong><span>${c.department || '-'}</span></div>
+          <div><strong>期間</strong><span>${c.internship_period || '-'}</span></div>
+          <div><strong>時段</strong><span>${c.internship_time || '-'}</span></div>
+          <div><strong>名額</strong><span>${c.internship_quota || '-'}</span></div>
+          <div class="full"><strong>實習內容</strong><span>${c.internship_content || '-'}</span></div>
+          <div class="full"><strong>備註</strong><span>${c.remark || '-'}</span></div>
+        </div>
         </div>
 
         ${c.status === 'rejected' && c.reject_reason ? `
@@ -595,7 +594,6 @@
         // 顯示 modal
         const modalEl = document.getElementById("companyModal");
         const bsModal = new bootstrap.Modal(modalEl);
-        document.body.classList.add("modal-open");
         bsModal.show();
 
         modalEl.addEventListener("hidden.bs.modal", () => {
@@ -625,7 +623,10 @@
 
     function rejectCompany(id) {
       const reason = prompt("請輸入退件理由：");
-      if (!reason) return;
+      if (!reason) {
+        alert("請輸入退件理由。");
+        return;
+      }
       fetch(`/api/reject_company`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
