@@ -19,6 +19,8 @@ import xlsxwriter
 from docx import Document
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.enum.table import WD_TABLE_ALIGNMENT
+from reportlab.lib.pagesizes import A4, landscape
+
 
 preferences_bp = Blueprint("preferences_bp", __name__)
 
@@ -516,154 +518,181 @@ def export_preferences_pdf():
         class_id = class_info['class_id']
         class_name = class_info['class_name']
 
-        # 查詢班上學生及其志願
+        # 查詢班上學生及其志願，包含公司與職缺與聯絡資訊
         cursor.execute("""
             SELECT 
                 u.id AS student_id,
                 u.name AS student_name,
-                u.username AS student_number, 
+                u.username AS student_number,
+                u.class_id,
                 sp.preference_order,
+                sp.submitted_at,
+                ic.id AS company_id,
                 ic.company_name,
-                sp.submitted_at
+                ic.company_address,
+                ic.contact_name,
+                ic.contact_phone,
+                ic.contact_email,
+                ij.id AS job_id,
+                ij.title AS job_title
             FROM users u
             LEFT JOIN student_preferences sp ON u.id = sp.student_id
             LEFT JOIN internship_companies ic ON sp.company_id = ic.id
+            LEFT JOIN internship_jobs ij ON sp.job_id = ij.id
             WHERE u.class_id = %s AND u.role = 'student'
             ORDER BY u.name, sp.preference_order
         """, (class_id,))
         results = cursor.fetchall()
 
-        # 創建 PDF 緩衝區
-        pdf_buffer = io.BytesIO()
-        doc = SimpleDocTemplate(pdf_buffer, pagesize=A4, topMargin=1*inch, bottomMargin=1*inch)
-        
-        # 設定樣式
-        styles = getSampleStyleSheet()
-        title_style = ParagraphStyle(
-            'CustomTitle',
-            parent=styles['Heading1'],
-            fontSize=18,
-            spaceAfter=30,
-            alignment=1,  # 置中
-            textColor=colors.HexColor('#0066CC')
-        )
-        
-        normal_style = styles['Normal']
-        normal_style.fontSize = 10
-
-        # 建立內容
-        story = []
-        
-        # 標題
-        title = Paragraph(f"{class_name} - 學生實習志願序統計表", title_style)
-        story.append(title)
-        
-        # 日期
-        date_text = f"導出時間：{datetime.now().strftime('%Y年%m月%d日 %H:%M:%S')}"
-        date_para = Paragraph(date_text, normal_style)
-        story.append(date_para)
-        story.append(Spacer(1, 20))
-
         # 整理學生資料
         student_data = defaultdict(lambda: {
             'name': '',
             'student_number': '',
-            'preferences': [''] * 5,
+            'class_id': '',
+            'preferences': [None] * 5,  # each entry will be dict or None
             'submitted_times': [''] * 5
         })
 
         for row in results:
-            student_name = row['student_name']
-            if student_name:
-                student_data[student_name]['name'] = student_name
-                student_data[student_name]['student_number'] = row['student_number'] or ''
-                
-                if row['preference_order'] and row['company_name']:
-                    order = row['preference_order'] - 1  # 轉為 0-based index
-                    if 0 <= order < 5:
-                        student_data[student_name]['preferences'][order] = row['company_name']
-                        if row['submitted_at']:
-                            student_data[student_name]['submitted_times'][order] = row['submitted_at'].strftime('%m/%d %H:%M')
+            student_name = row.get('student_name')
+            if not student_name:
+                continue
+            student = student_data[student_name]
+            student['name'] = student_name
+            student['student_number'] = row.get('student_number') or ''
+            student['class_id'] = row.get('class_id') or ''
 
-        # 建立表格資料
-        table_data = []
-        
-        # 表頭
-        headers = ['學生姓名', '學號', '第一志願', '第二志願', '第三志願', '第四志願', '第五志願']
-        table_data.append(headers)
-        
-        # 學生資料
+            pref_order = row.get('preference_order')
+            if pref_order and row.get('company_name'):
+                idx = pref_order - 1
+                if 0 <= idx < 5:
+                    student['preferences'][idx] = {
+                        'company_name': row.get('company_name') or '',
+                        'job_title': row.get('job_title') or row.get('job_title') or '',
+                        'company_address': row.get('company_address') or '',
+                        'contact_name': row.get('contact_name') or '',
+                        'contact_phone': row.get('contact_phone') or '',
+                        'contact_email': row.get('contact_email') or ''
+                    }
+                    if row.get('submitted_at'):
+                        student['submitted_times'][idx] = row['submitted_at'].strftime('%Y/%m/%d %H:%M')
+
+        # 準備 PDF（橫式）
+        pdf_buffer = io.BytesIO()
+        doc = SimpleDocTemplate(
+            pdf_buffer,
+            pagesize=landscape(A4),
+            leftMargin=0.5*inch,
+            rightMargin=0.5*inch,
+            topMargin=0.5*inch,
+            bottomMargin=0.5*inch
+        )
+
+        styles = getSampleStyleSheet()
+        title_style = ParagraphStyle(
+            'CustomTitle',
+            parent=styles['Heading1'],
+            fontSize=16,
+            spaceAfter=12,
+            alignment=1,  # centered
+            textColor=colors.HexColor('#0066CC')
+        )
+        normal_style = ParagraphStyle(
+            'NormalWrap',
+            parent=styles['Normal'],
+            fontSize=9,
+            leading=11
+        )
+
+        story = []
+        # 標題與日期
+        story.append(Paragraph(f"{class_name} - 學生實習志願序統計表", title_style))
+        story.append(Paragraph(f"導出時間：{datetime.now().strftime('%Y年%m月%d日 %H:%M:%S')}", normal_style))
+        story.append(Spacer(1, 12))
+
+        # 建表格資料（欄位：學生姓名、學號、班級、志願序、公司、職缺、公司地址、聯絡人、聯絡電話、提交時間）
+        headers = ['學生姓名', '學號', '班級', '志願序', '公司名稱', '職缺', '公司地址', '聯絡人', '聯絡電話', '提交時間']
+        table_data = [headers]
+
         for student_name in sorted(student_data.keys()):
             data = student_data[student_name]
-            row = [data['name'], data['student_number']]
-            
-            # 志願序
-            for i in range(5):
-                pref_text = data['preferences'][i]
-                if pref_text and data['submitted_times'][i]:
-                    pref_text += f"\n({data['submitted_times'][i]})"
-                row.append(pref_text)
-            
-            table_data.append(row)
+            for idx in range(5):
+                pref = data['preferences'][idx]
+                if not pref:
+                    # 如果該志願未填，仍列出空白的該列（可選）
+                    row = [
+                        data['name'],
+                        data['student_number'],
+                        class_name,
+                        f"第{idx+1}志願",
+                        '', '', '', '', '', ''
+                    ]
+                else:
+                    contact = pref.get('contact_name') or ''
+                    phone = pref.get('contact_phone') or pref.get('contact_email') or ''
+                    row = [
+                        data['name'],
+                        data['student_number'],
+                        class_name,
+                        f"第{idx+1}志願",
+                        pref.get('company_name', ''),
+                        pref.get('job_title', ''),
+                        pref.get('company_address', ''),
+                        contact,
+                        phone,
+                        data['submitted_times'][idx] or ''
+                    ]
+                # 使用 Paragraph 讓長文本可以自動換行
+                row = [Paragraph(str(cell), normal_style) for cell in row]
+                table_data.append(row)
 
-        # 建立表格
-        table = Table(table_data, colWidths=[1.2*inch, 1*inch, 1.5*inch, 1.5*inch, 1.5*inch, 1.5*inch, 1.5*inch])
-        
-        # 設定表格樣式
+        # 如果沒有任何學生，顯示提示
+        if len(table_data) == 1:
+            table_data.append([Paragraph("沒有可顯示的資料", normal_style)] + [''] * (len(headers) - 1))
+
+        # 設定欄寬（橫式需要寬欄）
+        col_widths = [1.4*inch, 0.9*inch, 0.9*inch, 0.8*inch, 2.2*inch, 1.6*inch, 2.6*inch, 1.2*inch, 1.2*inch, 1.0*inch]
+
+        table = Table(table_data, colWidths=col_widths, repeatRows=1)
+
         table_style = TableStyle([
-            # 表頭樣式
-            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#0066CC')),
-            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-            ('FONTSIZE', (0, 0), (-1, 0), 10),
-            
-            # 資料行樣式
-            ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
-            ('TEXTCOLOR', (0, 1), (-1, -1), colors.black),
-            ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
-            ('FONTSIZE', (0, 1), (-1, -1), 8),
-            
-            # 邊框
-            ('GRID', (0, 0), (-1, -1), 1, colors.black),
-            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-            
-            # 行高
-            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#F5F5F5')]),
+            ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#0066CC')),
+            ('TEXTCOLOR', (0,0), (-1,0), colors.whitesmoke),
+            ('ALIGN', (0,0), (-1,-1), 'LEFT'),
+            ('VALIGN', (0,0), (-1,-1), 'TOP'),
+            ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0,0), (-1,0), 10),
+            ('FONTSIZE', (0,1), (-1,-1), 8),
+            ('GRID', (0,0), (-1,-1), 0.5, colors.grey),
+            ('ROWBACKGROUNDS', (0,1), (-1,-1), [colors.white, colors.HexColor('#F9F9F9')]),
         ])
-        
         table.setStyle(table_style)
+
         story.append(table)
-        story.append(Spacer(1, 30))
+        story.append(Spacer(1, 12))
 
-        # 統計資訊
-        stats_title = Paragraph("統計資訊", styles['Heading2'])
-        story.append(stats_title)
-        
-        # 統計各公司被選擇次數
+        # 統計資訊：計算被選擇次數（以公司+職缺為 key）
         company_counts = defaultdict(int)
-        for data in student_data.values():
-            for pref in data['preferences']:
+        for student in student_data.values():
+            for pref in student['preferences']:
                 if pref:
-                    company_counts[pref] += 1
+                    key = (pref.get('company_name',''), pref.get('job_title',''))
+                    company_counts[key] += 1
 
-        # 建立統計表格
-        stats_data = [['公司名稱', '被選擇次數']]
-        for company, count in sorted(company_counts.items(), key=lambda x: x[1], reverse=True):
-            stats_data.append([company, str(count)])
-
-        if len(stats_data) > 1:  # 有統計資料才顯示
-            stats_table = Table(stats_data, colWidths=[3*inch, 1*inch])
-            stats_table_style = TableStyle([
-                ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#0066CC')),
-                ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-                ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-                ('FONTSIZE', (0, 0), (-1, -1), 10),
-                ('GRID', (0, 0), (-1, -1), 1, colors.black),
-                ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
-            ])
-            stats_table.setStyle(stats_table_style)
+        if company_counts:
+            story.append(Paragraph("統計資訊：公司(職缺) 被選擇次數", styles['Heading3']))
+            stats_table_data = [['公司名稱', '職缺', '被選擇次數']]
+            for (company, job), count in sorted(company_counts.items(), key=lambda x: x[1], reverse=True):
+                stats_table_data.append([Paragraph(company or '', normal_style),
+                                         Paragraph(job or '', normal_style),
+                                         Paragraph(str(count), normal_style)])
+            stats_table = Table(stats_table_data, colWidths=[3*inch, 2.5*inch, 1*inch])
+            stats_table.setStyle(TableStyle([
+                ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#0066CC')),
+                ('TEXTCOLOR', (0,0), (-1,0), colors.whitesmoke),
+                ('ALIGN', (0,0), (-1,-1), 'LEFT'),
+                ('GRID', (0,0), (-1,-1), 0.5, colors.grey),
+            ]))
             story.append(stats_table)
 
         # 生成 PDF
