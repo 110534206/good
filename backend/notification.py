@@ -16,7 +16,7 @@ def notifications_page():
 # -----------------------------
 # API：取得個人通知
 # -----------------------------
-@notification_bp.route('/api/my', methods=['GET'])
+@notification_bp.route('/api/my_notifications', methods=['GET'])
 def get_my_notifications():
     user_id = session.get('user_id')
     if not user_id:
