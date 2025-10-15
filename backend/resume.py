@@ -552,6 +552,8 @@ def get_class_resumes():
         sql_query = ""
         sql_params = tuple()
         
+        print(f"🔍 [DEBUG] get_class_resumes called - user_id: {user_id}, role: {role}")
+        
         # ------------------------------------------------------------------
         # 1. 班導 / 教師 (role == "teacher") 
         # ------------------------------------------------------------------
@@ -583,35 +585,10 @@ def get_class_resumes():
             cursor.execute(sql_query, sql_params)
             resumes = cursor.fetchall()
 
-            # ***************************************************************
-            # 【本次新增修改】: 如果標準查詢沒有結果，則使用寬鬆權限 (看到所有履歷)
-            # ***************************************************************
+            # 如果班導沒有在 classes_teacher 表中找到對應記錄，則返回空結果
             if not resumes:
-                print(f"⚠️ [DEBUG] Teacher user {user_id} has no classes assigned in classes_teacher. Falling back to view ALL resumes.")
-                # Fallback to view ALL resumes (Admin-like privilege)
-                sql_query = """
-                    SELECT 
-                        r.id,
-                        u.name AS student_name,
-                        u.username AS student_number,
-                        c.name AS class_name,
-                        c.department,
-                        r.original_filename,
-                        r.filepath,
-                        r.status,
-                        r.comment,
-                        r.note,
-                        r.created_at
-                    FROM resumes r
-                    JOIN users u ON r.user_id = u.id
-                    LEFT JOIN classes c ON u.class_id = c.id
-                    ORDER BY c.name, u.name
-                """
-                cursor.execute(sql_query, tuple())
-                resumes = cursor.fetchall() # 重新取得所有履歷
-            # ***************************************************************
-            # 【新增修改結束】
-            # ***************************************************************
+                print(f"⚠️ [DEBUG] Teacher user {user_id} has no classes assigned in classes_teacher. Returning empty result.")
+                resumes = []  # 返回空結果，不應該看到任何履歷
 
 
         # ------------------------------------------------------------------
@@ -713,11 +690,21 @@ def get_class_resumes():
         else:
             return jsonify({"success": False, "message": "無效的角色或權限"}), 403
 
-        # 格式化日期時間
+        # 格式化日期時間並統一字段名稱
         for r in resumes:
             if isinstance(r.get('created_at'), datetime):
                 r['created_at'] = r['created_at'].strftime("%Y-%m-%d %H:%M:%S")
+            # 統一字段名稱，確保前端能正確訪問
+            if 'student_name' in r:
+                r['name'] = r['student_name']
+            if 'student_number' in r:
+                r['username'] = r['student_number']
+            if 'class_name' in r:
+                r['className'] = r['class_name']
+            if 'created_at' in r:
+                r['upload_time'] = r['created_at']
 
+        print(f"✅ [DEBUG] Returning {len(resumes)} resumes for role {role}")
         return jsonify({"success": True, "resumes": resumes})
 
     except Exception:

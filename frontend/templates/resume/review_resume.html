@@ -296,12 +296,8 @@
         <nav>
           <ul class="pagination justify-content-center mt-3" id="pagination"></ul>
         </nav>
-
-        </tbody>
-        </table>
       </div>
     </div>
-  </div>
 
   <!-- Modal 區塊 (留言/備註) -->
   <div class="modal fade" id="commentModal" tabindex="-1" aria-hidden="true">
@@ -358,11 +354,7 @@
 
     document.addEventListener("DOMContentLoaded", () => {
       // 取得所有學生履歷
-      const username = localStorage.getItem("username");
-      const role = localStorage.getItem("role");
-      const pageType = window.location.pathname.includes("director_home") ? "director_home" : "teacher_home";
-
-      fetch(`/api/get_class_resumes?username=${username}&role=${role}&page=${pageType}`)
+      fetch(`/api/get_class_resumes`)
         .then(res => res.json())
         .then(data => {
           if (data.success) {
@@ -370,8 +362,12 @@
             populateFilters(allResumes);
             applyFilters();
           } else {
-            alert("載入資料失敗");
+            alert("載入資料失敗：" + (data.message || "未知錯誤"));
           }
+        })
+        .catch(error => {
+          console.error("API調用錯誤:", error);
+          alert("載入資料失敗，請檢查網路連線");
         });
 
       // 綁定篩選事件
