@@ -579,6 +579,8 @@ def get_class_resumes():
 
     user_id = session['user_id']
     role = session['role']
+    # mode: "homeroom" 僅看自己班；"director" 主任模式看全科；預設為 homeroom 對 teacher；director 預設依實際頁面傳入
+    mode = request.args.get('mode', '').strip().lower()
 
     conn = get_db()
     cursor = conn.cursor(dictionary=True)
@@ -631,23 +633,48 @@ def get_class_resumes():
         # 2. 主任 (role == "director")
         # ------------------------------------------------------------------
         elif role == "director":
-            # 1. 嘗試查詢主任管理的班級所屬的 department
-            cursor.execute("""
-                SELECT DISTINCT c.department
-                FROM classes c
-                JOIN classes_teacher ct ON ct.class_id = c.id
-                WHERE ct.teacher_id = %s
-                LIMIT 1
-            """, (user_id,))
-            dept = cursor.fetchone()
-            
-            department = dept.get("department") if dept else None
+            # director 根據 mode 控制可見範圍：
+            # - mode=director → 同科系全部
+            # - 其他/預設 → 僅自己帶的班級（班導模式）
+            if mode == "director":
+                cursor.execute("""
+                    SELECT DISTINCT c.department
+                    FROM classes c
+                    JOIN classes_teacher ct ON ct.class_id = c.id
+                    WHERE ct.teacher_id = %s
+                    LIMIT 1
+                """, (user_id,))
+                dept = cursor.fetchone()
+                department = dept.get("department") if dept else None
 
-            # ------------------------------------------------------------------
-            # 【上次修改處】: 如果找不到科系，則改為查詢所有履歷 (像 admin 一樣)
-            # ------------------------------------------------------------------
-            if not department:
-                print(f"⚠️ [DEBUG] Director user {user_id} department not found. Falling back to view ALL resumes.")
+                if not department:
+                    # 沒有設定科系 → 不顯示任何資料，以免越權
+                    resumes = []
+                    sql_query = ""
+                    sql_params = tuple()
+                else:
+                    sql_query = """
+                        SELECT 
+                            r.id,
+                            u.name AS student_name,
+                            u.username AS student_number,
+                            c.name AS class_name,
+                            c.department,
+                            r.original_filename,
+                            r.filepath,
+                            r.status,
+                            r.comment,
+                            r.note,
+                            r.created_at
+                        FROM resumes r
+                        JOIN users u ON r.user_id = u.id
+                        JOIN classes c ON u.class_id = c.id
+                        WHERE c.department = %s
+                        ORDER BY c.name, u.name
+                    """
+                    sql_params = (department,)
+            else:
+                # homeroom/預設：僅看自己帶的班級
                 sql_query = """
                     SELECT 
                         r.id,
@@ -664,31 +691,11 @@ def get_class_resumes():
                     FROM resumes r
                     JOIN users u ON r.user_id = u.id
                     LEFT JOIN classes c ON u.class_id = c.id
+                    JOIN classes_teacher ct ON ct.class_id = c.id
+                    WHERE ct.teacher_id = %s
                     ORDER BY c.name, u.name
                 """
-                sql_params = tuple()
-            else:
-                # 找到科系，執行原本的科系查詢邏輯
-                sql_query = """
-                    SELECT 
-                        r.id,
-                        u.name AS student_name,
-                        u.username AS student_number,
-                        c.name AS class_name,
-                        c.department,
-                        r.original_filename,
-                        r.filepath,
-                        r.status,
-                        r.comment,
-                        r.note,
-                        r.created_at
-                    FROM resumes r
-                    JOIN users u ON r.user_id = u.id
-                    JOIN classes c ON u.class_id = c.id
-                    WHERE c.department = %s
-                    ORDER BY c.name, u.name
-                """
-                sql_params = (department,)
+                sql_params = (user_id,)
             # ------------------------------------------------------------------
             # 【上次修改處結束】
             # ------------------------------------------------------------------
