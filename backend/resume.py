@@ -552,6 +552,8 @@ def get_class_resumes():
         sql_query = ""
         sql_params = tuple()
         
+        print(f"🔍 [DEBUG] get_class_resumes called - user_id: {user_id}, role: {role}")
+        
         # ------------------------------------------------------------------
         # 1. 班導 / 教師 (role == "teacher") 
         # ------------------------------------------------------------------
@@ -713,11 +715,21 @@ def get_class_resumes():
         else:
             return jsonify({"success": False, "message": "無效的角色或權限"}), 403
 
-        # 格式化日期時間
+        # 格式化日期時間並統一字段名稱
         for r in resumes:
             if isinstance(r.get('created_at'), datetime):
                 r['created_at'] = r['created_at'].strftime("%Y-%m-%d %H:%M:%S")
+            # 統一字段名稱，確保前端能正確訪問
+            if 'student_name' in r:
+                r['name'] = r['student_name']
+            if 'student_number' in r:
+                r['username'] = r['student_number']
+            if 'class_name' in r:
+                r['className'] = r['class_name']
+            if 'created_at' in r:
+                r['upload_time'] = r['created_at']
 
+        print(f"✅ [DEBUG] Returning {len(resumes)} resumes for role {role}")
         return jsonify({"success": True, "resumes": resumes})
 
     except Exception:
