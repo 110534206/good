@@ -407,26 +407,10 @@
     }
 
   document.getElementById('uploadBtn').addEventListener('click', () => {
-      const file = fileInput.files[0];
-      if (!file) return alert("請選擇檔案");
-      const formData = new FormData();
-      formData.append('resume', file);
-      formData.append('username', localStorage.getItem('username') || 'testuser');
-
-      // updateStatusText('uploaded'); // 移除此行，讓狀態保持為預設的「尚未上傳」
-
-      fetch('/api/upload_resume', { method: 'POST', body: formData })
-        .then(res => res.json())
-        .then(data => {
-          if (data.success && data.resume_id) {
-            resumeId = data.resume_id;
-            loadResumes();
-            if (interval) clearInterval(interval);
-            interval = setInterval(fetchStatus, 5000);
-          } else {
-            alert("上傳失敗");
-          }
-        });
+      // 移除所有上傳邏輯和狀態更新
+      
+      // 直接導向登入頁面
+      window.location.href = "/login";
     });
 
     function fetchStatus() {
