@@ -210,6 +210,10 @@
       font-weight: 600;
       margin-bottom: 15px;
     }
+
+    select.is-invalid {
+      border-color: #dc3545;
+    }
   </style>
 </head>
 
@@ -298,6 +302,35 @@
       });
     });
 
+    // 🔁 重複選擇職缺檢查
+    document.getElementById('preferencesForm').addEventListener('submit', function (e) {
+      const selectedJobs = [];
+
+      document.querySelectorAll('.job-select').forEach(select => {
+        const jobId = select.value;
+        if (jobId) selectedJobs.push(jobId);
+      });
+
+      const hasDuplicate = new Set(selectedJobs).size !== selectedJobs.length;
+
+      if (hasDuplicate) {
+        e.preventDefault();
+
+        // 顯示錯誤提示視覺效果
+        const duplicates = selectedJobs.filter((id, index, arr) => arr.indexOf(id) !== index);
+
+        document.querySelectorAll('.job-select').forEach(select => {
+          if (duplicates.includes(select.value)) {
+            select.classList.add('is-invalid');
+          } else {
+            select.classList.remove('is-invalid');
+          }
+        });
+
+        alert("請勿重複選擇相同的實習職缺！");
+      }
+
+    });
 
     // 查看公司詳細資料
     async function viewDetail(btn) {

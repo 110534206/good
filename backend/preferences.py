@@ -55,7 +55,7 @@ def fill_preferences():
             # 新增志願
             if preferences:
                 cursor.executemany("""
-                    INSERT INTO student_preferences (student_id, preference_order, company_id, submitted_at)
+                    INSERT INTO student_preferences (student_id, preference_order, company_id, job_id, submitted_at)
                     VALUES (%s, %s, %s, %s)
                 """, preferences)
                 conn.commit()
@@ -152,11 +152,13 @@ def review_preferences():
                 u.name AS student_name,
                 sp.preference_order,
                 ic.company_name,
-                sp.submitted_at
+                ij.title AS job_title,
+                sp.submitted_at,           
             FROM users u
             LEFT JOIN student_preferences sp ON u.id = sp.student_id
             LEFT JOIN internship_companies ic ON sp.company_id = ic.id
-            WHERE u.class_id = %s
+            LEFT JOIN internship_jobs ij ON sp.job_id = ij.id       
+            WHERE u.class_id = %s AND u.role = 'student'
             ORDER BY u.name, sp.preference_order
         """, (class_id,))
         results = cursor.fetchall()
