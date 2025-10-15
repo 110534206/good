@@ -413,7 +413,7 @@
       formData.append('resume', file);
       formData.append('username', localStorage.getItem('username') || 'testuser');
 
-      updateStatusText('uploaded');
+      // updateStatusText('uploaded'); // 移除此行，讓狀態保持為預設的「尚未上傳」
 
       fetch('/api/upload_resume', { method: 'POST', body: formData })
         .then(res => res.json())
