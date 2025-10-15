@@ -240,14 +240,15 @@
         </a>
         <div class="dropdown" style="position: relative;">
           <button id="accountDropdownBtn" class="btn-link" aria-expanded="false">帳號 ▾</button>
-          <div id="accountDropdownMenu" class="dropdown-menu" style="position:absolute; right:0; top:120%; background:#fff; border:1px solid #ccc; border-radius:8px; padding:6px; min-width:180px; display:none; box-shadow:0 4px 12px rgba(0,0,0,.12);">
+          <div id="accountDropdownMenu" class="dropdown-menu"
+            style="position:absolute; right:0; top:120%; background:#fff; border:1px solid #ccc; border-radius:8px; padding:6px; min-width:180px; display:none; box-shadow:0 4px 12px rgba(0,0,0,.12);">
             <a href="/profile" class="btn-link" style="display:block; border:none; margin:4px 0;">個人資料</a>
             <a href="/login" class="btn-link" style="display:block; border:none; margin:4px 0;">登出</a>
           </div>
         </div>
-         </div>
       </div>
-      </div>
+    </div>
+  </div>
   <!-- Hero 區塊 -->
   <div class="container">
     <header class="hero"></header>
@@ -295,7 +296,7 @@
   </nav>
 
   <script>
-   <!-- 選單開關邏輯 -->
+    <!-- 選單開關邏輯 -->
     const menuBtn = document.getElementById("menu-btn");
     const sideMenu = document.getElementById("side-menu");
     const closeBtn = document.getElementById("close-btn");
@@ -375,7 +376,7 @@
         const link = document.getElementById('toHomeroomLink');
         if (link) link.style.display = 'block';
       }
-    }).catch(() => {});
+    }).catch(() => { });
   </script>
 </body>
 

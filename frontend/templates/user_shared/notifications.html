@@ -2,213 +2,40 @@
 <html lang="zh-Hant">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>公告通知中心</title>
+  <title>我的通知</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
   <style>
-    body {
-      font-family: 'Inter', 'Noto Sans TC', sans-serif;
-      background-color: #f9fafb;
-      margin: 0;
-      padding: 0;
-      color: #111827;
-    }
-    header {
-      background-color: #2563eb;
-      color: white;
-      padding: 1rem;
-      text-align: center;
-      font-size: 1.5rem;
-      font-weight: bold;
-    }
-    #controls {
-      display: flex;
-      justify-content: flex-end;
-      padding: 0.5rem 1rem;
-      background: #f3f4f6;
-    }
-    #sortSelect {
-      padding: 0.3rem 0.6rem;
-      border: 1px solid #d1d5db;
-      border-radius: 6px;
-    }
-    .category-container {
-      margin: 1rem;
-      border: 1px solid #e5e7eb;
-      border-radius: 12px;
-      overflow: hidden;
-      background: white;
-      box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-    }
-    .category-title {
-      background: #e5e7eb;
-      padding: 0.8rem;
-      font-weight: bold;
-      cursor: pointer;
-      user-select: none;
-    }
-    .notification-container {
-      display: flex;
-      flex-direction: column;
-      padding: 0.8rem;
-      gap: 0.8rem;
-    }
-    .notification {
-      border: 1px solid #d1d5db;
-      border-radius: 10px;
-      padding: 0.8rem;
-      background: #f9fafb;
-      transition: background 0.2s;
-    }
-    .notification:hover {
-      background: #f3f4f6;
-    }
-    .notification .title {
-      font-weight: bold;
-      margin-bottom: 0.4rem;
-    }
-    .notification .meta {
-      font-size: 0.85rem;
-      color: #6b7280;
-      display: flex;
-      justify-content: space-between;
-      margin-bottom: 0.4rem;
-    }
-    .notification .content {
-      margin-bottom: 0.5rem;
-    }
-    .notification .deadline {
-      color: #dc2626;
-      font-weight: bold;
-      margin-bottom: 0.3rem;
-    }
-    .notification .attachments {
-      margin-top: 0.3rem;
-    }
-    .notification .attachments a {
-      color: #2563eb;
-      text-decoration: none;
-    }
-    .notification .attachments a:hover {
-      text-decoration: underline;
-    }
-    .notification .type {
-      font-size: 0.85rem;
-      color: #374151;
-    }
-    
-    .notification.important {
-      border-left: 4px solid #dc2626;
-      background: #fef2f2;
-    }
-    
-    .notification.important .title {
-      color: #dc2626;
-    }
+    body { padding: 2rem; font-family: "Noto Sans TC", sans-serif; }
+    h1 { color: #0066cc; margin-bottom: 2rem; }
+    .unread { background-color: #e9f3ff; font-weight: bold; }
   </style>
 </head>
 <body>
-  <header>公告通知中心</header>
-
-  <div id="controls">
-    <label for="sortSelect">排序：</label>
-    <select id="sortSelect">
-      <option value="desc">最新優先</option>
-      <option value="asc">最舊優先</option>
-    </select>
-  </div>
-
-  <div id="mainContainer"></div>
+  <h1>通知中心</h1>
+  <table class="table table-hover">
+    <thead>
+      <tr><th>標題</th><th>內容</th><th>時間</th><th>操作</th></tr>
+    </thead>
+    <tbody id="notifTable"></tbody>
+  </table>
 
   <script>
-    const mainContainer = document.getElementById("mainContainer");
-    const sortSelect = document.getElementById("sortSelect");
-    let announcements = [];
-
-    // 載入公告資料
-    async function loadAnnouncements() {
-      mainContainer.innerHTML = "<p style='text-align:center;'>載入中...</p>";
-      try {
-        const res = await fetch("/notifications/api/announcements");
-        const data = await res.json();
-        if (!data.success) throw new Error("取得公告失敗");
-        announcements = data.announcements;
-        renderAnnouncements(sortSelect.value);
-      } catch (err) {
-        console.error("載入公告失敗", err);
-        mainContainer.innerHTML = `<p style="color:red; text-align:center;">載入公告失敗</p>`;
-      }
-    }
-
-    // 渲染公告
-    function renderAnnouncements(sortOrder = "desc") {
-      mainContainer.innerHTML = "";
-
-      const sorted = [...announcements].sort((a, b) => {
-        return sortOrder === "asc"
-          ? new Date(a.created_at) - new Date(b.created_at)
-          : new Date(b.created_at) - new Date(a.created_at);
-      });
-
-      const categories = ["科助", "老師", "主任", "系統"];
-
-      categories.forEach(category => {
-        const filtered = sorted.filter(n => n.source === category);
-
-        if (filtered.length === 0) return;
-
-        const categoryDiv = document.createElement("div");
-        categoryDiv.className = "category-container";
-        categoryDiv.innerHTML = `<div class="category-title">${category} (${filtered.length})</div>`;
-
-        const notificationContainer = document.createElement("div");
-        notificationContainer.className = "notification-container";
-
-        filtered.forEach(note => {
-          const div = document.createElement("div");
-          div.className = `notification ${note.is_important ? 'important' : ''}`;
-          
-          // 根據類型設定不同的圖標
-          let typeIcon = "📢";
-          if (note.type === "deadline") typeIcon = "⏰";
-          else if (note.type === "reminder") typeIcon = "🔔";
-          
-          div.innerHTML = `
-            <div class="title">${typeIcon} ${note.title}</div>
-            <div class="meta">
-              <span class="source ${note.source}">${note.source}</span>
-              <span class="time">${new Date(note.created_at).toLocaleString('zh-TW', { hour12: false })}</span>
-            </div>
-            <div class="content">${note.content.replace(/\n/g, '<br>')}</div>
-            ${note.deadline ? `<div class="deadline">⏰ 截止時間：${new Date(note.deadline).toLocaleString('zh-TW', { hour12: false })}</div>` : ""}
-            ${note.attachments ? `<div class="attachments"><a href="${note.attachments}" target="_blank">📎 附件下載</a></div>` : ""}
-            <div class="type">類型：${note.type || "公告"}</div>
-          `;
-          notificationContainer.appendChild(div);
-        });
-
-        categoryDiv.appendChild(notificationContainer);
-        mainContainer.appendChild(categoryDiv);
-      });
-
-      // 類別可折疊功能
-      document.querySelectorAll(".category-title").forEach(titleEl => {
-        titleEl.addEventListener("click", () => {
-          const container = titleEl.nextElementSibling;
-          container.style.display = container.style.display === "none" ? "flex" : "none";
+    fetch('/notifications/api/my_notifications')
+      .then(res => res.json())
+      .then(data => {
+        if (!data.success) return alert('載入失敗');
+        const tbody = document.getElementById('notifTable');
+        tbody.innerHTML = '';
+        data.notifications.forEach(n => {
+          tbody.innerHTML += `
+            <tr class="${n.is_read ? '' : 'unread'}">
+              <td>${n.title}</td>
+              <td>${n.message}</td>
+              <td>${n.created_at}</td>
+              <td>${n.link_url ? `<a href="${n.link_url}" class="btn btn-sm btn-primary">前往</a>` : '-'}</td>
+            </tr>`;
         });
       });
-    }
-
-    // 監聽排序切換
-    sortSelect.addEventListener("change", (e) => {
-      renderAnnouncements(e.target.value);
-    });
-
-    // 首次載入
-    loadAnnouncements();
-
-    // ⏱️ 可選：每 60 秒自動更新公告（同步其他人編輯）
-    setInterval(loadAnnouncements, 60000); // 1分鐘自動更新
   </script>
 </body>
 </html>
