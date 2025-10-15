@@ -216,25 +216,25 @@ def list_announcements():
         conn.close()
 
 # ------------------------
-# ✅ API - 前台公告列表（只撈已發佈 published 的）
+# ✅ 改良版 API - 前台公告列表（只撈已發佈 published 的）
 # ------------------------
 @notification_bp.route("/notifications/api/announcements", methods=["GET"])
 def get_public_announcements():
     conn = get_db()
     cursor = conn.cursor()
 
-    # 模擬登入使用者資訊（實際應從 session 取得）
+    # 取得當前登入使用者資訊
     current_user = {
-        "id": session.get("user_id"),
-        "role": session.get("role"),             # e.g., 'student', 'teacher'
-        "class_name": session.get("class_name")  # e.g., '四孝'
+        "id": str(session.get("user_id") or ""),      # 統一轉成字串方便比對
+        "role": session.get("role") or "",
+        "class_name": session.get("class_name") or ""
     }
 
     try:
         cursor.execute("""
             SELECT 
                 id, title, content, target_roles, created_at, deadline, is_important,
-                status, type, created_by, target_class, target_user_id
+                status, type, created_by, target_class, target_user_id, attachments
             FROM notification
             WHERE status = 'published'
             ORDER BY is_important DESC, created_at DESC
@@ -242,45 +242,50 @@ def get_public_announcements():
         rows = cursor.fetchall()
 
         announcements = []
+
         for row in rows:
             (
                 id, title, content, target_roles_json, created_at, deadline, is_important,
-                status, type_, created_by, target_class, target_user_id
+                status, type_, created_by, target_class, target_user_id, attachments
             ) = row
 
-            # 解析目標角色
-            target_roles = []
-            if target_roles_json:
-                try:
-                    target_roles = json.loads(target_roles_json)
-                except Exception as e:
-                    print(f"❗ 無法解析 target_roles：{e}")
-                    target_roles = []
+            # --- 處理 target_roles JSON 欄位 ---
+            try:
+                target_roles = json.loads(target_roles_json) if target_roles_json else []
+                if isinstance(target_roles, str):
+                    target_roles = [target_roles]  # 防止資料庫儲存為字串
+            except Exception:
+                target_roles = []
 
-            # 權限過濾邏輯
+            # --- 統一欄位格式（避免 NULL）---
+            target_class = str(target_class or "").strip()
+            target_user_id = str(target_user_id or "").strip()
+
+            # --- 判斷是否為指定對象公告 ---
+            is_targeted = bool(target_roles or target_class or target_user_id)
+
+            # 調整可見性優先順序：個人 > 班級 > 角色
             visible = False
+            if is_targeted:
+                # 1️⃣ 針對個人公告（target_user_id）: 僅限該使用者可見
+                if target_user_id:
+                    visible = (current_user["id"] == target_user_id)
 
-            # ✅ 條件一：未指定任何目標 → 視為公開
-            if not target_roles and not target_class and not target_user_id:
+                # 2️⃣ 針對班級公告
+                elif target_class and current_user["class_name"]:
+                    visible = (current_user["class_name"] in target_class.split(","))
+
+                # 3️⃣ 針對角色公告（如 ["student", "teacher"]）
+                elif target_roles:
+                    visible = (current_user["role"] in target_roles)
+            else:
+                # 沒有指定對象 → 通用公告（全體可見）
                 visible = True
 
-            # ✅ 條件二：符合角色
-            elif current_user["role"] in target_roles:
-                visible = True
-
-            # ✅ 條件三：符合班級
-            elif target_class and target_class == current_user["class_name"]:
-                visible = True
-
-            # ✅ 條件四：符合個人使用者 ID
-            elif target_user_id and str(target_user_id) == str(current_user["id"]):
-                visible = True
-
-            # ❌ 不符合者略過
             if not visible:
-                continue
+                continue  # 不符合條件則跳過
 
-            # 判斷公告來源（前端顯示用途）
+            # --- 公告來源標籤 ---
             if created_by == 'ta':
                 source = "科助"
             elif created_by == 'teacher':
@@ -290,18 +295,18 @@ def get_public_announcements():
             else:
                 source = "系統"
 
-            # 加入公告內容
             announcements.append({
                 "id": id,
                 "title": title,
                 "content": content,
                 "target_roles": target_roles,
-                "created_at": created_at.isoformat() if created_at else None,
-                "deadline": deadline.isoformat() if deadline else None,
-                "is_important": is_important,
+                "created_at": created_at.strftime("%Y-%m-%d %H:%M:%S") if created_at else None,
+                "deadline": deadline.strftime("%Y-%m-%d %H:%M:%S") if deadline else None,
+                "is_important": bool(is_important),
                 "status": status,
                 "type": type_,
-                "source": source
+                "source": source,
+                "attachments": attachments or None
             })
 
         return jsonify({"success": True, "announcements": announcements})
@@ -355,32 +360,48 @@ def notifications():
 # ------------------------
 @notification_bp.route("/api/notifications/create_resume_rejection", methods=["POST"])
 def create_resume_rejection_notification():
-    """當班導退件學生履歷時，自動為該學生創建通知"""
+    """
+    當班導退件學生履歷時，自動為該學生創建通知
+    必須提供 student_username 和 student_user_id
+    """
     data = request.get_json()
     student_username = data.get("student_username")
+    student_user_id = data.get("student_user_id")  # 新增
     teacher_name = data.get("teacher_name", "老師")
     rejection_reason = data.get("rejection_reason", "")
-    
-    if not student_username:
-        return jsonify({"success": False, "message": "缺少學生帳號"}), 400
-    
+
+    # 檢查參數
+    if not student_username or not student_user_id:
+        return jsonify({"success": False, "message": "缺少學生帳號或 ID"}), 400
+
     conn = get_db()
     cursor = conn.cursor()
     try:
-        # 創建退件通知
-        title = f"履歷退件通知"
+        # 組合通知內容
+        title = "履歷退件通知"
         content = f"您的履歷已被{teacher_name}退件。"
         if rejection_reason:
             content += f"\n\n退件原因：{rejection_reason}"
         content += "\n\n請根據老師的建議修改履歷後重新上傳。"
-        
+
+        # 寫入資料表，包含 target_user_id
         cursor.execute("""
-            INSERT INTO notification (title, content, type, target_roles, is_important, status, created_at, created_by)
-            VALUES (%s, %s, %s, %s, %s, %s, NOW(), %s)
+            INSERT INTO notification (
+                title, content, type, target_roles, is_important,
+                status, created_at, created_by, target_user_id
+            )
+            VALUES (%s, %s, %s, %s, %s, %s, NOW(), %s, %s)
         """, (
-            title, content, 'reminder', json.dumps(['student']), 1, 'published', 'system'
+            title,
+            content,
+            'reminder',
+            json.dumps(['student']),
+            1,  # is_important
+            'published',
+            'system',
+            student_user_id
         ))
-        
+
         conn.commit()
         return jsonify({"success": True, "message": "退件通知已發送"})
     except Exception as e:
