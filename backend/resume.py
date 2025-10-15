@@ -585,35 +585,10 @@ def get_class_resumes():
             cursor.execute(sql_query, sql_params)
             resumes = cursor.fetchall()
 
-            # ***************************************************************
-            # 【本次新增修改】: 如果標準查詢沒有結果，則使用寬鬆權限 (看到所有履歷)
-            # ***************************************************************
+            # 如果班導沒有在 classes_teacher 表中找到對應記錄，則返回空結果
             if not resumes:
-                print(f"⚠️ [DEBUG] Teacher user {user_id} has no classes assigned in classes_teacher. Falling back to view ALL resumes.")
-                # Fallback to view ALL resumes (Admin-like privilege)
-                sql_query = """
-                    SELECT 
-                        r.id,
-                        u.name AS student_name,
-                        u.username AS student_number,
-                        c.name AS class_name,
-                        c.department,
-                        r.original_filename,
-                        r.filepath,
-                        r.status,
-                        r.comment,
-                        r.note,
-                        r.created_at
-                    FROM resumes r
-                    JOIN users u ON r.user_id = u.id
-                    LEFT JOIN classes c ON u.class_id = c.id
-                    ORDER BY c.name, u.name
-                """
-                cursor.execute(sql_query, tuple())
-                resumes = cursor.fetchall() # 重新取得所有履歷
-            # ***************************************************************
-            # 【新增修改結束】
-            # ***************************************************************
+                print(f"⚠️ [DEBUG] Teacher user {user_id} has no classes assigned in classes_teacher. Returning empty result.")
+                resumes = []  # 返回空結果，不應該看到任何履歷
 
 
         # ------------------------------------------------------------------

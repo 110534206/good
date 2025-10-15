@@ -120,7 +120,6 @@
                                 <option value="teacher">教師</option>
                                 <option value="director">主任</option>
                                 <option value="ta">科助</option>
-                                <option value="admin">訪客</option>
                                 <option value="admin">管理員</option>
                             </select>
                         </div>
@@ -190,8 +189,7 @@
                 teacher: '教師',
                 director: '主任',
                 ta: '科助',
-                admin: '管理員',
-                visitor :'訪客'
+                admin: '管理員'
             };
 
             async function loadUsers() {
@@ -252,6 +250,8 @@
                         <td>
                             <button class="btn btn-sm btn-warning" onclick="openEditModal(${user.id}, '${user.username}', '${user.name || ''}', '${user.email || ''}', '${user.role}', '${user.class_id || ''}')">編輯</button>
                             <button class="btn btn-sm btn-danger" onclick="deleteUser(${user.id})">刪除</button>
+                            ${user.role === 'student' ? `<button class="btn btn-sm btn-outline-primary" onclick="openAssignStudentClass(${user.id})">設定班級</button>` : ''}
+                            ${['teacher', 'director'].includes(user.role) ? `<button class="btn btn-sm btn-outline-secondary" onclick="openAssignTeacherClass(${user.id})">設定帶班</button>` : ''}
                         </td>`;
                     tbody.appendChild(tr);
                 });
@@ -365,7 +365,10 @@
         const classSelect = document.getElementById('editClassId');
         const isStudent = role === 'student';
         classGroup.style.display = isStudent ? '' : 'none';
-        if (isStudent) loadClasses(classSelect, classId);
+        if (isStudent) {
+            loadClasses(classSelect);
+            if (classId) classSelect.value = classId;
+        }
 
         modal.show();
     };

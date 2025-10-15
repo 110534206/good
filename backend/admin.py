@@ -383,8 +383,13 @@ def assign_teacher_class(user_id):
         if not cursor.fetchone():
             return jsonify({"success": False, "message": "班級不存在"}), 404
         
-        # 先刪除該教師的所有帶班記錄
-        cursor.execute("DELETE FROM classes_teacher WHERE teacher_id = %s", (user_id,))
+        # 檢查是否已經存在相同的帶班記錄
+        cursor.execute("""
+            SELECT id FROM classes_teacher 
+            WHERE teacher_id = %s AND class_id = %s AND role = %s
+        """, (user_id, class_id, role))
+        if cursor.fetchone():
+            return jsonify({"success": False, "message": f"該教師已經擔任此班級的{role}"}), 409
         
         # 新增帶班記錄
         cursor.execute("""
