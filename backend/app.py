@@ -50,7 +50,7 @@ app.register_blueprint(admin_bp)
 app.register_blueprint(users_bp)
 app.register_blueprint(notification_bp)
 app.register_blueprint(preferences_bp)
-app.register_blueprint(announcement_bp, url_prefix="/announcement")
+app.register_blueprint(announcement_bp)
 
 # -------------------------
 # 首頁路由（使用者前台）
