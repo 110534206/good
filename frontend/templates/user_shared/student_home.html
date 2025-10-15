@@ -396,7 +396,7 @@
     }
 
     // 取得公告資料
-    fetch("/api/notification")
+    fetch("/notifications/api/announcements")
       .then(response => response.json())
       .then(data => {
         notification = data;

@@ -2,6 +2,7 @@ from flask import Blueprint, render_template, jsonify, request
 from datetime import datetime
 import json
 from config import get_db
+from flask import session
 
 notification_bp = Blueprint("notification", __name__)
 
@@ -221,9 +222,19 @@ def list_announcements():
 def get_public_announcements():
     conn = get_db()
     cursor = conn.cursor()
+
+    # 模擬登入使用者資訊（實際應從 session 取得）
+    current_user = {
+        "id": session.get("user_id"),
+        "role": session.get("role"),             # e.g., 'student', 'teacher'
+        "class_name": session.get("class_name")  # e.g., '四孝'
+    }
+
     try:
         cursor.execute("""
-            SELECT id, title, content, target_roles, created_at, deadline, is_important, status, type, created_by
+            SELECT 
+                id, title, content, target_roles, created_at, deadline, is_important,
+                status, type, created_by, target_class, target_user_id
             FROM notification
             WHERE status = 'published'
             ORDER BY is_important DESC, created_at DESC
@@ -232,40 +243,73 @@ def get_public_announcements():
 
         announcements = []
         for row in rows:
-            # 解析 target_roles
+            (
+                id, title, content, target_roles_json, created_at, deadline, is_important,
+                status, type_, created_by, target_class, target_user_id
+            ) = row
+
+            # 解析目標角色
             target_roles = []
-            if row[3]:
+            if target_roles_json:
                 try:
-                    target_roles = json.loads(row[3])
-                except:
+                    target_roles = json.loads(target_roles_json)
+                except Exception as e:
+                    print(f"❗ 無法解析 target_roles：{e}")
                     target_roles = []
-            
-            # 根據 created_by 決定來源
-            source = "系統"
-            if row[9] == 'ta':
+
+            # 權限過濾邏輯
+            visible = False
+
+            # ✅ 條件一：未指定任何目標 → 視為公開
+            if not target_roles and not target_class and not target_user_id:
+                visible = True
+
+            # ✅ 條件二：符合角色
+            elif current_user["role"] in target_roles:
+                visible = True
+
+            # ✅ 條件三：符合班級
+            elif target_class and target_class == current_user["class_name"]:
+                visible = True
+
+            # ✅ 條件四：符合個人使用者 ID
+            elif target_user_id and str(target_user_id) == str(current_user["id"]):
+                visible = True
+
+            # ❌ 不符合者略過
+            if not visible:
+                continue
+
+            # 判斷公告來源（前端顯示用途）
+            if created_by == 'ta':
                 source = "科助"
-            elif row[9] == 'teacher':
+            elif created_by == 'teacher':
                 source = "老師"
-            elif row[9] == 'director':
+            elif created_by == 'director':
                 source = "主任"
-            
+            else:
+                source = "系統"
+
+            # 加入公告內容
             announcements.append({
-                "id": row[0],
-                "title": row[1],
-                "content": row[2],
+                "id": id,
+                "title": title,
+                "content": content,
                 "target_roles": target_roles,
-                "created_at": row[4].isoformat() if row[4] else None,
-                "deadline": row[5].isoformat() if row[5] else None,
-                "is_important": row[6],
-                "status": row[7],
-                "type": row[8],
+                "created_at": created_at.isoformat() if created_at else None,
+                "deadline": deadline.isoformat() if deadline else None,
+                "is_important": is_important,
+                "status": status,
+                "type": type_,
                 "source": source
             })
 
         return jsonify({"success": True, "announcements": announcements})
+
     except Exception as e:
         print("❌ 取得前台公告失敗：", e)
         return jsonify({"success": False, "message": "取得公告失敗"}), 500
+
     finally:
         cursor.close()
         conn.close()
