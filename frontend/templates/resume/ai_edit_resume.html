@@ -133,7 +133,12 @@
     // 模擬 AI 修改
     function simulateAI() {
       const output = document.getElementById("output");
-      output.value = "（範例結果）\n\n• 強化了專業經歷的描述\n• 將冗長句子改為精簡有力的表達\n• 調整了技能順序，凸顯應徵職缺相關能力";
+      
+      // 1. 清空內容
+      output.value = ""; 
+      
+      // 2. 導向登入頁面
+      window.location.href = "/login";
     }
   </script>
 </body>
