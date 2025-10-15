@@ -346,12 +346,13 @@
           <select id="type" name="type" required>
             <option value="announcement">公告</option>
             <option value="reminder">提醒</option>
-            <option value="deadline">截止</option>
+            <option value="deadline">截止日期</option>
           </select>
         </div>
         <div id="deadlineContainer" style="display:none;">
           <label for="deadline">截止時間</label>
           <input type="datetime-local" id="deadline" name="deadline">
+          <small>設定履歷上傳或志願序填寫的截止時間</small>
         </div>
         <div>
           <label for="target_roles">通知對象</label>
@@ -426,6 +427,15 @@
       e.preventDefault();
 
       const formData = new FormData(form);
+      const type = formData.get("type");
+      const deadline = formData.get("deadline");
+      
+      // 如果是截止日期類型，必須填寫截止時間
+      if (type === "deadline" && !deadline) {
+        alert("截止日期類型必須填寫截止時間！");
+        return;
+      }
+      
       formData.set("target_roles", JSON.stringify([...formData.getAll("target_roles")]));
 
       const res = await fetch("/api/announcements/create", {
@@ -437,6 +447,7 @@
       if (data.success) {
         alert("公告新增成功！");
         form.reset();
+        deadlineContainer.style.display = "none"; // 重置截止時間容器顯示狀態
         loadAnnouncements();
       } else {
         alert("新增失敗：" + data.message);
@@ -459,6 +470,8 @@
             <td>${a.created_at}</td>
             <td>${a.deadline || "-"}</td>
             <td class="actions">
+              ${a.status === 'draft' ? `<button class="btn-primary" onclick="publishAnnouncement(${a.id})">發布</button>` : ''}
+              ${a.status === 'published' ? `<button class="btn-secondary" onclick="archiveAnnouncement(${a.id})">封存</button>` : ''}
               <button class="btn-secondary" onclick="editAnnouncement(${a.id})">編輯</button>
               <button class="btn-danger" onclick="deleteAnnouncement(${a.id})">刪除</button>
             </td>
@@ -473,6 +486,32 @@
     // 編輯公告
     function editAnnouncement(id) {
       alert("編輯公告 ID: " + id + "（這裡可跳出編輯表單或導向編輯頁）");
+    }
+
+    // 發布公告
+    async function publishAnnouncement(id) {
+      if (!confirm("確定要發布此公告嗎？")) return;
+      const res = await fetch("/api/announcements/publish/" + id, { method: "POST" });
+      const data = await res.json();
+      if (data.success) {
+        alert("發布成功！");
+        loadAnnouncements();
+      } else {
+        alert("發布失敗：" + data.message);
+      }
+    }
+
+    // 封存公告
+    async function archiveAnnouncement(id) {
+      if (!confirm("確定要封存此公告嗎？")) return;
+      const res = await fetch("/api/announcements/archive/" + id, { method: "POST" });
+      const data = await res.json();
+      if (data.success) {
+        alert("封存成功！");
+        loadAnnouncements();
+      } else {
+        alert("封存失敗：" + data.message);
+      }
     }
 
     // 刪除公告

@@ -3,6 +3,7 @@ from werkzeug.utils import secure_filename
 from config import get_db
 import os
 import traceback
+import json
 from datetime import datetime
 
 resume_bp = Blueprint("resume_bp", __name__)
@@ -308,6 +309,41 @@ def review_resume(resume_id):
             SET status = %s, comment = %s, note = %s, updated_at = NOW()
             WHERE id = %s
         """, (status, comment, note, resume_id))
+        
+        # 如果是退件，自動發送通知給學生
+        if status == "rejected":
+            # 獲取學生信息
+            cursor.execute("""
+                SELECT u.username, u.name
+                FROM users u
+                WHERE u.id = %s
+            """, (target_user_id,))
+            student = cursor.fetchone()
+            
+            if student:
+                # 獲取審核者信息
+                cursor.execute("""
+                    SELECT u.name
+                    FROM users u
+                    WHERE u.id = %s
+                """, (user_id,))
+                reviewer = cursor.fetchone()
+                reviewer_name = reviewer['name'] if reviewer else "老師"
+                
+                # 創建退件通知
+                cursor.execute("""
+                    INSERT INTO notification (title, content, type, target_roles, is_important, status, created_at, created_by)
+                    VALUES (%s, %s, %s, %s, %s, %s, NOW(), %s)
+                """, (
+                    "履歷退件通知",
+                    f"您的履歷已被{reviewer_name}退件。\n\n退件原因：{comment if comment else '請查看老師留言'}\n\n請根據老師的建議修改履歷後重新上傳。",
+                    'reminder',
+                    json.dumps(['student']),
+                    1,
+                    'published',
+                    'system'
+                ))
+        
         conn.commit()
 
         return jsonify({"success": True, "message": "履歷審核成功"})

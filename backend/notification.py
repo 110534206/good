@@ -23,21 +23,36 @@ def create_announcement():
         if not title or not content or not type_:
             return jsonify({"success": False, "message": "標題、內容及類型為必填項目"}), 400
 
+        # 處理 target_roles
         if target_roles:
-            target_roles = json.dumps(target_roles.split(','))
+            try:
+                # 如果是 JSON 字符串，直接使用
+                if target_roles.startswith('['):
+                    target_roles_json = target_roles
+                else:
+                    # 如果是逗號分隔的字符串，轉換為 JSON
+                    target_roles_json = json.dumps(target_roles.split(','))
+            except:
+                target_roles_json = '[]'
         else:
-            target_roles = '[]'
+            target_roles_json = '[]'
 
+        # 處理 deadline
+        deadline_datetime = None
         if deadline:
-            deadline = datetime.strptime(deadline, "%Y-%m-%dT%H:%M")
-        else:
-            deadline = None
+            try:
+                deadline_datetime = datetime.strptime(deadline, "%Y-%m-%dT%H:%M")
+            except ValueError:
+                return jsonify({"success": False, "message": "截止時間格式錯誤"}), 400
+
+        # 處理 is_important
+        is_important_bool = 1 if is_important == "1" else 0
 
         cursor.execute("""
-            INSERT INTO notification (title, content, type, target_roles, deadline, is_important, status, created_at)
-            VALUES (%s, %s, %s, %s, %s, %s, 'draft', NOW())
+            INSERT INTO notification (title, content, type, target_roles, deadline, is_important, status, created_at, created_by)
+            VALUES (%s, %s, %s, %s, %s, %s, 'published', NOW(), %s)
         """, (
-            title, content, type_, target_roles, deadline, is_important
+            title, content, type_, target_roles_json, deadline_datetime, is_important_bool, 'ta'
         ))
         conn.commit()
         return jsonify({"success": True, "message": "公告新增成功"})
@@ -208,26 +223,43 @@ def get_public_announcements():
     cursor = conn.cursor()
     try:
         cursor.execute("""
-            SELECT id, title, content, target_roles, created_at, deadline, is_important, status, type
+            SELECT id, title, content, target_roles, created_at, deadline, is_important, status, type, created_by
             FROM notification
             WHERE status = 'published'
-            ORDER BY created_at DESC
+            ORDER BY is_important DESC, created_at DESC
         """)
         rows = cursor.fetchall()
 
         announcements = []
         for row in rows:
+            # 解析 target_roles
+            target_roles = []
+            if row[3]:
+                try:
+                    target_roles = json.loads(row[3])
+                except:
+                    target_roles = []
+            
+            # 根據 created_by 決定來源
+            source = "系統"
+            if row[9] == 'ta':
+                source = "科助"
+            elif row[9] == 'teacher':
+                source = "老師"
+            elif row[9] == 'director':
+                source = "主任"
+            
             announcements.append({
                 "id": row[0],
                 "title": row[1],
                 "content": row[2],
-                "target_roles": json.loads(row[3]) if row[3] else [],
+                "target_roles": target_roles,
                 "created_at": row[4].isoformat() if row[4] else None,
                 "deadline": row[5].isoformat() if row[5] else None,
                 "is_important": row[6],
                 "status": row[7],
                 "type": row[8],
-                "source": "系統"  # 或者自訂來源分類
+                "source": source
             })
 
         return jsonify({"success": True, "announcements": announcements})
@@ -275,7 +307,141 @@ def notifications():
     return render_template('user_shared/notifications.html')
 
 # ------------------------
-# 測試函式（可移除）
+# API - 自動生成通知（當班導退件學生履歷時）
+# ------------------------
+@notification_bp.route("/api/notifications/create_resume_rejection", methods=["POST"])
+def create_resume_rejection_notification():
+    """當班導退件學生履歷時，自動為該學生創建通知"""
+    data = request.get_json()
+    student_username = data.get("student_username")
+    teacher_name = data.get("teacher_name", "老師")
+    rejection_reason = data.get("rejection_reason", "")
+    
+    if not student_username:
+        return jsonify({"success": False, "message": "缺少學生帳號"}), 400
+    
+    conn = get_db()
+    cursor = conn.cursor()
+    try:
+        # 創建退件通知
+        title = f"履歷退件通知"
+        content = f"您的履歷已被{teacher_name}退件。"
+        if rejection_reason:
+            content += f"\n\n退件原因：{rejection_reason}"
+        content += "\n\n請根據老師的建議修改履歷後重新上傳。"
+        
+        cursor.execute("""
+            INSERT INTO notification (title, content, type, target_roles, is_important, status, created_at, created_by)
+            VALUES (%s, %s, %s, %s, %s, %s, NOW(), %s)
+        """, (
+            title, content, 'reminder', json.dumps(['student']), 1, 'published', 'system'
+        ))
+        
+        conn.commit()
+        return jsonify({"success": True, "message": "退件通知已發送"})
+    except Exception as e:
+        print("❌ 創建退件通知失敗：", e)
+        return jsonify({"success": False, "message": "創建退件通知失敗"}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+# ------------------------
+# API - 自動生成截止日期提醒
+# ------------------------
+@notification_bp.route("/api/notifications/create_deadline_reminder", methods=["POST"])
+def create_deadline_reminder():
+    """為截止日期創建提醒通知"""
+    data = request.get_json()
+    deadline_type = data.get("deadline_type")  # 'resume' 或 'preference'
+    deadline_datetime = data.get("deadline_datetime")
+    target_roles = data.get("target_roles", ["student"])
+    
+    if not deadline_type or not deadline_datetime:
+        return jsonify({"success": False, "message": "缺少必要參數"}), 400
+    
+    conn = get_db()
+    cursor = conn.cursor()
+    try:
+        # 根據類型設定標題和內容
+        if deadline_type == "resume":
+            title = "履歷上傳截止提醒"
+            content = f"履歷上傳截止時間為：{deadline_datetime}\n\n請盡快上傳您的履歷，逾期將無法提交。"
+        elif deadline_type == "preference":
+            title = "志願序填寫截止提醒"
+            content = f"志願序填寫截止時間為：{deadline_datetime}\n\n請盡快填寫您的志願序，逾期將無法修改。"
+        else:
+            return jsonify({"success": False, "message": "無效的截止類型"}), 400
+        
+        # 解析截止時間
+        deadline_dt = datetime.strptime(deadline_datetime, "%Y-%m-%dT%H:%M")
+        
+        cursor.execute("""
+            INSERT INTO notification (title, content, type, target_roles, deadline, is_important, status, created_at, created_by)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, NOW(), %s)
+        """, (
+            title, content, 'deadline', json.dumps(target_roles), deadline_dt, 1, 'published', 'ta'
+        ))
+        
+        conn.commit()
+        return jsonify({"success": True, "message": "截止日期提醒已創建"})
+    except Exception as e:
+        print("❌ 創建截止日期提醒失敗：", e)
+        return jsonify({"success": False, "message": "創建截止日期提醒失敗"}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+# ------------------------
+# 自動提醒檢查函式
 # ------------------------
 def check_and_generate_reminders():
-    print("🔔 check_and_generate_reminders 執行中...（此為測試函式）")
+    """檢查並生成自動提醒"""
+    print("🔔 檢查自動提醒...")
+    
+    conn = get_db()
+    cursor = conn.cursor()
+    try:
+        # 檢查即將到來的截止日期
+        cursor.execute("""
+            SELECT id, title, deadline, target_roles
+            FROM notification
+            WHERE type = 'deadline' 
+            AND status = 'published'
+            AND deadline IS NOT NULL
+            AND deadline > NOW()
+            AND deadline <= DATE_ADD(NOW(), INTERVAL 1 DAY)
+            AND reminder_generated = 0
+        """)
+        
+        upcoming_deadlines = cursor.fetchall()
+        
+        for deadline in upcoming_deadlines:
+            notification_id, title, deadline_dt, target_roles = deadline
+            
+            # 創建提醒通知
+            reminder_title = f"⏰ 截止提醒：{title}"
+            reminder_content = f"提醒：{title}\n截止時間：{deadline_dt.strftime('%Y-%m-%d %H:%M')}\n\n請注意時間，盡快完成相關作業。"
+            
+            cursor.execute("""
+                INSERT INTO notification (title, content, type, target_roles, is_important, status, created_at, created_by)
+                VALUES (%s, %s, %s, %s, %s, %s, NOW(), %s)
+            """, (
+                reminder_title, reminder_content, 'reminder', target_roles, 1, 'published', 'system'
+            ))
+            
+            # 標記原通知已生成提醒
+            cursor.execute("""
+                UPDATE notification 
+                SET reminder_generated = 1 
+                WHERE id = %s
+            """, (notification_id,))
+        
+        conn.commit()
+        print(f"✅ 已生成 {len(upcoming_deadlines)} 個截止提醒")
+        
+    except Exception as e:
+        print(f"❌ 自動提醒檢查失敗：{e}")
+    finally:
+        cursor.close()
+        conn.close()
