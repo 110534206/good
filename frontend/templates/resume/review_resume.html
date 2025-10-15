@@ -353,8 +353,11 @@
     const rowsPerPage = 10;
 
     document.addEventListener("DOMContentLoaded", () => {
-      // 取得所有學生履歷
-      fetch(`/api/get_class_resumes`)
+      // 取得所有學生履歷（若 URL 帶有 mode=director，則傳給後端）
+      const urlParams = new URLSearchParams(window.location.search);
+      const mode = urlParams.get('mode');
+      const apiUrl = mode ? `/api/get_class_resumes?mode=${encodeURIComponent(mode)}` : `/api/get_class_resumes`;
+      fetch(apiUrl)
         .then(res => res.json())
         .then(data => {
           if (data.success) {
