@@ -7,19 +7,222 @@
   <title>實習公司志願序填寫</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
   <style>
-    /* ... (CSS 樣式保持不變) ... */
+    body {
+      font-family: "Noto Sans TC", sans-serif;
+      background-color: #ffffff;
+      margin: 0;
+      padding: 20px;
+    }
+
+    .container {
+      max-width: 800px;
+      margin: auto;
+    }
+
+    form {
+      background: #ffffff;
+      padding: 40px;
+      border-radius: 12px;
+      box-shadow: 0 6px 20px rgba(0, 0, 0, 0.08);
+      margin-top: 50px;
+    }
+
+    /* === Headings === */
+    h2 {
+      font-weight: bold;
+      color: #0d6efd;
+      text-align: center;
+      margin-bottom: 2rem;
+    }
+
+    h5 {
+      margin-top: 1.5rem;
+      color: #343a40;
+      font-weight: 600;
+      border-bottom: 2px solid #dee2e6;
+      padding-bottom: 6px;
+    }
+
+    /* === Label and Select === */
+    label {
+      font-weight: 600;
+      margin-bottom: 6px;
+      display: block;
+      color: #495057;
+    }
+
+    select {
+      width: 100%;
+      padding: 10px 12px;
+      border-radius: 6px;
+      border: 1px solid #ced4da;
+      margin-top: 5px;
+      background-color: #fff;
+      font-size: 1rem;
+    }
+
+    /* === Company Row Layout === */
+    .company-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr auto;
+      gap: 12px;
+      align-items: center;
+      margin-top: 8px;
+    }
+
+    /* === View Button === */
+    .btn-view {
+      background-color: #e9ecef;
+      border: 1px solid #adb5bd;
+      color: #495057;
+      padding: 8px 14px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 0.95rem;
+      transition: background-color 0.2s ease;
+    }
+
+    .btn-view:hover {
+      background-color: #dee2e6;
+    }
+
+    /* === Submit Button === */
+    button[type="submit"] {
+      margin-top: 40px;
+      width: 100%;
+      padding: 12px;
+      font-size: 1.1rem;
+      background-color: #0d6efd;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: background-color 0.2s ease;
+    }
+
+    button[type="submit"]:hover {
+      background-color: #0b5ed7;
+    }
+
+    /* === Modal === */
+    .modal-content {
+      border-radius: 12px;
+      padding: 1.5rem;
+      background-color: #fff;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
+    }
+
+    .modal-header {
+      border-bottom: 1px solid #dee2e6;
+    }
+
+    .modal-title {
+      font-weight: bold;
+      color: #0d6efd;
+    }
+
+    /* === Info Grid (Modal Details) === */
+    .info-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px 20px;
+      margin-bottom: 1rem;
+    }
+
+    .info-grid div strong {
+      display: block;
+      color: #495057;
+      font-size: 0.9rem;
+      margin-bottom: 4px;
+    }
+
+    .info-grid div span {
+      display: block;
+      font-size: 1rem;
+      color: #212529;
+    }
+
+    .info-grid .full {
+      grid-column: 1 / -1;
+    }
+
+    /* === Responsive Design === */
+    @media (max-width: 768px) {
+      .company-row {
+        grid-template-columns: 1fr;
+      }
+
+      .info-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .btn-view {
+        width: 100%;
+        text-align: center;
+      }
+
+      button[type="submit"] {
+        font-size: 1rem;
+      }
+    }
+
+    .card {
+      box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+      border-radius: 10px;
+    }
+
+    #fileDrop {
+      border: 2px dashed #ccc;
+      border-radius: 8px;
+      padding: 30px;
+      text-align: center;
+      color: #888;
+      cursor: pointer;
+      transition: border-color 0.3s;
+    }
+
+    #fileDrop.dragover {
+      border-color: #0d6efd;
+      color: #0d6efd;
+    }
+
+    table {
+      text-align: center;
+      vertical-align: middle;
+    }
+
+    .company-preview {
+      font-size: 15px;
+      color: #333;
+    }
+
+    .company-preview .section {
+      background: #f9fbfd;
+      border: 1px solid #dee2e6;
+      border-radius: 8px;
+      padding: 18px 20px;
+      margin-bottom: 20px;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+    }
+
+    .company-preview .section h5 {
+      color: #0056b3;
+      font-weight: 600;
+      margin-bottom: 15px;
+    }
   </style>
 </head>
 
 <body>
   <div class="container">
-    <form id="preferencesForm" method="POST">
+    <form id="preferencesForm" method="POST" action="/fill_preferences">
       <h2 class="text-center text-primary mb-4">請填寫實習公司志願序</h2>
 
       {% for i in range(1, 6) %}
       <div class="mb-4">
         <label>第 {{ i }} 志願</label>
         <div class="company-row">
+          <!-- 公司選單 -->
           <select name="company_{{ i }}" class="form-select company-select" required>
             <option value="">-- 請選擇公司 --</option>
             {% for company in companies %}
@@ -27,10 +230,12 @@
             {% endfor %}
           </select>
 
+          <!-- 職位選單（動態載入） -->
           <select name="job_{{ i }}" class="form-select job-select" required>
             <option value="">-- 請先選擇公司 --</option>
           </select>
 
+          <!-- 查看詳細 -->
           <button type="button" class="btn-view" onclick="viewDetail(this)">查看</button>
         </div>
       </div>
@@ -40,6 +245,7 @@
     </form>
   </div>
 
+  <!-- 詳細資料 Modal -->
   <div class="modal fade" id="companyModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-lg modal-dialog-scrollable">
       <div class="modal-content">
@@ -168,16 +374,6 @@
       }
       modal.show();
     }
-
-    // ========== 新增：攔截表單送出事件 START ==========
-    document.getElementById('preferencesForm').addEventListener('submit', function(e) {
-      // 阻止表單進行預設的提交行為 (POST 請求)
-      e.preventDefault();
-
-      // 彈出提示訊息
-      alert("⚠️ 志願序送出功能已被停用！若要啟用此功能，請聯繫系統管理員。");
-    });
-    // ========== 新增：攔截表單送出事件 END ==========
   </script>
 </body>
 
