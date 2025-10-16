@@ -2,40 +2,82 @@
 <html lang="zh-Hant">
 <head>
   <meta charset="UTF-8">
-  <title>我的通知</title>
+  <title>通知中心</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
   <style>
-    body { padding: 2rem; font-family: "Noto Sans TC", sans-serif; }
-    h1 { color: #0066cc; margin-bottom: 2rem; }
+    body { padding: 2rem; font-family: "Noto Sans TC", sans-serif; background: #f8fafc; }
+    h1 { color: #0d6efd; margin-bottom: 2rem; }
     .unread { background-color: #e9f3ff; font-weight: bold; }
+    .read { color: #555; }
+    .btn-sm { margin-right: 0.25rem; }
   </style>
 </head>
 <body>
-  <h1>通知中心</h1>
-  <table class="table table-hover">
-    <thead>
-      <tr><th>標題</th><th>內容</th><th>時間</th><th>操作</th></tr>
-    </thead>
-    <tbody id="notifTable"></tbody>
-  </table>
+  <div class="container">
+    <h1>通知中心</h1>
+
+    <table class="table table-hover align-middle">
+      <thead class="table-light">
+        <tr>
+          <th>標題</th>
+          <th>內容</th>
+          <th>時間</th>
+          <th>操作</th>
+        </tr>
+      </thead>
+      <tbody id="notifTable"></tbody>
+    </table>
+  </div>
 
   <script>
-    fetch('/notifications/api/my_notifications')
-      .then(res => res.json())
-      .then(data => {
-        if (!data.success) return alert('載入失敗');
-        const tbody = document.getElementById('notifTable');
-        tbody.innerHTML = '';
-        data.notifications.forEach(n => {
-          tbody.innerHTML += `
-            <tr class="${n.is_read ? '' : 'unread'}">
-              <td>${n.title}</td>
-              <td>${n.message}</td>
-              <td>${n.created_at}</td>
-              <td>${n.link_url ? `<a href="${n.link_url}" class="btn btn-sm btn-primary">前往</a>` : '-'}</td>
-            </tr>`;
-        });
-      });
+  async function loadNotifications() {
+    const res = await fetch('/notifications/api/my_notifications');
+    const data = await res.json();
+    const tbody = document.getElementById('notifTable');
+    tbody.innerHTML = '';
+
+    if (!data.success) {
+      alert('載入失敗');
+      return;
+    }
+
+    data.notifications.forEach(n => {
+      const row = document.createElement('tr');
+      row.className = n.is_read ? 'read' : 'unread';
+      row.innerHTML = `
+        <td>${n.is_read ? '✅' : '🆕'} ${n.title}</td>
+        <td>${n.message.replace(/\n/g, '<br>')}</td>
+        <td>${new Date(n.created_at).toLocaleString('zh-TW', { hour12: false })}</td>
+        <td>
+          ${n.link_url ? `<a href="${n.link_url}" class="btn btn-sm btn-primary">前往</a>` : ''}
+          ${!n.is_read ? `<button class="btn btn-sm btn-success" onclick="markRead(${n.id})">已讀</button>` : ''}
+          <button class="btn btn-sm btn-danger" onclick="deleteNotif(${n.id})">刪除</button>
+        </td>
+      `;
+      tbody.appendChild(row);
+    });
+  }
+
+  async function markRead(id) {
+    const res = await fetch(`/notifications/api/mark_read/${id}`, { method: 'POST' });
+    const data = await res.json();
+    if (!data.success) return alert(data.message);
+    const row = document.querySelector(`button[onclick="markRead(${id})"]`).closest('tr');
+    row.classList.remove('unread');
+    row.classList.add('read');
+    row.querySelector('td:first-child').innerText = '✅ ' + row.querySelector('td:first-child').innerText.slice(2);
+    row.querySelector('button.btn-success').remove();
+  }
+
+  async function deleteNotif(id) {
+    if (!confirm("確定要刪除此通知？")) return;
+    const res = await fetch(`/notifications/api/notification/delete/${id}`, { method: 'DELETE' });
+    const data = await res.json();
+    alert(data.message);
+    loadNotifications();
+  }
+
+  loadNotifications();
   </script>
 </body>
 </html>

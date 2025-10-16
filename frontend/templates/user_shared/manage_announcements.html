@@ -5,23 +5,29 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>公告管理</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+      body { padding: 2rem; font-family: "Noto Sans TC", sans-serif; }
+      h1 { color: #0066cc; margin-bottom: 1.5rem; }
+      .status-badge { font-size: 0.85rem; padding: 0.2rem 0.5rem; border-radius: 0.4rem; }
+    </style>
   </head>
-  <body class="p-4">
+
+  <body>
     <div class="container">
       <h1>公告管理（主任 / 科助）</h1>
 
-      <div class="mb-3">
-        <button id="btn-new" class="btn btn-primary">新增公告</button>
+      <div class="mb-3 text-end">
+        <button id="btn-new" class="btn btn-primary">➕ 新增公告</button>
       </div>
 
-      <table class="table table-striped" id="ann-table">
-        <thead>
+      <table class="table table-striped align-middle" id="ann-table">
+        <thead class="table-primary">
           <tr>
             <th>ID</th>
             <th>標題</th>
-            <th>開始</th>
-            <th>結束</th>
-            <th>已發布</th>
+            <th>期間</th>
+            <th>狀態</th>
+            <th>發布</th>
             <th>建立時間</th>
             <th>操作</th>
           </tr>
@@ -30,12 +36,12 @@
       </table>
     </div>
 
-    <!-- Modal -->
+    <!-- 公告 Modal -->
     <div class="modal fade" id="annModal" tabindex="-1">
       <div class="modal-dialog">
         <div class="modal-content">
           <div class="modal-header">
-            <h5 class="modal-title">公告管理</h5>
+            <h5 class="modal-title">公告設定</h5>
             <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
           </div>
           <div class="modal-body">
@@ -73,40 +79,58 @@
     <script>
     document.addEventListener("DOMContentLoaded", () => {
       const tableBody = document.querySelector("#ann-table tbody");
-      const btnNew = document.getElementById("btn-new");
-
       const annModal = new bootstrap.Modal(document.getElementById("annModal"));
+      const btnNew = document.getElementById("btn-new");
+      const btnSave = document.getElementById("btn-save");
+
       const titleInput = document.getElementById("ann-title");
       const contentInput = document.getElementById("ann-content");
       const startInput = document.getElementById("ann-start");
       const endInput = document.getElementById("ann-end");
       const publishCheckbox = document.getElementById("ann-publish");
-      const btnSave = document.getElementById("btn-save");
 
-      let editId = null; // 判斷是否為編輯模式
+      let editId = null;
+      let annList = [];
 
-      // ✅ 載入公告列表
+      // ✅ 取得公告列表
       async function loadAnnouncements() {
-        const res = await fetch("/announcement/api/list");
+        const res = await fetch("/notifications/api/list");
         const data = await res.json();
-        if (!data.success) {
-          alert(data.message);
-          return;
-        }
-        tableBody.innerHTML = data.data.map(a => `
-          <tr>
-            <td>${a.id}</td>
-            <td>${a.title}</td>
-            <td>${a.start_time || ''}</td>
-            <td>${a.end_time || ''}</td>
-            <td>${a.is_published ? '✔️' : '❌'}</td>
-            <td>${a.created_at}</td>
-            <td>
-              <button class="btn btn-sm btn-warning" onclick="editAnnouncement(${a.id})">編輯</button>
-              <button class="btn btn-sm btn-danger" onclick="deleteAnnouncement(${a.id})">刪除</button>
-            </td>
-          </tr>
-        `).join("");
+        if (!data.success) return alert(data.message);
+        annList = data.data;
+        renderTable();
+      }
+
+      // ✅ 渲染表格
+      function renderTable() {
+        const now = new Date();
+        tableBody.innerHTML = annList.map(a => {
+          const start = a.start_time ? new Date(a.start_time) : null;
+          const end = a.end_time ? new Date(a.end_time) : null;
+          let status = "—";
+          let color = "secondary";
+
+          if (start && end) {
+            if (now < start) { status = "未開始"; color = "secondary"; }
+            else if (now > end) { status = "已結束"; color = "danger"; }
+            else { status = "進行中"; color = "success"; }
+          }
+
+          return `
+            <tr>
+              <td>${a.id}</td>
+              <td>${a.title}</td>
+              <td>${(a.start_time || '').replace('T',' ').slice(0,16)}<br>${(a.end_time || '').replace('T',' ').slice(0,16)}</td>
+              <td><span class="badge bg-${color} status-badge">${status}</span></td>
+              <td>${a.is_published ? '✔️' : '❌'}</td>
+              <td>${a.created_at.replace('T',' ').slice(0,16)}</td>
+              <td>
+                <button class="btn btn-sm btn-warning me-1" onclick="editAnnouncement(${a.id})">編輯</button>
+                <button class="btn btn-sm btn-danger" onclick="deleteAnnouncement(${a.id})">刪除</button>
+              </td>
+            </tr>
+          `;
+        }).join("");
       }
 
       // ✅ 新增公告
@@ -129,43 +153,42 @@
           end_time: endInput.value || null,
           is_published: publishCheckbox.checked
         };
+        if (!data.title || !data.content) return alert("標題與內容不可空白");
 
+        btnSave.disabled = true;
         const url = editId
-          ? `/announcement/api/update/${editId}`
-          : "/announcement/api/create";
-        const method = "POST";
+          ? `/notifications/api/update/${editId}`
+          : `/notifications/api/create`;
 
         const res = await fetch(url, {
-          method,
+          method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(data)
         });
         const result = await res.json();
+        btnSave.disabled = false;
         alert(result.message);
         annModal.hide();
         loadAnnouncements();
       });
 
       // ✅ 編輯公告
-      window.editAnnouncement = async function(id) {
-        const res = await fetch("/announcement/api/list");
-        const data = await res.json();
-        const ann = data.data.find(a => a.id === id);
+      window.editAnnouncement = function(id) {
+        const ann = annList.find(a => a.id === id);
         if (!ann) return;
-
         editId = id;
         titleInput.value = ann.title;
         contentInput.value = ann.content;
         startInput.value = ann.start_time ? ann.start_time.slice(0, 16) : "";
         endInput.value = ann.end_time ? ann.end_time.slice(0, 16) : "";
-        publishCheckbox.checked = ann.is_published === 1;
+        publishCheckbox.checked = ann.is_published === 1 || ann.is_published === true;
         annModal.show();
       };
 
       // ✅ 刪除公告
       window.deleteAnnouncement = async function(id) {
         if (!confirm("確定要刪除這則公告嗎？")) return;
-        const res = await fetch(`/announcement/api/delete/${id}`, { method: "DELETE" });
+        const res = await fetch(`/notifications/api/announcement/delete/${id}`, { method: "DELETE" });
         const result = await res.json();
         alert(result.message);
         loadAnnouncements();
