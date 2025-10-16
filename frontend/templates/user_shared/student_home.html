@@ -408,7 +408,7 @@
     }
 
     // 取得公告資料
-    fetch("/api/list")
+      fetch("/announcement/api/list")
       .then(response => response.json())
       .then(data => {
         if (data.success && Array.isArray(data.data)) {

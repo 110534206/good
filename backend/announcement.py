@@ -36,7 +36,7 @@ def list_announcements():
         rows = cursor.fetchall()
         # 加上前端可直接點擊的連結
         for r in rows:
-            r["link_url"] = f"/notifications/view_announcement/{r['id']}"
+         r["link_url"] = f"/announcement/view_announcement/{r['id']}"
         return jsonify({"success": True, "data": rows})
     except Exception:
         traceback.print_exc()
@@ -173,8 +173,7 @@ def push_announcement_notifications(conn, title, content, ann_id):
         INSERT INTO notifications (user_id, title, message, link_url, is_read, created_at)
         VALUES (%s, %s, %s, %s, 0, NOW())
     """
-    link = f"/notifications/view_announcement/{ann_id}"
-
+    link = f"/view_announcement/{ann_id}"
     for u in users:
         cursor.execute(notif_sql, (u[0], f"新公告：{title}", content[:150] + "...", link))
 

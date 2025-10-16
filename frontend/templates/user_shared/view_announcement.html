@@ -2,16 +2,16 @@
 <html lang="zh-Hant">
 <head>
   <meta charset="UTF-8" />
-  <title>{{ announcement[1] }}</title>
+  <title>{{ ann.title }}</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
 </head>
 <body class="p-4">
   <div class="container">
-    <h2>{{ announcement[1] }}</h2>
-    <p class="text-muted">作者：{{ announcement[4] }}　發布時間：{{ announcement[3] }}</p>
+    <h2>{{ ann.title }}</h2>
+    <p class="text-muted">發布時間：{{ ann.created_at }}</p>
     <hr>
-    <p>{{ announcement[2] }}</p>
-    <a href="/notifications" class="btn btn-secondary mt-3">返回公告列表</a>
+    <p style="white-space: pre-wrap;">{{ ann.content }}</p>
+    <a href="/student_home" class="btn btn-secondary mt-3">返回首頁</a>
   </div>
 </body>
 </html>
