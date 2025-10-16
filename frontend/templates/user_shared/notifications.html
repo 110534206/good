@@ -31,7 +31,7 @@
 
   <script>
   async function loadNotifications() {
-    const res = await fetch('/notifications/api/my_notifications');
+    const res = await fetch('/api/my_notifications');
     const data = await res.json();
     const tbody = document.getElementById('notifTable');
     tbody.innerHTML = '';
@@ -59,7 +59,7 @@
   }
 
   async function markRead(id) {
-    const res = await fetch(`/notifications/api/mark_read/${id}`, { method: 'POST' });
+    const res = await fetch(`/api/mark_read/${id}`, { method: 'POST' });
     const data = await res.json();
     if (!data.success) return alert(data.message);
     const row = document.querySelector(`button[onclick="markRead(${id})"]`).closest('tr');
@@ -71,7 +71,7 @@
 
   async function deleteNotif(id) {
     if (!confirm("確定要刪除此通知？")) return;
-    const res = await fetch(`/notifications/api/notification/delete/${id}`, { method: 'DELETE' });
+    const res = await fetch(`/api/notification/delete/${id}`, { method: 'DELETE' });
     const data = await res.json();
     alert(data.message);
     loadNotifications();

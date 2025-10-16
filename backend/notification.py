@@ -4,12 +4,12 @@ from datetime import datetime
 from markupsafe import escape
 import traceback
 
-notification_bp = Blueprint("notification_bp", __name__, url_prefix="/notifications")
+notification_bp = Blueprint("notification_bp", __name__)
 
 # =========================================================
 # 頁面
 # =========================================================
-@notification_bp.route("/")
+@notification_bp.route("/notifications")
 def notifications_page():
     """一般使用者通知中心"""
     return render_template("user_shared/notifications.html")

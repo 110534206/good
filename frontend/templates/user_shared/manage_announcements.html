@@ -94,7 +94,7 @@
 
       // ✅ 取得公告列表
       async function loadAnnouncements() {
-        const res = await fetch("/notifications/api/list");
+        const res = await fetch("/api/list");
         const data = await res.json();
         if (!data.success) return alert(data.message);
         annList = data.data;
