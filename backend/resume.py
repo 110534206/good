@@ -392,7 +392,7 @@ def get_my_resumes():
         conn.close()
 
 # -------------------------
-# API - 更新履歷欄位 (comment/note)（需有寫入權限）
+# API - 更新履歷欄位（comment, note）（含權限檢查）
 # -------------------------
 @resume_bp.route('/api/update_resume_field', methods=['POST'])
 def update_resume_field():
@@ -431,7 +431,7 @@ def update_resume_field():
 
         owner_id = r['user_id']
 
-        # 檢查寫入權限：只有 teacher（帶班）、director（同科系）、admin 可以改 comment/note
+        # 取得使用者角色與 id
         role = session.get('role')
         user_id = session['user_id']
 
@@ -453,8 +453,19 @@ def update_resume_field():
         elif role == "admin":
             pass  # admin 可以
 
+        elif role == "student":
+            # 學生只能修改自己的履歷，且只能修改 note 欄位
+            if user_id != owner_id:
+                cursor.close()
+                conn.close()
+                return jsonify({"success": False, "message": "學生只能修改自己的履歷"}), 403
+            if field != "note":
+                cursor.close()
+                conn.close()
+                return jsonify({"success": False, "message": "學生只能修改備註欄位"}), 403
+
         else:
-            # ta, student, 其他不可修改
+            # ta 或其他角色不可修改
             cursor.close()
             conn.close()
             return jsonify({"success": False, "message": "角色無權限修改"}), 403

@@ -14,7 +14,7 @@
 
   <body>
     <div class="container">
-      <h1>公告管理（主任 / 科助）</h1>
+      <h1>公告管理</h1>
 
       <div class="mb-3 text-end">
         <button id="btn-new" class="btn btn-primary">➕ 新增公告</button>
@@ -94,7 +94,7 @@
 
       // ✅ 取得公告列表
       async function loadAnnouncements() {
-        const res = await fetch("/api/list");
+        const res = await fetch("/announcement/api/list");
         const data = await res.json();
         if (!data.success) return alert(data.message);
         annList = data.data;
@@ -157,8 +157,8 @@
 
         btnSave.disabled = true;
         const url = editId
-          ? `/notifications/api/update/${editId}`
-          : `/notifications/api/create`;
+          ? `/announcement/api/update/${editId}`
+          : `/announcement/api/create`;
 
         const res = await fetch(url, {
           method: "POST",
@@ -188,7 +188,7 @@
       // ✅ 刪除公告
       window.deleteAnnouncement = async function(id) {
         if (!confirm("確定要刪除這則公告嗎？")) return;
-        const res = await fetch(`/notifications/api/announcement/delete/${id}`, { method: "DELETE" });
+        const res = await fetch(`/announcement/api/delete/${id}`, { method: "DELETE" });
         const result = await res.json();
         alert(result.message);
         loadAnnouncements();
