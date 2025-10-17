@@ -375,7 +375,7 @@
     let resumesData = [];
     let resumeId = null;
     let interval = null;
-    // **** 修正此行：將預設角色從 'student' 改為 'visitor' ****
+    // 修正此行：將預設角色從 'student' 改為 'visitor'
     const role = localStorage.getItem('role') || 'visitor'; 
 
     // 拖曳上傳
@@ -437,7 +437,15 @@
           if (data.success) {
             resumesData = data.resumes;
             renderTable('all');
+          } else {
+             // 處理 API 失敗 (例如 403) 時的表格顯示
+             document.getElementById('resumeTableBody').innerHTML = `<tr><td colspan="6" class="text-center text-muted">載入失敗，請檢查登入狀態或聯繫管理員。</td></tr>`;
           }
+        })
+        .catch(error => {
+            // 處理網路或解析錯誤
+            console.error('Fetching resumes failed:', error);
+            document.getElementById('resumeTableBody').innerHTML = `<tr><td colspan="6" class="text-center text-muted">網路錯誤或伺服器無回應。</td></tr>`;
         });
     }
 
@@ -606,21 +614,21 @@
           }
         });
     }
-    document.addEventListener("DOMContentLoaded", loadResumes);
 
-    // 動態設定頭像和返回主頁連結 (根據 localStorage 中的 role)
+    // 動態設定頭像和返回主頁連結 (根據 localStorage 中的 role)，並決定是否載入履歷
     document.addEventListener("DOMContentLoaded", () => {
         const avatarLink = document.getElementById('avatarLink');
         const homeButtonLink = document.getElementById('homeButtonLink');
         
         let homeUrl;
         
-        // 根據角色決定連結目標
         if (role === 'student') {
             homeUrl = '/student_home';
+            loadResumes(); // 學生登入時才載入履歷資料
         } else {
-            // 現在 'role' 為 'visitor' 時，會正確導向訪客主頁
             homeUrl = '/visitor_home';
+             // 訪客或未登入時不執行 API 呼叫，並顯示提示
+             document.getElementById('resumeTableBody').innerHTML = `<tr><td colspan="6" class="text-center text-muted">請先登入以查看您的履歷</td></tr>`;
         }
 
         if (avatarLink) {
