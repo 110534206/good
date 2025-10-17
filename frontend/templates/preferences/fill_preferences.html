@@ -1,126 +1,71 @@
-# -------------------------
-# 志願填寫頁面 (GET/POST)
-# -------------------------
-@preferences_bp.route("/fill_preferences", methods=["GET", "POST"])
-def fill_preferences():
-    # 登入檢查 (學生)
-    if "user_id" not in session or session.get("role") != "student":
-        return redirect(url_for("auth_bp.login_page"))
-
-    student_id = session["user_id"]
-    conn = get_db()
-    cursor = conn.cursor(dictionary=True)
-    message = None
-
-    try:
-        # 取得所有已通過的公司（供選擇）
-        cursor.execute("SELECT id, company_name FROM internship_companies WHERE status = 'approved' ORDER BY company_name")
-        companies = cursor.fetchall()
-
-        # 讀出學生目前已填寫的志願（若有）
-        cursor.execute("""
-            SELECT preference_order, company_id, job_id
-            FROM student_preferences
-            WHERE student_id = %s
-            ORDER BY preference_order
-        """, (student_id,))
-        prefs = cursor.fetchall()
-
-        # 轉成前端方便使用格式（index 0 -> 第1志願）
-        submitted_preferences = [None] * 5
-        submitted_job_ids = [None] * 5
-        for p in prefs:
-            order = p.get('preference_order')
-            if order and 1 <= order <= 5:
-                submitted_preferences[order - 1] = p.get('company_id')
-                submitted_job_ids[order - 1] = p.get('job_id')
-
-        # 處理 POST 提交
-        if request.method == "POST":
-            preferences = []
-            for i in range(1, 6):
-                company_id = request.form.get(f"company_{i}")
-                job_title = request.form.get(f"job_{i}")  # 前端傳來的是職缺名稱 title
-
-                if company_id:
-                    job_id = None
-                    if job_title:
-                        # 依公司與職缺名稱查 job.id
-                        cursor.execute(
-                            "SELECT id FROM internship_jobs WHERE company_id = %s AND title = %s",
-                            (company_id, job_title)
-                        )
-                        job_row = cursor.fetchone()
-                        job_id = job_row["id"] if job_row else None
-
-                    preferences.append((student_id, i, company_id, job_id, datetime.now()))
-
-            # 防呆：至少選一個；不可重複選同公司（後端最終驗證）
-            if not preferences:
-                message = "⚠️ 請至少填寫一個志願。"
-            else:
-                selected_companies = [p[2] for p in preferences]
-                if len(selected_companies) != len(set(selected_companies)):
-                    message = "⚠️ 不可重複選擇相同公司（請重新檢查）。"
-                else:
-                    # 刪除舊資料並寫入新資料
-                    cursor.execute("DELETE FROM student_preferences WHERE student_id = %s", (student_id,))
-                    cursor.executemany("""
-                        INSERT INTO student_preferences (student_id, preference_order, company_id, job_id, submitted_at)
-                        VALUES (%s, %s, %s, %s, %s)
-                    """, preferences)
-                    conn.commit()
-                    message = "✅ 志願序已成功送出。"
-
-                    # 重新讀取已填寫值
-                    cursor.execute("""
-                        SELECT preference_order, company_id
-                        FROM student_preferences
-                        WHERE student_id = %s
-                        ORDER BY preference_order
-                    """, (student_id,))
-                    prefs = cursor.fetchall()
-                    submitted_preferences = [None] * 5
-                    for p in prefs:
-                        order = p.get('preference_order')
-                        if order and 1 <= order <= 5:
-                            submitted_preferences[order - 1] = p.get('company_id')
-
-        return render_template("preferences/fill_preferences.html",
-                               companies=companies,
-                               submitted_preferences=submitted_preferences,
-                               message=message)
-    except Exception as e:
-        traceback.print_exc()
-        return "伺服器錯誤", 500
-    finally:
-        cursor.close()
-        conn.close()
-
 <!DOCTYPE html>
 <html lang="zh-Hant">
+
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>實習公司志願序填寫</title>
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet"/>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
   <style>
-    body { font-family: "Noto Sans TC", sans-serif; background:#fff; padding:20px; }
-    .container { max-width:900px; margin:auto; }
-    form { background:#fff; padding:30px; border-radius:10px; box-shadow:0 6px 18px rgba(0,0,0,0.06); }
-    h2 { color:#0d6efd; font-weight:700; text-align:center; margin-bottom:1.5rem; }
-    .company-row { display:grid; grid-template-columns: 1fr 1fr auto; gap:12px; align-items:center; }
-    @media (max-width:768px) { .company-row { grid-template-columns: 1fr; } }
-    .btn-view { background:#e9ecef; border:1px solid #adb5bd; padding:8px 12px; border-radius:6px; }
-    .note { font-size:0.9rem; color:#666; margin-bottom:12px; }
+    body {
+      font-family: "Noto Sans TC", sans-serif;
+      background: #fff;
+      padding: 20px;
+    }
+
+    .container {
+      max-width: 900px;
+      margin: auto;
+    }
+
+    form {
+      background: #fff;
+      padding: 30px;
+      border-radius: 10px;
+      box-shadow: 0 6px 18px rgba(0, 0, 0, 0.06);
+    }
+
+    h2 {
+      color: #0d6efd;
+      font-weight: 700;
+      text-align: center;
+      margin-bottom: 1.5rem;
+    }
+
+    .company-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr auto;
+      gap: 12px;
+      align-items: center;
+    }
+
+    @media (max-width:768px) {
+      .company-row {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .btn-view {
+      background: #e9ecef;
+      border: 1px solid #adb5bd;
+      padding: 8px 12px;
+      border-radius: 6px;
+    }
+
+    .note {
+      font-size: 0.9rem;
+      color: #666;
+      margin-bottom: 12px;
+    }
   </style>
 </head>
+
 <body>
   <div class="container">
     <form id="preferencesForm" method="POST" action="/fill_preferences">
       <h2>請填寫實習公司志願序</h2>
       {% if message %}
-        <div class="alert alert-info">{{ message }}</div>
+      <div class="alert alert-info">{{ message }}</div>
       {% endif %}
       <p class="note">提示：請為每一志願選擇公司後，再選擇該公司內的職缺。後端會阻擋重複選擇相同公司。</p>
 
@@ -128,14 +73,16 @@ def fill_preferences():
       <div class="mb-3">
         <label class="form-label">第 {{ i }} 志願</label>
         <div class="company-row">
-          <select name="company_{{ i }}" class="form-select company-select" data-index="{{ i }}" >
+          <select name="company_{{ i }}" class="form-select company-select" data-index="{{ i }}">
             <option value="">-- 請選擇公司 --</option>
             {% for c in companies %}
-            <option value="{{ c['id'] }}" {% if submitted_preferences and submitted_preferences[i-1] == c['id'] %}selected{% endif %}>{{ c['company_name'] }}</option>
+            <option value="{{ c['id'] }}" {% if submitted_preferences and submitted_preferences[i-1]==c['id']
+              %}selected{% endif %}>{{ c['company_name'] }}</option>
             {% endfor %}
           </select>
 
-          <select name="job_{{ i }}" class="form-select job-select" data-index="{{ i }}" >
+          <select name="job_{{ i }}" class="form-select job-select" data-index="{{ i }}"
+            data-selected-title="{{ submitted_job_titles[i-1] }}">
             <option value="">-- 請先選擇公司 --</option>
           </select>
 
@@ -245,12 +192,22 @@ def fill_preferences():
         jobSelect.innerHTML = `<option value="${j.id}" selected>${j.title || j.internship_unit || '未命名職位'}</option>`;
       } else {
         jobSelect.innerHTML = `<option value="">-- 請選擇職缺 --</option>`;
+        const selectedTitle = jobSelect.dataset.selectedTitle?.trim();
         jobs.forEach(j => {
           const opt = document.createElement('option');
           opt.value = j.id;
           opt.textContent = j.title || j.internship_unit || '未命名職位';
+          const selectedTitle = jobSelect.dataset.selectedTitle;
+          if (selectedTitle && selectedTitle !== "undefined") {
+            const cleanTitle = selectedTitle.trim();
+            if (cleanTitle && cleanTitle === (j.title || '').trim()) {
+              opt.selected = true;
+            }
+          }
+
           jobSelect.appendChild(opt);
         });
+
       }
 
       validateDuplicatesUI();
@@ -318,17 +275,18 @@ def fill_preferences():
           <p><strong>Email：</strong>${c.contact_email || '-'}</p>
           <hr/>
           <h6>職缺</h6>
-          ${ (c.internship_jobs && c.internship_jobs.length) ? c.internship_jobs.map(j => `
+          ${(c.internship_jobs && c.internship_jobs.length) ? c.internship_jobs.map(j => `
             <div style="margin-bottom:12px;">
               <strong>${j.title || j.internship_unit || '職缺'}</strong><br/>
               <small>部門：${j.department || '-'} | 期間：${j.period || j.internship_period || '-'} | 名額：${j.slots || j.internship_quota || '-'}</small>
               <p>${j.description || j.internship_content || ''}</p>
             </div>
-          `).join('') : '<p>此公司無職缺。</p>' }
+          `).join('') : '<p>此公司無職缺。</p>'}
         </div>
       `;
       modal.show();
     }
   </script>
 </body>
+
 </html>

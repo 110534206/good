@@ -48,7 +48,6 @@ def get_class_preferences(cursor, class_id):
     """, (class_id,))
     return cursor.fetchall()
 
-
 # -------------------------
 # 志願填寫頁面 (GET/POST)
 # -------------------------
@@ -70,7 +69,7 @@ def fill_preferences():
 
         # 讀出學生目前已填寫的志願（若有）
         cursor.execute("""
-            SELECT preference_order, company_id, job_id
+            SELECT preference_order, company_id, job_id, job_title
             FROM student_preferences
             WHERE student_id = %s
             ORDER BY preference_order
@@ -80,33 +79,43 @@ def fill_preferences():
         # 轉成前端方便使用格式（index 0 -> 第1志願）
         submitted_preferences = [None] * 5
         submitted_job_ids = [None] * 5
+        submitted_job_titles = [None] * 5
         for p in prefs:
-            order = p.get('preference_order')
-            if order and 1 <= order <= 5:
-                submitted_preferences[order - 1] = p.get('company_id')
-                submitted_job_ids[order - 1] = p.get('job_id')
+          order = p.get('preference_order')
+        if order and 1 <= order <= 5:
+          job_title = p.get('job_title')
+        if job_title in (None, '', 'undefined'):  # 🚫 避免錯誤字串
+            job_title = None
+        submitted_preferences[order - 1] = p.get('company_id')
+        submitted_job_ids[order - 1] = p.get('job_id')
+        submitted_job_titles[order - 1] = job_title
 
         # 處理 POST 提交
         if request.method == "POST":
             preferences = []
+
             for i in range(1, 6):
-                company_id = request.form.get(f"company_{i}")
-                job_title = request.form.get(f"job_{i}")  # 前端傳來的是職缺名稱 title
+                company_id_raw = request.form.get(f"company_{i}")
+                job_id_raw = request.form.get(f"job_{i}")
 
-                if company_id:
-                    job_id = None
-                    if job_title:
-                        # 依公司與職缺名稱查 job.id
-                        cursor.execute(
-                            "SELECT id FROM internship_jobs WHERE company_id = %s AND title = %s",
-                            (company_id, job_title)
-                        )
-                        job_row = cursor.fetchone()
-                        job_id = job_row["id"] if job_row else None
+                # 轉成 int 或 None
+                company_id = int(company_id_raw) if company_id_raw and company_id_raw.isdigit() else None
+                job_id = int(job_id_raw) if job_id_raw and job_id_raw.isdigit() else None
 
-                    preferences.append((student_id, i, company_id, job_id, datetime.now()))
+                if company_id is None or job_id is None:
+                    # 沒選該志願就跳過，不加入 preferences
+                    continue
 
-            # 防呆：至少選一個；不可重複選同公司（後端最終驗證）
+                # 取得 job_title
+                job_title = None
+                cursor.execute("SELECT title FROM internship_jobs WHERE id = %s", (job_id,))
+                job = cursor.fetchone()
+                if job:
+                    job_title = job["title"]
+
+                preferences.append((student_id, i, company_id, job_title, job_id, datetime.now()))
+
+            # 防呆：至少選一個；不可重複選同公司
             if not preferences:
                 message = "⚠️ 請至少填寫一個志願。"
             else:
@@ -114,33 +123,42 @@ def fill_preferences():
                 if len(selected_companies) != len(set(selected_companies)):
                     message = "⚠️ 不可重複選擇相同公司（請重新檢查）。"
                 else:
-                    # 刪除舊資料並寫入新資料
+                    # 清除舊志願
                     cursor.execute("DELETE FROM student_preferences WHERE student_id = %s", (student_id,))
+                    # 寫入新志願
                     cursor.executemany("""
-                        INSERT INTO student_preferences (student_id, preference_order, company_id, job_id, submitted_at)
-                        VALUES (%s, %s, %s, %s, %s)
+                        INSERT INTO student_preferences (student_id, preference_order, company_id, job_title, job_id, submitted_at)
+                        VALUES (%s, %s, %s, %s, %s, %s)
                     """, preferences)
+
                     conn.commit()
                     message = "✅ 志願序已成功送出。"
 
                     # 重新讀取已填寫值
                     cursor.execute("""
-                        SELECT preference_order, company_id
+                        SELECT preference_order, company_id, job_id, job_title
                         FROM student_preferences
                         WHERE student_id = %s
                         ORDER BY preference_order
                     """, (student_id,))
                     prefs = cursor.fetchall()
                     submitted_preferences = [None] * 5
+                    submitted_job_ids = [None] * 5
+                    submitted_job_titles = [None] * 5
                     for p in prefs:
                         order = p.get('preference_order')
                         if order and 1 <= order <= 5:
                             submitted_preferences[order - 1] = p.get('company_id')
+                            submitted_job_ids[order - 1] = p.get('job_id')
+                            submitted_job_titles[order - 1] = p.get('job_title')
 
         return render_template("preferences/fill_preferences.html",
                                companies=companies,
                                submitted_preferences=submitted_preferences,
+                               submitted_job_ids=submitted_job_ids,
+                               submitted_job_titles=submitted_job_titles,
                                message=message)
+
     except Exception as e:
         traceback.print_exc()
         return "伺服器錯誤", 500
