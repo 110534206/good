@@ -43,9 +43,10 @@ def fill_preferences():
     if request.method == 'POST':
         preferences = []
         for i in range(1, 6):
-            company_id = request.form.get(f'preference_{i}')
+            company_id = request.form.get(f'company_{i}') 
             if company_id:
-                preferences.append((student_id, i, company_id, datetime.now()))
+              job_id = request.form.get(f'job_{i}')
+              preferences.append((student_id, i, company_id, job_id, datetime.now()))
 
         try:
             # 刪除舊志願
@@ -56,7 +57,7 @@ def fill_preferences():
             if preferences:
                 cursor.executemany("""
                     INSERT INTO student_preferences (student_id, preference_order, company_id, job_id, submitted_at)
-                    VALUES (%s, %s, %s, %s)
+                    VALUES (%s, %s, %s, %s, %s)
                 """, preferences)
                 conn.commit()
                 message = "✅ 志願序已成功送出"
@@ -124,8 +125,8 @@ def select_role():
 # -------------------------
 @preferences_bp.route('/review_preferences')
 def review_preferences():
-    if 'username' not in session or session.get('role') not in ['teacher', 'director']:
-        return redirect(url_for('auth_bp.login_page'))
+    if 'user_id' not in session or session.get('role') not in ['teacher', 'director']:
+      return redirect(url_for('auth_bp.login_page'))
 
     user_id = session.get('user_id')
     conn = get_db()
@@ -153,7 +154,7 @@ def review_preferences():
                 sp.preference_order,
                 ic.company_name,
                 ij.title AS job_title,
-                sp.submitted_at,           
+                sp.submitted_at        
             FROM users u
             LEFT JOIN student_preferences sp ON u.id = sp.student_id
             LEFT JOIN internship_companies ic ON sp.company_id = ic.id
@@ -170,6 +171,7 @@ def review_preferences():
                 student_data[row['student_name']].append({
                     'order': row['preference_order'],
                     'company': row['company_name'],
+                    'job_title': row['job_title'],
                     'submitted_at': row['submitted_at']
                 })
 
@@ -188,8 +190,8 @@ def review_preferences():
 # -------------------------
 @preferences_bp.route('/export_preferences_excel')
 def export_preferences_excel():
-    if 'username' not in session or session.get('role') not in ['teacher', 'director']:
-        return redirect(url_for('auth_bp.login_page'))
+    if 'user_id' not in session or session.get('role') not in ['teacher', 'director']:
+       return redirect(url_for('auth_bp.login_page'))
 
     user_id = session.get('user_id')
     conn = get_db()
@@ -367,8 +369,8 @@ def export_preferences_excel():
 # -------------------------
 @preferences_bp.route('/export_preferences_word')
 def export_preferences_word():
-    if 'username' not in session or session.get('role') not in ['teacher', 'director']:
-        return redirect(url_for('auth_bp.login_page'))
+    if 'user_id' not in session or session.get('role') not in ['teacher', 'director']:
+       return redirect(url_for('auth_bp.login_page'))
 
     user_id = session.get('user_id')
     conn = get_db()
@@ -498,8 +500,8 @@ def export_preferences_word():
 # -------------------------
 @preferences_bp.route('/export_preferences_pdf')
 def export_preferences_pdf():
-    if 'username' not in session or session.get('role') not in ['teacher', 'director']:
-        return redirect(url_for('auth_bp.login_page'))
+    if 'user_id' not in session or session.get('role') not in ['teacher', 'director']:
+       return redirect(url_for('auth_bp.login_page'))
 
     user_id = session.get('user_id')
     conn = get_db()
