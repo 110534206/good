@@ -375,7 +375,8 @@
     let resumesData = [];
     let resumeId = null;
     let interval = null;
-    const role = localStorage.getItem('role') || 'student'; // 這裡的角色判斷是關鍵
+    // **** 修正此行：將預設角色從 'student' 改為 'visitor' ****
+    const role = localStorage.getItem('role') || 'visitor'; 
 
     // 拖曳上傳
     const dropZone = document.getElementById('resumeFileDrop');
@@ -607,11 +608,10 @@
     }
     document.addEventListener("DOMContentLoaded", loadResumes);
 
-    // **** 新增邏輯：動態設定頭像和返回主頁連結 (根據 localStorage 中的 role) ****
+    // 動態設定頭像和返回主頁連結 (根據 localStorage 中的 role)
     document.addEventListener("DOMContentLoaded", () => {
         const avatarLink = document.getElementById('avatarLink');
         const homeButtonLink = document.getElementById('homeButtonLink');
-        // role 變數已在上方定義：const role = localStorage.getItem('role') || 'student';
         
         let homeUrl;
         
@@ -619,7 +619,7 @@
         if (role === 'student') {
             homeUrl = '/student_home';
         } else {
-            // 非 'student' 角色，則導向訪客主頁
+            // 現在 'role' 為 'visitor' 時，會正確導向訪客主頁
             homeUrl = '/visitor_home';
         }
 
@@ -630,7 +630,6 @@
             homeButtonLink.href = homeUrl;
         }
     });
-    // **** 新增邏輯結束 ****
   </script>
   <script>
     document.getElementById('menu-btn').addEventListener('click', () => {
