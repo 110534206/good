@@ -1,205 +1,154 @@
+# -------------------------
+# 志願填寫頁面 (GET/POST)
+# -------------------------
+@preferences_bp.route("/fill_preferences", methods=["GET", "POST"])
+def fill_preferences():
+    # 登入檢查 (學生)
+    if "user_id" not in session or session.get("role") != "student":
+        return redirect(url_for("auth_bp.login_page"))
+
+    student_id = session["user_id"]
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+    message = None
+
+    try:
+        # 取得所有已通過的公司（供選擇）
+        cursor.execute("SELECT id, company_name FROM internship_companies WHERE status = 'approved' ORDER BY company_name")
+        companies = cursor.fetchall()
+
+        # 讀出學生目前已填寫的志願（若有）
+        cursor.execute("""
+            SELECT preference_order, company_id, job_id
+            FROM student_preferences
+            WHERE student_id = %s
+            ORDER BY preference_order
+        """, (student_id,))
+        prefs = cursor.fetchall()
+
+        # 轉成前端方便使用格式（index 0 -> 第1志願）
+        submitted_preferences = [None] * 5
+        submitted_job_ids = [None] * 5
+        for p in prefs:
+            order = p.get('preference_order')
+            if order and 1 <= order <= 5:
+                submitted_preferences[order - 1] = p.get('company_id')
+                submitted_job_ids[order - 1] = p.get('job_id')
+
+        # 處理 POST 提交
+        if request.method == "POST":
+            preferences = []
+            for i in range(1, 6):
+                company_id = request.form.get(f"company_{i}")
+                job_title = request.form.get(f"job_{i}")  # 前端傳來的是職缺名稱 title
+
+                if company_id:
+                    job_id = None
+                    if job_title:
+                        # 依公司與職缺名稱查 job.id
+                        cursor.execute(
+                            "SELECT id FROM internship_jobs WHERE company_id = %s AND title = %s",
+                            (company_id, job_title)
+                        )
+                        job_row = cursor.fetchone()
+                        job_id = job_row["id"] if job_row else None
+
+                    preferences.append((student_id, i, company_id, job_id, datetime.now()))
+
+            # 防呆：至少選一個；不可重複選同公司（後端最終驗證）
+            if not preferences:
+                message = "⚠️ 請至少填寫一個志願。"
+            else:
+                selected_companies = [p[2] for p in preferences]
+                if len(selected_companies) != len(set(selected_companies)):
+                    message = "⚠️ 不可重複選擇相同公司（請重新檢查）。"
+                else:
+                    # 刪除舊資料並寫入新資料
+                    cursor.execute("DELETE FROM student_preferences WHERE student_id = %s", (student_id,))
+                    cursor.executemany("""
+                        INSERT INTO student_preferences (student_id, preference_order, company_id, job_id, submitted_at)
+                        VALUES (%s, %s, %s, %s, %s)
+                    """, preferences)
+                    conn.commit()
+                    message = "✅ 志願序已成功送出。"
+
+                    # 重新讀取已填寫值
+                    cursor.execute("""
+                        SELECT preference_order, company_id
+                        FROM student_preferences
+                        WHERE student_id = %s
+                        ORDER BY preference_order
+                    """, (student_id,))
+                    prefs = cursor.fetchall()
+                    submitted_preferences = [None] * 5
+                    for p in prefs:
+                        order = p.get('preference_order')
+                        if order and 1 <= order <= 5:
+                            submitted_preferences[order - 1] = p.get('company_id')
+
+        return render_template("preferences/fill_preferences.html",
+                               companies=companies,
+                               submitted_preferences=submitted_preferences,
+                               message=message)
+    except Exception as e:
+        traceback.print_exc()
+        return "伺服器錯誤", 500
+    finally:
+        cursor.close()
+        conn.close()
+
 <!DOCTYPE html>
 <html lang="zh-Hant">
-
 <head>
-  <meta charset="UTF-8" />
+  <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>實習公司志願序填寫</title>
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet"/>
   <style>
-    body {
-      font-family: "Noto Sans TC", sans-serif;
-      background-color: #ffffff;
-      margin: 0;
-      padding: 20px;
-    }
-
-    .container {
-      max-width: 800px;
-      margin: auto;
-    }
-
-    form {
-      background: #ffffff;
-      padding: 40px;
-      border-radius: 12px;
-      box-shadow: 0 6px 20px rgba(0, 0, 0, 0.08);
-      margin-top: 50px;
-    }
-
-    h2 {
-      font-weight: bold;
-      color: #0d6efd;
-      text-align: center;
-      margin-bottom: 2rem;
-    }
-
-    h5 {
-      margin-top: 1.5rem;
-      color: #343a40;
-      font-weight: 600;
-      border-bottom: 2px solid #dee2e6;
-      padding-bottom: 6px;
-    }
-
-    label {
-      font-weight: 600;
-      margin-bottom: 6px;
-      display: block;
-      color: #495057;
-    }
-
-    select {
-      width: 100%;
-      padding: 10px 12px;
-      border-radius: 6px;
-      border: 1px solid #ced4da;
-      margin-top: 5px;
-      background-color: #fff;
-      font-size: 1rem;
-    }
-
-    .company-row {
-      display: grid;
-      grid-template-columns: 1fr 1fr auto;
-      gap: 12px;
-      align-items: center;
-      margin-top: 8px;
-    }
-
-    .btn-view {
-      background-color: #e9ecef;
-      border: 1px solid #adb5bd;
-      color: #495057;
-      padding: 8px 14px;
-      border-radius: 6px;
-      cursor: pointer;
-      font-size: 0.95rem;
-      transition: background-color 0.2s ease;
-    }
-
-    .btn-view:hover {
-      background-color: #dee2e6;
-    }
-
-    button[type="submit"] {
-      margin-top: 40px;
-      width: 100%;
-      padding: 12px;
-      font-size: 1.1rem;
-      background-color: #0d6efd;
-      color: #fff;
-      border: none;
-      border-radius: 8px;
-      cursor: pointer;
-      transition: background-color 0.2s ease;
-    }
-
-    button[type="submit"]:hover {
-      background-color: #0b5ed7;
-    }
-
-    .modal-content {
-      border-radius: 12px;
-      padding: 1.5rem;
-      background-color: #fff;
-      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
-    }
-
-    .modal-title {
-      font-weight: bold;
-      color: #0d6efd;
-    }
-
-    .info-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 12px 20px;
-      margin-bottom: 1rem;
-    }
-
-    .info-grid div strong {
-      display: block;
-      color: #495057;
-      font-size: 0.9rem;
-      margin-bottom: 4px;
-    }
-
-    .info-grid div span {
-      display: block;
-      font-size: 1rem;
-      color: #212529;
-    }
-
-    .info-grid .full {
-      grid-column: 1 / -1;
-    }
-
-    @media (max-width: 768px) {
-      .company-row {
-        grid-template-columns: 1fr;
-      }
-
-      .info-grid {
-        grid-template-columns: 1fr;
-      }
-
-      .btn-view {
-        width: 100%;
-        text-align: center;
-      }
-
-      button[type="submit"] {
-        font-size: 1rem;
-      }
-    }
-
-    .company-preview .section {
-      background: #f9fbfd;
-      border: 1px solid #dee2e6;
-      border-radius: 8px;
-      padding: 18px 20px;
-      margin-bottom: 20px;
-    }
-
-    .company-preview .section h5 {
-      color: #0056b3;
-      font-weight: 600;
-      margin-bottom: 15px;
-    }
+    body { font-family: "Noto Sans TC", sans-serif; background:#fff; padding:20px; }
+    .container { max-width:900px; margin:auto; }
+    form { background:#fff; padding:30px; border-radius:10px; box-shadow:0 6px 18px rgba(0,0,0,0.06); }
+    h2 { color:#0d6efd; font-weight:700; text-align:center; margin-bottom:1.5rem; }
+    .company-row { display:grid; grid-template-columns: 1fr 1fr auto; gap:12px; align-items:center; }
+    @media (max-width:768px) { .company-row { grid-template-columns: 1fr; } }
+    .btn-view { background:#e9ecef; border:1px solid #adb5bd; padding:8px 12px; border-radius:6px; }
+    .note { font-size:0.9rem; color:#666; margin-bottom:12px; }
   </style>
 </head>
-
 <body>
   <div class="container">
     <form id="preferencesForm" method="POST" action="/fill_preferences">
-      <h2 class="text-center text-primary mb-4">請填寫實習公司志願序</h2>
+      <h2>請填寫實習公司志願序</h2>
+      {% if message %}
+        <div class="alert alert-info">{{ message }}</div>
+      {% endif %}
+      <p class="note">提示：請為每一志願選擇公司後，再選擇該公司內的職缺。後端會阻擋重複選擇相同公司。</p>
 
-      {% for i in range(1, 6) %}
-      <div class="mb-4">
-        <label>第 {{ i }} 志願</label>
+      {% for i in range(1,6) %}
+      <div class="mb-3">
+        <label class="form-label">第 {{ i }} 志願</label>
         <div class="company-row">
-          <select name="company_{{ i }}" class="form-select company-select" required>
+          <select name="company_{{ i }}" class="form-select company-select" data-index="{{ i }}" >
             <option value="">-- 請選擇公司 --</option>
-            {% for company in companies %}
-            <option value="{{ company['id'] }}">{{ company['company_name'] }}</option>
+            {% for c in companies %}
+            <option value="{{ c['id'] }}" {% if submitted_preferences and submitted_preferences[i-1] == c['id'] %}selected{% endif %}>{{ c['company_name'] }}</option>
             {% endfor %}
           </select>
 
-          <select name="job_{{ i }}" class="form-select job-select" required>
+          <select name="job_{{ i }}" class="form-select job-select" data-index="{{ i }}" >
             <option value="">-- 請先選擇公司 --</option>
           </select>
 
-          <button type="button" class="btn-view" onclick="viewDetail(this)">查看</button>
+          <button type="button" class="btn btn-view" onclick="viewDetail(this)">查看</button>
         </div>
       </div>
       {% endfor %}
 
-      <button type="submit">送出志願</button>
+      <button type="submit" class="btn btn-primary w-100">送出志願</button>
     </form>
   </div>
 
-  <!-- 詳細資料 Modal -->
+  <!-- Modal -->
   <div class="modal fade" id="companyModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-lg modal-dialog-scrollable">
       <div class="modal-content">
@@ -214,144 +163,172 @@
 
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
   <script>
-    let allCompanies = {};
-    const companyJobCount = {};
+    // allCompanies 快取：只在第一次選該公司時去後端抓
+    const allCompanies = {};
+    document.addEventListener('DOMContentLoaded', () => {
+      // 如果後端有已填的 company id，嘗試載入職缺（不預先載入所有公司）
+      document.querySelectorAll('.company-select').forEach(select => {
+        // 綁監聽
+        select.addEventListener('change', async (e) => {
+          await onCompanyChange(e.target);
+          validateDuplicatesUI();
+        });
 
-    document.addEventListener("DOMContentLoaded", async () => {
-      // 預抓公司詳細資料
-      const companyOptions = document.querySelectorAll(".company-select option[value]");
-      for (let opt of companyOptions) {
-        if (opt.value) {
-          try {
-            const res = await fetch(`/api/get_company_detail?company_id=${opt.value}`);
-            const data = await res.json();
-            if (data.success && data.company) {
-              allCompanies[opt.value] = data.company;
-              companyJobCount[opt.value] = data.company.internship_jobs.length;
-            }
-          } catch (err) {
-            console.error("載入公司資料失敗", err);
-          }
+        // 頁面載入時若有 selected（來自後端 submitted_preferences），載入該職缺列表並選預設 job（如果 backend 沒傳 job id，前端僅載職缺）
+        const idx = select.dataset.index;
+        const selectedCompany = select.value;
+        if (selectedCompany) {
+          // 等 DOM 其他元素就緒後載入
+          setTimeout(() => onCompanyChange(select), 50);
         }
-      }
+      });
 
-      // 綁定公司變更事件
-      document.querySelectorAll(".company-select").forEach(select => {
-        select.addEventListener("change", (e) => handleCompanyChange(e.target));
+      // Submit 前驗證
+      document.getElementById('preferencesForm').addEventListener('submit', (e) => {
+        // 檢查重複公司
+        const companyVals = Array.from(document.querySelectorAll('.company-select')).map(s => s.value).filter(v => v);
+        const dup = companyVals.filter((v, i, a) => a.indexOf(v) !== i);
+        if (dup.length > 0) {
+          e.preventDefault();
+          alert('發現重複選擇相同公司。請移除重複或聯絡管理者。');
+          return;
+        }
+        // 檢查若選了公司沒有選職缺（job），提醒
+        const incomplete = Array.from(document.querySelectorAll('.company-select')).some((s, i) => {
+          const companyVal = s.value;
+          const jobVal = document.querySelectorAll('.job-select')[i].value;
+          return companyVal && !jobVal;
+        });
+        if (incomplete) {
+          e.preventDefault();
+          alert('請確認已為每個已選公司選擇對應職缺。');
+          return;
+        }
       });
     });
 
-    async function handleCompanyChange(select) {
-      const companyId = select.value;
-      const row = select.closest('.company-row');
-      const jobSelect = row.querySelector('.job-select');
+    async function onCompanyChange(selectElem) {
+      const idx = selectElem.dataset.index;
+      const companyId = selectElem.value;
+      const jobSelect = document.querySelector(`.job-select[data-index="${idx}"]`);
+      jobSelect.innerHTML = `<option value="">載入中...</option>`;
 
-      jobSelect.innerHTML = '<option value="">載入中...</option>';
-
-      if (!companyId || !allCompanies[companyId]) {
-        jobSelect.innerHTML = '<option value="">-- 請先選擇公司 --</option>';
+      if (!companyId) {
+        jobSelect.innerHTML = `<option value="">-- 請先選擇公司 --</option>`;
+        validateDuplicatesUI();
         return;
       }
 
-      const company = allCompanies[companyId];
-      const selectedJobIds = Array.from(document.querySelectorAll('.job-select')).map(s => s.value).filter(v => v);
-
-      // 不過濾重複職缺 → 允許重複選同一個職缺
-      const availableJobs = company.internship_jobs;
-
-      if (availableJobs.length === 0) {
-        jobSelect.innerHTML = '<option value="">此公司職缺已被選完</option>';
-        return;
+      // 若快取沒有，發請求取得公司詳細（含 internship_jobs）
+      if (!allCompanies[companyId]) {
+        try {
+          const res = await fetch(`/api/get_company_detail?company_id=${companyId}`);
+          const data = await res.json();
+          if (data.success && data.company) {
+            allCompanies[companyId] = data.company;
+          } else {
+            jobSelect.innerHTML = `<option value="">無職缺資料</option>`;
+            return;
+          }
+        } catch (err) {
+          console.error('取公司資料失敗', err);
+          jobSelect.innerHTML = `<option value="">載入職缺失敗</option>`;
+          return;
+        }
       }
 
-      if (availableJobs.length === 1) {
-        const job = availableJobs[0];
-        jobSelect.innerHTML = `<option value="${job.id}" selected>${job.title || job.internship_unit || '未命名職位'}</option>`;
+      const jobs = allCompanies[companyId].internship_jobs || [];
+      if (jobs.length === 0) {
+        jobSelect.innerHTML = `<option value="">此公司目前無職缺</option>`;
+      } else if (jobs.length === 1) {
+        const j = jobs[0];
+        jobSelect.innerHTML = `<option value="${j.id}" selected>${j.title || j.internship_unit || '未命名職位'}</option>`;
       } else {
-        jobSelect.innerHTML = '<option value="">-- 請選擇職位 --</option>';
-        availableJobs.forEach(job => {
+        jobSelect.innerHTML = `<option value="">-- 請選擇職缺 --</option>`;
+        jobs.forEach(j => {
           const opt = document.createElement('option');
-          opt.value = job.id;
-          opt.textContent = job.title || job.internship_unit || '未命名職位';
+          opt.value = j.id;
+          opt.textContent = j.title || j.internship_unit || '未命名職位';
           jobSelect.appendChild(opt);
         });
       }
 
-      updateCompanyOptions();
+      validateDuplicatesUI();
     }
 
-    function updateCompanyOptions() {
-      const selectedCompanies = Array.from(document.querySelectorAll('.company-select')).map(sel => sel.value).filter(v => v);
-
-      document.querySelectorAll('.company-select').forEach(select => {
-        const current = select.value;
-
-        Array.from(select.options).forEach(opt => {
+    function validateDuplicatesUI() {
+      // 當學生已選取某公司於多個志願時，顯示提示（前端只是 UX 提示，實際以後端為準）
+      const selected = Array.from(document.querySelectorAll('.company-select')).map(s => s.value).filter(v => v);
+      document.querySelectorAll('.company-select').forEach(s => {
+        Array.from(s.options).forEach(opt => {
           if (!opt.value) return;
-
-          const isSingleJob = companyJobCount[opt.value] === 1;
-
-          // 隱藏公司選項（不只是 disabled）
-          if (isSingleJob && selectedCompanies.includes(opt.value) && opt.value !== current) {
-            opt.hidden = true;
+          // 若該公司在多個志願出現，標示 warn class（不移除選項，後端仍會拒絕）
+          const count = selected.filter(v => v === opt.value).length;
+          if (count > 1) {
+            // 你可以改為增加 tooltip 或改變背景
+            opt.style.backgroundColor = '#ffecec';
           } else {
-            opt.hidden = false;
+            opt.style.backgroundColor = '';
           }
         });
       });
     }
 
+    // 查看詳細（使用已快取或發請求）
     async function viewDetail(btn) {
-      const companySelect = btn.closest('.company-row').querySelector('.company-select');
+      const row = btn.closest('.company-row');
+      const companySelect = row.querySelector('.company-select');
       const companyId = companySelect.value;
-      const modal = new bootstrap.Modal(document.getElementById('companyModal'));
       const modalBody = document.getElementById('modalBody');
+      const modal = new bootstrap.Modal(document.getElementById('companyModal'));
 
-      if (!companyId || !allCompanies[companyId]) {
-        modalBody.innerHTML = "<p class='text-danger'>資料載入失敗。</p>";
+      if (!companyId) {
+        modalBody.innerHTML = '<p class="text-danger">請先選擇公司</p>';
         modal.show();
         return;
       }
 
-      const company = allCompanies[companyId];
+      if (!allCompanies[companyId]) {
+        try {
+          const res = await fetch(`/api/get_company_detail?company_id=${companyId}`);
+          const data = await res.json();
+          if (data.success && data.company) {
+            allCompanies[companyId] = data.company;
+          } else {
+            modalBody.innerHTML = '<p class="text-danger">無法載入公司資料</p>';
+            modal.show();
+            return;
+          }
+        } catch (err) {
+          modalBody.innerHTML = '<p class="text-danger">載入公司資料失敗</p>';
+          modal.show();
+          return;
+        }
+      }
+
+      const c = allCompanies[companyId];
       modalBody.innerHTML = `
-        <div class="company-preview">
-          <div class="section">
-            <h5>公司基本資料</h5>
-            <div class="info-grid">
-              <div><strong>公司名稱</strong><span>${company.company_name || "-"}</span></div>
-              <div><strong>公司地址</strong><span>${company.company_address || "-"}</span></div>
-              <div class="full"><strong>公司簡介</strong><span>${company.company_intro || "-"}</span></div>
+        <div>
+          <h5>${c.company_name || '-'}</h5>
+          <p><strong>地址：</strong>${c.company_address || '-'}</p>
+          <p><strong>簡介：</strong>${c.company_intro || '-'}</p>
+          <hr/>
+          <p><strong>聯絡：</strong>${c.contact_name || '-'} (${c.contact_title || ''})</p>
+          <p><strong>電話：</strong>${c.contact_phone || '-'}</p>
+          <p><strong>Email：</strong>${c.contact_email || '-'}</p>
+          <hr/>
+          <h6>職缺</h6>
+          ${ (c.internship_jobs && c.internship_jobs.length) ? c.internship_jobs.map(j => `
+            <div style="margin-bottom:12px;">
+              <strong>${j.title || j.internship_unit || '職缺'}</strong><br/>
+              <small>部門：${j.department || '-'} | 期間：${j.period || j.internship_period || '-'} | 名額：${j.slots || j.internship_quota || '-'}</small>
+              <p>${j.description || j.internship_content || ''}</p>
             </div>
-          </div>
-          <div class="section">
-            <h5>聯絡資訊</h5>
-            <div class="info-grid">
-              <div><strong>聯絡人姓名</strong><span>${company.contact_name || "-"}</span></div>
-              <div><strong>職稱</strong><span>${company.contact_title || "-"}</span></div>
-              <div><strong>聯絡電話</strong><span>${company.contact_phone || "-"}</span></div>
-              <div><strong>電子郵件</strong><span>${company.contact_email || "-"}</span></div>
-            </div>
-          </div>
-          <div class="section">
-            <h5>實習職缺資訊</h5>
-            ${company.internship_jobs.map(job => `
-              <div class="info-grid">
-                <div><strong>實習職位</strong><span>${job.title || job.internship_unit || '-'}</span></div>
-                <div><strong>所屬部門</strong><span>${job.department || '-'}</span></div>
-                <div><strong>期間</strong><span>${job.period || job.internship_period || '-'}</span></div>
-                <div><strong>時段</strong><span>${job.work_time || job.internship_time || '-'}</span></div>
-                <div><strong>名額</strong><span>${job.slots || job.internship_quota || '-'}</span></div>
-                <div class="full"><strong>實習內容</strong><span>${job.description || job.internship_content || '-'}</span></div>
-                <div class="full"><strong>備註</strong><span>${job.remark || '-'}</span></div>
-              </div>
-            `).join('')}
-          </div>
+          `).join('') : '<p>此公司無職缺。</p>' }
         </div>
       `;
       modal.show();
     }
   </script>
 </body>
-
 </html>
