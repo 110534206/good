@@ -183,6 +183,7 @@
 
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
   <script>
+    const preview = {{ 'true' if preview else 'false' }};
     const companySlots = {{ job_slots | tojson }};
     const companies = {{ companies | tojson }};
 
@@ -328,6 +329,10 @@
     // 表單儲存
     document.getElementById("preferencesForm").addEventListener("submit", async (e) => {
       e.preventDefault();
+      if (preview) {
+        alert("此為預覽模式，請登入學生帳號後再儲存志願序。");
+        return;
+      }
       const preferences = [];
       document.querySelectorAll(".preference-card").forEach((card, idx) => {
         const companyId = card.querySelector(".company-select").value;
@@ -348,6 +353,23 @@
 
     // 初始
     updateRemainingDisplay();
+
+    // 預覽模式：停用操作與提交
+    (function applyPreviewMode(){
+      if (!preview) return;
+      document.querySelectorAll(".company-select, .job-select, .view-company-btn").forEach(el => {
+        if (el.tagName === 'BUTTON') {
+          el.disabled = true;
+        } else {
+          el.setAttribute('disabled', 'disabled');
+        }
+      });
+      const submitBtn = document.querySelector('#preferencesForm button[type="submit"]');
+      if (submitBtn) {
+        submitBtn.textContent = '登入後可儲存';
+        submitBtn.setAttribute('disabled', 'disabled');
+      }
+    })();
   </script>
 </body>
 

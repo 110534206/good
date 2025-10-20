@@ -55,11 +55,9 @@ def get_class_preferences(cursor, class_id):
 # -------------------------
 @preferences_bp.route("/fill_preferences", methods=["GET"])
 def fill_preferences_page():
-    # 權限檢查：需為學生登入
-    if "user_id" not in session or session.get("role") != "student":
-        return redirect(url_for("auth_bp.login_page"))
-
-    student_id = session["user_id"]
+    # 允許未登入/非學生以預覽模式進入
+    is_student = ("user_id" in session and session.get("role") == "student")
+    student_id = session.get("user_id") if is_student else None
     conn = get_db()
     cursor = conn.cursor(dictionary=True)
 
@@ -78,14 +76,16 @@ def fill_preferences_page():
         # job_slots: { company_id(str): total_slots(int), ... }
         job_slots = {str(row['company_id']): int(row['total_slots'] or 0) for row in job_slots_raw}
 
-        # 3) 讀取學生已填寫的志願（若有）
-        cursor.execute("""
-            SELECT preference_order, company_id, job_id, job_title
-            FROM student_preferences
-            WHERE student_id=%s
-            ORDER BY preference_order
-        """, (student_id,))
-        prefs = cursor.fetchall() or []
+        # 3) 讀取學生已填寫的志願（若有，預覽模式則為空）
+        prefs = []
+        if is_student:
+            cursor.execute("""
+                SELECT preference_order, company_id, job_id, job_title
+                FROM student_preferences
+                WHERE student_id=%s
+                ORDER BY preference_order
+            """, (student_id,))
+            prefs = cursor.fetchall() or []
 
         # submitted: { order: row, ... } （方便 template 使用）
         submitted = {int(p['preference_order']): p for p in prefs}
@@ -109,7 +109,8 @@ def fill_preferences_page():
             companies=companies,
             submitted=submitted,
             job_slots=job_slots,
-            company_remaining=company_remaining
+            company_remaining=company_remaining,
+            preview=(not is_student)
         )
 
     except Exception as e:
