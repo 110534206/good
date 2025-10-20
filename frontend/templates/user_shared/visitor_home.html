@@ -291,6 +291,10 @@
     }
   </style>
 </head>
+<script>
+  try { localStorage.setItem('role', 'visitor'); } catch (e) {}
+  // 設定當前頁面身分為訪客，供其他頁面判斷導向
+</script>
 
 <body>
   <div class="top-bar">

@@ -295,6 +295,10 @@
     }
   </style>
 </head>
+<script>
+  try { localStorage.setItem('role', 'student'); } catch (e) {}
+  // 設定當前頁面身分為學生，供其他頁面（例如 upload_resume）判斷導向
+</script>
 
 <body>
   <!-- 頂部欄 -->
