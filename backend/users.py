@@ -378,3 +378,41 @@ def get_session():
             "role": session["role"]
         })
     return jsonify({"success": False}), 401
+# intern_experience.py
+from flask import Blueprint, render_template, request, redirect, jsonify
+from config import get_db
+from datetime import datetime
+
+intern_exp_bp = Blueprint("intern_exp_bp", __name__)
+
+# 顯示心得頁面
+@intern_exp_bp.route("/intern_experience", methods=["GET", "POST"])
+def intern_experience():
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+
+    if request.method == "POST":
+        author = request.form.get("author") or "匿名"
+        company = request.form["company"]
+        position = request.form["position"]
+        title = request.form["title"]
+        content = request.form["content"]
+
+        cursor.execute("""
+            INSERT INTO intern_experiences (author, company, position, title, content, created_at)
+            VALUES (%s, %s, %s, %s, %s, NOW())
+        """, (author, company, position, title, content))
+        conn.commit()
+
+    # 撈出心得資料
+    cursor.execute("SELECT * FROM intern_experiences ORDER BY created_at DESC")
+    experiences = cursor.fetchall()
+
+    # 撈出公司清單（去重）
+    cursor.execute("SELECT DISTINCT company FROM intern_experiences")
+    companies = [row["company"] for row in cursor.fetchall()]
+
+    cursor.close()
+    conn.close()
+
+    return render_template("intern_experience.html", experiences=experiences, companies=companies)

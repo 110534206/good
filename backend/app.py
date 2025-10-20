@@ -29,6 +29,7 @@ app.jinja_loader = ChoiceLoader([
     FileSystemLoader('../admin_frontend/templates')
 ])
 
+
 # -------------------------
 # 載入 Blueprint
 # -------------------------
@@ -40,6 +41,12 @@ from users import users_bp
 from notification import notification_bp
 from preferences import preferences_bp
 from announcement import announcement_bp
+from intern_experience import intern_exp_bp  
+
+
+app = Flask(__name__)
+app.secret_key = "your_secret_key"  
+
 
 
 # 註冊 Blueprint
@@ -51,6 +58,10 @@ app.register_blueprint(users_bp)
 app.register_blueprint(notification_bp)
 app.register_blueprint(preferences_bp)
 app.register_blueprint(announcement_bp, url_prefix="/announcement")
+app.register_blueprint(intern_exp_bp)   
+
+if __name__ == "__main__":
+    app.run(debug=True)
 
 # -------------------------
 # 首頁路由（使用者前台）
