@@ -1,6 +1,7 @@
 from flask import Flask, redirect, url_for, session
 from flask_cors import CORS
 from jinja2 import ChoiceLoader, FileSystemLoader
+
 import os
 
 # -------------------------
@@ -36,8 +37,9 @@ from company import company_bp
 from resume import resume_bp
 from admin import admin_bp
 from users import users_bp
-from notification import notification_bp, check_and_generate_reminders
+from notification import notification_bp
 from preferences import preferences_bp
+from announcement import announcement_bp
 
 # 註冊 Blueprint
 app.register_blueprint(auth_bp)
@@ -47,15 +49,7 @@ app.register_blueprint(admin_bp)
 app.register_blueprint(users_bp)
 app.register_blueprint(notification_bp)
 app.register_blueprint(preferences_bp)
-
-# -------------------------
-# APScheduler 設定
-# -------------------------
-from apscheduler.schedulers.background import BackgroundScheduler
-scheduler = BackgroundScheduler()
-# 每天早上 9 點執行一次檢查
-scheduler.add_job(check_and_generate_reminders, "cron", hour=9, minute=0)
-scheduler.start()
+app.register_blueprint(announcement_bp, url_prefix="/announcement")
 
 # -------------------------
 # 首頁路由（使用者前台）
@@ -82,4 +76,4 @@ if __name__ == "__main__":
     try:
         app.run(host="0.0.0.0", port=5000, debug=True)
     except (KeyboardInterrupt, SystemExit):
-        scheduler.shutdown()
+        pass  # No scheduler to shut down
