@@ -363,8 +363,7 @@
   <nav id="side-menu" aria-hidden="true" role="navigation" aria-label="功能選單">
     <button id="close-btn" aria-label="關閉功能選單">×</button>
     <h2>功能選單</h2>
-    <a href="/student_home">首頁</a>
-    <a href="/profile">個人資料</a>
+    <a href="/student_home">首頁</a> <a href="/profile">個人資料</a>
     <a href="/upload_resume">上傳履歷</a>
     <a href="/ai_edit_resume">AI修改履歷</a>
     <a href="/fill_preferences">填寫志願序</a>
@@ -375,7 +374,7 @@
     let resumesData = [];
     let resumeId = null;
     let interval = null;
-    // 修正此行：將預設角色從 'student' 改為 'visitor'
+    // 確保 role 變數的定義
     const role = localStorage.getItem('role') || 'visitor'; 
 
     // 拖曳上傳
@@ -617,9 +616,9 @@
 
     // 動態設定頭像、返回主頁和側邊選單連結 (根據 localStorage 中的 role)，並決定是否載入履歷
     document.addEventListener("DOMContentLoaded", () => {
-        const avatarLink = document.getElementById('avatarLink');
-        const homeButtonLink = document.getElementById('homeButtonLink');
-        // 新增：抓取側邊選單中 href="/student_home" 的「首頁」連結
+        const avatarLink = document.getElementById('avatarLink'); // 頂部頭像連結
+        const homeButtonLink = document.getElementById('homeButtonLink'); // 頂部「返回主頁」按鈕連結
+        // 抓取側邊選單中 href="/student_home" 的「首頁」連結
         const sideMenuHomeLink = document.querySelector('#side-menu a[href="/student_home"]'); 
         
         let homeUrl;
