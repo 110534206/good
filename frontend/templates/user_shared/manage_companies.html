@@ -246,15 +246,7 @@
       }
     });
 
-    const chart2 = new Chart(document.getElementById('chart2'), {
-      type: 'doughnut',
-      data: {
-        labels: ['公司A', '公司B', '公司C', '公司D'],
-        datasets: [{ data: [25, 35, 20, 20], backgroundColor: ['#10b981', '#3b82f6', '#ec4899', '#fbbf24'] }]
-      }
-    });
-
-    const chart3 = new Chart(document.getElementById('chart3'), {
+    const chart2 = new Chart(document.getElementById('chart3'), {
       type: 'bar',
       data: {
         labels: ['資管四忠', '資管四孝'],
@@ -266,7 +258,7 @@
       options: { responsive: true, scales: { y: { beginAtZero: true, max: 100 } } }
     });
 
-    const chart4 = new Chart(document.getElementById('chart4'), {
+    const chart3 = new Chart(document.getElementById('chart4'), {
       type: 'doughnut',
       data: {
         labels: ['公司A', '公司B', '公司C', '公司D', '公司E'],
