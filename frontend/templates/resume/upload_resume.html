@@ -615,10 +615,12 @@
         });
     }
 
-    // 動態設定頭像和返回主頁連結 (根據 localStorage 中的 role)，並決定是否載入履歷
+    // 動態設定頭像、返回主頁和側邊選單連結 (根據 localStorage 中的 role)，並決定是否載入履歷
     document.addEventListener("DOMContentLoaded", () => {
         const avatarLink = document.getElementById('avatarLink');
         const homeButtonLink = document.getElementById('homeButtonLink');
+        // 新增：抓取側邊選單中 href="/student_home" 的「首頁」連結
+        const sideMenuHomeLink = document.querySelector('#side-menu a[href="/student_home"]'); 
         
         let homeUrl;
         
@@ -632,10 +634,13 @@
         }
 
         if (avatarLink) {
-            avatarLink.href = homeUrl;
+            avatarLink.href = homeUrl; // 設定頭像連結
         }
         if (homeButtonLink) {
-            homeButtonLink.href = homeUrl;
+            homeButtonLink.href = homeUrl; // 設定「返回主頁」按鈕連結
+        }
+        if (sideMenuHomeLink) {
+            sideMenuHomeLink.href = homeUrl; // 設定側邊選單「首頁」連結
         }
     });
   </script>
