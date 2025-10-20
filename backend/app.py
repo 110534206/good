@@ -40,6 +40,7 @@ from users import users_bp
 from notification import notification_bp
 from preferences import preferences_bp
 from announcement import announcement_bp
+from intern_exp import intern_exp_bp 
 
 # 註冊 Blueprint
 app.register_blueprint(auth_bp)
@@ -50,6 +51,7 @@ app.register_blueprint(users_bp)
 app.register_blueprint(notification_bp)
 app.register_blueprint(preferences_bp)
 app.register_blueprint(announcement_bp, url_prefix="/announcement")
+app.register_blueprint(intern_exp_bp)
 
 # -------------------------
 # 首頁路由（使用者前台）
