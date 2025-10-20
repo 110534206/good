@@ -332,7 +332,7 @@ def review_resume(resume_id):
                 
                 # 創建退件通知
                 cursor.execute("""
-                    INSERT INTO notification (title, content, type, target_roles, is_important, status, created_at, created_by)
+                    INSERT INTO notifications (title, content, type, target_user_id, status, created_at, created_by)
                     VALUES (%s, %s, %s, %s, %s, %s, NOW(), %s)
                 """, (
                     "履歷退件通知",

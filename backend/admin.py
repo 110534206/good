@@ -1,10 +1,14 @@
-from flask import Blueprint, request, jsonify, render_template
+from flask import Blueprint, request, send_file, jsonify, render_template
 from werkzeug.security import generate_password_hash
 from config import get_db
+import pandas as pd
+import io
 
-admin_bp = Blueprint("admin_bp", __name__, url_prefix="/admin")
+admin_bp = Blueprint("admin_bp", __name__)
 
-
+# --------------------------------
+# 用戶管理
+# --------------------------------
 @admin_bp.route('/api/get_all_users', methods=['GET'])
 def get_all_users():
     conn = get_db()
@@ -24,8 +28,6 @@ def get_all_users():
                 u.created_at
             FROM users u
             LEFT JOIN classes c ON u.class_id = c.id
-            -- 這裡不用特別限制 role，因為 ta 也是一個合法角色
-            -- 如果你只想撈出特定角色（例如 admin, teacher, student, ta），可以在這裡加 WHERE
             ORDER BY u.created_at DESC
         """)
         users = cursor.fetchall()
@@ -34,19 +36,8 @@ def get_all_users():
             if user.get('created_at'):
                 user['created_at'] = user['created_at'].strftime("%Y-%m-%d %H:%M:%S")
 
-            # 這裡可以針對新角色做額外處理（例如顯示名稱轉換）
-            if user.get('role') == 'ta':
-                user['role_display'] = '科助'
-            elif user.get('role') == 'teacher':
-                user['role_display'] = '老師'
-            elif user.get('role') == 'student':
-                user['role_display'] = '學生'
-            elif user.get('role') == 'director':
-                user['role_display'] = '主任'
-            elif user.get('role') == 'admin':
-                user['role_display'] = '管理員'
-            else:
-                user['role_display'] = user['role']
+            role_map = {'ta': '科助', 'teacher': '老師', 'student': '學生', 'director': '主任', 'admin': '管理員'}
+            user['role_display'] = role_map.get(user.get('role'), user.get('role'))
 
         return jsonify({"success": True, "users": users})
     except Exception as e:
@@ -57,12 +48,10 @@ def get_all_users():
         conn.close()
 
 
-
 @admin_bp.route('/api/search_users', methods=['GET'])
 def search_users():
     username = (request.args.get('username') or '').strip()
     filename = (request.args.get('filename') or '').strip()
-
     conn = get_db()
     cursor = conn.cursor(dictionary=True)
     try:
@@ -72,14 +61,13 @@ def search_users():
         if username:
             conditions.append("u.username LIKE %s")
             params.append(f"%{username}%")
-
         if filename:
             conditions.append("EXISTS (SELECT 1 FROM resumes r WHERE r.user_id = u.id AND r.original_filename LIKE %s)")
             params.append(f"%{filename}%")
 
-        where_clause = ("WHERE " + " AND ".join(conditions)) if conditions else ""
+        where_clause = "WHERE " + " AND ".join(conditions) if conditions else ""
 
-        sql = f"""
+        cursor.execute(f"""
             SELECT 
                 u.id, u.username, u.name, u.email, u.role, u.class_id,
                 c.name AS class_name,
@@ -95,15 +83,11 @@ def search_users():
             LEFT JOIN classes c ON u.class_id = c.id
             {where_clause}
             ORDER BY u.created_at DESC
-        """
-
-        cursor.execute(sql, params)
+        """, params)
         users = cursor.fetchall()
-
         for user in users:
             if user.get('created_at'):
                 user['created_at'] = user['created_at'].strftime("%Y-%m-%d %H:%M:%S")
-
         return jsonify({"success": True, "users": users})
     except Exception as e:
         print(f"搜尋用戶錯誤: {e}")
@@ -112,305 +96,165 @@ def search_users():
         cursor.close()
         conn.close()
 
-@admin_bp.route('/api/assign_student_class/<int:user_id>', methods=['POST'])
-def assign_student_class(user_id):
-    data = request.get_json()
-    class_id = data.get('class_id')
 
-    if not class_id:
-        return jsonify({"success": False, "message": "請選擇班級"}), 400
-
-    conn = get_db()
-    cursor = conn.cursor()
-    try:
-        cursor.execute("SELECT role FROM users WHERE id=%s", (user_id,))
-        user = cursor.fetchone()
-        if not user or user[0] != 'student':
-            return jsonify({"success": False, "message": "該用戶不是學生"}), 400
-
-        cursor.execute("SELECT id FROM classes WHERE id=%s", (class_id,))
-        if not cursor.fetchone():
-            return jsonify({"success": False, "message": "班級不存在"}), 404
-
-        cursor.execute("UPDATE users SET class_id=%s WHERE id=%s", (class_id, user_id))
-        conn.commit()
-        return jsonify({"success": True, "message": "學生班級設定成功"})
-    except Exception as e:
-        print(f"設定學生班級錯誤: {e}")
-        return jsonify({"success": False, "message": "設定失敗"}), 500
-    finally:
-        cursor.close()
-        conn.close()
-
-@admin_bp.route('/api/assign_class_teacher', methods=['POST'])
-def assign_class_teacher():
-    data = request.get_json()
-    class_id = data.get('class_id')
-    teacher_id = data.get('teacher_id')
-    role = data.get('role', '班導師')  # 預設是班導師
-
-    if not class_id or not teacher_id:
-        return jsonify({"success": False, "message": "缺少必要參數"}), 400
-
-    conn = get_db()
-    cursor = conn.cursor()
-    try:
-        cursor.execute("SELECT role FROM users WHERE id=%s", (teacher_id,))
-        user = cursor.fetchone()
-        if not user or user[0] not in ('teacher', 'director'):
-            return jsonify({"success": False, "message": "該用戶不是教師或主任"}), 400
-
-        cursor.execute("SELECT id FROM classes WHERE id=%s", (class_id,))
-        if not cursor.fetchone():
-            return jsonify({"success": False, "message": "班級不存在"}), 404
-
-        cursor.execute("""
-            SELECT id FROM classes_teacher 
-            WHERE class_id=%s AND teacher_id=%s AND role=%s
-        """, (class_id, teacher_id, role))
-        if cursor.fetchone():
-            return jsonify({"success": False, "message": f"該班級已有此教師擔任 {role}"}), 409
-
-        cursor.execute("""
-            INSERT INTO classes_teacher (class_id, teacher_id, role, created_at) 
-            VALUES (%s, %s, %s, NOW())
-        """, (class_id, teacher_id, role))
-
-        conn.commit()
-        return jsonify({"success": True, "message": f"{role} 設定成功"})
-    except Exception as e:
-        print(f"設定班導錯誤: {e}")
-        return jsonify({"success": False, "message": "設定失敗"}), 500
-    finally:
-        cursor.close()
-        conn.close()
-
-@admin_bp.route('/api/create_user', methods=['POST'])
-def admin_create_user():
-    data = request.get_json()
-    username = data.get('username')
-    password = data.get('password')
-    role = data.get('role')
-    name = data.get('name', '')
-    email = data.get('email', '')
-    class_id = data.get('class_id')
-
-    if not username or not password or not role:
-        return jsonify({"success": False, "message": "用戶名、密碼和角色為必填欄位"}), 400
-
-    valid_roles = ['student', 'teacher', 'director', 'ta','admin']
-    if role not in valid_roles:
-        return jsonify({"success": False, "message": "無效的角色"}), 400
-
-    conn = get_db()
-    cursor = conn.cursor()
-    try:
-        cursor.execute("SELECT id FROM users WHERE username = %s AND role = %s", (username, role))
-        if cursor.fetchone():
-            return jsonify({"success": False, "message": "該帳號已存在此角色"}), 409
-
-        hashed_password = generate_password_hash(password)
-
-        if role == "student":
-            cursor.execute("""
-                INSERT INTO users (username, password, role, name, email, class_id)
-                VALUES (%s, %s, %s, %s, %s, %s)
-            """, (username, hashed_password, role, name, email, class_id))
-        else:
-            cursor.execute("""
-                INSERT INTO users (username, password, role, name, email)
-                VALUES (%s, %s, %s, %s, %s)
-            """, (username, hashed_password, role, name, email))
-
-        conn.commit()
-        return jsonify({"success": True, "message": "用戶新增成功"})
-    except Exception as e:
-        print(f"新增用戶錯誤: {e}")
-        return jsonify({"success": False, "message": "新增用戶失敗"}), 500
-    finally:
-        cursor.close()
-        conn.close()
-
-@admin_bp.route('/api/update_user/<int:user_id>', methods=['PUT'])
-def admin_update_user(user_id):
-    data = request.get_json()
-    username = data.get('username')
-    password = data.get('password')
-    role = data.get('role')
-    name = data.get('name', '')
-    email = data.get('email', '')
-    class_id = data.get('class_id')
-
-    if not username or not role:
-        return jsonify({"success": False, "message": "用戶名和角色為必填欄位"}), 400
-
-    valid_roles = ['student', 'teacher', 'director','ta', 'admin']
-    if role not in valid_roles:
-        return jsonify({"success": False, "message": "無效的角色"}), 400
-
-    conn = get_db()
-    cursor = conn.cursor()
-    try:
-        cursor.execute("SELECT id FROM users WHERE id = %s", (user_id,))
-        if not cursor.fetchone():
-            return jsonify({"success": False, "message": "用戶不存在"}), 404
-
-        cursor.execute("SELECT id FROM users WHERE username = %s AND id != %s", (username, user_id))
-        if cursor.fetchone():
-            return jsonify({"success": False, "message": "用戶名已被其他用戶使用"}), 409
-
-        hashed_password = generate_password_hash(password) if password else None
-
-        if role == "student":
-            if hashed_password:
-                cursor.execute("""
-                    UPDATE users SET username=%s, password=%s, role=%s, name=%s, email=%s, class_id=%s
-                    WHERE id=%s
-                """, (username, hashed_password, role, name, email, class_id, user_id))
-            else:
-                cursor.execute("""
-                    UPDATE users SET username=%s, role=%s, name=%s, email=%s, class_id=%s
-                    WHERE id=%s
-                """, (username, role, name, email, class_id, user_id))
-        else:
-            if hashed_password:
-                cursor.execute("""
-                    UPDATE users SET username=%s, password=%s, role=%s, name=%s, email=%s
-                    WHERE id=%s
-                """, (username, hashed_password, role, name, email, user_id))
-            else:
-                cursor.execute("""
-                    UPDATE users SET username=%s, role=%s, name=%s, email=%s
-                    WHERE id=%s
-                """, (username, role, name, email, user_id))
-
-        conn.commit()
-        return jsonify({"success": True, "message": "用戶更新成功"})
-    except Exception as e:
-        print(f"更新用戶錯誤: {e}")
-        return jsonify({"success": False, "message": "更新用戶失敗"}), 500
-    finally:
-        cursor.close()
-        conn.close()
-
-@admin_bp.route('/api/delete_user/<int:user_id>', methods=['DELETE'])
-def admin_delete_user(user_id):
-    conn = get_db()
-    cursor = conn.cursor()
-    try:
-        cursor.execute("SELECT id, role FROM users WHERE id = %s", (user_id,))
-        user = cursor.fetchone()
-        if not user:
-            return jsonify({"success": False, "message": "用戶不存在"}), 404
-
-        if user[1] in ('teacher', 'director'):
-            cursor.execute("DELETE FROM classes_teacher WHERE teacher_id = %s", (user_id,))
-
-        cursor.execute("DELETE FROM users WHERE id = %s", (user_id,))
-        conn.commit()
-        return jsonify({"success": True, "message": "用戶刪除成功"})
-    except Exception as e:
-        print(f"刪除用戶錯誤: {e}")
-        return jsonify({"success": False, "message": "刪除用戶失敗"}), 500
-    finally:
-        cursor.close()
-        conn.close()
-
-@admin_bp.route('/api/teacher/classes/<int:user_id>', methods=['GET'])
-def get_classes_by_teacher(user_id):
+# --------------------------------
+# 學生班級分配
+# --------------------------------
+@admin_bp.route('/api/get_students_by_class', methods=['GET'])
+def get_students_by_class():
+    class_id = request.args.get('class_id')
     conn = get_db()
     cursor = conn.cursor(dictionary=True)
     try:
-        cursor.execute("""
-            SELECT c.id, c.name, c.department
-            FROM classes c
-            JOIN classes_teacher ct ON c.id = ct.class_id
-            WHERE ct.teacher_id = %s
-        """, (user_id,))
-        classes = cursor.fetchall()
-        return jsonify({"success": True, "classes": classes})
+        query = "SELECT u.id, u.username, u.name, u.email, " \
+                "(SELECT COUNT(*) FROM resumes r WHERE r.user_id = u.id) AS resume_count, " \
+                "(SELECT COUNT(*) FROM student_preferences sp WHERE sp.student_id = u.id) AS preference_count " \
+                "FROM users u WHERE u.role='student' "
+        params = []
+        if class_id and class_id != "all":
+            query += "AND u.class_id=%s "
+            params.append(class_id)
+        query += "ORDER BY u.username"
+        cursor.execute(query, params)
+        students = cursor.fetchall()
+        return jsonify({"success": True, "students": students})
     except Exception as e:
-        print("獲取教師班級錯誤:", e)
-        return jsonify({"success": False, "message": "獲取資料失敗"}), 500
+        print("取得學生資料錯誤:", e)
+        return jsonify({"success": False, "message": "取得學生資料失敗"}), 500
     finally:
         cursor.close()
         conn.close()
 
-@admin_bp.route('/api/get_all_classes', methods=['GET'])
-def get_all_classes():
+
+# --------------------------------
+# 班級列表
+# --------------------------------
+@admin_bp.route("/api/get_classes")
+def get_classes():
     conn = get_db()
     cursor = conn.cursor(dictionary=True)
     try:
-        cursor.execute("""
-           SELECT c.id, c.name, c.department, GROUP_CONCAT(u.name) AS teacher_names
-           FROM classes c
-           LEFT JOIN classes_teacher ct ON c.id = ct.class_id
-           LEFT JOIN users u ON ct.teacher_id = u.id
-           GROUP BY c.id, c.name, c.department
-        """)
+        cursor.execute("SELECT id, name, department FROM classes ORDER BY department, name")
         classes = cursor.fetchall()
         return jsonify({"success": True, "classes": classes})
     except Exception as e:
-        print(f"獲取班級列表錯誤: {e}")
-        return jsonify({"success": False, "message": "獲取班級列表失敗"}), 500
+        print(f"取得班級列表錯誤: {e}")
+        return jsonify({"success": False, "message": "取得班級列表失敗"}), 500
     finally:
         cursor.close()
         conn.close()
 
-@admin_bp.route('/api/assign_teacher_class/<int:user_id>', methods=['POST'])
-def assign_teacher_class(user_id):
-    data = request.get_json()
-    class_id = data.get('class_id')
-    role = data.get('role', '班導師')
-    
-    if not class_id:
-        return jsonify({"success": False, "message": "請選擇班級"}), 400
-    
+
+# --------------------------------
+# 公司統計
+# --------------------------------
+@admin_bp.route("/api/manage_companies_stats")
+def manage_companies_stats():
+    class_id = request.args.get("class_id")
     conn = get_db()
-    cursor = conn.cursor()
+    cursor = conn.cursor(dictionary=True)
     try:
-        # 檢查用戶是否存在且為教師或主任
-        cursor.execute("SELECT id, role FROM users WHERE id = %s", (user_id,))
-        user = cursor.fetchone()
-        if not user:
-            return jsonify({"success": False, "message": "用戶不存在"}), 404
-        
-        if user[1] not in ['teacher', 'director']:
-            return jsonify({"success": False, "message": "只有教師或主任可以設定帶班"}), 400
-        
-        # 檢查班級是否存在
-        cursor.execute("SELECT id FROM classes WHERE id = %s", (class_id,))
-        if not cursor.fetchone():
-            return jsonify({"success": False, "message": "班級不存在"}), 404
-        
-        # 檢查是否已經存在相同的帶班記錄
-        cursor.execute("""
-            SELECT id FROM classes_teacher 
-            WHERE teacher_id = %s AND class_id = %s AND role = %s
-        """, (user_id, class_id, role))
-        if cursor.fetchone():
-            return jsonify({"success": False, "message": f"該教師已經擔任此班級的{role}"}), 409
-        
-        # 新增帶班記錄
-        cursor.execute("""
-            INSERT INTO classes_teacher (teacher_id, class_id, role)
-            VALUES (%s, %s, %s)
-        """, (user_id, class_id, role))
-        
-        conn.commit()
-        return jsonify({"success": True, "message": "帶班設定成功"})
+        student_filter = ""
+        params = []
+        if class_id and class_id != "all":
+            student_filter = "WHERE u.class_id=%s"
+            params.append(class_id)
+
+        # 各公司被選志願次數
+        cursor.execute(f"""
+            SELECT c.company_name, COUNT(sp.id) AS preference_count
+            FROM internship_companies c
+            LEFT JOIN student_preferences sp ON c.id=sp.company_id
+            LEFT JOIN users u ON sp.student_id=u.id
+            {student_filter}
+            GROUP BY c.id
+            ORDER BY preference_count DESC
+            LIMIT 5
+        """, params)
+        top_companies = cursor.fetchall()
+
+        # 履歷繳交率
+        cursor.execute(f"SELECT COUNT(*) AS total FROM users u {student_filter}", params)
+        total_students = cursor.fetchone()["total"]
+        cursor.execute(f"""
+            SELECT COUNT(DISTINCT r.user_id) AS uploaded
+            FROM resumes r
+            JOIN users u ON r.user_id = u.id
+            {student_filter}
+        """, params)
+        uploaded = cursor.fetchone()["uploaded"]
+        resume_stats = {"uploaded": uploaded, "not_uploaded": total_students - uploaded}
+
+        # 志願序填寫率
+        cursor.execute(f"""
+            SELECT COUNT(DISTINCT sp.student_id) AS filled
+            FROM student_preferences sp
+            JOIN users u ON sp.student_id=u.id
+            {student_filter}
+        """, params)
+        filled = cursor.fetchone()["filled"]
+        preference_stats = {"filled": filled, "not_filled": total_students - filled}
+
+        return jsonify({
+            "success": True,
+            "top_companies": top_companies,
+            "resume_stats": resume_stats,
+            "preference_stats": preference_stats
+        })
     except Exception as e:
-        print(f"設定帶班錯誤: {e}")
-        return jsonify({"success": False, "message": "設定帶班失敗"}), 500
+        print("❌ manage_companies_stats error:", e)
+        return jsonify({"success": False, "message": str(e)}), 500
     finally:
         cursor.close()
         conn.close()
 
-  # 用戶管理頁面
+
+# --------------------------------
+# 匯出 Excel
+# --------------------------------
+@admin_bp.route("/api/export_companies_stats")
+def export_companies_stats():
+    class_id = request.args.get("class_id")
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        student_filter = ""
+        params = []
+        if class_id and class_id != "all":
+            student_filter = "WHERE u.class_id=%s"
+            params.append(class_id)
+
+        cursor.execute(f"""
+            SELECT c.company_name, COUNT(sp.id) AS preference_count
+            FROM internship_companies c
+            LEFT JOIN student_preferences sp ON c.id=sp.company_id
+            LEFT JOIN users u ON sp.student_id=u.id
+            {student_filter}
+            GROUP BY c.id
+            ORDER BY preference_count DESC
+        """, params)
+        data = cursor.fetchall()
+
+        df = pd.DataFrame(data)
+        output = io.BytesIO()
+        df.to_excel(output, index=False)
+        output.seek(0)
+        return send_file(output,
+                         download_name="companies_stats.xlsx",
+                         as_attachment=True,
+                         mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    finally:
+        cursor.close()
+        conn.close()
+
+
+# --------------------------------
+# 用戶管理頁面
+# --------------------------------
 @admin_bp.route('/user_management')
 def user_management():
     try:
         return render_template('admin/user_management.html')
     except Exception as e:
         print(f"用戶管理頁面錯誤: {e}")
-        return f"用戶管理頁面載入錯誤: {str(e)}", 500      
+        return f"用戶管理頁面載入錯誤: {str(e)}", 500
