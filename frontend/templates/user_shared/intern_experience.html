@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <title>學長姊實習心得分享區</title>
+  <style>
+    body { font-family: "微軟正黑體"; margin: 40px; }
+    h2 { color: #2b5797; }
+    form {
+      background: #f0f4fa;
+      padding: 20px;
+      border-radius: 10px;
+      margin-bottom: 30px;
+    }
+    input, textarea, select {
+      width: 100%;
+      margin-bottom: 12px;
+      padding: 8px;
+      border-radius: 6px;
+      border: 1px solid #ccc;
+    }
+    button {
+      background-color: #2b5797;
+      color: white;
+      padding: 8px 16px;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+    .card {
+      border: 1px solid #ccc;
+      padding: 15px;
+      border-radius: 10px;
+      margin-bottom: 12px;
+      background: #fff;
+    }
+    .card h3 { margin-top: 0; }
+  </style>
+</head>
+<body>
+  <h2>📝 上傳實習心得</h2>
+  <form action="/" method="POST">
+    <label>姓名：</label>
+    <input type="text" name="author" placeholder="匿名學長姊">
+
+    <label>公司名稱：</label>
+    <input type="text" name="company" required>
+
+    <label>職位名稱：</label>
+    <input type="text" name="position" required>
+
+    <label>心得標題：</label>
+    <input type="text" name="title" required>
+
+    <label>心得內容：</label>
+    <textarea name="content" rows="6" required></textarea>
+
+    <button type="submit">上傳心得</button>
+  </form>
+
+  <h2> 實習心得紀錄</h2>
+  <label>篩選公司：</label>
+  <select id="companyFilter" onchange="filterByCompany()">
+    <option value="all">全部</option>
+    {% for company in companies %}
+      <option value="{{ company }}">{{ company }}</option>
+    {% endfor %}
+  </select>
+
+  <div id="experienceList">
+    {% for exp in experiences %}
+      <div class="card" data-company="{{ exp.company }}">
+        <h3>{{ exp.title }}</h3>
+        <p><strong>公司：</strong>{{ exp.company }}</p>
+        <p><strong>職位：</strong>{{ exp.position }}</p>
+        <p><strong>作者：</strong>{{ exp.author }}</p>
+        <p><strong>上傳時間：</strong>{{ exp.created_at }}</p>
+        <hr>
+        <p>{{ exp.content }}</p>
+      </div>
+    {% else %}
+      <p>目前還沒有任何心得 🙌</p>
+    {% endfor %}
+  </div>
+
+  <script>
+    function filterByCompany() {
+      const selected = document.getElementById('companyFilter').value;
+      const cards = document.querySelectorAll('.card');
+      cards.forEach(card => {
+        card.style.display = (selected === 'all' || card.dataset.company === selected)
+          ? 'block' : 'none';
+      });
+    }
+  </script>
+</body>
+</html>
