@@ -130,6 +130,7 @@ def save_profile():
         "學生": "student",
         "教師": "teacher",
         "主任": "director",
+        "科助": "ta",
         "管理員": "admin"
     }
     role = role_map.get(role_display)
@@ -147,7 +148,7 @@ def save_profile():
 
         if role == "student":
             if not class_id:
-                return jsonify({"success": False, "message": "學生需提供班級"}), 400
+                return jsonify({"success": False, "message": f"{role_display}需提供班級"}), 400
             try:
                 class_id = int(class_id)
             except ValueError:
@@ -158,7 +159,14 @@ def save_profile():
                 return jsonify({"success": False, "message": "班級不存在"}), 404
 
             cursor.execute("UPDATE users SET class_id=%s WHERE username=%s AND role=%s",
-                           (class_id, username, role))
+                           (class_id, username, role)
+            )
+        else:
+            # 非學生身分一律清空 class_id（避免舊資料殘留）
+            cursor.execute(
+                "UPDATE users SET class_id=NULL WHERE username=%s AND role=%s",
+                (username, role)
+            )
 
         conn.commit()
         return jsonify({"success": True, "message": "資料更新成功"})
@@ -308,17 +316,12 @@ def manage_companies():
 # 志願序最終結果
 @users_bp.route('/final_results')
 def final_results():
-    return render_template('user_shared/final_results')
+    return render_template('user_shared/final_results.html')
 
 # 管理員首頁（後台）
 @users_bp.route('/admin_home')
 def admin_home():
     return render_template('admin/admin_home.html')
-
-# 實習心得
-@users_bp.route('/intern_experience')
-def intern_experience():
-    return render_template('user_shared/intern_experience.html')
 
 # 個人頁面
 @users_bp.route('/profile')
