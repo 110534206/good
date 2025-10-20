@@ -13,40 +13,7 @@ users_bp = Blueprint("users_bp", __name__)
 def teacher_home():
     if 'username' not in session or session.get('role') != 'teacher':
         return redirect(url_for('auth_bp.login_page'))
-    
     return render_template('user_shared/teacher_home.html')
-
-# -------------------------
-# API - 檢查班導師身分
-# -------------------------
-@users_bp.route('/api/check_homeroom_status', methods=['GET'])
-def check_homeroom_status():
-    if 'username' not in session or session.get('role') != 'teacher':
-        return jsonify({"success": False, "message": "請先登入"}), 401
-    
-    user_id = session.get('user_id')
-    if not user_id:
-        return jsonify({"success": False, "message": "找不到使用者ID"}), 401
-    
-    conn = get_db()
-    cursor = conn.cursor()
-    try:
-        cursor.execute("""
-            SELECT 1 FROM classes_teacher
-            WHERE teacher_id = %s AND role = '班導師'
-        """, (user_id,))
-        is_homeroom = cursor.fetchone() is not None
-        
-        return jsonify({
-            "success": True,
-            "is_homeroom": is_homeroom
-        })
-    except Exception as e:
-        print(f"檢查班導師身分錯誤: {e}")
-        return jsonify({"success": False, "message": "伺服器錯誤"}), 500
-    finally:
-        cursor.close()
-        conn.close()
 
 # -------------------------
 # 老師首頁(班導)
@@ -163,9 +130,7 @@ def save_profile():
         "學生": "student",
         "教師": "teacher",
         "主任": "director",
-        "科助": "ta",
-        "管理員": "admin",
-        "訪客": "visitor"
+        "管理員": "admin"
     }
     role = role_map.get(role_display)
     if not role:
@@ -182,7 +147,7 @@ def save_profile():
 
         if role == "student":
             if not class_id:
-                return jsonify({"success": False, "message": f"{role_display}需提供班級"}), 400
+                return jsonify({"success": False, "message": "學生需提供班級"}), 400
             try:
                 class_id = int(class_id)
             except ValueError:
@@ -193,14 +158,7 @@ def save_profile():
                 return jsonify({"success": False, "message": "班級不存在"}), 404
 
             cursor.execute("UPDATE users SET class_id=%s WHERE username=%s AND role=%s",
-                           (class_id, username, role)
-            )
-        else:
-            # 非學生身分一律清空 class_id（避免舊資料殘留）
-            cursor.execute(
-                "UPDATE users SET class_id=NULL WHERE username=%s AND role=%s",
-                (username, role)
-            )
+                           (class_id, username, role))
 
         conn.commit()
         return jsonify({"success": True, "message": "資料更新成功"})
@@ -305,12 +263,6 @@ def change_password():
 def student_home():
     return render_template('user_shared/student_home.html')
 
-# 實習廠商主頁 (新增：對應 visitor_home.html)
-@users_bp.route('/visitor_home')
-def visitor_home():
-    # 廠商主頁/訪客登入的頁面
-    return render_template('visitor_home.html')
-
 # 使用者首頁 (主任前台)
 @users_bp.route('/director_home')
 def director_home():
@@ -356,12 +308,17 @@ def manage_companies():
 # 志願序最終結果
 @users_bp.route('/final_results')
 def final_results():
-    return render_template('user_shared/final_results.html')
+    return render_template('user_shared/final_results')
 
 # 管理員首頁（後台）
 @users_bp.route('/admin_home')
 def admin_home():
     return render_template('admin/admin_home.html')
+
+# 實習心得
+@users_bp.route('/intern_experience')
+def intern_experience():
+    return render_template('user_shared/intern_experience.html')
 
 # 個人頁面
 @users_bp.route('/profile')
@@ -378,41 +335,3 @@ def get_session():
             "role": session["role"]
         })
     return jsonify({"success": False}), 401
-# intern_experience.py
-from flask import Blueprint, render_template, request, redirect, jsonify
-from config import get_db
-from datetime import datetime
-
-intern_exp_bp = Blueprint("intern_exp_bp", __name__)
-
-# 顯示心得頁面
-@intern_exp_bp.route("/intern_experience", methods=["GET", "POST"])
-def intern_experience():
-    conn = get_db()
-    cursor = conn.cursor(dictionary=True)
-
-    if request.method == "POST":
-        author = request.form.get("author") or "匿名"
-        company = request.form["company"]
-        position = request.form["position"]
-        title = request.form["title"]
-        content = request.form["content"]
-
-        cursor.execute("""
-            INSERT INTO intern_experiences (author, company, position, title, content, created_at)
-            VALUES (%s, %s, %s, %s, %s, NOW())
-        """, (author, company, position, title, content))
-        conn.commit()
-
-    # 撈出心得資料
-    cursor.execute("SELECT * FROM intern_experiences ORDER BY created_at DESC")
-    experiences = cursor.fetchall()
-
-    # 撈出公司清單（去重）
-    cursor.execute("SELECT DISTINCT company FROM intern_experiences")
-    companies = [row["company"] for row in cursor.fetchall()]
-
-    cursor.close()
-    conn.close()
-
-    return render_template("intern_experience.html", experiences=experiences, companies=companies)
