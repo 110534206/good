@@ -148,10 +148,6 @@
           <canvas id="chart1"></canvas>
         </div>
         <div class="chart-card">
-          <h3>廠商志願序比例</h3>
-          <canvas id="chart2"></canvas>
-        </div>
-        <div class="chart-card">
           <h3>履歷繳交百分比狀況</h3>
           <canvas id="chart3"></canvas>
         </div>
@@ -237,7 +233,7 @@
       return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     }
 
-    // === 四張圖表 ===
+    // === 三張圖表 ===
     const chart1 = new Chart(document.getElementById('chart1'), {
       type: 'pie',
       data: {
@@ -246,7 +242,7 @@
       }
     });
 
-    const chart2 = new Chart(document.getElementById('chart3'), {
+    const chart3 = new Chart(document.getElementById('chart3'), {
       type: 'bar',
       data: {
         labels: ['資管四忠', '資管四孝'],
@@ -258,7 +254,7 @@
       options: { responsive: true, scales: { y: { beginAtZero: true, max: 100 } } }
     });
 
-    const chart3 = new Chart(document.getElementById('chart4'), {
+    const chart4 = new Chart(document.getElementById('chart4'), {
       type: 'doughnut',
       data: {
         labels: ['公司A', '公司B', '公司C', '公司D', '公司E'],
@@ -274,9 +270,8 @@
       }
     });
 
-    // 隨機更新數據
     function updateCharts() {
-      [chart1, chart2, chart3, chart4].forEach(chart => {
+      [chart1, chart3, chart4].forEach(chart => {
         chart.data.datasets.forEach(ds => {
           ds.data = ds.data.map(() => Math.floor(Math.random() * 100));
         });
@@ -286,4 +281,3 @@
   </script>
 </body>
 </html>
-
