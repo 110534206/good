@@ -2,7 +2,6 @@ from flask import Blueprint, render_template, request, jsonify, session,send_fil
 from config import get_db
 from datetime import datetime
 import traceback
-from datetime import datetime
 from collections import defaultdict
 from openpyxl import Workbook
 from openpyxl.styles import Font, Alignment, PatternFill, Border, Side

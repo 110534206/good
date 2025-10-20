@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="zh-Hant">
+
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
@@ -13,7 +14,11 @@
       --accent: #2563eb;
     }
 
-    * { box-sizing: border-box; margin: 0; padding: 0; }
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
 
     body {
       font-family: "Noto Sans TC", system-ui;
@@ -23,40 +28,82 @@
       padding: 32px;
     }
 
-    .container { max-width: 1300px; margin: 0 auto; }
+    .container {
+      max-width: 1300px;
+      margin: 0 auto;
+    }
 
     header {
-      display: flex; align-items: center; justify-content: space-between;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
       margin-bottom: 24px;
     }
 
-    h1 { font-size: 26px; font-weight: 700; color: #1e3a8a; }
+    h1 {
+      font-size: 26px;
+      font-weight: 700;
+      color: #1e3a8a;
+    }
 
-    .header-actions { display: flex; gap: 10px; }
+    .header-actions {
+      display: flex;
+      gap: 10px;
+    }
 
     button {
-      background: var(--accent); color: #fff;
-      border: none; border-radius: 8px;
-      padding: 10px 18px; font-size: 14px; cursor: pointer;
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      padding: 10px 18px;
+      font-size: 14px;
+      cursor: pointer;
       transition: 0.25s;
     }
-    button:hover { background: #1d4ed8; transform: translateY(-1px); }
+
+    button:hover {
+      background: #1d4ed8;
+      transform: translateY(-1px);
+    }
 
     .card {
-      background: var(--card); border-radius: 14px;
+      background: var(--card);
+      border-radius: 14px;
       box-shadow: 0 6px 16px rgba(0, 0, 0, 0.06);
-      padding: 20px; margin-bottom: 30px;
+      padding: 20px;
+      margin-bottom: 30px;
     }
 
-    table { width: 100%; border-collapse: collapse; font-size: 15px; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 15px;
+    }
+
     thead th {
-      text-align: left; padding: 12px; font-weight: 600;
-      color: var(--muted); border-bottom: 2px solid #e2e8f0; background: #f8fafc;
+      text-align: left;
+      padding: 12px;
+      font-weight: 600;
+      color: var(--muted);
+      border-bottom: 2px solid #e2e8f0;
+      background: #f8fafc;
     }
-    tbody td { padding: 12px; border-bottom: 1px solid #f1f5f9; }
-    tr:hover td { background: #f9fbff; }
 
-    .empty { padding: 40px; text-align: center; color: var(--muted); }
+    tbody td {
+      padding: 12px;
+      border-bottom: 1px solid #f1f5f9;
+    }
+
+    tr:hover td {
+      background: #f9fbff;
+    }
+
+    .empty {
+      padding: 40px;
+      text-align: center;
+      color: var(--muted);
+    }
 
     .chart-grid {
       display: grid;
@@ -73,40 +120,56 @@
       text-align: center;
     }
 
-    .chart-card h3 { margin-bottom: 10px; color: #1e3a8a; }
+    .chart-card h3 {
+      margin-bottom: 10px;
+      color: #1e3a8a;
+    }
 
     .modal-backdrop {
-      position: fixed; inset: 0; background: rgba(0, 0, 0, 0.45);
-      display: none; align-items: center; justify-content: center;
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.45);
+      display: none;
+      align-items: center;
+      justify-content: center;
     }
 
     .modal {
-      width: 100%; max-width: 480px;
-      background: #fff; border-radius: 12px;
-      padding: 24px; box-shadow: 0 6px 24px rgba(0, 0, 0, 0.2);
+      width: 100%;
+      max-width: 480px;
+      background: #fff;
+      border-radius: 12px;
+      padding: 24px;
+      box-shadow: 0 6px 24px rgba(0, 0, 0, 0.2);
     }
 
-    .modal form label { display: block; margin-bottom: 12px; }
+    .modal form label {
+      display: block;
+      margin-bottom: 12px;
+    }
 
     .modal form input {
-      width: 100%; padding: 8px; margin-top: 4px;
-      border: 1px solid #cbd5e1; border-radius: 6px; font-size: 14px;
+      width: 100%;
+      padding: 8px;
+      margin-top: 4px;
+      border: 1px solid #cbd5e1;
+      border-radius: 6px;
+      font-size: 14px;
     }
   </style>
 </head>
+
 <body>
   <div class="container">
     <header>
       <h1>實習廠商管理</h1>
       <div class="header-actions">
         <button id="btnAdd">＋ 新增公司</button>
-        <button id="btnEdit">✎ 修改</button>
-        <button id="btnDelete">🗑 刪除</button>
       </div>
     </header>
 
     <div class="card">
-      <h2 style="margin-bottom:10px;color:#1e3a8a;">新增公司</h2>
+      <h2 style="margin-bottom:10px;color:#1e3a8a;">公司清單</h2>
       <table>
         <thead>
           <tr>
@@ -114,23 +177,7 @@
             <th>職位</th>
             <th>需求人數</th>
             <th>地點</th>
-            <th>修改 / 刪除</th>
-          </tr>
-        </thead>
-        <tbody id="dataBody"></tbody>
-      </table>
-      <div id="emptyHint" class="empty">目前沒有資料</div>
-    </div>
-
-    <div class="card">
-      <h2 style="margin-bottom:10px;color:#1e3a8a;">公司清單（詳細資料）</h2>
-      <table>
-        <thead>
-          <tr>
-            <th>公司名稱</th>
-            <th>職位</th>
-            <th>需求人數</th>
-            <th>地點</th>
+            <th>班級</th>
             <th>修改 / 刪除</th>
           </tr>
         </thead>
@@ -168,6 +215,7 @@
         <label>職位 <input id="position" required></label>
         <label>需求人數 <input id="count" type="number" min="1" required></label>
         <label>地點 <input id="location" required></label>
+        <label>班級 <input id="className" required></label>
         <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px;">
           <button type="button" id="btnCancel">取消</button>
           <button type="submit">儲存</button>
@@ -178,15 +226,31 @@
 
   <script>
     const modal = document.getElementById('modalBackdrop');
-    const tableBody = document.getElementById('dataBody');
     const companyList = document.getElementById('companyList');
-    const emptyHint = document.getElementById('emptyHint');
     const emptyCompany = document.getElementById('emptyCompany');
+
     let records = [];
 
     document.getElementById('btnAdd').addEventListener('click', () => modal.style.display = 'flex');
     document.getElementById('btnCancel').addEventListener('click', () => modal.style.display = 'none');
     document.getElementById('dataForm').addEventListener('submit', saveData);
+
+    // ==================== API 模擬/取得資料 ====================
+    async function fetchCompanies() {
+      try {
+        const res = await fetch('/api/get_my_companies'); // 後端需提供這個 API
+        const data = await res.json();
+        if (data.success) {
+          records = data.companies || [];
+        } else {
+          console.error(data.message);
+        }
+        renderTable();
+        updateCharts();
+      } catch (err) {
+        console.error("取得公司資料錯誤:", err);
+      }
+    }
 
     function saveData(e) {
       e.preventDefault();
@@ -194,28 +258,24 @@
       const position = document.getElementById('position').value.trim();
       const count = parseInt(document.getElementById('count').value || '0');
       const location = document.getElementById('location').value.trim();
+      const className = document.getElementById('className').value.trim();
 
-      if (!company || !position || !location) return alert('請填寫完整資料');
+      if (!company || !position || !location || !className) return alert('請填寫完整資料');
 
-      records.unshift({ id: Date.now(), company, position, count, location });
+      records.unshift({ id: Date.now(), company, position, count, location, class_name: className });
       modal.style.display = 'none';
-      renderTables();
-      e.target.reset();
+      renderTable();
+      document.getElementById('dataForm').reset();
       updateCharts();
     }
 
-    function renderTables() {
-      renderTable(tableBody, emptyHint);
-      renderTable(companyList, emptyCompany);
-    }
-
-    function renderTable(target, emptyBlock) {
-      target.innerHTML = '';
+    function renderTable() {
+      companyList.innerHTML = '';
       if (records.length === 0) {
-        emptyBlock.style.display = 'block';
+        emptyCompany.style.display = 'block';
         return;
       }
-      emptyBlock.style.display = 'none';
+      emptyCompany.style.display = 'none';
       records.forEach(item => {
         const tr = document.createElement('tr');
         tr.innerHTML = `
@@ -223,9 +283,10 @@
           <td>${escapeHtml(item.position)}</td>
           <td>${item.count}</td>
           <td>${escapeHtml(item.location)}</td>
+          <td>${escapeHtml(item.class_name || '')}</td>
           <td><button class='edit-btn'>✎</button><button class='delete-btn'>🗑</button></td>
         `;
-        target.appendChild(tr);
+        companyList.appendChild(tr);
       });
     }
 
@@ -233,51 +294,50 @@
       return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     }
 
-    // === 三張圖表 ===
+    // ==================== 圖表 ====================
     const chart1 = new Chart(document.getElementById('chart1'), {
       type: 'pie',
-      data: {
-        labels: ['資管四忠', '資管四孝'],
-        datasets: [{ data: [70, 30], backgroundColor: ['#3b82f6', '#facc15'] }]
-      }
+      data: { labels: [], datasets: [{ data: [], backgroundColor: ['#3b82f6', '#facc15', '#22c55e', '#f97316'] }] },
+      options: { responsive: true }
     });
 
     const chart3 = new Chart(document.getElementById('chart3'), {
       type: 'bar',
-      data: {
-        labels: ['資管四忠', '資管四孝'],
-        datasets: [
-          { label: '已繳交(%)', data: [90, 85], backgroundColor: '#3b82f6' },
-          { label: '缺交(%)', data: [10, 15], backgroundColor: '#ef4444' }
-        ]
-      },
+      data: { labels: [], datasets: [{ label: '已繳交(%)', data: [], backgroundColor: '#3b82f6' }, { label: '缺交(%)', data: [], backgroundColor: '#ef4444' }] },
       options: { responsive: true, scales: { y: { beginAtZero: true, max: 100 } } }
     });
 
     const chart4 = new Chart(document.getElementById('chart4'), {
       type: 'doughnut',
-      data: {
-        labels: ['公司A', '公司B', '公司C', '公司D', '公司E'],
-        datasets: [{
-          label: '志願序佔比',
-          data: [30, 25, 20, 15, 10],
-          backgroundColor: ['#22c55e', '#3b82f6', '#f97316', '#a855f7', '#e11d48']
-        }]
-      },
-      options: {
-        responsive: true,
-        plugins: { legend: { position: 'bottom' } }
-      }
+      data: { labels: [], datasets: [{ label: '志願序佔比', data: [], backgroundColor: ['#22c55e', '#3b82f6', '#f97316', '#a855f7', '#e11d48'] }] },
+      options: { responsive: true, plugins: { legend: { position: 'bottom' } } }
     });
 
     function updateCharts() {
-      [chart1, chart3, chart4].forEach(chart => {
-        chart.data.datasets.forEach(ds => {
-          ds.data = ds.data.map(() => Math.floor(Math.random() * 100));
-        });
-        chart.update();
+      // 志願序完成率示意
+      const classes = [...new Set(records.map(r => r.class_name))];
+      chart1.data.labels = classes;
+      chart1.data.datasets[0].data = classes.map(c => {
+        const total = records.filter(r => r.class_name === c).length;
+        return total ? Math.floor(Math.random() * 100) : 0; // 模擬完成率
       });
+      chart1.update();
+
+      // 履歷繳交百分比示意
+      chart3.data.labels = classes;
+      chart3.data.datasets[0].data = classes.map(() => Math.floor(Math.random() * 100));
+      chart3.data.datasets[1].data = classes.map((_, i) => 100 - chart3.data.datasets[0].data[i]);
+      chart3.update();
+
+      // 公司志願序佔比
+      const companies = [...new Set(records.map(r => r.company))];
+      chart4.data.labels = companies;
+      chart4.data.datasets[0].data = companies.map(c => records.filter(r => r.company === c).length);
+      chart4.update();
     }
+
+    fetchCompanies();
   </script>
 </body>
+
 </html>

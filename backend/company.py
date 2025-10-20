@@ -683,3 +683,10 @@ def approve_company_page():
     conn.close()
 
     return render_template("company/approve_company.html", companies=companies)
+
+# =========================
+# 頁面 - 公司管理前端頁
+# =========================
+@company_bp.route("/manage_companies")
+def manage_companies_page():
+    return render_template("user_shared/manage_companies.html")
