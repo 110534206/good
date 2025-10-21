@@ -4,7 +4,7 @@ from config import get_db
 import pandas as pd
 import io
 
-admin_bp = Blueprint("admin_bp", __name__)
+admin_bp = Blueprint("admin_bp", __name__, url_prefix='/admin')
 
 # --------------------------------
 # 用戶管理
