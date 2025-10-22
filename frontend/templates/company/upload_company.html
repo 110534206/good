@@ -241,7 +241,8 @@
 
 <body>
 
-  <!-- ✅ 頂部欄 -->
+  
+<body><!-- 頂部欄 -->
   <div class="top-bar">
     <div class="container">
       <div class="top-bar-left">
@@ -249,18 +250,22 @@
           <span></span><span></span><span></span>
         </div>
       </div>
-
       <div class="top-bar-right">
         <a href="/profile">
-          <img src="{{ url_for('static', filename='images/avatar.png') }}" alt="頭像" id="login-avatar" />
+        <img src="{{ url_for('static', filename='images/avatar.png') }}" alt="頭像" id="login-avatar" />
         </a>
-
         <div class="dropdown" style="position: relative;">
           <button id="accountDropdownBtn" class="btn-link" aria-expanded="false">帳號 ▾</button>
           <div id="accountDropdownMenu" class="dropdown-menu"
-            style="position:absolute; right:0; top:120%; background:#fff; border:1px solid #ccc; border-radius:8px; padding:6px; min-width:160px; display:none; box-shadow:0 4px 12px rgba(0,0,0,.12);">
+            style="position:absolute; right:0; top:120%; background:#fff; border:1px solid #ccc; border-radius:8px; padding:6px; min-width:180px; display:none; box-shadow:0 4px 12px rgba(0,0,0,.12);">
             <a href="/profile" class="btn-link" style="display:block; border:none; margin:4px 0;">個人資料</a>
-            <a id="toHomeroomLink" href="/class_teacher_home" class="btn-link" style="display:none; border:none; margin:4px 0;">切換班導身分</a>
+            {% if original_role == 'teacher' %}
+            <a id="toTeacherLink" href="/teacher_home" class="btn-link"
+              style="display:block; border:none; margin:4px 0;">切換老師身分</a>
+            {% elif original_role == 'director' %}
+            <a id="toDirectorLink" href="/director_home" class="btn-link"
+              style="display:block; border:none; margin:4px 0;">切換主任身分</a>
+            {% endif %}
             <a href="/login" class="btn-link" style="display:block; border:none; margin:4px 0;">登出</a>
           </div>
         </div>

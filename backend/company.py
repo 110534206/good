@@ -55,7 +55,8 @@ def upload_company_form():
             cursor.close()
             conn.close()
 
-    return render_template('company/upload_company.html')
+    original_role = session.get("original_role") or session.get("role")
+    return render_template('company/upload_company.html', original_role=original_role)
 
 # =========================================================
 # API - 批次上傳公司（含職缺）
