@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>智慧實習平台 | 訪客主頁</title>
+  <title>智慧實習平台 | 學生主頁</title>
   <style>
     * {
       box-sizing: border-box;
@@ -291,11 +291,6 @@
     }
   </style>
 </head>
-<script>
-  try { localStorage.setItem('role', 'visitor'); } catch (e) {}
-  // 設定當前頁面身分為訪客，供其他頁面判斷導向
-</script>
-
 <body>
   <div class="top-bar">
     <div class="container">
@@ -357,10 +352,10 @@
     </main>
   </div>
 
-  <nav id="side-menu" aria-hidden="true" role="navigation" aria-label="廠商功能選單">
+  <nav id="side-menu" aria-hidden="true" role="navigation" aria-label="學生功能選單">
     <button id="close-btn" aria-label="關閉功能選單">×</button>
-    <h2>廠商功能選單</h2>
-    <a href="/visitor_home">首頁</a>
+    <h2>學生功能選單</h2>
+    <a href="/student_home">首頁</a>
     <a href="/upload_resume">上傳履歷</a>
     <a href="/ai_edit_resume">AI修改履歷</a>
     <a href="/fill_preferences">填寫志願序</a>

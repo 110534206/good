@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>智慧實習平台 | 選擇身分</title>
+  <style>
+    body {
+      font-family: 'Inter', sans-serif;
+      background: #f4f7f6;
+      color: #333;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      margin: 0;
+    }
+
+    .selection-container {
+      background: #ffffff;
+      padding: 3rem;
+      border-radius: 12px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+      text-align: center;
+      max-width: 500px;
+      width: 90%;
+    }
+
+    .selection-container h1 {
+      color: #0066cc;
+      margin-bottom: 2.5rem;
+      font-size: 2rem;
+    }
+
+    .role-cards {
+      display: flex;
+      gap: 20px;
+      justify-content: center;
+    }
+
+    .role-card {
+      flex: 1;
+      padding: 2rem 1rem;
+      border: 2px solid #0066cc;
+      border-radius: 10px;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      text-decoration: none;
+      color: #333;
+      font-weight: bold;
+    }
+
+    .role-card:hover {
+      background-color: #e6f0ff;
+      transform: translateY(-5px);
+      box-shadow: 0 4px 15px rgba(0, 102, 204, 0.15);
+    }
+
+    .role-card h3 {
+      margin-top: 0.5rem;
+      color: #0066cc;
+    }
+
+    .role-card p {
+      font-size: 0.9rem;
+      color: #666;
+      margin-top: 0.5rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="selection-container">
+    <h1>請選擇您的身分</h1>
+    <div class="role-cards">
+      <a href="/student_home" class="role-card" id="student-role">
+        <h2>🎓</h2>
+        <h3>學生</h3>
+        <p>上傳履歷、填寫志願序</p>
+      </a>
+
+      <a href="/company_home" class="role-card" id="company-role">
+        <h2>🏢</h2>
+        <h3>廠商</h3>
+        <p>審核履歷、媒合學生</p>
+      </a>
+    </div>
+  </div>
+</body>
+</html>

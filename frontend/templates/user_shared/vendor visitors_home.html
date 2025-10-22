@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>智慧實習平台 | 廠商主頁</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background: #ffffff;
+      color: #333;
+      overflow-x: hidden;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 0 0.5rem;
+    }
+
+    /* 頂端列 */
+    .top-bar {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 60px;
+      background-color: #fff;
+      z-index: 1100;
+      display: flex;
+      align-items: center;
+    }
+
+    .top-bar>.container {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0 0.5rem;
+      height: 100%;
+      gap: 30px;
+    }
+
+    .top-bar-left #menu-btn {
+      width: 30px;
+      height: 22px;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+
+    .top-bar-left #menu-btn span {
+      height: 4px;
+      background-color: #333;
+      border-radius: 2px;
+    }
+
+    .top-bar-right {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: bold;
+    }
+
+    .top-bar-right .btn-link {
+      color: #0066cc;
+      background-color: transparent;
+      border: 1.5px solid #0066cc;
+      padding: 0.3rem 0.7rem;
+      border-radius: 6px;
+      text-decoration: none;
+      transition: background-color 0.3s ease, color 0.3s ease;
+      font-size: 0.9rem;
+      cursor: pointer;
+    }
+
+    .top-bar-right .btn-link:hover {
+      background-color: #0066cc;
+      color: white;
+    }
+
+    .top-bar-right #login-avatar {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      object-fit: cover;
+      cursor: pointer;
+      margin-top: 6px;
+    }
+
+    /* Hero 區塊 */
+    header.hero {
+      position: relative;
+      width: 100%;
+      aspect-ratio: 3 / 1;
+      background-image: url('/static/images/title.png');
+      background-size: cover;
+      background-repeat: no-repeat;
+      background-position: center;
+      margin-top: 80px;
+      margin-bottom: 2rem;
+      border-radius: 0;
+      color: white;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    main {
+      background-color: #fff;
+      padding: 2rem;
+      margin-bottom: 3rem;
+    }
+
+    .page-title {
+      text-align: center;
+      max-width: 1200px;
+      margin: 0 auto 3rem auto;
+    }
+
+    .card-container {
+      max-width: 1200px;
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 2rem;
+      padding: 0;
+    }
+
+    .card {
+      border: 2px solid #0066cc;
+      background: #fff;
+      border-radius: 12px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+      padding: 2rem;
+      text-align: center;
+      transition: transform 0.3s ease;
+    }
+
+    .card:hover {
+      transform: translateY(-5px);
+    }
+
+    .card h3 {
+      margin-bottom: 0.5rem;
+      color: #0066cc;
+    }
+
+    .card p {
+      font-size: 0.95rem;
+      color: #666;
+    }
+
+    .card a {
+      display: inline-block;
+      margin-top: 1rem;
+      padding: 0.6rem 2rem;
+      background-color: #0066cc;
+      color: white;
+      border-radius: 8px;
+      min-width: 120px;
+      text-decoration: none;
+      transition: background-color 0.3s ease;
+    }
+
+    .card a:hover {
+      background-color: #024689;
+    }
+
+    #side-menu {
+      position: fixed;
+      top: 0;
+      left: 0;
+      height: 100vh;
+      width: 320px;
+      max-width: 80vw;
+      background-color: rgba(10, 10, 10, 0.95);
+      backdrop-filter: blur(6px);
+      box-shadow: 3px 0 12px rgb(0 0 0 / 0.7);
+      padding: 2rem 1.5rem;
+      transform: translateX(-100%);
+      transition: transform 0.3s ease-in-out;
+      z-index: 1100;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      color: white;
+      user-select: none;
+    }
+
+    #side-menu.open {
+      transform: translateX(0);
+    }
+
+    #close-btn {
+      position: absolute;
+      top: 2rem;
+      right: 1.6rem;
+      font-size: 2.2rem;
+      background: none;
+      border: none;
+      color: white;
+      cursor: pointer;
+      line-height: 1;
+      width: 2.5rem;
+      height: 2.5rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    #side-menu h2 {
+      width: 100%;
+      margin-bottom: 1.5rem;
+      font-weight: 700;
+      font-size: 1.5rem;
+      text-align: left;
+    }
+
+    #side-menu a {
+      display: block;
+      width: 100%;
+      padding: 0.5rem 0;
+      font-size: 1.1rem;
+      color: #ddd;
+      text-decoration: none;
+      border-radius: 4px;
+      transition: background-color 0.2s ease;
+    }
+
+    #side-menu a:hover {
+      background-color: rgba(255, 255, 255, 0.15);
+      color: white;
+    }
+
+    /* 公告輪播樣式 */
+    #announcement-carousel {
+      max-width: 1200px;
+      margin: 0 auto 2rem auto;
+      position: relative;
+      padding: 1rem 3rem;
+      background-color: #f0f8ff;
+      font-weight: 600;
+      font-size: 1.2rem;
+      display: flex;
+      align-items: center;
+      color: #004080;
+      justify-content: center;
+      min-height: 60px;
+      user-select: none;
+    }
+
+    #announcement-carousel button {
+      position: absolute;
+      top: 50%;
+      transform: translateY(-50%);
+      background: none;
+      border: none;
+      font-size: 2rem;
+      font-weight: bold;
+      color: #0066cc;
+      cursor: pointer;
+      user-select: none;
+      padding: 0;
+      width: 40px;
+      height: 40px;
+      line-height: 40px;
+      text-align: center;
+      border-radius: 50%;
+      transition: background-color 0.3s ease;
+    }
+
+    #announcement-carousel button:hover {
+      background-color: #0066cc;
+      color: white;
+    }
+
+    #announcement-prev {
+      left: 10px;
+    }
+
+    #announcement-next {
+      right: 10px;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="top-bar">
+    <div class="container">
+      <div class="top-bar-left">
+        <div id="menu-btn" title="選單" role="button" tabindex="0">
+          <span></span><span></span><span></span>
+        </div>
+      </div>
+      <div class="top-bar-right">
+        <a href="/login">
+         <img src="{{ url_for('static', filename='images/avatar.png') }}" alt="頭像" id="login-avatar" />
+        </a>
+        <div class="dropdown" style="position: relative;">
+          <button id="accountDropdownBtn" class="btn-link" aria-expanded="false">帳號 ▾</button>
+          <div id="accountDropdownMenu" class="dropdown-menu" style="position:absolute; right:0; top:120%; background:#fff; border:1px solid #ccc; border-radius:8px; padding:6px; min-width:180px; display:none; box-shadow:0 4px 12px rgba(0,0,0,.12);">
+            <a href="/login" class="btn-link" style="display:block; border:none; margin:4px 0;">登入</a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="container">
+    <header class="hero"></header>
+  </div>
+
+    <div id="announcement-carousel" role="region" aria-live="polite" aria-label="最新公告">
+      <button id="announcement-prev" aria-label="上一則公告">&#8592;</button>
+      <div id="announcement-content"></div>
+      <button id="announcement-next" aria-label="下一則公告">&#8594;</button>
+    </div>
+  </div>
+
+  <div class="container">
+    <main>
+      <h2 class="page-title">請選擇你要使用的功能</h2>
+      <section class="card-container">
+        <div class="card">
+          <h3>學生履歷審核</h3>
+          <p>查看並審核所有報名學生的履歷資料。</p>
+          <a href="/review_resumes">開始審核</a>
+        </div>
+        <div class="card">
+          <h3>職位需求管理</h3>
+          <p>發佈、編輯或刪除貴公司的實習職位需求。</p>
+          <a href="/manage_positions">管理職缺</a>
+        </div>
+        <div class="card">
+          <h3>媒合結果確認</h3>
+          <p>確認系統自動媒合的學生名單與結果。</p>
+          <a href="/confirm_matching">查看結果</a>
+        </div>
+        <div class="card">
+          <h3>公告發布</h3>
+          <p>向學生發布重要的實習資訊與消息。</p>
+          <a href="/publish_announcements">發布公告</a>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <nav id="side-menu" aria-hidden="true" role="navigation" aria-label="廠商功能選單">
+    <button id="close-btn" aria-label="關閉功能選單">×</button>
+    <h2>廠商功能選單</h2>
+    <a href="/company_home">首頁</a>
+    <a href="/review_resumes">履歷審核</a>
+    <a href="/manage_positions">職位管理</a>
+    <a href="/confirm_matching">媒合結果</a>
+    <a href="/publish_announcements">發布公告</a>
+  </nav>
+
+  <script>
+    // 側邊選單開關
+    document.getElementById('menu-btn').addEventListener('click', () => {
+      document.getElementById('side-menu').classList.add('open');
+    });
+
+    document.getElementById('close-btn').addEventListener('click', () => {
+      document.getElementById('side-menu').classList.remove('open');
+    });
+
+    // 公告輪播內容
+    let notification = [];
+    let currentAnnouncementIndex = 0;
+    const announcementContent = document.getElementById('announcement-content');
+    const prevBtn = document.getElementById('announcement-prev');
+    const nextBtn = document.getElementById('announcement-next');
+
+    function showAnnouncement(index) {
+      if (notification.length > 0) {
+        announcementContent.textContent = notification[index];
+      } else {
+        announcementContent.textContent = "目前沒有公告";
+      }
+    }
+
+    // 取得廠商公告資料 (假設 API 路徑為 /api/company/notification)
+    // 注意：這裡我將 API 路徑修改為 /api/company/notification 以符合廠商角色
+    fetch("/api/company/notification")
+      .then(response => response.json())
+      .then(data => {
+        // 假設回傳是一個公告內容的陣列
+        notification = data; 
+        currentAnnouncementIndex = 0;
+        showAnnouncement(currentAnnouncementIndex);
+      })
+      .catch(err => {
+        console.error("廠商公告載入失敗:", err);
+        announcementContent.textContent = "廠商公告載入失敗";
+      });
+
+    // 左右切換
+    prevBtn.addEventListener('click', () => {
+       if (notification.length > 0) {
+        currentAnnouncementIndex = (currentAnnouncementIndex - 1 + notification.length) % notification.length;
+        showAnnouncement(currentAnnouncementIndex);
+      }
+    });
+
+    nextBtn.addEventListener('click', () => {
+      if (notification.length > 0) {
+        currentAnnouncementIndex = (currentAnnouncementIndex + 1) % notification.length;
+        showAnnouncement(currentAnnouncementIndex);
+      }
+    });
+
+    // 自動輪播
+    setInterval(() => {
+      if (notification.length > 0) {
+        currentAnnouncementIndex = (currentAnnouncementIndex + 1) % notification.length;
+        showAnnouncement(currentAnnouncementIndex);
+      }
+    }, 5000);
+
+
+    // 帳號下拉
+    document.addEventListener("DOMContentLoaded", function () {
+
+      const dropdownBtn = document.getElementById("accountDropdownBtn");
+      const dropdownMenu = document.getElementById("accountDropdownMenu");
+
+      if (dropdownBtn && dropdownMenu) {
+       dropdownBtn.addEventListener("click", function (e) {
+        e.stopPropagation();
+         const isExpanded = dropdownBtn.getAttribute("aria-expanded") === "true";
+        dropdownBtn.setAttribute("aria-expanded", !isExpanded);
+        dropdownMenu.style.display = isExpanded ? "none" : "block";
+  });
+
+  // 點擊外部時關閉選單
+  document.addEventListener("click", function () {
+    dropdownBtn.setAttribute("aria-expanded", "false");
+    dropdownMenu.style.display = "none";
+  });
+      }
+    });
+  </script>
+</body>
+</html>
