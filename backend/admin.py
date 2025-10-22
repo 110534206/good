@@ -376,7 +376,7 @@ def assign_teacher_class(teacher_id):
     try:
         data = request.get_json()
         class_ids = data.get("class_ids", [])
-        role = data.get("role", "advisor")  # 預設角色 advisor
+        role = data.get("role", "班導師")  # 預設為班導師
 
         if not class_ids:
             return jsonify({"success": False, "message": "未提供班級資料"}), 400

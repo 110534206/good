@@ -307,81 +307,77 @@
   <script>
     // 載入用戶頭像
     function loadUserAvatar() {
-      console.log('開始載入頭像...');
-      fetch('/api/profile')
-        .then(res => {
-          if (!res.ok) throw new Error('無法取得用戶資料');
-          return res.json();
-        })
-        .then(data => {
-          console.log('API 回應:', data);
-          if (data.success && data.user && data.user.avatar_url) {
-            // 確保頭像URL是完整的路徑，並加上時間戳避免快取
-            const rawUrl = data.user.avatar_url.startsWith('http') ?
-              data.user.avatar_url :
-              window.location.origin + data.user.avatar_url;
-            const avatarUrl = rawUrl + (rawUrl.includes('?') ? '&' : '?') + 't=' + Date.now();
-            console.log('設定頭像URL:', avatarUrl);
-            document.getElementById('login-avatar').src = avatarUrl;
-          } else {
-            console.log('沒有頭像URL或API失敗');
-          }
-        })
-        .catch(err => {
-          console.log('載入頭像失敗:', err);
-          // 保持預設頭像
-        });
+        console.log('開始載入頭像...');
+        // 使用 /api/profile 取得用戶所有資料，包含頭像和 is_homeroom
+        fetch('/api/profile')
+            .then(res => {
+                if (!res.ok) throw new Error('無法取得用戶資料');
+                return res.json();
+            })
+            .then(data => {
+                console.log('API 回應:', data);
+                if (data.success && data.user) {
+                    // 1. 載入頭像
+                    if (data.user.avatar_url) {
+                        // 確保頭像URL是完整的路徑，並加上時間戳避免快取
+                        const rawUrl = data.user.avatar_url.startsWith('http') ?
+                            data.user.avatar_url :
+                            window.location.origin + data.user.avatar_url;
+                        const avatarUrl = rawUrl + (rawUrl.includes('?') ? '&' : '?') + 't=' + Date.now();
+                        console.log('設定頭像URL:', avatarUrl);
+                        document.getElementById('login-avatar').src = avatarUrl;
+                    } else {
+                        console.log('沒有頭像URL或API失敗');
+                    }
+
+                    // 2. 檢查班導師身分，顯示切換按鈕
+                    // /api/profile 會回傳 is_homeroom 欄位
+                    if (data.user.is_homeroom === true) {
+                        const link = document.getElementById('toHomeroomLink');
+                        if (link) {
+                            link.style.display = 'block';
+                            link.textContent = '切換班導身分';
+                            console.log('顯示切換班導身分按鈕。');
+                        }
+                    } else {
+                        console.log('使用者不是班導師，不顯示切換按鈕。');
+                    }
+                }
+            })
+            .catch(err => {
+                console.log('載入用戶資料失敗:', err);
+                // 保持預設頭像
+            });
     }
 
-    // 頁面就緒後載入頭像
+    // 頁面就緒後載入頭像及檢查班導師身分
     document.addEventListener('DOMContentLoaded', () => {
-      loadUserAvatar();
+        loadUserAvatar();
     });
 
     document.getElementById('menu-btn').addEventListener('click', () => {
-      document.getElementById('side-menu').classList.add('open');
+        document.getElementById('side-menu').classList.add('open');
     });
 
     document.getElementById('close-btn').addEventListener('click', () => {
-      document.getElementById('side-menu').classList.remove('open');
+        document.getElementById('side-menu').classList.remove('open');
     });
 
     // 帳號下拉
     const btn = document.getElementById('accountDropdownBtn');
     const menu = document.getElementById('accountDropdownMenu');
     btn.addEventListener('click', () => {
-      const open = menu.style.display === 'block';
-      menu.style.display = open ? 'none' : 'block';
-      btn.setAttribute('aria-expanded', String(!open));
+        const open = menu.style.display === 'block';
+        menu.style.display = open ? 'none' : 'block';
+        btn.setAttribute('aria-expanded', String(!open));
     });
     document.addEventListener('click', (e) => {
-      if (!menu.contains(e.target) && !btn.contains(e.target)) {
-        menu.style.display = 'none';
-        btn.setAttribute('aria-expanded', 'false');
-      }
+        if (!menu.contains(e.target) && !btn.contains(e.target)) {
+            menu.style.display = 'none';
+            btn.setAttribute('aria-expanded', 'false');
+        }
     });
-
-    // 檢查是否為班導師，顯示切換按鈕
-    function checkHomeroomStatus() {
-      fetch('/api/check_homeroom_status')
-        .then(res => res.json())
-        .then(data => {
-          if (data.success && data.is_homeroom) {
-            const link = document.getElementById('toHomeroomLink');
-            if (link) {
-              link.style.display = 'block';
-              link.textContent = '切換到班導身分';
-            }
-          }
-        })
-        .catch(err => {
-          console.log('檢查班導師身分失敗:', err);
-        });
-    }
-
-    // 頁面載入時檢查班導師身分
-    checkHomeroomStatus();
-  </script>
+</script>
 </body>
 
 </html>
