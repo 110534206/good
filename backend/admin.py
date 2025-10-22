@@ -228,10 +228,11 @@ def manage_companies_stats():
     conn = get_db()
     cursor = conn.cursor(dictionary=True)
     try:
-        student_filter = ""
         params = []
+        student_filter = "WHERE u.role='student'"
+
         if class_id and class_id != "all":
-            student_filter = "WHERE u.class_id=%s"
+            student_filter += " AND u.class_id=%s"
             params.append(class_id)
 
         # 各公司被選志願次數
@@ -248,8 +249,11 @@ def manage_companies_stats():
         top_companies = cursor.fetchall()
 
         # 履歷繳交率
-        cursor.execute(f"SELECT COUNT(*) AS total FROM users u {student_filter}", params)
+        cursor.execute(f"""
+            SELECT COUNT(*) AS total FROM users u {student_filter}
+        """, params)
         total_students = cursor.fetchone()["total"]
+
         cursor.execute(f"""
             SELECT COUNT(DISTINCT r.user_id) AS uploaded
             FROM resumes r
@@ -277,6 +281,59 @@ def manage_companies_stats():
         })
     except Exception as e:
         print("❌ manage_companies_stats error:", e)
+        return jsonify({"success": False, "message": str(e)}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+
+# --------------------------------
+# 單一班級統計 (新增部分)
+# --------------------------------
+@admin_bp.route('/api/get_class_stats/<int:class_id>', methods=['GET'])
+def get_class_stats(class_id):
+    """取得單一班級的實習進度統計資料"""
+    # 這裡假設只有科助或管理員可以查看
+    if 'user_id' not in session or session.get('role') not in ['admin', 'ta']:
+        return jsonify({"success": False, "message": "未授權"}), 403
+
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        # 1. 查詢班級名稱
+        cursor.execute("SELECT name FROM classes WHERE id = %s", (class_id,))
+        class_info = cursor.fetchone()
+        if not class_info:
+            return jsonify({"success": False, "message": "找不到該班級資料"}), 404
+
+        # 2. 查詢班級統計數據：
+        # total_students: 總學生數 (users.role = 'student')
+        # students_with_resume: 已上傳履歷人數 (與 resumes 表 LEFT JOIN)
+        # students_with_preference: 已填寫志願人數 (與 student_preferences 表 LEFT JOIN)
+        cursor.execute("""
+            SELECT
+                COUNT(u.id) AS total_students,
+                SUM(CASE WHEN r.user_id IS NOT NULL THEN 1 ELSE 0 END) AS students_with_resume,
+                SUM(CASE WHEN sp.student_id IS NOT NULL THEN 1 ELSE 0 END) AS students_with_preference
+            FROM users u
+            LEFT JOIN (SELECT DISTINCT user_id FROM resumes) r ON r.user_id = u.id
+            LEFT JOIN (SELECT DISTINCT student_id FROM student_preferences) sp ON sp.student_id = u.id
+            WHERE u.class_id = %s AND u.role = 'student'
+        """, (class_id,))
+        stats = cursor.fetchone()
+
+        # 組合結果
+        result = {
+            "class_name": class_info['name'],
+            "total_students": stats['total_students'] if stats else 0,
+            "students_with_resume": stats['students_with_resume'] if stats else 0,
+            "students_with_preference": stats['students_with_preference'] if stats else 0
+        }
+        
+        return jsonify({"success": True, "stats": result})
+            
+    except Exception as e:
+        traceback.print_exc()
         return jsonify({"success": False, "message": str(e)}), 500
     finally:
         cursor.close()

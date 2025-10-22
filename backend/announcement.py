@@ -34,9 +34,6 @@ def list_announcements():
             ORDER BY created_at DESC
         """)
         rows = cursor.fetchall()
-        # 加上前端可直接點擊的連結
-        for r in rows:
-         r["link_url"] = f"/announcement/view_announcement/{r['id']}"
         return jsonify({"success": True, "data": rows})
     except Exception:
         traceback.print_exc()

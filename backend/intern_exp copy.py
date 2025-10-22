@@ -19,7 +19,6 @@ def require_login():
 def page_intern_exp():
     if not require_login():
         return redirect(url_for('auth_bp.login'))
-    # 渲染前端 HTML 頁面
     return render_template('user_shared/intern_experience.html')
 
 
@@ -27,15 +26,12 @@ def page_intern_exp():
 @intern_exp_bp.route('/api/list', methods=['GET'])
 def get_experience_list():
     try:
-        # 取得前端傳來的關鍵字和年份參數
         keyword = request.args.get('keyword', '')
         year = request.args.get('year', '')
 
         db = get_db()
         cursor = db.cursor(dictionary=True)
 
-        # SQL 查詢：JOIN users 取得發表者名稱 (author)，JOIN companies 取得公司名稱 (company_name)
-        # 僅查詢公開的心得 (ie.is_public = 1)
         query = """
             SELECT ie.id, ie.year, ie.content, ie.rating,
                    u.name AS author, c.name AS company_name, ie.created_at
@@ -46,22 +42,18 @@ def get_experience_list():
         """
         params = []
 
-        # 處理關鍵字篩選 (依公司名稱 c.name 搜尋)
         if keyword:
             query += " AND c.name LIKE %s"
             params.append(f"%{keyword}%")
 
-        # 處理年份篩選
         if year:
             query += " AND ie.year = %s"
             params.append(year)
 
-        # 依建立時間倒序排序
         query += " ORDER BY ie.created_at DESC"
 
         cursor.execute(query, params)
         experiences = cursor.fetchall()
-        # 回傳 JSON 格式的心得列表
         return jsonify({"success": True, "data": experiences})
 
     except Exception as e:
@@ -109,7 +101,6 @@ def add_experience():
         db = get_db()
         cursor = db.cursor()
 
-        # 將 is_public 預設為 1 (公開)
         cursor.execute("""
             INSERT INTO internship_experiences (user_id, company_id, year, content, rating, is_public, created_at)
             VALUES (%s, %s, %s, %s, %s, 1, NOW())

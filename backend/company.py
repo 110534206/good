@@ -82,60 +82,44 @@ def upload_company_bulk():
         for c in companies:
             company_name = c.get("company_name") or c.get("公司名稱") or ""
             if not company_name:
-                continue  # 跳過無公司名稱的資料
+                continue
 
-            # ✅ 對應前端欄位名稱
-            description = c.get("company_intro") or c.get("description") or c.get("公司簡介") or ""
-            location = c.get("company_address") or c.get("location") or c.get("公司地址") or ""
-            contact_person = c.get("contact_name") or c.get("contact_person") or c.get("聯絡人姓名") or ""
+            description = c.get("company_intro") or c.get("公司簡介") or ""
+            location = c.get("company_address") or c.get("公司地址") or ""
+            contact_person = c.get("contact_name") or c.get("聯絡人姓名") or ""
             contact_title = c.get("contact_title") or c.get("聯絡人職稱") or ""
             contact_email = c.get("contact_email") or c.get("聯絡信箱") or ""
             contact_phone = c.get("contact_phone") or c.get("聯絡電話") or ""
 
-            # ✅ 插入公司資料
+            # ✅ 先插入公司
             cursor.execute("""
                 INSERT INTO internship_companies
                 (company_name, description, location, contact_person, contact_title, contact_email, contact_phone,
                  uploaded_by_user_id, uploaded_by_role, status, submitted_at)
                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 'pending', NOW())
             """, (
-                company_name,
-                description,
-                location,
-                contact_person,
-                contact_title,
-                contact_email,
-                contact_phone,
-                uploaded_by_user_id,
-                uploaded_by_role
+                company_name, description, location,
+                contact_person, contact_title, contact_email, contact_phone,
+                uploaded_by_user_id, uploaded_by_role
             ))
             company_id = cursor.lastrowid
             inserted_company_count += 1
 
-            # ✅ 插入職缺資料（從欄位或 fallback 單筆職缺）
-            jobs = c.get("internship_jobs") or [{
+            # ✅ 插入職缺
+            jobs = c.get("internship_jobs") or [ {
                 "title": c.get("internship_unit") or "",
                 "description": c.get("internship_content") or "",
-                "department": c.get("department") or "", 
+                "department": c.get("department") or "",
                 "period": c.get("internship_period") or "",
                 "work_time": c.get("internship_time") or "",
                 "slots": c.get("internship_quota") or "",
                 "remark": c.get("remark") or ""
-            }]
+            } ]
 
             for job in jobs:
                 title = job.get("title") or ""
                 if not title:
-                    continue  # 沒有職缺名稱就跳過
-
-                description = job.get("description") or ""
-                department = job.get("department") or ""
-                location = job.get("location") or ""
-                period = job.get("period") or ""
-                work_time = job.get("work_time") or ""
-                slots = job.get("slots") or ""
-                remark = job.get("remark") or ""
-
+                    continue
                 cursor.execute("""
                     INSERT INTO internship_jobs
                     (company_id, title, description, department, period, work_time, slots, remark)
@@ -143,16 +127,27 @@ def upload_company_bulk():
                 """, (
                     company_id,
                     title,
-                    description,
-                    department,
-                    period,
-                    work_time,
-                    slots,
-                    remark
+                    job.get("description") or "",
+                    job.get("department") or "",
+                    job.get("period") or "",
+                    job.get("work_time") or "",
+                    job.get("slots") or "",
+                    job.get("remark") or ""
                 ))
                 inserted_job_count += 1
 
+        # ✅ 自動根據實際職缺數更新 slots 欄位
+        cursor.execute("""
+        UPDATE internship_companies ic
+        SET ic.slots = (
+        SELECT COUNT(*) 
+        FROM internship_jobs ij 
+        WHERE ij.company_id = ic.id
+        )
+        """)
         conn.commit()
+
+
         return jsonify({
             "success": True,
             "message": f"✅ 成功上傳 {inserted_company_count} 間公司、{inserted_job_count} 筆職缺資料"
@@ -168,6 +163,7 @@ def upload_company_bulk():
             conn.close()
         except:
             pass
+
 
 # =========================================================
 # API - 審核公司
