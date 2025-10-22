@@ -1,8 +1,10 @@
-from flask import Blueprint, request, send_file, jsonify, render_template
+from flask import Blueprint, request, send_file, session,jsonify, render_template
 from werkzeug.security import generate_password_hash
 from config import get_db
 import pandas as pd
 import io
+from datetime import datetime
+import traceback
 
 admin_bp = Blueprint("admin_bp", __name__, url_prefix='/admin')
 
@@ -96,9 +98,81 @@ def search_users():
         cursor.close()
         conn.close()
 
+# --------------------------------
+# 更新用戶資料
+# --------------------------------
+@admin_bp.route('/api/update_user/<int:user_id>', methods=['PUT'])
+def update_user(user_id):
+    data = request.get_json()
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        username = data.get("username")
+        name = data.get("name")
+        email = data.get("email")
+        role = data.get("role")
+        class_id = data.get("class_id")
+        password = data.get("password")
+
+        update_fields = []
+        params = []
+
+        if username:
+            update_fields.append("username=%s")
+            params.append(username)
+        if name:
+            update_fields.append("name=%s")
+            params.append(name)
+        if email:
+            update_fields.append("email=%s")
+            params.append(email)
+        if role:
+            update_fields.append("role=%s")
+            params.append(role)
+        if class_id is not None:
+            update_fields.append("class_id=%s")
+            params.append(class_id)
+        if password:
+            hashed = generate_password_hash(password)
+            update_fields.append("password=%s")
+            params.append(hashed)
+
+        if not update_fields:
+            return jsonify({"success": False, "message": "沒有提供要更新的欄位"}), 400
+
+        params.append(user_id)
+        query = f"UPDATE users SET {', '.join(update_fields)} WHERE id=%s"
+        cursor.execute(query, params)
+        conn.commit()
+        return jsonify({"success": True, "message": "使用者更新成功"})
+    except Exception as e:
+        print(f"更新使用者錯誤: {e}")
+        return jsonify({"success": False, "message": "更新失敗"}), 500
+    finally:
+        cursor.close()
+        conn.close()
 
 # --------------------------------
-# 學生班級分配
+# # 刪除用戶
+# --------------------------------
+@admin_bp.route('/api/update_user/<int:user_id>', methods=['DELETE'])
+def delete_user(user_id):
+    conn = get_db()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("DELETE FROM users WHERE id=%s", (user_id,))
+        conn.commit()
+        return jsonify({"success": True, "message": "刪除成功"})
+    except Exception as e:
+        conn.rollback()
+        print("刪除使用者錯誤：", e)
+        return jsonify({"success": False, "message": "刪除失敗"}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+# --------------------------------
+# 取得學生資料
 # --------------------------------
 @admin_bp.route('/api/get_students_by_class', methods=['GET'])
 def get_students_by_class():
@@ -247,7 +321,130 @@ def export_companies_stats():
         cursor.close()
         conn.close()
 
+# --------------------------------
+# 建立新用戶
+# --------------------------------
+@admin_bp.route('/api/create_user', methods=['POST'])
+def create_user():
+    data = request.get_json()
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        username = data.get("username")
+        name = data.get("name")
+        email = (data.get("email") or "").strip()  # 避免 None
+        role = data.get("role")
+        class_id = data.get("class_id")
+        password = data.get("password")
 
+        # 🧩 驗證必要欄位
+        if not all([username, name, role, password]):
+            return jsonify({"success": False, "message": "請填寫完整資料"}), 400
+
+        # 🧩 老師與主任可以不填 email，其他角色必須有
+        if role not in ["teacher", "director","ta"] and not email:
+            return jsonify({"success": False, "message": "學生需填寫 email"}), 400
+
+        hashed = generate_password_hash(password)
+
+        query = """
+            INSERT INTO users (username, name, email, role, class_id, password)
+            VALUES (%s, %s, %s, %s, %s, %s)
+        """
+        cursor.execute(query, (username, name, email, role, class_id, hashed))
+        conn.commit()
+
+        return jsonify({"success": True, "message": "使用者建立成功"})
+    except Exception as e:
+        print(f"建立使用者錯誤: {e}")
+        return jsonify({"success": False, "message": "建立失敗"}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+# =========================================================
+# API - 分配導師班級（主任 / 老師 都能被指派）
+# =========================================================
+@admin_bp.route('/api/assign_teacher_class/<int:teacher_id>', methods=['POST'])
+def assign_teacher_class(teacher_id):
+    """管理員分配班導（可以是主任或老師）"""
+    if 'user_id' not in session or session.get('role') != 'admin':
+        return jsonify({"success": False, "message": "未授權"}), 403
+
+    conn = get_db()
+    cursor = conn.cursor()
+    try:
+        data = request.get_json()
+        class_ids = data.get("class_ids", [])
+        role = data.get("role", "advisor")  # 預設角色 advisor
+
+        if not class_ids:
+            return jsonify({"success": False, "message": "未提供班級資料"}), 400
+
+        # 確認該老師存在，角色為 teacher 或 director
+        cursor.execute("""
+            SELECT id, role FROM users WHERE id = %s AND role IN ('teacher', 'director')
+        """, (teacher_id,))
+        user = cursor.fetchone()
+        if not user:
+            return jsonify({"success": False, "message": "找不到該老師或角色不符合"}), 404
+
+        # 清除舊資料（避免重複）
+        cursor.execute("DELETE FROM classes_teacher WHERE teacher_id = %s", (teacher_id,))
+
+        # 新增指派
+        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        for class_id in class_ids:
+            cursor.execute("""
+                INSERT INTO classes_teacher (teacher_id, class_id, role, created_at, updated_at)
+                VALUES (%s, %s, %s, %s, %s)
+            """, (teacher_id, class_id, role, now, now))
+
+        conn.commit()
+        return jsonify({"success": True, "message": "班級指派成功"})
+    except Exception as e:
+        conn.rollback()
+        traceback.print_exc()
+        return jsonify({"success": False, "message": str(e)}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+# =========================================================
+# API - 查詢某位班導目前帶的班級
+# =========================================================
+@admin_bp.route('/api/get_teacher_classes/<int:teacher_id>', methods=['GET'])
+def get_teacher_classes(teacher_id):
+    """取得某位老師/主任目前所屬班級"""
+    if 'user_id' not in session or session.get('role') != 'admin':
+        return jsonify({"success": False, "message": "未授權"}), 403
+
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute("""
+            SELECT 
+                c.id AS class_id,
+                c.name AS class_name,
+                c.department,
+                ct.role AS teacher_role,
+                u.name AS teacher_name,
+                u.role AS user_role
+            FROM classes_teacher ct
+            JOIN classes c ON ct.class_id = c.id
+            JOIN users u ON ct.teacher_id = u.id
+            WHERE ct.teacher_id = %s
+        """, (teacher_id,))
+        data = cursor.fetchall()
+
+        return jsonify({"success": True, "data": data})
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"success": False, "message": str(e)}), 500
+    finally:
+        cursor.close()
+        conn.close()
+    
 # --------------------------------
 # 用戶管理頁面
 # --------------------------------

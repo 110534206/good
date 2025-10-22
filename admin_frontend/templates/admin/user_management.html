@@ -275,7 +275,7 @@
             };
 
             async function loadClasses(selectEl) {
-                const res = await fetch('/admin/api/get_all_classes');
+                const res = await fetch('/admin/api/get_classes');
                 const data = await res.json();
                 if (!data.success) return alert('載入班級失敗');
                 selectEl.innerHTML = '';
@@ -325,8 +325,10 @@
                     password: document.getElementById('editPassword').value,
                     class_id: document.getElementById('editClassId').value || null
                 };
-                const res = await fetch(`/admin/api/update_user/${id}`, {
-                    method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+                                const res = await fetch(`/admin/api/update_user/${id}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
                 });
                 const data = await res.json();
                 alert(data.message);
@@ -336,96 +338,90 @@
                 }
             });
 
+            // 開啟編輯用戶 Modal
+            window.openEditModal = async (id, username, name, email, role, class_id) => {
+                document.getElementById('editUserId').value = id;
+                document.getElementById('editUsername').value = username;
+                document.getElementById('editName').value = name;
+                document.getElementById('editEmail').value = email;
+                document.getElementById('editRole').value = role;
+                document.getElementById('editPassword').value = '';
+
+                const classGroup = document.getElementById('editClassIdGroup');
+                const classSelect = document.getElementById('editClassId');
+                if (role === 'student') {
+                    classGroup.style.display = '';
+                    await loadClasses(classSelect);
+                    classSelect.value = class_id || '';
+                } else {
+                    classGroup.style.display = 'none';
+                }
+
+                new bootstrap.Modal(document.getElementById('editUserModal')).show();
+            };
+
+            // 刪除使用者
             window.deleteUser = async (id) => {
-                if (!confirm("確定要刪除這個用戶嗎？")) return;
-                const res = await fetch(`/admin/api/delete_user/${id}`, { method: 'DELETE' });
+                if (!confirm('確定要刪除此用戶嗎？')) return;
+                const res = await fetch(`/admin/api/update_user/${id}`, { method: 'DELETE' });
                 const data = await res.json();
-                alert(data.message);
+                alert(data.message || (data.success ? '刪除成功' : '刪除失敗'));
                 if (data.success) loadUsers();
             };
 
-             // 編輯用戶
-    window.openEditModal = (id, username, name, email, role, classId) => {
-        const modal = new bootstrap.Modal(document.getElementById('editUserModal'));
-        document.getElementById('editUserId').value = id;
-        document.getElementById('editUsername').value = username;
-        document.getElementById('editName').value = name;
-        document.getElementById('editEmail').value = email;
+            // 開啟設定帶班 Modal
+            window.openAssignTeacherClass = async (teacherId) => {
+                document.getElementById('assignTeacherId').value = teacherId;
+                const classSelect = document.getElementById('assignTeacherClassSelect');
+                await loadClasses(classSelect);
+                new bootstrap.Modal(document.getElementById('assignTeacherClassModal')).show();
+            };
 
-        const roleSelect = document.getElementById('editRole');
-        roleSelect.innerHTML = `
-            <option value="student" ${role === 'student' ? 'selected' : ''}>學生</option>
-            <option value="teacher" ${role === 'teacher' ? 'selected' : ''}>教師</option>
-            <option value="director" ${role === 'director' ? 'selected' : ''}>主任</option>
-            <option value="ta" ${role === 'ta' ? 'selected' : ''}>科助</option>
-            <option value="admin" ${role === 'admin' ? 'selected' : ''}>管理員</option>
-        `;
+            // 提交設定帶班
+            window.submitAssignTeacherClass = async () => {
+                const teacherId = document.getElementById('assignTeacherId').value;
+                const role = document.getElementById('assignTeacherRole').value;
+                const classId = document.getElementById('assignTeacherClassSelect').value;
+                const payload = { class_ids: [classId], role };
+                const res = await fetch(`/admin/api/assign_teacher_class/${teacherId}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const data = await res.json();
+                alert(data.message);
+                if (data.success) {
+                    bootstrap.Modal.getInstance(document.getElementById('assignTeacherClassModal')).hide();
+                    loadUsers();
+                }
+            };
 
-        const classGroup = document.getElementById('editClassIdGroup');
-        const classSelect = document.getElementById('editClassId');
-        const isStudent = role === 'student';
-        classGroup.style.display = isStudent ? '' : 'none';
-        if (isStudent) {
-            loadClasses(classSelect);
-            if (classId) classSelect.value = classId;
-        }
+            // 開啟設定學生班級 Modal
+            window.openAssignStudentClass = async (studentId) => {
+                document.getElementById('assignStudentId').value = studentId;
+                const classSelect = document.getElementById('assignStudentClassSelect');
+                await loadClasses(classSelect);
+                new bootstrap.Modal(document.getElementById('assignStudentClassModal')).show();
+            };
 
-        modal.show();
-    };
+            // 提交學生班級設定
+            window.submitAssignStudentClass = async () => {
+                const studentId = document.getElementById('assignStudentId').value;
+                const classId = document.getElementById('assignStudentClassSelect').value;
+                const res = await fetch(`/admin/api/update_user/${studentId}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ class_id: classId })
+                });
+                const data = await res.json();
+                alert(data.message);
+                if (data.success) {
+                    bootstrap.Modal.getInstance(document.getElementById('assignStudentClassModal')).hide();
+                    loadUsers();
+                }
+            };
 
-    // 設定帶班
-    window.openAssignTeacherClass = async (userId) => {
-        document.getElementById('assignTeacherId').value = userId;
-        const classSelect = document.getElementById('assignTeacherClassSelect');
-        await loadClasses(classSelect);
-        new bootstrap.Modal(document.getElementById('assignTeacherClassModal')).show();
-    };
-
-    // 設定學生班級
-    window.openAssignStudentClass = async (userId) => {
-        document.getElementById('assignStudentId').value = userId;
-        const classSelect = document.getElementById('assignStudentClassSelect');
-        await loadClasses(classSelect);
-        new bootstrap.Modal(document.getElementById('assignStudentClassModal')).show();
-    };
-
-    // 送出設定帶班
-    window.submitAssignTeacherClass = async () => {
-        const userId = document.getElementById('assignTeacherId').value;
-        const classId = document.getElementById('assignTeacherClassSelect').value;
-        const role = document.getElementById('assignTeacherRole').value;
-
-        const res = await fetch(`/admin/api/assign_teacher_class/${userId}`, {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({class_id: classId, role})
-        });
-        const data = await res.json();
-        alert(data.message);
-        if (data.success) {
-            bootstrap.Modal.getInstance(document.getElementById('assignTeacherClassModal')).hide();
-            loadUsers();
-        }
-    };
-
-    // 送出設定學生班級
-    window.submitAssignStudentClass = async () => {
-        const userId = document.getElementById('assignStudentId').value;
-        const classId = document.getElementById('assignStudentClassSelect').value;
-
-        const res = await fetch(`/admin/api/assign_student_class/${userId}`, {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({class_id: classId})
-        });
-        const data = await res.json();
-        alert(data.message);
-        if (data.success) {
-            bootstrap.Modal.getInstance(document.getElementById('assignStudentClassModal')).hide();
-            loadUsers();
-        }
-    };
-            // 初始化載入資料
+            // 初始載入
             loadUsers();
         });
     </script>
