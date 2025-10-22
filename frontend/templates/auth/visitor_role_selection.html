@@ -5,85 +5,87 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>智慧實習平台 | 選擇身分</title>
   <style>
+    /* 這裡使用 login-confirm.html 的 CSS 樣式 */
     body {
-      font-family: 'Inter', sans-serif;
-      background: #f4f7f6;
-      color: #333;
+      font-family: "Segoe UI", "微軟正黑體", sans-serif;
+      background-color: #f3f6f9;
+      margin: 0;
+    }
+    .container {
       display: flex;
       justify-content: center;
       align-items: center;
-      min-height: 100vh;
-      margin: 0;
+      height: 100vh;
     }
-
-    .selection-container {
-      background: #ffffff;
-      padding: 3rem;
-      border-radius: 12px;
-      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
-      text-align: center;
-      max-width: 500px;
-      width: 90%;
-    }
-
-    .selection-container h1 {
-      color: #0066cc;
-      margin-bottom: 2.5rem;
-      font-size: 2rem;
-    }
-
-    .role-cards {
-      display: flex;
-      gap: 20px;
-      justify-content: center;
-    }
-
-    .role-card {
-      flex: 1;
-      padding: 2rem 1rem;
-      border: 2px solid #0066cc;
+    .card {
+      width: 550px;
+      padding: 60px;
       border-radius: 10px;
+      box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+      background-color: #ffffff;
+      text-align: center;
+    }
+    .card h1 {
+      font-size: 35px;
+      font-weight: 700;
+      margin-bottom: 30px;
+      color: #222;
+    }
+    /* 模仿 login-confirm.html 的按鈕樣式 */
+    .role-button {
+      background-color: #3c91e6;
+      color: white;
+      font-size: 25px;
+      font-weight: 600;
+      padding: 15px 30px;
+      border: none;
+      border-radius: 5px;
       cursor: pointer;
-      transition: all 0.3s ease;
-      /* 移除 a 標籤的預設樣式 */
-      text-decoration: none; 
-      color: #333;
-      font-weight: bold;
+      margin: 10px;
+      width: 80%; /* 讓按鈕寬一點 */
+      max-width: 300px;
+      transition: background-color 0.3s ease;
+      display: block; /* 讓按鈕垂直排列 */
+      margin: 15px auto; /* 居中 */
+    }
+    .role-button:hover {
+      background-color: #2b74c2;
+    }
+    .role-button.loading {
+      opacity: 0.7;
+      cursor: not-allowed;
     }
 
-    .role-card:hover {
-      background-color: #e6f0ff;
-      transform: translateY(-5px);
-      box-shadow: 0 4px 15px rgba(0, 102, 204, 0.15);
-    }
-
-    .role-card h3 {
-      margin-top: 0.5rem;
-      color: #0066cc;
-    }
-
-    .role-card p {
-      font-size: 0.9rem;
-      color: #666;
-      margin-top: 0.5rem;
+    /* 確保按鈕群組在中間 */
+    .role-buttons {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
     }
   </style>
 </head>
 <body>
-  <div class="selection-container">
-    <h1>請選擇您的身分</h1>
-    <div class="role-cards">
-      <div class="role-card" id="student-role" onclick="selectRole('student', '/student_visitor')">
-        <h2>🎓</h2>
-        <h3>學生</h3>
-        <p>上傳履歷、填寫志願序</p>
-      </div>
+  <div class="container">
+    <div class="card">
+      <h1>請選擇您的訪客身分</h1>
+      <div id="role-buttons" class="role-buttons">
+        
+        <button 
+          class="role-button" 
+          onclick="selectRole('student', '/student_visitor')">
+          🎓 學生
+        </button>
 
-      <div class="role-card" id="company-role" onclick="selectRole('company', '/vendor_visitor')">
-        <h2>🏢</h2>
-        <h3>廠商</h3>
-        <p>審核履歷、媒合學生</p>
+        <button 
+          class="role-button" 
+          onclick="selectRole('company', '/vendor_visitor')">
+          🏢 廠商
+        </button>
+
       </div>
+      <p style="margin-top: 20px; color: #666; font-size: 16px;">
+        您可以選擇任一身分瀏覽平台主要功能。
+      </p>
     </div>
   </div>
 
@@ -96,6 +98,9 @@
     function selectRole(role, url) {
       // 步驟 1: 將選定的角色儲存到 localStorage，供後續頁面判斷身分
       localStorage.setItem("selectedRole", role); 
+      
+      // 由於是訪客進入，我們確保 username 也是 guest
+      localStorage.setItem("username", "guest");
 
       // 步驟 2: 導航到對應的主頁
       window.location.href = url;
