@@ -224,6 +224,27 @@ def index_page():
 
     return redirect(url_for("auth_bp.login_page")) 
 
+# -------------------------
+# 訪客角色選擇頁面
+# -------------------------
+@auth_bp.route("/visitor_role_selection")
+def visitor_role_selection_page():
+    """
+    訪客角色選擇頁面，不需登入
+    """
+    # 設定 session 為 guest
+    session["role"] = "guest"
+    session["username"] = "guest"
+
+    # 這裡可以提供不同的訪客選項，例如 "一般訪客"、"查看課程"、"查詢公司"
+    roles = [
+        {"id": "general", "name": "一般訪客"},
+        {"id": "view_courses", "name": "查看課程"},
+        {"id": "view_companies", "name": "查詢公司"},
+    ]
+
+    return render_template("auth/visitor_role_selection.html", roles=roles)
+
 
 # -------------------------
 # 頁面路由

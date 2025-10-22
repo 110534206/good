@@ -263,6 +263,61 @@ def change_password():
         conn.close()
 
 # -------------------------
+# 訪客 - 查詢實習廠商
+# -------------------------
+@users_bp.route('/vendor_visitor')
+def vendor_visitor():
+    # 設 session 為 guest
+    session["role"] = "guest"
+    session["username"] = "guest"
+
+    # 取得所有已核准的公司（或依需求調整）
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute("SELECT id, company_name, location, industry FROM internship_companies WHERE status = 'approved'")
+        companies = cursor.fetchall()
+    except Exception as e:
+        print("❌ 取得公司資料錯誤:", e)
+        companies = []
+    finally:
+        cursor.close()
+        conn.close()
+
+    return render_template("user_shared/vendor_visitor.html", companies=companies)
+
+
+# -------------------------
+# 訪客 - 查詢學生資訊 / 志願序
+# -------------------------
+@users_bp.route('/student_visitor')
+def student_visitor():
+    # 設 session 為 guest
+    session["role"] = "guest"
+    session["username"] = "guest"
+
+    # 取得公開的學生志願序或基本資訊（依需求調整）
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute("""
+            SELECT s.id, s.username, s.name, c.name AS class_name
+            FROM users s
+            LEFT JOIN classes c ON s.class_id = c.id
+            WHERE s.role='student'
+        """)
+        students = cursor.fetchall()
+    except Exception as e:
+        print("❌ 取得學生資料錯誤:", e)
+        students = []
+    finally:
+        cursor.close()
+        conn.close()
+
+    return render_template("user_shared/student_visitor.html", students=students)
+
+
+# -------------------------
 # # 頁面路由
 # -------------------------
 
