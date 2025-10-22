@@ -45,7 +45,8 @@
       border-radius: 10px;
       cursor: pointer;
       transition: all 0.3s ease;
-      text-decoration: none;
+      /* 移除 a 標籤的預設樣式 */
+      text-decoration: none; 
       color: #333;
       font-weight: bold;
     }
@@ -72,18 +73,33 @@
   <div class="selection-container">
     <h1>請選擇您的身分</h1>
     <div class="role-cards">
-      <a href="/student_visitor" class="role-card" id="student-role">
+      <div class="role-card" id="student-role" onclick="selectRole('student', '/student_visitor')">
         <h2>🎓</h2>
         <h3>學生</h3>
         <p>上傳履歷、填寫志願序</p>
-      </a>
+      </div>
 
-      <a href="/vendor_visitor" class="role-card" id="company-role">
+      <div class="role-card" id="company-role" onclick="selectRole('company', '/vendor_visitor')">
         <h2>🏢</h2>
         <h3>廠商</h3>
         <p>審核履歷、媒合學生</p>
-      </a>
+      </div>
     </div>
   </div>
+
+  <script>
+    /**
+     * 儲存選擇的角色並導航到對應的主頁
+     * @param {string} role - 選擇的角色 (student 或 company)
+     * @param {string} url - 導航目標的路徑 (/student_visitor 或 /vendor_visitor)
+     */
+    function selectRole(role, url) {
+      // 步驟 1: 將選定的角色儲存到 localStorage，供後續頁面判斷身分
+      localStorage.setItem("selectedRole", role); 
+
+      // 步驟 2: 導航到對應的主頁
+      window.location.href = url;
+    }
+  </script>
 </body>
 </html>
