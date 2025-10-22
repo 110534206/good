@@ -101,14 +101,20 @@ def require_login():
 @resume_bp.route('/api/upload_resume', methods=['POST'])
 def upload_resume_api():
     try:
+        # 取得 session 角色
+        role = session.get('role')
+        if role != 'student':
+            # 非學生不能上傳
+            return jsonify({"success": False, "message": "只有學生可以上傳履歷"}), 403
+
         if 'resume' not in request.files:
             return jsonify({"success": False, "message": "未上傳檔案"}), 400
 
         file = request.files['resume']
-        username = request.form.get('username')
-
+        username = session.get('username')  # 直接用登入的學生帳號
         if not username:
-            return jsonify({"success": False, "message": "缺少使用者帳號"}), 400
+            return jsonify({"success": False, "message": "未登入學生帳號"}), 403
+
         if file.filename == '':
             return jsonify({"success": False, "message": "檔案名稱為空"}), 400
 
@@ -128,7 +134,6 @@ def upload_resume_api():
         if not user:
             cursor.close()
             conn.close()
-            # 刪掉已存檔案
             if os.path.exists(save_path):
                 os.remove(save_path)
             return jsonify({"success": False, "message": "找不到使用者"}), 404
@@ -209,8 +214,12 @@ def download_resume(resume_id):
 @resume_bp.route('/api/list_resumes/<username>', methods=['GET'])
 def list_resumes(username):
     try:
-        if not require_login():
-            return jsonify({"success": False, "message": "未授權"}), 403
+        role = session.get('role')
+        user_id = session.get('user_id')
+
+        if role is None:
+            # 訪客無權查詢履歷
+            return jsonify({"success": False, "message": "訪客無法查看履歷"}), 403
 
         conn = get_db()
         cursor = conn.cursor(dictionary=True)
@@ -223,8 +232,8 @@ def list_resumes(username):
 
         target_user_id = user['id']
 
-        # 權限檢查：讀取型的權限（TA 可讀）
-        if not can_access_target_resume(cursor, session['user_id'], session['role'], target_user_id):
+        # 權限檢查
+        if not can_access_target_resume(cursor, user_id, role, target_user_id):
             cursor.close()
             conn.close()
             return jsonify({"success": False, "message": "沒有權限查看該使用者的履歷"}), 403
