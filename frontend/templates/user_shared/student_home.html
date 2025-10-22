@@ -301,7 +301,6 @@
 </script>
 
 <body>
-  <!-- 頂部欄 -->
   <div class="top-bar">
     <div class="container">
       <div class="top-bar-left">
@@ -328,11 +327,9 @@
     </div>
   </div>
 
-  <!-- Hero 區塊 -->
   <div class="container">
     <header class="hero" role="banner"></header>
 
-    <!-- 公告輪播 -->
     <div id="announcement-carousel" role="region" aria-live="polite" aria-label="最新公告">
       <button id="announcement-prev" aria-label="上一則公告">&#8592;</button>
       <div id="announcement-content" tabindex="0"></div>
@@ -340,7 +337,6 @@
     </div>
   </div>
 
-  <!-- 主內容 -->
   <div class="container">
     <main>
       <h2 class="page-title">請選擇你要使用的功能</h2>
@@ -374,7 +370,6 @@
     </main>
   </div>
 
-  <!-- 側邊選單 -->
   <nav id="side-menu" aria-hidden="true" role="navigation" aria-label="功能選單">
     <button id="close-btn" aria-label="關閉功能選單">×</button>
     <h2>功能選單</h2>
@@ -387,7 +382,6 @@
     <a href="/intern_experience">實習心得</a>
   </nav>
 
-  <!-- JS 控制 -->
   <script>
     // 側邊選單開關
     document.getElementById('menu-btn').addEventListener('click', () => {
@@ -409,6 +403,7 @@
     const prevBtn = document.getElementById('announcement-prev');
     const nextBtn = document.getElementById('announcement-next');
 
+    // 這裡的 showAnnouncement 函式在下面會被覆蓋，但保留以防萬一
     function showAnnouncement(index) {
       if (notification.length > 0) {
         announcementContent.textContent = notification[index].title;
@@ -424,6 +419,7 @@
         if (data.success && Array.isArray(data.data)) {
           notification = data.data;
           currentAnnouncementIndex = 0;
+          // 載入資料後，使用修改後的 showAnnouncement 顯示
           showAnnouncement(currentAnnouncementIndex);
         } else {
           announcementContent.textContent = "目前沒有公告";
@@ -434,12 +430,14 @@
         announcementContent.textContent = "公告載入失敗";
       });
 
-    // 顯示公告
+    // **【修改處】顯示公告 - 將連結強制導向到履歷上傳頁面**
     function showAnnouncement(index) {
+      const uploadResumeUrl = "/upload_resume"; 
+      
       if (notification.length > 0) {
         const ann = notification[index];
         announcementContent.innerHTML = `
-      <a href="${ann.link_url}" target="_blank" style="color:#004080;text-decoration:none;">
+      <a href="${uploadResumeUrl}" style="color:#004080;text-decoration:none;">
         ${ann.title}
       </a>
     `;
