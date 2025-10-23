@@ -1,296 +1,332 @@
 <!DOCTYPE html>
 <html lang="zh-Hant">
+
 <head>
   <meta charset="UTF-8">
   <title>實習公司統計 - 科助後台</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
-    body { font-family: "Noto Sans TC", sans-serif; background: #f9fafb; }
-    .chart-container { background: #fff; border-radius: 16px; padding: 24px; box-shadow: 0 2px 6px rgba(0,0,0,0.1); margin-bottom: 24px; }
-    h2 { font-weight: 600; color: #333; }
-    .sidebar { min-height: 100vh; background: #f1f3f5; padding: 24px; }
-    .sidebar h4 { margin-bottom: 20px; }
-    .sidebar a { display: block; padding: 6px 0; color: #495057; text-decoration: none; }
-    .sidebar a:hover { color: #0d6efd; }
-    #studentsContainer { margin-top: 24px; }
+    body {
+      font-family: "Noto Sans TC", sans-serif;
+      background: #f9fafb;
+    }
+
+    .chart-container {
+      background: #fff;
+      border-radius: 16px;
+      padding: 24px;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+      margin-bottom: 24px;
+    }
+
+    h2 {
+      font-weight: 600;
+      color: #333;
+    }
+
+    .sidebar {
+      min-height: 100vh;
+      background: #f1f3f5;
+      padding: 24px;
+    }
+
+    .sidebar h4 {
+      margin-bottom: 20px;
+    }
+
+    .sidebar a {
+      display: block;
+      padding: 6px 0;
+      color: #495057;
+      text-decoration: none;
+    }
+
+    .sidebar a:hover {
+      color: #0d6efd;
+    }
+
+    #studentsContainer {
+      margin-top: 24px;
+    }
   </style>
 </head>
+
 <body class="p-0">
-<div class="container-fluid">
-  <div class="row">
-    <div class="col-md-3 sidebar">
-      <h4>🛠 後台設定</h4>
-      <div class="mb-3">
-        <label for="classSelect" class="form-label">選擇班級</label>
-        <select id="classSelect" class="form-select">
-          <option value="all">所有班級</option>
-        </select>
-      </div>
-      <div class="mb-3">
-        <button class="btn btn-primary w-100 mb-2" id="refreshBtn">刷新統計</button>
-        <button class="btn btn-success w-100 mb-2" id="exportBtn">匯出 Excel</button>
-        <button class="btn btn-info w-100" id="manageStudentsBtn">學生資料</button>
-      </div>
-      <hr>
-      <h6>其他設定</h6>
-      <ul class="list-unstyled">
-        <li><a href="#">新增公司</a></li>
-        <li><a href="#">管理學生</a></li>
-      </ul>
-    </div>
-
-    <div class="col-md-9 p-4">
-      <h2 class="mb-4 text-center">📊 實習公司統計儀表板</h2>
-      <div class="row g-4">
-        <div class="col-lg-6">
-          <div class="chart-container">
-            <h5 class="text-center">🏢 各公司被選志願次數（前五名）</h5>
-            <canvas id="companyChart"></canvas>
-          </div>
+  <div class="container-fluid">
+    <div class="row">
+      <div class="col-md-3 sidebar">
+        <h4>🛠 後台設定</h4>
+        <div class="mb-3">
+          <label for="classSelect" class="form-label">選擇班級</label>
+          <select id="classSelect" class="form-select">
+            <option value="all">所有班級</option>
+          </select>
         </div>
-        <div class="col-lg-3">
-          <div class="chart-container">
-            <h5 class="text-center">📄 履歷繳交率</h5>
-            <canvas id="resumeChart"></canvas>
-          </div>
+        <div class="mb-3">
+          <button class="btn btn-primary w-100 mb-2" id="refreshBtn">刷新統計</button>
+          <button class="btn btn-success w-100 mb-2" id="exportBtn">匯出 Excel</button>
+          <button class="btn btn-info w-100" id="manageStudentsBtn">學生資料</button>
         </div>
-        <div class="col-lg-3">
-          <div class="chart-container">
-            <h5 class="text-center">🎯 志願序填寫率</h5>
-            <canvas id="preferenceChart"></canvas>
-          </div>
-        </div>
-      </div>
-      
-      <div class="row g-4 mt-4">
-        <div class="col-12">
-          <div id="classChartContainer" class="chart-container">
-            <h2>班級實習進度分析</h2>
-            <p>請選擇一個班級以查看詳細實習統計圖表。</p>
-          </div>
-        </div>
+        <hr>
+        <h6>其他設定</h6>
+        <ul class="list-unstyled">
+          <li><a href="#">新增公司</a></li>
+          <li><a href="#">管理學生</a></li>
+        </ul>
       </div>
 
-      <div id="studentsContainer"></div>
+      <div class="col-md-9 p-4">
+        <h2 class="mb-4 text-center">📊 實習公司統計儀表板</h2>
+        <div class="row g-4">
+          <div class="col-lg-6">
+            <div class="chart-container">
+              <h5 class="text-center">🏢 各公司被選志願次數（前五名）</h5>
+              <canvas id="companyChart"></canvas>
+            </div>
+          </div>
+          <div class="col-lg-3">
+            <div class="chart-container">
+              <h5 class="text-center">📄 履歷繳交率</h5>
+              <canvas id="resumeChart"></canvas>
+            </div>
+          </div>
+          <div class="col-lg-3">
+            <div class="chart-container">
+              <h5 class="text-center">🎯 志願序填寫率</h5>
+              <canvas id="preferenceChart"></canvas>
+            </div>
+          </div>
+        </div>
+
+        <div class="row g-4 mt-4">
+          <div class="col-12">
+            <div id="classChartContainer" class="chart-container">
+              <h2>班級實習進度分析</h2>
+              <p>請選擇一個班級以查看詳細實習統計圖表。</p>
+            </div>
+          </div>
+        </div>
+
+        <div id="studentsContainer"></div>
+      </div>
     </div>
   </div>
-</div>
 
-<script>
-let companyChart, resumeChart, preferenceChart;
-let myClassChart = null; // 新增：用於儲存單一班級 Chart 實例
+  <script>
+    let companyChart, resumeChart, preferenceChart;
+    let myClassChart = null; // 新增：用於儲存單一班級 Chart 實例
 
-// 載入班級列表
-async function loadClasses() {
-  const res = await fetch("/admin/api/get_classes"); // 修正: 確保路由正確
-  const data = await res.json();
-  const select = document.getElementById("classSelect");
+    // 載入班級列表
+    async function loadClasses() {
+      const res = await fetch("/admin/api/get_classes"); // 修正: 確保路由正確
+      const data = await res.json();
+      const select = document.getElementById("classSelect");
 
-  if (data.success) {
-    data.classes.forEach(c => {
-      const option = document.createElement("option");
-      option.value = c.id;
-      option.textContent = `${c.department.replace('管科','')}${c.name}`;
-      select.appendChild(option);
-    });
-  }
-}
+      if (data.success) {
+        data.classes.forEach(c => {
+          const option = document.createElement("option");
+          option.value = c.id;
+          option.textContent = `${c.department.replace('管科', '')}${c.name}`;
+          select.appendChild(option);
+        });
+      }
+    }
 
-// 載入統計資料 (原有的三個圖表)
-async function loadData(classId = "all") {
-  let url = "/admin/api/manage_companies_stats"; // 修正: 確保路由正確
-  if (classId !== "all") url += `?class_id=${classId}`;
+    // 載入統計資料 (原有的三個圖表)
+    async function loadData(classId = "all") {
+      let url = "/admin/api/manage_companies_stats"; // 修正: 確保路由正確
+      if (classId !== "all") url += `?class_id=${classId}`;
 
-  const res = await fetch(url);
-  const data = await res.json();
+      const res = await fetch(url);
+      const data = await res.json();
 
-  if (!data.success) {
-    alert("載入統計資料失敗：" + data.message);
-    return;
-  }
+      if (!data.success) {
+        alert("載入統計資料失敗：" + data.message);
+        return;
+      }
 
-  // 公司志願前五名
-  const companies = data.top_companies.map(c => c.company_name);
-  const counts = data.top_companies.map(c => c.preference_count);
+      // 公司志願前五名
+      const companies = data.top_companies.map(c => c.company_name);
+      const counts = data.top_companies.map(c => c.preference_count);
 
-  if (companyChart) companyChart.destroy();
-  companyChart = new Chart(document.getElementById("companyChart"), {
-    type: "bar",
-    data: {
-      labels: companies,
-      datasets: [{ label: "志願次數", data: counts, backgroundColor: "#4e79a7" }]
-    },
-    options: { scales: { y: { beginAtZero: true } } }
-  });
+      if (companyChart) companyChart.destroy();
+      companyChart = new Chart(document.getElementById("companyChart"), {
+        type: "bar",
+        data: {
+          labels: companies,
+          datasets: [{ label: "志願次數", data: counts, backgroundColor: "#4e79a7" }]
+        },
+        options: { scales: { y: { beginAtZero: true } } }
+      });
 
-  const resumeData = [data.resume_stats.uploaded, data.resume_stats.not_uploaded];
-  const resumeTotal = resumeData.reduce((a,b)=>a+b,0);
+      const resumeData = [data.resume_stats.uploaded, data.resume_stats.not_uploaded];
+      const resumeTotal = resumeData.reduce((a, b) => a + b, 0);
 
-  if (resumeChart) resumeChart.destroy();
-  resumeChart = new Chart(document.getElementById("resumeChart"), {
-    type: "doughnut",
-    data: {
-      labels: ["已上傳", "未上傳"],
-      datasets: [{ data: resumeData, backgroundColor: ["#59a14f", "#e15759"] }]
-    },
-    options: {
-      plugins: {
-        legend: { position: 'bottom' },
-        tooltip: {
-          callbacks: {
-            label: function(context) {
-              const value = context.raw;
-              const percent = ((value/resumeTotal)*100).toFixed(1) + '%';
-              return `${context.label}: ${value} (${percent})`;
+      if (resumeChart) resumeChart.destroy();
+      resumeChart = new Chart(document.getElementById("resumeChart"), {
+        type: "doughnut",
+        data: {
+          labels: ["已上傳", "未上傳"],
+          datasets: [{ data: resumeData, backgroundColor: ["#59a14f", "#e15759"] }]
+        },
+        options: {
+          plugins: {
+            legend: { position: 'bottom' },
+            tooltip: {
+              callbacks: {
+                label: function (context) {
+                  const value = context.raw;
+                  const percent = ((value / resumeTotal) * 100).toFixed(1) + '%';
+                  return `${context.label}: ${value} (${percent})`;
+                }
+              }
             }
           }
         }
-      }
-    }
-  });
+      });
 
-  const prefData = [data.preference_stats.filled, data.preference_stats.not_filled];
-  const prefTotal = prefData.reduce((a,b)=>a+b,0);
+      const prefData = [data.preference_stats.filled, data.preference_stats.not_filled];
+      const prefTotal = prefData.reduce((a, b) => a + b, 0);
 
-  if (preferenceChart) preferenceChart.destroy();
-  preferenceChart = new Chart(document.getElementById("preferenceChart"), {
-    type: "doughnut",
-    data: {
-      labels: ["已填寫", "未填寫"],
-      datasets: [{ data: prefData, backgroundColor: ["#edc948", "#bab0ab"] }]
-    },
-    options: {
-      plugins: {
-        legend: { position: 'bottom' },
-        tooltip: {
-          callbacks: {
-            label: function(context) {
-              const value = context.raw;
-              const percent = ((value/prefTotal)*100).toFixed(1) + '%';
-              return `${context.label}: ${value} (${percent})`;
+      if (preferenceChart) preferenceChart.destroy();
+      preferenceChart = new Chart(document.getElementById("preferenceChart"), {
+        type: "doughnut",
+        data: {
+          labels: ["已填寫", "未填寫"],
+          datasets: [{ data: prefData, backgroundColor: ["#edc948", "#bab0ab"] }]
+        },
+        options: {
+          plugins: {
+            legend: { position: 'bottom' },
+            tooltip: {
+              callbacks: {
+                label: function (context) {
+                  const value = context.raw;
+                  const percent = ((value / prefTotal) * 100).toFixed(1) + '%';
+                  return `${context.label}: ${value} (${percent})`;
+                }
+              }
             }
           }
         }
-      }
+      });
     }
-  });
-}
 
-// 新增函式：載入單一班級的統計圖表
-async function loadClassStats(classId, className) {
-    const chartContainer = document.getElementById("classChartContainer");
-    
-    // 處理「所有班級」的特殊情況
-    if (classId === 'all') {
+    // 新增函式：載入單一班級的統計圖表
+    async function loadClassStats(classId, className) {
+      const chartContainer = document.getElementById("classChartContainer");
+
+      // 處理「所有班級」的特殊情況
+      if (classId === 'all') {
         if (myClassChart) { myClassChart.destroy(); myClassChart = null; }
         chartContainer.innerHTML = '<h2>班級實習進度分析</h2><p>請選擇一個班級以查看詳細實習統計圖表。</p>';
         return;
-    }
+      }
 
-    // 清空並準備新的 Chart 元素
-    chartContainer.innerHTML = '<h2>' + className + ' 實習統計分析</h2><canvas id="classStatsChart"></canvas>';
+      // 清空並準備新的 Chart 元素
+      chartContainer.innerHTML = '<h2>' + className + ' 實習統計分析</h2><canvas id="classStatsChart"></canvas>';
 
-    try {
+      try {
         // 呼叫新的 API 路由
         const res = await fetch(`/admin/api/get_class_stats/${classId}`);
         const data = await res.json();
 
         if (!data.success) {
-            if (myClassChart) { myClassChart.destroy(); myClassChart = null; }
-            chartContainer.innerHTML = `<div class="text-danger">載入統計圖表失敗：${data.message}</div>`;
-            return;
+          if (myClassChart) { myClassChart.destroy(); myClassChart = null; }
+          chartContainer.innerHTML = `<div class="text-danger">載入統計圖表失敗：${data.message}</div>`;
+          return;
         }
 
         const stats = data.stats;
         const ctx = document.getElementById('classStatsChart').getContext('2d');
-        
+
         // 銷毀舊的 Chart 實例（如果存在）
         if (myClassChart) {
-            myClassChart.destroy();
+          myClassChart.destroy();
         }
 
         // 使用 Chart.js 繪製長條圖
         myClassChart = new Chart(ctx, {
-            type: 'bar',
-            data: {
-                labels: ['總學生數', '已上傳履歷', '已填寫志願'],
-                datasets: [{
-                    label: '人數',
-                    data: [
-                        stats.total_students, 
-                        stats.students_with_resume, 
-                        stats.students_with_preference
-                    ],
-                    backgroundColor: [
-                        'rgba(54, 162, 235, 0.7)', // 藍色: 總學生數
-                        'rgba(75, 192, 192, 0.7)', // 綠色: 已上傳履歷
-                        'rgba(153, 102, 255, 0.7)' // 紫色: 已填寫志願
-                    ],
-                    borderColor: [
-                        'rgba(54, 162, 235, 1)',
-                        'rgba(75, 192, 192, 1)',
-                        'rgba(153, 102, 255, 1)'
-                    ],
-                    borderWidth: 1
-                }]
-            },
-            options: {
-                responsive: true,
-                scales: {
-                    y: {
-                        beginAtZero: true,
-                        // 設定 Y 軸的最大值略大於總學生數，且至少為 5
-                        max: stats.total_students > 0 ? Math.ceil(stats.total_students * 1.05) : 5, 
-                        ticks: {
-                            precision: 0 // 確保 Y 軸刻度是整數
-                        }
-                    },
-                    x: {
-                        grid: {
-                            display: false
-                        }
-                    }
-                },
-                plugins: {
-                    legend: {
-                        display: false
-                    },
-                    title: {
-                        display: true,
-                        text: stats.class_name + ' 實習進度統計'
-                    }
+          type: 'bar',
+          data: {
+            labels: ['總學生數', '已上傳履歷', '已填寫志願'],
+            datasets: [{
+              label: '人數',
+              data: [
+                stats.total_students,
+                stats.students_with_resume,
+                stats.students_with_preference
+              ],
+              backgroundColor: [
+                'rgba(54, 162, 235, 0.7)', // 藍色: 總學生數
+                'rgba(75, 192, 192, 0.7)', // 綠色: 已上傳履歷
+                'rgba(153, 102, 255, 0.7)' // 紫色: 已填寫志願
+              ],
+              borderColor: [
+                'rgba(54, 162, 235, 1)',
+                'rgba(75, 192, 192, 1)',
+                'rgba(153, 102, 255, 1)'
+              ],
+              borderWidth: 1
+            }]
+          },
+          options: {
+            responsive: true,
+            scales: {
+              y: {
+                beginAtZero: true,
+                // 設定 Y 軸的最大值略大於總學生數，且至少為 5
+                max: stats.total_students > 0 ? Math.ceil(stats.total_students * 1.05) : 5,
+                ticks: {
+                  precision: 0 // 確保 Y 軸刻度是整數
                 }
+              },
+              x: {
+                grid: {
+                  display: false
+                }
+              }
+            },
+            plugins: {
+              legend: {
+                display: false
+              },
+              title: {
+                display: true,
+                text: stats.class_name + ' 實習進度統計'
+              }
             }
+          }
         });
 
-    } catch (error) {
+      } catch (error) {
         console.error("Fetch error:", error);
         if (myClassChart) { myClassChart.destroy(); myClassChart = null; }
         chartContainer.innerHTML = `<div class="text-danger">網路連線或資料處理錯誤</div>`;
+      }
     }
-}
 
 
-// 管理學生
-document.getElementById("manageStudentsBtn").addEventListener("click", async () => {
-  const classId = document.getElementById("classSelect").value;
-  const res = await fetch("/admin/api/get_students_by_class?class_id=" + classId); // 修正: 確保路由正確
-  const data = await res.json();
-  const container = document.getElementById("studentsContainer");
-  container.innerHTML = "";
+    // 管理學生
+    document.getElementById("manageStudentsBtn").addEventListener("click", async () => {
+      const classId = document.getElementById("classSelect").value;
+      const res = await fetch("/admin/api/get_students_by_class?class_id=" + classId); // 修正: 確保路由正確
+      const data = await res.json();
+      const container = document.getElementById("studentsContainer");
+      container.innerHTML = "";
 
-  if (!data.success) {
-    container.innerHTML = `<div class="text-danger">載入學生資料失敗：${data.message}</div>`;
-    return;
-  }
+      if (!data.success) {
+        container.innerHTML = `<div class="text-danger">載入學生資料失敗：${data.message}</div>`;
+        return;
+      }
 
-  if (data.students.length === 0) {
-    container.innerHTML = "<div>該班級沒有學生資料</div>";
-    return;
-  }
+      if (data.students.length === 0) {
+        container.innerHTML = "<div>該班級沒有學生資料</div>";
+        return;
+      }
 
-  let html = `<table class="table table-striped">
+      let html = `<table class="table table-striped">
     <thead><tr>
       <th>學號</th>
       <th>姓名</th>
@@ -300,40 +336,41 @@ document.getElementById("manageStudentsBtn").addEventListener("click", async () 
     </tr></thead>
     <tbody>`;
 
-  data.students.forEach(s => {
-    html += `<tr>
+      data.students.forEach(s => {
+        html += `<tr>
       <td>${s.username}</td>
       <td>${s.name}</td>
       <td>${s.email}</td>
       <td>${s.resume_count > 0 ? '✅' : '❌'}</td>
       <td>${s.preference_count > 0 ? '✅' : '❌'}</td>
     </tr>`;
-  });
+      });
 
-  html += "</tbody></table>";
-  container.innerHTML = html;
-});
+      html += "</tbody></table>";
+      container.innerHTML = html;
+    });
 
-// 刷新統計 (修改：同時呼叫 loadData 和 loadClassStats)
-document.getElementById("refreshBtn").addEventListener("click", () => {
-  const classSelect = document.getElementById("classSelect");
-  const classId = classSelect.value;
-  const className = classSelect.options[classSelect.selectedIndex].text;
-  
-  loadData(classId); // 載入原有 3 個圖表
-  loadClassStats(classId, className); // 載入新的班級統計圖表
-});
+    // 刷新統計 (修改：同時呼叫 loadData 和 loadClassStats)
+    document.getElementById("refreshBtn").addEventListener("click", () => {
+      const classSelect = document.getElementById("classSelect");
+      const classId = classSelect.value;
+      const className = classSelect.options[classSelect.selectedIndex].text;
 
-// 匯出 Excel
-document.getElementById("exportBtn").addEventListener("click", () => {
-  const classId = document.getElementById("classSelect").value;
-  window.location.href = `/admin/api/export_companies_stats${classId !== "all" ? '?class_id=' + classId : ''}`; // 修正: 確保路由正確
-});
+      loadData(classId); // 載入原有 3 個圖表
+      loadClassStats(classId, className); // 載入新的班級統計圖表
+    });
 
-// 初始載入
-loadClasses();
-loadData();
-loadClassStats("all", "所有班級"); // 初始載入班級統計 (顯示預設文字)
-</script>
+    // 匯出 Excel
+    document.getElementById("exportBtn").addEventListener("click", () => {
+      const classId = document.getElementById("classSelect").value;
+      window.location.href = `/admin/api/export_companies_stats${classId !== "all" ? '?class_id=' + classId : ''}`; // 修正: 確保路由正確
+    });
+
+    // 初始載入
+    loadClasses();
+    loadData();
+    loadClassStats("all", "所有班級"); // 初始載入班級統計 (顯示預設文字)
+  </script>
 </body>
+
 </html>

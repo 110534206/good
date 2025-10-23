@@ -1,15 +1,25 @@
 <!DOCTYPE html>
 <html lang="zh-Hant">
+
 <head>
   <meta charset="UTF-8">
   <title>實習心得分享</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
   <style>
-    body { background: #f8f9fa; }
-    .card:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.12); }
-    .card .card-body { min-height: 120px; }
+    body {
+      background: #f8f9fa;
+    }
+
+    .card:hover {
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+    }
+
+    .card .card-body {
+      min-height: 120px;
+    }
   </style>
 </head>
+
 <body>
   <div class="container mt-4">
     <h2 class="mb-4">實習心得分享</h2>
@@ -44,7 +54,8 @@
         </div>
         <div class="modal-body">
           <h5 id="modalCompany"></h5>
-          <p class="text-muted">職缺：<span id="modalJob"></span>｜發表者：<span id="modalAuthor"></span>｜年份：<span id="modalYear"></span></p>
+          <p class="text-muted">職缺：<span id="modalJob"></span>｜發表者：<span id="modalAuthor"></span>｜年份：<span
+              id="modalYear"></span></p>
           <p id="modalContent"></p>
           <p class="text-muted small">發表時間：<span id="modalCreated"></span></p>
         </div>
@@ -132,7 +143,7 @@
     }
 
     // 當選定公司時載入職缺
-    document.getElementById('company_id').addEventListener('change', async function() {
+    document.getElementById('company_id').addEventListener('change', async function () {
       const companyId = this.value;
       const jobSelect = document.getElementById('job_id');
       jobSelect.innerHTML = '<option value="">載入中...</option>';
@@ -172,7 +183,7 @@
               <div class="card-body">
                 <h6>${company} ${job}</h6>
                 <p class="text-muted mb-2">${yearText} 年 ｜ 評分 ${rating} ⭐</p>
-                <p class="small text-truncate">${(item.content||'').slice(0,200)}</p>
+                <p class="small text-truncate">${(item.content || '').slice(0, 200)}</p>
                 <div class="mt-2 d-flex justify-content-between">
                   <div>
                     <button class="btn btn-outline-primary btn-sm" onclick="viewExp(${item.id})">查看</button>
@@ -221,7 +232,7 @@
     }
 
     // 新增心得送出
-    document.getElementById('addForm').addEventListener('submit', async function(e) {
+    document.getElementById('addForm').addEventListener('submit', async function (e) {
       e.preventDefault();
       const payload = {
         company_id: document.getElementById('company_id').value || null,
@@ -251,10 +262,11 @@
     document.getElementById('btnSearch').addEventListener('click', loadExperiences);
 
     // 初始載入
-    window.onload = function() {
+    window.onload = function () {
       loadCompanies();
       loadExperiences();
     };
   </script>
 </body>
+
 </html>
