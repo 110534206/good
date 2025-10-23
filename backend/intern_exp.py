@@ -2,97 +2,159 @@ from flask import Blueprint, request, jsonify, session, render_template, redirec
 from config import get_db
 import traceback
 from datetime import datetime
-import traceback
 
 intern_exp_bp = Blueprint('intern_exp_bp', __name__, url_prefix='/intern_experience')
 
-
-# ✅ Helper - 確認是否登入
+# --------------------
+# Helpers
+# --------------------
 def require_login():
-    if 'user_id' not in session:
-        return False
-    return True
+    return 'user_id' in session
 
+def to_minguo(year):
+    """輸入可為西元年或民國年，若是西元(>1911)則轉民國；若已是民國(<2000)則直接回傳。"""
+    try:
+        y = int(year)
+        if y > 1911:
+            return y - 1911
+        return y
+    except Exception:
+        return None
 
-# ✅ 頁面：實習心得主畫面
+def to_gregorian_if_needed(year):
+    """若傳入為民國（例如 110），回傳西元；若是西元則回傳原本值。方便內部需要西元時使用（此專案多數不需要）。"""
+    try:
+        y = int(year)
+        if y < 2000:
+            return y + 1911
+        return y
+    except Exception:
+        return None
+
+# --------------------
+# 頁面：整合列表 + 新增（前端 HTML）
+# --------------------
 @intern_exp_bp.route('/')
 def page_intern_exp():
     if not require_login():
         return redirect(url_for('auth_bp.login'))
-    # 渲染前端 HTML 頁面
     return render_template('user_shared/intern_experience.html')
 
-
-# ✅ API：取得心得列表（搜尋 + 年份篩選）
-@intern_exp_bp.route('/api/list', methods=['GET'])
-def get_experience_list():
+# --------------------
+# API：公司清單（下拉用） - 只回傳已通過或可見的公司
+# --------------------
+@intern_exp_bp.route('/api/companies', methods=['GET'])
+def get_companies():
     try:
-        # 取得前端傳來的關鍵字和年份參數
-        keyword = request.args.get('keyword', '')
-        year = request.args.get('year', '')
-
         db = get_db()
         cursor = db.cursor(dictionary=True)
-
-        # SQL 查詢：JOIN users 取得發表者名稱 (author)，JOIN companies 取得公司名稱 (company_name)
-        # 僅查詢公開的心得 (ie.is_public = 1)
-        query = """
-            SELECT ie.id, ie.year, ie.content, ie.rating,
-                   u.name AS author, c.name AS company_name, ie.created_at
-            FROM internship_experiences ie
-            JOIN users u ON ie.user_id = u.id
-            LEFT JOIN companies c ON ie.company_id = c.id
-            WHERE ie.is_public = 1
-        """
-        params = []
-
-        # 處理關鍵字篩選 (依公司名稱 c.name 搜尋)
-        if keyword:
-            query += " AND c.name LIKE %s"
-            params.append(f"%{keyword}%")
-
-        # 處理年份篩選
-        if year:
-            query += " AND ie.year = %s"
-            params.append(year)
-
-        # 依建立時間倒序排序
-        query += " ORDER BY ie.created_at DESC"
-
-        cursor.execute(query, params)
-        experiences = cursor.fetchall()
-        # 回傳 JSON 格式的心得列表
-        return jsonify({"success": True, "data": experiences})
-
+        # 假設通過狀態為 'approved'；如果你使用其他值請調整條件
+        cursor.execute("SELECT id, company_name FROM internship_companies WHERE status = 'approved' ORDER BY company_name")
+        companies = cursor.fetchall()
+        return jsonify({"success": True, "data": companies})
     except Exception as e:
         print(traceback.format_exc())
         return jsonify({"success": False, "message": str(e)}), 500
 
+# --------------------
+# API：取得某公司職缺
+# --------------------
+@intern_exp_bp.route('/api/jobs/<int:company_id>', methods=['GET'])
+def get_jobs_by_company(company_id):
+    try:
+        db = get_db()
+        cursor = db.cursor(dictionary=True)
+        cursor.execute("SELECT id, title FROM internship_jobs WHERE company_id = %s ORDER BY title", (company_id,))
+        jobs = cursor.fetchall()
+        return jsonify({"success": True, "data": jobs})
+    except Exception as e:
+        print(traceback.format_exc())
+        return jsonify({"success": False, "message": str(e)}), 500
 
-# ✅ API：查看單篇心得
+# --------------------
+# API：心得列表（搜尋、年份篩選），只列公開(is_public = 1)
+# --------------------
+@intern_exp_bp.route('/api/list', methods=['GET'])
+def get_experience_list():
+    try:
+        keyword = request.args.get('keyword', '').strip()
+        year = request.args.get('year', '').strip()  # 前端會傳民國年
+        db = get_db()
+        cursor = db.cursor(dictionary=True)
+
+        query = """
+            SELECT ie.id, ie.year, ie.content, ie.rating, ie.created_at,
+                   u.id AS author_id, u.name AS author, 
+                   c.id AS company_id, c.company_name,
+                   j.id AS job_id, j.title AS job_title
+            FROM internship_experiences ie
+            JOIN users u ON ie.user_id = u.id
+            LEFT JOIN internship_companies c ON ie.company_id = c.id
+            LEFT JOIN internship_jobs j ON ie.job_id = j.id
+            WHERE ie.is_public = 1
+        """
+        params = []
+
+        if keyword:
+            query += " AND c.company_name LIKE %s"
+            params.append(f"%{keyword}%")
+
+        if year:
+            # year 前端傳民國年（如110），資料庫也儲存為民國年
+            query += " AND ie.year = %s"
+            params.append(year)
+
+        query += " ORDER BY ie.created_at DESC"
+
+        cursor.execute(query, params)
+        experiences = cursor.fetchall()
+
+        # 確保 year 為 int（並以民國年輸出）
+        for e in experiences:
+            try:
+                e['year'] = int(e['year']) if e.get('year') is not None else None
+            except:
+                e['year'] = None
+
+        return jsonify({"success": True, "data": experiences})
+    except Exception as e:
+        print(traceback.format_exc())
+        return jsonify({"success": False, "message": str(e)}), 500
+
+# --------------------
+# API：查看單篇心得
+# --------------------
 @intern_exp_bp.route('/api/view/<int:exp_id>', methods=['GET'])
 def view_experience(exp_id):
     try:
         db = get_db()
         cursor = db.cursor(dictionary=True)
-
         cursor.execute("""
-            SELECT ie.*, u.name AS author, c.name AS company_name
+            SELECT ie.id, ie.year, ie.content, ie.rating, ie.created_at, ie.user_id,
+                   u.name AS author,
+                   c.id AS company_id, c.company_name,
+                   j.id AS job_id, j.title AS job_title
             FROM internship_experiences ie
             JOIN users u ON ie.user_id = u.id
-            LEFT JOIN companies c ON ie.company_id = c.id
+            LEFT JOIN internship_companies c ON ie.company_id = c.id
+            LEFT JOIN internship_jobs j ON ie.job_id = j.id
             WHERE ie.id = %s
         """, (exp_id,))
-
         exp = cursor.fetchone()
+        if exp:
+            try:
+                exp['year'] = int(exp['year']) if exp.get('year') is not None else None
+            except:
+                exp['year'] = None
         return jsonify({"success": True, "data": exp})
-
     except Exception as e:
         print(traceback.format_exc())
         return jsonify({"success": False, "message": str(e)}), 500
 
-
-# ✅ API：新增心得
+# --------------------
+# API：新增心得（接收 company_id, job_id, year, rating, content）
+#       - year 可為西元或民國，會儲存為民國年
+# --------------------
 @intern_exp_bp.route('/api/add', methods=['POST'])
 def add_experience():
     try:
@@ -100,30 +162,39 @@ def add_experience():
             return jsonify({"success": False, "message": "請先登入"}), 403
 
         user_id = session['user_id']
-        data = request.json
-        company_id = data.get('company_id')
-        year = data.get('year')
-        content = data.get('content')
-        rating = data.get('rating')
+        data = request.get_json() or {}
+        company_id = data.get('company_id') or None
+        job_id = data.get('job_id') or None
+        year_raw = data.get('year')
+        content = data.get('content') or ''
+        rating = data.get('rating') or None
+
+        # 轉換 year（若用者傳西元或民國皆接受，統一儲存為民國年）
+        year = None
+        if year_raw is not None and year_raw != '':
+            try:
+                year = to_minguo(int(year_raw))
+            except:
+                year = None
 
         db = get_db()
         cursor = db.cursor()
 
-        # 將 is_public 預設為 1 (公開)
         cursor.execute("""
-            INSERT INTO internship_experiences (user_id, company_id, year, content, rating, is_public, created_at)
-            VALUES (%s, %s, %s, %s, %s, 1, NOW())
-        """, (user_id, company_id, year, content, rating))
+            INSERT INTO internship_experiences
+                (user_id, company_id, job_id, year, content, rating, is_public, created_at)
+            VALUES (%s, %s, %s, %s, %s, %s, 1, NOW())
+        """, (user_id, company_id, job_id, year, content, rating))
 
         db.commit()
         return jsonify({"success": True, "message": "心得已新增"})
-
     except Exception as e:
         print(traceback.format_exc())
         return jsonify({"success": False, "message": str(e)}), 500
 
-
-# ✅ API：刪除心得（只能刪自己的）
+# --------------------
+# API：刪除心得（只能刪自己的）
+# --------------------
 @intern_exp_bp.route('/api/delete/<int:exp_id>', methods=['DELETE'])
 def delete_experience(exp_id):
     try:
@@ -133,21 +204,19 @@ def delete_experience(exp_id):
         user_id = session['user_id']
         db = get_db()
         cursor = db.cursor()
-
         cursor.execute("SELECT user_id FROM internship_experiences WHERE id = %s", (exp_id,))
-        exp = cursor.fetchone()
-
-        if not exp:
+        row = cursor.fetchone()
+        if not row:
             return jsonify({"success": False, "message": "心得不存在"}), 404
 
-        if exp[0] != user_id:
+        # row may be tuple (cursor default) or dict; handle both
+        owner_id = row[0] if not isinstance(row, dict) else row.get('user_id')
+        if owner_id != user_id:
             return jsonify({"success": False, "message": "不能刪除他人的心得"}), 403
 
         cursor.execute("DELETE FROM internship_experiences WHERE id = %s", (exp_id,))
         db.commit()
-
         return jsonify({"success": True, "message": "已刪除"})
-
     except Exception as e:
         print(traceback.format_exc())
         return jsonify({"success": False, "message": str(e)}), 500

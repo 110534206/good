@@ -6,7 +6,8 @@
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
   <style>
     body { background: #f8f9fa; }
-    .card:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
+    .card:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.12); }
+    .card .card-body { min-height: 120px; }
   </style>
 </head>
 <body>
@@ -20,23 +21,20 @@
       <div class="col-md-3">
         <select id="filterYear" class="form-select">
           <option value="">選擇年份</option>
-          <option>2025</option>
-          <option>2024</option>
-          <option>2023</option>
-          <option>2022</option>
         </select>
       </div>
       <div class="col-md-2">
         <button id="btnSearch" class="btn btn-primary w-100">搜尋</button>
       </div>
       <div class="col-md-3 text-end">
-        <a href="/intern_experience/add" class="btn btn-success">+ 上傳心得</a>
+        <button class="btn btn-success" data-bs-toggle="modal" data-bs-target="#addModal">+ 上傳心得</button>
       </div>
     </div>
 
     <div id="experienceList" class="row g-3"></div>
   </div>
 
+  <!-- 查看心得 Modal -->
   <div class="modal fade" id="viewModal" tabindex="-1">
     <div class="modal-dialog modal-lg">
       <div class="modal-content">
@@ -46,8 +44,9 @@
         </div>
         <div class="modal-body">
           <h5 id="modalCompany"></h5>
-          <p class="text-muted">發表者：<span id="modalAuthor"></span>｜年份：<span id="modalYear"></span></p>
+          <p class="text-muted">職缺：<span id="modalJob"></span>｜發表者：<span id="modalAuthor"></span>｜年份：<span id="modalYear"></span></p>
           <p id="modalContent"></p>
+          <p class="text-muted small">發表時間：<span id="modalCreated"></span></p>
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">關閉</button>
@@ -56,58 +55,206 @@
     </div>
   </div>
 
+  <!-- 新增心得 Modal -->
+  <div class="modal fade" id="addModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+      <div class="modal-content">
+        <div class="modal-header bg-success text-white">
+          <h5 class="modal-title">新增實習心得</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <form id="addForm">
+            <div class="mb-3">
+              <label class="form-label">公司</label>
+              <select class="form-select" id="company_id" required>
+                <option value="">載入公司中...</option>
+              </select>
+            </div>
+
+            <div class="mb-3">
+              <label class="form-label">職缺</label>
+              <select class="form-select" id="job_id" required>
+                <option value="">請先選公司</option>
+              </select>
+            </div>
+
+            <div class="mb-3">
+              <label class="form-label">年份（可輸入西元或民國，如 2021 或 110，系統會存民國年）</label>
+              <input type="text" class="form-control" id="year" placeholder="例如 110 或 2021" required>
+            </div>
+
+            <div class="mb-3">
+              <label class="form-label">評分 (1~5)</label>
+              <input type="number" class="form-control" id="rating" min="1" max="5" required>
+            </div>
+
+            <div class="mb-3">
+              <label class="form-label">心得內容</label>
+              <textarea class="form-control" id="content" rows="5" required></textarea>
+            </div>
+
+            <button type="submit" class="btn btn-success">送出</button>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+
+
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
   <script>
-    // 函式：載入實習心得列表
+    // 產生民國年下拉 (近 6 年)
+    (function populateYearSelect() {
+      const sel = document.getElementById('filterYear');
+      const currentMinguo = new Date().getFullYear() - 1911;
+      for (let y = currentMinguo; y >= currentMinguo - 5; y--) {
+        const opt = document.createElement('option');
+        opt.value = y;
+        opt.textContent = y;
+        sel.appendChild(opt);
+      }
+    })();
+
+    // 載入公司下拉
+    async function loadCompanies() {
+      const res = await fetch('/intern_experience/api/companies');
+      const data = await res.json();
+      const companySelect = document.getElementById('company_id');
+      companySelect.innerHTML = '<option value="">請選擇公司</option>';
+      if (data.success) {
+        data.data.forEach(c => {
+          companySelect.innerHTML += `<option value="${c.id}">${c.company_name}</option>`;
+        });
+      } else {
+        companySelect.innerHTML = '<option value="">載入公司失敗</option>';
+      }
+    }
+
+    // 當選定公司時載入職缺
+    document.getElementById('company_id').addEventListener('change', async function() {
+      const companyId = this.value;
+      const jobSelect = document.getElementById('job_id');
+      jobSelect.innerHTML = '<option value="">載入中...</option>';
+      if (!companyId) {
+        jobSelect.innerHTML = '<option value="">請先選擇公司</option>';
+        return;
+      }
+      const res = await fetch(`/intern_experience/api/jobs/${companyId}`);
+      const data = await res.json();
+      jobSelect.innerHTML = '<option value="">請選擇職缺</option>';
+      if (data.success && data.data.length > 0) {
+        data.data.forEach(j => jobSelect.innerHTML += `<option value="${j.id}">${j.title}</option>`);
+      } else {
+        jobSelect.innerHTML = '<option value="">該公司無職缺</option>';
+      }
+    });
+
+    // 載入心得列表
     async function loadExperiences() {
-      // 取得搜尋欄位的值
       const keyword = document.getElementById('searchKeyword').value;
       const year = document.getElementById('filterYear').value;
-      
-      // 發起 API 請求到後端 /intern_experience/api/list，帶上 keyword 和 year 參數
-      const res = await fetch(`/intern_experience/api/list?keyword=${keyword}&year=${year}`);
+      const res = await fetch(`/intern_experience/api/list?keyword=${encodeURIComponent(keyword)}&year=${encodeURIComponent(year)}`);
       const data = await res.json();
       const list = document.getElementById('experienceList');
       list.innerHTML = '';
 
-      if (data.success && data.data.length > 0) {
-        // 成功取得資料，迴圈生成 HTML 卡片
+      if (data.success && data.data && data.data.length > 0) {
         data.data.forEach(item => {
-          list.innerHTML += `
-            <div class="col-md-4">
-              <div class="card p-3">
-                <h6>${item.company_name || '未填寫公司'}</h6>
-                <p class="text-muted">${item.year} 年｜評分 ${item.rating} ⭐</p>
-                <button class="btn btn-outline-primary btn-sm" onclick="viewExp(${item.id})">查看內容</button>
+          const company = item.company_name || '未填寫公司';
+          const job = item.job_title ? `／${item.job_title}` : '';
+          const yearText = item.year ? `${item.year}` : '--';
+          const rating = item.rating ? item.rating : '--';
+          const card = document.createElement('div');
+          card.className = 'col-md-4';
+          card.innerHTML = `
+            <div class="card p-3">
+              <div class="card-body">
+                <h6>${company} ${job}</h6>
+                <p class="text-muted mb-2">${yearText} 年 ｜ 評分 ${rating} ⭐</p>
+                <p class="small text-truncate">${(item.content||'').slice(0,200)}</p>
+                <div class="mt-2 d-flex justify-content-between">
+                  <div>
+                    <button class="btn btn-outline-primary btn-sm" onclick="viewExp(${item.id})">查看</button>
+                  </div>
+                  <div>
+                    ${item.author_id && item.author_id === Number(window.USER_ID || 0) ? `<button class="btn btn-danger btn-sm" onclick="deleteExp(${item.id})">刪除</button>` : ''}
+                  </div>
+                </div>
               </div>
             </div>`;
+          list.appendChild(card);
         });
       } else {
         list.innerHTML = '<p class="text-muted">找不到資料</p>';
       }
     }
 
-    // 函式：查看單篇心得內容 (透過 Modal 顯示)
+    // 取得單篇內容並顯示
     async function viewExp(id) {
-      // 發起 API 請求到後端 /intern_experience/api/view/<exp_id>
       const res = await fetch(`/intern_experience/api/view/${id}`);
       const data = await res.json();
-      if (data.success) {
-        // 將 API 回傳的資料填入 Modal 內
-        document.getElementById('modalCompany').innerText = data.data.company_name;
-        document.getElementById('modalAuthor').innerText = data.data.author;
-        document.getElementById('modalYear').innerText = data.data.year;
-        document.getElementById('modalContent').innerText = data.data.content;
-        // 顯示 Modal
+      if (data.success && data.data) {
+        document.getElementById('modalCompany').innerText = data.data.company_name || '未填寫公司';
+        document.getElementById('modalJob').innerText = data.data.job_title || '';
+        document.getElementById('modalAuthor').innerText = data.data.author || '';
+        document.getElementById('modalYear').innerText = data.data.year || '';
+        document.getElementById('modalContent').innerText = data.data.content || '';
+        document.getElementById('modalCreated').innerText = data.data.created_at || '';
         new bootstrap.Modal(document.getElementById('viewModal')).show();
+      } else {
+        alert('取得內容失敗');
       }
     }
 
-    // 綁定「搜尋」按鈕的點擊事件，點擊時執行 loadExperiences 載入資料
+    // 刪除心得（按鈕出現在自己的心得卡片）
+    async function deleteExp(id) {
+      if (!confirm('確定要刪除此心得？')) return;
+      const res = await fetch(`/intern_experience/api/delete/${id}`, { method: 'DELETE' });
+      const data = await res.json();
+      if (data.success) {
+        alert('已刪除');
+        loadExperiences();
+      } else {
+        alert('刪除失敗：' + data.message);
+      }
+    }
+
+    // 新增心得送出
+    document.getElementById('addForm').addEventListener('submit', async function(e) {
+      e.preventDefault();
+      const payload = {
+        company_id: document.getElementById('company_id').value || null,
+        job_id: document.getElementById('job_id').value || null,
+        year: document.getElementById('year').value,
+        rating: document.getElementById('rating').value,
+        content: document.getElementById('content').value
+      };
+
+      const res = await fetch('/intern_experience/api/add', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+      if (data.success) {
+        alert('心得上傳成功！');
+        document.getElementById('addForm').reset();
+        bootstrap.Modal.getInstance(document.getElementById('addModal')).hide();
+        loadExperiences();
+      } else {
+        alert('上傳失敗：' + data.message);
+      }
+    });
+
+    // 綁定搜尋按鈕
     document.getElementById('btnSearch').addEventListener('click', loadExperiences);
-    
-    // 網頁載入完成時，立即執行 loadExperiences 載入初始資料
-    window.onload = loadExperiences;
+
+    // 初始載入
+    window.onload = function() {
+      loadCompanies();
+      loadExperiences();
+    };
   </script>
 </body>
 </html>
