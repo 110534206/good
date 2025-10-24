@@ -181,8 +181,7 @@
         <div class="form-box">
             <h2>Welcome back!</h2>
             <div id="error-message">帳號或密碼錯誤，請重新輸入。</div>
-
-            <form onsubmit="return handleLogin(event)" method="POST">
+            <form id="loginForm" onsubmit="return handleLogin(event)" method="POST">
                 <div class="form-group">
                     <label for="username">帳號</label>
                     <input type="text" id="username" required />
@@ -201,7 +200,7 @@
                     <div class="button-row">
                         <button type="button" class="button guest-login" onclick="handleguestLogin()">以訪客身分進入</button>
                         <button type="button" class="button register"
-                          onclick="window.location.href='{{ url_for('auth_bp.show_register_student_page') }}'">註冊</button>
+                            onclick="window.location.href='{{ url_for('auth_bp.show_register_student_page') }}'">註冊</button>
                     </div>
                 </div>
             </form>
@@ -209,6 +208,10 @@
     </div>
 
     <script>
+        const usernameInput = document.getElementById("username");
+        const passwordInput = document.getElementById("password");
+        const errorMsg = document.getElementById("error-message");
+
         function togglePassword() {
             const pwd = document.getElementById("password"),
                 icon = document.getElementById("eyeIcon");
@@ -258,6 +261,8 @@
                 } else {
                     err.textContent = d.message || "帳號或密碼錯誤";
                     err.style.display = "block";
+                    passwordInput.value = ""; // 錯誤自動清空密碼
+                    passwordInput.focus();
                 }
 
             } catch (error) {
@@ -276,6 +281,10 @@
             localStorage.setItem("roleList", JSON.stringify(["guest"]));
             window.location.href = "/visitor_role_selection";
         }
+
+        // 即時隱藏錯誤訊息
+        usernameInput.addEventListener('input', () => errorMsg.style.display = 'none');
+        passwordInput.addEventListener('input', () => errorMsg.style.display = 'none');
     </script>
 </body>
 

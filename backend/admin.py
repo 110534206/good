@@ -39,16 +39,22 @@ def get_all_users():
                 user['created_at'] = user['created_at'].strftime("%Y-%m-%d %H:%M:%S")
 
             role_map = {'ta': '科助', 'teacher': '老師', 'student': '學生', 'director': '主任', 'admin': '管理員'}
-            user['role_display'] = role_map.get(user.get('role'), user.get('role'))
+            user['role_display'] = role_map.get(user['role'], user['role'])
+
+            # 【新增邏輯】提取學生的入學屆數
+            if user['role'] == 'student' and user.get('username') and len(user['username']) >= 3:
+                user['admission_year'] = user['username'][:3]
+            else:
+                user['admission_year'] = ''
+            # 【新增邏輯結束】
 
         return jsonify({"success": True, "users": users})
     except Exception as e:
-        print(f"獲取用戶列表錯誤: {e}")
-        return jsonify({"success": False, "message": "獲取用戶列表失敗"}), 500
+        print(f"取得所有用戶錯誤: {e}")
+        return jsonify({"success": False, "message": "取得失敗"}), 500
     finally:
         cursor.close()
         conn.close()
-
 
 @admin_bp.route('/api/search_users', methods=['GET'])
 def search_users():

@@ -1,10 +1,10 @@
 <!DOCTYPE html>
 <html lang="zh-TW">
-
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>個人資料管理</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
   <style>
     body {
       font-family: Arial, sans-serif;
@@ -34,11 +34,12 @@
 
     input,
     select {
-      width: 100%;
+      width: 96%;
       padding: 8px;
       margin-top: 5px;
       border-radius: 6px;
       border: 1px solid #ccc;
+      font-size: 16px;
     }
 
     input[readonly] {
@@ -83,6 +84,28 @@
       background: #ccc;
       cursor: not-allowed;
     }
+
+    .password-container {
+      position: relative;
+      margin-bottom: 24px;
+    }
+
+    .toggle-password {
+      position: absolute;
+      top: 10px; 
+      right: 16px;
+      font-size: 20px;
+      cursor: pointer;
+      color: #666;
+    }
+    
+    #error-message {
+      display: none;
+      font-weight: bold;
+      color: rgb(184, 59, 59);
+      margin-bottom: 15px;
+      text-align: center;
+    }
   </style>
 </head>
 
@@ -91,64 +114,69 @@
     <h2>個人資料</h2>
 
     <img id="avatarPreview" class="avatar-preview" src="https://via.placeholder.com/100?text=頭像" alt="頭像預覽" />
-
-    <div id="page1" class="page active">
+    <input type="hidden" id="isHomeroom" value="false" /> <div id="page1" class="page active">
       <label for="avatarUpload">上傳頭像</label>
       <input type="file" id="avatarUpload" accept="image/*" />
 
       <label for="identity">身分</label>
       <input id="identity" type="text" readonly />
 
-      <!-- 學生專用欄位 -->
+      <label for="admissionYear" id="admissionYearLabel">入學屆數</label> <input id="admissionYear" type="text" readonly />
+
       <div id="studentFields" class="role-specific-fields" style="display: none;">
         <label for="combinedClass">班級</label>
         <input id="combinedClass" type="text" readonly />
-        
+
         <label for="studentId">學號</label>
         <input id="studentId" type="text" readonly />
       </div>
 
-      <!-- 教師專用欄位 -->
-      <div id="teacherFields" class="role-specific-fields" style="display: none;">
-        <label for="teacherId">教師編號</label>
-        <input id="teacherId" type="text" readonly />
-      </div>
+     <div id="managedClassesContainer" class="role-specific-fields" style="display: none;">
+        <label for="managedClasses">管理班級</label>
+        <input id="managedClasses" type="text" readonly />
+     </div>
+        
+     <div id="teacherFields" class="role-specific-fields" style="display: none;">
+        <input id="teacherId" type="hidden" /> 
+     </div>
 
-      <!-- 主任專用欄位 -->
-      <div id="directorFields" class="role-specific-fields" style="display: none;">
-        <label for="directorId">主任編號</label>
-        <input id="directorId" type="text" readonly />
-      </div>
+     <div id="directorFields" class="role-specific-fields" style="display: none;">
+        <input id="directorId" type="hidden" /> 
+     </div>
 
-      <!-- 科助專用欄位 -->
       <div id="taFields" class="role-specific-fields" style="display: none;">
         <label for="taId">科助編號</label>
         <input id="taId" type="text" readonly />
       </div>
 
-      <!-- 管理員專用欄位 -->
       <div id="adminFields" class="role-specific-fields" style="display: none;">
         <label for="adminId">管理員編號</label>
         <input id="adminId" type="text" readonly />
       </div>
-
-      <label for="name">姓名</label>
-      <input id="name" type="text" />
-
-    </div>
+</div>
 
     <div id="page2" class="page">
+      <label for="name">姓名</label>
+      <input id="name" type="text" readonly />
+
       <label for="email">電子郵件</label>
       <input id="email" type="email" readonly />
 
       <label for="oldPassword">舊密碼</label>
-      <input type="password" id="oldPassword" />
+      <div class="password-container">
+        <input type="password" id="oldPassword" />
+        <span class="toggle-password" data-target="oldPassword">
+          <i class="fas fa-eye-slash"></i>
+        </span>
+      </div>
 
       <label for="newPassword">新密碼</label>
-      <input type="password" id="newPassword" />
-
-      <label for="confirmPassword">確認新密碼</label>
-      <input type="password" id="confirmPassword" />
+      <div class="password-container">
+        <input type="password" id="newPassword" />
+        <span class="toggle-password" data-target="newPassword">
+          <i class="fas fa-eye-slash"></i>
+        </span>
+      </div>
     </div>
 
     <div class="buttons">
@@ -164,11 +192,15 @@
 
       const prevBtn = document.getElementById('prevBtn');
       const nextBtn = document.getElementById('nextBtn');
+      const managedClassesContainer = document.getElementById('managedClassesContainer');
+      const managedClassesInput = document.getElementById('managedClasses');
+      const admissionYearLabel = document.getElementById('admissionYearLabel'); // 取得標籤元素
 
       // 用來儲存 class_id 後續更新用
       window.classId = null;
+      // 用來儲存學生班級資料，以便計算入學屆數
+      window.classData = null; 
 
-      // *** 修正: 將 roleMap 和 roleMapReverse 放在 DOMContentLoaded 的頂層作用域 ***
       const roleMap = {
         "student": "學生",
         "teacher": "教師",
@@ -183,7 +215,6 @@
         "科助": "ta",
         "管理員": "admin"
       };
-      // *** 修正結束 ***
 
       function showPage(index) {
         pages.forEach((page, i) => page.classList.toggle('active', i === index));
@@ -192,7 +223,7 @@
       }
 
       // 根據使用者身分顯示相應的欄位
-      function showRoleSpecificFields(role) {
+      function showRoleSpecificFields(role, isHomeroom) {
         // 隱藏所有角色專用欄位
         const allRoleFields = document.querySelectorAll('.role-specific-fields');
         allRoleFields.forEach(field => {
@@ -200,15 +231,21 @@
         });
 
         // 根據角色顯示相應欄位
-        switch(role) {
+        switch (role) {
           case 'student':
             document.getElementById('studentFields').style.display = 'block';
             break;
           case 'teacher':
             document.getElementById('teacherFields').style.display = 'block';
+            if (isHomeroom) {
+              managedClassesContainer.style.display = 'block';
+            }
             break;
           case 'director':
             document.getElementById('directorFields').style.display = 'block';
+            if (isHomeroom) {
+              managedClassesContainer.style.display = 'block';
+            }
             break;
           case 'ta':
             document.getElementById('taFields').style.display = 'block';
@@ -217,6 +254,46 @@
             document.getElementById('adminFields').style.display = 'block';
             break;
         }
+      }
+
+      // 計算入學屆數（例如：資五孝 -> 110）
+      function calculateAdmissionYear(classDisplayName) {
+        if (!classDisplayName) return '';
+        
+        // 假設班級名稱格式為：[科別][屆數簡稱][班級名稱]
+        // 範例: "資五孝", "管一愛", "管科五孝"
+        const match = classDisplayName.match(/([一二三四五六七八九十]|[0-9]+)/); // 找到第一個數字或中文數字
+        
+        if (match) {
+            const classYearMap = {
+                "一": 1, "二": 2, "三": 3, "四": 4, "五": 5, 
+                "1": 1, "2": 2, "3": 3, "4": 4, "5": 5 
+            };
+            const currentYear = new Date().getFullYear(); // 例如 2025 (實際年份)
+            const currentROCYear = currentYear - 1911; // 例如 114 (實際學年度)
+            
+            let grade = match[0];
+            let gradeNum = parseInt(grade);
+            
+            if (isNaN(gradeNum)) {
+                // 如果是中文數字，轉換成數字
+                gradeNum = classYearMap[grade] || 0;
+            }
+
+            if (gradeNum >= 1 && gradeNum <= 5) {
+                // 假設今年的新生是 currentROCYear 屆 (五年制), 
+                // 屆數計算公式: 實際學年度 - (年級 - 1)
+                // 例如: 114學年度的五 (5) 年級 => 114 - (5 - 1) = 110 屆
+                const admissionYear = currentROCYear - (gradeNum - 1);
+                return admissionYear.toString();
+            }
+        }
+        
+        // 如果無法從班級名稱判斷，則使用後端傳來的 admission_year (從學號前三碼取得)
+        const admissionYearFromBackend = document.getElementById('admissionYear').value;
+        if (admissionYearFromBackend) return admissionYearFromBackend;
+        
+        return '';
       }
 
       // 載入用戶資料
@@ -229,42 +306,83 @@
           if (!data.success) throw new Error(data.message || '取得資料失敗');
           const user = data.user;
 
+          // 儲存班導師狀態
+          const isHomeroom = user.is_homeroom || false;
+          document.getElementById('isHomeroom').value = isHomeroom ? 'true' : 'false';
+
           // 頭像 - 加上時間戳避免快取造成顯示舊圖
           const initialAvatarUrl = user.avatar_url ? (user.avatar_url + '?t=' + Date.now()) : 'https://via.placeholder.com/100?text=頭像';
           document.getElementById('avatarPreview').src = initialAvatarUrl;
 
           // 身分轉換
-          document.getElementById('identity').value = roleMap[user.role] || '';
+          const role = user.role;
+          document.getElementById('identity').value = roleMap[role] || '';
 
           // 根據使用者身分顯示相應的欄位
-          showRoleSpecificFields(user.role);
+          showRoleSpecificFields(role, isHomeroom);
 
+          // -------------------------------------------------------------
           // 根據身分填入相應的資料
-          if (user.role === 'student') {
-            // 班級顯示 & 存 class_id
-            if (user.classes && user.classes.length > 0) {
-              document.getElementById('combinedClass').value = user.classes
-                .map(c => (c.department.replace("管科", "") + c.name))
-                .join("、");
-            } else {
-              document.getElementById('combinedClass').value = user.class_display_name || '';
-            }
+          // -------------------------------------------------------------
+          if (role === 'student') {
+            const classDisplayName = user.class_display_name || '';
+            document.getElementById('combinedClass').value = classDisplayName;
             window.classId = user.class_id || null;
             document.getElementById('studentId').value = user.username || '';
-          } else if (user.role === 'teacher') {
-            document.getElementById('teacherId').value = user.username || '';
-          } else if (user.role === 'director') {
-            document.getElementById('directorId').value = user.username || '';
-          } else if (user.role === 'ta') {
+
+            // 標題設定為「入學屆數」
+            admissionYearLabel.textContent = '入學屆數';
+            
+            // 入學屆數 (學生: 使用班級名稱計算，若無則使用後端學號屆數)
+            const admissionYear = calculateAdmissionYear(classDisplayName) || user.admission_year || '';
+            document.getElementById('admissionYear').value = admissionYear;
+          } else if (role === 'teacher' || role === 'director') {
+            
+            // 隱藏的 ID 欄位
+            if (role === 'teacher') {
+                document.getElementById('teacherId').value = user.username || '';
+            } else {
+                document.getElementById('directorId').value = user.username || '';
+            }
+
+            // 管理班級 (只有班導師/主任有)
+            if (isHomeroom) {
+              const classDisplayName = user.class_display_name || '';
+              managedClassesInput.value = classDisplayName;
+              
+              // 標題設定為「班級屆數」
+              admissionYearLabel.textContent = '班級屆數'; 
+
+              // 如果有多個班級，取第一個班級計算入學屆數
+              const firstClass = classDisplayName.split('、')[0].trim();
+              const admissionYear = calculateAdmissionYear(firstClass);
+              document.getElementById('admissionYear').value = admissionYear;
+              
+              managedClassesContainer.style.display = 'block';
+            } else {
+               // 非班導師/主任，入學屆數欄位標題為「入學屆數」，內容為空
+               admissionYearLabel.textContent = '入學屆數'; 
+               document.getElementById('admissionYear').value = '';
+            }
+
+          } else if (role === 'ta') {
             document.getElementById('taId').value = user.username || '';
-          } else if (user.role === 'admin') {
+            admissionYearLabel.textContent = '入學屆數'; 
+            document.getElementById('admissionYear').value = ''; 
+          } else if (role === 'admin') {
             document.getElementById('adminId').value = user.username || '';
+            admissionYearLabel.textContent = '入學屆數'; 
+            document.getElementById('admissionYear').value = ''; 
           }
 
           document.getElementById('name').value = user.name || '';
           document.getElementById('email').value = user.email || '';
         })
         .catch(err => alert(err.message));
+        
+      // -------------------------------------------------------------
+      // 頁面切換與資料儲存（與上次版本相同，為維持完整性保留）
+      // -------------------------------------------------------------
 
       prevBtn.addEventListener('click', () => {
         if (currentPage > 0) {
@@ -279,6 +397,8 @@
           showPage(currentPage);
         } else {
           // 完成按鈕，送出資料
+          
+          nextBtn.disabled = true; // 避免重複送出
 
           const avatarFile = document.getElementById('avatarUpload').files[0];
 
@@ -306,11 +426,12 @@
               if (avatarUrl) {
                 document.getElementById('avatarPreview').src = avatarUrl + '?t=' + Date.now();
               }
-              
+
               // 更新個人資料
               const roleDisplayValue = document.getElementById('identity').value;
               const roleValue = roleMapReverse[roleDisplayValue] || 'student'; // 取得英文 role
-              
+
+              // 學生身分才需要 class_id
               const classIdToSend = roleValue === 'student' ? window.classId : null;
 
               if (roleValue === 'student' && !classIdToSend) {
@@ -335,7 +456,7 @@
               const payload = {
                 username: username,
                 // 後端 /api/saveProfile 預期收到中文 role 顯示值 (role_display)
-                role: roleDisplayValue, 
+                role: roleDisplayValue,
                 name: document.getElementById('name').value,
                 class_id: classIdToSend,
               };
@@ -348,20 +469,32 @@
                 .then(res => res.json())
                 .then(data => {
                   if (!data.success) throw new Error(data.message || '更新個人資料失敗');
-                  return { avatarUrl, roleValue }; // 傳遞 roleValue
+                  return { 
+                      avatarUrl, 
+                      roleValue: data.role, // 使用後端回傳的 role
+                      isHomeroom: data.is_homeroom, // 使用後端回傳的 is_homeroom
+                  }; 
                 });
             })
-            .then(({ roleValue }) => {
+            .then(({ roleValue, isHomeroom }) => {
               // 變更密碼（如果有填）
               const oldPwd = document.getElementById('oldPassword').value.trim();
               const newPwd = document.getElementById('newPassword').value.trim();
-              const confirmPwd = document.getElementById('confirmPassword').value.trim();
+              const confirmPwdInput = document.getElementById('newPassword'); // 確認密碼欄位已被移除，故不再檢查
+              
+              let finalRedirectUrl = '';
+              if (roleValue === 'student') {
+                  finalRedirectUrl = '/student_home';
+              } else if (roleValue === 'ta') {
+                  finalRedirectUrl = '/ta_home';
+              } else if (roleValue === 'teacher' || roleValue === 'director') {
+                  // 判斷是否為班導師
+                  finalRedirectUrl = isHomeroom ? '/class_teacher_home' : `/${roleValue}_home`;
+              } else {
+                  finalRedirectUrl = '/student_home'; // 預設跳轉
+              }
 
-              if (oldPwd || newPwd || confirmPwd) {
-                if (newPwd !== confirmPwd) {
-                  alert('新密碼與確認新密碼不符！');
-                  throw new Error('密碼確認失敗');
-                }
+              if (oldPwd || newPwd) {
                 return fetch('/api/change_password', {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
@@ -369,38 +502,21 @@
                 })
                   .then(res => res.json())
                   .then(data => {
+                    nextBtn.disabled = false; // 恢復按鈕
                     if (!data.success) throw new Error(data.message || '變更密碼失敗');
                     alert('資料及密碼更新成功！');
-                    // 根據 roleValue (英文代碼) 跳轉
-                    if (roleValue === 'student') {
-                      window.location.href = '/student_home';
-                    } else if (roleValue === 'ta') {
-                      window.location.href = '/ta_home';
-                    } else if (roleValue === 'teacher') {
-                      window.location.href = '/teacher_home';
-                    } else if (roleValue === 'director') {
-                      window.location.href = '/director_home';
-                    } else {
-                      window.location.href = '/student_home'; // 預設跳轉
-                    }
+                    window.location.href = finalRedirectUrl;
                   });
               } else {
+                nextBtn.disabled = false; // 恢復按鈕
                 alert('資料更新成功！');
-                // 根據 roleValue (英文代碼) 跳轉
-                if (roleValue === 'student') {
-                  window.location.href = '/student_home';
-                } else if (roleValue === 'ta') {
-                  window.location.href = '/ta_home';
-                } else if (roleValue === 'teacher') {
-                  window.location.href = '/teacher_home';
-                } else if (roleValue === 'director') {
-                  window.location.href = '/director_home';
-                } else {
-                  window.location.href = '/student_home'; // 預設跳轉
-                }
+                window.location.href = finalRedirectUrl;
               }
             })
-            .catch(err => alert(err.message));
+            .catch(err => {
+                nextBtn.disabled = false; // 發生錯誤時恢復按鈕
+                alert(err.message);
+            });
         }
       });
 
@@ -414,6 +530,23 @@
           };
           reader.readAsDataURL(file);
         }
+      });
+
+      // 密碼顯示/隱藏邏輯
+      document.querySelectorAll('.toggle-password').forEach(toggle => {
+        toggle.addEventListener('click', function () {
+          const targetId = this.getAttribute('data-target');
+          const passwordInput = document.getElementById(targetId);
+          const icon = this.querySelector('i');
+
+          if (passwordInput.type === 'password') {
+            passwordInput.type = 'text';
+            icon.classList.replace('fa-eye-slash', 'fa-eye');
+          } else {
+            passwordInput.type = 'password';
+            icon.classList.replace('fa-eye', 'fa-eye-slash');
+          }
+        });
       });
 
       showPage(currentPage);

@@ -35,6 +35,7 @@
                     <th>Email</th>
                     <th>角色</th>
                     <th>所屬班級</th>
+                    <th>屆數</th>
                     <th>科系</th>
                     <th>帶班</th>
                     <th>建立時間</th>
@@ -209,6 +210,7 @@
                             <td>${roleMap[user.role] || user.role}</td>
                             <td>${user.role === 'student' ? (user.class_name || '-') : '-'}</td>
                             <td>${user.role === 'student' ? (user.department || '-') : '-'}</td>
+                            <td>${user.admission_year || ''}</td>
                             <td>${['teacher', 'director'].includes(user.role) ? (user.teaching_classes || '-') : '-'}</td>
                             <td>${user.created_at || ''}</td>
                             <td>
