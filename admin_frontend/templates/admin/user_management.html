@@ -1,122 +1,381 @@
 <!DOCTYPE html>
 <html lang="zh-Hant">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>用戶管理</title>
+    <title>用戶管理 - 管理中心</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons/font/bootstrap-icons.css" rel="stylesheet">
     <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
         body {
+            font-family: 'Inter', sans-serif;
+            background: #e9ecef;
+            /* 淺灰色背景，更專業 */
+            color: #333;
+            overflow-x: hidden;
+        }
+
+        /* 已移除 .container-fluid 的自定義 CSS */
+
+        /* 頂端列 */
+        .top-bar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 60px;
+            background-color: #fff;
+            z-index: 1100;
+            display: flex;
+            align-items: center;
+            box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        /* 頂端列內容用 container 包裹，寬度跟下方一致 */
+        .top-bar>.container {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0 0.5rem;
+            height: 100%;
+            gap: 30px;
+        }
+
+        .top-bar-left #menu-btn {
+            width: 30px;
+            height: 22px;
+            cursor: pointer;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }
+
+        .top-bar-left #menu-btn span {
+            height: 4px;
+            background-color: #333;
+            border-radius: 2px;
+        }
+
+        .top-bar-right {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-weight: bold;
+        }
+
+        .top-bar-right .btn-link {
+            color: #0066cc;
+            background-color: transparent;
+            border: 1.5px solid #0066cc;
+            padding: 0.3rem 0.7rem;
+            border-radius: 6px;
+            text-decoration: none;
+            transition: background-color 0.3s ease, color 0.3s ease;
+            font-size: 0.9rem;
+        }
+
+        .top-bar-right .btn-link:hover {
+            background-color: #0066cc;
+            color: white;
+        }
+
+        .top-bar-right #login-avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            object-fit: cover;
+            cursor: pointer;
+            margin-top: 6px;
+        }
+
+        /* Hero 區塊 */
+        header.hero {
+            position: relative;
+            width: 100%;
+            aspect-ratio: 3 / 1;
+            background-image: url('/static/images/title.png');
+            background-size: cover;
+            background-repeat: no-repeat;
+            background-position: center;
+            margin-top: 80px;
+            /* 避開固定頂端列 */
+            margin-bottom: 2rem;
+            border-radius: 0;
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        #side-menu {
+            position: fixed;
+            top: 0;
+            left: 0;
+            height: 100vh;
+            width: 320px;
+            max-width: 80vw;
+            background-color: rgba(10, 10, 10, 0.95);
+            backdrop-filter: blur(6px);
+            box-shadow: 3px 0 12px rgb(0 0 0 / 0.7);
+            padding: 2rem 1.5rem;
+            transform: translateX(-100%);
+            transition: transform 0.3s ease-in-out;
+            z-index: 1100;
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            color: white;
+            user-select: none;
+        }
+
+        #side-menu.open {
+            transform: translateX(0);
+        }
+
+        #close-btn {
+            position: absolute;
+            top: 2rem;
+            right: 1.6rem;
+            font-size: 2.2rem;
+            background: none;
+            border: none;
+            color: white;
+            cursor: pointer;
+            line-height: 1;
+            width: 2.5rem;
+            height: 2.5rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        #side-menu h2 {
+            width: 100%;
+            margin-bottom: 1.5rem;
+            font-weight: 700;
+            font-size: 1.5rem;
+            text-align: left;
+        }
+
+        #side-menu a {
+            display: block;
+            width: 100%;
+            padding: 0.5rem 0;
+            font-size: 1.1rem;
+            color: #ddd;
+            text-decoration: none;
+            border-radius: 4px;
+            transition: background-color 0.2s ease;
+        }
+
+        #side-menu a:hover {
+            background-color: rgba(255, 255, 255, 0.15);
+            color: white;
+        }
+
+        .card {
+            border: none;
+            border-radius: 0.5rem;
+            box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.05);
+            /* 提升卡片陰影 */
+        }
+
+        .table thead th {
+            background-color: #004b99;
+            /* 更深的專業藍色 */
+            color: white;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+
+        .table-responsive {
+            max-height: 70vh;
+            /* 限制表格高度，防止頁面過長 */
+            overflow-y: auto;
+        }
+
+        /* 角色徽章顏色 */
+        .role-student {
+            background-color: #0d6efd;
+        }
+
+        /* 藍色 */
+        .role-teacher {
+            background-color: #198754;
+        }
+
+        /* 綠色 */
+        .role-director {
+            background-color: #ffc107;
+            color: #343a40;
+        }
+
+        /* 黃色 */
+        .role-ta {
+            background-color: #6c757d;
+        }
+
+        /* 灰色 */
+        .role-admin {
+            background-color: #dc3545;
+        }
+
+        /* 紅色 */
+
+        .badge {
+            font-size: 0.8em;
+            font-weight: 500;
+            min-width: 60px;
+            display: inline-block;
+        }
+
+        .action-btns {
+            min-width: 150px;
+            /* 確保操作按鈕區域足夠寬 */
+            text-align: center;
+        }
+
+        .modal-body .form-control[readonly] {
             background-color: #f8f9fa;
         }
-        .table thead th {
-            background-color: #0d6efd;
-            color: white;
+
+        /* 隱藏密碼欄位的文字 */
+        .password-mask {
+            -webkit-text-security: disc;
         }
     </style>
 </head>
 
 <body>
-    <div class="container mt-5">
-        <h2 class="mb-3">用戶管理</h2>
-        <div class="d-flex gap-2 mb-3 flex-wrap">
-            <input type="text" id="searchUsername" class="form-control w-auto" placeholder="搜尋帳號">
-            <button class="btn btn-primary" onclick="searchUsers()">搜尋</button>
-            <button class="btn btn-secondary" onclick="resetSearch()">重置</button>
-            <button class="btn btn-success ms-auto" onclick="openCreateModal()">新增用戶</button>
-        </div>
-
-        <table class="table table-bordered table-hover align-middle">
-            <thead>
-                <tr>
-                    <th>ID</th>
-                    <th>帳號</th>
-                    <th>姓名</th>
-                    <th>Email</th>
-                    <th>角色</th>
-                    <th>所屬班級</th>
-                    <th>屆數</th>
-                    <th>科系</th>
-                    <th>帶班</th>
-                    <th>建立時間</th>
-                    <th>操作</th>
-                </tr>
-            </thead>
-            <tbody id="userTableBody"></tbody>
-        </table>
-    </div>
-
-    <!-- 編輯用戶 Modal -->
-    <div class="modal fade" id="editUserModal" tabindex="-1">
-        <div class="modal-dialog">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title">編輯用戶</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+    <div class="top-bar">
+        <div class="container">
+            <div class="top-bar-left">
+                <div id="menu-btn" title="選單" role="button" tabindex="0">
+                    <span></span><span></span><span></span>
                 </div>
-                <div class="modal-body">
-                    <form id="editUserForm">
-                        <input type="hidden" id="editUserId">
-                        <div class="mb-3">
-                            <label class="form-label">帳號</label>
-                            <input type="text" id="editUsername" class="form-control" required>
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label">姓名</label>
-                            <input type="text" id="editName" class="form-control">
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label">Email</label>
-                            <input type="email" id="editEmail" class="form-control">
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label">角色</label>
-                            <select id="editRole" class="form-select" required></select>
-                        </div>
-                        <div class="mb-3" id="editClassIdGroup" style="display: none;">
-                            <label class="form-label">班級</label>
-                            <select id="editClassId" class="form-select"></select>
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label">密碼（留空表示不變更）</label>
-                            <input type="password" id="editPassword" class="form-control">
-                        </div>
-                        <button type="submit" class="btn btn-primary">儲存</button>
-                    </form>
+            </div>
+            <div class="top-bar-right">
+                <a href="/profile">
+                    <img src="{{ url_for('static', filename='images/avatar.png') }}" alt="頭像" id="login-avatar" />
+                </a>
+                <div class="dropdown" style="position: relative;">
+                    <button id="accountDropdownBtn" class="btn-link" aria-expanded="false">帳號 ▾</button>
+                    <div id="accountDropdownMenu" class="dropdown-menu"
+                        style="position:absolute; right:0; top:120%; background:#fff; border:1px solid #ccc; border-radius:8px; padding:6px; min-width:180px; display:none; box-shadow:0 4px 12px rgba(0,0,0,.12);">
+                        <a href="/admin_home" class="btn-link" style="display:block; border:none; margin:4px 0;">返回主頁</a>
+                        <a href="/login" class="btn-link" style="display:block; border:none; margin:4px 0;">登出</a>
+                    </div>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- 新增用戶 Modal -->
-    <div class="modal fade" id="createUserModal" tabindex="-1">
+    <nav id="side-menu" aria-hidden="true" role="navigation" aria-label="功能選單">
+        <button id="close-btn" aria-label="關閉功能選單">×</button>
+        <h2>功能選單</h2>
+        <a href="/admin_home">首頁</a>
+        <a href="admin/user_management">使用者管理</a>
+        <a href="/admin/system_settings">系統設定</a>
+        <a href="/admin/reports">報表與統計</a>
+        <a href="/notifications">通知管理</a>
+        <a href="/logout">登出</a>
+    </nav>
+
+    <div class="container mt-5 pt-3">
+        <div class="card p-4">
+            <h3 class="mb-4 text-primary"><i class="bi bi-people-fill"></i> 用戶管理</h3>
+
+            <div class="d-flex gap-2 mb-4 flex-wrap align-items-end">
+                <div class="flex-grow-1">
+                    <input type="text" id="searchUsername" class="form-control" placeholder="輸入帳號、姓名或Email"
+                        onkeydown="if(event.key==='Enter') searchUsers()">
+                </div>
+                <div>
+                    <select id="filterRole" class="form-select">
+                        <option value="">所有角色</option>
+                        <option value="student">學生</option>
+                        <option value="teacher">教師</option>
+                        <option value="director">主任</option>
+                        <option value="ta">科助</option>
+                        <option value="admin">管理員</option>
+                    </select>
+                </div>
+                <div class="d-flex gap-2">
+                    <button class="btn btn-primary" onclick="searchUsers()" title="開始搜尋"><i class="bi bi-search"></i>
+                        搜尋</button>
+                    <button class="btn btn-secondary" onclick="resetSearch()" title="清除搜尋條件"><i
+                            class="bi bi-arrow-counterclockwise"></i> 重置</button>
+                </div>
+                <button class="btn btn-success ms-auto" onclick="openCreateModal()" title="建立新用戶"><i
+                        class="bi bi-person-plus"></i> 新增用戶</button>
+            </div>
+
+            <div id="alertMessage" class="alert alert-dismissible fade show d-none" role="alert">
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            </div>
+
+            <div class="table-responsive">
+                <table class="table table-striped table-hover align-middle">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>帳號</th>
+                            <th>姓名</th>
+                            <th>Email</th>
+                            <th>角色</th>
+                            <th>科系/班級</th>
+                            <th>屆數</th>
+                            <th>帶班列表</th>
+                            <th>建立日期</th>
+                            <th class="action-btns">操作</th>
+                        </tr>
+                    </thead>
+                    <tbody id="userTableBody">
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="createUserModal" tabindex="-1" aria-labelledby="createUserModalLabel"
+        aria-hidden="true">
         <div class="modal-dialog">
             <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title">新增用戶</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                <div class="modal-header bg-success text-white">
+                    <h5 class="modal-title" id="createUserModalLabel"><i class="bi bi-person-plus"></i> 新增用戶</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"
+                        aria-label="Close"></button>
                 </div>
-                <div class="modal-body">
-                    <form id="createUserForm">
+                <form id="createUserForm">
+                    <div class="modal-body">
                         <div class="mb-3">
-                            <label class="form-label">帳號</label>
-                            <input type="text" id="createUsername" class="form-control" required>
+                            <label for="createUsername" class="form-label">帳號 (必填)</label>
+                            <input type="text" class="form-control" id="createUsername" required>
                         </div>
                         <div class="mb-3">
-                            <label class="form-label">密碼</label>
-                            <input type="password" id="createPassword" class="form-control" required>
+                            <label for="createPassword" class="form-label">密碼 (必填)</label>
+                            <input type="password" class="form-control" id="createPassword" required>
                         </div>
                         <div class="mb-3">
-                            <label class="form-label">姓名</label>
-                            <input type="text" id="createName" class="form-control">
+                            <label for="createName" class="form-label">姓名 (必填)</label>
+                            <input type="text" class="form-control" id="createName" required>
                         </div>
                         <div class="mb-3">
-                            <label class="form-label">Email</label>
-                            <input type="email" id="createEmail" class="form-control">
+                            <label for="createEmail" class="form-label">Email</label>
+                            <input type="email" class="form-control" id="createEmail" placeholder="學生角色需填寫">
                         </div>
                         <div class="mb-3">
-                            <label class="form-label">角色</label>
-                            <select id="createRole" class="form-select" required>
+                            <label for="createRole" class="form-label">角色 (必選)</label>
+                            <select class="form-select" id="createRole" required>
+                                <option value="">請選擇角色</option>
                                 <option value="student">學生</option>
                                 <option value="teacher">教師</option>
                                 <option value="director">主任</option>
@@ -125,58 +384,126 @@
                             </select>
                         </div>
                         <div class="mb-3" id="createClassIdGroup" style="display: none;">
-                            <label class="form-label">班級</label>
-                            <select id="createClassId" class="form-select"></select>
+                            <label for="createClassId" class="form-label">所屬班級 (學生必選)</label>
+                            <select class="form-select" id="createClassId">
+                                <option value="">請選擇</option>
+                            </select>
                         </div>
-                        <button type="submit" class="btn btn-primary">新增</button>
-                    </form>
-                </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                        <button type="submit" class="btn btn-success"><i class="bi bi-save"></i> 建立用戶</button>
+                    </div>
+                </form>
             </div>
         </div>
     </div>
 
-    <!-- 設定帶班 Modal -->
-    <div class="modal fade" id="assignTeacherClassModal" tabindex="-1">
+    <div class="modal fade" id="editUserModal" tabindex="-1" aria-labelledby="editUserModalLabel" aria-hidden="true">
         <div class="modal-dialog">
             <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title">設定帶班</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                <div class="modal-header bg-warning text-dark">
+                    <h5 class="modal-title" id="editUserModalLabel"><i class="bi bi-pencil-square"></i> 編輯用戶資料</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <form id="editUserForm">
+                    <input type="hidden" id="editUserId">
+                    <div class="modal-body">
+                        <div class="mb-3">
+                            <label for="editUsername" class="form-label">帳號</label>
+                            <input type="text" class="form-control" id="editUsername" readonly>
+                        </div>
+                        <div class="mb-3">
+                            <label for="editName" class="form-label">姓名</label>
+                            <input type="text" class="form-control" id="editName" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="editEmail" class="form-label">Email</label>
+                            <input type="email" class="form-control" id="editEmail">
+                        </div>
+                        <div class="mb-3">
+                            <label for="editRole" class="form-label">角色</label>
+                            <select class="form-select" id="editRole" required></select>
+                        </div>
+                        <div class="mb-3" id="editClassIdGroup" style="display: none;">
+                            <label for="editClassId" class="form-label">所屬班級 (學生專用)</label>
+                            <select class="form-select" id="editClassId">
+                                <option value="">請選擇</option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label for="editPassword" class="form-label">重設密碼 (留空則不修改)</label>
+                            <input type="password" class="form-control" id="editPassword" placeholder="輸入新密碼">
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                        <button type="submit" class="btn btn-warning text-dark"><i class="bi bi-save"></i> 儲存修改</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="assignTeacherClassModal" tabindex="-1" aria-labelledby="assignTeacherClassModalLabel"
+        aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header bg-info text-white">
+                    <h5 class="modal-title" id="assignTeacherClassModalLabel"><i class="bi bi-diagram-3"></i> 設定帶班班級
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"
+                        aria-label="Close"></button>
                 </div>
                 <div class="modal-body">
                     <input type="hidden" id="assignTeacherId">
+                    <p class="text-danger"><i class="bi bi-exclamation-triangle"></i>
+                        注意：目前功能僅支援指派**一個**班級，新的指派會覆蓋舊的帶班紀錄。</p>
                     <div class="mb-3">
-                        <label class="form-label">帶班角色</label>
-                        <select id="assignTeacherRole" class="form-select">
-                            <option value="班導師">班導師</option>
-                            <option value="主任">主任</option>
+                        <label for="assignTeacherClassSelect" class="form-label">選擇帶班班級</label>
+                        <select class="form-select" id="assignTeacherClassSelect">
+                            <option value="">請選擇班級</option>
                         </select>
                     </div>
                     <div class="mb-3">
-                        <label class="form-label">班級</label>
-                        <select id="assignTeacherClassSelect" class="form-select"></select>
+                        <label for="assignTeacherRole" class="form-label">指派角色</label>
+                        <input type="text" class="form-control" id="assignTeacherRole" value="班導師"
+                            placeholder="例如：班導師、實習輔導教師">
                     </div>
-                    <button class="btn btn-primary" onclick="submitAssignTeacherClass()">儲存</button>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="button" class="btn btn-primary" onclick="submitAssignTeacherClass()"><i
+                            class="bi bi-check-circle"></i> 確認指派</button>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- 設定學生班級 Modal -->
-    <div class="modal fade" id="assignStudentClassModal" tabindex="-1">
+    <div class="modal fade" id="assignStudentClassModal" tabindex="-1" aria-labelledby="assignStudentClassModalLabel"
+        aria-hidden="true">
         <div class="modal-dialog">
             <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title">設定學生班級</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                <div class="modal-header bg-primary text-white">
+                    <h5 class="modal-title" id="assignStudentClassModalLabel"><i class="bi bi-person-badge"></i> 分配學生班級
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"
+                        aria-label="Close"></button>
                 </div>
                 <div class="modal-body">
                     <input type="hidden" id="assignStudentId">
+                    <p class="text-muted">為此學生分配其所屬的班級，這將影響其導師的查看權限。</p>
                     <div class="mb-3">
-                        <label class="form-label">班級</label>
-                        <select id="assignStudentClassSelect" class="form-select"></select>
+                        <label for="assignStudentClassSelect" class="form-label">選擇所屬班級</label>
+                        <select class="form-select" id="assignStudentClassSelect">
+                            <option value="">請選擇班級</option>
+                        </select>
                     </div>
-                    <button class="btn btn-primary" onclick="submitAssignStudentClass()">儲存</button>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="button" class="btn btn-primary" onclick="submitAssignStudentClass()"><i
+                            class="bi bi-check-circle"></i> 確認分配</button>
                 </div>
             </div>
         </div>
@@ -185,6 +512,7 @@
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
         document.addEventListener('DOMContentLoaded', () => {
+            // 角色名稱映射
             const roleMap = {
                 student: '學生',
                 teacher: '教師',
@@ -193,125 +521,241 @@
                 admin: '管理員'
             };
 
-            async function loadUsers() {
-                try {
-                    const res = await fetch('/admin/api/get_all_users');
-                    const data = await res.json();
-                    if (!data.success) return alert("載入失敗：" + data.message);
-                    const tbody = document.getElementById('userTableBody');
-                    tbody.innerHTML = "";
-                    data.users.forEach(user => {
-                        const tr = document.createElement('tr');
-                        tr.innerHTML = `
-                            <td>${user.id}</td>
-                            <td>${user.username}</td>
-                            <td>${user.name || ''}</td>
-                            <td>${user.email || ''}</td>
-                            <td>${roleMap[user.role] || user.role}</td>
-                            <td>${user.role === 'student' ? (user.class_name || '-') : '-'}</td>
-                            <td>${user.role === 'student' ? (user.department || '-') : '-'}</td>
-                            <td>${user.admission_year || ''}</td>
-                            <td>${['teacher', 'director'].includes(user.role) ? (user.teaching_classes || '-') : '-'}</td>
-                            <td>${user.created_at || ''}</td>
-                            <td>
-                              <button class="btn btn-sm btn-warning" onclick="openEditModal(${user.id}, '${user.username}', '${user.name || ''}', '${user.email || ''}', '${user.role}', '${user.class_id || ''}')">編輯</button>
-                              <button class="btn btn-sm btn-danger" onclick="deleteUser(${user.id})">刪除</button>
-                              ${user.role === 'student' ? `<button class="btn btn-sm btn-outline-primary" onclick="openAssignStudentClass(${user.id})">設定班級</button>` : ''}
-                              ${['teacher', 'director'].includes(user.role) ? `<button class="btn btn-sm btn-outline-secondary" onclick="openAssignTeacherClass(${user.id})">設定帶班</button>` : ''}
-                            </td>`;
-                        tbody.appendChild(tr);
-                    });
-                } catch (err) {
-                    console.error("載入用戶錯誤：", err);
-                    alert("載入用戶失敗");
-                }
+            // 角色樣式映射 (用於 Bootstrap badge)
+            const roleClassMap = {
+                student: 'role-student',
+                teacher: 'role-teacher',
+                director: 'role-director',
+                ta: 'role-ta',
+                admin: 'role-admin'
+            };
+
+            /**
+             * 顯示提示訊息 (Alert)
+             * @param {string} message - 訊息內容
+             * @param {string} type - 訊息類型 (success, danger, warning, info)
+             */
+            function showAlert(message, type) {
+                const alertEl = document.getElementById('alertMessage');
+                alertEl.innerHTML = `${message}<button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>`;
+                alertEl.className = `alert alert-${type} alert-dismissible fade show`;
+                alertEl.classList.remove('d-none');
+
+                // 增加自動消失功能
+                setTimeout(() => {
+                    // 使用 Bootstrap 5 的方式手動關閉 Alert
+                    const alertInstance = bootstrap.Alert.getOrCreateInstance(alertEl);
+                    alertInstance.close();
+                }, 5000);
             }
 
-            window.loadUsers = loadUsers;
-            window.searchUsers = async () => {
-                const username = document.getElementById('searchUsername').value.trim();
-                const params = new URLSearchParams();
-                if (username) params.append('username', username);
-                const res = await fetch('/admin/api/search_users?' + params);
-                const data = await res.json();
-                if (!data.success) return alert('搜尋失敗');
+            /**
+             * 載入用戶數據並渲染表格
+             * @param {Array} users - 要顯示的用戶列表
+             */
+            function renderUserTable(users) {
                 const tbody = document.getElementById('userTableBody');
-                tbody.innerHTML = '';
-                data.users.forEach(user => {
+                tbody.innerHTML = "";
+                if (users.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="10" class="text-center text-muted"><i class="bi bi-info-circle"></i> 無符合條件的用戶數據</td></tr>';
+                    return;
+                }
+
+                users.forEach(user => {
+                    // 確保能正確取得顯示名稱，否則使用原始角色
+                    const roleDisplay = user.role_display || roleMap[user.role] || user.role;
+                    const roleClass = roleClassMap[user.role] || '';
+
+                    // 根據角色決定顯示的內容，將空值替換為 '-'
+                    const classDeptInfo = user.role === 'student' ?
+                        (user.department || '') + ' ' + (user.class_name || '-') :
+                        '-';
+                    const admissionYear = user.role === 'student' ? (user.admission_year || '-') : '-';
+                    const teachingClasses = ['teacher', 'director'].includes(user.role) ?
+                        (user.teaching_classes || '-').replace(/, /g, ',<br>') : /* 分行顯示班級 */
+                        '-';
+
+                    // 簡化 Email 顯示
+                    const displayEmail = user.email ? (user.email.length > 25 ? user.email.substring(0, 22) + '...' : user.email) : '-';
+                    // 簡化建立時間顯示 (只保留日期)
+                    const displayCreatedAt = user.created_at ? user.created_at.substring(0, 10) : '-';
+
+
                     const tr = document.createElement('tr');
                     tr.innerHTML = `
                         <td>${user.id}</td>
-                        <td>${user.username}</td>
-                        <td>${user.name || ''}</td>
-                        <td>${user.email || ''}</td>
-                        <td>${roleMap[user.role] || user.role}</td>
-                        <td>${user.role === 'student' ? (user.class_name || '-') : '-'}</td>
-                        <td>${user.role === 'student' ? (user.department || '-') : '-'}</td>
-                        <td>${['teacher', 'director'].includes(user.role) ? (user.teaching_classes || '-') : '-'}</td>
-                        <td>${user.created_at || ''}</td>
-                        <td>
-                            <button class="btn btn-sm btn-warning" onclick="openEditModal(${user.id}, '${user.username}', '${user.name || ''}', '${user.email || ''}', '${user.role}', '${user.class_id || ''}')">編輯</button>
-                            <button class="btn btn-sm btn-danger" onclick="deleteUser(${user.id})">刪除</button>
-                            ${user.role === 'student' ? `<button class="btn btn-sm btn-outline-primary" onclick="openAssignStudentClass(${user.id})">設定班級</button>` : ''}
-                            ${['teacher', 'director'].includes(user.role) ? `<button class="btn btn-sm btn-outline-secondary" onclick="openAssignTeacherClass(${user.id})">設定帶班</button>` : ''}
+                        <td class="text-truncate" title="${user.username}">${user.username}</td>
+                        <td>${user.name || '-'}</td>
+                        <td class="text-truncate" title="${user.email || '-'}">${displayEmail}</td>
+                        <td><span class="badge ${roleClass}">${roleDisplay}</span></td>
+                        <td>${classDeptInfo}</td>
+                        <td>${admissionYear}</td>
+                        <td>${teachingClasses}</td>
+                        <td>${displayCreatedAt}</td>
+                        <td class="action-btns">
+                          <div class="d-flex gap-1 justify-content-center">
+                            <button class="btn btn-sm btn-warning" onclick="openEditModal(${user.id}, '${user.username}', '${user.name || ''}', '${user.email || ''}', '${user.role}', '${user.class_id || ''}')" title="編輯"><i class="bi bi-pencil"></i></button>
+                            <button class="btn btn-sm btn-danger" onclick="deleteUser(${user.id})" title="刪除"><i class="bi bi-trash"></i></button>
+                            ${user.role === 'student' ? `<button class="btn btn-sm btn-outline-primary" onclick="openAssignStudentClass(${user.id})" title="設班級"><i class="bi bi-person-badge"></i></button>` : ''}
+                            ${['teacher', 'director'].includes(user.role) ? `<button class="btn btn-sm btn-outline-secondary" onclick="openAssignTeacherClass(${user.id})" title="設帶班"><i class="bi bi-diagram-3"></i></button>` : ''}
+                          </div>
                         </td>`;
                     tbody.appendChild(tr);
                 });
+            }
+
+
+            /**
+             * 初始載入所有用戶
+             */
+            async function loadUsers() {
+                try {
+                    document.getElementById('userTableBody').innerHTML = '<tr><td colspan="10" class="text-center text-info"><i class="bi bi-arrow-clockwise"></i> 載入數據中，請稍候...</td></tr>';
+                    const res = await fetch('/admin/api/get_all_users');
+                    const data = await res.json();
+                    if (!data.success) {
+                        showAlert("載入失敗：" + data.message, 'danger');
+                        document.getElementById('userTableBody').innerHTML = '<tr><td colspan="10" class="text-center text-danger">載入失敗</td></tr>';
+                        return;
+                    }
+                    renderUserTable(data.users);
+                } catch (err) {
+                    console.error("載入用戶錯誤：", err);
+                    showAlert('連線錯誤，載入用戶資料失敗', 'danger');
+                    document.getElementById('userTableBody').innerHTML = '<tr><td colspan="10" class="text-center text-danger">連線錯誤，載入失敗</td></tr>';
+                }
+            }
+            window.loadUsers = loadUsers;
+
+            /**
+             * 搜尋用戶
+             */
+            window.searchUsers = async () => {
+                const username = document.getElementById('searchUsername').value.trim();
+                const role = document.getElementById('filterRole').value;
+
+                if (!username && !role) {
+                    loadUsers(); // 如果都沒有填，則載入全部
+                    return;
+                }
+
+                const params = new URLSearchParams();
+                if (username) params.append('username', username);
+                if (role) params.append('role', role); // 後端已支援
+
+                try {
+                    document.getElementById('userTableBody').innerHTML = '<tr><td colspan="10" class="text-center text-primary"><i class="bi bi-search"></i> 搜尋中...</td></tr>';
+                    const res = await fetch('/admin/api/search_users?' + params.toString());
+                    const data = await res.json();
+                    if (!data.success) {
+                        showAlert('搜尋失敗: ' + data.message, 'danger');
+                        return;
+                    }
+
+                    renderUserTable(data.users);
+                    showAlert(`成功找到 ${data.users.length} 筆用戶資料`, 'success');
+
+                } catch (err) {
+                    console.error("搜尋用戶錯誤：", err);
+                    showAlert('連線錯誤，搜尋失敗', 'danger');
+                    document.getElementById('userTableBody').innerHTML = '<tr><td colspan="10" class="text-center text-danger">連線錯誤，搜尋失敗</td></tr>';
+                }
             };
+
+            /**
+             * 重置搜尋
+             */
             window.resetSearch = () => {
                 document.getElementById('searchUsername').value = '';
+                document.getElementById('filterRole').value = '';
                 loadUsers();
+                showAlert('搜尋條件已重置', 'info');
             };
+
+            /**
+             * 載入班級列表到 Select 元素中
+             * @param {HTMLElement} selectEl - 要填充班級選項的 <select> 元素
+             * @param {boolean} allowEmpty - 是否允許空值選項 (例如：老師/主任可不選班級)
+             */
+            async function loadClasses(selectEl, allowEmpty = true) {
+                try {
+                    selectEl.innerHTML = '<option value="">載入中...</option>';
+                    const res = await fetch('/admin/api/get_classes');
+                    const data = await res.json();
+                    if (!data.success) {
+                        selectEl.innerHTML = '<option value="">載入班級失敗</option>';
+                        return;
+                    }
+
+                    selectEl.innerHTML = allowEmpty ? '<option value="">請選擇</option>' : '';
+                    data.classes.forEach(c => {
+                        const opt = document.createElement('option');
+                        opt.value = c.id;
+                        opt.textContent = `${c.department || ''} ${c.name}`.trim();
+                        selectEl.appendChild(opt);
+                    });
+                } catch (e) {
+                    selectEl.innerHTML = '<option value="">連線錯誤</option>';
+                    showAlert("❌ 載入班級列表失敗：" + e.message, 'danger');
+                }
+            }
+            window.loadClasses = loadClasses;
+
+            // --- Modal 操作函數 ---
 
             window.openCreateModal = () => {
                 const roleSelect = document.getElementById('createRole');
                 const classGroup = document.getElementById('createClassIdGroup');
                 const classSelect = document.getElementById('createClassId');
+
+                // 根據角色顯示或隱藏班級欄位
                 roleSelect.onchange = () => {
                     const isStudent = roleSelect.value === 'student';
                     classGroup.style.display = isStudent ? '' : 'none';
+                    classSelect.required = isStudent; // 學生角色班級設為必填
                     if (isStudent) loadClasses(classSelect);
                 };
+
+                // 觸發一次 onchange 以初始化狀態
                 roleSelect.dispatchEvent(new Event('change'));
+                document.getElementById('createUserForm').reset();
                 new bootstrap.Modal(document.getElementById('createUserModal')).show();
             };
-
-            async function loadClasses(selectEl) {
-                const res = await fetch('/admin/api/get_classes');
-                const data = await res.json();
-                if (!data.success) return alert('載入班級失敗');
-                selectEl.innerHTML = '';
-                data.classes.forEach(c => {
-                    const opt = document.createElement('option');
-                    opt.value = c.id;
-                    opt.textContent = `${c.department || ''} ${c.name}`.trim();
-                    selectEl.appendChild(opt);
-                });
-            }
-            window.loadClasses = loadClasses;
 
             // 綁定新增表單
             document.getElementById('createUserForm').addEventListener('submit', async (e) => {
                 e.preventDefault();
+                const classIdValue = document.getElementById('createClassId').value;
+
                 const payload = {
                     username: document.getElementById('createUsername').value.trim(),
                     password: document.getElementById('createPassword').value.trim(),
                     name: document.getElementById('createName').value.trim(),
                     email: document.getElementById('createEmail').value.trim(),
                     role: document.getElementById('createRole').value,
-                    class_id: document.getElementById('createClassId').value || null
+                    // 如果沒有選擇班級，傳送 null
+                    class_id: classIdValue === "" ? null : classIdValue
                 };
-                if (!payload.username || !payload.password || !payload.role)
-                    return alert("請填寫帳號、密碼與角色");
+
+                // 前端再次驗證
+                if (payload.role === 'student' && payload.class_id === null) {
+                    return showAlert("❌ 學生角色必須選擇所屬班級", 'warning');
+                }
+
                 const res = await fetch('/admin/api/create_user', {
-                    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
                 });
                 const data = await res.json();
-                alert(data.message);
+
                 if (data.success) {
                     bootstrap.Modal.getInstance(document.getElementById('createUserModal')).hide();
                     document.getElementById('createUserForm').reset();
                     loadUsers();
+                    showAlert("✅ " + data.message, 'success');
+                } else {
+                    showAlert("❌ " + (data.message || '建立失敗'), 'danger');
                 }
             });
 
@@ -319,24 +763,36 @@
             document.getElementById('editUserForm').addEventListener('submit', async (e) => {
                 e.preventDefault();
                 const id = document.getElementById('editUserId').value;
+                const classIdValue = document.getElementById('editClassId').value;
+                const roleValue = document.getElementById('editRole').value;
+
                 const payload = {
                     username: document.getElementById('editUsername').value,
                     name: document.getElementById('editName').value,
                     email: document.getElementById('editEmail').value,
-                    role: document.getElementById('editRole').value,
-                    password: document.getElementById('editPassword').value,
-                    class_id: document.getElementById('editClassId').value || null
+                    role: roleValue,
+                    password: document.getElementById('editPassword').value || undefined, // 留空則不傳
+                    class_id: classIdValue === "" ? null : classIdValue
                 };
-                                const res = await fetch(`/admin/api/update_user/${id}`, {
+
+                // 前端再次驗證
+                if (roleValue === 'student' && payload.class_id === null) {
+                    return showAlert("❌ 學生角色必須選擇所屬班級", 'warning');
+                }
+
+                const res = await fetch(`/admin/api/update_user/${id}`, {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload)
                 });
                 const data = await res.json();
-                alert(data.message);
+
                 if (data.success) {
                     bootstrap.Modal.getInstance(document.getElementById('editUserModal')).hide();
                     loadUsers();
+                    showAlert("✅ " + data.message, 'success');
+                } else {
+                    showAlert("❌ " + (data.message || '儲存失敗'), 'danger');
                 }
             });
 
@@ -346,11 +802,18 @@
                 document.getElementById('editUsername').value = username;
                 document.getElementById('editName').value = name;
                 document.getElementById('editEmail').value = email;
-                document.getElementById('editRole').value = role;
                 document.getElementById('editPassword').value = '';
+
+                const editRoleSelect = document.getElementById('editRole');
+                // 填充角色下拉選單
+                editRoleSelect.innerHTML = Object.keys(roleMap).map(key =>
+                    `<option value="${key}" ${key === role ? 'selected' : ''}>${roleMap[key]}</option>`
+                ).join('');
 
                 const classGroup = document.getElementById('editClassIdGroup');
                 const classSelect = document.getElementById('editClassId');
+
+                // 根據角色設定班級欄位顯示
                 if (role === 'student') {
                     classGroup.style.display = '';
                     await loadClasses(classSelect);
@@ -364,11 +827,20 @@
 
             // 刪除使用者
             window.deleteUser = async (id) => {
-                if (!confirm('確定要刪除此用戶嗎？')) return;
-                const res = await fetch(`/admin/api/update_user/${id}`, { method: 'DELETE' });
-                const data = await res.json();
-                alert(data.message || (data.success ? '刪除成功' : '刪除失敗'));
-                if (data.success) loadUsers();
+                if (!confirm('【重要】確定要刪除此用戶嗎？此操作不可逆！')) return;
+                try {
+                    const res = await fetch(`/admin/api/update_user/${id}`, { method: 'DELETE' });
+                    const data = await res.json();
+
+                    if (data.success) {
+                        loadUsers();
+                        showAlert("✅ 刪除成功", 'success');
+                    } else {
+                        showAlert("❌ " + (data.message || '刪除失敗'), 'danger');
+                    }
+                } catch (e) {
+                    showAlert("❌ 刪除連線錯誤：" + e.message, 'danger');
+                }
             };
 
             // 開啟設定帶班 Modal
@@ -379,22 +851,35 @@
                 new bootstrap.Modal(document.getElementById('assignTeacherClassModal')).show();
             };
 
-            // 提交設定帶班
+            // 提交設定帶班 (單一班級，會覆蓋)
             window.submitAssignTeacherClass = async () => {
                 const teacherId = document.getElementById('assignTeacherId').value;
                 const role = document.getElementById('assignTeacherRole').value;
                 const classId = document.getElementById('assignTeacherClassSelect').value;
+
+                if (!classId) {
+                    showAlert('❌ 請選擇要分配的班級', 'warning');
+                    return;
+                }
+
                 const payload = { class_ids: [classId], role };
-                const res = await fetch(`/admin/api/assign_teacher_class/${teacherId}`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
-                });
-                const data = await res.json();
-                alert(data.message);
-                if (data.success) {
-                    bootstrap.Modal.getInstance(document.getElementById('assignTeacherClassModal')).hide();
-                    loadUsers();
+                try {
+                    const res = await fetch(`/admin/api/assign_teacher_class/${teacherId}`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+                    const data = await res.json();
+
+                    if (data.success) {
+                        bootstrap.Modal.getInstance(document.getElementById('assignTeacherClassModal')).hide();
+                        loadUsers();
+                        showAlert("✅ " + data.message, 'success');
+                    } else {
+                        showAlert("❌ " + data.message, 'danger');
+                    }
+                } catch (e) {
+                    showAlert("❌ 指派班級連線錯誤：" + e.message, 'danger');
                 }
             };
 
@@ -410,18 +895,111 @@
             window.submitAssignStudentClass = async () => {
                 const studentId = document.getElementById('assignStudentId').value;
                 const classId = document.getElementById('assignStudentClassSelect').value;
-                const res = await fetch(`/admin/api/update_user/${studentId}`, {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ class_id: classId })
-                });
-                const data = await res.json();
-                alert(data.message);
-                if (data.success) {
-                    bootstrap.Modal.getInstance(document.getElementById('assignStudentClassModal')).hide();
-                    loadUsers();
+
+                if (!classId) {
+                    showAlert('❌ 請選擇要分配的班級', 'warning');
+                    return;
+                }
+
+                try {
+                    const res = await fetch(`/admin/api/update_user/${studentId}`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ class_id: classId })
+                    });
+                    const data = await res.json();
+
+                    if (data.success) {
+                        bootstrap.Modal.getInstance(document.getElementById('assignStudentClassModal')).hide();
+                        loadUsers();
+                        showAlert("✅ " + data.message, 'success');
+                    } else {
+                        showAlert("❌ " + data.message, 'danger');
+                    }
+                } catch (e) {
+                    showAlert("❌ 分配班級連線錯誤：" + e.message, 'danger');
                 }
             };
+
+            // 選單開關邏輯
+            const menuBtn = document.getElementById("menu-btn");
+            const sideMenu = document.getElementById("side-menu");
+            const closeBtn = document.getElementById("close-btn");
+
+            menuBtn.addEventListener("click", () => {
+                sideMenu.classList.add("open");
+                sideMenu.setAttribute("aria-hidden", "false");
+            });
+
+            closeBtn.addEventListener("click", () => {
+                sideMenu.classList.remove("open");
+                sideMenu.setAttribute("aria-hidden", "true");
+            });
+
+            // 如果點擊 menu 以外的地方就關閉選單
+            document.addEventListener("click", (e) => {
+                if (
+                    !sideMenu.contains(e.target) &&
+                    !menuBtn.contains(e.target)
+                ) {
+                    sideMenu.classList.remove("open");
+                    sideMenu.setAttribute("aria-hidden", "true");
+                }
+            });
+
+            // 帳號下拉
+            const btn = document.getElementById('accountDropdownBtn');
+            const menu = document.getElementById('accountDropdownMenu');
+            btn.addEventListener('click', () => {
+                const open = menu.style.display === 'block';
+                menu.style.display = open ? 'none' : 'block';
+                btn.setAttribute('aria-expanded', String(!open));
+            });
+            document.addEventListener('click', (e) => {
+                if (!menu.contains(e.target) && !btn.contains(e.target)) {
+                    menu.style.display = 'none';
+                    btn.setAttribute('aria-expanded', 'false');
+                }
+            });
+
+            // 載入用戶頭像
+            function loadUserAvatar() {
+                console.log('開始載入頭像...');
+                fetch('/api/profile')
+                    .then(res => {
+                        if (!res.ok) throw new Error('無法取得用戶資料');
+                        return res.json();
+                    })
+                    .then(data => {
+                        console.log('API 回應:', data);
+                        if (data.success && data.user && data.user.avatar_url) {
+                            // 確保頭像URL是完整的路徑，並加上時間戳避免快取
+                            const rawUrl = data.user.avatar_url.startsWith('http') ?
+                                data.user.avatar_url :
+                                window.location.origin + data.user.avatar_url;
+                            const avatarUrl = rawUrl + (rawUrl.includes('?') ? '&' : '?') + 't=' + Date.now();
+                            console.log('設定頭像URL:', avatarUrl);
+                            document.getElementById('login-avatar').src = avatarUrl;
+                        } else {
+                            console.log('沒有頭像URL或API失敗');
+                        }
+                    })
+                    .catch(err => {
+                        console.log('載入頭像失敗:', err);
+                        // 保持預設頭像
+                    });
+            }
+
+            // 頁面就緒後載入頭像
+            loadUserAvatar();
+
+            // 判斷是否為班導，顯示切換到班導主頁
+            fetch('/api/profile').then(r => r.json()).then(d => {
+                if (d.success && d.user && d.user.is_homeroom) {
+                    const link = document.getElementById('toHomeroomLink');
+                    if (link) link.style.display = 'block';
+                }
+            }).catch(() => { });
 
             // 初始載入
             loadUsers();

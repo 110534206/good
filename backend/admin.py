@@ -22,7 +22,7 @@ def get_all_users():
                 c.name AS class_name,
                 c.department,
                 (
-                    SELECT GROUP_CONCAT(c2.name SEPARATOR ', ')
+                    SELECT GROUP_CONCAT(CONCAT(c2.admission_year, '屆', c2.department, c2.name) SEPARATOR ', ')
                     FROM classes_teacher ct2
                     JOIN classes c2 ON ct2.class_id = c2.id
                     WHERE ct2.teacher_id = u.id
@@ -38,8 +38,9 @@ def get_all_users():
             if user.get('created_at'):
                 user['created_at'] = user['created_at'].strftime("%Y-%m-%d %H:%M:%S")
 
-            role_map = {'ta': '科助', 'teacher': '老師', 'student': '學生', 'director': '主任', 'admin': '管理員'}
-            user['role_display'] = role_map.get(user['role'], user['role'])
+            role_map = {'ta': '科助', 'teacher': '教師', 'student': '學生', 'director': '主任', 'admin': '管理員'}
+            # 使用 role_map 賦值給 role_display，這是前端需要顯示的中文名稱
+            user['role_display'] = role_map.get(user['role'], user['role']) #
 
             # 【新增邏輯】提取學生的入學屆數
             if user['role'] == 'student' and user.get('username') and len(user['username']) >= 3:
@@ -58,7 +59,10 @@ def get_all_users():
 
 @admin_bp.route('/api/search_users', methods=['GET'])
 def search_users():
-    username = (request.args.get('username') or '').strip()
+    # 修正：將前端傳送的參數名稱 'username' 變更為更具描述性的名稱
+    username_or_name_or_email = (request.args.get('username') or '').strip()
+    # 新增：取得角色篩選參數
+    role = (request.args.get('role') or '').strip() 
     filename = (request.args.get('filename') or '').strip()
     conn = get_db()
     cursor = conn.cursor(dictionary=True)
@@ -66,9 +70,17 @@ def search_users():
         conditions = []
         params = []
 
-        if username:
-            conditions.append("u.username LIKE %s")
-            params.append(f"%{username}%")
+        if username_or_name_or_email:
+            # 修正：支援同時搜尋帳號、姓名或 Email (與前端提示一致)
+            conditions.append("(u.username LIKE %s OR u.name LIKE %s OR u.email LIKE %s)")
+            search_term = f"%{username_or_name_or_email}%"
+            params.extend([search_term, search_term, search_term])
+        
+        # 修正：加入角色篩選條件
+        if role:
+            conditions.append("u.role = %s")
+            params.append(role)
+
         if filename:
             conditions.append("EXISTS (SELECT 1 FROM resumes r WHERE r.user_id = u.id AND r.original_filename LIKE %s)")
             params.append(f"%{filename}%")
@@ -77,25 +89,38 @@ def search_users():
 
         cursor.execute(f"""
             SELECT 
-                u.id, u.username, u.name, u.email, u.role, u.class_id,
-                c.name AS class_name,
-                c.department,
-                (
-                    SELECT GROUP_CONCAT(c2.name SEPARATOR ', ')
-                    FROM classes_teacher ct2
-                    JOIN classes c2 ON ct2.class_id = c2.id
-                    WHERE ct2.teacher_id = u.id
-                ) AS teaching_classes,
-                u.created_at
-            FROM users u
-            LEFT JOIN classes c ON u.class_id = c.id
-            {where_clause}
-            ORDER BY u.created_at DESC
-        """, params)
+            u.id, u.username, u.name, u.email, u.role, u.class_id,
+            c.name AS class_name,
+            c.department,
+            (
+                SELECT GROUP_CONCAT(CONCAT(c2.admission_year, '屆', c2.department, c2.name) SEPARATOR ', ')
+                FROM classes_teacher ct2
+                JOIN classes c2 ON ct2.class_id = c2.id
+                WHERE ct2.teacher_id = u.id
+            ) AS teaching_classes,
+            u.created_at
+        FROM users u
+        LEFT JOIN classes c ON u.class_id = c.id
+        {where_clause}
+        ORDER BY u.created_at DESC
+    """, params)
         users = cursor.fetchall()
+        
+        # 補齊 post-processing 邏輯，確保前端能正確顯示角色名稱和學生屆數
+        role_map = {'ta': '科助', 'teacher': '老師', 'student': '學生', 'director': '主任', 'admin': '管理員'}
+        
         for user in users:
             if user.get('created_at'):
                 user['created_at'] = user['created_at'].strftime("%Y-%m-%d %H:%M:%S")
+
+            user['role_display'] = role_map.get(user['role'], user['role'])
+
+            # 提取學生的入學屆數
+            if user['role'] == 'student' and user.get('username') and len(user['username']) >= 3:
+                user['admission_year'] = user['username'][:3]
+            else:
+                user['admission_year'] = ''
+            
         return jsonify({"success": True, "users": users})
     except Exception as e:
         print(f"搜尋用戶錯誤: {e}")
@@ -135,6 +160,7 @@ def update_user(user_id):
         if role:
             update_fields.append("role=%s")
             params.append(role)
+        # 注意：class_id 可能為 None (例如：老師/主任)
         if class_id is not None:
             update_fields.append("class_id=%s")
             params.append(class_id)
@@ -394,15 +420,15 @@ def create_user():
     cursor = conn.cursor(dictionary=True)
     try:
         username = data.get("username")
-        name = data.get("name")
-        email = (data.get("email") or "").strip()  # 避免 None
+        name = data.get("name") # 新增用戶時，姓名也是必填
+        email = (data.get("email") or "").strip() 
         role = data.get("role")
         class_id = data.get("class_id")
         password = data.get("password")
 
         # 🧩 驗證必要欄位
-        if not all([username, name, role, password]):
-            return jsonify({"success": False, "message": "請填寫完整資料"}), 400
+        if not all([username, name, role, password]): # 確保姓名為必填
+            return jsonify({"success": False, "message": "請填寫完整資料 (帳號、密碼、姓名、角色)"}), 400
 
         # 🧩 老師與主任可以不填 email，其他角色必須有
         if role not in ["teacher", "director","ta"] and not email:

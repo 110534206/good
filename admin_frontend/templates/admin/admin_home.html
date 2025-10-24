@@ -402,7 +402,6 @@
       loadUserAvatar();
     });
 
-    // 判斷是否為班導，顯示切換到班導主頁
     fetch('/api/profile').then(r => r.json()).then(d => {
       if (d.success && d.user && d.user.is_homeroom) {
         const link = document.getElementById('toHomeroomLink');
