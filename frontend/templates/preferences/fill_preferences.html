@@ -337,11 +337,8 @@
               if (remaining > 0 || currentValue === cid) {
                   const opt = document.createElement('option');
                   opt.value = cid;
-                  opt.textContent = companyName; 
+                  opt.textContent = companyName; // 移除額度顯示
                   if (currentValue === cid) opt.selected = true;
-                  
-                  // 顯示剩餘額度
-                  opt.textContent += ` (${remaining} 個額度)`;
 
                   select.appendChild(opt);
               }
