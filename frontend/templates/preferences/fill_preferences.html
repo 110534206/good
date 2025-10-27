@@ -288,7 +288,7 @@
     // =========================================================================
     // 💥 核心修改：更新剩餘額度及選單顯示邏輯
     //    - 實現公司名稱只出現一次。
-    //    - 實現公司可選次數等於職缺數 (N)。
+    //    - 實現每個公司只能被選擇一次。
     // =========================================================================
     function updateRemainingDisplay() {
       const allCompanies = document.querySelectorAll(".company-select");
@@ -322,22 +322,15 @@
           companies.forEach(c => {
               const cid = String(c.id); // 確保是字串比較
               const companyName = c.name;
-              // 取得總職缺數 (N)，此值來自 company.py 的 slots 欄位
-              const totalSlots = Number(companySlots[cid] || 0); 
-
               const usedSlots = companyUsage[cid] || 0; // 該公司已被選次數
-              
-              // 該公司還可以被選擇的剩餘次數
-              // 如果當前志願已經選擇該公司 (currentValue === cid)，則它的 usedSlots 已經多算了 1 次，要扣回來
-              let remaining = totalSlots - usedSlots + (currentValue === cid ? 1 : 0);
 
               // 規則：
-              // 只要 (有剩餘次數 remaining > 0) 或是 (當前志願就是選中該公司 currentValue === cid) 就顯示。
-              // 由於 companies 陣列本身是唯一的公司列表，只會建立一次選項，實現「出現一次」。
-              if (remaining > 0 || currentValue === cid) {
+              // 只要 (該公司未被選擇 usedSlots === 0) 或是 (當前志願就是選中該公司 currentValue === cid) 就顯示。
+              // 每個公司只能被選擇一次
+              if (usedSlots === 0 || currentValue === cid) {
                   const opt = document.createElement('option');
                   opt.value = cid;
-                  opt.textContent = companyName; // 移除額度顯示
+                  opt.textContent = companyName;
                   if (currentValue === cid) opt.selected = true;
 
                   select.appendChild(opt);
@@ -346,21 +339,12 @@
 
           // 4. 更新 badge 顯示狀態
           if (currentValue) {
-              const total = Number(companySlots[currentValue] || 0);
-              const used = companyUsage[currentValue] || 0;
-              // 修正後的剩餘次數
-              const currentRemaining = total - used + (currentValue === select.value ? 1 : 0); 
-              
-              badge.textContent = `剩餘額度：${currentRemaining}`;
+              badge.textContent = "已選擇";
               badge.classList.remove("bg-primary", "bg-danger");
-              if (currentRemaining > 0) {
-                   badge.classList.add("bg-primary");
-              } else {
-                   badge.classList.add("bg-danger"); 
-              }
+              badge.classList.add("bg-success");
           } else {
               badge.textContent = "尚未選擇公司";
-              badge.classList.remove("bg-primary", "bg-danger");
+              badge.classList.remove("bg-primary", "bg-danger", "bg-success");
           }
       });
     }
