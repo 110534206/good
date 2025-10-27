@@ -4,99 +4,9 @@ from datetime import datetime
 import traceback
 import pandas as pd
 import io
-import os
-import traceback 
-from flask import current_app
 from werkzeug.utils import secure_filename
 
 company_bp = Blueprint("company_bp", __name__)
-
-# =========================================================
-# 路由 - 下載公司上傳範本
-# =========================================================
-@company_bp.route('/download_company_template', methods=['GET'])
-def download_company_template():
-    try:
-        # 🎯 檔案名稱 🎯
-        template_file_name = "公司上傳範本.xlsx"
-        
-        # 1. 獲取 Flask 專案的根目錄 (e.g., C:\Featured\good\backend)
-        backend_dir = current_app.root_path
-        # 2. 退回一層到專案總目錄 (e.g., C:\Featured\good)
-        project_root = os.path.dirname(backend_dir) 
-        
-        # 3. 組合檔案的完整路徑：[專案總目錄]/frontend/static/examples/公司上傳範本.xlsx
-        file_path = os.path.join(
-            project_root, 
-            'frontend', 
-            'static', 
-            'examples', 
-            template_file_name
-        ) 
-
-        # 檢查檔案是否存在
-        if not os.path.exists(file_path):
-            print(f"❌ 找不到範本檔案 (修正路徑): {file_path}")
-            return jsonify({"success": False, "message": "找不到範本檔案，請聯繫管理員確認檔案位置"}), 500
-
-        # 使用 send_file 將檔案送出給使用者
-        return send_file(
-            file_path,
-            as_attachment=True, 
-            download_name=template_file_name,
-            mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' 
-        )
-
-    except Exception as e:
-        print("❌ [download_company_template] 發生錯誤:", e)
-        traceback.print_exc()
-        return jsonify({"success": False, "message": "下載失敗，伺服器內部錯誤"}), 500
-
-
-# =========================================================
-# 輔助函數：解析 Excel 檔案中的公司資料和職缺資料
-# =========================================================
-def parse_excel_file(file_storage):
-    """
-    解析上傳的 Excel 檔案，從 '公司資料' 和 '實習職缺' 工作表中提取資料。
-    """
-    try:
-        # 將 FileStorage 內容讀取到 BytesIO 緩衝區
-        file_bytes = io.BytesIO(file_storage.read())
-        
-        # 使用 pandas 讀取 Excel 檔案，指定要讀取的工作表
-        df_dict = pd.read_excel(
-            file_bytes,
-            sheet_name=['公司資料', '實習職缺'],
-            header=0,
-            dtype=str,  # 將所有資料視為字串
-            keep_default_na=False # 保持空值為空字串，而不是 NaN
-        )
-        
-        df_company = df_dict.get('公司資料')
-        if df_company is None:
-            raise ValueError("找不到工作表名稱 '公司資料'。請確認工作表名稱正確。")
-
-        df_jobs = df_dict.get('實習職缺')
-        if df_jobs is None:
-            raise ValueError("找不到工作表名稱 '實習職缺'。請確認工作表名稱正確。")
-            
-        # 轉換為 JSON 格式 (list of dictionaries)
-        company_data = df_company.to_dict('records')
-        jobs_data = df_jobs.to_dict('records')
-        
-        return {
-            'success': True,
-            'company_data': company_data,
-            'jobs_data': jobs_data
-        }
-
-    except ValueError as ve:
-        return {'success': False, 'message': str(ve)}
-    except Exception as e:
-        print("❌ [parse_excel_file] 發生錯誤:", e)
-        traceback.print_exc()
-        return {'success': False, 'message': f"解析檔案失敗: {e}"}
 
 # =========================================================
 # 頁面 - 上傳公司（單筆手動表單）
@@ -104,50 +14,155 @@ def parse_excel_file(file_storage):
 @company_bp.route('/upload_company', methods=['GET', 'POST'])
 def upload_company_form():
     if request.method == 'POST':
-        # 處理檔案上傳和解析 (供前端「瀏覽」按鈕使用)
-        if 'excel_file' in request.files:
-            file = request.files['excel_file']
-            
-            if file.filename == '':
-                return jsonify({"success": False, "message": "請選擇檔案"}), 400
-            
-            # 確保檔案是 Excel 格式
-            if not file.filename.endswith(('.xlsx', '.xls')):
-                return jsonify({"success": False, "message": "請上傳 .xlsx 或 .xls 格式的 Excel 檔案"}), 400
-
-            # 判斷是「瀏覽/載入」
-            if request.form.get('action') == 'preview':
-                result = parse_excel_file(file)
-                return jsonify(result)
-
-            # 實際資料庫上傳邏輯 (如果 action 不是 preview，則執行完整上傳)
-            if request.form.get('action') == 'final_submit':
-                result = parse_excel_file(file)
-                if not result['success']:
-                    return jsonify(result), 400
-                
-                # 🎯 TODO: 在這裡加入資料檢查和資料庫寫入邏輯 🎯
-                # 暫時返回成功解析
-                return jsonify({"success": True, "message": "檔案解析並準備寫入資料庫成功！", "data": result})
-
-            return jsonify({"success": False, "message": "未知的上傳請求動作"}), 400
-            
-        # 處理原有的手動表單提交邏輯 (保持不變)
         try:
-            # ... (保留或整合您原有的單筆表單提交邏輯)
             company_name = request.form.get("company_name", "").strip()
+            description = request.form.get("description", "").strip()
+            location = request.form.get("location", "").strip()
+            contact_title = request.form.get("contact_title", "").strip()
+            contact_person = request.form.get("contact_person", "").strip()
+            contact_email = request.form.get("contact_email", "").strip()
+            contact_phone = request.form.get("contact_phone", "").strip()
+
             if not company_name:
                 return render_template('company/upload_company.html', error="公司名稱為必填")
-            # 暫時不寫入資料庫
-            return render_template('company/upload_company.html', message="單筆表單提交成功 (功能未完全實作)")
 
-        except Exception as e:
-             print("❌ [upload_company_form] 手動表單處理錯誤:", e)
-             traceback.print_exc()
-             return render_template('company/upload_company.html', error="表單提交失敗")
+            uploaded_by_user_id = session.get("user_id")
+            uploaded_by_role = session.get("role")
+            if not uploaded_by_user_id or not uploaded_by_role:
+                return render_template('company/upload_company.html', error="請先登入")
 
-    # GET 請求：顯示上傳頁面
-    return render_template('company/upload_company.html')
+            conn = get_db()
+            cursor = conn.cursor()
+            cursor.execute("""
+                INSERT INTO internship_companies
+                (company_name, description, location, contact_person, contact_title, contact_email, contact_phone,
+                uploaded_by_user_id, uploaded_by_role, status, submitted_at)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 'pending', NOW())
+            """, (
+                company_name, description, location,
+                contact_person, contact_title, contact_email, contact_phone,
+                uploaded_by_user_id, uploaded_by_role
+            ))
+            conn.commit()
+            success_msg = f"✅ 公司「{company_name}」已成功上傳，狀態：待審核"
+            return render_template('company/upload_company.html', success=success_msg)
+
+        except Exception:
+            print("❌ 上傳公司錯誤：", traceback.format_exc())
+            return render_template('company/upload_company.html', error="伺服器錯誤，請稍後再試")
+
+        finally:
+            cursor.close()
+            conn.close()
+
+    original_role = session.get("original_role") or session.get("role")
+    return render_template('company/upload_company.html', original_role=original_role)
+
+# =========================================================
+# API - 批次上傳公司（含職缺）
+# =========================================================
+@company_bp.route("/api/upload_company_bulk", methods=["POST"])
+def upload_company_bulk():
+    try:
+        data = request.get_json()
+        companies = data.get("companies", [])
+        if not companies or not isinstance(companies, list):
+            return jsonify({"success": False, "message": "缺少公司資料"}), 400
+
+        uploaded_by_user_id = session.get("user_id")
+        uploaded_by_role = session.get("role")
+        if not uploaded_by_user_id or not uploaded_by_role:
+            return jsonify({"success": False, "message": "請先登入"}), 401
+
+        conn = get_db()
+        cursor = conn.cursor()
+        inserted_company_count = 0
+        inserted_job_count = 0
+
+        for c in companies:
+            company_name = c.get("company_name") or c.get("公司名稱") or ""
+            if not company_name:
+                continue
+
+            description = c.get("company_intro") or c.get("公司簡介") or ""
+            location = c.get("company_address") or c.get("公司地址") or ""
+            contact_person = c.get("contact_name") or c.get("聯絡人姓名") or ""
+            contact_title = c.get("contact_title") or c.get("聯絡人職稱") or ""
+            contact_email = c.get("contact_email") or c.get("聯絡信箱") or ""
+            contact_phone = c.get("contact_phone") or c.get("聯絡電話") or ""
+
+            # ✅ 先插入公司
+            cursor.execute("""
+                INSERT INTO internship_companies
+                (company_name, description, location, contact_person, contact_title, contact_email, contact_phone,
+                 uploaded_by_user_id, uploaded_by_role, status, submitted_at)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 'pending', NOW())
+            """, (
+                company_name, description, location,
+                contact_person, contact_title, contact_email, contact_phone,
+                uploaded_by_user_id, uploaded_by_role
+            ))
+            company_id = cursor.lastrowid
+            inserted_company_count += 1
+
+            # ✅ 插入職缺
+            jobs = c.get("internship_jobs") or [ {
+                "title": c.get("internship_unit") or "",
+                "description": c.get("internship_content") or "",
+                "department": c.get("department") or "",
+                "period": c.get("internship_period") or "",
+                "work_time": c.get("internship_time") or "",
+                "slots": c.get("internship_quota") or "",
+                "remark": c.get("remark") or ""
+            } ]
+
+            for job in jobs:
+                title = job.get("title") or ""
+                if not title:
+                    continue
+                cursor.execute("""
+                    INSERT INTO internship_jobs
+                    (company_id, title, description, department, period, work_time, slots, remark)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                """, (
+                    company_id,
+                    title,
+                    job.get("description") or "",
+                    job.get("department") or "",
+                    job.get("period") or "",
+                    job.get("work_time") or "",
+                    job.get("slots") or "",
+                    job.get("remark") or ""
+                ))
+                inserted_job_count += 1
+
+        # ✅ 自動根據實際職缺數更新 slots 欄位
+        cursor.execute("""
+        UPDATE internship_companies ic
+        SET ic.slots = (
+        SELECT COUNT(*) 
+        FROM internship_jobs ij 
+        WHERE ij.company_id = ic.id
+        )
+        """)
+        conn.commit()
+
+
+        return jsonify({
+            "success": True,
+            "message": f"✅ 成功上傳 {inserted_company_count} 間公司、{inserted_job_count} 筆職缺資料"
+        })
+
+    except Exception:
+        print("❌ 批次上傳錯誤：", traceback.format_exc())
+        return jsonify({"success": False, "message": "伺服器錯誤"}), 500
+
+    finally:
+        try:
+            cursor.close()
+            conn.close()
+        except:
+            pass
 
 
 # =========================================================
