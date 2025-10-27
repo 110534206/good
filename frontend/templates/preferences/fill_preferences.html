@@ -169,7 +169,6 @@
     </form>
   </div>
 
-  <!-- Modal 預覽 -->
   <div class="modal fade" id="previewModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered modal-lg">
       <div class="modal-content">
@@ -181,8 +180,9 @@
     </div>
   </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
   <script>
+    // 從 Flask 模板中取得資料
     const preview = {{ 'true' if preview else 'false' }};
     const companySlots = {{ job_slots | tojson }};
     const companies = {{ companies | tojson }};
@@ -208,10 +208,12 @@
         }
 
         try {
+          // 取得職缺 API 呼叫
           const res = await fetch(`/api/get_jobs_by_company?company_id=${selectedCompany}`);
           const data = await res.json();
 
           if (data.success && data.jobs.length > 0) {
+            // 載入職缺選項
             jobSelect.innerHTML = data.jobs.map(j =>
               `<option value="${j.id}">${j.title}</option>`
             ).join('');
@@ -226,7 +228,7 @@
       });
     });
 
-    // 查看公司詳情 Modal
+    // 查看公司詳情 Modal (邏輯不變)
     document.querySelectorAll(".preference-card").forEach(card => {
       const viewBtn = card.querySelector(".view-company-btn");
       const companySelect = card.querySelector(".company-select");
@@ -283,50 +285,93 @@
       });
     });
 
-    // 更新剩餘名額
+    // =========================================================================
+    // 💥 核心修改：更新剩餘額度及選單顯示邏輯
+    //    - 實現公司名稱只出現一次。
+    //    - 實現公司可選次數等於職缺數 (N)。
+    // =========================================================================
     function updateRemainingDisplay() {
       const allCompanies = document.querySelectorAll(".company-select");
-      const countMap = {};
+      
+      // 1. 統計每個公司在所有志願中已被選擇的次數 (used)
+      const companyUsage = {};
+      // 初始化計數器，確保所有公司 ID 都在 map 裡
+      Object.keys(companySlots).forEach(cid => {
+          companyUsage[cid] = 0; 
+      });
 
-      allCompanies.forEach(s => { const cid = s.value; if (cid) countMap[cid] = (countMap[cid] || 0) + 1; });
-
-      allCompanies.forEach(select => {
-        const card = select.closest(".preference-card");
-        const badge = card.querySelector(".badge-remaining");
-        const currentValue = select.value;
-
-        // 清空選項但保留 "--請選擇公司--"
-        const firstOption = select.querySelector('option[value=""]');
-        select.innerHTML = '';
-        select.appendChild(firstOption);
-
-        Object.keys(companySlots).forEach(cid => {
-          const total = Number(companySlots[cid] || 0);
-          const used = countMap[cid] || 0;
-          const remaining = total - used;
-
-          if (remaining > 0 || currentValue === cid) {
-            const opt = document.createElement('option');
-            opt.value = cid;
-            opt.textContent = companies.find(c => c.id == cid).name;
-            if (currentValue === cid) opt.selected = true;
-            select.appendChild(opt);
+      allCompanies.forEach(s => { 
+          const cid = s.value; 
+          if (cid) {
+              companyUsage[cid]++;
           }
-        });
+      });
 
-        // 更新 badge
-        if (currentValue) {
-          const remain = Math.max(Number(companySlots[currentValue] || 0) - (countMap[currentValue] || 0), 0);
-          badge.textContent = remain > 0 ? `剩餘可選：${remain}` : `已填寫完畢`;
-          badge.classList.toggle("bg-danger", remain === 0);
-          badge.classList.toggle("bg-primary", remain > 0);
-        } else {
-          badge.textContent = "尚未選擇公司";
-        }
+      // 2. 遍歷每一個公司選擇下拉選單
+      allCompanies.forEach(select => {
+          const card = select.closest(".preference-card");
+          const badge = card.querySelector(".badge-remaining");
+          const currentValue = select.value; // 當前志願已選的公司 ID
+
+          // 清空選項但保留 "--請選擇公司--"
+          const firstOption = select.querySelector('option[value=""]');
+          select.innerHTML = '';
+          select.appendChild(firstOption);
+
+          // 3. 遍歷所有公司，決定哪些公司可以被列出
+          companies.forEach(c => {
+              const cid = String(c.id); // 確保是字串比較
+              const companyName = c.name;
+              // 取得總職缺數 (N)，此值來自 company.py 的 slots 欄位
+              const totalSlots = Number(companySlots[cid] || 0); 
+
+              const usedSlots = companyUsage[cid] || 0; // 該公司已被選次數
+              
+              // 該公司還可以被選擇的剩餘次數
+              // 如果當前志願已經選擇該公司 (currentValue === cid)，則它的 usedSlots 已經多算了 1 次，要扣回來
+              let remaining = totalSlots - usedSlots + (currentValue === cid ? 1 : 0);
+
+              // 規則：
+              // 只要 (有剩餘次數 remaining > 0) 或是 (當前志願就是選中該公司 currentValue === cid) 就顯示。
+              // 由於 companies 陣列本身是唯一的公司列表，只會建立一次選項，實現「出現一次」。
+              if (remaining > 0 || currentValue === cid) {
+                  const opt = document.createElement('option');
+                  opt.value = cid;
+                  opt.textContent = companyName; 
+                  if (currentValue === cid) opt.selected = true;
+                  
+                  // 顯示剩餘額度
+                  opt.textContent += ` (${remaining} 個額度)`;
+
+                  select.appendChild(opt);
+              }
+          });
+
+          // 4. 更新 badge 顯示狀態
+          if (currentValue) {
+              const total = Number(companySlots[currentValue] || 0);
+              const used = companyUsage[currentValue] || 0;
+              // 修正後的剩餘次數
+              const currentRemaining = total - used + (currentValue === select.value ? 1 : 0); 
+              
+              badge.textContent = `剩餘額度：${currentRemaining}`;
+              badge.classList.remove("bg-primary", "bg-danger");
+              if (currentRemaining > 0) {
+                   badge.classList.add("bg-primary");
+              } else {
+                   badge.classList.add("bg-danger"); 
+              }
+          } else {
+              badge.textContent = "尚未選擇公司";
+              badge.classList.remove("bg-primary", "bg-danger");
+          }
       });
     }
+    // =========================================================================
+    // 💥 核心修改結束
+    // =========================================================================
 
-    // 表單儲存
+    // 表單儲存 (邏輯不變)
     document.getElementById("preferencesForm").addEventListener("submit", async (e) => {
       e.preventDefault();
       if (preview) {
@@ -354,7 +399,7 @@
     // 初始
     updateRemainingDisplay();
 
-    // 預覽模式：停用操作與提交
+    // 預覽模式：停用操作與提交 (邏輯不變)
     (function applyPreviewMode(){
       if (!preview) return;
       document.querySelectorAll(".company-select, .job-select, .view-company-btn").forEach(el => {
@@ -372,4 +417,5 @@
     })();
   </script>
 </body>
+
 </html>
