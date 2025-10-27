@@ -106,9 +106,34 @@
   
   <script>
     // =========================================================
-    // 輔助函式：動態生成表格
+    // 1. 定義固定的標題順序 (與您的 Excel 欄位順序一致)
     // =========================================================
-    function renderTable(data, headerId, bodyId, countId) {
+    const COMPANY_HEADERS_ORDER = [
+        "公司名稱", 
+        "公司簡介", 
+        "公司地址", 
+        "聯絡人姓名", 
+        "聯絡人職稱", 
+        "聯絡信箱", 
+        "聯絡電話"
+    ];
+
+    const JOBS_HEADERS_ORDER = [
+        "公司名稱", // 後端關聯邏輯需要此欄位
+        "實習職位", 
+        "實習內容", 
+        "薪資", 
+        "實習期間", 
+        "實習時段", 
+        "崗位人數", 
+        "備註"
+    ];
+
+
+    // =========================================================
+    // 2. 輔助函式：動態生成表格
+    // =========================================================
+    function renderTable(data, headerId, bodyId, countId, headersOrder) {
         const headerElement = document.getElementById(headerId);
         const bodyElement = document.getElementById(bodyId);
         const countElement = document.getElementById(countId);
@@ -118,14 +143,13 @@
         countElement.textContent = data.length;
 
         if (data.length === 0) {
-            bodyElement.innerHTML = '<tr><td colspan="100">沒有資料</td></tr>';
+            bodyElement.innerHTML = `<tr><td colspan="${headersOrder.length}">沒有資料</td></tr>`;
             return;
         }
 
         // 1. 生成表頭
-        const headers = Object.keys(data[0]);
         const headerRow = document.createElement('tr');
-        headers.forEach(key => {
+        headersOrder.forEach(key => {
             const th = document.createElement('th');
             th.textContent = key;
             headerRow.appendChild(th);
@@ -135,12 +159,16 @@
         // 2. 生成表格內容
         data.forEach(rowObj => {
             const row = document.createElement('tr');
-            headers.forEach(key => {
+            
+            // 使用固定的 headersOrder 來迭代並取值
+            headersOrder.forEach(key => {
                 const td = document.createElement('td');
-                // 限制顯示長度，避免表格過大
-                td.textContent = String(rowObj[key]).length > 100 ? 
-                                 String(rowObj[key]).substring(0, 100) + '...' : 
-                                 rowObj[key];
+                const cellValue = rowObj[key] !== undefined ? String(rowObj[key]) : '';
+                
+                // 限制顯示長度，避免單元格內容過長
+                td.textContent = cellValue.length > 100 ? 
+                                 cellValue.substring(0, 100) + '...' : 
+                                 cellValue;
                 row.appendChild(td);
             });
             bodyElement.appendChild(row);
@@ -148,16 +176,15 @@
     }
 
     // =========================================================
-    // 下載範本 (發送路由請求)
+    // 3. 下載範本 (發送路由請求)
     // =========================================================
     function downloadTemplate() {
-        // 導向後端下載路由
         window.location.href = '/download_company_template';
     }
 
 
     // =========================================================
-    // 瀏覽功能函式 (發送檔案到後端解析)
+    // 4. 瀏覽功能函式 (發送檔案到後端解析並儲存到 Session)
     // =========================================================
     async function previewExcelData() {
         const fileInput = document.getElementById('excelFile');
@@ -166,6 +193,8 @@
         const submitButton = document.getElementById('submitButton');
         const statusMessage = document.getElementById('statusMessage');
         const loadingSpinner = document.getElementById('loadingSpinner');
+        const previewButton = document.getElementById('previewButton');
+
 
         if (!file) {
             statusMessage.className = 'mt-3 text-danger';
@@ -173,19 +202,15 @@
             return;
         }
 
-        if (!file.name.endsWith('.xlsx') && !file.name.endsWith('.xls')) {
-            statusMessage.className = 'mt-3 text-danger';
-            statusMessage.textContent = '請上傳 .xlsx 或 .xls 格式的檔案。';
-            return;
-        }
-
         loadingSpinner.classList.remove('d-none');
         statusMessage.textContent = '正在載入並解析檔案...';
-        submitButton.disabled = true; // 預先禁用上傳按鈕
+        submitButton.disabled = true; 
+        previewButton.disabled = true; // 鎖定預覽按鈕防止重複點擊
+        sessionStorage.removeItem('companyPreviewData'); // 開始新的預覽，先清除舊資料
         
         const formData = new FormData();
         formData.append('excel_file', file);
-        formData.append('action', 'preview'); // 告訴後端這是瀏覽請求
+        formData.append('action', 'preview');
 
         try {
             const response = await fetch('/upload_company', {
@@ -197,15 +222,21 @@
 
             if (result.success) {
                 // ✅ 檔案解析成功
+                
+                // 🎯 修正點 1: 將成功解析的資料儲存到 sessionStorage
+                sessionStorage.setItem('companyPreviewData', JSON.stringify(result));
+                
                 previewSection.classList.remove('d-none');
                 
                 // 動態生成表格
-                renderTable(result.company_data, 'companyHeader', 'companyBody', 'companyCount');
-                renderTable(result.jobs_data, 'jobsHeader', 'jobsBody', 'jobsCount');
+                renderTable(result.company_data, 'companyHeader', 'companyBody', 'companyCount', COMPANY_HEADERS_ORDER);
+                renderTable(result.jobs_data, 'jobsHeader', 'jobsBody', 'jobsCount', JOBS_HEADERS_ORDER);
 
                 statusMessage.className = 'mt-3 text-success';
                 statusMessage.textContent = `檔案解析成功！公司筆數: ${result.company_data.length} 筆，職缺筆數: ${result.jobs_data.length} 筆。請確認後再上傳。`;
-                submitButton.disabled = false; // 啟用上傳按鈕
+                submitButton.disabled = false;
+                previewButton.disabled = true; // 預覽成功後鎖定，避免混淆
+                
 
             } else {
                 // ❌ 檔案解析失敗
@@ -213,6 +244,7 @@
                 statusMessage.className = 'mt-3 text-danger';
                 statusMessage.textContent = '檔案解析失敗: ' + result.message;
                 submitButton.disabled = true;
+                previewButton.disabled = false; // 失敗則解鎖，允許用戶重新選擇檔案
             }
         } catch (error) {
             previewSection.classList.add('d-none');
@@ -220,53 +252,111 @@
             statusMessage.textContent = '連線或瀏覽發生錯誤，請檢查伺服器連線。';
             console.error('瀏覽失敗:', error);
             submitButton.disabled = true;
+            previewButton.disabled = false;
         } finally {
             loadingSpinner.classList.add('d-none');
         }
     }
-    
-    
+
+
     // =========================================================
-    // 頁面就緒事件及事件監聽
+    // 5. 載入 Session 資料的函式
+    // =========================================================
+    function loadPreviewFromSession() {
+        const storedData = sessionStorage.getItem('companyPreviewData');
+        const submitButton = document.getElementById('submitButton');
+        const statusMessage = document.getElementById('statusMessage');
+        const previewButton = document.getElementById('previewButton');
+
+        if (storedData) {
+            try {
+                const result = JSON.parse(storedData);
+                
+                // 重新渲染表格
+                renderTable(result.company_data, 'companyHeader', 'companyBody', 'companyCount', COMPANY_HEADERS_ORDER);
+                renderTable(result.jobs_data, 'jobsHeader', 'jobsBody', 'jobsCount', JOBS_HEADERS_ORDER);
+
+                // 恢復頁面狀態
+                document.getElementById('previewSection').classList.remove('d-none');
+                statusMessage.className = 'mt-3 text-success';
+                statusMessage.textContent = `已從上次會話恢復預覽資料。公司筆數: ${result.company_data.length} 筆，職缺筆數: ${result.jobs_data.length} 筆。請確認後再上傳。`;
+                submitButton.disabled = false;
+                
+                // 檔案輸入框清空，且預覽按鈕鎖定
+                document.getElementById('excelFile').value = ''; 
+                previewButton.disabled = true; 
+
+            } catch (e) {
+                console.error("解析 sessionStorage 資料失敗:", e);
+                sessionStorage.removeItem('companyPreviewData');
+            }
+        } else {
+            // 如果沒有 storedData，則確保預覽按鈕是啟用的
+            previewButton.disabled = false;
+        }
+    }
+
+
+    // =========================================================
+    // 6. 頁面就緒事件及事件監聽
     // =========================================================
     document.addEventListener('DOMContentLoaded', () => {
-        // loadUserAvatar(); // 載入用戶頭像 (保留您原有的邏輯)
+        
+        // 🚨 頁面載入時執行恢復操作
+        loadPreviewFromSession(); 
 
         const previewButton = document.getElementById('previewButton');
         if (previewButton) {
             previewButton.addEventListener('click', previewExcelData);
         }
         
-        // 監聽檔案輸入框的變化，清除預覽狀態
+        // 監聽檔案輸入框的變化，**並在有新檔案時清除 session 儲存**
         document.getElementById('excelFile').addEventListener('change', () => {
             document.getElementById('previewSection').classList.add('d-none');
             document.getElementById('statusMessage').textContent = '';
             document.getElementById('submitButton').disabled = true;
+            
+            // 🚨 清除 sessionStorage，並重新啟用預覽按鈕
+            sessionStorage.removeItem('companyPreviewData');
+            document.getElementById('previewButton').disabled = false; 
         });
 
         // 監聽「確認並上傳至系統」按鈕的表單提交事件
         document.getElementById('uploadForm').addEventListener('submit', async (e) => {
-            e.preventDefault(); // 阻止表單預設提交行為
+            e.preventDefault(); 
             
             const fileInput = document.getElementById('excelFile');
-            const file = fileInput.files[0];
             const submitButton = document.getElementById('submitButton');
             const statusMessage = document.getElementById('statusMessage');
             
-            if (submitButton.disabled || !file) {
+            // 如果是從 session 恢復的，fileInput.files[0] 會是 undefined，此時需要檢查 session
+            const file = fileInput.files[0];
+            const hasSessionData = sessionStorage.getItem('companyPreviewData') !== null;
+            
+            if (submitButton.disabled || (!file && !hasSessionData)) {
                  statusMessage.className = 'mt-3 text-warning';
                  statusMessage.textContent = '請先點擊「載入並預覽檔案內容」確認資料無誤。';
                  return;
             }
 
-            // 最終上傳邏輯 (將 action 設定為 final_submit)
+            // 最終上傳邏輯
             statusMessage.className = 'mt-3 text-info';
             statusMessage.textContent = '正在進行最終上傳 (資料庫寫入)...';
-            submitButton.disabled = true; // 鎖定按鈕
+            submitButton.disabled = true; 
+
+            // 如果是從 session 恢復的，則必須重新執行預覽邏輯來取得檔案物件或確保後端邏輯能夠處理
+            // 最佳做法是確保上傳時只能使用檔案或阻止 session 恢復時的提交，但此處遵循用戶流程：
+            // 由於後端需要文件，如果沒有新文件，則必須提示用戶重新載入文件。
+            if (!file) {
+                 statusMessage.className = 'mt-3 text-danger';
+                 statusMessage.textContent = '❌ 最終上傳失敗：請重新選擇 Excel 檔案，並點擊預覽按鈕。';
+                 submitButton.disabled = false;
+                 return;
+            }
 
             const formData = new FormData();
             formData.append('excel_file', file);
-            formData.append('action', 'final_submit'); // 告訴後端這是最終提交
+            formData.append('action', 'final_submit'); 
 
             try {
                 const response = await fetch('/upload_company', { 
@@ -279,13 +369,15 @@
                 if (result.success) {
                     statusMessage.className = 'mt-3 text-success';
                     statusMessage.textContent = '✅ 資料已成功上傳至系統並儲存！';
-                    // 可以清空檔案輸入框並禁用預覽按鈕
-                    fileInput.value = ''; 
+                    
+                    // 🚨 修正點 4: 最終提交成功後清除 sessionStorage
+                    sessionStorage.removeItem('companyPreviewData');
+                    
                     document.getElementById('previewButton').disabled = true;
                 } else {
                     statusMessage.className = 'mt-3 text-danger';
                     statusMessage.textContent = '❌ 資料上傳失敗: ' + result.message;
-                    submitButton.disabled = false; // 允許重試
+                    submitButton.disabled = false; 
                 }
 
             } catch (error) {

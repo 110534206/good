@@ -99,56 +99,121 @@ def parse_excel_file(file_storage):
         return {'success': False, 'message': f"解析檔案失敗: {e}"}
 
 # =========================================================
-# 頁面 - 上傳公司（單筆手動表單）
+# 頁面 - 上傳公司（單筆手動表單 / 批量 Excel）
 # =========================================================
 @company_bp.route('/upload_company', methods=['GET', 'POST'])
 def upload_company_form():
+    if "user_id" not in session and request.method == 'POST':
+        return jsonify({"success": False, "message": "請先登入才能上傳資料"}), 401
+
     if request.method == 'POST':
-        # 處理檔案上傳和解析 (供前端「瀏覽」按鈕使用)
         if 'excel_file' in request.files:
             file = request.files['excel_file']
-            
             if file.filename == '':
                 return jsonify({"success": False, "message": "請選擇檔案"}), 400
-            
-            # 確保檔案是 Excel 格式
             if not file.filename.endswith(('.xlsx', '.xls')):
                 return jsonify({"success": False, "message": "請上傳 .xlsx 或 .xls 格式的 Excel 檔案"}), 400
 
-            # 判斷是「瀏覽/載入」
-            if request.form.get('action') == 'preview':
+            action = request.form.get('action')
+
+            # 預覽
+            if action == 'preview':
                 result = parse_excel_file(file)
                 return jsonify(result)
 
-            # 實際資料庫上傳邏輯 (如果 action 不是 preview，則執行完整上傳)
-            if request.form.get('action') == 'final_submit':
+            # 最終提交
+            elif action == 'final_submit':
                 result = parse_excel_file(file)
                 if not result['success']:
                     return jsonify(result), 400
-                
-                # 🎯 TODO: 在這裡加入資料檢查和資料庫寫入邏輯 🎯
-                # 暫時返回成功解析
-                return jsonify({"success": True, "message": "檔案解析並準備寫入資料庫成功！", "data": result})
+
+                conn = None
+                cursor = None
+                try:
+                    company_data_list = result['company_data']
+                    jobs_data_list = result['jobs_data']
+
+                    if not company_data_list:
+                        return jsonify({"success": False, "message": "Excel 檔案中沒有公司資料"}), 400
+
+                    conn = get_db()
+                    cursor = conn.cursor()
+
+                    total_jobs = 0
+                    inserted_companies = []
+
+                    # 🔁 逐筆處理每家公司
+                    for company_row in company_data_list:
+                        cursor.execute("""
+                            INSERT INTO internship_companies
+                                (company_name, description, location, contact_person, contact_title, 
+                                 contact_email, contact_phone, uploaded_by_user_id, uploaded_by_role, status)
+                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 'pending')
+                        """, (
+                            company_row.get("公司名稱", ""), 
+                            company_row.get("公司簡介", ""), 
+                            company_row.get("公司地址", ""),
+                            company_row.get("聯絡人姓名", ""), 
+                            company_row.get("聯絡人職稱", ""), 
+                            company_row.get("聯絡信箱", ""), 
+                            company_row.get("聯絡電話", ""),
+                            session["user_id"], 
+                            session.get("role", "teacher")
+                        ))
+
+                        company_id = cursor.lastrowid
+                        inserted_companies.append(company_row.get("公司名稱", ""))
+
+                        # 🔍 找出該公司對應的職缺資料
+                        related_jobs = [
+                            j for j in jobs_data_list 
+                            if j.get("公司名稱") == company_row.get("公司名稱")
+                        ]
+
+                        for job_row in related_jobs:
+                            cursor.execute("""
+                                INSERT INTO internship_jobs
+                                    (company_id, title, description, period, salary, work_time, slots, remark)
+                                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                            """, (
+                               company_id,
+                               job_row.get("實習職位", ""),      # title
+                               job_row.get("實習內容", ""),      # description
+                               job_row.get("實習期間", ""),      # period
+                               job_row.get("薪資", ""),          # salary
+                               job_row.get("實習時段", ""),      # work_time
+                               job_row.get("崗位人數", ""),      # slots
+                               job_row.get("備註", "")           # remark
+                            ))
+                            total_jobs += 1
+
+                    conn.commit()
+
+                    return jsonify({
+                        "success": True,
+                        "message": f"✅ 成功上傳 {len(company_data_list)} 間公司，共 {total_jobs} 筆職缺，等待審核。",
+                        "companies": inserted_companies
+                    })
+
+                except Exception as e:
+                    if conn:
+                        conn.rollback()
+                    print("❌ [final_submit] 資料庫寫入錯誤:", e)
+                    traceback.print_exc()
+                    return jsonify({"success": False, "message": f"資料庫寫入錯誤：{str(e)}"}), 500
+                finally:
+                    if cursor:
+                        cursor.close()
+                    if conn:
+                        conn.close()
 
             return jsonify({"success": False, "message": "未知的上傳請求動作"}), 400
-            
-        # 處理原有的手動表單提交邏輯 (保持不變)
-        try:
-            # ... (保留或整合您原有的單筆表單提交邏輯)
-            company_name = request.form.get("company_name", "").strip()
-            if not company_name:
-                return render_template('company/upload_company.html', error="公司名稱為必填")
-            # 暫時不寫入資料庫
-            return render_template('company/upload_company.html', message="單筆表單提交成功 (功能未完全實作)")
 
-        except Exception as e:
-             print("❌ [upload_company_form] 手動表單處理錯誤:", e)
-             traceback.print_exc()
-             return render_template('company/upload_company.html', error="表單提交失敗")
+        else:
+            print("❌ POST 請求類型錯誤：非檔案上傳")
+            return jsonify({"success": False, "message": "POST 請求類型錯誤或缺少 Excel 檔案"}), 400
 
-    # GET 請求：顯示上傳頁面
     return render_template('company/upload_company.html')
-
 
 # =========================================================
 # API - 審核公司
