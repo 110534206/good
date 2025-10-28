@@ -314,12 +314,11 @@
           const currentValue = select.value; // 當前志願已選的公司 ID
 
           // 清空選項但保留 "--請選擇公司--"
-          select.innerHTML = '<option value="">-- 請選擇公司 --</option>';
+          const firstOption = select.querySelector('option[value=""]');
+          select.innerHTML = '';
+          select.appendChild(firstOption);
 
           // 3. 遍歷所有公司，決定哪些公司可以被列出
-          // 使用 Set 追蹤已添加的公司，確保每個公司只出現一次
-          const addedCompanies = new Set();
-          
           companies.forEach(c => {
               const cid = String(c.id); // 確保是字串比較
               const companyName = c.name;
@@ -328,15 +327,13 @@
               // 規則：
               // 只要 (該公司未被選擇 usedSlots === 0) 或是 (當前志願就是選中該公司 currentValue === cid) 就顯示。
               // 每個公司只能被選擇一次
-              // 使用 Set 確保同一個公司不會重複添加
-              if ((usedSlots === 0 || currentValue === cid) && !addedCompanies.has(cid)) {
+              if (usedSlots === 0 || currentValue === cid) {
                   const opt = document.createElement('option');
                   opt.value = cid;
                   opt.textContent = companyName;
                   if (currentValue === cid) opt.selected = true;
 
                   select.appendChild(opt);
-                  addedCompanies.add(cid);
               }
           });
 
