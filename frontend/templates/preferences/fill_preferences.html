@@ -47,6 +47,14 @@
       font-weight: 500;
     }
 
+    .badge-remaining.bg-primary {
+      background-color: #0d6efd !important;
+    }
+
+    .badge-remaining.bg-success {
+      background-color: #198754 !important;
+    }
+
     .company-preview {
       font-size: 15px;
       color: #333;
@@ -203,6 +211,8 @@
 
         if (!selectedCompany) {
           badge.textContent = "尚未選擇公司";
+          badge.classList.remove("bg-success", "bg-danger");
+          badge.classList.add("bg-primary");
           updateRemainingDisplay();
           return;
         }
@@ -339,12 +349,14 @@
 
           // 4. 更新 badge 顯示狀態
           if (currentValue) {
-              badge.textContent = "已選擇";
+              const selectedCompanyName = companies.find(c => String(c.id) === currentValue)?.name || '';
+              badge.textContent = `已選擇：${selectedCompanyName}`;
               badge.classList.remove("bg-primary", "bg-danger");
               badge.classList.add("bg-success");
           } else {
               badge.textContent = "尚未選擇公司";
-              badge.classList.remove("bg-primary", "bg-danger", "bg-success");
+              badge.classList.remove("bg-success", "bg-danger");
+              badge.classList.add("bg-primary");
           }
       });
     }
