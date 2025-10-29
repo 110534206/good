@@ -62,8 +62,8 @@ def fill_preferences_page():
     cursor = conn.cursor(dictionary=True)
 
     try:
-        # 1) 取得所有已核准的公司（id, name）
-        cursor.execute("SELECT id, company_name AS name FROM internship_companies WHERE status='approved'")
+        # 1) 取得所有公司（id, name）
+        cursor.execute("SELECT id, company_name AS name FROM internship_companies")
         companies = cursor.fetchall() or []
 
         # 2) 計算每家公司總名額 (SUM of slots)
@@ -136,8 +136,9 @@ def get_jobs_by_company():
     conn = get_db()
     cursor = conn.cursor(dictionary=True)
     try:
+        # 修改後的查詢：只選擇 slots > 0 的職缺
         cursor.execute("""
-            SELECT id, title FROM internship_jobs WHERE company_id=%s
+            SELECT id, title FROM internship_jobs WHERE company_id=%s AND slots > 0
         """, (company_id,))
         jobs = cursor.fetchall() or []
         return jsonify({"success": True, "jobs": jobs})
@@ -150,7 +151,6 @@ def get_jobs_by_company():
             conn.close()
         except Exception:
             pass
-
 
 # -------------------------
 # 取得公司詳細資料

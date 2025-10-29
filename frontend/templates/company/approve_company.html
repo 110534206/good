@@ -3,7 +3,7 @@
 
 <head>
   <meta charset="UTF-8" />
-  <title>主任審核公司</title>
+  <title>實習公司資料總覽中心</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
   <style>
     body {
@@ -25,6 +25,7 @@
       z-index: 1100;
       display: flex;
       align-items: center;
+      box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
     }
 
     .top-bar>.container {
@@ -55,34 +56,81 @@
       display: flex;
       align-items: center;
       gap: 10px;
-      font-weight: bold;
     }
 
-    .btn-link {
+    .top-bar-right .btn-link {
       color: #0066cc;
+      background-color: transparent;
       border: 1.5px solid #0066cc;
       padding: 0.3rem 0.7rem;
       border-radius: 6px;
       text-decoration: none;
-      transition: all 0.3s ease;
+      transition: background-color 0.3s ease, color 0.3s ease;
       font-size: 0.9rem;
-      background-color: transparent;
     }
 
-    .btn-link:hover {
+    .top-bar-right .btn-link:hover {
       background-color: #0066cc;
       color: white;
     }
 
-    #login-avatar {
-      width: 42px;
-      height: 42px;
-      border-radius: 50%;
-      object-fit: cover;
-      cursor: pointer;
+    .container {
+      max-width: 1200px;
+      margin: auto;
     }
 
-    /* 側邊選單 */
+    /* 標籤頁 */
+    .nav-tabs .nav-link {
+      color: #6c757d;
+    }
+
+    .nav-tabs .nav-link.active {
+      color: #0066cc;
+      border-color: #0066cc #0066cc #fff;
+    }
+
+    /* 表格 */
+    table thead th,
+    table td {
+      text-align: center;
+      vertical-align: middle;
+      font-size: 0.95rem;
+    }
+
+    .status-badge {
+      font-weight: bold;
+      border-radius: 5px;
+      padding: 0.2rem 0.6rem;
+    }
+
+    /* 彈窗 */
+    .modal-dialog {
+      max-width: 800px;
+    }
+
+    .company-detail-box {
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      padding: 15px;
+      margin-bottom: 15px;
+      background-color: #f8f9fa;
+    }
+
+    .job-item {
+      border-left: 4px solid #0066cc;
+      padding-left: 10px;
+      margin-bottom: 10px;
+      background-color: #e9ecef;
+      padding: 10px;
+      border-radius: 4px;
+    }
+
+    .detail-label {
+      font-weight: bold;
+      color: #495057;
+      margin-right: 5px;
+    }
+
     #side-menu {
       position: fixed;
       top: 0;
@@ -96,20 +144,12 @@
       padding: 2rem 1.5rem;
       transform: translateX(-100%);
       transition: transform 0.3s ease-in-out;
-      z-index: 1200;
+      z-index: 1100;
       display: flex;
       flex-direction: column;
       align-items: flex-start;
       color: white;
       user-select: none;
-    }
-
-    #side-menu h3 {
-      width: 100%;
-      margin-bottom: 1.5rem;
-      font-weight: 700;
-      font-size: 1.5rem;
-      text-align: left;
     }
 
     #side-menu.open {
@@ -133,6 +173,14 @@
       justify-content: center;
     }
 
+    #side-menu h2 {
+      width: 100%;
+      margin-bottom: 1.5rem;
+      font-weight: 700;
+      font-size: 1.5rem;
+      text-align: left;
+    }
+
     #side-menu a {
       display: block;
       width: 100%;
@@ -148,509 +196,186 @@
       background-color: rgba(255, 255, 255, 0.15);
       color: white;
     }
-
-    /* 主內容 */
-    h2 {
-      text-align: center;
-      color: #0066cc;
-      margin-bottom: 25px;
-    }
-
-    .card {
-      border-radius: 14px;
-      box-shadow: 0 3px 15px rgba(0, 0, 0, 0.05);
-      margin-bottom: 40px;
-    }
-
-    .card-header {
-      font-weight: 600;
-      background-color: #e9f3ff;
-      color: #004c97;
-    }
-
-    th,
-    td {
-      text-align: center;
-      vertical-align: middle;
-    }
-
-    .btn-action {
-      border: none;
-      border-radius: 6px;
-      padding: 6px 12px;
-      font-size: 0.9rem;
-      font-weight: 600;
-      cursor: pointer;
-    }
-
-    .btn-view {
-      background-color: #0d6efd;
-      color: white;
-    }
-
-    .btn-view:hover {
-      background-color: #0b5ed7;
-    }
-
-    .btn-approve {
-      background-color: #28a745;
-      color: white;
-    }
-
-    .btn-reject {
-      background-color: #dc3545;
-      color: white;
-    }
-
-    h2 {
-      text-align: center;
-      color: #0066cc;
-      margin-bottom: 20px;
-    }
-
-    .card {
-      box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
-      border-radius: 10px;
-    }
-
-    #fileDrop {
-      border: 2px dashed #ccc;
-      border-radius: 8px;
-      padding: 30px;
-      text-align: center;
-      color: #888;
-      cursor: pointer;
-      transition: border-color 0.3s;
-    }
-
-    #fileDrop.dragover {
-      border-color: #0d6efd;
-      color: #0d6efd;
-    }
-
-    table {
-      text-align: center;
-      vertical-align: middle;
-    }
-
-    .company-preview {
-      font-size: 15px;
-      color: #333;
-    }
-
-    .company-preview .section {
-      background: #f9fbfd;
-      border: 1px solid #dee2e6;
-      border-radius: 8px;
-      padding: 18px 20px;
-      margin-bottom: 20px;
-      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
-    }
-
-    .company-preview .section h5 {
-      color: #0056b3;
-      font-weight: 600;
-      margin-bottom: 15px;
-    }
-
-    .reject-box {
-      background-color: #fff3f3;
-      border: 1px solid #ffb3b3;
-      color: #c00;
-      border-radius: 6px;
-      padding: 12px;
-    }
-
-
-    .info-grid {
-      display: grid;
-      grid-template-columns: repeat(2, 1fr);
-      gap: 10px 20px;
-    }
-
-    .info-grid .full {
-      grid-column: 1 / -1;
-    }
-
-    .info-grid div {
-      background: #fff;
-      border: 1px solid #e2e6ea;
-      border-radius: 5px;
-      padding: 10px 12px;
-      display: flex;
-      flex-direction: column;
-      justify-content: center;
-    }
-
-    .info-grid strong {
-      color: #0056b3;
-      font-size: 14px;
-      margin-bottom: 4px;
-    }
-
-    .info-grid span {
-      font-size: 15px;
-      color: #444;
-      white-space: pre-wrap;
-    }
-
-
-    .modal {
-      z-index: 2000 !important;
-    }
-
-    body.modal-open,
-    html.modal-open {
-      overflow: auto;
-      height: 100% !important;
-      padding-right: 0 !important;
-    }
-
-    .modal.show .modal-dialog {
-      transform: translateY(39px) !important;
-    }
-
-    .modal-body {
-      max-height: 70vh;
-      overflow-y: auto;
-    }
   </style>
 </head>
 
 <body>
-  <!-- ✅ 頂部欄 -->
   <div class="top-bar">
     <div class="container">
       <div class="top-bar-left">
-        <div id="menu-btn" title="選單" role="button" tabindex="0">
+        <div id="menu-btn" title="選單" role="button">
           <span></span><span></span><span></span>
         </div>
       </div>
-
       <div class="top-bar-right">
-        <a href="/profile">
-          <img src="{{ url_for('static', filename='images/avatar.png') }}" alt="頭像" id="login-avatar" />
-        </a>
-
-        <div class="dropdown" style="position: relative;">
-          <button id="accountDropdownBtn" class="btn-link" aria-expanded="false">帳號 ▾</button>
-          <div id="accountDropdownMenu" class="dropdown-menu"
-            style="position:absolute; right:0; top:120%; background:#fff; border:1px solid #ccc; border-radius:8px; padding:6px; min-width:160px; display:none; box-shadow:0 4px 12px rgba(0,0,0,.12);">
-            <a href="/profile" class="btn-link" style="display:block; border:none; margin:4px 0;">個人資料</a>
-            <a id="toHomeroomLink" href="/class_teacher_home" class="btn-link"
-              style="display:none; border:none; margin:4px 0;">切換班導身分</a>
-            <a href="/login" class="btn-link" style="display:block; border:none; margin:4px 0;">登出</a>
-          </div>
-        </div>
+        <a href="/director_home" class="btn-link">返回主頁</a>
+        <a href="/logout" class="btn-link">登出</a>
       </div>
     </div>
   </div>
 
-  <!-- 側邊選單 -->
-  <nav id="side-menu" aria-hidden="true" role="navigation" aria-label="功能選單">
-    <button id="close-btn" aria-label="關閉功能選單">×</button>
-    <h3>功能選單</h3>
+  <div class="container my-4">
+    <h3 class="mb-4 text-center text-primary fw-bold">實習公司資料總覽中心</h3>
+
+    <ul class="nav nav-tabs" id="myTab" role="tablist">
+      <li class="nav-item" role="presentation">
+        <button class="nav-link active" id="pending-tab" data-bs-toggle="tab" data-bs-target="#pending" type="button"
+          role="tab" aria-controls="pending" aria-selected="true">目前上傳單位</button>
+      </li>
+    </ul>
+
+    <div class="tab-content border border-top-0 p-3 bg-white" id="myTabContent">
+      <div class="tab-pane fade show active" id="pending" role="tabpanel" aria-labelledby="pending-tab">
+        <table class="table table-bordered table-striped table-hover align-middle">
+          <thead class="table-dark">
+            <tr>
+              <th>ID</th>
+              <th>公司名稱</th>
+              <th>上傳教師</th>
+              <th>上傳時間</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody id="pendingTableBody">
+            <tr>
+              <td colspan="5" class="text-center text-muted">載入中...</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  
+ <!-- 側邊選單 -->
+  <nav id="side-menu" aria-hidden="true">
+    <button id="close-btn" aria-label="關閉選單">×</button>
+    <h2>功能選單</h2>
     <a href="/director_home">首頁</a>
+    <a href="/profile">個人資料</a>
     <a href="/approve_company">審核實習單位</a>
-    <a href="/review_resume">審核實習履歷</a>
+    <a href="/review_resume?mode=director">審核實習履歷</a>
     <a href="/notifications">管理公告</a>
     <a href="/admin_statistics">統計資料</a>
   </nav>
 
-  <h2>實習公司審核</h2>
-
-  <!-- 篩選列 -->
-  <div class="filter-section d-flex justify-content-end gap-2 mb-3">
-    <input type="text" id="teacherFilter" placeholder="搜尋指導老師姓名..." />
-    <select id="statusFilter">
-      <option value="">全部狀態</option>
-      <option value="pending">待審核</option>
-      <option value="approved">已核准</option>
-      <option value="rejected">已退件</option>
-    </select>
-    <button class="btn btn-primary btn-sm" onclick="applyFilter()">篩選</button>
-  </div>
-
-  <!-- 待審核公司 -->
-  <div class="card">
-    <div class="card-header">待審核公司</div>
-    <div class="card-body">
-      <table class="table table-hover align-middle">
-        <thead>
-          <tr>
-            <th>#</th>
-            <th>指導老師</th>
-            <th>公司名稱</th>
-            <th>聯絡人</th>
-            <th>Email</th>
-            <th>上傳時間</th>
-            <th>操作</th>
-          </tr>
-        </thead>
-        <tbody id="pendingTable">
-          <tr>
-            <td colspan="7" class="text-muted text-center">載入中...</td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-  </div>
-
-  <!-- 歷史紀錄 -->
-  <div class="card">
-    <div class="card-header">歷史紀錄</div>
-    <div class="card-body">
-      <table class="table table-hover align-middle">
-        <thead>
-          <tr>
-            <th>#</th>
-            <th>指導老師</th>
-            <th>公司名稱</th>
-            <th>狀態</th>
-            <th>上傳時間</th>
-            <th>審核時間</th>
-          </tr>
-        </thead>
-        <tbody id="historyTable">
-          <tr>
-            <td colspan="6" class="text-muted text-center">載入中...</td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-  </div>
-
-  <!-- Modal 預覽 -->
-  <div class="modal fade" id="companyModal" tabindex="-1">
-    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+  <div class="modal fade" id="companyModal" tabindex="-1" aria-labelledby="companyModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-scrollable">
       <div class="modal-content">
-        <div class="modal-header">
-          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        <div class="modal-header bg-primary text-white">
+          <h5 class="modal-title" id="companyModalLabel">公司詳細資料審核</h5>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
         </div>
-        <div class="modal-body" id="modalBody">
-          <p class="text-muted">載入中...</p>
+        <div class="modal-body">
+          <div id="modalContent">
+            <div class="text-center text-muted">載入公司資料中...</div>
+          </div>
         </div>
-        <div class="modal-footer" id="modalFooter"></div>
+        <div class="modal-footer" id="modalFooter">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">關閉</button>
+        </div>
       </div>
     </div>
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
   <script>
-
-    // 渲染上傳預覽表格
-    function renderTable(jsonData) {
-      previewTableBody.innerHTML = "";
-      parsedData = [];
-
-      if (jsonData.length <= 1) {
-        previewTableBody.innerHTML = `<tr><td colspan="8" class="text-center text-muted">檔案內容為空</td></tr>`;
-        return;
-      }
-
-      for (let i = 1; i < jsonData.length; i++) {
-        const r = jsonData[i];
-        if (r.length === 0) continue;
-        parsedData.push({
-          company_name: r[0] || "",
-          company_intro: r[1] || "",
-          company_address: r[2] || "",
-          contact_name: r[3] || "",
-          contact_title: r[4] || "",
-          contact_phone: r[5] || "",
-          contact_email: r[6] || "",
-          internship_unit: r[7] || "",
-          internship_content: r[8] || "",
-          department: r[9] || "",
-          internship_period: r[10] || "",
-          internship_time: r[11] || "",
-          internship_quota: r[12] || "",
-          remark: r[13] || "",
-          status: "審查中"
-        });
-      }
-      parsedData.forEach((c, idx) => {
-        previewTableBody.innerHTML += `
-          <tr>
-            <td>${idx + 1}</td>
-            <td>${c.company_name}</td>
-            <td>${c.company_address}</td>
-            <td>${c.internship_unit}</td>
-            <td>${c.department}</td>
-            <td>${c.internship_period}</td>
-            <td>${c.internship_quota}</td>
-            <td>
-            </td>
-          </tr>`;
-      });
-
-      document.getElementById("submitBtn").style.display = "inline-block";
-    }
-
-    let allPending = [], allHistory = [];
-
-    document.addEventListener("DOMContentLoaded", () => {
-      loadPending(); loadHistory();
+    document.getElementById('menu-btn').addEventListener('click', () => {
+        // 側邊選單控制 (可自行補充)
     });
 
-    function loadPending() {
-      fetch("/api/get_pending_companies").then(r => r.json()).then(d => {
-        if (d.success) { allPending = d.companies; renderTable(allPending, "pendingTable", true); }
-      });
-    }
+    // 載入待審核清單
+    document.addEventListener('DOMContentLoaded', loadPending);
 
-    function loadHistory() {
-      fetch("/api/get_reviewed_companies").then(r => r.json()).then(d => {
-        if (d.success) { allHistory = d.companies; renderTable(allHistory, "historyTable", false); }
-      });
-    }
+    async function loadPending() {
+      const tbody = document.getElementById('pendingTableBody');
+      tbody.innerHTML = `<tr><td colspan="5" class="text-center text-muted">載入中...</td></tr>`;
 
-    function renderTable(list, id, isPending) {
-      const tb = document.getElementById(id);
-      if (!list.length) {
-        tb.innerHTML = `<tr><td colspan="${isPending ? 7 : 6}" class="text-center text-muted">無資料</td></tr>`;
-        return;
+      try {
+        const res = await fetch("/api/get_pending_companies");
+        const data = await res.json();
+
+        if (!data.success) {
+          tbody.innerHTML = `<tr><td colspan="5" class="text-center text-danger">載入失敗: ${data.message}</td></tr>`;
+          return;
+        }
+
+        if (data.companies.length === 0) {
+          tbody.innerHTML = `<tr><td colspan="5" class="text-center text-muted">目前沒有待審核公司</td></tr>`;
+          return;
+        }
+
+        tbody.innerHTML = data.companies.map(r => `
+          <tr>
+            <td>${r.id}</td>
+            <td>${r.company_name}</td>
+            <td>${r.upload_teacher_name || '-'}</td>
+            <td>${r.submitted_at || ''}</td>
+            <td>
+              <a href="/api/download_company_file/${r.id}" class="btn btn-sm btn-outline-primary">下載附檔</a>
+            </td>
+          </tr>
+        `).join("");
+
+      } catch (error) {
+        console.error("載入待審核紀錄發生錯誤:", error);
+        tbody.innerHTML = `<tr><td colspan="5" class="text-center text-danger">伺服器錯誤，載入失敗。</td></tr>`;
       }
-      tb.innerHTML = list.map((c, i) => `
-        <tr>
-          <td>${i + 1}</td>
-          <td>${c.upload_teacher_name || "—"}</td>
-          <td>${c.company_name}</td>
-          ${isPending ?
-          `<td>${c.contact_name || "—"}</td><td>${c.contact_email || "—"}</td><td>${c.upload_time || "—"}</td>
-             <td><button class="btn-action btn-view" onclick="openCompanyModal(${c.id}, true)">查看</button></td>`
-          :
-          `<td>${c.status === "approved" ? "通過" : c.status === "rejected" ? "退件" : "—"}</td>
-             <td>${c.upload_time || "—"}</td><td>${c.reviewed_at || "—"}</td>`}
-        </tr>`).join("");
     }
 
-    async function openCompanyModal(id, isPending = false) {
+
+    
+    // 彈窗
+    async function openCompanyModal(id, isPending) {
+      const modal = new bootstrap.Modal(document.getElementById('companyModal'));
+      const content = document.getElementById('modalContent');
+      const footer = document.getElementById('modalFooter');
+      content.innerHTML = '<div class="text-center text-muted">載入公司資料中...</div>';
+      footer.innerHTML = '<button type="button" class="btn btn-secondary" data-bs-dismiss="modal">關閉</button>';
+
+      modal.show();
+
       try {
         const res = await fetch(`/api/get_company_detail?company_id=${id}`);
         const data = await res.json();
-        if (!data.success) { alert("載入失敗"); return; }
 
-        const c = data.company || {};
-        const body = document.getElementById("modalBody");
-        const footer = document.getElementById("modalFooter");
-
-        const content = `
-      <div class="company-preview">
-        <div class="section">
-          <h5>公司基本資料</h5>
-          <div class="info-grid">
-            <div><strong>公司名稱</strong><span>${c.company_name || "-"}</span></div>
-            <div><strong>公司地址</strong><span>${c.company_address || "-"}</span></div>
-            <div class="full"><strong>公司簡介</strong><span>${c.company_intro || "-"}</span></div>
-          </div>
-        </div>
-
-        <!-- 聯絡資訊 -->
-        <div class="section">
-          <h5>聯絡資訊</h5>
-          <div class="info-grid">
-            <div><strong>聯絡人姓名</strong><span>${c.contact_name || "-"}</span></div>
-            <div><strong>職稱</strong><span>${c.contact_title || "-"}</span></div>
-            <div><strong>聯絡電話</strong><span>${c.contact_phone || "-"}</span></div>
-            <div><strong>電子郵件</strong><span>${c.contact_email || "-"}</span></div>
-          </div>
-        </div>
-
-        <div class="section">
-        <h5>實習職缺資訊</h5>
-        ${c.internship_jobs.map(job => `
-        <div class="info-grid">
-        <div><strong>實習職位</strong><span>${job.internship_unit || '-'}</span></div>
-        <div><strong>薪資</strong><span>${job.salary || '-'}</span></div> <div><strong>期間</strong><span>${job.internship_period || '-'}</span></div>        <div><strong>期間</strong><span>${job.internship_period || '-'}</span></div>
-        <div><strong>時段</strong><span>${job.internship_time || '-'}</span></div>
-        <div><strong>名額</strong><span>${job.internship_quota || '-'}</span></div>
-        <div class="full"><strong>實習內容</strong><span>${job.internship_content || '-'}</span></div>
-        <div class="full"><strong>備註</strong><span>${job.remark || '-'}</span></div>
-        </div>
-        `).join('')}
-        </div>
-
-        ${c.status === 'rejected' && c.reject_reason ? `
-        <div class="section reject-box">
-          <h5>退件理由</h5>
-          <div><span>${c.reject_reason}</span></div>
-        </div>` : ''}
-
-      </div>
-    `;
-
-        body.innerHTML = content;
-
-        // footer 按鈕
-        if (isPending) {
-          footer.innerHTML = `
-    <button class="btn btn-success" onclick="approveCompany(${c.id})">通過</button>
-    <button class="btn btn-danger" onclick="rejectCompany(${c.id})">退件</button>
-  `;
-        } else {
-          footer.innerHTML = `<button class="btn btn-secondary" data-bs-dismiss="modal">關閉</button>`;
+        if (!data.success) {
+          content.innerHTML = `<div class="alert alert-danger">載入失敗: ${data.message}</div>`;
+          return;
         }
 
-        // 顯示 modal
-        const modalEl = document.getElementById("companyModal");
-        const bsModal = new bootstrap.Modal(modalEl);
-        bsModal.show();
+        const company = data.company;
+        const jobList = company.internship_jobs.map(job => `
+          <div class="job-item">
+            <p class="mb-1"><span class="detail-label">職缺名稱:</span> ${job.internship_unit || '-'}</p>
+            <p class="mb-1"><span class="detail-label">預計名額:</span> ${job.internship_quota || 'N/A'}</p>
+            <p class="mb-1"><span class="detail-label">工作時間:</span> ${job.internship_time || '（詳見附檔）'}</p>
+            <p class="mb-1"><span class="detail-label">職缺內容:</span> ${job.internship_content || '（詳見附檔）'}</p>
+          </div>
+        `).join('');
 
-        modalEl.addEventListener("hidden.bs.modal", () => {
-          document.body.classList.remove("modal-open");
-        });
+        let rejectReasonHtml = '';
+        if (company.reject_reason) {
+          rejectReasonHtml = `<div class="alert alert-warning"><strong>駁回原因:</strong> ${company.reject_reason}</div>`;
+        }
 
-      } catch (err) {
-        console.error("openCompanyModal error:", err);
-        alert("載入發生錯誤");
+        content.innerHTML = `
+          <div class="company-detail-box"><p><span class="detail-label">公司名稱:</span>${company.company_name}</p></div>
+          <div class="company-detail-box"><p><span class="detail-label">統一編號:</span>${company.company_tax_number || '-'}</p></div>
+          <div class="company-detail-box"><p><span class="detail-label">公司地址:</span>${company.company_address || '-'}</p></div>
+          <div class="company-detail-box"><p><span class="detail-label">聯絡人:</span>${company.contact_person || '-'}</p></div>
+          <div class="company-detail-box"><p><span class="detail-label">聯絡電話:</span>${company.contact_phone || '-'}</p></div>
+          <div class="company-detail-box"><p><span class="detail-label">電子郵件:</span>${company.contact_email || '-'}</p></div>
+          <h6>實習職缺列表:</h6>
+          ${jobList}
+          ${rejectReasonHtml}
+        `;
+      } catch (error) {
+        console.error(error);
+        content.innerHTML = `<div class="alert alert-danger">載入公司資料發生錯誤</div>`;
       }
     }
 
-    function approveCompany(id) {
-      if (!confirm("確定通過這家公司？")) return;
-      fetch(`/api/approve_company`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ company_id: id, status: "approved" })
-      })
-        .then(r => r.json()).then(d => {
-          alert(d.message || "已通過");
-          bootstrap.Modal.getInstance(document.getElementById("companyModal")).hide();
-          loadPending(); loadHistory();
-        });
-    }
-
-
-    function rejectCompany(id) {
-      const reason = prompt("請輸入退件理由：");
-      if (!reason) {
-        alert("請輸入退件理由。");
-        return;
-      }
-      fetch(`/api/reject_company`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ company_id: id, reason })
-      }).then(r => r.json()).then(d => {
-        alert(d.message || "已退件");
-        bootstrap.Modal.getInstance(document.getElementById("companyModal")).hide();
-        loadPending(); loadHistory();
-      });
-    }
-
-    function applyFilter() {
-      const keyword = document.getElementById("teacherFilter").value.trim();
-      const status = document.getElementById("statusFilter").value;
-      const p = allPending.filter(c => !keyword || (c.upload_teacher_name || "").includes(keyword));
-      const h = allHistory.filter(c =>
-        (!keyword || (c.upload_teacher_name || "").includes(keyword)) &&
-        (!status || c.status === status)
-      );
-      renderTable(p, "pendingTable", true);
-      renderTable(h, "historyTable", false);
-    }
-
+    <!-- 選單開關邏輯 -->
     const menuBtn = document.getElementById("menu-btn");
     const sideMenu = document.getElementById("side-menu");
     const closeBtn = document.getElementById("close-btn");
@@ -675,62 +400,6 @@
         sideMenu.setAttribute("aria-hidden", "true");
       }
     });
-
-    // 帳號下拉
-    const btn = document.getElementById('accountDropdownBtn');
-    const menu = document.getElementById('accountDropdownMenu');
-    btn.addEventListener('click', () => {
-      const open = menu.style.display === 'block';
-      menu.style.display = open ? 'none' : 'block';
-      btn.setAttribute('aria-expanded', String(!open));
-    });
-    document.addEventListener('click', (e) => {
-      if (!menu.contains(e.target) && !btn.contains(e.target)) {
-        menu.style.display = 'none';
-        btn.setAttribute('aria-expanded', 'false');
-      }
-    });
-
-    // 載入用戶頭像
-    function loadUserAvatar() {
-      console.log('開始載入頭像...');
-      fetch('/api/profile')
-        .then(res => {
-          if (!res.ok) throw new Error('無法取得用戶資料');
-          return res.json();
-        })
-        .then(data => {
-          console.log('API 回應:', data);
-          if (data.success && data.user && data.user.avatar_url) {
-            // 確保頭像URL是完整的路徑，並加上時間戳避免快取
-            const rawUrl = data.user.avatar_url.startsWith('http') ?
-              data.user.avatar_url :
-              window.location.origin + data.user.avatar_url;
-            const avatarUrl = rawUrl + (rawUrl.includes('?') ? '&' : '?') + 't=' + Date.now();
-            console.log('設定頭像URL:', avatarUrl);
-            document.getElementById('login-avatar').src = avatarUrl;
-          } else {
-            console.log('沒有頭像URL或API失敗');
-          }
-        })
-        .catch(err => {
-          console.log('載入頭像失敗:', err);
-          // 保持預設頭像
-        });
-    }
-
-    // 頁面就緒後載入頭像
-    document.addEventListener('DOMContentLoaded', () => {
-      loadUserAvatar();
-    });
-
-    // 判斷是否為班導，顯示切換到班導主頁
-    fetch('/api/profile').then(r => r.json()).then(d => {
-      if (d.success && d.user && d.user.is_homeroom) {
-        const link = document.getElementById('toHomeroomLink');
-        if (link) link.style.display = 'block';
-      }
-    }).catch(() => { });
   </script>
 </body>
 
