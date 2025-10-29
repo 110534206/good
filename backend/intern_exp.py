@@ -38,7 +38,13 @@ def to_gregorian_if_needed(year):
 def page_intern_exp():
     if not require_login():
         return redirect(url_for('auth_bp.login'))
-    return render_template('user_shared/intern_experience.html')
+        
+    # 新增邏輯：從 URL 取得 company_id 參數
+    company_id = request.args.get('company_id')
+    
+    # 將 company_id 傳遞給前端範本
+    # 前端可以利用這個 ID 來自動設定篩選器或作為額外參數
+    return render_template('user_shared/intern_experience.html', initial_company_id=company_id)
 
 # --------------------
 # API：公司清單（下拉用） - 只回傳已通過或可見的公司

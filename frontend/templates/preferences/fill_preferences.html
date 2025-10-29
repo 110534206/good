@@ -146,9 +146,7 @@
           <select class="form-select company-select" required>
             <option value="">-- 請選擇公司 --</option>
             {% for c in companies %}
-            {% if company_remaining[c.id|string] > 0 %}
             <option value="{{ c['id'] }}">{{ c['name'] }}</option>
-            {% endif %}
             {% endfor %}
           </select>
         </div>
@@ -159,8 +157,8 @@
             <option value="">-- 請先選擇公司 --</option>
           </select>
         </div>
-
         <button type="button" class="btn btn-outline-info btn-sm view-company-btn" disabled>查看公司詳情</button>
+
         <span class="badge-remaining">尚未選擇公司</span>
       </div>
       {% endfor %}
@@ -171,7 +169,7 @@
     </form>
   </div>
 
-  <!-- Modal for company preview -->
+  <!-- Modal 預覽 -->
   <div class="modal fade" id="previewModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered modal-lg">
       <div class="modal-content">
@@ -183,137 +181,60 @@
     </div>
   </div>
 
- <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-<script>
-    // ======== 取後端資料 ========
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script>
     const preview = {{ 'true' if preview else 'false' }};
-    const companies = {{ companies | tojson }}; 
-    
-    // ======== 輔助函式：取得所有志願中已被選取的職缺 ID ========
-    function getCurrentlyUsedJobIds() {
-        const usedJobIds = new Set();
-        document.querySelectorAll(".preference-card").forEach(card => {
-            const jobSelect = card.querySelector(".job-select");
-            const jobId = jobSelect.value;
-            if (jobId) {
-                // 將 job_id 存為字串，與 select.value 的型別保持一致
-                usedJobIds.add(jobId);
-            }
-        });
-        return usedJobIds;
-    }
-    
-    // ======== 核心函式：更新特定志願的職缺下拉選單 (新增自動填充邏輯) ========
-    async function updateSelectableJobs(card, selectedCompany, currentSelectedJobId) {
-        const jobSelect = card.querySelector(".job-select");
-        jobSelect.innerHTML = `<option value="">-- 請選擇職缺 --</option>`;
+    const companySlots = {{ job_slots | tojson }};
+    const companies = {{ companies | tojson }};
 
-        if (!selectedCompany) {
-            return;
-        }
-
-        try {
-            // 1. 取得該公司所有職缺 (不論是否已被選)
-            const res = await fetch(`/api/get_jobs_by_company?company_id=${selectedCompany}`);
-            const data = await res.json();
-            
-            if (data.success && data.jobs.length > 0) {
-                const allUsedJobIds = getCurrentlyUsedJobIds();
-                
-                // 2. 過濾職缺：找出所有可供這個志願選取的職缺
-                const availableJobs = data.jobs.filter(j => {
-                    const jobIdString = String(j.id);
-                    // 該職缺不是被其他志願選走 
-                    return !allUsedJobIds.has(jobIdString) || jobIdString === String(currentSelectedJobId);
-                });
-                
-                // 3. 檢查是否需要自動填充 (僅當職缺列表只有一個選項時)
-                let autoSelectedJobId = null;
-                if (availableJobs.length === 1 && !availableJobs[0].id) {
-                    // 排除掉只有 "-- 請選擇職缺 --" 選項的情況
-                    // (由於我們在下面重新建立選單，這裡只需檢查長度)
-                } else if (availableJobs.length === 1 && !currentSelectedJobId) {
-                    // 如果只剩一個可選職缺，且該志願原本未選，則自動選取
-                    autoSelectedJobId = String(availableJobs[0].id);
-                }
-                
-                // 4. 重新建立職缺下拉選單
-                if (availableJobs.length > 0) {
-                    jobSelect.innerHTML = `<option value="">-- 請選擇職缺 --</option>` + availableJobs.map(j => {
-                        const jobIdString = String(j.id);
-                        // 判斷是否為原本已選，或是否為需要自動填充的
-                        const isSelected = jobIdString === String(currentSelectedJobId) || jobIdString === autoSelectedJobId;
-                        return `<option value="${jobIdString}" ${isSelected ? 'selected' : ''}>${j.title}</option>`;
-                    }).join('');
-                    
-                    // 如果有自動填充，手動設定 value
-                    if (autoSelectedJobId) {
-                        jobSelect.value = autoSelectedJobId;
-                    }
-                    
-                    // 如果原本選的職缺現在不可選（被別人選走了），則重置選單值
-                    if (currentSelectedJobId && !availableJobs.some(j => String(j.id) === String(currentSelectedJobId))) {
-                        jobSelect.value = "";
-                    }
-                } else {
-                    jobSelect.innerHTML = `<option value="">（無可用職缺）</option>`;
-                    jobSelect.value = "";
-                }
-                
-            } else {
-                jobSelect.innerHTML = `<option value="">（無可用職缺）</option>`;
-                jobSelect.value = "";
-            }
-        } catch (err) {
-            console.error("Failed to fetch jobs:", err);
-            jobSelect.innerHTML = `<option value="">（載入錯誤）</option>`;
-        }
-        
-        // 手動觸發一次 job-select 的 change 事件，確保 badge 和其他志願的選單更新
-        const event = new Event('change', { bubbles: true });
-        jobSelect.dispatchEvent(event);
-    }
-
-    // ======== 綁定公司選擇 (修改) ========
+    // 綁定公司下拉變化，動態載入職缺
     document.querySelectorAll(".company-select").forEach(select => {
       select.addEventListener("change", async (e) => {
         const selectedCompany = e.target.value;
         const card = e.target.closest(".preference-card");
         const jobSelect = card.querySelector(".job-select");
+        const badge = card.querySelector(".badge-remaining");
         const viewBtn = card.querySelector(".view-company-btn");
-        
-        // 取得目前選中的 job ID，用於傳遞給 updateSelectableJobs
-        const previousJobId = jobSelect.value; 
 
         viewBtn.disabled = !selectedCompany;
+
+        // 初始職缺選單
         jobSelect.innerHTML = `<option value="">-- 請先選擇公司 --</option>`;
-        jobSelect.value = ""; // 清空職缺
 
         if (!selectedCompany) {
-          updateAllJobDropdowns(e.target); // 公司取消選擇時，也要通知其他選單更新
+          badge.textContent = "尚未選擇公司";
+          updateRemainingDisplay();
           return;
         }
 
-        // 呼叫新的職缺更新函式
-        await updateSelectableJobs(card, selectedCompany, previousJobId);
+        try {
+          const res = await fetch(`/api/get_jobs_by_company?company_id=${selectedCompany}`);
+          const data = await res.json();
+
+          if (data.success && data.jobs.length > 0) {
+            jobSelect.innerHTML = data.jobs.map(j =>
+              `<option value="${j.id}">${j.title}</option>`
+            ).join('');
+          } else {
+            jobSelect.innerHTML = `<option value="">（無可用職缺）</option>`;
+          }
+        } catch (err) {
+          console.error(err);
+        }
+
+        updateRemainingDisplay();
       });
     });
 
-    // ======== 綁定職缺選擇 (新增) ========
-    document.querySelectorAll(".job-select").forEach(select => {
-      select.addEventListener("change", (e) => {
-        // 當職缺被選擇/取消時，必須通知所有其他志願序的 job-select 重新過濾其選項
-        updateAllJobDropdowns(e.target);
-      });
-    });
-    
-    // ======== 查看公司詳情 Modal (保留原樣) ========
+    // 查看公司詳情 Modal
     document.querySelectorAll(".preference-card").forEach(card => {
       const viewBtn = card.querySelector(".view-company-btn");
       const companySelect = card.querySelector(".company-select");
+
       viewBtn.addEventListener("click", async () => {
         const companyId = companySelect.value;
         if (!companyId) return;
+
         try {
           const res = await fetch(`/api/get_company_detail?company_id=${companyId}`);
           const data = await res.json();
@@ -321,37 +242,38 @@
 
           const c = data.company;
           const content = `
-            <div class="company-preview">
-              <div class="section">
-                <h5>公司基本資料</h5>
-                <div class="info-grid">
-                  <div><strong>公司名稱</strong><span>${c.company_name || '-'}</span></div>
-                  <div><strong>公司地址</strong><span>${c.company_address || '-'}</span></div>
-                </div>
-              </div>
-              <div class="section">
-                <h5>聯絡資訊</h5>
-                <div class="info-grid">
-                  <div><strong>聯絡人姓名</strong><span>${c.contact_name || '-'}</span></div>
-                  <div><strong>聯絡電話</strong><span>${c.contact_phone || '-'}</span></div>
-                  <div class="full"><strong>電子郵件</strong><span>${c.contact_email || '-'}</span></div>
-                </div>
-              </div>
-              <div class="section">
-                <h5>實習職缺資訊</h5>
-                ${(data.jobs || []).map(job => `
-                  <div class="info-grid">
-                    <div><strong>實習職位</strong><span>${job.internship_unit || '-'}</span></div>
-                    <div><strong>薪資</strong><span>${job.salary ||'-'}</span></div>
-                    <div><strong>期間</strong><span>${job.internship_period|| '-'}</span></div>
-                    <div><strong>時段</strong><span>${job.internship_time  || '-'}</span></div>
-                    <div><strong>名額</strong><span>${job.internship_quota || '-'}</span></div>
-                    <div class="full"><strong>實習內容</strong><span>${job.internship_content || '-'}</span></div>
-                    <div class="full"><strong>備註</strong><span>${job.remark || '-'}</span></div>
-                  </div>
-                `).join('')}
-              </div>
-            </div>`;
+<div class="company-preview">
+  <div class="section">
+    <h5>公司基本資料</h5>
+    <div class="info-grid">
+      <div><strong>公司名稱</strong><span>${c.company_name || '-'}</span></div>
+      <div><strong>公司地址</strong><span>${c.company_address || '-'}</span></div>
+    </div>
+  </div>
+  <div class="section">
+    <h5>聯絡資訊</h5>
+    <div class="info-grid">
+      <div><strong>聯絡人姓名</strong><span>${c.contact_name || '-'}</span></div>
+      <div><strong>聯絡電話</strong><span>${c.contact_phone || '-'}</span></div>
+      <div class="full"><strong>電子郵件</strong><span>${c.contact_email || '-'}</span></div>
+    </div>
+  </div>
+  <div class="section">
+    <h5>實習職缺資訊</h5>
+    ${(c.internship_jobs || []).map(job => `
+      <div class="info-grid">
+        <div><strong>實習職位</strong><span>${job.internship_unit || '-'}</span></div>
+        <div><strong>薪資</strong><span>${job.salary || '-'}</span></div>
+        <div><strong>期間</strong><span>${job.internship_period || '-'}</span></div>
+        <div><strong>時段</strong><span>${job.internship_time || '-'}</span></div>
+        <div><strong>名額</strong><span>${job.internship_quota || '-'}</span></div>
+        <div class="full"><strong>實習內容</strong><span>${job.internship_content || '-'}</span></div>
+        <div class="full"><strong>備註</strong><span>${job.remark || '-'}</span></div>
+      </div>
+    `).join('')}
+  </div>
+</div>
+          `;
           document.getElementById("previewContent").innerHTML = content;
           new bootstrap.Modal(document.getElementById("previewModal")).show();
         } catch (err) {
@@ -361,54 +283,61 @@
       });
     });
 
-    // ======== 更新所有志願的職缺下拉選單和狀態 (優化) ========
-    function updateAllJobDropdowns(sourceElement = null) {
-        document.querySelectorAll(".preference-card").forEach(card => {
-            const companySelect = card.querySelector(".company-select");
-            const jobSelect = card.querySelector(".job-select");
-            const badge = card.querySelector(".badge-remaining");
-            
-            const selectedCompany = companySelect.value;
-            const currentSelectedJobId = jobSelect.value;
-            
-            // 1. 如果當前觸發事件的是另一個 job-select，則要求此卡片重新過濾職缺列表
-            if (selectedCompany && sourceElement !== jobSelect) {
-                // 如果是 job-select 變動觸發的，我們只需要重新過濾選項
-                if (sourceElement && sourceElement.className.includes("job-select")) {
-                     // 傳遞 null 作為 currentSelectedJobId，讓它重新根據所有已用 job IDs 過濾
-                     // 由於 updateSelectableJobs 內部會先呼叫 getCurrentlyUsedJobIds()，這裡不需要傳遞舊值
-                     updateSelectableJobs(card, selectedCompany, currentSelectedJobId);
-                }
-            }
-            
-            // 2. 更新 Badge 狀態
-            if (currentSelectedJobId) {
-                badge.textContent = "已選擇";
-                badge.classList.add("bg-success");
-            } else if (selectedCompany) {
-                badge.textContent = "尚未選擇職缺";
-                badge.classList.remove("bg-success");
-            } else {
-                badge.textContent = "尚未選擇公司";
-                badge.classList.remove("bg-success");
-            }
+    // 更新剩餘名額
+    function updateRemainingDisplay() {
+      const allCompanies = document.querySelectorAll(".company-select");
+      const countMap = {};
+
+      allCompanies.forEach(s => { const cid = s.value; if (cid) countMap[cid] = (countMap[cid] || 0) + 1; });
+
+      allCompanies.forEach(select => {
+        const card = select.closest(".preference-card");
+        const badge = card.querySelector(".badge-remaining");
+        const currentValue = select.value;
+
+        // 清空選項但保留 "--請選擇公司--"
+        const firstOption = select.querySelector('option[value=""]');
+        select.innerHTML = '';
+        select.appendChild(firstOption);
+
+        Object.keys(companySlots).forEach(cid => {
+          const total = Number(companySlots[cid] || 0);
+          const used = countMap[cid] || 0;
+          const remaining = total - used;
+
+          if (remaining > 0 || currentValue === cid) {
+            const opt = document.createElement('option');
+            opt.value = cid;
+            opt.textContent = companies.find(c => c.id == cid).name;
+            if (currentValue === cid) opt.selected = true;
+            select.appendChild(opt);
+          }
         });
+
+        // 更新 badge
+        if (currentValue) {
+          const remain = Math.max(Number(companySlots[currentValue] || 0) - (countMap[currentValue] || 0), 0);
+          badge.textContent = remain > 0 ? `剩餘可選：${remain}` : `已填寫完畢`;
+          badge.classList.toggle("bg-danger", remain === 0);
+          badge.classList.toggle("bg-primary", remain > 0);
+        } else {
+          badge.textContent = "尚未選擇公司";
+        }
+      });
     }
 
-    // ======== 儲存表單 (保留原樣) ========
+    // 表單儲存
     document.getElementById("preferencesForm").addEventListener("submit", async (e) => {
       e.preventDefault();
       if (preview) {
         alert("此為預覽模式，請登入學生帳號後再儲存志願序。");
         return;
       }
-
       const preferences = [];
       document.querySelectorAll(".preference-card").forEach((card, idx) => {
         const companyId = card.querySelector(".company-select").value;
         const jobId = card.querySelector(".job-select").value;
-        if (companyId && jobId)
-          preferences.push({ order: idx + 1, company_id: companyId, job_id: jobId });
+        if (companyId && jobId) preferences.push({ order: idx + 1, company_id: companyId, job_id: jobId });
       });
 
       const res = await fetch("/api/save_preferences", {
@@ -416,72 +345,24 @@
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ preferences })
       });
+
       const data = await res.json();
       alert(data.message);
       if (data.success) location.reload();
     });
 
-    // ======== 初始載入：解決已填志願的職缺篩選問題 (核心修正點) ========
-    async function initializePreferences() {
-        const cardsToUpdate = [];
-        
-        // 1. 第一輪：設置所有已填寫的志願的公司和職缺值 (DOM 狀態準備)
-        document.querySelectorAll(".preference-card").forEach(card => {
-            const companySelect = card.querySelector(".company-select");
-            const jobSelect = card.querySelector(".job-select");
-            const viewBtn = card.querySelector(".view-company-btn");
-            const rank = card.getAttribute('data-rank');
-            
-            // 使用 Jinja2 提供的 submitted 數據來設置初始值
-            {% for i in range(1, 6) %}
-                {% set p = submitted.get(i) %}
-                {% if p %}
-                    if (rank === '{{ i }}') {
-                        // 設置公司值
-                        companySelect.value = '{{ p.company_id }}';
-                        viewBtn.disabled = false;
-                        
-                        // 手動插入已選職缺選項，確保 jobSelect.value 是正確的
-                        jobSelect.innerHTML = `<option value="{{ p.job_id }}" selected>{{ p.job_title }}</option>`;
-                        
-                        // 將有值的卡片加入待更新列表
-                        cardsToUpdate.push(card); 
-                    }
-                {% endif %}
-            {% endfor %}
-            
-            // 確保未選公司時的 Badge 狀態正確
-            if (!companySelect.value) {
-                 const badge = card.querySelector(".badge-remaining");
-                 badge.textContent = "尚未選擇公司";
-                 badge.classList.remove("bg-success");
-            }
-        });
-        
-        // 2. 第二輪：確保所有已填志願的值都已設置後，再依序更新其職缺列表
-        for (const card of cardsToUpdate) {
-            const companySelect = card.querySelector(".company-select");
-            const jobSelect = card.querySelector(".job-select");
-            const selectedCompany = companySelect.value;
-            const currentSelectedJobId = jobSelect.value;
-            
-            // 執行更新，確保列表被過濾，但已選的職缺仍保持選中
-            await updateSelectableJobs(card, selectedCompany, currentSelectedJobId);
-        }
-        
-        // 確保所有 Badge 狀態最終正確
-        updateAllJobDropdowns();
-    }
-    
-    // 執行初始化
-    initializePreferences();
+    // 初始
+    updateRemainingDisplay();
 
-    // 預覽模式禁用 (保留原樣)
-    (function applyPreviewMode() {
+    // 預覽模式：停用操作與提交
+    (function applyPreviewMode(){
       if (!preview) return;
       document.querySelectorAll(".company-select, .job-select, .view-company-btn").forEach(el => {
-        if (el.tagName === 'BUTTON') el.disabled = true;
-        else el.setAttribute('disabled', 'disabled');
+        if (el.tagName === 'BUTTON') {
+          el.disabled = true;
+        } else {
+          el.setAttribute('disabled', 'disabled');
+        }
       });
       const submitBtn = document.querySelector('#preferencesForm button[type="submit"]');
       if (submitBtn) {
@@ -489,6 +370,7 @@
         submitBtn.setAttribute('disabled', 'disabled');
       }
     })();
-</script>
+  </script>
 </body>
+
 </html>
