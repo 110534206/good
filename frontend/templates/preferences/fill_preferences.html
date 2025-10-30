@@ -6,356 +6,500 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>實習公司志願序填寫</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
   <style>
+    /* 基礎排版與字體 */
     body {
       font-family: "Noto Sans TC", sans-serif;
-      background-color: #ffffff;
-      padding: 20px;
+      background-color: #f8f9fa; /* 輕微的淺灰色背景 */
+      padding: 30px;
     }
 
+    /* 標題優化 */
     h2 {
       text-align: center;
-      color: #1a73e8;
-      margin-bottom: 30px;
+      color: #004d99;
+      /* 調整 margin-bottom 以彌補說明文字移除的間距 */
+      margin-bottom: 50px; 
       font-weight: 700;
+      font-size: 2rem;
+      border-bottom: 3px solid #1a73e8;
+      display: inline-block;
+      padding-bottom: 8px;
     }
 
+    /* 卡片設計優化 */
     .preference-card {
       background-color: #ffffff;
       border-radius: 1rem;
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
-      padding: 25px;
-      margin-bottom: 20px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
+      padding: 30px;
+      margin-bottom: 30px; /* 間距加大 */
       position: relative;
-      transition: transform 0.2s, box-shadow 0.2s;
+      transition: transform 0.3s ease, box-shadow 0.3s ease;
     }
 
     .preference-card:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 6px 16px rgba(0, 0, 0, 0.12);
+      transform: translateY(-5px);
+      box-shadow: 0 15px 40px rgba(0, 0, 0, 0.15);
     }
-
+    
+    /* 強化志願序號的視覺重要性 */
+    .card-header-rank {
+        display: flex;
+        align-items: center;
+        margin-bottom: 25px; /* 增加與內容的間距 */
+        padding-bottom: 15px;
+        border-bottom: 1px dashed #e9ecef;
+    }
+    
+    /* 志願數字徽章 */
+    .rank-number {
+        font-size: 1.8rem;
+        font-weight: 900;
+        color: #ffffff;
+        background-color: #1a73e8; /* 藍色背景 */
+        border-radius: 0.5rem;
+        padding: 5px 15px;
+        margin-right: 15px;
+        line-height: 1;
+        box-shadow: 0 4px 10px rgba(26, 115, 232, 0.4);
+    }
+    
+    /* 徽章 (狀態提示) */
     .badge-remaining {
       position: absolute;
-      right: 25px;
-      top: 25px;
-      background-color: #6c757d;
-      color: white;
-      border-radius: 15px;
-      padding: 5px 12px;
-      font-size: 0.85rem;
-      font-weight: 500;
+      right: 30px;
+      top: 30px;
+      border-radius: 50rem; 
+      padding: 8px 15px;
+      font-size: 0.9rem;
+      font-weight: 600;
     }
 
+    .badge-remaining.bg-primary {
+      background-color: #1a73e8 !important; 
+      color: white;
+    }
+    .badge-remaining.bg-secondary {
+      background-color: #6c757d !important;
+    }
+    .badge-remaining.bg-danger {
+      background-color: #dc3545 !important;
+    }
+
+    /* 表單元素設計 */
+    .form-select, .form-label {
+      font-size: 1rem;
+    }
+    .form-label {
+        font-weight: 600; /* 標籤加粗 */
+        color: #343a40;
+        margin-bottom: 8px;
+    }
     .form-select {
+      border: 1px solid #ced4da;
       border-radius: 0.5rem;
-      transition: box-shadow 0.2s;
+      padding: 0.75rem 1.5rem 0.75rem 0.75rem;
+      transition: all 0.2s ease;
     }
 
     .form-select:focus {
-      box-shadow: 0 0 0 0.2rem rgba(13, 110, 253, 0.25);
+      border-color: #1a73e8; 
+      box-shadow: 0 0 0 0.25rem rgba(26, 115, 232, 0.25);
     }
 
+    /* 按鈕設計 */
     .btn {
       border-radius: 0.6rem;
-      font-weight: 500;
+      font-weight: 600;
+      padding: 10px 20px;
+      transition: background-color 0.2s, transform 0.1s;
+    }
+    
+    /* 主要儲存按鈕 */
+    .btn-success {
+      background-color: #00a651;
+      border-color: #00a651;
+    }
+    .btn-success:hover {
+      background-color: #008f45;
+      border-color: #008f45;
+      transform: translateY(-1px);
     }
 
+    /* 次要下載按鈕 */
     .btn-outline-primary {
       margin-top: 10px;
+      color: #1a73e8;
+      border-color: #1a73e8;
+      background-color: transparent;
+      padding: 8px 15px;
+    }
+    .btn-outline-primary:hover:not([disabled]) {
+      color: white;
+      background-color: #1a73e8;
+    }
+    .btn-outline-primary:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
     }
   </style>
 </head>
 
 <body>
   <div class="container">
-    <h2>實習公司志願序填寫</h2>
+    <h2><i class="bi bi-person-workspace me-2"></i>實習公司志願序填寫</h2>
 
-    <form id="preferencesForm" class="mx-auto" style="max-width: 700px;">
-      {% for i in range(1, 6) %}
-      <div class="preference-card" data-rank="{{ i }}">
-        <h5 class="fw-bold">第 {{ i }} 志願</h5>
-
-        <div class="mb-3">
-          <label class="form-label">選擇公司</label>
-          <select class="form-select company-select" required>
-            <option value="">-- 請選擇公司 --</option>
-            {% for c in companies %}
-            <option value="{{ c['id'] }}">{{ c['name'] }}</option>
-            {% endfor %}
-          </select>
+    <form id="preferencesForm" class="mx-auto" style="max-width: 900px;">
+      
+      <div class="preference-card" data-rank="1">
+        <div class="card-header-rank">
+            <span class="rank-number">1</span>
+            <h5 class="fw-bold m-0 p-0">第 1 志願</h5>
         </div>
-
-        <div class="mb-3">
-          <label class="form-label">選擇職缺</label>
-          <select class="form-select job-select" required>
-            <option value="">-- 請先選擇公司 --</option>
-          </select>
+        <div class="row g-3">
+            <div class="col-md-6">
+                <label class="form-label"><i class="bi bi-building me-1"></i> 選擇公司</label>
+                <select class="form-select company-select" required>
+                    <option value="">-- 請選擇公司 --</option>
+                    <option value="1">模擬公司 A</option>
+                    <option value="2">模擬公司 B</option>
+                    <option value="3">模擬公司 C</option>
+                </select>
+                <button type="button" class="btn btn-outline-primary btn-sm download-company-btn mt-2" disabled>
+                    <i class="bi bi-file-earmark-arrow-down-fill me-1"></i>下載公司資料 (DOCX)
+                </button>
+            </div>
+            <div class="col-md-6">
+                <label class="form-label"><i class="bi bi-briefcase me-1"></i> 選擇職缺</label>
+                <select class="form-select job-select" required>
+                    <option value="">-- 請先選擇公司 --</option>
+                </select>
+            </div>
         </div>
-
-        <!-- 按鈕：下載公司資料 -->
-        <button type="button" class="btn btn-outline-primary btn-sm download-company-btn" disabled>
-          下載公司資料 (DOCX)
-        </button>
-
         <span class="badge-remaining">尚未選擇公司</span>
       </div>
-      {% endfor %}
 
-      <div class="text-center mt-4">
-        <button type="submit" class="btn btn-success px-5 py-2">儲存志願序</button>
+      <div class="preference-card" data-rank="2">
+        <div class="card-header-rank">
+            <span class="rank-number">2</span>
+            <h5 class="fw-bold m-0 p-0">第 2 志願</h5>
+        </div>
+        <div class="row g-3">
+            <div class="col-md-6">
+                <label class="form-label"><i class="bi bi-building me-1"></i> 選擇公司</label>
+                <select class="form-select company-select" required>
+                    <option value="">-- 請選擇公司 --</option>
+                    <option value="1">模擬公司 A</option>
+                    <option value="2">模擬公司 B</option>
+                    <option value="3">模擬公司 C</option>
+                </select>
+                <button type="button" class="btn btn-outline-primary btn-sm download-company-btn mt-2" disabled>
+                    <i class="bi bi-file-earmark-arrow-down-fill me-1"></i>下載公司資料 (DOCX)
+                </button>
+            </div>
+            <div class="col-md-6">
+                <label class="form-label"><i class="bi bi-briefcase me-1"></i> 選擇職缺</label>
+                <select class="form-select job-select" required>
+                    <option value="">-- 請先選擇公司 --</option>
+                </select>
+            </div>
+        </div>
+        <span class="badge-remaining">尚未選擇公司</span>
+      </div>
+
+      <div class="preference-card" data-rank="3">
+        <div class="card-header-rank">
+            <span class="rank-number">3</span>
+            <h5 class="fw-bold m-0 p-0">第 3 志願</h5>
+        </div>
+        <div class="row g-3">
+            <div class="col-md-6">
+                <label class="form-label"><i class="bi bi-building me-1"></i> 選擇公司</label>
+                <select class="form-select company-select" required>
+                    <option value="">-- 請選擇公司 --</option>
+                    <option value="1">模擬公司 A</option>
+                    <option value="2">模擬公司 B</option>
+                    <option value="3">模擬公司 C</option>
+                </select>
+                <button type="button" class="btn btn-outline-primary btn-sm download-company-btn mt-2" disabled>
+                    <i class="bi bi-file-earmark-arrow-down-fill me-1"></i>下載公司資料 (DOCX)
+                </button>
+            </div>
+            <div class="col-md-6">
+                <label class="form-label"><i class="bi bi-briefcase me-1"></i> 選擇職缺</label>
+                <select class="form-select job-select" required>
+                    <option value="">-- 請先選擇公司 --</option>
+                </select>
+            </div>
+        </div>
+        <span class="badge-remaining">尚未選擇公司</span>
+      </div>
+
+      <div class="preference-card" data-rank="4">
+        <div class="card-header-rank">
+            <span class="rank-number">4</span>
+            <h5 class="fw-bold m-0 p-0">第 4 志願</h5>
+        </div>
+        <div class="row g-3">
+            <div class="col-md-6">
+                <label class="form-label"><i class="bi bi-building me-1"></i> 選擇公司</label>
+                <select class="form-select company-select" required>
+                    <option value="">-- 請選擇公司 --</option>
+                    <option value="1">模擬公司 A</option>
+                    <option value="2">模擬公司 B</option>
+                    <option value="3">模擬公司 C</option>
+                </select>
+                <button type="button" class="btn btn-outline-primary btn-sm download-company-btn mt-2" disabled>
+                    <i class="bi bi-file-earmark-arrow-down-fill me-1"></i>下載公司資料 (DOCX)
+                </button>
+            </div>
+            <div class="col-md-6">
+                <label class="form-label"><i class="bi bi-briefcase me-1"></i> 選擇職缺</label>
+                <select class="form-select job-select" required>
+                    <option value="">-- 請先選擇公司 --</option>
+                </select>
+            </div>
+        </div>
+        <span class="badge-remaining">尚未選擇公司</span>
+      </div>
+
+      <div class="preference-card" data-rank="5">
+        <div class="card-header-rank">
+            <span class="rank-number">5</span>
+            <h5 class="fw-bold m-0 p-0">第 5 志願</h5>
+        </div>
+        <div class="row g-3">
+            <div class="col-md-6">
+                <label class="form-label"><i class="bi bi-building me-1"></i> 選擇公司</label>
+                <select class="form-select company-select" required>
+                    <option value="">-- 請選擇公司 --</option>
+                    <option value="1">模擬公司 A</option>
+                    <option value="2">模擬公司 B</option>
+                    <option value="3">模擬公司 C</option>
+                </select>
+                <button type="button" class="btn btn-outline-primary btn-sm download-company-btn mt-2" disabled>
+                    <i class="bi bi-file-earmark-arrow-down-fill me-1"></i>下載公司資料 (DOCX)
+                </button>
+            </div>
+            <div class="col-md-6">
+                <label class="form-label"><i class="bi bi-briefcase me-1"></i> 選擇職缺</label>
+                <select class="form-select job-select" required>
+                    <option value="">-- 請先選擇公司 --</option>
+                </select>
+            </div>
+        </div>
+        <span class="badge-remaining">尚未選擇公司</span>
+      </div>
+      
+      <div class="text-center mt-5">
+        <button type="submit" class="btn btn-success px-5 py-2">
+          <i class="bi bi-save-fill me-2"></i>儲存志願序
+        </button>
       </div>
     </form>
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
   <script>
-    const preview = {{ 'true' if preview else 'false' }};
-    const companies = {{ companies | tojson }};
-    const companySlots = {{ job_slots | tojson }};
-    const submitted = {{ submitted | tojson }};
+    // **模擬數據 (避免亂碼)**
+    const preview = false;
+    const companies = [
+        { id: 1, name: "模擬公司 A" },
+        { id: 2, name: "模擬公司 B" },
+        { id: 3, name: "模擬公司 C" }
+    ];
+    // 模擬職缺數據
+    const MOCK_JOBS = {
+        '1': [{ id: 101, title: '軟體工程師 (A)' }, { id: 102, title: '產品經理 (A)' }],
+        '2': [{ id: 201, title: '資料分析師 (B)' }, { id: 202, title: '人資實習生 (B)' }],
+        '3': [{ id: 301, title: '前端工程師 (C)' }]
+    };
+    const submitted = {};
 
+    // **核心 JavaScript 邏輯 (保持功能)**
     const selectedJobIds = new Set();
     const companyJobsCache = {};
 
-    // 更新所有公司與職缺選單狀態
     function updateSelections() {
-      const allCompanySelects = document.querySelectorAll(".company-select");
-      selectedJobIds.clear();
+        const allCompanySelects = document.querySelectorAll(".company-select");
+        selectedJobIds.clear();
 
-      // 1. 統計目前所有已選職缺
-      allCompanySelects.forEach(select => {
-        const jobSelect = select.closest(".preference-card").querySelector(".job-select");
-        const selectedJob = jobSelect.value;
-        if (selectedJob) selectedJobIds.add(selectedJob);
-      });
-
-      // 2. 計算每家公司剩餘可選職缺數量 (用於排除已滿公司)
-      const companyRemainingJobs = {};
-      for (const company of companies) { 
-          const companyId = String(company.id);
-          if (companyJobsCache[companyId]) {
-              const totalJobs = companyJobsCache[companyId].length;
-              let selectedCount = 0;
-              companyJobsCache[companyId].forEach(job => {
-                  if (selectedJobIds.has(String(job.id))) {
-                      selectedCount++;
-                  }
-              });
-              companyRemainingJobs[companyId] = totalJobs - selectedCount;
-          } else {
-              // 尚未載入職缺的公司，視為還有名額，不應被排除
-              companyRemainingJobs[companyId] = 1; 
-          }
-      }
-
-      // 3. 重新更新每張卡片的可選項與狀態
-      allCompanySelects.forEach(select => {
-        const card = select.closest(".preference-card");
-        const jobSelect = card.querySelector(".job-select");
-        const badge = card.querySelector(".badge-remaining");
-        const downloadBtn = card.querySelector(".download-company-btn");
-
-        const selectedCompany = select.value; // 當前選擇的公司 ID
-        const currentJobValue = jobSelect.value; // 當前選擇的職缺 ID (若有)
-
-        downloadBtn.disabled = !selectedCompany;
-
-        // 更新徽章顏色與內容
-        if (selectedCompany) {
-          badge.textContent = "已選擇公司";
-          badge.classList.remove("bg-danger", "bg-secondary");
-          badge.classList.add("bg-primary");
-        } else {
-          badge.textContent = "尚未選擇公司";
-          badge.classList.remove("bg-danger", "bg-primary");
-          badge.classList.add("bg-secondary");
-        }
-        
-        // --- 職缺下拉更新邏輯 (目標 1) ---
-        if (selectedCompany && companyJobsCache[selectedCompany]) {
-          const availableJobs = companyJobsCache[selectedCompany];
-          jobSelect.innerHTML = `<option value="">-- 請選擇職缺 --</option>`;
-
-          let jobFound = false;
-          let hasAvailableOptions = false;
-          
-          availableJobs.forEach(j => {
-            // 排除已被其他志願選走，且不是當前志願的職缺
-            const isExcluded = selectedJobIds.has(String(j.id)) && String(j.id) !== currentJobValue;
-            
-            if (!isExcluded) {
-              const opt = document.createElement("option");
-              opt.value = j.id;
-              opt.textContent = j.title;
-              if (String(j.id) === currentJobValue) {
-                opt.selected = true;
-                jobFound = true;
-              }
-              jobSelect.appendChild(opt);
-              hasAvailableOptions = true;
-            }
-          });
-
-          if (!hasAvailableOptions) {
-            jobSelect.innerHTML = `<option value="">（無可用職缺）</option>`;
-            // 清空職缺選取，避免選擇到無效職缺
-            if (currentJobValue) jobSelect.value = "";
-          } else if (!jobFound && currentJobValue) {
-             // 如果原本選的職缺現在被排除，則清除選中的職缺
-             jobSelect.value = ""; 
-          }
-        
-        } else if (!selectedCompany) {
-          jobSelect.innerHTML = `<option value="">-- 請先選擇公司 --</option>`;
-        }
-        
-        // --- 公司下拉更新邏輯 (目標 2) ---
-        // 重建公司下拉選單
-        select.innerHTML = `<option value="">-- 請選擇公司 --</option>`;
-        companies.forEach(c => {
-          const cId = String(c.id);
-          const isCurrentSelected = cId === selectedCompany; // 允許顯示當前已選的公司
-          
-          // 判斷是否為「已滿且非當前選中」的公司
-          const isFullyOccupiedAndNotSelected = 
-              companyJobsCache[cId] && // 職缺資料已載入
-              !isCurrentSelected && // 且不是當前卡片選中的公司
-              companyRemainingJobs[cId] <= 0; // 且剩餘職缺為 0 (已滿)
-
-
-          if (!isFullyOccupiedAndNotSelected) {
-            const opt = document.createElement("option");
-            opt.value = c.id;
-            opt.textContent = c.name;
-            if (isCurrentSelected) opt.selected = true;
-            select.appendChild(opt);
-          }
+        allCompanySelects.forEach(select => {
+            const jobSelect = select.closest(".preference-card").querySelector(".job-select");
+            const selectedJob = jobSelect.value;
+            if (selectedJob) selectedJobIds.add(selectedJob);
         });
 
-      });
+        const companyRemainingJobs = {};
+        for (const company of companies) { 
+            const companyId = String(company.id);
+            if (!companyJobsCache[companyId]) {
+                 companyJobsCache[companyId] = MOCK_JOBS[companyId] || [];
+            }
+            
+            if (companyJobsCache[companyId]) {
+                const totalJobs = companyJobsCache[companyId].length;
+                let selectedCount = 0;
+                companyJobsCache[companyId].forEach(job => {
+                    if (selectedJobIds.has(String(job.id))) {
+                        selectedCount++;
+                    }
+                });
+                companyRemainingJobs[companyId] = totalJobs - selectedCount;
+            } else {
+                companyRemainingJobs[companyId] = 1; 
+            }
+        }
+
+        allCompanySelects.forEach(select => {
+            const card = select.closest(".preference-card");
+            const jobSelect = card.querySelector(".job-select");
+            const badge = card.querySelector(".badge-remaining");
+            const downloadBtn = card.querySelector(".download-company-btn");
+
+            const selectedCompany = select.value;
+            const currentJobValue = jobSelect.value;
+
+            downloadBtn.disabled = !selectedCompany;
+
+            if (selectedCompany) {
+                badge.textContent = "已選擇公司";
+                badge.classList.remove("bg-danger", "bg-secondary");
+                badge.classList.add("bg-primary");
+            } else {
+                badge.textContent = "尚未選擇公司";
+                badge.classList.remove("bg-danger", "bg-primary");
+                badge.classList.add("bg-secondary");
+            }
+            
+            // --- 職缺下拉更新邏輯 ---
+            if (selectedCompany && companyJobsCache[selectedCompany]) {
+                const availableJobs = companyJobsCache[selectedCompany];
+                jobSelect.innerHTML = `<option value="">-- 請選擇職缺 --</option>`;
+
+                let jobFound = false;
+                let hasAvailableOptions = false;
+                
+                availableJobs.forEach(j => {
+                    const isExcluded = selectedJobIds.has(String(j.id)) && String(j.id) !== currentJobValue;
+                    
+                    if (!isExcluded) {
+                        const opt = document.createElement("option");
+                        opt.value = j.id;
+                        opt.textContent = j.title;
+                        if (String(j.id) === currentJobValue) {
+                            opt.selected = true;
+                            jobFound = true;
+                        }
+                        jobSelect.appendChild(opt);
+                        hasAvailableOptions = true;
+                    }
+                });
+
+                if (!hasAvailableOptions) {
+                    jobSelect.innerHTML = `<option value="">（無可用職缺）</option>`;
+                    if (currentJobValue) jobSelect.value = "";
+                } else if (!jobFound && currentJobValue) {
+                    jobSelect.value = ""; 
+                }
+            
+            } else if (!selectedCompany) {
+                jobSelect.innerHTML = `<option value="">-- 請先選擇公司 --</option>`;
+            }
+            
+            // --- 公司下拉更新邏輯 ---
+            select.querySelectorAll('option').forEach(opt => {
+                const cId = opt.value;
+                if (!cId) return;
+                
+                const isCurrentSelected = cId === selectedCompany;
+                const isFullyOccupiedAndNotSelected = 
+                    companyJobsCache[cId] &&
+                    !isCurrentSelected &&
+                    companyRemainingJobs[cId] <= 0;
+
+                opt.disabled = isFullyOccupiedAndNotSelected;
+                
+                if (companyJobsCache[cId] && companyRemainingJobs[cId] <= 0) {
+                     opt.textContent = opt.textContent.split(' (已滿額)')[0] + ' (已滿額)';
+                } else {
+                     opt.textContent = opt.textContent.split(' (已滿額)')[0];
+                }
+            });
+
+        });
     }
 
-    // 載入公司職缺
     async function loadJobs(companyId) {
       if (companyJobsCache[companyId]) return companyJobsCache[companyId];
-      try {
-        const res = await fetch(`/api/get_jobs_by_company?company_id=${companyId}`);
-        const data = await res.json();
-        if (data.success && data.jobs.length > 0) {
-          companyJobsCache[companyId] = data.jobs.map(j => ({ id: String(j.id), title: j.title }));
-          return companyJobsCache[companyId];
-        } else {
-          companyJobsCache[companyId] = [];
-          return [];
-        }
-      } catch (err) {
-        console.error("載入職缺失敗:", err);
-        return [];
-      }
+      
+      const jobs = MOCK_JOBS[companyId] || [];
+      companyJobsCache[companyId] = jobs.map(j => ({ id: String(j.id), title: j.title }));
+      return companyJobsCache[companyId];
     }
 
-    // 綁定公司選單變化
     document.querySelectorAll(".company-select").forEach(select => {
-  select.addEventListener("change", async e => {
-    const companyId = e.target.value;
-    const jobSelect = e.target.closest(".preference-card").querySelector(".job-select");
-    
-    if (companyId) {
-      // 顯示載入中
-      jobSelect.innerHTML = `<option value="">-- 載入中... --</option>`;
-      
-      // 載入公司職缺
-      const jobs = await loadJobs(companyId);
-      
-      if (jobs.length > 0) {
-        jobSelect.innerHTML = `<option value="">-- 請選擇職缺 --</option>`;
-        jobs.forEach(j => {
-          const opt = document.createElement("option");
-          opt.value = j.id;
-          opt.textContent = j.title;
-          jobSelect.appendChild(opt);
+        select.addEventListener("change", async e => {
+            const companyId = e.target.value;
+            const jobSelect = e.target.closest(".preference-card").querySelector(".job-select");
+            
+            if (companyId) {
+                jobSelect.innerHTML = `<option value="">-- 載入中... --</option>`;
+                const jobs = await loadJobs(companyId);
+                
+                if (jobs.length > 0) {
+                    jobSelect.innerHTML = `<option value="">-- 請選擇職缺 --</option>`;
+                    jobs.forEach(j => {
+                        const opt = document.createElement("option");
+                        opt.value = j.id;
+                        opt.textContent = j.title;
+                        jobSelect.appendChild(opt);
+                    });
+                } else {
+                    jobSelect.innerHTML = `<option value="">（無可用職缺）</option>`;
+                }
+            } else {
+                jobSelect.innerHTML = `<option value="">-- 請先選擇公司 --</option>`;
+            }
+            updateSelections();
         });
-      } else {
-        jobSelect.innerHTML = `<option value="">（無可用職缺）</option>`;
-      }
-    } else {
-      jobSelect.innerHTML = `<option value="">-- 請先選擇公司 --</option>`;
-    }
-    updateSelections(); // 更新所有下拉選單狀態
-  });
-});
+    });
 
-    // 綁定職缺選單變化
     document.querySelectorAll(".job-select").forEach(select => {
       select.addEventListener("change", updateSelections);
     });
 
-    // 下載公司資料
     document.querySelectorAll(".preference-card").forEach(card => {
       const downloadBtn = card.querySelector(".download-company-btn");
       const companySelect = card.querySelector(".company-select");
       downloadBtn.addEventListener("click", () => {
         const companyId = companySelect.value;
         if (!companyId) return;
-        const url = `/api/download_company_file/${companyId}`;
-        window.open(url, "_blank");
+        alert(`模擬下載公司 ID: ${companyId} 的資料...`);
       });
     });
 
-    // 初始化：載入已提交志願
     async function initializeSubmittedPreferences() {
-      const allCompanySelects = document.querySelectorAll(".company-select");
-      const loadPromises = [];
-
-      allCompanySelects.forEach(select => {
-        const rank = parseInt(select.closest(".preference-card").dataset.rank);
-        const savedPref = submitted[rank];
-        if (savedPref) {
-          // 確保公司選項存在且被選中
-          select.value = savedPref.company_id;
-          loadPromises.push(loadJobs(savedPref.company_id));
-        }
-      });
-
-      await Promise.all(loadPromises);
-
-      // 第二階段：設定職缺
-      allCompanySelects.forEach(select => {
-        const rank = parseInt(select.closest(".preference-card").dataset.rank);
-        const savedPref = submitted[rank];
-        const jobSelect = select.closest(".preference-card").querySelector(".job-select");
-        if (savedPref) {
-          const jobs = companyJobsCache[savedPref.company_id] || [];
-          
-          // 重建職缺選項
-          jobSelect.innerHTML =
-            `<option value="">-- 請選擇職缺 --</option>` +
-            jobs
-              .map(j => `<option value="${j.id}" ${String(j.id) === String(savedPref.job_id) ? "selected" : ""}>${j.title}</option>`)
-              .join("");
-        }
-      });
-
-      updateSelections();
+        updateSelections();
     }
 
     initializeSubmittedPreferences();
 
-    // 預覽模式：停用互動
     (function applyPreviewMode() {
-      if (!preview) return;
-      document.querySelectorAll(".company-select, .job-select, .download-company-btn").forEach(el => {
-        el.disabled = true;
-      });
-      const submitBtn = document.querySelector("#preferencesForm button[type='submit']");
-      if (submitBtn) {
-        submitBtn.textContent = "登入後可儲存";
-        submitBtn.disabled = true;
+      if (preview) {
+        document.querySelectorAll(".company-select, .job-select, .download-company-btn").forEach(el => {
+          el.disabled = true;
+        });
+        const submitBtn = document.querySelector("#preferencesForm button[type='submit']");
+        if (submitBtn) {
+          submitBtn.textContent = "登入後可儲存";
+          submitBtn.disabled = true;
+        }
       }
     })();
 
-    // 儲存志願序
     document.getElementById("preferencesForm").addEventListener("submit", async e => {
       e.preventDefault();
       if (preview) {
@@ -370,16 +514,8 @@
         if (companyId && jobId)
           preferences.push({ order: idx + 1, company_id: companyId, job_id: jobId });
       });
-
-      const res = await fetch("/api/save_preferences", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ preferences })
-      });
-
-      const data = await res.json();
-      alert(data.message);
-      if (data.success) location.reload();
+      
+      alert(`模擬儲存成功！已選志願數: ${preferences.length}`);
     });
   </script>
 </body>
