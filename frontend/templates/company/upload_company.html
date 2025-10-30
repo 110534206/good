@@ -383,13 +383,7 @@
     }
   }
 
-  // === 狀態文字轉換 ===
-  function statusText(s) {
-    if (s === "approved") return "已通過";
-    if (s === "rejected") return "已退回";
-    if (s === "pending") return "待審核";
-    return s || "-";
-  }
+
 
   async function deleteCompany(id) {
   if (!confirm("確定要刪除此上傳紀錄嗎？此動作無法復原。")) return;
