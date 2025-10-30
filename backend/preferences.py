@@ -66,15 +66,9 @@ def fill_preferences_page():
         cursor.execute("SELECT id, company_name AS name FROM internship_companies")
         companies = cursor.fetchall() or []
 
-        # 2) 計算每家公司總名額 (SUM of slots)
-        cursor.execute("""
-            SELECT company_id, COALESCE(SUM(slots), 0) AS total_slots
-            FROM internship_jobs
-            GROUP BY company_id
-        """)
-        job_slots_raw = cursor.fetchall() or []
-        # job_slots: { company_id(str): total_slots(int), ... }
-        job_slots = {str(row['company_id']): int(row['total_slots'] or 0) for row in job_slots_raw}
+        # 2) 簡化：不再計算名額，改為取得所有公司的 ID 列表
+        # job_slots: { company_id(str): 1, ... } (1表示該公司可選)
+        job_slots = {str(c['id']): 1 for c in companies} #
 
         # 3) 讀取學生已填寫的志願（若有，預覽模式則為空）
         prefs = []
@@ -90,26 +84,12 @@ def fill_preferences_page():
         # submitted: { order: row, ... } （方便 template 使用）
         submitted = {int(p['preference_order']): p for p in prefs}
 
-        # 4) 計算學生已使用每家公司多少次（以同公司出現次數計）
-        student_used_slots = {}
-        for p in prefs:
-            cid = p.get('company_id')
-            if cid is not None:
-                student_used_slots[cid] = student_used_slots.get(cid, 0) + 1
-
-        # 5) 計算每家公司對該學生還剩多少可選次數
-        company_remaining = {}
-        for cid, total in job_slots.items():
-            used = student_used_slots.get(cid, 0)
-            remain = max(int(total) - int(used), 0)
-            company_remaining[cid] = remain
-
         return render_template(
             "preferences/fill_preferences.html",
             companies=companies,
             submitted=submitted,
-            job_slots=job_slots,
-            company_remaining=company_remaining,
+            job_slots=job_slots, # 僅用於前端 JS 判斷已選公司，不再代表名額
+            company_remaining={}, 
             preview=(not is_student)
         )
 
@@ -136,52 +116,14 @@ def get_jobs_by_company():
     conn = get_db()
     cursor = conn.cursor(dictionary=True)
     try:
-        # 修改後的查詢：只選擇 slots > 0 的職缺
         cursor.execute("""
-            SELECT id, title FROM internship_jobs WHERE company_id=%s AND slots > 0
+            SELECT id, title FROM internship_jobs WHERE company_id=%s
         """, (company_id,))
         jobs = cursor.fetchall() or []
         return jsonify({"success": True, "jobs": jobs})
     except Exception:
         traceback.print_exc()
         return jsonify({"success": False, "message": "查詢失敗"})
-    finally:
-        try:
-            cursor.close()
-            conn.close()
-        except Exception:
-            pass
-
-# -------------------------
-# 取得公司詳細資料
-# -------------------------
-@preferences_bp.route("/api/get_company_detail", methods=["GET"])
-def get_company_detail():
-    company_id = request.args.get("company_id")
-    if not company_id:
-        return jsonify({"success": False, "message": "缺少公司 ID"})
-
-    conn = get_db()
-    cursor = conn.cursor(dictionary=True)
-    try:
-        # 公司基本資料
-        cursor.execute("""
-            SELECT id, company_name, company_address, contact_name, contact_phone, contact_email
-            FROM internship_companies WHERE id=%s
-        """, (company_id,))
-        company = cursor.fetchone()
-
-        # 該公司所有職缺（供前端顯示）
-        cursor.execute("""
-            SELECT id, title, salary, work_time, period, slots, remark
-            FROM internship_jobs WHERE company_id=%s
-        """, (company_id,))
-        jobs = cursor.fetchall() or []
-
-        return jsonify({"success": True, "company": company, "jobs": jobs})
-    except Exception:
-        traceback.print_exc()
-        return jsonify({"success": False, "message": "查詢公司資料失敗"})
     finally:
         try:
             cursor.close()
@@ -214,32 +156,20 @@ def save_preferences():
     cursor = conn.cursor(dictionary=True)
 
     try:
-        # 1) 取得公司總 slots
-        cursor.execute("""
-            SELECT company_id, COALESCE(SUM(slots), 0) AS total_slots
-            FROM internship_jobs
-            GROUP BY company_id
-        """)
-        slots_data = cursor.fetchall() or []
-        company_slots = {row["company_id"]: int(row["total_slots"] or 0) for row in slots_data}
-
-        # 2) 計算此次提交每家公司被選的次數
-        company_count_in_submission = {}
+        # 1) 檢查公司是否重複 - 移除此邏輯，以配合前端的「公司可重複選，職缺互斥」
+        selected_job_ids = set() # 用來檢查職缺是否重複，以防萬一
         for p in preferences:
             cid = p.get("company_id")
-            if not cid or not p.get("job_id"):
+            jid = p.get("job_id")
+            if not cid or not jid:
                 return jsonify({"success": False, "message": "每筆志願需包含 company_id 與 job_id。"}), 400
-            company_count_in_submission[cid] = company_count_in_submission.get(cid, 0) + 1
+            
+            # **重點：檢查職缺是否重複**
+            if jid in selected_job_ids:
+                return jsonify({"success": False, "message": f"職缺(ID: {jid}) 已在其他志願中選擇，同一職缺只能選擇一次。"}), 400
+            selected_job_ids.add(jid)
 
-        # 3) 檢查公司是否超過可選名額
-        for cid, cnt in company_count_in_submission.items():
-            allowed = company_slots.get(int(cid), 0)
-            if allowed == 0:
-                return jsonify({"success": False, "message": f"公司(ID: {cid}) 尚無可用名額或不可選。"}), 400
-            if cnt > allowed:
-                return jsonify({"success": False, "message": f"公司(ID: {cid}) 的志願次數超過可用名額（{allowed}）。"}), 400
-
-        # 4) 刪除學生舊紀錄並插入新志願
+        # 2) 刪除學生舊紀錄並插入新志願
         cursor.execute("DELETE FROM student_preferences WHERE student_id=%s", (student_id,))
 
         for p in preferences:
@@ -271,7 +201,7 @@ def save_preferences():
                 datetime.now()
             ))
 
-        # 5) 提交 transaction
+        # 3) 提交 transaction
         conn.commit()
         return jsonify({"success": True, "message": "志願序已成功送出。"})
 
