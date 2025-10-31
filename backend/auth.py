@@ -178,21 +178,15 @@ def switch_role():
 
     return jsonify({"success": True, "redirect": redirect_url})
 
-# -------------------------
-# 🎯 訪客入口 (直接跳轉到學生訪客頁面，取代原有的訪客角色選擇頁面)
-# -------------------------
-@auth_bp.route("/visitor_role_selection")
-def visitor_role_selection_page():
+# =========================================================
+# 🧩 頁面路由 (新增：註冊角色選擇頁面)
+# =========================================================
+@auth_bp.route("/register_role_selection")
+def register_role_selection_page():
     """
-    訪客入口：清除舊 session 後，直接跳轉到學生訪客主頁。
-    這個路由是假設您的 LOGIN 介面訪客按鈕目前指向的 URL。
+    註冊入口：提供學生或廠商角色選擇。
     """
-    session.clear() # 清除任何舊的登入資訊
-    # 設定 session 為 guest
-    session["role"] = "guest"
-    session["username"] = "guest"
-    
-    return redirect(url_for('users_bp.student_visitor'))
+    return render_template("auth/register_role_selection.html")
 
 
 # =========================================================
@@ -216,6 +210,6 @@ def logout_page():
     session.clear()
     return redirect(url_for("auth_bp.login_page"))
 
-@auth_bp.route("/register_student")
-def show_register_student_page():
-    return render_template("auth/register_student.html")
+@auth_bp.route("/register_vendor")
+def show_register_vendor_page():
+    return render_template("auth/register_vendor.html") 

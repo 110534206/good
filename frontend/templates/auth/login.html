@@ -200,7 +200,7 @@
                     <div class="button-row">
                         <button type="button" class="button guest-login" onclick="handleguestLogin()">以訪客身分進入</button>
                         <button type="button" class="button register"
-                            onclick="window.location.href='{{ url_for('auth_bp.show_register_student_page') }}'">註冊</button>
+                            onclick="window.location.href='{{ url_for('auth_bp.show_register_role_page') }}'">註冊</button>
                     </div>
                 </div>
             </form>
@@ -279,7 +279,7 @@
             localStorage.setItem("username", "guest");
             localStorage.setItem("selectedRole", "guest");
             localStorage.setItem("roleList", JSON.stringify(["guest"]));
-            window.location.href = "/visitor_role_selection";
+            window.location.href = "/register_role_selection";
         }
 
         // 即時隱藏錯誤訊息
