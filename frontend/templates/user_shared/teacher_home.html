@@ -260,11 +260,9 @@
         </a>
         <div class="dropdown" style="position: relative;">
           <button id="accountDropdownBtn" class="btn-link" aria-expanded="false">帳號 ▾</button>
-          <div id="accountDropdownMenu" class="dropdown-menu"
-            style="position:absolute; right:0; top:120%; background:#fff; border:1px solid #ccc; border-radius:8px; padding:6px; min-width:160px; display:none; box-shadow:0 4px 12px rgba(0,0,0,.12);">
+          <div id="accountDropdownMenu" class="dropdown-menu" style="position:absolute; right:0; top:120%; background:#fff; border:1px solid #ccc; border-radius:8px; padding:6px; min-width:160px; display:none; box-shadow:0 4px 12px rgba(0,0,0,.12);">
             <a href="/profile" class="btn-link" style="display:block; border:none; margin:4px 0;">個人資料</a>
-            <a id="toHomeroomLink" href="/class_teacher_home" class="btn-link"
-              style="display:none; border:none; margin:4px 0;">切換班導身分</a>
+            <a id="toHomeroomLink" href="/class_teacher_home" class="btn-link" style="display:none; border:none; margin:4px 0;">切換班導身分</a>
             <a href="/login" class="btn-link" style="display:block; border:none; margin:4px 0;">登出</a>
           </div>
         </div>
@@ -309,126 +307,78 @@
   <!-- JS 控制開關 -->
   <script>
     // 載入用戶頭像
-   function loadUserAvatar() {
-  console.log('開始載入頭像及檢查角色功能...');
-  fetch('/api/profile')
-    .then(res => {
-      if (!res.ok) throw new Error('無法取得用戶資料 (' + res.status + ')');
-      return res.json();
-    })
-    .then(data => {
-      console.log('API 回應:', data);
-      if (data.success && data.user) {
-        const user = data.user;
-        
-        // 處理頭像顯示 (保留原邏輯)
-        if (user.avatar_url) {
-            const rawUrl = user.avatar_url.startsWith('http') ? user.avatar_url : window.location.origin + user.avatar_url;
-            const avatarUrl = rawUrl + (rawUrl.includes('?') ? '&' : '?') + 't=' + Date.now();
-            document.getElementById('login-avatar').src = avatarUrl;
-        }
+    function loadUserAvatar() {
+        console.log('開始載入頭像...');
+        // 使用 /api/profile 取得用戶所有資料，包含頭像和 is_homeroom
+        fetch('/api/profile')
+            .then(res => {
+                if (!res.ok) throw new Error('無法取得用戶資料');
+                return res.json();
+            })
+            .then(data => {
+                console.log('API 回應:', data);
+                if (data.success && data.user) {
+                    // 1. 載入頭像
+                    if (data.user.avatar_url) {
+                        // 確保頭像URL是完整的路徑，並加上時間戳避免快取
+                        const rawUrl = data.user.avatar_url.startsWith('http') ?
+                            data.user.avatar_url :
+                            window.location.origin + data.user.avatar_url;
+                        const avatarUrl = rawUrl + (rawUrl.includes('?') ? '&' : '?') + 't=' + Date.now();
+                        console.log('設定頭像URL:', avatarUrl);
+                        document.getElementById('login-avatar').src = avatarUrl;
+                    } else {
+                        console.log('沒有頭像URL或API失敗');
+                    }
 
-        // =========================================================
-        // A. 處理班導切換 (使用 is_homeroom)
-        // =========================================================
-        const switchLink = document.getElementById('switchRoleLink');
-        // 只有在具備班導身分時才顯示切換選項
-        if (user.is_homeroom) {
-            if (switchLink) {
-                switchLink.style.display = 'block'; 
-                switchLink.textContent = '切換班導身分';
-                // 確保綁定正確的切換函式
-                switchLink.onclick = () => switchRole('class_teacher'); 
-            }
-        } else {
-            if (switchLink) switchLink.style.display = 'none'; 
-        }
-
-        // =========================================================
-        // B. 處理主任功能 (使用 original_role)
-        // =========================================================
-        // 即使當前 role 是 'teacher'，只要原始 role 是 'director'，就顯示主任功能
-        if (user.original_role === 'director') {
-            console.log('用戶為主任，顯示主任功能連結。');
-            
-            // 實習廠商管理
-            const manageCompaniesLink = document.getElementById('directorLink_manage_companies');
-            if (manageCompaniesLink) manageCompaniesLink.style.display = 'block';
-
-            // 志願序最終結果
-            const finalResultsLink = document.getElementById('directorLink_final_results');
-            if (finalResultsLink) finalResultsLink.style.display = 'block';
-            
-            // 💡 提示：請在這裡繼續添加您的其他主任功能連結的 ID
-        }
-
-      } else {
-        console.log('API 回傳失敗:', data.message);
-      }
-    })
-    .catch(err => {
-      console.error('載入用戶資料失敗:', err);
-      // 保持預設頭像
-    });
-}
+                    // 2. 檢查班導師身分，顯示切換按鈕
+                    // /api/profile 會回傳 is_homeroom 欄位
+                    if (data.user.is_homeroom === true) {
+                        const link = document.getElementById('toHomeroomLink');
+                        if (link) {
+                            link.style.display = 'block';
+                            link.textContent = '切換班導身分';
+                            console.log('顯示切換班導身分按鈕。');
+                        }
+                    } else {
+                        console.log('使用者不是班導師，不顯示切換按鈕。');
+                    }
+                }
+            })
+            .catch(err => {
+                console.log('載入用戶資料失敗:', err);
+                // 保持預設頭像
+            });
+    }
 
     // 頁面就緒後載入頭像及檢查班導師身分
     document.addEventListener('DOMContentLoaded', () => {
-      loadUserAvatar();
+        loadUserAvatar();
     });
 
     document.getElementById('menu-btn').addEventListener('click', () => {
-      document.getElementById('side-menu').classList.add('open');
+        document.getElementById('side-menu').classList.add('open');
     });
 
     document.getElementById('close-btn').addEventListener('click', () => {
-      document.getElementById('side-menu').classList.remove('open');
+        document.getElementById('side-menu').classList.remove('open');
     });
 
     // 帳號下拉
     const btn = document.getElementById('accountDropdownBtn');
     const menu = document.getElementById('accountDropdownMenu');
     btn.addEventListener('click', () => {
-      const open = menu.style.display === 'block';
-      menu.style.display = open ? 'none' : 'block';
-      btn.setAttribute('aria-expanded', String(!open));
+        const open = menu.style.display === 'block';
+        menu.style.display = open ? 'none' : 'block';
+        btn.setAttribute('aria-expanded', String(!open));
     });
     document.addEventListener('click', (e) => {
-      if (!menu.contains(e.target) && !btn.contains(e.target)) {
-        menu.style.display = 'none';
-        btn.setAttribute('aria-expanded', 'false');
-      }
+        if (!menu.contains(e.target) && !btn.contains(e.target)) {
+            menu.style.display = 'none';
+            btn.setAttribute('aria-expanded', 'false');
+        }
     });
-
-    // =========================================================
-    // 🧩 身份切換函式
-    // =========================================================
-    function switchRole(targetRole) {
-      if (targetRole !== 'class_teacher' && targetRole !== 'teacher') return;
-
-      // 您可能需要在這裡加入載入狀態的提示
-
-      fetch('/api/switch-role', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ role: targetRole })
-      })
-        .then(res => res.json())
-        .then(data => {
-          if (data.success) {
-            // 成功切換，導向班導頁面
-            window.location.href = data.redirect;
-          } else {
-            alert(data.message || '切換身份失敗。');
-          }
-        })
-        .catch(err => {
-          console.error('API 錯誤:', err);
-          alert('網路錯誤，無法切換身份。');
-        });
-    }
-
-  </script>
+</script>
 </body>
 
 </html>

@@ -35,45 +35,82 @@ def class_teacher_home():
 # -------------------------
 # API - 取得個人資料
 # -------------------------
-@users_bp.route('/api/profile', methods=['GET'])
-def get_user_profile():
-    if 'user_id' not in session:
-        return jsonify({"success": False, "message": "未登入"}), 401
+@users_bp.route("/api/profile", methods=["GET"])
+def get_profile():
+    if "username" not in session or "role" not in session:
+        return jsonify({"success": False, "message": "尚未登入"}), 401
 
-    user_id = session.get('user_id')
-    current_role = session.get('role')
+    username = session["username"]
+    role = session["role"]
 
     conn = get_db()
     cursor = conn.cursor(dictionary=True)
     try:
-        # 取得用戶在資料庫中的原始角色及基本資料
-        # 這是判斷是否為「主任」的核心依據
-        cursor.execute("SELECT role, avatar_url, name, username, email FROM users WHERE id = %s", (user_id,))
-        user_data = cursor.fetchone()
+        # 查詢用戶基本資料
+        cursor.execute("""
+            SELECT u.id, u.username, u.email, u.role, u.name,
+                   c.department, c.name AS class_name, u.class_id, u.avatar_url
+            FROM users u
+            LEFT JOIN classes c ON u.class_id = c.id
+            WHERE u.username = %s AND u.role = %s
+        """, (username, role))
+        user = cursor.fetchone()
 
-        if not user_data:
-            return jsonify({"success": False, "message": "用戶不存在"}), 404
+        if not user:
+            return jsonify({"success": False, "message": "使用者不存在"}), 404
+            
+        # 【修改】針對學生角色，從 username (學號) 提取入學屆數，作為備用
+        if role == "student" and user.get("username") and len(user["username"]) >= 3:
+            # 假設學號前三碼是入學屆數
+            user["admission_year"] = user["username"][:3]
+        else:
+            user["admission_year"] = ""
         
-        # 準備回傳資料
-        user_info = {
-            "id": user_id,
-            "username": user_data.get('username'),
-            "name": user_data.get('name'),
-            "avatar_url": user_data.get('avatar_url'),
-            "current_role": current_role,                      
-            "original_role": user_data.get('role'),            
-            "is_homeroom": session.get('is_homeroom', False)    
-        }
-        
-        return jsonify({"success": True, "user": user_info})
+        # 檢查是否為班導 / 主任
+        is_homeroom = False
+        classes = []
+        if role in ("teacher", "director"):
+            # 查詢所有管理的班級 (無論是不是班導師)
+            cursor.execute("""
+                SELECT c.id, c.name, c.department, ct.role
+                FROM classes c
+                JOIN classes_teacher ct ON c.id = ct.class_id
+                WHERE ct.teacher_id = %s
+            """, (user["id"],))
+            classes = cursor.fetchall()
+            user["classes"] = classes # 傳遞所有班級資料
 
+            # 確保使用非 dictionary 模式的 cursor 查詢 is_homeroom
+            homeroom_cursor = conn.cursor()
+            homeroom_cursor.execute("""
+                SELECT 1 FROM classes_teacher 
+                WHERE teacher_id = %s AND role = '班導師'
+            """, (user["id"],))
+            is_homeroom = bool(homeroom_cursor.fetchone())
+            homeroom_cursor.close()
+            
+        user["is_homeroom"] = is_homeroom # 傳遞班導師狀態
+        user["email"] = user["email"] or ""
+
+        # 如果是老師/主任，且是班導師，且有多班級，拼成一個字串顯示在「管理班級」
+        if role in ("teacher", "director") and is_homeroom and classes:
+            # 只列出班導師身分的班級，但為了簡化，目前列出所有管理的班級
+            class_names = [f"{c['department'].replace('管科', '')}{c['name']}" for c in classes]
+            user["class_display_name"] = "、".join(class_names)
+        elif role == "student":
+            # 學生班級顯示
+            dep_short = user['department'].replace("管科", "") if user['department'] else ""
+            user["class_display_name"] = f"{dep_short}{user['class_name'] or ''}"
+        else:
+            user["class_display_name"] = ""
+        return jsonify({"success": True, "user": user})
     except Exception as e:
-        current_app.logger.error(f"Error fetching profile: {e}")
+        print("❌ 取得個人資料錯誤:", e)
         return jsonify({"success": False, "message": "伺服器錯誤"}), 500
     finally:
         cursor.close()
         conn.close()
-
+        
 # -------------------------
 # API - 更新個人資料
 # -------------------------
