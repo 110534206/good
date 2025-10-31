@@ -183,15 +183,7 @@ def switch_role():
 # -------------------------
 @auth_bp.route("/visitor_role_selection")
 def visitor_role_selection_page():
-    """
-    訪客入口：清除舊 session 後，直接跳轉到學生訪客主頁。
-    這個路由是假設您的 LOGIN 介面訪客按鈕目前指向的 URL。
-    """
-    session.clear() # 清除任何舊的登入資訊
-    # 設定 session 為 guest
-    session["role"] = "guest"
-    session["username"] = "guest"
-    
+    # ... 邏輯: 設定 session 為 guest
     return redirect(url_for('users_bp.student_visitor'))
 
 # =========================================================
