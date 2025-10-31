@@ -200,7 +200,7 @@
                     <div class="button-row">
                         <button type="button" class="button guest-login" onclick="handleguestLogin()">以訪客身分進入</button>
                         <button type="button" class="button register"
-                            onclick="window.location.href='{{ url_for('auth_bp.show_register_role_page') }}'">註冊</button>
+                            onclick="window.location.href='{{ url_for('auth_bp.register_role_selection_page') }}'">註冊</button>
                     </div>
                 </div>
             </form>
@@ -273,7 +273,7 @@
         }
 
         /**
-        * 訪客快速進入，不需要帳號登入，導向 visitor_home
+        * 快速進入，不需要帳號登入，導向 visitor_home
         */
         function handleguestLogin() {
             localStorage.setItem("username", "guest");
