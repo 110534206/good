@@ -267,40 +267,20 @@ def change_password():
         cursor.close()
         conn.close()
 
-
 # -------------------------
-# 🎯 訪客 - 查詢學生資訊 / 志願序 (保留此頁面)
+# 學生訪客頁面
 # -------------------------
 @users_bp.route('/student_visitor')
-def student_visitor():
-    # 確保 session 是 guest (雖然 auth.py 已設定，但保留此處的檢查/設定邏輯)
-    if session.get("role") != "guest":
-        session.clear()
-        session["role"] = "guest"
-        session["username"] = "guest"
-
-    # 取得公開的學生志願序或基本資訊（依需求調整）
-    conn = get_db()
-    cursor = conn.cursor(dictionary=True)
-    try:
-        cursor.execute("""
-            SELECT s.id, s.username, s.name, c.name AS class_name
-            FROM users s
-            LEFT JOIN classes c ON s.class_id = c.id
-            WHERE s.role='student'
-            LIMIT 100 -- 限制數量，避免訪客查詢過多資料
-        """)
-        students = cursor.fetchall()
-    except Exception as e:
-        print("❌ 訪客取得學生資料錯誤:", e)
-        students = []
-    finally:
-        cursor.close()
-        conn.close()
-
-    # 渲染 student_visitor.html
-    return render_template("user_shared/student_visitor.html", students=students)
-
+def student_visitor_page():
+    current_role = session.get('role')
+    
+    # 🌟 核心修正：明確檢查 current_role 是否在 ['student', 'visitor'] 列表中
+    if current_role not in ['student', 'visitor']:
+        # 如果不是學生也不是訪客，導向登入頁
+        return redirect(url_for('auth_bp.login_page'))
+    
+    # 如果是 'student' 或 'visitor'，則渲染頁面
+    return render_template('user_shared/student_visitor.html')
 
 # -------------------------
 # # 頁面路由

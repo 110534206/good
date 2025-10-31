@@ -179,32 +179,27 @@ def switch_role():
     return jsonify({"success": True, "redirect": redirect_url})
 
 # -------------------------
-# 🎯 訪客入口 (修正重定向問題)
+# 訪客入口 (Login 頁面點擊進入)
 # -------------------------
-@auth_bp.route("/student_visitor")
-def student_visitor_page():
-    session.clear() # 清除任何舊的登入資訊
-    session["username"] = "guest"
-    session["role"] = "guest_student" # 標記為訪客-學生身份
-    
-    # 【修正點 1】將錯誤的 endpoint 'users_bp.student_visito.html' 
-    # 修正為一個合理的目標 endpoint 名稱 'users_bp.student_visitor'，
-    # 假設這是渲染 student_visitor.html 的路由。
-    return redirect(url_for('users_bp.student_visitor'))
+@auth_bp.route("/visitor")
+def visitor_entry():
+    """
+    訪客入口：設定訪客 Session 標誌，並導向最終頁面。
+    """
+    # 步驟 1: 清除現有 Session (確保不是登入狀態)
+    session.clear() 
+
+    # 步驟 2: 設定訪客身份的 Session 標誌
+    session['role'] = 'visitor'
+    session['is_visitor'] = True
+    session['user_id'] = 0 # 訪客ID設為0
+
+    # 步驟 3: 導向 /student_visitor 頁面 (在 users_bp 中)
+    return redirect(url_for("users_bp.student_visitor_page"))
 
 # =========================================================
 # 🧩 頁面路由
 # =========================================================
-
-# 🌟 訪客入口 (Login 頁面點擊進入)
-@auth_bp.route("/visitor")
-def visitor_entry():
-    """
-    訪客入口，直接導向學生訪客頁面，
-    對應 login.html 上「以訪客身分進入」按鈕的連結。
-    """
-    # 導向 /student_visitor 進行 Session 設定 (保留不變，這個設計是合理的)
-    return redirect(url_for("auth_bp.student_visitor_page"))
 
 @auth_bp.route("/login")
 def login_page():
