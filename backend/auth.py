@@ -184,7 +184,7 @@ def switch_role():
 @auth_bp.route("/student_visitor")
 def student_visitor_page():
     # ... 邏輯: 設定 session 為 guest
-    return redirect(url_for('users_bp.student_visitor'))
+    return redirect(url_for('users_bp.student_visito.html'))
 
 # =========================================================
 # 🧩 頁面路由 (新增：註冊角色選擇頁面)
