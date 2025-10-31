@@ -246,7 +246,8 @@
                     if (d.redirect) {
                         window.location.href = d.redirect;
                     } else {
-                        err.textContent = "登入成功，但無導向路徑";
+                        // 處理沒有 redirect 的情況... 這裡可以保留您原來的邏輯，但為了精簡我移除 client-side fallback
+                        err.textContent = "登入成功，但伺服器未提供導向路徑";
                         err.style.display = "block";
                     }
                 } else {
@@ -264,10 +265,10 @@
         }
 
         /**
-        * 快速進入，不需要帳號登入，導向 /visitor 路由
+        * 快速進入，不需要帳號登入，導向後端 /visitor 路由
         */
         function handleguestLogin() {
-            // 直接導向後端的訪客入口路由
+            // 【修正點 2】直接呼叫後端的訪客入口路由，讓後端處理 Session 設定和重定向
             window.location.href = "{{ url_for('auth_bp.visitor_entry') }}";
         }
 
