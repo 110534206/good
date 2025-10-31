@@ -1,0 +1,270 @@
+<!DOCTYPE HTML>
+<html lang="zh-TW">
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>智慧實習平台 | 廠商註冊</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    body,
+    html {
+      height: 100%;
+      margin: 0;
+      font-family: "Segoe UI", "微軟正黑體", sans-serif;
+      background-color:#f3f6f9;
+      background-size: cover;
+    }
+
+    #wrapper {
+      max-width: 500px;
+      margin: 95px auto;
+      padding: 40px;
+      border-radius: 10px;
+      box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+      background-color: #ffffff;
+    }
+
+    h1 {
+      text-align: center;
+      margin-top: -10px;
+      color: #000000;
+    }
+
+    .field {
+      margin-bottom: 20px;
+      position: relative;
+    }
+
+    label {
+      display: block;
+      margin-bottom: 8px;
+      color: #000000;
+      font-size: 20px;
+    }
+
+    input[type="text"],
+    input[type="password"],
+    input[type="email"] {
+      background-color: #ffffff;
+      border: 1px solid #000000;
+      color: #000000;
+      padding: 10px;
+      border-radius: 6px;
+      font-size: 18px;
+      width: 100%;
+      box-sizing: border-box;
+    }
+    
+    /* 讓唯讀欄位有區別 */
+    input[readonly] {
+      background-color: #f0f0f0;
+      cursor: not-allowed;
+    }
+
+    input[type="submit"] {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 56px;
+      width: 500px;
+      background-color: #3c91e6;
+      color: #ffffff;
+      font-size: 22px;
+      font-weight: bold;
+      border: none;
+      border-radius: 10px;
+      cursor: pointer;
+      transition: background-color 0.3s ease, transform 0.2s ease;
+      margin: 0 auto;
+    }
+
+    input[type="submit"]:hover {
+      background-color: #2b74c2;
+      transform: translateY(-2px);
+    }
+
+    .toggle-password {
+      position: absolute;
+      top: 56px;
+      right: 16px;
+      transform: translateY(-50%);
+      cursor: pointer;
+      color: #888888;
+      font-size: 18px;
+      user-select: none;
+    }
+
+    .back-button {
+      margin-top: 10px;
+      color: #000000;
+      background-color: transparent;
+      border: none;
+      font-size: 20px;
+      cursor: pointer;
+      text-decoration: underline;
+    }
+
+    .back-button:hover {
+      color: #5a6268;
+    }
+
+    #responseMessage {
+      text-align: center;
+      font-weight: bold;
+      margin-bottom: 15px;
+    }
+  </style>
+</head>
+
+<body>
+  <div id="wrapper">
+    <h1>廠商註冊</h1>
+
+    <div id="responseMessage"></div>
+
+    <form id="registerForm">
+      
+      <div class="field">
+        <label for="email">Email <span style="font-size: 0.9em; color: #666;">（請輸入公司聯絡 Email）</span></label>
+        <input type="email" name="email" id="email" required autocomplete="off" />
+        <div id="emailError" style="color: red; font-size: 14px; display: none;"></div>
+      </div>
+
+      <div class="field">
+        <label for="username">登入帳號 <span style="font-size: 0.9em; color: #666;">（自動從 Email @ 前的部分生成，無法修改）</span></label>
+        <input type="text" name="username_display" id="username_display" readonly />
+      </div>
+
+      <div class="field">
+        <label for="password">密碼 <span style="font-size: 0.9em; color: #666;">（請輸入自訂密碼，至少 6 個字元）</span></label>
+        <input type="password" name="password" id="password" required autocomplete="off" />
+        <span class="toggle-password" onclick="togglePassword()">
+          <i class="fas fa-eye-slash" id="eyeIcon"></i>
+        </span>
+        <div id="passwordError" style="color: red; font-size: 14px; display: none;"></div>
+      </div>
+
+      <div class="field">
+        <input type="submit" value="註冊" />
+      </div>
+
+      <div class="field">
+        <button type="button" class="back-button" onclick="window.location.href='{{ url_for('auth_bp.login_page') }}'">返回上一頁</button>
+      </div>
+    </form>
+  </div>
+
+  <script>
+  function togglePassword() {
+    const passwordInput = document.getElementById("password");
+    const eyeIcon = document.getElementById("eyeIcon");
+
+    if (passwordInput.type === "password") {
+      passwordInput.type = "text";
+      eyeIcon.classList.remove("fa-eye-slash");
+      eyeIcon.classList.add("fa-eye");
+    } else {
+      passwordInput.type = "password";
+      eyeIcon.classList.remove("fa-eye");
+      eyeIcon.classList.add("fa-eye-slash");
+    }
+  }
+
+  // 獲取 Email 和唯讀帳號欄位
+  const emailInput = document.getElementById("email");
+  const usernameDisplay = document.getElementById("username_display");
+  
+  // 監聽 Email 欄位輸入，並即時更新唯讀帳號欄位
+  emailInput.addEventListener("input", () => {
+    const email = emailInput.value.trim();
+    const atIndex = email.indexOf('@');
+    
+    if (atIndex > 0) {
+      // 提取 @ 符號前的部分
+      usernameDisplay.value = email.substring(0, atIndex);
+    } else {
+      usernameDisplay.value = "";
+    }
+  });
+
+
+  // 表單提交 + 前端驗證 + 回傳訊息處理
+  document.getElementById("registerForm").addEventListener("submit", async function (e) {
+    e.preventDefault();
+
+    const email = emailInput.value.trim();
+    const password = document.getElementById("password").value.trim();
+    const passwordError = document.getElementById("passwordError");
+    const emailError = document.getElementById("emailError");
+    const responseMessage = document.getElementById("responseMessage");
+
+    // 簡單的 Email 格式驗證
+    const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    
+    let valid = true;
+
+    // 1. 驗證 Email
+    if (!emailPattern.test(email)) {
+        emailError.style.display = "block";
+        emailError.textContent = "請輸入有效的 Email 地址";
+        valid = false;
+    } else {
+        emailError.style.display = "none";
+    }
+
+    // 2. 驗證密碼（至少 6 個字元）
+    if (password.length < 6) {
+      passwordError.style.display = "block";
+      passwordError.textContent = "密碼長度需至少 6 個字元";
+      valid = false;
+    } else {
+      passwordError.style.display = "none";
+    }
+
+    if (!valid) return;
+
+    // 3. 從 Email 提取 @ 前的字串作為 username (帳號)
+    const username = email.substring(0, email.indexOf('@'));
+    
+    // 額外檢查：如果帳號為空，則拒絕提交 (例如只輸入 @domain.com)
+    if (!username) {
+        emailError.style.display = "block";
+        emailError.textContent = "Email 格式不正確，@ 前的部分不能為空。";
+        return;
+    }
+
+
+    try {
+      // 廠商註冊 API 端點
+      const res = await fetch("/api/register_company", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        // 將提取出的 username、password 和 email 提交
+        body: JSON.stringify({ username, password, email }) 
+      });
+
+      const data = await res.json();
+
+      if (data.success) {
+        responseMessage.style.color = "green";
+        responseMessage.textContent = data.message || "註冊成功，將為您導向登入頁...";
+        setTimeout(() => {
+          window.location.href = "/login";
+        }, 1500);
+      } else {
+        responseMessage.style.color = "red";
+        responseMessage.textContent = data.message || "註冊失敗，請重試";
+      }
+    } catch (err) {
+      responseMessage.style.color = "red";
+      responseMessage.textContent = "伺服器錯誤，請稍後再試";
+      console.error(err);
+    }
+  });
+</script>
+</body>
+
+</html>
