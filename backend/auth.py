@@ -192,6 +192,16 @@ def register_role_selection_page():
 # =========================================================
 # 🧩 頁面路由
 # =========================================================
+
+# 🌟 新增：訪客入口，直接導向學生訪客頁面
+@auth_bp.route("/visitor")
+def visitor_entry():
+    """
+    訪客入口，直接導向學生訪客頁面，
+    對應 login.html 上「以訪客身分進入」按鈕的連結。
+    """
+    return redirect(url_for("users_bp.student_visitor"))
+
 @auth_bp.route("/login")
 def login_page():
     # 這裡可以直接渲染 login.html (依您的要求，不修改此頁面內容)
@@ -212,4 +222,4 @@ def logout_page():
 
 @auth_bp.route("/register_vendor")
 def show_register_vendor_page():
-    return render_template("auth/register_vendor.html") 
+    return render_template("auth/register_vendor.html")
