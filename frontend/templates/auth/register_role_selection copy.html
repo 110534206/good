@@ -67,18 +67,18 @@
 <body>
   <div class="container">
     <div class="card">
-      <h1>請選擇您的註冊身分</h1>
+      <h1>請選擇您的訪客身分</h1>
       <div id="role-buttons" class="role-buttons">
         
         <button 
           class="role-button" 
-          onclick="selectRole('student', '{{ url_for('auth_bp.show_register_student_page') }}')">
+          onclick="selectRole('student', '/register_student')">
           學生
         </button>
 
         <button 
           class="role-button" 
-          onclick="selectRole('company', '{{ url_for('auth_bp.show_register_vendor_page') }}')">
+          onclick="selectRole('company', '/register_vendor')">
           廠商
         </button>
 
@@ -88,11 +88,18 @@
 
   <script>
     /**
-     * 導航到對應的註冊頁面
+     * 儲存選擇的角色並導航到對應的主頁
      * @param {string} role - 選擇的角色 (student 或 company)
-     * @param {string} url - 導航目標的路徑 (/register_student 或 /register_vendor)
+     * @param {string} url - 導航目標的路徑 (/student_visitor 或 /vendor_visitor)
      */
     function selectRole(role, url) {
+      // 步驟 1: 將選定的角色儲存到 localStorage，供後續頁面判斷身分
+      localStorage.setItem("selectedRole", role); 
+      
+      // 由於是訪客進入，我們確保 username 也是 guest
+      localStorage.setItem("username", "guest");
+
+      // 步驟 2: 導航到對應的主頁
       window.location.href = url;
     }
   </script>

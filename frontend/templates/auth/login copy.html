@@ -242,11 +242,20 @@
                 const d = await resp.json();
 
                 if (d.success) {
-                    // 登入成功，導向後端提供的 redirect 網址
+                    localStorage.setItem("username", d.username);
+                    localStorage.setItem("roleList", JSON.stringify(d.roles || []));
+
+                    // 優先導向 API 回傳的 redirect
                     if (d.redirect) {
                         window.location.href = d.redirect;
+                    } else if (d.roles.length === 1) {
+                        // fallback，若 API 沒回 redirect，用角色導向
+                        localStorage.setItem("selectedRole", d.roles[0]);
+                        window.location.href = `/${d.roles[0]}_home`;
+                    } else if (d.roles.length > 1) {
+                        window.location.href = "/login-confirm";
                     } else {
-                        err.textContent = "登入成功，但無導向路徑";
+                        err.textContent = "沒有可用角色，請聯絡管理員";
                         err.style.display = "block";
                     }
                 } else {
@@ -264,11 +273,13 @@
         }
 
         /**
-        * 快速進入，不需要帳號登入，導向 /visitor 路由
+        * 快速進入，不需要帳號登入，導向 visitor_home
         */
         function handleguestLogin() {
-            // 直接導向後端的訪客入口路由
-            window.location.href = "{{ url_for('auth_bp.visitor_entry') }}";
+            localStorage.setItem("username", "guest");
+            localStorage.setItem("selectedRole", "guest");
+            localStorage.setItem("roleList", JSON.stringify(["guest"]));
+            window.location.href = "/register_role_selection";
         }
 
         // 即時隱藏錯誤訊息

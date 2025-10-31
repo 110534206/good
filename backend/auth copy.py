@@ -7,7 +7,7 @@ import re
 auth_bp = Blueprint("auth_bp", __name__)
 
 # =========================================================
-# 🧩 API - 登入 (保持不變)
+# 🧩 API - 登入
 # =========================================================
 @auth_bp.route('/api/login', methods=['POST'])
 def login():
@@ -85,7 +85,7 @@ def login():
         conn.close()
 
 # =========================================================
-# 🧩 API - 確認角色 (處理 login-confirm 頁面的選擇) (保持不變)
+# 🧩 API - 確認角色 (處理 login-confirm 頁面的選擇)
 # =========================================================
 @auth_bp.route('/api/confirm-role', methods=['POST'])
 def confirm_role():
@@ -112,7 +112,7 @@ def confirm_role():
     return jsonify({"success": True, "redirect": redirect_page})
 
 # =========================================================
-# 🧩 API - 學生註冊 (保持不變)
+# 🧩 API - 學生註冊
 # =========================================================
 @auth_bp.route("/api/register_student", methods=["POST"])
 def register_student():
@@ -154,7 +154,7 @@ def register_student():
         conn.close()
 
 # =========================================================
-# 🧩 API - 身份切換 (Teacher <-> Class Teacher) (保持不變)
+# 🧩 API - 身份切換 (Teacher <-> Class Teacher)
 # =========================================================
 @auth_bp.route('/api/switch-role', methods=['POST'])
 def switch_role():
@@ -169,42 +169,50 @@ def switch_role():
 
     if target_role == 'class_teacher':
         session['role'] = 'class_teacher'
-        # 假設 users_bp.class_teacher_home 存在
-        redirect_url = url_for('users_bp.class_teacher_home') 
+        redirect_url = url_for('users_bp.class_teacher_home')
     elif target_role == 'teacher':
         session['role'] = 'teacher' 
-        # 假設 users_bp.teacher_home 存在
-        redirect_url = url_for('users_bp.teacher_home') 
+        redirect_url = url_for('users_bp.teacher_home')
     else:
         return jsonify({"success": False, "message": "無效的目標角色"}), 400
 
     return jsonify({"success": True, "redirect": redirect_url})
 
 # -------------------------
-# 🎯 訪客入口 (設定 Session 後導向)
+# 🎯 訪客入口 (直接跳轉到學生訪客頁面，取代原有的訪客角色選擇頁面)
 # -------------------------
 @auth_bp.route("/student_visitor")
 def student_visitor_page():
-    session.clear() # 清除任何舊的登入資訊
-    session["username"] = "guest"
-    session["role"] = "guest_student" # 標記為訪客-學生身份
-    # 假設 'users_bp.student_visitor' 是正確的路由名稱
-    return redirect(url_for('users_bp.student_visitor'))
+    # ... 邏輯: 設定 session 為 guest
+    return redirect(url_for('users_bp.student_visito.html'))
+
+# =========================================================
+# 🧩 頁面路由 (新增：註冊角色選擇頁面)
+# =========================================================
+@auth_bp.route("/register_role_selection")
+def register_role_selection_page():
+    """
+    註冊入口：提供學生或廠商角色選擇。
+    """
+    return render_template("auth/register_role_selection.html")
+
 
 # =========================================================
 # 🧩 頁面路由
 # =========================================================
 
-# 🌟 訪客入口，直接導向學生訪客頁面
+# 🌟 新增：訪客入口，直接導向學生訪客頁面
 @auth_bp.route("/visitor")
 def visitor_entry():
     """
-    訪客入口，對應 login.html 上「以訪客身分進入」按鈕的連結。
+    訪客入口，直接導向學生訪客頁面，
+    對應 login.html 上「以訪客身分進入」按鈕的連結。
     """
-    return redirect(url_for("auth_bp.student_visitor_page"))
+    return redirect(url_for("users_bp.student_visitor"))
 
 @auth_bp.route("/login")
 def login_page():
+    # 這裡可以直接渲染 login.html (依您的要求，不修改此頁面內容)
     return render_template("auth/login.html")
 
 @auth_bp.route('/login-confirm')
@@ -220,24 +228,6 @@ def logout_page():
     session.clear()
     return redirect(url_for("auth_bp.login_page"))
 
-# 註冊角色選擇頁面
-@auth_bp.route("/register_role_selection")
-def register_role_selection_page():
-    """
-    註冊入口：提供學生或廠商角色選擇。
-    """
-    return render_template("auth/register_role_selection.html")
-
-# 廠商註冊頁面 (保持不變)
 @auth_bp.route("/register_vendor")
 def show_register_vendor_page():
-    return render_template("auth/register_vendor.html") 
-
-# 學生註冊頁面 (新增)
-@auth_bp.route("/register_student")
-def show_register_student_page():
-    """
-    學生註冊頁面。
-    """
-    # 這裡假設您的學生註冊模板位於 auth/register_student.html
-    return render_template("auth/register_student.html")
+    return render_template("auth/register_vendor.html")
