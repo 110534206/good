@@ -181,8 +181,8 @@ def switch_role():
 # -------------------------
 # 🎯 訪客入口 (直接跳轉到學生訪客頁面，取代原有的訪客角色選擇頁面)
 # -------------------------
-@auth_bp.route("/visitor_role_selection")
-def visitor_role_selection_page():
+@auth_bp.route("/student_visitor")
+def student_visitor_page():
     # ... 邏輯: 設定 session 為 guest
     return redirect(url_for('users_bp.student_visitor'))
 
