@@ -246,8 +246,6 @@
 
 <body>
   <script>
-    // 後端已經處理了主任權限驗證，不需要前端檢查
-
     document.addEventListener("DOMContentLoaded", () => {
       // 如果存在 user-role 元素，則設定為主任
       const userRoleElement = document.getElementById("user-role");
@@ -273,7 +271,6 @@
           <button id="accountDropdownBtn" class="btn-link" aria-expanded="false">帳號 ▾</button>
           <div id="accountDropdownMenu" class="dropdown-menu" style="position:absolute; right:0; top:120%; background:#fff; border:1px solid #ccc; border-radius:8px; padding:6px; min-width:180px; display:none; box-shadow:0 4px 12px rgba(0,0,0,.12);">
             <a href="/profile" class="btn-link" style="display:block; border:none; margin:4px 0;">個人資料</a>
-            <a id="toHomeroomLink" href="/class_teacher_home" class="btn-link" style="display:none; border:none; margin:4px 0;">切換班導身分</a>
             <a href="/login" class="btn-link" style="display:block; border:none; margin:4px 0;">登出</a>
           </div>
         </div>
@@ -401,14 +398,6 @@
     document.addEventListener('DOMContentLoaded', () => {
       loadUserAvatar();
     });
-
-    // 判斷是否為班導，顯示切換到班導主頁
-    fetch('/api/profile').then(r => r.json()).then(d => {
-      if (d.success && d.user && d.user.is_homeroom) {
-        const link = document.getElementById('toHomeroomLink');
-        if (link) link.style.display = 'block';
-      }
-    }).catch(() => {});
   </script>
 </body>
 </html>

@@ -66,16 +66,6 @@
   <script>
     // ✅ 使用 Flask 的 tojson 確保安全序列化
     const roleList = {{ roles_json | tojson }};
-    
-    function getRoleDisplayName(role) {
-      const map = {
-        "teacher": "指導老師",
-        "director": "主任",
-        "student": "學生",
-        "admin": "系統管理員"
-      };
-      return map[role] || role;
-    }
 
     if (!Array.isArray(roleList) || roleList.length === 0) {
       alert("角色資訊遺失，請重新登入");
@@ -86,13 +76,14 @@
       roleList.forEach(role => {
         const btn = document.createElement("button");
         btn.className = "role-button";
-        btn.textContent = getRoleDisplayName(role);
-        btn.onclick = () => confirmRole(role, btn);
+        btn.textContent = role.name; 
+        btn.onclick = () => confirmRole(role.id, btn, role.name); 
         container.appendChild(btn);
       });
     }
 
-    async function confirmRole(role, button) {
+    // ✅ 修正 3：接收三個參數：role_id, button, display_name
+    async function confirmRole(role_id, button, display_name) {
       button.classList.add("loading");
       button.textContent = "登入中...";
 
@@ -100,7 +91,8 @@
         const response = await fetch("/api/confirm-role", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ role })
+          // ✅ 修正 4：傳遞 role_id (字串) 給後端
+          body: JSON.stringify({ role: role_id }) 
         });
         const data = await response.json();
 
@@ -110,12 +102,13 @@
         } else {
           alert(data.message || "發生錯誤，請稍後重試");
           button.classList.remove("loading");
-          button.textContent = getRoleDisplayName(role);
+          // ✅ 修正 5：使用傳入的 display_name 恢復按鈕文字
+          button.textContent = display_name; 
         }
       } catch (err) {
         alert("伺服器連線錯誤，請稍後再試");
         button.classList.remove("loading");
-        button.textContent = getRoleDisplayName(role);
+        button.textContent = display_name; // 恢復按鈕文字
       }
     }
   </script>

@@ -8,124 +8,67 @@ import re # 引入正則表達式
 users_bp = Blueprint("users_bp", __name__)
 
 # -------------------------
-# 老師首頁
+# 老師首頁 (指導老師)
 # -------------------------
 @users_bp.route('/teacher_home')
 def teacher_home():
-    if 'username' not in session or session.get('role') != 'teacher':
+    # 允許 'teacher' (單一身份) 或 'director' (多身份選擇後) 進入
+    if 'username' not in session or session.get('role') not in ['teacher', 'director']:
         return redirect(url_for('auth_bp.login_page'))
     return render_template('user_shared/teacher_home.html')
 
 # -------------------------
-# 老師首頁(班導)
+# 班導首頁
 # -------------------------
-@users_bp.route('/class_teacher_home')
+@users_bp.route("/class_teacher_home")
 def class_teacher_home():
-    # 這裡的邏輯可以簡化，因為登入時已經設定了 is_homeroom session
-    if 'username' not in session or session.get('role') not in ['teacher', 'director']:
-        return redirect(url_for('auth_bp.login_page'))
+    if "username" not in session or session.get("role") not in ["teacher", "director"]:
+        return redirect(url_for("auth_bp.login_page"))
 
-    user_id = session.get('user_id')
-    if not user_id:
-        return redirect(url_for('auth_bp.login_page'))
+    if not session.get("is_homeroom"):
+        return redirect(url_for("users_bp.teacher_home"))
 
-    conn = get_db()
-    cursor = conn.cursor()
-    try:
-        cursor.execute("""
-            SELECT 1 FROM classes_teacher
-            WHERE teacher_id = %s AND role = '班導師'
-        """, (user_id,))
-        is_homeroom = cursor.fetchone()
-
-        if is_homeroom is None:
-            # 沒有班導身分就不能看這頁
-            return redirect(url_for('auth_bp.login_page'))
-    finally:
-        cursor.close()
-        conn.close()
-
-    return render_template('user_shared/class_teacher_home.html',
-        username=session.get('username'),
-        original_role=session.get('role')
-    )
+    return render_template("user_shared/class_teacher_home.html",
+                           username=session.get("username"),
+                           original_role=session.get("role"))
 
 # -------------------------
 # API - 取得個人資料
 # -------------------------
-@users_bp.route("/api/profile", methods=["GET"])
-def get_profile():
-    if "username" not in session or "role" not in session:
-        return jsonify({"success": False, "message": "尚未登入"}), 401
+@users_bp.route('/api/profile', methods=['GET'])
+def get_user_profile():
+    if 'user_id' not in session:
+        return jsonify({"success": False, "message": "未登入"}), 401
 
-    username = session["username"]
-    role = session["role"]
+    user_id = session.get('user_id')
+    current_role = session.get('role')
 
     conn = get_db()
     cursor = conn.cursor(dictionary=True)
     try:
-        # 查詢用戶基本資料
-        cursor.execute("""
-            SELECT u.id, u.username, u.email, u.role, u.name,
-                   c.department, c.name AS class_name, u.class_id, u.avatar_url
-            FROM users u
-            LEFT JOIN classes c ON u.class_id = c.id
-            WHERE u.username = %s AND u.role = %s
-        """, (username, role))
-        user = cursor.fetchone()
+        # 取得用戶在資料庫中的原始角色及基本資料
+        # 這是判斷是否為「主任」的核心依據
+        cursor.execute("SELECT role, avatar_url, name, username, email FROM users WHERE id = %s", (user_id,))
+        user_data = cursor.fetchone()
 
-        if not user:
-            return jsonify({"success": False, "message": "使用者不存在"}), 404
-            
-        # 【修改】針對學生角色，從 username (學號) 提取入學屆數，作為備用
-        if role == "student" and user.get("username") and len(user["username"]) >= 3:
-            # 假設學號前三碼是入學屆數
-            user["admission_year"] = user["username"][:3]
-        else:
-            user["admission_year"] = ""
+        if not user_data:
+            return jsonify({"success": False, "message": "用戶不存在"}), 404
         
-        # 檢查是否為班導 / 主任
-        is_homeroom = False
-        classes = []
-        if role in ("teacher", "director"):
-            # 查詢所有管理的班級 (無論是不是班導師)
-            cursor.execute("""
-                SELECT c.id, c.name, c.department, ct.role
-                FROM classes c
-                JOIN classes_teacher ct ON c.id = ct.class_id
-                WHERE ct.teacher_id = %s
-            """, (user["id"],))
-            classes = cursor.fetchall()
-            user["classes"] = classes # 傳遞所有班級資料
+        # 準備回傳資料
+        user_info = {
+            "id": user_id,
+            "username": user_data.get('username'),
+            "name": user_data.get('name'),
+            "avatar_url": user_data.get('avatar_url'),
+            "current_role": current_role,                      
+            "original_role": user_data.get('role'),            
+            "is_homeroom": session.get('is_homeroom', False)    
+        }
+        
+        return jsonify({"success": True, "user": user_info})
 
-            # 確保使用非 dictionary 模式的 cursor 查詢 is_homeroom
-            homeroom_cursor = conn.cursor()
-            homeroom_cursor.execute("""
-                SELECT 1 FROM classes_teacher 
-                WHERE teacher_id = %s AND role = '班導師'
-            """, (user["id"],))
-            is_homeroom = bool(homeroom_cursor.fetchone())
-            homeroom_cursor.close()
-            
-        user["is_homeroom"] = is_homeroom # 傳遞班導師狀態
-        user["email"] = user["email"] or ""
-
-        # 如果是老師/主任，且是班導師，且有多班級，拼成一個字串顯示在「管理班級」
-        if role in ("teacher", "director") and is_homeroom and classes:
-            # 只列出班導師身分的班級，但為了簡化，目前列出所有管理的班級
-            class_names = [f"{c['department'].replace('管科', '')}{c['name']}" for c in classes]
-            user["class_display_name"] = "、".join(class_names)
-        elif role == "student":
-            # 學生班級顯示
-            dep_short = user['department'].replace("管科", "") if user['department'] else ""
-            user["class_display_name"] = f"{dep_short}{user['class_name'] or ''}"
-        else:
-            user["class_display_name"] = ""
-
-
-        return jsonify({"success": True, "user": user})
     except Exception as e:
-        print("❌ 取得個人資料錯誤:", e)
+        current_app.logger.error(f"Error fetching profile: {e}")
         return jsonify({"success": False, "message": "伺服器錯誤"}), 500
     finally:
         cursor.close()
@@ -388,31 +331,14 @@ def student_home():
     return render_template('user_shared/student_home.html')
 
 # 使用者首頁 (主任前台)
-@users_bp.route('/director_home')
+@users_bp.route("/director_home")
 def director_home():
-    # 檢查用戶是否已登入
-    if 'username' not in session or 'user_id' not in session:
+    if "username" not in session or session.get("role") != "director":
         return redirect(url_for("auth_bp.login_page"))
-    
-    user_id = session.get('user_id')
-    
-    # 檢查用戶是否具有主任權限
-    conn = get_db()
-    cursor = conn.cursor()
-    try:
-        cursor.execute("SELECT 1 FROM users WHERE id = %s AND role = 'director'", (user_id,))
-        is_director = cursor.fetchone()
-        
-        if not is_director:
-            return redirect(url_for("auth_bp.login_page"))
-    finally:
-        cursor.close()
-        conn.close()
 
-    # 取得待審核公司資料
     conn = get_db()
     cursor = conn.cursor(dictionary=True)
-    cursor.execute("SELECT id, company_name FROM internship_companies WHERE status = 'pending'")
+    cursor.execute("SELECT id, company_name FROM internship_companies WHERE status='pending'")
     companies = cursor.fetchall()
     cursor.close()
     conn.close()

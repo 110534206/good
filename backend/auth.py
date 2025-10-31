@@ -6,12 +6,12 @@ import re
 
 auth_bp = Blueprint("auth_bp", __name__)
 
-# -------------------------
-# API - 登入
-# -------------------------
+# =========================================================
+# 🧩 API - 登入
+# =========================================================
 @auth_bp.route('/api/login', methods=['POST'])
 def login():
-    data = request.get_json() 
+    data = request.get_json()
     username = data.get("username")
     password = data.get("password")
 
@@ -23,138 +23,117 @@ def login():
 
     try:
         cursor.execute("SELECT * FROM users WHERE username = %s", (username,))
-        users = cursor.fetchall()
-
-        if not users:
-            return jsonify({"success": False, "message": "帳號不存在"}), 404
-
-        matching_roles = []
-        matched_user = None  
-
-        for user in users:
-            if check_password_hash(user["password"], password):
-                matching_roles.append(user["role"])
-                matched_user = user  
-
-        if not matched_user:
-            return jsonify({"success": False, "message": "帳號或密碼錯誤"}), 401
-
-        session["username"] = matched_user["username"]
-        session["user_id"] = matched_user["id"]
-
-        if len(matching_roles) > 1:
-            session["pending_roles"] = matching_roles 
-            session["username"] = matched_user["username"]
-            session["user_id"] = matched_user["id"]
-            return jsonify({
-                "success": True,
-                "username": matched_user["username"],
-                "roles": matching_roles,
-                "redirect": "/login-confirm"
-            })
-
-        single_role = matching_roles[0]
-        session["role"] = single_role
-        session["original_role"] = single_role  
-
-        redirect_page = "/"
-
-        if single_role == "student":
-            redirect_page = "/student_home"
-        elif single_role == "ta":
-            redirect_page = "/ta_home"
-        elif single_role == "teacher":
-            cursor.execute("""
-                SELECT 1 FROM classes_teacher 
-                WHERE teacher_id = %s AND role = '班導師'
-            """, (matched_user["id"],))
-            is_homeroom = cursor.fetchone()
-
-            if is_homeroom:
-                redirect_page = "/class_teacher_home"
-            else:
-                redirect_page = "/teacher_home"
-        elif single_role == "director":
-            redirect_page = "/director_home"
-        elif single_role == "admin":
-            redirect_page = "/admin_home"
-
-        return jsonify({
-            "success": True,
-            "username": matched_user["username"],
-            "roles": matching_roles,
-            "redirect": redirect_page
-        })
-
-    except Exception as e:
-        print(f"登入錯誤: {e}")
-        return jsonify({"success": False, "message": "伺服器錯誤"}), 500
-    finally:
-        cursor.close()
-        conn.close()
-
-# -------------------------
-# API - 確認角色 (多角色登入後)
-# -------------------------
-@auth_bp.route('/api/confirm-role', methods=['POST'])
-def api_confirm_role():
-    if "username" not in session:
-        return jsonify({"success": False, "message": "請先登入"}), 401
-
-    data = request.get_json()
-    role = data.get("role")
-    username = session.get("username")
-
-    if role not in ['teacher', 'director', 'student', 'admin']:
-        return jsonify({"success": False, "message": "角色錯誤"}), 400
-
-    conn = get_db()
-    cursor = conn.cursor(dictionary=True)
-
-    try:
-        # ✅ 重新查出該帳號對應此角色的使用者資料
-        cursor.execute("SELECT * FROM users WHERE username = %s AND role = %s", (username, role))
         user = cursor.fetchone()
 
         if not user:
-            return jsonify({"success": False, "message": "找不到該角色的使用者資料"}), 404
+            return jsonify({"success": False, "message": "帳號不存在"}), 404
 
+        if not check_password_hash(user["password"], password):
+            return jsonify({"success": False, "message": "帳號或密碼錯誤"}), 401
+
+        role = user["role"]
         user_id = user["id"]
-
-        redirect_page = f"/{role}_home"
-        is_homeroom = False
-
-        # 檢查是否為班導師（僅記錄，不自動重導向）
-        if role in ["teacher", "director"]:
-            cursor.execute("""
-                SELECT 1 FROM classes_teacher
-                WHERE teacher_id = %s AND role = '班導師'
-            """, (user_id,))
-            is_homeroom = bool(cursor.fetchone())
-
-        # ✅ 更新 session — 指向正確角色的使用者
-        session["user_id"] = user_id
-        session["role"] = role
-        session["original_role"] = role
-        session["is_homeroom"] = is_homeroom
         
+        # 檢查是否為班導師 (這段邏輯必須保留，因為無論選哪個身份，班導資訊都要帶入 session)
+        cursor.execute("""
+            SELECT 1 FROM classes_teacher 
+            WHERE teacher_id = %s AND role = '班導師'
+        """, (user_id,))
+        is_homeroom = bool(cursor.fetchone())
 
-        return jsonify({
-            "success": True,
-            "redirect": redirect_page,
-            "is_homeroom": is_homeroom
-        })
+        # 🎯 設定 session 資訊 (先儲存基本資訊)
+        session.clear() 
+        session["user_id"] = user_id
+        session["username"] = user["username"]
+        session["name"] = user["name"]
+        session["is_homeroom"] = is_homeroom 
+        
+        # =========================================================
+        # 🌟 核心修正：判斷是否為主任，強制跳轉至身份選擇頁面
+        # =========================================================
+        if role == "director":
+            # 主任帳號，強制跳轉到選擇頁面，讓他選擇「主任」或「指導老師」
+            pending_roles = [
+                {"id": "director", "name": "主任"},
+                {"id": "teacher", "name": "指導老師"}
+            ]
+            # 將多角色選項儲存到 session
+            session["pending_roles"] = pending_roles
+            
+            # 不設定 session["role"]，讓使用者在 /login-confirm 選擇後再設置
+            return jsonify({"success": True, "redirect": "/login-confirm"})
 
+        # =========================================================
+        # 🧩 單一角色登入導向邏輯
+        # =========================================================
+        # 非主任的角色，直接設定 session['role']
+        session["role"] = role
+
+        # 根據角色決定導向頁面
+        if role == "teacher":
+            # 依據新邏輯：指導老師登入一律先到指導老師主頁
+            redirect_page = "/teacher_home" 
+        elif role == "student":
+            redirect_page = "/student_home"
+        elif role == "ta":
+            redirect_page = "/ta_home"
+        elif role == "admin":
+            redirect_page = "/admin_home"
+        elif role == "director": 
+            # 正常情況下不會跑到這裡 (會被上面的 if 攔截)，但保留作為單一主任身份的預設
+            redirect_page = "/director_home" 
+        else:
+            # 其他角色或未知角色
+            return jsonify({"success": False, "message": "無效的角色"}), 403
+
+        return jsonify({"success": True, "redirect": redirect_page})
+        
     except Exception as e:
-        print("❌ 確認角色錯誤:", e)
+        print("❌ 登入錯誤:", e)
         return jsonify({"success": False, "message": "伺服器錯誤"}), 500
     finally:
         cursor.close()
         conn.close()
 
-# -------------------------
-# API - 註冊學生帳號 (POST)
-# -------------------------
+# =========================================================
+# 🧩 API - 確認角色 (處理 login-confirm 頁面的選擇)
+# =========================================================
+@auth_bp.route('/api/confirm-role', methods=['POST'])
+def confirm_role():
+    data = request.get_json()
+    selected_role = data.get('role')
+
+    # 1. 檢查 Session 狀態
+    # 必須有 user_id，且必須處於 pending_roles 待選擇狀態
+    if 'user_id' not in session or 'pending_roles' not in session:
+        # 如果沒有 pending_roles，表示使用者可能直接訪問此API，或Session已過期
+        return jsonify({"success": False, "message": "狀態錯誤，請重新登入"}), 403
+
+    # 2. 驗證角色選擇 (主任只能選 director 或 teacher)
+    valid_ids = [r['id'] for r in session.get('pending_roles')]
+    if selected_role not in valid_ids:
+        return jsonify({"success": False, "message": "無效的角色選擇"}), 400
+
+    # 3. 設定最終角色並清除 pending 資訊
+    # 這是設定 session['role'] 的唯一位置
+    session['role'] = selected_role
+    session.pop('pending_roles', None) # 清除待選角色清單
+
+    # 4. 決定跳轉頁面
+    if selected_role == 'director':
+        # 主任身分：跳轉到主任主頁
+        redirect_page = '/director_home'
+    elif selected_role == 'teacher':
+        # 指導老師身分：跳轉到指導老師主頁 (即使有班導身份，也由前端下拉選單切換)
+        redirect_page = '/teacher_home' 
+    else:
+        return jsonify({"success": False, "message": "系統錯誤：未知的角色"}), 500
+
+    return jsonify({"success": True, "redirect": redirect_page})
+
+# =========================================================
+# 🧩 API - 學生註冊
+# =========================================================
 @auth_bp.route("/api/register_student", methods=["POST"])
 def register_student():
     try:
@@ -164,65 +143,64 @@ def register_student():
         email = data.get("email")
         role = "student"
 
-        # 格式驗證
         if not re.match(r"^[A-Za-z0-9]{6,20}$", username):
-            return jsonify({"success": False, "message": "學號格式錯誤，需為6~20字元英數字"}), 400
+            return jsonify({"success": False, "message": "學號格式錯誤"}), 400
         if not re.match(r"^[A-Za-z0-9]{8,}$", password):
-            return jsonify({"success": False, "message": "密碼需至少8碼英數字"}), 400
+            return jsonify({"success": False, "message": "密碼需至少8碼"}), 400
         if not re.match(r"^[A-Za-z0-9._%+-]+@.*\.edu\.tw$", email):
-            return jsonify({"success": False, "message": "必須使用學校信箱"}), 400
+            return jsonify({"success": False, "message": "請使用學校信箱"}), 400
 
-        hashed_password = generate_password_hash(password)
+        hashed_pw = generate_password_hash(password)
 
         conn = get_db()
         cursor = conn.cursor()
 
-        # 檢查是否已有相同帳號 (在 users 表)
-        cursor.execute("SELECT * FROM users WHERE username = %s AND role = %s", (username, role))
+        cursor.execute("SELECT id FROM users WHERE username=%s AND role='student'", (username,))
         if cursor.fetchone():
-            cursor.close()
-            conn.close()
-            return jsonify({"success": False, "message": "帳號已存在"}), 400
+            return jsonify({"success": False, "message": "該學生帳號已存在"}), 400
 
-        # 新增學生帳號 (存進 users)
-        cursor.execute(
-            "INSERT INTO users (username, password, email, role) VALUES (%s, %s, %s, %s)",
-            (username, hashed_password, email, role)
-        )
+        cursor.execute("""
+            INSERT INTO users (username, password, email, role)
+            VALUES (%s, %s, %s, %s)
+        """, (username, hashed_pw, email, role))
         conn.commit()
+
+        return jsonify({"success": True, "message": "註冊成功"})
+    except Exception as e:
+        print("❌ 註冊錯誤:", e)
+        return jsonify({"success": False, "message": "伺服器錯誤"}), 500
+    finally:
         cursor.close()
         conn.close()
 
-        return jsonify({"success": True, "message": "註冊成功"})
+# =========================================================
+# 🧩 API - 身份切換 (Teacher <-> Class Teacher)
+# =========================================================
+@auth_bp.route('/api/switch-role', methods=['POST'])
+def switch_role():
+    data = request.get_json()
+    target_role = data.get('role') # 預期為 'teacher' 或 'class_teacher'
 
-    except Exception as e:
-        print("Error in register_student:", e)
-        return jsonify({"success": False, "message": "伺服器錯誤"}), 500   
+    # 1. 檢查基本權限
+    if 'user_id' not in session or session.get('role') not in ['teacher', 'director', 'class_teacher']:
+        return jsonify({"success": False, "message": "未授權或登入過期"}), 403
+    
+    # 2. 檢查班導身份
+    if target_role == 'class_teacher' and session.get("is_homeroom") != True:
+        return jsonify({"success": False, "message": "您不具備班導師身份，無法切換"}), 403
 
-# -------------------------
-# API - 首頁 (多角色登入後)
-# -------------------------
-@auth_bp.route('/index')
-def index_page():
-    role = session.get("role")
-    user_id = session.get("user_id")
+    # 3. 執行角色切換
+    if target_role == 'class_teacher':
+        session['role'] = 'class_teacher'
+        redirect_url = url_for('users_bp.class_teacher_home')
+    elif target_role == 'teacher':
+        # 切換回指導老師或主任身份
+        session['role'] = 'teacher' 
+        redirect_url = url_for('users_bp.teacher_home')
+    else:
+        return jsonify({"success": False, "message": "無效的目標角色"}), 400
 
-    if not role:
-        return redirect(url_for("auth_bp.login_page"))
-
-    # 老師和主任統一重導向到對應頁面，不自動檢查班導師身分
-    if role == "teacher":
-        return redirect(url_for('users_bp.teacher_home'))
-    elif role == "director":
-        return redirect(url_for('users_bp.director_home'))
-
-    elif role == "student":
-        return redirect(url_for('users_bp.student_home')) 
-
-    elif role == "admin":
-        return redirect(url_for('admin_bp.admin_home')) 
-
-    return redirect(url_for("auth_bp.login_page")) 
+    return jsonify({"success": True, "redirect": redirect_url})
 
 # -------------------------
 # 訪客角色選擇頁面
@@ -245,42 +223,26 @@ def visitor_role_selection_page():
 
     return render_template("auth/visitor_role_selection.html", roles=roles)
 
-
-# -------------------------
-# 頁面路由
-# -------------------------
-  
-#登入
+# =========================================================
+# 🧩 頁面路由
+# =========================================================
 @auth_bp.route("/login")
 def login_page():
     return render_template("auth/login.html")
 
-#登出
-@auth_bp.route("/logout")
-def logout_page():
-    session.clear()  # 清除所有登入資訊
-    return redirect(url_for("auth_bp.login_page"))
-
-# 多角色登入後確認角色頁面
 @auth_bp.route('/login-confirm')
 def login_confirm_page():
-    roles = session.get("pending_roles")  # 登入時先把多角色放這
+    roles = session.get("pending_roles")  
     if not roles:
         return redirect(url_for("auth_bp.login_page"))
 
     return render_template("auth/login-confirm.html", roles_json=roles)
-  
-# 訪客首頁頁面（不需登入）
-@auth_bp.route("/visitor_home")
-def visitor_home():
-    # 不驗證 session，允許訪客進入
-    session["role"] = "guest"
-    session["username"] = "guest"
-    return render_template("user_shared/visitor_home.html")
-  
-# 學生註冊
+
+@auth_bp.route("/logout")
+def logout_page():
+    session.clear()
+    return redirect(url_for("auth_bp.login_page"))
+
 @auth_bp.route("/register_student")
 def show_register_student_page():
     return render_template("auth/register_student.html")
-
-
