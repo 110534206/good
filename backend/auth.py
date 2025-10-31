@@ -30,7 +30,15 @@ def login():
 
         if not check_password_hash(user["password"], password):
             return jsonify({"success": False, "message": "帳號或密碼錯誤"}), 401
-
+        
+        # 🌟 廠商帳號審核檢查 (新增)
+        if user["role"] == "vendor":
+            vendor_status = user.get("status")
+            if vendor_status == "pending":
+                return jsonify({"success": False, "message": "您的廠商帳號正在等待管理員審核，請耐心等候。"}), 403
+            elif vendor_status == "rejected":
+                return jsonify({"success": False, "message": "您的廠商帳號已被管理員拒絕。如有疑問請聯繫平台管理員。"}), 403
+            
         role = user["role"]
         user_id = user["id"]
         
@@ -72,6 +80,8 @@ def login():
             redirect_page = "/admin_home"
         elif role == "director": 
             redirect_page = "/director_home" 
+        elif role == "vendor":
+            return jsonify({"success": True, "redirect_url": url_for("users_bp.vendor_home")})    
         else:
             return jsonify({"success": False, "message": "無效的角色"}), 403
 
@@ -112,7 +122,7 @@ def confirm_role():
     return jsonify({"success": True, "redirect": redirect_page})
 
 # =========================================================
-# 🧩 API - 學生註冊 (保留不變)
+# 🧩 API - 學生註冊 
 # =========================================================
 @auth_bp.route("/api/register_student", methods=["POST"])
 def register_student():
@@ -148,6 +158,66 @@ def register_student():
         return jsonify({"success": True, "message": "註冊成功"})
     except Exception as e:
         print("❌ 註冊錯誤:", e)
+        return jsonify({"success": False, "message": "伺服器錯誤"}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+# =========================================================
+# 🧩 API - 廠商註冊
+# =========================================================
+@auth_bp.route("/api/register_company", methods=["POST"])
+def register_company():
+    try:
+        data = request.json
+        # 前端 (register_vendor.html) 提交 username, password, email
+        username = data.get("username")
+        password = data.get("password")
+        email = data.get("email")
+        role = "vendor" # 設定廠商的角色為 'vendor'
+
+        # 1. 基本資料驗證
+        if not username or not password or not email:
+            return jsonify({"success": False, "message": "所有欄位皆為必填"}), 400
+        
+        # 帳號格式驗證 (與前端邏輯一致，確保不為空)
+        # 由於帳號是從 Email 前綴自動生成，這裡只做基礎檢查
+        if not re.match(r"^[A-Za-z0-9._%+-]{1,50}$", username): 
+            return jsonify({"success": False, "message": "帳號格式錯誤"}), 400
+        
+        # 密碼長度驗證 (register_vendor.html 要求至少 6 個字元)
+        if len(password) < 6:
+            return jsonify({"success": False, "message": "密碼需至少 6 個字元"}), 400
+        
+        # Email 格式驗證 (廠商信箱無須限制 .edu.tw)
+        if not re.match(r"^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$", email):
+             return jsonify({"success": False, "message": "Email 格式錯誤"}), 400
+
+        # 2. 密碼加密
+        hashed_pw = generate_password_hash(password)
+
+        conn = get_db()
+        cursor = conn.cursor()
+
+        # 3. 檢查帳號 (username) 是否已存在
+        cursor.execute("SELECT id FROM users WHERE username=%s AND role=%s", (username, role))
+        if cursor.fetchone():
+            return jsonify({"success": False, "message": "該廠商帳號已存在"}), 400
+        
+        # 4. 將廠商資料寫入 users 資料表，並將 status 設為 'pending'
+        cursor.execute("""
+            INSERT INTO users (username, password, email, role, status)
+            VALUES (%s, %s, %s, %s, 'pending')  -- <<< 新增 status 欄位
+        """, (username, hashed_pw, email, role))
+        
+        user_id = cursor.lastrowid # 獲取剛插入的 users.id
+
+        # 修正回覆訊息
+        return jsonify({"success": True, "message": "廠商帳號註冊申請已送出，需等待管理員審核通過後才能登入。"})
+    
+    except Exception as e:
+        conn.rollback()
+        print("❌ 廠商註冊錯誤:", e)
         return jsonify({"success": False, "message": "伺服器錯誤"}), 500
     finally:
         cursor.close()
@@ -229,7 +299,7 @@ def register_role_selection_page():
 def show_register_vendor_page():
     return render_template("auth/register_vendor.html") 
 
-# 學生註冊頁面 (保留不變)
+
 @auth_bp.route("/register_student")
 def show_register_student_page():
     """

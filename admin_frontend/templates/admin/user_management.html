@@ -251,16 +251,6 @@
         .password-mask {
             -webkit-text-security: disc;
         }
-
-        .role-admin {
-            background-color: #dc3545;
-        }
-
-        /* 紅色 */
-        .role-vendor {
-            background-color: #fd7e14;
-            color: white;
-        }
     </style>
 </head>
 
@@ -280,8 +270,7 @@
                     <button id="accountDropdownBtn" class="btn-link" aria-expanded="false">帳號 ▾</button>
                     <div id="accountDropdownMenu" class="dropdown-menu"
                         style="position:absolute; right:0; top:120%; background:#fff; border:1px solid #ccc; border-radius:8px; padding:6px; min-width:180px; display:none; box-shadow:0 4px 12px rgba(0,0,0,.12);">
-                        <a href="/admin_home" class="btn-link"
-                            style="display:block; border:none; margin:4px 0;">返回主頁</a>
+                        <a href="/admin_home" class="btn-link" style="display:block; border:none; margin:4px 0;">返回主頁</a>
                         <a href="/login" class="btn-link" style="display:block; border:none; margin:4px 0;">登出</a>
                     </div>
                 </div>
@@ -317,7 +306,6 @@
                         <option value="director">主任</option>
                         <option value="ta">科助</option>
                         <option value="admin">管理員</option>
-                        <option value="vendor">廠商</option> </select>
                     </select>
                 </div>
                 <div class="d-flex gap-2">
@@ -393,7 +381,6 @@
                                 <option value="director">主任</option>
                                 <option value="ta">科助</option>
                                 <option value="admin">管理員</option>
-                                <option value="vendor">廠商</option>
                             </select>
                         </div>
                         <div class="mb-3" id="createClassIdGroup" style="display: none;">
@@ -531,8 +518,7 @@
                 teacher: '教師',
                 director: '主任',
                 ta: '科助',
-                admin: '管理員',
-                vendor: '廠商'
+                admin: '管理員'
             };
 
             // 角色樣式映射 (用於 Bootstrap badge)
@@ -541,8 +527,7 @@
                 teacher: 'role-teacher',
                 director: 'role-director',
                 ta: 'role-ta',
-                admin: 'role-admin',
-                vendor: 'role-vendor'
+                admin: 'role-admin'
             };
 
             /**
@@ -1021,5 +1006,4 @@
         });
     </script>
 </body>
-
 </html>

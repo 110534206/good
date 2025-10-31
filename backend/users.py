@@ -283,6 +283,19 @@ def student_visitor_page():
     return render_template('user_shared/student_visitor.html')
 
 # -------------------------
+# 廠商首頁
+# ------------------------
+@users_bp.route('/vendor_home')
+def vendor_home():
+    """
+    實習廠商登入後進入的主頁。
+    """
+    # 權限檢查：必須是已登入的用戶，且角色為 'vendor'
+    if 'username' not in session or session.get('role') != 'vendor':
+        return redirect(url_for('auth_bp.login_page'))
+    return render_template('user_shared/vendor_home.html') 
+
+# -------------------------
 # # 頁面路由
 # -------------------------
 
