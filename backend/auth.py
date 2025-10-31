@@ -34,7 +34,7 @@ def login():
         role = user["role"]
         user_id = user["id"]
         
-        # 檢查是否為班導師 (這段邏輯必須保留，因為無論選哪個身份，班導資訊都要帶入 session)
+        # 檢查是否為班導師 (這段邏輯必須保留)
         cursor.execute("""
             SELECT 1 FROM classes_teacher 
             WHERE teacher_id = %s AND role = '班導師'
@@ -48,30 +48,21 @@ def login():
         session["name"] = user["name"]
         session["is_homeroom"] = is_homeroom 
         
-        # =========================================================
-        # 🌟 核心修正：判斷是否為主任，強制跳轉至身份選擇頁面
-        # =========================================================
+        # 🌟 判斷是否為主任，強制跳轉至身份選擇頁面
         if role == "director":
             # 主任帳號，強制跳轉到選擇頁面，讓他選擇「主任」或「指導老師」
             pending_roles = [
                 {"id": "director", "name": "主任"},
                 {"id": "teacher", "name": "指導老師"}
             ]
-            # 將多角色選項儲存到 session
             session["pending_roles"] = pending_roles
-            
-            # 不設定 session["role"]，讓使用者在 /login-confirm 選擇後再設置
             return jsonify({"success": True, "redirect": "/login-confirm"})
 
-        # =========================================================
         # 🧩 單一角色登入導向邏輯
-        # =========================================================
-        # 非主任的角色，直接設定 session['role']
         session["role"] = role
 
         # 根據角色決定導向頁面
         if role == "teacher":
-            # 依據新邏輯：指導老師登入一律先到指導老師主頁
             redirect_page = "/teacher_home" 
         elif role == "student":
             redirect_page = "/student_home"
@@ -80,10 +71,8 @@ def login():
         elif role == "admin":
             redirect_page = "/admin_home"
         elif role == "director": 
-            # 正常情況下不會跑到這裡 (會被上面的 if 攔截)，但保留作為單一主任身份的預設
             redirect_page = "/director_home" 
         else:
-            # 其他角色或未知角色
             return jsonify({"success": False, "message": "無效的角色"}), 403
 
         return jsonify({"success": True, "redirect": redirect_page})
@@ -103,28 +92,19 @@ def confirm_role():
     data = request.get_json()
     selected_role = data.get('role')
 
-    # 1. 檢查 Session 狀態
-    # 必須有 user_id，且必須處於 pending_roles 待選擇狀態
     if 'user_id' not in session or 'pending_roles' not in session:
-        # 如果沒有 pending_roles，表示使用者可能直接訪問此API，或Session已過期
         return jsonify({"success": False, "message": "狀態錯誤，請重新登入"}), 403
 
-    # 2. 驗證角色選擇 (主任只能選 director 或 teacher)
     valid_ids = [r['id'] for r in session.get('pending_roles')]
     if selected_role not in valid_ids:
         return jsonify({"success": False, "message": "無效的角色選擇"}), 400
 
-    # 3. 設定最終角色並清除 pending 資訊
-    # 這是設定 session['role'] 的唯一位置
     session['role'] = selected_role
-    session.pop('pending_roles', None) # 清除待選角色清單
+    session.pop('pending_roles', None) 
 
-    # 4. 決定跳轉頁面
     if selected_role == 'director':
-        # 主任身分：跳轉到主任主頁
         redirect_page = '/director_home'
     elif selected_role == 'teacher':
-        # 指導老師身分：跳轉到指導老師主頁 (即使有班導身份，也由前端下拉選單切換)
         redirect_page = '/teacher_home' 
     else:
         return jsonify({"success": False, "message": "系統錯誤：未知的角色"}), 500
@@ -179,22 +159,18 @@ def register_student():
 @auth_bp.route('/api/switch-role', methods=['POST'])
 def switch_role():
     data = request.get_json()
-    target_role = data.get('role') # 預期為 'teacher' 或 'class_teacher'
+    target_role = data.get('role') 
 
-    # 1. 檢查基本權限
     if 'user_id' not in session or session.get('role') not in ['teacher', 'director', 'class_teacher']:
         return jsonify({"success": False, "message": "未授權或登入過期"}), 403
     
-    # 2. 檢查班導身份
     if target_role == 'class_teacher' and session.get("is_homeroom") != True:
         return jsonify({"success": False, "message": "您不具備班導師身份，無法切換"}), 403
 
-    # 3. 執行角色切換
     if target_role == 'class_teacher':
         session['role'] = 'class_teacher'
         redirect_url = url_for('users_bp.class_teacher_home')
     elif target_role == 'teacher':
-        # 切換回指導老師或主任身份
         session['role'] = 'teacher' 
         redirect_url = url_for('users_bp.teacher_home')
     else:
@@ -203,31 +179,28 @@ def switch_role():
     return jsonify({"success": True, "redirect": redirect_url})
 
 # -------------------------
-# 訪客角色選擇頁面
+# 🎯 訪客入口 (直接跳轉到學生訪客頁面，取代原有的訪客角色選擇頁面)
 # -------------------------
 @auth_bp.route("/visitor_role_selection")
 def visitor_role_selection_page():
     """
-    訪客角色選擇頁面，不需登入
+    訪客入口：清除舊 session 後，直接跳轉到學生訪客主頁。
+    這個路由是假設您的 LOGIN 介面訪客按鈕目前指向的 URL。
     """
+    session.clear() # 清除任何舊的登入資訊
     # 設定 session 為 guest
     session["role"] = "guest"
     session["username"] = "guest"
+    
+    return redirect(url_for('users_bp.student_visitor'))
 
-    # 這裡可以提供不同的訪客選項，例如 "一般訪客"、"查看課程"、"查詢公司"
-    roles = [
-        {"id": "general", "name": "一般訪客"},
-        {"id": "view_courses", "name": "查看課程"},
-        {"id": "view_companies", "name": "查詢公司"},
-    ]
-
-    return render_template("auth/visitor_role_selection.html", roles=roles)
 
 # =========================================================
 # 🧩 頁面路由
 # =========================================================
 @auth_bp.route("/login")
 def login_page():
+    # 這裡可以直接渲染 login.html (依您的要求，不修改此頁面內容)
     return render_template("auth/login.html")
 
 @auth_bp.route('/login-confirm')
