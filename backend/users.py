@@ -12,9 +12,11 @@ users_bp = Blueprint("users_bp", __name__)
 # -------------------------
 @users_bp.route('/teacher_home')
 def teacher_home():
-    # 允許 'teacher' (單一身份) 或 'director' (多身份選擇後) 進入
+    # 確保只有老師或主任身份可以進入
     if 'username' not in session or session.get('role') not in ['teacher', 'director']:
         return redirect(url_for('auth_bp.login_page'))
+        
+    # 最終導向指導老師主頁，讓用戶自行透過前端下拉選單切換班導身分
     return render_template('user_shared/teacher_home.html')
 
 # -------------------------
@@ -22,64 +24,95 @@ def teacher_home():
 # -------------------------
 @users_bp.route("/class_teacher_home")
 def class_teacher_home():
+    # 確保只有老師或主任身份可以進入
     if "username" not in session or session.get("role") not in ["teacher", "director"]:
         return redirect(url_for("auth_bp.login_page"))
 
+    # 🎯 關鍵邏輯：若沒有班導師狀態，導回其當前 active role 的主頁
     if not session.get("is_homeroom"):
-        return redirect(url_for("users_bp.teacher_home"))
+        current_role = session.get("role")
+        if current_role == 'director':
+            return redirect(url_for("users_bp.director_home")) # 主任導回主任主頁
+        else:
+            return redirect(url_for("users_bp.teacher_home")) # 老師導回指導老師主頁
 
     return render_template("user_shared/class_teacher_home.html",
                            username=session.get("username"),
-                           original_role=session.get("role"))
+                           original_role=session.get("original_role"))
 
 # -------------------------
 # API - 取得個人資料
 # -------------------------
-@users_bp.route('/api/profile', methods=['GET'])
-def get_user_profile():
-    # 訪客 (role='guest') 不應該有個人資料，但為了一致性，我們讓他們可以嘗試訪問
-    if 'user_id' not in session and session.get('role') != 'guest':
-        return jsonify({"success": False, "message": "未登入"}), 401
-    
-    # 如果是訪客，直接回傳基本資訊
-    if session.get('role') == 'guest':
-        return jsonify({"success": True, "user": {
-            "id": None, 
-            "username": "guest", 
-            "name": "訪客", 
-            "avatar_url": None, 
-            "current_role": "guest",                      
-            "original_role": "guest",            
-            "is_homeroom": False    
-        }})
+@users_bp.route("/api/profile", methods=["GET"])
+def get_profile():
+    # 🎯 修正 1: 使用 user_id 進行查詢，user_id 在登入時被設定且不會變
+    user_id = session.get("user_id") 
+    if not user_id:
+        return jsonify({"success": False, "message": "尚未登入"}), 401
 
-
-    user_id = session.get('user_id')
-    current_role = session.get('role')
+    active_role = session["role"] # 當前活躍的角色 (例如: 'teacher')
 
     conn = get_db()
     cursor = conn.cursor(dictionary=True)
     try:
-        cursor.execute("SELECT role, avatar_url, name, username, email FROM users WHERE id = %s", (user_id,))
-        user_data = cursor.fetchone()
+        # 查詢用戶基本資料 - 只使用 ID 查詢，確保取得原始 DB 資料
+        cursor.execute("""
+            SELECT u.id, u.username, u.email, u.role AS original_role, u.name,
+                   c.department, c.name AS class_name, u.class_id, u.avatar_url
+            FROM users u
+            LEFT JOIN classes c ON u.class_id = c.id
+            WHERE u.id = %s -- 修正: 只使用 user_id 篩選
+        """, (user_id,)) # 傳遞 user_id
+        user = cursor.fetchone()
 
-        if not user_data:
-            return jsonify({"success": False, "message": "用戶不存在"}), 404
+        if not user:
+            return jsonify({"success": False, "message": "使用者不存在"}), 404
+            
+        # 將 DB 中的原始 role 賦值給一個新變數
+        original_role_from_db = user.pop("original_role")
         
-        user_info = {
-            "id": user_id,
-            "username": user_data.get('username'),
-            "name": user_data.get('name'),
-            "avatar_url": user_data.get('avatar_url'),
-            "current_role": current_role,                      
-            "original_role": user_data.get('role'),            
-            "is_homeroom": session.get('is_homeroom', False)    
-        }
+        # 🎯 修正 2: 確保傳遞給前端的 user["role"] 是當前活躍的角色
+        user["role"] = active_role 
+        user["original_role"] = original_role_from_db
         
-        return jsonify({"success": True, "user": user_info})
+        # ... (學生屆數邏輯 - 保持不變)
+        if original_role_from_db == "student" and user.get("username") and len(user["username"]) >= 3:
+            user["admission_year"] = user["username"][:3]
+        else:
+            user["admission_year"] = ""
+        
+        # 🎯 修正 3: 班導狀態直接從 Session 取得，避免重複查詢
+        is_homeroom = session.get("is_homeroom", False)
+        classes = []
+        if original_role_from_db in ("teacher", "director"): # 使用原始角色判斷是否需要查詢管理的班級
+            # 查詢所有管理的班級 (無論是不是班導師)
+            cursor.execute("""
+                SELECT c.id, c.name, c.department, ct.role
+                FROM classes c
+                JOIN classes_teacher ct ON c.id = ct.class_id
+                WHERE ct.teacher_id = %s
+            """, (user["id"],))
+            classes = cursor.fetchall()
+            user["classes"] = classes # 傳遞所有班級資料
+            # **(原程式碼中重複查詢 is_homeroom 的邏輯已被 session.get("is_homeroom") 取代)**
 
+        user["is_homeroom"] = is_homeroom # 傳遞班導師狀態
+        user["email"] = user["email"] or ""
+
+        # 如果是老師/主任，且是班導師，且有多班級，拼成一個字串顯示在「管理班級」
+        if active_role in ("teacher", "director") and is_homeroom and classes:
+            class_names = [f"{c['department'].replace('管科', '')}{c['name']}" for c in classes]
+            user["class_display_name"] = "、".join(class_names)
+        elif original_role_from_db == "student":
+            # 學生班級顯示
+            dep_short = user['department'].replace("管科", "") if user['department'] else ""
+            user["class_display_name"] = f"{dep_short}{user['class_name'] or ''}"
+        else:
+            user["class_display_name"] = ""
+            
+        return jsonify({"success": True, "user": user})
     except Exception as e:
-        current_app.logger.error(f"Error fetching profile: {e}")
+        print("❌ 取得個人資料錯誤:", e)
         return jsonify({"success": False, "message": "伺服器錯誤"}), 500
     finally:
         cursor.close()
@@ -105,7 +138,7 @@ def save_profile():
 
     role_map = {
         "學生": "student",
-        "教師": "teacher",
+        "指導老師": "teacher",
         "主任": "director",
         "科助": "ta",
         "管理員": "admin"
@@ -144,7 +177,7 @@ def save_profile():
         else:
             cursor.execute(
                 "UPDATE users SET class_id=NULL WHERE id=%s",
-                (user_id)
+                (user_id,)
             )
 
         is_homeroom = False
@@ -316,7 +349,8 @@ def director_home():
     companies = cursor.fetchall()
     cursor.close()
     conn.close()
-
+    
+    # 🎯 確認：此處直接渲染主任主頁，不執行任何班導師跳轉邏輯。
     return render_template("user_shared/director_home.html", companies=companies)
 
 # 科助

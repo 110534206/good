@@ -295,19 +295,16 @@
       </div>
       <div class="top-bar-right">
         <a href="/profile">
-        <img src="{{ url_for('static', filename='images/avatar.png') }}" alt="頭像" id="login-avatar" />
+          <img src="{{ url_for('static', filename='images/avatar.png') }}" alt="頭像" id="login-avatar" />
         </a>
         <div class="dropdown" style="position: relative;">
           <button id="accountDropdownBtn" class="btn-link" aria-expanded="false">帳號 ▾</button>
           <div id="accountDropdownMenu" class="dropdown-menu"
             style="position:absolute; right:0; top:120%; background:#fff; border:1px solid #ccc; border-radius:8px; padding:6px; min-width:180px; display:none; box-shadow:0 4px 12px rgba(0,0,0,.12);">
             <a href="/profile" class="btn-link" style="display:block; border:none; margin:4px 0;">個人資料</a>
-            {% if original_role == 'teacher' %}
+            {% if original_role in ['teacher', 'director'] %}
             <a id="toTeacherLink" href="/teacher_home" class="btn-link"
-              style="display:block; border:none; margin:4px 0;">切換老師身分</a>
-            {% elif original_role == 'director' %}
-            <a id="toDirectorLink" href="/director_home" class="btn-link"
-              style="display:block; border:none; margin:4px 0;">切換主任身分</a>
+              style="display:block; border:none; margin:4px 0;">切換指導老師身分</a>
             {% endif %}
             <a href="/login" class="btn-link" style="display:block; border:none; margin:4px 0;">登出</a>
           </div>
@@ -341,10 +338,10 @@
         <a href="/admission results">查看結果</a>
       </div>
       <div class="card">
-          <h3>建立實習機會</h3>
-          <p>新增並上傳實習公司資料。</p>
-          <a href="/upload_company">上傳實習名單</a>
-        </div>
+        <h3>建立實習機會</h3>
+        <p>新增並上傳實習公司資料。</p>
+        <a href="/upload_company">上傳實習名單</a>
+      </div>
       <div class="card" onclick="location.href='/notifications'">
         <h3>通知</h3>
         <p>接收來自學生與平台的最新消息。</p>
@@ -366,7 +363,7 @@
     <a href="/notifications">通知</a>
   </nav>
 
- <!-- 選單開關邏輯 -->
+  <!-- 選單開關邏輯 -->
   <script>
     const menuBtn = document.getElementById("menu-btn");
     const sideMenu = document.getElementById("side-menu");
@@ -447,7 +444,7 @@
         const link = document.getElementById('toHomeroomLink');
         if (link) link.style.display = 'block';
       }
-    }).catch(() => {});
+    }).catch(() => { });
   </script>
   <!-- 頁尾空間 -->
   <div style="height: 85px;"></div>
