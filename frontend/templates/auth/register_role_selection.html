@@ -30,36 +30,27 @@
       margin-bottom: 30px;
       color: #222;
     }
-    /* 模仿 login-confirm.html 的按鈕樣式 */
     .role-button {
       background-color: #3c91e6;
       color: white;
       font-size: 25px;
-      font-weight: 600;
-      padding: 15px 30px;
+      font-weight: bold;
       border: none;
-      border-radius: 5px;
+      border-radius: 10px;
+      padding: 20px;
+      width: 350px;
       cursor: pointer;
-      margin: 10px;
-      width: 80%; /* 讓按鈕寬一點 */
-      max-width: 300px;
-      transition: background-color 0.3s ease;
-      display: block; /* 讓按鈕垂直排列 */
-      margin: 15px auto; /* 居中 */
+      transition: background-color 0.3s ease, transform 0.2s ease;
+      margin: 10px auto;
+      display: block;
     }
     .role-button:hover {
       background-color: #2b74c2;
+      transform: translateY(-3px);
     }
-    .role-button.loading {
-      opacity: 0.7;
-      cursor: not-allowed;
-    }
-
-    /* 確保按鈕群組在中間 */
-    .role-buttons {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
+    .loading {
+      opacity: 0.6;
+      pointer-events: none;
     }
   </style>
 </head>
