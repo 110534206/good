@@ -815,3 +815,74 @@ def export_preferences_pdf():
     finally:
         cursor.close()
         conn.close()
+
+# -------------------------
+# 指導老師查看選擇其公司學生列表
+# -------------------------
+@preferences_bp.route('/admission_results')
+def admission_results_page():
+    if 'username' not in session or session.get('role') != 'teacher':
+        return redirect(url_for('auth_bp.login_page'))
+
+    teacher_id = session.get('user_id')
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+
+    try:
+        # 找出該老師所屬公司
+        cursor.execute("""
+            SELECT ic.id AS company_id, ic.company_name
+            FROM internship_companies ic
+            WHERE ic.teacher_id = %s
+        """, (teacher_id,))
+        companies = cursor.fetchall()
+
+        if not companies:
+            return render_template(
+                'preferences/admission_results.html',
+                companies=[],
+                student_data={},
+                message="目前尚未綁定任何實習公司。"
+            )
+
+        # 找出選擇這些公司的學生
+        company_ids = tuple([c['company_id'] for c in companies])
+        cursor.execute(f"""
+            SELECT 
+                u.name AS student_name,
+                u.username AS student_number,
+                sp.preference_order,
+                sp.submitted_at,
+                ic.company_name,
+                ij.title AS job_title
+            FROM student_preferences sp
+            JOIN users u ON sp.student_id = u.id
+            JOIN internship_companies ic ON sp.company_id = ic.id
+            JOIN internship_jobs ij ON sp.job_id = ij.id
+            WHERE sp.company_id IN {company_ids}
+            ORDER BY ic.company_name, sp.preference_order, u.name
+        """)
+        rows = cursor.fetchall()
+
+        # 整理成 {公司名稱: [學生資料...]} 結構
+        student_data = {}
+        for c in companies:
+            cname = c['company_name']
+            student_data[cname] = [
+                r for r in rows if r['company_name'] == cname
+            ]
+
+        return render_template(
+            'preferences/admission_results.html',
+            companies=companies,
+            student_data=student_data,
+            message=None
+        )
+
+    except Exception as e:
+        print("取得指導老師學生列表錯誤：", e)
+        return "伺服器錯誤", 500
+
+    finally:
+        cursor.close()
+        conn.close()
