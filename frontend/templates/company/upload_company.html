@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="zh-Hant">
+
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -154,7 +155,8 @@
     }
 
     /* 歷史紀錄表格 */
-    table thead th, table td {
+    table thead th,
+    table td {
       text-align: center;
       vertical-align: middle;
     }
@@ -184,52 +186,59 @@
   </div>
 
   <div class="container my-5">
-    <!-- 上傳區 -->
+  <!-- 上傳區 -->
+  <form id="uploadForm" enctype="multipart/form-data">
+    <!-- 🔹 Word 檔案上傳 -->
+    <div class="card p-4 mb-4">
+      <h4 class="text-center mb-4 text-primary fw-bold">上傳實習公司資料表</h4>
+      <div class="mb-3">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <label class="form-label fw-bold mb-0">上傳公司資料表 (.docx)<span class="text-danger">*</span></label>
+          <a href="/download_company_template" class="btn btn-template btn-sm" target="_blank">下載範本</a>
+        </div>
+        <input type="file" name="company_doc" class="form-control" accept=".docx,.doc" required>
+      </div>
+    </div>
+
+    <!-- 🔹 公司名稱 -->
     <div class="mb-4">
-          <h4 class="text-center mb-4">填寫實習公司資料</h4>
-          <label for="company_name" class="form-label fw-bold">公司名稱<span class="text-danger">*</span></label>
-          <input type="text" id="company_name" name="company_name" class="form-control" required placeholder="請輸入公司名稱">
-        </div>
-        <div id="jobsContainer" class="mb-4"></div>
-        <button type="button" class="btn btn-outline-success w-100 mb-3" id="addJobBtn">+ 新增職缺</button>
-    <div class="card p-4 mb-5">
-      <form id="uploadForm" enctype="multipart/form-data">
-        <div class="mb-4">
-          <div class="d-flex justify-content-between align-items-center mb-2">
-            <label class="form-label fw-bold mb-0">上傳公司資料表 (.docx)<span class="text-danger">*</span></label>
-            <a href="/download_company_template" class="btn btn-template btn-sm" target="_blank">下載範本</a>
-          </div>
-          <input type="file" name="company_doc" class="form-control" accept=".docx,.doc" required>
-        </div>
-
-        
-        <button type="submit" class="btn btn-primary w-100" id="submitBtn">
-          <span id="btnText">送出並上傳</span>
-          <div id="spinner" class="spinner-border spinner-border-sm ms-2 d-none"></div>
-        </button>
-      </form>
-      <div id="msgBox" class="mt-4"></div>
+      <label for="company_name" class="form-label fw-bold">公司名稱<span class="text-danger">*</span></label>
+      <input type="text" id="company_name" name="company_name" class="form-control" required placeholder="請輸入公司名稱">
     </div>
 
-    <!-- 歷史紀錄區 -->
-    <div class="card p-4">
-      <h5 class="mb-3 fw-bold text-primary">上傳紀錄</h5>
-      <table class="table table-bordered table-hover align-middle">
-        <thead class="table-light">
-          <tr>
-            <th>上傳時間</th>
-            <th>公司名稱</th>
-            <th>檔案名稱</th>
-            <th>審核狀態</th>
-            <th>操作</th>
-          </tr>
-        </thead>
-        <tbody id="historyTableBody">
-          <tr><td colspan="5" class="text-muted text-center">載入中...</td></tr>
-        </tbody>
-      </table>
-    </div>
+    <!-- 🔹 職缺區 -->
+    <div id="jobsContainer" class="mb-4"></div>
+    <button type="button" class="btn btn-outline-success w-100 mb-3" id="addJobBtn">+ 新增職缺</button>
+
+    <!-- 🔹 送出按鈕 -->
+    <button type="submit" class="btn btn-primary w-100" id="submitBtn">
+      <span id="btnText">送出並上傳</span>
+      <div id="spinner" class="spinner-border spinner-border-sm ms-2 d-none"></div>
+    </button>
+
+    <!-- 🔹 上傳訊息區 -->
+    <div id="msgBox" class="mt-4"></div>
+  </form>
+
+  <!-- 🔹 歷史紀錄區 -->
+  <div class="card p-4 mt-5">
+    <h5 class="mb-3 fw-bold text-primary">上傳紀錄</h5>
+    <table class="table table-bordered table-hover align-middle">
+      <thead class="table-light">
+        <tr>
+          <th>上傳時間</th>
+          <th>公司名稱</th>
+          <th>檔案名稱</th>
+          <th>審核狀態</th>
+          <th>操作</th>
+        </tr>
+      </thead>
+      <tbody id="historyTableBody">
+        <tr><td colspan="5" class="text-muted text-center">載入中...</td></tr>
+      </tbody>
+    </table>
   </div>
+</div>
 
   <!-- 側邊選單 -->
   <nav id="side-menu">
@@ -242,20 +251,20 @@
   </nav>
 
   <script>
-  // === 側邊選單控制 ===
-  document.getElementById('menu-btn').addEventListener('click', () => {
-    document.getElementById('side-menu').classList.add('open');
-  });
-  document.getElementById('close-btn').addEventListener('click', () => {
-    document.getElementById('side-menu').classList.remove('open');
-  });
+    // === 側邊選單控制 ===
+    document.getElementById('menu-btn').addEventListener('click', () => {
+      document.getElementById('side-menu').classList.add('open');
+    });
+    document.getElementById('close-btn').addEventListener('click', () => {
+      document.getElementById('side-menu').classList.remove('open');
+    });
 
-  // === 職缺新增區 ===
-  let jobIndex = 0;
-  const jobsContainer = document.getElementById('jobsContainer');
+    // === 職缺新增區 ===
+    let jobIndex = 0;
+    const jobsContainer = document.getElementById('jobsContainer');
 
-  function createJobTemplate(i) {
-    return `
+    function createJobTemplate(i) {
+      return `
       <div class="card p-3 mb-3 border-info border-2 job-item">
         <div class="d-flex justify-content-between align-items-center mb-2">
           <strong class="text-primary">職缺 #${i + 1}</strong>
@@ -270,101 +279,100 @@
           <input type="number" name="job[${i}][slots]" class="form-control" value="1" min="1" required>
         </div>
       </div>`;
-  }
+    }
 
-  function addJob() {
-    jobsContainer.insertAdjacentHTML("beforeend", createJobTemplate(jobIndex));
-    jobIndex++;
-  }
+    function addJob() {
+      jobsContainer.insertAdjacentHTML("beforeend", createJobTemplate(jobIndex));
+      jobIndex++;
+    }
 
-  document.addEventListener("DOMContentLoaded", () => {
-    addJob();
-    document.getElementById("addJobBtn").addEventListener("click", addJob);
-    loadUploadedCompanies();
-  });
+    document.addEventListener("DOMContentLoaded", () => {
+      addJob();
+      document.getElementById("addJobBtn").addEventListener("click", addJob);
+      loadUploadedCompanies();
+    });
 
-// ✅ 新增：事件代理來處理動態新增的職缺移除按鈕
-    jobsContainer.addEventListener('click', function(e) {
+    // ✅ 新增：事件代理來處理動態新增的職缺移除按鈕
+    jobsContainer.addEventListener('click', function (e) {
       if (e.target.classList.contains('remove-job-btn') && !e.target.disabled) {
         e.target.closest('.job-item').remove();
       }
     });
 
-  // === 上傳處理 ===
-  document.getElementById("uploadForm").addEventListener("submit", async e => {
-    e.preventDefault();
-    const btn = document.getElementById("submitBtn");
-    const text = document.getElementById("btnText");
-    const spinner = document.getElementById("spinner");
-    const msg = document.getElementById("msgBox");
+    // === 上傳處理 ===
+    document.getElementById("uploadForm").addEventListener("submit", async e => {
+      e.preventDefault();
+      const btn = document.getElementById("submitBtn");
+      const text = document.getElementById("btnText");
+      const spinner = document.getElementById("spinner");
+      const msg = document.getElementById("msgBox");
 
-    btn.disabled = true;
-    text.textContent = "上傳中...";
-    spinner.classList.remove("d-none");
-    msg.innerHTML = "";
+      btn.disabled = true;
+      text.textContent = "上傳中...";
+      spinner.classList.remove("d-none");
+      msg.innerHTML = "";
 
-    try {
-      const res = await fetch("/api/upload_company", {
-        method: "POST",
-        body: new FormData(e.target)
-      });
-      const data = await res.json();
+      try {
+        const res = await fetch("/api/upload_company", {
+          method: "POST",
+          body: new FormData(e.target)
+        });
+        const data = await res.json();
 
-      if (data.success) {
-        msg.innerHTML = `<div class="alert alert-success">${data.message}</div>`;
-        e.target.reset();
-        jobsContainer.innerHTML = "";
-        jobIndex = 0;
-        addJob();
-        loadUploadedCompanies(); // ✅ 上傳成功後重新載入紀錄
-      } else {
-        msg.innerHTML = `<div class="alert alert-danger">${data.message}</div>`;
+        if (data.success) {
+          msg.innerHTML = `<div class="alert alert-success">${data.message}</div>`;
+          e.target.reset();
+          jobsContainer.innerHTML = "";
+          jobIndex = 0;
+          addJob();
+          loadUploadedCompanies(); // ✅ 上傳成功後重新載入紀錄
+        } else {
+          msg.innerHTML = `<div class="alert alert-danger">${data.message}</div>`;
+        }
+      } catch (err) {
+        console.error("上傳錯誤:", err);
+        msg.innerHTML = `<div class="alert alert-danger">伺服器錯誤或無回應。</div>`;
+      } finally {
+        btn.disabled = false;
+        text.textContent = "送出並上傳";
+        spinner.classList.add("d-none");
       }
-    } catch (err) {
-      console.error("上傳錯誤:", err);
-      msg.innerHTML = `<div class="alert alert-danger">伺服器錯誤或無回應。</div>`;
-    } finally {
-      btn.disabled = false;
-      text.textContent = "送出並上傳";
-      spinner.classList.add("d-none");
-    }
-  });
+    });
 
-  // === 上傳紀錄載入 ===
-  async function loadUploadedCompanies() {
-    const tbody = document.getElementById('historyTableBody');
-    tbody.innerHTML = `<tr><td colspan="5" class="text-center text-muted">載入中...</td></tr>`;
+    // === 上傳紀錄載入 ===
+    async function loadUploadedCompanies() {
+      const tbody = document.getElementById('historyTableBody');
+      tbody.innerHTML = `<tr><td colspan="5" class="text-center text-muted">載入中...</td></tr>`;
 
-    try {
-      const res = await fetch("/api/get_my_companies");
-      const data = await res.json();
+      try {
+        const res = await fetch("/api/get_my_companies");
+        const data = await res.json();
 
-      if (res.status === 403) {
-        tbody.innerHTML = `<tr><td colspan="5" class="text-center text-danger">請先登入以查看紀錄</td></tr>`;
-        return;
-      }
+        if (res.status === 403) {
+          tbody.innerHTML = `<tr><td colspan="5" class="text-center text-danger">請先登入以查看紀錄</td></tr>`;
+          return;
+        }
 
-      if (!data.success || !data.companies || data.companies.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="5" class="text-center text-muted">尚無上傳紀錄</td></tr>`;
-        return;
-      }
+        if (!data.success || !data.companies || data.companies.length === 0) {
+          tbody.innerHTML = `<tr><td colspan="5" class="text-center text-muted">尚無上傳紀錄</td></tr>`;
+          return;
+        }
 
-      tbody.innerHTML = data.companies.map((r, idx) => {
-        const displayTime = r.upload_time || formatDateTime(r.submitted_at);
-        const filename = r.filename || 'N/A';
-        const jobDisplay = r.job_count !== undefined ? `${r.job_count} 個職缺` : 'N/A';
+        tbody.innerHTML = data.companies.map((r, idx) => {
+          const displayTime = r.upload_time || formatDateTime(r.submitted_at);
+          const filename = r.filename || 'N/A';
+          const jobDisplay = r.job_count !== undefined ? `${r.job_count} 個職缺` : 'N/A';
 
-        return `
+          return `
           <tr>
             <td>${displayTime}</td>
             <td>${r.company_name || '-'}</td>
             <td>${filename}</td>
             <td>
-              <span class="status-badge ${
-                r.status === 'approved' ? 'bg-success text-white'
-                : r.status === 'rejected' ? 'bg-danger text-white'
+              <span class="status-badge ${r.status === 'approved' ? 'bg-success text-white'
+              : r.status === 'rejected' ? 'bg-danger text-white'
                 : 'bg-warning text-dark'
-              }">
+            }">
                 ${statusText(r.status)}
               </span>
             </td>
@@ -374,53 +382,54 @@
             </td>
           </tr>
         `;
-      }).join("");
+        }).join("");
 
-    } catch (error) {
-      console.error("載入歷史紀錄發生錯誤:", error);
-      tbody.innerHTML = `<tr><td colspan="5" class="text-center text-danger">載入失敗，請稍後再試。</td></tr>`;
+      } catch (error) {
+        console.error("載入歷史紀錄發生錯誤:", error);
+        tbody.innerHTML = `<tr><td colspan="5" class="text-center text-danger">載入失敗，請稍後再試。</td></tr>`;
+      }
     }
-  }
 
-  // === 狀態文字轉換 ===
-  function statusText(s) {
-    if (s === "approved") return "已通過";
-    if (s === "rejected") return "已退回";
-    if (s === "pending") return "待審核";
-    return s || "-";
-  }
-
-  async function deleteCompany(id) {
-  if (!confirm("確定要刪除此上傳紀錄嗎？此動作無法復原。")) return;
-
-  try {
-    const res = await fetch(`/api/delete_company/${id}`, { method: "DELETE" });
-    const data = await res.json();
-
-    if (data.success) {
-      alert("刪除成功！");
-      loadUploadedCompanies(); // ✅ 重新載入表格
-    } else {
-      alert("刪除失敗：" + (data.message || "未知錯誤"));
+    // === 狀態文字轉換 ===
+    function statusText(s) {
+      if (s === "approved") return "已通過";
+      if (s === "rejected") return "已退回";
+      if (s === "pending") return "待審核";
+      return s || "-";
     }
-  } catch (err) {
-    console.error("刪除公司資料錯誤:", err);
-    alert("伺服器錯誤，請稍後再試。");
-  }
-}
 
-function formatDateTime(dt) {
-  if (!dt) return '-';
-  const d = new Date(dt);
-  if (isNaN(d)) return dt; 
-  const yyyy = d.getFullYear();
-  const mm = String(d.getMonth() + 1).padStart(2, '0');
-  const dd = String(d.getDate()).padStart(2, '0');
-  const hh = String(d.getHours()).padStart(2, '0');
-  const mi = String(d.getMinutes()).padStart(2, '0');
-  return `${yyyy}-${mm}-${dd} ${hh}:${mi}`;
-}
+    async function deleteCompany(id) {
+      if (!confirm("確定要刪除此上傳紀錄嗎？此動作無法復原。")) return;
 
-</script>
+      try {
+        const res = await fetch(`/api/delete_company/${id}`, { method: "DELETE" });
+        const data = await res.json();
+
+        if (data.success) {
+          alert("刪除成功！");
+          loadUploadedCompanies(); // ✅ 重新載入表格
+        } else {
+          alert("刪除失敗：" + (data.message || "未知錯誤"));
+        }
+      } catch (err) {
+        console.error("刪除公司資料錯誤:", err);
+        alert("伺服器錯誤，請稍後再試。");
+      }
+    }
+
+    function formatDateTime(dt) {
+      if (!dt) return '-';
+      const d = new Date(dt);
+      if (isNaN(d)) return dt;
+      const yyyy = d.getFullYear();
+      const mm = String(d.getMonth() + 1).padStart(2, '0');
+      const dd = String(d.getDate()).padStart(2, '0');
+      const hh = String(d.getHours()).padStart(2, '0');
+      const mi = String(d.getMinutes()).padStart(2, '0');
+      return `${yyyy}-${mm}-${dd} ${hh}:${mi}`;
+    }
+
+  </script>
 </body>
+
 </html>

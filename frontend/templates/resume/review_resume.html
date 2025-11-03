@@ -222,7 +222,7 @@
 </head>
 
 <body>
-   <!-- 頂部欄 -->
+  <!-- 頂部欄 -->
   <div class="top-bar">
     <div class="container">
       <div class="top-bar-left">
@@ -236,10 +236,13 @@
         </a>
         <div class="dropdown" style="position: relative;">
           <button id="accountDropdownBtn" class="btn-link" aria-expanded="false">帳號 ▾</button>
-          <div id="accountDropdownMenu" class="dropdown-menu" style="position:absolute; right:0; top:120%; background:#fff; border:1px solid #ccc; border-radius:8px; padding:6px; min-width:200px; display:none; box-shadow:0 4px 12px rgba(0,0,0,.12);">
-            <a href="/class_teacher_home" class="btn-link" style="display:block; border:none; margin:4px 0;">返回首頁</a>
-            <a id="toDirectorHome" href="/director_home" class="btn-link" style="display:none; border:none; margin:4px 0;">切換主任身分</a>
-            <a id="toTeacherHome" href="/teacher_home" class="btn-link" style="display:none; border:none; margin:4px 0;">切換教師身分</a>
+          <div id="accountDropdownMenu" class="dropdown-menu"
+            style="position:absolute; right:0; top:120%; background:#fff; border:1px solid #ccc; border-radius:8px; padding:6px; min-width:200px; display:none; box-shadow:0 4px 12px rgba(0,0,0,.12);">
+            <a href="{{ current_home_url }}" class="btn-link" style="display:block; border:none; margin:4px 0;">返回首頁</a>
+            <a id="toDirectorHome" href="/director_home" class="btn-link"
+              style="display:none; border:none; margin:4px 0;">切換主任身分</a>
+            <a id="toTeacherHome" href="/teacher_home" class="btn-link"
+              style="display:none; border:none; margin:4px 0;">切換教師身分</a>
             <a href="/login" class="btn-link" style="display:block; border:none; margin:4px 0;">登出</a>
           </div>
         </div>
@@ -247,57 +250,57 @@
     </div>
   </div>
 
-    <div class="container my-5 pt-1">
-      <div class="card shadow-sm p-4">
-        <h4 class="mb-4 text-center">審核學生履歷</h4>
-        <!-- 篩選 + 搜尋 -->
-        <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
-          <div class="d-flex gap-2 flex-wrap">
-            <select id="departmentFilter" class="form-select form-select-sm w-auto">
-              <option value="">所有科別</option>
-            </select>
-            <select id="classFilter" class="form-select form-select-sm w-auto">
-              <option value="">所有班級</option>
-            </select>
-            <select id="statusFilter" class="form-select form-select-sm w-auto">
-              <option value="">所有狀態</option>
-              <option value="uploaded">待審查</option>
-              <option value="approved">完成</option>
-              <option value="rejected">退件</option>
-            </select>
-          </div>
-          <input type="text" id="searchBox" class="form-control form-control-sm w-auto" placeholder="搜尋帳號/檔案" />
+  <div class="container my-5 pt-1">
+    <div class="card shadow-sm p-4">
+      <h4 class="mb-4 text-center">審核學生履歷</h4>
+      <!-- 篩選 + 搜尋 -->
+      <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+        <div class="d-flex gap-2 flex-wrap">
+          <select id="departmentFilter" class="form-select form-select-sm w-auto">
+            <option value="">所有科別</option>
+          </select>
+          <select id="classFilter" class="form-select form-select-sm w-auto">
+            <option value="">所有班級</option>
+          </select>
+          <select id="statusFilter" class="form-select form-select-sm w-auto">
+            <option value="">所有狀態</option>
+            <option value="uploaded">待審查</option>
+            <option value="approved">完成</option>
+            <option value="rejected">退件</option>
+          </select>
         </div>
-
-        <!-- 表格 -->
-        <div class="table-responsive">
-          <table class="table table-hover align-middle">
-            <thead>
-              <tr>
-                <th>學生帳號</th>
-                <th>姓名</th>
-                <th>上傳時間</th>
-                <th>檔案名稱</th>
-                <th>狀態</th>
-                <th>老師留言</th>
-                <th>學生備註</th>
-                <th>操作</th>
-              </tr>
-            </thead>
-            <tbody id="resumeTableBody">
-              <tr>
-                <td colspan="8" class="text-muted text-center">載入中...</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-
-        <!-- 分頁器 -->
-        <nav>
-          <ul class="pagination justify-content-center mt-3" id="pagination"></ul>
-        </nav>
+        <input type="text" id="searchBox" class="form-control form-control-sm w-auto" placeholder="搜尋帳號/檔案" />
       </div>
+
+      <!-- 表格 -->
+      <div class="table-responsive">
+        <table class="table table-hover align-middle">
+          <thead>
+            <tr>
+              <th>學生帳號</th>
+              <th>姓名</th>
+              <th>上傳時間</th>
+              <th>檔案名稱</th>
+              <th>狀態</th>
+              <th>老師留言</th>
+              <th>學生備註</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody id="resumeTableBody">
+            <tr>
+              <td colspan="8" class="text-muted text-center">載入中...</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- 分頁器 -->
+      <nav>
+        <ul class="pagination justify-content-center mt-3" id="pagination"></ul>
+      </nav>
     </div>
+  </div>
 
   <!-- Modal 區塊 (留言/備註) -->
   <div class="modal fade" id="commentModal" tabindex="-1" aria-hidden="true">
@@ -332,7 +335,7 @@
     </div>
   </div>
 
-   <!-- 側邊選單 -->
+  <!-- 側邊選單 -->
   <nav id="side-menu" aria-hidden="true" role="navigation" aria-label="功能選單">
     <button id="close-btn" aria-label="關閉功能選單">×</button>
     <h2>功能選單</h2>

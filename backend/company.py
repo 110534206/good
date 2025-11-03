@@ -62,6 +62,10 @@ def upload_company():
         if 'user_id' not in session:
             return jsonify({"success": False, "message": "請先登入"}), 403
 
+        role = session.get('role')
+        if role not in ['teacher', 'director']:
+           return jsonify({"success": False, "message": "無權限操作此功能"}), 403
+
         user_id = session['user_id']
         company_name = request.form.get("company_name", "").strip()
         upload_dir = ensure_upload_folder()

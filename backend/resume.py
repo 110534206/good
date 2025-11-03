@@ -295,8 +295,7 @@ def review_resume(resume_id):
 
         target_user_id = resume['user_id']
 
-        # 權限 ： teacher / director / admin 可審核； ta 不能審核
-        if role == "teacher":
+        if role in ["teacher"]:
             if not teacher_manages_class(cursor, user_id, resume['class_id']):
                 return jsonify({"success": False, "message": "沒有權限審核這份履歷"}), 403
 
@@ -606,17 +605,16 @@ def get_class_resumes():
     cursor = conn.cursor(dictionary=True)
 
     try:
-        resumes = [] # 初始化結果列表
+        resumes = []  # 初始化結果列表
         sql_query = ""
         sql_params = tuple()
-        
+
         print(f"🔍 [DEBUG] get_class_resumes called - user_id: {user_id}, role: {role}")
-        
+
         # ------------------------------------------------------------------
-        # 1. 班導 / 教師 (role == "teacher") 
+        # 1. 班導 / 教師 (role == "teacher" or "class_teacher")
         # ------------------------------------------------------------------
-        if role == "teacher":
-            # 這是標準的 SQL 邏輯：只看自己帶的班級（透過 classes_teacher 關聯）
+        if role in ["teacher", "class_teacher"]:
             sql_query = """
                 SELECT 
                     r.id,
@@ -638,16 +636,13 @@ def get_class_resumes():
                 ORDER BY c.name, u.name
             """
             sql_params = (user_id,)
-            
-            # 先執行標準查詢
+
             cursor.execute(sql_query, sql_params)
             resumes = cursor.fetchall()
 
-            # 如果班導沒有在 classes_teacher 表中找到對應記錄，則返回空結果
             if not resumes:
-                print(f"⚠️ [DEBUG] Teacher user {user_id} has no classes assigned in classes_teacher. Returning empty result.")
-                resumes = []  # 返回空結果，不應該看到任何履歷
-
+                print(f"⚠️ [DEBUG] Teacher/class_teacher user {user_id} has no assigned classes.")
+                resumes = []
 
         # ------------------------------------------------------------------
         # 2. 主任 (role == "director")
@@ -657,15 +652,8 @@ def get_class_resumes():
             # - mode=director → 同科系全部
             # - 其他/預設 → 僅自己帶的班級（班導模式）
             if mode == "director":
-                cursor.execute("""
-                    SELECT DISTINCT c.department
-                    FROM classes c
-                    JOIN classes_teacher ct ON ct.class_id = c.id
-                    WHERE ct.teacher_id = %s
-                    LIMIT 1
-                """, (user_id,))
-                dept = cursor.fetchone()
-                department = dept.get("department") if dept else None
+                # 取得主任所屬科系（使用 helper）
+                department = get_director_department(cursor, user_id)
 
                 if not department:
                     # 沒有設定科系 → 不顯示任何資料，以免越權
@@ -716,15 +704,12 @@ def get_class_resumes():
                     ORDER BY c.name, u.name
                 """
                 sql_params = (user_id,)
-            # ------------------------------------------------------------------
-            # 【上次修改處結束】
-            # ------------------------------------------------------------------
 
             # 執行 SQL 查詢 (主任邏輯在上面已完成查詢或準備好查詢字串)
             if sql_query:
                 cursor.execute(sql_query, sql_params)
                 resumes = cursor.fetchall()
-            
+
         # ------------------------------------------------------------------
         # 3. TA 或 Admin (role == "ta" or "admin")
         # ------------------------------------------------------------------

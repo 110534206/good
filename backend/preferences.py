@@ -248,7 +248,7 @@ def select_role():
 # -------------------------
 @preferences_bp.route('/review_preferences')
 def review_preferences():
-    if 'username' not in session or session.get('role') not in ['teacher', 'director']:
+    if 'username' not in session or session.get('role') not in ['teacher', 'director', "class_teacher"]:
         return redirect(url_for('auth_bp.login_page'))
 
     user_id = session.get('user_id')

@@ -8,7 +8,7 @@ import re
 users_bp = Blueprint("users_bp", __name__)
 
 # -------------------------
-# 老師首頁 (指導老師)
+# 指導老師首頁
 # -------------------------
 @users_bp.route('/teacher_home')
 def teacher_home():
@@ -28,6 +28,7 @@ def teacher_home():
         session['original_role'] = 'director' if session.get('role') == 'director' else 'teacher'
 
     return render_template('user_shared/teacher_home.html')
+
 
 # -------------------------
 # 班導首頁
