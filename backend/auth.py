@@ -297,8 +297,8 @@ def visitor_entry():
     session['is_visitor'] = True
     session['user_id'] = 0 # 訪客ID設為0
 
-    # 步驟 3: 導向 /student_visitor 頁面 (在 users_bp 中)
-    return redirect(url_for("users_bp.student_visitor_page"))
+    # 步驟 3: 導向 /visitor 頁面 (在 users_bp 中)
+    return redirect(url_for("users_bp.visitor_page"))
 
 # =========================================================
 # 🧩 頁面路由
