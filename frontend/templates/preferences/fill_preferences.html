@@ -11,8 +11,26 @@
     <style>
         body {
             font-family: "Noto Sans TC", sans-serif;
-            background-color: #f8f9fa;
-            padding: 30px;
+            background: #f7f9fc;
+            margin: 0;
+            padding: 0;
+        }
+
+        header {
+            background: #0454a3;
+            color: white;
+            padding: 1rem 2rem;
+            text-align: center;
+            font-size: 1.5rem;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 2rem auto;
+            background: white;
+            padding: 2rem;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
         }
 
         h2 {
@@ -29,7 +47,7 @@
             background-color: #ffffff;
             border-radius: 1rem;
             box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
-            padding: 30px;
+            padding: 20px;
             margin-bottom: 30px;
             position: relative;
             transition: transform 0.3s ease, box-shadow 0.3s ease;
@@ -141,11 +159,9 @@
 </head>
 
 <body>
-    <div class="container">
-        <div class="text-center">
-            <h2><i class="bi bi-person-workspace me-2"></i>實習公司志願序填寫</h2>
-        </div>
+    <header>實習公司志願序填寫</header>
 
+    <div class="container">
         {% if preview %}
         <div class="alert alert-warning text-center" role="alert" style="max-width: 900px;">
             <i class="bi bi-eye-fill me-2"></i>
@@ -401,4 +417,5 @@
         });
     </script>
 </body>
+
 </html>

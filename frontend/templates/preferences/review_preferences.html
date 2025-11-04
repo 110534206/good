@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="zh-Hant">
+
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -13,140 +14,19 @@
       padding: 0;
     }
 
-    body {
-      background-color: #ffffff;
-      font-family: "Noto Sans TC", sans-serif;
-      margin-top: 40px;
-    }
-
-    /* 頂端列 */
-    .top-bar {
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 60px;
-      background-color: #fff;
-      z-index: 1100;
-      display: flex;
-      align-items: center;
-    }
-
-    .top-bar>.container {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 0 0.5rem;
-      height: 100%;
-      gap: 30px;
-    }
-
-    .top-bar-left #menu-btn {
-      width: 30px;
-      height: 22px;
-      cursor: pointer;
-      display: flex;
-      flex-direction: column;
-      justify-content: space-between;
-    }
-
-    .top-bar-left #menu-btn span {
-      height: 4px;
-      background-color: #333;
-      border-radius: 2px;
-    }
-
-    .top-bar-right {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      font-weight: bold;
-    }
-
-    .top-bar-right .btn-link {
-      color: #0066cc;
-      background-color: transparent;
-      border: 1.5px solid #0066cc;
-      padding: 0.3rem 0.7rem;
-      border-radius: 6px;
-      text-decoration: none;
-      transition: background-color 0.3s ease, color 0.3s ease;
-      font-size: 0.9rem;
-    }
-
-    .top-bar-right .btn-link:hover {
-      background-color: #0066cc;
+    header {
+      background: #0454a3;
       color: white;
-    }
-
-    .top-bar-right #login-avatar {
-      width: 40px;
-      height: 40px;
-      border-radius: 50%;
-      object-fit: cover;
-      cursor: pointer;
-      margin-top: 6px;
-    }
-    
-    /* 側邊選單 */
-    #side-menu {
-      position: fixed;
-      top: 0;
-      left: 0;
-      height: 100vh;
-      width: 320px;
-      max-width: 80vw;
-      background-color: rgba(10, 10, 10, 0.95);
-      backdrop-filter: blur(6px);
-      box-shadow: 3px 0 12px rgb(0 0 0 / 0.7);
-      padding: 2rem 1.5rem;
-      transform: translateX(-100%);
-      transition: transform 0.3s ease-in-out;
-      z-index: 1100;
-      display: flex;
-      flex-direction: column;
-      align-items: flex-start;
-      color: white;
-      user-select: none;
-    }
-
-    #side-menu.open {
-      transform: translateX(0);
-    }
-
-    #close-btn {
-      position: absolute;
-      top: 2rem;
-      right: 1.6rem;
-      font-size: 2.2rem;
-      background: none;
-      border: none;
-      color: white;
-      cursor: pointer;
-    }
-
-    #side-menu h3 {
-      width: 100%;
-      margin-bottom: 1.5rem;
-      font-weight: 700;
+      padding: 1rem 2rem;
+      text-align: center;
       font-size: 1.5rem;
-      text-align: left;
     }
 
-    #side-menu a {
-      display: block;
-      width: 100%;
-      padding: 0.5rem 0;
-      font-size: 1.1rem;
-      color: #ddd;
-      text-decoration: none;
-      border-radius: 4px;
-      transition: background-color 0.2s ease;
-    }
-
-    #side-menu a:hover {
-      background-color: rgba(255, 255, 255, 0.15);
-      color: white;
+    body {
+      font-family: "Noto Sans TC", sans-serif;
+      background: #f7f9fc;
+      margin: 0;
+      padding: 0;
     }
 
     /* 主體卡片 */
@@ -155,7 +35,7 @@
       margin-bottom: 1.5rem;
       padding: 1rem 1.5rem;
       border-radius: 10px;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
     }
 
     .student-section h3 {
@@ -163,24 +43,25 @@
       font-weight: bold;
     }
 
- /* --- 主要內容 --- */
-        h2 {
-            margin-top: 80px;
-            margin-bottom: 2rem;
-            color: #0066cc;
-            font-weight: 700;
-            font-size: 2rem;
-            text-align: center;
-            letter-spacing: 1px;
-        }
+    /* --- 主要內容 --- */
+    h2 {
+      margin-top: 80px;
+      margin-bottom: 2rem;
+      color: #0066cc;
+      font-weight: 700;
+      font-size: 2rem;
+      text-align: center;
+      letter-spacing: 1px;
+    }
 
-     table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-bottom: 30px;
-        }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 30px;
+    }
 
-    th, td {
+    th,
+    td {
       padding: 0.75rem;
       border: 1px solid #e0e0e0;
       text-align: center;
@@ -192,7 +73,7 @@
 
     /* 查詢功能樣式 */
     .input-group {
-      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
     }
 
     #studentSearchInput {
@@ -222,7 +103,7 @@
     .alert {
       border-radius: 8px;
       border: none;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
     }
 
     .alert-info {
@@ -236,34 +117,18 @@
     }
   </style>
 </head>
+
 <body>
+  <header>學生志願序檢視</header>
   <!-- 頂部欄 -->
-  <div class="top-bar">
     <div class="container">
       <div class="top-bar-left">
         <div id="menu-btn" title="選單" role="button" tabindex="0">
           <span></span><span></span><span></span>
         </div>
       </div>
-      <div class="top-bar-right">
-        <a href="/class_teacher_home">
-          <img src="{{ url_for('static', filename='images/avatar.png') }}" alt="頭像" id="login-avatar" />
-        </a>
-        <div class="dropdown" style="position: relative;">
-          <button id="accountDropdownBtn" class="btn-link" aria-expanded="false">帳號 ▾</button>
-          <div id="accountDropdownMenu" class="dropdown-menu" style="position:absolute; right:0; top:120%; background:#fff; border:1px solid #ccc; border-radius:8px; padding:6px; min-width:200px; display:none; box-shadow:0 4px 12px rgba(0,0,0,.12);">
-            <a href="/class_teacher_home" class="btn-link" style="display:block; border:none; margin:4px 0;">返回首頁</a>
-            <a id="toDirectorHome" href="/director_home" class="btn-link" style="display:none; border:none; margin:4px 0;">切換主任身分</a>
-            <a id="toTeacherHome" href="/teacher_home" class="btn-link" style="display:none; border:none; margin:4px 0;">切換教師身分</a>
-            <a href="/login" class="btn-link" style="display:block; border:none; margin:4px 0;">登出</a>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
 
- <div class="container my-5 pt-1">
-        <h2 class="mb-4 text-center">學生志願序檢視</h2>
+  <div class="container my-5 pt-1">
     <div class="d-flex justify-content-center mb-3">
       <div class="input-group me-2" style="width: 300px;">
         <input type="text" id="studentSearchInput" class="form-control" placeholder="輸入學生姓名查詢志願序">
@@ -289,89 +154,43 @@
     </div>
 
     {% if student_data %}
-      {% for student_name, preferences in student_data.items() %}
-        <div class="student-section">
-          <h3>{{ student_name }}</h3>
-          <div class="table-responsive">
-            <table class="table table-striped table-hover align-middle">
-              <thead>
-                <tr>
-                  <th>志願序</th>
-                  <th>公司名稱</th>
-                  <th>送出時間</th>
-                </tr>
-              </thead>
-              <tbody>
-                {% for p in preferences %}
-                <tr>
-                  <td>{{ p.order }}</td>
-                  <td>{{ p.company }}</td>
-                  <td>{{ p.submitted_at }}</td>
-                </tr>
-                {% endfor %}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      {% endfor %}
+    {% for student_name, preferences in student_data.items() %}
+    <div class="student-section">
+      <h3>{{ student_name }}</h3>
+      <div class="table-responsive">
+        <table class="table table-striped table-hover align-middle">
+          <thead>
+            <tr>
+              <th>志願序</th>
+              <th>公司名稱</th>
+              <th>送出時間</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for p in preferences %}
+            <tr>
+              <td>{{ p.order }}</td>
+              <td>{{ p.company }}</td>
+              <td>{{ p.submitted_at }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    {% endfor %}
     {% else %}
-      <p class="text-muted text-center">目前尚無學生填寫志願。</p>
+    <p class="text-muted text-center">目前尚無學生填寫志願。</p>
     {% endif %}
   </div>
 
-   <!-- 側邊選單 -->
-  <nav id="side-menu" aria-hidden="true" role="navigation" aria-label="功能選單">
-    <button id="close-btn" aria-label="關閉功能選單">×</button>
-    <h3>功能選單</h3>
-    <a href="/class_teacher_home">首頁</a>
-    <a href="/profile">個人資料</a>
-    <a href="/review_resume">查看學生履歷</a>
-    <a href="/review_preferences">審核志願序</a>
-    <a href="/admission results">查詢學生錄取結果</a>
-    <a href="/notifications">通知</a>
-  </nav>
-
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <script>
-    // 帳號下拉
-    const btn = document.getElementById('accountDropdownBtn');
-    const menu = document.getElementById('accountDropdownMenu');
-    btn.addEventListener('click', () => {
-      const open = menu.style.display === 'block';
-      menu.style.display = open ? 'none' : 'block';
-      btn.setAttribute('aria-expanded', String(!open));
-    });
-    document.addEventListener('click', (e) => {
-      if (!menu.contains(e.target) && !btn.contains(e.target)) {
-        menu.style.display = 'none';
-        btn.setAttribute('aria-expanded', 'false');
-      }
-    });
-
-    // 顯示不同角色的切換按鈕
-    fetch('/api/get-session').then(r => r.json()).then(s => {
-      if (s.success) {
-        if (s.role === 'director') {
-          document.getElementById('toDirectorHome').style.display = 'block';
-        } else if (s.role === 'teacher') {
-          document.getElementById('toTeacherHome').style.display = 'block';
-        }
-      }
-    }).catch(() => {});
-
-    // 側邊選單控制
-    document.getElementById('menu-btn').addEventListener('click', () => {
-      document.getElementById('side-menu').classList.add('open');
-    });
-    document.getElementById('close-btn').addEventListener('click', () => {
-      document.getElementById('side-menu').classList.remove('open');
-    });
-
     // 學生查詢功能
-    document.getElementById('searchStudentBtn')?.addEventListener('click', function() {
+    document.getElementById('searchStudentBtn')?.addEventListener('click', function () {
       const searchInput = document.getElementById('studentSearchInput');
       const searchTerm = searchInput.value.trim().toLowerCase();
-      
+
       if (!searchTerm) {
         alert('請輸入學生姓名或學號');
         return;
@@ -388,7 +207,7 @@
         if (studentName.includes(searchTerm)) {
           section.style.display = 'block';
           foundCount++;
-          
+
           // 高亮顯示匹配的學生姓名
           const nameElement = section.querySelector('h3');
           nameElement.style.backgroundColor = '#fff3cd';
@@ -425,7 +244,7 @@
     });
 
     // 按 Enter 鍵查詢
-    document.getElementById('studentSearchInput')?.addEventListener('keypress', function(e) {
+    document.getElementById('studentSearchInput')?.addEventListener('keypress', function (e) {
       if (e.key === 'Enter') {
         document.getElementById('searchStudentBtn').click();
       }
@@ -436,32 +255,32 @@
       const resultDiv = document.createElement('div');
       resultDiv.id = 'searchResult';
       resultDiv.style.display = 'none';
-      
+
       // 插入到按鈕組後面
       const buttonGroup = document.querySelector('.btn-group');
       buttonGroup.parentNode.insertBefore(resultDiv, buttonGroup.nextSibling);
-      
+
       return resultDiv;
     }
 
     // 清除查詢結果
-    window.clearSearch = function() {
+    window.clearSearch = function () {
       const searchInput = document.getElementById('studentSearchInput');
       const resultDiv = document.getElementById('searchResult');
-      
+
       // 清空搜尋框
       searchInput.value = '';
-      
+
       // 隱藏結果提示
       if (resultDiv) {
         resultDiv.style.display = 'none';
       }
-      
+
       // 顯示所有學生區塊
       const studentSections = document.querySelectorAll('.student-section');
       studentSections.forEach(section => {
         section.style.display = 'block';
-        
+
         // 移除高亮樣式
         const nameElement = section.querySelector('h3');
         nameElement.style.backgroundColor = '';
@@ -552,7 +371,7 @@
     })();
 
     // Excel 導出功能
-    document.getElementById('exportExcelBtn')?.addEventListener('click', function() {
+    document.getElementById('exportExcelBtn')?.addEventListener('click', function () {
       // 顯示載入狀態
       const btn = this;
       const originalText = btn.innerHTML;
@@ -561,7 +380,7 @@
 
       // 創建一個隱藏的 a 標籤來觸發下載
       window.location.href = '/export_preferences_excel';
-      
+
       // 恢復按鈕狀態（延遲一下讓用戶看到載入效果）
       setTimeout(() => {
         btn.innerHTML = originalText;
@@ -570,14 +389,14 @@
     });
 
     // Word 導出功能
-    document.getElementById('exportWordBtn')?.addEventListener('click', function() {
+    document.getElementById('exportWordBtn')?.addEventListener('click', function () {
       const btn = this;
       const originalText = btn.innerHTML;
       btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 導出中...';
       btn.disabled = true;
 
       window.location.href = '/export_preferences_word';
-      
+
       setTimeout(() => {
         btn.innerHTML = originalText;
         btn.disabled = false;
@@ -585,14 +404,14 @@
     });
 
     // PDF 導出功能
-    document.getElementById('exportPdfBtn')?.addEventListener('click', function() {
+    document.getElementById('exportPdfBtn')?.addEventListener('click', function () {
       const btn = this;
       const originalText = btn.innerHTML;
       btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 導出中...';
       btn.disabled = true;
 
       window.location.href = '/export_preferences_pdf';
-      
+
       setTimeout(() => {
         btn.innerHTML = originalText;
         btn.disabled = false;
@@ -601,4 +420,5 @@
 
   </script>
 </body>
+
 </html>
