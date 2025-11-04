@@ -286,19 +286,14 @@ def switch_role():
 # -------------------------
 @auth_bp.route("/visitor")
 def visitor_entry():
-    """
-    訪客入口：設定訪客 Session 標誌，並導向最終頁面。
-    """
     # 步驟 1: 清除現有 Session (確保不是登入狀態)
     session.clear() 
-
     # 步驟 2: 設定訪客身份的 Session 標誌
     session['role'] = 'visitor'
     session['is_visitor'] = True
     session['user_id'] = 0 # 訪客ID設為0
-
     # 步驟 3: 導向 /visitor 頁面 (在 users_bp 中)
-    return redirect(url_for("users_bp.visitor.html"))
+    return redirect(url_for("users_bp.visitor_page"))
 
 # =========================================================
 # 🧩 頁面路由

@@ -320,18 +320,15 @@ def change_password():
         conn.close()
 
 # -------------------------
-# 訪客頁面
+# 訪客主頁
 # -------------------------
-@users_bp.route('/visitor')
+@users_bp.route('/visitor_page')
 def visitor_page():
-    current_role = session.get('role')
-    
-    # 🌟 核心修正：明確檢查 current_role 是否在 ['visitor'] 列表中
-    if current_role not in ['visitor']:
-        # 如果不是學生也不是訪客，導向登入頁
-        return redirect(url_for('auth_bp.login_page'))
-    
-    # 如果是 'student' 或 'visitor'，則渲染頁面
+    # 確保用戶是以訪客身份進入
+    if session.get('role') != 'visitor' and session.get('is_visitor') != True:
+         # 如果用戶不是訪客身份，導回登入頁面
+         return redirect(url_for('auth_bp.login_page'))
+         
     return render_template('user_shared/visitor.html')
 
 # -------------------------
