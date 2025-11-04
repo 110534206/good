@@ -214,7 +214,7 @@
 
             <div class="text-center mt-5">
                 <button type="submit" class="btn btn-success px-5 py-2" {% if preview %}disabled{% endif %}>
-                    <i class="bi bi-save-fill me-2"></i>{% if preview %}登入後可儲存{% else %}儲存志願序{% endif %}
+                    <i class="bi bi-save-fill me-2"></i>{% if preview %}登入後可儲存{% else %}送出志願序{% endif %}
                 </button>
             </div>
         </form>
@@ -317,7 +317,7 @@
 
                 // --- 3A. 更新公司選單 (應用排除邏輯) ---
                 companySelect.innerHTML = `<option value="">-- 請選擇公司 --</option>`;
-                
+
                 companies.forEach(c => {
                     const cId = String(c.id);
                     const isExcluded = excludedCompanyIds.has(cId);
@@ -339,9 +339,9 @@
 
                 // 如果當前選中的公司在重新渲染後不存在於列表中，則清空公司選取
                 if (selectedCompany && !companySelect.value) {
-                    companySelect.value = ""; 
+                    companySelect.value = "";
                 }
-                
+
                 // --- 3B. 更新職缺選單 (原排他性邏輯：職缺不重複) ---
 
                 const finalCompanyId = companySelect.value; // 使用更新後的公司 ID
@@ -399,66 +399,73 @@
 
         /**
          * 初始化已填寫的志願 (載入資料並應用排他性邏輯)
-         */
+        */
         async function initializeSubmittedPreferences() {
             const companySelects = document.querySelectorAll(".company-select");
             const loadPromises = [];
 
-            // 1. 預載入所有公司（所有志願卡片中的公司）的職缺
+            // 1️⃣ 預先載入所有已被選取的公司職缺
             companySelects.forEach(select => {
                 const companyId = select.dataset.initialCompany;
                 if (companyId) {
                     loadPromises.push(loadJobs(companyId));
                 }
             });
-            // 由於公司列表 `companies` 是靜態的，我們也需要載入列表中所有公司的職缺，以計算總職缺數
+
+            // 2️⃣ 同時預載所有公司（用於排他性判斷）
             companies.forEach(company => {
                 const companyId = String(company.id);
-                 // 避免重複載入
                 if (!companyJobsCache[companyId]) {
-                     loadPromises.push(loadJobs(companyId));
+                    loadPromises.push(loadJobs(companyId));
                 }
             });
 
-
-            // 等待所有公司的職缺都載入完成
+            // 3️⃣ 等待所有職缺載入完成
             await Promise.all(loadPromises);
 
-            // 2. 第二階段：設定職缺選單的值（依賴已載入的快取）
+            // 4️⃣ 設定每張卡片的職缺選單初始值
             companySelects.forEach(select => {
+                const card = select.closest(".preference-card");
+                const jobSelect = card.querySelector(".job-select");
+
                 const companyId = select.dataset.initialCompany;
-                const initialJobId = select.dataset.initialJob;
-                const jobSelect = select.closest(".preference-card").querySelector(".job-select");
+                const initialJobId = jobSelect.dataset.initialJob; // ✅ 修正這裡
 
                 if (companyId) {
                     const jobs = companyJobsCache[companyId] || [];
-
-                    // 重新建構選項，並將初始值設定為 selected
                     jobSelect.innerHTML =
                         `<option value="">-- 請選擇職缺 --</option>` +
                         jobs
-                            .map(j => `<option value="${j.id}" ${String(j.id) === String(initialJobId) ? "selected" : ""}>${j.title}</option>`)
+                            .map(
+                                j =>
+                                    `<option value="${j.id}" ${String(j.id) === String(initialJobId)
+                                        ? "selected"
+                                        : ""
+                                    }>${j.title}</option>`
+                            )
                             .join("");
+                } else {
+                    jobSelect.innerHTML = `<option value="">-- 請先選擇公司 --</option>`;
                 }
             });
 
-            // 3. 最後更新所有選項狀態，應用排他性邏輯
-            updateSelections();
+            // 5️⃣ 更新畫面 (徽章、排他性邏輯)
+            setTimeout(updateSelections, 100);
         }
 
-        // --- 事件監聽器 ---
-
+        // --- 事件監聽器設定 ---
+        // --- 事件監聽器設定 ---
         document.querySelectorAll(".company-select").forEach(select => {
             select.addEventListener("change", async e => {
                 const companyId = e.target.value;
-                const jobSelect = e.target.closest(".preference-card").querySelector(".job-select");
+                const card = e.target.closest(".preference-card");
+                const jobSelect = card.querySelector(".job-select");
 
-                jobSelect.value = ""; // 清除舊的職缺選擇
+                jobSelect.value = ""; // 清除舊選擇
+                jobSelect.innerHTML = `<option value="">-- 載入中... --</option>`;
 
                 if (companyId) {
-                    jobSelect.innerHTML = `<option value="">-- 載入中... --</option>`;
-                    const jobs = await loadJobs(companyId); // 確保職缺已載入
-
+                    const jobs = await loadJobs(companyId);
                     if (jobs.length > 0) {
                         jobSelect.innerHTML = `<option value="">-- 請選擇職缺 --</option>`;
                         jobs.forEach(j => {
@@ -472,28 +479,27 @@
                     }
                 } else {
                     jobSelect.innerHTML = `<option value="">-- 請先選擇公司 --</option>`;
-                    jobSelect.value = ""; // 確保沒有選中值
                 }
-                updateSelections(); // 更改公司或載入職缺後，更新全部排他性邏輯
+
+                setTimeout(updateSelections, 100);
             });
         });
 
         document.querySelectorAll(".job-select").forEach(select => {
-            select.addEventListener("change", updateSelections); // 更改職缺後，更新排他性邏輯
+            select.addEventListener("change", updateSelections);
         });
 
-        // 檔案下載按鈕
         document.querySelectorAll(".preference-card").forEach(card => {
             const downloadBtn = card.querySelector(".download-company-btn");
             const companySelect = card.querySelector(".company-select");
             downloadBtn.addEventListener("click", () => {
                 const companyId = companySelect.value;
-                if (!companyId) return;
-
-                // 使用後端 Flask 程式碼中指定的路由
-                window.location.href = `/api/download_company_file/${companyId}`;
+                if (companyId) window.location.href = `/api/download_company_file/${companyId}`;
             });
         });
+
+        // ✅ 頁面載入時初始化一次（保留這一行即可）
+        initializeSubmittedPreferences().then(updateSelections);
 
         // 表單提交處理
         document.getElementById("preferencesForm").addEventListener("submit", async e => {
@@ -538,9 +544,15 @@
                 const result = await response.json();
 
                 if (result.success) {
-                    Swal.fire({ icon: 'success', title: '儲存成功！', text: result.message, confirmButtonText: '確定' }).then(() => {
-                        window.location.reload();
+                    Swal.fire({
+                        icon: 'success',
+                        title: '送出成功！',
+                        text: result.message,
+                        confirmButtonText: '確定'
+                    }).then(() => {
+                       updateSelections();
                     });
+
                 } else {
                     Swal.fire({ icon: 'error', title: '儲存失敗', text: result.message, confirmButtonText: '確定' });
                 }
@@ -550,8 +562,6 @@
             }
         });
 
-        // 頁面載入時初始化
-        initializeSubmittedPreferences();
     </script>
 </body>
 

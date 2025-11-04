@@ -81,8 +81,14 @@ def fill_preferences_page():
             """, (student_id,))
             prefs = cursor.fetchall() or []
 
-        # submitted: { order: row, ... } （方便 template 使用）
-        submitted = {int(p['preference_order']): p for p in prefs}
+        submitted = {
+        int(p['preference_order']): {
+        "company_id": p["company_id"],
+        "job_id": p["job_id"],
+        "job_title": p["job_title"],
+        }
+        for p in prefs
+        }
 
         return render_template(
             "preferences/fill_preferences.html",
@@ -109,27 +115,26 @@ def fill_preferences_page():
 # -------------------------
 @preferences_bp.route("/api/get_jobs_by_company", methods=["GET"])
 def get_jobs_by_company():
-    company_id = request.args.get("company_id")
+    company_id = request.args.get("company_id", type=int)
     if not company_id:
-        return jsonify({"success": False, "message": "缺少公司 ID"})
+        return jsonify({"success": False, "message": "缺少公司 ID"}), 400
 
     conn = get_db()
     cursor = conn.cursor(dictionary=True)
     try:
         cursor.execute("""
-            SELECT id, title FROM internship_jobs WHERE company_id=%s
+            SELECT id, title 
+            FROM internship_jobs 
+            WHERE company_id = %s AND is_active = TRUE
         """, (company_id,))
         jobs = cursor.fetchall() or []
         return jsonify({"success": True, "jobs": jobs})
-    except Exception:
+    except Exception as e:
         traceback.print_exc()
-        return jsonify({"success": False, "message": "查詢失敗"})
+        return jsonify({"success": False, "message": f"查詢失敗: {e}"}), 500
     finally:
-        try:
-            cursor.close()
-            conn.close()
-        except Exception:
-            pass
+        cursor.close()
+        conn.close()
 
 # -------------------------
 # 儲存學生志願
