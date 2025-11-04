@@ -32,6 +32,35 @@ def check_is_homeroom(user_id):
     return is_homeroom
 
 # =========================================================
+# 輔助函式：發送通知給所有科助
+# =========================================================
+def notify_all_ta(conn, title, message, link_url=None):
+    """發送通知給所有科助（role='ta'）"""
+    cursor = None
+    try:
+        cursor = conn.cursor()
+        # 查詢所有科助的 user_id
+        cursor.execute("SELECT id FROM users WHERE role = 'ta'")
+        ta_users = cursor.fetchall()
+        
+        # 為每個科助創建通知
+        for ta_user in ta_users:
+            ta_user_id = ta_user[0]
+            cursor.execute("""
+                INSERT INTO notifications (user_id, title, message, link_url, is_read, created_at)
+                VALUES (%s, %s, %s, %s, 0, NOW())
+            """, (ta_user_id, title, message, link_url))
+        
+        # 注意：不在此處 commit，由調用者負責 commit
+        if cursor:
+            cursor.close()
+    except Exception as e:
+        if cursor:
+            cursor.close()
+        print(f"❌ 發送科助通知錯誤: {e}")
+        # 不影響主流程，只記錄錯誤
+
+# =========================================================
 # API - 登入
 # =========================================================
 @auth_bp.route('/api/login', methods=['POST'])
@@ -244,9 +273,18 @@ def register_company():
         """, (username, hashed_pw, email, role))
         
         user_id = cursor.lastrowid # 獲取剛插入的 users.id
+        
+        # 5. 發送通知給所有科助
+        title = "新廠商申請通知"
+        message = f"有新的廠商申請待審核：\n帳號：{username}\nEmail：{email}\n請前往審核頁面處理。"
+        link_url = "/admin/user_management"  # 連結到用戶管理頁面，科助可以在此審核廠商
+        
+        notify_all_ta(conn, title, message, link_url)
+        
+        conn.commit()
 
         # 修正回覆訊息
-        return jsonify({"success": True, "message": "廠商帳號註冊申請已送出，需等待管理員審核通過後才能登入。"})
+        return jsonify({"success": True, "message": "廠商帳號註冊申請已送出，需等待科助審核通過後才能登入。"})
     
     except Exception as e:
         conn.rollback()

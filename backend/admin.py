@@ -18,7 +18,7 @@ def get_all_users():
     try:
         cursor.execute("""
             SELECT 
-                u.id, u.username, u.name, u.email, u.role, u.class_id,
+                u.id, u.username, u.name, u.email, u.role, u.class_id, u.status,
                 c.name AS class_name,
                 c.department,
                 (
@@ -89,7 +89,7 @@ def search_users():
 
         cursor.execute(f"""
             SELECT 
-            u.id, u.username, u.name, u.email, u.role, u.class_id,
+            u.id, u.username, u.name, u.email, u.role, u.class_id, u.status,
             c.name AS class_name,
             c.department,
             (
@@ -134,6 +134,10 @@ def search_users():
 # --------------------------------
 @admin_bp.route('/api/update_user/<int:user_id>', methods=['PUT'])
 def update_user(user_id):
+    # 權限檢查：允許 admin 和 ta 更新用戶
+    if 'user_id' not in session or session.get('role') not in ['admin', 'ta']:
+        return jsonify({"success": False, "message": "未授權"}), 403
+    
     data = request.get_json()
     conn = get_db()
     cursor = conn.cursor(dictionary=True)
@@ -144,6 +148,7 @@ def update_user(user_id):
         role = data.get("role")
         class_id = data.get("class_id")
         password = data.get("password")
+        status = data.get("status")  # 新增：支援更新廠商狀態
 
         update_fields = []
         params = []
@@ -168,6 +173,9 @@ def update_user(user_id):
             hashed = generate_password_hash(password)
             update_fields.append("password=%s")
             params.append(hashed)
+        if status:
+            update_fields.append("status=%s")
+            params.append(status)
 
         if not update_fields:
             return jsonify({"success": False, "message": "沒有提供要更新的欄位"}), 400
@@ -539,6 +547,10 @@ def get_teacher_classes(teacher_id):
 # --------------------------------
 @admin_bp.route('/user_management')
 def user_management():
+    # 權限檢查：允許 admin 和 ta 訪問用戶管理頁面
+    if 'user_id' not in session or session.get('role') not in ['admin', 'ta']:
+        from flask import redirect, url_for
+        return redirect(url_for('auth_bp.login_page'))
     try:
         return render_template('admin/user_management.html')
     except Exception as e:
