@@ -9,17 +9,13 @@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <style>
-        /* 基礎排版與字體 */
         body {
             font-family: "Noto Sans TC", sans-serif;
             background-color: #f8f9fa;
-            /* 輕微的淺灰色背景 */
             padding: 30px;
         }
 
-        /* 標題優化 */
         h2 {
-            /* 移除 text-align: center; 因為我們使用父層 div 置中 */
             color: #004d99;
             margin-bottom: 50px;
             font-weight: 700;
@@ -29,14 +25,12 @@
             padding-bottom: 8px;
         }
 
-        /* 卡片設計優化 */
         .preference-card {
             background-color: #ffffff;
             border-radius: 1rem;
             box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
             padding: 30px;
             margin-bottom: 30px;
-            /* 間距加大 */
             position: relative;
             transition: transform 0.3s ease, box-shadow 0.3s ease;
         }
@@ -46,23 +40,19 @@
             box-shadow: 0 15px 40px rgba(0, 0, 0, 0.15);
         }
 
-        /* 強化志願序號的視覺重要性 */
         .card-header-rank {
             display: flex;
             align-items: center;
             margin-bottom: 25px;
-            /* 增加與內容的間距 */
             padding-bottom: 15px;
             border-bottom: 1px dashed #e9ecef;
         }
 
-        /* 志願數字徽章 */
         .rank-number {
             font-size: 1.8rem;
             font-weight: 900;
             color: #ffffff;
             background-color: #1a73e8;
-            /* 藍色背景 */
             border-radius: 0.5rem;
             padding: 5px 15px;
             margin-right: 15px;
@@ -70,7 +60,6 @@
             box-shadow: 0 4px 10px rgba(26, 115, 232, 0.4);
         }
 
-        /* 徽章 (狀態提示) */
         .badge-remaining {
             position: absolute;
             right: 30px;
@@ -90,7 +79,6 @@
             background-color: #6c757d !important;
         }
 
-        /* 表單元素設計 */
         .form-select,
         .form-label {
             font-size: 1rem;
@@ -98,7 +86,6 @@
 
         .form-label {
             font-weight: 600;
-            /* 標籤加粗 */
             color: #343a40;
             margin-bottom: 8px;
         }
@@ -115,7 +102,6 @@
             box-shadow: 0 0 0 0.25rem rgba(26, 115, 232, 0.25);
         }
 
-        /* 按鈕設計 */
         .btn {
             border-radius: 0.6rem;
             font-weight: 600;
@@ -123,7 +109,6 @@
             transition: background-color 0.2s, transform 0.1s;
         }
 
-        /* 主要儲存按鈕 */
         .btn-success {
             background-color: #00a651;
             border-color: #00a651;
@@ -135,7 +120,6 @@
             transform: translateY(-1px);
         }
 
-        /* 次要下載按鈕 */
         .btn-outline-primary {
             margin-top: 10px;
             color: #1a73e8;
@@ -170,7 +154,7 @@
         {% endif %}
 
         <form id="preferencesForm" class="mx-auto" style="max-width: 900px;">
-            {% for rank in range(1, 6) %}
+            {% for rank in range(1, 5+1) %}
             <div class="preference-card" data-rank="{{ rank }}">
                 <div class="card-header-rank">
                     <span class="rank-number">{{ rank }}</span>
@@ -213,274 +197,126 @@
             {% endfor %}
 
             <div class="text-center mt-5">
-                <button type="submit" class="btn btn-success px-5 py-2" {% if preview %}disabled{% endif %}>
-                    <i class="bi bi-save-fill me-2"></i>{% if preview %}登入後可儲存{% else %}送出志願序{% endif %}
+                {% if preview %}
+                <button type="submit" class="btn btn-success px-5 py-2" disabled>
+                    <i class="bi bi-lock-fill me-2"></i>登入後可儲存
                 </button>
+                {% else %}
+                <button id="toggleEditBtn" type="button" class="btn btn-primary px-5 py-2 me-3">
+                    <i class="bi bi-pencil-square me-2"></i>修改志願序
+                </button>
+                <button id="saveBtn" type="submit" class="btn btn-success px-5 py-2">
+                    <i class="bi bi-save-fill me-2"></i>送出志願序
+                </button>
+                {% endif %}
             </div>
         </form>
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
-        // 後端傳輸的動態數據
         const companies = {{ companies | tojson }};
         const submitted = {{ submitted | tojson }};
         const preview = {{ preview | tojson }};
 
-        // 核心 JavaScript 狀態與快取
         const selectedJobIds = new Set();
         const companyJobsCache = {};
 
-        /**
-         * 呼叫後端 API 載入特定公司的職缺
-         * @param {string} companyId - 公司 ID
-         * @returns {Promise<Array<Object>>} 職缺列表
-         */
         async function loadJobs(companyId) {
             if (companyJobsCache[companyId]) return companyJobsCache[companyId];
-
             try {
-                // 假設 API 路由是 /api/get_jobs_by_company?company_id=<id>
                 const response = await fetch(`/api/get_jobs_by_company?company_id=${companyId}`);
                 const data = await response.json();
-
                 if (data.success) {
-                    // 將 id 轉為字串以確保 Set 比較一致性
                     companyJobsCache[companyId] = data.jobs.map(j => ({ id: String(j.id), title: j.title }));
                     return companyJobsCache[companyId];
-                } else {
-                    console.error("Failed to load jobs:", data.message);
-                    return [];
                 }
-            } catch (error) {
-                console.error("API error during job load:", error);
-                return [];
-            }
+            } catch (error) { console.error(error); }
+            return [];
         }
 
-        /**
-         * 更新所有志願卡的狀態、職缺下拉選單，並檢查職缺重複。
-         * 實作公司排他性邏輯：當公司所有職缺都被選走時，該公司將被排除在其他選單之外。
-         */
         function updateSelections() {
             const allPreferenceCards = document.querySelectorAll(".preference-card");
             selectedJobIds.clear();
-            const excludedCompanyIds = new Set(); // 儲存需要排除的公司 ID
+            const excludedCompanyIds = new Set();
 
-            // 1. 收集當前所有已選職缺
             allPreferenceCards.forEach(card => {
                 const jobSelect = card.querySelector(".job-select");
-                const selectedJob = jobSelect.value;
-                if (selectedJob) {
-                    selectedJobIds.add(selectedJob);
-                }
+                if (jobSelect.value) selectedJobIds.add(jobSelect.value);
             });
 
-            // 2. 識別需要排除的公司 (所有職缺都被選走的公司)
             companies.forEach(company => {
-                const companyId = String(company.id);
-                const availableJobs = companyJobsCache[companyId]; // 從快取中取得該公司的職缺列表
-
-                // 檢查該公司的職缺是否已經載入
-                if (!availableJobs || availableJobs.length === 0) {
-                    return; // 如果職缺未載入或無職缺，則跳過
-                }
-
-                const totalJobs = availableJobs.length;
-                let selectedCount = 0;
-
-                // 統計該公司有多少職缺已被選中
-                availableJobs.forEach(j => {
-                    if (selectedJobIds.has(String(j.id))) {
-                        selectedCount++;
-                    }
-                });
-
-                // 條件：已選職缺數等於總職缺數
-                if (selectedCount >= totalJobs) {
-                    excludedCompanyIds.add(companyId);
-                }
+                const jobs = companyJobsCache[String(company.id)];
+                if (!jobs) return;
+                const selectedCount = jobs.filter(j => selectedJobIds.has(String(j.id))).length;
+                if (selectedCount >= jobs.length) excludedCompanyIds.add(String(company.id));
             });
 
-
-            // 3. 遍歷所有志願卡，更新 UI (公司選單、職缺選單、徽章)
             allPreferenceCards.forEach(card => {
                 const companySelect = card.querySelector(".company-select");
                 const jobSelect = card.querySelector(".job-select");
                 const badge = card.querySelector(".badge-remaining");
                 const downloadBtn = card.querySelector(".download-company-btn");
-
-                const selectedCompany = companySelect.value; // 當前志願卡已選的公司 ID
-                const currentJobValue = jobSelect.value; // 當前志願卡已選的職缺 ID
+                const selectedCompany = companySelect.value;
+                const currentJobValue = jobSelect.value;
 
                 downloadBtn.disabled = !selectedCompany;
 
-                // --- 3A. 更新公司選單 (應用排除邏輯) ---
                 companySelect.innerHTML = `<option value="">-- 請選擇公司 --</option>`;
-
                 companies.forEach(c => {
                     const cId = String(c.id);
-                    const isExcluded = excludedCompanyIds.has(cId);
-
-                    // 排除條件：該公司所有職缺已被選走 AND 不是當前卡片已選的公司
-                    if (isExcluded && cId !== selectedCompany) {
-                        return; // 跳過此公司選項
-                    }
-
+                    if (excludedCompanyIds.has(cId) && cId !== selectedCompany) return;
                     const opt = document.createElement("option");
-                    opt.value = cId;
-                    opt.textContent = c.name;
-
-                    if (cId === selectedCompany) {
-                        opt.selected = true;
-                    }
+                    opt.value = cId; opt.textContent = c.name;
+                    if (cId === selectedCompany) opt.selected = true;
                     companySelect.appendChild(opt);
                 });
 
-                // 如果當前選中的公司在重新渲染後不存在於列表中，則清空公司選取
-                if (selectedCompany && !companySelect.value) {
-                    companySelect.value = "";
-                }
-
-                // --- 3B. 更新職缺選單 (原排他性邏輯：職缺不重複) ---
-
-                const finalCompanyId = companySelect.value; // 使用更新後的公司 ID
-
+                const finalCompanyId = companySelect.value;
                 if (finalCompanyId && companyJobsCache[finalCompanyId]) {
                     const availableJobs = companyJobsCache[finalCompanyId];
                     jobSelect.innerHTML = `<option value="">-- 請選擇職缺 --</option>`;
-
-                    let jobFound = false;
-                    let hasAvailableOptions = false;
-
                     availableJobs.forEach(j => {
-                        const jId = String(j.id);
-                        // 排除已在其他志願選中的職缺，但允許當前職缺被選中
-                        const isExcluded = selectedJobIds.has(jId) && jId !== currentJobValue;
-
-                        if (!isExcluded) {
-                            const opt = document.createElement("option");
-                            opt.value = jId;
-                            opt.textContent = j.title;
-                            if (jId === currentJobValue) {
-                                opt.selected = true;
-                                jobFound = true;
-                            }
-                            jobSelect.appendChild(opt);
-                            hasAvailableOptions = true;
-                        }
+                        const isExcluded = selectedJobIds.has(String(j.id)) && String(j.id) !== currentJobValue;
+                        if (!isExcluded)
+                            jobSelect.innerHTML += `<option value="${j.id}" ${j.id === currentJobValue ? 'selected' : ''}>${j.title}</option>`;
                     });
+                } else jobSelect.innerHTML = `<option value="">-- 請先選擇公司 --</option>`;
 
-                    if (!hasAvailableOptions) {
-                        jobSelect.innerHTML = `<option value="">（無可用職缺）</option>`;
-                        if (currentJobValue) jobSelect.value = ""; // 清除選中的無效職缺
-                    } else if (!jobFound && currentJobValue) {
-                        jobSelect.value = ""; // 清除無效職缺
-                    }
-
-                } else if (!finalCompanyId) {
-                    jobSelect.innerHTML = `<option value="">-- 請先選擇公司 --</option>`;
-                    // 如果公司被清空，職缺也必須清空
-                    jobSelect.value = "";
-                }
-
-                // --- 3C. 更新徽章狀態 ---
                 if (finalCompanyId) {
                     badge.textContent = "已選擇公司";
-                    badge.classList.remove("bg-secondary");
-                    badge.classList.add("bg-primary");
+                    badge.classList.replace("bg-secondary", "bg-primary");
                 } else {
                     badge.textContent = "尚未選擇公司";
-                    badge.classList.remove("bg-primary");
-                    badge.classList.add("bg-secondary");
+                    badge.classList.replace("bg-primary", "bg-secondary");
                 }
             });
         }
 
-        /**
-         * 初始化已填寫的志願 (載入資料並應用排他性邏輯)
-        */
         async function initializeSubmittedPreferences() {
             const companySelects = document.querySelectorAll(".company-select");
             const loadPromises = [];
-
-            // 1️⃣ 預先載入所有已被選取的公司職缺
             companySelects.forEach(select => {
                 const companyId = select.dataset.initialCompany;
-                if (companyId) {
-                    loadPromises.push(loadJobs(companyId));
-                }
+                if (companyId) loadPromises.push(loadJobs(companyId));
             });
-
-            // 2️⃣ 同時預載所有公司（用於排他性判斷）
-            companies.forEach(company => {
-                const companyId = String(company.id);
-                if (!companyJobsCache[companyId]) {
-                    loadPromises.push(loadJobs(companyId));
-                }
-            });
-
-            // 3️⃣ 等待所有職缺載入完成
+            companies.forEach(c => { if (!companyJobsCache[c.id]) loadPromises.push(loadJobs(c.id)); });
             await Promise.all(loadPromises);
-
-            // 4️⃣ 設定每張卡片的職缺選單初始值
-            companySelects.forEach(select => {
-                const card = select.closest(".preference-card");
-                const jobSelect = card.querySelector(".job-select");
-
-                const companyId = select.dataset.initialCompany;
-                const initialJobId = jobSelect.dataset.initialJob; // ✅ 修正這裡
-
-                if (companyId) {
-                    const jobs = companyJobsCache[companyId] || [];
-                    jobSelect.innerHTML =
-                        `<option value="">-- 請選擇職缺 --</option>` +
-                        jobs
-                            .map(
-                                j =>
-                                    `<option value="${j.id}" ${String(j.id) === String(initialJobId)
-                                        ? "selected"
-                                        : ""
-                                    }>${j.title}</option>`
-                            )
-                            .join("");
-                } else {
-                    jobSelect.innerHTML = `<option value="">-- 請先選擇公司 --</option>`;
-                }
-            });
-
-            // 5️⃣ 更新畫面 (徽章、排他性邏輯)
-            setTimeout(updateSelections, 100);
+            updateSelections();
         }
 
-        // --- 事件監聽器設定 ---
-        // --- 事件監聽器設定 ---
         document.querySelectorAll(".company-select").forEach(select => {
             select.addEventListener("change", async e => {
-                const companyId = e.target.value;
                 const card = e.target.closest(".preference-card");
                 const jobSelect = card.querySelector(".job-select");
-
-                jobSelect.value = ""; // 清除舊選擇
-                jobSelect.innerHTML = `<option value="">-- 載入中... --</option>`;
-
+                const companyId = e.target.value;
+                jobSelect.innerHTML = `<option>-- 載入中... --</option>`;
                 if (companyId) {
                     const jobs = await loadJobs(companyId);
-                    if (jobs.length > 0) {
-                        jobSelect.innerHTML = `<option value="">-- 請選擇職缺 --</option>`;
-                        jobs.forEach(j => {
-                            const opt = document.createElement("option");
-                            opt.value = j.id;
-                            opt.textContent = j.title;
-                            jobSelect.appendChild(opt);
-                        });
-                    } else {
-                        jobSelect.innerHTML = `<option value="">（無可用職缺）</option>`;
-                    }
-                } else {
-                    jobSelect.innerHTML = `<option value="">-- 請先選擇公司 --</option>`;
-                }
-
+                    jobSelect.innerHTML = jobs.length ? `<option value="">-- 請選擇職缺 --</option>` +
+                        jobs.map(j => `<option value="${j.id}">${j.title}</option>`).join("") :
+                        `<option value="">（無可用職缺）</option>`;
+                } else jobSelect.innerHTML = `<option value="">-- 請先選擇公司 --</option>`;
                 setTimeout(updateSelections, 100);
             });
         });
@@ -489,80 +325,80 @@
             select.addEventListener("change", updateSelections);
         });
 
-        document.querySelectorAll(".preference-card").forEach(card => {
-            const downloadBtn = card.querySelector(".download-company-btn");
-            const companySelect = card.querySelector(".company-select");
-            downloadBtn.addEventListener("click", () => {
-                const companyId = companySelect.value;
+        document.querySelectorAll(".download-company-btn").forEach(btn => {
+            btn.addEventListener("click", () => {
+                const companyId = btn.closest(".preference-card").querySelector(".company-select").value;
                 if (companyId) window.location.href = `/api/download_company_file/${companyId}`;
             });
         });
 
-        // ✅ 頁面載入時初始化一次（保留這一行即可）
         initializeSubmittedPreferences().then(updateSelections);
 
-        // 表單提交處理
+        // ---------- 狀態控制 ----------
+        let isEditing = false;
+        const hasSubmitted = Object.keys(submitted || {}).length > 0;
+        const saveBtn = document.getElementById("saveBtn");
+        const toggleEditBtn = document.getElementById("toggleEditBtn");
+        const allSelects = document.querySelectorAll(".company-select, .job-select");
+
+        function setReadOnlyMode(readonly) {
+            allSelects.forEach(sel => sel.disabled = readonly);
+            document.querySelectorAll(".download-company-btn").forEach(btn => btn.disabled = readonly ? false : !btn.closest(".preference-card").querySelector(".company-select").value);
+            if (readonly) {
+                saveBtn.style.display = "none";
+                toggleEditBtn.innerHTML = `<i class="bi bi-pencil-square me-2"></i>修改志願序`;
+                toggleEditBtn.classList.replace("btn-secondary", "btn-primary");
+            } else {
+                saveBtn.style.display = "inline-block";
+                toggleEditBtn.innerHTML = `<i class="bi bi-x-circle me-2"></i>取消修改`;
+                toggleEditBtn.classList.replace("btn-primary", "btn-secondary");
+            }
+        }
+
+        if (toggleEditBtn) {
+            toggleEditBtn.addEventListener("click", () => {
+                isEditing = !isEditing;
+                setReadOnlyMode(!isEditing);
+            });
+        }
+
+        if (hasSubmitted) setReadOnlyMode(true);
+        else toggleEditBtn.style.display = "none";
+
+        // ---------- 表單送出 ----------
         document.getElementById("preferencesForm").addEventListener("submit", async e => {
             e.preventDefault();
-            if (preview) {
-                Swal.fire({ icon: 'warning', title: '未授權', text: '此為預覽模式，請登入學生帳號後再儲存志願序。', confirmButtonText: '確定' });
-                return;
-            }
-
+            if (preview) return Swal.fire({ icon: 'warning', title: '未授權', text: '此為預覽模式，請登入學生帳號後再儲存志願序。' });
             const preferences = [];
             let isValid = true;
             document.querySelectorAll(".preference-card").forEach((card, idx) => {
                 const companyId = card.querySelector(".company-select").value;
                 const jobId = card.querySelector(".job-select").value;
-
-                // 檢查是否只選了公司但未選職缺
                 if (companyId && !jobId) {
                     isValid = false;
-                    Swal.fire({ icon: 'error', title: '志願錯誤', text: `第 ${idx + 1} 志願已選擇公司，但尚未選擇職缺。`, confirmButtonText: '確定' });
+                    Swal.fire({ icon: 'error', title: '志願錯誤', text: `第 ${idx + 1} 志願已選擇公司但未選職缺。` });
                 }
-
-                if (companyId && jobId)
-                    preferences.push({ order: idx + 1, company_id: companyId, job_id: jobId });
+                if (companyId && jobId) preferences.push({ order: idx + 1, company_id: companyId, job_id: jobId });
             });
-
             if (!isValid) return;
+            if (preferences.length === 0)
+                return Swal.fire({ icon: 'warning', title: '尚未填寫志願', text: '至少選擇一個完整志願。' });
 
-            // 檢查是否至少選擇一個完整的志願
-            if (preferences.length === 0) {
-                Swal.fire({ icon: 'warning', title: '尚未填寫志願', text: '您必須至少選擇一個完整的志願（公司與職缺）。', confirmButtonText: '確定' });
-                return;
-            }
-
-            // 提交數據到後端 API
             try {
-                const response = await fetch("/api/save_preferences", {
+                const res = await fetch("/api/save_preferences", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ preferences: preferences })
+                    body: JSON.stringify({ preferences })
                 });
-
-                const result = await response.json();
-
+                const result = await res.json();
                 if (result.success) {
-                    Swal.fire({
-                        icon: 'success',
-                        title: '送出成功！',
-                        text: result.message,
-                        confirmButtonText: '確定'
-                    }).then(() => {
-                       updateSelections();
-                    });
-
-                } else {
-                    Swal.fire({ icon: 'error', title: '儲存失敗', text: result.message, confirmButtonText: '確定' });
-                }
-            } catch (error) {
-                Swal.fire({ icon: 'error', title: '網路錯誤', text: '無法連線到伺服器，請稍後再試。', confirmButtonText: '確定' });
-                console.error("Fetch error:", error);
+                    Swal.fire({ icon: 'success', title: '送出成功！', text: result.message })
+                        .then(() => { setReadOnlyMode(true); updateSelections(); });
+                } else Swal.fire({ icon: 'error', title: '儲存失敗', text: result.message });
+            } catch {
+                Swal.fire({ icon: 'error', title: '網路錯誤', text: '無法連線到伺服器。' });
             }
         });
-
     </script>
 </body>
-
 </html>
