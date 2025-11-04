@@ -1,7 +1,7 @@
 from flask import Flask, redirect, url_for, session
 from flask_cors import CORS
 from jinja2 import ChoiceLoader, FileSystemLoader
-
+from dotenv import load_dotenv
 import os
 
 # -------------------------
@@ -42,7 +42,7 @@ from notification import notification_bp
 from preferences import preferences_bp
 from announcement import announcement_bp
 from intern_exp import intern_exp_bp 
-from ai_tools import ai_bp # <--- 3. [新增] 匯入新的 AI blueprint
+from ai_tools import ai_bp 
 
 # 註冊 Blueprint
 app.register_blueprint(auth_bp)
