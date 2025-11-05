@@ -49,12 +49,20 @@ def revise_resume():
         final_prompt = ""
         
         # --- 步驟一：定義語氣風格 (Tone) ---
+        # (*** 這是根據您的要求修改後的區塊 ***)
         if tone_style == 'friendly':
             tone_prompt = "語氣必須親切隨和。"
-        elif tone_style == 'creative':
-            tone_prompt = "語氣必須活潑有創意。"
+        
+        # 'creative' (活潑有創意) 已被移除
+
+        elif tone_style == 'cautious':
+            tone_prompt = "語氣必須專業、謹慎且精確。"
+        
+        elif tone_style == 'academic':
+            tone_prompt = "語氣必須嚴謹、客觀且具學術性。"
+            
         else:
-            tone_prompt = "語氣必須專業正式。" # 預設
+            tone_prompt = "語氣必須專業正式。" # 預設 ('professional')
 
         # --- 步驟二：定義主要任務 (Task) ---
         

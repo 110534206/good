@@ -165,9 +165,10 @@
             <select id="toneStyle" class="filter-pill">
                 <option value="professional">語氣：專業正式</option>
                 <option value="friendly">語氣：親切隨和</option>
-                <option value="creative">語氣：活潑創意</option>
+                <option value="cautious">語氣：謹慎的</option>
+                <option value="academic">語氣：學術的</option>
             </select>
-        </div>
+            </div>
         
         <button onclick="reviseResume()">⚡ 使用 AI 修改履歷</button>
 
@@ -201,7 +202,7 @@
                 // 🔴 [已修正]
                 // 錯誤寫法: 'http://localhost:5000/api/revise-resume'
                 // 正確寫法: 使用相對路徑，讓瀏覽器自動抓取當前網域
-                // ========================================================
+                // =================================M=======================
                 const response = await fetch('/api/revise-resume', { 
                     method: 'POST',
                     headers: {
