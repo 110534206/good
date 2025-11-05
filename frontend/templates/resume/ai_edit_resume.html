@@ -197,7 +197,12 @@
             loadingSpinner.style.display = 'block'; 
 
             try {
-                const response = await fetch('http://localhost:5000/api/revise-resume', { 
+                // ========================================================
+                // 🔴 [已修正]
+                // 錯誤寫法: 'http://localhost:5000/api/revise-resume'
+                // 正確寫法: 使用相對路徑，讓瀏覽器自動抓取當前網域
+                // ========================================================
+                const response = await fetch('/api/revise-resume', { 
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -230,8 +235,12 @@
                 revisedResumeDiv.innerHTML += decoder.decode();
 
             } catch (error) {
+                // ========================================================
+                // 🔴 [已修正]
+                // 修正錯誤訊息，移除錯誤的 "localhost:3000" 提示
+                // ========================================================
                 console.error('連線或讀取串流錯誤:', error);
-                revisedResumeDiv.innerHTML = `連線錯誤：請確保後端伺服器 (http://localhost:3000) 正在運行。`;
+                revisedResumeDiv.innerHTML = `AI 服務連線失敗：無法連線到後端伺服器。請檢查伺服器狀態並稍後再試。`;
                 revisedResumeDiv.style.color = 'red';
             } finally {
                 loadingSpinner.style.display = 'none'; 
