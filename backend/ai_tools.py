@@ -1,5 +1,3 @@
-# ai_tools.py
-
 import os
 import google.generativeai as genai
 from flask import Blueprint, request, Response, jsonify
