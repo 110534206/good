@@ -50,6 +50,29 @@
   </div>
 
   <script>
+    // ------------------------------------
+    //  廠商審核 JS 函式
+    // ------------------------------------
+    async function approveVendor(notifId, vendorUserId) {
+        if (!confirm('確定要通過該廠商的帳號審核嗎？')) return;
+
+        // 1. 調用後端審核 API
+        const res = await fetch(`/admin/api/approve_vendor/${vendorUserId}`, { method: 'POST' }); 
+        const data = await res.json();
+
+        if (data.success) {
+            alert(data.message);
+            // 2. 審核成功後，將該通知標記為已讀 (避免重複操作)
+            await markRead(notifId); 
+            loadNotifications(); // 重新載入通知列表
+        } else {
+            alert('審核失敗: ' + data.message);
+        }
+    }
+
+    // ------------------------------------
+    // 載入通知函式
+    // ------------------------------------
     async function loadNotifications() {
       const res = await fetch('/api/my_notifications');
       const data = await res.json();
@@ -57,20 +80,40 @@
       tbody.innerHTML = '';
 
       if (!data.success) {
-        alert('載入失敗');
+        tbody.innerHTML = `<tr><td colspan="4" class="text-center text-danger">${data.message || '載入失敗'}</td></tr>`;
         return;
       }
 
       data.notifications.forEach(n => {
         const row = document.createElement('tr');
         row.className = n.is_read ? 'read' : 'unread';
+
+        let actionButton = '';
+        // 🎯 核心修改：檢查是否為審核連結
+        const isApprovalLink = n.link_url && n.link_url.startsWith('/admin/api/approve_vendor/');
+
+        if (isApprovalLink) {
+            // 提取廠商 User ID (n.link_url 的最後一部分)
+            const userId = n.link_url.split('/').pop();
+            // n.id 是通知ID，用於 markRead；userId 是廠商ID，用於 approveVendor API
+            // 只有未讀通知才顯示審核按鈕
+            if (!n.is_read) {
+                 actionButton = `<button class="btn btn-sm btn-success" onclick="approveVendor(${n.id}, ${userId})">同意審核</button>`;
+            } else {
+                 actionButton = `<span class="badge bg-success">已審核</span>`;
+            }
+        } else {
+            // 保持現有的 "前往" 連結邏輯
+            actionButton = n.link_url ? `<a href="${n.link_url}" class="btn btn-sm btn-primary">前往</a>` : '';
+        }
+        
         row.innerHTML = `
         <td>${n.is_read ? '✅' : '🆕'} ${n.title}</td>
-        <td>${n.message.replace(/\n/g, '<br>')}</td>
+        <td>${n.message.replace(/\\n/g, '<br>')}</td>
         <td>${new Date(n.created_at).toLocaleString('zh-TW', { hour12: false })}</td>
         <td>
-          ${n.link_url ? `<a href="${n.link_url}" class="btn btn-sm btn-primary">前往</a>` : ''}
-          ${!n.is_read ? `<button class="btn btn-sm btn-success" onclick="markRead(${n.id})">已讀</button>` : ''}
+          ${actionButton} 
+          ${!n.is_read && !isApprovalLink ? `<button class="btn btn-sm btn-success" onclick="markRead(${n.id})">已讀</button>` : ''}
           <button class="btn btn-sm btn-danger" onclick="deleteNotif(${n.id})">刪除</button>
         </td>
       `;
@@ -82,23 +125,19 @@
       const res = await fetch(`/api/mark_read/${id}`, { method: 'POST' });
       const data = await res.json();
       if (!data.success) return alert(data.message);
-      const row = document.querySelector(`button[onclick="markRead(${id})"]`).closest('tr');
-      row.classList.remove('unread');
-      row.classList.add('read');
-      row.querySelector('td:first-child').innerText = '✅ ' + row.querySelector('td:first-child').innerText.slice(2);
-      row.querySelector('button.btn-success').remove();
-    }
-
-    async function deleteNotif(id) {
-      if (!confirm("確定要刪除此通知？")) return;
-      const res = await fetch(`/api/notification/delete/${id}`, { method: 'DELETE' });
-      const data = await res.json();
-      alert(data.message);
+      // 重新載入以更新 UI
       loadNotifications();
     }
-
-    loadNotifications();
-  </script>
+    
+    async function deleteNotif(id) {
+        if (!confirm('確定要刪除這則通知嗎？')) return;
+        const res = await fetch(`/api/delete_notification/${id}`, { method: 'POST' });
+        const data = await res.json();
+        if (!data.success) return alert(data.message);
+        loadNotifications(); // 重新載入通知列表
+    }
+    loadNotifications(); // 頁面載入時執行
+</script>
 </body>
 
 </html>
