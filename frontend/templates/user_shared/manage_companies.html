@@ -119,7 +119,7 @@
 
     // 載入班級列表
     async function loadClasses() {
-      const res = await fetch("/admin/api/get_classes"); // 修正: 確保路由正確
+      const res = await fetch("/ta/statistics/api/get_classes"); // 修正: 確保路由正確
       const data = await res.json();
       const select = document.getElementById("classSelect");
 
@@ -135,7 +135,7 @@
 
     // 載入統計資料 (原有的三個圖表)
     async function loadData(classId = "all") {
-      let url = "/admin/api/manage_companies_stats"; // 修正: 確保路由正確
+      let url = "/ta/statistics/api/manage_companies_stats"; 
       if (classId !== "all") url += `?class_id=${classId}`;
 
       const res = await fetch(url);
@@ -229,7 +229,7 @@
 
       try {
         // 呼叫新的 API 路由
-        const res = await fetch(`/admin/api/get_class_stats/${classId}`);
+        const res = await fetch(`/ta/statistics/api/get_class_stats/${classId}`);
         const data = await res.json();
 
         if (!data.success) {
@@ -311,7 +311,7 @@
     // 管理學生
     document.getElementById("manageStudentsBtn").addEventListener("click", async () => {
       const classId = document.getElementById("classSelect").value;
-      const res = await fetch("/admin/api/get_students_by_class?class_id=" + classId); // 修正: 確保路由正確
+      const res = await fetch("/ta/statistics/api/get_students_by_class?class_id=" + classId); // 修正: 確保路由正確
       const data = await res.json();
       const container = document.getElementById("studentsContainer");
       container.innerHTML = "";
@@ -363,7 +363,7 @@
     // 匯出 Excel
     document.getElementById("exportBtn").addEventListener("click", () => {
       const classId = document.getElementById("classSelect").value;
-      window.location.href = `/admin/api/export_companies_stats${classId !== "all" ? '?class_id=' + classId : ''}`; // 修正: 確保路由正確
+      window.location.href = `/ta/statistics/api/export_companies_stats${classId !== "all" ? '?class_id=' + classId : ''}`; // 修正: 確保路由正確
     });
 
     // 初始載入

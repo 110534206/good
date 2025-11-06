@@ -8,6 +8,7 @@ import os
 # 建立 Flask app
 # -------------------------
 load_dotenv(dotenv_path='GEMINI_API_KEY.env')
+load_dotenv(dotenv_path='EMAIL.env')
 app = Flask(
     __name__,
     static_folder='../frontend/static',
@@ -63,7 +64,7 @@ app.register_blueprint(ai_bp)
 app.register_blueprint(semester_bp)
 app.register_blueprint(admission_bp)
 app.register_blueprint(director_overview_bp)
-app.register_blueprint(ta_statistics_bp)
+app.register_blueprint(ta_statistics_bp, url_prefix='/ta/statistics')
 app.register_blueprint(student_results_bp)
 
 # -------------------------

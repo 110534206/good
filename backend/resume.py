@@ -2,7 +2,7 @@ from flask import Blueprint, request, jsonify, session, send_file, render_templa
 from werkzeug.utils import secure_filename
 from config import get_db
 from semester import get_current_semester_id
-from email_service import send_resume_rejection_email
+from email_service import send_resume_rejection_email, send_resume_approval_email
 import os
 import traceback
 import json
@@ -76,7 +76,7 @@ def can_access_target_resume(cursor, session_user_id, session_role, target_user_
         return False
     target_class_id = u.get('class_id')
 
-    if session_role == "teacher":
+    if session_role == "class_teacher":
         return teacher_manages_class(cursor, session_user_id, target_class_id)
 
     if session_role == "director":
@@ -312,7 +312,8 @@ def review_resume(resume_id):
 
         target_user_id = resume['user_id']
 
-        if role in ["teacher"]:
+        # 權限檢查
+        if role in ["class_teacher"]:
             if not teacher_manages_class(cursor, user_id, resume['class_id']):
                 return jsonify({"success": False, "message": "沒有權限審核這份履歷"}), 403
 
@@ -335,25 +336,31 @@ def review_resume(resume_id):
             WHERE id = %s
         """, (status, comment, note, resume_id))
         
-        # 如果是退件，自動發送通知給學生
-        if status == "rejected":
-            # 獲取學生信息
-            cursor.execute("""
-                SELECT u.username, u.name, u.email
-                FROM users u
-                WHERE u.id = %s
-            """, (target_user_id,))
-            student = cursor.fetchone()
-            
-            if student:
-                # 獲取審核者信息
-                cursor.execute("""
-                    SELECT u.name
-                    FROM users u
-                    WHERE u.id = %s
-                """, (user_id,))
-                reviewer = cursor.fetchone()
-                reviewer_name = reviewer['name'] if reviewer else "老師"
+        
+        # 處理通知邏輯 (退件或通過)
+        
+        # 獲取學生與審核者信息
+        cursor.execute("""
+            SELECT u.username, u.name, u.email
+            FROM users u
+            WHERE u.id = %s
+        """, (target_user_id,))
+        student = cursor.fetchone()
+
+        cursor.execute("""
+            SELECT u.name
+            FROM users u
+            WHERE u.id = %s
+        """, (user_id,))
+        reviewer = cursor.fetchone()
+        reviewer_name = reviewer['name'] if reviewer else "老師"
+
+
+        if student:
+            # ==================================
+            # 1. 處理退件通知 (Rejected)
+            # ==================================
+            if status == "rejected":
                 
                 # 創建退件通知（系統通知）
                 try:
@@ -367,7 +374,7 @@ def review_resume(resume_id):
                         '/upload_resume'
                     ))
                 except Exception as e:
-                    print(f"⚠️ 創建通知時發生錯誤: {e}")
+                    print(f"⚠️ 創建退件通知時發生錯誤: {e}")
                     pass
                 
                 # 發送郵件通知（如果學生有郵箱）
@@ -380,9 +387,44 @@ def review_resume(resume_id):
                             rejection_reason=comment if comment else ""
                         )
                     except Exception as e:
-                        print(f"⚠️ 發送郵件時發生錯誤: {e}")
+                        print(f"⚠️ 發送退件郵件時發生錯誤: {e}")
                         pass
-        
+
+            # ==================================
+            # 2. 處理通過通知 (Approved) (新增邏輯)
+            # ==================================
+            elif status == "approved":
+                
+                # 創建通過通知（系統通知）
+                try:
+                    cursor.execute("""
+                        INSERT INTO notifications (user_id, title, message, link_url, is_read, created_at)
+                        VALUES (%s, %s, %s, %s, 0, NOW())
+                    """, (
+                        target_user_id,
+                        "履歷審核通過通知",
+                        f"您的履歷已由{reviewer_name}審核通過！您現在可以進行後續的實習步驟。",
+                        '/upload_resume' # 連結到一個能查看履歷狀態的頁面
+                    ))
+                except Exception as e:
+                    print(f"⚠️ 創建通過通知時發生錯誤: {e}")
+                    pass
+                
+                # 發送郵件通知（如果學生有郵箱）
+                if student.get('email'):
+                    try:
+                        # 呼叫新的郵件發送函式
+                        send_resume_approval_email(
+                            student_email=student['email'],
+                            student_name=student['name'],
+                            reviewer_name=reviewer_name
+                        )
+                    except Exception as e:
+                        print(f"⚠️ 發送通過郵件時發生錯誤: {e}")
+                        pass
+
+
+        # 提交所有資料庫變更（包含 UPDATE resumes 和 INSERT notifications）
         conn.commit()
 
         return jsonify({"success": True, "message": "履歷審核成功"})
@@ -474,7 +516,7 @@ def update_resume_field():
         role = session.get('role')
         user_id = session['user_id']
 
-        if role == "teacher":
+        if role == "class_teacher":
             if not teacher_manages_class(cursor, user_id, get_user_by_id(cursor, owner_id)['class_id']):
                 cursor.close()
                 conn.close()
@@ -643,9 +685,9 @@ def get_class_resumes():
         print(f"🔍 [DEBUG] get_class_resumes called - user_id: {user_id}, role: {role}")
 
         # ------------------------------------------------------------------
-        # 1. 班導 / 教師 (role == "teacher" or "class_teacher")
+        # 1. 班導 (role == "class_teacher")
         # ------------------------------------------------------------------
-        if role in ["teacher", "class_teacher"]:
+        if role in ["class_teacher"]:
             sql_query = """
                 SELECT 
                     r.id,
@@ -821,7 +863,7 @@ def delete_resume():
         user_id = session['user_id']
 
         # 權限： teacher 要帶該班級； director 要同科系； admin 可以
-        if role == "teacher":
+        if role == "class_teacher":
             # 取得 owner 的 class_id
             cursor.execute("SELECT class_id FROM users WHERE id = %s", (owner_id,))
             owner = cursor.fetchone()
@@ -897,7 +939,7 @@ def submit_comment():
         # 權限檢查（寫入）
         role = session.get('role')
         user_id = session.get('user_id')
-        if role == "teacher":
+        if role == "class_teacher":
             cursor.execute("SELECT class_id FROM users WHERE id = %s", (owner_id,))
             owner = cursor.fetchone()
             if not owner or not teacher_manages_class(cursor, user_id, owner.get('class_id')):

@@ -374,10 +374,6 @@ def director_home():
 def ta_home():
     return render_template('user_shared/ta_home.html')
     
-# 實習廠商管理
-@users_bp.route('/manage_companies')
-def manage_companies():
-    return render_template('user_shared/manage_companies.html')
 
 # 志願序最終結果
 @users_bp.route('/final_results')

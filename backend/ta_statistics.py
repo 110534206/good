@@ -1,14 +1,12 @@
-"""
-科助端统计报表模块
-生成完整的统计图表数据
-"""
-from flask import Blueprint, request, jsonify, session
+from flask import Blueprint, request, jsonify, session,render_template, send_file
 from config import get_db
 from datetime import datetime
 from semester import get_current_semester_code
 import traceback
+import pandas as pd 
+import io 
 
-ta_statistics_bp = Blueprint("ta_statistics_bp", __name__, url_prefix="/ta/statistics")
+ta_statistics_bp = Blueprint("ta_statistics_bp", __name__, )
 
 # =========================================================
 # API: 取得全系統統計總覽
@@ -198,6 +196,184 @@ def get_classes_statistics():
     except Exception as e:
         traceback.print_exc()
         return jsonify({"success": False, "message": f"查詢失敗: {str(e)}"}), 500
+    finally:
+        cursor.close()
+        conn.close()    
+
+# --------------------------------
+# 班級列表
+# --------------------------------
+@ta_statistics_bp.route('/api/get_classes')
+def get_classes():
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute("SELECT id, name, department FROM classes ORDER BY department, name")
+        classes = cursor.fetchall()
+        return jsonify({"success": True, "classes": classes})
+    except Exception as e:
+        print(f"取得班級列表錯誤: {e}")
+        return jsonify({"success": False, "message": "取得班級列表失敗"}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+# =========================================================
+# API: 取得學生資料（依班級篩選）
+# =========================================================
+@ta_statistics_bp.route('/api/get_students_by_class', methods=['GET'])
+def get_students_by_class():
+    # 權限檢查：統計功能通常允許 ta, admin 訪問
+    if 'user_id' not in session or session.get('role') not in ['ta', 'admin']:
+        return jsonify({"success": False, "message": "未授權"}), 403
+
+    class_id = request.args.get('class_id')
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        # 查詢指定班級（或所有）的學生基本資料、履歷數、志願數
+        query = "SELECT u.id, u.username, u.name, u.email, " \
+                "(SELECT COUNT(*) FROM resumes r WHERE r.user_id = u.id) AS resume_count, " \
+                "(SELECT COUNT(*) FROM student_preferences sp WHERE sp.student_id = u.id) AS preference_count " \
+                "FROM users u WHERE u.role='student' "
+        params = []
+        if class_id and class_id != "all":
+            query += "AND u.class_id=%s "
+            params.append(class_id)
+        query += "ORDER BY u.username"
+        
+        cursor.execute(query, params)
+        students = cursor.fetchall()
+
+        return jsonify({"success": True, "students": students})
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"success": False, "message": "取得學生資料失敗"}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+
+# --------------------------------
+# 公司統計
+# --------------------------------
+@ta_statistics_bp.route('/api/manage_companies_stats')
+def manage_companies_stats():
+    class_id = request.args.get("class_id")
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        params = []
+        student_filter = "WHERE u.role='student'"
+
+        if class_id and class_id != "all":
+            student_filter += " AND u.class_id=%s"
+            params.append(class_id)
+
+        # 各公司被選志願次數
+        cursor.execute(f"""
+            SELECT c.company_name, COUNT(sp.id) AS preference_count
+            FROM internship_companies c
+            LEFT JOIN student_preferences sp ON c.id=sp.company_id
+            LEFT JOIN users u ON sp.student_id=u.id
+            {student_filter}
+            GROUP BY c.id
+            ORDER BY preference_count DESC
+            LIMIT 5
+        """, params)
+        top_companies = cursor.fetchall()
+
+        # 履歷繳交率
+        cursor.execute(f"""
+            SELECT COUNT(*) AS total FROM users u {student_filter}
+        """, params)
+        total_students = cursor.fetchone()["total"]
+
+        cursor.execute(f"""
+            SELECT COUNT(DISTINCT r.user_id) AS uploaded
+            FROM resumes r
+            JOIN users u ON r.user_id = u.id
+            {student_filter}
+        """, params)
+        uploaded = cursor.fetchone()["uploaded"]
+        resume_stats = {"uploaded": uploaded, "not_uploaded": total_students - uploaded}
+
+        # 志願序填寫率
+        cursor.execute(f"""
+            SELECT COUNT(DISTINCT sp.student_id) AS filled
+            FROM student_preferences sp
+            JOIN users u ON sp.student_id=u.id
+            {student_filter}
+        """, params)
+        filled = cursor.fetchone()["filled"]
+        preference_stats = {"filled": filled, "not_filled": total_students - filled}
+
+        return jsonify({
+            "success": True,
+            "top_companies": top_companies,
+            "resume_stats": resume_stats,
+            "preference_stats": preference_stats
+        })
+    except Exception as e:
+        print("❌ manage_companies_stats error:", e)
+        return jsonify({"success": False, "message": str(e)}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+# =========================================================
+# API: 匯出 Excel (公司志願統計)
+# =========================================================
+@ta_statistics_bp.route("/api/export_companies_stats", methods=["GET"])
+def export_companies_stats():
+    # 權限檢查：統計功能通常允許 ta, admin 訪問
+    if 'user_id' not in session or session.get('role') not in ['ta', 'admin']:
+        return jsonify({"success": False, "message": "未授權"}), 403
+        
+    class_id = request.args.get("class_id")
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        params = []
+        query = """
+            SELECT c.company_name, COUNT(sp.id) AS preference_count 
+            FROM internship_companies c 
+            LEFT JOIN student_preferences sp ON c.id=sp.company_id 
+        """
+        
+        # 處理班級篩選邏輯
+        if class_id and class_id != "all":
+            # 如果有指定班級，需要 JOIN users 表進行過濾
+            query += "JOIN users u ON sp.student_id = u.id WHERE u.role='student' AND u.class_id=%s "
+            params.append(class_id)
+        elif class_id == "all":
+            # 針對所有學生進行統計（可加入過濾確保只計學生，但原 admin.py 邏輯較開放）
+             query += "LEFT JOIN users u ON sp.student_id = u.id WHERE u.role='student' "
+
+        query += "GROUP BY c.id, c.company_name ORDER BY preference_count DESC"
+            
+        cursor.execute(query, params)
+        data = cursor.fetchall()
+        
+        df = pd.DataFrame(data)
+        df.columns = ["公司名稱", "志願次數"] # 替換欄位名稱
+        
+        output = io.BytesIO()
+        df.to_excel(output, index=False)
+        output.seek(0)
+        
+        # 生成檔案名稱
+        filename = f"公司志願統計_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+        
+        return send_file(
+            output, 
+            download_name=filename, 
+            as_attachment=True, 
+            mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"success": False, "message": f"匯出 Excel 失敗: {str(e)}"}), 500
     finally:
         cursor.close()
         conn.close()
@@ -477,3 +653,9 @@ def export_statistics():
         if 'conn' in locals():
             conn.close()
 
+# --------------------------------
+# 實習廠商管理頁面
+# --------------------------------
+@ta_statistics_bp.route('/manage_companies')
+def manage_companies():
+    return render_template('user_shared/manage_companies.html')               
