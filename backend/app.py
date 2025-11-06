@@ -42,7 +42,12 @@ from notification import notification_bp
 from preferences import preferences_bp
 from announcement import announcement_bp
 from intern_exp import intern_exp_bp 
-from ai_tools import ai_bp 
+from ai_tools import ai_bp
+from semester import semester_bp
+from admission import admission_bp
+from director_overview import director_overview_bp
+from ta_statistics import ta_statistics_bp
+from student_results import student_results_bp
 
 # 註冊 Blueprint
 app.register_blueprint(auth_bp)
@@ -55,6 +60,11 @@ app.register_blueprint(preferences_bp)
 app.register_blueprint(announcement_bp, url_prefix="/announcement")
 app.register_blueprint(intern_exp_bp)
 app.register_blueprint(ai_bp)
+app.register_blueprint(semester_bp)
+app.register_blueprint(admission_bp)
+app.register_blueprint(director_overview_bp)
+app.register_blueprint(ta_statistics_bp)
+app.register_blueprint(student_results_bp)
 
 # -------------------------
 # 首頁路由（使用者前台）

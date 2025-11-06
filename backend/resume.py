@@ -1,6 +1,8 @@
 from flask import Blueprint, request, jsonify, session, send_file, render_template
 from werkzeug.utils import secure_filename
 from config import get_db
+from semester import get_current_semester_id
+from email_service import send_resume_rejection_email
 import os
 import traceback
 import json
@@ -141,10 +143,25 @@ def upload_resume_api():
         user_id = user['id']
         filesize = os.path.getsize(save_path)
 
+        # =========================================================
+        # 自動標註：學期、班級、學號
+        # =========================================================
+        # 1. 獲取當前學期ID
+        semester_id = get_current_semester_id(cursor)
+        
+        # 2. 獲取學生班級ID（從 users 表）
+        cursor.execute("SELECT class_id FROM users WHERE id = %s", (user_id,))
+        user_info = cursor.fetchone()
+        class_id = user_info['class_id'] if user_info else None
+        
+        # 3. 學號已從 username 獲取（session.get('username')）
+        # 注意：學號不需要存儲在 resumes 表中，因為可以通過 user_id 關聯 users.username 獲取
+        
+        # 插入履歷（包含 semester_id）
         cursor.execute("""
-            INSERT INTO resumes (user_id, original_filename, filepath, filesize, status, created_at)
-            VALUES (%s, %s, %s, %s, %s, NOW())
-        """, (user_id, original_filename, save_path, filesize, 'uploaded'))
+            INSERT INTO resumes (user_id, semester_id, original_filename, filepath, filesize, status, created_at)
+            VALUES (%s, %s, %s, %s, %s, %s, NOW())
+        """, (user_id, semester_id, original_filename, save_path, filesize, 'uploaded'))
 
         resume_id = cursor.lastrowid
         conn.commit()
@@ -322,7 +339,7 @@ def review_resume(resume_id):
         if status == "rejected":
             # 獲取學生信息
             cursor.execute("""
-                SELECT u.username, u.name
+                SELECT u.username, u.name, u.email
                 FROM users u
                 WHERE u.id = %s
             """, (target_user_id,))
@@ -338,19 +355,33 @@ def review_resume(resume_id):
                 reviewer = cursor.fetchone()
                 reviewer_name = reviewer['name'] if reviewer else "老師"
                 
-                # 創建退件通知
-                cursor.execute("""
-                    INSERT INTO notifications (title, content, type, target_user_id, status, created_at, created_by)
-                    VALUES (%s, %s, %s, %s, %s, %s, NOW(), %s)
-                """, (
-                    "履歷退件通知",
-                    f"您的履歷已被{reviewer_name}退件。\n\n退件原因：{comment if comment else '請查看老師留言'}\n\n請根據老師的建議修改履歷後重新上傳。",
-                    'reminder',
-                    json.dumps(['student']),
-                    1,
-                    'published',
-                    'system'
-                ))
+                # 創建退件通知（系統通知）
+                try:
+                    cursor.execute("""
+                        INSERT INTO notifications (user_id, title, message, link_url, is_read, created_at)
+                        VALUES (%s, %s, %s, %s, 0, NOW())
+                    """, (
+                        target_user_id,
+                        "履歷退件通知",
+                        f"您的履歷已被{reviewer_name}退件。\n\n退件原因：{comment if comment else '請查看老師留言'}\n\n請根據老師的建議修改履歷後重新上傳。",
+                        '/upload_resume'
+                    ))
+                except Exception as e:
+                    print(f"⚠️ 創建通知時發生錯誤: {e}")
+                    pass
+                
+                # 發送郵件通知（如果學生有郵箱）
+                if student.get('email'):
+                    try:
+                        send_resume_rejection_email(
+                            student_email=student['email'],
+                            student_name=student['name'],
+                            reviewer_name=reviewer_name,
+                            rejection_reason=comment if comment else ""
+                        )
+                    except Exception as e:
+                        print(f"⚠️ 發送郵件時發生錯誤: {e}")
+                        pass
         
         conn.commit()
 
