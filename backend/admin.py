@@ -38,7 +38,7 @@ def get_all_users():
             if user.get('created_at'):
                 user['created_at'] = user['created_at'].strftime("%Y-%m-%d %H:%M:%S")
 
-            role_map = {'ta': '科助', 'teacher': '教師', 'student': '學生', 'director': '主任', 'admin': '管理員'}
+            role_map = {'ta': '科助', 'teacher': '教師', 'student': '學生', 'director': '主任', 'admin': '管理員', 'vendor': '廠商'}
             # 使用 role_map 賦值給 role_display，這是前端需要顯示的中文名稱
             user['role_display'] = role_map.get(user['role'], user['role']) #
 
@@ -107,7 +107,7 @@ def search_users():
         users = cursor.fetchall()
         
         # 補齊 post-processing 邏輯，確保前端能正確顯示角色名稱和學生屆數
-        role_map = {'ta': '科助', 'teacher': '老師', 'student': '學生', 'director': '主任', 'admin': '管理員'}
+        role_map = {'ta': '科助', 'teacher': '老師', 'student': '學生', 'director': '主任', 'admin': '管理員', 'vendor': '廠商'}
         
         for user in users:
             if user.get('created_at'):

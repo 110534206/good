@@ -61,6 +61,35 @@ def notify_all_ta(conn, title, message, link_url=None):
         # 不影響主流程，只記錄錯誤
 
 # =========================================================
+# 輔助函式：發送通知給所有主任
+# =========================================================
+def notify_all_directors(conn, title, message, link_url=None):
+    """發送通知給所有主任（role='director'）"""
+    cursor = None
+    try:
+        cursor = conn.cursor()
+        # 查詢所有主任的 user_id
+        cursor.execute("SELECT id FROM users WHERE role = 'director'")
+        director_users = cursor.fetchall()
+        
+        # 為每個主任創建通知
+        for director_user in director_users:
+            director_user_id = director_user[0]
+            cursor.execute("""
+                INSERT INTO notifications (user_id, title, message, link_url, is_read, created_at)
+                VALUES (%s, %s, %s, %s, 0, NOW())
+            """, (director_user_id, title, message, link_url))
+        
+        # 注意：不在此處 commit，由調用者負責 commit
+        if cursor:
+            cursor.close()
+    except Exception as e:
+        if cursor:
+            cursor.close()
+        print(f"❌ 發送主任通知錯誤: {e}")
+        # 不影響主流程，只記錄錯誤
+
+# =========================================================
 # API - 登入
 # =========================================================
 @auth_bp.route('/api/login', methods=['POST'])
@@ -274,12 +303,13 @@ def register_company():
         
         user_id = cursor.lastrowid # 獲取剛插入的 users.id
         
-        # 5. 發送通知給所有科助
+        # 5. 發送通知給所有科助和主任
         title = "新廠商申請通知"
         message = f"有新的廠商申請待審核：\n帳號：{username}\nEmail：{email}\n請前往審核頁面處理。"
         link_url = "/admin/user_management"  # 連結到用戶管理頁面，科助可以在此審核廠商
         
         notify_all_ta(conn, title, message, link_url)
+        notify_all_directors(conn, title, message, link_url)
         
         conn.commit()
 
