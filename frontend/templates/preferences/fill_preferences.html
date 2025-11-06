@@ -218,6 +218,9 @@
                     <i class="bi bi-lock-fill me-2"></i>登入後可儲存
                 </button>
                 {% else %}
+                <button id="aiRecommendBtn" type="button" class="btn btn-info px-5 py-2 me-3" style="background-color: #17a2b8; border-color: #17a2b8; color: white;">
+                    <i class="bi bi-robot me-2"></i>AI 推薦志願
+                </button>
                 <button id="toggleEditBtn" type="button" class="btn btn-primary px-5 py-2 me-3">
                     <i class="bi bi-pencil-square me-2"></i>修改志願序
                 </button>
@@ -380,6 +383,149 @@
 
         if (hasSubmitted) setReadOnlyMode(true);
         else toggleEditBtn.style.display = "none";
+
+        // ---------- AI 推薦志願功能 ----------
+        const aiRecommendBtn = document.getElementById("aiRecommendBtn");
+        if (aiRecommendBtn) {
+            aiRecommendBtn.addEventListener("click", async () => {
+                // 顯示輸入履歷文字的彈窗
+                const { value: resumeText } = await Swal.fire({
+                    title: 'AI 推薦志願序',
+                    html: `
+                        <p class="text-start mb-3">請輸入您的履歷內容，AI 將根據您的履歷推薦最適合的志願序。</p>
+                        <textarea id="resumeTextArea" class="swal2-textarea" placeholder="請貼上您的履歷內容，包含：\n- 個人基本資料\n- 學歷背景\n- 技能專長\n- 工作經驗\n- 專案經歷\n- 其他相關資訊..." style="width: 100%; min-height: 200px; padding: 10px; border: 1px solid #ddd; border-radius: 5px;"></textarea>
+                    `,
+                    focusConfirm: false,
+                    showCancelButton: true,
+                    confirmButtonText: '開始推薦',
+                    cancelButtonText: '取消',
+                    preConfirm: () => {
+                        const textarea = document.getElementById('resumeTextArea');
+                        return textarea ? textarea.value.trim() : '';
+                    },
+                    didOpen: () => {
+                        const textarea = document.getElementById('resumeTextArea');
+                        if (textarea) textarea.focus();
+                    }
+                });
+
+                if (!resumeText) return; // 用戶取消或沒有輸入內容
+
+                // 顯示載入中
+                Swal.fire({
+                    title: 'AI 正在分析中...',
+                    html: '請稍候，這可能需要幾秒鐘時間',
+                    allowOutsideClick: false,
+                    didOpen: () => {
+                        Swal.showLoading();
+                    }
+                });
+
+                try {
+                    const response = await fetch("/api/recommend-preferences", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ resumeText })
+                    });
+
+                    const result = await response.json();
+
+                    if (!result.success) {
+                        return Swal.fire({
+                            icon: 'error',
+                            title: '推薦失敗',
+                            text: result.error || '無法取得AI推薦，請稍後再試。'
+                        });
+                    }
+
+                    const recommendations = result.recommendations || [];
+                    if (recommendations.length === 0) {
+                        return Swal.fire({
+                            icon: 'warning',
+                            title: '無推薦結果',
+                            text: 'AI 無法生成推薦，請確認履歷內容是否足夠詳細。'
+                        });
+                    }
+
+                    // 顯示推薦結果
+                    let recommendationsHtml = '<div class="text-start" style="max-height: 400px; overflow-y: auto;">';
+                    recommendations.forEach((rec, idx) => {
+                        recommendationsHtml += `
+                            <div class="mb-3 p-3" style="border: 1px solid #ddd; border-radius: 8px; background-color: #f8f9fa;">
+                                <h6 class="mb-2"><strong>第 ${rec.order} 志願推薦</strong></h6>
+                                <p class="mb-1"><strong>公司：</strong>${rec.company_name}</p>
+                                <p class="mb-1"><strong>職缺：</strong>${rec.job_title}</p>
+                                <p class="mb-0 text-muted"><small><strong>推薦理由：</strong>${rec.reason || '無'}</small></p>
+                            </div>
+                        `;
+                    });
+                    recommendationsHtml += '</div>';
+
+                    const { isConfirmed } = await Swal.fire({
+                        icon: 'success',
+                        title: `AI 推薦了 ${recommendations.length} 個志願`,
+                        html: recommendationsHtml,
+                        showCancelButton: true,
+                        confirmButtonText: '套用到志願序',
+                        cancelButtonText: '取消',
+                        width: '600px'
+                    });
+
+                    if (isConfirmed) {
+                        // 套用推薦到志願序
+                        const allCards = document.querySelectorAll(".preference-card");
+                        
+                        // 使用 Promise 來確保每個推薦都正確套用
+                        const applyPromises = recommendations.map((rec, idx) => {
+                            return new Promise((resolve) => {
+                                if (idx >= allCards.length) {
+                                    resolve();
+                                    return;
+                                }
+                                
+                                const card = allCards[idx];
+                                const companySelect = card.querySelector(".company-select");
+                                const jobSelect = card.querySelector(".job-select");
+                                
+                                // 設定公司
+                                companySelect.value = String(rec.company_id);
+                                
+                                // 載入該公司的職缺
+                                loadJobs(String(rec.company_id)).then(() => {
+                                    // 等待職缺選單更新
+                                    setTimeout(() => {
+                                        jobSelect.value = String(rec.job_id);
+                                        jobSelect.dispatchEvent(new Event('change'));
+                                        resolve();
+                                    }, 300);
+                                });
+                                
+                                // 觸發公司選擇事件以載入職缺
+                                companySelect.dispatchEvent(new Event('change'));
+                            });
+                        });
+
+                        // 等待所有推薦套用完成
+                        Promise.all(applyPromises).then(() => {
+                            updateSelections();
+                            Swal.fire({
+                                icon: 'success',
+                                title: '已套用推薦',
+                                text: `已將 ${recommendations.length} 個推薦套用到志願序中，您可以進一步調整後再送出。`,
+                                timer: 2000
+                            });
+                        });
+                    }
+                } catch (error) {
+                    console.error('AI 推薦錯誤:', error);
+                    Swal.fire({
+                        icon: 'error',
+                        title: '網路錯誤',
+                        text: '無法連線到伺服器，請稍後再試。'
+                    });
+                }
+            });
+        }
 
         // ---------- 表單送出 ----------
         document.getElementById("preferencesForm").addEventListener("submit", async e => {

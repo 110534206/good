@@ -1,6 +1,9 @@
 import os
 import google.generativeai as genai
-from flask import Blueprint, request, Response, jsonify
+from flask import Blueprint, request, Response, jsonify, session
+from config import get_db
+import json
+import traceback
 
 # --- 初始化 AI Blueprint ---
 ai_bp = Blueprint('ai_bp', __name__)
@@ -112,3 +115,239 @@ def revise_resume():
     except Exception as e:
         print(f"Gemini API 呼叫失敗： {e}")
         return jsonify({"error": f"AI 服務處理失敗: {e}"}), 500
+
+
+# ==========================================================
+# AI 推薦志願序 API 端點
+# ==========================================================
+@ai_bp.route('/api/recommend-preferences', methods=['POST'])
+def recommend_preferences():
+    """
+    AI 推薦適合的志願序選項
+    根據學生的履歷內容和公司職缺資訊進行匹配分析
+    """
+    
+    # 檢查 API Key
+    if not api_key or not model:
+        return jsonify({"success": False, "error": "AI 服務未正確配置 API Key。"}), 500
+    
+    # 權限檢查
+    if "user_id" not in session or session.get("role") != "student":
+        return jsonify({"success": False, "error": "只有學生可以使用此功能。"}), 403
+    
+    student_id = session["user_id"]
+    conn = None
+    cursor = None
+    
+    try:
+        # 接收履歷文字（可選，如果沒有提供則從資料庫查詢）
+        data = request.get_json() or {}
+        resume_text = data.get('resumeText', '').strip()
+        
+        conn = get_db()
+        cursor = conn.cursor(dictionary=True)
+        
+        # 如果沒有提供履歷文字，嘗試從資料庫取得最新的履歷
+        if not resume_text:
+            cursor.execute("""
+                SELECT filepath, original_filename
+                FROM resumes
+                WHERE user_id = %s AND status = 'approved'
+                ORDER BY created_at DESC
+                LIMIT 1
+            """, (student_id,))
+            resume_record = cursor.fetchone()
+            
+            if resume_record:
+                # 這裡可以讀取履歷檔案內容（需要額外的庫來解析PDF/DOCX）
+                # 目前先提示用戶需要提供履歷文字
+                return jsonify({
+                    "success": False,
+                    "error": "請提供履歷文字內容，或請先上傳並審核通過履歷檔案。"
+                }), 400
+        
+        # 取得所有已審核通過的公司和職缺
+        cursor.execute("""
+            SELECT 
+                ic.id AS company_id,
+                ic.company_name,
+                ic.description AS company_description,
+                ic.location AS company_address,
+                ij.id AS job_id,
+                ij.title AS job_title,
+                ij.description AS job_description,
+                ij.period AS job_period,
+                ij.work_time AS job_work_time,
+                ij.remark AS job_remark
+            FROM internship_companies ic
+            JOIN internship_jobs ij ON ic.id = ij.company_id
+            WHERE ic.status = 'approved' AND ij.is_active = TRUE
+            ORDER BY ic.company_name, ij.title
+        """)
+        companies_jobs = cursor.fetchall()
+        
+        if not companies_jobs:
+            return jsonify({
+                "success": False,
+                "error": "目前沒有可選的公司和職缺。"
+            }), 400
+        
+        # 整理公司和職缺資訊為結構化資料
+        companies_info = {}
+        for item in companies_jobs:
+            company_id = item['company_id']
+            if company_id not in companies_info:
+                companies_info[company_id] = {
+                    'company_id': company_id,
+                    'company_name': item['company_name'],
+                    'company_description': item['company_description'] or '',
+                    'company_address': item['company_address'] or '',
+                    'jobs': []
+                }
+            
+            companies_info[company_id]['jobs'].append({
+                'job_id': item['job_id'],
+                'job_title': item['job_title'],
+                'job_description': item['job_description'] or '',
+                'job_period': item['job_period'] or '',
+                'job_work_time': item['job_work_time'] or '',
+                'job_remark': item['job_remark'] or ''
+            })
+        
+        # 構建 AI 提示詞
+        companies_text = ""
+        for company in companies_info.values():
+            jobs_text = "\n".join([
+                f"  - 職缺ID: {job['job_id']}, 職缺名稱: {job['job_title']}, "
+                f"描述: {job['job_description']}, 實習期間: {job['job_period']}, "
+                f"工作時間: {job['job_work_time']}, 備註: {job['job_remark']}"
+                for job in company['jobs']
+            ])
+            companies_text += f"""
+公司ID: {company['company_id']}
+公司名稱: {company['company_name']}
+公司描述: {company['company_description']}
+公司地址: {company['company_address']}
+職缺列表:
+{jobs_text}
+---
+"""
+        
+        # 構建 AI 分析提示詞
+        prompt = f"""你是一位專業的實習顧問，請根據學生的履歷內容，推薦最適合的實習志願序（最多5個）。
+
+【學生履歷內容】
+{resume_text}
+
+【可選的公司和職缺資訊】
+{companies_text}
+
+【任務要求】
+1. 分析學生的技能、經驗和興趣
+2. 匹配最適合的公司和職缺
+3. 按照適合度排序，推薦最多5個志願（從最適合到較適合）
+4. 每個推薦需包含：公司ID、職缺ID、推薦理由
+
+【輸出格式】
+請以 JSON 格式輸出，格式如下：
+{{
+  "recommendations": [
+    {{
+      "order": 1,
+      "company_id": 公司ID（數字）,
+      "job_id": 職缺ID（數字）,
+      "company_name": "公司名稱",
+      "job_title": "職缺名稱",
+      "reason": "推薦理由（簡短說明為什麼適合）"
+    }},
+    ...
+  ]
+}}
+
+請確保：
+- 只輸出 JSON 格式，不要有其他文字
+- 推薦的順序從最適合到較適合排列
+- 每個推薦都要有明確的推薦理由
+- 公司ID和職缺ID必須是實際存在的數字
+"""
+        
+        print(f"🔍 AI 推薦志願序 - 學生ID: {student_id}, 履歷長度: {len(resume_text)}")
+        
+        # 呼叫 AI 模型
+        response = model.generate_content(prompt)
+        ai_response_text = response.text.strip()
+        
+        # 清理回應文字（移除可能的 markdown 代碼塊標記）
+        if ai_response_text.startswith('```json'):
+            ai_response_text = ai_response_text[7:]
+        if ai_response_text.startswith('```'):
+            ai_response_text = ai_response_text[3:]
+        if ai_response_text.endswith('```'):
+            ai_response_text = ai_response_text[:-3]
+        ai_response_text = ai_response_text.strip()
+        
+        # 解析 JSON 回應
+        try:
+            recommendations_data = json.loads(ai_response_text)
+            recommendations = recommendations_data.get('recommendations', [])
+            
+            # 驗證推薦的ID是否存在於資料庫中
+            valid_recommendations = []
+            for rec in recommendations:
+                company_id = rec.get('company_id')
+                job_id = rec.get('job_id')
+                
+                # 驗證這個職缺是否屬於該公司且有效
+                cursor.execute("""
+                    SELECT ij.id, ij.title, ic.company_name
+                    FROM internship_jobs ij
+                    JOIN internship_companies ic ON ij.company_id = ic.id
+                    WHERE ij.id = %s AND ij.company_id = %s 
+                    AND ij.is_active = TRUE AND ic.status = 'approved'
+                """, (job_id, company_id))
+                job_check = cursor.fetchone()
+                
+                if job_check:
+                    valid_recommendations.append({
+                        'order': rec.get('order'),
+                        'company_id': company_id,
+                        'job_id': job_id,
+                        'company_name': rec.get('company_name', job_check['company_name']),
+                        'job_title': rec.get('job_title', job_check['title']),
+                        'reason': rec.get('reason', '')
+                    })
+            
+            if not valid_recommendations:
+                return jsonify({
+                    "success": False,
+                    "error": "AI 無法生成有效的推薦，請確認履歷內容是否足夠詳細。"
+                }), 400
+            
+            print(f"✅ AI 推薦成功 - 共 {len(valid_recommendations)} 個推薦")
+            
+            return jsonify({
+                "success": True,
+                "recommendations": valid_recommendations
+            })
+            
+        except json.JSONDecodeError as e:
+            print(f"❌ JSON 解析錯誤: {e}")
+            print(f"AI 回應內容: {ai_response_text}")
+            return jsonify({
+                "success": False,
+                "error": "AI 回應格式錯誤，請稍後再試。"
+            }), 500
+        
+    except Exception as e:
+        traceback.print_exc()
+        print(f"❌ AI 推薦志願序錯誤: {e}")
+        return jsonify({
+            "success": False,
+            "error": f"AI 服務處理失敗: {str(e)}"
+        }), 500
+    
+    finally:
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
