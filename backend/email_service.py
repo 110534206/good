@@ -14,7 +14,7 @@ SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
 SMTP_USER = os.getenv("SMTP_USER", "")
 SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")
 SMTP_FROM_EMAIL = os.getenv("SMTP_FROM_EMAIL", SMTP_USER)
-SMTP_FROM_NAME = os.getenv("SMTP_FROM_NAME", "智慧實習系統")
+SMTP_FROM_NAME = os.getenv("SMTP_FROM_NAME", "智慧實習平台")
 
 # 是否啟用郵件功能
 EMAIL_ENABLED = os.getenv("EMAIL_ENABLED", "false").lower() == "true"
@@ -123,7 +123,7 @@ def send_resume_approval_email(student_email, student_name, reviewer_name):
     """
     發送履歷審核通過通知郵件
     """
-    subject = "【智慧實習系統】履歷審核通過通知"
+    subject = "【智慧實習平台】履歷審核通過通知"
     content = f"""
 親愛的 {student_name} 同學：
 
@@ -138,7 +138,7 @@ def send_resume_approval_email(student_email, student_name, reviewer_name):
 此為系統自動發送，請勿直接回覆此郵件。
 
 --
-智慧實習系統
+智慧實習平台
 """
     return send_email(student_email, subject, content)
 
@@ -159,7 +159,7 @@ def send_resume_rejection_email(student_email, student_name, reviewer_name, reje
     回傳:
         tuple: (success: bool, message: str)
     """
-    subject = "【智慧實習系統】履歷退件通知"
+    subject = "【智慧實習平台】履歷退件通知"
     content = f"""
 親愛的 {student_name} 同學：
 
@@ -198,7 +198,7 @@ def send_preference_rejection_email(student_email, student_name, reviewer_name, 
     回傳:
         tuple: (success: bool, message: str)
     """
-    subject = "【智慧實習系統】志願序退件通知"
+    subject = "【智慧實習平台】志願序退件通知"
     content = f"""
 親愛的 {student_name} 同學：
 
@@ -237,7 +237,7 @@ def send_admission_email(student_email, student_name, company_name, teacher_name
     回傳:
         tuple: (success: bool, message: str)
     """
-    subject = "【智慧實習系統】實習錄取通知"
+    subject = "【智慧實習平台】實習錄取通知"
     content = f"""
 親愛的 {student_name} 同學：
 
@@ -254,7 +254,7 @@ def send_admission_email(student_email, student_name, company_name, teacher_name
 此為系統自動發送，請勿直接回覆此郵件。
 
 --
-智慧實習系統
+智慧實習平台
 """
     
     return send_email(student_email, subject, content)
