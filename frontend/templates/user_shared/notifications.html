@@ -69,7 +69,6 @@
         <td>${n.message.replace(/\n/g, '<br>')}</td>
         <td>${new Date(n.created_at).toLocaleString('zh-TW', { hour12: false })}</td>
         <td>
-          ${n.link_url ? `<a href="${n.link_url}" class="btn btn-sm btn-primary">前往</a>` : ''}
           ${!n.is_read ? `<button class="btn btn-sm btn-success" onclick="markRead(${n.id})">已讀</button>` : ''}
           <button class="btn btn-sm btn-danger" onclick="deleteNotif(${n.id})">刪除</button>
         </td>
