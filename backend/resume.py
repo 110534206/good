@@ -206,11 +206,24 @@ def download_resume(resume_id):
             conn.close()
             return jsonify({"success": False, "message": "找不到履歷"}), 404
 
+        # ⭐️ 修正邏輯：安全地獲取 session 資訊，並將 user_id 轉為 int 以確保與資料庫 ID 比較時型別一致 ⭐️
+        session_user_id = session.get('user_id')
+        session_role = session.get('role')
+        
+        # 嘗試將 session_user_id 轉換為整數，這是解決權限問題的關鍵步驟
+        try:
+            if session_user_id is not None:
+                session_user_id = int(session_user_id)
+        except (TypeError, ValueError):
+            # 如果轉換失敗，保持原值，讓 can_access_target_resume 處理
+            pass 
+
         # 權限檢查（TA 和其他讀取角色會透過 can_access_target_resume）
-        if not can_access_target_resume(cursor, session['user_id'], session['role'], resume['user_id']):
+        if not can_access_target_resume(cursor, session_user_id, session_role, resume['user_id']):
             cursor.close()
             conn.close()
             return jsonify({"success": False, "message": "沒有權限下載該履歷"}), 403
+        # ⭐️ 修正邏輯結束 ⭐️
 
         filepath = resume['filepath']
         cursor.close()
@@ -862,7 +875,7 @@ def delete_resume():
         role = session['role']
         user_id = session['user_id']
 
-        # 權限： teacher 要帶該班級； director 要同科系； admin 可以
+        # 權限檢查開始
         if role == "class_teacher":
             # 取得 owner 的 class_id
             cursor.execute("SELECT class_id FROM users WHERE id = %s", (owner_id,))
@@ -884,11 +897,21 @@ def delete_resume():
         elif role == "admin":
             pass
 
+        # 學生只能刪除自己的履歷
+        elif role == "student": 
+            if user_id != owner_id:
+                # 嚴格確保學生只能刪除自己的履歷
+                cursor.close()
+                conn.close()
+                return jsonify({"success": False, "message": "學生只能刪除自己的履歷"}), 403
+            pass # 自己的履歷，允許繼續執行刪除
+            
         else:
-            # student, ta, others 無刪除權限
+            # ta, others 無刪除權限
             cursor.close()
             conn.close()
             return jsonify({"success": False, "message": "角色無權限刪除"}), 403
+        # 權限檢查結束
 
         # 刪除檔案與資料
         filepath = result['filepath']

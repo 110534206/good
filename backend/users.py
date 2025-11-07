@@ -7,6 +7,25 @@ import re
 
 users_bp = Blueprint("users_bp", __name__)
 
+role_map = {
+    "student": "學生",
+    "teacher": "指導老師",
+    "director": "主任",
+    "ta": "科助",
+    "admin": "管理員",
+    "vendor": "廠商",
+    "class_teacher": "班導師"
+}
+role_map_reverse = {
+    "學生": "student",
+    "指導老師": "teacher",
+    "主任": "director",
+    "科助": "ta",
+    "管理員": "admin",
+    "廠商": "vendor",
+    "班導師": "teacher" 
+}
+
 # -------------------------
 # 指導老師首頁
 # -------------------------
@@ -28,7 +47,6 @@ def teacher_home():
         session['original_role'] = 'director' if session.get('role') == 'director' else 'teacher'
 
     return render_template('user_shared/teacher_home.html')
-
 
 # -------------------------
 # 班導首頁
@@ -55,6 +73,15 @@ def class_teacher_home():
                            original_role=session.get("original_role"))
 
 # -------------------------
+# Helper - 取得所有學期代碼
+# -------------------------
+def get_all_semesters(cursor):
+    """從 semesters 表格中獲取所有學期代碼和名稱。"""
+    # 這裡假設 semesters 表中有 id 和 code (學期代碼，例如 1132) 欄位
+    cursor.execute("SELECT code, code AS display_name FROM semesters ORDER BY code DESC")
+    return cursor.fetchall()
+
+# -------------------------
 # API - 取得個人資料
 # -------------------------
 @users_bp.route("/api/profile", methods=["GET"])
@@ -70,7 +97,7 @@ def get_profile():
     try:
         cursor.execute("""
             SELECT u.id, u.username, u.email, u.role AS original_role, u.name,
-                   c.department, c.name AS class_name, u.class_id, u.avatar_url
+                   c.department, c.name AS class_name, u.class_id, u.avatar_url, u.current_semester_code
             FROM users u
             LEFT JOIN classes c ON u.class_id = c.id
             WHERE u.id = %s
@@ -80,25 +107,28 @@ def get_profile():
         if not user:
             return jsonify({"success": False, "message": "使用者不存在"}), 404
 
-       
+        # ------------------------------
+        # ⭐ 修正：從 semesters 取得顯示用學期名稱
+        # ------------------------------
+        user['current_semester_display'] = ''
+        semester_id = user.get('current_semester_code')
+
+        if semester_id:
+            cursor.execute("SELECT code FROM semesters WHERE id = %s", (semester_id,))
+            semester_row = cursor.fetchone()
+            if semester_row:
+                user['current_semester_display'] = semester_row['code']
+            else:
+                user['current_semester_display'] = str(semester_id)
+        # ------------------------------
+
         display_role = active_role
         if active_role == "class_teacher":
             display_role = "teacher"
 
-        # 原始角色
         original_role_from_db = user.pop("original_role")
-
-        # 🔹 確保回傳的 user["role"] 是當前活躍角色
         user["role"] = display_role
-        # 🔹 額外提供前端顯示文字
-        user["display_role"] = "班導師" if active_role == "class_teacher" else (
-            "主任" if display_role == "director" else
-            "指導老師" if display_role == "teacher" else
-            "學生" if display_role == "student" else
-            "科助" if display_role == "ta" else
-            "管理員" if display_role == "admin" else
-            "廠商" if display_role == "vendor" else display_role
-        )
+        user["display_role"] = role_map.get(active_role, active_role)
 
         if original_role_from_db == "student" and user.get("username") and len(user["username"]) >= 3:
             user["admission_year"] = user["username"][:3]
@@ -130,7 +160,6 @@ def get_profile():
             user["class_display_name"] = ""
 
         return jsonify({"success": True, "user": user})
-
     except Exception as e:
         print("❌ 取得個人資料錯誤:", e)
         return jsonify({"success": False, "message": "伺服器錯誤"}), 500
@@ -143,7 +172,6 @@ def get_profile():
 # -------------------------
 @users_bp.route("/api/saveProfile", methods=["POST"])
 def save_profile():
-    # 訪客禁止使用此功能
     if session.get('role') == 'guest':
         return jsonify({"success": False, "message": "訪客無權限操作此功能"}), 403
 
@@ -156,51 +184,32 @@ def save_profile():
     if not username or not role_display or not name:
         return jsonify({"success": False, "message": "缺少必要欄位"}), 400
 
-    role_map = {
-        "學生": "student",
-        "指導老師": "teacher",
-        "主任": "director",
-        "科助": "ta",
-        "管理員": "admin",
-        "廠商": "vendor"
-    }
-    role = role_map.get(role_display)
+    role = role_map_reverse.get(role_display)
     if not role:
         return jsonify({"success": False, "message": "身分錯誤"}), 400
 
     conn = get_db()
     cursor = conn.cursor()
-    user_id = None
+    user_id = session.get("user_id")
+
     try:
-        user_id = session.get("user_id") # 使用 session 中的 user_id
-        
         if not user_id:
-             return jsonify({"success": False, "message": "請重新登入"}), 401
+            return jsonify({"success": False, "message": "請重新登入"}), 401
 
         cursor.execute("UPDATE users SET name=%s WHERE id=%s", (name, user_id))
 
         if role == "student":
-            if not class_id:
-                pass
-            else:
-                try:
-                    class_id = int(class_id)
-                except ValueError:
-                    return jsonify({"success": False, "message": "班級格式錯誤"}), 400
-
+            if class_id:
                 cursor.execute("SELECT id FROM classes WHERE id=%s", (class_id,))
                 if not cursor.fetchone():
                     return jsonify({"success": False, "message": "班級不存在"}), 404
-
-                cursor.execute("UPDATE users SET class_id=%s WHERE id=%s",
-                            (class_id, user_id)
-                )
+                cursor.execute("UPDATE users SET class_id=%s WHERE id=%s", (class_id, user_id))
         else:
-            cursor.execute(
-                "UPDATE users SET class_id=NULL WHERE id=%s",
-                (user_id,)
-            )
+            cursor.execute("UPDATE users SET class_id=NULL WHERE id=%s", (user_id,))
 
+        conn.commit()
+
+        # 判斷是否班導師
         is_homeroom = False
         if role in ("teacher", "director"):
             cursor.execute("""
@@ -209,20 +218,35 @@ def save_profile():
             """, (user_id,))
             is_homeroom = bool(cursor.fetchone())
 
-        conn.commit()
-        
         return jsonify({
-            "success": True, 
+            "success": True,
             "message": "資料更新成功",
-            "role": role, 
-            "is_homeroom": is_homeroom 
+            "role": role,
+            "is_homeroom": is_homeroom
         })
     except Exception as e:
         print("❌ 更新資料錯誤:", e)
+        conn.rollback()
         return jsonify({"success": False, "message": "資料庫錯誤"}), 500
     finally:
         cursor.close()
         conn.close()
+
+# -------------------------
+# API - 取得所有學期
+# -------------------------
+@users_bp.route("/api/semesters", methods=["GET"])
+def get_semesters():
+    try:
+        conn = get_db()
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute("SELECT id, code FROM semesters ORDER BY code DESC")
+        semesters = cursor.fetchall()
+        cursor.close()
+        conn.close()
+        return jsonify({"success": True, "semesters": semesters})
+    except Exception as e:
+        return jsonify({"success": False, "message": f"無法取得學期資料：{str(e)}"}), 500
 
 # -------------------------
 # API - 上傳頭像
