@@ -432,6 +432,24 @@
     // 帳號下拉
     document.addEventListener("DOMContentLoaded", function () {
 
+      const defaultAvatarUrl = "{{ url_for('static', filename='images/avatar.png') }}";
+      const avatarImg = document.getElementById('login-avatar');
+
+      if (avatarImg) {
+        fetch('/api/profile')
+          .then(res => res.ok ? res.json() : Promise.reject(new Error('取得個人資料失敗')))
+          .then(data => {
+            if (data.success && data.user && data.user.avatar_url) {
+              avatarImg.src = `${data.user.avatar_url}?t=${Date.now()}`;
+            } else {
+              avatarImg.src = defaultAvatarUrl;
+            }
+          })
+          .catch(() => {
+            avatarImg.src = defaultAvatarUrl;
+          });
+      }
+
       const dropdownBtn = document.getElementById("accountDropdownBtn");
       const dropdownMenu = document.getElementById("accountDropdownMenu");
 
