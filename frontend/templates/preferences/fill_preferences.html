@@ -171,14 +171,42 @@
 
         <form id="preferencesForm" class="mx-auto" style="max-width: 900px;">
 
-            <div class="card mb-4 p-4 border-info" style="border: 1px solid #17a2b8; border-left: 5px solid #17a2b8; background-color: #e9f7f9;">
-                <h5 class="card-title text-info"><i class="bi bi-lightbulb-fill"></i> **AI 志願序推薦功能**</h5>
-                <p class="mb-0">請依照您的需求選擇志願序，或點擊下方的 **AI 推薦按鈕**。</p>
-                <p class="mb-0">系統將依據您在彈跳視窗中提供的**履歷日記**內容，抓出最適合您的志願序。</p>
+            <div class="card mb-4 p-4 border-primary" style="border: 1px solid #1a73e8; border-left: 5px solid #1a73e8;">
+                <h5 class="card-title text-primary"><i class="bi bi-robot me-2"></i> AI 推薦篩選條件</h5>
+                <p class="mb-3 fw-bold">請選擇您的實習偏好，AI 將根據這些條件推薦最適合的志願序：</p>
+
+                <div class="row g-3">
+                    <div class="col-md-4">
+                        <label for="distance-filter" class="form-label">距離遠近偏好</label>
+                        <select class="form-select" id="distance-filter">
+                            <option selected value="any">不限距離</option>
+                            <option value="close">通勤 30 分鐘內</option>
+                            <option value="medium">通勤 1 小時內</option>
+                            <option value="far">超過 1 小時 (可接受)</option>
+                        </select>
+                    </div>
+                    
+                    <div class="col-md-4">
+                        <label for="transportation-filter" class="form-label">交通工具偏好</label>
+                        <select class="form-select" id="transportation-filter">
+                            <option selected value="any">不限交通方式</option>
+                            <option value="public">大眾運輸方便</option>
+                            <option value="car">汽/機車為主</option>
+                            <option value="bike">自行車/步行</option>
+                        </select>
+                    </div>
+
+                    <div class="col-md-4">
+                        <label for="time-filter" class="form-label">實習期間/時段偏好</label>
+                        <select class="form-select" id="time-filter">
+                            <option selected value="any">不限時段</option>
+                            <option value="long_term">長期實習 (半年以上)</option>
+                            <option value="short_term">短期實習 (寒暑假)</option>
+                            <option value="flexible">彈性工時/兼職</option>
+                        </select>
+                    </div>
+                </div>
             </div>
-            
-            <input type="hidden" id="transportation-filter" value="any">
-            <input type="hidden" id="distance-filter" value="any">
             
             {% for rank in range(1, 5+1) %}
             <div class="preference-card" data-rank="{{ rank }}">
@@ -230,7 +258,7 @@
                 {% else %}
                 
                 <button id="aiRecommendBtnNew" type="button" class="btn btn-warning px-5 py-2 me-3" style="background-color: #ffc107; border-color: #ffc107; color: #343a40;">
-                    <i class="bi bi-robot me-2"></i>依履歷日記取得 **AI 推薦志願序**
+                    <i class="bi bi-robot me-2"></i>依條件取得 **AI 推薦志願序**
                 </button>
 
                 <button id="toggleEditBtn" type="button" class="btn btn-primary px-5 py-2 me-3">
@@ -246,7 +274,7 @@
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
-        // ... (省略不變的 JavaScript 函式：loadJobs, updateSelections, initializeSubmittedPreferences, setReadOnlyMode) ...
+        // ... (初始化和狀態控制等邏輯保持不變) ...
         const companies = {{ companies | tojson }};
         const submitted = {{ submitted | tojson }};
         const preview = {{ preview | tojson }};
@@ -397,41 +425,26 @@
         if (hasSubmitted) setReadOnlyMode(true);
         else toggleEditBtn.style.display = "none";
 
-        // ---------- AI 推薦志願功能 ----------
+        // ---------- AI 推薦志願功能 (重要修改) ----------
         const aiRecommendBtn = document.getElementById("aiRecommendBtnNew"); 
         if (aiRecommendBtn) {
             aiRecommendBtn.addEventListener("click", async () => {
-                // 💡 由於移除了下拉式選單，直接使用 hidden input 的值 'any'
-                const transportationFilter = document.getElementById('transportation-filter').value;
+                // 💡 取得三個篩選器值
                 const distanceFilter = document.getElementById('distance-filter').value;
+                const transportationFilter = document.getElementById('transportation-filter').value;
+                const timeFilter = document.getElementById('time-filter').value;
 
-                // 顯示輸入履歷文字的彈窗
-                const { value: resumeText } = await Swal.fire({
-                    title: 'AI 推薦志願序',
-                    html: `
-                        <p class="text-start mb-3">請輸入您的履歷日記內容，AI 將為您推薦最適合的志願序。</p>
-                        <textarea id="resumeTextArea" class="swal2-textarea" placeholder="請貼上您的履歷日記內容，包含：\n- 個人基本資料\n- 學歷背景\n- 技能專長\n- 工作經驗\n- 專案經歷\n- 其他相關資訊..." style="width: 100%; min-height: 200px; padding: 10px; border: 1px solid #ddd; border-radius: 5px;"></textarea>
-                    `,
-                    focusConfirm: false,
-                    showCancelButton: true,
-                    confirmButtonText: '開始推薦',
-                    cancelButtonText: '取消',
-                    preConfirm: () => {
-                        const textarea = document.getElementById('resumeTextArea');
-                        return textarea ? textarea.value.trim() : '';
-                    },
-                    didOpen: () => {
-                        const textarea = document.getElementById('resumeTextArea');
-                        if (textarea) textarea.focus();
-                    }
-                });
-
-                if (!resumeText) return; 
-
-                // 顯示載入中
+                // 顯示載入中 (不再彈出履歷日記輸入框)
                 Swal.fire({
                     title: 'AI 正在分析中...',
-                    html: '請稍候，這可能需要幾秒鐘時間',
+                    html: `
+                        <p>將根據您的選擇推薦：</p>
+                        <ul class="text-start mb-0" style="list-style-type: none; padding-left: 0;">
+                            <li>距離偏好: <strong>${document.getElementById('distance-filter').options[document.getElementById('distance-filter').selectedIndex].text}</strong></li>
+                            <li>交通偏好: <strong>${document.getElementById('transportation-filter').options[document.getElementById('transportation-filter').selectedIndex].text}</strong></li>
+                            <li>時間偏好: <strong>${document.getElementById('time-filter').options[document.getElementById('time-filter').selectedIndex].text}</strong></li>
+                        </ul>
+                    `,
                     allowOutsideClick: false,
                     didOpen: () => {
                         Swal.showLoading();
@@ -439,14 +452,14 @@
                 });
 
                 try {
-                    // 💡 呼叫後端 API，傳遞履歷日記和預設的篩選條件 ('any')
+                    // 💡 呼叫後端 API，只傳遞篩選條件，不傳遞 resumeText
                     const response = await fetch("/api/recommend-preferences", {
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
                         body: JSON.stringify({ 
-                            resumeText: resumeText,
-                            transportationFilter: transportationFilter, 
-                            distanceFilter: distanceFilter 
+                            distanceFilter: distanceFilter, 
+                            transportationFilter: transportationFilter,
+                            timeFilter: timeFilter // 💡 新增時間篩選條件
                         })
                     });
 
@@ -465,7 +478,7 @@
                         return Swal.fire({
                             icon: 'warning',
                             title: '無推薦結果',
-                            text: 'AI 無法生成推薦，請確認履歷日記內容是否足夠詳細。'
+                            text: 'AI 無法生成推薦，請嘗試放寬篩選條件。'
                         });
                     }
 
@@ -542,7 +555,7 @@
             });
         }
 
-        // ---------- 表單送出 ----------
+        // ---------- 表單送出 (保持不變) ----------
         document.getElementById("preferencesForm").addEventListener("submit", async e => {
             e.preventDefault();
             if (preview) return Swal.fire({ icon: 'warning', title: '未授權', text: '此為預覽模式，請登入學生帳號後再儲存志願序。' });
