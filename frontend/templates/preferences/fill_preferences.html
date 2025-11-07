@@ -171,7 +171,7 @@
 
         <form id="preferencesForm" class="mx-auto" style="max-width: 900px;">
 
-            <div class="card mb-4 p-4 border-primary" style="border: 1px solid #1a73e8; border-left: 5px solid #1a73e8;">
+            <div id="aiPreferenceCard" class="card mb-4 p-4 border-primary d-none" style="border: 1px solid #1a73e8; border-left: 5px solid #1a73e8;">
                 <h5 class="card-title text-primary"><i class="bi bi-robot me-2"></i> AI 推薦篩選條件</h5>
                 <p class="mb-3 fw-bold">請選擇您的實習偏好，AI 將根據這些條件推薦最適合的志願序：</p>
 
@@ -278,6 +278,7 @@
         const companies = {{ companies | tojson }};
         const submitted = {{ submitted | tojson }};
         const preview = {{ preview | tojson }};
+        const preferenceCard = document.getElementById("aiPreferenceCard");
 
         const selectedJobIds = new Set();
         const companyJobsCache = {};
@@ -429,6 +430,12 @@
         const aiRecommendBtn = document.getElementById("aiRecommendBtnNew"); 
         if (aiRecommendBtn) {
             aiRecommendBtn.addEventListener("click", async () => {
+                if (preferenceCard && preferenceCard.classList.contains("d-none")) {
+                    preferenceCard.classList.remove("d-none");
+                    preferenceCard.scrollIntoView({ behavior: "smooth", block: "start" });
+                    return;
+                }
+
                 // 💡 取得三個篩選器值
                 const distanceFilter = document.getElementById('distance-filter').value;
                 const transportationFilter = document.getElementById('transportation-filter').value;
