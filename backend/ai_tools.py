@@ -59,7 +59,7 @@ def extract_pdf_text(pdf_path: str) -> str:
 # ... (revise_resume API 保持不變) ...
 
 # ==========================================================
-# AI 推薦志願序 API (已修改：依據篩選條件推薦)
+# AI 推薦志願序 API 
 # ==========================================================
 @ai_bp.route('/api/recommend-preferences', methods=['POST'])
 def recommend_preferences():

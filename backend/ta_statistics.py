@@ -122,24 +122,24 @@ def get_overview():
         conn.close()
 
 # =========================================================
-# API: 取得各班級統計（列表）
+# API: 取得各班級統計列表
 # =========================================================
 @ta_statistics_bp.route("/api/classes", methods=["GET"])
 def get_classes_statistics():
     """科助端取得各班級統計列表"""
     if 'user_id' not in session or session.get('role') not in ['ta', 'admin']:
         return jsonify({"success": False, "message": "未授權"}), 403
-    
+
     conn = get_db()
     cursor = conn.cursor(dictionary=True)
-    
+
     try:
-        # 獲取當前學期ID
+        # 取得目前學期
         cursor.execute("SELECT id FROM semesters WHERE is_active = 1 LIMIT 1")
         current_semester = cursor.fetchone()
         semester_id = current_semester['id'] if current_semester else None
-        
-        # 查詢所有班級的統計
+
+        # 查詢所有班級統計 (SQL中已移除 ORDER BY)
         cursor.execute("""
             SELECT 
                 c.id AS class_id,
@@ -161,12 +161,28 @@ def get_classes_statistics():
             LEFT JOIN resumes r ON r.user_id = u.id AND r.semester_id = %s
             LEFT JOIN student_preferences sp ON sp.student_id = u.id AND sp.semester_id = %s
             GROUP BY c.id, c.name, c.department
-            ORDER BY c.department, c.name
         """, (semester_id, semester_id))
-        
+
         classes_stats = cursor.fetchall()
-        
-        # 計算完成率和通過率
+
+        # ✅ 改成依班級名稱中數字遞增排序 (Python 邏輯)
+        def extract_grade_num(name):
+            """從班級名稱取出年級數字 (ex: 資一孝 → 1)"""
+            # 增加 '六' 以應對五專，可根據貴校情況調整
+            mapping = {'一': 1, '二': 2, '三': 3, '四': 4, '五': 5, '六': 6} 
+            
+            # 遍歷班級名稱，尋找第一個匹配的年級數字
+            for ch, num in mapping.items():
+                if ch in name:
+                    return num
+            return 99  # 沒找到則放列表的最後面
+
+        # 核心排序：主要依據年級數字 (數字遞增)，次要依據完整班級名稱 (字串遞增，確保甲班排在乙班前)
+        classes_stats.sort(
+            key=lambda x: (extract_grade_num(x['class_name']), x['class_name'])
+        )
+
+        # 計算完成率
         for stat in classes_stats:
             total = stat['total_students'] or 0
             # 履歷完成率
@@ -187,18 +203,20 @@ def get_classes_statistics():
                 (stat['students_preferences_approved'] or 0) * 100.0 / (stat['students_with_preferences'] or 1)
                 if stat['students_with_preferences'] else 0, 2
             )
-        
+
         return jsonify({
             "success": True,
             "classes": classes_stats
         })
-    
+
     except Exception as e:
+        # 請確保檔案頂部有 import traceback
+        import traceback 
         traceback.print_exc()
         return jsonify({"success": False, "message": f"查詢失敗: {str(e)}"}), 500
     finally:
         cursor.close()
-        conn.close()    
+        conn.close()
 
 # --------------------------------
 # 班級列表
@@ -253,6 +271,57 @@ def get_students_by_class():
         cursor.close()
         conn.close()
 
+# --------------------------------
+# 單一班級統計 (新增部分)
+# --------------------------------
+@ta_statistics_bp.route('/api/get_class_stats/<int:class_id>', methods=['GET'])
+def get_class_stats(class_id):
+    """取得單一班級的實習進度統計資料"""
+    # 這裡假設只有科助或管理員可以查看
+    if 'user_id' not in session or session.get('role') not in ['admin', 'ta']:
+        return jsonify({"success": False, "message": "未授權"}), 403
+
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        # 1. 查詢班級名稱
+        cursor.execute("SELECT name FROM classes WHERE id = %s", (class_id,))
+        class_info = cursor.fetchone()
+        if not class_info:
+            return jsonify({"success": False, "message": "找不到該班級資料"}), 404
+
+        # 2. 查詢班級統計數據：
+        # total_students: 總學生數 (users.role = 'student')
+        # students_with_resume: 已上傳履歷人數 (與 resumes 表 LEFT JOIN)
+        # students_with_preference: 已填寫志願人數 (與 student_preferences 表 LEFT JOIN)
+        cursor.execute("""
+            SELECT
+                COUNT(u.id) AS total_students,
+                SUM(CASE WHEN r.user_id IS NOT NULL THEN 1 ELSE 0 END) AS students_with_resume,
+                SUM(CASE WHEN sp.student_id IS NOT NULL THEN 1 ELSE 0 END) AS students_with_preference
+            FROM users u
+            LEFT JOIN (SELECT DISTINCT user_id FROM resumes) r ON r.user_id = u.id
+            LEFT JOIN (SELECT DISTINCT student_id FROM student_preferences) sp ON sp.student_id = u.id
+            WHERE u.class_id = %s AND u.role = 'student'
+        """, (class_id,))
+        stats = cursor.fetchone()
+
+        # 組合結果
+        result = {
+            "class_name": class_info['name'],
+            "total_students": stats['total_students'] if stats else 0,
+            "students_with_resume": stats['students_with_resume'] if stats else 0,
+            "students_with_preference": stats['students_with_preference'] if stats else 0
+        }
+        
+        return jsonify({"success": True, "stats": result})
+            
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"success": False, "message": str(e)}), 500
+    finally:
+        cursor.close()
+        conn.close()
 
 # --------------------------------
 # 公司統計
@@ -600,7 +669,7 @@ def export_statistics():
             LEFT JOIN resumes r ON r.user_id = u.id
             LEFT JOIN student_preferences sp ON sp.student_id = u.id
             GROUP BY c.id, c.name, c.department
-            ORDER BY c.department, c.name
+            ORDER BY c.name ASC, c.department ASC
         """)
         classes_stats = cursor.fetchall()
         
