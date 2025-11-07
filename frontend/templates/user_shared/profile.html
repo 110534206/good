@@ -118,8 +118,10 @@
       <label for="identity">身分</label>
       <input id="identity" type="text" readonly />
 
-      <label for="admissionYear">入學屆數</label>
-      <input id="admissionYear" type="text" readonly />
+      <div id="admissionYearField">
+        <label for="admissionYear">入學屆數</label>
+        <input id="admissionYear" type="text" readonly />
+      </div>
 
       <div id="currentSemesterContainer">
         <label for="currentSemesterCode">實習學期</label>
@@ -139,10 +141,12 @@
 
       <div id="page2" class="page">
 
-        <label for="studentId">學號</label>
-        <input id="studentId" type="text" readonly />
+        <div id="studentIdField">
+          <label id="studentIdLabel" for="studentId">學號</label>
+          <input id="studentId" type="text" readonly />
+        </div>
 
-      <label for="name">姓名</label>
+      <label id="nameLabel" for="name">姓名</label>
       <input id="name" type="text" />
 
       <label for="email">電子郵件</label>
@@ -179,6 +183,9 @@
       const studentFields = document.getElementById('studentFields');
       const managedClassesContainer = document.getElementById('managedClassesContainer');
       const userClassIdInput = document.getElementById('userClassId');
+      const admissionYearField = document.getElementById('admissionYearField');
+      const studentIdField = document.getElementById('studentIdField');
+      const nameLabel = document.getElementById('nameLabel');
 
       function showPage(index) {
         pages.forEach((page, i) => page.classList.toggle('active', i === index));
@@ -194,6 +201,17 @@
 
         // 預設隱藏實習學期
         document.getElementById('currentSemesterContainer').style.display = 'none';
+
+        if (nameLabel) nameLabel.textContent = '姓名';
+        if (admissionYearField) admissionYearField.style.display = '';
+        if (studentIdField) studentIdField.style.display = '';
+
+        if (role === 'vendor') {
+          if (nameLabel) nameLabel.textContent = '公司名稱';
+          if (admissionYearField) admissionYearField.style.display = 'none';
+          if (studentIdField) studentIdField.style.display = 'none';
+          return;
+        }
 
         // 根據角色顯示相應欄位
         if (role === 'student') {
@@ -222,6 +240,7 @@
           document.getElementById('name').value = user.name || '';
           document.getElementById('email').value = user.email || '';
           document.getElementById('admissionYear').value = user.admission_year || '';
+          document.getElementById('studentId').value = user.username || '';
           document.getElementById('avatarPreview').src = user.avatar_url
             ? user.avatar_url + '?t=' + Date.now()
             : 'https://via.placeholder.com/100?text=頭像';
@@ -234,7 +253,6 @@
           // 填入角色特定資料
           if (userRole === 'student') {
             document.getElementById('combinedClass').value = user.class_display_name || '';
-            document.getElementById('studentId').value = user.username || '';
           } else if (isHomeroom) {
             document.getElementById('managedClasses').value = user.class_display_name || '';
           }
