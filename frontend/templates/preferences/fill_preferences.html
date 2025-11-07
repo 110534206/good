@@ -155,6 +155,11 @@
             opacity: 0.6;
             cursor: not-allowed;
         }
+        
+        /* 隱藏/取代原來的 AI 推薦結果方框 */
+        #ai-result-box {
+            display: none; /* 移除或隱藏圖一的 AI 結果方框 */
+        }
     </style>
 </head>
 
@@ -170,11 +175,11 @@
 
         <form id="preferencesForm" class="mx-auto" style="max-width: 900px;">
 
-            <div class="card mb-4 p-4 border-primary" style="border: 1px solid #1a73e8; border-left: 5px solid #1a73e8;">
-                <h5 class="card-title text-primary"><i class="bi bi-person-lines-fill"></i> 志願序填寫輔助</h5>
-                <p class="mb-3 fw-bold">**請依照您的需求選擇**，適合的志願序：</p>
+            <div class="card mb-4 p-4 border-light" style="border: 1px solid #e0e0e0;">
+                <h5 class="card-title text-dark"><i class="bi bi-gear-fill"></i> 篩選偏好設定</h5>
+                <p class="mb-3">請依照您的需求選擇，此將影響 AI 推薦的排序結果：</p>
 
-                <div class="row g-3 mb-4">
+                <div class="row g-3">
                     <div class="col-md-6">
                         <label for="transportation-filter" class="form-label">交通工具偏好</label>
                         <select class="form-select" id="transportation-filter">
@@ -195,11 +200,6 @@
                         </select>
                     </div>
                 </div>
-
-                <button id="aiRecommendBtnNew" type="button" class="btn btn-warning px-5 py-2 w-100" style="background-color: #ffc107; border-color: #ffc107; color: #343a40;">
-                    <i class="bi bi-robot me-2"></i>依據前面填寫的履歷日記，**抓出適合的志願序**
-                </button>
-                <p class="mt-2 mb-0 text-muted text-center"><small>* AI 推薦將覆蓋您當前已選擇的志願序，且優先考量上方篩選偏好。</small></p>
             </div>
             
             {% for rank in range(1, 5+1) %}
@@ -250,6 +250,11 @@
                     <i class="bi bi-lock-fill me-2"></i>登入後可儲存
                 </button>
                 {% else %}
+                
+                <button id="aiRecommendBtnNew" type="button" class="btn btn-warning px-5 py-2 me-3" style="background-color: #ffc107; border-color: #ffc107; color: #343a40;">
+                    <i class="bi bi-robot me-2"></i>依履歷日記取得 **AI 推薦志願序**
+                </button>
+
                 <button id="toggleEditBtn" type="button" class="btn btn-primary px-5 py-2 me-3">
                     <i class="bi bi-pencil-square me-2"></i>修改志願序
                 </button>
@@ -263,6 +268,7 @@
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
+        // ... (省略不變的 JavaScript 函式，如 loadJobs, updateSelections, initializeSubmittedPreferences 等) ...
         const companies = {{ companies | tojson }};
         const submitted = {{ submitted | tojson }};
         const preview = {{ preview | tojson }};
@@ -414,7 +420,7 @@
         else toggleEditBtn.style.display = "none";
 
         // ---------- AI 推薦志願功能 ----------
-        const aiRecommendBtn = document.getElementById("aiRecommendBtnNew"); // 💡 使用新的按鈕 ID
+        const aiRecommendBtn = document.getElementById("aiRecommendBtnNew"); 
         if (aiRecommendBtn) {
             aiRecommendBtn.addEventListener("click", async () => {
                 // 💡 取得篩選器值
@@ -425,7 +431,7 @@
                 const { value: resumeText } = await Swal.fire({
                     title: 'AI 推薦志願序',
                     html: `
-                        <p class="text-start mb-3">請輸入您的履歷日記內容，將推薦你最適合的志願序。</p>
+                        <p class="text-start mb-3">請輸入您的履歷日記內容，AI 將綜合上方篩選偏好推薦最適合的志願序。</p>
                         <textarea id="resumeTextArea" class="swal2-textarea" placeholder="請貼上您的履歷日記內容，包含：\n- 個人基本資料\n- 學歷背景\n- 技能專長\n- 工作經驗\n- 專案經歷\n- 其他相關資訊..." style="width: 100%; min-height: 200px; padding: 10px; border: 1px solid #ddd; border-radius: 5px;"></textarea>
                     `,
                     focusConfirm: false,
@@ -442,7 +448,7 @@
                     }
                 });
 
-                if (!resumeText) return; // 用戶取消或沒有輸入內容
+                if (!resumeText) return; 
 
                 // 顯示載入中
                 Swal.fire({
@@ -455,14 +461,14 @@
                 });
 
                 try {
-                    // 💡 呼叫後端 AI 推薦 API，傳遞履歷日記和篩選條件
+                    // 💡 呼叫後端 API，傳遞履歷日記和篩選條件
                     const response = await fetch("/api/recommend-preferences", {
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
                         body: JSON.stringify({ 
                             resumeText: resumeText,
-                            transportationFilter: transportationFilter, // 💡 新增交通篩選條件
-                            distanceFilter: distanceFilter // 💡 新增距離篩選條件
+                            transportationFilter: transportationFilter, 
+                            distanceFilter: distanceFilter 
                         })
                     });
 
@@ -510,10 +516,9 @@
                     });
 
                     if (isConfirmed) {
-                        // 套用推薦到志願序
+                        // ... (套用推薦邏輯保持不變) ...
                         const allCards = document.querySelectorAll(".preference-card");
                         
-                        // 使用 Promise 來確保每個推薦都正確套用
                         const applyPromises = recommendations.map((rec, idx) => {
                             return new Promise((resolve) => {
                                 if (idx >= allCards.length) {
@@ -525,12 +530,9 @@
                                 const companySelect = card.querySelector(".company-select");
                                 const jobSelect = card.querySelector(".job-select");
                                 
-                                // 設定公司
                                 companySelect.value = String(rec.company_id);
                                 
-                                // 載入該公司的職缺
                                 loadJobs(String(rec.company_id)).then(() => {
-                                    // 等待職缺選單更新
                                     setTimeout(() => {
                                         jobSelect.value = String(rec.job_id);
                                         jobSelect.dispatchEvent(new Event('change'));
@@ -538,12 +540,10 @@
                                     }, 300);
                                 });
                                 
-                                // 觸發公司選擇事件以載入職缺
                                 companySelect.dispatchEvent(new Event('change'));
                             });
                         });
 
-                        // 等待所有推薦套用完成
                         Promise.all(applyPromises).then(() => {
                             updateSelections();
                             Swal.fire({
