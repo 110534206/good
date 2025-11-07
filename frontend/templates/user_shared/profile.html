@@ -95,7 +95,7 @@
 
     .toggle-password {
       position: absolute;
-      top: 12px;
+      top: 10px;
       right: 16px;
       font-size: 20px;
       cursor: pointer;
@@ -118,55 +118,30 @@
       <label for="identity">身分</label>
       <input id="identity" type="text" readonly />
 
+      <label for="admissionYear">入學屆數</label>
+      <input id="admissionYear" type="text" readonly />
+
+      <div id="currentSemesterContainer">
+        <label for="currentSemesterCode">實習學期</label>
+        <input id="currentSemesterCode" type="text" readonly />
+      </div>
+
+      <div id="studentFields" class="role-specific-fields" style="display: none;">
         <label for="combinedClass">班級</label>
         <input id="combinedClass" type="text" readonly />
 
-        <label for="admissionYear">入學屆數</label>
-        <input id="admissionYear" type="text" readonly />
-
-        <div id="currentSemesterContainer">
-          <label for="currentSemesterCode">實習學期</label>
-          <input id="currentSemesterCode" type="text" readonly />
+        <div id="managedClassesContainer" class="role-specific-fields" style="display: none;">
+          <label for="managedClasses">管理班級</label>
+          <input id="managedClasses" type="text" readonly />
         </div>
-      </div>
-
-      <div id="page2" class="page">
-      <div id="studentFields" class="role-specific-fields" style="display: none;">
-
-        <label for="studentId">學號</label>
-        <input id="studentId" type="text" readonly />
-      </div>
-
-      <div id="managedClassesContainer" class="role-specific-fields" style="display: none;">
-        <label for="managedClasses">管理班級</label>
-        <input id="managedClasses" type="text" readonly />
-      </div>
-
-      <div id="teacherFields" class="role-specific-fields" style="display: none;">
-        <input id="teacherId" type="hidden" />
-      </div>
-
-      <div id="directorFields" class="role-specific-fields" style="display: none;">
-        <input id="directorId" type="hidden" />
-      </div>
-
-      <div id="taFields" class="role-specific-fields" style="display: none;">
-        <label for="taId">科助編號</label>
-        <input id="taId" type="text" readonly />
-      </div>
-
-      <div id="adminFields" class="role-specific-fields" style="display: none;">
-        <label for="adminId">管理員編號</label>
-        <input id="adminId" type="text" readonly />
-      </div>
-
-      <div id="vendorFields" class="role-specific-fields" style="display: none;">
-        <label for="vendorId">廠商帳號</label>
-        <input id="vendorId" type="text" readonly />
       </div>
     </div>
 
-    <div id="page2" class="page">
+      <div id="page2" class="page">
+
+        <label for="studentId">學號</label>
+        <input id="studentId" type="text" readonly />
+
       <label for="name">姓名</label>
       <input id="name" type="text" />
 
@@ -203,30 +178,7 @@
       const currentSemesterInput = document.getElementById('currentSemesterCode');
       const studentFields = document.getElementById('studentFields');
       const managedClassesContainer = document.getElementById('managedClassesContainer');
-      const managedClassesInput = document.getElementById('managedClasses');
-      const admissionYearLabel = document.getElementById('admissionYearLabel'); // 取得標籤元素
-
-      // 用來儲存 class_id 後續更新用
-      window.classId = null;
-      // 用來儲存學生班級資料，以便計算入學屆數
-      window.classData = null;
-
-      const roleMap = {
-        "student": "學生",
-        "teacher": "指導老師",
-        "director": "主任",
-        "ta": "科助",
-        "admin": "管理員",
-        "vendor": "廠商"
-      };
-      const roleMapReverse = {
-        "學生": "student",
-        "指導老師": "teacher",
-        "主任": "director",
-        "科助": "ta",
-        "管理員": "admin",
-        "廠商": "vendor"
-      };
+      const userClassIdInput = document.getElementById('userClassId');
 
       function showPage(index) {
         pages.forEach((page, i) => page.classList.toggle('active', i === index));
@@ -263,15 +215,28 @@
           const user = data.user;
           userRole = user.role; // 儲存當前活躍角色
 
-          case 'director':
-            document.getElementById('directorFields').style.display = 'block';
-            if (isHomeroom) {
-              managedClassesContainer.style.display = 'block';
-            }
-            break;
-          case 'vendor':
-            document.getElementById('vendorFields').style.display = 'block';
-            break;
+          const isHomeroom = user.is_homeroom || false;
+
+          // 填入基礎資料
+          document.getElementById('identity').value = user.display_role || '';
+          document.getElementById('name').value = user.name || '';
+          document.getElementById('email').value = user.email || '';
+          document.getElementById('admissionYear').value = user.admission_year || '';
+          document.getElementById('avatarPreview').src = user.avatar_url
+            ? user.avatar_url + '?t=' + Date.now()
+            : 'https://via.placeholder.com/100?text=頭像';
+
+          userClassIdInput.value = user.class_id || ''; // 儲存 class_id 供儲存時使用
+
+          // ⭐️ 修正點 B: 填入唯讀的實習學期資料 ⭐️
+          currentSemesterInput.value = user.current_semester_display || '';
+
+          // 填入角色特定資料
+          if (userRole === 'student') {
+            document.getElementById('combinedClass').value = user.class_display_name || '';
+            document.getElementById('studentId').value = user.username || '';
+          } else if (isHomeroom) {
+            document.getElementById('managedClasses').value = user.class_display_name || '';
           }
 
           // 根據使用者身分顯示相應的欄位
@@ -363,77 +328,14 @@
 
             let finalRedirectUrl = '/student_home'; // 預設跳轉
 
-            // 頭像 - 加上時間戳避免快取造成顯示舊圖
-            const initialAvatarUrl = user.avatar_url ? (user.avatar_url + '?t=' + Date.now()) : 'https://via.placeholder.com/100?text=頭像';
-            document.getElementById('avatarPreview').src = initialAvatarUrl;
-
-            // 身分轉換
-            const role = user.role;
-            if (role === 'class_teacher') {
-              document.getElementById('identity').value = '班導師';
-            }
-            const displayRole = user.display_role || roleMap[role] || '';
-            document.getElementById('identity').value = displayRole;
-
-            // 根據使用者身分顯示相應的欄位
-            showRoleSpecificFields(role, isHomeroom);
-
-            // -------------------------------------------------------------
-            // 根據身分填入相應的資料
-            // -------------------------------------------------------------
-            if (role === 'student') {
-              const classDisplayName = user.class_display_name || '';
-              document.getElementById('combinedClass').value = classDisplayName;
-              window.classId = user.class_id || null;
-              document.getElementById('studentId').value = user.username || '';
-
-              // 標題設定為「入學屆數」
-              admissionYearLabel.textContent = '入學屆數';
-
-              // 入學屆數 (學生: 使用班級名稱計算，若無則使用後端學號屆數)
-              const admissionYear = calculateAdmissionYear(classDisplayName) || user.admission_year || '';
-              document.getElementById('admissionYear').value = admissionYear;
-            } else if (role === 'teacher' || role === 'director') {
-
-              // 隱藏的 ID 欄位
-              if (role === 'teacher') {
-                document.getElementById('teacherId').value = user.username || '';
-              } else {
-                document.getElementById('directorId').value = user.username || '';
-              }
-
-              // 管理班級 (只有班導師/主任有)
-              if (isHomeroom) {
-                const classDisplayName = user.class_display_name || '';
-                managedClassesInput.value = classDisplayName;
-
-                // 標題設定為「班級屆數」
-                admissionYearLabel.textContent = '班級屆數';
-
-                // 如果有多個班級，取第一個班級計算入學屆數
-                const firstClass = classDisplayName.split('、')[0].trim();
-                const admissionYear = calculateAdmissionYear(firstClass);
-                document.getElementById('admissionYear').value = admissionYear;
-
-                managedClassesContainer.style.display = 'block';
-              } else {
-                // 非班導師/主任，入學屆數欄位標題為「入學屆數」，內容為空
-                admissionYearLabel.textContent = '入學屆數';
-                document.getElementById('admissionYear').value = '';
-              }
-
-            } else if (role === 'ta') {
-              document.getElementById('taId').value = user.username || '';
-              admissionYearLabel.textContent = '入學屆數';
-              document.getElementById('admissionYear').value = '';
-            } else if (role === 'admin') {
-              document.getElementById('adminId').value = user.username || '';
-              admissionYearLabel.textContent = '入學屆數';
-              document.getElementById('admissionYear').value = '';
-            } else if (role === 'vendor') {
-              document.getElementById('vendorId').value = user.username || '';
-              admissionYearLabel.textContent = '系統資訊';
-              document.getElementById('admissionYear').value = '';
+            if (roleValue === 'student') {
+              finalRedirectUrl = '/student_home';
+            } else if (roleValue === 'ta') {
+              finalRedirectUrl = '/ta_home';
+            } else if (roleValue === 'teacher' || roleValue === 'director') {
+              finalRedirectUrl = isHomeroom ? '/class_teacher_home' : `/${roleValue}_home`;
+            } else if (roleValue === 'admin') {
+              finalRedirectUrl = '/admin_home';
             }
 
 
@@ -445,105 +347,9 @@
               })
                 .then(res => res.json())
                 .then(data => {
-                  if (!data.success) throw new Error(data.message || '頭像上傳失敗');
-                  return data.avatar_url; // 回傳頭像URL
-                });
-            }
-
-            uploadAvatar()
-              .then(avatarUrl => {
-                // 如果有新的頭像URL，更新預覽（加上時間戳避免被舊圖覆蓋）
-                if (avatarUrl) {
-                  document.getElementById('avatarPreview').src = avatarUrl + '?t=' + Date.now();
-                }
-
-                // 更新個人資料
-                const roleDisplayValue = document.getElementById('identity').value;
-                const roleValue = roleMapReverse[roleDisplayValue] || 'student'; // 取得英文 role
-
-                // 學生身分才需要 class_id
-                const classIdToSend = roleValue === 'student' ? window.classId : null;
-
-                if (roleValue === 'student' && !classIdToSend) {
-                  alert('學生身分必須選擇班級！');
-                  throw new Error('學生身分缺少班級');
-                }
-
-                // 根據身分取得相應的 username
-                let username = '';
-                if (roleValue === 'student') {
-                  username = document.getElementById('studentId').value;
-                } else if (roleValue === 'teacher') {
-                  username = document.getElementById('teacherId').value;
-                } else if (roleValue === 'director') {
-                  username = document.getElementById('directorId').value;
-                } else if (roleValue === 'ta') {
-                  username = document.getElementById('taId').value;
-                } else if (roleValue === 'admin') {
-                  username = document.getElementById('adminId').value;
-                } else if (roleValue === 'vendor') {
-                  username = document.getElementById('vendorId').value;
-                }
-
-                const payload = {
-                  username: username,
-                  // 後端 /api/saveProfile 預期收到中文 role 顯示值 (role_display)
-                  role: roleDisplayValue,
-                  name: document.getElementById('name').value,
-                  class_id: classIdToSend,
-                };
-
-                return fetch('/api/saveProfile', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify(payload),
-                })
-                  .then(res => res.json())
-                  .then(data => {
-                    if (!data.success) throw new Error(data.message || '更新個人資料失敗');
-                    return {
-                      avatarUrl,
-                      roleValue: data.role, // 使用後端回傳的 role
-                      isHomeroom: data.is_homeroom, // 使用後端回傳的 is_homeroom
-                    };
-                  });
-              })
-              .then(({ roleValue, isHomeroom }) => {
-                // 變更密碼（如果有填）
-                const oldPwd = document.getElementById('oldPassword').value.trim();
-                const newPwd = document.getElementById('newPassword').value.trim();
-                const confirmPwdInput = document.getElementById('newPassword'); // 確認密碼欄位已被移除，故不再檢查
-
-                let finalRedirectUrl = '';
-                if (roleValue === 'student') {
-                  finalRedirectUrl = '/student_home';
-                } else if (roleValue === 'ta') {
-                  finalRedirectUrl = '/ta_home';
-                } else if (roleValue === 'teacher' || roleValue === 'director') {
-                  // 判斷是否為班導師
-                  finalRedirectUrl = isHomeroom ? '/class_teacher_home' : `/${roleValue}_home`;
-                } else if (roleValue === 'vendor') {
-                  finalRedirectUrl = '/vendor_home';
-                } else {
-                  finalRedirectUrl = '/student_home'; // 預設跳轉
-                }
-
-                if (oldPwd || newPwd) {
-                  return fetch('/api/change_password', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ old_password: oldPwd, new_password: newPwd }),
-                  })
-                    .then(res => res.json())
-                    .then(data => {
-                      nextBtn.disabled = false; // 恢復按鈕
-                      if (!data.success) throw new Error(data.message || '變更密碼失敗');
-                      alert('資料及密碼更新成功！');
-                      window.location.href = finalRedirectUrl;
-                    });
-                } else {
-                  nextBtn.disabled = false; // 恢復按鈕
-                  alert('資料更新成功！');
+                  nextBtn.disabled = false;
+                  if (!data.success) throw new Error(data.message || '密碼變更失敗');
+                  alert('資料更新成功！密碼已變更。');
                   window.location.href = finalRedirectUrl;
                 });
             } else {
@@ -593,3 +399,4 @@
 </body>
 
 </html>
+```
