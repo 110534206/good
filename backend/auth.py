@@ -295,17 +295,17 @@ def register_company():
         if cursor.fetchone():
             return jsonify({"success": False, "message": "該廠商帳號已存在"}), 400
         
-        # 4. 將廠商資料寫入 users 資料表，並將 status 設為 'pending'
+        # 4. 將廠商資料寫入 users 資料表，並將 status 設為 'active'
         cursor.execute("""
             INSERT INTO users (username, password, email, role, status)
-            VALUES (%s, %s, %s, %s, 'pending')  -- <<< 新增 status 欄位
+            VALUES (%s, %s, %s, %s, 'active')  -- 註冊後即啟用
         """, (username, hashed_pw, email, role))
         
         user_id = cursor.lastrowid # 獲取剛插入的 users.id
         
         # 5. 發送通知給所有科助和主任
-        title = "新廠商申請通知"
-        message = f"有新的廠商申請待審核：\n帳號：{username}\nEmail：{email}\n請前往審核頁面處理。"
+        title = "新廠商註冊通知"
+        message = f"有新的廠商已完成註冊：\n帳號：{username}\nEmail：{email}\n請前往管理頁面留意後續合作。"
         link_url = "/admin/user_management"  # 連結到用戶管理頁面，科助可以在此審核廠商
         
         notify_all_ta(conn, title, message, link_url)
@@ -314,7 +314,7 @@ def register_company():
         conn.commit()
 
         # 修正回覆訊息
-        return jsonify({"success": True, "message": "廠商帳號註冊申請已送出，需等待科助審核通過後才能登入。"})
+        return jsonify({"success": True, "message": "廠商帳號註冊成功，您現在可以直接登入。"})
     
     except Exception as e:
         conn.rollback()

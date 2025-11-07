@@ -250,10 +250,33 @@
 
       if (data.success) {
         responseMessage.style.color = "green";
-        responseMessage.textContent = data.message || "註冊成功，將為您導向登入頁...";
-        setTimeout(() => {
-          window.location.href = "/login";
-        }, 1500);
+        responseMessage.textContent = data.message || "註冊成功，正在自動登入...";
+
+        try {
+          const loginRes = await fetch("/api/login", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json"
+            },
+            body: JSON.stringify({ username, password })
+          });
+
+          const loginData = await loginRes.json();
+
+          if (loginData.success && loginData.redirect) {
+            responseMessage.textContent = "登入成功，為您導向...";
+            window.location.href = loginData.redirect;
+          } else {
+            responseMessage.style.color = "red";
+            responseMessage.textContent = loginData.message || "自動登入失敗，請改用登入頁面。";
+            setTimeout(() => { window.location.href = "/login"; }, 2000);
+          }
+        } catch (loginErr) {
+          responseMessage.style.color = "red";
+          responseMessage.textContent = "自動登入時發生錯誤，請手動登入。";
+          console.error(loginErr);
+          setTimeout(() => { window.location.href = "/login"; }, 2000);
+        }
       } else {
         responseMessage.style.color = "red";
         responseMessage.textContent = data.message || "註冊失敗，請重試";
