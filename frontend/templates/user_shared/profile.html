@@ -155,6 +155,11 @@
         <label for="adminId">管理員編號</label>
         <input id="adminId" type="text" readonly />
       </div>
+
+      <div id="vendorFields" class="role-specific-fields" style="display: none;">
+        <label for="vendorId">廠商帳號</label>
+        <input id="vendorId" type="text" readonly />
+      </div>
     </div>
 
     <div id="page2" class="page">
@@ -208,14 +213,16 @@
         "teacher": "指導老師",
         "director": "主任",
         "ta": "科助",
-        "admin": "管理員"
+        "admin": "管理員",
+        "vendor": "廠商"
       };
       const roleMapReverse = {
         "學生": "student",
         "指導老師": "teacher",
         "主任": "director",
         "科助": "ta",
-        "管理員": "admin"
+        "管理員": "admin",
+        "廠商": "vendor"
       };
 
       function showPage(index) {
@@ -251,6 +258,9 @@
             if (isHomeroom) {
               managedClassesContainer.style.display = 'block';
             }
+            break;
+          case 'vendor':
+            document.getElementById('vendorFields').style.display = 'block';
             break;
           }
         }
@@ -374,6 +384,10 @@
               document.getElementById('adminId').value = user.username || '';
               admissionYearLabel.textContent = '入學屆數';
               document.getElementById('admissionYear').value = '';
+            } else if (role === 'vendor') {
+              document.getElementById('vendorId').value = user.username || '';
+              admissionYearLabel.textContent = '系統資訊';
+              document.getElementById('admissionYear').value = '';
             }
 
             document.getElementById('name').value = user.name || '';
@@ -452,6 +466,8 @@
                   username = document.getElementById('taId').value;
                 } else if (roleValue === 'admin') {
                   username = document.getElementById('adminId').value;
+                } else if (roleValue === 'vendor') {
+                  username = document.getElementById('vendorId').value;
                 }
 
                 const payload = {
@@ -491,6 +507,8 @@
                 } else if (roleValue === 'teacher' || roleValue === 'director') {
                   // 判斷是否為班導師
                   finalRedirectUrl = isHomeroom ? '/class_teacher_home' : `/${roleValue}_home`;
+                } else if (roleValue === 'vendor') {
+                  finalRedirectUrl = '/vendor_home';
                 } else {
                   finalRedirectUrl = '/student_home'; // 預設跳轉
                 }
