@@ -1,19 +1,20 @@
 <!DOCTYPE html>
 <html lang="zh-Hant">
+
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>智慧實習平台 | AI 履歷修改平台</title>
-  <style>
-   :root {
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>智慧實習平台 | AI 履歷修改平台</title>
+    <style>
+        :root {
             --primary-blue: #0069ff;
             --light-gray-border: #e0e0e0;
             --bg-color: #f9f9f9;
-            --container-shadow: 0 4px 12px rgba(0,0,0,0.05);
+            --container-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
         }
 
-        body { 
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; 
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
             background-color: var(--bg-color);
             display: flex;
             justify-content: center;
@@ -24,6 +25,18 @@
             color: #333;
         }
 
+        .main-header {
+            background: #0454a3;
+            color: white;
+            text-align: center;
+            font-size: 1.5rem;
+            padding: 1rem 0; 
+            width: 100%;
+            position: fixed;
+            top: 0;
+            left: 0;
+        }
+
         .ai-container {
             width: 100%;
             max-width: 800px;
@@ -32,150 +45,159 @@
             padding: 32px;
             box-shadow: var(--container-shadow);
             border: 1px solid var(--light-gray-border);
+            margin-top: 65px;
         }
 
-        h1 {
-            text-align: center;
-            color: #111;
-            margin-top: 0;
-            margin-bottom: 30px;
-        }
-
-        textarea { 
-            width: 100%; 
-            height: 200px; 
-            margin-bottom: 10px; 
-            padding: 15px; 
-            box-sizing: border-box; 
+        textarea {
+            width: 100%;
+            height: 200px;
+            margin-bottom: 10px;
+            padding: 15px;
+            box-sizing: border-box;
             border: 1px solid var(--light-gray-border);
             border-radius: 12px;
-            resize: vertical; 
+            resize: vertical;
             font-size: 16px;
             line-height: 1.6;
             background-color: #fafafa;
         }
+
         textarea:focus {
             outline: none;
             border-color: var(--primary-blue);
-            box-shadow: 0 0 0 3px rgba(0,105,255,0.1);
+            box-shadow: 0 0 0 3px rgba(0, 105, 255, 0.1);
         }
 
         /* 🌟 [新樣式] 篩選器容器 (讓藥丸並排) */
         .filter-container {
             display: flex;
-            flex-wrap: wrap; /* 在小螢幕上換行 */
-            gap: 10px; /* 藥丸之間的間距 */
+            flex-wrap: wrap;
+            /* 在小螢幕上換行 */
+            gap: 10px;
+            /* 藥丸之間的間距 */
             margin-bottom: 20px;
         }
 
         /* 🌟 [新樣式] 模仿 Canva 的「藥丸」下拉選單 */
         .filter-pill {
-            flex-grow: 1; /* 讓它們平均分配寬度 */
-            min-width: 180px; /* 最小寬度 */
+            flex-grow: 1;
+            /* 讓它們平均分配寬度 */
+            min-width: 180px;
+            /* 最小寬度 */
             padding: 10px 15px;
-            padding-right: 40px; /* 為箭頭騰出空間 */
+            padding-right: 40px;
+            /* 為箭頭騰出空間 */
             font-size: 14px;
             font-weight: 500;
             color: #333;
             border: 1px solid var(--light-gray-border);
-            border-radius: 20px; /* 藥丸的圓角 */
-            background-color: #f5f5f5; /* 藥丸背景色 */
-            appearance: none; /* 移除瀏覽器預設箭頭 */
+            border-radius: 20px;
+            /* 藥丸的圓角 */
+            background-color: #f5f5f5;
+            /* 藥丸背景色 */
+            appearance: none;
+            /* 移除瀏覽器預設箭頭 */
             background-image: url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%23666%22%20d%3D%22M287%2069.4a17.6%2017.6%200%200%200-13-5.4H18.4c-5%200-9.3%201.8-13%205.4A17.6%2017.6%200%200%200%200%2082.2c0%205%201.8%209.3%205.4%2013l128%20128c3.6%203.6%207.8%205.4%2013%205.4s9.4-1.8%2013-5.4l128-128c3.6-3.6%205.4-7.8%205.4-13%200-5-1.8-9.4-5.4-13z%22%2F%3E%3C%2Fsvg%3E');
             background-repeat: no-repeat;
             background-position: right 15px top 50%;
             background-size: 10px auto;
             cursor: pointer;
         }
+
         .filter-pill:focus {
             outline: none;
             border-color: var(--primary-blue);
         }
 
-        button { 
-            width: 100%; 
-            padding: 14px 25px; 
-            cursor: pointer; 
+        button {
+            width: 100%;
+            padding: 14px 25px;
+            cursor: pointer;
             background: linear-gradient(90deg, #007BFF, var(--primary-blue));
-            color: white; 
-            border: none; 
+            color: white;
+            border: none;
             border-radius: 12px;
             font-size: 16px;
             font-weight: bold;
             transition: all 0.3s ease;
         }
+
         button:hover {
             opacity: 0.9;
-            box-shadow: 0 4px 8px rgba(0,105,255,0.2);
+            box-shadow: 0 4px 8px rgba(0, 105, 255, 0.2);
         }
 
-        .section-title { 
+        .section-title {
             margin-top: 20px;
             margin-bottom: 10px;
-            font-size: 1.1em; 
+            font-size: 1.1em;
             font-weight: 600;
             color: #555;
         }
-        
-        #revisedResume { 
-            white-space: pre-wrap; 
+
+        #revisedResume {
+            white-space: pre-wrap;
             background-color: #f5f5f5;
-            padding: 15px; 
-            border: 1px solid #e0e0e0; 
-            min-height: 100px; 
+            padding: 15px;
+            border: 1px solid #e0e0e0;
+            min-height: 100px;
             margin-top: 10px;
             border-radius: 12px;
             line-height: 1.7;
         }
-        
+
         .loader {
-            border: 4px solid #f3f3f3; 
+            border: 4px solid #f3f3f3;
             border-top: 4px solid var(--primary-blue);
             border-radius: 50%;
             width: 30px;
             height: 30px;
             animation: spin 1s linear infinite;
-            margin: 20px auto; 
-            display: none; 
+            margin: 20px auto;
+            display: none;
         }
 
         @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
+            0% {
+                transform: rotate(0deg);
+            }
+
+            100% {
+                transform: rotate(360deg);
+            }
         }
     </style>
 </head>
+
 <body>
-
+    <header class="main-header">AI 履歷修改服務</header>
     <div class="ai-container">
-        <h1>📝 AI 履歷修改服務</h1>
-
         <div class="section-title">輸入您的履歷草稿：</div>
         <textarea id="resumeInput" placeholder="請貼上您的履歷內容..."></textarea>
-        
+
         <div class="section-title">請選擇修改選項：</div>
-        
+
         <div class="filter-container">
             <select id="editStyle" class="filter-pill">
                 <option value="polish">任務：履歷美化</option>
                 <option value="concise">任務：文案精簡</option>
                 <option value="keyword_focus">任務：關鍵字導向</option>
             </select>
-            
+
             <select id="toneStyle" class="filter-pill">
                 <option value="professional">語氣：專業正式</option>
                 <option value="friendly">語氣：親切隨和</option>
                 <option value="cautious">語氣：謹慎的</option>
                 <option value="academic">語氣：學術的</option>
             </select>
-            </div>
-        
+        </div>
+
         <button onclick="reviseResume()">⚡ 使用 AI 修改履歷</button>
 
         <div class="section-title">修改後的履歷：</div>
-        
+
         <div id="loadingSpinner" class="loader"></div>
-        
+
         <div id="revisedResume">AI 修改後的內容將顯示在這裡...</div>
     </div>
 
@@ -184,18 +206,18 @@
             const resumeInput = document.getElementById('resumeInput').value;
             const revisedResumeDiv = document.getElementById('revisedResume');
             const loadingSpinner = document.getElementById('loadingSpinner');
-            
+
             // 🌟 [新功能] 讀取兩個下拉選單的值
-            const editStyle = document.getElementById('editStyle').value; 
-            const toneStyle = document.getElementById('toneStyle').value; 
-            
+            const editStyle = document.getElementById('editStyle').value;
+            const toneStyle = document.getElementById('toneStyle').value;
+
             if (resumeInput.trim() === "") {
                 alert("請先貼上您的履歷內容！");
                 return;
             }
 
             revisedResumeDiv.innerHTML = "";
-            loadingSpinner.style.display = 'block'; 
+            loadingSpinner.style.display = 'block';
 
             try {
                 // ========================================================
@@ -203,31 +225,31 @@
                 // 錯誤寫法: 'http://localhost:5000/api/revise-resume'
                 // 正確寫法: 使用相對路徑，讓瀏覽器自動抓取當前網域
                 // =================================M=======================
-                const response = await fetch('/api/revise-resume', { 
+                const response = await fetch('/api/revise-resume', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
                     },
                     // 🌟 [新功能] 將履歷和兩個選項一起發送到後端
-                    body: JSON.stringify({ 
+                    body: JSON.stringify({
                         resumeText: resumeInput,
                         style: editStyle,
-                        tone: toneStyle 
+                        tone: toneStyle
                     })
                 });
 
                 if (!response.body) {
                     throw new Error("伺服器沒有返回可讀取的串流。");
                 }
-                
+
                 const reader = response.body.getReader();
-                const decoder = new TextDecoder("utf-8"); 
+                const decoder = new TextDecoder("utf-8");
                 let done = false;
-                
+
                 while (!done) {
                     const { value, done: readerDone } = await reader.read();
                     done = readerDone;
-                    
+
                     if (value) {
                         const chunk = decoder.decode(value, { stream: true });
                         revisedResumeDiv.innerHTML += chunk;
@@ -244,10 +266,11 @@
                 revisedResumeDiv.innerHTML = `AI 服務連線失敗：無法連線到後端伺服器。請檢查伺服器狀態並稍後再試。`;
                 revisedResumeDiv.style.color = 'red';
             } finally {
-                loadingSpinner.style.display = 'none'; 
+                loadingSpinner.style.display = 'none';
             }
         }
     </script>
 
 </body>
+
 </html>
