@@ -226,7 +226,10 @@ def get_classes():
     conn = get_db()
     cursor = conn.cursor(dictionary=True)
     try:
-        cursor.execute("SELECT id, name, department FROM classes ORDER BY department, name")
+        cursor.execute(
+            "SELECT id, name, department, admission_year FROM classes "
+            "ORDER BY department ASC, admission_year DESC, name ASC"
+        )
         classes = cursor.fetchall()
         return jsonify({"success": True, "classes": classes})
     except Exception as e:
