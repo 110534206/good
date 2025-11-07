@@ -33,7 +33,7 @@ SYSTEM_PROMPT = """
 """
 
 # ==========================================================
-# AI 修改履歷 API (保持不變)
+# AI 修改履歷 API
 # ==========================================================
 @ai_bp.route('/api/revise-resume', methods=['POST'])
 def revise_resume():
@@ -135,7 +135,7 @@ def revise_resume():
 
 
 # ==========================================================
-# AI 推薦志願序 API (已修改)
+# AI 推薦志願序 API
 # ==========================================================
 @ai_bp.route('/api/recommend-preferences', methods=['POST'])
 def recommend_preferences():
@@ -151,18 +151,12 @@ def recommend_preferences():
 
     try:
         data = request.get_json() or {}
-        # 💡 接收履歷日記文字內容
-        resume_diary_text = data.get('resumeText', '').strip() 
-        # 💡 接收交通工具和距離篩選條件
-        transportation_filter = data.get('transportationFilter', 'any')
-        distance_filter = data.get('distanceFilter', 'any')
-
+        resume_text = data.get('resumeText', '').strip()
 
         conn = get_db()
         cursor = conn.cursor(dictionary=True)
 
-        # 檢查履歷日記是否為空
-        if not resume_diary_text:
+        if not resume_text:
             cursor.execute("""
                 SELECT filepath, original_filename
                 FROM resumes
@@ -173,10 +167,9 @@ def recommend_preferences():
             resume_record = cursor.fetchone()
 
             if resume_record:
-                # 💡 修改錯誤提示以符合「履歷日記」
                 return jsonify({
                     "success": False,
-                    "error": "請提供履歷日記文字內容，或請先上傳並審核通過履歷檔案。"
+                    "error": "請提供履歷文字內容，或請先上傳並審核通過履歷檔案。"
                 }), 400
 
         cursor.execute("""
@@ -239,21 +232,12 @@ def recommend_preferences():
 {jobs_text}
 ---
 """
-        # 💡 在 Prompt 中加入篩選條件
-        preference_info = f"""
-        【學生志願偏好條件】
-        * 交通工具偏好: {transportation_filter}
-        * 距離遠近偏好: {distance_filter}
-        (請特別注意公司地址與偏好是否匹配，作為額外的評分依據，但不是硬性篩選條件。)
-        """
 
         prompt = f"""{SYSTEM_PROMPT}
-你是一位專業的實習顧問，請根據學生的**履歷日記**內容以及**志願偏好條件**，推薦最適合的實習志願序（最多5個）。
+你是一位專業的實習顧問，請根據學生的履歷內容，推薦最適合的實習志願序（最多5個）。
 
-【學生履歷日記內容】
-{resume_diary_text}
-
-{preference_info}
+【學生履歷內容】
+{resume_text}
 
 【可選的公司和職缺資訊】
 {companies_text}
@@ -261,9 +245,8 @@ def recommend_preferences():
 【任務要求】
 1. 分析學生的技能、經驗與興趣。
 2. 匹配最適合的公司與職缺。
-3. **將學生的交通與距離偏好作為重要參考依據**來排列志願序。
-4. 按適合度排序，推薦最多5個志願（由最適合至較適合）。
-5. 每個推薦需包含：公司ID、職缺ID、推薦理由。
+3. 按適合度排序，推薦最多5個志願（由最適合至較適合）。
+4. 每個推薦需包含：公司ID、職缺ID、推薦理由。
 
 【輸出格式】
 請以 JSON 格式輸出：
@@ -282,8 +265,7 @@ def recommend_preferences():
 }}
 """
 
-        # 💡 將 print 訊息改為「履歷日記」
-        print(f"🔍 AI 推薦志願序 - 學生ID: {student_id}, 履歷日記長度: {len(resume_diary_text)}, 交通: {transportation_filter}, 距離: {distance_filter}")
+        print(f"🔍 AI 推薦志願序 - 學生ID: {student_id}, 履歷長度: {len(resume_text)}")
 
         response = model.generate_content(prompt)
         ai_response_text = response.text.strip()
@@ -321,7 +303,7 @@ def recommend_preferences():
                 })
 
         if not valid:
-            return jsonify({"success": False, "error": "AI 無法生成有效推薦，請確認履歷日記內容是否足夠詳細或放寬篩選條件。"}), 400
+            return jsonify({"success": False, "error": "AI 無法生成有效推薦，請確認履歷內容是否足夠詳細。"}), 400
 
         print(f"✅ AI 推薦成功 - 共 {len(valid)} 個推薦")
         return jsonify({"success": True, "recommendations": valid})

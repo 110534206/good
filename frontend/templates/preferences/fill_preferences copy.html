@@ -169,39 +169,6 @@
         {% endif %}
 
         <form id="preferencesForm" class="mx-auto" style="max-width: 900px;">
-
-            <div class="card mb-4 p-4 border-primary" style="border: 1px solid #1a73e8; border-left: 5px solid #1a73e8;">
-                <h5 class="card-title text-primary"><i class="bi bi-person-lines-fill"></i> 志願序填寫輔助</h5>
-                <p class="mb-3 fw-bold">**請依照您的需求選擇**，適合的志願序：</p>
-
-                <div class="row g-3 mb-4">
-                    <div class="col-md-6">
-                        <label for="transportation-filter" class="form-label">交通工具偏好</label>
-                        <select class="form-select" id="transportation-filter">
-                            <option selected value="any">不限交通方式</option>
-                            <option value="public">大眾運輸方便</option>
-                            <option value="car">汽/機車為主</option>
-                            <option value="bike">自行車/步行</option>
-                        </select>
-                    </div>
-
-                    <div class="col-md-6">
-                        <label for="distance-filter" class="form-label">距離遠近偏好</label>
-                        <select class="form-select" id="distance-filter">
-                            <option selected value="any">不限距離</option>
-                            <option value="close">通勤 30 分鐘內</option>
-                            <option value="medium">通勤 1 小時內</option>
-                            <option value="far">超過 1 小時 (可接受)</option>
-                        </select>
-                    </div>
-                </div>
-
-                <button id="aiRecommendBtnNew" type="button" class="btn btn-warning px-5 py-2 w-100" style="background-color: #ffc107; border-color: #ffc107; color: #343a40;">
-                    <i class="bi bi-robot me-2"></i>依據前面填寫的履歷日記，**抓出適合的志願序**
-                </button>
-                <p class="mt-2 mb-0 text-muted text-center"><small>* AI 推薦將覆蓋您當前已選擇的志願序，且優先考量上方篩選偏好。</small></p>
-            </div>
-            
             {% for rank in range(1, 5+1) %}
             <div class="preference-card" data-rank="{{ rank }}">
                 <div class="card-header-rank">
@@ -250,6 +217,9 @@
                     <i class="bi bi-lock-fill me-2"></i>登入後可儲存
                 </button>
                 {% else %}
+                <button id="aiRecommendBtn" type="button" class="btn btn-info px-5 py-2 me-3" style="background-color: #17a2b8; border-color: #17a2b8; color: white;">
+                    <i class="bi bi-robot me-2"></i>AI 推薦志願
+                </button>
                 <button id="toggleEditBtn" type="button" class="btn btn-primary px-5 py-2 me-3">
                     <i class="bi bi-pencil-square me-2"></i>修改志願序
                 </button>
@@ -414,19 +384,15 @@
         else toggleEditBtn.style.display = "none";
 
         // ---------- AI 推薦志願功能 ----------
-        const aiRecommendBtn = document.getElementById("aiRecommendBtnNew"); // 💡 使用新的按鈕 ID
+        const aiRecommendBtn = document.getElementById("aiRecommendBtn");
         if (aiRecommendBtn) {
             aiRecommendBtn.addEventListener("click", async () => {
-                // 💡 取得篩選器值
-                const transportationFilter = document.getElementById('transportation-filter').value;
-                const distanceFilter = document.getElementById('distance-filter').value;
-
                 // 顯示輸入履歷文字的彈窗
                 const { value: resumeText } = await Swal.fire({
                     title: 'AI 推薦志願序',
                     html: `
-                        <p class="text-start mb-3">請輸入您的履歷日記內容，將推薦你最適合的志願序。</p>
-                        <textarea id="resumeTextArea" class="swal2-textarea" placeholder="請貼上您的履歷日記內容，包含：\n- 個人基本資料\n- 學歷背景\n- 技能專長\n- 工作經驗\n- 專案經歷\n- 其他相關資訊..." style="width: 100%; min-height: 200px; padding: 10px; border: 1px solid #ddd; border-radius: 5px;"></textarea>
+                        <p class="text-start mb-3">請輸入您的履歷內容，將推薦你最適合的志願序。</p>
+                        <textarea id="resumeTextArea" class="swal2-textarea" placeholder="請貼上您的履歷內容，包含：\n- 個人基本資料\n- 學歷背景\n- 技能專長\n- 工作經驗\n- 專案經歷\n- 其他相關資訊..." style="width: 100%; min-height: 200px; padding: 10px; border: 1px solid #ddd; border-radius: 5px;"></textarea>
                     `,
                     focusConfirm: false,
                     showCancelButton: true,
@@ -455,15 +421,10 @@
                 });
 
                 try {
-                    // 💡 呼叫後端 AI 推薦 API，傳遞履歷日記和篩選條件
                     const response = await fetch("/api/recommend-preferences", {
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ 
-                            resumeText: resumeText,
-                            transportationFilter: transportationFilter, // 💡 新增交通篩選條件
-                            distanceFilter: distanceFilter // 💡 新增距離篩選條件
-                        })
+                        body: JSON.stringify({ resumeText })
                     });
 
                     const result = await response.json();
@@ -481,7 +442,7 @@
                         return Swal.fire({
                             icon: 'warning',
                             title: '無推薦結果',
-                            text: 'AI 無法生成推薦，請確認履歷日記內容是否足夠詳細，並考慮放寬篩選條件。'
+                            text: 'AI 無法生成推薦，請確認履歷內容是否足夠詳細。'
                         });
                     }
 
@@ -493,7 +454,7 @@
                                 <h6 class="mb-2"><strong>第 ${rec.order} 志願推薦</strong></h6>
                                 <p class="mb-1"><strong>公司：</strong>${rec.company_name}</p>
                                 <p class="mb-1"><strong>職缺：</strong>${rec.job_title}</p>
-                                <p class="mb-0 text-muted"><small><strong>推薦理由：：</strong>${rec.reason || '無'}</small></p>
+                                <p class="mb-0 text-muted"><small><strong>推薦理由：</strong>${rec.reason || '無'}</small></p>
                             </div>
                         `;
                     });
