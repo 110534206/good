@@ -313,8 +313,20 @@ def register_company():
         
         conn.commit()
 
+        # 註冊完成後直接建立登入 Session
+        session.clear()
+        session['user_id'] = user_id
+        session['username'] = username
+        session['original_role'] = role
+        session['role'] = 'vendor'
+        session['is_homeroom'] = False
+
         # 修正回覆訊息
-        return jsonify({"success": True, "message": "廠商帳號註冊成功，您現在可以直接登入。"})
+        return jsonify({
+            "success": True,
+            "message": "廠商帳號註冊成功，正在為您導向主頁。",
+            "redirect": url_for("users_bp.vendor_home")
+        })
     
     except Exception as e:
         conn.rollback()
