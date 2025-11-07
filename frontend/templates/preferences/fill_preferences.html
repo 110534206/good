@@ -9,6 +9,7 @@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <style>
+        /* ... (CSS 樣式保持不變) ... */
         body {
             font-family: "Noto Sans TC", sans-serif;
             background: #f7f9fc;
@@ -155,11 +156,6 @@
             opacity: 0.6;
             cursor: not-allowed;
         }
-        
-        /* 隱藏/取代原來的 AI 推薦結果方框 */
-        #ai-result-box {
-            display: none; /* 移除或隱藏圖一的 AI 結果方框 */
-        }
     </style>
 </head>
 
@@ -175,32 +171,14 @@
 
         <form id="preferencesForm" class="mx-auto" style="max-width: 900px;">
 
-            <div class="card mb-4 p-4 border-light" style="border: 1px solid #e0e0e0;">
-                <h5 class="card-title text-dark"><i class="bi bi-gear-fill"></i> 篩選偏好設定</h5>
-                <p class="mb-3">請依照您的需求選擇，此將影響 AI 推薦的排序結果：</p>
-
-                <div class="row g-3">
-                    <div class="col-md-6">
-                        <label for="transportation-filter" class="form-label">交通工具偏好</label>
-                        <select class="form-select" id="transportation-filter">
-                            <option selected value="any">不限交通方式</option>
-                            <option value="public">大眾運輸方便</option>
-                            <option value="car">汽/機車為主</option>
-                            <option value="bike">自行車/步行</option>
-                        </select>
-                    </div>
-
-                    <div class="col-md-6">
-                        <label for="distance-filter" class="form-label">距離遠近偏好</label>
-                        <select class="form-select" id="distance-filter">
-                            <option selected value="any">不限距離</option>
-                            <option value="close">通勤 30 分鐘內</option>
-                            <option value="medium">通勤 1 小時內</option>
-                            <option value="far">超過 1 小時 (可接受)</option>
-                        </select>
-                    </div>
-                </div>
+            <div class="card mb-4 p-4 border-info" style="border: 1px solid #17a2b8; border-left: 5px solid #17a2b8; background-color: #e9f7f9;">
+                <h5 class="card-title text-info"><i class="bi bi-lightbulb-fill"></i> **AI 志願序推薦功能**</h5>
+                <p class="mb-0">請依照您的需求選擇志願序，或點擊下方的 **AI 推薦按鈕**。</p>
+                <p class="mb-0">系統將依據您在彈跳視窗中提供的**履歷日記**內容，抓出最適合您的志願序。</p>
             </div>
+            
+            <input type="hidden" id="transportation-filter" value="any">
+            <input type="hidden" id="distance-filter" value="any">
             
             {% for rank in range(1, 5+1) %}
             <div class="preference-card" data-rank="{{ rank }}">
@@ -268,7 +246,7 @@
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
-        // ... (省略不變的 JavaScript 函式，如 loadJobs, updateSelections, initializeSubmittedPreferences 等) ...
+        // ... (省略不變的 JavaScript 函式：loadJobs, updateSelections, initializeSubmittedPreferences, setReadOnlyMode) ...
         const companies = {{ companies | tojson }};
         const submitted = {{ submitted | tojson }};
         const preview = {{ preview | tojson }};
@@ -423,7 +401,7 @@
         const aiRecommendBtn = document.getElementById("aiRecommendBtnNew"); 
         if (aiRecommendBtn) {
             aiRecommendBtn.addEventListener("click", async () => {
-                // 💡 取得篩選器值
+                // 💡 由於移除了下拉式選單，直接使用 hidden input 的值 'any'
                 const transportationFilter = document.getElementById('transportation-filter').value;
                 const distanceFilter = document.getElementById('distance-filter').value;
 
@@ -431,7 +409,7 @@
                 const { value: resumeText } = await Swal.fire({
                     title: 'AI 推薦志願序',
                     html: `
-                        <p class="text-start mb-3">請輸入您的履歷日記內容，AI 將綜合上方篩選偏好推薦最適合的志願序。</p>
+                        <p class="text-start mb-3">請輸入您的履歷日記內容，AI 將為您推薦最適合的志願序。</p>
                         <textarea id="resumeTextArea" class="swal2-textarea" placeholder="請貼上您的履歷日記內容，包含：\n- 個人基本資料\n- 學歷背景\n- 技能專長\n- 工作經驗\n- 專案經歷\n- 其他相關資訊..." style="width: 100%; min-height: 200px; padding: 10px; border: 1px solid #ddd; border-radius: 5px;"></textarea>
                     `,
                     focusConfirm: false,
@@ -461,7 +439,7 @@
                 });
 
                 try {
-                    // 💡 呼叫後端 API，傳遞履歷日記和篩選條件
+                    // 💡 呼叫後端 API，傳遞履歷日記和預設的篩選條件 ('any')
                     const response = await fetch("/api/recommend-preferences", {
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
@@ -487,7 +465,7 @@
                         return Swal.fire({
                             icon: 'warning',
                             title: '無推薦結果',
-                            text: 'AI 無法生成推薦，請確認履歷日記內容是否足夠詳細，並考慮放寬篩選條件。'
+                            text: 'AI 無法生成推薦，請確認履歷日記內容是否足夠詳細。'
                         });
                     }
 
@@ -516,7 +494,6 @@
                     });
 
                     if (isConfirmed) {
-                        // ... (套用推薦邏輯保持不變) ...
                         const allCards = document.querySelectorAll(".preference-card");
                         
                         const applyPromises = recommendations.map((rec, idx) => {
