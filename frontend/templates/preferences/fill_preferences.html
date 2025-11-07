@@ -264,12 +264,13 @@
                             </select>
                         </div>
                         <div class="col-md-4">
-                            <label for="time-filter" class="form-label">實習薪資</label>
-                            <select class="form-select" id="time-filter">
-                                <option selected value="any">月薪</option>
-                                <option value="long_term">時薪</option>
-                                <option value="short_term">獎金/津貼</option>
-                                <option value="flexible">無薪資</option>
+                            <label for="salary-filter" class="form-label">實習薪資</label>
+                            <select class="form-select" id="salary-filter">
+                                <option selected value="any">不限薪資</option>
+                                <option value="monthly">月薪</option>
+                                <option value="hourly">時薪</option>
+                                <option value="stipend">獎金/津貼</option>
+                                <option value="unpaid">無薪資</option>
                             </select>
                         </div>
                     </div>
@@ -284,12 +285,16 @@
         </div>
     </div>
 
+    <script type="application/json" id="companies-data">{{ companies | tojson | safe }}</script>
+    <script type="application/json" id="submitted-data">{{ submitted | tojson | safe }}</script>
+    <script type="application/json" id="preview-data">{{ preview | tojson | safe }}</script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
+        /* eslint-disable */
         // ... (初始化和狀態控制等邏輯保持不變) ...
-        const companies = {{ companies | tojson }};
-        const submitted = {{ submitted | tojson }};
-        const preview = {{ preview | tojson }};
+        const companies = JSON.parse(document.getElementById("companies-data").textContent || "[]");
+        const submitted = JSON.parse(document.getElementById("submitted-data").textContent || "{}");
+        const preview = JSON.parse(document.getElementById("preview-data").textContent || "false");
         const aiPreferenceModalEl = document.getElementById("aiPreferenceModal");
         const aiPreferenceModal = aiPreferenceModalEl ? new bootstrap.Modal(aiPreferenceModalEl) : null;
 
@@ -455,17 +460,17 @@
                 // 💡 取得三個篩選器值
                 const distanceFilter = document.getElementById('distance-filter').value;
                 const transportationFilter = document.getElementById('transportation-filter').value;
-                const timeFilter = document.getElementById('time-filter').value;
+                const salaryFilter = document.getElementById('salary-filter').value;
 
                 // 顯示載入中 (不再彈出履歷日記輸入框)
                 Swal.fire({
                     title: 'AI 正在分析中...',
                     html: `
-                        <p>將根據您的選擇推薦：</p>
+                        <p>將根據您的履歷與下列條件推薦志願序：</p>
                         <ul class="text-start mb-0" style="list-style-type: none; padding-left: 0;">
                             <li>距離偏好: <strong>${document.getElementById('distance-filter').options[document.getElementById('distance-filter').selectedIndex].text}</strong></li>
                             <li>交通偏好: <strong>${document.getElementById('transportation-filter').options[document.getElementById('transportation-filter').selectedIndex].text}</strong></li>
-                            <li>時間偏好: <strong>${document.getElementById('time-filter').options[document.getElementById('time-filter').selectedIndex].text}</strong></li>
+                            <li>薪資偏好: <strong>${document.getElementById('salary-filter').options[document.getElementById('salary-filter').selectedIndex].text}</strong></li>
                         </ul>
                     `,
                     allowOutsideClick: false,
@@ -482,7 +487,7 @@
                         body: JSON.stringify({ 
                             distanceFilter: distanceFilter, 
                             transportationFilter: transportationFilter,
-                            timeFilter: timeFilter // 💡 新增時間篩選條件
+                            salaryFilter: salaryFilter
                         })
                     });
 
@@ -513,7 +518,7 @@
                                 <h6 class="mb-2"><strong>第 ${rec.order} 志願推薦</strong></h6>
                                 <p class="mb-1"><strong>公司：</strong>${rec.company_name}</p>
                                 <p class="mb-1"><strong>職缺：</strong>${rec.job_title}</p>
-                                <p class="mb-0 text-muted"><small><strong>推薦理由：：</strong>${rec.reason || '無'}</small></p>
+                                <p class="mb-0 text-muted"><small><strong>推薦理由：</strong>${rec.reason || '無'}</small></p>
                             </div>
                         `;
                     });
@@ -531,6 +536,11 @@
 
                     if (isConfirmed) {
                         const allCards = document.querySelectorAll(".preference-card");
+
+                        if (hasSubmitted && !isEditing) {
+                            isEditing = true;
+                            setReadOnlyMode(false);
+                        }
                         
                         const applyPromises = recommendations.map((rec, idx) => {
                             return new Promise((resolve) => {

@@ -4,6 +4,7 @@ from flask import Blueprint, request, Response, jsonify, session
 from config import get_db
 import json
 import traceback
+from PyPDF2 import PdfReader
 
 # --- 初始化 AI Blueprint ---
 ai_bp = Blueprint('ai_bp', __name__)
@@ -33,6 +34,28 @@ SYSTEM_PROMPT = """
 6. 全程使用純文字，禁止產生星號、井字號、底線或其他 Markdown 標記符號。
 """
 
+# ----------------------------------------------------------
+# Helper: 讀取 PDF 履歷文字
+# ----------------------------------------------------------
+def extract_pdf_text(pdf_path: str) -> str:
+    if not pdf_path or not os.path.exists(pdf_path):
+        print(f"❗ 找不到履歷檔案：{pdf_path}")
+        return ""
+
+    try:
+        reader = PdfReader(pdf_path)
+        pages_text = []
+        for page in reader.pages:
+            page_text = page.extract_text() or ""
+            pages_text.append(page_text.strip())
+        combined = "\n".join(filter(None, pages_text)).strip()
+        if not combined:
+            print(f"❗ PDF 解析結果為空：{pdf_path}")
+        return combined
+    except Exception as exc:
+        print(f"❌ PDF 解析失敗：{exc}")
+        return ""
+
 # ... (revise_resume API 保持不變) ...
 
 # ==========================================================
@@ -52,15 +75,42 @@ def recommend_preferences():
 
     try:
         data = request.get_json() or {}
-        # 💡 不再接收 resumeText，只接收篩選條件
+        # 💡 從前端接收偏好條件
         transportation_filter = data.get('transportationFilter', 'any')
         distance_filter = data.get('distanceFilter', 'any')
-        time_filter = data.get('timeFilter', 'any') # 💡 新增時間篩選條件
+        salary_filter = data.get('salaryFilter', 'any')
 
         conn = get_db()
         cursor = conn.cursor(dictionary=True)
 
-        # 💡 移除履歷日記檢查 (因為不再需要履歷日記)
+        # 取得學生最新「審核通過」的履歷檔案
+        cursor.execute(
+            """
+            SELECT filepath, original_filename
+            FROM resumes
+            WHERE user_id = %s AND status = 'approved'
+            ORDER BY created_at DESC
+            LIMIT 1
+            """,
+            (student_id,),
+        )
+        resume_record = cursor.fetchone()
+        if not resume_record:
+            return jsonify({
+                "success": False,
+                "error": "尚未找到審核通過的履歷檔案，請先完成上傳與審核再使用 AI 推薦。"
+            }), 400
+
+        resume_path = resume_record.get('filepath')
+        resume_text = extract_pdf_text(resume_path)
+        if not resume_text:
+            return jsonify({
+                "success": False,
+                "error": "無法讀取履歷檔案內容，請確認檔案為可解析的 PDF。"
+            }), 500
+
+        # 避免過長導致超出模型限制，保留前 6000 字元
+        resume_text = resume_text[:6000]
 
         cursor.execute("""
             SELECT 
@@ -122,27 +172,47 @@ def recommend_preferences():
 {jobs_text}
 ---
 """
-        # 💡 關鍵修改：將推薦依據改為篩選條件
-        preference_info = f"""
-        【學生實習偏好條件】
-        * 距離遠近偏好: {distance_filter} (close=30分鐘內, medium=1小時內, far=1小時以上, any=不限)
-        * 交通工具偏好: {transportation_filter} (public=大眾運輸, car=汽/機車, bike=自行車/步行, any=不限)
-        * 實習期間/時段偏好: {time_filter} (long_term=長期, short_term=短期/寒暑假, flexible=彈性工時, any=不限)
-        
-        **請嚴格依據這些偏好條件，從【可選的公司和職缺資訊】中篩選並排序最適合的志願序。**
-        """
-        
+        distance_map = {
+            'any': '不限距離',
+            'close': '通勤 30 分鐘內',
+            'medium': '通勤 1 小時內',
+            'far': '超過 1 小時'
+        }
+        transportation_map = {
+            'any': '不限交通方式',
+            'public': '以大眾運輸為主',
+            'car': '以汽車或機車為主',
+            'bike': '以自行車或步行為主'
+        }
+        salary_map = {
+            'any': '不限薪資類型',
+            'monthly': '月薪',
+            'hourly': '時薪',
+            'stipend': '獎金或津貼',
+            'unpaid': '無薪資'
+        }
+
+        preference_lines = [
+            f"距離遠近偏好：{distance_map.get(distance_filter, '不限距離')}",
+            f"交通工具偏好：{transportation_map.get(transportation_filter, '不限交通方式')}",
+            f"實習薪資偏好：{salary_map.get(salary_filter, '不限薪資類型')}"
+        ]
+        preference_info = "【學生實習偏好條件】\n" + "\n".join(preference_lines) + "\n請嚴格依據上述偏好條件，從【可選的公司和職缺資訊】中篩選並排序最適合的志願序。"
+
         # 💡 關鍵修改：移除對履歷日記的提及
         prompt = f"""{SYSTEM_PROMPT}
 你是一位專業的實習顧問，請根據學生提供的【學生實習偏好條件】，推薦最適合的實習志願序（最多5個）。
 
 {preference_info}
 
+【學生履歷重點（系統自動擷取）】
+{resume_text}
+
 【可選的公司和職缺資訊】
 {companies_text}
 
 【任務要求】
-1. 分析並比對【學生實習偏好條件】和【可選的公司和職缺資訊】。
+1. 分析並比對【學生實習偏好條件】、【學生履歷重點】與【可選的公司和職缺資訊】。
 2. 匹配最符合這些條件的公司與職缺。
 3. 按適合度排序，推薦最多5個志願（由最適合至較適合）。
 4. 每個推薦需包含：公司ID、職缺ID、推薦理由 (理由必須明確說明如何符合偏好條件)。
@@ -165,7 +235,11 @@ def recommend_preferences():
 """
 
         # 💡 將 print 訊息更新
-        print(f"🔍 AI 推薦志願序 - 學生ID: {student_id}, 距離: {distance_filter}, 交通: {transportation_filter}, 時間: {time_filter}")
+        print(
+            "🔍 AI 推薦志願序 - "
+            f"學生ID: {student_id}, 距離: {distance_filter}, 交通: {transportation_filter}, 薪資: {salary_filter}, "
+            f"履歷長度: {len(resume_text)}"
+        )
 
         response = model.generate_content(prompt)
         ai_response_text = response.text.strip()
