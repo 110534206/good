@@ -319,7 +319,7 @@
         </td>
         <td>
           <div class="btn-group btn-group-sm">
-            <a href="/api/download_resume?resume_id=${r.id}" class="btn btn-outline-primary">下載</a>
+            <a href="/api/download_resume/${r.id}" class="btn btn-outline-primary btn-sm me-1">下載</a>
             <button class="btn btn-outline-danger" onclick="rejectResume(${r.id})">退件</button>
             <button class="btn btn-outline-success" onclick="approveResume(${r.id})">完成</button>
           </div>

@@ -382,7 +382,7 @@ function handleFileChange() {
       <td class="comment-cell">${commentView}</td>
       <td class="note-cell">${noteView}</td>
       <td>
-        <a href="/api/download_resume?resume_id=${r.id}" class="btn btn-outline-primary btn-sm me-1">下載</a>
+        <a href="/api/download_resume/${r.id}" class="btn btn-outline-primary btn-sm me-1">下載</a>
         <button class="btn btn-outline-danger btn-sm" onclick="deleteResume(${r.id})">刪除</button>
       </td>
     </tr>
