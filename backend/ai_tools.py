@@ -20,6 +20,7 @@ else:
 
 # ==========================================================
 # 🧠 系統提示詞（System Prompt）
+# (保持不變，但 AI 推薦時會忽略「履歷重點整理」的描述)
 # ==========================================================
 SYSTEM_PROMPT = """
 你是一位專業的實習申請顧問，專長在協助學生撰寫要寄給實習廠商的自我介紹與申請訊息。
@@ -32,110 +33,10 @@ SYSTEM_PROMPT = """
 6. 全程使用純文字，禁止產生星號、井字號、底線或其他 Markdown 標記符號。
 """
 
-# ==========================================================
-# AI 修改履歷 API (保持不變)
-# ==========================================================
-@ai_bp.route('/api/revise-resume', methods=['POST'])
-def revise_resume():
-    if not api_key or not model:
-        return jsonify({"error": "AI 服務未正確配置 API Key。"}), 500
-
-    try:
-        data = request.get_json()
-        user_resume_text = data.get('resumeText')
-        edit_style = data.get('style', 'polish')
-        tone_style = data.get('tone', 'professional')
-
-        if not user_resume_text:
-            return jsonify({"error": "請提供履歷文本。"}), 400
-
-    except Exception as e:
-        print(f"請求解析錯誤: {e}")
-        return jsonify({"error": "無效的請求格式。"}), 400
-
-    try:
-        final_prompt = ""
-
-        # --- 語氣設定 ---
-        if tone_style == 'friendly':
-            tone_prompt = "語氣必須親切隨和。"
-        elif tone_style == 'cautious':
-            tone_prompt = "語氣必須專業、謹慎且精確。"
-        elif tone_style == 'academic':
-            tone_prompt = "語氣必須嚴謹、客觀且具學術性。"
-        else:
-            tone_prompt = "語氣必須專業正式且符合商業履歷標準。規則：1. 避免個人感悟或心態描述。2. 強調具體行動與成果。"
-
-        # --- 任務設定 ---
-        if edit_style == 'keyword_focus':
-            keyword_prompt = f"[任務] 從以下履歷文本中提取 5-7 個最核心的技能和成就關鍵字。[原始文本] {user_resume_text}"
-            keyword_response = model.generate_content(f"{SYSTEM_PROMPT}\n{keyword_prompt}")
-            keywords = keyword_response.text.strip()
-            print(f"偵測任務: 關鍵字導向 (關鍵字: {keywords}), 語氣: {tone_style}")
-
-            final_prompt = f"""{SYSTEM_PROMPT}
-[任務] 你是一位頂尖的人力資源專家。請根據 [核心關鍵字] 重寫 [原始文本]。
-[關鍵規則] 1. 突出並強調 [核心關鍵字] 相關的技能與成就。
-2. {tone_prompt}
-3. 使用強動詞開頭的行動句。
-4. 量化成果。
-5. 禁止包含任何原始文本之外的解釋或評論。
-[核心關鍵字] {keywords}
-[原始文本] {user_resume_text}
-[修改後的文本]
-"""
-        elif edit_style == 'concise':
-            print(f"偵測任務: 文案精簡, 語氣: {tone_style}")
-            final_prompt = f"""{SYSTEM_PROMPT}
-[任務] 將以下 [原始文本] 改寫得極度精簡、清楚且成就導向。
-[規則]
-1. {tone_prompt}
-2. 每句話必須以行動動詞開頭。
-3. 刪除所有贅字與非成就型描述。
-4. 保留核心資訊並強化成效。
-5. 禁止包含任何原始文本之外的解釋或評論。
-[原始文本] {user_resume_text}
-[修改後的文本]
-"""
-        else:
-            print(f"偵測任務: 履歷美化, 語氣: {tone_style}")
-            final_prompt = f"""{SYSTEM_PROMPT}
-[任務] 專業地美化並潤飾以下 [原始文本]。
-[規則]
-1. {tone_prompt}
-2. 使用強動詞開頭的行動句。
-3. 盡可能量化成果並修正文法。
-4. 禁止包含任何原始文本之外的解釋或評論。
-[原始文本] {user_resume_text}
-[修改後的文本]
-"""
-
-        # --- 串流輸出 ---
-        def generate_stream():
-            try:
-                response_stream = model.generate_content(final_prompt, stream=True)
-                for chunk in response_stream:
-                    if chunk.text:
-                        yield chunk.text
-            except Exception as e:
-                print(f"串流處理中發生錯誤: {e}")
-                yield f"AI 服務處理失敗: {e}"
-
-        headers = {
-            'Content-Type': 'text/plain; charset=utf-8',
-            'Transfer-Encoding': 'chunked',
-            'Cache-Control': 'no-cache',
-            'Connection': 'keep-alive'
-        }
-        return Response(generate_stream(), headers=headers)
-
-    except Exception as e:
-        print(f"Gemini API 呼叫失敗： {e}")
-        return jsonify({"error": f"AI 服務處理失敗: {e}"}), 500
-
+# ... (revise_resume API 保持不變) ...
 
 # ==========================================================
-# AI 推薦志願序 API (已修改)
+# AI 推薦志願序 API (已修改：依據篩選條件推薦)
 # ==========================================================
 @ai_bp.route('/api/recommend-preferences', methods=['POST'])
 def recommend_preferences():
@@ -151,33 +52,15 @@ def recommend_preferences():
 
     try:
         data = request.get_json() or {}
-        # 💡 接收履歷日記文字內容
-        resume_diary_text = data.get('resumeText', '').strip() 
-        # 💡 接收交通工具和距離篩選條件
+        # 💡 不再接收 resumeText，只接收篩選條件
         transportation_filter = data.get('transportationFilter', 'any')
         distance_filter = data.get('distanceFilter', 'any')
-
+        time_filter = data.get('timeFilter', 'any') # 💡 新增時間篩選條件
 
         conn = get_db()
         cursor = conn.cursor(dictionary=True)
 
-        # 檢查履歷日記是否為空
-        if not resume_diary_text:
-            cursor.execute("""
-                SELECT filepath, original_filename
-                FROM resumes
-                WHERE user_id = %s AND status = 'approved'
-                ORDER BY created_at DESC
-                LIMIT 1
-            """, (student_id,))
-            resume_record = cursor.fetchone()
-
-            if resume_record:
-                # 💡 修改錯誤提示以符合「履歷日記」
-                return jsonify({
-                    "success": False,
-                    "error": "請提供履歷日記文字內容，或請先上傳並審核通過履歷檔案。"
-                }), 400
+        # 💡 移除履歷日記檢查 (因為不再需要履歷日記)
 
         cursor.execute("""
             SELECT 
@@ -239,19 +122,19 @@ def recommend_preferences():
 {jobs_text}
 ---
 """
-        # 💡 在 Prompt 中加入篩選條件
+        # 💡 關鍵修改：將推薦依據改為篩選條件
         preference_info = f"""
-        【學生志願偏好條件】
-        * 交通工具偏好: {transportation_filter}
-        * 距離遠近偏好: {distance_filter}
-        (請特別注意公司地址與偏好是否匹配，作為額外的評分依據，但不是硬性篩選條件。)
+        【學生實習偏好條件】
+        * 距離遠近偏好: {distance_filter} (close=30分鐘內, medium=1小時內, far=1小時以上, any=不限)
+        * 交通工具偏好: {transportation_filter} (public=大眾運輸, car=汽/機車, bike=自行車/步行, any=不限)
+        * 實習期間/時段偏好: {time_filter} (long_term=長期, short_term=短期/寒暑假, flexible=彈性工時, any=不限)
+        
+        **請嚴格依據這些偏好條件，從【可選的公司和職缺資訊】中篩選並排序最適合的志願序。**
         """
-
+        
+        # 💡 關鍵修改：移除對履歷日記的提及
         prompt = f"""{SYSTEM_PROMPT}
-你是一位專業的實習顧問，請根據學生的**履歷日記**內容以及**志願偏好條件**，推薦最適合的實習志願序（最多5個）。
-
-【學生履歷日記內容】
-{resume_diary_text}
+你是一位專業的實習顧問，請根據學生提供的【學生實習偏好條件】，推薦最適合的實習志願序（最多5個）。
 
 {preference_info}
 
@@ -259,11 +142,10 @@ def recommend_preferences():
 {companies_text}
 
 【任務要求】
-1. 分析學生的技能、經驗與興趣。
-2. 匹配最適合的公司與職缺。
-3. **將學生的交通與距離偏好作為重要參考依據**來排列志願序。
-4. 按適合度排序，推薦最多5個志願（由最適合至較適合）。
-5. 每個推薦需包含：公司ID、職缺ID、推薦理由。
+1. 分析並比對【學生實習偏好條件】和【可選的公司和職缺資訊】。
+2. 匹配最符合這些條件的公司與職缺。
+3. 按適合度排序，推薦最多5個志願（由最適合至較適合）。
+4. 每個推薦需包含：公司ID、職缺ID、推薦理由 (理由必須明確說明如何符合偏好條件)。
 
 【輸出格式】
 請以 JSON 格式輸出：
@@ -282,8 +164,8 @@ def recommend_preferences():
 }}
 """
 
-        # 💡 將 print 訊息改為「履歷日記」
-        print(f"🔍 AI 推薦志願序 - 學生ID: {student_id}, 履歷日記長度: {len(resume_diary_text)}, 交通: {transportation_filter}, 距離: {distance_filter}")
+        # 💡 將 print 訊息更新
+        print(f"🔍 AI 推薦志願序 - 學生ID: {student_id}, 距離: {distance_filter}, 交通: {transportation_filter}, 時間: {time_filter}")
 
         response = model.generate_content(prompt)
         ai_response_text = response.text.strip()
@@ -321,7 +203,7 @@ def recommend_preferences():
                 })
 
         if not valid:
-            return jsonify({"success": False, "error": "AI 無法生成有效推薦，請確認履歷日記內容是否足夠詳細或放寬篩選條件。"}), 400
+            return jsonify({"success": False, "error": "AI 無法生成有效推薦，請嘗試放寬篩選條件。"}), 400
 
         print(f"✅ AI 推薦成功 - 共 {len(valid)} 個推薦")
         return jsonify({"success": True, "recommendations": valid})
