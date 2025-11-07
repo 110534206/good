@@ -4,6 +4,8 @@ from flask import Blueprint, request, Response, jsonify, session
 from config import get_db
 import json
 import traceback
+# 使用 pypdf 提高對 PDF 檔案錯誤的容錯性
+from pypdf import PdfReader, errors as pypdf_errors 
 
 # --- 初始化 AI Blueprint ---
 ai_bp = Blueprint('ai_bp', __name__)
@@ -16,6 +18,7 @@ if not api_key:
     model = None
 else:
     genai.configure(api_key=api_key)
+    # 使用 genai.Client() 並設置 model_name
     model = genai.GenerativeModel('gemini-2.5-flash')
 
 # ==========================================================
@@ -32,110 +35,58 @@ SYSTEM_PROMPT = """
 6. 全程使用純文字，禁止產生星號、井字號、底線或其他 Markdown 標記符號。
 """
 
-# ==========================================================
-# AI 修改履歷 API
-# ==========================================================
-@ai_bp.route('/api/revise-resume', methods=['POST'])
-def revise_resume():
-    if not api_key or not model:
-        return jsonify({"error": "AI 服務未正確配置 API Key。"}), 500
+# ----------------------------------------------------------
+# Helper: 讀取 PDF 履歷文字 (已修正：使用 pypdf 並新增檔案標頭檢查)
+# ----------------------------------------------------------
+def extract_pdf_text(pdf_path: str) -> str:
+    if not pdf_path or not os.path.exists(pdf_path):
+        print(f"❗ 找不到履歷檔案：{pdf_path}")
+        return ""
 
+    # ⚠️ 關鍵修正：先檢查檔案標頭是否為 PDF，以排除 DOCX/ZIP 誤傳
     try:
-        data = request.get_json()
-        user_resume_text = data.get('resumeText')
-        edit_style = data.get('style', 'polish')
-        tone_style = data.get('tone', 'professional')
-
-        if not user_resume_text:
-            return jsonify({"error": "請提供履歷文本。"}), 400
-
+        with open(pdf_path, 'rb') as f:
+            header = f.read(4) # 讀取前 4 個位元組
+            if header != b'%PDF':
+                # 判斷是否為 ZIP/DOCX 的標記 (PK\x03\x04)
+                if header.startswith(b'PK\x03\x04'):
+                    print(f"❌ 檔案格式錯誤: 檔案標頭顯示為 ZIP/DOCX 格式 (標記: {header})，非標準 PDF。")
+                    return "ERROR_NOT_A_PDF_DOCX"
+                else:
+                    print(f"❌ 檔案格式錯誤: 檔案標頭非 PDF (標記: {header})。")
+                    return "ERROR_NOT_A_PDF_OTHER"
     except Exception as e:
-        print(f"請求解析錯誤: {e}")
-        return jsonify({"error": "無效的請求格式。"}), 400
+        print(f"❌ 讀取檔案標頭失敗: {e}")
+        return "" # 讀取失敗，回傳空字串
 
+    # 如果通過標頭檢查，則繼續使用 pypdf 解析
     try:
-        final_prompt = ""
-
-        # --- 語氣設定 ---
-        if tone_style == 'friendly':
-            tone_prompt = "語氣必須親切隨和。"
-        elif tone_style == 'cautious':
-            tone_prompt = "語氣必須專業、謹慎且精確。"
-        elif tone_style == 'academic':
-            tone_prompt = "語氣必須嚴謹、客觀且具學術性。"
-        else:
-            tone_prompt = "語氣必須專業正式且符合商業履歷標準。規則：1. 避免個人感悟或心態描述。2. 強調具體行動與成果。"
-
-        # --- 任務設定 ---
-        if edit_style == 'keyword_focus':
-            keyword_prompt = f"[任務] 從以下履歷文本中提取 5-7 個最核心的技能和成就關鍵字。[原始文本] {user_resume_text}"
-            keyword_response = model.generate_content(f"{SYSTEM_PROMPT}\n{keyword_prompt}")
-            keywords = keyword_response.text.strip()
-            print(f"偵測任務: 關鍵字導向 (關鍵字: {keywords}), 語氣: {tone_style}")
-
-            final_prompt = f"""{SYSTEM_PROMPT}
-[任務] 你是一位頂尖的人力資源專家。請根據 [核心關鍵字] 重寫 [原始文本]。
-[關鍵規則] 1. 突出並強調 [核心關鍵字] 相關的技能與成就。
-2. {tone_prompt}
-3. 使用強動詞開頭的行動句。
-4. 量化成果。
-5. 禁止包含任何原始文本之外的解釋或評論。
-[核心關鍵字] {keywords}
-[原始文本] {user_resume_text}
-[修改後的文本]
-"""
-        elif edit_style == 'concise':
-            print(f"偵測任務: 文案精簡, 語氣: {tone_style}")
-            final_prompt = f"""{SYSTEM_PROMPT}
-[任務] 將以下 [原始文本] 改寫得極度精簡、清楚且成就導向。
-[規則]
-1. {tone_prompt}
-2. 每句話必須以行動動詞開頭。
-3. 刪除所有贅字與非成就型描述。
-4. 保留核心資訊並強化成效。
-5. 禁止包含任何原始文本之外的解釋或評論。
-[原始文本] {user_resume_text}
-[修改後的文本]
-"""
-        else:
-            print(f"偵測任務: 履歷美化, 語氣: {tone_style}")
-            final_prompt = f"""{SYSTEM_PROMPT}
-[任務] 專業地美化並潤飾以下 [原始文本]。
-[規則]
-1. {tone_prompt}
-2. 使用強動詞開頭的行動句。
-3. 盡可能量化成果並修正文法。
-4. 禁止包含任何原始文本之外的解釋或評論。
-[原始文本] {user_resume_text}
-[修改後的文本]
-"""
-
-        # --- 串流輸出 ---
-        def generate_stream():
-            try:
-                response_stream = model.generate_content(final_prompt, stream=True)
-                for chunk in response_stream:
-                    if chunk.text:
-                        yield chunk.text
-            except Exception as e:
-                print(f"串流處理中發生錯誤: {e}")
-                yield f"AI 服務處理失敗: {e}"
-
-        headers = {
-            'Content-Type': 'text/plain; charset=utf-8',
-            'Transfer-Encoding': 'chunked',
-            'Cache-Control': 'no-cache',
-            'Connection': 'keep-alive'
-        }
-        return Response(generate_stream(), headers=headers)
-
-    except Exception as e:
-        print(f"Gemini API 呼叫失敗： {e}")
-        return jsonify({"error": f"AI 服務處理失敗: {e}"}), 500
-
+        reader = PdfReader(pdf_path) 
+        
+        if reader.is_encrypted:
+            print(f"❌ PDF 解析失敗：檔案已加密，無法讀取 {pdf_path}")
+            return ""
+            
+        pages_text = []
+        for page in reader.pages:
+            page_text = page.extract_text() or ""
+            pages_text.append(page_text.strip())
+            
+        combined = "\n".join(filter(None, pages_text)).strip()
+        if not combined:
+            print(f"❗ PDF 解析結果為空：{pdf_path}")
+        return combined
+        
+    except pypdf_errors.PdfReadError as exc: 
+        print(f"❌ PDF 解析失敗 (檔案損壞/格式錯誤)：{exc}")
+        return ""
+    except Exception as exc:
+        print(f"❌ PDF 解析失敗 (通用錯誤)：{exc}")
+        traceback.print_exc()
+        return ""
 
 # ==========================================================
-# AI 推薦志願序 API
+# AI 推薦志願序 API 
 # ==========================================================
 @ai_bp.route('/api/recommend-preferences', methods=['POST'])
 def recommend_preferences():
@@ -151,26 +102,52 @@ def recommend_preferences():
 
     try:
         data = request.get_json() or {}
-        resume_text = data.get('resumeText', '').strip()
+        # 💡 從前端接收偏好條件
+        transportation_filter = data.get('transportationFilter', 'any')
+        distance_filter = data.get('distanceFilter', 'any')
+        salary_filter = data.get('salaryFilter', 'any')
 
         conn = get_db()
         cursor = conn.cursor(dictionary=True)
 
-        if not resume_text:
-            cursor.execute("""
-                SELECT filepath, original_filename
-                FROM resumes
-                WHERE user_id = %s AND status = 'approved'
-                ORDER BY created_at DESC
-                LIMIT 1
-            """, (student_id,))
-            resume_record = cursor.fetchone()
+        # 取得學生最新「審核通過」的履歷檔案
+        cursor.execute(
+            """
+            SELECT filepath, original_filename
+            FROM resumes
+            WHERE user_id = %s AND status = 'approved'
+            ORDER BY created_at DESC
+            LIMIT 1
+            """,
+            (student_id,),
+        )
+        resume_record = cursor.fetchone()
+        if not resume_record:
+            return jsonify({
+                "success": False,
+                "error": "尚未找到審核通過的履歷檔案，請先完成上傳與審核再使用 AI 推薦。"
+            }), 400
 
-            if resume_record:
-                return jsonify({
-                    "success": False,
-                    "error": "請提供履歷文字內容，或請先上傳並審核通過履歷檔案。"
-                }), 400
+        resume_path = resume_record.get('filepath')
+        # 呼叫修正後的函式
+        resume_text = extract_pdf_text(resume_path)
+        
+        # ⚠️ 關鍵修正：處理 extract_pdf_text 回傳的特殊錯誤字串
+        if not resume_text or resume_text.startswith("ERROR_NOT_A_PDF"):
+            error_msg = "無法讀取履歷檔案內容，請確認檔案為可解析的 PDF。"
+            if resume_text == "ERROR_NOT_A_PDF_DOCX":
+                # 提供更明確的指示給使用者
+                error_msg = "您上傳的檔案似乎是 Word (.docx) 檔案，請將履歷轉換為 **標準 PDF 格式** 後再試一次。"
+            elif resume_text == "ERROR_NOT_A_PDF_OTHER":
+                error_msg = "檔案標頭錯誤，請確認檔案為標準 PDF 格式。"
+                
+            return jsonify({
+                "success": False,
+                "error": error_msg
+            }), 400 
+
+        # 避免過長導致超出模型限制，保留前 6000 字元
+        resume_text = resume_text[:6000]
 
         cursor.execute("""
             SELECT 
@@ -232,21 +209,49 @@ def recommend_preferences():
 {jobs_text}
 ---
 """
+        distance_map = {
+            'any': '不限距離',
+            'close': '通勤 30 分鐘內',
+            'medium': '通勤 1 小時內',
+            'far': '超過 1 小時'
+        }
+        transportation_map = {
+            'any': '不限交通方式',
+            'public': '以大眾運輸為主',
+            'car': '以汽車或機車為主',
+            'bike': '以自行車或步行為主'
+        }
+        salary_map = {
+            'any': '不限薪資類型',
+            'monthly': '月薪',
+            'hourly': '時薪',
+            'stipend': '獎金或津貼',
+            'unpaid': '無薪資'
+        }
+
+        preference_lines = [
+            f"距離遠近偏好：{distance_map.get(distance_filter, '不限距離')}",
+            f"交通工具偏好：{transportation_map.get(transportation_filter, '不限交通方式')}",
+            f"實習薪資偏好：{salary_map.get(salary_filter, '不限薪資類型')}"
+        ]
+        preference_info = "【學生實習偏好條件】\n" + "\n".join(preference_lines) + "\n請嚴格依據上述偏好條件，從【可選的公司和職缺資訊】中篩選並排序最適合的志願序。"
 
         prompt = f"""{SYSTEM_PROMPT}
-你是一位專業的實習顧問，請根據學生的履歷內容，推薦最適合的實習志願序（最多5個）。
+你是一位專業的實習顧問，請根據學生提供的【學生實習偏好條件】，推薦最適合的實習志願序（最多5個）。
 
-【學生履歷內容】
+{preference_info}
+
+【學生履歷重點（系統自動擷取）】
 {resume_text}
 
 【可選的公司和職缺資訊】
 {companies_text}
 
 【任務要求】
-1. 分析學生的技能、經驗與興趣。
-2. 匹配最適合的公司與職缺。
+1. 分析並比對【學生實習偏好條件】、【學生履歷重點】與【可選的公司和職缺資訊】。
+2. 匹配最符合這些條件的公司與職缺。
 3. 按適合度排序，推薦最多5個志願（由最適合至較適合）。
-4. 每個推薦需包含：公司ID、職缺ID、推薦理由。
+4. 每個推薦需包含：公司ID、職缺ID、推薦理由 (理由必須明確說明如何符合偏好條件)。
 
 【輸出格式】
 請以 JSON 格式輸出：
@@ -265,7 +270,11 @@ def recommend_preferences():
 }}
 """
 
-        print(f"🔍 AI 推薦志願序 - 學生ID: {student_id}, 履歷長度: {len(resume_text)}")
+        print(
+            "🔍 AI 推薦志願序 - "
+            f"學生ID: {student_id}, 距離: {distance_filter}, 交通: {transportation_filter}, 薪資: {salary_filter}, "
+            f"履歷長度: {len(resume_text)}"
+        )
 
         response = model.generate_content(prompt)
         ai_response_text = response.text.strip()
@@ -303,7 +312,7 @@ def recommend_preferences():
                 })
 
         if not valid:
-            return jsonify({"success": False, "error": "AI 無法生成有效推薦，請確認履歷內容是否足夠詳細。"}), 400
+            return jsonify({"success": False, "error": "AI 無法生成有效推薦，請嘗試放寬篩選條件。"}), 400
 
         print(f"✅ AI 推薦成功 - 共 {len(valid)} 個推薦")
         return jsonify({"success": True, "recommendations": valid})

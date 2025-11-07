@@ -97,9 +97,8 @@ def can_access_target_resume(cursor, session_user_id, session_role, target_user_
 def require_login():
     return 'user_id' in session and 'role' in session
 
-
 # -------------------------
-#  履歷上傳
+# API - 上傳履歷
 # -------------------------
 @resume_bp.route('/api/upload_resume', methods=['POST'])
 def upload_resume_api():
@@ -107,34 +106,27 @@ def upload_resume_api():
         # 取得 session 角色
         role = session.get('role')
         if role != 'student':
+            # 非學生不能上傳
             return jsonify({"success": False, "message": "只有學生可以上傳履歷"}), 403
 
         if 'resume' not in request.files:
             return jsonify({"success": False, "message": "未上傳檔案"}), 400
 
         file = request.files['resume']
-        username = session.get('username')
+        username = session.get('username')  # 直接用登入的學生帳號
         if not username:
             return jsonify({"success": False, "message": "未登入學生帳號"}), 403
 
         if file.filename == '':
             return jsonify({"success": False, "message": "檔案名稱為空"}), 400
 
-        # 取得原始檔名、保護檔名
         original_filename = file.filename
         safe_filename = secure_filename(original_filename)
-        # 取得副檔名
-        ext = os.path.splitext(safe_filename)[1]  # 包含點，如 ".pdf"、".docx"
-
-        # 用時間戳 + 副檔名做儲存檔名
         timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
-        stored_filename = f"{timestamp}{ext}"
+        stored_filename = f"{timestamp}_{safe_filename}"
         save_path = os.path.join(UPLOAD_FOLDER, stored_filename)
 
         file.save(save_path)
-
-        # 儲存到資料庫時統一用斜線
-        db_filepath = save_path.replace("\\", "/")
 
         conn = get_db()
         cursor = conn.cursor(dictionary=True)
@@ -154,16 +146,22 @@ def upload_resume_api():
         # =========================================================
         # 自動標註：學期、班級、學號
         # =========================================================
+        # 1. 獲取當前學期ID
         semester_id = get_current_semester_id(cursor)
+        
+        # 2. 獲取學生班級ID（從 users 表）
         cursor.execute("SELECT class_id FROM users WHERE id = %s", (user_id,))
         user_info = cursor.fetchone()
         class_id = user_info['class_id'] if user_info else None
-
-        # 插入履歷
+        
+        # 3. 學號已從 username 獲取（session.get('username')）
+        # 注意：學號不需要存儲在 resumes 表中，因為可以通過 user_id 關聯 users.username 獲取
+        
+        # 插入履歷（包含 semester_id）
         cursor.execute("""
             INSERT INTO resumes (user_id, semester_id, original_filename, filepath, filesize, status, created_at)
             VALUES (%s, %s, %s, %s, %s, %s, NOW())
-        """, (user_id, semester_id, original_filename, db_filepath, filesize, 'uploaded'))
+        """, (user_id, semester_id, original_filename, save_path, filesize, 'uploaded'))
 
         resume_id = cursor.lastrowid
         conn.commit()

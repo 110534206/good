@@ -4,7 +4,8 @@ from flask import Blueprint, request, Response, jsonify, session
 from config import get_db
 import json
 import traceback
-from PyPDF2 import PdfReader
+# 使用 pypdf 提高對 PDF 檔案錯誤的容錯性
+from pypdf import PdfReader, errors as pypdf_errors 
 
 # --- 初始化 AI Blueprint ---
 ai_bp = Blueprint('ai_bp', __name__)
@@ -17,11 +18,11 @@ if not api_key:
     model = None
 else:
     genai.configure(api_key=api_key)
+    # 使用 genai.Client() 並設置 model_name
     model = genai.GenerativeModel('gemini-2.5-flash')
 
 # ==========================================================
 # 🧠 系統提示詞（System Prompt）
-# (保持不變，但 AI 推薦時會忽略「履歷重點整理」的描述)
 # ==========================================================
 SYSTEM_PROMPT = """
 你是一位專業的實習申請顧問，專長在協助學生撰寫要寄給實習廠商的自我介紹與申請訊息。
@@ -35,30 +36,55 @@ SYSTEM_PROMPT = """
 """
 
 # ----------------------------------------------------------
-# Helper: 讀取 PDF 履歷文字
+# Helper: 讀取 PDF 履歷文字 (已修正：使用 pypdf 並新增檔案標頭檢查)
 # ----------------------------------------------------------
 def extract_pdf_text(pdf_path: str) -> str:
     if not pdf_path or not os.path.exists(pdf_path):
         print(f"❗ 找不到履歷檔案：{pdf_path}")
         return ""
 
+    # ⚠️ 關鍵修正：先檢查檔案標頭是否為 PDF，以排除 DOCX/ZIP 誤傳
     try:
-        reader = PdfReader(pdf_path)
+        with open(pdf_path, 'rb') as f:
+            header = f.read(4) # 讀取前 4 個位元組
+            if header != b'%PDF':
+                # 判斷是否為 ZIP/DOCX 的標記 (PK\x03\x04)
+                if header.startswith(b'PK\x03\x04'):
+                    print(f"❌ 檔案格式錯誤: 檔案標頭顯示為 ZIP/DOCX 格式 (標記: {header})，非標準 PDF。")
+                    return "ERROR_NOT_A_PDF_DOCX"
+                else:
+                    print(f"❌ 檔案格式錯誤: 檔案標頭非 PDF (標記: {header})。")
+                    return "ERROR_NOT_A_PDF_OTHER"
+    except Exception as e:
+        print(f"❌ 讀取檔案標頭失敗: {e}")
+        return "" # 讀取失敗，回傳空字串
+
+    # 如果通過標頭檢查，則繼續使用 pypdf 解析
+    try:
+        reader = PdfReader(pdf_path) 
+        
+        if reader.is_encrypted:
+            print(f"❌ PDF 解析失敗：檔案已加密，無法讀取 {pdf_path}")
+            return ""
+            
         pages_text = []
         for page in reader.pages:
             page_text = page.extract_text() or ""
             pages_text.append(page_text.strip())
+            
         combined = "\n".join(filter(None, pages_text)).strip()
         if not combined:
             print(f"❗ PDF 解析結果為空：{pdf_path}")
         return combined
+        
+    except pypdf_errors.PdfReadError as exc: 
+        print(f"❌ PDF 解析失敗 (檔案損壞/格式錯誤)：{exc}")
+        return ""
     except Exception as exc:
-        print(f"❌ PDF 解析失敗：{exc}")
+        print(f"❌ PDF 解析失敗 (通用錯誤)：{exc}")
+        traceback.print_exc()
         return ""
 
-# ==========================================================
-# AI 推薦志願序 API 
-# ==========================================================
 @ai_bp.route('/api/recommend-preferences', methods=['POST'])
 def recommend_preferences():
     if not api_key or not model:
@@ -73,7 +99,6 @@ def recommend_preferences():
 
     try:
         data = request.get_json() or {}
-        # 💡 從前端接收偏好條件
         transportation_filter = data.get('transportationFilter', 'any')
         distance_filter = data.get('distanceFilter', 'any')
         salary_filter = data.get('salaryFilter', 'any')
@@ -82,34 +107,52 @@ def recommend_preferences():
         cursor = conn.cursor(dictionary=True)
 
         # 取得學生最新「審核通過」的履歷檔案
-        cursor.execute(
-            """
+        cursor.execute("""
             SELECT filepath, original_filename
             FROM resumes
             WHERE user_id = %s AND status = 'approved'
             ORDER BY created_at DESC
             LIMIT 1
-            """,
-            (student_id,),
-        )
+        """, (student_id,))
         resume_record = cursor.fetchone()
+
         if not resume_record:
+            print(f"❌ 找不到通過審核的履歷 - student_id: {student_id}")
             return jsonify({
                 "success": False,
                 "error": "尚未找到審核通過的履歷檔案，請先完成上傳與審核再使用 AI 推薦。"
             }), 400
 
         resume_path = resume_record.get('filepath')
+        print(f"🧩 找到履歷: {resume_path}, 狀態: approved")
+
+        # 防呆：檢查檔案存在與副檔名
+        if not os.path.exists(resume_path):
+            return jsonify({
+                "success": False,
+                "error": f"履歷檔案不存在: {resume_path}"
+            }), 400
+
+        if not resume_path.lower().endswith('.pdf'):
+            return jsonify({
+                "success": False,
+                "error": "履歷檔案不是 PDF 格式，請重新上傳 PDF 檔案。"
+            }), 400
+
+        # 解析 PDF
         resume_text = extract_pdf_text(resume_path)
         if not resume_text:
             return jsonify({
                 "success": False,
                 "error": "無法讀取履歷檔案內容，請確認檔案為可解析的 PDF。"
-            }), 500
+            }), 400
 
-        # 避免過長導致超出模型限制，保留前 6000 字元
+        print(f"✅ 履歷文字長度: {len(resume_text)} 字元")
+
+        # 避免過長，截斷
         resume_text = resume_text[:6000]
 
+        # 取得公司與職缺資料
         cursor.execute("""
             SELECT 
                 ic.id AS company_id,
@@ -197,7 +240,6 @@ def recommend_preferences():
         ]
         preference_info = "【學生實習偏好條件】\n" + "\n".join(preference_lines) + "\n請嚴格依據上述偏好條件，從【可選的公司和職缺資訊】中篩選並排序最適合的志願序。"
 
-        # 💡 關鍵修改：移除對履歷日記的提及
         prompt = f"""{SYSTEM_PROMPT}
 你是一位專業的實習顧問，請根據學生提供的【學生實習偏好條件】，推薦最適合的實習志願序（最多5個）。
 
@@ -232,7 +274,6 @@ def recommend_preferences():
 }}
 """
 
-        # 💡 將 print 訊息更新
         print(
             "🔍 AI 推薦志願序 - "
             f"學生ID: {student_id}, 距離: {distance_filter}, 交通: {transportation_filter}, 薪資: {salary_filter}, "
@@ -280,9 +321,6 @@ def recommend_preferences():
         print(f"✅ AI 推薦成功 - 共 {len(valid)} 個推薦")
         return jsonify({"success": True, "recommendations": valid})
 
-    except json.JSONDecodeError as e:
-        print(f"❌ JSON 解析錯誤: {e}")
-        return jsonify({"success": False, "error": "AI 回應格式錯誤，請稍後再試。"}), 500
     except Exception as e:
         traceback.print_exc()
         return jsonify({"success": False, "error": f"AI 服務處理失敗: {str(e)}"}), 500
