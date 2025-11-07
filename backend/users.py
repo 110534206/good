@@ -96,7 +96,8 @@ def get_profile():
             "指導老師" if display_role == "teacher" else
             "學生" if display_role == "student" else
             "科助" if display_role == "ta" else
-            "管理員" if display_role == "admin" else display_role
+            "管理員" if display_role == "admin" else
+            "廠商" if display_role == "vendor" else display_role
         )
 
         if original_role_from_db == "student" and user.get("username") and len(user["username"]) >= 3:
@@ -160,7 +161,8 @@ def save_profile():
         "指導老師": "teacher",
         "主任": "director",
         "科助": "ta",
-        "管理員": "admin"
+        "管理員": "admin",
+        "廠商": "vendor"
     }
     role = role_map.get(role_display)
     if not role:
