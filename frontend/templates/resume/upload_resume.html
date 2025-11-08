@@ -15,477 +15,242 @@
       font-size: 1.5rem;
     }
 
-     .container {
-      max-width: 800px;
+    body {
+      font-family: "Noto Sans TC", sans-serif;
+      background: #f7f9fc;
+    }
+
+    .container {
+      max-width: 1000px;
       margin: 2rem auto;
       background: white;
       padding: 2rem;
       border-radius: 12px;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-    }
-    
-   body {
-      font-family: "Noto Sans TC", sans-serif;
-      background: #f7f9fc;
-      margin: 0;
-      padding: 0;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
     }
 
-    .card {
-      box-shadow: 0 0 12px rgba(0, 0, 0, 0.05);
+    table {
+      font-size: 0.95rem;
     }
 
-    .card h4.text-center {
-      color: #0066cc;
-      font-weight: bold;
-    }
-
-    .container {
-      max-width: 1200px;
-      margin: auto;
-    }
-
-    .btn-group .btn.active {
-      font-weight: bold;
-    }
-
-    .status-badge {
-      font-size: 0.9em;
-    }
-
-    #resumeFileDrop {
-      border: 2px dashed #ccc;
-      border-radius: 8px;
-      padding: 30px;
-      text-align: center;
-      color: #888;
-      cursor: pointer;
-      transition: border-color 0.3s;
-    }
-
-    #resumeFileDrop.dragover {
-      border-color: #0d6efd;
-      color: #0d6efd;
-    }
-
-    /* 表頭置中 */
-    table thead th {
+    .fixed-course-table th,
+    .fixed-course-table td {
       text-align: center;
       vertical-align: middle;
-    }
-
-    /* 所有表格欄位預設置中 */
-    table td {
-      text-align: center;
-      vertical-align: middle;
-    }
-
-    /* 評語和備註欄高度與對齊調整 */
-    td.comment-cell .view-text,
-    td.note-cell .view-text {
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      min-height: 40px;
-      height: 40px;
-      text-align: center;
-      word-break: break-word;
-      white-space: pre-wrap;
-    }
-
-    td.comment-cell .text-muted,
-    td.note-cell .text-muted {
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      width: 100%;
-      min-height: 40px;
-      text-align: center;
-      word-break: break-word;
-      white-space: pre-wrap;
-    }
-
-
-    td.comment-cell textarea,
-    td.note-cell textarea {
-      width: 100%;
-      resize: vertical;
-      font-size: 1.2em;
-      text-align: center;
-      box-sizing: border-box;
-      font-family: inherit;
-      padding: 0.4rem;
-    }
-
-    td.comment-cell button,
-    td.note-cell button {
-      margin-top: 0.2rem;
-      font-size: 0.85em;
-      padding: 0.2rem 0.5rem;
-    }
-
-    /* 顯示用的 view-text（例如備註） */
-    .view-text span {
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      height: 40px;
-      /* 和父層 min-height 一致 */
-    }
-
-    /* 已填寫的文字樣式 */
-    .view-text span {
-      color: #198754;
-      /* 綠色代表已填寫 */
-    }
-
-    /* 未填寫的文字樣式 */
-    .view-text span.text-muted {
-      color: #6c757d;
-    }
-
-    /* 編輯器浮出樣式 */
-    .editor-box {
-      position: absolute;
-      top: 0;
-      left: 0;
-      z-index: 10;
-      background-color: #fff;
-      border: 1px solid #ddd;
-      padding: 0.5rem;
-      width: 100%;
-      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
     }
   </style>
 </head>
 
 <body>
-  <header>上傳履歷</header>
-  <div class="container my-5">
-    <!-- 上傳區塊 -->
-    <div class="card p-4 mb-4">
-      <div id="resumeFileDrop">拖曳檔案至此或點擊選擇（限 PDF / Word，最大 5MB）</div>
-      <input type="file" id="resumeFile" accept=".pdf,.doc,.docx" hidden />
-      <div class="mt-3 d-flex justify-content-between align-items-center">
-        <span id="fileInfo" class="text-muted">尚未選擇檔案</span>
-        <button class="btn btn-primary" id="uploadBtn" disabled>上傳</button>
-      </div>
-      <div id="visitorTip" class="visitor-tip" style="display:none;">
-        
-      </div>
-      <div class="mt-3"><strong>審查進度：</strong><span id="reviewStatus" class="text-muted">尚未上傳</span></div>
-    </div>
+  <header>智慧實習平台 | 履歷管理</header>
 
-    <!-- 篩選按鈕 -->
-    <div class="btn-group mb-3 w-100" role="group">
-      <button class="btn btn-outline-secondary active" onclick="filterStatus('all', this)">全部</button>
-      <button class="btn btn-outline-info" id="uploadedCountBtn" onclick="filterStatus('uploaded', this)">已上傳</button>
-      <button class="btn btn-outline-success" id="approvedCountBtn"
-        onclick="filterStatus('approved', this)">審查完成</button>
-      <button class="btn btn-outline-danger" id="rejectedCountBtn" onclick="filterStatus('rejected', this)">已退件</button>
-    </div>
+  <div class="container">
+    <ul class="nav nav-tabs mb-4">
+      <li class="nav-item">
+        <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#form-pane">📝 填寫履歷</button>
+      </li>
+      <li class="nav-item">
+        <button class="nav-link" data-bs-toggle="tab" data-bs-target="#records-pane">📂 履歷紀錄</button>
+      </li>
+    </ul>
 
-    <!-- 清單區塊 -->
-    <div class="card p-3">
-      <table class="table table-hover align-middle mb-0">
-        <thead class="table-light">
-          <tr>
-            <th>上傳時間</th>
-            <th>檔案名稱</th>
-            <th>狀態</th>
-            <th>老師留言</th>
-            <th>學生備註</th>
-            <th>操作</th>
-          </tr>
-        </thead>
-        <tbody id="resumeTableBody">
-          <tr>
-            <td colspan="6" class="text-center text-muted">載入中...</td>
-          </tr>
-        </tbody>
-      </table>
+    <div class="tab-content">
+      <!-- 履歷填寫 -->
+      <div class="tab-pane fade show active" id="form-pane">
+        <form id="resumeForm">
+          <!-- 基本資料 -->
+          <div class="card p-4 mb-3">
+            <h5 class="text-primary">👤 個人基本資料</h5>
+            <div class="row g-3">
+              <div class="col-md-4">
+                <label class="form-label">姓名</label>
+                <input type="text" name="name" class="form-control" required />
+              </div>
+              <div class="col-md-4">
+                <label class="form-label">出生日期</label>
+                <input type="date" name="birth_date" class="form-control" required />
+              </div>
+              <div class="col-md-4">
+                <label class="form-label">性別</label>
+                <select name="gender" class="form-select" required>
+                  <option value="">請選擇</option>
+                  <option value="男">男</option>
+                  <option value="女">女</option>
+                </select>
+              </div>
+              <div class="col-md-6">
+                <label class="form-label">聯絡電話</label>
+                <input type="tel" name="phone" class="form-control" required />
+              </div>
+              <div class="col-md-6">
+                <label class="form-label">電子信箱</label>
+                <input type="email" name="email" class="form-control" required />
+              </div>
+              <div class="col-12">
+                <label class="form-label">地址</label>
+                <input type="text" name="address" class="form-control" required />
+              </div>
+              <div class="col-md-6">
+                <label class="form-label">操行成績</label>
+                <select name="conduct_score" class="form-select" required>
+                  <option value="">請選擇</option>
+                  <option value="優">優</option>
+                  <option value="甲">甲</option>
+                  <option value="乙">乙</option>
+                  <option value="丙">丙</option>
+                  <option value="丁">丁</option>
+                </select>
+              </div>
+              <div class="col-md-6">
+                <label class="form-label">上傳照片 (可選)</label>
+                <input type="file" name="photo" class="form-control" accept="image/*" />
+              </div>
+            </div>
+          </div>
+
+          <!-- 修課科目 -->
+          <div class="card p-4 mb-3">
+            <h5 class="text-success">📘 已修習專業核心科目（自動載入）</h5>
+            <table class="table table-bordered fixed-course-table">
+              <thead class="table-light">
+                <tr>
+                  <th>科目名稱</th>
+                  <th>學分</th>
+                </tr>
+              </thead>
+              <tbody id="courseTableBody"></tbody>
+            </table>
+          </div>
+
+          <!-- 自傳 -->
+          <div class="card p-4 mb-3">
+            <h5 class="text-info">🖋 自傳</h5>
+            <textarea name="autobiography" rows="6" class="form-control" placeholder="請描述家庭生活、求學經過、個人專長、未來規劃等..."
+              required></textarea>
+          </div>
+
+          <div class="text-center mt-4">
+            <button type="submit" class="btn btn-primary btn-lg">提交並生成履歷</button>
+          </div>
+        </form>
+      </div>
+
+      <!-- 履歷紀錄 -->
+      <div class="tab-pane fade" id="records-pane">
+        <div id="resumeRecords" class="p-3">
+          <table class="table table-striped align-middle">
+            <thead class="table-light">
+              <tr>
+                <th>生成時間</th>
+                <th>檔名</th>
+                <th>下載</th>
+              </tr>
+            </thead>
+            <tbody id="recordsBody">
+              <tr>
+                <td colspan="3" class="text-center text-muted">尚無履歷紀錄</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
     </div>
   </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
   <script>
-    let resumesData = [];
-    let resumeId = null;
-    let interval = null;
-    const uploadBtn = document.getElementById('uploadBtn');
-    const visitorTip = document.getElementById('visitorTip');
-    const homeButtonLink = document.getElementById('homeButtonLink');
-    const tbody = document.getElementById('resumeTableBody');
-    const fileInfo = document.getElementById('fileInfo');
+    // 固定課程表
+    const fixedCourses = [
+      { name: "資訊科技", credits: 2 },
+      { name: "程式設計", credits: "3/3" },
+      { name: "JAVA程式語言", credits: "3/3" },
+      { name: "資訊科技進階", credits: 2 },
+      { name: "行動網頁程式開發", credits: "3/3" },
+      { name: "資料庫伺服器管理與實作", credits: 2 },
+      { name: "會計概論", credits: "3/3" },
+      { name: "數位化資料處理", credits: "2/2" },
+      { name: "資料庫管理實務(SQL)", credits: 2 },
+      { name: "作業系統", credits: 2 },
+      { name: "管理學", credits: "2/2" },
+      { name: "資料結構", credits: 3 },
+      { name: "網頁設計", credits: "2/2" },
+      { name: "系統分析與設計", credits: 3 },
+      { name: "計算機網路", credits: 2 },
+      { name: "行銷管理", credits: "2/2" },
+      { name: "商品攝影與後製", credits: 2 },
+      { name: "微電影製作", credits: 2 },
+      { name: "電腦繪圖與動畫", credits: 3 },
+      { name: "數位整合行銷", credits: 3 }
+    ];
 
-    // 拖曳上傳
-    const dropZone = document.getElementById('resumeFileDrop');
-    const fileInput = document.getElementById('resumeFile');
-    dropZone.addEventListener('click', () => fileInput.click());
-    dropZone.addEventListener('dragover', e => {
-      e.preventDefault();
-      dropZone.classList.add('dragover');
-    });
-    dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
-    dropZone.addEventListener('drop', e => {
-      e.preventDefault();
-      dropZone.classList.remove('dragover');
-      fileInput.files = e.dataTransfer.files;
-      handleFileChange();
-    });
-    fileInput.addEventListener('change', handleFileChange);
+    document.addEventListener("DOMContentLoaded", () => {
+      const tbody = document.getElementById("courseTableBody");
+      fixedCourses.forEach(c => {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `<td>${c.name}</td><td>${c.credits}</td>`;
+        tbody.appendChild(tr);
+      });
 
-    function handleFileChange() {
-      const file = fileInput.files[0];
-      if (!file) return;
-      document.getElementById('fileInfo').textContent = `${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)`;
-      document.getElementById('uploadBtn').disabled = file.size > 5 * 1024 * 1024;
-    }
+      // 表單提交
+      document.getElementById("resumeForm").addEventListener("submit", async e => {
+        e.preventDefault();
+        const form = e.target;
+        const data = {
+          name: form.name.value.trim(),
+          birth_date: form.birth_date.value,
+          gender: form.gender.value,
+          phone: form.phone.value.trim(),
+          email: form.email.value.trim(),
+          address: form.address.value.trim(),
+          conduct_score: form.conduct_score.value,
+          autobiography: form.autobiography.value.trim(),
+          courses: fixedCourses
+        };
 
-    document.getElementById('uploadBtn').addEventListener('click', () => {
-      const file = fileInput.files[0];
-      if (!file) return alert("請選擇檔案");
-      const formData = new FormData();
-      formData.append('resume', file);
-      formData.append('username', localStorage.getItem('username') || 'testuser');
-
-      updateStatusText('uploaded');
-
-      fetch('/api/upload_resume', { method: 'POST', body: formData })
-        .then(res => res.json())
-        .then(data => {
-          if (data.success && data.resume_id) {
-            resumeId = data.resume_id;
-            loadResumes();
-            if (interval) clearInterval(interval);
-            interval = setInterval(fetchStatus, 5000);
-          } else {
-            alert("上傳失敗");
-          }
+        const res = await fetch("/api/submit_and_generate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(data)
         });
-    });
+        const result = await res.json();
+        if (result.success) {
+          alert("✅ 履歷已生成，可於下方紀錄頁籤下載");
+          const tabTrigger = new bootstrap.Tab(document.querySelector('[data-bs-target="#records-pane"]'));
+          tabTrigger.show();
+          await loadResumeRecords(); // 自動刷新紀錄
+        } else {
+          alert("❌ 提交失敗：" + (result.message || "未知錯誤"));
+        }
+      });
 
-    function fetchStatus() {
-      if (!resumeId) return;
-      fetch(`/api/resume_status?resume_id=${resumeId}`)
-        .then(res => res.json())
-        .then(data => {
-          if (data.success) updateStatusText(data.status);
-        });
-    }
+      // 載入履歷紀錄
+      async function loadResumeRecords() {
+        const res = await fetch("/api/get_my_resumes");
+        const data = await res.json();
+        const tbody = document.getElementById("recordsBody");
+        tbody.innerHTML = "";
 
-function handleFileChange() {
-      const file = fileInput.files[0];
-      if (!file) return;
-      fileInfo.textContent = `${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)`;
-      uploadBtn.disabled = file.size > 5 * 1024 * 1024;
-    }
-
-    fetch('/api/get-session')
-      .then(res => res.json())
-      .then(data => {
-        const role = data.success ? data.role : 'visitor';
-        homeButtonLink.href = role === 'student' ? '/student_home' : '/student_visitor';
-
-        if (role !== 'student') {
-          fileInput.disabled = true;
-          uploadBtn.disabled = true;
-          visitorTip.style.display = 'block';
-          tbody.innerHTML = `<tr><td colspan="6" class="text-center text-muted">請先註冊學生帳號才可繼續操作</td></tr>`;
+        if (!data.success || !data.resumes || data.resumes.length === 0) {
+          tbody.innerHTML = `<tr><td colspan="3" class="text-center text-muted">尚無履歷紀錄</td></tr>`;
           return;
         }
-        loadResumes();
-      });
 
-    function updateStatusText(status) {
-      const el = document.getElementById('reviewStatus');
-      const map = {
-        uploaded: ['已上傳，待審查', '#0d6efd'],
-        reviewing: ['審查中', '#ffc107'],
-        approved: ['審查完成', '#198754'],
-        rejected: ['已退件', '#dc3545']
-      };
-      el.textContent = map[status]?.[0] || '尚未上傳';
-      el.style.color = map[status]?.[1] || '#6c757d';
-    }
-
-    function loadResumes() {
-      fetch('/api/get_my_resumes')
-        .then(res => res.json())
-        .then(data => {
-          if (data.success) {
-            resumesData = data.resumes;
-            renderTable('all');
-          }
+        data.resumes.forEach(r => {
+          const tr = document.createElement("tr");
+          const fileUrl = `/api/download_resume/${r.id}`;
+          tr.innerHTML = `
+          <td>${r.upload_time || ""}</td>
+          <td>${r.original_filename || "resume.docx"}</td>
+          <td><a href="${fileUrl}" class="btn btn-sm btn-outline-primary" target="_blank">下載</a></td>
+          `;
+          tbody.appendChild(tr);
         });
-    }
-
-    function filterStatus(filter, btn) {
-      document.querySelectorAll('.btn-group .btn').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      renderTable(filter);
-    }
-
-
-    function renderTable(filter) {
-      const tbody = document.getElementById('resumeTableBody');
-      tbody.innerHTML = '';
-      // 計算各個狀態的數量
-      const statusCounts = {
-        uploaded: resumesData.filter(r => r.status === 'uploaded').length,
-        reviewing: resumesData.filter(r => r.status === 'reviewing').length,
-        approved: resumesData.filter(r => r.status === 'approved').length,
-        rejected: resumesData.filter(r => r.status === 'rejected').length
-      };
-
-      // 更新篩選按鈕文字
-      document.getElementById('uploadedCountBtn').textContent = `已上傳 (${statusCounts.uploaded})`;
-      document.getElementById('approvedCountBtn').textContent = `審查完成 (${statusCounts.approved})`;
-      document.getElementById('rejectedCountBtn').textContent = `已退件 (${statusCounts.rejected})`;
-
-      const commentPlaceholder = '請輸入留言...';
-
-      const notePlaceholder = '請輸入備註...';
-
-      const filtered = filter === 'all' ? resumesData : resumesData.filter(r => r.status === filter);
-      if (filtered.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="6" class="text-center text-muted">無資料</td></tr>`;
-        return;
       }
-      filtered.forEach(r => {
-        // 留言欄：學生可查看，不能編輯
-        const commentView = ` 
-    <div class="view-text" onclick="showCommentEditor(this, ${r.id})" style="cursor:pointer;">
-      <span class="${r.comment?.trim() ? '' : 'text-muted'}">${r.comment?.trim() ? '請查看' : '無內容'}</span>
-    </div>
-    <div class="editor-box" style="display:none;">
-      <textarea readonly style="background-color:#f9f9f9;" placeholder="無內容">${escapeHtml(r.comment)}</textarea><br/>
-      <button class="btn btn-sm btn-secondary" onclick="cancelEdit(this)">返回</button>
-    </div>
-  `;
 
-        // 備註欄：學生可編輯
-        const noteView = `
-    <div class="view-text" onclick="showNoteEditor(this, ${r.id})" style="cursor:pointer;">
-      <span class="${r.note?.trim() ? '' : 'text-muted'}">${r.note?.trim() ? '已填寫' : '未填寫'}</span>
-    </div>
-    <div class="editor-box" style="display:none;">
-      <textarea onkeydown="handleNoteKeydown(event, this, ${r.id})" placeholder="請輸入備註...">${escapeHtml(r.note)}</textarea><br/>
-      <button class="btn btn-sm btn-primary" onclick="submitNote(this, ${r.id})">送出</button>
-      <button class="btn btn-sm btn-secondary" onclick="cancelEdit(this)">取消</button>
-    </div>
-  `;
-
-        tbody.innerHTML += `
-    <tr>
-      <td>${new Date(r.upload_time).toLocaleString()}</td>
-      <td>${r.original_filename}</td>
-      <td><span class="badge bg-${statusColor(r.status)} status-badge">${mapStatus(r.status)}</span></td>
-      <td class="comment-cell">${commentView}</td>
-      <td class="note-cell">${noteView}</td>
-      <td>
-        <a href="/api/download_resume/${r.id}" class="btn btn-outline-primary btn-sm me-1">下載</a>
-        <button class="btn btn-outline-danger btn-sm" onclick="deleteResume(${r.id})">刪除</button>
-      </td>
-    </tr>
-  `;
-      });
-
-    }
-
-    function mapStatus(status) {
-      return {
-        uploaded: '已上傳',
-        reviewing: '審查中',
-        approved: '完成',
-        rejected: '退件'
-      }[status] || '未知';
-    }
-
-    function statusColor(status) {
-      return {
-        uploaded: 'info',
-        reviewing: 'warning',
-        approved: 'success',
-        rejected: 'danger'
-      }[status] || 'secondary';
-    }
-
-    function deleteResume(id) {
-      if (!confirm("確定要刪除這份履歷？")) return;
-      fetch(`/api/delete_resume?resume_id=${id}`, { method: 'DELETE' })
-        .then(res => res.json())
-        .then(data => {
-          if (data.success) loadResumes();
-          else alert("刪除失敗");
-        });
-    }
-
-    function showCommentEditor(container, id) {
-      const td = container.closest('td');
-      td.querySelector('.view-text').style.display = 'none';
-      td.querySelector('.editor-box').style.display = 'block';
-      td.querySelector('textarea').focus();
-    }
-
-    function showNoteEditor(container, id) {
-      const td = container.closest('td');
-      td.querySelector('.view-text').style.display = 'none';
-      td.querySelector('.editor-box').style.display = 'block';
-      td.querySelector('textarea').focus();
-    }
-
-    function submitComment(btn, id) {
-      if (role === 'student') {
-        alert("學生不可編輯留言");
-        cancelEdit(btn);
-        return;
-      }
-      const td = btn.closest('td');
-      const newVal = td.querySelector('textarea').value.trim();
-      updateField(id, 'comment', newVal, td);
-    }
-
-    function submitNote(btn, id) {
-      const td = btn.closest('td');
-      const newVal = td.querySelector('textarea').value.trim();
-      updateField(id, 'note', newVal, td);
-    }
-
-    function cancelEdit(btn) {
-      const td = btn.closest('td');
-      td.querySelector('.editor-box').style.display = 'none';
-      td.querySelector('.view-text').style.display = 'flex';
-    }
-
-    function escapeHtml(text) {
-      if (!text) return '';
-      return text.replace(/&/g, "&amp;").replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;").replace(/"/g, "&quot;")
-        .replace(/'/g, "&#039;");
-    }
-
-    function updateField(id, field, value, td) {
-      fetch('/api/update_resume_field', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ resume_id: id, field, value })
-      })
-        .then(res => res.json())
-        .then(data => {
-          if (data.success) {
-            td.querySelector('.view-text span').textContent = value ? '已填寫' : '未填寫';
-            td.querySelector('.view-text span').className = value ? '' : 'text-muted';
-            td.querySelector('.editor-box').style.display = 'none';
-            td.querySelector('.view-text').style.display = 'flex';
-          } else {
-            alert("更新失敗");
-          }
-        });
-    }
-    document.addEventListener("DOMContentLoaded", loadResumes);
+      // 當切換到履歷紀錄分頁時自動載入
+      document.querySelector('[data-bs-target="#records-pane"]').addEventListener("shown.bs.tab", loadResumeRecords);
+    });
   </script>
-</body>
 </body>
 
 </html>

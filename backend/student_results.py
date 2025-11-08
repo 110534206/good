@@ -174,3 +174,4 @@ def get_internship_period():
         cursor.close()
         conn.close()
 
+

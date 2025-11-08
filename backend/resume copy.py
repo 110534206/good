@@ -1,12 +1,18 @@
-from flask import Blueprint, request, jsonify, session, send_file, render_template
+from flask import Blueprint, request, jsonify, session, send_file, render_template, redirect, url_for
 from werkzeug.utils import secure_filename
 from config import get_db
-from semester import get_current_semester_id
-from email_service import send_resume_rejection_email, send_resume_approval_email
+from semester import get_current_semester_id 
+from email_service import send_resume_rejection_email, send_resume_approval_email 
 import os
 import traceback
 import json
 from datetime import datetime
+
+# 引入 docx 相關模組
+from docx import Document
+from docx.shared import Inches, Pt
+from docx.enum.text import WD_ALIGN_PARAGRAPH
+from docx.enum.table import WD_TABLE_ALIGNMENT
 
 resume_bp = Blueprint("resume_bp", __name__)
 
@@ -98,7 +104,219 @@ def require_login():
     return 'user_id' in session and 'role' in session
 
 # -------------------------
-# API - 上傳履歷
+# 新增：資料儲存與文件生成函式
+# -------------------------
+
+def save_structured_data(cursor, student_id, data):
+    """將結構化資料寫入四個正規化表格。"""
+    try:
+        # 1. 寫入 Student_Info (學生基本資料)
+        cursor.execute("""
+            INSERT INTO Student_Info (StuID, StuName, BirthDate, Gender, Phone, Email, Address, ConductScore, Autobiography, PhotoPath, AbsencesPath)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            ON DUPLICATE KEY UPDATE 
+                StuName=VALUES(StuName), BirthDate=VALUES(BirthDate), Gender=VALUES(Gender), Phone=VALUES(Phone), 
+                Email=VALUES(Email), Address=VALUES(Address), ConductScore=VALUES(ConductScore), 
+                Autobiography=VALUES(Autobiography), PhotoPath=VALUES(PhotoPath), AbsencesPath=VALUES(AbsencesPath), UpdatedAt=NOW()
+        """, (
+            student_id, data.get('name'), data.get('birth_date'), data.get('gender'), data.get('phone'),
+            data.get('email'), data.get('address'), data.get('conduct_score'), data.get('autobiography'),
+            data.get('photo_path'), data.get('absences_path')
+        ))
+
+        # 2. 寫入 Course_Grades (修課成績)
+        cursor.execute("DELETE FROM Course_Grades WHERE StuID = %s", (student_id,))
+        courses = data.get('courses', [])
+        for course in courses:
+            if course.get('name'):
+                cursor.execute("""
+                    INSERT INTO Course_Grades (StuID, CourseName, Credits, Grade)
+                    VALUES (%s, %s, %s, %s)
+                """, (student_id, course['name'], course.get('credits'), course.get('grade')))
+        
+        # 3. 寫入 Certificate_Skills (證照與語文能力)
+        cursor.execute("DELETE FROM Certificate_Skills WHERE StuID = %s", (student_id,))
+        certs_languages = data.get('certs_languages', [])
+        for item in certs_languages:
+            if item.get('name'):
+                cursor.execute("""
+                    INSERT INTO Certificate_Skills (StuID, Type, Name, Proficiency, CertImagePath)
+                    VALUES (%s, %s, %s, %s, %s)
+                """, (student_id, item['type'], item['name'], item.get('proficiency'), item.get('image_path')))
+
+        # 4. 寫入 Internship_Preferences (實習志願序)
+        cursor.execute("DELETE FROM Internship_Preferences WHERE StuID = %s", (student_id,))
+        preferences = data.get('preferences', [])
+        for i, pref in enumerate(preferences):
+            if pref.get('company_name'):
+                cursor.execute("""
+                    INSERT INTO Internship_Preferences (StuID, PreferenceRank, CompanyName, JobTitle)
+                    VALUES (%s, %s, %s, %s)
+                """, (student_id, i + 1, pref['company_name'], pref.get('job_title')))
+        
+        return True
+    
+    except Exception as e:
+        print(f"寫入結構化資料錯誤: {e}")
+        traceback.print_exc()
+        return False
+
+def get_student_info_for_doc(cursor, student_id):
+    """從資料庫獲取所有生成文件所需資料。"""
+    data = {}
+    
+    # 1. 基本資料
+    cursor.execute("SELECT * FROM Student_Info WHERE StuID = %s", (student_id,))
+    data['info'] = cursor.fetchone()
+    
+    # 2. 成績
+    cursor.execute("SELECT CourseName, Credits, Grade FROM Course_Grades WHERE StuID = %s", (student_id,))
+    data['grades'] = cursor.fetchall()
+    
+    # 3. 證照與語文
+    cursor.execute("SELECT Type, Name, Proficiency, CertImagePath FROM Certificate_Skills WHERE StuID = %s", (student_id,))
+    data['certs_languages'] = cursor.fetchall()
+    
+    # 4. 志願序
+    cursor.execute("SELECT PreferenceRank, CompanyName, JobTitle FROM Internship_Preferences WHERE StuID = %s ORDER BY PreferenceRank", (student_id,))
+    data['preferences'] = cursor.fetchall()
+    
+    return data
+
+def generate_application_form_docx(student_data, output_path):
+    """
+    從結構化資料生成《實習申請表.docx》。
+    **重要：請將此函式內容替換為針對您文件排版的實際填充邏輯。**
+    """
+    try:
+        # 建議使用您提供的實習申請表作為範本，但為示範，此處從空白文件開始
+        # document = Document('template/實習申請表_template.docx')
+        document = Document() 
+        
+        info = student_data.get('info', {})
+        grades = student_data.get('grades', [])
+        prefs = student_data.get('preferences', [])
+        certs_languages = student_data.get('certs_languages', [])
+
+        document.add_heading('康寧大學 資訊管理科 校外企業實習申請表', 0)
+        document.add_paragraph(f'學號：{info.get("StuID", "")}，姓名：{info.get("StuName", "")}').paragraph_format.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        document.add_paragraph(f'出生日期：{info.get("BirthDate", "")}，性別：{info.get("Gender", "")}')
+        document.add_paragraph(f'連絡電話：{info.get("Phone", "")}，電子信箱：{info.get("Email", "")}')
+        document.add_paragraph(f'地址：{info.get("Address", "")}')
+
+        # 填充修習專業核心科目 (複雜表格，僅示範結構)
+        document.add_heading('已修習專業核心科目', level=1)
+        grade_table = document.add_table(rows=len(grades) // 3 + 2, cols=9)
+        grade_table.cell(0, 0).text = '科目名稱'
+        grade_table.cell(0, 1).text = '學分'
+        grade_table.cell(0, 2).text = '成績'
+        # ... 此處需要複雜的表格填充邏輯來匹配文件結構 ...
+
+        # 填充實習志願填寫
+        document.add_heading('實習志願填寫', level=1)
+        pref_table = document.add_table(rows=6, cols=3)
+        pref_table.cell(0, 0).text = '志願序'
+        pref_table.cell(0, 1).text = '公司名稱'
+        pref_table.cell(0, 2).text = '工作項目'
+        
+        for i in range(5):
+            pref = prefs[i] if i < len(prefs) else {'PreferenceRank': i+1, 'CompanyName': '', 'JobTitle': ''}
+            pref_table.cell(i + 1, 0).text = str(pref['PreferenceRank'])
+            pref_table.cell(i + 1, 1).text = pref['CompanyName']
+            pref_table.cell(i + 1, 2).text = pref['JobTitle']
+
+        # 填充其他資訊... (證照、自傳等)
+
+        document.save(output_path)
+        return True
+
+    except Exception as e:
+        print(f"生成 Word 文件錯誤: {e}")
+        traceback.print_exc()
+        return False
+
+
+# ------------------------
+# 核心 API 路由 (新增)
+# ------------------------
+
+@resume_bp.route('/api/submit_and_generate', methods=['POST'])
+def submit_and_generate_api():
+    """
+    處理學生表單提交、資料正規化儲存、文件生成，並建立上傳紀錄。
+    """
+    try:
+        # 權限檢查
+        if session.get('role') != 'student' or not session.get('user_id'):
+            return jsonify({"success": False, "message": "只有學生可以提交申請"}), 403
+
+        user_id = session.get('user_id')
+        data = request.get_json() 
+        if not data:
+             return jsonify({"success": False, "message": "缺少提交資料"}), 400
+        
+        conn = get_db()
+        cursor = conn.cursor(dictionary=True)
+
+        # 取得學生學號 (StuID)
+        cursor.execute("SELECT username FROM users WHERE id = %s", (user_id,))
+        user_info = cursor.fetchone()
+        student_id = user_info['username'] # 假設 StuID 存於 users.username 欄位
+        
+        # 1. 資料儲存與正規化
+        if not save_structured_data(cursor, student_id, data):
+             conn.close()
+             return jsonify({"success": False, "message": "資料儲存失敗"}), 500
+        
+        # 2. 準備生成文件所需資料
+        student_data_for_doc = get_student_info_for_doc(cursor, student_id)
+        
+        # 3. 自動生成檔案
+        original_filename = f"{student_id}_實習申請表_{datetime.now().strftime('%Y%m%d_%H%M%S')}.docx"
+        safe_filename = secure_filename(original_filename)
+        save_path = os.path.join(UPLOAD_FOLDER, safe_filename)
+
+        if not generate_application_form_docx(student_data_for_doc, save_path):
+            conn.close()
+            return jsonify({"success": False, "message": "文件生成失敗，請檢查後端日誌"}), 500
+
+        # 4. 建立上傳紀錄
+        semester_id = get_current_semester_id(cursor) # 假設此函式存在
+        filesize = os.path.getsize(save_path)
+        db_filepath = save_path.replace("\\", "/") # 處理路徑分隔符
+
+        cursor.execute("""
+            INSERT INTO resumes (user_id, semester_id, original_filename, filepath, filesize, status, created_at)
+            VALUES (%s, %s, %s, %s, %s, %s, NOW())
+        """, (user_id, semester_id, original_filename, db_filepath, filesize, 'uploaded'))
+
+        resume_id = cursor.lastrowid
+        conn.commit()
+        
+        # 5. 回傳成功訊息和下載資訊
+        return jsonify({
+            "success": True,
+            "resume_id": resume_id,
+            "filename": original_filename,
+            "status": "uploaded",
+            "message": "申請表已生成並提交",
+            "download_url": f"/api/download_resume/{resume_id}"
+        })
+
+    except Exception as e:
+        traceback.print_exc()
+        conn = get_db()
+        conn.rollback()
+        return jsonify({"success": False, "message": f"伺服器提交錯誤: {str(e)}"}), 500
+    finally:
+        if 'cursor' in locals() and cursor:
+            cursor.close()
+        if 'conn' in locals() and conn:
+            conn.close()
+
+
+# -------------------------
+#  履歷上傳
 # -------------------------
 @resume_bp.route('/api/upload_resume', methods=['POST'])
 def upload_resume_api():
@@ -106,27 +324,34 @@ def upload_resume_api():
         # 取得 session 角色
         role = session.get('role')
         if role != 'student':
-            # 非學生不能上傳
             return jsonify({"success": False, "message": "只有學生可以上傳履歷"}), 403
 
         if 'resume' not in request.files:
             return jsonify({"success": False, "message": "未上傳檔案"}), 400
 
         file = request.files['resume']
-        username = session.get('username')  # 直接用登入的學生帳號
+        username = session.get('username')
         if not username:
             return jsonify({"success": False, "message": "未登入學生帳號"}), 403
 
         if file.filename == '':
             return jsonify({"success": False, "message": "檔案名稱為空"}), 400
 
+        # 取得原始檔名、保護檔名
         original_filename = file.filename
         safe_filename = secure_filename(original_filename)
+        # 取得副檔名
+        ext = os.path.splitext(safe_filename)[1]  # 包含點，如 ".pdf"、".docx"
+
+        # 用時間戳 + 副檔名做儲存檔名
         timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
-        stored_filename = f"{timestamp}_{safe_filename}"
+        stored_filename = f"{timestamp}{ext}"
         save_path = os.path.join(UPLOAD_FOLDER, stored_filename)
 
         file.save(save_path)
+
+        # 儲存到資料庫時統一用斜線
+        db_filepath = save_path.replace("\\", "/")
 
         conn = get_db()
         cursor = conn.cursor(dictionary=True)
@@ -146,22 +371,16 @@ def upload_resume_api():
         # =========================================================
         # 自動標註：學期、班級、學號
         # =========================================================
-        # 1. 獲取當前學期ID
         semester_id = get_current_semester_id(cursor)
-        
-        # 2. 獲取學生班級ID（從 users 表）
         cursor.execute("SELECT class_id FROM users WHERE id = %s", (user_id,))
         user_info = cursor.fetchone()
         class_id = user_info['class_id'] if user_info else None
-        
-        # 3. 學號已從 username 獲取（session.get('username')）
-        # 注意：學號不需要存儲在 resumes 表中，因為可以通過 user_id 關聯 users.username 獲取
-        
-        # 插入履歷（包含 semester_id）
+
+        # 插入履歷
         cursor.execute("""
             INSERT INTO resumes (user_id, semester_id, original_filename, filepath, filesize, status, created_at)
             VALUES (%s, %s, %s, %s, %s, %s, NOW())
-        """, (user_id, semester_id, original_filename, save_path, filesize, 'uploaded'))
+        """, (user_id, semester_id, original_filename, db_filepath, filesize, 'uploaded'))
 
         resume_id = cursor.lastrowid
         conn.commit()
@@ -206,24 +425,11 @@ def download_resume(resume_id):
             conn.close()
             return jsonify({"success": False, "message": "找不到履歷"}), 404
 
-        # ⭐️ 修正邏輯：安全地獲取 session 資訊，並將 user_id 轉為 int 以確保與資料庫 ID 比較時型別一致 ⭐️
-        session_user_id = session.get('user_id')
-        session_role = session.get('role')
-        
-        # 嘗試將 session_user_id 轉換為整數，這是解決權限問題的關鍵步驟
-        try:
-            if session_user_id is not None:
-                session_user_id = int(session_user_id)
-        except (TypeError, ValueError):
-            # 如果轉換失敗，保持原值，讓 can_access_target_resume 處理
-            pass 
-
         # 權限檢查（TA 和其他讀取角色會透過 can_access_target_resume）
-        if not can_access_target_resume(cursor, session_user_id, session_role, resume['user_id']):
+        if not can_access_target_resume(cursor, session['user_id'], session['role'], resume['user_id']):
             cursor.close()
             conn.close()
             return jsonify({"success": False, "message": "沒有權限下載該履歷"}), 403
-        # ⭐️ 修正邏輯結束 ⭐️
 
         filepath = resume['filepath']
         cursor.close()
@@ -575,7 +781,7 @@ def update_resume_field():
     except Exception as e:
         traceback.print_exc()
         return jsonify({"success": False, "message": f"伺服器錯誤: {str(e)}"}), 500
-
+    
 # -------------------------
 # API - 查詢履歷狀態
 # -------------------------
@@ -995,11 +1201,11 @@ def submit_comment():
         traceback.print_exc()
         return jsonify({"success": False, "message": f"伺服器錯誤: {str(e)}"}), 500
 
-# -------------------------
-# # 頁面路由
-# -------------------------
+# ------------------------
+# 頁面路由
+# ------------------------
 
-#上傳履歷頁面
+#上傳履歷頁面 (原本用於檔案上傳，現在可作為單純檔案管理頁面)
 @resume_bp.route('/upload_resume')
 def upload_resume_page():
     return render_template('resume/upload_resume.html')
@@ -1008,8 +1214,3 @@ def upload_resume_page():
 @resume_bp.route('/review_resume')
 def review_resume_page():
     return render_template('resume/review_resume.html')
-
-#ai 編輯履歷頁面
-@resume_bp.route('/ai_edit_resume')
-def ai_edit_resume_page():
-    return render_template('resume/ai_edit_resume.html')
