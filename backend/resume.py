@@ -5,9 +5,9 @@ from semester import get_current_semester_id
 from email_service import send_resume_rejection_email, send_resume_approval_email 
 import os
 import traceback
-from docx import Document
 import json
 from datetime import datetime
+
 
 # 引入 docx 相關模組
 from docx import Document
@@ -237,12 +237,28 @@ def generate_application_form_docx(student_data, output_path):
                     return str(date_value)
             return str(date_value)
         
+        # 【💡 修正點一：將日期拆分為年、月、日】
+        birth_date_str = format_date(info.get('BirthDate'))
+        birth_parts = {'year': '', 'month': '', 'day': ''}
+        if birth_date_str and len(birth_date_str) >= 10:
+             try:
+                 parts = birth_date_str.split('-')
+                 birth_parts['year'] = parts[0]
+                 birth_parts['month'] = parts[1]
+                 birth_parts['day'] = parts[2]
+             except:
+                 pass
+
         # 構建模板上下文（所有變數都放在這裡）
         context = {
-            # 基本資料
+           # 基本資料
             'StuID': str(info.get('StuID', '')),
             'StuName': str(info.get('StuName', '')),
-            'BirthDate': format_date(info.get('BirthDate')),
+            # VVVV 傳入範本所需的三個變數 VVVV
+            'BirthYear': birth_parts['year'],
+            'BirthMonth': birth_parts['month'],
+            'BirthDay': birth_parts['day'],
+            # ^^^^ 傳入範本所需的三個變數 ^^^^
             'Gender': str(info.get('Gender', '')),
             'Phone': str(info.get('Phone', '')),
             'Email': str(info.get('Email', '')),
