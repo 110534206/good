@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="zh-Hant">
+
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -90,15 +91,8 @@
                 <input type="text" name="address" class="form-control" required />
               </div>
               <div class="col-md-6">
-                <label class="form-label">操行成績</label>
-                <select name="conduct_score" class="form-select" required>
-                  <option value="">請選擇</option>
-                  <option value="優">優</option>
-                  <option value="甲">甲</option>
-                  <option value="乙">乙</option>
-                  <option value="丙">丙</option>
-                  <option value="丁">丁</option>
-                </select>
+                <label class="form-label">操行成績分數 (0-100)</label>
+                <input type="number" name="conduct_score_numeric" class="form-control" min="0" max="100" required>
               </div>
               <div class="col-md-6">
                 <label class="form-label">上傳照片 (請上傳jpg格式)</label>
@@ -124,13 +118,8 @@
           <!-- 自傳 -->
           <div class="card p-4 mb-3">
             <h5 class="text-info">🖋 自傳</h5>
-            <textarea
-              name="autobiography"
-              rows="6"
-              class="form-control"
-              placeholder="請描述家庭生活、求學經過、個人專長、未來規劃等..."
-              required
-            ></textarea>
+            <textarea name="autobiography" rows="6" class="form-control" placeholder="請描述家庭生活、求學經過、個人專長、未來規劃等..."
+              required></textarea>
           </div>
 
           <div class="text-center mt-4">
@@ -250,4 +239,5 @@
     });
   </script>
 </body>
+
 </html>

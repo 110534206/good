@@ -17,6 +17,28 @@ UPLOAD_FOLDER = "uploads/resumes"
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 # -------------------------
+# 分數轉等級輔助函式
+# -------------------------
+def score_to_grade(score):
+    """將數字分數轉換成操行等級 (優/甲/乙/丙/丁)"""
+    try:
+        score = int(score)
+    except (ValueError, TypeError):
+        return '丁' # 若無效，預設為不及格 (丁)
+
+    if 90 <= score <= 99:
+        return '優'
+    elif 80 <= score <= 89:
+        return '甲'
+    elif 70 <= score <= 79:
+        return '乙'
+    elif 60 <= score <= 69:
+        return '丙'
+    # 這裡的邏輯與您的規則 (未滿 60 分為丁等) 相符
+    else: 
+        return '丁'
+
+# -------------------------
 # Helper / 權限管理
 # -------------------------
 def get_user_by_username(cursor, username):
@@ -164,10 +186,16 @@ def generate_application_form_docx(student_data, output_path):
 
         # 操行成績複選框處理 (新增)
         conduct_score = info.get('ConductScore', '')
-        # 初始化所有複選框變數為空字串
-        conduct_marks = {'C_You': '', 'C_Jia': '', 'C_Yi': '', 'C_Bing': '', 'C_Ding': ''}
-        
-        # 將選中的選項設為 'X'
+
+        # 預設所有複選框變數為 '□' (空心方塊)
+        conduct_marks = {
+            'C_You': '□', 
+            'C_Jia': '□', 
+            'C_Yi': '□', 
+            'C_Bing': '□', 
+            'C_Ding': '□'
+        }
+        # 將選中的選項從 '□' 替換為 '■' (實心方塊)
         if conduct_score == '優': conduct_marks['C_You'] = '■'
         elif conduct_score == '甲': conduct_marks['C_Jia'] = '■'
         elif conduct_score == '乙': conduct_marks['C_Yi'] = '■'

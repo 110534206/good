@@ -1,195 +1,172 @@
 import os
 import google.generativeai as genai
-# ⚠️ 修正：新增 render_template, redirect, url_for 以支援頁面路由
-from flask import Blueprint, request, Response, jsonify, session, render_template, redirect, url_for
-from config import get_db # 假設 config.py 存在
+from flask import Blueprint, request, Response, jsonify, session
+from config import get_db
 import json
 import traceback
-# 使用 pypdf 提高對 PDF 檔案錯誤的容錯性
-from pypdf import PdfReader, errors as pypdf_errors 
 
 # --- 初始化 AI Blueprint ---
 ai_bp = Blueprint('ai_bp', __name__)
 
 # --- 初始化 Google GenAI ---
+
+# 從環境變數中讀取 API Key (這會由主 app.py 載入)
 api_key = os.getenv('GEMINI_API_KEY')
 
+# 檢查 API Key 是否存在
 if not api_key:
-    print("AI 模組警告：在環境變數中找不到 GEMINI_API_KEY。")
-    model = None
+  print("AI 模組警告：在環境變數中找不到 GEMINI_API_KEY。")
+  model = None # 將 model 設為 None
 else:
-    genai.configure(api_key=api_key)
-    # 使用 genai.Client() 並設置 model_name
-    model = genai.GenerativeModel('gemini-2.5-flash')
+  # 設定 Google Gen AI
+  genai.configure(api_key=api_key)
+  # 初始化模型
+  model = genai.GenerativeModel('gemini-2.5-flash')
+
 
 # ==========================================================
-# 🧠 系統提示詞（System Prompt for Job Recommendation）
-# 專用於實習推薦功能
+# AI 處理的 API 端點
 # ==========================================================
-SYSTEM_PROMPT = """
-你是一位專業的實習申請顧問，專長在協助學生撰寫要寄給實習廠商的自我介紹與申請訊息。
-請在所有回覆中遵守以下原則：
-1. 依據指定語氣設定（專業正式／親切隨和／謹慎的／學術的）維持一致語氣。
-2. 將學生提供的履歷重點整理成可直接寄給廠商的訊息，強調技能、成果與申請動機。
-3. 禁止加入道歉語、AI 身分或與申請無關的敘述。
-4. 全文使用繁體中文，可搭配必要的英文專有名詞。
-5. 以具體行動與可量化成果為核心，段落清晰，符合寄給廠商的禮節與期待。
-6. 全程使用純文字，禁止產生星號、井字號、底線或其他 Markdown 標記符號。
-"""
+@ai_bp.route('/api/revise-resume', methods=['POST'])
+def revise_resume():
+    
+    # 檢查 API Key 是否在啟動時成功載入
+    if not api_key or not model:
+        return jsonify({"error": "AI 服務未正確配置 API Key。"}), 500
 
-# ==========================================================
-# 🧠 履歷修改系統提示詞（System Prompt for Resume Revision）
-# 專用於 /api/revise-resume 功能
-# ==========================================================
-REVISE_PROMPT = """
-你是一位專業的履歷撰寫師，專長是將用戶貼上的履歷草稿修改得更具專業性和吸引力。
-請在所有回覆中遵守以下原則：
-1. 僅回覆修改後的履歷文本，禁止加入任何開頭、結尾、解釋、或標題（如「修改後的履歷：」）。
-2. 保持內容的真實性，不虛構技能或經驗。
-3. 根據使用者選擇的「修改任務」和「語氣風格」進行優化。
-4. 全程使用繁體中文，可搭配必要的英文專有名詞。
-5. 使用清晰的段落和條列式清單（如 `-` 或 `*`）來呈現，但禁止使用 Markdown 標記（如 `**` 或 `##`）。
-6. **核心原則：**
-    - 調整為更專業、主動的動詞。
-    - 強調可量化的成果 (e.g., "提升了 20% 的效率")。
-    - 確保語意流暢且結構完整。
-"""
-
-# ----------------------------------------------------------
-# Helper: 讀取 PDF 履歷文字
-# ----------------------------------------------------------
-def extract_pdf_text(pdf_path: str) -> str:
-    if not pdf_path or not os.path.exists(pdf_path):
-        print(f"❗ 找不到履歷檔案：{pdf_path}")
-        return ""
-
-    # 關鍵修正：先檢查檔案標頭是否為 PDF，以排除 DOCX/ZIP 誤傳
+    # 接收履歷文本、任務風格、語氣風格
     try:
-        with open(pdf_path, 'rb') as f:
-            header = f.read(4) # 讀取前 4 個位元組
-            if header != b'%PDF':
-                # 判斷是否為 ZIP/DOCX 的標記 (PK\x03\x04)
-                if header.startswith(b'PK\x03\x04'):
-                    print(f"❌ 檔案格式錯誤: 檔案標頭顯示為 ZIP/DOCX 格式 (標記: {header})，非標準 PDF。")
-                    return "ERROR_NOT_A_PDF_DOCX"
-                else:
-                    print(f"❌ 檔案格式錯誤: 檔案標頭非 PDF (標記: {header})。")
-                    return "ERROR_NOT_A_PDF_OTHER"
+        data = request.get_json()
+        user_resume_text = data.get('resumeText')
+        edit_style = data.get('style', 'polish')
+        tone_style = data.get('tone', 'professional')
+
+        if not user_resume_text:
+            return jsonify({"error": "請提供履歷文本。"}), 400
+
     except Exception as e:
-        print(f"❌ 讀取檔案標頭失敗: {e}")
-        return "" # 讀取失敗，回傳空字串
+        print(f"請求解析錯誤: {e}")
+        return jsonify({"error": "無效的請求格式。"}), 400
 
-    # 如果通過標頭檢查，則繼續使用 pypdf 解析
     try:
-        reader = PdfReader(pdf_path) 
+        final_prompt = ""
         
-        if reader.is_encrypted:
-            print(f"❌ PDF 解析失敗：檔案已加密，無法讀取 {pdf_path}")
-            return ""
+        # --- 步驟一：定義語氣風格 (Tone) ---
+        
+        if tone_style == 'friendly':
+            tone_prompt = "語氣必須親切隨和。"
+        
+        # 'creative' (活潑有創意) 已被移除
+
+        elif tone_style == 'cautious':
+            tone_prompt = "語氣必須專業、謹慎且精確。"
+        
+        elif tone_style == 'academic':
+            tone_prompt = "語氣必須嚴謹、客觀且具學術性。"
             
-        pages_text = []
-        for page in reader.pages:
-            page_text = page.extract_text() or ""
-            pages_text.append(page_text.strip())
-            
-        combined = "\n".join(filter(None, pages_text)).strip()
-        if not combined:
-            print(f"❗ PDF 解析結果為空：{pdf_path}")
-        return combined
+        else:
+            # 預設 ('professional') 語氣的專業強化 (針對履歷情境)
+            tone_prompt = "語氣必須專業正式且符合商業履歷標準。規則：1. 避免個人感悟、心態或哲學性描述。2. 強調具體行動和成就。"
+
+
+        # --- 步驟二：定義主要任務 (Task) ---
         
-    except pypdf_errors.PdfReadError as exc: 
-        print(f"❌ PDF 解析失敗 (檔案損壞/格式錯誤)：{exc}")
-        return ""
-    except Exception as exc:
-        print(f"❌ PDF 解析失敗 (通用錯誤)：{exc}")
-        traceback.print_exc()
-        return ""
+        if edit_style == 'keyword_focus':
+            # --- 選項 1: 關鍵字導向 (兩步驟) ---
+            keyword_prompt = f"[任務] 從以下履歷文本中提取 5-7 個最核心的技能和成就關鍵字。[規則] 以逗號 (,) 分隔所有關鍵字，並在**一行中**輸出。[原始文本] {user_resume_text} [關鍵字列表]"
+            keyword_response = model.generate_content(keyword_prompt)
+            keywords = keyword_response.text.strip()
+            print(f"偵測任務: 關鍵字導向 (關鍵字: {keywords}), 語氣: {tone_style}")
 
-# ==========================================================
-# 🎯 API 0: AI 履歷修改頁面路由 (解決 404 錯誤)
-# ==========================================================
-@ai_bp.route('/ai_edit_resume')
-def ai_edit_resume_page():
-    # 檢查使用者是否登入，如果未登入則導向登入頁
-    if "username" not in session:
-        # 假設您的登入路由註冊在 'auth_bp.login_page'
-        return redirect(url_for("auth_bp.login_page"))
+            final_prompt = f"[任務] 你是一位頂尖的人力資源專家。請根據 [核心關鍵字] 重寫 [原始文本]。[關鍵規則] 1. **必須**突出並強調 [核心關鍵字] 相關的技能和成就。 2. **{tone_prompt}** [規則] 1. 使用強動詞開頭的行動句。 2. 量化成果。 3. 禁止包含任何原始文本之外的解釋或評論。[核心關鍵字] {keywords} [原始文本] {user_resume_text} [修改後的文本]"
         
-    # 如果已登入，渲染 HTML 模板
-    return render_template('ai_edit_resume.html')
+        elif edit_style == 'concise':
+            # --- 選項 2: 文案精簡 (一步驟) ---
+            # 強化文案精簡任務，強制其以成就導向
+            print(f"偵測任務: 文案精簡, 語氣: {tone_style}")
+            final_prompt = f"[任務] 將以下 [原始文本] 改寫得**極度精簡、清楚明瞭且成就導向**。[規則] 1. **{tone_prompt}** 2. **每句話必須以行動動詞開頭**。 3. 刪除所有贅字、口語化和非成就型描述。 4. 保留並強化核心資訊。 5. 禁止包含任何原始文本之外的解釋或評論。[原始文本] {user_resume_text} [修改後的文本]"
+
+        else: # 'polish' (預設)
+            # --- 選項 3: 履歷美化 (預設) (一步驟) ---
+            print(f"偵測任務: 履歷美化, 語氣: {tone_style}")
+            # 修正原始程式碼中 tone_prompt 的引用錯誤 ($ 改為 {})
+            final_prompt = f"[任務] 專業地**美化並潤飾**以下 [原始文本]。[規則] 1. **{tone_prompt}** 2. 使用強動詞開頭的行動句。 3. 盡可能量化成果。 4. 修正文法。 5. 禁止包含任何原始文本之外的解釋或評論。[原始文本] {user_resume_text} [修改後的文本]"
+
+        # --- 統一的串流輸出 ---
+        
+        def generate_stream():
+            try:
+                response_stream = model.generate_content(final_prompt, stream=True)
+                for chunk in response_stream:
+                    if chunk.text:
+                        yield chunk.text
+            except Exception as e:
+                print(f"串流處理中發生錯誤: {e}")
+                yield f"AI 服務處理失敗: {e}"
+
+        headers = {
+            'Content-Type': 'text/plain; charset=utf-8',
+            'Transfer-Encoding': 'chunked',
+            'Cache-Control': 'no-cache',
+            'Connection': 'keep-alive'
+        }
+        return Response(generate_stream(), headers=headers)
+
+    except Exception as e:
+        print(f"Gemini API 呼叫失敗： {e}")
+        return jsonify({"error": f"AI 服務處理失敗: {e}"}), 500
 
 
 # ==========================================================
-# 🎯 API 1: 實習職缺推薦 
+# AI 推薦志願序 API 端點
 # ==========================================================
 @ai_bp.route('/api/recommend-preferences', methods=['POST'])
 def recommend_preferences():
+    """
+    AI 推薦適合的志願序選項
+    根據學生的履歷內容和公司職缺資訊進行匹配分析
+    """
+    
+    # 檢查 API Key
     if not api_key or not model:
         return jsonify({"success": False, "error": "AI 服務未正確配置 API Key。"}), 500
-
+    
+    # 權限檢查
     if "user_id" not in session or session.get("role") != "student":
         return jsonify({"success": False, "error": "只有學生可以使用此功能。"}), 403
-
+    
     student_id = session["user_id"]
     conn = None
     cursor = None
-
+    
     try:
+        # 接收履歷文字（可選，如果沒有提供則從資料庫查詢）
         data = request.get_json() or {}
-        transportation_filter = data.get('transportationFilter', 'any')
-        distance_filter = data.get('distanceFilter', 'any')
-        salary_filter = data.get('salaryFilter', 'any')
-
+        resume_text = data.get('resumeText', '').strip()
+        
         conn = get_db()
         cursor = conn.cursor(dictionary=True)
-
-        # 取得學生最新「審核通過」的履歷檔案
-        cursor.execute("""
-            SELECT filepath, original_filename
-            FROM resumes
-            WHERE user_id = %s AND status = 'approved'
-            ORDER BY created_at DESC
-            LIMIT 1
-        """, (student_id,))
-        resume_record = cursor.fetchone()
-
-        if not resume_record:
-            print(f"❌ 找不到通過審核的履歷 - student_id: {student_id}")
-            return jsonify({
-                "success": False,
-                "error": "尚未找到審核通過的履歷檔案，請先完成上傳與審核再使用 AI 推薦。"
-            }), 400
-
-        resume_path = resume_record.get('filepath')
-        print(f"🧩 找到履歷: {resume_path}, 狀態: approved")
-
-        # 防呆：檢查檔案存在與副檔名
-        if not os.path.exists(resume_path):
-            return jsonify({
-                "success": False,
-                "error": f"履歷檔案不存在: {resume_path}"
-            }), 400
-
-        if not resume_path.lower().endswith('.pdf'):
-            return jsonify({
-                "success": False,
-                "error": "履歷檔案不是 PDF 格式，請重新上傳 PDF 檔案。"
-            }), 400
-
-        # 解析 PDF
-        resume_text = extract_pdf_text(resume_path)
+        
+        # 如果沒有提供履歷文字，嘗試從資料庫取得最新的履歷
         if not resume_text:
-            return jsonify({
-                "success": False,
-                "error": "無法讀取履歷檔案內容，請確認檔案為可解析的 PDF。"
-            }), 400
-
-        print(f"✅ 履歷文字長度: {len(resume_text)} 字元")
-
-        # 避免過長，截斷
-        resume_text = resume_text[:6000]
-
-        # 取得公司與職缺資料
+            cursor.execute("""
+                SELECT filepath, original_filename
+                FROM resumes
+                WHERE user_id = %s AND status = 'approved'
+                ORDER BY created_at DESC
+                LIMIT 1
+            """, (student_id,))
+            resume_record = cursor.fetchone()
+            
+            if resume_record:
+                # 這裡可以讀取履歷檔案內容（需要額外的庫來解析PDF/DOCX）
+                # 目前先提示用戶需要提供履歷文字
+                return jsonify({
+                    "success": False,
+                    "error": "請提供履歷文字內容，或請先上傳並審核通過履歷檔案。"
+                }), 400
+        
+        # 取得所有已審核通過的公司和職缺
         cursor.execute("""
             SELECT 
                 ic.id AS company_id,
@@ -208,25 +185,27 @@ def recommend_preferences():
             ORDER BY ic.company_name, ij.title
         """)
         companies_jobs = cursor.fetchall()
-
+        
         if not companies_jobs:
             return jsonify({
                 "success": False,
                 "error": "目前沒有可選的公司和職缺。"
             }), 400
-
+        
+        # 整理公司和職缺資訊為結構化資料
         companies_info = {}
         for item in companies_jobs:
-            cid = item['company_id']
-            if cid not in companies_info:
-                companies_info[cid] = {
-                    'company_id': cid,
+            company_id = item['company_id']
+            if company_id not in companies_info:
+                companies_info[company_id] = {
+                    'company_id': company_id,
                     'company_name': item['company_name'],
                     'company_description': item['company_description'] or '',
                     'company_address': item['company_address'] or '',
                     'jobs': []
                 }
-            companies_info[cid]['jobs'].append({
+            
+            companies_info[company_id]['jobs'].append({
                 'job_id': item['job_id'],
                 'job_title': item['job_title'],
                 'job_description': item['job_description'] or '',
@@ -234,92 +213,71 @@ def recommend_preferences():
                 'job_work_time': item['job_work_time'] or '',
                 'job_remark': item['job_remark'] or ''
             })
-
+        
+        # 構建 AI 提示詞
         companies_text = ""
-        for c in companies_info.values():
+        for company in companies_info.values():
             jobs_text = "\n".join([
-                f"  - 職缺ID: {j['job_id']}, 職缺名稱: {j['job_title']}, 描述: {j['job_description']}, 實習期間: {j['job_period']}, 工作時間: {j['job_work_time']}, 備註: {j['job_remark']}"
-                for j in c['jobs']
+                f"  - 職缺ID: {job['job_id']}, 職缺名稱: {job['job_title']}, "
+                f"描述: {job['job_description']}, 實習期間: {job['job_period']}, "
+                f"工作時間: {job['job_work_time']}, 備註: {job['job_remark']}"
+                for job in company['jobs']
             ])
             companies_text += f"""
-公司ID: {c['company_id']}
-公司名稱: {c['company_name']}
-公司描述: {c['company_description']}
-公司地址: {c['company_address']}
+公司ID: {company['company_id']}
+公司名稱: {company['company_name']}
+公司描述: {company['company_description']}
+公司地址: {company['company_address']}
 職缺列表:
 {jobs_text}
 ---
 """
-        distance_map = {
-            'any': '不限距離',
-            'close': '通勤 30 分鐘內',
-            'medium': '通勤 1 小時內',
-            'far': '超過 1 小時'
-        }
-        transportation_map = {
-            'any': '不限交通方式',
-            'public': '以大眾運輸為主',
-            'car': '以汽車或機車為主',
-            'bike': '以自行車或步行為主'
-        }
-        salary_map = {
-            'any': '不限薪資類型',
-            'monthly': '月薪',
-            'hourly': '時薪',
-            'stipend': '獎金或津貼',
-            'unpaid': '無薪資'
-        }
+        
+        # 構建 AI 分析提示詞
+        prompt = f"""你是一位專業的實習顧問，請根據學生的履歷內容，推薦最適合的實習志願序（最多5個）。
 
-        preference_lines = [
-            f"距離遠近偏好：{distance_map.get(distance_filter, '不限距離')}",
-            f"交通工具偏好：{transportation_map.get(transportation_filter, '不限交通方式')}",
-            f"實習薪資偏好：{salary_map.get(salary_filter, '不限薪資類型')}"
-        ]
-        preference_info = "【學生實習偏好條件】\n" + "\n".join(preference_lines) + "\n請嚴格依據上述偏好條件，從【可選的公司和職缺資訊】中篩選並排序最適合的志願序。"
-
-        prompt = f"""{SYSTEM_PROMPT}
-你是一位專業的實習顧問，請根據學生提供的【學生實習偏好條件】，推薦最適合的實習志願序（最多5個）。
-
-{preference_info}
-
-【學生履歷重點（系統自動擷取）】
+【學生履歷內容】
 {resume_text}
 
 【可選的公司和職缺資訊】
 {companies_text}
 
 【任務要求】
-1. 分析並比對【學生實習偏好條件】、【學生履歷重點】與【可選的公司和職缺資訊】。
-2. 匹配最符合這些條件的公司與職缺。
-3. 按適合度排序，推薦最多5個志願（由最適合至較適合）。
-4. 每個推薦需包含：公司ID、職缺ID、推薦理由 (理由必須明確說明如何符合偏好條件)。
+1. 分析學生的技能、經驗和興趣
+2. 匹配最適合的公司和職缺
+3. 按照適合度排序，推薦最多5個志願（從最適合到較適合）
+4. 每個推薦需包含：公司ID、職缺ID、推薦理由
 
 【輸出格式】
-請以 JSON 格式輸出：
+請以 JSON 格式輸出，格式如下：
 {{
   "recommendations": [
     {{
       "order": 1,
-      "company_id": 公司ID,
-      "job_id": 職缺ID,
+      "company_id": 公司ID（數字）,
+      "job_id": 職缺ID（數字）,
       "company_name": "公司名稱",
       "job_title": "職缺名稱",
-      "reason": "推薦理由"
+      "reason": "推薦理由（簡短說明為什麼適合）"
     }},
     ...
   ]
 }}
+
+請確保：
+- 只輸出 JSON 格式，不要有其他文字
+- 推薦的順序從最適合到較適合排列
+- 每個推薦都要有明確的推薦理由
+- 公司ID和職缺ID必須是實際存在的數字
 """
-
-        print(
-            "🔍 AI 推薦志願序 - "
-            f"學生ID: {student_id}, 距離: {distance_filter}, 交通: {transportation_filter}, 薪資: {salary_filter}, "
-            f"履歷長度: {len(resume_text)}"
-        )
-
+        
+        print(f"🔍 AI 推薦志願序 - 學生ID: {student_id}, 履歷長度: {len(resume_text)}")
+        
+        # 呼叫 AI 模型
         response = model.generate_content(prompt)
         ai_response_text = response.text.strip()
-
+        
+        # 清理回應文字（移除可能的 markdown 代碼塊標記）
         if ai_response_text.startswith('```json'):
             ai_response_text = ai_response_text[7:]
         if ai_response_text.startswith('```'):
@@ -327,126 +285,69 @@ def recommend_preferences():
         if ai_response_text.endswith('```'):
             ai_response_text = ai_response_text[:-3]
         ai_response_text = ai_response_text.strip()
-
-        recommendations_data = json.loads(ai_response_text)
-        recommendations = recommendations_data.get('recommendations', [])
-
-        valid = []
-        for rec in recommendations:
-            cid, jid = rec.get('company_id'), rec.get('job_id')
-            cursor.execute("""
-                SELECT ij.id, ij.title, ic.company_name
-                FROM internship_jobs ij
-                JOIN internship_companies ic ON ij.company_id = ic.id
-                WHERE ij.id = %s AND ij.company_id = %s 
-                AND ij.is_active = TRUE AND ic.status = 'approved'
-            """, (jid, cid))
-            job_check = cursor.fetchone()
-            if job_check:
-                valid.append({
-                    'order': rec.get('order'),
-                    'company_id': cid,
-                    'job_id': jid,
-                    'company_name': rec.get('company_name', job_check['company_name']),
-                    'job_title': rec.get('job_title', job_check['title']),
-                    'reason': rec.get('reason', '')
-                })
-
-        if not valid:
-            return jsonify({"success": False, "error": "AI 無法生成有效推薦，請嘗試放寬篩選條件。"}), 400
-
-        print(f"✅ AI 推薦成功 - 共 {len(valid)} 個推薦")
-        return jsonify({"success": True, "recommendations": valid})
-
+        
+        # 解析 JSON 回應
+        try:
+            recommendations_data = json.loads(ai_response_text)
+            recommendations = recommendations_data.get('recommendations', [])
+            
+            # 驗證推薦的ID是否存在於資料庫中
+            valid_recommendations = []
+            for rec in recommendations:
+                company_id = rec.get('company_id')
+                job_id = rec.get('job_id')
+                
+                # 驗證這個職缺是否屬於該公司且有效
+                cursor.execute("""
+                    SELECT ij.id, ij.title, ic.company_name
+                    FROM internship_jobs ij
+                    JOIN internship_companies ic ON ij.company_id = ic.id
+                    WHERE ij.id = %s AND ij.company_id = %s 
+                    AND ij.is_active = TRUE AND ic.status = 'approved'
+                """, (job_id, company_id))
+                job_check = cursor.fetchone()
+                
+                if job_check:
+                    valid_recommendations.append({
+                        'order': rec.get('order'),
+                        'company_id': company_id,
+                        'job_id': job_id,
+                        'company_name': rec.get('company_name', job_check['company_name']),
+                        'job_title': rec.get('job_title', job_check['title']),
+                        'reason': rec.get('reason', '')
+                    })
+            
+            if not valid_recommendations:
+                return jsonify({
+                    "success": False,
+                    "error": "AI 無法生成有效的推薦，請確認履歷內容是否足夠詳細。"
+                }), 400
+            
+            print(f"✅ AI 推薦成功 - 共 {len(valid_recommendations)} 個推薦")
+            
+            return jsonify({
+                "success": True,
+                "recommendations": valid_recommendations
+            })
+            
+        except json.JSONDecodeError as e:
+            print(f"❌ JSON 解析錯誤: {e}")
+            print(f"AI 回應內容: {ai_response_text}")
+            return jsonify({
+                "success": False,
+                "error": "AI 回應格式錯誤，請稍後再試。"
+            }), 500
+        
     except Exception as e:
         traceback.print_exc()
-        return jsonify({"success": False, "error": f"AI 服務處理失敗: {str(e)}"}), 500
+        print(f"❌ AI 推薦志願序錯誤: {e}")
+        return jsonify({
+            "success": False,
+            "error": f"AI 服務處理失敗: {str(e)}"
+        }), 500
+    
     finally:
         if cursor:
             cursor.close()
         if conn:
             conn.close()
-
-
-# ==========================================================
-# 🎯 API 2: AI 履歷修改 (新功能，支持串流)
-# ==========================================================
-@ai_bp.route('/api/revise-resume', methods=['POST'])
-def revise_resume():
-    if not api_key or not model:
-        # 回傳 text/plain 錯誤訊息以供前端接收 
-        return Response(
-            "AI 服務連線失敗：後端 AI 服務未正確配置或無法啟動。",
-            status=500,
-            mimetype='text/plain' 
-        )
-    
-    try:
-        data = request.get_json()
-        resume_text = data.get('resumeText', '').strip()
-        edit_style = data.get('style', 'polish')
-        tone_style = data.get('tone', 'professional')
-
-        if not resume_text:
-            return Response("請提供履歷內容。", status=400, mimetype='text/plain')
-
-        # ------------------------------------------------------------------
-        # 1. 根據前端選項設定 AI 指令
-        # ------------------------------------------------------------------
-        style_map = {
-            'polish': '任務：進行履歷美化與專業潤飾，將描述轉為更具影響力的行動句。',
-            'concise': '任務：將所有文字精簡，去除贅字，讓履歷更為簡潔有力，長度需至少縮短 30%。',
-            'keyword_focus': '任務：分析內容，著重強調專業技能、專案成果、和可量化數據，使履歷更符合業界標準。'
-        }
-        
-        tone_map = {
-            'professional': '語氣設定：專業、正式、權威。',
-            'friendly': '語氣設定：親切、隨和、注重團隊合作與溝通。',
-            'cautious': '語氣設定：謹慎、嚴謹、注重細節與風險控管。',
-            'academic': '語氣設定：學術、嚴謹、注重研究方法與理論基礎。'
-        }
-
-        # 組合完整的使用者指令
-        user_instruction = f"""
-請根據以下要求修改履歷：
-- 修改任務: {style_map.get(edit_style, style_map['polish'])}
-- 語氣風格: {tone_map.get(tone_style, tone_map['professional'])}
-
----
-以下是原始履歷草稿：
-{resume_text}
-"""
-        
-        # ------------------------------------------------------------------
-        # 2. 呼叫 Gemini API 進行串流生成 
-        # ------------------------------------------------------------------
-        print(f"🔍 AI 履歷修改請求 - 樣式: {edit_style}, 語氣: {tone_style}, 原始長度: {len(resume_text)}")
-
-        # 使用 stream_generate_content 進行串流回覆 (已修正)
-        response = model.stream_generate_content(  # <--- 這是正確的函數名稱
-            contents=[user_instruction],
-            config={"system_instruction": REVISE_PROMPT} # 使用專門的系統提示詞
-        )
-        
-        # ------------------------------------------------------------------
-        # 3. 定義串流 Generator
-        # ------------------------------------------------------------------
-        def stream_generator():
-            for chunk in response:
-                if chunk.text:
-                    yield chunk.text
-
-        # ------------------------------------------------------------------
-        # 4. 回傳 Streaming Response
-        # ------------------------------------------------------------------
-        # 返回 text/plain 讓前端可以解析並顯示串流結果
-        return Response(stream_generator(), mimetype='text/plain')
-
-    except Exception as e:
-        traceback.print_exc()
-        # 處理任何可能發生的錯誤
-        return Response(
-            f"AI 服務處理失敗，發生內部錯誤: {str(e)}", 
-            status=500, 
-            mimetype='text/plain'
-        )
