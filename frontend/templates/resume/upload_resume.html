@@ -1,6 +1,5 @@
 <!DOCTYPE html>
 <html lang="zh-Hant">
-
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -57,7 +56,7 @@
     <div class="tab-content">
       <!-- 履歷填寫 -->
       <div class="tab-pane fade show active" id="form-pane">
-        <form id="resumeForm">
+        <form id="resumeForm" enctype="multipart/form-data">
           <!-- 基本資料 -->
           <div class="card p-4 mb-3">
             <h5 class="text-primary">👤 個人基本資料</h5>
@@ -102,8 +101,8 @@
                 </select>
               </div>
               <div class="col-md-6">
-                <label class="form-label">上傳照片 (可選)</label>
-                <input type="file" name="photo" class="form-control" accept="image/*" />
+                <label class="form-label">上傳照片 (請上傳jpg格式)</label>
+                <input type="file" name="photo" class="form-control" accept="image/jpeg, .jpg" />
               </div>
             </div>
           </div>
@@ -125,8 +124,13 @@
           <!-- 自傳 -->
           <div class="card p-4 mb-3">
             <h5 class="text-info">🖋 自傳</h5>
-            <textarea name="autobiography" rows="6" class="form-control" placeholder="請描述家庭生活、求學經過、個人專長、未來規劃等..."
-              required></textarea>
+            <textarea
+              name="autobiography"
+              rows="6"
+              class="form-control"
+              placeholder="請描述家庭生活、求學經過、個人專長、未來規劃等..."
+              required
+            ></textarea>
           </div>
 
           <div class="text-center mt-4">
@@ -184,6 +188,7 @@
     ];
 
     document.addEventListener("DOMContentLoaded", () => {
+      // 載入課程表
       const tbody = document.getElementById("courseTableBody");
       fixedCourses.forEach(c => {
         const tr = document.createElement("tr");
@@ -191,33 +196,25 @@
         tbody.appendChild(tr);
       });
 
-      // 表單提交
+      // 提交表單（使用 FormData 支援圖片）
       document.getElementById("resumeForm").addEventListener("submit", async e => {
         e.preventDefault();
         const form = e.target;
-        const data = {
-          name: form.name.value.trim(),
-          birth_date: form.birth_date.value,
-          gender: form.gender.value,
-          phone: form.phone.value.trim(),
-          email: form.email.value.trim(),
-          address: form.address.value.trim(),
-          conduct_score: form.conduct_score.value,
-          autobiography: form.autobiography.value.trim(),
-          courses: fixedCourses
-        };
+
+        const formData = new FormData(form);
+        formData.append("courses", JSON.stringify(fixedCourses));
 
         const res = await fetch("/api/submit_and_generate", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(data)
+          body: formData
         });
+
         const result = await res.json();
         if (result.success) {
           alert("✅ 履歷已生成，可於下方紀錄頁籤下載");
           const tabTrigger = new bootstrap.Tab(document.querySelector('[data-bs-target="#records-pane"]'));
           tabTrigger.show();
-          await loadResumeRecords(); // 自動刷新紀錄
+          await loadResumeRecords();
         } else {
           alert("❌ 提交失敗：" + (result.message || "未知錯誤"));
         }
@@ -239,18 +236,18 @@
           const tr = document.createElement("tr");
           const fileUrl = `/api/download_resume/${r.id}`;
           tr.innerHTML = `
-          <td>${r.upload_time || ""}</td>
-          <td>${r.original_filename || "resume.docx"}</td>
-          <td><a href="${fileUrl}" class="btn btn-sm btn-outline-primary" target="_blank">下載</a></td>
+            <td>${r.upload_time || ""}</td>
+            <td>${r.original_filename || "resume.docx"}</td>
+            <td><a href="${fileUrl}" class="btn btn-sm btn-outline-primary" target="_blank">下載</a></td>
           `;
           tbody.appendChild(tr);
         });
       }
 
-      // 當切換到履歷紀錄分頁時自動載入
-      document.querySelector('[data-bs-target="#records-pane"]').addEventListener("shown.bs.tab", loadResumeRecords);
+      document
+        .querySelector('[data-bs-target="#records-pane"]')
+        .addEventListener("shown.bs.tab", loadResumeRecords);
     });
   </script>
 </body>
-
 </html>
