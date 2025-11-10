@@ -422,8 +422,8 @@ def revise_resume():
         # ------------------------------------------------------------------
         print(f"🔍 AI 履歷修改請求 - 樣式: {edit_style}, 語氣: {tone_style}, 原始長度: {len(resume_text)}")
 
-        # 使用 generate_content_stream 進行串流回覆
-        response = model.generate_content_stream(
+        # 使用 stream_generate_content 進行串流回覆 (已修正)
+        response = model.stream_generate_content(  # <--- 這是正確的函數名稱
             contents=[user_instruction],
             config={"system_instruction": REVISE_PROMPT} # 使用專門的系統提示詞
         )
