@@ -24,7 +24,7 @@ def score_to_grade(score):
     try:
         score = int(score)
     except (ValueError, TypeError):
-        return '丁' # 若無效，預設為不及格 (丁)
+        return '丁'
 
     if 90 <= score <= 99:
         return '優'
@@ -34,12 +34,37 @@ def score_to_grade(score):
         return '乙'
     elif 60 <= score <= 69:
         return '丙'
-    # 這裡的邏輯與您的規則 (未滿 60 分為丁等) 相符
-    else: 
+    else:
         return '丁'
 
 # -------------------------
-# Helper / 權限管理
+# 語文能力複選框處理輔助函式 (修正版)
+# -------------------------
+def generate_language_marks(level):
+    """將語文能力（精通/中等/略懂）轉換為方格標記（■/□）"""
+    # 初始化所有方框為未選中 (□)
+    marks = {
+        'Jing': '□',  # 精通
+        'Zhong': '□', # 中等
+        'Lue': '□'    # 略懂
+    }
+    
+    # 建立等級與字典 key 的對應
+    level_map = {
+        '精通': 'Jing',
+        '中等': 'Zhong',
+        '略懂': 'Lue'
+    }
+    
+    # 檢查傳入的等級並標記為選中 (■)
+    level_key = level_map.get(level)
+    if level_key in marks:
+        marks[level_key] = '■'
+        
+    return marks
+
+# -------------------------
+# 權限與工具函式
 # -------------------------
 def get_user_by_username(cursor, username):
     cursor.execute("SELECT * FROM users WHERE username = %s", (username,))
@@ -75,11 +100,13 @@ def can_access_target_resume(cursor, session_user_id, session_role, target_user_
         return session_user_id == target_user_id
     if session_role == "ta":
         return True
+
     cursor.execute("SELECT class_id FROM users WHERE id = %s", (target_user_id,))
     u = cursor.fetchone()
     if not u:
         return False
     target_class_id = u.get('class_id')
+
     if session_role == "class_teacher":
         return teacher_manages_class(cursor, session_user_id, target_class_id)
     if session_role == "director":
@@ -96,25 +123,28 @@ def can_access_target_resume(cursor, session_user_id, session_role, target_user_
 def require_login():
     return 'user_id' in session and 'role' in session
 
+
 # -------------------------
 # 實習履歷生成邏輯
 # -------------------------
 def save_structured_data(cursor, student_id, data):
-    """將結構化資料寫入資料表"""
+    """儲存結構化資料到 Student_Info"""
     try:
         cursor.execute("""
             INSERT INTO Student_Info (StuID, StuName, BirthDate, Gender, Phone, Email, Address, ConductScore, Autobiography, PhotoPath)
             VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
             ON DUPLICATE KEY UPDATE 
-                StuName=VALUES(StuName), BirthDate=VALUES(BirthDate), Gender=VALUES(Gender), Phone=VALUES(Phone),
-                Email=VALUES(Email), Address=VALUES(Address), ConductScore=VALUES(ConductScore),
-                Autobiography=VALUES(Autobiography), PhotoPath=VALUES(PhotoPath), UpdatedAt=NOW()
+                StuName=VALUES(StuName), BirthDate=VALUES(BirthDate), Gender=VALUES(Gender),
+                Phone=VALUES(Phone), Email=VALUES(Email), Address=VALUES(Address),
+                ConductScore=VALUES(ConductScore), Autobiography=VALUES(Autobiography),
+                PhotoPath=VALUES(PhotoPath), UpdatedAt=NOW()
         """, (
             student_id, data.get('name'), data.get('birth_date'), data.get('gender'),
             data.get('phone'), data.get('email'), data.get('address'),
             data.get('conduct_score'), data.get('autobiography'), data.get('photo_path')
         ))
 
+        # 儲存課程
         cursor.execute("DELETE FROM Course_Grades WHERE StuID=%s", (student_id,))
         for c in data.get('courses', []):
             if c.get('name'):
@@ -124,9 +154,10 @@ def save_structured_data(cursor, student_id, data):
                 """, (student_id, c['name'], c.get('credits'), c.get('grade')))
         return True
     except Exception as e:
-        print("❌ 寫入結構化資料錯誤:", e)
+        print("❌ 儲存結構化資料錯誤:", e)
         traceback.print_exc()
         return False
+
 
 def get_student_info_for_doc(cursor, student_id):
     data = {}
@@ -136,8 +167,9 @@ def get_student_info_for_doc(cursor, student_id):
     data['grades'] = cursor.fetchall() or []
     return data
 
+
 def generate_application_form_docx(student_data, output_path):
-    """根據模板生成 Word 履歷檔（支援圖片）"""
+    """根據模板生成 Word 履歷檔"""
     try:
         base_dir = os.path.dirname(__file__)
         template_path = os.path.abspath(os.path.join(base_dir, "..", "frontend", "static", "examples", "實習履歷(空白).docx"))
@@ -149,13 +181,11 @@ def generate_application_form_docx(student_data, output_path):
         info = student_data.get("info", {})
         grades = student_data.get("grades", [])
 
-        # 出生年月日處理
+        # 出生日期處理
         def fmt_date(val):
-            # 檢查是否有 strftime 方法（適用於 datetime.date 和 datetime.datetime）
-            if hasattr(val, 'strftime'): 
+            if hasattr(val, 'strftime'):
                 return val.strftime("%Y-%m-%d")
             if isinstance(val, str) and len(val) >= 10:
-                # 處理來自表單的字串，例如 '2005-11-10'
                 return val.split("T")[0]
             return ""
 
@@ -163,46 +193,51 @@ def generate_application_form_docx(student_data, output_path):
         year, month, day = ("", "", "")
         if bdate:
             try:
-                # 確保分拆時不會崩潰
                 year, month, day = bdate.split("-")
             except:
                 pass
 
-        # ✅ 插入照片（簡化並強化錯誤處理）
+        # 插入照片
         photo_path = info.get("PhotoPath")
-        image_obj = None  # 預設為 None，讓 docxtpl 在找不到圖片時安全地忽略
-
+        image_obj = None
         try:
             if photo_path and os.path.exists(photo_path):
-                # 直接將絕對路徑傳給 InlineImage
                 abs_photo_path = os.path.abspath(photo_path)
                 image_obj = InlineImage(doc, abs_photo_path, width=Inches(1.2))
-            else:
-                print(f"⚠️ 找不到圖片檔案: {photo_path}")
         except Exception as e:
-            # 捕獲所有圖片相關錯誤 (包括 UnrecognizedImageError)
-            print(f"❌ 圖片載入/格式錯誤: {photo_path}, 錯誤: {e}")
-            image_obj = None # 確保錯誤時傳入 None，避免渲染崩潰
+            print(f"⚠️ 圖片載入錯誤: {e}")
 
-        # 操行成績複選框處理 (新增)
+        # 操行等級
         conduct_score = info.get('ConductScore', '')
+        conduct_marks = {k: '□' for k in ['C_You','C_Jia','C_Yi','C_Bing','C_Ding']}
+        mapping = {'優': 'C_You', '甲': 'C_Jia', '乙': 'C_Yi', '丙': 'C_Bing', '丁': 'C_Ding'}
+        if conduct_score in mapping:
+            conduct_marks[mapping[conduct_score]] = '■'
 
-        # 預設所有複選框變數為 '□' (空心方塊)
-        conduct_marks = {
-            'C_You': '□', 
-            'C_Jia': '□', 
-            'C_Yi': '□', 
-            'C_Bing': '□', 
-            'C_Ding': '□'
-        }
-        # 將選中的選項從 '□' 替換為 '■' (實心方塊)
-        if conduct_score == '優': conduct_marks['C_You'] = '■'
-        elif conduct_score == '甲': conduct_marks['C_Jia'] = '■'
-        elif conduct_score == '乙': conduct_marks['C_Yi'] = '■'
-        elif conduct_score == '丙': conduct_marks['C_Bing'] = '■'
-        elif conduct_score == '丁': conduct_marks['C_Ding'] = '■'
+        # 證照處理（四類分類）
+        certs = student_data.get("certifications", [])
+        labor_certs = []
+        intl_certs = []
+        local_certs = []
+        other_certs = []
 
-        # Word 模板變數替換
+        for cert in certs:
+            name = cert.strip()
+            if not name:
+                continue
+            if "勞" in name or "技師" in name:
+                labor_certs.append(name)
+            elif any(x in name.upper() for x in ["TOEIC", "TOEFL", "IELTS", "JLPT"]):
+                intl_certs.append(name)
+            elif "乙級" in name or "丙級" in name:
+                local_certs.append(name)
+            else:
+                other_certs.append(name)
+
+        # 若無資料則填入「無」
+        def fmt_cert_list(lst):
+            return "、".join(lst) if lst else "無"
+
         context = {
             'StuID': info.get('StuID', ''),
             'StuName': info.get('StuName', ''),
@@ -211,24 +246,23 @@ def generate_application_form_docx(student_data, output_path):
             'Phone': info.get('Phone', ''),
             'Email': info.get('Email', ''),
             'Address': info.get('Address', ''),
-            'ConductScore': info.get('ConductScore', ''),
+            'ConductScore': conduct_score,
             'Autobiography': info.get('Autobiography', ''),
-            'courses': [
-                {'name': g.get('CourseName', ''), 'credits': g.get('Credits', ''), 'grade': g.get('Grade', '')}
-                for g in grades
-            ],
+            'courses': [{'name': g.get('CourseName', ''), 'credits': g.get('Credits', ''), 'grade': g.get('Grade', '')} for g in grades],
+            'LaborCerts': fmt_cert_list(labor_certs),
+            'IntlCerts': fmt_cert_list(intl_certs),
+            'LocalCerts': fmt_cert_list(local_certs),
+            'OtherCerts': fmt_cert_list(other_certs),
             'Image_1': image_obj
         }
-
         context.update(conduct_marks)
 
         doc.render(context)
         doc.save(output_path)
         print(f"✅ 履歷文件已生成: {output_path}")
         return True
-
     except Exception as e:
-        print("❌ 生成 Word 檔錯誤：", e)
+        print("❌ 生成 Word 檔錯誤:", e)
         traceback.print_exc()
         return False
 
@@ -239,17 +273,16 @@ def generate_application_form_docx(student_data, output_path):
 def submit_and_generate_api():
     try:
         if session.get('role') != 'student' or not session.get('user_id'):
-            return jsonify({"success": False, "message": "只有學生可以提交申請"}), 403
+            return jsonify({"success": False, "message": "只有學生可以提交"}), 403
 
         user_id = session['user_id']
         conn = get_db()
         cursor = conn.cursor(dictionary=True)
-
-        # 接收 multipart 表單
         data = request.form.to_dict()
         courses = json.loads(data.get('courses', '[]'))
         photo = request.files.get('photo')
 
+        # 儲存照片
         photo_path = None
         if photo:
             filename = secure_filename(photo.filename)
@@ -258,10 +291,13 @@ def submit_and_generate_api():
             photo_path = os.path.join(photo_dir, f"{user_id}_{filename}")
             photo.save(photo_path)
 
-        # 查出學號
+        # 證照名稱（僅名稱，無發證單位）
+        cert_names = request.form.getlist('certification_name[]')
+        certifications = [n.strip() for n in cert_names if n.strip()]
+
+        # 查學號
         cursor.execute("SELECT username FROM users WHERE id=%s", (user_id,))
-        u = cursor.fetchone()
-        student_id = u['username']
+        student_id = cursor.fetchone()['username']
 
         structured_data = {
             "name": data.get("name"),
@@ -272,6 +308,7 @@ def submit_and_generate_api():
             "address": data.get("address"),
             "conduct_score": data.get("conduct_score"),
             "autobiography": data.get("autobiography"),
+            "certifications": certifications,
             "courses": courses,
             "photo_path": photo_path
         }
@@ -282,22 +319,20 @@ def submit_and_generate_api():
 
         student_data_for_doc = get_student_info_for_doc(cursor, student_id)
         student_data_for_doc["info"]["PhotoPath"] = photo_path
+        student_data_for_doc["certifications"] = certifications
 
         filename = f"{student_id}_履歷_{datetime.now().strftime('%Y%m%d_%H%M%S')}.docx"
         save_path = os.path.join(UPLOAD_FOLDER, filename)
-
         if not generate_application_form_docx(student_data_for_doc, save_path):
             conn.close()
             return jsonify({"success": False, "message": "文件生成失敗"}), 500
 
-        # 寫入 resumes 紀錄表
         semester_id = get_current_semester_id(cursor)
         cursor.execute("""
             INSERT INTO resumes (user_id, semester_id, original_filename, filepath, status, created_at)
-            VALUES (%s, %s, %s, %s, %s, NOW())
+            VALUES (%s,%s,%s,%s,%s,NOW())
         """, (user_id, semester_id, filename, save_path, 'generated'))
         conn.commit()
-
         return jsonify({"success": True, "message": "履歷生成成功"})
     except Exception as e:
         traceback.print_exc()
@@ -306,6 +341,7 @@ def submit_and_generate_api():
         if 'cursor' in locals(): cursor.close()
         if 'conn' in locals(): conn.close()
 
+
 # -------------------------
 # API：下載履歷
 # -------------------------
@@ -313,54 +349,45 @@ def submit_and_generate_api():
 def download_resume(resume_id):
     if not require_login():
         return jsonify({"success": False, "message": "未授權"}), 403
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
     try:
-        conn = get_db()
-        cursor = conn.cursor(dictionary=True)
         cursor.execute("SELECT filepath, original_filename, user_id FROM resumes WHERE id=%s", (resume_id,))
         r = cursor.fetchone()
         if not r:
             return jsonify({"success": False, "message": "找不到履歷"}), 404
         if not can_access_target_resume(cursor, session['user_id'], session['role'], r['user_id']):
-            return jsonify({"success": False, "message": "沒有權限下載"}), 403
-        path = r['filepath']
-        if not os.path.exists(path):
+            return jsonify({"success": False, "message": "無權限"}), 403
+        if not os.path.exists(r['filepath']):
             return jsonify({"success": False, "message": "檔案不存在"}), 404
-        return send_file(path, as_attachment=True, download_name=r['original_filename'])
+        return send_file(r['filepath'], as_attachment=True, download_name=r['original_filename'])
     finally:
         cursor.close()
         conn.close()
 
+
 # -------------------------
-# API - 查詢自己的履歷列表 (學生)
+# API：查詢學生履歷列表
 # -------------------------
 @resume_bp.route('/api/get_my_resumes', methods=['GET'])
 def get_my_resumes():
     if 'user_id' not in session or session.get('role') != 'student':
         return jsonify({"success": False, "message": "未授權"}), 403
 
-    user_id = session['user_id']
-
     conn = get_db()
     cursor = conn.cursor(dictionary=True)
-
     try:
         cursor.execute("""
             SELECT r.id, r.original_filename, r.status, r.comment, r.note, r.created_at AS upload_time
             FROM resumes r
             WHERE r.user_id = %s
             ORDER BY r.created_at DESC
-        """, (user_id,))
+        """, (session['user_id'],))
         resumes = cursor.fetchall()
-
         for r in resumes:
             if isinstance(r.get('upload_time'), datetime):
                 r['upload_time'] = r['upload_time'].strftime("%Y-%m-%d %H:%M:%S")
-
         return jsonify({"success": True, "resumes": resumes})
-    
-    except Exception as e:
-        traceback.print_exc()
-        return jsonify({"success": False, "message": str(e)}), 500
     finally:
         cursor.close()
         conn.close()
@@ -373,8 +400,6 @@ def get_my_resumes():
 def upload_resume_page():
     return render_template('resume/upload_resume.html')
 
-
-#ai 編輯履歷頁面
 @resume_bp.route('/ai_edit_resume')
 def ai_edit_resume_page():
     return render_template('resume/ai_edit_resume.html')
