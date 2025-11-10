@@ -1,6 +1,7 @@
 import os
 import google.generativeai as genai
-from flask import Blueprint, request, Response, jsonify, session
+# ⚠️ 修正：新增 render_template, redirect, url_for 以支援頁面路由
+from flask import Blueprint, request, Response, jsonify, session, render_template, redirect, url_for
 from config import get_db # 假設 config.py 存在
 import json
 import traceback
@@ -55,14 +56,14 @@ REVISE_PROMPT = """
 """
 
 # ----------------------------------------------------------
-# Helper: 讀取 PDF 履歷文字 (已修正：使用 pypdf 並新增檔案標頭檢查)
+# Helper: 讀取 PDF 履歷文字
 # ----------------------------------------------------------
 def extract_pdf_text(pdf_path: str) -> str:
     if not pdf_path or not os.path.exists(pdf_path):
         print(f"❗ 找不到履歷檔案：{pdf_path}")
         return ""
 
-    # ⚠️ 關鍵修正：先檢查檔案標頭是否為 PDF，以排除 DOCX/ZIP 誤傳
+    # 關鍵修正：先檢查檔案標頭是否為 PDF，以排除 DOCX/ZIP 誤傳
     try:
         with open(pdf_path, 'rb') as f:
             header = f.read(4) # 讀取前 4 個位元組
@@ -105,7 +106,21 @@ def extract_pdf_text(pdf_path: str) -> str:
         return ""
 
 # ==========================================================
-# 🎯 API 1: 實習職缺推薦 (原功能)
+# 🎯 API 0: AI 履歷修改頁面路由 (解決 404 錯誤)
+# ==========================================================
+@ai_bp.route('/ai_edit_resume')
+def ai_edit_resume_page():
+    # 檢查使用者是否登入，如果未登入則導向登入頁
+    if "username" not in session:
+        # 假設您的登入路由註冊在 'auth_bp.login_page'
+        return redirect(url_for("auth_bp.login_page"))
+        
+    # 如果已登入，渲染 HTML 模板
+    return render_template('ai_edit_resume.html')
+
+
+# ==========================================================
+# 🎯 API 1: 實習職缺推薦 
 # ==========================================================
 @ai_bp.route('/api/recommend-preferences', methods=['POST'])
 def recommend_preferences():
@@ -359,7 +374,7 @@ def recommend_preferences():
 @ai_bp.route('/api/revise-resume', methods=['POST'])
 def revise_resume():
     if not api_key or not model:
-        # 回傳 text/plain 錯誤訊息以供前端接收
+        # 回傳 text/plain 錯誤訊息以供前端接收 
         return Response(
             "AI 服務連線失敗：後端 AI 服務未正確配置或無法啟動。",
             status=500,
@@ -403,7 +418,7 @@ def revise_resume():
 """
         
         # ------------------------------------------------------------------
-        # 2. 呼叫 Gemini API 進行串流生成
+        # 2. 呼叫 Gemini API 進行串流生成 
         # ------------------------------------------------------------------
         print(f"🔍 AI 履歷修改請求 - 樣式: {edit_style}, 語氣: {tone_style}, 原始長度: {len(resume_text)}")
 
