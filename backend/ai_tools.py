@@ -237,60 +237,84 @@ def recommend_preferences():
                 for job in company['jobs']
             ])
             companies_text += f"""
-公司ID: {company['company_id']}
-公司名稱: {company['company_name']}
-公司描述: {company['company_description']}
-公司地址: {company['company_address']}
+公司ID: {c['company_id']}
+公司名稱: {c['company_name']}
+公司描述: {c['company_description']}
+公司地址: {c['company_address']}
 職缺列表:
 {jobs_text}
 ---
 """
-        
-        # 構建 AI 分析提示詞
-        prompt = f"""你是一位專業的實習顧問，請根據學生的履歷內容，推薦最適合的實習志願序（最多5個）。
+        distance_map = {
+            'any': '不限距離',
+            'close': '通勤 30 分鐘內',
+            'medium': '通勤 1 小時內',
+            'far': '超過 1 小時'
+        }
+        transportation_map = {
+            'any': '不限交通方式',
+            'public': '以大眾運輸為主',
+            'car': '以汽車或機車為主',
+            'bike': '以自行車或步行為主'
+        }
+        salary_map = {
+            'any': '不限薪資類型',
+            'monthly': '月薪',
+            'hourly': '時薪',
+            'stipend': '獎金或津貼',
+            'unpaid': '無薪資'
+        }
 
-【學生履歷內容】
+        preference_lines = [
+            f"距離遠近偏好：{distance_map.get(distance_filter, '不限距離')}",
+            f"交通工具偏好：{transportation_map.get(transportation_filter, '不限交通方式')}",
+            f"實習薪資偏好：{salary_map.get(salary_filter, '不限薪資類型')}"
+        ]
+        preference_info = "【學生實習偏好條件】\n" + "\n".join(preference_lines) + "\n請嚴格依據上述偏好條件，從【可選的公司和職缺資訊】中篩選並排序最適合的志願序。"
+
+        prompt = f"""{SYSTEM_PROMPT}
+你是一位專業的實習顧問，請根據學生提供的【學生實習偏好條件】，推薦最適合的實習志願序（最多5個）。
+
+{preference_info}
+
+【學生履歷重點（系統自動擷取）】
 {resume_text}
 
 【可選的公司和職缺資訊】
 {companies_text}
 
 【任務要求】
-1. 分析學生的技能、經驗和興趣
-2. 匹配最適合的公司和職缺
-3. 按照適合度排序，推薦最多5個志願（從最適合到較適合）
-4. 每個推薦需包含：公司ID、職缺ID、推薦理由
+1. 分析並比對【學生實習偏好條件】、【學生履歷重點】與【可選的公司和職缺資訊】。
+2. 匹配最符合這些條件的公司與職缺。
+3. 按適合度排序，推薦最多5個志願（由最適合至較適合）。
+4. 每個推薦需包含：公司ID、職缺ID、推薦理由 (理由必須明確說明如何符合偏好條件)。
 
 【輸出格式】
-請以 JSON 格式輸出，格式如下：
+請以 JSON 格式輸出：
 {{
   "recommendations": [
     {{
       "order": 1,
-      "company_id": 公司ID（數字）,
-      "job_id": 職缺ID（數字）,
+      "company_id": 公司ID,
+      "job_id": 職缺ID,
       "company_name": "公司名稱",
       "job_title": "職缺名稱",
-      "reason": "推薦理由（簡短說明為什麼適合）"
+      "reason": "推薦理由"
     }},
     ...
   ]
 }}
-
-請確保：
-- 只輸出 JSON 格式，不要有其他文字
-- 推薦的順序從最適合到較適合排列
-- 每個推薦都要有明確的推薦理由
-- 公司ID和職缺ID必須是實際存在的數字
 """
-        
-        print(f"🔍 AI 推薦志願序 - 學生ID: {student_id}, 履歷長度: {len(resume_text)}")
-        
-        # 呼叫 AI 模型
+
+        print(
+            "🔍 AI 推薦志願序 - "
+            f"學生ID: {student_id}, 距離: {distance_filter}, 交通: {transportation_filter}, 薪資: {salary_filter}, "
+            f"履歷長度: {len(resume_text)}"
+        )
+
         response = model.generate_content(prompt)
         ai_response_text = response.text.strip()
-        
-        # 清理回應文字（移除可能的 markdown 代碼塊標記）
+
         if ai_response_text.startswith('```json'):
             ai_response_text = ai_response_text[7:]
         if ai_response_text.startswith('```'):
@@ -298,67 +322,43 @@ def recommend_preferences():
         if ai_response_text.endswith('```'):
             ai_response_text = ai_response_text[:-3]
         ai_response_text = ai_response_text.strip()
-        
-        # 解析 JSON 回應
-        try:
-            recommendations_data = json.loads(ai_response_text)
-            recommendations = recommendations_data.get('recommendations', [])
-            
-            # 驗證推薦的ID是否存在於資料庫中
-            valid_recommendations = []
-            for rec in recommendations:
-                company_id = rec.get('company_id')
-                job_id = rec.get('job_id')
-                
-                # 驗證這個職缺是否屬於該公司且有效
-                cursor.execute("""
-                    SELECT ij.id, ij.title, ic.company_name
-                    FROM internship_jobs ij
-                    JOIN internship_companies ic ON ij.company_id = ic.id
-                    WHERE ij.id = %s AND ij.company_id = %s 
-                    AND ij.is_active = TRUE AND ic.status = 'approved'
-                """, (job_id, company_id))
-                job_check = cursor.fetchone()
-                
-                if job_check:
-                    valid_recommendations.append({
-                        'order': rec.get('order'),
-                        'company_id': company_id,
-                        'job_id': job_id,
-                        'company_name': rec.get('company_name', job_check['company_name']),
-                        'job_title': rec.get('job_title', job_check['title']),
-                        'reason': rec.get('reason', '')
-                    })
-            
-            if not valid_recommendations:
-                return jsonify({
-                    "success": False,
-                    "error": "AI 無法生成有效的推薦，請確認履歷內容是否足夠詳細。"
-                }), 400
-            
-            print(f"✅ AI 推薦成功 - 共 {len(valid_recommendations)} 個推薦")
-            
-            return jsonify({
-                "success": True,
-                "recommendations": valid_recommendations
-            })
-            
-        except json.JSONDecodeError as e:
-            print(f"❌ JSON 解析錯誤: {e}")
-            print(f"AI 回應內容: {ai_response_text}")
-            return jsonify({
-                "success": False,
-                "error": "AI 回應格式錯誤，請稍後再試。"
-            }), 500
-        
+
+        recommendations_data = json.loads(ai_response_text)
+        recommendations = recommendations_data.get('recommendations', [])
+
+        valid = []
+        for rec in recommendations:
+            cid, jid = rec.get('company_id'), rec.get('job_id')
+            cursor.execute("""
+                SELECT ij.id, ij.title, ic.company_name
+                FROM internship_jobs ij
+                JOIN internship_companies ic ON ij.company_id = ic.id
+                WHERE ij.id = %s AND ij.company_id = %s 
+                AND ij.is_active = TRUE AND ic.status = 'approved'
+            """, (jid, cid))
+            job_check = cursor.fetchone()
+            if job_check:
+                valid.append({
+                    'order': rec.get('order'),
+                    'company_id': cid,
+                    'job_id': jid,
+                    'company_name': rec.get('company_name', job_check['company_name']),
+                    'job_title': rec.get('job_title', job_check['title']),
+                    'reason': rec.get('reason', '')
+                })
+
+        if not valid:
+            return jsonify({"success": False, "error": "AI 無法生成有效推薦，請嘗試放寬篩選條件。"}), 400
+
+        print(f"✅ AI 推薦成功 - 共 {len(valid)} 個推薦")
+        return jsonify({"success": True, "recommendations": valid})
+
+    except json.JSONDecodeError as e:
+        print(f"❌ JSON 解析錯誤: {e}")
+        return jsonify({"success": False, "error": "AI 回應格式錯誤，請稍後再試。"}), 500
     except Exception as e:
         traceback.print_exc()
-        print(f"❌ AI 推薦志願序錯誤: {e}")
-        return jsonify({
-            "success": False,
-            "error": f"AI 服務處理失敗: {str(e)}"
-        }), 500
-    
+        return jsonify({"success": False, "error": f"AI 服務處理失敗: {str(e)}"}), 500
     finally:
         if cursor:
             cursor.close()
