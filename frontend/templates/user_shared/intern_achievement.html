@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>我的實習成果</title>
+    <style>
+        /* 基礎樣式 */
+        body { font-family: Arial, sans-serif; background-color: #f7f7f7; margin: 20px; color: #333; }
+        .container { max-width: 700px; margin: 0 auto; }
+        h1 { color: #0056b3; border-bottom: 2px solid #0056b3; padding-bottom: 5px; margin-bottom: 30px; }
+
+        /* 實習成果卡片樣式 */
+        .result-card {
+            background-color: #ffffff;
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+            padding: 25px;
+            margin-bottom: 20px;
+            border-left: 5px solid #28a745; /* 強調錄取狀態 */
+        }
+
+        /* 資訊區塊 */
+        .info-block {
+            padding: 10px 0;
+            border-bottom: 1px dotted #e0e0e0;
+        }
+        .info-block:last-child {
+            border-bottom: none;
+        }
+
+        /* 標籤與數值 */
+        .info-label {
+            font-weight: bold;
+            color: #555;
+            display: block;
+            margin-bottom: 3px;
+            font-size: 0.9em;
+        }
+        .info-value {
+            font-size: 1.1em;
+            color: #333;
+            /* 讓佔位符更容易被看見 */
+            background-color: #f9f9f9;
+            padding: 5px;
+            border-radius: 3px;
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>我的實習成果</h1>
+
+        <div class="result-card">
+
+            <div class="info-block">
+                <span class="info-label">錄取公司</span>
+                <span class="info-value">[動態資料 - 錄取公司名稱]</span>
+            </div>
+
+            <div class="info-block">
+                <span class="info-label">實習期間</span>
+                <span class="info-value">[動態資料 - 實習開始日期 至 實習結束日期]</span>
+            </div>
+
+            <div class="info-block">
+                <span class="info-label">最終錄取志願 / 職位</span>
+                <span class="info-value">[動態資料 - 職位名稱]</span>
+            </div>
+            
+        </div>
+        
+    </div>
+</body>
+</html>
