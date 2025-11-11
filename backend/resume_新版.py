@@ -106,7 +106,6 @@ def require_login():
 # 儲存結構化資料
 # -------------------------
 def save_structured_data(cursor, student_id, data):
-    # 假設這是儲存學生基本資料、課程、證照(文本)和語言能力的函式
     try:
         # 儲存 Student_Info (基本資料)
         cursor.execute("""
@@ -122,20 +121,21 @@ def save_structured_data(cursor, student_id, data):
             data.get('phone'), data.get('email'), data.get('address'),
             data.get('conduct_score'), data.get('autobiography'), data.get('photo_path')
         ))
-
-        # 儲存課程
+        # 儲存 Course_Grades (課程成績)
         cursor.execute("DELETE FROM Course_Grades WHERE StuID=%s", (student_id,))
+        
         for c in data.get('courses', []):
             if c.get('name'):
                 cursor.execute("""
                     INSERT INTO Course_Grades (StuID, CourseName, Credits, Grade)
-                    VALUES (%s,%s,%s,%s)
+                    VALUES (%s, %s, %s, %s)
+                    ON DUPLICATE KEY UPDATE
+                        Credits = VALUES(Credits),
+                        Grade = VALUES(Grade)
                 """, (student_id, c['name'], c.get('credits'), c.get('grade')))
 
-        # 儲存證照 (此處處理的是文本證照，如果前端沒有欄位提交此資料，則此處只會刪除舊資料)
         cursor.execute("DELETE FROM Student_Certifications WHERE StuID=%s", (student_id,))
         for cert in data.get('structured_certifications', []):
-             # 由於前端只上傳圖片名稱，這裡假設所有結構化證照都屬於 'other' 類，但您可能需要調整
             if cert.get('name'):
                 cursor.execute("""
                     INSERT INTO Student_Certifications (StuID, CertName, CertType)
@@ -154,7 +154,6 @@ def save_structured_data(cursor, student_id, data):
         return True
     except Exception as e:
         print("❌ 儲存結構化資料錯誤:", e)
-        traceback.print_exc()
         return False
 
 # -------------------------
@@ -395,7 +394,7 @@ def submit_and_generate_api():
         photo = request.files.get('photo')
         transcript_file = request.files.get('transcript_file')
         cert_files = request.files.getlist('cert_photos[]')
-        
+
         # 【新增】接收證照名稱清單
         cert_names = request.form.getlist('cert_names[]')
 
@@ -410,7 +409,7 @@ def submit_and_generate_api():
             # 【新增檢查】
             if photo.mimetype not in ALLOWED_IMAGE_MIMES:
                  return jsonify({"success": False, "message": f"照片檔案格式錯誤 ({photo.mimetype})，請上傳 JPG/PNG/GIF 圖片"}), 400
-                 
+                  
             filename = secure_filename(photo.filename)
             photo_dir = os.path.join(UPLOAD_FOLDER, "photos")
             os.makedirs(photo_dir, exist_ok=True)
@@ -420,14 +419,14 @@ def submit_and_generate_api():
             photo.save(photo_path)
 
         # ---------------------
-        #  儲存成績單檔案
+        # 儲存成績單檔案
         # ---------------------
         transcript_path = None
         if transcript_file and transcript_file.filename:
             # 【新增檢查】
             if transcript_file.mimetype not in ALLOWED_IMAGE_MIMES:
                  return jsonify({"success": False, "message": f"成績單檔案格式錯誤 ({transcript_file.mimetype})，請上傳 JPG/PNG/GIF 圖片"}), 400
-                 
+                  
             filename = secure_filename(transcript_file.filename)
             transcript_dir = os.path.join(UPLOAD_FOLDER, "transcripts")
             os.makedirs(transcript_dir, exist_ok=True)
@@ -437,45 +436,48 @@ def submit_and_generate_api():
             transcript_file.save(transcript_path)
 
         # ---------------------
-        # 【修正】上傳多張證照圖片 (新增 MIME 檢查)
+        # 【修正/新增】上傳多張證照圖片與名稱結構化 (處理 cert_names 與 cert_files 的配對)
         # ---------------------
-        cert_photo_paths = []
-        # 注意：這裡使用 getlist('cert_photos')，因為您 HTML 中 name="cert_photos[]"
-        cert_files = request.files.getlist('cert_photos[]') 
+        cert_photo_paths = [] 
+        # 【修正】新增結構化證照清單的定義：用於儲存到 Student_Certifications (文本)
+        structured_certifications = [] 
+        
+        cert_dir = os.path.join(UPLOAD_FOLDER, "cert_photos")
+        os.makedirs(cert_dir, exist_ok=True)
 
-        if cert_files:
-          cert_dir = os.path.join(UPLOAD_FOLDER, "cert_photos")
-          os.makedirs(cert_dir, exist_ok=True)
+        # 假設 cert_files (檔案) 和 cert_names (名稱) 數量和順序一致
+        # 使用 zip() 迭代，只處理「有效圖片 + 有效名稱」的配對
+        cert_iterator = zip(cert_files, cert_names) if cert_files and cert_names else zip([], [])
 
-        for idx, file in enumerate(cert_files, start=1):
-          if file and file.filename:
-            # 【新增檢查】
-            if file.mimetype not in ALLOWED_IMAGE_MIMES:
-                print(f"⚠️ 證照檔案格式錯誤已跳過: {file.filename} ({file.mimetype})")
-                continue
+        for idx, (file, cert_name) in enumerate(cert_iterator, start=1):
+            cert_name = cert_name.strip()
+            
+            # 僅處理有檔案名稱且符合 MIME 類型，且有證照名稱的項目
+            if file and file.filename and file.mimetype in ALLOWED_IMAGE_MIMES and cert_name:
                 
-            ext = os.path.splitext(secure_filename(file.filename))[1]
-            new_filename = f"{user_id}_cert_{idx}_{datetime.now().strftime('%Y%m%d_%H%M%S')}{ext}"
-            file_path = os.path.join(cert_dir, new_filename)
-            file.save(file_path)
-            cert_photo_paths.append(file_path)
+                ext = os.path.splitext(secure_filename(file.filename))[1]
+                # 使用當前的 idx 避免檔名重複
+                new_filename = f"{user_id}_cert_{idx}_{datetime.now().strftime('%Y%m%d_%H%M%S')}{ext}"
+                file_path = os.path.join(cert_dir, new_filename)
+                
+                # 儲存檔案
+                file.save(file_path)
+                
+                # 儲存圖片路徑 (用於 docx 生成與 resumes 資料表)
+                cert_photo_paths.append(file_path) 
+                
+                # 儲存結構化證照資料 (用於 Student_Certifications 資料表)
+                # 假設類型為 'other'，這將在 save_structured_data 中使用
+                structured_certifications.append({'name': cert_name, 'type': 'other'})
+                
+            elif file and file.filename and file.mimetype not in ALLOWED_IMAGE_MIMES:
+                # 保留原有的錯誤訊息
+                print(f"⚠️ 證照檔案格式錯誤已跳過: {file.filename} ({file.mimetype})")
+                continue # 跳過不處理
+            # 若只有名稱但沒圖片，或只有圖片但沒名稱，則跳過。只處理「有效圖片 + 有效名稱」的配對。
 
         # ---------------------
-        # 證照結構化 (略)
-        # ---------------------
-        structured_certifications = []
-        for cert_type, field_prefix in [
-            ('labor', 'labor_cert[]'),
-            ('intl', 'international_cert[]'),
-            ('local', 'domestic_cert[]'),
-            ('other', 'other_cert[]')
-        ]:
-            for name in request.form.getlist(field_prefix):
-                if name.strip():
-                    structured_certifications.append({'name': name.strip(), 'type': cert_type})
-
-        # ---------------------
-        # 語文能力結構化 (略)
+        # 語文能力結構化
         # ---------------------
         structured_languages = []
         languages_map = {"en": "英語", "jp": "日語", "tw": "台語", "hk": "客語"}
@@ -505,11 +507,11 @@ def submit_and_generate_api():
             "phone": data.get("phone"),
             "email": data.get("email"),
             "address": data.get("address"),
-            "conduct_score": data.get("conduct_score"),
+            "conduct_score": score_to_grade(data.get("conduct_score")), # 儲存轉換後的等級
             "autobiography": data.get("autobiography"),
             "courses": courses,
             "photo_path": photo_path,
-            "structured_certifications": structured_certifications,
+            "structured_certifications": structured_certifications, # 【修正】已定義
             "structured_languages": structured_languages,
         }
 
@@ -526,8 +528,9 @@ def submit_and_generate_api():
         student_data_for_doc = get_student_info_for_doc(cursor, student_id)
         student_data_for_doc["info"]["PhotoPath"] = photo_path 
         student_data_for_doc["info"]["TranscriptPath"] = transcript_path 
-        # 【新增】傳遞證照圖片路徑
+        # 【新增】傳遞成功上傳圖片的證照名稱與路徑
         student_data_for_doc["cert_photo_paths"] = cert_photo_paths
+        student_data_for_doc["cert_names"] = [c['name'] for c in structured_certifications] # 從結構化清單中提取名稱
 
         filename = f"{student_id}_履歷_{datetime.now().strftime('%Y%m%d_%H%M%S')}.docx"
         save_path = os.path.join(UPLOAD_FOLDER, filename)
@@ -553,7 +556,6 @@ def submit_and_generate_api():
     finally:
         if 'cursor' in locals(): cursor.close()
         if 'conn' in locals(): conn.close()
-
 # -------------------------
 # 下載履歷
 # -------------------------
