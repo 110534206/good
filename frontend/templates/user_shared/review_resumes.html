@@ -165,16 +165,10 @@
     header.hero {
       position: relative;
       width: 100%;
-      /* 移除圖片背景相關樣式 */
-      /* aspect-ratio: 3 / 1; */
-      /* background-image: url('/static/images/title.png'); */
-      /* background-size: cover; */
-      /* background-repeat: no-repeat; */
-      /* background-position: center; */
       background-color: #0066cc; /* 藍色背景 */
       height: 70px; /* 固定高度，形成條狀 */
-      margin-top: 60px; /* 與 Top Bar 緊密銜接 */
-      margin-bottom: 2rem;
+      margin-top: 0;
+      margin-bottom: 1rem;
       display: flex;
       align-items: center;
       justify-content: center; /* 垂直置中 */
@@ -189,7 +183,7 @@
     }
 
     main {
-      padding: 2rem 0;
+      padding: 1rem 0 2rem;
     }
 
     .page-title {
@@ -649,49 +643,7 @@
     <h1>履歷審核中心</h1>
   </header>
 
-  <main class="container">
-    <section class="page-title">
-      <h2>快速篩選適合人才</h2>
-      <p>管理所有投遞至貴公司職缺的學生履歷，並即時更新審核狀態。</p>
-    </section>
-
-    <section class="filters" aria-label="篩選條件">
-      <div class="field">
-        <label for="filter-position">職缺</label>
-        <select id="filter-position">
-          <option value="">全部職缺</option>
-          <option value="frontend">前端工程實習生</option>
-          <option value="backend">後端工程實習生</option>
-          <option value="marketing">行銷企劃實習生</option>
-        </select>
-      </div>
-      <div class="field">
-        <label for="filter-status">履歷狀態</label>
-        <select id="filter-status">
-          <option value="">全部狀態</option>
-          <option value="pending">待審核</option>
-          <option value="approved">已通過</option>
-          <option value="rejected">已退回</option>
-        </select>
-      </div>
-      <div class="field">
-        <label for="filter-school">學校 / 科系</label>
-        <select id="filter-school">
-          <option value="">不限</option>
-          <option value="ntust">國立台灣科技大學</option>
-          <option value="nccu">國立政治大學</option>
-          <option value="ntub">國立台北商業大學</option>
-        </select>
-      </div>
-      <div class="field">
-        <label for="filter-keyword">技能 / 關鍵字</label>
-        <input id="filter-keyword" type="text" placeholder="例：React、Python、UIUX" />
-      </div>
-      <div class="filters-actions">
-        <button class="btn-primary" type="button" id="filter-apply">套用篩選</button>
-        <button class="btn-secondary" type="button" id="filter-reset">重設</button>
-      </div>
-    </section>
+  
 
     <section class="stats" aria-label="摘要統計">
       <article class="stat-card">
