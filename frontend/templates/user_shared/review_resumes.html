@@ -161,26 +161,31 @@
     }
 
     /* 內容區 */
+    /* Hero Section - 藍色顯示條樣式 (已修改) */
     header.hero {
       position: relative;
       width: 100%;
-      aspect-ratio: 3 / 1;
-      background-image: url('/static/images/title.png');
-      background-size: cover;
-      background-repeat: no-repeat;
-      background-position: center;
-      margin-top: 80px;
+      /* 移除圖片背景相關樣式 */
+      /* aspect-ratio: 3 / 1; */
+      /* background-image: url('/static/images/title.png'); */
+      /* background-size: cover; */
+      /* background-repeat: no-repeat; */
+      /* background-position: center; */
+      background-color: #0066cc; /* 藍色背景 */
+      height: 70px; /* 固定高度，形成條狀 */
+      margin-top: 60px; /* 與 Top Bar 緊密銜接 */
       margin-bottom: 2rem;
       display: flex;
       align-items: center;
-      justify-content: center;
+      justify-content: center; /* 垂直置中 */
       color: #fff;
-      text-align: center;
+      text-align: center; /* 確保文字水平置中 */
     }
 
     header.hero h1 {
-      font-size: 2rem;
-      text-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+      font-size: 1.5rem; /* 調整字體大小 */
+      font-weight: 700;
+      text-shadow: none; /* 移除陰影 */
     }
 
     main {
@@ -312,7 +317,7 @@
       font-weight: 700;
     }
 
-    /* ᄅ履歷列表 */
+    /* 履歷列表 */
     .results {
       display: grid;
       grid-template-columns: 2fr 1fr;
@@ -627,22 +632,7 @@
   </style>
 </head>
 <body>
-  <nav class="top-bar">
-    <div class="container">
-      <div class="top-bar-left">
-        <div id="menu-btn" aria-label="開啟選單">
-          <span></span>
-          <span></span>
-          <span></span>
-        </div>
-        <span class="brand">智慧實習平台</span>
-      </div>
-      <div class="top-bar-right">
-        <button class="btn-link">返回儀表板</button>
-        <img src="/static/images/avatar-default.png" alt="Vendor Avatar" class="avatar" />
-      </div>
-    </div>
-  </nav>
+  
 
   <aside id="side-menu" aria-hidden="true">
     <span class="menu-close" id="menu-close-btn">&times;</span>
@@ -1259,4 +1249,3 @@
   </script>
 </body>
 </html>
-
