@@ -107,7 +107,7 @@
               </div>
               <input type="hidden" name="conduct_score" id="conduct_score">
               <div class="col-md-6">
-                <label class="form-label">上傳照片 (jpg)</label>
+                <label class="form-label">上傳照片 (JPG/PNG)</label>
                 <input type="file" name="photo" class="form-control" accept="image/jpeg, .jpg" />
               </div>
             </div>
@@ -165,6 +165,28 @@
             <h5 class="text-info">🖋 自傳</h5>
             <textarea name="autobiography" rows="6" class="form-control" placeholder="請描述家庭生活、求學經過、個人專長、未來規劃等..."
               required></textarea>
+          </div>
+
+          <div class="card p-4 mb-3">
+            <h5 class="text-primary">📑 成績單上傳</h5>
+            <div class="row g-3">
+              <div class="col-12">
+                <label class="form-label">上傳學期成績單 (JPG/PNG)</label>
+                <input type="file" name="transcript_file" class="form-control"
+                  accept="image/jpeg, .jpg, image/png, .png" required />
+              </div>
+            </div>
+          </div>
+
+          <!-- 證照圖片上傳 -->
+          <div class="card p-4 mb-3">
+            <h5 class="text-success">🏆 證照圖片上傳</h5>
+            <div class="row g-3">
+              <div class="col-12">
+                <label class="form-label">可上傳多張證照圖片 (JPG/PNG)</label>
+                <input type="file" name="cert_photos[]" class="form-control" accept="image/jpeg,image/png" multiple>
+              </div>
+            </div>
           </div>
 
           <div class="text-center mt-4">
