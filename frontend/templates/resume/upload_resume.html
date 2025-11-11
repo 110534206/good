@@ -36,6 +36,19 @@
     table {
       font-size: 0.95rem;
     }
+
+    /*用於語文能力的水平排列 */
+    .language-grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 1.5rem;
+      align-items: flex-start;
+    }
+
+    .language-item {
+      flex: 1 1 calc(25% - 1.5rem);
+      min-width: 150px;
+    }
   </style>
 </head>
 
@@ -105,7 +118,10 @@
             <h5 class="text-success">📘 已修習專業核心科目（自動載入）</h5>
             <table class="table table-bordered text-center">
               <thead class="table-light">
-                <tr><th>科目名稱</th><th>學分</th></tr>
+                <tr>
+                  <th>科目名稱</th>
+                  <th>學分</th>
+                </tr>
               </thead>
               <tbody id="courseTableBody"></tbody>
             </table>
@@ -127,7 +143,8 @@
               <tbody id="certificate-table-body">
                 <tr>
                   <td><input type="text" name="labor_cert[]" class="form-control" placeholder="例：電腦軟體應用乙級"></td>
-                  <td><input type="text" name="international_cert[]" class="form-control" placeholder="例：TOEIC 800分"></td>
+                  <td><input type="text" name="international_cert[]" class="form-control" placeholder="例：TOEIC 800分">
+                  </td>
                   <td><input type="text" name="domestic_cert[]" class="form-control" placeholder="例：中餐丙級"></td>
                   <td><input type="text" name="other_cert[]" class="form-control" placeholder="例：專題競賽、研習營"></td>
                   <td><button type="button" class="btn btn-outline-danger btn-sm remove-row">移除</button></td>
@@ -146,8 +163,8 @@
           <!-- 自傳 -->
           <div class="card p-4 mb-3">
             <h5 class="text-info">🖋 自傳</h5>
-            <textarea name="autobiography" rows="6" class="form-control"
-              placeholder="請描述家庭生活、求學經過、個人專長、未來規劃等..." required></textarea>
+            <textarea name="autobiography" rows="6" class="form-control" placeholder="請描述家庭生活、求學經過、個人專長、未來規劃等..."
+              required></textarea>
           </div>
 
           <div class="text-center mt-4">
@@ -161,10 +178,16 @@
         <div id="resumeRecords" class="p-3">
           <table class="table table-striped align-middle text-center">
             <thead class="table-light">
-              <tr><th>生成時間</th><th>檔名</th><th>下載</th></tr>
+              <tr>
+                <th>生成時間</th>
+                <th>檔名</th>
+                <th>下載</th>
+              </tr>
             </thead>
             <tbody id="recordsBody">
-              <tr><td colspan="3" class="text-muted">尚無履歷紀錄</td></tr>
+              <tr>
+                <td colspan="3" class="text-muted">尚無履歷紀錄</td>
+              </tr>
             </tbody>
           </table>
         </div>
@@ -185,8 +208,8 @@
 
     const languages = [
       { code: "en", name: "英語" },
-      { code: "jp", name: "日語" },
       { code: "tw", name: "台語" },
+      { code: "jp", name: "日語" },
       { code: "hk", name: "客語" }
     ];
 
@@ -198,23 +221,20 @@
 
       // 語文能力
       const langSection = document.getElementById("language-section");
+      langSection.classList.add('language-grid');
+
       languages.forEach(lang => {
         langSection.innerHTML += `
-          <h6 class="mt-2">${lang.name}</h6>
-          <div class="row mb-2">
-            ${["聽", "說", "讀", "寫"].map(skill => `
-              <div class="col-md-3">
-                <label>${skill}</label>
-                <select name="lang_${lang.code}_${skill}" class="form-select">
-                  <option value="">請選擇</option>
-                  <option value="精通">精通</option>
-                  <option value="中等">中等</option>
-                  <option value="略懂">略懂</option>
-                </select>
-              </div>
-            `).join('')}
-          </div>
-        `;
+    <div class="language-item">
+      <label class="form-label">${lang.name}</label>
+      <select name="lang_${lang.code}_level" class="form-select">
+        <option value="">請選擇</option>
+        <option value="精通">精通</option>
+        <option value="中等">中等</option>
+        <option value="略懂">略懂</option>
+      </select>
+    </div>
+  `;
       });
 
       // 操行成績轉換
@@ -268,17 +288,30 @@
 
       async function loadResumeRecords() {
         const res = await fetch("/api/get_my_resumes");
-        const data = await res.json();
+        const result = await res.json();
         const tbody = document.getElementById("recordsBody");
         tbody.innerHTML = "";
-        if (!data.success || data.resumes.length === 0)
-          return tbody.innerHTML = `<tr><td colspan="3" class="text-muted">尚無履歷紀錄</td></tr>`;
-        data.resumes.forEach(r => {
-          tbody.innerHTML += `<tr><td>${r.upload_time}</td><td>${r.original_filename}</td>
-          <td><a href="/api/download_resume/${r.id}" class="btn btn-sm btn-outline-primary" target="_blank">下載</a></td></tr>`;
+
+        if (!result.success || !result.resumes || result.resumes.length === 0) {
+          tbody.innerHTML = `<tr><td colspan="3" class="text-muted">尚無履歷紀錄</td></tr>`;
+          return;
+        }
+
+        result.resumes.forEach(r => {
+          tbody.insertAdjacentHTML("beforeend", `
+            <tr>
+              <td>${r.upload_time || "-"}</td>
+              <td>${r.original_filename || "未命名"}</td>
+              <td><a href="/api/download_resume/${r.id}" class="btn btn-outline-primary btn-sm">下載</a></td>
+            </tr>
+          `);
         });
       }
+
+      // 預設載入紀錄
+      loadResumeRecords();
     });
   </script>
 </body>
+
 </html>
