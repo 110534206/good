@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>智慧實習平台 | 廠商媒合結果</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <style>
+    :root {
+      --brand-blue: #0066cc;
+      --brand-blue-dark: #024689;
+      --bg-light: #f5f8ff;
+      --border-light: #dbe4f4;
+      --text-dark: #1f2937;
+      --text-muted: #6b7280;
+      --success-green: #0ea5e9;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: "Noto Sans TC", "Segoe UI", sans-serif;
+      background: var(--bg-light);
+      color: var(--text-dark);
+    }
+
+    header {
+      background: #fff;
+      border-bottom: 1px solid var(--border-light);
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+
+    .topbar {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 18px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .topbar h1 {
+      font-size: 1.5rem;
+      margin: 0;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .topbar h1 i {
+      color: var(--brand-blue);
+    }
+
+    .topbar a {
+      color: var(--brand-blue);
+      text-decoration: none;
+      font-weight: 600;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 14px;
+      border-radius: 9999px;
+      border: 1px solid var(--brand-blue);
+      transition: all 0.2s ease;
+    }
+
+    .topbar a:hover {
+      background: var(--brand-blue);
+      color: #fff;
+    }
+
+    main {
+      max-width: 1200px;
+      margin: 24px auto 60px;
+      padding: 0 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+    }
+
+    .card {
+      background: #fff;
+      border-radius: 16px;
+      border: 1px solid var(--border-light);
+      padding: 24px;
+      box-shadow: 0 10px 30px rgba(0, 40, 80, 0.08);
+    }
+
+    .card h2 {
+      font-size: 1.25rem;
+      margin-top: 0;
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .card h2 i {
+      color: var(--brand-blue);
+    }
+
+    .summary-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 16px;
+      margin-top: 16px;
+    }
+
+    .summary-item {
+      border: 1px solid var(--border-light);
+      border-radius: 14px;
+      padding: 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      background: linear-gradient(145deg, rgba(0, 102, 204, 0.08), rgba(255, 255, 255, 0.9));
+    }
+
+    .summary-item span:first-child {
+      font-size: 0.95rem;
+      color: var(--text-muted);
+    }
+
+    .summary-item span:last-child {
+      font-size: 1.6rem;
+      font-weight: 700;
+      color: var(--brand-blue-dark);
+    }
+
+    .filter-bar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 16px;
+      align-items: center;
+      margin-bottom: 16px;
+    }
+
+    .filter-bar label {
+      font-weight: 600;
+      color: var(--text-muted);
+    }
+
+    .filter-bar select,
+    .filter-bar input {
+      padding: 10px 12px;
+      border-radius: 10px;
+      border: 1px solid var(--border-light);
+      min-width: 220px;
+      font-size: 0.95rem;
+      background: #fff;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    thead {
+      background: rgba(0, 102, 204, 0.08);
+    }
+
+    th, td {
+      padding: 12px 14px;
+      text-align: left;
+      border-bottom: 1px solid var(--border-light);
+      font-size: 0.95rem;
+      vertical-align: middle;
+    }
+
+    th {
+      font-weight: 600;
+      color: var(--brand-blue-dark);
+    }
+
+    tbody tr:hover {
+      background: rgba(0, 102, 204, 0.05);
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      background: rgba(0, 102, 204, 0.12);
+      color: var(--brand-blue-dark);
+    }
+
+    .empty-state {
+      padding: 36px 0;
+      text-align: center;
+      color: var(--text-muted);
+      font-size: 1rem;
+    }
+
+    .empty-state i {
+      font-size: 2.4rem;
+      margin-bottom: 16px;
+      color: rgba(0, 102, 204, 0.35);
+    }
+
+    .loading {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      color: var(--text-muted);
+    }
+
+    .loading .spinner {
+      width: 18px;
+      height: 18px;
+      border: 3px solid rgba(0, 102, 204, 0.2);
+      border-top-color: var(--brand-blue);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin {
+      to {
+        transform: rotate(360deg);
+      }
+    }
+
+    @media (max-width: 768px) {
+      .topbar {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 16px;
+      }
+
+      main {
+        padding: 0 16px;
+      }
+
+      .filter-bar select,
+      .filter-bar input {
+        min-width: 100%;
+      }
+
+      table {
+        display: block;
+        overflow-x: auto;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="topbar">
+      <h1><i class="fa-solid fa-handshake"></i>媒合結果確認</h1>
+      <a href="/vendor_home"><i class="fa-solid fa-home"></i>返回廠商首頁</a>
+    </div>
+  </header>
+
+  <main>
+    <section class="card">
+      <h2><i class="fa-solid fa-chart-pie"></i>媒合摘要</h2>
+      <div id="summaryContent" class="summary-grid">
+        <div class="summary-item">
+          <span>關聯公司數</span>
+          <span id="summaryCompanyCount">-</span>
+        </div>
+        <div class="summary-item">
+          <span>媒合學生數</span>
+          <span id="summaryStudentCount">-</span>
+        </div>
+      </div>
+      <div id="companyBreakdown" class="summary-grid" style="margin-top: 8px;"></div>
+    </section>
+
+    <section class="card">
+      <h2><i class="fa-solid fa-users-gear"></i>媒合學生列表</h2>
+      <div class="filter-bar">
+        <label for="companyFilter">篩選公司</label>
+        <select id="companyFilter">
+          <option value="">全部公司</option>
+        </select>
+
+        <label for="keywordInput">搜尋學生/職缺</label>
+        <input id="keywordInput" type="search" placeholder="輸入學生姓名、學號或職缺關鍵字">
+      </div>
+
+      <div id="tableContainer">
+        <div class="loading" id="loadingState">
+          <span class="spinner"></span> 資料載入中...
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const companyFilter = document.getElementById('companyFilter');
+    const keywordInput = document.getElementById('keywordInput');
+    const summaryCompanyCount = document.getElementById('summaryCompanyCount');
+    const summaryStudentCount = document.getElementById('summaryStudentCount');
+    const summaryGrid = document.getElementById('companyBreakdown');
+    const tableContainer = document.getElementById('tableContainer');
+
+    let cachedMatches = [];
+    let companyMap = new Map();
+
+    function renderSummary(summary) {
+      summaryCompanyCount.textContent = summary.total_companies || 0;
+      summaryStudentCount.textContent = summary.total_students || 0;
+
+      summaryGrid.innerHTML = '';
+      if (summary.by_company && summary.by_company.length) {
+        summary.by_company.forEach(item => {
+          const block = document.createElement('div');
+          block.className = 'summary-item';
+          block.innerHTML = `
+            <span>${item.company_name}</span>
+            <span>${item.matched_students}</span>
+          `;
+          summaryGrid.appendChild(block);
+        });
+      }
+    }
+
+    function renderTable(matches) {
+      if (!matches.length) {
+        tableContainer.innerHTML = `
+          <div class="empty-state">
+            <i class="fa-solid fa-circle-info"></i>
+            <div>尚無媒合紀錄或尚未與任何公司關聯。</div>
+          </div>
+        `;
+        return;
+      }
+
+      const rowsHtml = matches.map(row => `
+        <tr>
+          <td>
+            <div style="font-weight:600;">${row.student_name || '-'}</div>
+            <div class="text-muted" style="font-size:0.85rem;color:var(--text-muted);">${row.student_number || ''}</div>
+          </td>
+          <td>${row.class_department ? `${row.class_department}${row.class_name || ''}` : (row.class_name || '-')}</td>
+          <td>${row.student_email || '-'}</td>
+          <td>
+            <div style="font-weight:600;">${row.company_name}</div>
+            <div class="badge"><i class="fa-solid fa-briefcase"></i>${row.job_title || '未指定職缺'}</div>
+          </td>
+          <td>
+            <div>志願序：${row.preference_order ?? '—'}</div>
+            <div style="font-size:0.85rem;color:var(--text-muted);">提交時間：${row.preference_submitted_at || '-'}</div>
+          </td>
+          <td>
+            <div>媒合時間：${row.admitted_at || '-'}</div>
+            <div style="font-size:0.85rem;color:var(--text-muted);">學期：${row.semester || '-'}</div>
+          </td>
+        </tr>
+      `).join('');
+
+      tableContainer.innerHTML = `
+        <div style="overflow-x:auto;">
+          <table>
+            <thead>
+              <tr>
+                <th>學生</th>
+                <th>班級</th>
+                <th>Email</th>
+                <th>媒合公司 / 職缺</th>
+                <th>錄取志願</th>
+                <th>媒合資訊</th>
+              </tr>
+            </thead>
+            <tbody>${rowsHtml}</tbody>
+          </table>
+        </div>
+      `;
+    }
+
+    function applyFilters() {
+      const selectedCompany = companyFilter.value;
+      const keyword = keywordInput.value.trim().toLowerCase();
+
+      const filtered = cachedMatches.filter(item => {
+        const matchCompany = !selectedCompany || String(item.company_id) === selectedCompany;
+        const matchKeyword = !keyword || [
+          item.student_name,
+          item.student_number,
+          item.job_title,
+          item.company_name
+        ].some(value => value && value.toLowerCase().includes(keyword));
+        return matchCompany && matchKeyword;
+      });
+
+      renderTable(filtered);
+    }
+
+    async function loadMatchingResults() {
+      try {
+        const res = await fetch('/admission/api/vendor_matching_results');
+        if (!res.ok) {
+          throw new Error('伺服器回應失敗');
+        }
+
+        const data = await res.json();
+        if (!data.success) {
+          throw new Error(data.message || '查詢失敗');
+        }
+
+        const { companies, matches, summary, message } = data;
+
+        companyMap = new Map();
+        companyFilter.innerHTML = '<option value="">全部公司</option>';
+
+        (companies || []).forEach(comp => {
+          companyMap.set(String(comp.id), comp.company_name);
+          const option = document.createElement('option');
+          option.value = comp.id;
+          option.textContent = comp.company_name;
+          companyFilter.appendChild(option);
+        });
+
+        cachedMatches = matches || [];
+        renderSummary(summary || { total_companies: 0, total_students: 0, by_company: [] });
+
+        if (message && !(matches && matches.length)) {
+          tableContainer.innerHTML = `
+            <div class="empty-state">
+              <i class="fa-solid fa-circle-info"></i>
+              <div>${message}</div>
+            </div>
+          `;
+          return;
+        }
+
+        applyFilters();
+      } catch (error) {
+        console.error('媒合結果載入失敗:', error);
+        tableContainer.innerHTML = `
+          <div class="empty-state">
+            <i class="fa-solid fa-triangle-exclamation"></i>
+            <div>媒合結果載入失敗：${error.message}</div>
+          </div>
+        `;
+      }
+    }
+
+    companyFilter.addEventListener('change', applyFilters);
+    keywordInput.addEventListener('input', () => {
+      window.clearTimeout(keywordInput._timer);
+      keywordInput._timer = setTimeout(applyFilters, 220);
+    });
+
+    loadMatchingResults();
+  </script>
+</body>
+</html>
+
