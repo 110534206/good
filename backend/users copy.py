@@ -426,10 +426,3 @@ def get_session():
             "role": session["role"]
         })
     return jsonify({"success": False}), 401
-    
-#實習成果
-@users_bp.route('/intern_achievement')
-def intern_achievement():
-    if 'username' not in session or session.get('role') != 'student':
-        return redirect(url_for('auth_bp.login_page'))
-    return render_template('user_shared/intern_achievement.html')
