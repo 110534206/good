@@ -49,7 +49,7 @@ from admission import admission_bp
 from director_overview import director_overview_bp
 from ta_statistics import ta_statistics_bp
 from student_results import student_results_bp
-from review_resumes import review_resumes_bp
+from vendor import vendor_bp
 
 # 註冊 Blueprint
 app.register_blueprint(auth_bp)
@@ -67,7 +67,7 @@ app.register_blueprint(admission_bp)
 app.register_blueprint(director_overview_bp)
 app.register_blueprint(ta_statistics_bp, url_prefix='/ta/statistics')
 app.register_blueprint(student_results_bp)
-app.register_blueprint(review_resumes_bp)
+app.register_blueprint(vendor_bp)
 
 # -------------------------
 # 首頁路由（使用者前台）
