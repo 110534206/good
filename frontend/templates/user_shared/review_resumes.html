@@ -286,9 +286,12 @@
     /* 統計區 */
     .stats {
       display: grid;
-      grid-template-columns: repeat(4, minmax(160px, 1fr));
+      grid-template-columns: repeat(3, minmax(160px, 1fr));
       gap: 1rem;
-      margin-bottom: 2.5rem;
+      margin: 1rem auto 2.5rem;
+      justify-items: center;
+      justify-content: center;
+      max-width: 720px;
     }
 
     .stat-card {
@@ -297,6 +300,7 @@
       border-radius: 12px;
       padding: 1.25rem;
       box-shadow: 0 6px 16px rgba(0, 78, 140, 0.2);
+      text-align: center;
     }
 
     .stat-card span {
@@ -516,6 +520,17 @@
       gap: 0.75rem;
     }
 
+    .detail-bottom-actions {
+      margin-top: 1.25rem;
+      display: flex;
+      justify-content: center;
+      gap: 1rem;
+    }
+
+    .detail-bottom-actions.hidden {
+      display: none;
+    }
+
     /* 審核對話框 */
     .modal-backdrop {
       position: fixed;
@@ -658,10 +673,6 @@
         <span>已退回</span>
         <strong id="stat-rejected">0</strong>
       </article>
-      <article class="stat-card">
-        <span>本週新投遞</span>
-        <strong id="stat-new">0</strong>
-      </article>
     </section>
 
     <section class="results">
@@ -704,6 +715,11 @@
         </div>
 
         <div class="detail-actions" id="detail-actions"></div>
+
+      <div class="detail-bottom-actions" id="detail-bottom-actions">
+        <button type="button" class="btn-primary" data-action="approve">通過</button>
+        <button type="button" class="btn-secondary" data-action="reject">不通過</button>
+      </div>
       </aside>
     </section>
   </main>
@@ -766,6 +782,7 @@
     const detailSkills = document.getElementById('detail-skills');
     const detailHistory = document.getElementById('detail-history');
     const detailActions = document.getElementById('detail-actions');
+    const detailBottomActions = document.getElementById('detail-bottom-actions');
 
     const filterPosition = document.getElementById('filter-position');
     const filterStatus = document.getElementById('filter-status');
@@ -988,6 +1005,7 @@
       const actions = getAvailableActions(application).filter((action) => action.action !== 'view');
       if (!actions.length) {
         detailActions.appendChild(createEmptyNode('目前無可用操作'));
+        updateBottomActions(application);
         return;
       }
       actions.forEach((action) => {
@@ -998,6 +1016,32 @@
         button.textContent = action.label;
         detailActions.appendChild(button);
       });
+      updateBottomActions(application);
+    };
+
+    const updateBottomActions = (application) => {
+      if (!detailBottomActions) {
+        return;
+      }
+      const approveBtn = detailBottomActions.querySelector('[data-action="approve"]');
+      const rejectBtn = detailBottomActions.querySelector('[data-action="reject"]');
+      const actions = getAvailableActions(application);
+      const hasApprove = actions.some((action) => action.action === 'approve');
+      const hasReject = actions.some((action) => action.action === 'reject');
+      
+      // ▼▼▼ 修改 2: 這裡的邏輯被移除了，不再切換 hidden class ▼▼▼
+      // const shouldShow = hasApprove || hasReject;
+      // detailBottomActions.classList.toggle('hidden', !shouldShow);
+
+      // 我們保留按鈕的 style.display 控制，這樣 "通過" 按鈕在 "已通過" 狀態時仍會隱藏
+      // 但整個區塊 (detail-bottom-actions) 會保持可見
+      if (approveBtn) {
+        approveBtn.style.display = hasApprove ? '' : 'none';
+      }
+      if (rejectBtn) {
+        rejectBtn.style.display = hasReject ? '' : 'none';
+      }
+      // ▲▲▲ 修改 2 結束 ▲▲▲
     };
 
     const renderDetail = (application) => {
@@ -1032,6 +1076,20 @@
       detailHistory.appendChild(createEmptyNode('尚無歷程紀錄'));
       detailActions.innerHTML = '';
       detailActions.appendChild(createEmptyNode('請先選擇履歷'));
+      if (detailBottomActions) {
+        // ▼▼▼ 修改 3: 從 .add('hidden') 改為 .remove('hidden') ▼▼▼
+        detailBottomActions.classList.remove('hidden');
+        
+        // 同時確保按鈕在清除時顯示，以符合初始狀態
+        const approveBtn = detailBottomActions.querySelector('[data-action="approve"]');
+        const rejectBtn = detailBottomActions.querySelector('[data-action="reject"]');
+         if (approveBtn) {
+          approveBtn.style.display = '';
+        }
+        if (rejectBtn) {
+          rejectBtn.style.display = '';
+        }
+      }
     };
 
     const loadApplicationDetail = async (applicationId) => {
@@ -1113,6 +1171,15 @@
       openModal(action, detailName.textContent);
     });
 
+    if (detailBottomActions) {
+      detailBottomActions.addEventListener('click', (event) => {
+        const action = event.target.dataset.action;
+        if (!action || !selectedApplicationId) return;
+        pendingAction = { action, appId: selectedApplicationId, name: detailName.textContent };
+        openModal(action, detailName.textContent);
+      });
+    }
+
     filterApplyBtn.addEventListener('click', () => {
       loadApplications({ selectId: null }).catch((error) => {
         alert(`載入履歷列表失敗：${error.message}`);
@@ -1133,7 +1200,7 @@
       if (event.key === 'Enter') {
         event.preventDefault();
         loadApplications({ selectId: null }).catch((error) => {
-          alert(`載入履歷列表失敗：${error.message}`);
+          alert(`載M入履歷列表失敗：${error.message}`);
         });
       }
     });
