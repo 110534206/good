@@ -1,0 +1,935 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>智慧實習平台 | 履歷審核</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background: #ffffff;
+      color: #333;
+      overflow-x: hidden;
+    }
+
+    a {
+      text-decoration: none;
+      color: inherit;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 0 0.75rem;
+    }
+
+    /* 頂端列 */
+    .top-bar {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 60px;
+      background-color: #fff;
+      z-index: 1100;
+      display: flex;
+      align-items: center;
+      box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
+    }
+
+    .top-bar > .container {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      height: 100%;
+      gap: 30px;
+    }
+
+    .top-bar-left {
+      display: flex;
+      align-items: center;
+      gap: 18px;
+    }
+
+    .brand {
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: #0066cc;
+    }
+
+    .top-bar-left #menu-btn {
+      width: 30px;
+      height: 22px;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+
+    .top-bar-left #menu-btn span {
+      height: 4px;
+      background-color: #333;
+      border-radius: 2px;
+    }
+
+    .top-bar-right {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-weight: 600;
+    }
+
+    .btn-link {
+      color: #0066cc;
+      background-color: transparent;
+      border: 1.5px solid #0066cc;
+      padding: 0.35rem 0.8rem;
+      border-radius: 6px;
+      transition: background-color 0.3s ease, color 0.3s ease;
+      font-size: 0.9rem;
+      cursor: pointer;
+    }
+
+    .btn-link:hover {
+      background-color: #0066cc;
+      color: #fff;
+    }
+
+    .avatar {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      object-fit: cover;
+      cursor: pointer;
+      margin-top: 6px;
+    }
+
+    /* 側邊選單 */
+    #side-menu {
+      position: fixed;
+      top: 0;
+      left: 0;
+      height: 100vh;
+      width: 320px;
+      max-width: 80vw;
+      background-color: rgba(10, 10, 10, 0.95);
+      backdrop-filter: blur(6px);
+      box-shadow: 3px 0 12px rgb(0 0 0 / 0.7);
+      padding: 2rem 1.5rem;
+      transform: translateX(-100%);
+      transition: transform 0.3s ease-in-out;
+      z-index: 1150;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      color: #fff;
+    }
+
+    #side-menu.open {
+      transform: translateX(0);
+    }
+
+    .menu-close {
+      align-self: flex-end;
+      font-size: 1.5rem;
+      cursor: pointer;
+    }
+
+    .menu-section {
+      margin-top: 2rem;
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+
+    .menu-section a {
+      color: rgba(255, 255, 255, 0.85);
+      font-weight: 600;
+      letter-spacing: 0.02em;
+    }
+
+    .menu-section a:hover {
+      color: #fff;
+    }
+
+    /* 內容區 */
+    header.hero {
+      position: relative;
+      width: 100%;
+      aspect-ratio: 3 / 1;
+      background-image: url('/static/images/title.png');
+      background-size: cover;
+      background-repeat: no-repeat;
+      background-position: center;
+      margin-top: 80px;
+      margin-bottom: 2rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #fff;
+      text-align: center;
+    }
+
+    header.hero h1 {
+      font-size: 2rem;
+      text-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+    }
+
+    main {
+      padding: 2rem 0;
+    }
+
+    .page-title {
+      text-align: center;
+      margin-bottom: 2.5rem;
+    }
+
+    .page-title h2 {
+      font-size: 1.8rem;
+      color: #024689;
+      margin-bottom: 0.5rem;
+    }
+
+    .page-title p {
+      color: #666;
+      font-size: 0.95rem;
+    }
+
+    .filters {
+      background-color: #f1f6fb;
+      border: 1px solid #cfe0f5;
+      border-radius: 12px;
+      padding: 1.5rem;
+      margin-bottom: 2rem;
+      display: grid;
+      grid-template-columns: repeat(4, minmax(160px, 1fr));
+      gap: 1rem 1.5rem;
+    }
+
+    .filters .field {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+
+    label {
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: #024689;
+      letter-spacing: 0.02em;
+    }
+
+    input[type="text"],
+    select {
+      width: 100%;
+      padding: 0.55rem 0.65rem;
+      border-radius: 8px;
+      border: 1px solid #bfd0e7;
+      font-size: 0.95rem;
+      transition: border 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    input[type="text"]:focus,
+    select:focus {
+      border-color: #0066cc;
+      box-shadow: 0 0 0 4px rgba(0, 102, 204, 0.15);
+      outline: none;
+    }
+
+    .filters-actions {
+      display: flex;
+      gap: 0.75rem;
+      align-items: flex-end;
+    }
+
+    .btn-primary {
+      background-color: #0066cc;
+      color: #fff;
+      border: none;
+      padding: 0.65rem 1.4rem;
+      border-radius: 8px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background-color 0.3s ease, transform 0.15s ease;
+    }
+
+    .btn-primary:hover {
+      background-color: #024689;
+    }
+
+    .btn-primary:active {
+      transform: scale(0.98);
+    }
+
+    .btn-secondary {
+      background-color: transparent;
+      color: #024689;
+      border: 1.5px solid #024689;
+      padding: 0.65rem 1.4rem;
+      border-radius: 8px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background-color 0.3s ease, color 0.3s ease;
+    }
+
+    .btn-secondary:hover {
+      background-color: #edf4fb;
+    }
+
+    /* 統計區 */
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(160px, 1fr));
+      gap: 1rem;
+      margin-bottom: 2.5rem;
+    }
+
+    .stat-card {
+      background: linear-gradient(130deg, #0066cc, #59a9f2);
+      color: #fff;
+      border-radius: 12px;
+      padding: 1.25rem;
+      box-shadow: 0 6px 16px rgba(0, 78, 140, 0.2);
+    }
+
+    .stat-card span {
+      display: block;
+      font-size: 0.9rem;
+      opacity: 0.8;
+      margin-bottom: 0.4rem;
+    }
+
+    .stat-card strong {
+      font-size: 1.6rem;
+      font-weight: 700;
+    }
+
+    /* ᄅ履歷列表 */
+    .results {
+      display: grid;
+      grid-template-columns: 2fr 1fr;
+      gap: 2rem;
+      align-items: flex-start;
+    }
+
+    .cards {
+      display: flex;
+      flex-direction: column;
+      gap: 1.5rem;
+    }
+
+    .resume-card {
+      border: 1.5px solid #d7e3f3;
+      border-radius: 14px;
+      padding: 1.5rem;
+      display: flex;
+      gap: 1.25rem;
+      box-shadow: 0 3px 12px rgba(2, 70, 137, 0.08);
+      transition: border-color 0.3s ease, transform 0.2s ease;
+    }
+
+    .resume-card:hover {
+      border-color: #0066cc;
+      transform: translateY(-3px);
+    }
+
+    .resume-card .avatar {
+      width: 64px;
+      height: 64px;
+      margin-top: 0;
+    }
+
+    .resume-body {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+
+    .resume-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 1rem;
+    }
+
+    .resume-header h3 {
+      font-size: 1.2rem;
+      color: #024689;
+    }
+
+    .resume-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+      font-size: 0.85rem;
+      color: #566174;
+    }
+
+    .badge {
+      background-color: #edf4fb;
+      color: #024689;
+      border-radius: 999px;
+      padding: 0.25rem 0.75rem;
+      font-size: 0.8rem;
+      font-weight: 600;
+    }
+
+    .resume-actions {
+      display: flex;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+    }
+
+    .resume-actions .btn-primary {
+      padding: 0.55rem 1rem;
+    }
+
+    .resume-actions .btn-secondary {
+      padding: 0.55rem 1rem;
+    }
+
+    .state-tag {
+      padding: 0.25rem 0.75rem;
+      border-radius: 999px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      background-color: #f7f9fc;
+      border: 1px solid #d7e3f3;
+      color: #024689;
+    }
+
+    /* 履歷詳情側欄 */
+    .detail-panel {
+      position: sticky;
+      top: 90px;
+      border: 1.5px solid #d7e3f3;
+      border-radius: 14px;
+      padding: 1.5rem;
+      box-shadow: 0 6px 20px rgba(2, 70, 137, 0.12);
+      display: flex;
+      flex-direction: column;
+      gap: 1.25rem;
+      max-height: calc(100vh - 120px);
+      overflow-y: auto;
+      background-color: #fff;
+    }
+
+    .detail-header {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+
+    .detail-header .avatar {
+      width: 72px;
+      height: 72px;
+      margin-top: 0;
+    }
+
+    .detail-header h3 {
+      font-size: 1.3rem;
+      color: #024689;
+    }
+
+    .info-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(120px, 1fr));
+      gap: 0.75rem 1rem;
+    }
+
+    .info-grid span {
+      font-size: 0.85rem;
+      color: #566174;
+    }
+
+    .section-title {
+      font-size: 1rem;
+      font-weight: 700;
+      color: #024689;
+      margin-bottom: 0.5rem;
+    }
+
+    .detail-section {
+      border-top: 1px solid #e3ecf7;
+      padding-top: 1rem;
+    }
+
+    .detail-section:first-of-type {
+      border-top: none;
+      padding-top: 0;
+    }
+
+    .tag-group {
+      display: flex;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+    }
+
+    .history {
+      font-size: 0.85rem;
+      color: #566174;
+      display: flex;
+      flex-direction: column;
+      gap: 0.4rem;
+    }
+
+    .history strong {
+      color: #024689;
+    }
+
+    .detail-actions {
+      display: flex;
+      gap: 0.75rem;
+    }
+
+    /* 審核對話框 */
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.48);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 1200;
+      padding: 1rem;
+    }
+
+    .modal-backdrop.show {
+      display: flex;
+    }
+
+    .modal {
+      background-color: #fff;
+      border-radius: 16px;
+      padding: 1.75rem;
+      width: min(520px, 100%);
+      box-shadow: 0 18px 48px rgba(0, 32, 70, 0.25);
+      display: flex;
+      flex-direction: column;
+      gap: 1.25rem;
+    }
+
+    .modal h4 {
+      font-size: 1.2rem;
+      color: #024689;
+    }
+
+    textarea {
+      width: 100%;
+      min-height: 120px;
+      padding: 0.75rem;
+      border-radius: 10px;
+      border: 1.5px solid #bfd0e7;
+      resize: vertical;
+      font-size: 0.95rem;
+      transition: border 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    textarea:focus {
+      border-color: #0066cc;
+      box-shadow: 0 0 0 4px rgba(0, 102, 204, 0.1);
+      outline: none;
+    }
+
+    .modal-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 0.75rem;
+    }
+
+    footer {
+      margin: 3rem 0 2rem;
+      text-align: center;
+      color: #9aa6b6;
+      font-size: 0.8rem;
+    }
+
+    /* 響應式 */
+    @media (max-width: 1024px) {
+      .filters,
+      .stats {
+        grid-template-columns: repeat(2, minmax(160px, 1fr));
+      }
+
+      .results {
+        grid-template-columns: 1fr;
+      }
+
+      .detail-panel {
+        position: static;
+        max-height: none;
+      }
+    }
+
+    @media (max-width: 768px) {
+      .filters {
+        grid-template-columns: repeat(1, minmax(0, 1fr));
+      }
+
+      .filters-actions {
+        grid-column: 1 / -1;
+      }
+
+      .stats {
+        grid-template-columns: repeat(1, minmax(160px, 1fr));
+      }
+
+      .resume-card {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+
+      .resume-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.4rem;
+      }
+
+      .detail-actions {
+        flex-direction: column;
+      }
+    }
+  </style>
+</head>
+<body>
+  <nav class="top-bar">
+    <div class="container">
+      <div class="top-bar-left">
+        <div id="menu-btn" aria-label="開啟選單">
+          <span></span>
+          <span></span>
+          <span></span>
+        </div>
+        <span class="brand">智慧實習平台</span>
+      </div>
+      <div class="top-bar-right">
+        <button class="btn-link">返回儀表板</button>
+        <img src="/static/images/avatar-default.png" alt="Vendor Avatar" class="avatar" />
+      </div>
+    </div>
+  </nav>
+
+  <aside id="side-menu" aria-hidden="true">
+    <span class="menu-close" id="menu-close-btn">&times;</span>
+    <nav class="menu-section">
+      <a href="#">儀表板</a>
+      <a href="#">職缺管理</a>
+      <a href="#">履歷審核</a>
+      <a href="#">面試排程</a>
+      <a href="#">帳戶設定</a>
+    </nav>
+  </aside>
+
+  <header class="hero">
+    <h1>履歷審核中心</h1>
+  </header>
+
+  <main class="container">
+    <section class="page-title">
+      <h2>快速篩選適合人才</h2>
+      <p>管理所有投遞至貴公司職缺的學生履歷，並即時更新審核狀態。</p>
+    </section>
+
+    <section class="filters" aria-label="篩選條件">
+      <div class="field">
+        <label for="filter-position">職缺</label>
+        <select id="filter-position">
+          <option value="">全部職缺</option>
+          <option value="frontend">前端工程實習生</option>
+          <option value="backend">後端工程實習生</option>
+          <option value="marketing">行銷企劃實習生</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="filter-status">履歷狀態</label>
+        <select id="filter-status">
+          <option value="">全部狀態</option>
+          <option value="pending">待審核</option>
+          <option value="approved">已通過</option>
+          <option value="rejected">已退回</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="filter-school">學校 / 科系</label>
+        <select id="filter-school">
+          <option value="">不限</option>
+          <option value="ntust">國立台灣科技大學</option>
+          <option value="nccu">國立政治大學</option>
+          <option value="ntub">國立台北商業大學</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="filter-keyword">技能 / 關鍵字</label>
+        <input id="filter-keyword" type="text" placeholder="例：React、Python、UIUX" />
+      </div>
+      <div class="filters-actions">
+        <button class="btn-primary" type="button">套用篩選</button>
+        <button class="btn-secondary" type="button">重設</button>
+      </div>
+    </section>
+
+    <section class="stats" aria-label="摘要統計">
+      <article class="stat-card">
+        <span>待審履歷</span>
+        <strong>12</strong>
+      </article>
+      <article class="stat-card">
+        <span>已排面試</span>
+        <strong>5</strong>
+      </article>
+      <article class="stat-card">
+        <span>平均審核時間</span>
+        <strong>2.4 天</strong>
+      </article>
+      <article class="stat-card">
+        <span>本週新投遞</span>
+        <strong>18</strong>
+      </article>
+    </section>
+
+    <section class="results">
+      <div class="cards">
+        <article class="resume-card" data-id="app-101" data-name="林思妤">
+          <img src="/static/images/avatar-default.png" alt="林思妤頭像" class="avatar" />
+          <div class="resume-body">
+            <div class="resume-header">
+              <h3>林思妤</h3>
+              <span class="state-tag">待審核</span>
+            </div>
+            <div class="resume-meta">
+              <span>投遞職缺：前端工程實習生</span>
+              <span>國立台灣科技大學 資工系</span>
+              <span>投遞日期：2025/05/24</span>
+            </div>
+            <div class="tag-group">
+              <span class="badge">React</span>
+              <span class="badge">TypeScript</span>
+              <span class="badge">UI/UX</span>
+            </div>
+            <div class="resume-actions">
+              <button class="btn-primary" type="button" data-action="view">查看履歷</button>
+              <button class="btn-secondary" type="button" data-action="approve">快速通過</button>
+              <button class="btn-secondary" type="button" data-action="reject">退回</button>
+            </div>
+          </div>
+        </article>
+
+        <article class="resume-card" data-id="app-102" data-name="張柏翰">
+          <img src="/static/images/avatar-default.png" alt="張柏翰頭像" class="avatar" />
+          <div class="resume-body">
+            <div class="resume-header">
+              <h3>張柏翰</h3>
+              <span class="state-tag">已通過</span>
+            </div>
+            <div class="resume-meta">
+              <span>投遞職缺：後端工程實習生</span>
+              <span>國立政治大學 資訊管理系</span>
+              <span>投遞日期：2025/05/20</span>
+            </div>
+            <div class="tag-group">
+              <span class="badge">Python</span>
+              <span class="badge">Django</span>
+              <span class="badge">RESTful API</span>
+            </div>
+            <div class="resume-actions">
+              <button class="btn-primary" type="button" data-action="view">查看履歷</button>
+              <button class="btn-secondary" type="button" data-action="schedule">安排面試</button>
+              <button class="btn-secondary" type="button" data-action="comment">補充備註</button>
+            </div>
+          </div>
+        </article>
+
+        <article class="resume-card" data-id="app-103" data-name="吳明安">
+          <img src="/static/images/avatar-default.png" alt="吳明安頭像" class="avatar" />
+          <div class="resume-body">
+            <div class="resume-header">
+              <h3>吳明安</h3>
+              <span class="state-tag">已退回</span>
+            </div>
+            <div class="resume-meta">
+              <span>投遞職缺：行銷企劃實習生</span>
+              <span>國立台北商業大學 行銷管理系</span>
+              <span>投遞日期：2025/05/18</span>
+            </div>
+            <div class="tag-group">
+              <span class="badge">市場調查</span>
+              <span class="badge">社群企劃</span>
+              <span class="badge">Canva</span>
+            </div>
+            <div class="resume-actions">
+              <button class="btn-primary" type="button" data-action="view">查看履歷</button>
+              <button class="btn-secondary" type="button" data-action="reopen">重新審核</button>
+            </div>
+          </div>
+        </article>
+      </div>
+
+      <aside class="detail-panel" id="detail-panel" aria-live="polite">
+        <div class="detail-header">
+          <img src="/static/images/avatar-default.png" alt="履歷頭像" class="avatar" />
+          <div>
+            <h3 id="detail-name">林思妤</h3>
+            <span class="state-tag" id="detail-status">待審核</span>
+          </div>
+        </div>
+
+        <div class="info-grid">
+          <span><strong>投遞職缺：</strong> 前端工程實習生</span>
+          <span><strong>投遞日期：</strong> 2025/05/24</span>
+          <span><strong>學校科系：</strong> 國立台灣科技大學 資工系</span>
+          <span><strong>可開始日期：</strong> 2025/07/01</span>
+        </div>
+
+        <div class="detail-section">
+          <h4 class="section-title">自我簡介</h4>
+          <p>對使用者體驗與前端開發充滿熱情，目前擔任系學會設計長，帶領團隊製作各式活動網站。熟悉 React、TypeScript 與 Tailwind CSS。</p>
+        </div>
+
+        <div class="detail-section">
+          <h4 class="section-title">作品 / 附件</h4>
+          <ul>
+            <li><a href="#" target="_blank">作品集網站</a></li>
+            <li><a href="#" target="_blank">GitHub - syu-portfolio</a></li>
+            <li><a href="#" target="_blank">PDF：履歷檔案</a></li>
+          </ul>
+        </div>
+
+        <div class="detail-section">
+          <h4 class="section-title">核心技能</h4>
+          <div class="tag-group">
+            <span class="badge">React</span>
+            <span class="badge">TypeScript</span>
+            <span class="badge">Figma</span>
+            <span class="badge">Scrum</span>
+          </div>
+        </div>
+
+        <div class="detail-section">
+          <h4 class="section-title">審核歷程</h4>
+          <div class="history">
+            <span><strong>2025/05/24 11:22</strong> - 投遞履歷，待審核</span>
+            <span><strong>2025/05/25 09:48</strong> - 招募專員提醒審核中</span>
+          </div>
+        </div>
+
+        <div class="detail-actions">
+          <button class="btn-primary" type="button" data-action="approve">通過</button>
+          <button class="btn-secondary" type="button" data-action="reject">退回</button>
+        </div>
+      </aside>
+    </section>
+  </main>
+
+  <footer>
+    智慧實習平台 © 2025
+  </footer>
+
+  <div class="modal-backdrop" id="review-modal" aria-hidden="true">
+    <div class="modal">
+      <h4 id="modal-title">審核備註</h4>
+      <p id="modal-desc">請填寫審核備註，將同步通知學生。</p>
+      <textarea id="modal-comment" placeholder="例：請補充作品集連結，我們再進一步聯繫。"></textarea>
+      <div class="modal-actions">
+        <button class="btn-secondary" type="button" data-modal="cancel">取消</button>
+        <button class="btn-primary" type="button" data-modal="confirm">送出</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const menuBtn = document.getElementById('menu-btn');
+    const menu = document.getElementById('side-menu');
+    const menuCloseBtn = document.getElementById('menu-close-btn');
+    const modalBackdrop = document.getElementById('review-modal');
+    const modalTitle = document.getElementById('modal-title');
+    const modalDesc = document.getElementById('modal-desc');
+    const modalCancel = document.querySelector('[data-modal="cancel"]');
+    const modalConfirm = document.querySelector('[data-modal="confirm"]');
+    const modalComment = document.getElementById('modal-comment');
+    const detailPanel = document.getElementById('detail-panel');
+
+    const toggleMenu = (isOpen) => {
+      menu.classList.toggle('open', isOpen);
+      menu.setAttribute('aria-hidden', !isOpen);
+    };
+
+    const openModal = (action, name) => {
+      const textMap = {
+        approve: {
+          title: `通過「${name}」履歷`,
+          desc: '若有補充通知，可在下方備註；之後可在審核歷程中查看。'
+        },
+        reject: {
+          title: `退回「${name}」履歷`,
+          desc: '請說明退回原因，此訊息將通知學生並列入歷程紀錄。'
+        },
+        comment: {
+          title: `備註「${name}」履歷`,
+          desc: '補充內部備註資訊，僅內部成員可見。'
+        }
+      };
+
+      const content = textMap[action] || textMap.comment;
+      modalTitle.textContent = content.title;
+      modalDesc.textContent = content.desc;
+      modalComment.value = '';
+      modalBackdrop.classList.add('show');
+      modalBackdrop.setAttribute('aria-hidden', 'false');
+    };
+
+    const closeModal = () => {
+      modalBackdrop.classList.remove('show');
+      modalBackdrop.setAttribute('aria-hidden', 'true');
+    };
+
+    menuBtn.addEventListener('click', () => toggleMenu(true));
+    menuCloseBtn.addEventListener('click', () => toggleMenu(false));
+    menu.addEventListener('click', (event) => {
+      if (event.target === menu) toggleMenu(false);
+    });
+
+    document.addEventListener('click', (event) => {
+      const action = event.target.dataset.action;
+      if (!action) return;
+
+      const card = event.target.closest('.resume-card');
+      const applicantName = card?.dataset.name || '學生';
+
+      if (action === 'view') {
+        const mockDetail = {
+          name: card.dataset.name,
+          status: card.querySelector('.state-tag')?.textContent || '待審核',
+          position: card.querySelector('.resume-meta span:nth-child(1)')?.textContent || '',
+          date: card.querySelector('.resume-meta span:nth-child(3)')?.textContent || ''
+        };
+        detailPanel.querySelector('#detail-name').textContent = mockDetail.name;
+        detailPanel.querySelector('#detail-status').textContent = mockDetail.status;
+      } else {
+        openModal(action, applicantName);
+      }
+    });
+
+    modalCancel.addEventListener('click', closeModal);
+    modalConfirm.addEventListener('click', () => {
+      closeModal();
+      // TODO: 在此處接 API 傳送審核結果
+    });
+
+    modalBackdrop.addEventListener('click', (event) => {
+      if (event.target === modalBackdrop) {
+        closeModal();
+      }
+    });
+  </script>
+</body>
+</html>
+
