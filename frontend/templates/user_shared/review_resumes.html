@@ -341,6 +341,32 @@
       transform: translateY(-3px);
     }
 
+    .resume-card.active {
+      border-color: #0066cc;
+      box-shadow: 0 6px 18px rgba(2, 70, 137, 0.18);
+      transform: translateY(-2px);
+    }
+
+    .empty-state {
+      padding: 2rem 1.5rem;
+      border: 1.5px dashed #bfd0e7;
+      border-radius: 12px;
+      text-align: center;
+      color: #566174;
+      font-size: 0.95rem;
+      background-color: #f7f9fc;
+    }
+
+    .empty-text {
+      color: #9aa6b6;
+      font-size: 0.9rem;
+    }
+
+    .history .history-comment {
+      color: #024689;
+      font-style: italic;
+    }
+
     .resume-card .avatar {
       width: 64px;
       height: 64px;
@@ -672,159 +698,70 @@
         <input id="filter-keyword" type="text" placeholder="例：React、Python、UIUX" />
       </div>
       <div class="filters-actions">
-        <button class="btn-primary" type="button">套用篩選</button>
-        <button class="btn-secondary" type="button">重設</button>
+        <button class="btn-primary" type="button" id="filter-apply">套用篩選</button>
+        <button class="btn-secondary" type="button" id="filter-reset">重設</button>
       </div>
     </section>
 
     <section class="stats" aria-label="摘要統計">
       <article class="stat-card">
         <span>待審履歷</span>
-        <strong>12</strong>
+        <strong id="stat-pending">0</strong>
       </article>
       <article class="stat-card">
-        <span>已排面試</span>
-        <strong>5</strong>
+        <span>已通過</span>
+        <strong id="stat-approved">0</strong>
       </article>
       <article class="stat-card">
-        <span>平均審核時間</span>
-        <strong>2.4 天</strong>
+        <span>已退回</span>
+        <strong id="stat-rejected">0</strong>
       </article>
       <article class="stat-card">
         <span>本週新投遞</span>
-        <strong>18</strong>
+        <strong id="stat-new">0</strong>
       </article>
     </section>
 
     <section class="results">
-      <div class="cards">
-        <article class="resume-card" data-id="app-101" data-name="林思妤">
-          <img src="/static/images/avatar-default.png" alt="林思妤頭像" class="avatar" />
-          <div class="resume-body">
-            <div class="resume-header">
-              <h3>林思妤</h3>
-              <span class="state-tag">待審核</span>
-            </div>
-            <div class="resume-meta">
-              <span>投遞職缺：前端工程實習生</span>
-              <span>國立台灣科技大學 資工系</span>
-              <span>投遞日期：2025/05/24</span>
-            </div>
-            <div class="tag-group">
-              <span class="badge">React</span>
-              <span class="badge">TypeScript</span>
-              <span class="badge">UI/UX</span>
-            </div>
-            <div class="resume-actions">
-              <button class="btn-primary" type="button" data-action="view">查看履歷</button>
-              <button class="btn-secondary" type="button" data-action="approve">快速通過</button>
-              <button class="btn-secondary" type="button" data-action="reject">退回</button>
-            </div>
-          </div>
-        </article>
-
-        <article class="resume-card" data-id="app-102" data-name="張柏翰">
-          <img src="/static/images/avatar-default.png" alt="張柏翰頭像" class="avatar" />
-          <div class="resume-body">
-            <div class="resume-header">
-              <h3>張柏翰</h3>
-              <span class="state-tag">已通過</span>
-            </div>
-            <div class="resume-meta">
-              <span>投遞職缺：後端工程實習生</span>
-              <span>國立政治大學 資訊管理系</span>
-              <span>投遞日期：2025/05/20</span>
-            </div>
-            <div class="tag-group">
-              <span class="badge">Python</span>
-              <span class="badge">Django</span>
-              <span class="badge">RESTful API</span>
-            </div>
-            <div class="resume-actions">
-              <button class="btn-primary" type="button" data-action="view">查看履歷</button>
-              <button class="btn-secondary" type="button" data-action="schedule">安排面試</button>
-              <button class="btn-secondary" type="button" data-action="comment">補充備註</button>
-            </div>
-          </div>
-        </article>
-
-        <article class="resume-card" data-id="app-103" data-name="吳明安">
-          <img src="/static/images/avatar-default.png" alt="吳明安頭像" class="avatar" />
-          <div class="resume-body">
-            <div class="resume-header">
-              <h3>吳明安</h3>
-              <span class="state-tag">已退回</span>
-            </div>
-            <div class="resume-meta">
-              <span>投遞職缺：行銷企劃實習生</span>
-              <span>國立台北商業大學 行銷管理系</span>
-              <span>投遞日期：2025/05/18</span>
-            </div>
-            <div class="tag-group">
-              <span class="badge">市場調查</span>
-              <span class="badge">社群企劃</span>
-              <span class="badge">Canva</span>
-            </div>
-            <div class="resume-actions">
-              <button class="btn-primary" type="button" data-action="view">查看履歷</button>
-              <button class="btn-secondary" type="button" data-action="reopen">重新審核</button>
-            </div>
-          </div>
-        </article>
-      </div>
+      <div class="cards" id="resume-list"></div>
 
       <aside class="detail-panel" id="detail-panel" aria-live="polite">
         <div class="detail-header">
-          <img src="/static/images/avatar-default.png" alt="履歷頭像" class="avatar" />
+          <img src="/static/images/avatar-default.png" alt="履歷頭像" class="avatar" id="detail-avatar" />
           <div>
-            <h3 id="detail-name">林思妤</h3>
-            <span class="state-tag" id="detail-status">待審核</span>
+            <h3 id="detail-name">請選擇學生</h3>
+            <span class="state-tag" id="detail-status">—</span>
           </div>
         </div>
 
         <div class="info-grid">
-          <span><strong>投遞職缺：</strong> 前端工程實習生</span>
-          <span><strong>投遞日期：</strong> 2025/05/24</span>
-          <span><strong>學校科系：</strong> 國立台灣科技大學 資工系</span>
-          <span><strong>可開始日期：</strong> 2025/07/01</span>
+          <span id="detail-position"><strong>投遞職缺：</strong><span class="value">—</span></span>
+          <span id="detail-applied-date"><strong>投遞日期：</strong><span class="value">—</span></span>
+          <span id="detail-school"><strong>學校科系：</strong><span class="value">—</span></span>
+          <span id="detail-start-date"><strong>可開始日期：</strong><span class="value">—</span></span>
         </div>
 
         <div class="detail-section">
           <h4 class="section-title">自我簡介</h4>
-          <p>對使用者體驗與前端開發充滿熱情，目前擔任系學會設計長，帶領團隊製作各式活動網站。熟悉 React、TypeScript 與 Tailwind CSS。</p>
+          <p id="detail-intro">尚未選擇任何履歷。</p>
         </div>
 
         <div class="detail-section">
           <h4 class="section-title">作品 / 附件</h4>
-          <ul>
-            <li><a href="#" target="_blank">作品集網站</a></li>
-            <li><a href="#" target="_blank">GitHub - syu-portfolio</a></li>
-            <li><a href="#" target="_blank">PDF：履歷檔案</a></li>
-          </ul>
+          <ul id="detail-portfolio-list"></ul>
         </div>
 
         <div class="detail-section">
           <h4 class="section-title">核心技能</h4>
-          <div class="tag-group">
-            <span class="badge">React</span>
-            <span class="badge">TypeScript</span>
-            <span class="badge">Figma</span>
-            <span class="badge">Scrum</span>
-          </div>
+          <div class="tag-group" id="detail-skills"></div>
         </div>
 
         <div class="detail-section">
           <h4 class="section-title">審核歷程</h4>
-          <div class="history">
-            <span><strong>2025/05/24 11:22</strong> - 投遞履歷，待審核</span>
-            <span><strong>2025/05/25 09:48</strong> - 招募專員提醒審核中</span>
-          </div>
+          <div class="history" id="detail-history"></div>
         </div>
 
-        <div class="detail-actions">
-          <button class="btn-primary" type="button" data-action="approve">通過</button>
-          <button class="btn-secondary" type="button" data-action="reject">退回</button>
-        </div>
+        <div class="detail-actions" id="detail-actions"></div>
       </aside>
     </section>
   </main>
@@ -855,40 +792,54 @@
     const modalCancel = document.querySelector('[data-modal="cancel"]');
     const modalConfirm = document.querySelector('[data-modal="confirm"]');
     const modalComment = document.getElementById('modal-comment');
-    const detailPanel = document.getElementById('detail-panel');
+    const modalConfirmOriginalText = modalConfirm.textContent;
+
+    const statusLabels = {
+      pending: '待審核',
+      approved: '已通過',
+      rejected: '已退回',
+    };
+
+    const actionEndpoints = {
+      approve: 'approve',
+      reject: 'reject',
+      comment: 'comment',
+      reopen: 'reopen',
+    };
+
+    let applications = [];
+    let selectedApplicationId = null;
+    let pendingAction = null;
+
+    const cardsContainer = document.getElementById('resume-list');
+    const detailAvatar = document.getElementById('detail-avatar');
+    const detailName = document.getElementById('detail-name');
+    const detailStatus = document.getElementById('detail-status');
+    const detailPosition = document.querySelector('#detail-position .value');
+    const detailAppliedDate = document.querySelector('#detail-applied-date .value');
+    const detailSchool = document.querySelector('#detail-school .value');
+    const detailStartDate = document.querySelector('#detail-start-date .value');
+    const detailIntro = document.getElementById('detail-intro');
+    const detailPortfolio = document.getElementById('detail-portfolio-list');
+    const detailSkills = document.getElementById('detail-skills');
+    const detailHistory = document.getElementById('detail-history');
+    const detailActions = document.getElementById('detail-actions');
+
+    const filterPosition = document.getElementById('filter-position');
+    const filterStatus = document.getElementById('filter-status');
+    const filterSchool = document.getElementById('filter-school');
+    const filterKeyword = document.getElementById('filter-keyword');
+    const filterApplyBtn = document.getElementById('filter-apply');
+    const filterResetBtn = document.getElementById('filter-reset');
+
+    const statPending = document.getElementById('stat-pending');
+    const statApproved = document.getElementById('stat-approved');
+    const statRejected = document.getElementById('stat-rejected');
+    const statNew = document.getElementById('stat-new');
 
     const toggleMenu = (isOpen) => {
       menu.classList.toggle('open', isOpen);
-      menu.setAttribute('aria-hidden', !isOpen);
-    };
-
-    const openModal = (action, name) => {
-      const textMap = {
-        approve: {
-          title: `通過「${name}」履歷`,
-          desc: '若有補充通知，可在下方備註；之後可在審核歷程中查看。'
-        },
-        reject: {
-          title: `退回「${name}」履歷`,
-          desc: '請說明退回原因，此訊息將通知學生並列入歷程紀錄。'
-        },
-        comment: {
-          title: `備註「${name}」履歷`,
-          desc: '補充內部備註資訊，僅內部成員可見。'
-        }
-      };
-
-      const content = textMap[action] || textMap.comment;
-      modalTitle.textContent = content.title;
-      modalDesc.textContent = content.desc;
-      modalComment.value = '';
-      modalBackdrop.classList.add('show');
-      modalBackdrop.setAttribute('aria-hidden', 'false');
-    };
-
-    const closeModal = () => {
-      modalBackdrop.classList.remove('show');
-      modalBackdrop.setAttribute('aria-hidden', 'true');
+      menu.setAttribute('aria-hidden', (!isOpen).toString());
     };
 
     menuBtn.addEventListener('click', () => toggleMenu(true));
@@ -897,37 +848,413 @@
       if (event.target === menu) toggleMenu(false);
     });
 
-    document.addEventListener('click', (event) => {
-      const action = event.target.dataset.action;
-      if (!action) return;
+    const createEmptyNode = (text, tag = 'span') => {
+      const node = document.createElement(tag);
+      node.className = 'empty-text';
+      node.textContent = text;
+      return node;
+    };
 
-      const card = event.target.closest('.resume-card');
-      const applicantName = card?.dataset.name || '學生';
+    const openModal = (action, name) => {
+      const textMap = {
+        approve: {
+          title: `通過「${name}」履歷`,
+          desc: '若需補充通知，可在下方備註；備註將寫入審核歷程。',
+        },
+        reject: {
+          title: `退回「${name}」履歷`,
+          desc: '請說明退回原因，此訊息將通知學生並記錄於歷程。',
+        },
+        comment: {
+          title: `備註「${name}」履歷`,
+          desc: '僅供內部成員參考，不會通知學生。',
+        },
+        reopen: {
+          title: `重新審核「${name}」履歷`,
+          desc: '此動作會將狀態改回待審核，可補充說明原因（選填）。',
+        },
+      };
+      const content = textMap[action] || textMap.comment;
+      modalTitle.textContent = content.title;
+      modalDesc.textContent = content.desc;
+      modalComment.value = '';
+      modalBackdrop.classList.add('show');
+      modalBackdrop.setAttribute('aria-hidden', 'false');
+      modalComment.focus();
+    };
 
-      if (action === 'view') {
-        const mockDetail = {
-          name: card.dataset.name,
-          status: card.querySelector('.state-tag')?.textContent || '待審核',
-          position: card.querySelector('.resume-meta span:nth-child(1)')?.textContent || '',
-          date: card.querySelector('.resume-meta span:nth-child(3)')?.textContent || ''
-        };
-        detailPanel.querySelector('#detail-name').textContent = mockDetail.name;
-        detailPanel.querySelector('#detail-status').textContent = mockDetail.status;
+    const closeModal = () => {
+      modalBackdrop.classList.remove('show');
+      modalBackdrop.setAttribute('aria-hidden', 'true');
+      modalComment.value = '';
+      pendingAction = null;
+    };
+
+    const fetchJSON = async (url, options = {}) => {
+      const config = { ...options };
+      config.headers = {
+        Accept: 'application/json',
+        ...(config.headers || {}),
+      };
+      if (config.body && typeof config.body !== 'string') {
+        config.headers['Content-Type'] = 'application/json';
+        config.body = JSON.stringify(config.body);
+      }
+      const response = await fetch(url, config);
+      if (!response.ok) {
+        let message = response.statusText;
+        try {
+          const data = await response.json();
+          if (data && data.error) {
+            message = data.error;
+          }
+        } catch (error) {
+          message = await response.text();
+        }
+        throw new Error(message || '發生未知錯誤');
+      }
+      if (response.status === 204) {
+        return null;
+      }
+      return response.json();
+    };
+
+    const getAvailableActions = (application) => {
+      const actions = [
+        { action: 'view', label: '查看履歷', variant: 'primary' },
+      ];
+      switch (application.status) {
+        case 'pending':
+          actions.push({ action: 'approve', label: '通過', variant: 'primary' });
+          actions.push({ action: 'reject', label: '退回', variant: 'secondary' });
+          break;
+        case 'approved':
+          actions.push({ action: 'comment', label: '備註', variant: 'secondary' });
+          break;
+        case 'rejected':
+          actions.push({ action: 'reopen', label: '重新審核', variant: 'secondary' });
+          break;
+        default:
+          break;
+      }
+      return actions;
+    };
+
+    const renderCards = (list, activeId) => {
+      cardsContainer.innerHTML = '';
+      if (!list.length) {
+        const empty = document.createElement('div');
+        empty.className = 'empty-state';
+        empty.textContent = '目前沒有符合條件的履歷';
+        cardsContainer.appendChild(empty);
+        return;
+      }
+      list.forEach((application) => {
+        const card = document.createElement('article');
+        card.className = 'resume-card';
+        if (application.id === activeId) {
+          card.classList.add('active');
+        }
+        card.dataset.id = application.id;
+        card.dataset.name = application.name;
+        card.innerHTML = `
+          <img src="${application.avatar || '/static/images/avatar-default.png'}" alt="${application.name}頭像" class="avatar" />
+          <div class="resume-body">
+            <div class="resume-header">
+              <h3>${application.name}</h3>
+              <span class="state-tag">${application.status_label || statusLabels[application.status] || '—'}</span>
+            </div>
+            <div class="resume-meta">
+              <span>投遞職缺：${application.position_label}</span>
+              <span>${application.school_label}</span>
+              <span>投遞日期：${application.applied_date}</span>
+            </div>
+            <div class="tag-group">
+              ${(application.skills || []).map((skill) => `<span class="badge">${skill}</span>`).join('')}
+            </div>
+            <div class="resume-actions">
+              ${getAvailableActions(application).map((action) => `
+                <button class="${action.variant === 'primary' ? 'btn-primary' : 'btn-secondary'}" type="button" data-action="${action.action}">${action.label}</button>
+              `).join('')}
+            </div>
+          </div>
+        `;
+        cardsContainer.appendChild(card);
+      });
+    };
+
+    const renderSummary = (summary = {}) => {
+      statPending.textContent = summary.pending ?? 0;
+      statApproved.textContent = summary.approved ?? 0;
+      statRejected.textContent = summary.rejected ?? 0;
+      statNew.textContent = summary.new_this_week ?? 0;
+    };
+
+    const renderSkills = (skills) => {
+      detailSkills.innerHTML = '';
+      if (!skills || !skills.length) {
+        detailSkills.appendChild(createEmptyNode('尚未提供技能'));
+        return;
+      }
+      skills.forEach((skill) => {
+        const span = document.createElement('span');
+        span.className = 'badge';
+        span.textContent = skill;
+        detailSkills.appendChild(span);
+      });
+    };
+
+    const renderPortfolio = (items) => {
+      detailPortfolio.innerHTML = '';
+      if (!items || !items.length) {
+        detailPortfolio.appendChild(createEmptyNode('尚未提供附件', 'li'));
+        return;
+      }
+      items.forEach((item) => {
+        const li = document.createElement('li');
+        const link = document.createElement('a');
+        link.href = item.url || '#';
+        link.target = '_blank';
+        link.rel = 'noopener noreferrer';
+        link.textContent = item.label || '附件';
+        li.appendChild(link);
+        detailPortfolio.appendChild(li);
+      });
+    };
+
+    const renderHistory = (history) => {
+      detailHistory.innerHTML = '';
+      if (!history || !history.length) {
+        detailHistory.appendChild(createEmptyNode('尚無歷程紀錄'));
+        return;
+      }
+      history.forEach((entry) => {
+        const row = document.createElement('span');
+        const timestampNode = document.createElement('strong');
+        timestampNode.textContent = entry.timestamp;
+        row.appendChild(timestampNode);
+        row.appendChild(document.createTextNode(` - ${entry.text}`));
+        if (entry.type === 'comment') {
+          row.classList.add('history-comment');
+        }
+        detailHistory.appendChild(row);
+      });
+    };
+
+    const renderDetailActions = (application) => {
+      detailActions.innerHTML = '';
+      const actions = getAvailableActions(application).filter((action) => action.action !== 'view');
+      if (!actions.length) {
+        detailActions.appendChild(createEmptyNode('目前無可用操作'));
+        return;
+      }
+      actions.forEach((action) => {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = action.variant === 'primary' ? 'btn-primary' : 'btn-secondary';
+        button.dataset.action = action.action;
+        button.textContent = action.label;
+        detailActions.appendChild(button);
+      });
+    };
+
+    const renderDetail = (application) => {
+      detailAvatar.src = application.avatar || '/static/images/avatar-default.png';
+      detailName.textContent = application.name || '—';
+      detailStatus.textContent = application.status_label || statusLabels[application.status] || '—';
+      detailPosition.textContent = application.position_label || '—';
+      detailAppliedDate.textContent = application.applied_date || '—';
+      detailSchool.textContent = application.school_label || '—';
+      detailStartDate.textContent = application.start_date || '—';
+      detailIntro.textContent = application.summary || '尚未提供自我簡介';
+      renderPortfolio(application.portfolio);
+      renderSkills(application.skills);
+      renderHistory(application.history);
+      renderDetailActions(application);
+    };
+
+    const clearDetail = () => {
+      detailAvatar.src = '/static/images/avatar-default.png';
+      detailName.textContent = '請選擇學生';
+      detailStatus.textContent = '—';
+      detailPosition.textContent = '—';
+      detailAppliedDate.textContent = '—';
+      detailSchool.textContent = '—';
+      detailStartDate.textContent = '—';
+      detailIntro.textContent = '尚未選擇任何履歷。';
+      detailPortfolio.innerHTML = '';
+      detailPortfolio.appendChild(createEmptyNode('尚未提供附件', 'li'));
+      detailSkills.innerHTML = '';
+      detailSkills.appendChild(createEmptyNode('尚未提供技能'));
+      detailHistory.innerHTML = '';
+      detailHistory.appendChild(createEmptyNode('尚無歷程紀錄'));
+      detailActions.innerHTML = '';
+      detailActions.appendChild(createEmptyNode('請先選擇履歷'));
+    };
+
+    const loadApplicationDetail = async (applicationId) => {
+      if (!applicationId) {
+        clearDetail();
+        return;
+      }
+      try {
+        const response = await fetchJSON(`/vendor/api/applications/${applicationId}`);
+        if (response && response.item) {
+          renderDetail(response.item);
+        }
+      } catch (error) {
+        alert(`讀取履歷詳情失敗：${error.message}`);
+      }
+    };
+
+    const loadApplications = async (options = {}) => {
+      const params = new URLSearchParams();
+      if (filterStatus.value) params.set('status', filterStatus.value);
+      if (filterPosition.value) params.set('position', filterPosition.value);
+      if (filterSchool.value) params.set('school', filterSchool.value);
+      if (filterKeyword.value.trim()) params.set('keyword', filterKeyword.value.trim());
+      const query = params.toString();
+      const url = query ? `/vendor/api/applications?${query}` : '/vendor/api/applications';
+      const data = await fetchJSON(url);
+      applications = data.items || [];
+      renderSummary(data.summary);
+      if (!applications.length) {
+        selectedApplicationId = null;
+        renderCards([], null);
+        if (!options.skipDetailFetch) {
+          clearDetail();
+        }
+        return;
+      }
+      let targetId = options.selectId || selectedApplicationId;
+      if (!targetId || !applications.some((item) => item.id === targetId)) {
+        targetId = applications[0].id;
+      }
+      selectedApplicationId = targetId;
+      renderCards(applications, selectedApplicationId);
+      if (options.skipDetailFetch && options.detailData) {
+        renderDetail(options.detailData);
       } else {
-        openModal(action, applicantName);
+        await loadApplicationDetail(selectedApplicationId);
+      }
+    };
+
+    const selectApplication = (applicationId, forceFetch = true) => {
+      if (!applicationId) return;
+      if (selectedApplicationId !== applicationId) {
+        selectedApplicationId = applicationId;
+        renderCards(applications, selectedApplicationId);
+      }
+      if (forceFetch) {
+        loadApplicationDetail(applicationId);
+      }
+    };
+
+    cardsContainer.addEventListener('click', (event) => {
+      const card = event.target.closest('.resume-card');
+      if (!card) return;
+      const action = event.target.dataset.action;
+      const applicationId = card.dataset.id;
+      const applicationName = card.dataset.name;
+      if (action && action !== 'view') {
+        pendingAction = { action, appId: applicationId, name: applicationName };
+        openModal(action, applicationName);
+        return;
+      }
+      selectApplication(applicationId, true);
+    });
+
+    detailActions.addEventListener('click', (event) => {
+      const action = event.target.dataset.action;
+      if (!action || !selectedApplicationId) return;
+      pendingAction = { action, appId: selectedApplicationId, name: detailName.textContent };
+      openModal(action, detailName.textContent);
+    });
+
+    filterApplyBtn.addEventListener('click', () => {
+      loadApplications({ selectId: null }).catch((error) => {
+        alert(`載入履歷列表失敗：${error.message}`);
+      });
+    });
+
+    filterResetBtn.addEventListener('click', () => {
+      filterPosition.value = '';
+      filterStatus.value = '';
+      filterSchool.value = '';
+      filterKeyword.value = '';
+      loadApplications({ selectId: null }).catch((error) => {
+        alert(`載入履歷列表失敗：${error.message}`);
+      });
+    });
+
+    filterKeyword.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        loadApplications({ selectId: null }).catch((error) => {
+          alert(`載入履歷列表失敗：${error.message}`);
+        });
       }
     });
 
     modalCancel.addEventListener('click', closeModal);
-    modalConfirm.addEventListener('click', () => {
-      closeModal();
-      // TODO: 在此處接 API 傳送審核結果
+
+    modalConfirm.addEventListener('click', async () => {
+      if (!pendingAction) {
+        closeModal();
+        return;
+      }
+      const currentAction = { ...pendingAction };
+      const endpoint = actionEndpoints[currentAction.action];
+      if (!endpoint) {
+        closeModal();
+        return;
+      }
+      modalConfirm.disabled = true;
+      modalConfirm.textContent = '送出中...';
+      try {
+        const payload = {};
+        if (modalComment.value.trim()) {
+          payload.comment = modalComment.value.trim();
+        }
+        const response = await fetchJSON(`/vendor/api/applications/${currentAction.appId}/${endpoint}`, {
+          method: 'POST',
+          body: payload,
+        });
+        const updatedItem = response && response.item ? response.item : null;
+        closeModal();
+        if (updatedItem) {
+          await loadApplications({
+            selectId: updatedItem.id,
+            skipDetailFetch: true,
+            detailData: updatedItem,
+          });
+        } else {
+          await loadApplications({ selectId: currentAction.appId });
+        }
+      } catch (error) {
+        alert(`操作失敗：${error.message}`);
+      } finally {
+        modalConfirm.disabled = false;
+        modalConfirm.textContent = modalConfirmOriginalText;
+      }
     });
 
     modalBackdrop.addEventListener('click', (event) => {
       if (event.target === modalBackdrop) {
         closeModal();
       }
+    });
+
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape' && modalBackdrop.classList.contains('show')) {
+        closeModal();
+      }
+    });
+
+    clearDetail();
+
+    loadApplications().catch((error) => {
+      alert(`載入履歷列表失敗：${error.message}`);
     });
   </script>
 </body>
