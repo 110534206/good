@@ -421,16 +421,6 @@
       font-size: 0.95rem;
     }
 
-    .tab-count {
-      font-size: 0.85rem;
-      opacity: 0.75;
-      transition: opacity 0.2s ease;
-    }
-
-    .tab-button.active .tab-count {
-      opacity: 0.9;
-    }
-
     .tab-panels {
       margin-top: 1.5rem;
     }
@@ -481,6 +471,19 @@
       text-align: center;
       color: #9aa6b6;
       font-size: 0.9rem;
+    }
+
+    .table-actions {
+      display: flex;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+
+    .table-actions .btn-primary,
+    .table-actions .btn-secondary {
+      padding: 0.45rem 0.9rem;
+      font-size: 0.85rem;
     }
 
     /* 履歷列表 */
@@ -807,7 +810,6 @@
           data-variant="all"
         >
           <span class="tab-label">全部</span>
-          <span class="tab-count" id="tab-count-all">(0)</span>
         </button>
         <button
           id="tab-uploaded"
@@ -820,7 +822,6 @@
           data-variant="uploaded"
         >
           <span class="tab-label">已上傳</span>
-          <span class="tab-count" id="tab-count-uploaded">(0)</span>
         </button>
         <button
           id="tab-reviewed"
@@ -833,7 +834,6 @@
           data-variant="reviewed"
         >
           <span class="tab-label">審查完成</span>
-          <span class="tab-count" id="tab-count-reviewed">(0)</span>
         </button>
         <button
           id="tab-returned"
@@ -845,8 +845,7 @@
           data-target="#panel-returned"
           data-variant="returned"
         >
-          <span class="tab-label">已退件</span>
-          <span class="tab-count" id="tab-count-returned">(0)</span>
+          <span class="tab-label">不通過</span>
         </button>
       </nav>
     </header>
@@ -963,7 +962,7 @@
     const statusLabels = {
       pending: '待審核',
       approved: '已通過',
-      rejected: '已退回',
+      rejected: '不通過',
     };
 
     const actionEndpoints = {
@@ -986,6 +985,12 @@
       uploaded: document.getElementById('tab-count-uploaded'),
       reviewed: document.getElementById('tab-count-reviewed'),
       returned: document.getElementById('tab-count-returned'),
+    };
+    const tableBodies = {
+      all: document.getElementById('resume-table-body-all'),
+      uploaded: document.getElementById('resume-table-body-uploaded'),
+      reviewed: document.getElementById('resume-table-body-reviewed'),
+      returned: document.getElementById('resume-table-body-returned'),
     };
 
     const filterPosition = document.getElementById('filter-position');
@@ -1027,11 +1032,17 @@
       menu.setAttribute('aria-hidden', (!isOpen).toString());
     };
 
-    menuBtn.addEventListener('click', () => toggleMenu(true));
-    menuCloseBtn.addEventListener('click', () => toggleMenu(false));
-    menu.addEventListener('click', (event) => {
-      if (event.target === menu) toggleMenu(false);
-    });
+    if (menuBtn) {
+      menuBtn.addEventListener('click', () => toggleMenu(true));
+    }
+    if (menuCloseBtn) {
+      menuCloseBtn.addEventListener('click', () => toggleMenu(false));
+    }
+    if (menu) {
+      menu.addEventListener('click', (event) => {
+        if (event.target === menu) toggleMenu(false);
+      });
+    }
 
     const activateTab = (tabKey, options = {}) => {
       if (!tabKey) return;
@@ -1156,7 +1167,7 @@
       switch (application.status) {
         case 'pending':
           actions.push({ action: 'approve', label: '通過', variant: 'primary' });
-          actions.push({ action: 'reject', label: '退回', variant: 'secondary' });
+          actions.push({ action: 'reject', label: '不通過', variant: 'secondary' });
           break;
         case 'approved':
           actions.push({ action: 'comment', label: '備註', variant: 'secondary' });
@@ -1213,6 +1224,67 @@
       });
     };
 
+    const createTableActionButton = (application, action, label, variant) => {
+      return `
+        <button
+          type="button"
+          class="${variant === 'primary' ? 'btn-primary' : 'btn-secondary'}"
+          data-action="${action}"
+          data-id="${application.id}"
+          data-name="${application.name}"
+        >
+          ${label}
+        </button>
+      `;
+    };
+
+    const createTableRow = (application) => {
+      const actions = [];
+      if (application.status === 'pending') {
+        actions.push(createTableActionButton(application, 'approve', '通過', 'primary'));
+        actions.push(createTableActionButton(application, 'reject', '不通過', 'secondary'));
+      } else if (application.status === 'approved') {
+        actions.push(createTableActionButton(application, 'comment', '備註', 'secondary'));
+      } else if (application.status === 'rejected') {
+        actions.push(createTableActionButton(application, 'reopen', '重新審核', 'secondary'));
+      }
+      const actionContent = actions.length ? actions.join('') : '<span class="empty-text">—</span>';
+      return `
+        <tr data-id="${application.id}" data-name="${application.name}">
+          <td>${application.applied_date || '—'}</td>
+          <td>${application.position_label || '—'}</td>
+          <td>${application.status_label || statusLabels[application.status] || '—'}</td>
+          <td>
+            <div class="table-actions">
+              ${actionContent}
+            </div>
+          </td>
+        </tr>
+      `;
+    };
+
+    const renderTableRows = (list) => {
+      const grouped = {
+        all: list,
+        uploaded: list.filter((item) => item.status === 'pending'),
+        reviewed: list.filter((item) => item.status === 'approved'),
+        returned: list.filter((item) => item.status === 'rejected'),
+      };
+      Object.entries(tableBodies).forEach(([key, tbody]) => {
+        if (!tbody) return;
+        const rows = grouped[key] || [];
+        if (!rows.length) {
+          tbody.innerHTML = `
+            <tr>
+              <td colspan="4" class="table-empty">目前沒有資料</td>
+            </tr>
+          `;
+          return;
+        }
+        tbody.innerHTML = rows.map((application) => createTableRow(application)).join('');
+      });
+    };
+
     const renderSummary = (summary = {}) => {
       const pendingCount = summary.pending ?? 0;
       const approvedCount = summary.approved ?? 0;
@@ -1232,7 +1304,7 @@
       };
       Object.entries(tabCountMapping).forEach(([key, value]) => {
         if (tabCountElements[key]) {
-          tabCountElements[key].textContent = `(${value})`;
+          tabCountElements[key].textContent = `${value}`;
         }
       });
     };
@@ -1248,6 +1320,7 @@
       const data = await fetchJSON(url);
       applications = data.items || [];
       renderSummary(data.summary);
+      renderTableRows(applications);
       if (!applications.length) {
         selectedApplicationId = null;
         renderCards([], null);
@@ -1307,6 +1380,22 @@
         });
       }
     });
+
+    const tabbedSection = document.querySelector('.tabbed-section');
+    if (tabbedSection) {
+      tabbedSection.addEventListener('click', (event) => {
+        const button = event.target.closest('button[data-action]');
+        if (!button) return;
+        const { action, id: appId, name } = button.dataset;
+        if (!action || !appId) return;
+        if (action === 'view') {
+          selectApplication(appId);
+          return;
+        }
+        pendingAction = { action, appId, name };
+        openModal(action, name);
+      });
+    }
 
     modalCancel.addEventListener('click', closeModal);
 
