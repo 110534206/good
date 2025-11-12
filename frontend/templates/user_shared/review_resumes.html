@@ -290,7 +290,7 @@
       align-items: center;
       flex-wrap: wrap;
       gap: 1.5rem;
-      margin: 1rem auto 2.5rem;
+      margin: 3rem auto 2.5rem;
       max-width: 720px;
     }
 
@@ -537,6 +537,12 @@
       display: none;
     }
 
+    .detail-bottom-actions .btn-primary,
+    .detail-bottom-actions .btn-secondary {
+      min-width: 140px;
+      text-align: center;
+    }
+
     /* 審核對話框 */
     .modal-backdrop {
       position: fixed;
@@ -696,35 +702,34 @@
         <div class="detail-header">
           <img src="/static/images/avatar-default.png" alt="履歷頭像" class="avatar" id="detail-avatar" />
           <div>
-            <h3 id="detail-name">請選擇學生</h3>
-            <span class="state-tag" id="detail-status">—</span>
+            <h3 id="detail-name">學生履歷</h3>
           </div>
         </div>
 
         <div class="info-grid">
-          <span id="detail-position"><strong>投遞職缺：</strong><span class="value">—</span></span>
-          <span id="detail-applied-date"><strong>投遞日期：</strong><span class="value">—</span></span>
-          <span id="detail-school"><strong>學校科系：</strong><span class="value">—</span></span>
-          <span id="detail-start-date"><strong>可開始日期：</strong><span class="value">—</span></span>
+          <span id="detail-position"><strong>姓名：</strong><span class="value">—</span></span>
+          <span id="detail-applied-date"><strong>班級：</strong><span class="value">—</span></span>
+          <span id="detail-school"><strong>學號：</strong><span class="value">—</span></span>
+          <span id="detail-start-date"><strong>應徵職缺：</strong><span class="value">—</span></span>
         </div>
 
         <div class="detail-section">
-          <h4 class="section-title">自我簡介</h4>
+          <h4 class="section-title">自傳</h4>
           <p id="detail-intro">尚未選擇任何履歷。</p>
         </div>
 
         <div class="detail-section">
-          <h4 class="section-title">作品 / 附件</h4>
+          <h4 class="section-title">成績單</h4>
           <ul id="detail-portfolio-list"></ul>
         </div>
 
         <div class="detail-section">
-          <h4 class="section-title">核心技能</h4>
+          <h4 class="section-title">證照</h4>
           <div class="tag-group" id="detail-skills"></div>
         </div>
 
         <div class="detail-section">
-          <h4 class="section-title">審核歷程</h4>
+          <h4 class="section-title">語言能力</h4>
           <div class="history" id="detail-history"></div>
         </div>
 
@@ -738,9 +743,6 @@
     </section>
   </main>
 
-  <footer>
-    智慧實習平台 © 2025
-  </footer>
 
   <div class="modal-backdrop" id="review-modal" aria-hidden="true">
     <div class="modal">
@@ -786,7 +788,6 @@
     const cardsContainer = document.getElementById('resume-list');
     const detailAvatar = document.getElementById('detail-avatar');
     const detailName = document.getElementById('detail-name');
-    const detailStatus = document.getElementById('detail-status');
     const detailPosition = document.querySelector('#detail-position .value');
     const detailAppliedDate = document.querySelector('#detail-applied-date .value');
     const detailSchool = document.querySelector('#detail-school .value');
@@ -809,6 +810,28 @@
     const statApproved = document.getElementById('stat-approved');
     const statRejected = document.getElementById('stat-rejected');
     const statNew = document.getElementById('stat-new');
+    const statElements = {
+      pending: statPending,
+      approved: statApproved,
+      rejected: statRejected,
+    };
+
+    const getStatValue = (node) => {
+      if (!node) return 0;
+      const value = parseInt(node.textContent, 10);
+      return Number.isNaN(value) ? 0 : value;
+    };
+
+    const adjustSummaryCounts = (fromStatus, toStatus) => {
+      if (!toStatus || fromStatus === toStatus) return;
+      if (fromStatus && statElements[fromStatus]) {
+        const current = getStatValue(statElements[fromStatus]);
+        statElements[fromStatus].textContent = current > 0 ? current - 1 : 0;
+      }
+      if (statElements[toStatus]) {
+        statElements[toStatus].textContent = getStatValue(statElements[toStatus]) + 1;
+      }
+    };
 
     const toggleMenu = (isOpen) => {
       menu.classList.toggle('open', isOpen);
@@ -1061,7 +1084,6 @@
     const renderDetail = (application) => {
       detailAvatar.src = application.avatar || '/static/images/avatar-default.png';
       detailName.textContent = application.name || '—';
-      detailStatus.textContent = application.status_label || statusLabels[application.status] || '—';
       detailPosition.textContent = application.position_label || '—';
       detailAppliedDate.textContent = application.applied_date || '—';
       detailSchool.textContent = application.school_label || '—';
@@ -1075,8 +1097,7 @@
 
     const clearDetail = () => {
       detailAvatar.src = '/static/images/avatar-default.png';
-      detailName.textContent = '請選擇學生';
-      detailStatus.textContent = '—';
+      detailName.textContent = '學生履歷';
       detailPosition.textContent = '—';
       detailAppliedDate.textContent = '—';
       detailSchool.textContent = '—';
@@ -1246,6 +1267,12 @@
         const updatedItem = response && response.item ? response.item : null;
         closeModal();
         if (updatedItem) {
+          const existingIndex = applications.findIndex((item) => item.id === updatedItem.id);
+          const previousStatus = existingIndex >= 0 ? applications[existingIndex].status : null;
+          if (existingIndex >= 0) {
+            applications[existingIndex] = { ...applications[existingIndex], ...updatedItem };
+          }
+          adjustSummaryCounts(previousStatus, updatedItem.status);
           await loadApplications({
             selectId: updatedItem.id,
             skipDetailFetch: true,
