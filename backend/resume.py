@@ -630,6 +630,36 @@ def get_my_resumes():
         conn.close()
 
 # -------------------------
+# API：取得標準核心科目
+# -------------------------
+@resume_bp.route('/api/get_standard_courses', methods=['GET'])
+def get_standard_courses():
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        # 查詢 standard_courses 表格，只取 is_active=1 的資料
+        cursor.execute("""
+            SELECT course_name, credits 
+            FROM standard_courses 
+            WHERE is_active = 1
+            ORDER BY order_index
+        """)
+        courses = cursor.fetchall()
+        
+        # 將 credits 從 decimal 轉換為字串 (如果需要的話，確保格式正確)
+        for c in courses:
+            if c['credits'] is not None:
+                c['credits'] = str(c['credits'])
+
+        return jsonify({"success": True, "courses": courses})
+    except Exception as e:
+        print("❌ 查詢標準課程錯誤:", e)
+        return jsonify({"success": False, "message": "資料庫查詢錯誤"}), 500
+    finally:
+        if 'cursor' in locals(): cursor.close()
+        if 'conn' in locals(): conn.close()
+
+# -------------------------
 # 頁面路由
 # -------------------------
 @resume_bp.route('/upload_resume')

@@ -123,15 +123,18 @@
 
             <div class="card p-4 mb-3">
               <h5 class="text-success">已修習專業核心科目</h5>
-              <table class="table table-bordered text-center">
+              <table class="table table-bordered text-center align-middle">
                 <thead class="table-light">
                   <tr>
                     <th>科目名稱</th>
                     <th>學分</th>
+                    <th>操作</th>
                   </tr>
                 </thead>
-                <tbody id="courseTableBody"></tbody>
+                <tbody id="courseTableBody">
+                  </tbody>
               </table>
+              <button type="button" class="btn btn-sm btn-outline-success" id="add-course-row">＋新增額外修習科目</button>
             </div>
 
             <div class="card p-4 mb-3">
@@ -148,11 +151,11 @@
                 </thead>
                 <tbody id="certificate-table-body">
                   <tr>
-                    <td><input type="text" name="labor_cert[]" class="form-control" placeholder="例：電腦軟體應用乙級"></td>
-                    <td><input type="text" name="international_cert[]" class="form-control" placeholder="例：TOEIC 800分">
+                    <td><input type="text" name="labor_cert[]" class="form-control" placeholder="例:電腦軟體應用乙級"></td>
+                    <td><input type="text" name="international_cert[]" class="form-control" placeholder="例:TOEIC 800分">
                     </td>
-                    <td><input type="text" name="domestic_cert[]" class="form-control" placeholder="例：中餐丙級"></td>
-                    <td><input type="text" name="other_cert[]" class="form-control" placeholder="例：專題競賽、研習營"></td>
+                    <td><input type="text" name="domestic_cert[]" class="form-control" placeholder="例:中餐丙級"></td>
+                    <td><input type="text" name="other_cert[]" class="form-control" placeholder="例:專題競賽"></td>
                     <td><button type="button" class="btn btn-outline-danger btn-sm remove-row">移除</button></td>
                   </tr>
                 </tbody>
@@ -256,21 +259,62 @@
 
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
   <script>
-    const fixedCourses = [
-      { name: "資訊科技", credits: 2 },
-      { name: "程式設計", credits: "3/3" },
-      { name: "JAVA程式語言", credits: "3/3" },
-      { name: "資訊科技進階", credits: 2 },
-      { name: "行動網頁程式開發", credits: "3/3" },
-      { name: "資料庫伺服器管理與實作", credits: 2 }
-    ];
+
+   // 函式：新增課程列
+    function addCourseRow(name = "", credits = "") {
+        const tbody = document.getElementById("courseTableBody");
+        // 使用 input 欄位實現編輯功能
+        tbody.insertAdjacentHTML("beforeend", `
+          <tr>
+            <td><input type="text" name="course_name[]" class="form-control" value="${name}" required></td>
+            <td><input type="text" name="course_credits[]" class="form-control" value="${credits}" required></td>
+            <td><button type="button" class="btn btn-outline-danger btn-sm remove-course-row">移除</button></td>
+          </tr>
+        `);
+    }
+
+    // 函式：從後端載入課程並顯示
+    async function loadStandardCourses() {
+        const tbody = document.getElementById("courseTableBody");
+        tbody.innerHTML = ''; // 清空現有內容
+
+        try {
+            // 呼叫新的 API 來取得標準核心科目
+            const res = await fetch("/api/get_standard_courses");
+            const result = await res.json();
+            
+            if (result.success && result.courses && result.courses.length > 0) {
+                result.courses.forEach(c => {
+                    // 載入標準資料並預設為可編輯
+                    addCourseRow(c.course_name, c.credits);
+                });
+            } else {
+                // 如果載入失敗或無資料，預設新增一列空白的讓學生填寫
+                addCourseRow();
+                console.warn("未從後端載入核心科目，已新增一列空白。");
+            }
+        } catch (error) {
+            console.error("載入核心科目時發生錯誤:", error);
+            addCourseRow(); // 發生錯誤也新增一列空白
+        }
+    }
+
 
     document.addEventListener("DOMContentLoaded", () => {
-      // 載入固定修課科目
-      const tbody = document.getElementById("courseTableBody");
-      fixedCourses.forEach(c => {
-        tbody.innerHTML += `<tr><td>${c.name}</td><td>${c.credits}</td></tr>`;
-      });
+        // 1. 初始化：載入標準課程
+        loadStandardCourses();
+        
+        // 2. 處理課程表格的新增/移除事件
+        document.getElementById("add-course-row").addEventListener("click", () => {
+          addCourseRow();
+        });
+
+        // 使用事件委派處理移除按鈕
+        document.getElementById("courseTableBody").addEventListener("click", e => {
+          if (e.target.classList.contains("remove-course-row")) {
+            e.target.closest("tr").remove();
+          }
+        });
 
       // 操行成績轉換
       const scoreInput = document.querySelector('input[name="conduct_score_numeric"]');
@@ -307,16 +351,29 @@
       });
 
       // 表單送出
-      document.getElementById("resumeForm").addEventListener("submit", async e => {
-        e.preventDefault();
-        const formData = new FormData(e.target);
-        formData.append("courses", JSON.stringify(fixedCourses));
+        document.getElementById("resumeForm").addEventListener("submit", async e => {
+          e.preventDefault();
+          const formData = new FormData(e.target);
+          
+          // 收集動態的課程資料並添加到 FormData
+          const courses = [];
+          const courseNames = document.querySelectorAll('input[name="course_name[]"]');
+          const courseCredits = document.querySelectorAll('input[name="course_credits[]"]');
+          
+          courseNames.forEach((input, index) => {
+              // 確保欄位不為空
+              if (input.value.trim() && courseCredits[index].value.trim()) {
+                  courses.push({
+                      name: input.value.trim(),
+                      credits: courseCredits[index].value.trim()
+                  });
+              }
+          });
 
-        // 檢查 formData 內容 (可選，用於偵錯)
-        // for (let pair of formData.entries()) {
-        //     console.log(pair[0]+ ': '+ pair[1]); 
-        // }
-
+          // 將動態收集到的課程列表作為 JSON 字串發送到後端
+          formData.append("courses", JSON.stringify(courses)); 
+          
+         // 送出請求
         const res = await fetch("/api/submit_and_generate", { method: "POST", body: formData });
         const result = await res.json();
         if (result.success) {
@@ -353,6 +410,3 @@
       loadResumeRecords();
     });
   </script>
-</body>
-
-</html>
