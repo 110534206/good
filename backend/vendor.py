@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta
+from decimal import Decimal, InvalidOperation
 
 from flask import Blueprint, jsonify, render_template, request, session
 
@@ -79,6 +80,90 @@ def _get_vendor_companies(cursor, vendor_id, vendor_email):
         params.append(vendor_email)
     cursor.execute(query, tuple(params))
     return cursor.fetchall() or []
+
+
+def _get_vendor_scope(cursor, vendor_id):
+    profile = _get_vendor_profile(cursor, vendor_id)
+    if not profile:
+        return None, [], None
+    email = profile.get("email")
+    companies = _get_vendor_companies(cursor, vendor_id, email)
+    return profile, companies, email
+
+
+def _to_bool(value):
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return bool(value)
+    if isinstance(value, str):
+        lowered = value.strip().lower()
+        if lowered in {"true", "1", "yes", "y", "on"}:
+            return True
+        if lowered in {"false", "0", "no", "n", "off"}:
+            return False
+    raise ValueError("Invalid boolean value")
+
+
+def _serialize_job(row):
+    if not row:
+        return None
+    salary_val = row.get("salary")
+    if isinstance(salary_val, Decimal):
+        salary_val = float(salary_val)
+    return {
+        "id": row.get("id"),
+        "company_id": row.get("company_id"),
+        "company_name": row.get("company_name"),
+        "title": row.get("title") or "",
+        "slots": int(row.get("slots") or 0),
+        "description": row.get("description") or "",
+        "period": row.get("period") or "",
+        "work_time": row.get("work_time") or "",
+        "salary": salary_val,
+        "remark": row.get("remark") or "",
+        "is_active": bool(row.get("is_active")),
+        "updated_at": _format_datetime(row.get("updated_at")),
+        "created_at": _format_datetime(row.get("created_at")),
+    }
+
+
+def _fetch_job_for_vendor(cursor, job_id, vendor_id, vendor_email):
+    cursor.execute(
+        """
+        SELECT
+            ij.id,
+            ij.company_id,
+            ic.company_name,
+            ij.title,
+            ij.slots,
+            ij.description,
+            ij.period,
+            ij.work_time,
+            ij.salary,
+            ij.remark,
+            ij.is_active,
+            ic.uploaded_by_user_id,
+            ic.contact_email
+        FROM internship_jobs ij
+        JOIN internship_companies ic ON ij.company_id = ic.id
+        WHERE ij.id = %s
+        """,
+        (job_id,),
+    )
+    row = cursor.fetchone()
+    if not row:
+        return None
+
+    allowed = row.get("uploaded_by_user_id") == vendor_id
+    if not allowed and vendor_email:
+        allowed = row.get("contact_email") == vendor_email
+    if not allowed:
+        return None
+
+    row.pop("uploaded_by_user_id", None)
+    row.pop("contact_email", None)
+    return row
 
 
 def _record_history(cursor, preference_id, reviewer_id, action, comment):
@@ -486,6 +571,295 @@ def retrieve_application(application_id):
         return jsonify({"item": detail})
     except Exception as exc:
         return jsonify({"error": f"查詢失敗：{exc}"}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+
+@vendor_bp.route("/vendor/api/positions", methods=["GET"])
+def list_positions_for_vendor():
+    if "user_id" not in session or session.get("role") != "vendor":
+        return jsonify({"success": False, "message": "未授權"}), 403
+
+    vendor_id = session["user_id"]
+    company_filter = request.args.get("company_id", type=int)
+    status_filter = (request.args.get("status") or "").strip().lower()
+    keyword = (request.args.get("q") or "").strip()
+
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        profile, companies, vendor_email = _get_vendor_scope(cursor, vendor_id)
+        if not profile:
+            payload = {"success": True, "companies": [], "items": [], "stats": {"total": 0, "active": 0, "inactive": 0}}
+            return jsonify(payload)
+
+        company_ids = [c["id"] for c in companies]
+        if not company_ids:
+            payload = {"success": True, "companies": [], "items": [], "stats": {"total": 0, "active": 0, "inactive": 0}}
+            return jsonify(payload)
+
+        if company_filter and company_filter not in company_ids:
+            return jsonify({"success": False, "message": "無權限查看此公司"}), 403
+
+        where_clauses = [f"ij.company_id IN ({', '.join(['%s'] * len(company_ids))})"]
+        params = company_ids[:]
+
+        if company_filter:
+            where_clauses.append("ij.company_id = %s")
+            params.append(company_filter)
+
+        if status_filter in {"active", "inactive"}:
+            where_clauses.append("ij.is_active = %s")
+            params.append(1 if status_filter == "active" else 0)
+        elif status_filter and status_filter not in {"all", ""}:
+            return jsonify({"success": False, "message": "狀態參數錯誤"}), 400
+
+        if keyword:
+            like = f"%{keyword}%"
+            where_clauses.append("(ij.title LIKE %s OR ij.description LIKE %s OR ij.remark LIKE %s)")
+            params.extend([like, like, like])
+
+        query = f"""
+            SELECT
+                ij.id,
+                ij.company_id,
+                ic.company_name,
+                ij.title,
+                ij.slots,
+                ij.description,
+                ij.period,
+                ij.work_time,
+                ij.salary,
+                ij.remark,
+                ij.is_active
+            FROM internship_jobs ij
+            JOIN internship_companies ic ON ij.company_id = ic.id
+            WHERE {' AND '.join(where_clauses)}
+            ORDER BY ij.is_active DESC, ij.id DESC
+        """
+        cursor.execute(query, tuple(params))
+        rows = cursor.fetchall() or []
+        items = [_serialize_job(row) for row in rows]
+
+        stats = {
+            "total": len(items),
+            "active": sum(1 for item in items if item["is_active"]),
+            "inactive": sum(1 for item in items if not item["is_active"]),
+        }
+        companies_payload = [{"id": c["id"], "name": c["company_name"]} for c in companies]
+        return jsonify({"success": True, "companies": companies_payload, "items": items, "stats": stats})
+    except Exception as exc:
+        return jsonify({"success": False, "message": f"載入失敗：{exc}"}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+
+@vendor_bp.route("/vendor/api/positions", methods=["POST"])
+def create_position_for_vendor():
+    if "user_id" not in session or session.get("role") != "vendor":
+        return jsonify({"success": False, "message": "未授權"}), 403
+
+    data = request.get_json(silent=True) or {}
+    title = (data.get("title") or "").strip()
+    company_id_raw = data.get("company_id")
+    slots_raw = data.get("slots")
+
+    if not company_id_raw:
+        return jsonify({"success": False, "message": "請選擇公司"}), 400
+    if not title:
+        return jsonify({"success": False, "message": "請填寫職缺名稱"}), 400
+
+    try:
+        company_id = int(company_id_raw)
+    except (TypeError, ValueError):
+        return jsonify({"success": False, "message": "公司參數錯誤"}), 400
+
+    try:
+        slots = int(slots_raw)
+        if slots <= 0:
+            raise ValueError
+    except (TypeError, ValueError):
+        return jsonify({"success": False, "message": "名額必須為正整數"}), 400
+
+    description = (data.get("description") or "").strip()
+    period = (data.get("period") or "").strip()
+    work_time = (data.get("work_time") or "").strip()
+    remark = (data.get("remark") or "").strip()
+    salary_value = data.get("salary")
+    salary = None
+    if salary_value not in (None, "", "null"):
+        try:
+            salary = Decimal(str(salary_value))
+        except (InvalidOperation, ValueError):
+            return jsonify({"success": False, "message": "薪資格式不正確"}), 400
+
+    is_active = True
+    if "is_active" in data:
+        try:
+            is_active = _to_bool(data.get("is_active"))
+        except ValueError:
+            return jsonify({"success": False, "message": "狀態參數錯誤"}), 400
+
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        profile, companies, vendor_email = _get_vendor_scope(cursor, session["user_id"])
+        if not profile:
+            return jsonify({"success": False, "message": "帳號資料不完整"}), 403
+
+        company_ids = {c["id"] for c in companies}
+        if company_id not in company_ids:
+            return jsonify({"success": False, "message": "無權限操作此公司"}), 403
+
+        cursor.execute(
+            """
+            INSERT INTO internship_jobs
+                (company_id, title, slots, description, period, work_time, salary, remark, is_active)
+            VALUES
+                (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+            """,
+            (
+                company_id,
+                title,
+                slots,
+                description or None,
+                period or None,
+                work_time or None,
+                salary,
+                remark or None,
+                1 if is_active else 0,
+            ),
+        )
+        conn.commit()
+        job_row = _fetch_job_for_vendor(cursor, cursor.lastrowid, session["user_id"], vendor_email)
+        return jsonify({"success": True, "item": _serialize_job(job_row)})
+    except Exception as exc:
+        conn.rollback()
+        return jsonify({"success": False, "message": f"新增失敗：{exc}"}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+
+@vendor_bp.route("/vendor/api/positions/<int:job_id>", methods=["PUT"])
+def update_position_for_vendor(job_id):
+    if "user_id" not in session or session.get("role") != "vendor":
+        return jsonify({"success": False, "message": "未授權"}), 403
+
+    data = request.get_json(silent=True) or {}
+    title = (data.get("title") or "").strip()
+    slots_raw = data.get("slots")
+
+    if not title:
+        return jsonify({"success": False, "message": "請填寫職缺名稱"}), 400
+
+    try:
+        slots = int(slots_raw)
+        if slots <= 0:
+            raise ValueError
+    except (TypeError, ValueError):
+        return jsonify({"success": False, "message": "名額必須為正整數"}), 400
+
+    description = (data.get("description") or "").strip()
+    period = (data.get("period") or "").strip()
+    work_time = (data.get("work_time") or "").strip()
+    remark = (data.get("remark") or "").strip()
+    salary_value = data.get("salary")
+    salary = None
+    if salary_value not in (None, "", "null"):
+        try:
+            salary = Decimal(str(salary_value))
+        except (InvalidOperation, ValueError):
+            return jsonify({"success": False, "message": "薪資格式不正確"}), 400
+
+    try:
+        is_active = _to_bool(data.get("is_active", True))
+    except ValueError:
+        return jsonify({"success": False, "message": "狀態參數錯誤"}), 400
+
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        profile, _companies, vendor_email = _get_vendor_scope(cursor, session["user_id"])
+        if not profile:
+            return jsonify({"success": False, "message": "帳號資料不完整"}), 403
+
+        job_row = _fetch_job_for_vendor(cursor, job_id, session["user_id"], vendor_email)
+        if not job_row:
+            return jsonify({"success": False, "message": "找不到職缺或無權限編輯"}), 404
+
+        cursor.execute(
+            """
+            UPDATE internship_jobs
+            SET title = %s,
+                slots = %s,
+                description = %s,
+                period = %s,
+                work_time = %s,
+                salary = %s,
+                remark = %s,
+                is_active = %s
+            WHERE id = %s
+            """,
+            (
+                title,
+                slots,
+                description or None,
+                period or None,
+                work_time or None,
+                salary,
+                remark or None,
+                1 if is_active else 0,
+                job_id,
+            ),
+        )
+        conn.commit()
+        updated = _fetch_job_for_vendor(cursor, job_id, session["user_id"], vendor_email)
+        return jsonify({"success": True, "item": _serialize_job(updated)})
+    except Exception as exc:
+        conn.rollback()
+        return jsonify({"success": False, "message": f"更新失敗：{exc}"}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+
+@vendor_bp.route("/vendor/api/positions/<int:job_id>/status", methods=["PATCH"])
+def toggle_position_status(job_id):
+    if "user_id" not in session or session.get("role") != "vendor":
+        return jsonify({"success": False, "message": "未授權"}), 403
+
+    data = request.get_json(silent=True) or {}
+    if "is_active" not in data:
+        return jsonify({"success": False, "message": "缺少狀態參數"}), 400
+    try:
+        desired = _to_bool(data.get("is_active"))
+    except ValueError:
+        return jsonify({"success": False, "message": "狀態參數錯誤"}), 400
+
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        profile, _companies, vendor_email = _get_vendor_scope(cursor, session["user_id"])
+        if not profile:
+            return jsonify({"success": False, "message": "帳號資料不完整"}), 403
+
+        job_row = _fetch_job_for_vendor(cursor, job_id, session["user_id"], vendor_email)
+        if not job_row:
+            return jsonify({"success": False, "message": "找不到職缺或無權限操作"}), 404
+
+        cursor.execute(
+            "UPDATE internship_jobs SET is_active = %s WHERE id = %s",
+            (1 if desired else 0, job_id),
+        )
+        conn.commit()
+        updated = _fetch_job_for_vendor(cursor, job_id, session["user_id"], vendor_email)
+        return jsonify({"success": True, "item": _serialize_job(updated)})
+    except Exception as exc:
+        conn.rollback()
+        return jsonify({"success": False, "message": f"更新狀態失敗：{exc}"}), 500
     finally:
         cursor.close()
         conn.close()

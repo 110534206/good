@@ -371,6 +371,16 @@ def vendor_home():
     return render_template('user_shared/vendor_home.html') 
 
 
+@users_bp.route('/manage_positions')
+def manage_positions_page():
+    """
+    廠商職位需求管理頁面。
+    """
+    if 'username' not in session or session.get('role') != 'vendor':
+        return redirect(url_for('auth_bp.login_page'))
+    return render_template('user_shared/manage_positions.html')
+
+
 # -------------------------
 # 廠商媒合結果頁面
 # -------------------------
