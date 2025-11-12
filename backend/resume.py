@@ -39,7 +39,7 @@ def score_to_grade(score):
         return '丁'
 
 # -------------------------
-# 語文能力複選框處理輔助函式
+# 語文能力複選框處理輔助函式 (未使用，但保留)
 # -------------------------
 def generate_language_marks(level):
     marks = {'Jing': '□', 'Zhong': '□', 'Lue': '□'}
@@ -130,20 +130,20 @@ def save_structured_data(cursor, student_id, data):
         cursor.execute("DELETE FROM Course_Grades WHERE StuID=%s", (student_id,))
         for c in data.get('courses', []):
             if c.get('name'):
-                cursor.execute("""
-                    INSERT INTO Course_Grades (StuID, CourseName, Credits, Grade)
-                    VALUES (%s,%s,%s,%s)
-                """, (student_id, c['name'], c.get('credits'), c.get('grade')))
+                 cursor.execute("""
+                     INSERT INTO Course_Grades (StuID, CourseName, Credits, Grade)
+                       VALUES (%s,%s,%s,%s)
+                 """, (student_id, c['name'], c.get('credits'), c.get('grade')))
 
-        # 儲存證照 (此處處理的是文本證照，如果前端沒有欄位提交此資料，則此處只會刪除舊資料)
+        # 儲存證照 (此處處理的是文本證照)
         cursor.execute("DELETE FROM Student_Certifications WHERE StuID=%s", (student_id,))
         for cert in data.get('structured_certifications', []):
              # 由於前端只上傳圖片名稱，這裡假設所有結構化證照都屬於 'other' 類，但您可能需要調整
-            if cert.get('name'):
-                cursor.execute("""
-                    INSERT INTO Student_Certifications (StuID, CertName, CertType)
-                    VALUES (%s, %s, %s)
-                """, (student_id, cert['name'], cert.get('type', 'other'))) 
+             if cert.get('name'):
+                 cursor.execute("""
+                     INSERT INTO Student_Certifications (StuID, CertName, CertType)
+                     VALUES (%s, %s, %s)
+                 """, (student_id, cert['name'], cert.get('type', 'other'))) 
 
         # 儲存語文能力
         cursor.execute("DELETE FROM Student_LanguageSkills WHERE StuID=%s", (student_id,))
@@ -184,6 +184,7 @@ def get_student_info_for_doc(cursor, student_id):
 def generate_application_form_docx(student_data, output_path):
     try:
         base_dir = os.path.dirname(__file__)
+        # 假設模板檔案的路徑
         template_path = os.path.abspath(os.path.join(base_dir, "..", "frontend", "static", "examples", "實習履歷(空白).docx"))
         if not os.path.exists(template_path):
             print("❌ 找不到模板：", template_path)
@@ -225,7 +226,28 @@ def generate_application_form_docx(student_data, output_path):
                 print(f"⚠️ 圖片載入錯誤: {e}")
 
         # -------------------------
-        # 【修正】插入成績單圖片 (transcript_path)
+        # 處理專業核心科目資料
+        # -------------------------
+        MAX_COURSES = 15
+        
+        padded_grades = grades[:MAX_COURSES]
+        padded_grades += [{'CourseName': '', 'Credits': ''}] * (MAX_COURSES - len(padded_grades))
+        
+        # 將列表轉換為三欄格式，並生成 context 變數
+        context_courses = {}
+        for i in range(5): # 5 列 (i 從 0 到 4)
+            for j in range(3): # 3 欄 (j 從 0 到 2)
+                index = i * 3 + j
+                if index < MAX_COURSES:
+                    course = padded_grades[index]
+                    row_num = i + 1 # 模板變數從 1 開始
+                    col_num = j + 1 # 模板變數從 1 開始
+                    
+                    context_courses[f'CourseName_{row_num}_{col_num}'] = course.get('CourseName', '')
+                    context_courses[f'Credits_{row_num}_{col_num}'] = course.get('Credits', '')
+
+        # -------------------------
+        # 插入成績單圖片
         # -------------------------
         transcript_obj = None
         transcript_path = info.get("TranscriptPath")
@@ -286,13 +308,15 @@ def generate_application_form_docx(student_data, output_path):
             'ConductScoreNumeric': info.get('ConductScoreNumeric', ''),
             'ConductScore': conduct_score,
             'Autobiography': info.get('Autobiography', ''),
-            'courses': [{'name': g.get('CourseName', ''), 'credits': g.get('Credits', ''), 'grade': g.get('Grade', '')} for g in grades],
             'Image_1': image_obj,
             'transcript_path': transcript_obj
         }
 
         # 加入操行等級勾選
         context.update(conduct_marks)
+
+        # 加入課程資料
+        context.update(context_courses)
 
         # 加入證照資料 (文本證照)
         for i, val in enumerate(pad_list(labor_certs), 1):
@@ -304,7 +328,7 @@ def generate_application_form_docx(student_data, output_path):
         for i, val in enumerate(pad_list(other_certs), 1):
             context[f'OtherCerts_{i}'] = val
 
-       # -------------------------
+        # -------------------------
         # 證照圖片與名稱 (最多8個)
         # -------------------------
         MAX_CERTS = 8
@@ -333,7 +357,7 @@ def generate_application_form_docx(student_data, output_path):
             context[image_key] = cert_photo_objs[i] if i < len(cert_photo_objs) else ''
             
             # 名稱變數 (CertPhotoName_1 to 8)
-            # 使用前端傳入的名稱清單
+            # 使用傳入的名稱清單
             name_key = f'CertPhotoName_{i+1}'
             context[name_key] = cert_names[i] if i < len(cert_names) else ''
             
@@ -355,8 +379,8 @@ def generate_application_form_docx(student_data, output_path):
 
         # 3️⃣ 根據資料庫數據設定 '■'
         for lang_skill in student_data.get('languages', []):
-            lang = lang_skill.get('Language')  # e.g., '英語'
-            level = lang_skill.get('Level')    # e.g., '精通'
+            lang = lang_skill.get('Language')   # e.g., '英語'
+            level = lang_skill.get('Level')     # e.g., '精通'
             lang_code = lang_code_map.get(lang)
             level_code = level_code_map.get(level)
             if lang_code and level_code:
@@ -413,7 +437,7 @@ def submit_and_generate_api():
             # 【新增檢查】
             if photo.mimetype not in ALLOWED_IMAGE_MIMES:
                  return jsonify({"success": False, "message": f"照片檔案格式錯誤 ({photo.mimetype})，請上傳 JPG/PNG/GIF 圖片"}), 400
-                 
+                  
             filename = secure_filename(photo.filename)
             photo_dir = os.path.join(UPLOAD_FOLDER, "photos")
             os.makedirs(photo_dir, exist_ok=True)
@@ -430,7 +454,7 @@ def submit_and_generate_api():
             # 【新增檢查】
             if transcript_file.mimetype not in ALLOWED_IMAGE_MIMES:
                  return jsonify({"success": False, "message": f"成績單檔案格式錯誤 ({transcript_file.mimetype})，請上傳 JPG/PNG/GIF 圖片"}), 400
-                 
+                  
             filename = secure_filename(transcript_file.filename)
             transcript_dir = os.path.join(UPLOAD_FOLDER, "transcripts")
             os.makedirs(transcript_dir, exist_ok=True)
@@ -440,10 +464,10 @@ def submit_and_generate_api():
             transcript_file.save(transcript_path)
 
         # ---------------------
-        # 【修正】上傳多張證照圖片 (新增 MIME 檢查)
+        # 上傳多張證照圖片 (含 MIME 檢查)
         # ---------------------
         cert_photo_paths = []
-        # 注意：這裡使用 getlist('cert_photos')，因為您 HTML 中 name="cert_photos[]"
+        # 注意：這裡使用 getlist('cert_photos[]')，因為您 HTML 中 name="cert_photos[]"
         cert_files = request.files.getlist('cert_photos[]') 
 
         if cert_files:
@@ -464,7 +488,7 @@ def submit_and_generate_api():
             cert_photo_paths.append(file_path)
 
         # ---------------------
-        # 證照結構化 (略)
+        # 證照結構化 (文本證照列表)
         # ---------------------
         structured_certifications = []
         for cert_type, field_prefix in [
@@ -478,7 +502,7 @@ def submit_and_generate_api():
                     structured_certifications.append({'name': name.strip(), 'type': cert_type})
 
         # ---------------------
-        # 語文能力結構化 (略)
+        # 語文能力結構化
         # ---------------------
         structured_languages = []
         languages_map = {"en": "英語", "jp": "日語", "tw": "台語", "hk": "客語"}
@@ -488,6 +512,45 @@ def submit_and_generate_api():
             level = data.get(field_name)
             if level:
                 structured_languages.append({'language': lang_name, 'level': level})
+
+       # ---------------------
+       # 處理「單一」證照圖片上傳（與多圖邏輯合併）
+       # ---------------------
+        # 這裡的邏輯是將單一證照圖片/名稱插入到現有的多圖列表中
+        certificate_image_file = request.files.get('certificate_image')
+        certificate_description = request.form.get('certificate_description', '')
+        image_path_for_template = None
+
+        if certificate_image_file and certificate_image_file.filename != '' and 'user_id' in session:
+            try:
+                # 確保圖片儲存子資料夾存在
+                cert_folder = os.path.join(UPLOAD_FOLDER, 'certificates')
+                os.makedirs(cert_folder, exist_ok=True)
+                # 創建一個安全且獨特的檔案名稱
+                filename = secure_filename(certificate_image_file.filename)
+                file_extension = os.path.splitext(filename)[1] or '.png'
+                unique_filename = f"{session['user_id']}_{datetime.now().strftime('%Y%m%d%H%M%S')}_{os.urandom(4).hex()}{file_extension}"
+                image_save_path = os.path.join(cert_folder, unique_filename)
+                # 儲存檔案
+                certificate_image_file.save(image_save_path)
+                image_path_for_template = image_save_path
+            except Exception as e:
+                print(f"❌ 儲存單一證照圖片失敗: {e}")
+                traceback.print_exc()
+                image_path_for_template = None
+
+        # 將單一證照圖片/名稱插入在最前面
+        if image_path_for_template or certificate_description:
+            # 確保清單存在
+            if cert_photo_paths is None:
+                cert_photo_paths = []
+            if cert_names is None:
+                cert_names = []
+
+            # 插入在最前面，確保 Word 模板會把它放在第一個位置
+            cert_photo_paths.insert(0, image_path_for_template or "")
+            cert_names.insert(0, certificate_description or "")
+
 
         # ---------------------
         # 查學生學號
@@ -529,9 +592,12 @@ def submit_and_generate_api():
         student_data_for_doc = get_student_info_for_doc(cursor, student_id)
         student_data_for_doc["info"]["PhotoPath"] = photo_path 
         student_data_for_doc["info"]["TranscriptPath"] = transcript_path 
-        student_data_for_doc["info"]["ConductScoreNumeric"] = data.get("conduct_score_numeric") # <-- 新增此行
-        # 【新增】傳遞證照圖片路徑
+        student_data_for_doc["info"]["ConductScoreNumeric"] = data.get("conduct_score_numeric")
+        
+        # 【重要修正】傳遞證照圖片路徑與名稱清單
         student_data_for_doc["cert_photo_paths"] = cert_photo_paths
+        student_data_for_doc["cert_names"] = cert_names # 傳遞名稱清單
+        
         filename = f"{student_id}_履歷_{datetime.now().strftime('%Y%m%d_%H%M%S')}.docx"
         save_path = os.path.join(UPLOAD_FOLDER, filename)
 
@@ -587,21 +653,31 @@ def download_resume(resume_id):
 def download_transcript(resume_id):
     db = get_db()
     cursor = db.cursor(dictionary=True)
-    cursor.execute("SELECT transcript_path FROM resumes WHERE id=%s", (resume_id,))
-    result = cursor.fetchone()
-    if not result or not result["transcript_path"]:
-        return jsonify({"success": False, "message": "找不到成績單"}), 404
-
-    path = result["transcript_path"]
-    if not os.path.exists(path):
-        return jsonify({"success": False, "message": "檔案不存在"}), 404
-
-    # 嘗試推斷檔名，如果找不到則使用預設名
-    download_name = os.path.basename(path)
-    if not download_name or not os.path.splitext(download_name)[1]:
-        download_name = f"transcript_{resume_id}.jpg" # 預設檔名
+    try:
+        cursor.execute("SELECT transcript_path, user_id FROM resumes WHERE id=%s", (resume_id,))
+        result = cursor.fetchone()
         
-    return send_file(path, as_attachment=True, download_name=download_name)
+        if not result or not result["transcript_path"]:
+            return jsonify({"success": False, "message": "找不到成績單"}), 404
+            
+        # 權限檢查 (可以根據您的 can_access_target_resume 邏輯來決定是否需要加入)
+        # 這裡假設下載成績單也需要權限檢查，如同下載履歷
+        if not can_access_target_resume(cursor, session.get('user_id'), session.get('role'), result['user_id']):
+            return jsonify({"success": False, "message": "無權限"}), 403
+
+        path = result["transcript_path"]
+        if not os.path.exists(path):
+            return jsonify({"success": False, "message": "檔案不存在"}), 404
+
+        # 嘗試推斷檔名，如果找不到則使用預設名
+        download_name = os.path.basename(path)
+        if not download_name or not os.path.splitext(download_name)[1]:
+            download_name = f"transcript_{resume_id}.jpg" # 預設檔名
+            
+        return send_file(path, as_attachment=True, download_name=download_name)
+    finally:
+        cursor.close()
+        db.close()
 
 # -------------------------
 # 查詢學生履歷列表
@@ -637,27 +713,21 @@ def get_standard_courses():
     conn = get_db()
     cursor = conn.cursor(dictionary=True)
     try:
-        # 查詢 standard_courses 表格，只取 is_active=1 的資料
-        cursor.execute("""
-            SELECT course_name, credits 
+       cursor.execute("""
+            SELECT course_name AS name, credits 
             FROM standard_courses 
-            WHERE is_active = 1
+            WHERE is_active = 1 
             ORDER BY order_index
         """)
-        courses = cursor.fetchall()
-        
-        # 將 credits 從 decimal 轉換為字串 (如果需要的話，確保格式正確)
-        for c in courses:
-            if c['credits'] is not None:
-                c['credits'] = str(c['credits'])
-
-        return jsonify({"success": True, "courses": courses})
+       courses = cursor.fetchall()
+       return jsonify({"success": True, "courses": courses})
     except Exception as e:
-        print("❌ 查詢標準課程錯誤:", e)
-        return jsonify({"success": False, "message": "資料庫查詢錯誤"}), 500
+        print("❌ 取得標準核心科目錯誤:", e)
+        traceback.print_exc()
+        return jsonify({"success": False, "message": "取得標準核心科目失敗"}), 500
     finally:
-        if 'cursor' in locals(): cursor.close()
-        if 'conn' in locals(): conn.close()
+        cursor.close()
+        conn.close()
 
 # -------------------------
 # 頁面路由
