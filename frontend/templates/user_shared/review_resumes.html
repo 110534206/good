@@ -285,22 +285,28 @@
 
     /* 統計區 */
     .stats {
-      display: grid;
-      grid-template-columns: repeat(3, minmax(160px, 1fr));
-      gap: 1rem;
-      margin: 1rem auto 2.5rem;
-      justify-items: center;
+      display: flex;
       justify-content: center;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 1.5rem;
+      margin: 1rem auto 2.5rem;
       max-width: 720px;
     }
 
     .stat-card {
+      width: 220px;
+      height: 120px;
       background: linear-gradient(130deg, #0066cc, #59a9f2);
       color: #fff;
-      border-radius: 12px;
-      padding: 1.25rem;
+      border-radius: 16px;
       box-shadow: 0 6px 16px rgba(0, 78, 140, 0.2);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
       text-align: center;
+      padding: 1rem;
     }
 
     .stat-card span {
@@ -595,13 +601,16 @@
 
     /* 響應式 */
     @media (max-width: 1024px) {
-      .filters,
-      .stats {
+      .filters {
         grid-template-columns: repeat(2, minmax(160px, 1fr));
       }
 
       .results {
         grid-template-columns: 1fr;
+      }
+
+      .stats {
+        justify-content: center;
       }
 
       .detail-panel {
@@ -613,6 +622,11 @@
     @media (max-width: 768px) {
       .filters {
         grid-template-columns: repeat(1, minmax(0, 1fr));
+      }
+
+      .stats {
+        flex-direction: column;
+        align-items: center;
       }
 
       .filters-actions {
