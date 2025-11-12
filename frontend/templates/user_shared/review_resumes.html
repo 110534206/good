@@ -321,12 +321,173 @@
       font-weight: 700;
     }
 
+    /* 履歷狀態切換表格 */
+    .tabbed-section {
+      background-color: #ffffff;
+      border: 1.5px solid #d7e3f3;
+      border-radius: 16px;
+      padding: 1.5rem;
+      margin: 0 auto 2.5rem;
+      width: 100%;
+      max-width: 1100px;
+      box-shadow: 0 3px 12px rgba(2, 70, 137, 0.08);
+    }
+
+    .tabbed-section header {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 1.25rem;
+    }
+
+    .tab-nav {
+      display: flex;
+      width: 100%;
+      border: 1.5px solid #d7e3f3;
+      border-radius: 16px;
+      overflow: hidden;
+      background-color: #ffffff;
+    }
+
+    .tab-button {
+      flex: 1 1 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.35rem;
+      background: #ffffff;
+      border: none;
+      border-right: 1px solid #d7e3f3;
+      padding: 0.85rem 0.75rem;
+      font-weight: 600;
+      font-size: 0.95rem;
+      color: #4c5b70;
+      cursor: pointer;
+      transition: background-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
+      white-space: nowrap;
+    }
+
+    .tab-button:last-child {
+      border-right: none;
+    }
+
+    .tab-button[data-variant="all"] {
+      color: #5a5247;
+    }
+
+    .tab-button[data-variant="uploaded"] {
+      color: #007ec4;
+    }
+
+    .tab-button[data-variant="reviewed"] {
+      color: #1c8f5f;
+    }
+
+    .tab-button[data-variant="returned"] {
+      color: #c5383c;
+    }
+
+    .tab-button:hover {
+      background-color: #f5f8fc;
+    }
+
+    .tab-button:focus-visible {
+      outline: 2px solid rgba(0, 102, 204, 0.45);
+      outline-offset: -2px;
+    }
+
+    .tab-button.active {
+      color: #fff;
+      box-shadow: none;
+    }
+
+    .tab-button.active[data-variant="all"] {
+      background: #6b665f;
+    }
+
+    .tab-button.active[data-variant="uploaded"] {
+      background: #00a0df;
+    }
+
+    .tab-button.active[data-variant="reviewed"] {
+      background: #2cab76;
+    }
+
+    .tab-button.active[data-variant="returned"] {
+      background: #e24c52;
+    }
+
+    .tab-label {
+      font-size: 0.95rem;
+    }
+
+    .tab-count {
+      font-size: 0.85rem;
+      opacity: 0.75;
+      transition: opacity 0.2s ease;
+    }
+
+    .tab-button.active .tab-count {
+      opacity: 0.9;
+    }
+
+    .tab-panels {
+      margin-top: 1.5rem;
+    }
+
+    .tab-panel {
+      display: none;
+    }
+
+    .tab-panel.active {
+      display: block;
+    }
+
+    .table-wrapper {
+      width: 100%;
+      overflow-x: auto;
+      margin: 0 auto;
+    }
+
+    .resume-table {
+      width: 100%;
+      border-collapse: collapse;
+      min-width: 720px;
+    }
+
+    .resume-table thead {
+      background-color: #f7f9fc;
+    }
+
+    .resume-table th,
+    .resume-table td {
+      padding: 0.9rem 1rem;
+      text-align: left;
+      border-bottom: 1px solid #e1e9f4;
+      font-size: 0.9rem;
+      color: #344256;
+    }
+
+    .resume-table th {
+      font-weight: 700;
+      color: #024689;
+    }
+
+    .resume-table tbody tr:last-child td {
+      border-bottom: none;
+    }
+
+    .table-empty {
+      text-align: center;
+      color: #9aa6b6;
+      font-size: 0.9rem;
+    }
+
     /* 履歷列表 */
     .results {
-      display: grid;
-      grid-template-columns: 2fr 1fr;
+      display: flex;
+      flex-direction: column;
       gap: 2rem;
-      align-items: flex-start;
     }
 
     .cards {
@@ -443,104 +604,15 @@
     }
 
     /* 履歷詳情側欄 */
-    .detail-panel {
-      position: sticky;
-      top: 90px;
-      border: 1.5px solid #d7e3f3;
-      border-radius: 14px;
-      padding: 1.5rem;
-      box-shadow: 0 6px 20px rgba(2, 70, 137, 0.12);
-      display: flex;
-      flex-direction: column;
-      gap: 1.25rem;
-      max-height: calc(100vh - 120px);
-      overflow-y: auto;
-      background-color: #fff;
-    }
-
-    .detail-header {
-      display: flex;
-      align-items: center;
-      gap: 1rem;
-    }
-
-    .detail-header .avatar {
-      width: 72px;
-      height: 72px;
-      margin-top: 0;
-    }
-
-    .detail-header h3 {
-      font-size: 1.3rem;
-      color: #024689;
-    }
-
-    .info-grid {
-      display: grid;
-      grid-template-columns: repeat(2, minmax(120px, 1fr));
-      gap: 0.75rem 1rem;
-    }
-
-    .info-grid span {
-      font-size: 0.85rem;
-      color: #566174;
-    }
-
-    .section-title {
-      font-size: 1rem;
-      font-weight: 700;
-      color: #024689;
-      margin-bottom: 0.5rem;
-    }
-
-    .detail-section {
-      border-top: 1px solid #e3ecf7;
-      padding-top: 1rem;
-    }
-
-    .detail-section:first-of-type {
-      border-top: none;
-      padding-top: 0;
-    }
-
-    .tag-group {
-      display: flex;
-      gap: 0.5rem;
-      flex-wrap: wrap;
-    }
-
-    .history {
-      font-size: 0.85rem;
-      color: #566174;
-      display: flex;
-      flex-direction: column;
-      gap: 0.4rem;
-    }
-
-    .history strong {
-      color: #024689;
-    }
-
-    .detail-actions {
-      display: flex;
-      gap: 0.75rem;
-    }
-
+    .detail-panel,
+    .detail-header,
+    .info-grid,
+    .detail-section,
+    .tag-group,
+    .history,
+    .detail-actions,
     .detail-bottom-actions {
-      margin-top: 1.25rem;
-      display: flex;
-      justify-content: center;
-      gap: 1rem;
-    }
-
-    .detail-bottom-actions.hidden {
       display: none;
-    }
-
-    .detail-bottom-actions .btn-primary,
-    .detail-bottom-actions .btn-secondary {
-      min-width: 140px;
-      text-align: center;
     }
 
     /* 審核對話框 */
@@ -657,6 +729,32 @@
       .detail-actions {
         flex-direction: column;
       }
+
+      .tabbed-section {
+        padding: 1rem;
+      }
+
+      .tab-nav {
+        flex-wrap: wrap;
+      }
+
+      .tab-button {
+        flex: 1 1 50%;
+        border-right: 1px solid #d7e3f3;
+        border-bottom: 1px solid #d7e3f3;
+      }
+
+      .tab-button:nth-child(2n) {
+        border-right: none;
+      }
+
+      .tab-button:nth-last-child(-n + 2) {
+        border-bottom: none;
+      }
+
+      .resume-table {
+        min-width: 600px;
+      }
     }
   </style>
 </head>
@@ -690,56 +788,150 @@
         <strong id="stat-approved">0</strong>
       </article>
       <article class="stat-card">
-        <span>已退回</span>
+        <span>不通過</span>
         <strong id="stat-rejected">0</strong>
       </article>
     </section>
 
+  <section class="tabbed-section" aria-label="履歷狀態列表">
+    <header>
+      <nav class="tab-nav" id="resume-tabs" role="tablist" aria-label="履歷狀態篩選">
+        <button
+          id="tab-all"
+          class="tab-button active"
+          type="button"
+          role="tab"
+          aria-selected="true"
+          data-tab="all"
+          data-target="#panel-all"
+          data-variant="all"
+        >
+          <span class="tab-label">全部</span>
+          <span class="tab-count" id="tab-count-all">(0)</span>
+        </button>
+        <button
+          id="tab-uploaded"
+          class="tab-button"
+          type="button"
+          role="tab"
+          aria-selected="false"
+          data-tab="uploaded"
+          data-target="#panel-uploaded"
+          data-variant="uploaded"
+        >
+          <span class="tab-label">已上傳</span>
+          <span class="tab-count" id="tab-count-uploaded">(0)</span>
+        </button>
+        <button
+          id="tab-reviewed"
+          class="tab-button"
+          type="button"
+          role="tab"
+          aria-selected="false"
+          data-tab="reviewed"
+          data-target="#panel-reviewed"
+          data-variant="reviewed"
+        >
+          <span class="tab-label">審查完成</span>
+          <span class="tab-count" id="tab-count-reviewed">(0)</span>
+        </button>
+        <button
+          id="tab-returned"
+          class="tab-button"
+          type="button"
+          role="tab"
+          aria-selected="false"
+          data-tab="returned"
+          data-target="#panel-returned"
+          data-variant="returned"
+        >
+          <span class="tab-label">已退件</span>
+          <span class="tab-count" id="tab-count-returned">(0)</span>
+        </button>
+      </nav>
+    </header>
+    <div class="tab-panels">
+      <div class="tab-panel active" id="panel-all" data-tab-panel="all" role="tabpanel" aria-labelledby="tab-all">
+        <div class="table-wrapper">
+          <table class="resume-table" aria-describedby="tab-all">
+            <thead>
+              <tr>
+                <th scope="col">上傳時間</th>
+                <th scope="col">檔案名稱</th>
+                <th scope="col">狀態</th>
+                <th scope="col">操作</th>
+              </tr>
+            </thead>
+            <tbody id="resume-table-body-all">
+              <tr>
+                <td colspan="4" class="table-empty">載入中...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="tab-panel" id="panel-uploaded" data-tab-panel="uploaded" role="tabpanel" aria-labelledby="tab-uploaded" hidden>
+        <div class="table-wrapper">
+          <table class="resume-table" aria-describedby="tab-uploaded">
+            <thead>
+              <tr>
+                <th scope="col">上傳時間</th>
+                <th scope="col">檔案名稱</th>
+                <th scope="col">狀態</th>
+                <th scope="col">操作</th>
+              </tr>
+            </thead>
+            <tbody id="resume-table-body-uploaded">
+              <tr>
+                <td colspan="4" class="table-empty">載入中...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="tab-panel" id="panel-reviewed" data-tab-panel="reviewed" role="tabpanel" aria-labelledby="tab-reviewed" hidden>
+        <div class="table-wrapper">
+          <table class="resume-table" aria-describedby="tab-reviewed">
+            <thead>
+              <tr>
+                <th scope="col">上傳時間</th>
+                <th scope="col">檔案名稱</th>
+                <th scope="col">狀態</th>
+                <th scope="col">操作</th>
+              </tr>
+            </thead>
+            <tbody id="resume-table-body-reviewed">
+              <tr>
+                <td colspan="4" class="table-empty">載入中...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="tab-panel" id="panel-returned" data-tab-panel="returned" role="tabpanel" aria-labelledby="tab-returned" hidden>
+        <div class="table-wrapper">
+          <table class="resume-table" aria-describedby="tab-returned">
+            <thead>
+              <tr>
+                <th scope="col">上傳時間</th>
+                <th scope="col">檔案名稱</th>
+                <th scope="col">狀態</th>
+                <th scope="col">操作</th>
+              </tr>
+            </thead>
+            <tbody id="resume-table-body-returned">
+              <tr>
+                <td colspan="4" class="table-empty">載入中...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </section>
+
     <section class="results">
       <div class="cards" id="resume-list"></div>
-
-      <aside class="detail-panel" id="detail-panel" aria-live="polite">
-        <div class="detail-header">
-          <img src="/static/images/avatar-default.png" alt="履歷頭像" class="avatar" id="detail-avatar" />
-          <div>
-            <h3 id="detail-name">學生履歷</h3>
-          </div>
-        </div>
-
-        <div class="info-grid">
-          <span id="detail-position"><strong>姓名：</strong><span class="value">—</span></span>
-          <span id="detail-applied-date"><strong>班級：</strong><span class="value">—</span></span>
-          <span id="detail-school"><strong>學號：</strong><span class="value">—</span></span>
-          <span id="detail-start-date"><strong>應徵職缺：</strong><span class="value">—</span></span>
-        </div>
-
-        <div class="detail-section">
-          <h4 class="section-title">自傳</h4>
-          <p id="detail-intro">尚未選擇任何履歷。</p>
-        </div>
-
-        <div class="detail-section">
-          <h4 class="section-title">成績單</h4>
-          <ul id="detail-portfolio-list"></ul>
-        </div>
-
-        <div class="detail-section">
-          <h4 class="section-title">證照</h4>
-          <div class="tag-group" id="detail-skills"></div>
-        </div>
-
-        <div class="detail-section">
-          <h4 class="section-title">語言能力</h4>
-          <div class="history" id="detail-history"></div>
-        </div>
-
-        <div class="detail-actions" id="detail-actions"></div>
-
-      <div class="detail-bottom-actions" id="detail-bottom-actions">
-        <button type="button" class="btn-primary" data-action="approve">通過</button>
-        <button type="button" class="btn-secondary" data-action="reject">不通過</button>
-      </div>
-      </aside>
     </section>
   </main>
 
@@ -786,18 +978,15 @@
     let pendingAction = null;
 
     const cardsContainer = document.getElementById('resume-list');
-    const detailAvatar = document.getElementById('detail-avatar');
-    const detailName = document.getElementById('detail-name');
-    const detailPosition = document.querySelector('#detail-position .value');
-    const detailAppliedDate = document.querySelector('#detail-applied-date .value');
-    const detailSchool = document.querySelector('#detail-school .value');
-    const detailStartDate = document.querySelector('#detail-start-date .value');
-    const detailIntro = document.getElementById('detail-intro');
-    const detailPortfolio = document.getElementById('detail-portfolio-list');
-    const detailSkills = document.getElementById('detail-skills');
-    const detailHistory = document.getElementById('detail-history');
-    const detailActions = document.getElementById('detail-actions');
-    const detailBottomActions = document.getElementById('detail-bottom-actions');
+    const tabNav = document.getElementById('resume-tabs');
+    const tabButtons = tabNav ? Array.from(tabNav.querySelectorAll('.tab-button')) : [];
+    const tabPanels = tabNav ? Array.from(document.querySelectorAll('[data-tab-panel]')) : [];
+    const tabCountElements = {
+      all: document.getElementById('tab-count-all'),
+      uploaded: document.getElementById('tab-count-uploaded'),
+      reviewed: document.getElementById('tab-count-reviewed'),
+      returned: document.getElementById('tab-count-returned'),
+    };
 
     const filterPosition = document.getElementById('filter-position');
     const filterStatus = document.getElementById('filter-status');
@@ -844,6 +1033,51 @@
       if (event.target === menu) toggleMenu(false);
     });
 
+    const activateTab = (tabKey, options = {}) => {
+      if (!tabKey) return;
+      tabButtons.forEach((button) => {
+        const isActive = button.dataset.tab === tabKey;
+        button.classList.toggle('active', isActive);
+        button.setAttribute('aria-selected', isActive.toString());
+        button.setAttribute('tabindex', isActive ? '0' : '-1');
+      });
+      tabPanels.forEach((panel) => {
+        const isActive = panel.dataset.tabPanel === tabKey;
+        panel.classList.toggle('active', isActive);
+        panel.toggleAttribute('hidden', !isActive);
+      });
+      const targetSelector = tabButtons.find((button) => button.dataset.tab === tabKey)?.dataset.target;
+      if (!options.silent && targetSelector) {
+        const targetNode = document.querySelector(targetSelector);
+        if (targetNode) {
+          targetNode.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+      }
+      if (!options.silent) {
+        const nextHash = `#${tabKey}`;
+        if (window.location.hash !== nextHash) {
+          window.history.replaceState(null, '', nextHash);
+        }
+      }
+    };
+
+    if (tabNav && tabButtons.length) {
+      const tabKeys = tabButtons.map((button) => button.dataset.tab);
+      const hashValue = window.location.hash.replace('#', '');
+      const initialTab = tabKeys.includes(hashValue) ? hashValue : tabButtons[0].dataset.tab;
+      activateTab(initialTab, { silent: true });
+      tabNav.addEventListener('click', (event) => {
+        const button = event.target.closest('.tab-button');
+        if (!button || !tabNav.contains(button)) return;
+        activateTab(button.dataset.tab);
+      });
+      window.addEventListener('hashchange', () => {
+        const currentHash = window.location.hash.replace('#', '');
+        if (!tabKeys.includes(currentHash)) return;
+        activateTab(currentHash, { silent: true });
+      });
+    }
+
     const createEmptyNode = (text, tag = 'span') => {
       const node = document.createElement(tag);
       node.className = 'empty-text';
@@ -858,7 +1092,7 @@
           desc: '若需補充通知，可在下方備註；備註將寫入審核歷程。',
         },
         reject: {
-          title: `退回「${name}」履歷`,
+          title: `不通過「${name}」履歷`,
           desc: '請說明退回原因，此訊息將通知學生並記錄於歷程。',
         },
         comment: {
@@ -980,166 +1214,27 @@
     };
 
     const renderSummary = (summary = {}) => {
-      statPending.textContent = summary.pending ?? 0;
-      statApproved.textContent = summary.approved ?? 0;
-      statRejected.textContent = summary.rejected ?? 0;
-      statNew.textContent = summary.new_this_week ?? 0;
-    };
+      const pendingCount = summary.pending ?? 0;
+      const approvedCount = summary.approved ?? 0;
+      const rejectedCount = summary.rejected ?? 0;
+      const totalCount = summary.all ?? summary.total ?? pendingCount + approvedCount + rejectedCount;
 
-    const renderSkills = (skills) => {
-      detailSkills.innerHTML = '';
-      if (!skills || !skills.length) {
-        detailSkills.appendChild(createEmptyNode('尚未提供技能'));
-        return;
-      }
-      skills.forEach((skill) => {
-        const span = document.createElement('span');
-        span.className = 'badge';
-        span.textContent = skill;
-        detailSkills.appendChild(span);
-      });
-    };
+      if (statPending) statPending.textContent = pendingCount;
+      if (statApproved) statApproved.textContent = approvedCount;
+      if (statRejected) statRejected.textContent = rejectedCount;
+      if (statNew) statNew.textContent = summary.new_this_week ?? 0;
 
-    const renderPortfolio = (items) => {
-      detailPortfolio.innerHTML = '';
-      if (!items || !items.length) {
-        detailPortfolio.appendChild(createEmptyNode('尚未提供附件', 'li'));
-        return;
-      }
-      items.forEach((item) => {
-        const li = document.createElement('li');
-        const link = document.createElement('a');
-        link.href = item.url || '#';
-        link.target = '_blank';
-        link.rel = 'noopener noreferrer';
-        link.textContent = item.label || '附件';
-        li.appendChild(link);
-        detailPortfolio.appendChild(li);
-      });
-    };
-
-    const renderHistory = (history) => {
-      detailHistory.innerHTML = '';
-      if (!history || !history.length) {
-        detailHistory.appendChild(createEmptyNode('尚無歷程紀錄'));
-        return;
-      }
-      history.forEach((entry) => {
-        const row = document.createElement('span');
-        const timestampNode = document.createElement('strong');
-        timestampNode.textContent = entry.timestamp;
-        row.appendChild(timestampNode);
-        row.appendChild(document.createTextNode(` - ${entry.text}`));
-        if (entry.type === 'comment') {
-          row.classList.add('history-comment');
+      const tabCountMapping = {
+        all: totalCount,
+        uploaded: pendingCount,
+        reviewed: approvedCount,
+        returned: rejectedCount,
+      };
+      Object.entries(tabCountMapping).forEach(([key, value]) => {
+        if (tabCountElements[key]) {
+          tabCountElements[key].textContent = `(${value})`;
         }
-        detailHistory.appendChild(row);
       });
-    };
-
-    const renderDetailActions = (application) => {
-      detailActions.innerHTML = '';
-      const actions = getAvailableActions(application).filter((action) => action.action !== 'view');
-      if (!actions.length) {
-        detailActions.appendChild(createEmptyNode('目前無可用操作'));
-        updateBottomActions(application);
-        return;
-      }
-      actions.forEach((action) => {
-        const button = document.createElement('button');
-        button.type = 'button';
-        button.className = action.variant === 'primary' ? 'btn-primary' : 'btn-secondary';
-        button.dataset.action = action.action;
-        button.textContent = action.label;
-        detailActions.appendChild(button);
-      });
-      updateBottomActions(application);
-    };
-
-    const updateBottomActions = (application) => {
-      if (!detailBottomActions) {
-        return;
-      }
-      const approveBtn = detailBottomActions.querySelector('[data-action="approve"]');
-      const rejectBtn = detailBottomActions.querySelector('[data-action="reject"]');
-      const actions = getAvailableActions(application);
-      const hasApprove = actions.some((action) => action.action === 'approve');
-      const hasReject = actions.some((action) => action.action === 'reject');
-      
-      // ▼▼▼ 修改 2: 這裡的邏輯被移除了，不再切換 hidden class ▼▼▼
-      // const shouldShow = hasApprove || hasReject;
-      // detailBottomActions.classList.toggle('hidden', !shouldShow);
-
-      // 我們保留按鈕的 style.display 控制，這樣 "通過" 按鈕在 "已通過" 狀態時仍會隱藏
-      // 但整個區塊 (detail-bottom-actions) 會保持可見
-      if (approveBtn) {
-        approveBtn.style.display = hasApprove ? '' : 'none';
-      }
-      if (rejectBtn) {
-        rejectBtn.style.display = hasReject ? '' : 'none';
-      }
-      // ▲▲▲ 修改 2 結束 ▲▲▲
-    };
-
-    const renderDetail = (application) => {
-      detailAvatar.src = application.avatar || '/static/images/avatar-default.png';
-      detailName.textContent = application.name || '—';
-      detailPosition.textContent = application.position_label || '—';
-      detailAppliedDate.textContent = application.applied_date || '—';
-      detailSchool.textContent = application.school_label || '—';
-      detailStartDate.textContent = application.start_date || '—';
-      detailIntro.textContent = application.summary || '尚未提供自我簡介';
-      renderPortfolio(application.portfolio);
-      renderSkills(application.skills);
-      renderHistory(application.history);
-      renderDetailActions(application);
-    };
-
-    const clearDetail = () => {
-      detailAvatar.src = '/static/images/avatar-default.png';
-      detailName.textContent = '學生履歷';
-      detailPosition.textContent = '—';
-      detailAppliedDate.textContent = '—';
-      detailSchool.textContent = '—';
-      detailStartDate.textContent = '—';
-      detailIntro.textContent = '尚未選擇任何履歷。';
-      detailPortfolio.innerHTML = '';
-      detailPortfolio.appendChild(createEmptyNode('尚未提供附件', 'li'));
-      detailSkills.innerHTML = '';
-      detailSkills.appendChild(createEmptyNode('尚未提供技能'));
-      detailHistory.innerHTML = '';
-      detailHistory.appendChild(createEmptyNode('尚無歷程紀錄'));
-      detailActions.innerHTML = '';
-      detailActions.appendChild(createEmptyNode('請先選擇履歷'));
-      if (detailBottomActions) {
-        // ▼▼▼ 修改 3: 從 .add('hidden') 改為 .remove('hidden') ▼▼▼
-        detailBottomActions.classList.remove('hidden');
-        
-        // 同時確保按鈕在清除時顯示，以符合初始狀態
-        const approveBtn = detailBottomActions.querySelector('[data-action="approve"]');
-        const rejectBtn = detailBottomActions.querySelector('[data-action="reject"]');
-         if (approveBtn) {
-          approveBtn.style.display = '';
-        }
-        if (rejectBtn) {
-          rejectBtn.style.display = '';
-        }
-      }
-    };
-
-    const loadApplicationDetail = async (applicationId) => {
-      if (!applicationId) {
-        clearDetail();
-        return;
-      }
-      try {
-        const response = await fetchJSON(`/vendor/api/applications/${applicationId}`);
-        if (response && response.item) {
-          renderDetail(response.item);
-        }
-      } catch (error) {
-        alert(`讀取履歷詳情失敗：${error.message}`);
-      }
     };
 
     const loadApplications = async (options = {}) => {
@@ -1156,9 +1251,6 @@
       if (!applications.length) {
         selectedApplicationId = null;
         renderCards([], null);
-        if (!options.skipDetailFetch) {
-          clearDetail();
-        }
         return;
       }
       let targetId = options.selectId || selectedApplicationId;
@@ -1167,21 +1259,13 @@
       }
       selectedApplicationId = targetId;
       renderCards(applications, selectedApplicationId);
-      if (options.skipDetailFetch && options.detailData) {
-        renderDetail(options.detailData);
-      } else {
-        await loadApplicationDetail(selectedApplicationId);
-      }
     };
 
-    const selectApplication = (applicationId, forceFetch = true) => {
+    const selectApplication = (applicationId) => {
       if (!applicationId) return;
       if (selectedApplicationId !== applicationId) {
         selectedApplicationId = applicationId;
         renderCards(applications, selectedApplicationId);
-      }
-      if (forceFetch) {
-        loadApplicationDetail(applicationId);
       }
     };
 
@@ -1196,24 +1280,8 @@
         openModal(action, applicationName);
         return;
       }
-      selectApplication(applicationId, true);
+      selectApplication(applicationId);
     });
-
-    detailActions.addEventListener('click', (event) => {
-      const action = event.target.dataset.action;
-      if (!action || !selectedApplicationId) return;
-      pendingAction = { action, appId: selectedApplicationId, name: detailName.textContent };
-      openModal(action, detailName.textContent);
-    });
-
-    if (detailBottomActions) {
-      detailBottomActions.addEventListener('click', (event) => {
-        const action = event.target.dataset.action;
-        if (!action || !selectedApplicationId) return;
-        pendingAction = { action, appId: selectedApplicationId, name: detailName.textContent };
-        openModal(action, detailName.textContent);
-      });
-    }
 
     filterApplyBtn.addEventListener('click', () => {
       loadApplications({ selectId: null }).catch((error) => {
@@ -1273,11 +1341,7 @@
             applications[existingIndex] = { ...applications[existingIndex], ...updatedItem };
           }
           adjustSummaryCounts(previousStatus, updatedItem.status);
-          await loadApplications({
-            selectId: updatedItem.id,
-            skipDetailFetch: true,
-            detailData: updatedItem,
-          });
+          await loadApplications({ selectId: updatedItem.id });
         } else {
           await loadApplications({ selectId: currentAction.appId });
         }
@@ -1300,8 +1364,6 @@
         closeModal();
       }
     });
-
-    clearDetail();
 
     loadApplications().catch((error) => {
       alert(`載入履歷列表失敗：${error.message}`);
