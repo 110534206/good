@@ -56,22 +56,30 @@
   <header>智慧實習平台 | 履歷管理</header>
 
   <div class="container">
-    <ul class="nav nav-tabs mb-4">
-      <li class="nav-item">
-        <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#form-pane">📝 填寫履歷</button>
-      </li>
-      <li class="nav-item">
-        <button class="nav-link" data-bs-toggle="tab" data-bs-target="#records-pane">📂 履歷紀錄</button>
-      </li>
-    </ul>
+    <div class="card p-4">
+      <ul class="nav nav-tabs" id="myTab" role="tablist">
+        <li class="nav-item" role="presentation">
+          <button class="nav-link active" id="form-tab" data-bs-toggle="tab" data-bs-target="#form-pane" type="button"
+            role="tab" aria-controls="form-pane" aria-selected="true">
+            表單填寫
+          </button>
+        </li>
+        <li class="nav-item" role="presentation">
+          <button class="nav-link" id="records-tab" data-bs-toggle="tab" data-bs-target="#records-pane" type="button"
+            role="tab" aria-controls="records-pane" aria-selected="false">
+            紀錄下載
+          </button>
+        </li>
+      </ul>
 
-    <div class="tab-content">
-      <!-- 填寫履歷 -->
-      <div class="tab-pane fade show active" id="form-pane">
-        <form id="resumeForm" enctype="multipart/form-data">
-          <!-- 基本資料 -->
-          <div class="card p-4 mb-3">
-            <h5 class="text-primary">👤 個人基本資料</h5>
+      <div class="tab-content" id="myTabContent">
+        <div class="tab-pane fade show active" id="form-pane" role="tabpanel" aria-labelledby="form-tab" tabindex="0">
+
+          <form id="resumeForm" enctype="multipart/form-data">
+
+            <h5 class="mt-4 mb-3">個人基本資料</h5>
+            <input type="hidden" id="conduct_score" name="conduct_score">
+
             <div class="row g-3">
               <div class="col-md-4">
                 <label class="form-label">姓名</label>
@@ -82,11 +90,12 @@
                 <input type="date" name="birth_date" class="form-control" required />
               </div>
               <div class="col-md-4">
-                <label class="form-label">性別</label>
-                <select name="gender" class="form-select" required>
-                  <option value="">請選擇</option>
+                <label for="gender" class="form-label">性別</label>
+                <select class="form-select" id="gender" name="gender" required>
+                  <option value="">選擇...</option>
                   <option value="男">男</option>
                   <option value="女">女</option>
+                  <option value="其他">其他</option>
                 </select>
               </div>
               <div class="col-md-6">
@@ -101,117 +110,145 @@
                 <label class="form-label">地址</label>
                 <input type="text" name="address" class="form-control" required />
               </div>
-              <div class="col-md-6">
+              <div class="col-md-6 mt-3">
                 <label class="form-label">操行成績分數 (0-100)</label>
                 <input type="number" name="conduct_score_numeric" class="form-control" min="0" max="100" required>
               </div>
-              <input type="hidden" name="conduct_score" id="conduct_score">
-              <div class="col-md-6">
-                <label class="form-label">上傳照片 (JPG/PNG)</label>
-                <input type="file" name="photo" class="form-control" accept="image/jpeg, .jpg" />
+              <div class="col-md-6 mt-3">
+                <label for="photo" class="form-label">個人大頭照 (JPG/PNG)</label>
+                <input class="form-control" type="file" id="photo" name="photo" accept="image/*" />
               </div>
             </div>
-          </div>
+            <div class="mb-4"></div>
 
-          <!-- 修課科目 -->
-          <div class="card p-4 mb-3">
-            <h5 class="text-success">📘 已修習專業核心科目（自動載入）</h5>
-            <table class="table table-bordered text-center">
+            <div class="card p-4 mb-3">
+              <h5 class="text-success">已修習專業核心科目</h5>
+              <table class="table table-bordered text-center">
+                <thead class="table-light">
+                  <tr>
+                    <th>科目名稱</th>
+                    <th>學分</th>
+                  </tr>
+                </thead>
+                <tbody id="courseTableBody"></tbody>
+              </table>
+            </div>
+
+            <div class="card p-4 mb-3">
+              <h5 class="text-secondary">相關證照</h5>
+              <table class="table table-bordered text-center align-middle">
+                <thead class="table-light">
+                  <tr>
+                    <th>勞動部證照</th>
+                    <th>國際證照</th>
+                    <th>國內證照</th>
+                    <th>其他證照</th>
+                    <th>操作</th>
+                  </tr>
+                </thead>
+                <tbody id="certificate-table-body">
+                  <tr>
+                    <td><input type="text" name="labor_cert[]" class="form-control" placeholder="例：電腦軟體應用乙級"></td>
+                    <td><input type="text" name="international_cert[]" class="form-control" placeholder="例：TOEIC 800分">
+                    </td>
+                    <td><input type="text" name="domestic_cert[]" class="form-control" placeholder="例：中餐丙級"></td>
+                    <td><input type="text" name="other_cert[]" class="form-control" placeholder="例：專題競賽、研習營"></td>
+                    <td><button type="button" class="btn btn-outline-danger btn-sm remove-row">移除</button></td>
+                  </tr>
+                </tbody>
+              </table>
+              <button type="button" class="btn btn-sm btn-outline-success" id="add-certificate-row">＋新增一列</button>
+            </div>
+            <h5 class="mt-4 mb-3">語文能力</h5>
+            <div class="row mb-3">
+              <div class="col-md-3 language-group">
+                <label>英語</label>
+                <select class="form-select form-select-sm" name="lang_en_level">
+                  <option value="">未選</option>
+                  <option value="精通">精通</option>
+                  <option value="中等">中等</option>
+                  <option value="略懂">略懂</option>
+                </select>
+              </div>
+              <div class="col-md-3 language-group">
+                <label>台語</label>
+                <select class="form-select form-select-sm" name="lang_tw_level">
+                  <option value="">未選</option>
+                  <option value="精通">精通</option>
+                  <option value="中等">中等</option>
+                  <option value="略懂">略懂</option>
+                </select>
+              </div>
+              <div class="col-md-3 language-group">
+                <label>日語</label>
+                <select class="form-select form-select-sm" name="lang_jp_level">
+                  <option value="">未選</option>
+                  <option value="精通">精通</option>
+                  <option value="中等">中等</option>
+                  <option value="略懂">略懂</option>
+                </select>
+              </div>
+              <div class="col-md-3 language-group">
+                <label>客語</label>
+                <select class="form-select form-select-sm" name="lang_hk_level">
+                  <option value="">未選</option>
+                  <option value="精通">精通</option>
+                  <option value="中等">中等</option>
+                  <option value="略懂">略懂</option>
+                </select>
+              </div>
+              </div>
+              <div class="mb-4"></div>
+
+              <div class="card p-4 mb-3">
+                <h5 class="text-info">自傳</h5>
+                <textarea name="autobiography" rows="6" class="form-control" placeholder="請描述家庭生活、求學經過、個人專長、未來規劃等..."
+                  required></textarea>
+              </div>
+
+              <div class="card p-4 mb-3">
+                <h5 class="text-primary">成績單上傳</h5>
+                <div class="row g-3">
+                  <div class="col-12">
+                    <label class="form-label">上傳學期成績單 (JPG/PNG)</label>
+                    <input type="file" name="transcript_file" class="form-control"
+                      accept="image/jpeg, .jpg, image/png, .png" required />
+                  </div>
+                </div>
+              </div>
+
+              <div class="card p-4 mb-3">
+                <h5 class="text-success">證照圖片上傳</h5>
+                <div class="row g-3">
+                  <div class="col-12">
+                    <label class="form-label">可上傳多張證照圖片 (JPG/PNG)</label>
+                    <input type="file" name="cert_photos" class="form-control" accept="image/jpeg,image/png" multiple>
+                  </div>
+                </div>
+              </div>
+              <div class="text-center mt-4">
+                <button type="submit" class="btn btn-primary btn-lg">提交並生成履歷</button>
+              </div>
+          </form>
+        </div>
+
+        <div class="tab-pane fade" id="records-pane">
+          <div id="resumeRecords" class="p-3">
+            <table class="table table-striped align-middle text-center">
               <thead class="table-light">
                 <tr>
-                  <th>科目名稱</th>
-                  <th>學分</th>
+                  <th>生成時間</th>
+                  <th>檔名</th>
+                  <th>下載</th>
                 </tr>
               </thead>
-              <tbody id="courseTableBody"></tbody>
-            </table>
-          </div>
-
-          <!-- 相關證照 -->
-          <div class="card p-4 mb-3">
-            <h5 class="text-secondary">🏅 相關證照</h5>
-            <table class="table table-bordered text-center align-middle">
-              <thead class="table-light">
+              <tbody id="recordsBody">
                 <tr>
-                  <th>勞動部證照</th>
-                  <th>國際證照</th>
-                  <th>國內證照</th>
-                  <th>其他證照</th>
-                  <th>操作</th>
-                </tr>
-              </thead>
-              <tbody id="certificate-table-body">
-                <tr>
-                  <td><input type="text" name="labor_cert[]" class="form-control" placeholder="例：電腦軟體應用乙級"></td>
-                  <td><input type="text" name="international_cert[]" class="form-control" placeholder="例：TOEIC 800分">
-                  </td>
-                  <td><input type="text" name="domestic_cert[]" class="form-control" placeholder="例：中餐丙級"></td>
-                  <td><input type="text" name="other_cert[]" class="form-control" placeholder="例：專題競賽、研習營"></td>
-                  <td><button type="button" class="btn btn-outline-danger btn-sm remove-row">移除</button></td>
+                  <td colspan="3" class="text-muted">尚無履歷紀錄</td>
                 </tr>
               </tbody>
             </table>
-            <button type="button" class="btn btn-sm btn-outline-success" id="add-certificate-row">＋新增一列</button>
           </div>
-
-          <!-- 語文能力 -->
-          <div class="card p-4 mb-3">
-            <h5 class="text-warning">🌏 語文能力</h5>
-            <div id="language-section"></div>
-          </div>
-
-          <!-- 自傳 -->
-          <div class="card p-4 mb-3">
-            <h5 class="text-info">🖋 自傳</h5>
-            <textarea name="autobiography" rows="6" class="form-control" placeholder="請描述家庭生活、求學經過、個人專長、未來規劃等..."
-              required></textarea>
-          </div>
-
-          <div class="card p-4 mb-3">
-            <h5 class="text-primary">📑 成績單上傳</h5>
-            <div class="row g-3">
-              <div class="col-12">
-                <label class="form-label">上傳學期成績單 (JPG/PNG)</label>
-                <input type="file" name="transcript_file" class="form-control"
-                  accept="image/jpeg, .jpg, image/png, .png" required />
-              </div>
-            </div>
-          </div>
-
-          <!-- 證照圖片上傳 -->
-          <div class="card p-4 mb-3">
-            <h5 class="text-success">🏆 證照圖片上傳</h5>
-            <div class="row g-3">
-              <div class="col-12">
-                <label class="form-label">可上傳多張證照圖片 (JPG/PNG)</label>
-                <input type="file" name="cert_photos" class="form-control" accept="image/jpeg,image/png" multiple>
-              </div>
-            </div>
-          </div>
-
-          <div class="text-center mt-4">
-            <button type="submit" class="btn btn-primary btn-lg">提交並生成履歷</button>
-          </div>
-        </form>
-      </div>
-
-      <!-- 履歷紀錄 -->
-      <div class="tab-pane fade" id="records-pane">
-        <div id="resumeRecords" class="p-3">
-          <table class="table table-striped align-middle text-center">
-            <thead class="table-light">
-              <tr>
-                <th>生成時間</th>
-                <th>檔名</th>
-                <th>下載</th>
-              </tr>
-            </thead>
-            <tbody id="recordsBody">
-              <tr>
-                <td colspan="3" class="text-muted">尚無履歷紀錄</td>
-              </tr>
-            </tbody>
-          </table>
         </div>
       </div>
     </div>
@@ -228,35 +265,11 @@
       { name: "資料庫伺服器管理與實作", credits: 2 }
     ];
 
-    const languages = [
-      { code: "en", name: "英語" },
-      { code: "tw", name: "台語" },
-      { code: "jp", name: "日語" },
-      { code: "hk", name: "客語" }
-    ];
-
     document.addEventListener("DOMContentLoaded", () => {
+      // 載入固定修課科目
       const tbody = document.getElementById("courseTableBody");
       fixedCourses.forEach(c => {
         tbody.innerHTML += `<tr><td>${c.name}</td><td>${c.credits}</td></tr>`;
-      });
-
-      // 語文能力
-      const langSection = document.getElementById("language-section");
-      langSection.classList.add('language-grid');
-
-      languages.forEach(lang => {
-        langSection.innerHTML += `
-    <div class="language-item">
-      <label class="form-label">${lang.name}</label>
-      <select name="lang_${lang.code}_level" class="form-select">
-        <option value="">請選擇</option>
-        <option value="精通">精通</option>
-        <option value="中等">中等</option>
-        <option value="略懂">略懂</option>
-      </select>
-    </div>
-  `;
       });
 
       // 操行成績轉換
@@ -270,7 +283,7 @@
         else if (score >= 70) grade = "乙";
         else if (score >= 60) grade = "丙";
         else if (score >= 0) grade = "丁";
-        hiddenGrade.value = grade;
+        hiddenGrade.value = grade; // 將轉換後的等級寫入隱藏欄位
       });
 
       // 新增 / 移除「相關證照」列
@@ -298,6 +311,12 @@
         e.preventDefault();
         const formData = new FormData(e.target);
         formData.append("courses", JSON.stringify(fixedCourses));
+
+        // 檢查 formData 內容 (可選，用於偵錯)
+        // for (let pair of formData.entries()) {
+        //     console.log(pair[0]+ ': '+ pair[1]); 
+        // }
+
         const res = await fetch("/api/submit_and_generate", { method: "POST", body: formData });
         const result = await res.json();
         if (result.success) {

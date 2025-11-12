@@ -16,24 +16,21 @@ resume_bp = Blueprint("resume_bp", __name__)
 UPLOAD_FOLDER = "uploads/resumes"
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
+# -------------------------
+# 分數轉等級輔助函式
+# -------------------------
 def score_to_grade(score):
-    # 若已經是等第，直接回傳
-    if str(score).strip() in ['優', '甲', '乙', '丙', '丁']:
-        return str(score).strip()
-
-    # 若是分數才做數字轉換
     try:
-        score = int(str(score).strip())
+        score = int(score)
     except (ValueError, TypeError):
         return '丁'
-
-    if score >= 90:
+    if 90 <= score <= 99:
         return '優'
-    elif score >= 80:
+    elif 80 <= score <= 89:
         return '甲'
-    elif score >= 70:
+    elif 70 <= score <= 79:
         return '乙'
-    elif score >= 60:
+    elif 60 <= score <= 69:
         return '丙'
     else:
         return '丁'
@@ -283,11 +280,11 @@ def generate_application_form_docx(student_data, output_path):
             'Phone': info.get('Phone', ''),
             'Email': info.get('Email', ''),
             'Address': info.get('Address', ''),
-            'ConductScoreNumeric': info.get('ConductScoreNumeric', ''),
             'ConductScore': conduct_score,
             'Autobiography': info.get('Autobiography', ''),
             'courses': [{'name': g.get('CourseName', ''), 'credits': g.get('Credits', ''), 'grade': g.get('Grade', '')} for g in grades],
             'Image_1': image_obj,
+            # 【修正】將 key 從 'transcript_placeholder' 改為 'transcript_path'
             'transcript_path': transcript_obj
         }
 
@@ -508,7 +505,7 @@ def submit_and_generate_api():
             "phone": data.get("phone"),
             "email": data.get("email"),
             "address": data.get("address"),
-            "conduct_score": score_to_grade(data.get("conduct_score")),
+            "conduct_score": data.get("conduct_score"),
             "autobiography": data.get("autobiography"),
             "courses": courses,
             "photo_path": photo_path,
@@ -529,9 +526,9 @@ def submit_and_generate_api():
         student_data_for_doc = get_student_info_for_doc(cursor, student_id)
         student_data_for_doc["info"]["PhotoPath"] = photo_path 
         student_data_for_doc["info"]["TranscriptPath"] = transcript_path 
-        student_data_for_doc["info"]["ConductScoreNumeric"] = data.get("conduct_score_numeric") # <-- 新增此行
         # 【新增】傳遞證照圖片路徑
         student_data_for_doc["cert_photo_paths"] = cert_photo_paths
+
         filename = f"{student_id}_履歷_{datetime.now().strftime('%Y%m%d_%H%M%S')}.docx"
         save_path = os.path.join(UPLOAD_FOLDER, filename)
 
