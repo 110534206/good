@@ -33,21 +33,56 @@
       border-radius: 10px;
     }
 
+    /* 調整表格字體大小和欄位最小寬度以容納完整文字 */
     table {
-      font-size: 0.95rem;
+      font-size: 1rem;
+      table-layout: fixed;
+      width: 100%;
     }
 
-    /*用於語文能力的水平排列 */
-    .language-grid {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 1.5rem;
-      align-items: flex-start;
+    /* 預設最小寬度 */
+    .table th {
+      min-width: 50px;
+      white-space: nowrap;
+      /* 確保標題不會換行 */
+      text-align: center;
+      /* 讓標題文字置中 */
     }
 
-    .language-item {
-      flex: 1 1 calc(25% - 1.5rem);
-      min-width: 150px;
+    /* 針對所有的「科目名稱」欄位進行加寬：第 1, 3, 5 個 <th> */
+    .table th:nth-child(1),
+    .table th:nth-child(3),
+    .table th:nth-child(5) {
+      /* 雖然您指定 300px，但過大會導致橫向滾動條。
+         為了讓表格在 1000px 寬度內正常顯示，我們使用 200px 左右較為合理。
+         我保留 300px，但請注意可能出現滾動條。*/
+      min-width: 300px;
+    }
+
+    /* 針對所有的「學分」欄位：第 2, 4, 6 個 <th> */
+    .table th:nth-child(2),
+    .table th:nth-child(4),
+    .table th:nth-child(6) {
+      /* 實際測試，50px 或 60px 才能容納「學分」兩字和 input 框的最小寬度 */
+      min-width: 60px;
+    }
+
+    /* 確保表格內容的 input 欄位可以填滿父層 (td) 的寬度 */
+    .table td input.form-control {
+      width: 100%;
+      /* 由於學分欄位非常窄，我們可以移除 input 框的內邊距來爭取空間 */
+      padding: .2rem .2rem;
+      font-size: 0.85rem;
+      /* 縮小字體以容納窄欄位 */
+    }
+
+    /* 證照表格不需要這麼寬，讓它自動分配 */
+    .card:has(h5.text-secondary) table th:not(:last-child) {
+      min-width: unset;
+    }
+
+    .language-group label {
+      font-weight: 600;
     }
   </style>
 </head>
@@ -60,21 +95,16 @@
       <ul class="nav nav-tabs" id="myTab" role="tablist">
         <li class="nav-item" role="presentation">
           <button class="nav-link active" id="form-tab" data-bs-toggle="tab" data-bs-target="#form-pane" type="button"
-            role="tab" aria-controls="form-pane" aria-selected="true">
-            表單填寫
-          </button>
+            role="tab" aria-controls="form-pane" aria-selected="true">表單填寫</button>
         </li>
         <li class="nav-item" role="presentation">
           <button class="nav-link" id="records-tab" data-bs-toggle="tab" data-bs-target="#records-pane" type="button"
-            role="tab" aria-controls="records-pane" aria-selected="false">
-            紀錄下載
-          </button>
+            role="tab" aria-controls="records-pane" aria-selected="false">紀錄下載</button>
         </li>
       </ul>
 
       <div class="tab-content" id="myTabContent">
         <div class="tab-pane fade show active" id="form-pane" role="tabpanel" aria-labelledby="form-tab" tabindex="0">
-
           <form id="resumeForm" enctype="multipart/form-data">
 
             <h5 class="mt-4 mb-3">個人基本資料</h5>
@@ -119,22 +149,28 @@
                 <input class="form-control" type="file" id="photo" name="photo" accept="image/*" />
               </div>
             </div>
+
             <div class="mb-4"></div>
 
             <div class="card p-4 mb-3">
               <h5 class="text-success">已修習專業核心科目</h5>
-              <table class="table table-bordered text-center align-middle">
-                <thead class="table-light">
-                  <tr>
-                    <th>科目名稱</th>
-                    <th>學分</th>
-                    <th>操作</th>
-                  </tr>
-                </thead>
-                <tbody id="courseTableBody">
-                  </tbody>
-              </table>
-              <button type="button" class="btn btn-sm btn-outline-success" id="add-course-row">＋新增額外修習科目</button>
+              <div class="table-responsive">
+                <table class="table table-bordered text-center align-middle">
+                  <thead class="table-light">
+                    <tr>
+                      <th>科目名稱</th>
+                      <th>學分</th>
+                      <th>科目名稱</th>
+                      <th>學分</th>
+                      <th>科目名稱</th>
+                      <th>學分</th>
+                      <th>操作</th>
+                    </tr>
+                  </thead>
+                  <tbody id="courseTableBody"></tbody>
+                </table>
+              </div>
+              <button type="button" class="btn btn-sm btn-outline-success" id="add-course-row">＋新增一列課程</button>
             </div>
 
             <div class="card p-4 mb-3">
@@ -159,8 +195,8 @@
                     <td><button type="button" class="btn btn-outline-danger btn-sm remove-row">移除</button></td>
                   </tr>
                 </tbody>
-              </table>
-              <button type="button" class="btn btn-sm btn-outline-success" id="add-certificate-row">＋新增一列</button>
+              </table> <button type="button" class="btn btn-sm btn-outline-success"
+                id="add-certificate-row">＋新增一列</button>
             </div>
             <h5 class="mt-4 mb-3">語文能力</h5>
             <div class="row mb-3">
@@ -200,38 +236,49 @@
                   <option value="略懂">略懂</option>
                 </select>
               </div>
-              </div>
-              <div class="mb-4"></div>
+            </div>
 
-              <div class="card p-4 mb-3">
-                <h5 class="text-info">自傳</h5>
-                <textarea name="autobiography" rows="6" class="form-control" placeholder="請描述家庭生活、求學經過、個人專長、未來規劃等..."
-                  required></textarea>
-              </div>
+            <div class="mb-4"></div>
 
-              <div class="card p-4 mb-3">
-                <h5 class="text-primary">成績單上傳</h5>
-                <div class="row g-3">
-                  <div class="col-12">
-                    <label class="form-label">上傳學期成績單 (JPG/PNG)</label>
-                    <input type="file" name="transcript_file" class="form-control"
-                      accept="image/jpeg, .jpg, image/png, .png" required />
-                  </div>
+            <div class="card p-4 mb-3">
+              <h5 class="text-info">自傳</h5>
+              <textarea name="autobiography" rows="6" class="form-control" placeholder="請描述家庭生活、求學經過、個人專長、未來規劃等..."
+                required></textarea>
+            </div>
+
+            <div class="card p-4 mb-3">
+              <h5 class="text-primary">成績單上傳</h5>
+              <div class="row g-3">
+                <div class="col-12">
+                  <label class="form-label">上傳學期成績單 (JPG/PNG)</label>
+                  <input type="file" name="transcript_file" class="form-control" accept="image/jpeg, image/png"
+                    required />
                 </div>
               </div>
+            </div>
 
-              <div class="card p-4 mb-3">
-                <h5 class="text-success">證照圖片上傳</h5>
-                <div class="row g-3">
-                  <div class="col-12">
-                    <label class="form-label">可上傳多張證照圖片 (JPG/PNG)</label>
-                    <input type="file" name="cert_photos" class="form-control" accept="image/jpeg,image/png" multiple>
-                  </div>
+            <div class="card my-4">
+              <div class="card-header bg-primary text-white">
+                <h5>證照資訊 (選填)</h5>
+              </div>
+              <div class="card-body">
+                <div class="mb-3">
+                  <label for="certificateImage" class="form-label">證照圖片上傳</label>
+                  <input class="form-control" type="file" id="certificateImage" name="certificate_image"
+                    accept="image/*">
+                  <div class="form-text">請上傳單一圖片檔 (PNG, JPG)</div>
+                </div>
+                <div class="mb-3">
+                  <label for="certificateDescription" class="form-label">證照名稱</label>
+                  <textarea class="form-control" id="certificateDescription" name="certificate_description" rows="3"
+                    placeholder="例:電腦軟體應用乙級"></textarea>
                 </div>
               </div>
-              <div class="text-center mt-4">
-                <button type="submit" class="btn btn-primary btn-lg">提交並生成履歷</button>
-              </div>
+            </div>
+
+            <div class="text-center mt-4">
+              <button type="submit" class="btn btn-primary btn-lg">提交並生成履歷</button>
+            </div>
           </form>
         </div>
 
@@ -259,75 +306,76 @@
 
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
   <script>
+    // 函式：新增一行（可放最多3科課程）
+    function addCourseRow(courses = [{
+      course_name: "",
+      credits: ""
+    }, {
+      course_name: "",
+      credits: ""
+    }, {
+      course_name: "",
+      credits: ""
+    }]) {
+      const tbody = document.getElementById("courseTableBody");
+      let rowHTML = "<tr>";
 
-   // 函式：新增課程列
-    function addCourseRow(name = "", credits = "") {
-        const tbody = document.getElementById("courseTableBody");
-        // 使用 input 欄位實現編輯功能
-        tbody.insertAdjacentHTML("beforeend", `
-          <tr>
-            <td><input type="text" name="course_name[]" class="form-control" value="${name}" required></td>
-            <td><input type="text" name="course_credits[]" class="form-control" value="${credits}" required></td>
-            <td><button type="button" class="btn btn-outline-danger btn-sm remove-course-row">移除</button></td>
-          </tr>
-        `);
+      // 確保 courses 陣列最多只有 3 個元素
+      const coursesSlice = courses.slice(0, 3);
+
+      coursesSlice.forEach(c => {
+        rowHTML += `
+          <td><input type="text" name="course_name[]" class="form-control" value="${c.name}" placeholder="科目名稱"></td>
+          <td><input type="text" name="course_credits[]" class="form-control" value="${c.credits}" placeholder="學分"></td>
+        `;
+      });
+
+      // 補足剩餘的空欄位 (如果 courses 少於 3 個)
+      const emptyCount = 3 - coursesSlice.length;
+      for (let i = 0; i < emptyCount; i++) {
+        rowHTML += `
+          <td><input type="text" name="course_name[]" class="form-control" placeholder="科目名稱"></td>
+          <td><input type="text" name="course_credits[]" class="form-control" placeholder="學分"></td>
+        `;
+      }
+
+      rowHTML += `<td><button type="button" class="btn btn-outline-danger btn-sm remove-course-row">移除</button></td></tr>`;
+      tbody.insertAdjacentHTML("beforeend", rowHTML);
     }
 
     // 函式：從後端載入課程並顯示
     async function loadStandardCourses() {
-        const tbody = document.getElementById("courseTableBody");
-        tbody.innerHTML = ''; // 清空現有內容
-
-        try {
-            // 呼叫新的 API 來取得標準核心科目
-            const res = await fetch("/api/get_standard_courses");
-            const result = await res.json();
-            
-            if (result.success && result.courses && result.courses.length > 0) {
-                result.courses.forEach(c => {
-                    // 載入標準資料並預設為可編輯
-                    addCourseRow(c.course_name, c.credits);
-                });
-            } else {
-                // 如果載入失敗或無資料，預設新增一列空白的讓學生填寫
-                addCourseRow();
-                console.warn("未從後端載入核心科目，已新增一列空白。");
-            }
-        } catch (error) {
-            console.error("載入核心科目時發生錯誤:", error);
-            addCourseRow(); // 發生錯誤也新增一列空白
+      const tbody = document.getElementById("courseTableBody");
+      tbody.innerHTML = '';
+      try {
+        const res = await fetch("/api/get_standard_courses");
+        const result = await res.json();
+        if (result.success && result.courses?.length) {
+          // 以3科為一組分批顯示
+          for (let i = 0; i < result.courses.length; i += 3) {
+            addCourseRow(result.courses.slice(i, i + 3)); // 使用 slice 取得最多 3 門課程
+          }
+        } else {
+          addCourseRow(); // 如果沒有標準課程，新增一個空白列
         }
+      } catch (error) {
+        // 發生錯誤時也新增一個空白列
+        addCourseRow();
+      }
     }
 
-
     document.addEventListener("DOMContentLoaded", () => {
-        // 1. 初始化：載入標準課程
-        loadStandardCourses();
-        
-        // 2. 處理課程表格的新增/移除事件
-        document.getElementById("add-course-row").addEventListener("click", () => {
-          addCourseRow();
-        });
+      // 1. 初始化：載入標準課程
+      loadStandardCourses();
 
-        // 使用事件委派處理移除按鈕
-        document.getElementById("courseTableBody").addEventListener("click", e => {
-          if (e.target.classList.contains("remove-course-row")) {
-            e.target.closest("tr").remove();
-          }
-        });
+      // 2. 處理課程表格的新增/移除事件
+      document.getElementById("add-course-row").addEventListener("click", () => addCourseRow());
 
-      // 操行成績轉換
-      const scoreInput = document.querySelector('input[name="conduct_score_numeric"]');
-      const hiddenGrade = document.getElementById("conduct_score");
-      scoreInput.addEventListener("input", () => {
-        const score = parseInt(scoreInput.value);
-        let grade = "";
-        if (score >= 90) grade = "優";
-        else if (score >= 80) grade = "甲";
-        else if (score >= 70) grade = "乙";
-        else if (score >= 60) grade = "丙";
-        else if (score >= 0) grade = "丁";
-        hiddenGrade.value = grade; // 將轉換後的等級寫入隱藏欄位
+      // 使用事件委派處理移除按鈕
+      document.getElementById("courseTableBody").addEventListener("click", e => {
+        if (e.target.classList.contains("remove-course-row")) {
+          e.target.closest("tr").remove();
+        }
       });
 
       // 新增 / 移除「相關證照」列
@@ -340,8 +388,7 @@
             <td><input type="text" name="domestic_cert[]" class="form-control"></td>
             <td><input type="text" name="other_cert[]" class="form-control"></td>
             <td><button type="button" class="btn btn-outline-danger btn-sm remove-row">移除</button></td>
-          </tr>
-        `);
+          </tr>`);
       });
 
       document.getElementById("certificate-table-body").addEventListener("click", e => {
@@ -350,50 +397,57 @@
         }
       });
 
-      // 表單送出
-        document.getElementById("resumeForm").addEventListener("submit", async e => {
-          e.preventDefault();
-          const formData = new FormData(e.target);
-          
-          // 收集動態的課程資料並添加到 FormData
-          const courses = [];
-          const courseNames = document.querySelectorAll('input[name="course_name[]"]');
-          const courseCredits = document.querySelectorAll('input[name="course_credits[]"]');
-          
-          courseNames.forEach((input, index) => {
-              // 確保欄位不為空
-              if (input.value.trim() && courseCredits[index].value.trim()) {
-                  courses.push({
-                      name: input.value.trim(),
-                      credits: courseCredits[index].value.trim()
-                  });
-              }
-          });
+      // 操行成績轉換
+      const scoreInput = document.querySelector('input[name="conduct_score_numeric"]');
+      const hiddenGrade = document.getElementById("conduct_score");
+      scoreInput.addEventListener("input", () => {
+        const score = parseInt(scoreInput.value);
+        let grade = "";
+        if (score >= 90) grade = "優";
+        else if (score >= 80) grade = "甲";
+        else if (score >= 70) grade = "乙";
+        else if (score >= 60) grade = "丙";
+        else if (score >= 0) grade = "丁";
+        hiddenGrade.value = grade;
+      });
 
-          // 將動態收集到的課程列表作為 JSON 字串發送到後端
-          formData.append("courses", JSON.stringify(courses)); 
-          
-         // 送出請求
-        const res = await fetch("/api/submit_and_generate", { method: "POST", body: formData });
+      // 表單送出
+      document.getElementById("resumeForm").addEventListener("submit", async e => {
+        e.preventDefault();
+        const formData = new FormData(e.target);
+
+        // 收集動態的課程資料並添加到 FormData
+        const courseNames = [...document.querySelectorAll('input[name="course_name[]"]')];
+        const courseCredits = [...document.querySelectorAll('input[name="course_credits[]"]')];
+        const courses = courseNames.map((n, i) => ({
+          name: n.value.trim(),
+          credits: courseCredits[i].value.trim()
+        }))
+          .filter(c => c.name && c.credits); // 只保留名稱和學分皆不為空的項目
+
+        formData.append("courses", JSON.stringify(courses));
+
+        const res = await fetch("/api/submit_and_generate", {
+          method: "POST",
+          body: formData
+        });
         const result = await res.json();
         if (result.success) {
-          alert("✅ 履歷已生成，可於下方紀錄頁籤下載");
-          const tabTrigger = new bootstrap.Tab(document.querySelector('[data-bs-target="#records-pane"]'));
-          tabTrigger.show();
+          alert("✅ 履歷已生成，可於紀錄頁籤下載");
+          // 切換到紀錄頁籤
+          new bootstrap.Tab(document.querySelector('[data-bs-target="#records-pane"]')).show();
           await loadResumeRecords();
         } else alert("❌ 提交失敗：" + (result.message || "未知錯誤"));
       });
 
+      // 載入履歷紀錄
       async function loadResumeRecords() {
         const res = await fetch("/api/get_my_resumes");
         const result = await res.json();
         const tbody = document.getElementById("recordsBody");
         tbody.innerHTML = "";
-
-        if (!result.success || !result.resumes || result.resumes.length === 0) {
-          tbody.innerHTML = `<tr><td colspan="3" class="text-muted">尚無履歷紀錄</td></tr>`;
-          return;
-        }
+        if (!result.success || !result.resumes?.length)
+          return tbody.innerHTML = `<tr><td colspan="3" class="text-muted">尚無履歷紀錄</td></tr>`;
 
         result.resumes.forEach(r => {
           tbody.insertAdjacentHTML("beforeend", `
@@ -410,3 +464,6 @@
       loadResumeRecords();
     });
   </script>
+</body>
+
+</html>
