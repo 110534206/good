@@ -126,30 +126,14 @@ def save_structured_data(cursor, student_id, data):
             data.get('conduct_score'), data.get('autobiography'), data.get('photo_path')
         ))
 
-        # 儲存課程 (資料來源已在 submit_and_generate_api 中處理，確保包含 Grade 欄位)
+        # 儲存課程
         cursor.execute("DELETE FROM Course_Grades WHERE StuID=%s", (student_id,))
-        # 先去除重複的課程名稱，再一次性插入
-        seen_course_names = set()
-        unique_courses = []
-
         for c in data.get('courses', []):
-          course_name = (c.get('name') or '').strip()
-    
-        # 確保課程名稱不為空，且不重複
-          if course_name and course_name not in seen_course_names:
-             unique_courses.append(c)
-             seen_course_names.add(course_name)
-          elif course_name:
-        # 可選的除錯訊息
-            print(f"⚠️ 偵測到重複課程名稱並已跳過: {course_name}")
-
-        # 透過去重複後的清單進行插入
-        for c in unique_courses:
-          cursor.execute("""
-        INSERT INTO Course_Grades (StuID, CourseName, Credits, Grade)
-        VALUES (%s,%s,%s,%s)
-    """, (student_id, c['name'], c.get('credits'), c.get('grade')))
-
+            if c.get('name'):
+                 cursor.execute("""
+                     INSERT INTO Course_Grades (StuID, CourseName, Credits, Grade)
+                       VALUES (%s,%s,%s,%s)
+                 """, (student_id, c['name'], c.get('credits'), c.get('grade')))
 
         # 儲存證照 (此處處理的是文本證照)
         cursor.execute("DELETE FROM Student_Certifications WHERE StuID=%s", (student_id,))
@@ -244,34 +228,21 @@ def generate_application_form_docx(student_data, output_path):
         # -------------------------
         # 處理專業核心科目資料
         # -------------------------
-        MAX_COURSES = 30
+        MAX_COURSES = 15
         
         padded_grades = grades[:MAX_COURSES]
         padded_grades += [{'CourseName': '', 'Credits': ''}] * (MAX_COURSES - len(padded_grades))
         
+        # 將列表轉換為三欄格式，並生成 context 變數
         context_courses = {}
-        # 處理專業核心科目資料 (四欄 x 十行 = 30 筆)
-        # -------------------------
-        MAX_COURSES = 30 # 總格子數設為 40 (4欄 x 10行)
-        
-        padded_grades = grades[:MAX_COURSES]
-        # 填充空白，確保總數為 MAX_COURSES
-        padded_grades += [{'CourseName': '', 'Credits': ''}] * (MAX_COURSES - len(padded_grades))
-        
-        # 將列表轉換為四欄格式 (4欄 X 10行)，並生成 context 變數
-        context_courses = {}
-        NUM_ROWS = 10 # 10 行
-        NUM_COLS = 3  # 4 欄 (Word 表格中的科目+學分組算作 1 欄)
-
-        for i in range(NUM_ROWS): # i 為行索引 (0 to 9)
-            for j in range(NUM_COLS): # j 為欄索引 (0 to 3)
-                index = i * NUM_COLS + j
+        for i in range(5): # 5 列 (i 從 0 到 4)
+            for j in range(3): # 3 欄 (j 從 0 到 2)
+                index = i * 3 + j
                 if index < MAX_COURSES:
                     course = padded_grades[index]
-                    row_num = i + 1 # 模板變數從 1 開始 (1 to 10)
-                    col_num = j + 1 # 模板變數從 1 開始 (1 to 4)
+                    row_num = i + 1 # 模板變數從 1 開始
+                    col_num = j + 1 # 模板變數從 1 開始
                     
-                    # 假設 Word 模板變數為 CourseName_行號_欄號 和 Credits_行號_欄號
                     context_courses[f'CourseName_{row_num}_{col_num}'] = course.get('CourseName', '')
                     context_courses[f'Credits_{row_num}_{col_num}'] = course.get('Credits', '')
 
@@ -353,7 +324,7 @@ def generate_application_form_docx(student_data, output_path):
         for i, val in enumerate(pad_list(intl_certs), 1):
             context[f'IntlCerts_{i}'] = val
         for i, val in enumerate(pad_list(local_certs), 1):
-            context[f'LocalCerts_{i}'] = val 
+            context[f'LocalCerts_{i}'] = val  
         for i, val in enumerate(pad_list(other_certs), 1):
             context[f'OtherCerts_{i}'] = val
 
@@ -365,7 +336,7 @@ def generate_application_form_docx(student_data, output_path):
         cert_names = student_data.get("cert_names", [])             # 上傳的名稱清單
         
         cert_photo_objs = []
-        image_size = Inches(3.0) 
+        image_size = Inches(1.5) 
         
         # 準備圖片物件
         for i, path in enumerate(cert_photo_paths[:MAX_CERTS]):
@@ -466,7 +437,7 @@ def submit_and_generate_api():
             # 【新增檢查】
             if photo.mimetype not in ALLOWED_IMAGE_MIMES:
                  return jsonify({"success": False, "message": f"照片檔案格式錯誤 ({photo.mimetype})，請上傳 JPG/PNG/GIF 圖片"}), 400
-                     
+                  
             filename = secure_filename(photo.filename)
             photo_dir = os.path.join(UPLOAD_FOLDER, "photos")
             os.makedirs(photo_dir, exist_ok=True)
@@ -483,7 +454,7 @@ def submit_and_generate_api():
             # 【新增檢查】
             if transcript_file.mimetype not in ALLOWED_IMAGE_MIMES:
                  return jsonify({"success": False, "message": f"成績單檔案格式錯誤 ({transcript_file.mimetype})，請上傳 JPG/PNG/GIF 圖片"}), 400
-                     
+                  
             filename = secure_filename(transcript_file.filename)
             transcript_dir = os.path.join(UPLOAD_FOLDER, "transcripts")
             os.makedirs(transcript_dir, exist_ok=True)
@@ -591,13 +562,6 @@ def submit_and_generate_api():
         student_id = result['username']
 
         # ---------------------
-        # 【重要】處理課程資料：確保 Grade 欄位存在，以便寫入 Course_Grades 表
-        # ---------------------
-        # 確保每個課程物件都有 Grade 欄位，如果沒有則預設為空字串 ""
-        for c in courses:
-            c['grade'] = c.get('grade', '') 
-
-        # ---------------------
         # 建立結構化資料
         # ---------------------
         structured_data = {
@@ -642,36 +606,22 @@ def submit_and_generate_api():
             return jsonify({"success": False, "message": "文件生成失敗"}), 500
 
         semester_id = get_current_semester_id(cursor)
-       
         # 【修正】新增 cert_photos 欄位
         cursor.execute("""
-            INSERT INTO resumes 
-                (user_id, filepath, original_filename, status, semester_id, created_at, cert_photos)
-            VALUES (%s, %s, %s, %s, %s, NOW(), %s)
-        """, (
-            user_id,
-            save_path,
-            filename,
-            'submitted',
-            semester_id,
-            json.dumps(cert_photo_paths, ensure_ascii=False)
-        ))
+            INSERT INTO resumes (user_id, semester_id, original_filename, filepath, status, transcript_path, cert_photos, created_at)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, NOW())
+        """, (user_id, semester_id, filename, save_path, 'generated', transcript_path, json.dumps(cert_photo_paths))) 
 
         conn.commit()
-        cursor.close()
-        conn.close()
-
-        return jsonify({
-            "success": True,
-            "message": "履歷已成功提交並生成文件",
-            "file_path": save_path,
-            "filename": filename
-        })
+        return jsonify({"success": True, "message": "履歷生成成功"})
 
     except Exception as e:
-        print("❌ submit_and_generate_api 發生錯誤:", e)
         traceback.print_exc()
-        return jsonify({"success": False, "message": f"系統錯誤: {str(e)}"}), 500
+        return jsonify({"success": False, "message": str(e)}), 500
+
+    finally:
+        if 'cursor' in locals(): cursor.close()
+        if 'conn' in locals(): conn.close()
 
 # -------------------------
 # 下載履歷
@@ -763,14 +713,14 @@ def get_standard_courses():
     conn = get_db()
     cursor = conn.cursor(dictionary=True)
     try:
-        cursor.execute("""
+       cursor.execute("""
             SELECT course_name AS name, credits 
             FROM standard_courses 
             WHERE is_active = 1 
             ORDER BY order_index
         """)
-        courses = cursor.fetchall()
-        return jsonify({"success": True, "courses": courses})
+       courses = cursor.fetchall()
+       return jsonify({"success": True, "courses": courses})
     except Exception as e:
         print("❌ 取得標準核心科目錯誤:", e)
         traceback.print_exc()
@@ -813,58 +763,18 @@ def save_personal_template():
 def load_personal_template():
     if 'user_id' not in session or session.get('role') != 'student':
         return jsonify({"success": False, "message": "未授權"}), 403
-
     conn = get_db()
     cursor = conn.cursor(dictionary=True)
     try:
-        # 1️⃣ 抓標準課程
-        cursor.execute("""
-            SELECT course_name AS name, credits 
-            FROM standard_courses 
-            WHERE is_active = 1 
-            ORDER BY order_index
-        """)
-        standard_courses = cursor.fetchall()
-        standard_count = len(standard_courses)
-
-        # 2️⃣ 嘗試抓學生個人模板
         cursor.execute("""
             SELECT content FROM templates
             WHERE uploaded_by=%s AND template_type='student_custom'
             ORDER BY uploaded_at DESC LIMIT 1
         """, (session['user_id'],))
         row = cursor.fetchone()
-
         if not row:
-            # 沒模板 → 回傳標準課程
-            return jsonify({
-                "success": True,
-                "courses": standard_courses,
-                "needs_update": False,
-                "source": "standard"
-            })
-
-        # 3️⃣ 解析模板內容
-        try:
-            student_courses = json.loads(row['content'])
-        except Exception:
-            student_courses = []
-        
-        student_count = len(student_courses)
-
-        # 4️⃣ 檢查是否有新增科目
-        needs_update = student_count < standard_count
-
-        # 回傳資料
-        return jsonify({
-            "success": True,
-            "courses": student_courses,
-            "needs_update": needs_update,
-            "source": "student" if not needs_update else "student_outdated"
-        })
-    except Exception as e:
-        print("❌ 載入模板錯誤:", e)
-        return jsonify({"success": False, "message": "載入模板失敗"}), 500
+            return jsonify({"success": False, "message": "無模板"})
+        return jsonify({"success": True, "courses": json.loads(row['content'])})
     finally:
         cursor.close()
         conn.close()

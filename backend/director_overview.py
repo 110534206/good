@@ -359,3 +359,4 @@ def get_class_preferences_detail(class_id):
         conn.close()
 
 
+

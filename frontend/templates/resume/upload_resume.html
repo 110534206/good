@@ -134,8 +134,11 @@
               <h5 class="mb-3">已修習專業核心科目</h5>
 
               <div class="mb-3">
-                <button type="button" class="btn btn-outline-primary btn-sm" id="load-template-btn">載入我的課程模板</button>
-                <button type="button" class="btn btn-outline-success btn-sm" id="save-template-btn">儲存為我的模板</button>
+                <button id="update-template-btn" class="btn btn-warning" style="display:none;">
+                  ⚠️ 請更新最新課程資料
+                </button>
+                <button type="button" class="btn btn-outline-primary btn-sm" id="load-template-btn">查看我的課程</button>
+                <button type="button" class="btn btn-outline-success btn-sm" id="save-template-btn">儲存</button>
               </div>
 
               <div class="row mb-3">
@@ -316,7 +319,7 @@
       const displayCredits = isNotTaken ? "0" : creditsDisplay;
       const buttonClass = isNotTaken ? "btn-warning" : "btn-outline-warning";
       const buttonText = isNotTaken ? "已標記未修課" : "未修課";
-      
+
       const tr = document.createElement("tr");
       // 儲存原始學分數在 data-original-credits 屬性中
       tr.dataset.originalCredits = creditsDisplay;
@@ -385,7 +388,7 @@
       const tbody = document.getElementById("courseTableBody");
       tbody.innerHTML = '<tr><td colspan="3" class="text-muted text-center">載入中...</td></tr>';
       try {
-        const res = await fetch("/api/load_personal_template");
+        const res = await fetch("api/load_personal_template");
         const result = await res.json();
 
         if (result.success && Array.isArray(result.courses) && result.courses.length > 0) {
@@ -402,6 +405,19 @@
       }
     }
 
+    // 點擊更新按鈕 → 重新載入標準課程並覆蓋模板
+    document.getElementById('update-template-btn').addEventListener('click', async () => {
+      if (!confirm('偵測到新科目，是否要重新載入最新標準課程？（原有修改將被覆蓋）')) return;
+
+      const res = await fetch('/api/get_standard_courses');
+      const data = await res.json();
+
+      if (data.success) {
+        renderCourses(data.courses);
+        document.getElementById('update-template-btn').style.display = 'none';
+      }
+    });
+
     // 🧩 若無個人模板，載入系統預設課程
     async function loadStandardCourses() {
       const tbody = document.getElementById("courseTableBody");
@@ -410,8 +426,14 @@
         const res = await fetch("/api/get_standard_courses");
         const result = await res.json();
         if (result.success && result.courses?.length > 0) {
-          allCoursesData = result.courses;
-          renderCourseTable(allCoursesData);
+          // 為課程加上唯一的 ID 和 isNotTaken 狀態，以便追蹤
+          allCoursesData = result.courses.map((course, index) => ({
+            ...course,
+            id: `std_${index}`, // 唯一 ID
+            isNotTaken: course.isNotTaken || false // 確保狀態存在
+          }));
+          // 呼叫篩選函式來執行初始渲染，確保所有資料在無篩選條件下顯示
+          applyFilterAndSearch();
         } else {
           tbody.innerHTML = '<tr><td colspan="3" class="text-muted text-center">目前無標準課程</td></tr>';
           allCoursesData = [];
@@ -435,7 +457,7 @@
         if (nameInput && creditsInput) {
           const name = nameInput.value.trim();
           // 儲存原始學分數 (從 data-original-credits 獲取，因為 creditsInput.value 可能為 0)
-          const credits = row.dataset.originalCredits; 
+          const credits = row.dataset.originalCredits;
 
           if (name) courses.push({ name, credits, isNotTaken });
         }
@@ -484,15 +506,15 @@
           e.target.textContent = "已標記未修課";
           tr.dataset.isNotTaken = true;
         }
-        
+
         // **重要：** 同步更新 allCoursesData 中的狀態
         const courseName = tr.querySelector('input[name="course_name[]"]').value;
         const index = allCoursesData.findIndex(c => c.name === courseName);
         if (index > -1) {
-             allCoursesData[index].isNotTaken = !isNotTaken;
+          allCoursesData[index].isNotTaken = !isNotTaken;
         } else {
-             // 如果找不到，就更新 row 上的屬性即可，因為 this row 已經是 user 新增的
-             tr.dataset.isNotTaken = !isNotTaken;
+          // 如果找不到，就更新 row 上的屬性即可，因為 this row 已經是 user 新增的
+          tr.dataset.isNotTaken = !isNotTaken;
         }
       }
     });
@@ -549,30 +571,30 @@
       // 收集動態的課程資料並添加到 FormData
       const courseRows = document.querySelectorAll("#courseTableBody tr");
       const courses = [];
-      
-      courseRows.forEach(row => {
-          const nameInput = row.querySelector('input[name="course_name[]"]');
-          const creditsInput = row.querySelector('input[name="course_credits[]"]');
-          const isNotTaken = row.dataset.isNotTaken === 'true';
 
-          if (nameInput && creditsInput) {
-              const name = nameInput.value.trim();
-              // 提交時，無論是否未修課，都使用顯示的值 (0 或實際學分)
-              const credits = creditsInput.value.trim(); 
-              
-              if (name && credits) {
-                  courses.push({ 
-                      name: name, 
-                      credits: credits, 
-                      isNotTaken: isNotTaken // 傳遞狀態給後端
-                  });
-              }
+      courseRows.forEach(row => {
+        const nameInput = row.querySelector('input[name="course_name[]"]');
+        const creditsInput = row.querySelector('input[name="course_credits[]"]');
+        const isNotTaken = row.dataset.isNotTaken === 'true';
+
+        if (nameInput && creditsInput) {
+          const name = nameInput.value.trim();
+          // 提交時，無論是否未修課，都使用顯示的值 (0 或實際學分)
+          const credits = creditsInput.value.trim();
+
+          if (name && credits) {
+            courses.push({
+              name: name,
+              credits: credits,
+              isNotTaken: isNotTaken // 傳遞狀態給後端
+            });
           }
+        }
       });
-      
+
 
       formData.append("courses", JSON.stringify(courses));
-      
+
       // 移除舊的課程相關欄位，因為我們統一用 JSON 傳遞
       formData.delete("course_name[]");
       formData.delete("course_credits[]");
@@ -611,7 +633,7 @@
     }
 
     // 預設載入課程和紀錄
-    loadPersonalTemplate(); 
+    loadPersonalTemplate();
     loadResumeRecords();
   </script>
 </body>

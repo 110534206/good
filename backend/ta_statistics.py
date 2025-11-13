@@ -731,3 +731,4 @@ def export_statistics():
 @ta_statistics_bp.route('/manage_companies')
 def manage_companies():
     return render_template('user_shared/manage_companies.html')               
+
