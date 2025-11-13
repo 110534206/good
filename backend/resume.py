@@ -730,6 +730,56 @@ def get_standard_courses():
         conn.close()
 
 # -------------------------
+# 儲存學生個人模板
+# -------------------------
+@resume_bp.route('/api/save_personal_template', methods=['POST'])
+def save_personal_template():
+    if 'user_id' not in session or session.get('role') != 'student':
+        return jsonify({"success": False, "message": "未授權"}), 403
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        data = request.get_json()
+        courses_json = json.dumps(data.get('courses', []), ensure_ascii=False)
+        cursor.execute("""
+            INSERT INTO templates (template_type, content, display_name, is_active, uploaded_by, uploaded_at)
+    VALUES (%s, %s, %s, %s, %s, NOW())
+    ON DUPLICATE KEY UPDATE content=VALUES(content), display_name=VALUES(display_name), updated_at=NOW()
+""", ('student_custom', courses_json, data.get('display_name', '我的模板'), 1, session['user_id']))
+        conn.commit()
+        return jsonify({"success": True})
+    except Exception as e:
+        conn.rollback()
+        print("❌ 儲存模板錯誤:", e)
+        return jsonify({"success": False, "message": "儲存失敗"}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+# -------------------------
+# 載入學生個人模板
+# -------------------------
+@resume_bp.route('/api/load_personal_template', methods=['GET'])
+def load_personal_template():
+    if 'user_id' not in session or session.get('role') != 'student':
+        return jsonify({"success": False, "message": "未授權"}), 403
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute("""
+            SELECT content FROM templates
+            WHERE uploaded_by=%s AND template_type='student_custom'
+            ORDER BY uploaded_at DESC LIMIT 1
+        """, (session['user_id'],))
+        row = cursor.fetchone()
+        if not row:
+            return jsonify({"success": False, "message": "無模板"})
+        return jsonify({"success": True, "courses": json.loads(row['content'])})
+    finally:
+        cursor.close()
+        conn.close()
+
+# -------------------------
 # 頁面路由
 # -------------------------
 @resume_bp.route('/upload_resume')
