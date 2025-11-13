@@ -826,6 +826,9 @@ def load_personal_template():
         """)
         standard_courses = cursor.fetchall()
         standard_count = len(standard_courses)
+        
+        # 【新增】建立標準課程的 (name, credits) 集合，用於內容比對
+        standard_set = {(c['name'], c['credits']) for c in standard_courses}
 
         # 2️⃣ 嘗試抓學生個人模板
         cursor.execute("""
@@ -851,9 +854,14 @@ def load_personal_template():
             student_courses = []
         
         student_count = len(student_courses)
+        
+        # 【新增】建立學生課程的 (name, credits) 集合，用於內容比對
+        student_set = {(c.get('name'), c.get('credits')) for c in student_courses}
 
-        # 4️⃣ 檢查是否有新增科目
-        needs_update = student_count < standard_count
+        # 4️⃣ 檢查是否有新增或內容變更
+        # needs_update = student_count < standard_count
+        # 【修改】若標準課程數量增加 OR 兩個課程內容集合不相等，則視為需要更新
+        needs_update = (student_count < standard_count) or (student_set != standard_set)
 
         # 回傳資料
         return jsonify({
@@ -868,7 +876,7 @@ def load_personal_template():
     finally:
         cursor.close()
         conn.close()
-
+        
 # -------------------------
 # 頁面路由
 # -------------------------
