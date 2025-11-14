@@ -137,6 +137,11 @@
           <input id="managedClasses" type="text" readonly />
         </div>
       </div>
+
+      <div id="advisorField" class="role-specific-fields" style="display: none;">
+        <label for="advisorName">指導老師</label>
+        <input id="advisorName" type="text" readonly />
+      </div>
     </div>
 
       <div id="page2" class="page">
@@ -194,6 +199,10 @@
       }
 
       function showRoleSpecificFields(role, isHomeroom) {
+        // 先獲取所有需要控制的元素
+        const advisorField = document.getElementById('advisorField');
+        const studentFieldsEl = document.getElementById('studentFields');
+        
         // 隱藏所有角色專用欄位
         document.querySelectorAll('.role-specific-fields').forEach(field => {
           field.style.display = 'none';
@@ -210,15 +219,24 @@
           if (nameLabel) nameLabel.textContent = '公司名稱';
           if (admissionYearField) admissionYearField.style.display = 'none';
           if (studentIdField) studentIdField.style.display = 'none';
+          // 顯示指導老師欄位
+          if (advisorField) {
+            advisorField.style.display = 'block';
+          }
           return;
+        }
+        
+        // 非廠商角色隱藏指導老師欄位
+        if (advisorField) {
+          advisorField.style.display = 'none';
         }
 
         // 根據角色顯示相應欄位
         if (role === 'student') {
-          studentFields.style.display = 'block';
+          if (studentFieldsEl) studentFieldsEl.style.display = 'block';
           document.getElementById('currentSemesterContainer').style.display = 'block'; // 學生顯示實習學期
         } else if (isHomeroom) {
-          managedClassesContainer.style.display = 'block';
+          if (managedClassesContainer) managedClassesContainer.style.display = 'block';
         }
       }
 
@@ -255,10 +273,30 @@
             document.getElementById('combinedClass').value = user.class_display_name || '';
           } else if (isHomeroom) {
             document.getElementById('managedClasses').value = user.class_display_name || '';
+          } else if (userRole === 'vendor') {
+            // 填入指導老師資訊
+            const advisorNameInput = document.getElementById('advisorName');
+            if (advisorNameInput) {
+              advisorNameInput.value = user.advisor_name || '';
+              console.log('指導老師名稱已填入:', user.advisor_name || '(無)');
+            } else {
+              console.error('找不到 advisorName 輸入框');
+            }
           }
 
           // 根據使用者身分顯示相應的欄位
           showRoleSpecificFields(userRole, isHomeroom);
+          
+          // 如果是廠商，再次確認指導老師欄位已顯示
+          if (userRole === 'vendor') {
+            const advisorField = document.getElementById('advisorField');
+            if (advisorField) {
+              advisorField.style.display = 'block';
+              console.log('指導老師欄位已顯示');
+            } else {
+              console.error('找不到 advisorField 元素');
+            }
+          }
 
         })
         .catch(err => alert('載入資料失敗：' + err.message));

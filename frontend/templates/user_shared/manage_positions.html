@@ -73,21 +73,6 @@
       gap: 16px;
     }
 
-    #menu-btn {
-      width: 30px;
-      height: 22px;
-      cursor: pointer;
-      display: flex;
-      flex-direction: column;
-      justify-content: space-between;
-    }
-
-    #menu-btn span {
-      height: 4px;
-      background-color: #1f2933;
-      border-radius: 2px;
-    }
-
     .top-bar-right {
       display: flex;
       align-items: center;
@@ -607,12 +592,6 @@
   <div class="top-bar">
     <div class="container">
       <div class="top-bar-left">
-        <div id="menu-btn" title="選單" role="button" tabindex="0">
-          <span></span><span></span><span></span>
-        </div>
-        <div>
-          <strong>智慧實習平台</strong>
-        </div>
       </div>
       <div class="top-bar-right">
         <a href="/profile">
@@ -634,7 +613,6 @@
     <header class="page-header">
       <div>
         <h1>職位需求管理</h1>
-        <p>集中管理實習職缺，確保資訊即時更新並維持招募效率。</p>
       </div>
       <button id="createPositionBtn" class="btn btn-primary">＋ 新增職缺</button>
     </header>
@@ -1199,15 +1177,8 @@
       }
 
       function initMenu() {
-        const menuBtn = document.getElementById('menu-btn');
         const sideMenu = document.getElementById('side-menu');
         const closeBtn = document.getElementById('close-btn');
-        if (menuBtn) {
-          menuBtn.addEventListener('click', () => {
-            sideMenu.classList.add('open');
-            sideMenu.setAttribute('aria-hidden', 'false');
-          });
-        }
         if (closeBtn) {
           closeBtn.addEventListener('click', () => {
             sideMenu.classList.remove('open');
@@ -1215,7 +1186,7 @@
           });
         }
         document.addEventListener('click', (event) => {
-          if (!sideMenu.contains(event.target) && !menuBtn.contains(event.target)) {
+          if (sideMenu && !sideMenu.contains(event.target)) {
             sideMenu.classList.remove('open');
             sideMenu.setAttribute('aria-hidden', 'true');
           }
