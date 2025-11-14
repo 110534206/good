@@ -117,11 +117,16 @@ def send_email(recipient_email, subject, content, related_user_id=None):
             conn.close()
 
 # =========================================================
-# 發送履歷審核通過通知郵件
+# 發送履歷通過通知郵件
 # =========================================================
-def send_resume_approval_email(student_email, student_name, reviewer_name):
+def send_resume_approval_email(student_email, student_name, reviewer_name=""):
     """
-    發送履歷審核通過通知郵件
+    發送履歷通過通知郵件
+    
+    參數:
+        student_email: 學生信箱
+        student_name: 學生姓名
+        reviewer_name: 審核老師姓名
     """
     subject = "【智慧實習平台】履歷審核通過通知"
     content = f"""
@@ -129,19 +134,17 @@ def send_resume_approval_email(student_email, student_name, reviewer_name):
 
 您好！
 
-恭喜您！您的履歷已由 {reviewer_name} 老師審核通過。
-
-您現在可以繼續進行後續的實習志願選填等步驟。
+您提交的履歷已由 {reviewer_name} 老師審核通過。
+您現在可以繼續進行後續實習相關流程。
 
 如有任何疑問，請聯絡您的班導師或系統管理員。
 
 此為系統自動發送，請勿直接回覆此郵件。
 
 --
-智慧實習平台
+智慧實習系統
 """
     return send_email(student_email, subject, content)
-
 
 # =========================================================
 # 發送履歷退件通知郵件
@@ -155,9 +158,6 @@ def send_resume_rejection_email(student_email, student_name, reviewer_name, reje
         student_name: 學生姓名
         reviewer_name: 審核老師姓名
         rejection_reason: 退件原因
-    
-    回傳:
-        tuple: (success: bool, message: str)
     """
     subject = "【智慧實習平台】履歷退件通知"
     content = f"""
@@ -165,12 +165,12 @@ def send_resume_rejection_email(student_email, student_name, reviewer_name, reje
 
 您好！
 
-您的履歷已被 {reviewer_name} 老師退件。
+您提交的履歷已被 {reviewer_name} 老師退件。
 
 退件原因：
-{rejection_reason if rejection_reason else '請查看系統通知或聯絡老師'}
+{rejection_reason if rejection_reason else '請登入系統查看老師的留言或聯絡老師。'}
 
-請依照老師的建議修改履歷後，重新上傳。
+請根據老師的建議修改履歷後，重新提交。
 
 如有任何疑問，請聯絡您的班導師或系統管理員。
 
@@ -179,7 +179,6 @@ def send_resume_rejection_email(student_email, student_name, reviewer_name, reje
 --
 智慧實習系統
 """
-    
     return send_email(student_email, subject, content)
 
 # =========================================================

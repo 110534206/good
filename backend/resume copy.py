@@ -1,10 +1,6 @@
 from flask import Blueprint, request, jsonify, session, send_file, render_template
 from werkzeug.utils import secure_filename
 from config import get_db
-from semester import get_current_semester_id
-from email_service import send_resume_rejection_email, send_resume_approval_email
-from docxtpl import DocxTemplate, InlineImage
-from docx.shared import Inches
 import os
 import traceback
 import json
@@ -16,47 +12,22 @@ resume_bp = Blueprint("resume_bp", __name__)
 UPLOAD_FOLDER = "uploads/resumes"
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
-def score_to_grade(score):
-    # 若已經是等第，直接回傳
-    if str(score).strip() in ['優', '甲', '乙', '丙', '丁']:
-        return str(score).strip()
-
-    # 若是分數才做數字轉換
-    try:
-        score = int(str(score).strip())
-    except (ValueError, TypeError):
-        return '丁'
-
-    if score >= 90:
-        return '優'
-    elif score >= 80:
-        return '甲'
-    elif score >= 70:
-        return '乙'
-    elif score >= 60:
-        return '丙'
-    else:
-        return '丁'
-
 # -------------------------
-# 語文能力複選框處理輔助函式 (未使用，但保留)
+# Helper / 權限管理
 # -------------------------
-def generate_language_marks(level):
-    marks = {'Jing': '□', 'Zhong': '□', 'Lue': '□'}
-    level_map = {'精通': 'Jing', '中等': 'Zhong', '略懂': 'Lue'}
-    level_key = level_map.get(level)
-    if level_key in marks:
-        marks[level_key] = '■'
-    return marks
+def get_user_by_username(cursor, username):
+    cursor.execute("SELECT * FROM users WHERE username = %s", (username,))
+    return cursor.fetchone()
 
-# -------------------------
-# 權限與工具函式
-# -------------------------
 def get_user_by_id(cursor, user_id):
     cursor.execute("SELECT * FROM users WHERE id = %s", (user_id,))
     return cursor.fetchone()
 
 def get_director_department(cursor, user_id):
+    """
+    取得主任所屬 department（透過 classes_teacher -> classes.department）
+    若管理多個班級，只回傳第一個有 department 的值（可擴充回傳 list）
+    """
     cursor.execute("""
         SELECT DISTINCT c.department
         FROM classes c
@@ -76,716 +47,873 @@ def teacher_manages_class(cursor, teacher_id, class_id):
     return cursor.fetchone() is not None
 
 def can_access_target_resume(cursor, session_user_id, session_role, target_user_id):
+    """
+    判斷 session 的使用者（session_user_id, session_role）是否可存取 target_user_id 的履歷
+    - admin: 全部
+    - ta: 只讀（此函式只處理存取權，呼叫端需再判斷是否為可寫操作）
+    - student: 只能存取自己的履歷
+    - teacher: 只能存取自己帶的班級學生
+    - director: 只能存取自己科系的學生（由 classes_teacher -> classes.department 判斷）
+    """
+    # admin 可以
     if session_role == "admin":
         return True
+
+    # student 只能自己
     if session_role == "student":
         return session_user_id == target_user_id
+
+    # ta 可以讀所有（呼叫端若為寫動作需拒絕）
     if session_role == "ta":
         return True
 
+    # teacher / director 需要查 student 的班級與科系
     cursor.execute("SELECT class_id FROM users WHERE id = %s", (target_user_id,))
     u = cursor.fetchone()
     if not u:
         return False
     target_class_id = u.get('class_id')
 
-    if session_role == "class_teacher":
+    if session_role == "teacher":
         return teacher_manages_class(cursor, session_user_id, target_class_id)
+
     if session_role == "director":
+        # 取得 director 的 department（若沒有設定，則無法存取）
         director_dept = get_director_department(cursor, session_user_id)
         if not director_dept:
             return False
+        # 取得 target student's department
         cursor.execute("SELECT c.department FROM classes c WHERE c.id = %s", (target_class_id,))
         cd = cursor.fetchone()
         if not cd:
             return False
         return cd.get('department') == director_dept
+
+    # 預設拒絕
     return False
 
 def require_login():
     return 'user_id' in session and 'role' in session
 
 # -------------------------
-# 儲存結構化資料
+# API - 上傳履歷
 # -------------------------
-def save_structured_data(cursor, student_id, data):
-    # 假設這是儲存學生基本資料、課程、證照(文本)和語言能力的函式
+@resume_bp.route('/api/upload_resume', methods=['POST'])
+def upload_resume_api():
     try:
-        # 儲存 Student_Info (基本資料)
-        cursor.execute("""
-            INSERT INTO Student_Info (StuID, StuName, BirthDate, Gender, Phone, Email, Address, ConductScore, Autobiography, PhotoPath)
-            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
-            ON DUPLICATE KEY UPDATE 
-                StuName=VALUES(StuName), BirthDate=VALUES(BirthDate), Gender=VALUES(Gender),
-                Phone=VALUES(Phone), Email=VALUES(Email), Address=VALUES(Address),
-                ConductScore=VALUES(ConductScore), Autobiography=VALUES(Autobiography),
-                PhotoPath=VALUES(PhotoPath), UpdatedAt=NOW()
-        """, (
-            student_id, data.get('name'), data.get('birth_date'), data.get('gender'),
-            data.get('phone'), data.get('email'), data.get('address'),
-            data.get('conduct_score'), data.get('autobiography'), data.get('photo_path')
-        ))
+        # 取得 session 角色
+        role = session.get('role')
+        if role != 'student':
+            # 非學生不能上傳
+            return jsonify({"success": False, "message": "只有學生可以上傳履歷"}), 403
 
-        # 儲存課程
-        cursor.execute("DELETE FROM Course_Grades WHERE StuID=%s", (student_id,))
-        for c in data.get('courses', []):
-            if c.get('name'):
-                 cursor.execute("""
-                     INSERT INTO Course_Grades (StuID, CourseName, Credits, Grade)
-                       VALUES (%s,%s,%s,%s)
-                 """, (student_id, c['name'], c.get('credits'), c.get('grade')))
+        if 'resume' not in request.files:
+            return jsonify({"success": False, "message": "未上傳檔案"}), 400
 
-        # 儲存證照 (此處處理的是文本證照)
-        cursor.execute("DELETE FROM Student_Certifications WHERE StuID=%s", (student_id,))
-        for cert in data.get('structured_certifications', []):
-             # 由於前端只上傳圖片名稱，這裡假設所有結構化證照都屬於 'other' 類，但您可能需要調整
-             if cert.get('name'):
-                 cursor.execute("""
-                     INSERT INTO Student_Certifications (StuID, CertName, CertType)
-                     VALUES (%s, %s, %s)
-                 """, (student_id, cert['name'], cert.get('type', 'other'))) 
+        file = request.files['resume']
+        username = session.get('username')  # 直接用登入的學生帳號
+        if not username:
+            return jsonify({"success": False, "message": "未登入學生帳號"}), 403
 
-        # 儲存語文能力
-        cursor.execute("DELETE FROM Student_LanguageSkills WHERE StuID=%s", (student_id,))
-        for lang_skill in data.get('structured_languages', []):
-            if lang_skill.get('language') and lang_skill.get('level'):
-                cursor.execute("""
-                    INSERT INTO Student_LanguageSkills (StuID, Language, Level)
-                    VALUES (%s, %s, %s)
-                """, (student_id, lang_skill['language'], lang_skill['level']))
+        if file.filename == '':
+            return jsonify({"success": False, "message": "檔案名稱為空"}), 400
 
-        return True
-    except Exception as e:
-        print("❌ 儲存結構化資料錯誤:", e)
-        traceback.print_exc()
-        return False
+        original_filename = file.filename
+        safe_filename = secure_filename(original_filename)
+        timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+        stored_filename = f"{timestamp}_{safe_filename}"
+        save_path = os.path.join(UPLOAD_FOLDER, stored_filename)
 
-# -------------------------
-# 取回學生資料 (for 生成履歷)
-# -------------------------
-def get_student_info_for_doc(cursor, student_id):
-    data = {}
-    cursor.execute("SELECT * FROM Student_Info WHERE StuID=%s", (student_id,))
-    data['info'] = cursor.fetchone() or {}
-    cursor.execute("SELECT CourseName, Credits, Grade FROM Course_Grades WHERE StuID=%s", (student_id,))
-    data['grades'] = cursor.fetchall() or []
-    cursor.execute("SELECT CertName, CertType FROM Student_Certifications WHERE StuID=%s", (student_id,))
-    data['certifications'] = cursor.fetchall() or []
-    
-    # 讀取語文能力資料 
-    cursor.execute("SELECT Language, Level FROM Student_LanguageSkills WHERE StuID=%s", (student_id,))
-    data['languages'] = cursor.fetchall() or [] 
-    
-    return data
+        file.save(save_path)
 
-# -------------------------
-# Word 生成邏輯
-# -------------------------
-def generate_application_form_docx(student_data, output_path):
-    try:
-        base_dir = os.path.dirname(__file__)
-        # 假設模板檔案的路徑
-        template_path = os.path.abspath(os.path.join(base_dir, "..", "frontend", "static", "examples", "實習履歷(空白).docx"))
-        if not os.path.exists(template_path):
-            print("❌ 找不到模板：", template_path)
-            return False
-
-        doc = DocxTemplate(template_path)
-        info = student_data.get("info", {})
-        grades = student_data.get("grades", [])
-        certs = student_data.get("certifications", [])
-
-        # -------------------------
-        # 出生日期格式化
-        # -------------------------
-        def fmt_date(val):
-            if hasattr(val, 'strftime'):
-                return val.strftime("%Y-%m-%d")
-            if isinstance(val, str) and len(val) >= 10:
-                return val.split("T")[0]
-            return ""
-
-        bdate = fmt_date(info.get("BirthDate"))
-        year, month, day = ("", "", "")
-        if bdate:
-            try:
-                year, month, day = bdate.split("-")
-            except:
-                pass
-
-        # -------------------------
-        # 插入照片
-        # -------------------------
-        image_obj = None
-        photo_path = info.get("PhotoPath")
-        if photo_path and os.path.exists(photo_path):
-            try:
-                abs_photo_path = os.path.abspath(photo_path)
-                image_obj = InlineImage(doc, abs_photo_path, width=Inches(1.2))
-            except Exception as e:
-                print(f"⚠️ 圖片載入錯誤: {e}")
-
-        # -------------------------
-        # 處理專業核心科目資料
-        # -------------------------
-        MAX_COURSES = 15
-        
-        padded_grades = grades[:MAX_COURSES]
-        padded_grades += [{'CourseName': '', 'Credits': ''}] * (MAX_COURSES - len(padded_grades))
-        
-        # 將列表轉換為三欄格式，並生成 context 變數
-        context_courses = {}
-        for i in range(5): # 5 列 (i 從 0 到 4)
-            for j in range(3): # 3 欄 (j 從 0 到 2)
-                index = i * 3 + j
-                if index < MAX_COURSES:
-                    course = padded_grades[index]
-                    row_num = i + 1 # 模板變數從 1 開始
-                    col_num = j + 1 # 模板變數從 1 開始
-                    
-                    context_courses[f'CourseName_{row_num}_{col_num}'] = course.get('CourseName', '')
-                    context_courses[f'Credits_{row_num}_{col_num}'] = course.get('Credits', '')
-
-        # -------------------------
-        # 插入成績單圖片
-        # -------------------------
-        transcript_obj = None
-        transcript_path = info.get("TranscriptPath")
-        
-        if transcript_path and os.path.exists(transcript_path):
-            try:
-                abs_transcript_path = os.path.abspath(transcript_path)
-                # 設定圖片寬度，這裡使用 Inches(6)
-                transcript_obj = InlineImage(doc, abs_transcript_path, width=Inches(6))
-            except Exception as e:
-                print(f"⚠️ 成績單圖片載入錯誤 (請確保它是圖片檔案): {e}")
-
-
-        # -------------------------
-        # 操行等級（優甲乙丙丁）
-        # -------------------------
-        conduct_score = info.get('ConductScore', '')
-        conduct_marks = {k: '□' for k in ['C_You', 'C_Jia', 'C_Yi', 'C_Bing', 'C_Ding']}
-        mapping = {'優': 'C_You', '甲': 'C_Jia', '乙': 'C_Yi', '丙': 'C_Bing', '丁': 'C_Ding'}
-        if conduct_score in mapping:
-            conduct_marks[mapping[conduct_score]] = '■'
-
-        # -------------------------
-        # 證照分類 (文本證照列表)
-        # -------------------------
-        labor_certs, intl_certs, local_certs, other_certs = [], [], [], []
-        for cert in certs:
-            name = cert.get('CertName', '')
-            ctype = cert.get('CertType', '')
-            if not name:
-                continue
-            if ctype == 'labor':
-                labor_certs.append(name)
-            elif ctype == 'intl':
-                intl_certs.append(name)
-            elif ctype == 'local':
-                local_certs.append(name)
-            else:
-                other_certs.append(name)
-
-        # 新增輔助函式：將列表擴展到固定長度
-        def pad_list(lst, length=5):
-            lst = lst[:length]
-            lst += [''] * (length - len(lst))
-            return lst
-        
-        # -------------------------
-        # 建立 context (模板變數)
-        # -------------------------
-        context = {
-            'StuID': info.get('StuID', ''),
-            'StuName': info.get('StuName', ''),
-            'BirthYear': year, 'BirthMonth': month, 'BirthDay': day,
-            'Gender': info.get('Gender', ''),
-            'Phone': info.get('Phone', ''),
-            'Email': info.get('Email', ''),
-            'Address': info.get('Address', ''),
-            'ConductScoreNumeric': info.get('ConductScoreNumeric', ''),
-            'ConductScore': conduct_score,
-            'Autobiography': info.get('Autobiography', ''),
-            'Image_1': image_obj,
-            'transcript_path': transcript_obj
-        }
-
-        # 加入操行等級勾選
-        context.update(conduct_marks)
-
-        # 加入課程資料
-        context.update(context_courses)
-
-        # 加入證照資料 (文本證照)
-        for i, val in enumerate(pad_list(labor_certs), 1):
-            context[f'LaborCerts_{i}'] = val
-        for i, val in enumerate(pad_list(intl_certs), 1):
-            context[f'IntlCerts_{i}'] = val
-        for i, val in enumerate(pad_list(local_certs), 1):
-            context[f'LocalCerts_{i}'] = val  
-        for i, val in enumerate(pad_list(other_certs), 1):
-            context[f'OtherCerts_{i}'] = val
-
-        # -------------------------
-        # 證照圖片與名稱 (最多8個)
-        # -------------------------
-        MAX_CERTS = 8
-        cert_photo_paths = student_data.get("cert_photo_paths", []) # 上傳的圖片路徑清單
-        cert_names = student_data.get("cert_names", [])             # 上傳的名稱清單
-        
-        cert_photo_objs = []
-        image_size = Inches(1.5) 
-        
-        # 準備圖片物件
-        for i, path in enumerate(cert_photo_paths[:MAX_CERTS]):
-            try:
-                if os.path.exists(path):
-                    obj = InlineImage(doc, os.path.abspath(path), width=image_size)
-                    cert_photo_objs.append(obj)
-                else:
-                    cert_photo_objs.append('')
-            except Exception as e:
-                print(f"⚠️ 證照圖片載入錯誤: {e}")
-                cert_photo_objs.append('')
-
-        # 將圖片物件和名稱放入 context
-        for i in range(MAX_CERTS):
-            # 圖片變數 (CertPhotoImages_1 to 8)
-            image_key = f'CertPhotoImages_{i+1}'
-            context[image_key] = cert_photo_objs[i] if i < len(cert_photo_objs) else ''
-            
-            # 名稱變數 (CertPhotoName_1 to 8)
-            # 使用傳入的名稱清單
-            name_key = f'CertPhotoName_{i+1}'
-            context[name_key] = cert_names[i] if i < len(cert_names) else ''
-            
-        # -------------------------
-        # 語文能力處理
-        # -------------------------
-        lang_context = {}
-
-        # 1️⃣ 初始化所有欄位為 '□'
-        lang_codes = ['En', 'Jp', 'Tw', 'Hk']
-        level_codes = ['Jing', 'Zhong', 'Lue']
-        for code in lang_codes:
-            for level_code in level_codes:
-                lang_context[f'{code}_{level_code}'] = '□'  # e.g., En_Jing, Jp_Zhong
-
-        # 2️⃣ 建立對應表
-        lang_code_map = {'英語': 'En', '日語': 'Jp', '台語': 'Tw', '客語': 'Hk'}
-        level_code_map = {'精通': 'Jing', '中等': 'Zhong', '略懂': 'Lue'}
-
-        # 3️⃣ 根據資料庫數據設定 '■'
-        for lang_skill in student_data.get('languages', []):
-            lang = lang_skill.get('Language')   # e.g., '英語'
-            level = lang_skill.get('Level')     # e.g., '精通'
-            lang_code = lang_code_map.get(lang)
-            level_code = level_code_map.get(level)
-            if lang_code and level_code:
-                key = f'{lang_code}_{level_code}'
-                if key in lang_context:
-                    lang_context[key] = '■'
-
-        context.update(lang_context)
-
-        # -------------------------
-        # 套入模板並輸出
-        # -------------------------
-        doc.render(context)
-        doc.save(output_path)
-        print(f"✅ 履歷文件已生成: {output_path}")
-        return True
-
-    except Exception as e:
-        print("❌ 生成 Word 檔錯誤:", e)
-        traceback.print_exc()
-        return False
-
-# -------------------------
-# API：提交並生成履歷
-# -------------------------
-@resume_bp.route('/api/submit_and_generate', methods=['POST'])
-def submit_and_generate_api():
-    try:
-        # 權限檢查：僅限學生
-        if session.get('role') != 'student' or not session.get('user_id'):
-            return jsonify({"success": False, "message": "只有學生可以提交"}), 403
-
-        user_id = session['user_id']
         conn = get_db()
         cursor = conn.cursor(dictionary=True)
 
-        data = request.form.to_dict()
-        courses = json.loads(data.get('courses', '[]'))
-        photo = request.files.get('photo')
-        transcript_file = request.files.get('transcript_file')
-        cert_files = request.files.getlist('cert_photos[]')
-        
-        # 【新增】接收證照名稱清單
-        cert_names = request.form.getlist('cert_names[]')
-
-        # 1. 圖片檔案類型白名單
-        ALLOWED_IMAGE_MIMES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'] 
-
-        # ---------------------
-        # 儲存照片
-        # ---------------------
-        photo_path = None
-        if photo and photo.filename:
-            # 【新增檢查】
-            if photo.mimetype not in ALLOWED_IMAGE_MIMES:
-                 return jsonify({"success": False, "message": f"照片檔案格式錯誤 ({photo.mimetype})，請上傳 JPG/PNG/GIF 圖片"}), 400
-                  
-            filename = secure_filename(photo.filename)
-            photo_dir = os.path.join(UPLOAD_FOLDER, "photos")
-            os.makedirs(photo_dir, exist_ok=True)
-            ext = os.path.splitext(filename)[1]
-            new_filename = f"{user_id}_photo_{datetime.now().strftime('%Y%m%d_%H%M%S')}{ext}"
-            photo_path = os.path.join(photo_dir, new_filename)
-            photo.save(photo_path)
-
-        # ---------------------
-        #  儲存成績單檔案
-        # ---------------------
-        transcript_path = None
-        if transcript_file and transcript_file.filename:
-            # 【新增檢查】
-            if transcript_file.mimetype not in ALLOWED_IMAGE_MIMES:
-                 return jsonify({"success": False, "message": f"成績單檔案格式錯誤 ({transcript_file.mimetype})，請上傳 JPG/PNG/GIF 圖片"}), 400
-                  
-            filename = secure_filename(transcript_file.filename)
-            transcript_dir = os.path.join(UPLOAD_FOLDER, "transcripts")
-            os.makedirs(transcript_dir, exist_ok=True)
-            ext = os.path.splitext(filename)[1]
-            new_filename = f"{user_id}_transcript_{datetime.now().strftime('%Y%m%d_%H%M%S')}{ext}"
-            transcript_path = os.path.join(transcript_dir, new_filename)
-            transcript_file.save(transcript_path)
-
-        # ---------------------
-        # 上傳多張證照圖片 (含 MIME 檢查)
-        # ---------------------
-        cert_photo_paths = []
-        # 注意：這裡使用 getlist('cert_photos[]')，因為您 HTML 中 name="cert_photos[]"
-        cert_files = request.files.getlist('cert_photos[]') 
-
-        if cert_files:
-          cert_dir = os.path.join(UPLOAD_FOLDER, "cert_photos")
-          os.makedirs(cert_dir, exist_ok=True)
-
-        for idx, file in enumerate(cert_files, start=1):
-          if file and file.filename:
-            # 【新增檢查】
-            if file.mimetype not in ALLOWED_IMAGE_MIMES:
-                print(f"⚠️ 證照檔案格式錯誤已跳過: {file.filename} ({file.mimetype})")
-                continue
-                
-            ext = os.path.splitext(secure_filename(file.filename))[1]
-            new_filename = f"{user_id}_cert_{idx}_{datetime.now().strftime('%Y%m%d_%H%M%S')}{ext}"
-            file_path = os.path.join(cert_dir, new_filename)
-            file.save(file_path)
-            cert_photo_paths.append(file_path)
-
-        # ---------------------
-        # 證照結構化 (文本證照列表)
-        # ---------------------
-        structured_certifications = []
-        for cert_type, field_prefix in [
-            ('labor', 'labor_cert[]'),
-            ('intl', 'international_cert[]'),
-            ('local', 'domestic_cert[]'),
-            ('other', 'other_cert[]')
-        ]:
-            for name in request.form.getlist(field_prefix):
-                if name.strip():
-                    structured_certifications.append({'name': name.strip(), 'type': cert_type})
-
-        # ---------------------
-        # 語文能力結構化
-        # ---------------------
-        structured_languages = []
-        languages_map = {"en": "英語", "jp": "日語", "tw": "台語", "hk": "客語"}
-
-        for code, lang_name in languages_map.items():
-            field_name = f"lang_{code}_level"
-            level = data.get(field_name)
-            if level:
-                structured_languages.append({'language': lang_name, 'level': level})
-
-       # ---------------------
-       # 處理「單一」證照圖片上傳（與多圖邏輯合併）
-       # ---------------------
-        # 這裡的邏輯是將單一證照圖片/名稱插入到現有的多圖列表中
-        certificate_image_file = request.files.get('certificate_image')
-        certificate_description = request.form.get('certificate_description', '')
-        image_path_for_template = None
-
-        if certificate_image_file and certificate_image_file.filename != '' and 'user_id' in session:
-            try:
-                # 確保圖片儲存子資料夾存在
-                cert_folder = os.path.join(UPLOAD_FOLDER, 'certificates')
-                os.makedirs(cert_folder, exist_ok=True)
-                # 創建一個安全且獨特的檔案名稱
-                filename = secure_filename(certificate_image_file.filename)
-                file_extension = os.path.splitext(filename)[1] or '.png'
-                unique_filename = f"{session['user_id']}_{datetime.now().strftime('%Y%m%d%H%M%S')}_{os.urandom(4).hex()}{file_extension}"
-                image_save_path = os.path.join(cert_folder, unique_filename)
-                # 儲存檔案
-                certificate_image_file.save(image_save_path)
-                image_path_for_template = image_save_path
-            except Exception as e:
-                print(f"❌ 儲存單一證照圖片失敗: {e}")
-                traceback.print_exc()
-                image_path_for_template = None
-
-        # 將單一證照圖片/名稱插入在最前面
-        if image_path_for_template or certificate_description:
-            # 確保清單存在
-            if cert_photo_paths is None:
-                cert_photo_paths = []
-            if cert_names is None:
-                cert_names = []
-
-            # 插入在最前面，確保 Word 模板會把它放在第一個位置
-            cert_photo_paths.insert(0, image_path_for_template or "")
-            cert_names.insert(0, certificate_description or "")
-
-
-        # ---------------------
-        # 查學生學號
-        # ---------------------
-        cursor.execute("SELECT username FROM users WHERE id=%s", (user_id,))
-        result = cursor.fetchone()
-        if not result:
+        cursor.execute("SELECT id FROM users WHERE username = %s", (username,))
+        user = cursor.fetchone()
+        if not user:
+            cursor.close()
+            conn.close()
+            if os.path.exists(save_path):
+                os.remove(save_path)
             return jsonify({"success": False, "message": "找不到使用者"}), 404
-        student_id = result['username']
 
-        # ---------------------
-        # 建立結構化資料
-        # ---------------------
-        structured_data = {
-            "name": data.get("name"),
-            "birth_date": data.get("birth_date"),
-            "gender": data.get("gender"),
-            "phone": data.get("phone"),
-            "email": data.get("email"),
-            "address": data.get("address"),
-            "conduct_score": score_to_grade(data.get("conduct_score")),
-            "autobiography": data.get("autobiography"),
-            "courses": courses,
-            "photo_path": photo_path,
-            "structured_certifications": structured_certifications,
-            "structured_languages": structured_languages,
-        }
+        user_id = user['id']
+        filesize = os.path.getsize(save_path)
 
-        # ---------------------
-        # 儲存結構化資料至資料庫
-        # ---------------------
-        if not save_structured_data(cursor, student_id, structured_data):
-            conn.rollback()
-            return jsonify({"success": False, "message": "資料儲存失敗"}), 500
-
-        # ---------------------
-        # 生成履歷 Word 檔案
-        # ---------------------
-        student_data_for_doc = get_student_info_for_doc(cursor, student_id)
-        student_data_for_doc["info"]["PhotoPath"] = photo_path 
-        student_data_for_doc["info"]["TranscriptPath"] = transcript_path 
-        student_data_for_doc["info"]["ConductScoreNumeric"] = data.get("conduct_score_numeric")
-        
-        # 【重要修正】傳遞證照圖片路徑與名稱清單
-        student_data_for_doc["cert_photo_paths"] = cert_photo_paths
-        student_data_for_doc["cert_names"] = cert_names # 傳遞名稱清單
-        
-        filename = f"{student_id}_履歷_{datetime.now().strftime('%Y%m%d_%H%M%S')}.docx"
-        save_path = os.path.join(UPLOAD_FOLDER, filename)
-
-        if not generate_application_form_docx(student_data_for_doc, save_path):
-            conn.rollback()
-            return jsonify({"success": False, "message": "文件生成失敗"}), 500
-
-        semester_id = get_current_semester_id(cursor)
-        # 【修正】新增 cert_photos 欄位
         cursor.execute("""
-            INSERT INTO resumes (user_id, semester_id, original_filename, filepath, status, transcript_path, cert_photos, created_at)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, NOW())
-        """, (user_id, semester_id, filename, save_path, 'generated', transcript_path, json.dumps(cert_photo_paths))) 
+            INSERT INTO resumes (user_id, original_filename, filepath, filesize, status, created_at)
+            VALUES (%s, %s, %s, %s, %s, NOW())
+        """, (user_id, original_filename, save_path, filesize, 'uploaded'))
 
+        resume_id = cursor.lastrowid
         conn.commit()
-        return jsonify({"success": True, "message": "履歷生成成功"})
+        cursor.close()
+        conn.close()
+
+        return jsonify({
+            "success": True,
+            "resume_id": resume_id,
+            "filename": original_filename,
+            "filesize": filesize,
+            "status": "uploaded",
+            "message": "履歷上傳成功"
+        })
+
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"success": False, "message": f"上傳失敗: {str(e)}"}), 500
+
+# -------------------------
+# API - 下載履歷
+# -------------------------
+@resume_bp.route('/api/download_resume/<int:resume_id>', methods=['GET'])
+def download_resume(resume_id):
+    try:
+        # 檢查登入（所有角色皆須登入）
+        if not require_login():
+            return jsonify({"success": False, "message": "未授權"}), 403
+
+        conn = get_db()
+        cursor = conn.cursor(dictionary=True)
+
+        # 取得 resume 與 owner
+        cursor.execute("""
+            SELECT r.filepath, r.original_filename, r.user_id
+            FROM resumes r
+            WHERE r.id = %s
+        """, (resume_id,))
+        resume = cursor.fetchone()
+        if not resume:
+            cursor.close()
+            conn.close()
+            return jsonify({"success": False, "message": "找不到履歷"}), 404
+
+        # 權限檢查（TA 和其他讀取角色會透過 can_access_target_resume）
+        if not can_access_target_resume(cursor, session['user_id'], session['role'], resume['user_id']):
+            cursor.close()
+            conn.close()
+            return jsonify({"success": False, "message": "沒有權限下載該履歷"}), 403
+
+        filepath = resume['filepath']
+        cursor.close()
+        conn.close()
+
+        if not filepath or not os.path.exists(filepath):
+            return jsonify({"success": False, "message": "檔案不存在"}), 404
+
+        return send_file(filepath, as_attachment=True, download_name=resume["original_filename"])
+
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"success": False, "message": f"下載失敗: {str(e)}"}), 500
+
+# -------------------------
+# API - 查詢使用者履歷列表（含權限檢查）
+# -------------------------
+@resume_bp.route('/api/list_resumes/<username>', methods=['GET'])
+def list_resumes(username):
+    try:
+        role = session.get('role')
+        user_id = session.get('user_id')
+
+        if role is None:
+            # 訪客無權查詢履歷
+            return jsonify({"success": False, "message": "訪客無法查看履歷"}), 403
+
+        conn = get_db()
+        cursor = conn.cursor(dictionary=True)
+
+        user = get_user_by_username(cursor, username)
+        if not user:
+            cursor.close()
+            conn.close()
+            return jsonify({"success": False, "message": "找不到使用者"}), 404
+
+        target_user_id = user['id']
+
+        # 權限檢查
+        if not can_access_target_resume(cursor, user_id, role, target_user_id):
+            cursor.close()
+            conn.close()
+            return jsonify({"success": False, "message": "沒有權限查看該使用者的履歷"}), 403
+
+        cursor.execute("""
+            SELECT id, original_filename, status, comment, note, created_at
+            FROM resumes
+            WHERE user_id = %s
+            ORDER BY created_at DESC
+        """, (target_user_id,))
+        resumes = cursor.fetchall()
+
+        for r in resumes:
+            if isinstance(r.get('created_at'), datetime):
+                r['created_at'] = r['created_at'].strftime("%Y-%m-%d %H:%M:%S")
+
+        cursor.close()
+        conn.close()
+        return jsonify({"success": True, "resumes": resumes})
+
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"success": False, "message": f"查詢失敗: {str(e)}"}), 500
+
+# -------------------------
+# API - 審核履歷（合併 approve/reject 的邏輯）
+# -------------------------
+@resume_bp.route('/api/review_resume/<int:resume_id>', methods=['POST'])
+def review_resume(resume_id):
+    if 'user_id' not in session:
+        return jsonify({"success": False, "message": "未授權"}), 403
+
+    user_id = session['user_id']
+    role = session.get('role')
+    data = request.get_json() or {}
+    status = data.get("status")
+    comment = data.get("comment", "")
+    note = data.get("note", "")
+
+    if status not in ["approved", "rejected"]:
+        return jsonify({"success": False, "message": "無效的狀態"}), 400
+
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+
+    try:
+        # 查履歷對應學生與班級
+        cursor.execute("""
+            SELECT r.id, r.user_id, u.class_id, c.department
+            FROM resumes r
+            JOIN users u ON r.user_id = u.id
+            LEFT JOIN classes c ON u.class_id = c.id
+            WHERE r.id = %s
+        """, (resume_id,))
+        resume = cursor.fetchone()
+
+        if not resume:
+            return jsonify({"success": False, "message": "找不到履歷"}), 404
+
+        target_user_id = resume['user_id']
+
+        if role in ["teacher"]:
+            if not teacher_manages_class(cursor, user_id, resume['class_id']):
+                return jsonify({"success": False, "message": "沒有權限審核這份履歷"}), 403
+
+        elif role == "director":
+            director_dept = get_director_department(cursor, user_id)
+            if not director_dept or director_dept != resume.get('department'):
+                return jsonify({"success": False, "message": "主任無權限審核其他科系的履歷"}), 403
+
+        elif role == "admin":
+            pass  # admin 可以
+
+        else:
+            # ta, student, 其他角色不可審核
+            return jsonify({"success": False, "message": "角色無權限審核"}), 403
+
+        # 更新履歷狀態與備註
+        cursor.execute("""
+            UPDATE resumes
+            SET status = %s, comment = %s, note = %s, updated_at = NOW()
+            WHERE id = %s
+        """, (status, comment, note, resume_id))
+        
+        # 如果是退件，自動發送通知給學生
+        if status == "rejected":
+            # 獲取學生信息
+            cursor.execute("""
+                SELECT u.username, u.name
+                FROM users u
+                WHERE u.id = %s
+            """, (target_user_id,))
+            student = cursor.fetchone()
+            
+            if student:
+                # 獲取審核者信息
+                cursor.execute("""
+                    SELECT u.name
+                    FROM users u
+                    WHERE u.id = %s
+                """, (user_id,))
+                reviewer = cursor.fetchone()
+                reviewer_name = reviewer['name'] if reviewer else "老師"
+                
+                # 創建退件通知
+                cursor.execute("""
+                    INSERT INTO notifications (title, content, type, target_user_id, status, created_at, created_by)
+                    VALUES (%s, %s, %s, %s, %s, %s, NOW(), %s)
+                """, (
+                    "履歷退件通知",
+                    f"您的履歷已被{reviewer_name}退件。\n\n退件原因：{comment if comment else '請查看老師留言'}\n\n請根據老師的建議修改履歷後重新上傳。",
+                    'reminder',
+                    json.dumps(['student']),
+                    1,
+                    'published',
+                    'system'
+                ))
+        
+        conn.commit()
+
+        return jsonify({"success": True, "message": "履歷審核成功"})
 
     except Exception as e:
         traceback.print_exc()
         return jsonify({"success": False, "message": str(e)}), 500
 
     finally:
-        if 'cursor' in locals(): cursor.close()
-        if 'conn' in locals(): conn.close()
-
-# -------------------------
-# 下載履歷
-# -------------------------
-@resume_bp.route('/api/download_resume/<int:resume_id>', methods=['GET'])
-def download_resume(resume_id):
-    if not require_login():
-        return jsonify({"success": False, "message": "未授權"}), 403
-    conn = get_db()
-    cursor = conn.cursor(dictionary=True)
-    try:
-        cursor.execute("SELECT filepath, original_filename, user_id FROM resumes WHERE id=%s", (resume_id,))
-        r = cursor.fetchone()
-        if not r:
-            return jsonify({"success": False, "message": "找不到履歷"}), 404
-        if not can_access_target_resume(cursor, session['user_id'], session['role'], r['user_id']):
-            return jsonify({"success": False, "message": "無權限"}), 403
-        if not os.path.exists(r['filepath']):
-            return jsonify({"success": False, "message": "檔案不存在"}), 404
-        return send_file(r['filepath'], as_attachment=True, download_name=r['original_filename'])
-    finally:
         cursor.close()
         conn.close()
 
 # -------------------------
-# 下載成績單
-# -------------------------
-@resume_bp.route("/api/download_transcript/<int:resume_id>")
-def download_transcript(resume_id):
-    db = get_db()
-    cursor = db.cursor(dictionary=True)
-    try:
-        cursor.execute("SELECT transcript_path, user_id FROM resumes WHERE id=%s", (resume_id,))
-        result = cursor.fetchone()
-        
-        if not result or not result["transcript_path"]:
-            return jsonify({"success": False, "message": "找不到成績單"}), 404
-            
-        # 權限檢查 (可以根據您的 can_access_target_resume 邏輯來決定是否需要加入)
-        # 這裡假設下載成績單也需要權限檢查，如同下載履歷
-        if not can_access_target_resume(cursor, session.get('user_id'), session.get('role'), result['user_id']):
-            return jsonify({"success": False, "message": "無權限"}), 403
-
-        path = result["transcript_path"]
-        if not os.path.exists(path):
-            return jsonify({"success": False, "message": "檔案不存在"}), 404
-
-        # 嘗試推斷檔名，如果找不到則使用預設名
-        download_name = os.path.basename(path)
-        if not download_name or not os.path.splitext(download_name)[1]:
-            download_name = f"transcript_{resume_id}.jpg" # 預設檔名
-            
-        return send_file(path, as_attachment=True, download_name=download_name)
-    finally:
-        cursor.close()
-        db.close()
-
-# -------------------------
-# 查詢學生履歷列表
+# API - 查詢自己的履歷列表 (學生)
 # -------------------------
 @resume_bp.route('/api/get_my_resumes', methods=['GET'])
 def get_my_resumes():
     if 'user_id' not in session or session.get('role') != 'student':
         return jsonify({"success": False, "message": "未授權"}), 403
 
+    user_id = session['user_id']
+
     conn = get_db()
     cursor = conn.cursor(dictionary=True)
+
     try:
         cursor.execute("""
             SELECT r.id, r.original_filename, r.status, r.comment, r.note, r.created_at AS upload_time
             FROM resumes r
             WHERE r.user_id = %s
             ORDER BY r.created_at DESC
-        """, (session['user_id'],))
+        """, (user_id,))
         resumes = cursor.fetchall()
+
         for r in resumes:
             if isinstance(r.get('upload_time'), datetime):
                 r['upload_time'] = r['upload_time'].strftime("%Y-%m-%d %H:%M:%S")
+
         return jsonify({"success": True, "resumes": resumes})
-    finally:
-        cursor.close()
-        conn.close()
-
-# -------------------------
-# API：取得標準核心科目
-# -------------------------
-@resume_bp.route('/api/get_standard_courses', methods=['GET'])
-def get_standard_courses():
-    conn = get_db()
-    cursor = conn.cursor(dictionary=True)
-    try:
-       cursor.execute("""
-            SELECT course_name AS name, credits 
-            FROM standard_courses 
-            WHERE is_active = 1 
-            ORDER BY order_index
-        """)
-       courses = cursor.fetchall()
-       return jsonify({"success": True, "courses": courses})
+    
     except Exception as e:
-        print("❌ 取得標準核心科目錯誤:", e)
         traceback.print_exc()
-        return jsonify({"success": False, "message": "取得標準核心科目失敗"}), 500
+        return jsonify({"success": False, "message": str(e)}), 500
     finally:
         cursor.close()
         conn.close()
 
 # -------------------------
-# 儲存學生個人模板
+# API - 更新履歷欄位（comment, note）（含權限檢查）
 # -------------------------
-@resume_bp.route('/api/save_personal_template', methods=['POST'])
-def save_personal_template():
-    if 'user_id' not in session or session.get('role') != 'student':
-        return jsonify({"success": False, "message": "未授權"}), 403
-    conn = get_db()
-    cursor = conn.cursor(dictionary=True)
+@resume_bp.route('/api/update_resume_field', methods=['POST'])
+def update_resume_field():
     try:
-        data = request.get_json()
-        courses_json = json.dumps(data.get('courses', []), ensure_ascii=False)
-        cursor.execute("""
-            INSERT INTO templates (template_type, content, display_name, is_active, uploaded_by, uploaded_at)
-    VALUES (%s, %s, %s, %s, %s, NOW())
-    ON DUPLICATE KEY UPDATE content=VALUES(content), display_name=VALUES(display_name), updated_at=NOW()
-""", ('student_custom', courses_json, data.get('display_name', '我的模板'), 1, session['user_id']))
+        if not require_login():
+            return jsonify({"success": False, "message": "未授權"}), 403
+
+        data = request.get_json() or {}
+        resume_id = data.get('resume_id')
+        field = data.get('field')
+        value = (data.get('value') or '').strip()
+
+        allowed_fields = {
+            "comment": "comment",
+            "note": "note"
+        }
+
+        try:
+            resume_id = int(resume_id)
+        except (TypeError, ValueError):
+            return jsonify({"success": False, "message": "resume_id 必須是數字"}), 400
+
+        if field not in allowed_fields:
+            return jsonify({"success": False, "message": "參數錯誤"}), 400
+
+        conn = get_db()
+        cursor = conn.cursor(dictionary=True)
+
+        # 先找出 resume 的 owner
+        cursor.execute("SELECT user_id FROM resumes WHERE id = %s", (resume_id,))
+        r = cursor.fetchone()
+        if not r:
+            cursor.close()
+            conn.close()
+            return jsonify({"success": False, "message": "找不到該履歷"}), 404
+
+        owner_id = r['user_id']
+
+        # 取得使用者角色與 id
+        role = session.get('role')
+        user_id = session['user_id']
+
+        if role == "teacher":
+            if not teacher_manages_class(cursor, user_id, get_user_by_id(cursor, owner_id)['class_id']):
+                cursor.close()
+                conn.close()
+                return jsonify({"success": False, "message": "沒有權限修改該履歷"}), 403
+
+        elif role == "director":
+            director_dept = get_director_department(cursor, user_id)
+            cursor.execute("SELECT c.department FROM classes c JOIN users u ON u.class_id = c.id WHERE u.id = %s", (owner_id,))
+            target_dept_row = cursor.fetchone()
+            if not director_dept or not target_dept_row or director_dept != target_dept_row.get('department'):
+                cursor.close()
+                conn.close()
+                return jsonify({"success": False, "message": "沒有權限修改該履歷"}), 403
+
+        elif role == "admin":
+            pass  # admin 可以
+
+        elif role == "student":
+            # 學生只能修改自己的履歷，且只能修改 note 欄位
+            if user_id != owner_id:
+                cursor.close()
+                conn.close()
+                return jsonify({"success": False, "message": "學生只能修改自己的履歷"}), 403
+            if field != "note":
+                cursor.close()
+                conn.close()
+                return jsonify({"success": False, "message": "學生只能修改備註欄位"}), 403
+
+        else:
+            # ta 或其他角色不可修改
+            cursor.close()
+            conn.close()
+            return jsonify({"success": False, "message": "角色無權限修改"}), 403
+
+        # 更新欄位
+        sql = f"UPDATE resumes SET {allowed_fields[field]} = %s, updated_at = NOW() WHERE id = %s"
+        cursor.execute(sql, (value, resume_id))
         conn.commit()
-        return jsonify({"success": True})
+        cursor.close()
+        conn.close()
+        return jsonify({"success": True, "field": field, "resume_id": resume_id})
+
     except Exception as e:
-        conn.rollback()
-        print("❌ 儲存模板錯誤:", e)
-        return jsonify({"success": False, "message": "儲存失敗"}), 500
-    finally:
+        traceback.print_exc()
+        return jsonify({"success": False, "message": f"伺服器錯誤: {str(e)}"}), 500
+
+# -------------------------
+# API - 查詢履歷狀態
+# -------------------------
+@resume_bp.route('/api/resume_status', methods=['GET'])
+def resume_status():
+    resume_id = request.args.get('resume_id')
+    if not resume_id:
+        return jsonify({"success": False, "message": "缺少 resume_id"}), 400
+
+    try:
+        conn = get_db()
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute("SELECT status FROM resumes WHERE id = %s", (resume_id,))
+        resume = cursor.fetchone()
         cursor.close()
         conn.close()
 
+        if not resume:
+            return jsonify({"success": False, "message": "找不到該履歷"}), 404
+
+        return jsonify({"success": True, "status": resume['status']})
+
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"success": False, "message": f"伺服器錯誤: {str(e)}"}), 500
+
 # -------------------------
-# 載入學生個人模板
+# API - 查詢所有學生履歷（根據 username，含讀取權限檢查）
 # -------------------------
-@resume_bp.route('/api/load_personal_template', methods=['GET'])
-def load_personal_template():
-    if 'user_id' not in session or session.get('role') != 'student':
+@resume_bp.route('/api/get_student_resumes', methods=['GET'])
+def get_student_resumes():
+    if not require_login():
         return jsonify({"success": False, "message": "未授權"}), 403
+
+    username = request.args.get('username')
+    if not username:
+        return jsonify({"success": False, "message": "缺少 username"}), 400
+
+    user_id = session['user_id']
+    role = session['role']
+
     conn = get_db()
     cursor = conn.cursor(dictionary=True)
+
     try:
         cursor.execute("""
-            SELECT content FROM templates
-            WHERE uploaded_by=%s AND template_type='student_custom'
-            ORDER BY uploaded_at DESC LIMIT 1
-        """, (session['user_id'],))
-        row = cursor.fetchone()
-        if not row:
-            return jsonify({"success": False, "message": "無模板"})
-        return jsonify({"success": True, "courses": json.loads(row['content'])})
+            SELECT u.id AS student_id, u.class_id, c.department
+            FROM users u
+            LEFT JOIN classes c ON u.class_id = c.id
+            WHERE u.username = %s
+        """, (username,))
+        student = cursor.fetchone()
+        if not student:
+            return jsonify({"success": False, "message": "找不到學生"}), 404
+
+        # 權限判斷（讀取）
+        if role == "teacher":
+            if not teacher_manages_class(cursor, user_id, student['class_id']):
+                return jsonify({"success": False, "message": "沒有權限查看該學生履歷"}), 403
+
+        elif role == "director":
+            director_dept = get_director_department(cursor, user_id)
+            if not director_dept or director_dept != student.get('department'):
+                return jsonify({"success": False, "message": "沒有權限查看該學生履歷"}), 403
+
+        elif role == "ta":
+            pass  # TA 可讀全部（如需限制可在此修改）
+
+        elif role == "admin":
+            pass
+
+        else:
+            return jsonify({"success": False, "message": "角色無權限"}), 403
+
+        # 取得該學生履歷
+        cursor.execute("""
+            SELECT r.id, r.original_filename, r.status, r.comment, r.note, r.created_at AS upload_time
+            FROM resumes r
+            WHERE r.user_id = %s
+            ORDER BY r.created_at DESC
+        """, (student['student_id'],))
+        resumes = cursor.fetchall()
+
+        for r in resumes:
+            if isinstance(r.get('upload_time'), datetime):
+                r['upload_time'] = r['upload_time'].strftime("%Y-%m-%d %H:%M:%S")
+
+        return jsonify({"success": True, "resumes": resumes})
+
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"success": False, "message": f"伺服器錯誤: {str(e)}"}), 500
+
     finally:
         cursor.close()
         conn.close()
 
 # -------------------------
-# 頁面路由
+# API - 取得班導 / 主任 履歷 (支援多班級 & 全系)（讀取）
 # -------------------------
+@resume_bp.route("/api/get_class_resumes", methods=["GET"])
+def get_class_resumes():
+    # 驗證登入
+    if not require_login():
+        return jsonify({"success": False, "message": "未授權"}), 403
+
+    user_id = session['user_id']
+    role = session['role']
+    # mode: "homeroom" 僅看自己班；"director" 主任模式看全科；預設為 homeroom 對 teacher；director 預設依實際頁面傳入
+    mode = request.args.get('mode', '').strip().lower()
+
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+
+    try:
+        resumes = []  # 初始化結果列表
+        sql_query = ""
+        sql_params = tuple()
+
+        print(f"🔍 [DEBUG] get_class_resumes called - user_id: {user_id}, role: {role}")
+
+        # ------------------------------------------------------------------
+        # 1. 班導 / 教師 (role == "teacher" or "class_teacher")
+        # ------------------------------------------------------------------
+        if role in ["teacher", "class_teacher"]:
+            sql_query = """
+                SELECT 
+                    r.id,
+                    u.name AS student_name,
+                    u.username AS student_number,
+                    c.name AS class_name,
+                    c.department,
+                    r.original_filename,
+                    r.filepath,
+                    r.status,
+                    r.comment,
+                    r.note,
+                    r.created_at
+                FROM resumes r
+                JOIN users u ON r.user_id = u.id
+                LEFT JOIN classes c ON u.class_id = c.id
+                JOIN classes_teacher ct ON ct.class_id = c.id
+                WHERE ct.teacher_id = %s
+                ORDER BY c.name, u.name
+            """
+            sql_params = (user_id,)
+
+            cursor.execute(sql_query, sql_params)
+            resumes = cursor.fetchall()
+
+            if not resumes:
+                print(f"⚠️ [DEBUG] Teacher/class_teacher user {user_id} has no assigned classes.")
+                resumes = []
+
+        # ------------------------------------------------------------------
+        # 2. 主任 (role == "director")
+        # ------------------------------------------------------------------
+        elif role == "director":
+            # director 根據 mode 控制可見範圍：
+            # - mode=director → 同科系全部
+            # - 其他/預設 → 僅自己帶的班級（班導模式）
+            if mode == "director":
+                # 取得主任所屬科系（使用 helper）
+                department = get_director_department(cursor, user_id)
+
+                if not department:
+                    # 沒有設定科系 → 不顯示任何資料，以免越權
+                    resumes = []
+                    sql_query = ""
+                    sql_params = tuple()
+                else:
+                    sql_query = """
+                        SELECT 
+                            r.id,
+                            u.name AS student_name,
+                            u.username AS student_number,
+                            c.name AS class_name,
+                            c.department,
+                            r.original_filename,
+                            r.filepath,
+                            r.status,
+                            r.comment,
+                            r.note,
+                            r.created_at
+                        FROM resumes r
+                        JOIN users u ON r.user_id = u.id
+                        JOIN classes c ON u.class_id = c.id
+                        WHERE c.department = %s
+                        ORDER BY c.name, u.name
+                    """
+                    sql_params = (department,)
+            else:
+                # homeroom/預設：僅看自己帶的班級
+                sql_query = """
+                    SELECT 
+                        r.id,
+                        u.name AS student_name,
+                        u.username AS student_number,
+                        c.name AS class_name,
+                        c.department,
+                        r.original_filename,
+                        r.filepath,
+                        r.status,
+                        r.comment,
+                        r.note,
+                        r.created_at
+                    FROM resumes r
+                    JOIN users u ON r.user_id = u.id
+                    LEFT JOIN classes c ON u.class_id = c.id
+                    JOIN classes_teacher ct ON ct.class_id = c.id
+                    WHERE ct.teacher_id = %s
+                    ORDER BY c.name, u.name
+                """
+                sql_params = (user_id,)
+
+            # 執行 SQL 查詢 (主任邏輯在上面已完成查詢或準備好查詢字串)
+            if sql_query:
+                cursor.execute(sql_query, sql_params)
+                resumes = cursor.fetchall()
+
+        # ------------------------------------------------------------------
+        # 3. TA 或 Admin (role == "ta" or "admin")
+        # ------------------------------------------------------------------
+        elif role in ["ta", "admin"]:
+            sql_query = """
+                SELECT 
+                    r.id,
+                    u.name AS student_name,
+                    u.username AS student_number,
+                    c.name AS class_name,
+                    c.department,
+                    r.original_filename,
+                    r.filepath,
+                    r.status,
+                    r.comment,
+                    r.note,
+                    r.created_at
+                FROM resumes r
+                JOIN users u ON r.user_id = u.id
+                LEFT JOIN classes c ON u.class_id = c.id
+                ORDER BY c.name, u.name
+            """
+            cursor.execute(sql_query, tuple())
+            resumes = cursor.fetchall()
+
+        else:
+            return jsonify({"success": False, "message": "無效的角色或權限"}), 403
+
+        # 格式化日期時間並統一字段名稱
+        for r in resumes:
+            if isinstance(r.get('created_at'), datetime):
+                r['created_at'] = r['created_at'].strftime("%Y-%m-%d %H:%M:%S")
+            # 統一字段名稱，確保前端能正確訪問
+            if 'student_name' in r:
+                r['name'] = r['student_name']
+            if 'student_number' in r:
+                r['username'] = r['student_number']
+            if 'class_name' in r:
+                r['className'] = r['class_name']
+            if 'created_at' in r:
+                r['upload_time'] = r['created_at']
+
+        print(f"✅ [DEBUG] Returning {len(resumes)} resumes for role {role}")
+        return jsonify({"success": True, "resumes": resumes})
+
+    except Exception:
+        print("❌ 取得班級履歷資料錯誤：", traceback.format_exc())
+        return jsonify({"success": False, "message": "伺服器錯誤"}), 500
+
+    finally:
+        cursor.close()
+        conn.close()
+
+# -------------------------
+# API - 刪除履歷（需寫入權限）
+# -------------------------
+@resume_bp.route('/api/delete_resume', methods=['DELETE'])
+def delete_resume():
+    if not require_login():
+        return jsonify({"success": False, "message": "未授權"}), 403
+
+    resume_id = request.args.get('resume_id')
+    if not resume_id:
+        return jsonify({"success": False, "message": "缺少 resume_id"}), 400
+
+    try:
+        conn = get_db()
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute("SELECT filepath, user_id FROM resumes WHERE id = %s", (resume_id,))
+        result = cursor.fetchone()
+        if not result:
+            cursor.close()
+            conn.close()
+            return jsonify({"success": False, "message": "找不到該履歷"}), 404
+
+        owner_id = result['user_id']
+        role = session['role']
+        user_id = session['user_id']
+
+        # 權限： teacher 要帶該班級； director 要同科系； admin 可以
+        if role == "teacher":
+            # 取得 owner 的 class_id
+            cursor.execute("SELECT class_id FROM users WHERE id = %s", (owner_id,))
+            owner = cursor.fetchone()
+            if not owner or not teacher_manages_class(cursor, user_id, owner.get('class_id')):
+                cursor.close()
+                conn.close()
+                return jsonify({"success": False, "message": "沒有權限刪除該履歷"}), 403
+
+        elif role == "director":
+            director_dept = get_director_department(cursor, user_id)
+            cursor.execute("SELECT c.department FROM classes c JOIN users u ON u.class_id = c.id WHERE u.id = %s", (owner_id,))
+            target_dept_row = cursor.fetchone()
+            if not director_dept or not target_dept_row or director_dept != target_dept_row.get('department'):
+                cursor.close()
+                conn.close()
+                return jsonify({"success": False, "message": "沒有權限刪除該履歷"}), 403
+
+        elif role == "admin":
+            pass
+
+        else:
+            # student, ta, others 無刪除權限
+            cursor.close()
+            conn.close()
+            return jsonify({"success": False, "message": "角色無權限刪除"}), 403
+
+        # 刪除檔案與資料
+        filepath = result['filepath']
+        if filepath and os.path.exists(filepath):
+            os.remove(filepath)
+
+        cursor.execute("DELETE FROM resumes WHERE id = %s", (resume_id,))
+        conn.commit()
+        cursor.close()
+        conn.close()
+
+        return jsonify({"success": True, "message": "履歷已刪除"})
+
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"success": False, "message": f"伺服器錯誤: {str(e)}"}), 500
+
+# -------------------------
+# API - submit_comment（寫入 note，整合 update_resume_field）
+# -------------------------
+@resume_bp.route('/api/submit_comment', methods=['POST'])
+def submit_comment():
+    try:
+        # 直接呼叫 update_resume_field 的邏輯會比較乾淨，但為保持原 API 也支援，我用相同的權限檢查
+        data = request.get_json() or {}
+        resume_id = data.get('resume_id')
+        comment = (data.get('comment') or '').strip()
+
+        if not resume_id or not comment:
+            return jsonify({"success": False, "message": "缺少必要參數"}), 400
+
+        try:
+            resume_id = int(resume_id)
+        except (TypeError, ValueError):
+            return jsonify({"success": False, "message": "resume_id 必須是數字"}), 400
+
+        conn = get_db()
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute("SELECT id, user_id FROM resumes WHERE id=%s", (resume_id,))
+        r = cursor.fetchone()
+        if not r:
+            cursor.close()
+            conn.close()
+            return jsonify({"success": False, "message": "找不到該履歷"}), 404
+
+        owner_id = r['user_id']
+
+        # 權限檢查（寫入）
+        role = session.get('role')
+        user_id = session.get('user_id')
+        if role == "teacher":
+            cursor.execute("SELECT class_id FROM users WHERE id = %s", (owner_id,))
+            owner = cursor.fetchone()
+            if not owner or not teacher_manages_class(cursor, user_id, owner.get('class_id')):
+                cursor.close()
+                conn.close()
+                return jsonify({"success": False, "message": "沒有權限更新留言"}), 403
+        elif role == "director":
+            director_dept = get_director_department(cursor, user_id)
+            cursor.execute("SELECT c.department FROM classes c JOIN users u ON u.class_id = c.id WHERE u.id = %s", (owner_id,))
+            target_dept_row = cursor.fetchone()
+            if not director_dept or not target_dept_row or director_dept != target_dept_row.get('department'):
+                cursor.close()
+                conn.close()
+                return jsonify({"success": False, "message": "沒有權限更新留言"}), 403
+        elif role == "admin":
+            pass
+        else:
+            cursor.close()
+            conn.close()
+            return jsonify({"success": False, "message": "角色無權限更新留言"}), 403
+
+        cursor.execute("UPDATE resumes SET note=%s, updated_at=NOW() WHERE id=%s", (comment, resume_id))
+        conn.commit()
+        cursor.close()
+        conn.close()
+
+        return jsonify({"success": True, "message": "留言更新成功"})
+
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"success": False, "message": f"伺服器錯誤: {str(e)}"}), 500
+
+# -------------------------
+# # 頁面路由
+# -------------------------
+
+#上傳履歷頁面
 @resume_bp.route('/upload_resume')
 def upload_resume_page():
     return render_template('resume/upload_resume.html')
 
+#審核履歷頁面
+@resume_bp.route('/review_resume')
+def review_resume_page():
+    return render_template('resume/review_resume.html')
+
+#ai 編輯履歷頁面
 @resume_bp.route('/ai_edit_resume')
 def ai_edit_resume_page():
     return render_template('resume/ai_edit_resume.html')

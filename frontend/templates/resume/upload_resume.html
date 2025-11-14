@@ -77,7 +77,7 @@
         </li>
         <li class="nav-item" role="presentation">
           <button class="nav-link" id="records-tab" data-bs-toggle="tab" data-bs-target="#records-pane" type="button"
-            role="tab" aria-controls="records-pane" aria-selected="false">紀錄下載</button>
+            role="tab" aria-controls="records-pane" aria-selected="false">歷史紀錄</button>
         </li>
       </ul>
 
@@ -184,7 +184,7 @@
                   </tr>
                 </thead>
                 <tbody id="certificate-table-body">
-                </tbody>
+                  </tbody>
               </table> <button type="button" class="btn btn-sm btn-outline-success"
                 id="add-certificate-row">＋新增一列</button>
             </div>
@@ -267,7 +267,7 @@
             </div>
 
             <div class="text-center mt-4">
-              <button type="submit" id="submitBtn" class="btn btn-primary btn-lg">提交並生成履歷</button>
+              <button type="submit" class="btn btn-primary btn-lg">提交並生成履歷</button>
             </div>
           </form>
         </div>
@@ -279,6 +279,7 @@
                 <tr>
                   <th>生成時間</th>
                   <th>檔名</th>
+                  <th>審核狀態</th>
                   <th>下載</th>
                 </tr>
               </thead>
@@ -294,436 +295,479 @@
     </div>
   </div>
 
- <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-<script>
-/* ---------- 全域變數 ---------- */
-let allCoursesData = [];
-const AUTO_SAVE_KEY = 'resumeFormData';
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script>
+    // 儲存所有課程的原始資料，用於篩選和查詢
+    let allCoursesData = [];
 
-/* ---------- 鎖定/解鎖表單 ---------- */
-function setFormReadOnly(isLocked) {
-    const form = document.getElementById('resumeForm');
-    if (!form) return;
+    // 新增: LocalStorage Key
+    const AUTO_SAVE_KEY = 'resumeFormData';
+    
+    // 🧩 建立課程列 (學分數欄位已為 type="text" 以容納 "3/3" 等分數)
+    function createCourseRow(course) {
+      // 課程資料備份，用於「未修課」時恢復原始學分
+      const creditsDisplay = course.credits || "";
+      const isNotTaken = course.isNotTaken || false;
+      const displayCredits = isNotTaken ? "0" : creditsDisplay;
+      const buttonClass = isNotTaken ? "btn-warning" : "btn-outline-warning";
+      const buttonText = isNotTaken ? "已標記未修課" : "未修課";
+      
+      const tr = document.createElement("tr");
+      // 儲存原始學分數在 data-original-credits 屬性中
+      tr.dataset.originalCredits = creditsDisplay;
+      // 儲存未修課狀態
+      tr.dataset.isNotTaken = isNotTaken;
 
-    // 禁用/啟用所有輸入元素（但不禁用紀錄區按鈕）
-    const elements = form.querySelectorAll('input, select, textarea, button');
-    elements.forEach(el => {
-        // 不要把紀錄 tab 的按鈕也禁了 (按鈕帶 data-bs-target 的可以保留)
-        if (el.hasAttribute('data-bs-toggle') || el.dataset.bsTarget) return;
-        // Allow the submit-related button to be hidden/disabled separately
-        if (el.id === 'submitBtn') return;
-        el.disabled = isLocked;
-    });
-
-    // 檔案欄位視覺上設定
-    form.querySelectorAll('input[type="file"]').forEach(f => {
-        f.style.cursor = isLocked ? 'not-allowed' : '';
-        f.style.backgroundColor = isLocked ? '#e9ecef' : '';
-    });
-
-    // submitBtn 處理
-    const submitBtn = document.getElementById('submitBtn');
-    const lockMessageId = 'resumeLockMessage';
-    let lockMessage = document.getElementById(lockMessageId);
-
-    if (isLocked) {
-        if (submitBtn) {
-            submitBtn.disabled = true;
-            submitBtn.innerText = '已提交（等待審核）';
-        }
-        if (!lockMessage) {
-            lockMessage = document.createElement('div');
-            lockMessage.id = lockMessageId;
-            lockMessage.className = 'alert alert-info mt-3 text-center';
-            lockMessage.textContent = '履歷已提交並鎖定，目前為唯讀狀態。如需修改，請聯繫導師解鎖。';
-            form.appendChild(lockMessage);
-        } else {
-            lockMessage.style.display = 'block';
-        }
-    } else {
-        if (submitBtn) {
-            submitBtn.disabled = false;
-            submitBtn.innerText = '提交並生成履歷';
-            submitBtn.style.display = 'inline-block';
-        }
-        if (lockMessage) lockMessage.style.display = 'none';
-    }
-}
-
-/* ---------- 課程表格相關（保留你原有邏輯） ---------- */
-function createCourseRow(course) {
-    const creditsDisplay = course.credits || "";
-    const isNotTaken = !!course.isNotTaken;
-    const displayCredits = isNotTaken ? "0" : creditsDisplay;
-    const buttonClass = isNotTaken ? "btn-warning" : "btn-outline-warning";
-    const buttonText = isNotTaken ? "已標記未修課" : "未修課";
-
-    const tr = document.createElement("tr");
-    tr.dataset.originalCredits = creditsDisplay;
-    tr.dataset.isNotTaken = isNotTaken;
-    tr.innerHTML = `
-        <td><input type="text" name="course_name[]" class="form-control form-control-sm" value="${(course.name||'').replace(/"/g,'&quot;')}" placeholder="輸入課程名稱"></td>
+      tr.innerHTML = `
+        <td><input type="text" name="course_name[]" class="form-control form-control-sm" value="${course.name || ""}" placeholder="輸入課程名稱"></td>
         <td><input type="text" name="course_credits[]" class="form-control form-control-sm course-credits-input" value="${displayCredits}" placeholder="學分" readonly></td>
         <td><button type="button" class="btn ${buttonClass} btn-sm toggle-not-taken">${buttonText}</button></td>
-    `;
-    return tr;
-}
-function renderCourseTable(courses) {
-    const tbody = document.getElementById("courseTableBody");
-    tbody.innerHTML = "";
-    if (!courses || courses.length === 0) {
+      `;
+      return tr;
+    }
+
+    // 🧩 渲染課程表格
+    function renderCourseTable(courses) {
+      const tbody = document.getElementById("courseTableBody");
+      tbody.innerHTML = "";
+
+      if (courses.length === 0) {
         const row = document.createElement("tr");
         row.innerHTML = `<td colspan="3" class="text-muted text-center">查無課程或尚未新增課程</td>`;
         tbody.appendChild(row);
         return;
+      }
+
+      courses.forEach(course => {
+        tbody.appendChild(createCourseRow(course));
+      });
+      // 重新渲染後，儲存當前課程狀態 (包括未修課標記)
+      saveFormData();
     }
-    courses.forEach(course => tbody.appendChild(createCourseRow(course)));
-    saveFormData();
-}
-function applyFilterAndSearch() {
-    const searchTerm = document.getElementById("course-search").value.toLowerCase();
-    const creditFilter = document.getElementById("credit-filter").value;
-    const filteredCourses = allCoursesData.filter(course => {
-        const nameMatch = (course.name || '').toLowerCase().includes(searchTerm);
+
+    // 🧩 執行查詢和篩選
+    function applyFilterAndSearch() {
+      const searchTerm = document.getElementById("course-search").value.toLowerCase();
+      const creditFilter = document.getElementById("credit-filter").value;
+
+      const filteredCourses = allCoursesData.filter(course => {
+        // 1. 課程名稱查詢
+        const nameMatch = course.name.toLowerCase().includes(searchTerm);
         if (!nameMatch) return false;
-        if (!creditFilter) return true;
+
+        // 2. 學分數篩選
+        if (!creditFilter) return true; // 未選取篩選條件
+
+        // 由於資料可能為 "3/3"，使用 parseFloat 只會取到 "3"，這對篩選是正確的
         const credits = parseFloat(course.credits);
         if (isNaN(credits)) return false;
-        switch (creditFilter) {
-            case "1": return credits === 1;
-            case "2": return credits === 2;
-            case "3": return credits === 3;
-            case "4+": return credits >= 4;
-            default: return true;
-        }
-    });
-    filteredCourses.sort((a,b)=> (a.name||'').localeCompare(b.name||'','zh-TW',{sensitivity:'base'}));
-    renderCourseTable(filteredCourses);
-}
 
-/* ---------- 載入個人模板（含鎖定檢查） ---------- */
-async function loadPersonalTemplate() {
-    const tbody = document.getElementById("courseTableBody");
-    tbody.innerHTML = '<tr><td colspan="3" class="text-muted text-center">載入中...</td></tr>';
-    try {
+        switch (creditFilter) {
+          case "1":
+            return credits === 1;
+          case "2":
+            return credits === 2;
+          case "3":
+            return credits === 3;
+          case "4+":
+            return credits >= 4;
+          default:
+            return true;
+        }
+      });
+      
+      // 【關鍵修正】確保過濾後的列表總是按照課程名稱排序
+      filteredCourses.sort((a, b) => a.name.localeCompare(b.name, 'zh-TW', { sensitivity: 'base' }));
+
+      renderCourseTable(filteredCourses);
+    }
+
+    // 🧩 從後端載入學生個人模板
+    async function loadPersonalTemplate() {
+      const tbody = document.getElementById("courseTableBody");
+      tbody.innerHTML = '<tr><td colspan="3" class="text-muted text-center">載入中...</td></tr>';
+      try {
         const res = await fetch("/api/load_personal_template");
         const result = await res.json();
 
-        // 如果後端回傳 is_locked -> 設定表單狀態
-        if (result && typeof result.is_locked !== 'undefined') {
-            setFormReadOnly(!!result.is_locked);
-        }
-
         if (result.success && Array.isArray(result.courses) && result.courses.length > 0) {
-            const savedData = JSON.parse(localStorage.getItem(AUTO_SAVE_KEY) || '{}');
-            const savedCourses = savedData.courses || [];
-            allCoursesData = result.courses.map(course => {
-                const saved = savedCourses.find(c => c.name === course.name) || {};
-                return {...course, isNotTaken: saved.isNotTaken || course.isNotTaken || false};
-            });
-            allCoursesData.sort((a,b)=> (a.name||'').localeCompare(b.name||'','zh-TW',{sensitivity:'base'}));
-            renderCourseTable(allCoursesData);
+          // 載入時，嘗試與 LocalStorage 中儲存的課程狀態合併
+          const savedData = JSON.parse(localStorage.getItem(AUTO_SAVE_KEY) || '{}');
+          const savedCourses = savedData.courses || [];
+          
+          allCoursesData = result.courses.map(course => {
+            const savedCourse = savedCourses.find(c => c.name === course.name);
+            // 優先使用 LocalStorage 儲存的 isNotTaken 狀態
+            return {
+              ...course,
+              isNotTaken: savedCourse ? savedCourse.isNotTaken : (course.isNotTaken || false)
+            };
+          });
+
+          // 步驟 1: 依照課程名稱排序
+          allCoursesData.sort((a, b) => a.name.localeCompare(b.name, 'zh-TW', { sensitivity: 'base' }));
+
+          renderCourseTable(allCoursesData);
         } else {
-            await loadStandardCourses();
+          console.log("無個人模板，改載入標準課程");
+          await loadStandardCourses();
         }
-    } catch (e) {
-        console.error("載入個人模板錯誤", e);
+      } catch (err) {
+        console.error("❌ 載入個人模板失敗:", err);
         tbody.innerHTML = '<tr><td colspan="3" class="text-danger text-center">載入失敗</td></tr>';
+        allCoursesData = [];
+      }
     }
-}
-async function loadStandardCourses() {
-    const tbody = document.getElementById("courseTableBody");
-    tbody.innerHTML = '<tr><td colspan="3" class="text-muted text-center">載入標準課程中...</td></tr>';
-    try {
+
+    // 🧩 若無個人模板，載入系統預設課程
+    async function loadStandardCourses() {
+      const tbody = document.getElementById("courseTableBody");
+      tbody.innerHTML = '<tr><td colspan="3" class="text-muted text-center">載入標準課程中...</td></tr>';
+      try {
         const res = await fetch("/api/get_standard_courses");
         const result = await res.json();
-        if (result.success && result.courses?.length) {
-            allCoursesData = result.courses;
-            allCoursesData.sort((a,b)=> (a.name||'').localeCompare(b.name||'','zh-TW',{sensitivity:'base'}));
-            renderCourseTable(allCoursesData);
+        if (result.success && result.courses?.length > 0) {
+          allCoursesData = result.courses;
+          
+          // 步驟 1: 依照課程名稱排序
+          allCoursesData.sort((a, b) => a.name.localeCompare(b.name, 'zh-TW', { sensitivity: 'base' }));
+
+          renderCourseTable(allCoursesData);
         } else {
-            tbody.innerHTML = '<tr><td colspan="3" class="text-muted text-center">目前無標準課程</td></tr>';
+          tbody.innerHTML = '<tr><td colspan="3" class="text-muted text-center">目前無標準課程</td></tr>';
+          allCoursesData = [];
         }
-    } catch (e) {
-        console.error(e);
+      } catch (err) {
+        console.error("❌ 載入標準課程失敗:", err);
         tbody.innerHTML = '<tr><td colspan="3" class="text-danger text-center">載入失敗</td></tr>';
+        allCoursesData = [];
+      }
     }
-}
 
-/* ---------- 模板儲存（保留簡易版本） ---------- */
-async function savePersonalTemplate() {
-    const courses = allCoursesData.map(c => ({name:c.name, credits:c.credits, isNotTaken: c.isNotTaken||false}));
-    if (courses.length === 0) return alert("請先新增至少一門課程！");
-    try {
-        const res = await fetch("/api/save_personal_template", {
-            method: "POST",
-            headers: {"Content-Type": "application/json"},
-            body: JSON.stringify({display_name: "我的課程模板", courses})
-        });
-        const j = await res.json();
-        if (j.success) alert("✅ 模板已儲存！");
-        else alert("❌ 儲存失敗：" + (j.message || ""));
-    } catch (e) {
-        console.error(e);
-        alert("❌ 儲存失敗（網路錯誤）");
+    // 🧩 儲存為個人模板
+    async function savePersonalTemplate() {
+      // 使用 allCoursesData 確保儲存所有課程，無論篩選狀態
+      const courses = allCoursesData.map(course => ({
+          name: course.name,
+          credits: course.credits,
+          isNotTaken: course.isNotTaken || false // 確保有 isNotTaken 屬性
+      }));
+
+      if (courses.length === 0) {
+        alert("請先新增至少一門課程！");
+        return;
+      }
+
+      const res = await fetch("/api/save_personal_template", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          display_name: "我的課程模板",
+          courses: courses
+        })
+      });
+      const result = await res.json();
+      if (result.success) {
+        alert("✅ 模板已儲存！");
+      } else {
+        alert("❌ 儲存失敗：" + (result.message || ""));
+      }
     }
-}
 
-/* ---------- 證照表格、LocalStorage ---------- */
-function addNewCertificateRow(certData = { labor: "", international: "", domestic: "", other: "" }) {
-    const tbody = document.getElementById("certificate-table-body");
-    const html = `
-        <tr>
-          <td><input type="text" name="labor_cert[]" class="form-control" value="${(certData.labor||'').replace(/"/g,'&quot;')}" placeholder="例:電腦軟體應用乙級"></td>
-          <td><input type="text" name="international_cert[]" class="form-control" value="${(certData.international||'').replace(/"/g,'&quot;')}" placeholder="例:TOEIC 800分"></td>
-          <td><input type="text" name="domestic_cert[]" class="form-control" value="${(certData.domestic||'').replace(/"/g,'&quot;')}" placeholder="例:中餐丙級"></td>
-          <td><input type="text" name="other_cert[]" class="form-control" value="${(certData.other||'').replace(/"/g,'&quot;')}" placeholder="例:專題競賽"></td>
-          <td><button type="button" class="btn btn-outline-danger btn-sm remove-row">移除</button></td>
-        </tr>`;
-    tbody.insertAdjacentHTML("beforeend", html);
-    const newRow = tbody.lastElementChild;
-    newRow.querySelectorAll('input').forEach(i=>i.addEventListener('input', saveFormData));
-}
-
-function saveFormData() {
-    const data = {};
-    const form = document.getElementById("resumeForm");
-    form.querySelectorAll('input, select, textarea').forEach(input=>{
-        const name = input.name; const type = input.type;
-        if (name && type !== 'file' && type !== 'submit') data[name] = input.value;
-    });
-
-    // certificates
-    const certificates = [];
-    document.querySelectorAll("#certificate-table-body tr").forEach(row=>{
-        const get = (sel)=> (row.querySelector(sel) ? row.querySelector(sel).value : '');
-        certificates.push({
-            labor: get('input[name="labor_cert[]"]'),
-            international: get('input[name="international_cert[]"]'),
-            domestic: get('input[name="domestic_cert[]"]'),
-            other: get('input[name="other_cert[]"]')
-        });
-    });
-    data.certificates = certificates;
-
-    // courses: only store name/credits/isNotTaken
-    data.courses = allCoursesData.map(c => ({name:c.name, credits:c.credits, isNotTaken: c.isNotTaken||false}));
-
-    localStorage.setItem(AUTO_SAVE_KEY, JSON.stringify(data));
-    //console.log("Auto-saved");
-}
-
-function loadFormData() {
-    const raw = localStorage.getItem(AUTO_SAVE_KEY);
-    if (!raw) { addNewCertificateRow(); return; }
-    try {
-        const data = JSON.parse(raw);
-        const form = document.getElementById("resumeForm");
-        Object.keys(data).forEach(k=>{
-            if (k === 'certificates' || k === 'courses') return;
-            const el = form.querySelector(`[name="${k}"]`);
-            if (el) { el.value = data[k]; if (k === 'conduct_score_numeric') el.dispatchEvent(new Event('input')); }
-        });
-        // certificates
-        const tbody = document.getElementById("certificate-table-body");
-        tbody.innerHTML = '';
-        if (Array.isArray(data.certificates) && data.certificates.length>0) {
-            data.certificates.forEach(cert=>{
-                const allEmpty = Object.values(cert).every(v => !v || v.trim()==='');
-                if (!allEmpty) addNewCertificateRow(cert);
-            });
-        }
-        if (document.querySelectorAll("#certificate-table-body tr").length === 0) addNewCertificateRow();
-    } catch (e) {
-        console.error("載入 LocalStorage 失敗", e);
-        localStorage.removeItem(AUTO_SAVE_KEY);
-        addNewCertificateRow();
-    }
-}
-
-/* ---------- 切換未修課按鈕事件 ---------- */
-document.getElementById("courseTableBody").addEventListener("click", e=>{
-    if (e.target.classList.contains("toggle-not-taken")) {
-        const tr = e.target.closest('tr');
-        const creditsInput = tr.querySelector('.course-credits-input');
+    // 🧩 刪除/未修課 相關的事件處理
+    document.getElementById("courseTableBody").addEventListener("click", e => {
+      if (e.target.classList.contains("toggle-not-taken")) {
+        const tr = e.target.closest("tr");
+        const creditsInput = tr.querySelector(".course-credits-input");
         let isNotTaken = tr.dataset.isNotTaken === 'true';
+
         if (isNotTaken) {
-            creditsInput.value = tr.dataset.originalCredits;
-            e.target.classList.remove("btn-warning"); e.target.classList.add("btn-outline-warning");
-            e.target.textContent = "未修課"; tr.dataset.isNotTaken = false;
+          // 恢復原始學分數
+          creditsInput.value = tr.dataset.originalCredits;
+          e.target.classList.remove("btn-warning");
+          e.target.classList.add("btn-outline-warning");
+          e.target.textContent = "未修課";
+          tr.dataset.isNotTaken = false;
         } else {
-            creditsInput.value = "0";
-            e.target.classList.remove("btn-outline-warning"); e.target.classList.add("btn-warning");
-            e.target.textContent = "已標記未修課"; tr.dataset.isNotTaken = true;
+          // 標記為未修課，學分數設為 0
+          creditsInput.value = "0";
+          e.target.classList.remove("btn-outline-warning");
+          e.target.classList.add("btn-warning");
+          e.target.textContent = "已標記未修課";
+          tr.dataset.isNotTaken = true;
         }
-        const name = tr.querySelector('input[name="course_name[]"]').value;
-        const idx = allCoursesData.findIndex(c=>c.name===name);
-        if (idx>-1) allCoursesData[idx].isNotTaken = !isNotTaken;
+        
+        // **重要：** 同步更新 allCoursesData 中的狀態
+        const courseName = tr.querySelector('input[name="course_name[]"]').value;
+        const index = allCoursesData.findIndex(c => c.name === courseName);
+        if (index > -1) {
+             allCoursesData[index].isNotTaken = !isNotTaken;
+        } 
+        
+        // 狀態改變後儲存表單
         saveFormData();
-    }
-});
-
-/* ---------- 新增/刪除證照列 ---------- */
-document.getElementById("add-certificate-row").addEventListener("click", ()=>{ addNewCertificateRow(); saveFormData(); });
-document.getElementById("certificate-table-body").addEventListener("click", e=>{
-    if (e.target.classList.contains("remove-row")) {
-        e.target.closest('tr').remove(); saveFormData();
-        if (document.querySelectorAll("#certificate-table-body tr").length === 0) addNewCertificateRow();
-    }
-});
-
-/* ---------- 操行分數轉換 ---------- */
-const scoreInput = document.querySelector('input[name="conduct_score_numeric"]');
-const hiddenGrade = document.getElementById("conduct_score");
-function conductScoreHandler(){
-    const score = parseInt(scoreInput.value);
-    let grade="";
-    if (score>=90) grade='優'; else if (score>=80) grade='甲'; else if (score>=70) grade='乙'; else if (score>=60) grade='丙'; else if (!isNaN(score)) grade='丁';
-    hiddenGrade.value = grade;
-    saveFormData();
-}
-if (scoreInput) scoreInput.addEventListener('input', conductScoreHandler);
-
-/* ---------- 送出表單（含前端鎖定 / 防重複） ---------- */
-document.getElementById("resumeForm").addEventListener("submit", async e=>{
-    e.preventDefault();
-    const submitBtn = document.getElementById('submitBtn');
-    if (submitBtn) { submitBtn.disabled = true; submitBtn.innerText = '送出中...'; }
-
-    const formData = new FormData(e.target);
-
-    // collect courses
-    const courseRows = document.querySelectorAll("#courseTableBody tr");
-    const courses = [];
-    courseRows.forEach(row=>{
-        const n = row.querySelector('input[name="course_name[]"]');
-        const c = row.querySelector('input[name="course_credits[]"]');
-        const not = row.dataset.isNotTaken === 'true';
-        if (n && c) {
-            const name = n.value.trim(); const credits = c.value.trim();
-            if (name && credits) courses.push({name, credits, isNotTaken: not});
-        }
+      }
     });
-    formData.append("courses", JSON.stringify(courses));
-    formData.delete("course_name[]"); formData.delete("course_credits[]");
 
-    try {
-        const res = await fetch("/api/submit_and_generate", { method: "POST", body: formData });
-        const j = await res.json();
-        if (j.success) {
-            // 成功 -> 鎖定表單並切換到紀錄分頁
-            setFormReadOnly(true);
-            // 重新載入紀錄
-            await loadResumeRecords();
-            // 切換 tab
-            new bootstrap.Tab(document.querySelector('[data-bs-target="#records-pane"]')).show();
-            alert("✅ 履歷已生成並提交，表單已鎖定（等待審核）");
-        } else {
-            alert("❌ 提交失敗：" + (j.message || "未知錯誤"));
-            if (submitBtn) { submitBtn.disabled = false; submitBtn.innerText = '提交並生成履歷'; }
-        }
-    } catch (e) {
-        console.error(e);
-        alert("❌ 網路或系統錯誤，請稍後重試");
-        if (submitBtn) { submitBtn.disabled = false; submitBtn.innerText = '提交並生成履歷'; }
-    }
-});
-
-/* ---------- 紀錄載入：含「下載/查看狀態/刪除」按鈕 ---------- */
-async function loadResumeRecords() {
-    try {
-        const res = await fetch("/api/get_my_resumes");
-        const result = await res.json();
-        const tbody = document.getElementById("recordsBody");
-        tbody.innerHTML = "";
-
-        if (!result.success || !result.resumes?.length) {
-            tbody.innerHTML = `<tr><td colspan="4" class="text-muted">尚無履歷紀錄</td></tr>`;
-            return;
-        }
-
-        result.resumes.forEach(r=>{
-            // 根據狀態決定是否顯示刪除按鈕（僅「rejected/退回」時可刪除）
-            const canDelete = (r.status === 'rejected' || r.status === '退回' || r.status === 'rejected-by-director'); // 容錯
-            const statusLabel = r.status || 'unknown';
-            const statusBadge = `<span class="badge bg-secondary">${statusLabel}</span>`;
-
-            tbody.insertAdjacentHTML("beforeend", `
-                <tr id="resume-row-${r.id}">
-                    <td>${r.upload_time || "-"}</td>
-                    <td>${r.original_filename || "未命名"}</td>
-                    <td>
-                      <a href="/api/download_resume/${r.id}" class="btn btn-outline-primary btn-sm">下載</a>
-                      <button type="button" class="btn btn-info btn-sm ms-1" onclick="checkStatus(${r.id})">查看狀態</button>
-                      ${ canDelete ? `<button type="button" class="btn btn-danger btn-sm ms-1" onclick="deleteResume(${r.id})">刪除</button>` : '' }
-                    </td>
-                    <td>${statusBadge}</td>
-                </tr>
-            `);
-        });
-    } catch (e) {
-        console.error("載入紀錄失敗", e);
-        const tbody = document.getElementById("recordsBody");
-        tbody.innerHTML = `<tr><td colspan="4" class="text-danger">載入紀錄失敗</td></tr>`;
-    }
-}
-
-/* ---------- 查看審核狀態（按鈕） ---------- */
-async function checkStatus(resumeId) {
-    try {
-        const res = await fetch(`/api/resume_status/${resumeId}`);
-        const j = await res.json();
-        if (!j.success) return alert(j.message || "查詢失敗");
-        const d = j.data || {};
-        const status = d.status || '未知';
-        const reviewed = d.reviewed_at || '尚未審核';
-        const comment = d.comment || d.note || '無備註';
-        alert(`狀態：${status}\n審核時間：${reviewed}\n備註：${comment}`);
-    } catch (e) {
-        console.error(e);
-        alert("查詢審核狀態失敗");
-    }
-}
-
-/* ---------- 刪除履歷（僅允許可刪除的情況） ---------- */
-async function deleteResume(resumeId) {
-    if (!confirm("確定要刪除這份履歷？（僅能刪除已退回的履歷）")) return;
-    try {
-        const res = await fetch(`/api/delete_resume/${resumeId}`, { method: 'DELETE' });
-        const j = await res.json();
-        alert(j.message || (j.success ? "已刪除" : "刪除失敗"));
-        if (j.success) {
-            // 移除列或重新載入
-            const row = document.getElementById(`resume-row-${resumeId}`);
-            if (row) row.remove();
-            else await loadResumeRecords();
-        }
-    } catch (e) {
-        console.error(e);
-        alert("刪除失敗（網路錯誤）");
-    }
-}
-
-/* ---------- 初始化 ---------- */
-document.addEventListener("DOMContentLoaded", ()=>{
-    // 載入 LocalStorage
-    loadFormData();
-
-    // 綁定搜尋和篩選
+    // 🧩 綁定查詢和篩選事件
     document.getElementById("course-search").addEventListener("input", applyFilterAndSearch);
     document.getElementById("credit-filter").addEventListener("change", applyFilterAndSearch);
 
-    // 綁定載入/儲存模板按鈕
+    // 🧩 綁定按鈕事件
     document.getElementById("load-template-btn").addEventListener("click", loadPersonalTemplate);
     document.getElementById("save-template-btn").addEventListener("click", savePersonalTemplate);
 
-    // 新增/刪除證照按鈕
-    document.getElementById("add-certificate-row").addEventListener("click", ()=>{ addNewCertificateRow(); saveFormData(); });
+    // =========================================================================
+    // 新增: AutoSave and Load 邏輯
+    // =========================================================================
+    
+    // 🧩 證照表格新增列的通用函數 (用於 load 和 add button)
+    function addNewCertificateRow(certData = { labor: "", international: "", domestic: "", other: "" }) {
+        const tbody = document.getElementById("certificate-table-body");
+        const newRowHTML = `
+            <tr>
+                <td><input type="text" name="labor_cert[]" class="form-control" placeholder="例:電腦軟體應用乙級" value="${certData.labor || ""}"></td>
+                <td><input type="text" name="international_cert[]" class="form-control" placeholder="例:TOEIC 800分" value="${certData.international || ""}"></td>
+                <td><input type="text" name="domestic_cert[]" class="form-control" placeholder="例:中餐丙級" value="${certData.domestic || ""}"></td>
+                <td><input type="text" name="other_cert[]" class="form-control" placeholder="例:專題競賽" value="${certData.other || ""}"></td>
+                <td><button type="button" class="btn btn-outline-danger btn-sm remove-row">移除</button></td>
+            </tr>`;
+        tbody.insertAdjacentHTML("beforeend", newRowHTML);
+        
+        // 新增: 為新加入的欄位添加自動儲存監聽器
+        const newRow = tbody.lastElementChild;
+        newRow.querySelectorAll('input').forEach(input => {
+            input.addEventListener('input', saveFormData);
+        });
+    }
 
-    // 初始載入
-    loadPersonalTemplate();
+    // 🧩 儲存表單資料到 LocalStorage
+    function saveFormData() {
+        const data = {};
+        const form = document.getElementById("resumeForm");
+
+        // 1. 收集所有單一欄位的值 (排除檔案和按鈕)
+        form.querySelectorAll('input, select, textarea').forEach(input => {
+            const name = input.name;
+            const type = input.type;
+            if (name && type !== 'file' && type !== 'submit') {
+                data[name] = input.value;
+            }
+        });
+
+        // 2. 收集證照資料 (動態表格)
+        const certificateRows = document.querySelectorAll("#certificate-table-body tr");
+        const certificates = [];
+        certificateRows.forEach(row => {
+            const certData = {
+                labor: row.querySelector('input[name="labor_cert[]"]').value,
+                international: row.querySelector('input[name="international_cert[]"]').value,
+                domestic: row.querySelector('input[name="domestic_cert[]"]').value,
+                other: row.querySelector('input[name="other_cert[]"]').value
+            };
+            certificates.push(certData);
+        });
+        data['certificates'] = certificates;
+
+        // 3. 收集課程資料 (課程清單，只儲存 allCoursesData 中的 isNotTaken 狀態)
+        data['courses'] = allCoursesData.map(course => ({
+            name: course.name,
+            credits: course.credits, // 儲存原始 credit
+            isNotTaken: course.isNotTaken || false
+        }));
+
+
+        localStorage.setItem(AUTO_SAVE_KEY, JSON.stringify(data));
+        console.log("✅ 表單已自動儲存到 LocalStorage");
+    }
+
+    // 🧩 從 LocalStorage 載入表單資料
+    function loadFormData() {
+        const savedData = localStorage.getItem(AUTO_SAVE_KEY);
+        if (!savedData) {
+            // 如果沒有儲存的資料，則新增一條空白的證照列
+            addNewCertificateRow(); 
+            return;
+        }
+
+        try {
+            const data = JSON.parse(savedData);
+            const form = document.getElementById("resumeForm");
+
+            // 1. 載入單一欄位
+            Object.keys(data).forEach(key => {
+                // 排除動態表格 data['certificates'] 和 data['courses']
+                if (key !== 'certificates' && key !== 'courses') { 
+                    const input = form.querySelector(`[name="${key}"]`);
+                    if (input) {
+                        input.value = data[key];
+                        // 載入操行成績分數後，觸發 input 事件，讓轉換邏輯執行
+                        if (key === 'conduct_score_numeric') {
+                            input.dispatchEvent(new Event('input'));
+                        }
+                    }
+                }
+            });
+            
+            // 2. 載入證照資料 (動態表格)
+            const tbody = document.getElementById("certificate-table-body");
+            tbody.innerHTML = ""; // 清空 HTML 中可能的殘留
+
+            if (data.certificates && Array.isArray(data.certificates) && data.certificates.length > 0) {
+                data.certificates.forEach(cert => {
+                    // 檢查所有欄位是否皆為空，若皆為空則不載入
+                    const isEmpty = Object.values(cert).every(val => !val || val.trim() === '');
+                    if (!isEmpty) {
+                         addNewCertificateRow(cert);
+                    }
+                });
+            }
+            
+            // 確保至少有一條證照空白列
+            if (document.querySelectorAll("#certificate-table-body tr").length === 0) {
+              addNewCertificateRow();
+            }
+
+            // 3. 課程資料會在 loadPersonalTemplate 中合併處理
+
+        } catch (e) {
+            console.error("❌ 載入 LocalStorage 資料失敗:", e);
+            localStorage.removeItem(AUTO_SAVE_KEY); // 清除無效資料
+            addNewCertificateRow(); // 載入失敗也確保有一條空白證照列
+        }
+    }
+
+    // 新增: 綁定表單欄位自動儲存事件
+    document.addEventListener("DOMContentLoaded", () => {
+        const form = document.getElementById("resumeForm");
+        
+        // 先載入 LocalStorage 資料到表單 (但課程載入會在 loadPersonalTemplate 之後)
+        loadFormData();
+        
+        // 針對非動態生成的欄位，設定監聽器
+        form.querySelectorAll('input:not([type="file"]), select, textarea').forEach(input => {
+            // 檔案欄位不儲存，動態生成的證照欄位在 addNewCertificateRow 中處理
+            input.addEventListener('input', saveFormData);
+            input.addEventListener('change', saveFormData); 
+        });
+    });
+    
+    // 🧩 替換原本的「相關證照」新增 / 移除列的程式碼，並加入 saveFormData()
+
+    // 替換原本的新增證照列監聽器
+    document.getElementById("add-certificate-row").addEventListener("click", () => {
+        addNewCertificateRow(); // 不帶參數即為新增空白列
+        saveFormData(); // 新增後儲存狀態
+    });
+    
+    // 替換原本的移除證照列監聽器
+    document.getElementById("certificate-table-body").addEventListener("click", e => {
+        if (e.target.classList.contains("remove-row")) {
+            e.target.closest("tr").remove();
+            saveFormData(); // 移除後儲存狀態
+            
+            // 如果移除到沒有任何一列，則新增一條空白列
+            if (document.querySelectorAll("#certificate-table-body tr").length === 0) {
+                addNewCertificateRow();
+            }
+        }
+    });
+
+    // 操行成績轉換 (加入 saveFormData)
+    const scoreInput = document.querySelector('input[name="conduct_score_numeric"]');
+    const hiddenGrade = document.getElementById("conduct_score");
+    const conductScoreHandler = () => {
+      const score = parseInt(scoreInput.value);
+      let grade = "";
+      if (score >= 90) grade = "優";
+      else if (score >= 80) grade = "甲";
+      else if (score >= 70) grade = "乙";
+      else if (score >= 60) grade = "丙";
+      else if (score >= 0) grade = "丁";
+      hiddenGrade.value = grade;
+      saveFormData(); // 轉換後也儲存
+    };
+    scoreInput.addEventListener("input", conductScoreHandler);
+
+    // 表單送出 (提交成功後清除 LocalStorage)
+    document.getElementById("resumeForm").addEventListener("submit", async e => {
+      e.preventDefault();
+      const formData = new FormData(e.target);
+
+      
+      // 收集動態的課程資料並添加到 FormData
+      const courseRows = document.querySelectorAll("#courseTableBody tr");
+      const courses = [];
+      
+      courseRows.forEach(row => {
+          const nameInput = row.querySelector('input[name="course_name[]"]');
+          const creditsInput = row.querySelector('input[name="course_credits[]"]');
+          const isNotTaken = row.dataset.isNotTaken === 'true';
+
+          if (nameInput && creditsInput) {
+              const name = nameInput.value.trim();
+              // 提交時，無論是否未修課，都使用顯示的值 (0 或實際學分)
+              const credits = creditsInput.value.trim(); 
+              
+              if (name && credits) {
+                  courses.push({ 
+                      name: name, 
+                      credits: credits, 
+                      isNotTaken: isNotTaken // 傳遞狀態給後端
+                  });
+              }
+          }
+      });
+      
+
+      formData.append("courses", JSON.stringify(courses));
+      
+      // 移除舊的課程相關欄位，因為我們統一用 JSON 傳遞
+      formData.delete("course_name[]");
+      formData.delete("course_credits[]");
+
+      const res = await fetch("/api/submit_and_generate", {
+        method: "POST",
+        body: formData
+      });
+      const result = await res.json();
+      if (result.success) {
+        alert("✅ 履歷已生成，可於紀錄頁籤下載");
+        // 切換到紀錄頁籤
+        new bootstrap.Tab(document.querySelector('[data-bs-target="#records-pane"]')).show();
+        await loadResumeRecords();
+      } else alert("❌ 提交失敗：" + (result.message || "未知錯誤"));
+    });
+
+    // 載入履歷紀錄
+    async function loadResumeRecords() {
+      const res = await fetch("/api/get_my_resumes");
+      const result = await res.json();
+      const tbody = document.getElementById("recordsBody");
+      tbody.innerHTML = "";
+      if (!result.success || !result.resumes?.length)
+        return tbody.innerHTML = `<tr><td colspan="3" class="text-muted">尚無履歷紀錄</td></tr>`;
+
+      result.resumes.forEach(r => {
+        tbody.insertAdjacentHTML("beforeend", `
+    <tr>
+      <td>${r.upload_time || "-"}</td>
+      <td>${r.original_filename || "未命名"}</td>
+      <td>
+        ${r.status === 'submitted' ? '<span class="text-secondary">已提交</span>' : ''}
+        ${r.status === 'under_review' ? '<span class="text-warning">審核中</span>' : ''}
+        ${r.status === 'approved' ? '<span class="text-success">審核通過</span>' : ''}
+        ${r.status === 'rejected' ? '<span class="text-danger">退件</span>' : ''}
+      </td>
+      <td><a href="/api/download_resume/${r.id}" class="btn btn-outline-primary btn-sm">下載</a></td>
+    </tr>
+    `);
+      });
+    }
+
+    loadPersonalTemplate(); 
     loadResumeRecords();
-});
-</script>
+  </script>
 </body>
+
 </html>
