@@ -617,70 +617,26 @@
       <button id="createPositionBtn" class="btn btn-primary">＋ 新增職缺</button>
     </header>
 
-    <p id="companyHint" class="empty-hint">目前尚未建立與您帳號綁定的公司資料。如需建立新公司或取得維護權限，請聯絡平台管理員或實習窗口。</p>
-
-    <section class="summary-grid" aria-label="職缺統計總覽">
-      <div class="summary-card">
-        <p class="label">總職缺數</p>
-        <p class="value" id="summaryTotal">0</p>
-      </div>
-      <div class="summary-card">
-        <p class="label">啟用中</p>
-        <p class="value" id="summaryActive">0</p>
-      </div>
-      <div class="summary-card">
-        <p class="label">已停用</p>
-        <p class="value" id="summaryInactive">0</p>
-      </div>
-    </section>
-
-    <section class="panel" aria-labelledby="filterTitle">
-      <div class="panel-header">
-        <h2 id="filterTitle">篩選條件</h2>
-        <button id="resetFilters" class="btn btn-ghost" type="button">重設篩選</button>
-      </div>
-      <div class="filter-grid">
-        <label for="filterCompany">
-          所屬公司
-          <select id="filterCompany">
-            <option value="all">全部</option>
-          </select>
-        </label>
-        <label for="filterStatus">
-          狀態
-          <select id="filterStatus">
-            <option value="all">全部</option>
-            <option value="active">啟用中</option>
-            <option value="inactive">已停用</option>
-          </select>
-        </label>
-        <label for="filterKeyword">
-          關鍵字搜尋
-          <input id="filterKeyword" type="text" placeholder="輸入職缺名稱、內容或備註關鍵字" />
-        </label>
-      </div>
-    </section>
+    <p id="companyHint" class="empty-hint">目前尚未建立與您對接指導老師關聯的公司資料。您新增的職缺將會顯示給對接的指導老師和科助查看。請確認您的指導老師已建立公司，或聯絡平台管理員設定對接關係。</p>
 
     <section class="panel" aria-label="職缺列表">
       <div class="panel-header">
         <h2>職缺列表</h2>
-        <span class="flag" id="filterSummary">全部職缺</span>
       </div>
       <div class="table-wrapper">
         <table class="positions-table">
           <thead>
             <tr>
-              <th style="width: 28%;">職缺名稱 / 公司</th>
-              <th style="width: 12%;">名額</th>
-              <th style="width: 18%;">期間 / 時間</th>
-              <th style="width: 12%;">薪資</th>
-              <th style="width: 12%;">狀態</th>
-              <th style="width: 18%;">操作</th>
+              <th style="width: 30%;">職缺名稱 / 公司</th>
+              <th style="width: 15%;">名額</th>
+              <th style="width: 20%;">期間 / 時間</th>
+              <th style="width: 15%;">薪資</th>
+              <th style="width: 20%;">操作</th>
             </tr>
           </thead>
           <tbody id="positionsTableBody">
             <tr>
-              <td colspan="6">資料載入中...</td>
+              <td colspan="5">資料載入中...</td>
             </tr>
           </tbody>
         </table>
@@ -739,12 +695,6 @@
             <label for="formRemark">備註 (可留空)</label>
             <textarea id="formRemark" placeholder="補充資訊、報到注意事項等" maxlength="800"></textarea>
           </div>
-          <div class="form-group option-row">
-            <label class="checkbox-field">
-              <input id="formActive" type="checkbox" checked />
-              啟用此職缺
-            </label>
-          </div>
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-ghost" id="cancelFormBtn">取消</button>
@@ -762,23 +712,12 @@
 
       const state = {
         companies: [],
-        jobs: [],
-        stats: { total: 0, active: 0, inactive: 0 },
-        filters: { company: 'all', status: 'all', keyword: '' },
-        editingId: null
+        jobs: []
       };
 
       const els = {
         companyHint: document.getElementById('companyHint'),
-        filterCompany: document.getElementById('filterCompany'),
-        filterStatus: document.getElementById('filterStatus'),
-        filterKeyword: document.getElementById('filterKeyword'),
-        filterSummary: document.getElementById('filterSummary'),
-        resetFilters: document.getElementById('resetFilters'),
         positionsTableBody: document.getElementById('positionsTableBody'),
-        summaryTotal: document.getElementById('summaryTotal'),
-        summaryActive: document.getElementById('summaryActive'),
-        summaryInactive: document.getElementById('summaryInactive'),
         createBtn: document.getElementById('createPositionBtn'),
         modal: document.getElementById('positionModal'),
         modalTitle: document.getElementById('modalTitle'),
@@ -791,13 +730,10 @@
         formSalary: document.getElementById('formSalary'),
         formDescription: document.getElementById('formDescription'),
         formRemark: document.getElementById('formRemark'),
-        formActive: document.getElementById('formActive'),
         cancelFormBtn: document.getElementById('cancelFormBtn'),
         submitFormBtn: document.getElementById('submitFormBtn'),
         toast: document.getElementById('toast')
       };
-
-      let searchTimer = null;
 
       function escapeHtml(str) {
         if (typeof str !== 'string') return '';
@@ -827,25 +763,13 @@
         if (!els.positionsTableBody) return;
         els.positionsTableBody.innerHTML = `
           <tr>
-            <td colspan="6">資料載入中...</td>
+            <td colspan="5">資料載入中...</td>
           </tr>
         `;
       }
 
       function updateCompaniesControls() {
         const { companies } = state;
-        const companyOptions = ['<option value="all">全部</option>'];
-        companies.forEach((company) => {
-          companyOptions.push(
-            `<option value="${company.id}">${escapeHtml(company.name || `公司 #${company.id}`)}</option>`
-          );
-        });
-        const selectedFilter = state.filters.company;
-        els.filterCompany.innerHTML = companyOptions.join('');
-        els.filterCompany.value = selectedFilter && companies.some((c) => String(c.id) === String(selectedFilter))
-          ? selectedFilter
-          : 'all';
-
         const formOptions = ['<option value="">請選擇公司</option>'];
         companies.forEach((company) => {
           formOptions.push(
@@ -857,13 +781,6 @@
         const hasCompanies = companies.length > 0;
         els.createBtn.disabled = !hasCompanies;
         els.companyHint.classList.toggle('show', !hasCompanies);
-      }
-
-      function renderStats() {
-        const { stats } = state;
-        els.summaryTotal.textContent = stats.total ?? 0;
-        els.summaryActive.textContent = stats.active ?? 0;
-        els.summaryInactive.textContent = stats.inactive ?? 0;
       }
 
       function formatSalary(value) {
@@ -881,7 +798,7 @@
         if (!jobs.length) {
           els.positionsTableBody.innerHTML = `
             <tr>
-              <td colspan="6">尚無符合條件的職缺資料。</td>
+              <td colspan="5">尚無職缺資料。</td>
             </tr>
           `;
           return;
@@ -894,10 +811,6 @@
           const workTimeText = job.work_time ? escapeHtml(job.work_time) : '—';
           const descriptionText = job.description ? escapeHtml(job.description) : '尚未提供';
           const remarkText = job.remark ? escapeHtml(job.remark) : '—';
-          const statusBadge = job.is_active
-            ? '<span class="status-badge active">啟用中</span>'
-            : '<span class="status-badge inactive">已停用</span>';
-          const toggleLabel = job.is_active ? '停用' : '啟用';
 
           rows.push(`
             <tr data-id="${job.id}">
@@ -915,14 +828,12 @@
                 </div>
               </td>
               <td>${salaryText}</td>
-              <td>${statusBadge}</td>
               <td>
-                <button class="link-button" data-action="edit" data-id="${job.id}">編輯</button>
-                <button class="link-button" data-action="status" data-id="${job.id}" data-active="${job.is_active ? 'true' : 'false'}">${toggleLabel}</button>
+                <button class="link-button" data-action="delete" data-id="${job.id}" style="color:var(--color-danger);">刪除</button>
               </td>
             </tr>
             <tr class="detail-row">
-              <td colspan="6">
+              <td colspan="5">
                 <div class="detail-grid">
                   <div>
                     <span class="detail-label">職務說明</span>
@@ -943,18 +854,8 @@
 
       async function loadPositions() {
         setTableLoading();
-        const params = new URLSearchParams();
-        if (state.filters.company && state.filters.company !== 'all') {
-          params.append('company_id', state.filters.company);
-        }
-        if (state.filters.status && state.filters.status !== 'all') {
-          params.append('status', state.filters.status);
-        }
-        if (state.filters.keyword) {
-          params.append('q', state.filters.keyword.trim());
-        }
         try {
-          const response = await fetch(`/vendor/api/positions?${params.toString()}`, {
+          const response = await fetch('/vendor/api/positions', {
             headers: { 'Accept': 'application/json' },
             credentials: 'include'
           });
@@ -964,76 +865,32 @@
           }
           state.companies = result.companies || [];
           state.jobs = result.items || [];
-          state.stats = result.stats || { total: 0, active: 0, inactive: 0 };
 
           updateCompaniesControls();
-          renderStats();
           renderPositions();
-          updateFilterSummary();
         } catch (error) {
           showToast(error.message || '資料載入失敗，請稍後再試', 'error');
           els.positionsTableBody.innerHTML = `
             <tr>
-              <td colspan="6">載入資料時發生錯誤，請稍後再試。</td>
+              <td colspan="5">載入資料時發生錯誤，請稍後再試。</td>
             </tr>
           `;
         }
       }
 
-      function updateFilterSummary() {
-        const { companies, filters } = state;
-        const parts = [];
-        if (filters.company === 'all') {
-          parts.push('全部公司');
-        } else {
-          const company = companies.find((c) => String(c.id) === String(filters.company));
-          parts.push(company ? company.name : '指定公司');
-        }
-        if (filters.status === 'active') {
-          parts.push('啟用中');
-        } else if (filters.status === 'inactive') {
-          parts.push('已停用');
-        } else {
-          parts.push('全部狀態');
-        }
-        if (filters.keyword) {
-          parts.push(`關鍵字：${filters.keyword}`);
-        }
-        els.filterSummary.textContent = parts.join('｜');
-      }
-
-      function openModal(mode, job = null) {
-        if (mode === 'create') {
-          state.editingId = null;
-          els.modalTitle.textContent = '新增職缺';
-          els.form.reset();
-          els.formActive.checked = true;
-          els.formCompany.disabled = false;
-          els.formCompany.value = '';
-        } else if (mode === 'edit' && job) {
-          state.editingId = job.id;
-          els.modalTitle.textContent = '編輯職缺';
-          els.formCompany.value = job.company_id;
-          els.formCompany.disabled = true;
-          els.formTitle.value = job.title || '';
-          els.formSlots.value = job.slots ?? 1;
-          els.formPeriod.value = job.period || '';
-          els.formWorkTime.value = job.work_time || '';
-          els.formSalary.value = job.salary ?? '';
-          els.formDescription.value = job.description || '';
-          els.formRemark.value = job.remark || '';
-          els.formActive.checked = !!job.is_active;
-        }
+      function openModal() {
+        els.modalTitle.textContent = '新增職缺';
+        els.form.reset();
+        els.formCompany.disabled = false;
+        els.formCompany.value = '';
         els.modal.classList.add('show');
       }
 
       function closeModal() {
         els.modal.classList.remove('show');
-        state.editingId = null;
         setTimeout(() => {
           els.form.reset();
           els.formCompany.disabled = false;
-          els.formActive.checked = true;
         }, 200);
       }
 
@@ -1045,7 +902,7 @@
         }
 
         const payload = {
-          company_id: state.editingId ? state.jobs.find((job) => job.id === state.editingId)?.company_id : els.formCompany.value,
+          company_id: els.formCompany.value,
           title: els.formTitle.value.trim(),
           slots: els.formSlots.value,
           period: els.formPeriod.value.trim(),
@@ -1053,7 +910,7 @@
           salary: els.formSalary.value.trim(),
           description: els.formDescription.value.trim(),
           remark: els.formRemark.value.trim(),
-          is_active: els.formActive.checked
+          is_active: true
         };
 
         if (!payload.title) {
@@ -1061,7 +918,7 @@
           return;
         }
 
-        if (!state.editingId && !payload.company_id) {
+        if (!payload.company_id) {
           showToast('請選擇所屬公司。', 'error');
           return;
         }
@@ -1069,12 +926,8 @@
         els.submitFormBtn.disabled = true;
 
         try {
-          const isEdit = !!state.editingId;
-          const url = isEdit ? `/vendor/api/positions/${state.editingId}` : '/vendor/api/positions';
-          const method = isEdit ? 'PUT' : 'POST';
-
-          const response = await fetch(url, {
-            method,
+          const response = await fetch('/vendor/api/positions', {
+            method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
             credentials: 'include',
             body: JSON.stringify(payload)
@@ -1084,7 +937,7 @@
             throw new Error(result.message || '儲存失敗');
           }
 
-          showToast(isEdit ? '職缺已更新' : '職缺新增成功', 'success');
+          showToast('職缺新增成功', 'success');
           closeModal();
           await loadPositions();
         } catch (error) {
@@ -1094,56 +947,32 @@
         }
       }
 
-      async function toggleStatus(jobId, desiredStatus) {
+      async function deletePosition(jobId) {
+        if (!confirm('確定要刪除此職缺嗎？')) {
+          return;
+        }
+
         try {
-          const response = await fetch(`/vendor/api/positions/${jobId}/status`, {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-            credentials: 'include',
-            body: JSON.stringify({ is_active: desiredStatus })
+          const response = await fetch(`/vendor/api/positions/${jobId}`, {
+            method: 'DELETE',
+            headers: { 'Accept': 'application/json' },
+            credentials: 'include'
           });
           const result = await response.json();
           if (!response.ok || !result.success) {
-            throw new Error(result.message || '更新狀態失敗');
+            throw new Error(result.message || '刪除失敗');
           }
-          const verb = desiredStatus ? '已啟用' : '已停用';
-          showToast(`職缺${verb}`, 'success');
+          showToast('職缺已刪除', 'success');
           await loadPositions();
         } catch (error) {
-          showToast(error.message || '更新狀態失敗', 'error');
+          showToast(error.message || '刪除失敗，請稍後再試', 'error');
         }
       }
 
       function bindEvents() {
-        els.createBtn.addEventListener('click', () => openModal('create'));
+        els.createBtn.addEventListener('click', () => openModal());
         els.cancelFormBtn.addEventListener('click', closeModal);
         els.form.addEventListener('submit', submitForm);
-
-        els.filterCompany.addEventListener('change', () => {
-          state.filters.company = els.filterCompany.value;
-          loadPositions();
-        });
-
-        els.filterStatus.addEventListener('change', () => {
-          state.filters.status = els.filterStatus.value;
-          loadPositions();
-        });
-
-        els.filterKeyword.addEventListener('input', () => {
-          clearTimeout(searchTimer);
-          searchTimer = setTimeout(() => {
-            state.filters.keyword = els.filterKeyword.value.trim();
-            loadPositions();
-          }, 360);
-        });
-
-        els.resetFilters.addEventListener('click', () => {
-          state.filters = { company: 'all', status: 'all', keyword: '' };
-          els.filterCompany.value = 'all';
-          els.filterStatus.value = 'all';
-          els.filterKeyword.value = '';
-          loadPositions();
-        });
 
         els.positionsTableBody.addEventListener('click', (event) => {
           const target = event.target;
@@ -1151,15 +980,8 @@
           const action = target.dataset.action;
           const id = Number(target.dataset.id);
           if (!action || !id) return;
-          if (action === 'edit') {
-            const job = state.jobs.find((item) => item.id === id);
-            if (job) {
-              openModal('edit', job);
-            }
-          }
-          if (action === 'status') {
-            const isActive = target.dataset.active === 'true';
-            toggleStatus(id, !isActive);
+          if (action === 'delete') {
+            deletePosition(id);
           }
         });
 

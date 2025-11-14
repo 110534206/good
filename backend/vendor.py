@@ -69,16 +69,38 @@ def _get_vendor_profile(cursor, vendor_id):
 
 
 def _get_vendor_companies(cursor, vendor_id, vendor_email):
-    params = [vendor_id]
-    query = """
+    """
+    獲取廠商對應的公司列表。
+    邏輯：廠商通過指導老師（teacher_name）關聯到公司。
+    1. 從 users 表獲取廠商的 teacher_name
+    2. 找到該指導老師（users.name = teacher_name）
+    3. 找到該指導老師對接的公司（internship_companies.advisor_user_id = 指導老師 ID）
+    """
+    # 先獲取廠商的 teacher_name
+    cursor.execute("SELECT teacher_name FROM users WHERE id = %s", (vendor_id,))
+    vendor_row = cursor.fetchone()
+    if not vendor_row:
+        return []
+    
+    teacher_name = vendor_row.get("teacher_name")
+    if not teacher_name or not teacher_name.strip():
+        return []
+    
+    # 找到指導老師的 ID（根據 name 匹配）
+    cursor.execute("SELECT id FROM users WHERE name = %s AND role IN ('teacher', 'director')", (teacher_name.strip(),))
+    teacher_row = cursor.fetchone()
+    if not teacher_row:
+        return []
+    
+    teacher_id = teacher_row["id"]
+    
+    # 找到該指導老師對接的公司
+    cursor.execute("""
         SELECT id, company_name, contact_email
         FROM internship_companies
-        WHERE uploaded_by_user_id = %s
-    """
-    if vendor_email:
-        query += " OR contact_email = %s"
-        params.append(vendor_email)
-    cursor.execute(query, tuple(params))
+        WHERE advisor_user_id = %s
+        ORDER BY company_name
+    """, (teacher_id,))
     return cursor.fetchall() or []
 
 
@@ -129,6 +151,28 @@ def _serialize_job(row):
 
 
 def _fetch_job_for_vendor(cursor, job_id, vendor_id, vendor_email):
+    """
+    獲取廠商有權限訪問的職缺。
+    權限邏輯：通過指導老師（teacher_name）關聯到公司。
+    """
+    # 先獲取廠商的 teacher_name
+    cursor.execute("SELECT teacher_name FROM users WHERE id = %s", (vendor_id,))
+    vendor_row = cursor.fetchone()
+    if not vendor_row:
+        return None
+    
+    teacher_name = vendor_row.get("teacher_name")
+    if not teacher_name or not teacher_name.strip():
+        return None
+    
+    # 找到指導老師的 ID
+    cursor.execute("SELECT id FROM users WHERE name = %s AND role IN ('teacher', 'director')", (teacher_name.strip(),))
+    teacher_row = cursor.fetchone()
+    if not teacher_row:
+        return None
+    
+    teacher_id = teacher_row["id"]
+    
     cursor.execute(
         """
         SELECT
@@ -142,27 +186,14 @@ def _fetch_job_for_vendor(cursor, job_id, vendor_id, vendor_email):
             ij.work_time,
             ij.salary,
             ij.remark,
-            ij.is_active,
-            ic.uploaded_by_user_id,
-            ic.contact_email
+            ij.is_active
         FROM internship_jobs ij
         JOIN internship_companies ic ON ij.company_id = ic.id
-        WHERE ij.id = %s
+        WHERE ij.id = %s AND ic.advisor_user_id = %s
         """,
-        (job_id,),
+        (job_id, teacher_id),
     )
     row = cursor.fetchone()
-    if not row:
-        return None
-
-    allowed = row.get("uploaded_by_user_id") == vendor_id
-    if not allowed and vendor_email:
-        allowed = row.get("contact_email") == vendor_email
-    if not allowed:
-        return None
-
-    row.pop("uploaded_by_user_id", None)
-    row.pop("contact_email", None)
     return row
 
 
@@ -409,6 +440,28 @@ def _fetch_application_detail(cursor, preference_id):
 
 
 def _get_application_access(cursor, preference_id, vendor_id, vendor_email):
+    """
+    獲取廠商有權限訪問的申請。
+    權限邏輯：通過指導老師（teacher_name）關聯到公司。
+    """
+    # 先獲取廠商的 teacher_name
+    cursor.execute("SELECT teacher_name FROM users WHERE id = %s", (vendor_id,))
+    vendor_row = cursor.fetchone()
+    if not vendor_row:
+        return None
+    
+    teacher_name = vendor_row.get("teacher_name")
+    if not teacher_name or not teacher_name.strip():
+        return None
+    
+    # 找到指導老師的 ID
+    cursor.execute("SELECT id FROM users WHERE name = %s AND role IN ('teacher', 'director')", (teacher_name.strip(),))
+    teacher_row = cursor.fetchone()
+    if not teacher_row:
+        return None
+    
+    teacher_id = teacher_row["id"]
+    
     cursor.execute(
         """
         SELECT
@@ -416,24 +469,14 @@ def _get_application_access(cursor, preference_id, vendor_id, vendor_email):
             sp.student_id,
             sp.company_id,
             sp.status,
-            ic.company_name,
-            ic.uploaded_by_user_id,
-            ic.contact_email
+            ic.company_name
         FROM student_preferences sp
         JOIN internship_companies ic ON sp.company_id = ic.id
-        WHERE sp.id = %s
+        WHERE sp.id = %s AND ic.advisor_user_id = %s
         """,
-        (preference_id,),
+        (preference_id, teacher_id),
     )
     record = cursor.fetchone()
-    if not record:
-        return None
-
-    allowed = record.get("uploaded_by_user_id") == vendor_id
-    if not allowed and vendor_email:
-        allowed = record.get("contact_email") == vendor_email
-    if not allowed:
-        return None
     return record
 
 
@@ -860,6 +903,34 @@ def toggle_position_status(job_id):
     except Exception as exc:
         conn.rollback()
         return jsonify({"success": False, "message": f"更新狀態失敗：{exc}"}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+
+@vendor_bp.route("/vendor/api/positions/<int:job_id>", methods=["DELETE"])
+def delete_position_for_vendor(job_id):
+    """刪除職缺"""
+    if "user_id" not in session or session.get("role") != "vendor":
+        return jsonify({"success": False, "message": "未授權"}), 403
+
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        profile, _companies, vendor_email = _get_vendor_scope(cursor, session["user_id"])
+        if not profile:
+            return jsonify({"success": False, "message": "帳號資料不完整"}), 403
+
+        job_row = _fetch_job_for_vendor(cursor, job_id, session["user_id"], vendor_email)
+        if not job_row:
+            return jsonify({"success": False, "message": "找不到職缺或無權限刪除"}), 404
+
+        cursor.execute("DELETE FROM internship_jobs WHERE id = %s", (job_id,))
+        conn.commit()
+        return jsonify({"success": True, "message": "職缺已刪除"})
+    except Exception as exc:
+        conn.rollback()
+        return jsonify({"success": False, "message": f"刪除失敗：{exc}"}), 500
     finally:
         cursor.close()
         conn.close()
