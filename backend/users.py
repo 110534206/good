@@ -97,7 +97,8 @@ def get_profile():
     try:
         cursor.execute("""
             SELECT u.id, u.username, u.email, u.role AS original_role, u.name,
-                   c.department, c.name AS class_name, u.class_id, u.avatar_url, u.current_semester_code
+                   c.department, c.name AS class_name, u.class_id, u.avatar_url, u.current_semester_code,
+                   u.teacher_name
             FROM users u
             LEFT JOIN classes c ON u.class_id = c.id
             WHERE u.id = %s
@@ -160,32 +161,45 @@ def get_profile():
             user["class_display_name"] = ""
 
         # 如果是廠商，獲取對應的指導老師資訊
+        # 優先使用 users 表中的 teacher_name 欄位（如果有的話）
+        # 如果沒有，則從 internship_companies 表中查詢
         if original_role_from_db == "vendor":
-            vendor_email = user.get("email") or ""
-            # 查詢該廠商上傳的公司，以及對應的指導老師
-            # 注意：也可能需要查詢 contact_email 為該廠商 email 的公司
-            cursor.execute("""
-                SELECT DISTINCT u.id AS advisor_id, u.name AS advisor_name
-                FROM internship_companies ic
-                LEFT JOIN users u ON ic.advisor_user_id = u.id
-                WHERE (ic.uploaded_by_user_id = %s OR ic.contact_email = %s)
-                  AND ic.status = 'approved'
-                  AND ic.advisor_user_id IS NOT NULL
-                  AND u.name IS NOT NULL
-            """, (user_id, vendor_email))
-            advisors = cursor.fetchall() or []
+            # 首先檢查 users 表中是否有直接儲存的 teacher_name
+            teacher_name_from_users = user.get("teacher_name") or ""
             
-            # 收集所有指導老師名稱
-            advisor_names = []
-            if advisors:
-                for advisor in advisors:
-                    advisor_name = advisor.get("advisor_name")
-                    if advisor_name and advisor_name.strip():
-                        if advisor_name not in advisor_names:  # 避免重複
-                            advisor_names.append(advisor_name)
-            
-            # 如果有指導老師，顯示所有指導老師（用、分隔）
-            user["advisor_name"] = "、".join(advisor_names) if advisor_names else ""
+            if teacher_name_from_users and teacher_name_from_users.strip():
+                # 如果 users 表中有直接儲存的指導老師名稱，直接使用
+                user["advisor_name"] = teacher_name_from_users.strip()
+                print(f"✅ 從 users 表讀取指導老師名稱: {user['advisor_name']}")
+            else:
+                # 否則從 internship_companies 表中查詢
+                vendor_email = user.get("email") or ""
+                cursor.execute("""
+                    SELECT DISTINCT u.id AS advisor_id, u.name AS advisor_name
+                    FROM internship_companies ic
+                    LEFT JOIN users u ON ic.advisor_user_id = u.id
+                    WHERE (ic.uploaded_by_user_id = %s OR ic.contact_email = %s)
+                      AND ic.advisor_user_id IS NOT NULL
+                      AND u.name IS NOT NULL
+                      AND u.name != ''
+                """, (user_id, vendor_email))
+                advisors = cursor.fetchall() or []
+                
+                # 調試信息：記錄查詢結果
+                print(f"🔍 廠商 {user_id} (email: {vendor_email}) 從 internship_companies 查詢指導老師: {advisors}")
+                
+                # 收集所有指導老師名稱
+                advisor_names = []
+                if advisors:
+                    for advisor in advisors:
+                        advisor_name = advisor.get("advisor_name")
+                        if advisor_name and advisor_name.strip():
+                            if advisor_name not in advisor_names:  # 避免重複
+                                advisor_names.append(advisor_name)
+                
+                # 如果有指導老師，顯示所有指導老師（用、分隔）
+                user["advisor_name"] = "、".join(advisor_names) if advisor_names else ""
+                print(f"✅ 從 internship_companies 表查詢到的指導老師名稱: {user['advisor_name']}")
         else:
             user["advisor_name"] = ""
 
