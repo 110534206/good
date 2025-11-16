@@ -242,35 +242,15 @@
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body">
-                    <p class="mb-3 fw-bold">請選擇您的實習條件，AI 將根據這些條件推薦最適合的志願序：</p>
+                    <p class="mb-3 fw-bold">請輸入您的履歷重點與學業成績摘要，AI 將依此推薦最適合的實習志願序：</p>
                     <div class="row g-3">
-                        <div class="col-md-4">
-                            <label for="distance-filter" class="form-label">距離遠近</label>
-                            <select class="form-select" id="distance-filter">
-                                <option selected value="any">不限距離</option>
-                                <option value="close">通勤 30 分鐘內</option>
-                                <option value="medium">通勤 1 小時內</option>
-                                <option value="far">超過 1 小時</option>
-                            </select>
+                        <div class="col-12">
+                            <label for="resume-text" class="form-label">履歷重點（可貼上段落或條列重點）</label>
+                            <textarea id="resume-text" class="form-control" rows="5" placeholder="例：專長技能、專題/實習經驗、拿手技術、比賽獎項、證照等"></textarea>
                         </div>
-                        <div class="col-md-4">
-                            <label for="transportation-filter" class="form-label">交通工具</label>
-                            <select class="form-select" id="transportation-filter">
-                                <option selected value="any">不限交通方式</option>
-                                <option value="public">大眾運輸</option>
-                                <option value="car">汽/機車</option>
-                                <option value="bike">自行車/步行</option>
-                            </select>
-                        </div>
-                        <div class="col-md-4">
-                            <label for="salary-filter" class="form-label">實習薪資</label>
-                            <select class="form-select" id="salary-filter">
-                                <option selected value="any">不限薪資</option>
-                                <option value="monthly">月薪</option>
-                                <option value="hourly">時薪</option>
-                                <option value="stipend">獎金/津貼</option>
-                                <option value="unpaid">無薪資</option>
-                            </select>
+                        <div class="col-12">
+                            <label for="grades-text" class="form-label">學業成績摘要（例如 GPA、關鍵課程成績、名次或加權）</label>
+                            <textarea id="grades-text" class="form-control" rows="4" placeholder="例：GPA 3.8/4.3、演算法 A、資料結構 A+、資料庫 A、班排前 10%"></textarea>
                         </div>
                     </div>
                 </div>
@@ -456,20 +436,26 @@
             confirmAiPreferenceBtn.addEventListener("click", async () => {
                 aiPreferenceModal.hide();
 
-                // 💡 取得三個篩選器值
-                const distanceFilter = document.getElementById('distance-filter').value;
-                const transportationFilter = document.getElementById('transportation-filter').value;
-                const salaryFilter = document.getElementById('salary-filter').value;
+                // 💡 取得履歷與成績摘要
+                const resumeText = (document.getElementById('resume-text')?.value || '').trim();
+                const gradesText = (document.getElementById('grades-text')?.value || '').trim();
+
+                if (!resumeText && !gradesText) {
+                    return Swal.fire({
+                        icon: 'warning',
+                        title: '需要基本資訊',
+                        text: '請至少填寫履歷重點或學業成績摘要其一。'
+                    });
+                }
 
                 // 顯示載入中 (不再彈出履歷日記輸入框)
                 Swal.fire({
                     title: 'AI 正在分析中...',
                     html: `
-                        <p>將根據您的履歷與下列條件推薦志願序：</p>
+                        <p>將根據您的履歷與學業成績推薦志願序：</p>
                         <ul class="text-start mb-0" style="list-style-type: none; padding-left: 0;">
-                            <li>距離偏好: <strong>${document.getElementById('distance-filter').options[document.getElementById('distance-filter').selectedIndex].text}</strong></li>
-                            <li>交通偏好: <strong>${document.getElementById('transportation-filter').options[document.getElementById('transportation-filter').selectedIndex].text}</strong></li>
-                            <li>薪資偏好: <strong>${document.getElementById('salary-filter').options[document.getElementById('salary-filter').selectedIndex].text}</strong></li>
+                            <li>履歷重點: <strong>${resumeText ? '已提供' : '未提供'}</strong></li>
+                            <li>學業成績: <strong>${gradesText ? '已提供' : '未提供'}</strong></li>
                         </ul>
                     `,
                     allowOutsideClick: false,
@@ -479,14 +465,13 @@
                 });
 
                 try {
-                    // 💡 呼叫後端 API，只傳遞篩選條件，不傳遞 resumeText
+                    // 💡 呼叫後端 API，傳遞履歷與成績摘要
                     const response = await fetch("/api/recommend-preferences", {
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
                         body: JSON.stringify({ 
-                            distanceFilter: distanceFilter, 
-                            transportationFilter: transportationFilter,
-                            salaryFilter: salaryFilter
+                            resumeText: resumeText,
+                            gradesText: gradesText
                         })
                     });
 
