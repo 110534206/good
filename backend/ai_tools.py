@@ -21,7 +21,7 @@ else:
   # 設定 Google Gen AI
   genai.configure(api_key=api_key)
   # 初始化模型
-  model = genai.GenerativeModel('gemini-1.5-flash') # (我把模型改為 1.5-flash，你也可以用 2.5)
+  model = genai.GenerativeModel('gemini-1.5-flash')
 
 # ==========================================================
 # 🧠 系統提示詞（System Prompt）
@@ -69,8 +69,6 @@ def revise_resume():
         if tone_style == 'friendly':
             tone_prompt = "語氣必須親切隨和。"
         
-        # 'creative' (活潑有創意) 已被移除
-
         elif tone_style == 'cautious':
             tone_prompt = "語氣必須專業、謹慎且精確。"
         
@@ -91,22 +89,16 @@ def revise_resume():
             keywords = keyword_response.text.strip()
             print(f"偵測任務: 關鍵字導向 (關鍵字: {keywords}), 語氣: {tone_style}")
 
-            # 【*** 已修改 ***】在開頭加上 SYSTEM_PROMPT
             final_prompt = f"{SYSTEM_PROMPT}\n\n[任務] 你是一位頂尖的人力資源專家。請根據 [核心關鍵字] 重寫 [原始文本]。[關鍵規則] 1. **必須**突出並強調 [核心關鍵字] 相關的技能和成就。 2. **{tone_prompt}** [規則] 1. 使用強動詞開頭的行動句。 2. 量化成果。 3. 禁止包含任何原始文本之外的解釋或評論。[核心關鍵字] {keywords} [原始文本] {user_resume_text} [修改後的文本]"
         
         elif edit_style == 'concise':
             # --- 選項 2: 文案精簡 (一步驟) ---
-            # 強化文案精簡任務，強制其以成就導向
             print(f"偵測任務: 文案精簡, 語氣: {tone_style}")
-            
-            # 【*** 已修改 ***】在開頭加上 SYSTEM_PROMPT
             final_prompt = f"{SYSTEM_PROMPT}\n\n[任務] 將以下 [原始文本] 改寫得**極度精簡、清楚明瞭且成就導向**。[規則] 1. **{tone_prompt}** 2. **每句話必須以行動動詞開頭**。 3. 刪除所有贅字、口語化和非成就型描述。 4. 保留並強化核心資訊。 5. 禁止包含任何原始文本之外的解釋或評論。[原始文本] {user_resume_text} [修改後的文本]"
 
         else: # 'polish' (預設)
             # --- 選項 3: 履歷美化 (預設) (一步驟) ---
             print(f"偵測任務: 履歷美化, 語氣: {tone_style}")
-            
-            # 【*** 已修改 ***】在開頭加上 SYSTEM_PROMPT
             final_prompt = f"{SYSTEM_PROMPT}\n\n[任務] 專業地**美化並潤飾**以下 [原始文本]。[規則] 1. **{tone_prompt}** 2. 使用強動詞開頭的行動句。 3. 盡可能量化成果。 4. 修正文法。 5. 禁止包含任何原始文本之外的解釋或評論。[原始文本] {user_resume_text} [修改後的文本]"
 
         # --- 統一的串流輸出 ---
@@ -119,7 +111,7 @@ def revise_resume():
                         yield chunk.text
             except Exception as e:
                 print(f"串流處理中發生錯誤: {e}")
-                yield f"AI 服務處理失敗: {e}"
+                yield f"AI 服務處理失败: {e}"
 
         headers = {
             'Content-Type': 'text/plain; charset=utf-8',
@@ -135,7 +127,7 @@ def revise_resume():
 
 
 # ==========================================================
-# AI 推薦志願序 API 端點
+# AI 推薦志願序 API 端點 (*** 已修改 ***)
 # ==========================================================
 @ai_bp.route('/api/recommend-preferences', methods=['POST'])
 def recommend_preferences():
@@ -143,30 +135,48 @@ def recommend_preferences():
     AI 推薦適合的志願序選項
     根據學生的履歷內容和公司職缺資訊進行匹配分析
     """
+    print("\n--- 收到 /api/recommend-preferences 請求 ---") # 新增日誌
     
     # 檢查 API Key
     if not api_key or not model:
-        return jsonify({"success": False, "error": "AI 服務未正確配置 API Key。"}), 500
+        print("❌ 錯誤: AI 服務未配置 (500)") # 新增日誌
+        return jsonify({"success": False, "error": "AI 服務未正確配置 API Key。", "error_code": "AI_NOT_CONFIGURED"}), 500
     
     # 權限檢查
     if "user_id" not in session or session.get("role") != "student":
-        return jsonify({"success": False, "error": "只有學生可以使用此功能。"}), 403
+        print(f"❌ 錯誤: 權限不足 (403) - Session: {session}") # 新增日誌
+        return jsonify({"success": False, "error": "只有學生可以使用此功能。", "error_code": "AUTH_NOT_STUDENT"}), 403
     
     student_id = session["user_id"]
+    print(f"ℹ️ 學生 ID: {student_id} 請求推薦") # 新增日誌
+    
     conn = None
     cursor = None
+    ai_response_text = "" # 預先宣告，以便 finally 中使用
     
     try:
-        # 接收履歷文字與學業成績摘要（可選，如果沒有提供履歷則從資料庫查最新）
-        data = request.get_json() or {}
+        # 接收履歷文字與學業成績摘要
+        try:
+            data = request.get_json()
+            if data is None:
+                # 如果前端傳了 'application/json' 但 body 是空的
+                print("❌ 錯誤: 收到的 JSON 為 None (400)") # 新增日誌
+                return jsonify({"success": False, "error": "無效的請求：未收到任何 JSON 資料。", "error_code": "JSON_IS_NONE"}), 400
+        except Exception as json_e:
+            # 如果前端傳來的 JSON 格式錯誤
+            print(f"❌ 錯誤: JSON 解析失敗 (400) - {json_e}") # 新增日誌
+            return jsonify({"success": False, "error": f"無效的請求：JSON 格式錯誤。 {str(json_e)}", "error_code": "JSON_PARSE_ERROR"}), 400
+        
         resume_text = data.get('resumeText', '').strip()
         grades_text = data.get('gradesText', '').strip()
+        print(f"ℹ️ 收到履歷長度: {len(resume_text)}, 收到成績長度: {len(grades_text)}") # 新增日誌
         
         conn = get_db()
         cursor = conn.cursor(dictionary=True)
         
         # 如果沒有提供履歷文字，嘗試從資料庫取得最新的履歷
         if not resume_text:
+            print("⚠️ 警告: 未收到 resumeText，嘗試從資料庫查詢...") # 新增日誌
             cursor.execute("""
                 SELECT filepath, original_filename
                 FROM resumes
@@ -179,15 +189,21 @@ def recommend_preferences():
             if resume_record:
                 # 這裡可以讀取履歷檔案內容（需要額外的庫來解析PDF/DOCX）
                 # 目前先提示用戶需要提供履歷文字
+                print("❌ 錯誤: 找到履歷檔案，但未實作檔案讀取 (400)") # 新增日誌
                 return jsonify({
                     "success": False,
-                    "error": "請提供履歷文字內容，或請先上傳並審核通過履歷檔案。"
+                    "error": "請提供履歷文字內容，或請先上傳並審核通過履歷檔案。",
+                    "error_code": "RESUME_FILE_NOT_READ" # 新增錯誤代碼
                 }), 400
             else:
-                 return jsonify({
+                print("❌ 錯誤: 資料庫中找不到已審核的履歷 (400)") # 新增日誌
+                return jsonify({
                     "success": False,
-                    "error": "找不到您已審核的履歷，請先上傳履歷。"
+                    "error": "找不到您已審核的履歷，請先上傳履歷。",
+                    "error_code": "RESUME_NOT_FOUND_APPROVED" # 新增錯誤代碼
                 }), 400
+        
+        print("✅ 履歷檢查通過。開始查詢職缺...") # 新增日誌
         
         # 取得所有已審核通過的公司和職缺
         cursor.execute("""
@@ -210,10 +226,14 @@ def recommend_preferences():
         companies_jobs = cursor.fetchall()
         
         if not companies_jobs:
+            print("❌ 錯誤: 資料庫中沒有可選的職缺 (400)") # 新增日誌
             return jsonify({
                 "success": False,
-                "error": "目前沒有可選的公司和職缺。"
+                "error": "目前沒有可選的公司和職缺。",
+                "error_code": "NO_JOBS_AVAILABLE" # 新增錯誤代碼
             }), 400
+        
+        print(f"ℹ️ 找到 {len(companies_jobs)} 筆職缺資料。開始整理...") # 新增日誌
         
         # 整理公司和職缺資訊為結構化資料
         companies_info = {}
@@ -246,7 +266,6 @@ def recommend_preferences():
                 f"工作時間: {job['job_work_time']}, 備註: {job['job_remark']}"
                 for job in company['jobs']
             ])
-            # (修正一個小錯誤：c['company_id'] 應為 company['company_id'] 等)
             companies_text += f"""
 公司ID: {company['company_id']}
 公司名稱: {company['company_name']}
@@ -265,8 +284,6 @@ def recommend_preferences():
             f"學業成績摘要：\n{academic_info}\n"
         )
 
-        # (這個 SYSTEM_PROMPT 已經在檔案開頭定義過了，
-        #  你原始程式碼在這裡又寫了一次，我幫你修正為使用開頭定義的變數)
         prompt = f"""{SYSTEM_PROMPT}
 你是一位專業的實習顧問，請根據學生提供的【學生背景條件】（履歷與學業成績摘要），推薦最適合的實習志願序（最多5個）。
 
@@ -298,10 +315,12 @@ def recommend_preferences():
 }}
 """
 
-        print("🔍 AI 推薦志願序 - " f"學生ID: {student_id}, 履歷長度: {len(resume_text)}, 成績摘要長度: {len(grades_text)}")
+        print(f"🔍 AI 推薦志願序 - 學生ID: {student_id}, 履歷長度: {len(resume_text)}, 成績摘要長度: {len(grades_text)}")
+        print("--- 正在呼叫 Gemini API ---") # 新增日誌
 
         response = model.generate_content(prompt)
         ai_response_text = response.text.strip()
+        print("--- 收到 Gemini API 回應 ---") # 新增日G
 
         # 強化 JSON 清理
         if ai_response_text.startswith('```json'):
@@ -317,8 +336,10 @@ def recommend_preferences():
         if json_start_index != -1:
             ai_response_text = ai_response_text[json_start_index:]
 
+        print("ℹ️ 正在解析 AI 回傳的 JSON...") # 新增日誌
         recommendations_data = json.loads(ai_response_text)
         recommendations = recommendations_data.get('recommendations', [])
+        print(f"ℹ️ AI 推薦了 {len(recommendations)} 筆資料，開始驗證...") # 新增日誌
 
         valid = []
         for rec in recommendations:
@@ -329,7 +350,7 @@ def recommend_preferences():
                 cid_int = int(cid)
                 jid_int = int(jid)
             except (ValueError, TypeError):
-                print(f"AI 回傳了無效的 ID: company_id={cid}, job_id={jid}")
+                print(f"⚠️ 警告: AI 回傳了無效的 ID: company_id={cid}, job_id={jid} (已跳過)") # 新增日誌
                 continue # 跳過這筆無效的推薦
 
             cursor.execute("""
@@ -350,22 +371,41 @@ def recommend_preferences():
                     'job_title': rec.get('job_title', job_check['title']),
                     'reason': rec.get('reason', '')
                 })
+            else:
+                print(f"⚠️ 警告: AI 推薦的 ID (C:{cid_int}, J:{jid_int}) 在資料庫中不存在或未啟用 (已跳過)") # 新增日誌
 
         if not valid:
-            return jsonify({"success": False, "error": "AI 無法生成有效推薦，請嘗試放寬篩選條件。"}), 400
+            print("❌ 錯誤: AI 推薦的職缺經資料庫驗證後全部失效 (400)") # 新增日誌
+            return jsonify({
+                "success": False, 
+                "error": "AI 無法生成有效推薦，可能是職缺不符或推薦 ID 有誤。", # 調整錯誤訊息
+                "error_code": "NO_VALID_RECOMMENDATIONS" # 新增錯誤代碼
+            }), 400
 
-        print(f"✅ AI 推薦成功 - 共 {len(valid)} 個推薦")
+        print(f"✅ AI 推薦成功 - 共 {len(valid)} 個有效推薦") # 新增日誌
         return jsonify({"success": True, "recommendations": valid})
 
     except json.JSONDecodeError as e:
-        print(f"❌ JSON 解析錯誤: {e}")
-        print(f"AI 原始回應: {ai_response_text}")
-        return jsonify({"success": False, "error": "AI 回應格式錯誤，請稍後再試。"}), 500
+        print(f"❌ 嚴重錯誤: JSON 解析失敗 (500)") # 新增日誌
+        print(f"   錯誤: {e}")
+        print(f"   AI 原始回應: {ai_response_text}")
+        return jsonify({
+            "success": False, 
+            "error": "AI 回應格式錯誤，請稍後再試。", 
+            "error_code": "AI_JSON_DECODE_ERROR",
+            "ai_response": ai_response_text # 將錯誤的 AI 回應傳給前端，方便除錯
+        }), 500
     except Exception as e:
+        print(f"❌ 嚴重錯誤: 未知的伺服器錯誤 (500)") # 新增日誌
         traceback.print_exc()
-        return jsonify({"success": False, "error": f"AI 服務處理失敗: {str(e)}"}), 500
+        return jsonify({
+            "success": False, 
+            "error": f"AI 服務處理失敗: {str(e)}", 
+            "error_code": "INTERNAL_SERVER_ERROR"
+        }), 500
     finally:
         if cursor:
             cursor.close()
         if conn:
             conn.close()
+        print("--- 請求 /api/recommend-preferences 處理完畢 ---\n") # 新增日誌
