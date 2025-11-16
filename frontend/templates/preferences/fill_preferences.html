@@ -494,31 +494,85 @@
                         });
                     }
 
-                    // 顯示推薦結果
-                    let recommendationsHtml = '<div class="text-start" style="max-height: 400px; overflow-y: auto;">';
+                    // =========================================================================
+                    // ⬇⬇⬇ START: 這一段是我們修改的核心 ⬇⬇⬇
+                    // =========================================================================
+
+                    // 顯示推薦結果 (已修改：加入核取方塊)
+                    let recommendationsHtml = `
+                        <div class="text-start" style="max-height: 400px; overflow-y: auto; padding: 1em;">
+                            <div class="form-check" style="margin-bottom: 10px; padding-left: 2.5em;">
+                                <input class="form-check-input" type="checkbox" id="ai-rec-select-all" checked>
+                                <label class="form-check-label fw-bold" for="ai-rec-select-all">
+                                    全選 (預設全部套用)
+                                </label>
+                            </div>
+                            <hr class="mt-0">
+                    `;
+                    
                     recommendations.forEach((rec, idx) => {
+                        // 將推薦資料轉為 JSON 字串，並處理引號以便塞入 data-attribute
+                        const recJson = JSON.stringify(rec).replace(/"/g, '&quot;');
+                        
                         recommendationsHtml += `
-                            <div class="mb-3 p-3" style="border: 1px solid #ddd; border-radius: 8px; background-color: #f8f9fa;">
-                                <h6 class="mb-2"><strong>第 ${rec.order} 志願推薦</strong></h6>
-                                <p class="mb-1"><strong>公司：</strong>${rec.company_name}</p>
-                                <p class="mb-1"><strong>職缺：</strong>${rec.job_title}</p>
-                                <p class="mb-0 text-muted"><small><strong>推薦理由：</strong>${rec.reason || '無'}</small></p>
+                            <div class="form-check mb-3 p-3" style="border: 1px solid #ddd; border-radius: 8px; background-color: #f8f9fa; padding-left: 2.5em !important;">
+                                <input class="form-check-input ai-rec-checkbox" type="checkbox" id="rec-check-${idx}" data-recommendation="${recJson}" checked>
+                                <label class="form-check-label" for="rec-check-${idx}" style="width: 100%; cursor: pointer;">
+                                    <h6 class="mb-2"><strong>${rec.company_name} - ${rec.job_title}</strong></h6>
+                                    <p class="mb-0 text-muted"><small><strong>推薦理由：</strong>${rec.reason || '無'}</small></p>
+                                </label>
                             </div>
                         `;
                     });
                     recommendationsHtml += '</div>';
 
-                    const { isConfirmed } = await Swal.fire({
+                    // (已修改：使用 preConfirm 收集勾選結果)
+                    const { value: selectedRecommendations } = await Swal.fire({
                         icon: 'success',
                         title: `AI 推薦了 ${recommendations.length} 個志願`,
                         html: recommendationsHtml,
                         showCancelButton: true,
-                        confirmButtonText: '套用到志願序',
+                        confirmButtonText: '<i class="bi bi-check-circle-fill me-2"></i>加入選取項目',
                         cancelButtonText: '取消',
-                        width: '600px'
+                        width: '700px', // 稍微加寬以容納 Checkbox
+                        didOpen: () => {
+                            // "全選" 核取方塊的連動邏輯
+                            const selectAll = document.getElementById('ai-rec-select-all');
+                            const checkboxes = document.querySelectorAll('.ai-rec-checkbox');
+                            if (selectAll) {
+                                selectAll.addEventListener('change', (e) => {
+                                    checkboxes.forEach(cb => cb.checked = e.target.checked);
+                                });
+                            }
+                            checkboxes.forEach(cb => {
+                                cb.addEventListener('change', () => {
+                                    if (!cb.checked) {
+                                        selectAll.checked = false;
+                                    } else {
+                                        // C檢查是否所有都勾選了
+                                        const allChecked = Array.from(checkboxes).every(c => c.checked);
+                                        selectAll.checked = allChecked;
+                                    }
+                                });
+                            });
+                        },
+                        preConfirm: () => {
+                            // 收集所有 "被勾選" 的 checkbox 的 data-recommendation
+                            const selectedRecs = [];
+                            document.querySelectorAll('.ai-rec-checkbox:checked').forEach(cb => {
+                                // 從 data-recommendation 屬性解析回 JSON 物件
+                                selectedRecs.push(JSON.parse(cb.dataset.recommendation.replace(/&quot;/g, '"')));
+                            });
+                            
+                            if (selectedRecs.length === 0) {
+                                Swal.showValidationMessage('您尚未勾選任何項目');
+                            }
+                            return selectedRecs; // 回傳被勾選的項目陣列
+                        }
                     });
 
-                    if (isConfirmed) {
+                    // (已修改：檢查 selectedRecommendations 是否存在且有內容)
+                    if (selectedRecommendations && selectedRecommendations.length > 0) {
                         const allCards = document.querySelectorAll(".preference-card");
 
                         if (hasSubmitted && !isEditing) {
@@ -526,7 +580,8 @@
                             setReadOnlyMode(false);
                         }
                         
-                        const applyPromises = recommendations.map((rec, idx) => {
+                        // (已修改：只 map "selectedRecommendations")
+                        const applyPromises = selectedRecommendations.map((rec, idx) => {
                             return new Promise((resolve) => {
                                 if (idx >= allCards.length) {
                                     resolve();
@@ -544,7 +599,7 @@
                                         jobSelect.value = String(rec.job_id);
                                         jobSelect.dispatchEvent(new Event('change'));
                                         resolve();
-                                    }, 300);
+                                    }, 300); // 增加一點延遲確保 DOM 更新
                                 });
                                 
                                 companySelect.dispatchEvent(new Event('change'));
@@ -553,14 +608,20 @@
 
                         Promise.all(applyPromises).then(() => {
                             updateSelections();
+                            // (已修改：更新提示文字)
                             Swal.fire({
                                 icon: 'success',
                                 title: '已套用推薦',
-                                text: `已將 ${recommendations.length} 個推薦套用到志願序中，您可以進一步調整後再送出。`,
-                                timer: 2000
+                                text: `已將 ${selectedRecommendations.length} 個推薦套用到志願序中，您可以進一步調整後再送出。`,
+                                timer: 2500
                             });
                         });
                     }
+
+                    // =========================================================================
+                    // ⬆⬆⬆ END: 這一段是我們修改的核心 ⬆⬆⬆
+                    // =========================================================================
+
                 } catch (error) {
                     console.error('AI 推薦錯誤:', error);
                     Swal.fire({
