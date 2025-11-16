@@ -273,10 +273,6 @@
                             </select>
                         </div>
                     </div>
-                    <div class="mt-3">
-                        <label for="system-prompt" class="form-label">系統提示詞（選填，會傳給 AI 作為角色與格式指示）</label>
-                        <textarea id="system-prompt" class="form-control" rows="4" placeholder="例：你是實習媒合顧問。請根據學生履歷與距離/交通/薪資偏好，從可選公司職缺中產生最多 5 個志願，輸出包含 order、company_id、job_id、company_name、job_title、reason（20-40 字），不得重複公司或職缺，若無合適則回傳空陣列。">你是實習媒合顧問。請根據學生履歷與距離/交通/薪資偏好，從可選公司職缺中產生最多 5 個志願，輸出包含 order、company_id、job_id、company_name、job_title、reason（20-40 字），不得重複公司或職缺，若無合適則回傳空陣列。</textarea>
-                    </div>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
@@ -464,7 +460,6 @@
                 const distanceFilter = document.getElementById('distance-filter').value;
                 const transportationFilter = document.getElementById('transportation-filter').value;
                 const salaryFilter = document.getElementById('salary-filter').value;
-                const systemPrompt = (document.getElementById('system-prompt')?.value || '').trim();
 
                 // 顯示載入中 (不再彈出履歷日記輸入框)
                 Swal.fire({
@@ -491,8 +486,7 @@
                         body: JSON.stringify({ 
                             distanceFilter: distanceFilter, 
                             transportationFilter: transportationFilter,
-                            salaryFilter: salaryFilter,
-                            systemPrompt: systemPrompt
+                            salaryFilter: salaryFilter
                         })
                     });
 
