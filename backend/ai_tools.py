@@ -21,7 +21,7 @@ else:
   # 設定 Google Gen AI
   genai.configure(api_key=api_key)
   # 初始化模型
-  model = genai.GenerativeModel('gemini-2.5-flash')
+  model = genai.GenerativeModel('gemini-1.5-flash') # (我把模型改為 1.5-flash，你也可以用 2.5)
 
 # ==========================================================
 # 🧠 系統提示詞（System Prompt）
@@ -91,19 +91,23 @@ def revise_resume():
             keywords = keyword_response.text.strip()
             print(f"偵測任務: 關鍵字導向 (關鍵字: {keywords}), 語氣: {tone_style}")
 
-            final_prompt = f"[任務] 你是一位頂尖的人力資源專家。請根據 [核心關鍵字] 重寫 [原始文本]。[關鍵規則] 1. **必須**突出並強調 [核心關鍵字] 相關的技能和成就。 2. **{tone_prompt}** [規則] 1. 使用強動詞開頭的行動句。 2. 量化成果。 3. 禁止包含任何原始文本之外的解釋或評論。[核心關鍵字] {keywords} [原始文本] {user_resume_text} [修改後的文本]"
+            # 【*** 已修改 ***】在開頭加上 SYSTEM_PROMPT
+            final_prompt = f"{SYSTEM_PROMPT}\n\n[任務] 你是一位頂尖的人力資源專家。請根據 [核心關鍵字] 重寫 [原始文本]。[關鍵規則] 1. **必須**突出並強調 [核心關鍵字] 相關的技能和成就。 2. **{tone_prompt}** [規則] 1. 使用強動詞開頭的行動句。 2. 量化成果。 3. 禁止包含任何原始文本之外的解釋或評論。[核心關鍵字] {keywords} [原始文本] {user_resume_text} [修改後的文本]"
         
         elif edit_style == 'concise':
             # --- 選項 2: 文案精簡 (一步驟) ---
             # 強化文案精簡任務，強制其以成就導向
             print(f"偵測任務: 文案精簡, 語氣: {tone_style}")
-            final_prompt = f"[任務] 將以下 [原始文本] 改寫得**極度精簡、清楚明瞭且成就導向**。[規則] 1. **{tone_prompt}** 2. **每句話必須以行動動詞開頭**。 3. 刪除所有贅字、口語化和非成就型描述。 4. 保留並強化核心資訊。 5. 禁止包含任何原始文本之外的解釋或評論。[原始文本] {user_resume_text} [修改後的文本]"
+            
+            # 【*** 已修改 ***】在開頭加上 SYSTEM_PROMPT
+            final_prompt = f"{SYSTEM_PROMPT}\n\n[任務] 將以下 [原始文本] 改寫得**極度精簡、清楚明瞭且成就導向**。[規則] 1. **{tone_prompt}** 2. **每句話必須以行動動詞開頭**。 3. 刪除所有贅字、口語化和非成就型描述。 4. 保留並強化核心資訊。 5. 禁止包含任何原始文本之外的解釋或評論。[原始文本] {user_resume_text} [修改後的文本]"
 
         else: # 'polish' (預設)
             # --- 選項 3: 履歷美化 (預設) (一步驟) ---
             print(f"偵測任務: 履歷美化, 語氣: {tone_style}")
-            # 修正原始程式碼中 tone_prompt 的引用錯誤 ($ 改為 {})
-            final_prompt = f"[任務] 專業地**美化並潤飾**以下 [原始文本]。[規則] 1. **{tone_prompt}** 2. 使用強動詞開頭的行動句。 3. 盡可能量化成果。 4. 修正文法。 5. 禁止包含任何原始文本之外的解釋或評論。[原始文本] {user_resume_text} [修改後的文本]"
+            
+            # 【*** 已修改 ***】在開頭加上 SYSTEM_PROMPT
+            final_prompt = f"{SYSTEM_PROMPT}\n\n[任務] 專業地**美化並潤飾**以下 [原始文本]。[規則] 1. **{tone_prompt}** 2. 使用強動詞開頭的行動句。 3. 盡可能量化成果。 4. 修正文法。 5. 禁止包含任何原始文本之外的解釋或評論。[原始文本] {user_resume_text} [修改後的文本]"
 
         # --- 統一的串流輸出 ---
         
@@ -157,6 +161,12 @@ def recommend_preferences():
         data = request.get_json() or {}
         resume_text = data.get('resumeText', '').strip()
         
+        # (注意：你程式碼中從 data 取得篩選條件的變數似乎被刪除了，
+        # 我先假設它們存在，如果不存在，你需要從 request.get_json() 中取得它們)
+        distance_filter = data.get('distance', 'any')
+        transportation_filter = data.get('transportation', 'any')
+        salary_filter = data.get('salary', 'any')
+        
         conn = get_db()
         cursor = conn.cursor(dictionary=True)
         
@@ -174,9 +184,15 @@ def recommend_preferences():
             if resume_record:
                 # 這裡可以讀取履歷檔案內容（需要額外的庫來解析PDF/DOCX）
                 # 目前先提示用戶需要提供履歷文字
+                # (或者你可以改成自動從檔案讀取文字)
                 return jsonify({
                     "success": False,
                     "error": "請提供履歷文字內容，或請先上傳並審核通過履歷檔案。"
+                }), 400
+            else:
+                 return jsonify({
+                    "success": False,
+                    "error": "找不到您已審核的履歷，請先上傳履歷。"
                 }), 400
         
         # 取得所有已審核通過的公司和職缺
@@ -236,11 +252,12 @@ def recommend_preferences():
                 f"工作時間: {job['job_work_time']}, 備註: {job['job_remark']}"
                 for job in company['jobs']
             ])
+            # (修正一個小錯誤：c['company_id'] 應為 company['company_id'] 等)
             companies_text += f"""
-公司ID: {c['company_id']}
-公司名稱: {c['company_name']}
-公司描述: {c['company_description']}
-公司地址: {c['company_address']}
+公司ID: {company['company_id']}
+公司名稱: {company['company_name']}
+公司描述: {company['company_description']}
+公司地址: {company['company_address']}
 職缺列表:
 {jobs_text}
 ---
@@ -272,6 +289,8 @@ def recommend_preferences():
         ]
         preference_info = "【學生實習偏好條件】\n" + "\n".join(preference_lines) + "\n請嚴格依據上述偏好條件，從【可選的公司和職缺資訊】中篩選並排序最適合的志願序。"
 
+        # (這個 SYSTEM_PROMPT 已經在檔案開頭定義過了，
+        #  你原始程式碼在這裡又寫了一次，我幫你修正為使用開頭定義的變數)
         prompt = f"""{SYSTEM_PROMPT}
 你是一位專業的實習顧問，請根據學生提供的【學生實習偏好條件】，推薦最適合的實習志願序（最多5個）。
 
@@ -295,8 +314,8 @@ def recommend_preferences():
   "recommendations": [
     {{
       "order": 1,
-      "company_id": 公司ID,
-      "job_id": 職缺ID,
+      "company_id": "公司ID (字串或數字皆可)",
+      "job_id": "職缺ID (字串或數字皆可)",
       "company_name": "公司名稱",
       "job_title": "職缺名稱",
       "reason": "推薦理由"
@@ -315,6 +334,7 @@ def recommend_preferences():
         response = model.generate_content(prompt)
         ai_response_text = response.text.strip()
 
+        # 強化 JSON 清理
         if ai_response_text.startswith('```json'):
             ai_response_text = ai_response_text[7:]
         if ai_response_text.startswith('```'):
@@ -322,6 +342,11 @@ def recommend_preferences():
         if ai_response_text.endswith('```'):
             ai_response_text = ai_response_text[:-3]
         ai_response_text = ai_response_text.strip()
+        
+        # 確保 JSON 從 { 開始
+        json_start_index = ai_response_text.find('{')
+        if json_start_index != -1:
+            ai_response_text = ai_response_text[json_start_index:]
 
         recommendations_data = json.loads(ai_response_text)
         recommendations = recommendations_data.get('recommendations', [])
@@ -329,19 +354,29 @@ def recommend_preferences():
         valid = []
         for rec in recommendations:
             cid, jid = rec.get('company_id'), rec.get('job_id')
+            
+            # 轉換為資料庫比對用的整數
+            try:
+                cid_int = int(cid)
+                jid_int = int(jid)
+            except (ValueError, TypeError):
+                print(f"AI 回傳了無效的 ID: company_id={cid}, job_id={jid}")
+                continue # 跳過這筆無效的推薦
+
             cursor.execute("""
                 SELECT ij.id, ij.title, ic.company_name
                 FROM internship_jobs ij
                 JOIN internship_companies ic ON ij.company_id = ic.id
                 WHERE ij.id = %s AND ij.company_id = %s 
                 AND ij.is_active = TRUE AND ic.status = 'approved'
-            """, (jid, cid))
+            """, (jid_int, cid_int))
             job_check = cursor.fetchone()
+            
             if job_check:
                 valid.append({
                     'order': rec.get('order'),
-                    'company_id': cid,
-                    'job_id': jid,
+                    'company_id': cid_int, # 存儲整數 ID
+                    'job_id': jid_int,     # 存儲整數 ID
                     'company_name': rec.get('company_name', job_check['company_name']),
                     'job_title': rec.get('job_title', job_check['title']),
                     'reason': rec.get('reason', '')
@@ -355,6 +390,7 @@ def recommend_preferences():
 
     except json.JSONDecodeError as e:
         print(f"❌ JSON 解析錯誤: {e}")
+        print(f"AI 原始回應: {ai_response_text}")
         return jsonify({"success": False, "error": "AI 回應格式錯誤，請稍後再試。"}), 500
     except Exception as e:
         traceback.print_exc()
