@@ -97,7 +97,8 @@ def get_profile():
     try:
         cursor.execute("""
             SELECT u.id, u.username, u.email, u.role AS original_role, u.name,
-                   c.department, c.name AS class_name, u.class_id, u.avatar_url, u.current_semester_code
+                   c.department, c.name AS class_name, u.class_id, u.avatar_url, u.current_semester_code,
+                   u.teacher_name
             FROM users u
             LEFT JOIN classes c ON u.class_id = c.id
             WHERE u.id = %s
@@ -158,6 +159,49 @@ def get_profile():
             user["class_display_name"] = f"{dep_short}{user['class_name'] or ''}"
         else:
             user["class_display_name"] = ""
+
+        # 如果是廠商，獲取對應的指導老師資訊
+        # 優先使用 users 表中的 teacher_name 欄位（如果有的話）
+        # 如果沒有，則從 internship_companies 表中查詢
+        if original_role_from_db == "vendor":
+            # 首先檢查 users 表中是否有直接儲存的 teacher_name
+            teacher_name_from_users = user.get("teacher_name") or ""
+            
+            if teacher_name_from_users and teacher_name_from_users.strip():
+                # 如果 users 表中有直接儲存的指導老師名稱，直接使用
+                user["advisor_name"] = teacher_name_from_users.strip()
+                print(f"✅ 從 users 表讀取指導老師名稱: {user['advisor_name']}")
+            else:
+                # 否則從 internship_companies 表中查詢
+                vendor_email = user.get("email") or ""
+                cursor.execute("""
+                    SELECT DISTINCT u.id AS advisor_id, u.name AS advisor_name
+                    FROM internship_companies ic
+                    LEFT JOIN users u ON ic.advisor_user_id = u.id
+                    WHERE (ic.uploaded_by_user_id = %s OR ic.contact_email = %s)
+                      AND ic.advisor_user_id IS NOT NULL
+                      AND u.name IS NOT NULL
+                      AND u.name != ''
+                """, (user_id, vendor_email))
+                advisors = cursor.fetchall() or []
+                
+                # 調試信息：記錄查詢結果
+                print(f"🔍 廠商 {user_id} (email: {vendor_email}) 從 internship_companies 查詢指導老師: {advisors}")
+                
+                # 收集所有指導老師名稱
+                advisor_names = []
+                if advisors:
+                    for advisor in advisors:
+                        advisor_name = advisor.get("advisor_name")
+                        if advisor_name and advisor_name.strip():
+                            if advisor_name not in advisor_names:  # 避免重複
+                                advisor_names.append(advisor_name)
+                
+                # 如果有指導老師，顯示所有指導老師（用、分隔）
+                user["advisor_name"] = "、".join(advisor_names) if advisor_names else ""
+                print(f"✅ 從 internship_companies 表查詢到的指導老師名稱: {user['advisor_name']}")
+        else:
+            user["advisor_name"] = ""
 
         return jsonify({"success": True, "user": user})
     except Exception as e:
@@ -456,3 +500,140 @@ def intern_achievement():
     if 'username' not in session or session.get('role') != 'student':
         return redirect(url_for('auth_bp.login_page'))
     return render_template('user_shared/intern_achievement.html')
+
+# -------------------------
+# 廠商職缺瀏覽頁面（給指導老師、科助查看所有廠商職缺）
+# -------------------------
+@users_bp.route('/manage_vendor')
+def manage_vendor_page():
+    """
+    指導老師、科助查看所有廠商職缺的頁面。
+    """
+    if 'username' not in session:
+        return redirect(url_for('auth_bp.login_page'))
+    # 只允許指導老師、科助查看
+    allowed_roles = ['teacher', 'ta']
+    if session.get('role') not in allowed_roles:
+        return redirect(url_for('auth_bp.login_page'))
+    return render_template('user_shared/manage_vendor.html')
+
+# -------------------------
+# API - 獲取所有公開的職缺（給指導老師、科助查看）
+# -------------------------
+@users_bp.route('/api/public/positions', methods=['GET'])
+def get_public_positions():
+    """
+    獲取當前登入指導老師對接的公司和啟用的職缺。
+    只允許指導老師、科助查看。
+    指導老師只能看到 advisor_user_id 等於自己的公司。
+    科助可以看到所有已審核通過的公司。
+    """
+    if 'username' not in session:
+        return jsonify({"success": False, "message": "未登入"}), 401
+    
+    # 只允許指導老師、科助查看
+    allowed_roles = ['teacher', 'ta']
+    if session.get('role') not in allowed_roles:
+        return jsonify({"success": False, "message": "無權限"}), 403
+    
+    user_id = session.get('user_id')
+    user_role = session.get('role')
+    company_filter = request.args.get("company_id", type=int)
+    status_filter = (request.args.get("status") or "").strip().lower()
+    keyword = (request.args.get("q") or "").strip()
+    
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        # 只查詢已審核通過的公司和啟用的職缺
+        where_clauses = ["ic.status = 'approved'", "ij.is_active = 1"]
+        params = []
+        
+        # 指導老師只能看到自己對接的公司，科助可以看到所有公司
+        if user_role == 'teacher':
+            where_clauses.append("ic.advisor_user_id = %s")
+            params.append(user_id)
+        # 科助 (ta) 可以看到所有已審核通過的公司，不需要額外過濾
+        
+        if company_filter:
+            where_clauses.append("ij.company_id = %s")
+            params.append(company_filter)
+        
+        if keyword:
+            like = f"%{keyword}%"
+            where_clauses.append("(ij.title LIKE %s OR ij.description LIKE %s OR ij.remark LIKE %s OR ic.company_name LIKE %s)")
+            params.extend([like, like, like, like])
+        
+        query = f"""
+            SELECT
+                ij.id,
+                ij.company_id,
+                ic.company_name,
+                ij.title,
+                ij.slots,
+                ij.description,
+                ij.period,
+                ij.work_time,
+                ij.salary,
+                ij.remark,
+                ij.is_active
+            FROM internship_jobs ij
+            JOIN internship_companies ic ON ij.company_id = ic.id
+            WHERE {' AND '.join(where_clauses)}
+            ORDER BY ic.company_name, ij.title
+        """
+        cursor.execute(query, tuple(params))
+        rows = cursor.fetchall() or []
+        
+        # 序列化職缺資料
+        items = []
+        for row in rows:
+            items.append({
+                "id": row["id"],
+                "company_id": row["company_id"],
+                "company_name": row["company_name"],
+                "title": row["title"],
+                "slots": row["slots"],
+                "description": row["description"] or "",
+                "period": row["period"] or "",
+                "work_time": row["work_time"] or "",
+                "salary": str(row["salary"]) if row["salary"] else "",
+                "remark": row["remark"] or "",
+                "is_active": bool(row["is_active"])
+            })
+        
+        # 獲取公司列表（指導老師只能看到自己對接的公司，科助可以看到所有）
+        company_where_clause = "ic.status = 'approved'"
+        company_params = []
+        if user_role == 'teacher':
+            company_where_clause += " AND ic.advisor_user_id = %s"
+            company_params.append(user_id)
+        
+        cursor.execute(f"""
+            SELECT DISTINCT ic.id, ic.company_name
+            FROM internship_companies ic
+            WHERE {company_where_clause}
+            ORDER BY ic.company_name
+        """, tuple(company_params))
+        companies = cursor.fetchall() or []
+        companies_payload = [{"id": c["id"], "name": c["company_name"]} for c in companies]
+        
+        # 統計資訊
+        stats = {
+            "total": len(items),
+            "active": len(items),  # 這裡只顯示啟用的，所以全部都是 active
+            "inactive": 0
+        }
+        
+        return jsonify({
+            "success": True,
+            "companies": companies_payload,
+            "items": items,
+            "stats": stats
+        })
+    except Exception as exc:
+        print(f"❌ 獲取公開職缺失敗：{exc}")
+        return jsonify({"success": False, "message": f"載入失敗：{exc}"}), 500
+    finally:
+        cursor.close()
+        conn.close()
