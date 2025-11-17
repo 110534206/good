@@ -440,20 +440,25 @@
                 const resumeText = (document.getElementById('resume-text')?.value || '').trim();
                 const gradesText = (document.getElementById('grades-text')?.value || '').trim();
 
-                // 顯示載入中（後端會自動從資料庫抓取履歷和成績，如果前端沒有提供）
+                if (!resumeText && !gradesText) {
+                    return Swal.fire({
+                        icon: 'warning',
+                        title: '需要基本資訊',
+                        text: '請至少填寫履歷重點或學業成績摘要其一。'
+                    });
+                }
+
+                // 顯示載入中 (不再彈出履歷日記輸入框)
                 Swal.fire({
                     title: 'AI 正在分析中...',
                     html: `
-                        <p>正在根據您的履歷與學業成績推薦志願序：</p>
+                        <p>將根據您的履歷與學業成績推薦志願序：</p>
                         <ul class="text-start mb-0" style="list-style-type: none; padding-left: 0;">
-                            <li>履歷重點: <strong>${resumeText ? '已提供（前端輸入）' : '將從資料庫自動抓取'}</strong></li>
-                            <li>學業成績: <strong>${gradesText ? '已提供（前端輸入）' : '將從資料庫自動抓取'}</strong></li>
+                            <li>履歷重點: <strong>${resumeText ? '已提供' : '未提供'}</strong></li>
+                            <li>學業成績: <strong>${gradesText ? '已提供' : '未提供'}</strong></li>
                         </ul>
-                        <p class="mt-3 text-muted"><small>請稍候，AI 正在分析中...</small></p>
                     `,
                     allowOutsideClick: false,
-                    allowEscapeKey: false,
-                    showConfirmButton: false,
                     didOpen: () => {
                         Swal.showLoading();
                     }
