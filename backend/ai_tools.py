@@ -153,31 +153,114 @@ def recommend_preferences():
     cursor = None
     
     try:
-        # 接收履歷文字（可選，如果沒有提供則從資料庫查詢）
+        # 接收履歷文字和成績摘要（可選，如果沒有提供則從資料庫查詢）
         data = request.get_json() or {}
         resume_text = data.get('resumeText', '').strip()
+        grades_text = data.get('gradesText', '').strip()
         
         conn = get_db()
         cursor = conn.cursor(dictionary=True)
         
-        # 如果沒有提供履歷文字，嘗試從資料庫取得最新的履歷
+        # 如果沒有提供履歷文字，從資料庫取得履歷相關資料
         if not resume_text:
+            # 取得學生的基本資訊、證照、語文能力等履歷相關資料
             cursor.execute("""
-                SELECT filepath, original_filename
-                FROM resumes
-                WHERE user_id = %s AND status = 'approved'
-                ORDER BY created_at DESC
-                LIMIT 1
+                SELECT 
+                    u.name, u.username,
+                    u.email, u.phone,
+                    c.name AS class_name, c.department
+                FROM users u
+                LEFT JOIN classes c ON u.class_id = c.id
+                WHERE u.id = %s
             """, (student_id,))
-            resume_record = cursor.fetchone()
+            user_info = cursor.fetchone() or {}
             
-            if resume_record:
-                # 這裡可以讀取履歷檔案內容（需要額外的庫來解析PDF/DOCX）
-                # 目前先提示用戶需要提供履歷文字
-                return jsonify({
-                    "success": False,
-                    "error": "請提供履歷文字內容，或請先上傳並審核通過履歷檔案。"
-                }), 400
+            # 取得證照資料
+            cursor.execute("""
+                SELECT CertName, CertType 
+                FROM Student_Certifications 
+                WHERE StuID = %s
+            """, (student_id,))
+            certifications = cursor.fetchall() or []
+            
+            # 取得語文能力
+            cursor.execute("""
+                SELECT Language, Level 
+                FROM Student_LanguageSkills 
+                WHERE StuID = %s
+            """, (student_id,))
+            languages = cursor.fetchall() or []
+            
+            # 組合履歷重點文字
+            resume_parts = []
+            if user_info.get('name'):
+                resume_parts.append(f"姓名：{user_info['name']}")
+            if user_info.get('class_name'):
+                resume_parts.append(f"班級：{user_info['class_name']}")
+            if user_info.get('department'):
+                resume_parts.append(f"系所：{user_info['department']}")
+            
+            if certifications:
+                cert_names = [c['CertName'] for c in certifications if c.get('CertName')]
+                if cert_names:
+                    resume_parts.append(f"證照：{', '.join(cert_names)}")
+            
+            if languages:
+                lang_strs = [f"{l['Language']}({l['Level']})" for l in languages if l.get('Language')]
+                if lang_strs:
+                    resume_parts.append(f"語文能力：{', '.join(lang_strs)}")
+            
+            if resume_parts:
+                resume_text = "\n".join(resume_parts)
+        
+        # 如果沒有提供成績摘要，從資料庫取得成績資料
+        if not grades_text:
+            # 取得課程成績
+            cursor.execute("""
+                SELECT CourseName, Credits, Grade 
+                FROM Course_Grades 
+                WHERE StuID = %s
+                ORDER BY Grade DESC, CourseName
+            """, (student_id,))
+            grades = cursor.fetchall() or []
+            
+            if grades:
+                # 計算 GPA（假設成績為 A+, A, B+, B, C+, C, D, F 等）
+                grade_points = {
+                    'A+': 4.3, 'A': 4.0, 'A-': 3.7,
+                    'B+': 3.3, 'B': 3.0, 'B-': 2.7,
+                    'C+': 2.3, 'C': 2.0, 'C-': 1.7,
+                    'D': 1.0, 'F': 0.0
+                }
+                
+                total_points = 0
+                total_credits = 0
+                key_courses = []
+                
+                for grade in grades:
+                    course_name = grade.get('CourseName', '')
+                    credits = float(grade.get('Credits', 0) or 0)
+                    grade_str = str(grade.get('Grade', '')).strip().upper()
+                    
+                    if credits > 0 and grade_str in grade_points:
+                        total_points += grade_points[grade_str] * credits
+                        total_credits += credits
+                    
+                    # 記錄重要課程（成績為 A 或 A+ 的課程）
+                    if grade_str in ['A', 'A+'] and course_name:
+                        key_courses.append(f"{course_name} {grade_str}")
+                
+                gpa = total_points / total_credits if total_credits > 0 else 0
+                
+                # 組合成績摘要
+                grade_parts = []
+                if gpa > 0:
+                    grade_parts.append(f"GPA: {gpa:.2f}/4.3")
+                if key_courses:
+                    grade_parts.append(f"關鍵課程：{', '.join(key_courses[:5])}")  # 最多顯示5個
+                
+                if grade_parts:
+                    grades_text = "\n".join(grade_parts)
         
         # 取得所有已審核通過的公司和職缺
         cursor.execute("""
@@ -237,57 +320,33 @@ def recommend_preferences():
                 for job in company['jobs']
             ])
             companies_text += f"""
-公司ID: {c['company_id']}
-公司名稱: {c['company_name']}
-公司描述: {c['company_description']}
-公司地址: {c['company_address']}
+公司ID: {company['company_id']}
+公司名稱: {company['company_name']}
+公司描述: {company['company_description']}
+公司地址: {company['company_address']}
 職缺列表:
 {jobs_text}
 ---
 """
-        distance_map = {
-            'any': '不限距離',
-            'close': '通勤 30 分鐘內',
-            'medium': '通勤 1 小時內',
-            'far': '超過 1 小時'
-        }
-        transportation_map = {
-            'any': '不限交通方式',
-            'public': '以大眾運輸為主',
-            'car': '以汽車或機車為主',
-            'bike': '以自行車或步行為主'
-        }
-        salary_map = {
-            'any': '不限薪資類型',
-            'monthly': '月薪',
-            'hourly': '時薪',
-            'stipend': '獎金或津貼',
-            'unpaid': '無薪資'
-        }
 
-        preference_lines = [
-            f"距離遠近偏好：{distance_map.get(distance_filter, '不限距離')}",
-            f"交通工具偏好：{transportation_map.get(transportation_filter, '不限交通方式')}",
-            f"實習薪資偏好：{salary_map.get(salary_filter, '不限薪資類型')}"
-        ]
-        preference_info = "【學生實習偏好條件】\n" + "\n".join(preference_lines) + "\n請嚴格依據上述偏好條件，從【可選的公司和職缺資訊】中篩選並排序最適合的志願序。"
-
+        # 構建 AI 提示詞（移除未使用的偏好條件相關代碼）
         prompt = f"""{SYSTEM_PROMPT}
-你是一位專業的實習顧問，請根據學生提供的【學生實習偏好條件】，推薦最適合的實習志願序（最多5個）。
+你是一位專業的實習顧問，請根據學生提供的履歷重點和學業成績，推薦最適合的實習志願序（最多5個）。
 
-{preference_info}
+【學生履歷重點】
+{resume_text if resume_text else '（未提供履歷重點）'}
 
-【學生履歷重點（系統自動擷取）】
-{resume_text}
+【學業成績摘要】
+{grades_text if grades_text else '（未提供成績摘要）'}
 
 【可選的公司和職缺資訊】
 {companies_text}
 
 【任務要求】
-1. 分析並比對【學生實習偏好條件】、【學生履歷重點】與【可選的公司和職缺資訊】。
-2. 匹配最符合這些條件的公司與職缺。
+1. 分析並比對【學生履歷重點】、【學業成績摘要】與【可選的公司和職缺資訊】。
+2. 根據學生的技能、專長、成績與職缺需求進行匹配。
 3. 按適合度排序，推薦最多5個志願（由最適合至較適合）。
-4. 每個推薦需包含：公司ID、職缺ID、推薦理由 (理由必須明確說明如何符合偏好條件)。
+4. 每個推薦需包含：公司ID、職缺ID、推薦理由（理由必須明確說明為何適合該學生）。
 
 【輸出格式】
 請以 JSON 格式輸出：
@@ -308,8 +367,9 @@ def recommend_preferences():
 
         print(
             "🔍 AI 推薦志願序 - "
-            f"學生ID: {student_id}, 距離: {distance_filter}, 交通: {transportation_filter}, 薪資: {salary_filter}, "
-            f"履歷長度: {len(resume_text)}"
+            f"學生ID: {student_id}, "
+            f"履歷長度: {len(resume_text) if resume_text else 0}, "
+            f"成績摘要長度: {len(grades_text) if grades_text else 0}"
         )
 
         response = model.generate_content(prompt)
