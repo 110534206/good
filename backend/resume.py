@@ -15,6 +15,10 @@ resume_bp = Blueprint("resume_bp", __name__)
 UPLOAD_FOLDER = "uploads/resumes"
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
+# 缺勤佐證圖片資料夾設定
+ABSENCE_PROOF_FOLDER = "uploads/absence_proofs"
+os.makedirs(ABSENCE_PROOF_FOLDER, exist_ok=True)
+
 def score_to_grade(score):
     # 若已經是等第，直接回傳
     if str(score).strip() in ['優', '甲', '乙', '丙', '丁']:
@@ -186,8 +190,8 @@ def save_structured_data(cursor, student_id, data):
                 cursor.execute("""
                     INSERT INTO Student_LanguageSkills (StuID, Language, Level)
                     VALUES (%s, %s, %s)
+            
                 """, (student_id, lang_skill['language'], lang_skill['level']))
-
         return True
     except Exception as e:
         print("❌ 儲存結構化資料錯誤:", e)
@@ -226,7 +230,8 @@ def generate_application_form_docx(student_data, output_path):
 
         doc = DocxTemplate(template_path)
         info = student_data.get("info", {})
-        grades = student_data.get("grades", [])
+        # 注意：這裡使用 student_data.get("grades")，而非 info.get("grades")
+        grades = student_data.get("grades", []) 
         certs = student_data.get("certifications", [])
 
         # -------------------------
@@ -270,7 +275,7 @@ def generate_application_form_docx(student_data, output_path):
         context_courses = {}
         # 處理專業核心科目資料 (四欄 x 十行 = 30 筆)
         # -------------------------
-        MAX_COURSES = 30 # 總格子數設為 40 (4欄 x 10行)
+        MAX_COURSES = 30 
         
         padded_grades = grades[:MAX_COURSES]
         # 填充空白，確保總數為 MAX_COURSES
@@ -278,8 +283,8 @@ def generate_application_form_docx(student_data, output_path):
         
         # 將列表轉換為四欄格式 (4欄 X 10行)，並生成 context 變數
         context_courses = {}
-        NUM_ROWS = 10 # 10 行
-        NUM_COLS = 3  # 4 欄 (Word 表格中的科目+學分組算作 1 欄)
+        NUM_ROWS = 10 
+        NUM_COLS = 3 
 
         for i in range(NUM_ROWS): # i 為行索引 (0 to 9)
             for j in range(NUM_COLS): # j 為欄索引 (0 to 3)
@@ -303,11 +308,24 @@ def generate_application_form_docx(student_data, output_path):
             try:
                 abs_transcript_path = os.path.abspath(transcript_path)
                 # 設定圖片寬度，這裡使用 Inches(6)
-                transcript_obj = InlineImage(doc, abs_transcript_path, width=Inches(6))
+                transcript_obj = InlineImage(doc, abs_transcript_path, width=Inches(6.0))
             except Exception as e:
                 print(f"⚠️ 成績單圖片載入錯誤 (請確保它是圖片檔案): {e}")
 
+        # -------------------------
+        # 【新增】插入缺勤佐證圖片
+        # -------------------------
+        absence_proof_obj = None
+        # 獲取路徑 (來自 submit_and_generate_api 設置的 'Absence_Proof_Path')
+        absence_proof_path = student_data.get("Absence_Proof_Path") 
+        image_size = Inches(6.0) # 與成績單圖片大小保持一致
 
+        if absence_proof_path and os.path.exists(absence_proof_path):
+            try:
+                abs_absence_proof_path = os.path.abspath(absence_proof_path)
+                absence_proof_obj = InlineImage(doc, abs_absence_proof_path, width=image_size)
+            except Exception as e:
+                print(f"⚠️ 缺勤佐證圖片載入錯誤: {e}")
         # -------------------------
         # 操行等級（優甲乙丙丁）
         # -------------------------
@@ -356,7 +374,9 @@ def generate_application_form_docx(student_data, output_path):
             'ConductScore': conduct_score,
             'Autobiography': info.get('Autobiography', ''),
             'Image_1': image_obj,
-            'transcript_path': transcript_obj
+            'transcript_path': transcript_obj,
+            # 【關鍵新增】將圖片物件加入 context
+            'Absence_Proof_Image': absence_proof_obj if absence_proof_obj else "（查無佐證圖片）"
         }
 
         # 加入操行等級勾選
@@ -379,16 +399,15 @@ def generate_application_form_docx(student_data, output_path):
         # 證照圖片與名稱 (最多8個)
         # -------------------------
         MAX_CERTS = 8
-        cert_photo_paths = student_data.get("cert_photo_paths", []) # 上傳的圖片路徑清單
-        cert_names = student_data.get("cert_names", [])             # 上傳的名稱清單
-        
+        cert_photo_paths = student_data.get("cert_photo_paths", []) 
+        cert_names = student_data.get("cert_names", []) 
         cert_photo_objs = []
         image_size = Inches(3.0) 
         
         # 準備圖片物件
         for i, path in enumerate(cert_photo_paths[:MAX_CERTS]):
             try:
-                if os.path.exists(path):
+                if path and os.path.exists(path):
                     obj = InlineImage(doc, os.path.abspath(path), width=image_size)
                     cert_photo_objs.append(obj)
                 else:
@@ -404,7 +423,6 @@ def generate_application_form_docx(student_data, output_path):
             context[image_key] = cert_photo_objs[i] if i < len(cert_photo_objs) else ''
             
             # 名稱變數 (CertPhotoName_1 to 8)
-            # 使用傳入的名稱清單
             name_key = f'CertPhotoName_{i+1}'
             context[name_key] = cert_names[i] if i < len(cert_names) else ''
             
@@ -418,7 +436,7 @@ def generate_application_form_docx(student_data, output_path):
         level_codes = ['Jing', 'Zhong', 'Lue']
         for code in lang_codes:
             for level_code in level_codes:
-                lang_context[f'{code}_{level_code}'] = '□'  # e.g., En_Jing, Jp_Zhong
+                lang_context[f'{code}_{level_code}'] = '□' 
 
         # 2️⃣ 建立對應表
         lang_code_map = {'英語': 'En', '日語': 'Jp', '台語': 'Tw', '客語': 'Hk'}
@@ -426,8 +444,8 @@ def generate_application_form_docx(student_data, output_path):
 
         # 3️⃣ 根據資料庫數據設定 '■'
         for lang_skill in student_data.get('languages', []):
-            lang = lang_skill.get('Language')   # e.g., '英語'
-            level = lang_skill.get('Level')     # e.g., '精通'
+            lang = lang_skill.get('Language')
+            level = lang_skill.get('Level') 
             lang_code = lang_code_map.get(lang)
             level_code = level_code_map.get(level)
             if lang_code and level_code:
@@ -455,6 +473,10 @@ def generate_application_form_docx(student_data, output_path):
 # -------------------------
 @resume_bp.route('/api/submit_and_generate', methods=['POST'])
 def submit_and_generate_api():
+    context = {} 
+    conn = None
+    cursor = None
+    
     try:
         # 權限檢查：僅限學生
         if session.get('role') != 'student' or not session.get('user_id'):
@@ -484,7 +506,7 @@ def submit_and_generate_api():
             # 【新增檢查】
             if photo.mimetype not in ALLOWED_IMAGE_MIMES:
                  return jsonify({"success": False, "message": f"照片檔案格式錯誤 ({photo.mimetype})，請上傳 JPG/PNG/GIF 圖片"}), 400
-                     
+                  
             filename = secure_filename(photo.filename)
             photo_dir = os.path.join(UPLOAD_FOLDER, "photos")
             os.makedirs(photo_dir, exist_ok=True)
@@ -501,7 +523,7 @@ def submit_and_generate_api():
             # 【新增檢查】
             if transcript_file.mimetype not in ALLOWED_IMAGE_MIMES:
                  return jsonify({"success": False, "message": f"成績單檔案格式錯誤 ({transcript_file.mimetype})，請上傳 JPG/PNG/GIF 圖片"}), 400
-                     
+                  
             filename = secure_filename(transcript_file.filename)
             transcript_dir = os.path.join(UPLOAD_FOLDER, "transcripts")
             os.makedirs(transcript_dir, exist_ok=True)
@@ -514,7 +536,6 @@ def submit_and_generate_api():
         # 上傳多張證照圖片 (含 MIME 檢查)
         # ---------------------
         cert_photo_paths = []
-        # 注意：這裡使用 getlist('cert_photos[]')，因為您 HTML 中 name="cert_photos[]"
         cert_files = request.files.getlist('cert_photos[]') 
 
         if cert_files:
@@ -560,10 +581,9 @@ def submit_and_generate_api():
             if level:
                 structured_languages.append({'language': lang_name, 'level': level})
 
-       # ---------------------
-       # 處理「單一」證照圖片上傳（與多圖邏輯合併）
-       # ---------------------
-        # 這裡的邏輯是將單一證照圖片/名稱插入到現有的多圖列表中
+        # ---------------------
+        # 處理「單一」證照圖片上傳（與多圖邏輯合併）
+        # ---------------------
         certificate_image_file = request.files.get('certificate_image')
         certificate_description = request.form.get('certificate_description', '')
         image_path_for_template = None
@@ -598,6 +618,65 @@ def submit_and_generate_api():
             cert_photo_paths.insert(0, image_path_for_template or "")
             cert_names.insert(0, certificate_description or "")
 
+        # -------------------------
+        # 3. 獲取缺勤紀錄統計
+        # -------------------------
+        absence_stats = {}
+        
+        # 查詢並計算各類別缺勤總節數 
+        cursor.execute("""
+            SELECT 
+                absence_type, 
+                SUM(duration_units) AS total_units 
+            FROM absence_records
+            WHERE user_id = %s
+            GROUP BY absence_type
+        """, (user_id,))
+        
+        results = cursor.fetchall()
+        
+        # 預先定義所有可能類別
+        all_types = ["曠課", "遲到", "事假", "病假", "生理假", "公假", "喪假"]
+        
+        # 將結果轉換為 context 變數
+        for t in all_types:
+            key = f"absence_{t}_units"
+            absence_stats[key] = "0 節" # 預設為 0 節
+
+        for row in results:
+            # 變數名稱範例：absence_曠課_units, absence_事假_units
+            stats_key = f"absence_{row['absence_type']}_units"
+            # 格式化為 "X 節"
+            absence_stats[stats_key] = f"{int(row['total_units'])} 節" 
+
+        # 將缺勤統計結果加入到 DocxTemplate 的 context 中
+        context.update(absence_stats)
+
+        # -------------------------
+        # 4. 獲取最新的缺勤佐證圖片 (使用 absence_records.image_path 欄位)
+        # -------------------------
+        absence_image_path = None
+        try:
+            # 查詢 absence_records 表格，獲取最新的 image_path
+            cursor.execute("""
+                SELECT image_path
+                FROM absence_records
+                WHERE user_id = %s AND image_path IS NOT NULL AND image_path != ''
+                ORDER BY created_at DESC
+                LIMIT 1
+            """, (user_id,))
+            
+            result = cursor.fetchone()
+            if result:
+                # 使用正確的資料庫欄位名稱：image_path
+                absence_image_path = result['image_path'] 
+
+            # 將圖片路徑儲存到 context，鍵名為 'Absence_Proof_Path'
+            context['Absence_Proof_Path'] = absence_image_path 
+
+        except Exception as e:
+            print(f"Error fetching latest absence proof path: {e}")
+            context['Absence_Proof_Path'] = None 
 
         # ---------------------
         # 查學生學號
@@ -611,7 +690,6 @@ def submit_and_generate_api():
         # ---------------------
         # 【重要】處理課程資料：確保 Grade 欄位存在，以便寫入 Course_Grades 表
         # ---------------------
-        # 確保每個課程物件都有 Grade 欄位，如果沒有則預設為空字串 ""
         for c in courses:
             c['grade'] = c.get('grade', '') 
 
@@ -632,6 +710,11 @@ def submit_and_generate_api():
             "structured_certifications": structured_certifications,
             "structured_languages": structured_languages,
         }
+        
+        # 將表單數據和結構化數據也加入 context (這一步很重要)
+        context.update(data)
+        context.update(structured_data)
+
 
         # ---------------------
         # 儲存結構化資料至資料庫
@@ -650,8 +733,11 @@ def submit_and_generate_api():
         
         # 【重要修正】傳遞證照圖片路徑與名稱清單
         student_data_for_doc["cert_photo_paths"] = cert_photo_paths
-        student_data_for_doc["cert_names"] = cert_names # 傳遞名稱清單
+        student_data_for_doc["cert_names"] = cert_names 
         
+        # 整合所有 context 資訊到傳給 DocxTemplate 的字典
+        student_data_for_doc.update(context) 
+
         filename = f"{student_id}_履歷_{datetime.now().strftime('%Y%m%d_%H%M%S')}.docx"
         save_path = os.path.join(UPLOAD_FOLDER, filename)
 
@@ -660,26 +746,24 @@ def submit_and_generate_api():
             return jsonify({"success": False, "message": "文件生成失敗"}), 500
 
         semester_id = get_current_semester_id(cursor)
-       
+        
         # 新增個人照片、成績單 欄位
         cursor.execute("""
-           INSERT INTO resumes 
-           (user_id, filepath, original_filename, status, semester_id, created_at, transcript_path, cert_photos)
-           VALUES 
-           (%s, %s, %s, %s, %s, NOW(), %s, %s)
-           """, (
-           user_id,
-           save_path,
-           filename,
+            INSERT INTO resumes 
+            (user_id, filepath, original_filename, status, semester_id, created_at, transcript_path, cert_photos)
+            VALUES 
+            (%s, %s, %s, %s, %s, NOW(), %s, %s)
+            """, (
+            user_id,
+            save_path,
+            filename,
             'submitted',
-           semester_id,
-           transcript_path,
-           json.dumps(cert_photo_paths, ensure_ascii=False) 
+            semester_id,
+            transcript_path,
+            json.dumps(cert_photo_paths, ensure_ascii=False) 
         ))
 
         conn.commit()
-        cursor.close()
-        conn.close()
 
         return jsonify({
             "success": True,
@@ -691,7 +775,15 @@ def submit_and_generate_api():
     except Exception as e:
         print("❌ submit_and_generate_api 發生錯誤:", e)
         traceback.print_exc()
+        if conn:
+            conn.rollback()
         return jsonify({"success": False, "message": f"系統錯誤: {str(e)}"}), 500
+
+    finally:
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
 
 # -------------------------
 # 下載履歷
@@ -769,6 +861,167 @@ def download_transcript(resume_id):
     finally:
         cursor.close()
         db.close()
+
+# -------------------------
+# 缺勤紀錄列表查詢 
+# -------------------------
+@resume_bp.route('/api/get_absence_records', methods=['GET'])
+def get_absence_records():
+    if 'user_id' not in session:
+        return jsonify({"success": False, "message": "請先登入"}), 401
+
+    user_id = session['user_id']
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+
+    try:
+        # 查詢所有缺勤紀錄的詳細資訊，包括 duration_units
+        cursor.execute("""
+            SELECT 
+                id, 
+                absence_date, 
+                absence_type, 
+                duration_units,  -- 【重點】這個欄位將回傳時數
+                reason,
+                image_path,
+                created_at 
+            FROM absence_records
+            WHERE user_id = %s
+            ORDER BY absence_date DESC, created_at DESC
+        """, (user_id,))
+        
+        records = cursor.fetchall()
+        
+        # 格式化日期時間
+        # 這裡假設 datetime 模組已從外部匯入
+        # from datetime import datetime, date
+        for r in records:
+            if isinstance(r.get('created_at'), datetime):
+                r['created_at'] = r['created_at'].strftime("%Y-%m-%d %H:%M:%S")
+
+        return jsonify({"success": True, "records": records}) # 回傳詳細紀錄列表
+
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"success": False, "message": f"伺服器錯誤: {str(e)}"}), 500
+
+    finally:
+        cursor.close()
+        conn.close()
+
+# -------------------------
+#  缺勤統計查詢
+# -------------------------
+@resume_bp.route('/api/get_absence_stats', methods=['GET'])
+def get_absence_stats():
+    if 'user_id' not in session:
+        return jsonify({"success": False, "message": "請先登入"}), 401
+
+    user_id = session['user_id']
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+
+    try:
+        # 查詢並計算各類別缺勤總節數
+        cursor.execute("""
+            SELECT 
+                absence_type, 
+                SUM(duration_units) AS total_units 
+            FROM absence_records
+            WHERE user_id = %s
+            GROUP BY absence_type
+        """, (user_id,))
+        
+        results = cursor.fetchall()
+        
+        # 將結果轉換為前端需要的字典格式 (例如: {"曠課": 5, "事假": 10, ...})
+        stats = {}
+        for row in results:
+            # 確保 total_units 轉換為整數
+            stats[row['absence_type']] = int(row['total_units'])
+
+        return jsonify({"success": True, "stats": stats})
+
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"success": False, "message": f"伺服器錯誤: {str(e)}"}), 500
+
+    finally:
+        cursor.close()
+        conn.close()
+
+# -------------------------
+# 缺勤紀錄提交
+# -------------------------
+@resume_bp.route('/api/submit_absence_record', methods=['POST'])
+def submit_absence_record():
+    if 'user_id' not in session:
+        return jsonify({"success": False, "message": "請先登入"}), 401
+
+    user_id = session['user_id']
+    
+    # 取得前端傳來的所有欄位
+    absence_date = request.form.get('absence_date')
+    absence_type = request.form.get('absence_type')
+    duration_units = request.form.get('duration_units')
+    
+    # 【修正 1】: 'reason' 欄位不再是必傳。如果前端未傳，則預設為 '無'。
+    reason = request.form.get('reason', '無') 
+
+    # 【修正 2】: 移除必填檢查中的 reason，只檢查前端確定的必填欄位。
+    if not all([absence_date, absence_type, duration_units]):
+        # 由於前端的 JS 已經有檢查，這裡主要是為了確保後端邏輯嚴謹
+        return jsonify({"success": False, "message": "日期、類型、節數皆為必填欄位"}), 400
+
+    try:
+        duration_units = int(duration_units)
+        if duration_units <= 0:
+            return jsonify({"success": False, "message": "節數必須為正整數"}), 400
+    except ValueError:
+        return jsonify({"success": False, "message": "節數格式錯誤"}), 400
+
+    image_path = None
+    # 處理佐證圖片上傳
+    # 【修正 3】: 使用 in request.files 檢查，並確保 proof_image 的處理是安全的
+    if 'proof_image' in request.files:
+        proof_image = request.files['proof_image']
+        # 額外檢查 proof_image 是否為空檔案，因為前端可能傳送一個空的 FileStorage
+        if proof_image and proof_image.filename and proof_image.content_length > 0:
+            # 確保檔名安全，並加上 user_id 和時間戳以避免重複
+            # ⚠️ 這裡假設 ABSENCE_PROOF_FOLDER 已經定義並指向正確的資料夾
+            from datetime import datetime
+            from werkzeug.utils import secure_filename
+            import os
+            
+            filename = secure_filename(f"{user_id}_{datetime.now().strftime('%Y%m%d%H%M%S')}_{proof_image.filename}")
+            # 這裡假設 ABSENCE_PROOF_FOLDER 是上層作用域已定義的變數
+            save_path = os.path.join(ABSENCE_PROOF_FOLDER, filename)
+            proof_image.save(save_path)
+            image_path = save_path # 儲存到資料庫的路徑
+
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+
+    try:
+        # 插入缺勤紀錄到 absence_records 表格
+        cursor.execute("""
+            INSERT INTO absence_records 
+            (user_id, absence_date, absence_type, duration_units, reason, image_path)
+            VALUES (%s, %s, %s, %s, %s, %s)
+        """, (user_id, absence_date, absence_type, duration_units, reason, image_path))
+        
+        conn.commit()
+
+        return jsonify({"success": True, "message": "缺勤紀錄提交成功！"})
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({"success": False, "message": f"資料庫操作失敗: {str(e)}"}), 500
+
+    finally:
+        cursor.close()
+        conn.close()
 
 # -------------------------
 # 查詢學生履歷列表
