@@ -776,7 +776,7 @@
   </aside>
 
   <header class="hero">
-    <h1>履歷審核中心</h1>
+    <h1>智慧實習平台| 履歷審核</h1>
   </header>
 
   
@@ -1198,6 +1198,9 @@
         }
         card.dataset.id = application.id;
         card.dataset.name = application.name;
+        if (application.resume_url) {
+          card.dataset.resumeUrl = application.resume_url;
+        }
         card.innerHTML = `
           <img src="${application.avatar || '/static/images/avatar-default.png'}" alt="${application.name}頭像" class="avatar" />
           <div class="resume-body">
@@ -1214,9 +1217,14 @@
               ${(application.skills || []).map((skill) => `<span class="badge">${skill}</span>`).join('')}
             </div>
             <div class="resume-actions">
-              ${getAvailableActions(application).map((action) => `
-                <button class="${action.variant === 'primary' ? 'btn-primary' : 'btn-secondary'}" type="button" data-action="${action.action}">${action.label}</button>
-              `).join('')}
+              ${getAvailableActions(application).map((action) => {
+                const resumeUrlAttr = action.action === 'view' && application.resume_url 
+                  ? `data-resume-url="${application.resume_url}"` 
+                  : '';
+                return `
+                <button class="${action.variant === 'primary' ? 'btn-primary' : 'btn-secondary'}" type="button" data-action="${action.action}" ${resumeUrlAttr}>${action.label}</button>
+              `;
+              }).join('')}
             </div>
           </div>
         `;
@@ -1225,6 +1233,9 @@
     };
 
     const createTableActionButton = (application, action, label, variant) => {
+      const resumeUrlAttr = action === 'view' && application.resume_url 
+        ? `data-resume-url="${application.resume_url}"` 
+        : '';
       return `
         <button
           type="button"
@@ -1232,6 +1243,7 @@
           data-action="${action}"
           data-id="${application.id}"
           data-name="${application.name}"
+          ${resumeUrlAttr}
         >
           ${label}
         </button>
@@ -1240,6 +1252,9 @@
 
     const createTableRow = (application) => {
       const actions = [];
+      // 所有狀態都應該有「查看履歷」按鈕
+      actions.push(createTableActionButton(application, 'view', '查看履歷', 'primary'));
+      
       if (application.status === 'pending') {
         actions.push(createTableActionButton(application, 'approve', '通過', 'primary'));
         actions.push(createTableActionButton(application, 'reject', '不通過', 'secondary'));
@@ -1348,6 +1363,14 @@
       const action = event.target.dataset.action;
       const applicationId = card.dataset.id;
       const applicationName = card.dataset.name;
+      const resumeUrl = event.target.dataset.resumeUrl || card.dataset.resumeUrl;
+      
+      if (action === 'view' && resumeUrl) {
+        // 下載履歷檔案
+        window.location.href = resumeUrl;
+        return;
+      }
+      
       if (action && action !== 'view') {
         pendingAction = { action, appId: applicationId, name: applicationName };
         openModal(action, applicationName);
@@ -1386,9 +1409,14 @@
       tabbedSection.addEventListener('click', (event) => {
         const button = event.target.closest('button[data-action]');
         if (!button) return;
-        const { action, id: appId, name } = button.dataset;
+        const { action, id: appId, name, resumeUrl } = button.dataset;
         if (!action || !appId) return;
         if (action === 'view') {
+          if (resumeUrl) {
+            // 下載履歷檔案
+            window.location.href = resumeUrl;
+            return;
+          }
           selectApplication(appId);
           return;
         }

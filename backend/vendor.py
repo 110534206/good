@@ -321,6 +321,13 @@ def _build_application_summary_row(row):
     skills = []
     if row.get("skill_tags"):
         skills = row["skill_tags"].split("||")
+    
+    # 加入履歷下載連結
+    resume_id = row.get("resume_id")
+    resume_url = None
+    if resume_id:
+        resume_url = f"/api/download_resume/{resume_id}"
+    
     return {
         "id": str(row.get("id")),
         "student_id": row.get("student_id"),
@@ -339,6 +346,8 @@ def _build_application_summary_row(row):
         "skills": [skill for skill in skills if skill],
         "summary": row.get("autobiography") or "",
         "interview_scheduled": bool(row.get("has_relation")),
+        "resume_id": resume_id,
+        "resume_url": resume_url,
     }
 
 
@@ -530,6 +539,13 @@ def list_applications():
                 CONCAT_WS(' ', c.name, c.department) AS school_label,
                 si.Autobiography AS autobiography,
                 si.PhotoPath AS photo_path,
+                (
+                    SELECT r.id
+                    FROM resumes r
+                    WHERE r.user_id = sp.student_id
+                    ORDER BY r.created_at DESC
+                    LIMIT 1
+                ) AS resume_id,
                 EXISTS (
                     SELECT 1
                     FROM teacher_student_relations tsr
