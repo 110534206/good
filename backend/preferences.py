@@ -195,14 +195,15 @@ def save_preferences():
 
             cursor.execute("""
                 INSERT INTO student_preferences
-                (student_id, preference_order, company_id, job_id, job_title, submitted_at)
-                VALUES (%s, %s, %s, %s, %s, %s)
+                (student_id, preference_order, company_id, job_id, job_title, status, submitted_at)
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
             """, (
                 student_id,
                 pref_order,
                 company_id,
                 job_id,
                 job_title,
+                'pending',  # 預設狀態為「待審核」
                 datetime.now()
             ))
 
