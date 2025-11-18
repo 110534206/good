@@ -325,17 +325,25 @@
                         </thead>
                         <tbody id="absenceStatsBody">
                           <tr>
-                            <td colspan="7">載入中...</td>
+                            <td><span id="stat_曠課">0</span> 節</td>
+                            <td><span id="stat_遲到">0</span> 節</td>
+                            <td><span id="stat_事假">0</span> 節</td>
+                            <td><span id="stat_病假">0</span> 節</td>
+                            <td><span id="stat_生理假">0</span> 節</td>
+                            <td><span id="stat_公假">0</span> 節</td>
+                            <td><span id="stat_喪假">0</span> 節</td>
                           </tr>
                         </tbody>
                       </table>
                     </div>
                   </div>
 
-                  <button type="button" id="updateAbsenceStatsBtn" class="btn btn-primary">
-                    更新缺勤資訊
-                  </button>
-  
+                    <input type="hidden" name="all_absence_details_json" id="all_absence_details_json" value="[]">
+                    <button type="button" id="updateAbsenceStatsBtn" class="btn btn-primary">
+                      更新缺勤資訊
+                    </button>
+                  </div>
+
                   <div class="mb-3"></div>
 
                   <div class="mb-3">
@@ -380,6 +388,14 @@
     // 儲存所有課程的原始資料，用於篩選和查詢
     let disableAutoSave = false;
     let allCoursesData = [];
+    let allAbsenceRecords = [];
+
+
+    // 缺勤統計初始值
+    let absenceStats = {
+      "曠課": 0, "遲到": 0, "事假": 0, "病假": 0,
+      "生理假": 0, "公假": 0, "喪假": 0, "其他": 0
+    };
 
     // 新增: LocalStorage Key
     const AUTO_SAVE_KEY = 'resumeFormData';
@@ -400,10 +416,10 @@
       tr.dataset.isNotTaken = isNotTaken;
 
       tr.innerHTML = `
-                <td><input type="text" name="course_name[]" class="form-control form-control-sm" value="${course.name || ""}" placeholder="輸入課程名稱"></td>
-                <td><input type="text" name="course_credits[]" class="form-control form-control-sm course-credits-input" value="${displayCredits}" placeholder="學分" readonly></td>
-                <td><button type="button" class="btn ${buttonClass} btn-sm toggle-not-taken">${buttonText}</button></td>
-            `;
+      <td><input type="text" name="course_name[]" class="form-control form-control-sm" value="${course.name || ""}" placeholder="輸入課程名稱"></td>
+      <td><input type="text" name="course_credits[]" class="form-control form-control-sm course-credits-input" value="${displayCredits}" placeholder="學分" readonly></td>
+      <td><button type="button" class="btn ${buttonClass} btn-sm toggle-not-taken">${buttonText}</button></td>
+      `;
       return tr;
     }
 
@@ -475,7 +491,7 @@
 
         if (result.success && Array.isArray(result.courses) && result.courses.length > 0) {
           // 載入時，嘗試與 LocalStorage 中儲存的課程狀態合併
-          const savedData = JSON.parse(localStorage.getItem(AUTO_SAVE_KEY) || '{}');
+          const savedData = JSON.parse(localStorage.getItem(AUTO_SAVE_KEY) || '{ }');
           const savedCourses = savedData.courses || [];
 
           allCoursesData = result.courses.map(course => {
@@ -619,13 +635,13 @@
     }) {
       const tbody = document.getElementById("certificate-table-body");
       const newRowHTML = `
-                <tr>
-                    <td><input type="text" name="labor_cert[]" class="form-control" placeholder="例:電腦軟體應用乙級" value="${certData.labor || ""}"></td>
-                    <td><input type="text" name="international_cert[]" class="form-control" placeholder="例:TOEIC 800分" value="${certData.international || ""}"></td>
-                    <td><input type="text" name="domestic_cert[]" class="form-control" placeholder="例:中餐丙級" value="${certData.domestic || ""}"></td>
-                    <td><input type="text" name="other_cert[]" class="form-control" placeholder="例:專題競賽" value="${certData.other || ""}"></td>
-                    <td><button type="button" class="btn btn-outline-danger btn-sm remove-row">移除</button></td>
-                </tr>`;
+      <tr>
+        <td><input type="text" name="labor_cert[]" class="form-control" placeholder="例:電腦軟體應用乙級" value="${certData.labor || ""}"></td>
+        <td><input type="text" name="international_cert[]" class="form-control" placeholder="例:TOEIC 800分" value="${certData.international || ""}"></td>
+        <td><input type="text" name="domestic_cert[]" class="form-control" placeholder="例:中餐丙級" value="${certData.domestic || ""}"></td>
+        <td><input type="text" name="other_cert[]" class="form-control" placeholder="例:專題競賽" value="${certData.other || ""}"></td>
+        <td><button type="button" class="btn btn-outline-danger btn-sm remove-row">移除</button></td>
+      </tr>`;
       tbody.insertAdjacentHTML("beforeend", newRowHTML);
 
       // 新增: 為新加入的欄位添加自動儲存監聽器
@@ -780,7 +796,16 @@
     // 🧩 載入缺勤統計資料
     async function loadAbsenceStats() {
       const statsBody = document.getElementById("absenceStatsBody");
-      statsBody.innerHTML = '<tr><td colspan="7">載入中...</td></tr>';
+
+      const orderedKeys = ["曠課", "遲到", "事假", "病假", "生理假", "公假", "喪假"];
+
+      // 頁面載入時的初始狀態 (如果沒有資料，就顯示 0)
+      orderedKeys.forEach(key => {
+        const statElement = document.getElementById(`stat_${key}`);
+        if (statElement) {
+          statElement.textContent = absenceStats[key] || 0;
+        }
+      });
 
       try {
         const res = await fetch("/api/get_absence_stats");
@@ -789,23 +814,29 @@
         if (result.success && result.stats) {
           const stats = result.stats;
 
-          // 依照 HTML 表格的順序定義 key
-          const orderedKeys = ["曠課", "遲到", "事假", "病假", "生理假", "公假", "喪假"];
-          let rowHTML = '<tr>';
-
+          // 1. 更新全域變數 absenceStats
           orderedKeys.forEach(key => {
-            const totalUnits = stats[key] || 0; // 如果該類別無紀錄，顯示 0
-            rowHTML += `<td>${totalUnits} 節</td>`;
+            // 獲取後端統計的單位數，如果沒有則為 0
+            const totalUnits = stats[key] || 0;
+            absenceStats[key] = totalUnits;
           });
-          rowHTML += '</tr>';
 
-          statsBody.innerHTML = rowHTML;
+          // 2. 根據更新後的全域變數，更新 HTML 顯示
+          orderedKeys.forEach(key => {
+            const statElement = document.getElementById(`stat_${key}`);
+            if (statElement) {
+              statElement.textContent = absenceStats[key];
+            }
+          });
+
         } else {
-          statsBody.innerHTML = '<tr><td colspan="7" class="text-muted">尚無缺勤資料</td></tr>';
+          // 如果後端返回失敗，我們保持原本的 0/載入中 狀態 (如果 HTML 已經被正確定義)
+          // 為了避免混亂，這裡不修改 HTML 結構，只保留原本的數字 (0)
         }
+
       } catch (error) {
         console.error('載入缺勤統計失敗:', error);
-        statsBody.innerHTML = '<tr><td colspan="7" class="text-danger">統計載入失敗</td></tr>';
+        // 如果載入失敗，我們保持數字為 0 或原本的 absenceStats[key]
       }
     }
 
@@ -863,28 +894,75 @@
       // 取得欄位值
       const absence_date = container.querySelector('#absence_date').value;
       const absence_type = container.querySelector('#absence_type').value;
-      const duration_units = container.querySelector('#duration_units').value;
+      const duration_units_str = container.querySelector('#duration_units').value;
       const reason = container.querySelector('#reason').value;
-      const proof_image = container.querySelector('#proof_image').files[0];
+      const proof_image_input = container.querySelector('#proof_image'); // 使用 input 元素
 
-      // 驗證
-      if (!absence_date || !absence_type || !duration_units || !reason) {
-        alert("請填寫所有必填欄位（日期、類型、節數、事由）");
+      // 進行數值轉換和檔案獲取
+      const duration_units_int = parseInt(duration_units_str);
+      const proof_image_file = proof_image_input.files[0];
+      const image_filename = proof_image_file ? proof_image_file.name : null;
+
+
+      // 1. 驗證
+      if (!absence_date || !absence_type || isNaN(duration_units_int) || duration_units_int <= 0 || !reason) {
+        alert("請填寫所有必填欄位（日期、類型、節數必須為正整數、事由）");
         btn.disabled = false;
         btn.textContent = originalText;
         return;
       }
 
-      // ⭐⭐ 更新統計數字（不清空、不寫 DB）
-      const totalUnitsElement = document.getElementById("totalAbsenceUnits");
-      const oldValue = parseInt(totalUnitsElement.textContent || "0");
-      const newValue = oldValue + parseInt(duration_units);
+      // ------------------------------------------------------------------
+      // ⭐ 核心邏輯：分項累計與更新表格 ⭐
+      // ------------------------------------------------------------------
 
-      totalUnitsElement.textContent = newValue;
+      // 2. 確定要累加的類型 Key (如果不在定義範圍，則歸類為「其他」)
+      let typeToUpdate = absence_type;
+      if (absenceStats[typeToUpdate] === undefined) {
+        typeToUpdate = "其他";
+      }
+
+      // 3. 檢查統計顯示元素是否存在
+      const statElement = document.getElementById(`stat_${typeToUpdate}`);
+
+      if (!statElement) {
+        // 如果 HTML 結構正確，這裡不應該發生。
+        alert(`錯誤：找不到統計顯示欄位 ID: stat_${typeToUpdate}。請檢查 HTML 表格！`);
+        btn.disabled = false;
+        btn.textContent = originalText;
+        return;
+      }
+
+      // 4. 更新 JS 記憶體中的分項數字
+      absenceStats[typeToUpdate] += duration_units_int;
+
+      // 5. 更新 HTML 顯示
+      statElement.textContent = absenceStats[typeToUpdate];
+
+      // 6. 暫存詳細紀錄到全域變數
+      const newRecord = {
+        date: absence_date,
+        type: absence_type,
+        units: duration_units_int,
+        reason: reason,
+        image_filename: image_filename
+      };
+      allAbsenceRecords.push(newRecord);
+
+      // 7. 將詳細紀錄陣列寫入隱藏欄位 (供最終提交給後端)
+      const hiddenInput = document.getElementById('all_absence_details_json');
+      if (hiddenInput) {
+        hiddenInput.value = JSON.stringify(allAbsenceRecords);
+      }
+
+      // 8. 清空圖片輸入，方便下一次上傳
+      proof_image_input.value = '';
+      // ------------------------------------------------------------------
+
 
       // 顯示本地更新成功提示
       const msgBox = document.getElementById('absenceSavedMsg');
-      msgBox.textContent = "缺勤統計已更新（此階段尚未儲存到資料庫）";
+      msgBox.textContent = `成功新增 ${typeToUpdate} 紀錄，累計總數為 ${absenceStats[typeToUpdate]} 節。`;
       msgBox.classList.remove('d-none');
 
       setTimeout(() => {
@@ -896,12 +974,9 @@
       btn.textContent = originalText;
     });
 
-
     // =========================================================================
-    // 頁面載入時執行
+    // 事件綁定和初始化
     // =========================================================================
-
-    // 新增: 綁定表單欄位自動儲存事件
     document.addEventListener("DOMContentLoaded", () => {
       const form = document.getElementById("resumeForm");
 
