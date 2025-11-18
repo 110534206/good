@@ -384,8 +384,30 @@ def recommend_preferences():
             ai_response_text = ai_response_text[:-3]
         ai_response_text = ai_response_text.strip()
 
-        recommendations_data = json.loads(ai_response_text)
-        recommendations = recommendations_data.get('recommendations', [])
+        def try_parse_json(raw_text: str):
+            try:
+                return json.loads(raw_text)
+            except json.JSONDecodeError:
+                return None
+
+        recommendations_data = try_parse_json(ai_response_text)
+
+        if recommendations_data is None:
+            # 嘗試從文字中擷取 JSON 片段
+            first_brace = ai_response_text.find('{')
+            last_brace = ai_response_text.rfind('}')
+            parsed = None
+            if first_brace != -1 and last_brace != -1 and last_brace > first_brace:
+                possible_json = ai_response_text[first_brace:last_brace+1]
+                parsed = try_parse_json(possible_json)
+            if parsed is None:
+                print("❌ AI 回傳無法解析為 JSON，改用 fallback。原始回應：", ai_response_text)
+                recommendations = []
+            else:
+                recommendations_data = parsed
+                recommendations = recommendations_data.get('recommendations', [])
+        else:
+            recommendations = recommendations_data.get('recommendations', [])
 
         valid = []
         for rec in recommendations:
@@ -471,9 +493,6 @@ def recommend_preferences():
         print(f"✅ AI 推薦成功 - 共 {len(valid)} 個推薦")
         return jsonify({"success": True, "recommendations": valid})
 
-    except json.JSONDecodeError as e:
-        print(f"❌ JSON 解析錯誤: {e}")
-        return jsonify({"success": False, "error": "AI 回應格式錯誤，請稍後再試。"}), 500
     except Exception as e:
         traceback.print_exc()
         return jsonify({"success": False, "error": f"AI 服務處理失敗: {str(e)}"}), 500
