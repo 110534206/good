@@ -234,35 +234,6 @@
         </form>
     </div>
 
-    <div class="modal fade" id="aiPreferenceModal" tabindex="-1" aria-labelledby="aiPreferenceModalLabel" aria-hidden="true">
-        <div class="modal-dialog modal-lg modal-dialog-centered">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title" id="aiPreferenceModalLabel"><i class="bi bi-robot me-2"></i>AI 推薦篩選條件</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                </div>
-                <div class="modal-body">
-                    <p class="mb-3 fw-bold">請輸入您的履歷重點與學業成績摘要，AI 將依此推薦最適合的實習志願序：</p>
-                    <div class="row g-3">
-                        <div class="col-12">
-                            <label for="resume-text" class="form-label">履歷重點（可貼上段落或條列重點）</label>
-                            <textarea id="resume-text" class="form-control" rows="5" placeholder="例：專長技能、專題/實習經驗、拿手技術、比賽獎項、證照等"></textarea>
-                        </div>
-                        <div class="col-12">
-                            <label for="grades-text" class="form-label">學業成績摘要（例如 GPA、關鍵課程成績、名次或加權）</label>
-                            <textarea id="grades-text" class="form-control" rows="4" placeholder="例：GPA 3.8/4.3、演算法 A、資料結構 A+、資料庫 A、班排前 10%"></textarea>
-                        </div>
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
-                    <button type="button" id="confirmAiPreferenceBtn" class="btn btn-warning" style="background-color: #ffc107; border-color: #ffc107; color: #343a40;">
-                        <i class="bi bi-lightning-charge-fill me-2"></i>開始推薦
-                    </button>
-                </div>
-            </div>
-        </div>
-    </div>
 
     <script type="application/json" id="companies-data">{{ companies | tojson | safe }}</script>
     <script type="application/json" id="submitted-data">{{ submitted | tojson | safe }}</script>
@@ -274,8 +245,6 @@
         const companies = JSON.parse(document.getElementById("companies-data").textContent || "[]");
         const submitted = JSON.parse(document.getElementById("submitted-data").textContent || "{}");
         const preview = JSON.parse(document.getElementById("preview-data").textContent || "false");
-        const aiPreferenceModalEl = document.getElementById("aiPreferenceModal");
-        const aiPreferenceModal = aiPreferenceModalEl ? new bootstrap.Modal(aiPreferenceModalEl) : null;
 
         const selectedJobIds = new Set();
         const companyJobsCache = {};
@@ -423,40 +392,16 @@
         if (hasSubmitted) setReadOnlyMode(true);
         else toggleEditBtn.style.display = "none";
 
-        // ---------- AI 推薦志願功能 (重要修改) ----------
+        // ---------- AI 推薦志願功能 (自動獲取資料) ----------
         const aiRecommendBtn = document.getElementById("aiRecommendBtnNew"); 
-        if (aiRecommendBtn && aiPreferenceModal) {
-            aiRecommendBtn.addEventListener("click", () => {
-                aiPreferenceModal.show();
-            });
-        }
-
-        const confirmAiPreferenceBtn = document.getElementById("confirmAiPreferenceBtn");
-        if (confirmAiPreferenceBtn) {
-            confirmAiPreferenceBtn.addEventListener("click", async () => {
-                aiPreferenceModal.hide();
-
-                // 💡 取得履歷與成績摘要
-                const resumeText = (document.getElementById('resume-text')?.value || '').trim();
-                const gradesText = (document.getElementById('grades-text')?.value || '').trim();
-
-                if (!resumeText && !gradesText) {
-                    return Swal.fire({
-                        icon: 'warning',
-                        title: '需要基本資訊',
-                        text: '請至少填寫履歷重點或學業成績摘要其一。'
-                    });
-                }
-
-                // 顯示載入中 (不再彈出履歷日記輸入框)
+        if (aiRecommendBtn) {
+            aiRecommendBtn.addEventListener("click", async () => {
+                // 顯示載入中 - AI 正在推薦適合你的志願
                 Swal.fire({
-                    title: 'AI 正在分析中...',
+                    title: 'AI 正在推薦適合你的志願',
                     html: `
-                        <p>將根據您的履歷與學業成績推薦志願序：</p>
-                        <ul class="text-start mb-0" style="list-style-type: none; padding-left: 0;">
-                            <li>履歷重點: <strong>${resumeText ? '已提供' : '未提供'}</strong></li>
-                            <li>學業成績: <strong>${gradesText ? '已提供' : '未提供'}</strong></li>
-                        </ul>
+                        <p>系統正在自動分析您的履歷與學業成績...</p>
+                        <p class="text-muted"><small>將根據您的專長、證照、語言能力、成績表現推薦最適合的實習志願序</small></p>
                     `,
                     allowOutsideClick: false,
                     didOpen: () => {
@@ -465,14 +410,11 @@
                 });
 
                 try {
-                    // 💡 呼叫後端 API，傳遞履歷與成績摘要
+                    // 💡 呼叫後端 API，後端會自動從資料庫獲取履歷與成績資料
                     const response = await fetch("/api/recommend-preferences", {
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ 
-                            resumeText: resumeText,
-                            gradesText: gradesText
-                        })
+                        body: JSON.stringify({})
                     });
 
                     const result = await response.json();
@@ -504,7 +446,7 @@
                             <div class="form-check" style="margin-bottom: 10px; padding-left: 2.5em;">
                                 <input class="form-check-input" type="checkbox" id="ai-rec-select-all" checked>
                                 <label class="form-check-label fw-bold" for="ai-rec-select-all">
-                                    全選 (預設全部套用)
+                                    全選 
                                 </label>
                             </div>
                             <hr class="mt-0">
