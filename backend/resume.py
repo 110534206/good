@@ -863,53 +863,6 @@ def download_transcript(resume_id):
         db.close()
 
 # -------------------------
-# 缺勤紀錄列表查詢 
-# -------------------------
-@resume_bp.route('/api/get_absence_records', methods=['GET'])
-def get_absence_records():
-    if 'user_id' not in session:
-        return jsonify({"success": False, "message": "請先登入"}), 401
-
-    user_id = session['user_id']
-    conn = get_db()
-    cursor = conn.cursor(dictionary=True)
-
-    try:
-        # 查詢所有缺勤紀錄的詳細資訊，包括 duration_units
-        cursor.execute("""
-            SELECT 
-                id, 
-                absence_date, 
-                absence_type, 
-                duration_units,  -- 【重點】這個欄位將回傳時數
-                reason,
-                image_path,
-                created_at 
-            FROM absence_records
-            WHERE user_id = %s
-            ORDER BY absence_date DESC, created_at DESC
-        """, (user_id,))
-        
-        records = cursor.fetchall()
-        
-        # 格式化日期時間
-        # 這裡假設 datetime 模組已從外部匯入
-        # from datetime import datetime, date
-        for r in records:
-            if isinstance(r.get('created_at'), datetime):
-                r['created_at'] = r['created_at'].strftime("%Y-%m-%d %H:%M:%S")
-
-        return jsonify({"success": True, "records": records}) # 回傳詳細紀錄列表
-
-    except Exception as e:
-        traceback.print_exc()
-        return jsonify({"success": False, "message": f"伺服器錯誤: {str(e)}"}), 500
-
-    finally:
-        cursor.close()
-        conn.close()
-
-# -------------------------
 #  缺勤統計查詢
 # -------------------------
 @resume_bp.route('/api/get_absence_stats', methods=['GET'])
@@ -951,7 +904,7 @@ def get_absence_stats():
         conn.close()
 
 # -------------------------
-# 缺勤紀錄提交
+#  缺勤紀錄提交
 # -------------------------
 @resume_bp.route('/api/submit_absence_record', methods=['POST'])
 def submit_absence_record():
@@ -964,14 +917,10 @@ def submit_absence_record():
     absence_date = request.form.get('absence_date')
     absence_type = request.form.get('absence_type')
     duration_units = request.form.get('duration_units')
-    
-    # 【修正 1】: 'reason' 欄位不再是必傳。如果前端未傳，則預設為 '無'。
-    reason = request.form.get('reason', '無') 
+    reason = request.form.get('reason')
 
-    # 【修正 2】: 移除必填檢查中的 reason，只檢查前端確定的必填欄位。
-    if not all([absence_date, absence_type, duration_units]):
-        # 由於前端的 JS 已經有檢查，這裡主要是為了確保後端邏輯嚴謹
-        return jsonify({"success": False, "message": "日期、類型、節數皆為必填欄位"}), 400
+    if not all([absence_date, absence_type, duration_units, reason]):
+        return jsonify({"success": False, "message": "日期、類型、節數、事由皆為必填欄位"}), 400
 
     try:
         duration_units = int(duration_units)
@@ -982,19 +931,11 @@ def submit_absence_record():
 
     image_path = None
     # 處理佐證圖片上傳
-    # 【修正 3】: 使用 in request.files 檢查，並確保 proof_image 的處理是安全的
     if 'proof_image' in request.files:
         proof_image = request.files['proof_image']
-        # 額外檢查 proof_image 是否為空檔案，因為前端可能傳送一個空的 FileStorage
-        if proof_image and proof_image.filename and proof_image.content_length > 0:
+        if proof_image and proof_image.filename:
             # 確保檔名安全，並加上 user_id 和時間戳以避免重複
-            # ⚠️ 這裡假設 ABSENCE_PROOF_FOLDER 已經定義並指向正確的資料夾
-            from datetime import datetime
-            from werkzeug.utils import secure_filename
-            import os
-            
             filename = secure_filename(f"{user_id}_{datetime.now().strftime('%Y%m%d%H%M%S')}_{proof_image.filename}")
-            # 這裡假設 ABSENCE_PROOF_FOLDER 是上層作用域已定義的變數
             save_path = os.path.join(ABSENCE_PROOF_FOLDER, filename)
             proof_image.save(save_path)
             image_path = save_path # 儲存到資料庫的路徑
@@ -1015,7 +956,6 @@ def submit_absence_record():
         return jsonify({"success": True, "message": "缺勤紀錄提交成功！"})
 
     except Exception as e:
-        import traceback
         traceback.print_exc()
         return jsonify({"success": False, "message": f"資料庫操作失敗: {str(e)}"}), 500
 
