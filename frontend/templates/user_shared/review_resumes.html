@@ -86,6 +86,90 @@
       color: #0066cc;
       font-weight: bold;
     }
+
+    /* 選單按鈕樣式 */
+    #menu-btn {
+      width: 30px;
+      height: 22px;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      margin: 1rem;
+    }
+
+    #menu-btn span {
+      height: 4px;
+      background-color: #333;
+      border-radius: 2px;
+    }
+
+    /* 側邊選單樣式 */
+    #side-menu {
+      position: fixed;
+      top: 0;
+      left: 0;
+      height: 100vh;
+      width: 320px;
+      max-width: 80vw;
+      background-color: rgba(10, 10, 10, 0.95);
+      backdrop-filter: blur(6px);
+      box-shadow: 3px 0 12px rgb(0 0 0 / 0.7);
+      padding: 2rem 1.5rem;
+      transform: translateX(-100%);
+      transition: transform 0.3s ease-in-out;
+      z-index: 1100;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      color: white;
+      user-select: none;
+    }
+
+    #side-menu.open {
+      transform: translateX(0);
+    }
+
+    #close-btn {
+      position: absolute;
+      top: 2rem;
+      right: 1.6rem;
+      font-size: 2.2rem;
+      background: none;
+      border: none;
+      color: white;
+      cursor: pointer;
+      line-height: 1;
+      width: 2.5rem;
+      height: 2.5rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    #side-menu h2 {
+      width: 100%;
+      margin-bottom: 1.5rem;
+      font-weight: 700;
+      font-size: 1.5rem;
+      text-align: left;
+    }
+
+    #side-menu a {
+      display: block;
+      width: 100%;
+      padding: 0.5rem 0;
+      font-size: 1.1rem;
+      color: #ddd;
+      text-decoration: none;
+      border-radius: 4px;
+      transition: background-color 0.2s ease;
+    }
+
+    #side-menu a:hover {
+      background-color: rgba(255, 255, 255, 0.15);
+      color: white;
+    }
   </style>
 </head>
 
@@ -161,6 +245,19 @@
       </div>
     </div>
 
+    <!-- 側邊選單 -->
+    <nav id="side-menu" aria-hidden="true" role="navigation" aria-label="功能選單">
+      <button id="close-btn" aria-label="關閉功能選單">×</button>
+      <h2>功能選單</h2>
+      <a href="/teacher_home">首頁</a>
+      <a href="/profile">個人資料</a>
+      <a href="/upload_company">建立實習機會</a>
+      <a href="/admission_results">查看錄取結果</a>
+      <a href="/manage_vendor">實習廠商管理</a>
+      <a href="/notifications">查看公告</a>
+      <a href="/review_resume">學生履歷審核</a>
+    </nav>
+
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
 
@@ -177,24 +274,26 @@
        * 根據履歷狀態返回對應的 Bootstrap 顏色類別。
        */
       function statusColor(status) {
-        // status: 'submitted', 'under_review', 'approved', 'rejected'
-        return {
+        const colorMap = {
           'approved': 'success',     // 通過 (綠色)
-          'rejected': 'danger',      // 不通過(紅色)
-          'uploaded': 'info'         // 保留舊狀態 'uploaded'
-        }
+          'rejected': 'danger',      // 不通過 (紅色)
+          'submitted': 'warning',    // 待審查 (黃色)
+          'under_review': 'info'     // 審查中 (藍色)
+        };
+        return colorMap[status] || 'secondary';
       }
 
       /**
        * 將履歷狀態碼轉換為中文顯示名稱。
        */
       function mapStatus(status) {
-        // status: 'submitted', 'under_review', 'approved', 'rejected'
-        return {
-          'submitted': '待審核',
+        const statusMap = {
+          'submitted': '待審查',
+          'under_review': '審查中',
           'approved': '通過',
-          'uploaded': '不通過'
-        }
+          'rejected': '不通過'
+        };
+        return statusMap[status] || status || '未知';
       }
 
       // ------------------------------------
