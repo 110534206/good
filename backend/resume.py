@@ -622,8 +622,8 @@ def submit_and_generate_api():
         # 3. 獲取缺勤紀錄統計
         # -------------------------
         absence_stats = {}
-        
-        # 查詢並計算各類別缺勤總節數 
+
+        # 先從資料庫抓取各類別的總節數（作為 fallback / 初始值）
         cursor.execute("""
             SELECT 
                 absence_type, 
@@ -632,51 +632,135 @@ def submit_and_generate_api():
             WHERE user_id = %s
             GROUP BY absence_type
         """, (user_id,))
-        
+
         results = cursor.fetchall()
-        
+
         # 預先定義所有可能類別
         all_types = ["曠課", "遲到", "事假", "病假", "生理假", "公假", "喪假"]
-        
-        # 將結果轉換為 context 變數
+
+        # 預先填入 DB 值（若查不到則為 0）
+        db_stats = {t: 0 for t in all_types}
+        for row in results:
+            typ = row.get('absence_type')
+            if typ in db_stats:
+                try:
+                    db_stats[typ] = int(row.get('total_units') or 0)
+                except Exception:
+                    db_stats[typ] = 0
+
+        # 預設 context 的字串格式為 "X 節"
         for t in all_types:
             key = f"absence_{t}_units"
-            absence_stats[key] = "0 節" # 預設為 0 節
+            absence_stats[key] = f"{db_stats.get(t, 0)} 節"
+            
+        # 嘗試從前端傳來的 JSON 覆蓋（代表目前累計值）
+        try:
+            incoming_stats_json = request.form.get("absence_stats_json", None)
+            if incoming_stats_json:
+                try:
+                    incoming = json.loads(incoming_stats_json)
+                    # incoming 範例： {"曠課": 1, "事假": 2, ...}
+                    # 使用 incoming 的值覆蓋 DB 值（代表前端目前累計）
+                    for t in all_types:
+                        val = incoming.get(t)
+                        if val is not None:
+                            try:
+                                val_int = int(val)
+                            except Exception:
+                                # 若前端傳的是字串 "2 節" 或其他，嘗試擷取數字
+                                try:
+                                    val_int = int(str(val).replace("節","").strip())
+                                except Exception:
+                                    val_int = db_stats.get(t, 0)
+                            absence_stats[f"absence_{t}_units"] = f"{val_int} 節"
+                except Exception as e:
+                    # 若無法解析 incoming_stats_json，忽略並保留 DB 結果
+                    print("⚠️ 無法解析 absence_stats_json，忽略前端傳入值:", e)
+        except Exception as e:
+            print("⚠️ 取得 absence_stats_json 時發生錯誤:", e)
 
-        for row in results:
-            # 變數名稱範例：absence_曠課_units, absence_事假_units
-            stats_key = f"absence_{row['absence_type']}_units"
-            # 格式化為 "X 節"
-            absence_stats[stats_key] = f"{int(row['total_units'])} 節" 
+        # ---- 計算總計（合併後的數值） ----
+        try:
+            total = 0
+            for t in all_types:
+                # absence_stats key 範例： 'absence_事假_units' -> '2 節'
+                v = absence_stats.get(f"absence_{t}_units", "0 節")
+                try:
+                    total += int(str(v).replace("節", "").strip())
+                except Exception:
+                    # 如果格式有問題，忽略該項（當作0）
+                    pass
+            absence_stats["absence_總計_units"] = f"{total} 節"
+        except Exception as e:
+            print("⚠️ 計算缺勤總計時出錯:", e)
+            absence_stats["absence_總計_units"] = "0 節"
 
         # 將缺勤統計結果加入到 DocxTemplate 的 context 中
         context.update(absence_stats)
 
         # -------------------------
-        # 4. 獲取最新的缺勤佐證圖片 (使用 absence_records.image_path 欄位)
+        # 4. 處理並取得缺勤佐證圖片
         # -------------------------
         absence_image_path = None
+
+        # 1) 儲存本次表單上傳的 proof_image（若有）
         try:
-            # 查詢 absence_records 表格，獲取最新的 image_path
-            cursor.execute("""
-                SELECT image_path
-                FROM absence_records
-                WHERE user_id = %s AND image_path IS NOT NULL AND image_path != ''
-                ORDER BY created_at DESC
-                LIMIT 1
-            """, (user_id,))
-            
-            result = cursor.fetchone()
-            if result:
-                # 使用正確的資料庫欄位名稱：image_path
-                absence_image_path = result['image_path'] 
-
-            # 將圖片路徑儲存到 context，鍵名為 'Absence_Proof_Path'
-            context['Absence_Proof_Path'] = absence_image_path 
-
+            # 支援兩個可能的 field name： 'proof_image' 或 'absence_proof'
+            uploaded_proof = request.files.get('proof_image') or request.files.get('absence_proof')
+            if uploaded_proof and uploaded_proof.filename:
+                # 檔案類型檢查
+                if uploaded_proof.mimetype in ALLOWED_IMAGE_MIMES:
+                    os.makedirs(ABSENCE_PROOF_FOLDER, exist_ok=True)
+                    ext = os.path.splitext(secure_filename(uploaded_proof.filename))[1] or ".png"
+                    fname = f"{user_id}_absence_proof_{datetime.now().strftime('%Y%m%d_%H%M%S')}{ext}"
+                    savep = os.path.join(ABSENCE_PROOF_FOLDER, fname)
+                    uploaded_proof.save(savep)
+                    absence_image_path = savep
+                else:
+                    print(f"⚠️ 上傳的缺勤佐證圖片格式不支援: {uploaded_proof.mimetype}")
         except Exception as e:
-            print(f"Error fetching latest absence proof path: {e}")
-            context['Absence_Proof_Path'] = None 
+            print("⚠️ 儲存上傳的缺勤佐證圖片失敗:", e)
+            traceback.print_exc()
+
+        # 2) 如果前端有傳 JSON 的 absence_records（例如: allAbsenceRecords），嘗試從裡面找最近的 image_filename
+        if not absence_image_path:
+            try:
+                ar_json = request.form.get("absence_records_json", None)
+                if ar_json:
+                    try:
+                        ar_list = json.loads(ar_json)
+                        # ar_list 預期為 [{date,type,units,reason,image_filename}, ...]
+                        # 嘗試從最後一筆或倒序找第一個有 image_filename 的項目
+                        for rec in reversed(ar_list):
+                            img = rec.get("image_filename") or rec.get("image_path")
+                            if img:
+                                # 這裡假設前端所傳的是已上傳到伺服器的路徑（或你想要的值）
+                                # 若只是檔名，可能需要前端或其他 API 回傳實際路徑給後端
+                                absence_image_path = img
+                                break
+                    except Exception as e:
+                        print("⚠️ 解析 absence_records_json 失敗:", e)
+            except Exception as e:
+                print("⚠️ 嘗試讀取 absence_records_json 失敗:", e)
+
+        # 3) 如果還是沒有，使用 DB 中最新的 image_path（原先已有的查詢）
+        if not absence_image_path:
+            try:
+                cursor.execute("""
+                    SELECT image_path
+                    FROM absence_records
+                    WHERE user_id = %s AND image_path IS NOT NULL AND image_path != ''
+                    ORDER BY created_at DESC
+                    LIMIT 1
+                """, (user_id,))
+
+                row = cursor.fetchone()
+                if row:
+                    absence_image_path = row.get('image_path')
+            except Exception as e:
+                print(f"Error fetching latest absence proof path from DB: {e}")
+
+        context['Absence_Proof_Path'] = absence_image_path
 
         # ---------------------
         # 查學生學號
@@ -1258,46 +1342,6 @@ def get_class_resumes():
             cursor.execute(sql_query, tuple())
             resumes = cursor.fetchall()
 
-        # ------------------------------------------------------------------
-        # 4. Vendor (role == "vendor")
-        # ------------------------------------------------------------------
-        elif role == "vendor":
-            # Vendor 可以看到選擇了他們上傳的公司的學生履歷
-            # 或者被錄取到他們公司的學生履歷
-            sql_query = """
-                SELECT DISTINCT
-                    r.id,
-                    u.name AS student_name,
-                    u.username AS student_number,
-                    c.name AS class_name,
-                    c.department,
-                    r.original_filename,
-                    r.filepath,
-                    r.status,
-                    r.comment,
-                    r.note,
-                    r.created_at
-                FROM resumes r
-                JOIN users u ON r.user_id = u.id
-                LEFT JOIN classes c ON u.class_id = c.id
-                WHERE EXISTS (
-                    -- 學生選擇了該 vendor 上傳的公司
-                    SELECT 1 FROM student_preferences sp
-                    JOIN internship_companies ic ON sp.company_id = ic.id
-                    WHERE sp.student_id = u.id
-                    AND ic.uploaded_by_user_id = %s
-                ) OR EXISTS (
-                    -- 學生被錄取到該 vendor 的公司
-                    SELECT 1 FROM internship_experiences ie
-                    JOIN internship_companies ic ON ie.company_id = ic.id
-                    WHERE ie.user_id = u.id
-                    AND ic.uploaded_by_user_id = %s
-                )
-                ORDER BY c.name, u.name
-            """
-            cursor.execute(sql_query, (user_id, user_id))
-            resumes = cursor.fetchall()
-
         else:
             return jsonify({"success": False, "message": "無效的角色或權限"}), 403
 
@@ -1642,4 +1686,3 @@ def review_resume_page():
 @resume_bp.route('/ai_edit_resume')
 def ai_edit_resume_page():
     return render_template('resume/ai_edit_resume.html')
-

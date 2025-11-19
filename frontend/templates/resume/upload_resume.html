@@ -305,46 +305,41 @@
                     <label for="reason" class="form-label">事由說明</label>
                     <textarea class="form-control" id="reason" name="reason" rows="3" required></textarea>
                   </div>
-
-                  <div class="card mb-4 mt-3">
-                    <div class="card-header bg-warning text-dark">
-                      <h5>缺勤紀錄統計 (總節數)</h5>
-                    </div>
-                    <div class="card-body p-3">
-                      <table class="table table-bordered table-sm text-center">
-                        <thead class="table-light">
-                          <tr>
-                            <th>曠課</th>
-                            <th>遲到</th>
-                            <th>事假</th>
-                            <th>病假</th>
-                            <th>生理假</th>
-                            <th>公假</th>
-                            <th>喪假</th>
-                          </tr>
-                        </thead>
-                        <tbody id="absenceStatsBody">
-                          <tr>
-                            <td><span id="stat_曠課">0</span> 節</td>
-                            <td><span id="stat_遲到">0</span> 節</td>
-                            <td><span id="stat_事假">0</span> 節</td>
-                            <td><span id="stat_病假">0</span> 節</td>
-                            <td><span id="stat_生理假">0</span> 節</td>
-                            <td><span id="stat_公假">0</span> 節</td>
-                            <td><span id="stat_喪假">0</span> 節</td>
-                          </tr>
-                        </tbody>
-                      </table>
-                    </div>
+                  <div class="mb-3">
+                    <label for="reason" class="form-label">缺勤紀錄統計 (總節數)</label>
                   </div>
+                  <table class="table table-bordered table-sm text-center">
+                    <thead class="table-light">
+                      <tr>
+                        <th>曠課</th>
+                        <th>遲到</th>
+                        <th>事假</th>
+                        <th>病假</th>
+                        <th>生理假</th>
+                        <th>公假</th>
+                        <th>喪假</th>
+                      </tr>
+                    </thead>
+                    <tbody id="absenceStatsBody">
+                      <tr>
+                        <td><span id="stat_曠課">0</span> 節</td>
+                        <td><span id="stat_遲到">0</span> 節</td>
+                        <td><span id="stat_事假">0</span> 節</td>
+                        <td><span id="stat_病假">0</span> 節</td>
+                        <td><span id="stat_生理假">0</span> 節</td>
+                        <td><span id="stat_公假">0</span> 節</td>
+                        <td><span id="stat_喪假">0</span> 節</td>
+                      </tr>
+                    </tbody>
+                  </table>
 
-                    <input type="hidden" name="all_absence_details_json" id="all_absence_details_json" value="[]">
-                    <button type="button" id="updateAbsenceStatsBtn" class="btn btn-primary">
+                  <div class="text-start mt-2">
+                    <button type="button" id="updateAbsenceStatsBtn" class="btn btn-warning">
                       更新缺勤資訊
                     </button>
                   </div>
 
-                  <div class="mb-3"></div>
+                  <div class="mt-3"></div>
 
                   <div class="mb-3">
                     <label for="proof_image" class="form-label">缺勤記錄佐證圖上傳</label>
@@ -354,6 +349,11 @@
                 </div>
               </div>
             </div>
+
+            <!-- 隱藏欄位：儲存缺勤紀錄和統計的 JSON -->
+            <input type="hidden" id="all_absence_details_json" name="all_absence_details_json" value="[]">
+            <input type="hidden" id="absence_stats_json" name="absence_stats_json" value="{}">
+
             <div class="text-center mt-4">
               <button type="submit" class="btn btn-primary btn-lg">提交並生成履歷</button>
             </div>
@@ -394,7 +394,7 @@
     // 缺勤統計初始值
     let absenceStats = {
       "曠課": 0, "遲到": 0, "事假": 0, "病假": 0,
-      "生理假": 0, "公假": 0, "喪假": 0, "其他": 0
+      "生理假": 0, "公假": 0, "喪假": 0
     };
 
     // 新增: LocalStorage Key
@@ -623,7 +623,7 @@
     document.getElementById("save-template-btn").addEventListener("click", savePersonalTemplate);
 
     // =========================================================================
-    // AutoSave and Load 邏輯
+    // 證照表格動態新增/移除列 & 自動儲存功能
     // =========================================================================
 
     // 🧩 證照表格新增列的通用函數 (用於 load 和 add button)
@@ -786,7 +786,7 @@
         container.querySelector('#absence_type').value = '曠課';
         container.querySelector('#duration_units').value = '';
         container.querySelector('#reason').value = ''; // 加上事由
-        const proofImageInput = container.querySelector('#proof_image');
+        const proofImageInput = document.getElementById('proof_image');
         if (proofImageInput) {
           proofImageInput.value = '';
         }
@@ -896,11 +896,11 @@
       const absence_type = container.querySelector('#absence_type').value;
       const duration_units_str = container.querySelector('#duration_units').value;
       const reason = container.querySelector('#reason').value;
-      const proof_image_input = container.querySelector('#proof_image'); // 使用 input 元素
+      const proof_image_input = document.getElementById('proof_image');
 
       // 進行數值轉換和檔案獲取
       const duration_units_int = parseInt(duration_units_str);
-      const proof_image_file = proof_image_input.files[0];
+      const proof_image_file = proof_image_input ? proof_image_input.files[0] : null;
       const image_filename = proof_image_file ? proof_image_file.name : null;
 
 
@@ -955,9 +955,48 @@
         hiddenInput.value = JSON.stringify(allAbsenceRecords);
       }
 
-      // 8. 清空圖片輸入，方便下一次上傳
+
+      // ⭐ 寫入統計資料給後端
+      const statsInput = document.getElementById("absence_stats_json");
+      if (statsInput) {
+        statsInput.value = JSON.stringify(absenceStats);
+      }
+
+      // 8. 清空圖片輸入
       proof_image_input.value = '';
-      // ------------------------------------------------------------------
+
+      // ⭐⭐⭐ 最重要：送出資料給後端 ⭐⭐⭐
+      const formData = new FormData();
+      formData.append("absence_date", absence_date);
+      formData.append("absence_type", absence_type);
+      formData.append("duration_units", duration_units_int);
+      formData.append("reason", reason);
+      formData.append("absence_stats_json", JSON.stringify(absenceStats));
+      formData.append("absence_records_json", JSON.stringify(allAbsenceRecords));
+      formData.append("proof_image", document.getElementById('proof_image').files[0])
+
+      if (proof_image_file) {
+        formData.append("proof_image", proof_image_file);
+      }
+
+      fetch("/api/submit_absence_record", {
+        method: "POST",
+        body: formData
+      })
+        .then(res => res.json())
+        .then(data => {
+          if (data.success) {
+            console.log("缺勤紀錄成功寫入資料庫");
+            loadAbsenceStats();
+            loadAbsenceRecordsList();
+          } else {
+            alert("缺勤紀錄提交失敗：" + data.message);
+          }
+        })
+        .catch(err => {
+          console.error("提交缺勤紀錄錯誤:", err);
+          alert("提交缺勤紀錄至伺服器時發生錯誤");
+        });
 
 
       // 顯示本地更新成功提示
@@ -1111,8 +1150,8 @@
     // =========================================================================
     loadPersonalTemplate();
     loadResumeRecords();
-    loadAbsenceStats();
-    loadAbsenceRecordsList();
+    console.log("缺勤紀錄成功寫入資料庫");
+    loadAbsenceRecordsList(); 
   </script>
 </body>
 
