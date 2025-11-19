@@ -517,6 +517,19 @@ def manage_vendor_page():
         return redirect(url_for('auth_bp.login_page'))
     return render_template('user_shared/manage_vendor.html')
 
+
+@users_bp.route('/teacher/company/<int:company_id>')
+def teacher_company_detail_page(company_id):
+    """
+    指導老師、科助查看單一廠商詳細資訊的頁面。
+    """
+    if 'username' not in session:
+        return redirect(url_for('auth_bp.login_page'))
+    allowed_roles = ['teacher', 'ta']
+    if session.get('role') not in allowed_roles:
+        return redirect(url_for('auth_bp.login_page'))
+    return render_template('user_shared/teacher_company_detail.html', company_id=company_id)
+
 # -------------------------
 # API - 獲取所有公開的職缺（給指導老師、科助查看）
 # -------------------------
@@ -634,6 +647,108 @@ def get_public_positions():
     except Exception as exc:
         print(f"❌ 獲取公開職缺失敗：{exc}")
         return jsonify({"success": False, "message": f"載入失敗：{exc}"}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+
+@users_bp.route('/api/public/company/<int:company_id>', methods=['GET'])
+def get_public_company(company_id):
+    """
+    取得指定公司的詳細資料與職缺，僅供指導老師、科助使用。
+    """
+    if 'username' not in session:
+        return jsonify({"success": False, "message": "未登入"}), 401
+
+    allowed_roles = ['teacher', 'ta']
+    role = session.get('role')
+    if role not in allowed_roles:
+        return jsonify({"success": False, "message": "無權限"}), 403
+
+    user_id = session.get('user_id')
+
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        company_conditions = ["ic.id = %s", "ic.status = 'approved'"]
+        params = [company_id]
+        if role == 'teacher':
+            company_conditions.append("ic.advisor_user_id = %s")
+            params.append(user_id)
+
+        cursor.execute(f"""
+            SELECT
+                ic.id,
+                ic.company_name,
+                ic.description,
+                ic.location,
+                ic.contact_person,
+                ic.contact_title,
+                ic.contact_email,
+                ic.contact_phone,
+                ic.reviewed_at,
+                ic.submitted_at
+            FROM internship_companies ic
+            WHERE {' AND '.join(company_conditions)}
+            LIMIT 1
+        """, tuple(params))
+        company = cursor.fetchone()
+
+        if not company:
+            return jsonify({"success": False, "message": "找不到公司資料"}), 404
+
+        cursor.execute("""
+            SELECT
+                ij.id,
+                ij.title,
+                ij.slots,
+                ij.description,
+                ij.period,
+                ij.work_time,
+                ij.salary,
+                ij.remark,
+                ij.is_active
+            FROM internship_jobs ij
+            WHERE ij.company_id = %s
+            ORDER BY ij.is_active DESC, ij.title
+        """, (company_id,))
+        jobs = cursor.fetchall() or []
+
+        company_payload = {
+            "id": company["id"],
+            "name": company["company_name"],
+            "description": company.get("description") or "",
+            "location": company.get("location") or "",
+            "contact_person": company.get("contact_person") or "",
+            "contact_title": company.get("contact_title") or "",
+            "contact_email": company.get("contact_email") or "",
+            "contact_phone": company.get("contact_phone") or "",
+            "submitted_at": company.get("submitted_at"),
+            "reviewed_at": company.get("reviewed_at")
+        }
+
+        job_items = []
+        for job in jobs:
+            job_items.append({
+                "id": job["id"],
+                "title": job["title"],
+                "slots": job["slots"],
+                "description": job.get("description") or "",
+                "period": job.get("period") or "",
+                "work_time": job.get("work_time") or "",
+                "salary": str(job["salary"]) if job.get("salary") not in (None, "") else "",
+                "remark": job.get("remark") or "",
+                "is_active": bool(job.get("is_active"))
+            })
+
+        return jsonify({
+            "success": True,
+            "company": company_payload,
+            "jobs": job_items
+        })
+    except Exception as exc:
+        print(f"❌ 取得公司詳細資料失敗：{exc}")
+        return jsonify({"success": False, "message": "載入失敗，請稍後再試"}), 500
     finally:
         cursor.close()
         conn.close()

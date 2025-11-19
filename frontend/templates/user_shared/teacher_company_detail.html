@@ -1,0 +1,543 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>智慧實習平台 | 公司詳情</title>
+  <style>
+    :root {
+      --color-primary: #0066cc;
+      --color-primary-dark: #024689;
+      --color-border: #e2e8f0;
+      --color-bg: #f5f7fb;
+      --color-card: #ffffff;
+      --color-text: #1f2933;
+      --color-muted: #64748b;
+      --color-success: #16a34a;
+      --color-danger: #dc2626;
+      --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.08);
+      --shadow-md: 0 8px 24px rgba(15, 23, 42, 0.08);
+      --radius-md: 12px;
+      --radius-lg: 18px;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Inter', 'Noto Sans TC', sans-serif;
+      background: var(--color-bg);
+      color: var(--color-text);
+      margin: 0;
+      min-height: 100vh;
+    }
+
+    a {
+      color: inherit;
+      text-decoration: none;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 0 1rem;
+    }
+
+    .top-bar {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 60px;
+      background-color: #fff;
+      z-index: 1200;
+      display: flex;
+      align-items: center;
+      box-shadow: 0 1px 4px rgba(15, 23, 42, 0.12);
+    }
+
+    .top-bar>.container {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 24px;
+      height: 100%;
+    }
+
+    .top-bar-right {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-weight: 600;
+    }
+
+    #login-avatar {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      object-fit: cover;
+      cursor: pointer;
+      border: 2px solid transparent;
+      transition: border-color 0.2s ease;
+    }
+
+    #login-avatar:hover {
+      border-color: var(--color-primary);
+    }
+
+    main.company-detail-container {
+      padding: 96px 0 64px;
+      display: grid;
+      gap: 24px;
+    }
+
+    .back-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-weight: 600;
+      color: var(--color-primary);
+    }
+
+    .company-hero {
+      background: var(--color-card);
+      border-radius: var(--radius-lg);
+      border: 1px solid var(--color-border);
+      padding: 32px;
+      box-shadow: var(--shadow-md);
+      display: grid;
+      gap: 16px;
+    }
+
+    .company-hero h1 {
+      margin: 0;
+      font-size: 2rem;
+    }
+
+    .hero-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      color: var(--color-muted);
+      font-size: 0.95rem;
+    }
+
+    .hero-description {
+      font-size: 1rem;
+      line-height: 1.7;
+    }
+
+    .info-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 16px;
+    }
+
+    .info-card {
+      background: #f8fbff;
+      border-radius: var(--radius-md);
+      border: 1px solid #dee7f3;
+      padding: 16px;
+    }
+
+    .info-card span {
+      display: block;
+    }
+
+    .info-label {
+      font-size: 0.85rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--color-muted);
+      margin-bottom: 6px;
+    }
+
+    .info-value {
+      font-weight: 600;
+      color: var(--color-text);
+    }
+
+    .panel {
+      background: var(--color-card);
+      border-radius: var(--radius-lg);
+      border: 1px solid var(--color-border);
+      padding: 28px;
+      box-shadow: var(--shadow-md);
+    }
+
+    .panel-header {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+
+    .panel-header h2 {
+      margin: 0;
+    }
+
+    .jobs-list {
+      display: grid;
+      gap: 20px;
+    }
+
+    .job-card {
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-md);
+      padding: 20px;
+      background: #f8fafc;
+    }
+
+    .job-card h3 {
+      margin: 0 0 10px;
+    }
+
+    .job-meta {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 12px;
+      font-size: 0.9rem;
+      color: var(--color-muted);
+      margin-bottom: 12px;
+    }
+
+    .job-section {
+      margin-top: 12px;
+      font-size: 0.92rem;
+      line-height: 1.6;
+    }
+
+    .status-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-size: 0.8rem;
+      font-weight: 600;
+    }
+
+    .status-pill.active {
+      background: rgba(22, 163, 74, 0.15);
+      color: var(--color-success);
+    }
+
+    .status-pill.inactive {
+      background: rgba(100, 116, 139, 0.15);
+      color: var(--color-muted);
+    }
+
+    .empty-state {
+      padding: 48px;
+      text-align: center;
+      color: var(--color-muted);
+    }
+
+    .toast {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      min-width: 240px;
+      max-width: 360px;
+      padding: 14px 16px;
+      background: var(--color-text);
+      color: #fff;
+      border-radius: 12px;
+      box-shadow: 0 12px 32px rgba(15, 23, 42, 0.2);
+      display: none;
+      z-index: 1500;
+      font-weight: 600;
+    }
+
+    .toast.show {
+      display: block;
+    }
+
+    .toast.success {
+      background: var(--color-success);
+    }
+
+    .toast.error {
+      background: var(--color-danger);
+    }
+
+    @media (max-width: 768px) {
+      .company-hero {
+        padding: 24px;
+      }
+
+      .panel {
+        padding: 22px;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="top-bar">
+    <div class="container">
+      <div></div>
+      <div class="top-bar-right">
+        <a href="/profile">
+          <img src="{{ url_for('static', filename='images/avatar.png') }}" alt="頭像" id="login-avatar" />
+        </a>
+        <div class="dropdown" style="position: relative;">
+          <button id="accountDropdownBtn" class="btn-link" aria-expanded="false"
+            style="background:none;border:1px solid var(--color-primary);padding:0.3rem 0.7rem;border-radius:6px;color:var(--color-primary);cursor:pointer;">帳號
+            ▾</button>
+          <div id="accountDropdownMenu" class="dropdown-menu"
+            style="position:absolute; right:0; top:120%; background:#fff; border:1px solid #ccc; border-radius:10px; padding:8px; min-width:180px; display:none; box-shadow:0 12px 28px rgba(15,23,42,0.16);">
+            <a href="/profile" class="btn-link"
+              style="display:block; border:none; margin:4px 0; text-decoration:none;">個人資料</a>
+            <a href="/logout" class="btn-link"
+              style="display:block; border:none; margin:4px 0; text-decoration:none;">登出</a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <main class="company-detail-container container" data-company-id="{{ company_id }}">
+    <a class="back-link" href="/manage_vendor">← 返回廠商職缺列表</a>
+
+    <section class="company-hero" id="companyHero">
+      <div>
+        <span class="hero-meta">公司資訊載入中...</span>
+      </div>
+    </section>
+
+    <section class="panel" aria-label="職缺清單">
+      <div class="panel-header">
+        <h2>提供中的職缺</h2>
+        <span id="jobsCount" style="color:var(--color-muted);">0 個職缺</span>
+      </div>
+      <div id="jobsContainer">
+        <div class="empty-state">
+          <p>職缺資料載入中...</p>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <script>
+    (() => {
+      'use strict';
+
+      const COMPANY_ID = {{ company_id | tojson }};
+
+      const state = {
+        company: null,
+        jobs: []
+      };
+
+      const els = {
+        companyHero: document.getElementById('companyHero'),
+        jobsContainer: document.getElementById('jobsContainer'),
+        jobsCount: document.getElementById('jobsCount'),
+        toast: document.getElementById('toast')
+      };
+
+      function showToast(message, type = 'info') {
+        if (!els.toast) return;
+        els.toast.textContent = message;
+        els.toast.className = `toast show ${type}`;
+        clearTimeout(els.toast._timer);
+        els.toast._timer = setTimeout(() => {
+          els.toast.classList.remove('show');
+        }, 3600);
+      }
+
+      function escapeHtml(str) {
+        if (typeof str !== 'string') return '';
+        return str.replace(/[&<>"']/g, (char) => {
+          const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
+          return map[char] || char;
+        });
+      }
+
+      function formatText(value, defaultText = '—') {
+        if (value === null || value === undefined || value === '') return defaultText;
+        return escapeHtml(String(value));
+      }
+
+      function renderCompany() {
+        const company = state.company;
+        if (!company) {
+          els.companyHero.innerHTML = `
+            <div class="empty-state" style="padding:24px;">
+              <p>找不到公司資料。</p>
+            </div>
+          `;
+          return;
+        }
+
+        const description = company.description || '尚未提供公司簡介。';
+        const contactBlocks = [
+          { label: '聯絡人', value: [company.contact_person, company.contact_title].filter(Boolean).join(' / ') || '—' },
+          { label: '電子郵件', value: company.contact_email || '—' },
+          { label: '聯絡電話', value: company.contact_phone || '—' },
+          { label: '公司地址', value: company.location || '—' }
+        ];
+
+        els.companyHero.innerHTML = `
+          <div>
+            <div class="hero-meta">公司編號 #${company.id}</div>
+            <h1>${escapeHtml(company.name)}</h1>
+            <p class="hero-description">${escapeHtml(description)}</p>
+          </div>
+          <div class="info-grid">
+            ${contactBlocks.map(block => `
+              <div class="info-card">
+                <span class="info-label">${escapeHtml(block.label)}</span>
+                <span class="info-value">${escapeHtml(block.value)}</span>
+              </div>
+            `).join('')}
+          </div>
+        `;
+      }
+
+      function renderJobs() {
+        const jobs = state.jobs || [];
+        if (els.jobsCount) {
+          els.jobsCount.textContent = `${jobs.length} 個職缺`;
+        }
+        if (!jobs.length) {
+          els.jobsContainer.innerHTML = `
+            <div class="empty-state">
+              <p>目前沒有可供顯示的職缺。</p>
+            </div>
+          `;
+          return;
+        }
+
+        els.jobsContainer.innerHTML = `
+          <div class="jobs-list">
+            ${jobs.map(job => `
+              <article class="job-card">
+                <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;">
+                  <div>
+                    <h3>${escapeHtml(job.title)}</h3>
+                    <div class="status-pill ${job.is_active ? 'active' : 'inactive'}">
+                      ${job.is_active ? '啟用中' : '未啟用'}
+                    </div>
+                  </div>
+                  <div style="color:var(--color-muted);font-size:0.9rem;">職缺編號 #${job.id}</div>
+                </div>
+                <div class="job-meta">
+                  <span>名額：${job.slots ?? 0} 人</span>
+                  <span>期間：${formatText(job.period)}</span>
+                  <span>上班時間：${formatText(job.work_time)}</span>
+                  <span>薪資：${formatText(job.salary)}</span>
+                </div>
+                ${job.description ? `<div class="job-section"><strong>職務說明：</strong>${escapeHtml(job.description)}</div>` : ''}
+                ${job.remark ? `<div class="job-section"><strong>備註：</strong>${escapeHtml(job.remark)}</div>` : ''}
+              </article>
+            `).join('')}
+          </div>
+        `;
+      }
+
+      function setLoading() {
+        if (els.companyHero) {
+          els.companyHero.innerHTML = `
+            <div class="hero-meta">公司資料載入中...</div>
+          `;
+        }
+        if (els.jobsContainer) {
+          els.jobsContainer.innerHTML = `
+            <div class="empty-state">
+              <p>職缺資料載入中...</p>
+            </div>
+          `;
+        }
+      }
+
+      async function loadDetail() {
+        setLoading();
+        try {
+          const response = await fetch(`/api/public/company/${COMPANY_ID}`, {
+            headers: { 'Accept': 'application/json' },
+            credentials: 'include'
+          });
+          const result = await response.json();
+          if (!response.ok || !result.success) {
+            throw new Error(result.message || '載入失敗');
+          }
+          state.company = result.company;
+          state.jobs = result.jobs || [];
+          renderCompany();
+          renderJobs();
+        } catch (error) {
+          showToast(error.message || '載入資料失敗', 'error');
+          if (els.companyHero) {
+            els.companyHero.innerHTML = `
+              <div class="empty-state" style="padding:24px;">
+                <p>無法載入公司資訊，請稍後再試。</p>
+              </div>
+            `;
+          }
+          if (els.jobsContainer) {
+            els.jobsContainer.innerHTML = `
+              <div class="empty-state">
+                <p>無法載入職缺資訊。</p>
+              </div>
+            `;
+          }
+        }
+      }
+
+      function initAccountDropdown() {
+        const btn = document.getElementById('accountDropdownBtn');
+        const menu = document.getElementById('accountDropdownMenu');
+        if (!btn || !menu) return;
+        btn.addEventListener('click', () => {
+          const open = menu.style.display === 'block';
+          menu.style.display = open ? 'none' : 'block';
+          btn.setAttribute('aria-expanded', String(!open));
+        });
+        document.addEventListener('click', (event) => {
+          if (!menu.contains(event.target) && !btn.contains(event.target)) {
+            menu.style.display = 'none';
+            btn.setAttribute('aria-expanded', 'false');
+          }
+        });
+      }
+
+      function loadAvatar() {
+        fetch('/api/profile', { credentials: 'include' })
+          .then((res) => res.ok ? res.json() : Promise.reject())
+          .then((data) => {
+            if (data && data.success && data.user && data.user.avatar_url) {
+              const rawUrl = data.user.avatar_url.startsWith('http')
+                ? data.user.avatar_url
+                : window.location.origin + data.user.avatar_url;
+              const avatarUrl = `${rawUrl}${rawUrl.includes('?') ? '&' : '?'}t=${Date.now()}`;
+              const avatar = document.getElementById('login-avatar');
+              if (avatar) {
+                avatar.src = avatarUrl;
+              }
+            }
+          })
+          .catch(() => { });
+      }
+
+      function init() {
+        initAccountDropdown();
+        loadAvatar();
+        loadDetail();
+      }
+
+      document.addEventListener('DOMContentLoaded', init);
+    })();
+  </script>
+</body>
+
+</html>
+

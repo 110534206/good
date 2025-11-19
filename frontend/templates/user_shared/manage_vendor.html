@@ -117,284 +117,152 @@
 
     .page-header {
       display: flex;
-      flex-wrap: wrap;
-      align-items: center;
-      justify-content: space-between;
-      gap: 16px;
-      margin-bottom: 20px;
+      flex-direction: column;
+      gap: 12px;
+      padding: 32px;
+      background: linear-gradient(135deg, #f3f8ff 0%, #fff 60%);
+      border-radius: var(--radius-lg);
+      border: 1px solid var(--color-border);
+      box-shadow: var(--shadow-md);
+      margin-bottom: 32px;
     }
 
     .page-header h1 {
-      font-size: 1.75rem;
+      font-size: 2.1rem;
       margin: 0;
     }
 
     .page-header p {
-      margin: 4px 0 0;
+      margin: 0;
       color: var(--color-muted);
+      font-size: 1rem;
+    }
+
+    .page-eyebrow {
+      font-size: 0.85rem;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: var(--color-primary);
+      font-weight: 600;
+    }
+
+    .summary-section-header {
+      text-align: center;
+      margin-bottom: 16px;
+    }
+
+    .summary-section-header h2 {
+      margin: 0;
+      font-size: 1.35rem;
+    }
+
+    .summary-section-header p {
+      margin: 8px 0 0;
+      color: var(--color-muted);
+      font-size: 0.95rem;
     }
 
     .summary-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-      gap: 16px;
-      margin-bottom: 24px;
-    }
-
-    .summary-card {
-      background: var(--color-card);
-      border-radius: var(--radius-md);
-      padding: 20px;
-      box-shadow: var(--shadow-sm);
-      border: 1px solid var(--color-border);
-    }
-
-    .summary-card .label {
-      font-size: 0.9rem;
-      color: var(--color-muted);
-      margin-bottom: 10px;
-    }
-
-    .summary-card .value {
-      font-size: 1.8rem;
-      font-weight: 700;
-    }
-
-    .panel {
-      background: var(--color-card);
-      border-radius: var(--radius-lg);
-      padding: 24px;
-      box-shadow: var(--shadow-md);
-      border: 1px solid var(--color-border);
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 20px;
       margin-bottom: 32px;
     }
 
-    .panel-header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 12px;
-      margin-bottom: 16px;
-    }
-
-    .panel-header h2 {
-      font-size: 1.2rem;
-      margin: 0;
-    }
-
-    .filter-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-      gap: 16px;
-    }
-
-    .filter-grid label {
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
-      font-weight: 600;
-      color: var(--color-muted);
-    }
-
-    select,
-    input[type="text"] {
-      width: 100%;
-      padding: 10px 12px;
-      border-radius: 8px;
-      border: 1px solid var(--color-border);
-      background: #fff;
-      font-size: 0.95rem;
-      transition: border-color 0.2s ease, box-shadow 0.2s ease;
-    }
-
-    select:focus,
-    input[type="text"]:focus {
-      border-color: var(--color-primary);
-      outline: none;
-      box-shadow: 0 0 0 3px rgba(0, 102, 204, 0.15);
-    }
-
-    .table-wrapper {
-      overflow-x: auto;
-    }
-
-    table.positions-table {
-      width: 100%;
-      border-collapse: collapse;
-      min-width: 760px;
-    }
-
-    table.positions-table thead {
-      background: #f1f5f9;
-    }
-
-    table.positions-table th,
-    table.positions-table td {
-      padding: 14px 16px;
-      text-align: left;
-      border-bottom: 1px solid var(--color-border);
-      vertical-align: top;
-    }
-
-    table.positions-table tbody tr:hover {
-      background: rgba(15, 23, 42, 0.02);
-    }
-
-    table.positions-table .title-cell {
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
-    }
-
-    .status-badge {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      padding: 4px 10px;
-      border-radius: 999px;
-      font-size: 0.8rem;
-      font-weight: 600;
-    }
-
-    .status-badge.active {
-      background: rgba(34, 197, 94, 0.12);
-      color: var(--color-success);
-    }
-
-    .detail-row td {
-      background: #f8fafc;
-    }
-
-    .detail-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-      gap: 12px 20px;
-      font-size: 0.92rem;
-      color: var(--color-muted);
-    }
-
-    .detail-label {
-      display: block;
-      font-weight: 600;
-      margin-bottom: 6px;
-      color: var(--color-text);
-    }
-
-    .btn {
-      border-radius: 8px;
-      padding: 10px 18px;
-      font-weight: 600;
-      font-size: 0.95rem;
-      cursor: pointer;
-      border: none;
-      transition: transform 0.15s ease, box-shadow 0.15s ease;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      gap: 6px;
-    }
-
-    .btn-ghost {
-      background: rgba(15, 23, 42, 0.05);
-      color: var(--color-text);
-    }
-
-    .btn-ghost:hover:not(:disabled) {
-      background: rgba(15, 23, 42, 0.08);
-    }
-
-    .companies-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-      gap: 24px;
-      margin-top: 16px;
-    }
-
-    .company-card {
+    .summary-card {
+      position: relative;
       background: var(--color-card);
       border-radius: var(--radius-lg);
-      padding: 24px;
-      box-shadow: var(--shadow-md);
+      padding: 28px 24px;
       border: 1px solid var(--color-border);
+      box-shadow: var(--shadow-md);
+      overflow: hidden;
       transition: transform 0.2s ease, box-shadow 0.2s ease;
+      text-decoration: none;
+      color: inherit;
+      display: block;
     }
 
-    .company-card:hover {
+    .summary-card:hover {
       transform: translateY(-2px);
-      box-shadow: 0 12px 32px rgba(15, 23, 42, 0.12);
+      box-shadow: 0 14px 32px rgba(15, 23, 42, 0.15);
     }
 
-    .company-header {
-      border-bottom: 2px solid var(--color-border);
-      padding-bottom: 16px;
-      margin-bottom: 20px;
+    .summary-card::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      border-radius: inherit;
+      opacity: 0.85;
+      pointer-events: none;
     }
 
-    .company-name {
-      font-size: 1.3rem;
-      font-weight: 700;
-      color: var(--color-text);
-      margin: 0 0 8px 0;
+    .summary-card--sky::after {
+      background: linear-gradient(135deg, rgba(0, 102, 204, 0.08), rgba(0, 102, 204, 0));
     }
 
-    .company-job-count {
-      font-size: 0.9rem;
-      color: var(--color-muted);
-      margin: 0;
+    .summary-card--mint::after {
+      background: linear-gradient(135deg, rgba(22, 163, 74, 0.08), rgba(22, 163, 74, 0));
     }
 
-    .jobs-list {
-      display: flex;
-      flex-direction: column;
-      gap: 20px;
+    .summary-card--gold::after {
+      background: linear-gradient(135deg, rgba(249, 115, 22, 0.08), rgba(249, 115, 22, 0));
     }
 
-    .job-item {
-      padding: 16px;
-      background: #f8fafc;
-      border-radius: var(--radius-md);
-      border-left: 4px solid var(--color-primary);
-    }
-
-    .job-title {
-      font-size: 1.05rem;
-      font-weight: 700;
-      color: var(--color-text);
-      margin: 0 0 12px 0;
-    }
-
-    .job-info {
+    .summary-card-content {
+      position: relative;
       display: grid;
-      grid-template-columns: repeat(2, 1fr);
       gap: 12px;
-      font-size: 0.9rem;
-      color: var(--color-muted);
-      margin-bottom: 12px;
     }
 
-    .job-info-item {
+    .summary-card-title {
       display: flex;
       flex-direction: column;
       gap: 4px;
     }
 
-    .job-info-label {
-      font-weight: 600;
-      color: var(--color-text);
-      font-size: 0.85rem;
+    .summary-card-title span {
+      font-size: 0.9rem;
+      color: var(--color-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
     }
 
-    .job-info-value {
+    .summary-card-title h3 {
+      margin: 0;
+      font-size: 1.25rem;
+    }
+
+    .summary-card-note {
+      font-size: 0.92rem;
       color: var(--color-muted);
     }
 
-    .job-description {
-      font-size: 0.9rem;
-      color: var(--color-text);
-      line-height: 1.6;
-      margin: 12px 0 0 0;
+    .summary-card-footer {
+      position: relative;
+      margin-top: 16px;
       padding-top: 12px;
       border-top: 1px solid var(--color-border);
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.9rem;
+      color: var(--color-muted);
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .summary-card-footer strong {
+      color: var(--color-text);
+    }
+
+    .summary-card.disabled {
+      cursor: default;
+      opacity: 0.85;
+    }
+
+    .summary-card.disabled:hover {
+      transform: none;
+      box-shadow: var(--shadow-md);
     }
 
     .empty-state {
@@ -504,55 +372,27 @@
     </div>
   </div>
 
+
+
   <main class="management-container container">
-    <header class="page-header">
-      <div>
-        <h1>廠商職缺瀏覽</h1>
-        <p>查看所有已審核通過的實習職缺資訊。</p>
-      </div>
-    </header>
+    <div>
+      <h1>實習廠商管理</h1>
+    </div>
 
-    <section class="summary-grid" aria-label="職缺統計總覽">
-      <div class="summary-card">
-        <p class="label">總職缺數</p>
-        <p class="value" id="summaryTotal">0</p>
-      </div>
-      <div class="summary-card">
-        <p class="label">啟用中</p>
-        <p class="value" id="summaryActive">0</p>
+    <section aria-label="廠商捷徑">
+      <div class="summary-grid" id="companySummaryGrid">
+        <article class="summary-card summary-card--sky disabled">
+          <div class="summary-card-content">
+            <div class="summary-card-title">
+              <span>loading</span>
+              <h3>資料載入中</h3>
+            </div>
+            <p class="summary-card-note">待資料載入後顯示可點選的公司卡片。</p>
+          </div>
+        </article>
       </div>
     </section>
 
-    <section class="panel" aria-labelledby="filterTitle">
-      <div class="panel-header">
-        <h2 id="filterTitle">篩選條件</h2>
-        <button id="resetFilters" class="btn btn-ghost" type="button">重設篩選</button>
-      </div>
-      <div class="filter-grid">
-        <label for="filterCompany">
-          所屬公司
-          <select id="filterCompany">
-            <option value="all">全部</option>
-          </select>
-        </label>
-        <label for="filterKeyword">
-          關鍵字搜尋
-          <input id="filterKeyword" type="text" placeholder="輸入職缺名稱、內容、備註或公司名稱關鍵字" />
-        </label>
-      </div>
-    </section>
-
-    <section class="panel" aria-label="職缺列表">
-      <div class="panel-header">
-        <h2>廠商職缺列表</h2>
-        <span class="flag" id="filterSummary">全部職缺</span>
-      </div>
-      <div id="companiesContainer" class="companies-grid">
-        <div class="empty-state">
-          <p>資料載入中...</p>
-        </div>
-      </div>
-    </section>
   </main>
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
@@ -562,24 +402,18 @@
       'use strict';
 
       const state = {
-        companies: [],
-        jobs: [],
-        stats: { total: 0, active: 0 },
-        filters: { company: 'all', keyword: '' },
+        companies: []
       };
 
       const els = {
-        filterCompany: document.getElementById('filterCompany'),
-        filterKeyword: document.getElementById('filterKeyword'),
-        filterSummary: document.getElementById('filterSummary'),
-        resetFilters: document.getElementById('resetFilters'),
-        companiesContainer: document.getElementById('companiesContainer'),
-        summaryTotal: document.getElementById('summaryTotal'),
-        summaryActive: document.getElementById('summaryActive'),
+        companySummaryGrid: document.getElementById('companySummaryGrid'),
         toast: document.getElementById('toast')
       };
 
-      let searchTimer = null;
+      const featuredCompanies = [
+        { label: '人人人', account: 'vendor' },
+        { label: '嘻嘻嘻', account: 'vendorA' }
+      ];
 
       function escapeHtml(str) {
         if (typeof str !== 'string') return '';
@@ -605,143 +439,85 @@
         }, 3600);
       }
 
-      function setLoading() {
-        if (!els.companiesContainer) return;
-        els.companiesContainer.innerHTML = `
-          <div class="empty-state" style="grid-column: 1 / -1;">
-            <p>資料載入中...</p>
-          </div>
-        `;
-      }
+      function renderCompanyShortcuts() {
+        const container = els.companySummaryGrid;
+        if (!container) return;
+        const colors = ['sky', 'mint', 'gold'];
+        const cards = [];
 
-      function updateCompaniesControls() {
-        const { companies } = state;
-        const companyOptions = ['<option value="all">全部</option>'];
-        companies.forEach((company) => {
-          companyOptions.push(
-            `<option value="${company.id}">${escapeHtml(company.name || `公司 #${company.id}`)}</option>`
+        const matchedCompanyIds = new Set();
+        featuredCompanies.forEach((feature, index) => {
+          const company = (state.companies || []).find(
+            (c) => (c.name || '').trim() === feature.label
           );
+          if (company) {
+            matchedCompanyIds.add(company.id);
+          }
+          cards.push(renderCard({
+            company,
+            color: colors[index % colors.length],
+            label: feature.label,
+            noteWhenMissing: `尚未找到帳號 ${feature.account} 對應的公司`,
+            noteWhenAvailable: `由帳號 ${feature.account} 提供的合作廠商`
+          }));
         });
-        const selectedFilter = state.filters.company;
-        els.filterCompany.innerHTML = companyOptions.join('');
-        els.filterCompany.value = selectedFilter && companies.some((c) => String(c.id) === String(selectedFilter))
-          ? selectedFilter
-          : 'all';
-      }
 
-      function renderStats() {
-        const { stats } = state;
-        els.summaryTotal.textContent = stats.total ?? 0;
-        els.summaryActive.textContent = stats.active ?? 0;
-      }
+        (state.companies || []).forEach((company, idx) => {
+          if (matchedCompanyIds.has(company.id)) return;
+          cards.push(renderCard({
+            company,
+            color: colors[(idx + featuredCompanies.length) % colors.length],
+            label: company.name || `公司 #${company.id}`,
+            noteWhenAvailable: '點擊查看詳細資訊'
+          }));
+        });
 
-      function formatSalary(value) {
-        if (value === null || value === undefined || value === '') {
-          return '—';
+        if (!cards.length) {
+          cards.push(`
+            <article class="summary-card summary-card--sky disabled">
+              <div class="summary-card-content">
+                <div class="summary-card-title">
+                  <span>placeholder</span>
+                  <h3>尚無合作廠商</h3>
+                </div>
+                <p class="summary-card-note">一旦有合作廠商通過審核，即會顯示於此。</p>
+              </div>
+            </article>
+          `);
         }
-        if (typeof value === 'number') {
-          return value.toLocaleString('zh-TW');
-        }
-        return escapeHtml(String(value));
-      }
 
-      function renderPositions() {
-        const jobs = state.jobs || [];
-        if (!jobs.length) {
-          els.companiesContainer.innerHTML = `
-            <div class="empty-state" style="grid-column: 1 / -1;">
-              <p>尚無符合條件的職缺資料。</p>
+        container.innerHTML = cards.join('');
+
+        function renderCard({ company, color, label, noteWhenMissing = '尚未頂上任何資料，請待廠商建立後再試', noteWhenAvailable = '點擊前往公司詳細資料' }) {
+          const title = escapeHtml(label || company?.name || `公司 #${company?.id ?? ''}`);
+          const note = company && company.id ? noteWhenAvailable : noteWhenMissing;
+          const content = `
+            <div class="summary-card-content">
+              <div class="summary-card-title">
+                <span>${company && company.id ? 'company' : 'placeholder'}</span>
+                <h3>${title}</h3>
+              </div>
+              <p class="summary-card-note">${escapeHtml(note)}</p>
             </div>
           `;
-          return;
-        }
-
-        // 按公司分組職缺
-        const companiesMap = new Map();
-        jobs.forEach((job) => {
-          const companyId = job.company_id;
-          if (!companiesMap.has(companyId)) {
-            companiesMap.set(companyId, {
-              id: companyId,
-              name: job.company_name,
-              jobs: []
-            });
+          if (!company || !company.id) {
+            return `<article class="summary-card summary-card--${color} disabled">${content}</article>`;
           }
-          companiesMap.get(companyId).jobs.push(job);
-        });
-
-        // 渲染公司卡片
-        const cards = [];
-        companiesMap.forEach((company) => {
-          const jobsHtml = company.jobs.map((job) => {
-            const salaryText = formatSalary(job.salary);
-            const periodText = job.period ? escapeHtml(job.period) : '—';
-            const workTimeText = job.work_time ? escapeHtml(job.work_time) : '—';
-            const descriptionText = job.description ? escapeHtml(job.description) : '尚未提供';
-            const remarkText = job.remark ? escapeHtml(job.remark) : '—';
-
-            return `
-              <div class="job-item">
-                <h3 class="job-title">${escapeHtml(job.title)}</h3>
-                <div class="job-info">
-                  <div class="job-info-item">
-                    <span class="job-info-label">名額</span>
-                    <span class="job-info-value">${job.slots ?? 0} 人</span>
-                  </div>
-                  <div class="job-info-item">
-                    <span class="job-info-label">薪資</span>
-                    <span class="job-info-value">${salaryText}</span>
-                  </div>
-                  <div class="job-info-item">
-                    <span class="job-info-label">實習期間</span>
-                    <span class="job-info-value">${periodText}</span>
-                  </div>
-                  <div class="job-info-item">
-                    <span class="job-info-label">上班時間</span>
-                    <span class="job-info-value">${workTimeText}</span>
-                  </div>
-                </div>
-                ${descriptionText !== '尚未提供' ? `
-                  <div class="job-description">
-                    <strong>職務說明：</strong>${descriptionText}
-                  </div>
-                ` : ''}
-                ${remarkText !== '—' ? `
-                  <div class="job-description">
-                    <strong>備註：</strong>${remarkText}
-                  </div>
-                ` : ''}
+          return `
+            <a class="summary-card summary-card--${color}" href="/teacher/company/${company.id}" aria-label="查看${title}公司資料">
+              ${content}
+              <div class="summary-card-footer">
+                <span>公司編號 <strong>${company.id}</strong></span>
+                <span>狀態 <strong>啟用</strong></span>
               </div>
-            `;
-          }).join('');
-
-          cards.push(`
-            <div class="company-card">
-              <div class="company-header">
-                <h2 class="company-name">${escapeHtml(company.name)}</h2>
-                <p class="company-job-count">共 ${company.jobs.length} 個職缺</p>
-              </div>
-              <div class="jobs-list">
-                ${jobsHtml}
-              </div>
-            </div>
-          `);
-        });
-
-        els.companiesContainer.innerHTML = cards.join('');
+            </a>
+          `;
+        }
       }
 
-      async function loadPositions() {
-        setLoading();
-        const params = new URLSearchParams();
-        if (state.filters.company && state.filters.company !== 'all') {
-          params.append('company_id', state.filters.company);
-        }
-        if (state.filters.keyword) {
-          params.append('q', state.filters.keyword.trim());
-        }
+      async function loadCompanies() {
         try {
-          const response = await fetch(`/api/public/positions?${params.toString()}`, {
+          const response = await fetch('/api/public/positions', {
             headers: { 'Accept': 'application/json' },
             credentials: 'include'
           });
@@ -750,58 +526,12 @@
             throw new Error(result.message || '載入失敗');
           }
           state.companies = result.companies || [];
-          state.jobs = result.items || [];
-          state.stats = result.stats || { total: 0, active: 0 };
-
-          updateCompaniesControls();
-          renderStats();
-          renderPositions();
-          updateFilterSummary();
+          renderCompanyShortcuts();
         } catch (error) {
           showToast(error.message || '資料載入失敗，請稍後再試', 'error');
-          els.companiesContainer.innerHTML = `
-            <div class="empty-state" style="grid-column: 1 / -1;">
-              <p>載入資料時發生錯誤，請稍後再試。</p>
-            </div>
-          `;
+          state.companies = [];
+          renderCompanyShortcuts();
         }
-      }
-
-      function updateFilterSummary() {
-        const { companies, filters } = state;
-        const parts = [];
-        if (filters.company === 'all') {
-          parts.push('全部公司');
-        } else {
-          const company = companies.find((c) => String(c.id) === String(filters.company));
-          parts.push(company ? company.name : '指定公司');
-        }
-        if (filters.keyword) {
-          parts.push(`關鍵字：${filters.keyword}`);
-        }
-        els.filterSummary.textContent = parts.join('｜') || '全部職缺';
-      }
-
-      function bindEvents() {
-        els.filterCompany.addEventListener('change', () => {
-          state.filters.company = els.filterCompany.value;
-          loadPositions();
-        });
-
-        els.filterKeyword.addEventListener('input', () => {
-          clearTimeout(searchTimer);
-          searchTimer = setTimeout(() => {
-            state.filters.keyword = els.filterKeyword.value.trim();
-            loadPositions();
-          }, 360);
-        });
-
-        els.resetFilters.addEventListener('click', () => {
-          state.filters = { company: 'all', keyword: '' };
-          els.filterCompany.value = 'all';
-          els.filterKeyword.value = '';
-          loadPositions();
-        });
       }
 
       function initAccountDropdown() {
@@ -841,9 +571,9 @@
 
       function init() {
         initAccountDropdown();
-        bindEvents();
         loadAvatar();
-        loadPositions();
+        renderCompanyShortcuts();
+        loadCompanies();
       }
 
       document.addEventListener('DOMContentLoaded', init);
