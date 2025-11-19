@@ -1,9 +1,11 @@
 <!DOCTYPE html>
 <html lang="zh-Hant">
+
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>智慧實習平台 | 履歷審核</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
   <style>
     * {
       box-sizing: border-box;
@@ -11,1482 +13,457 @@
       padding: 0;
     }
 
+    header {
+      background: #0454a3;
+      color: white;
+      padding: 1rem 2rem;
+      text-align: center;
+      font-size: 1.5rem;
+    }
+
     body {
-      font-family: 'Inter', sans-serif;
-      background: #ffffff;
-      color: #333;
-      overflow-x: hidden;
+      font-family: "Noto Sans TC", sans-serif;
+      background: #f7f9fc;
+      margin: 0;
+      padding: 0;
     }
 
-    a {
-      text-decoration: none;
-      color: inherit;
-    }
-
-    .container {
-      width: 100%;
-      max-width: 1200px;
-      margin: 0 auto;
-      padding: 0 0.75rem;
-    }
-
-    /* 頂端列 */
-    .top-bar {
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 60px;
-      background-color: #fff;
-      z-index: 1100;
-      display: flex;
-      align-items: center;
-      box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
-    }
-
-    .top-bar > .container {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      height: 100%;
-      gap: 30px;
-    }
-
-    .top-bar-left {
-      display: flex;
-      align-items: center;
-      gap: 18px;
-    }
-
-    .brand {
-      font-size: 1.1rem;
-      font-weight: 700;
-      color: #0066cc;
-    }
-
-    .top-bar-left #menu-btn {
-      width: 30px;
-      height: 22px;
-      cursor: pointer;
-      display: flex;
-      flex-direction: column;
-      justify-content: space-between;
-    }
-
-    .top-bar-left #menu-btn span {
-      height: 4px;
-      background-color: #333;
-      border-radius: 2px;
-    }
-
-    .top-bar-right {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      font-weight: 600;
-    }
-
-    .btn-link {
-      color: #0066cc;
-      background-color: transparent;
-      border: 1.5px solid #0066cc;
-      padding: 0.35rem 0.8rem;
-      border-radius: 6px;
-      transition: background-color 0.3s ease, color 0.3s ease;
-      font-size: 0.9rem;
-      cursor: pointer;
-    }
-
-    .btn-link:hover {
-      background-color: #0066cc;
-      color: #fff;
-    }
-
-    .avatar {
-      width: 40px;
-      height: 40px;
-      border-radius: 50%;
-      object-fit: cover;
-      cursor: pointer;
-      margin-top: 6px;
-    }
-
-    /* 側邊選單 */
-    #side-menu {
-      position: fixed;
-      top: 0;
-      left: 0;
-      height: 100vh;
-      width: 320px;
-      max-width: 80vw;
-      background-color: rgba(10, 10, 10, 0.95);
-      backdrop-filter: blur(6px);
-      box-shadow: 3px 0 12px rgb(0 0 0 / 0.7);
-      padding: 2rem 1.5rem;
-      transform: translateX(-100%);
-      transition: transform 0.3s ease-in-out;
-      z-index: 1150;
-      display: flex;
-      flex-direction: column;
-      align-items: flex-start;
-      color: #fff;
-    }
-
-    #side-menu.open {
-      transform: translateX(0);
-    }
-
-    .menu-close {
-      align-self: flex-end;
-      font-size: 1.5rem;
-      cursor: pointer;
-    }
-
-    .menu-section {
-      margin-top: 2rem;
-      width: 100%;
-      display: flex;
-      flex-direction: column;
-      gap: 1rem;
-    }
-
-    .menu-section a {
-      color: rgba(255, 255, 255, 0.85);
-      font-weight: 600;
-      letter-spacing: 0.02em;
-    }
-
-    .menu-section a:hover {
-      color: #fff;
-    }
-
-    /* 內容區 */
-    /* Hero Section - 藍色顯示條樣式 (已修改) */
-    header.hero {
-      position: relative;
-      width: 100%;
-      background-color: #0066cc; /* 藍色背景 */
-      height: 70px; /* 固定高度，形成條狀 */
-      margin-top: 0;
-      margin-bottom: 1rem;
-      display: flex;
-      align-items: center;
-      justify-content: center; /* 垂直置中 */
-      color: #fff;
-      text-align: center; /* 確保文字水平置中 */
-    }
-
-    header.hero h1 {
-      font-size: 1.5rem; /* 調整字體大小 */
-      font-weight: 700;
-      text-shadow: none; /* 移除陰影 */
-    }
-
-    main {
-      padding: 1rem 0 2rem;
-    }
-
-    .page-title {
+    /* 表格樣式 */
+    .table thead th {
       text-align: center;
-      margin-bottom: 2.5rem;
+      background-color: #fafafb;
     }
 
-    .page-title h2 {
-      font-size: 1.8rem;
-      color: #024689;
-      margin-bottom: 0.5rem;
+    .table tbody td {
+      text-align: center;
+      vertical-align: middle;
     }
 
-    .page-title p {
-      color: #666;
-      font-size: 0.95rem;
+    .table-striped>tbody>tr:nth-of-type(odd) {
+      background-color: rgba(0, 0, 0, 0.02);
     }
 
-    .filters {
-      background-color: #f1f6fb;
-      border: 1px solid #cfe0f5;
-      border-radius: 12px;
-      padding: 1.5rem;
-      margin-bottom: 2rem;
-      display: grid;
-      grid-template-columns: repeat(4, minmax(160px, 1fr));
-      gap: 1rem 1.5rem;
-    }
-
-    .filters .field {
-      display: flex;
-      flex-direction: column;
-      gap: 0.5rem;
-    }
-
-    label {
-      font-size: 0.85rem;
+    /* 狀態標籤 */
+    .status-badge {
+      font-size: 0.9em;
+      padding: 0.3em 0.6em;
+      border-radius: 0.5rem;
+      display: inline-block;
       font-weight: 600;
-      color: #024689;
-      letter-spacing: 0.02em;
     }
 
-    input[type="text"],
-    select {
-      width: 100%;
-      padding: 0.55rem 0.65rem;
-      border-radius: 8px;
-      border: 1px solid #bfd0e7;
-      font-size: 0.95rem;
-      transition: border 0.2s ease, box-shadow 0.2s ease;
-    }
-
-    input[type="text"]:focus,
-    select:focus {
-      border-color: #0066cc;
-      box-shadow: 0 0 0 4px rgba(0, 102, 204, 0.15);
-      outline: none;
-    }
-
-    .filters-actions {
-      display: flex;
-      gap: 0.75rem;
-      align-items: flex-end;
-    }
-
-    .btn-primary {
-      background-color: #0066cc;
+    .status-badge.bg-success {
       color: #fff;
-      border: none;
-      padding: 0.65rem 1.4rem;
-      border-radius: 8px;
-      font-weight: 600;
-      cursor: pointer;
-      transition: background-color 0.3s ease, transform 0.15s ease;
     }
 
-    .btn-primary:hover {
-      background-color: #024689;
-    }
-
-    .btn-primary:active {
-      transform: scale(0.98);
-    }
-
-    .btn-secondary {
-      background-color: transparent;
-      color: #024689;
-      border: 1.5px solid #024689;
-      padding: 0.65rem 1.4rem;
-      border-radius: 8px;
-      font-weight: 600;
-      cursor: pointer;
-      transition: background-color 0.3s ease, color 0.3s ease;
-    }
-
-    .btn-secondary:hover {
-      background-color: #edf4fb;
-    }
-
-    /* 統計區 */
-    .stats {
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      flex-wrap: wrap;
-      gap: 1.5rem;
-      margin: 3rem auto 2.5rem;
-      max-width: 720px;
-    }
-
-    .stat-card {
-      width: 220px;
-      height: 120px;
-      background: linear-gradient(130deg, #66b8ff, #a7d5ff);
-      color: #0b3a6a;
-      border-radius: 16px;
-      box-shadow: 0 6px 16px rgba(15, 76, 129, 0.15);
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      text-align: center;
-      padding: 1rem;
-    }
-
-    .stat-card span {
-      display: block;
-      font-size: 0.9rem;
-      margin-bottom: 0.35rem;
-      color: #063055;
-      font-weight: 600;
-    }
-
-    .stat-card strong {
-      font-size: 1.5rem;
-      font-weight: 700;
-      color: #063055;
-    }
-
-    /* 履歷狀態切換表格 */
-    .tabbed-section {
-      background-color: #ffffff;
-      border: 1.5px solid #d7e3f3;
-      border-radius: 16px;
-      padding: 1.5rem;
-      margin: 0 auto 2.5rem;
-      width: 100%;
-      max-width: 1100px;
-      box-shadow: 0 3px 12px rgba(2, 70, 137, 0.08);
-    }
-
-    .tabbed-section header {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      margin-bottom: 1.25rem;
-    }
-
-    .tab-nav {
-      display: flex;
-      width: 100%;
-      border: 1.5px solid #d7e3f3;
-      border-radius: 16px;
-      overflow: hidden;
-      background-color: #ffffff;
-    }
-
-    .tab-button {
-      flex: 1 1 0;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 0.35rem;
-      background: #ffffff;
-      border: none;
-      border-right: 1px solid #d7e3f3;
-      padding: 0.85rem 0.75rem;
-      font-weight: 600;
-      font-size: 0.95rem;
-      color: #4c5b70;
-      cursor: pointer;
-      transition: background-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
-      white-space: nowrap;
-    }
-
-    .tab-button:last-child {
-      border-right: none;
-    }
-
-    .tab-button[data-variant="all"] {
-      color: #5a5247;
-    }
-
-    .tab-button[data-variant="uploaded"] {
-      color: #007ec4;
-    }
-
-    .tab-button[data-variant="reviewed"] {
-      color: #1c8f5f;
-    }
-
-    .tab-button[data-variant="returned"] {
-      color: #c5383c;
-    }
-
-    .tab-button:hover {
-      background-color: #f5f8fc;
-    }
-
-    .tab-button:focus-visible {
-      outline: 2px solid rgba(0, 102, 204, 0.45);
-      outline-offset: -2px;
-    }
-
-    .tab-button.active {
+    .status-badge.bg-danger {
       color: #fff;
-      box-shadow: none;
     }
 
-    .tab-button.active[data-variant="all"] {
-      background: #6b665f;
+    .status-badge.bg-info {
+      color: #fff;
     }
 
-    .tab-button.active[data-variant="uploaded"] {
-      background: #00a0df;
+    .status-badge.bg-secondary {
+      color: #fff;
     }
 
-    .tab-button.active[data-variant="reviewed"] {
-      background: #2cab76;
+    .status-badge.bg-warning {
+      /* 確保黃色 badge 的文字可讀 */
+      color: #212529;
     }
 
-    .tab-button.active[data-variant="returned"] {
-      background: #e24c52;
-    }
-
-    .tab-label {
-      font-size: 0.95rem;
-    }
-
-    .tab-panels {
-      margin-top: 1.5rem;
-    }
-
-    .tab-panel {
-      display: none;
-    }
-
-    .tab-panel.active {
-      display: block;
-    }
-
-    .table-wrapper {
+    #commentInput {
       width: 100%;
-      overflow-x: auto;
-      margin: 0 auto;
-    }
-
-    .resume-table {
-      width: 100%;
-      border-collapse: collapse;
-      min-width: 720px;
-    }
-
-    .resume-table thead {
-      background-color: #f7f9fc;
-    }
-
-    .resume-table th,
-    .resume-table td {
-      padding: 0.9rem 1rem;
-      text-align: left;
-      border-bottom: 1px solid #e1e9f4;
-      font-size: 0.9rem;
-      color: #344256;
-    }
-
-    .resume-table th {
-      font-weight: 700;
-      color: #024689;
-    }
-
-    .resume-table tbody tr:last-child td {
-      border-bottom: none;
-    }
-
-    .table-empty {
-      text-align: center;
-      color: #9aa6b6;
-      font-size: 0.9rem;
-    }
-
-    .table-actions {
-      display: flex;
-      gap: 0.5rem;
-      flex-wrap: wrap;
-      align-items: center;
-    }
-
-    .table-actions .btn-primary,
-    .table-actions .btn-secondary {
-      padding: 0.45rem 0.9rem;
-      font-size: 0.85rem;
-    }
-
-    /* 履歷列表 */
-    .results {
-      display: flex;
-      flex-direction: column;
-      gap: 2rem;
-    }
-
-    .cards {
-      display: flex;
-      flex-direction: column;
-      gap: 1.5rem;
-    }
-
-    .resume-card {
-      border: 1.5px solid #d7e3f3;
-      border-radius: 14px;
-      padding: 1.5rem;
-      display: flex;
-      gap: 1.25rem;
-      box-shadow: 0 3px 12px rgba(2, 70, 137, 0.08);
-      transition: border-color 0.3s ease, transform 0.2s ease;
-    }
-
-    .resume-card:hover {
-      border-color: #0066cc;
-      transform: translateY(-3px);
-    }
-
-    .resume-card.active {
-      border-color: #0066cc;
-      box-shadow: 0 6px 18px rgba(2, 70, 137, 0.18);
-      transform: translateY(-2px);
-    }
-
-    .empty-state {
-      padding: 2rem 1.5rem;
-      border: 1.5px dashed #bfd0e7;
-      border-radius: 12px;
-      text-align: center;
-      color: #566174;
-      font-size: 0.95rem;
-      background-color: #f7f9fc;
-    }
-
-    .empty-text {
-      color: #9aa6b6;
-      font-size: 0.9rem;
-    }
-
-    .history .history-comment {
-      color: #024689;
-      font-style: italic;
-    }
-
-    .resume-card .avatar {
-      width: 64px;
-      height: 64px;
-      margin-top: 0;
-    }
-
-    .resume-body {
-      flex: 1;
-      display: flex;
-      flex-direction: column;
-      gap: 0.75rem;
-    }
-
-    .resume-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      gap: 1rem;
-    }
-
-    .resume-header h3 {
-      font-size: 1.2rem;
-      color: #024689;
-    }
-
-    .resume-meta {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 0.75rem;
-      font-size: 0.85rem;
-      color: #566174;
-    }
-
-    .badge {
-      background-color: #edf4fb;
-      color: #024689;
-      border-radius: 999px;
-      padding: 0.25rem 0.75rem;
-      font-size: 0.8rem;
-      font-weight: 600;
-    }
-
-    .resume-actions {
-      display: flex;
-      gap: 0.5rem;
-      flex-wrap: wrap;
-    }
-
-    .resume-actions .btn-primary {
-      padding: 0.55rem 1rem;
-    }
-
-    .resume-actions .btn-secondary {
-      padding: 0.55rem 1rem;
-    }
-
-    .state-tag {
-      padding: 0.25rem 0.75rem;
-      border-radius: 999px;
-      font-size: 0.8rem;
-      font-weight: 600;
-      background-color: #f7f9fc;
-      border: 1px solid #d7e3f3;
-      color: #024689;
-    }
-
-    /* 履歷詳情側欄 */
-    .detail-panel,
-    .detail-header,
-    .info-grid,
-    .detail-section,
-    .tag-group,
-    .history,
-    .detail-actions,
-    .detail-bottom-actions {
-      display: none;
-    }
-
-    /* 審核對話框 */
-    .modal-backdrop {
-      position: fixed;
-      inset: 0;
-      background: rgba(0, 0, 0, 0.48);
-      display: none;
-      align-items: center;
-      justify-content: center;
-      z-index: 1200;
-      padding: 1rem;
-    }
-
-    .modal-backdrop.show {
-      display: flex;
-    }
-
-    .modal {
-      background-color: #fff;
-      border-radius: 16px;
-      padding: 1.75rem;
-      width: min(520px, 100%);
-      box-shadow: 0 18px 48px rgba(0, 32, 70, 0.25);
-      display: flex;
-      flex-direction: column;
-      gap: 1.25rem;
-    }
-
-    .modal h4 {
-      font-size: 1.2rem;
-      color: #024689;
-    }
-
-    textarea {
-      width: 100%;
-      min-height: 120px;
-      padding: 0.75rem;
-      border-radius: 10px;
-      border: 1.5px solid #bfd0e7;
+      height: 180px;
       resize: vertical;
-      font-size: 0.95rem;
-      transition: border 0.2s ease, box-shadow 0.2s ease;
+      padding: 0.5rem;
+      font-size: 1rem;
+      line-height: 1.4;
     }
 
-    textarea:focus {
-      border-color: #0066cc;
-      box-shadow: 0 0 0 4px rgba(0, 102, 204, 0.1);
-      outline: none;
-    }
-
-    .modal-actions {
-      display: flex;
-      justify-content: flex-end;
-      gap: 0.75rem;
-    }
-
-    footer {
-      margin: 3rem 0 2rem;
-      text-align: center;
-      color: #9aa6b6;
-      font-size: 0.8rem;
-    }
-
-    /* 響應式 */
-    @media (max-width: 1024px) {
-      .filters {
-        grid-template-columns: repeat(2, minmax(160px, 1fr));
-      }
-
-      .results {
-        grid-template-columns: 1fr;
-      }
-
-      .stats {
-        justify-content: center;
-      }
-
-      .detail-panel {
-        position: static;
-        max-height: none;
-      }
-    }
-
-    @media (max-width: 768px) {
-      .filters {
-        grid-template-columns: repeat(1, minmax(0, 1fr));
-      }
-
-      .stats {
-        flex-direction: column;
-        align-items: center;
-      }
-
-      .filters-actions {
-        grid-column: 1 / -1;
-      }
-
-      .stats {
-        grid-template-columns: repeat(1, minmax(160px, 1fr));
-      }
-
-      .resume-card {
-        flex-direction: column;
-        align-items: flex-start;
-      }
-
-      .resume-header {
-        flex-direction: column;
-        align-items: flex-start;
-        gap: 0.4rem;
-      }
-
-      .detail-actions {
-        flex-direction: column;
-      }
-
-      .tabbed-section {
-        padding: 1rem;
-      }
-
-      .tab-nav {
-        flex-wrap: wrap;
-      }
-
-      .tab-button {
-        flex: 1 1 50%;
-        border-right: 1px solid #d7e3f3;
-        border-bottom: 1px solid #d7e3f3;
-      }
-
-      .tab-button:nth-child(2n) {
-        border-right: none;
-      }
-
-      .tab-button:nth-last-child(-n + 2) {
-        border-bottom: none;
-      }
-
-      .resume-table {
-        min-width: 600px;
-      }
+    .card h4.text-center {
+      color: #0066cc;
+      font-weight: bold;
     }
   </style>
 </head>
+
 <body>
-  
-
-  <aside id="side-menu" aria-hidden="true">
-    <span class="menu-close" id="menu-close-btn">&times;</span>
-    <nav class="menu-section">
-      <a href="#">儀表板</a>
-      <a href="#">職缺管理</a>
-      <a href="#">履歷審核</a>
-      <a href="#">面試排程</a>
-      <a href="#">帳戶設定</a>
-    </nav>
-  </aside>
-
-  <header class="hero">
-    <h1>智慧實習平台| 履歷審核</h1>
-  </header>
-
-  
-
-    <section class="stats" aria-label="摘要統計">
-      <article class="stat-card">
-        <span>待審履歷</span>
-        <strong id="stat-pending">0</strong>
-      </article>
-      <article class="stat-card">
-        <span>已通過</span>
-        <strong id="stat-approved">0</strong>
-      </article>
-      <article class="stat-card">
-        <span>不通過</span>
-        <strong id="stat-rejected">0</strong>
-      </article>
-    </section>
-
-  <section class="tabbed-section" aria-label="履歷狀態列表">
-    <header>
-      <nav class="tab-nav" id="resume-tabs" role="tablist" aria-label="履歷狀態篩選">
-        <button
-          id="tab-all"
-          class="tab-button active"
-          type="button"
-          role="tab"
-          aria-selected="true"
-          data-tab="all"
-          data-target="#panel-all"
-          data-variant="all"
-        >
-          <span class="tab-label">全部</span>
-        </button>
-        <button
-          id="tab-uploaded"
-          class="tab-button"
-          type="button"
-          role="tab"
-          aria-selected="false"
-          data-tab="uploaded"
-          data-target="#panel-uploaded"
-          data-variant="uploaded"
-        >
-          <span class="tab-label">已上傳</span>
-        </button>
-        <button
-          id="tab-reviewed"
-          class="tab-button"
-          type="button"
-          role="tab"
-          aria-selected="false"
-          data-tab="reviewed"
-          data-target="#panel-reviewed"
-          data-variant="reviewed"
-        >
-          <span class="tab-label">審查完成</span>
-        </button>
-        <button
-          id="tab-returned"
-          class="tab-button"
-          type="button"
-          role="tab"
-          aria-selected="false"
-          data-tab="returned"
-          data-target="#panel-returned"
-          data-variant="returned"
-        >
-          <span class="tab-label">不通過</span>
-        </button>
-      </nav>
-    </header>
-    <div class="tab-panels">
-      <div class="tab-panel active" id="panel-all" data-tab-panel="all" role="tabpanel" aria-labelledby="tab-all">
-        <div class="table-wrapper">
-          <table class="resume-table" aria-describedby="tab-all">
-            <thead>
-              <tr>
-                <th scope="col">上傳時間</th>
-                <th scope="col">檔案名稱</th>
-                <th scope="col">狀態</th>
-                <th scope="col">操作</th>
-              </tr>
-            </thead>
-            <tbody id="resume-table-body-all">
-              <tr>
-                <td colspan="4" class="table-empty">載入中...</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-      <div class="tab-panel" id="panel-uploaded" data-tab-panel="uploaded" role="tabpanel" aria-labelledby="tab-uploaded" hidden>
-        <div class="table-wrapper">
-          <table class="resume-table" aria-describedby="tab-uploaded">
-            <thead>
-              <tr>
-                <th scope="col">上傳時間</th>
-                <th scope="col">檔案名稱</th>
-                <th scope="col">狀態</th>
-                <th scope="col">操作</th>
-              </tr>
-            </thead>
-            <tbody id="resume-table-body-uploaded">
-              <tr>
-                <td colspan="4" class="table-empty">載入中...</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-      <div class="tab-panel" id="panel-reviewed" data-tab-panel="reviewed" role="tabpanel" aria-labelledby="tab-reviewed" hidden>
-        <div class="table-wrapper">
-          <table class="resume-table" aria-describedby="tab-reviewed">
-            <thead>
-              <tr>
-                <th scope="col">上傳時間</th>
-                <th scope="col">檔案名稱</th>
-                <th scope="col">狀態</th>
-                <th scope="col">操作</th>
-              </tr>
-            </thead>
-            <tbody id="resume-table-body-reviewed">
-              <tr>
-                <td colspan="4" class="table-empty">載入中...</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-      <div class="tab-panel" id="panel-returned" data-tab-panel="returned" role="tabpanel" aria-labelledby="tab-returned" hidden>
-        <div class="table-wrapper">
-          <table class="resume-table" aria-describedby="tab-returned">
-            <thead>
-              <tr>
-                <th scope="col">上傳時間</th>
-                <th scope="col">檔案名稱</th>
-                <th scope="col">狀態</th>
-                <th scope="col">操作</th>
-              </tr>
-            </thead>
-            <tbody id="resume-table-body-returned">
-              <tr>
-                <td colspan="4" class="table-empty">載入中...</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
+  <header>履歷審核</header>
+  <div class="container">
+    <div class="top-bar-left">
+      <div id="menu-btn" title="選單" role="button" tabindex="0">
+        <span></span><span></span><span></span>
       </div>
     </div>
-  </section>
 
-    <section class="results">
-      <div class="cards" id="resume-list"></div>
-    </section>
-  </main>
-
-
-  <div class="modal-backdrop" id="review-modal" aria-hidden="true">
-    <div class="modal">
-      <h4 id="modal-title">審核備註</h4>
-      <p id="modal-desc">請填寫審核備註，將同步通知學生。</p>
-      <textarea id="modal-comment" placeholder="例：請補充作品集連結，我們再進一步聯繫。"></textarea>
-      <div class="modal-actions">
-        <button class="btn-secondary" type="button" data-modal="cancel">取消</button>
-        <button class="btn-primary" type="button" data-modal="confirm">送出</button>
-      </div>
-    </div>
-  </div>
-
-  <script>
-    const menuBtn = document.getElementById('menu-btn');
-    const menu = document.getElementById('side-menu');
-    const menuCloseBtn = document.getElementById('menu-close-btn');
-    const modalBackdrop = document.getElementById('review-modal');
-    const modalTitle = document.getElementById('modal-title');
-    const modalDesc = document.getElementById('modal-desc');
-    const modalCancel = document.querySelector('[data-modal="cancel"]');
-    const modalConfirm = document.querySelector('[data-modal="confirm"]');
-    const modalComment = document.getElementById('modal-comment');
-    const modalConfirmOriginalText = modalConfirm.textContent;
-
-    const statusLabels = {
-      pending: '待審核',
-      approved: '已通過',
-      rejected: '不通過',
-    };
-
-    const actionEndpoints = {
-      approve: 'approve',
-      reject: 'reject',
-      comment: 'comment',
-      reopen: 'reopen',
-    };
-
-    let applications = [];
-    let selectedApplicationId = null;
-    let pendingAction = null;
-
-    const cardsContainer = document.getElementById('resume-list');
-    const tabNav = document.getElementById('resume-tabs');
-    const tabButtons = tabNav ? Array.from(tabNav.querySelectorAll('.tab-button')) : [];
-    const tabPanels = tabNav ? Array.from(document.querySelectorAll('[data-tab-panel]')) : [];
-    const tabCountElements = {
-      all: document.getElementById('tab-count-all'),
-      uploaded: document.getElementById('tab-count-uploaded'),
-      reviewed: document.getElementById('tab-count-reviewed'),
-      returned: document.getElementById('tab-count-returned'),
-    };
-    const tableBodies = {
-      all: document.getElementById('resume-table-body-all'),
-      uploaded: document.getElementById('resume-table-body-uploaded'),
-      reviewed: document.getElementById('resume-table-body-reviewed'),
-      returned: document.getElementById('resume-table-body-returned'),
-    };
-
-    const filterPosition = document.getElementById('filter-position');
-    const filterStatus = document.getElementById('filter-status');
-    const filterSchool = document.getElementById('filter-school');
-    const filterKeyword = document.getElementById('filter-keyword');
-    const filterApplyBtn = document.getElementById('filter-apply');
-    const filterResetBtn = document.getElementById('filter-reset');
-
-    const statPending = document.getElementById('stat-pending');
-    const statApproved = document.getElementById('stat-approved');
-    const statRejected = document.getElementById('stat-rejected');
-    const statNew = document.getElementById('stat-new');
-    const statElements = {
-      pending: statPending,
-      approved: statApproved,
-      rejected: statRejected,
-    };
-
-    const getStatValue = (node) => {
-      if (!node) return 0;
-      const value = parseInt(node.textContent, 10);
-      return Number.isNaN(value) ? 0 : value;
-    };
-
-    const adjustSummaryCounts = (fromStatus, toStatus) => {
-      if (!toStatus || fromStatus === toStatus) return;
-      if (fromStatus && statElements[fromStatus]) {
-        const current = getStatValue(statElements[fromStatus]);
-        statElements[fromStatus].textContent = current > 0 ? current - 1 : 0;
-      }
-      if (statElements[toStatus]) {
-        statElements[toStatus].textContent = getStatValue(statElements[toStatus]) + 1;
-      }
-    };
-
-    const toggleMenu = (isOpen) => {
-      menu.classList.toggle('open', isOpen);
-      menu.setAttribute('aria-hidden', (!isOpen).toString());
-    };
-
-    if (menuBtn) {
-      menuBtn.addEventListener('click', () => toggleMenu(true));
-    }
-    if (menuCloseBtn) {
-      menuCloseBtn.addEventListener('click', () => toggleMenu(false));
-    }
-    if (menu) {
-      menu.addEventListener('click', (event) => {
-        if (event.target === menu) toggleMenu(false);
-      });
-    }
-
-    const activateTab = (tabKey, options = {}) => {
-      if (!tabKey) return;
-      tabButtons.forEach((button) => {
-        const isActive = button.dataset.tab === tabKey;
-        button.classList.toggle('active', isActive);
-        button.setAttribute('aria-selected', isActive.toString());
-        button.setAttribute('tabindex', isActive ? '0' : '-1');
-      });
-      tabPanels.forEach((panel) => {
-        const isActive = panel.dataset.tabPanel === tabKey;
-        panel.classList.toggle('active', isActive);
-        panel.toggleAttribute('hidden', !isActive);
-      });
-      const targetSelector = tabButtons.find((button) => button.dataset.tab === tabKey)?.dataset.target;
-      if (!options.silent && targetSelector) {
-        const targetNode = document.querySelector(targetSelector);
-        if (targetNode) {
-          targetNode.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        }
-      }
-      if (!options.silent) {
-        const nextHash = `#${tabKey}`;
-        if (window.location.hash !== nextHash) {
-          window.history.replaceState(null, '', nextHash);
-        }
-      }
-    };
-
-    if (tabNav && tabButtons.length) {
-      const tabKeys = tabButtons.map((button) => button.dataset.tab);
-      const hashValue = window.location.hash.replace('#', '');
-      const initialTab = tabKeys.includes(hashValue) ? hashValue : tabButtons[0].dataset.tab;
-      activateTab(initialTab, { silent: true });
-      tabNav.addEventListener('click', (event) => {
-        const button = event.target.closest('.tab-button');
-        if (!button || !tabNav.contains(button)) return;
-        activateTab(button.dataset.tab);
-      });
-      window.addEventListener('hashchange', () => {
-        const currentHash = window.location.hash.replace('#', '');
-        if (!tabKeys.includes(currentHash)) return;
-        activateTab(currentHash, { silent: true });
-      });
-    }
-
-    const createEmptyNode = (text, tag = 'span') => {
-      const node = document.createElement(tag);
-      node.className = 'empty-text';
-      node.textContent = text;
-      return node;
-    };
-
-    const openModal = (action, name) => {
-      const textMap = {
-        approve: {
-          title: `通過「${name}」履歷`,
-          desc: '若需補充通知，可在下方備註；備註將寫入審核歷程。',
-        },
-        reject: {
-          title: `不通過「${name}」履歷`,
-          desc: '請說明退回原因，此訊息將通知學生並記錄於歷程。',
-        },
-        comment: {
-          title: `備註「${name}」履歷`,
-          desc: '僅供內部成員參考，不會通知學生。',
-        },
-        reopen: {
-          title: `重新審核「${name}」履歷`,
-          desc: '此動作會將狀態改回待審核，可補充說明原因（選填）。',
-        },
-      };
-      const content = textMap[action] || textMap.comment;
-      modalTitle.textContent = content.title;
-      modalDesc.textContent = content.desc;
-      modalComment.value = '';
-      modalBackdrop.classList.add('show');
-      modalBackdrop.setAttribute('aria-hidden', 'false');
-      modalComment.focus();
-    };
-
-    const closeModal = () => {
-      modalBackdrop.classList.remove('show');
-      modalBackdrop.setAttribute('aria-hidden', 'true');
-      modalComment.value = '';
-      pendingAction = null;
-    };
-
-    const fetchJSON = async (url, options = {}) => {
-      const config = { ...options };
-      config.headers = {
-        Accept: 'application/json',
-        ...(config.headers || {}),
-      };
-      if (config.body && typeof config.body !== 'string') {
-        config.headers['Content-Type'] = 'application/json';
-        config.body = JSON.stringify(config.body);
-      }
-      const response = await fetch(url, config);
-      if (!response.ok) {
-        let message = response.statusText;
-        try {
-          const data = await response.json();
-          if (data && data.error) {
-            message = data.error;
-          }
-        } catch (error) {
-          message = await response.text();
-        }
-        throw new Error(message || '發生未知錯誤');
-      }
-      if (response.status === 204) {
-        return null;
-      }
-      return response.json();
-    };
-
-    const getAvailableActions = (application) => {
-      const actions = [
-        { action: 'view', label: '查看履歷', variant: 'primary' },
-      ];
-      switch (application.status) {
-        case 'pending':
-          actions.push({ action: 'approve', label: '通過', variant: 'primary' });
-          actions.push({ action: 'reject', label: '不通過', variant: 'secondary' });
-          break;
-        case 'approved':
-          actions.push({ action: 'comment', label: '備註', variant: 'secondary' });
-          break;
-        case 'rejected':
-          actions.push({ action: 'reopen', label: '重新審核', variant: 'secondary' });
-          break;
-        default:
-          break;
-      }
-      return actions;
-    };
-
-    const renderCards = (list, activeId) => {
-      cardsContainer.innerHTML = '';
-      if (!list.length) {
-        const empty = document.createElement('div');
-        empty.className = 'empty-state';
-        empty.textContent = '目前沒有符合條件的履歷';
-        cardsContainer.appendChild(empty);
-        return;
-      }
-      list.forEach((application) => {
-        const card = document.createElement('article');
-        card.className = 'resume-card';
-        if (application.id === activeId) {
-          card.classList.add('active');
-        }
-        card.dataset.id = application.id;
-        card.dataset.name = application.name;
-        if (application.resume_url) {
-          card.dataset.resumeUrl = application.resume_url;
-        }
-        card.innerHTML = `
-          <img src="${application.avatar || '/static/images/avatar-default.png'}" alt="${application.name}頭像" class="avatar" />
-          <div class="resume-body">
-            <div class="resume-header">
-              <h3>${application.name}</h3>
-              <span class="state-tag">${application.status_label || statusLabels[application.status] || '—'}</span>
-            </div>
-            <div class="resume-meta">
-              <span>投遞職缺：${application.position_label}</span>
-              <span>${application.school_label}</span>
-              <span>投遞日期：${application.applied_date}</span>
-            </div>
-            <div class="tag-group">
-              ${(application.skills || []).map((skill) => `<span class="badge">${skill}</span>`).join('')}
-            </div>
-            <div class="resume-actions">
-              ${getAvailableActions(application).map((action) => {
-                const resumeUrlAttr = action.action === 'view' && application.resume_url 
-                  ? `data-resume-url="${application.resume_url}"` 
-                  : '';
-                return `
-                <button class="${action.variant === 'primary' ? 'btn-primary' : 'btn-secondary'}" type="button" data-action="${action.action}" ${resumeUrlAttr}>${action.label}</button>
-              `;
-              }).join('')}
-            </div>
+    <div class="container my-5 pt-1">
+      <div class="card shadow-sm p-4">
+        <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+          <div class="d-flex gap-2 flex-wrap">
+            <select id="departmentFilter" class="form-select form-select-sm w-auto">
+              <option value="">所有科別</option>
+            </select>
+            <select id="classFilter" class="form-select form-select-sm w-auto">
+              <option value="">所有班級</option>
+            </select>
+            <select id="statusFilter" class="form-select form-select-sm w-auto">
+              <option value="">所有狀態</option>
+              <option value="submitted">待審查</option>
+              <option value="approved">通過</option>
+              <option value="rejected">不通過</option>
+            </select>
           </div>
-        `;
-        cardsContainer.appendChild(card);
-      });
-    };
+        </div>
 
-    const createTableActionButton = (application, action, label, variant) => {
-      const resumeUrlAttr = action === 'view' && application.resume_url 
-        ? `data-resume-url="${application.resume_url}"` 
-        : '';
-      return `
-        <button
-          type="button"
-          class="${variant === 'primary' ? 'btn-primary' : 'btn-secondary'}"
-          data-action="${action}"
-          data-id="${application.id}"
-          data-name="${application.name}"
-          ${resumeUrlAttr}
-        >
-          ${label}
-        </button>
-      `;
-    };
+        <div class="table-responsive">
+          <table class="table table-hover align-middle">
+            <thead>
+              <tr>
+                <th>姓名</th>
+                <th>上傳時間</th>
+                <th>檔案名稱</th>
+                <th>狀態</th>
+                <th>老師留言</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody id="resumeTableBody">
+              <tr>
+                <td colspan="6" class="text-muted text-center">載入中...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
 
-    const createTableRow = (application) => {
-      const actions = [];
-      // 所有狀態都應該有「查看履歷」按鈕
-      actions.push(createTableActionButton(application, 'view', '查看履歷', 'primary'));
-      
-      if (application.status === 'pending') {
-        actions.push(createTableActionButton(application, 'approve', '通過', 'primary'));
-        actions.push(createTableActionButton(application, 'reject', '不通過', 'secondary'));
-      } else if (application.status === 'approved') {
-        actions.push(createTableActionButton(application, 'comment', '備註', 'secondary'));
-      } else if (application.status === 'rejected') {
-        actions.push(createTableActionButton(application, 'reopen', '重新審核', 'secondary'));
+        <nav>
+          <ul class="pagination justify-content-center mt-3" id="pagination"></ul>
+        </nav>
+      </div>
+    </div>
+
+    <div class="modal fade" id="commentModal" tabindex="-1" aria-hidden="true">
+      <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="commentModalLabel">編輯留言</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+          </div>
+          <div class="modal-body">
+            <textarea id="commentInput"></textarea>
+          </div>
+          <div class="modal-footer">
+            <button class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+            <button class="btn btn-primary" id="saveCommentBtn">送出</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+
+      let allResumes = [];
+      let currentResumeId = null;
+      let currentPage = 1;
+      const rowsPerPage = 10;
+
+      // ------------------------------------
+      // 狀態轉換函式 (已修正：使用 submitted 和 under_review)
+      // ------------------------------------
+
+      /**
+       * 根據履歷狀態返回對應的 Bootstrap 顏色類別。
+       */
+      function statusColor(status) {
+        // status: 'submitted', 'under_review', 'approved', 'rejected'
+        return {
+          'approved': 'success',     // 通過 (綠色)
+          'rejected': 'danger',      // 不通過(紅色)
+          'uploaded': 'info'         // 保留舊狀態 'uploaded'
+        }
       }
-      const actionContent = actions.length ? actions.join('') : '<span class="empty-text">—</span>';
-      return `
-        <tr data-id="${application.id}" data-name="${application.name}">
-          <td>${application.applied_date || '—'}</td>
-          <td>${application.position_label || '—'}</td>
-          <td>${application.status_label || statusLabels[application.status] || '—'}</td>
+
+      /**
+       * 將履歷狀態碼轉換為中文顯示名稱。
+       */
+      function mapStatus(status) {
+        // status: 'submitted', 'under_review', 'approved', 'rejected'
+        return {
+          'submitted': '待審查',
+          'approved': '通過',
+          'uploaded': '待審查'
+        }
+      }
+
+      // ------------------------------------
+      // DOMContentLoaded 載入與事件綁定
+      // ------------------------------------
+
+      document.addEventListener("DOMContentLoaded", () => {
+        // 取得所有學生履歷（若 URL 帶有 mode=director，則傳給後端）
+        const urlParams = new URLSearchParams(window.location.search);
+        const mode = urlParams.get('mode');
+        const apiUrl = mode ? `/api/get_class_resumes?mode=${encodeURIComponent(mode)}` : `/api/get_class_resumes`;
+        fetch(apiUrl)
+          .then(res => res.json())
+          .then(data => {
+            if (data.success) {
+              allResumes = data.resumes;
+              populateFilters(allResumes);
+              applyFilters();
+            } else {
+              alert("載入資料失敗：" + (data.message || "未知錯誤"));
+            }
+          })
+          .catch(error => {
+            console.error("API調用錯誤:", error);
+            alert("載入資料失敗，請檢查網路連線");
+          });
+
+        // 綁定篩選事件
+        document.getElementById("departmentFilter").addEventListener("change", applyFilters);
+        document.getElementById("classFilter").addEventListener("change", applyFilters);
+        document.getElementById("statusFilter").addEventListener("change", applyFilters);
+        document.getElementById("saveCommentBtn").addEventListener("click", saveComment); // 綁定 "儲存留言"
+      });
+
+      // 判斷是否為班導，顯示切換到班導主頁 (此段保留用戶原邏輯)
+      fetch('/api/profile').then(r => r.json()).then(d => {
+        if (d.success && d.user && d.user.is_homeroom) {
+          const link = document.getElementById('toHomeroomLink');
+          if (link) link.style.display = 'block';
+        }
+      }).catch(() => { });
+
+      // ------------------------------------
+      // 篩選與渲染函式
+      // ------------------------------------
+
+      function populateFilters(data) {
+        const deptSet = new Set();
+        const classSet = new Set();
+
+        data.forEach(r => {
+          if (r.department) deptSet.add(r.department);
+          if (r.className) classSet.add(r.className);
+        });
+        
+        deptSet.add("資管科");
+        classSet.add("忠班");
+        classSet.add("孝班");
+
+        const deptSelect = document.getElementById("departmentFilter");
+        const classSelect = document.getElementById("classFilter");
+
+        deptSelect.innerHTML = `<option value="">所有科別</option>`;
+        classSelect.innerHTML = `<option value="">所有班級</option>`;
+
+        Array.from(deptSet).sort().forEach(d => {
+          const option = document.createElement("option");
+          option.value = d;
+          option.textContent = d;
+          deptSelect.appendChild(option);
+        });
+
+        Array.from(classSet).sort().forEach(c => {
+          const option = document.createElement("option");
+          option.value = c;
+          option.textContent = c;
+          classSelect.appendChild(option);
+        });
+      }
+
+      function applyFilters() {
+        currentPage = 1;
+        const dept = document.getElementById("departmentFilter").value.trim();
+        const cls = document.getElementById("classFilter").value.trim();
+        const status = document.getElementById("statusFilter").value.trim();
+
+        const filtered = allResumes.filter(r => {
+          const matchesDept = !dept || r.department === dept;
+          const matchesClass = !cls || r.className === cls;
+          const matchesStatus = !status || r.status === status;
+
+          return matchesDept && matchesClass && matchesStatus;
+        });
+
+        renderTable(filtered);
+      }
+
+      function renderTable(resumes) {
+        const tbody = document.getElementById("resumeTableBody");
+        tbody.innerHTML = "";
+
+        if (resumes.length === 0) {
+          tbody.innerHTML = `<tr><td colspan="6" class="text-center text-muted">目前沒有資料</td></tr>`;
+          document.getElementById("pagination").innerHTML = "";
+          return;
+        }
+
+        const start = (currentPage - 1) * rowsPerPage;
+        const end = start + rowsPerPage;
+        const pageData = resumes.slice(start, end);
+
+        pageData.forEach(r => {
+          const row = `
+        <tr>
+          <td>${escapeHtml(r.name || '')}</td>
+          <td>${r.upload_time}</td>
+          <td>${escapeHtml(r.original_filename)}</td>
+          <td><span class="status-badge bg-${statusColor(r.status)}">${mapStatus(r.status)}</span></td>
           <td>
-            <div class="table-actions">
-              ${actionContent}
-            </div>
+            <button class="btn btn-sm btn-outline-secondary ${r.comment ? 'text-success' : ''}"
+              onclick="openCommentModal(${r.id}, '${escapeHtml(r.comment || '')}')">
+              ${r.comment ? '已填寫' : '未填寫'}
+            </button>
           </td>
-        </tr>
-      `;
-    };
+          <td>
+            <div class="btn-group btn-group-sm">
+         <a href="/api/download_resume/${r.id}" class="btn btn-outline-primary btn-sm me-1" target="_blank">下載</a>
+         <button type="button" class="btn btn-outline-danger" onclick="rejectResume(${r.id})">退件</button>
+         <button type="button" class="btn btn-outline-success" onclick="approveResume(${r.id})">完成</button>
 
-    const renderTableRows = (list) => {
-      const grouped = {
-        all: list,
-        uploaded: list.filter((item) => item.status === 'pending'),
-        reviewed: list.filter((item) => item.status === 'approved'),
-        returned: list.filter((item) => item.status === 'rejected'),
-      };
-      Object.entries(tableBodies).forEach(([key, tbody]) => {
-        if (!tbody) return;
-        const rows = grouped[key] || [];
-        if (!rows.length) {
-          tbody.innerHTML = `
-            <tr>
-              <td colspan="4" class="table-empty">目前沒有資料</td>
-            </tr>
-          `;
-          return;
-        }
-        tbody.innerHTML = rows.map((application) => createTableRow(application)).join('');
-      });
-    };
-
-    const renderSummary = (summary = {}) => {
-      const pendingCount = summary.pending ?? 0;
-      const approvedCount = summary.approved ?? 0;
-      const rejectedCount = summary.rejected ?? 0;
-      const totalCount = summary.all ?? summary.total ?? pendingCount + approvedCount + rejectedCount;
-
-      if (statPending) statPending.textContent = pendingCount;
-      if (statApproved) statApproved.textContent = approvedCount;
-      if (statRejected) statRejected.textContent = rejectedCount;
-      if (statNew) statNew.textContent = summary.new_this_week ?? 0;
-
-      const tabCountMapping = {
-        all: totalCount,
-        uploaded: pendingCount,
-        reviewed: approvedCount,
-        returned: rejectedCount,
-      };
-      Object.entries(tabCountMapping).forEach(([key, value]) => {
-        if (tabCountElements[key]) {
-          tabCountElements[key].textContent = `${value}`;
-        }
-      });
-    };
-
-    const loadApplications = async (options = {}) => {
-      const params = new URLSearchParams();
-      if (filterStatus.value) params.set('status', filterStatus.value);
-      if (filterPosition.value) params.set('position', filterPosition.value);
-      if (filterSchool.value) params.set('school', filterSchool.value);
-      if (filterKeyword.value.trim()) params.set('keyword', filterKeyword.value.trim());
-      const query = params.toString();
-      const url = query ? `/vendor/api/applications?${query}` : '/vendor/api/applications';
-      const data = await fetchJSON(url);
-      applications = data.items || [];
-      renderSummary(data.summary);
-      renderTableRows(applications);
-      if (!applications.length) {
-        selectedApplicationId = null;
-        renderCards([], null);
-        return;
-      }
-      let targetId = options.selectId || selectedApplicationId;
-      if (!targetId || !applications.some((item) => item.id === targetId)) {
-        targetId = applications[0].id;
-      }
-      selectedApplicationId = targetId;
-      renderCards(applications, selectedApplicationId);
-    };
-
-    const selectApplication = (applicationId) => {
-      if (!applicationId) return;
-      if (selectedApplicationId !== applicationId) {
-        selectedApplicationId = applicationId;
-        renderCards(applications, selectedApplicationId);
-      }
-    };
-
-    cardsContainer.addEventListener('click', (event) => {
-      const card = event.target.closest('.resume-card');
-      if (!card) return;
-      const action = event.target.dataset.action;
-      const applicationId = card.dataset.id;
-      const applicationName = card.dataset.name;
-      const resumeUrl = event.target.dataset.resumeUrl || card.dataset.resumeUrl;
-      
-      if (action === 'view' && resumeUrl) {
-        // 下載履歷檔案
-        window.location.href = resumeUrl;
-        return;
-      }
-      
-      if (action && action !== 'view') {
-        pendingAction = { action, appId: applicationId, name: applicationName };
-        openModal(action, applicationName);
-        return;
-      }
-      selectApplication(applicationId);
-    });
-
-    filterApplyBtn.addEventListener('click', () => {
-      loadApplications({ selectId: null }).catch((error) => {
-        alert(`載入履歷列表失敗：${error.message}`);
-      });
-    });
-
-    filterResetBtn.addEventListener('click', () => {
-      filterPosition.value = '';
-      filterStatus.value = '';
-      filterSchool.value = '';
-      filterKeyword.value = '';
-      loadApplications({ selectId: null }).catch((error) => {
-        alert(`載入履歷列表失敗：${error.message}`);
-      });
-    });
-
-    filterKeyword.addEventListener('keydown', (event) => {
-      if (event.key === 'Enter') {
-        event.preventDefault();
-        loadApplications({ selectId: null }).catch((error) => {
-          alert(`載M入履歷列表失敗：${error.message}`);
+          </td>
+        </tr>`;
+          tbody.innerHTML += row;
         });
-      }
-    });
 
-    const tabbedSection = document.querySelector('.tabbed-section');
-    if (tabbedSection) {
-      tabbedSection.addEventListener('click', (event) => {
-        const button = event.target.closest('button[data-action]');
-        if (!button) return;
-        const { action, id: appId, name, resumeUrl } = button.dataset;
-        if (!action || !appId) return;
-        if (action === 'view') {
-          if (resumeUrl) {
-            // 下載履歷檔案
-            window.location.href = resumeUrl;
-            return;
-          }
-          selectApplication(appId);
-          return;
+        renderPagination(resumes.length);
+      }
+
+      function renderPagination(totalItems) {
+        const totalPages = Math.ceil(totalItems / rowsPerPage);
+        const pagination = document.getElementById("pagination");
+        pagination.innerHTML = "";
+
+        if (totalPages <= 1) return;
+
+        for (let i = 1; i <= totalPages; i++) {
+          const li = document.createElement("li");
+          li.className = `page-item ${i === currentPage ? "active" : ""}`;
+          li.innerHTML = `<a class="page-link" href="#">${i}</a>`;
+          li.addEventListener("click", (e) => {
+            e.preventDefault();
+            currentPage = i;
+            applyFilters();
+          });
+          pagination.appendChild(li);
         }
-        pendingAction = { action, appId, name };
-        openModal(action, name);
+      }
+
+      function escapeHtml(text) {
+        if (text === null || text === undefined) return '';
+        return String(text)
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;")
+          .replace(/'/g, "&#039;");
+      }
+
+      // ------------------------------------
+      // 審核操作函式
+      // ------------------------------------
+
+      // 這是給老師單純編輯 'comment' 用的，不改變狀態
+      function openCommentModal(id, comment) {
+        currentResumeId = id;
+        document.getElementById("commentInput").value = comment;
+        // 確保將 Modal 的標題和按鈕設為 '編輯留言'
+        document.getElementById("commentModalLabel").textContent = "編輯留言";
+        document.getElementById("saveCommentBtn").textContent = "儲存留言";
+        new bootstrap.Modal(document.getElementById("commentModal")).show();
+      }
+
+      // 這是給老師單純編輯 'comment' 用的，不改變狀態
+      function saveComment() {
+        const newVal = document.getElementById("commentInput").value.trim();
+        fetch("/api/update_resume_field", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ resume_id: currentResumeId, field: "comment", value: newVal })
+        })
+          .then(res => res.json())
+          .then(data => {
+            if (data.success) {
+              bootstrap.Modal.getInstance(document.getElementById("commentModal")).hide();
+              alert("留言更新成功");
+              location.reload(); // 重新載入以更新表格顯示
+            } else {
+              alert("留言更新失敗");
+            }
+          });
+      }
+
+      // 處理退件：先嘗試退件API，若成功則強制彈出留言Modal讓老師填寫原因
+      function rejectResume(resumeId) {
+        if (!confirm("確定要將此履歷標記為退件？退件後，請務必填寫退件原因。")) return;
+
+        // 注意：根據後端邏輯，/api/review_resume/<id> 預期 body 包含 status 和 comment
+        // 我們先呼叫 API，但不傳 comment
+        fetch(`/api/review_resume/${resumeId}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ status: "rejected" }) // 初始呼叫不傳 comment
+        })
+          .then(res => res.json())
+          .then(data => {
+            if (data.success) {
+              alert("已成功標記為退件狀態。請填寫退件原因。");
+
+              currentResumeId = resumeId;
+              document.getElementById("commentInput").value = "";
+
+              // 修正 Modal 標題，強調這是退件原因填寫
+              document.getElementById("commentModalLabel").textContent = "❌ 填寫退件原因";
+              document.getElementById("saveCommentBtn").textContent = "送出";
+
+              // 顯示留言Modal
+              new bootstrap.Modal(document.getElementById("commentModal")).show();
+            } else {
+              alert("退件失敗：" + data.message);
+            }
+          })
+          .catch(error => {
+            console.error("Reject error:", error);
+            alert("退件失敗，網路錯誤或 API 錯誤。");
+          });
+      }
+
+
+      function approveResume(resumeId) {
+        if (!confirm("確定要將此履歷標記為審核通過嗎？")) return;
+        fetch(`/api/review_resume/${resumeId}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ status: "approved" })
+        })
+          .then(res => res.json())
+          .then(data => {
+            if (data.success) {
+              alert("✅ 履歷已標記為審核通過");
+              location.reload();
+            } else {
+              alert("標記失敗：" + data.message);
+            }
+          })
+          .catch(error => {
+            console.error("Approve error:", error);
+            alert("通過失敗，網路錯誤或 API 錯誤。");
+          });
+      }
+
+
+      // 側邊選單控制 (保留原有邏輯)
+      document.getElementById('menu-btn').addEventListener('click', () => {
+        document.getElementById('side-menu').classList.add('open');
       });
-    }
-
-    modalCancel.addEventListener('click', closeModal);
-
-    modalConfirm.addEventListener('click', async () => {
-      if (!pendingAction) {
-        closeModal();
-        return;
-      }
-      const currentAction = { ...pendingAction };
-      const endpoint = actionEndpoints[currentAction.action];
-      if (!endpoint) {
-        closeModal();
-        return;
-      }
-      modalConfirm.disabled = true;
-      modalConfirm.textContent = '送出中...';
-      try {
-        const payload = {};
-        if (modalComment.value.trim()) {
-          payload.comment = modalComment.value.trim();
-        }
-        const response = await fetchJSON(`/vendor/api/applications/${currentAction.appId}/${endpoint}`, {
-          method: 'POST',
-          body: payload,
-        });
-        const updatedItem = response && response.item ? response.item : null;
-        closeModal();
-        if (updatedItem) {
-          const existingIndex = applications.findIndex((item) => item.id === updatedItem.id);
-          const previousStatus = existingIndex >= 0 ? applications[existingIndex].status : null;
-          if (existingIndex >= 0) {
-            applications[existingIndex] = { ...applications[existingIndex], ...updatedItem };
-          }
-          adjustSummaryCounts(previousStatus, updatedItem.status);
-          await loadApplications({ selectId: updatedItem.id });
-        } else {
-          await loadApplications({ selectId: currentAction.appId });
-        }
-      } catch (error) {
-        alert(`操作失敗：${error.message}`);
-      } finally {
-        modalConfirm.disabled = false;
-        modalConfirm.textContent = modalConfirmOriginalText;
-      }
-    });
-
-    modalBackdrop.addEventListener('click', (event) => {
-      if (event.target === modalBackdrop) {
-        closeModal();
-      }
-    });
-
-    document.addEventListener('keydown', (event) => {
-      if (event.key === 'Escape' && modalBackdrop.classList.contains('show')) {
-        closeModal();
-      }
-    });
-
-    loadApplications().catch((error) => {
-      alert(`載入履歷列表失敗：${error.message}`);
-    });
-  </script>
+      document.getElementById('close-btn').addEventListener('click', () => {
+        document.getElementById('side-menu').classList.remove('open');
+      });
+    </script>
 </body>
+
 </html>

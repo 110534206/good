@@ -1258,6 +1258,46 @@ def get_class_resumes():
             cursor.execute(sql_query, tuple())
             resumes = cursor.fetchall()
 
+        # ------------------------------------------------------------------
+        # 4. Vendor (role == "vendor")
+        # ------------------------------------------------------------------
+        elif role == "vendor":
+            # Vendor 可以看到選擇了他們上傳的公司的學生履歷
+            # 或者被錄取到他們公司的學生履歷
+            sql_query = """
+                SELECT DISTINCT
+                    r.id,
+                    u.name AS student_name,
+                    u.username AS student_number,
+                    c.name AS class_name,
+                    c.department,
+                    r.original_filename,
+                    r.filepath,
+                    r.status,
+                    r.comment,
+                    r.note,
+                    r.created_at
+                FROM resumes r
+                JOIN users u ON r.user_id = u.id
+                LEFT JOIN classes c ON u.class_id = c.id
+                WHERE EXISTS (
+                    -- 學生選擇了該 vendor 上傳的公司
+                    SELECT 1 FROM student_preferences sp
+                    JOIN internship_companies ic ON sp.company_id = ic.id
+                    WHERE sp.student_id = u.id
+                    AND ic.uploaded_by_user_id = %s
+                ) OR EXISTS (
+                    -- 學生被錄取到該 vendor 的公司
+                    SELECT 1 FROM internship_experiences ie
+                    JOIN internship_companies ic ON ie.company_id = ic.id
+                    WHERE ie.user_id = u.id
+                    AND ic.uploaded_by_user_id = %s
+                )
+                ORDER BY c.name, u.name
+            """
+            cursor.execute(sql_query, (user_id, user_id))
+            resumes = cursor.fetchall()
+
         else:
             return jsonify({"success": False, "message": "無效的角色或權限"}), 403
 
