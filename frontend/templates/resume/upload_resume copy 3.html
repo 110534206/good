@@ -62,16 +62,6 @@
     .course-scroll-container table {
       margin-bottom: 0;
     }
-
-    .certificate-entry {
-      background: #f8fbff;
-    }
-
-    .certificate-entry .cert-index-badge {
-      min-width: 32px;
-      text-align: center;
-      font-weight: 600;
-    }
   </style>
 </head>
 
@@ -182,16 +172,21 @@
 
 
             <div class="card p-4 mb-3">
-              <div class="d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-2 mb-3">
-                <div>
-                  <h5 class="text-secondary mb-1">相關證照</h5>
-                  <p class="text-muted small mb-0">輸入證照代碼可自動帶出名稱與類別，最多 32 筆；每筆可直接上傳對應圖片。</p>
-                </div>
-                <span class="badge bg-light text-dark">已新增 <span id="cert-count">0</span> / 32</span>
-              </div>
-
-              <div id="certificatesContainer"></div>
-              <button type="button" class="btn btn-sm btn-outline-success mt-2" id="addCertificateBtn">＋新增證照</button>
+              <h5 class="text-secondary">相關證照</h5>
+              <table class="table table-bordered text-center align-middle">
+                <thead class="table-light">
+                  <tr>
+                    <th>勞動部證照</th>
+                    <th>國際證照</th>
+                    <th>國內證照</th>
+                    <th>其他證照</th>
+                    <th>操作</th>
+                  </tr>
+                </thead>
+                <tbody id="certificate-table-body">
+                </tbody>
+              </table> <button type="button" class="btn btn-sm btn-outline-success"
+                id="add-certificate-row">＋新增一列</button>
             </div>
             <h5 class="mt-4 mb-3">語文能力</h5>
             <div class="row mb-3">
@@ -248,6 +243,25 @@
                   <label class="form-label">上傳學期成績單 (JPG/PNG)</label>
                   <input type="file" name="transcript_file" class="form-control" accept="image/jpeg, image/png"
                     required />
+                </div>
+              </div>
+            </div>
+
+            <div class="card my-4">
+              <div class="card-header bg-primary text-white">
+                <h5>證照資訊</h5>
+              </div>
+              <div class="card-body">
+                <div class="mb-3">
+                  <label for="certificateImage" class="form-label">證照圖片上傳</label>
+                  <input class="form-control" type="file" id="certificateImage" name="certificate_image"
+                    accept="image/*">
+                  <div class="form-text">請上傳單一圖片檔 (PNG, JPG)</div>
+                </div>
+                <div class="mb-3">
+                  <label for="certificateDescription" class="form-label">證照名稱</label>
+                  <textarea class="form-control" id="certificateDescription" name="certificate_description" rows="3"
+                    placeholder="例:電腦軟體應用乙級"></textarea>
                 </div>
               </div>
             </div>
@@ -375,12 +389,6 @@
     let disableAutoSave = false;
     let allCoursesData = [];
     let allAbsenceRecords = [];
-
-    const CERT_MAX_COUNT = 32;
-    const CERT_CONTAINER_ID = 'certificatesContainer';
-    const CERT_ADD_BTN_ID = 'addCertificateBtn';
-    let certEntries = [];
-    let certIdSeed = 0;
 
 
     // 缺勤統計初始值
@@ -615,356 +623,129 @@
     document.getElementById("save-template-btn").addEventListener("click", savePersonalTemplate);
 
     // =========================================================================
-    // 證照動態管理（代碼 + 名稱 + 類別 + 圖片）
+    // 證照表格動態新增/移除列 & 自動儲存功能
     // =========================================================================
 
-    function updateCertificateControlsState() {
-      const countEl = document.getElementById("cert-count");
-      if (countEl) countEl.textContent = certEntries.length;
-      const addBtn = document.getElementById(CERT_ADD_BTN_ID);
-      if (addBtn) addBtn.disabled = certEntries.length >= CERT_MAX_COUNT;
-    }
+    // 🧩 證照表格新增列的通用函數 (用於 load 和 add button)
+    function addNewCertificateRow(certData = {
+      labor: "",
+      international: "",
+      domestic: "",
+      other: ""
+    }) {
+      const tbody = document.getElementById("certificate-table-body");
+      const newRowHTML = `
+      <tr>
+        <td><input type="text" name="labor_cert[]" class="form-control" placeholder="例:電腦軟體應用乙級" value="${certData.labor || ""}"></td>
+        <td><input type="text" name="international_cert[]" class="form-control" placeholder="例:TOEIC 800分" value="${certData.international || ""}"></td>
+        <td><input type="text" name="domestic_cert[]" class="form-control" placeholder="例:中餐丙級" value="${certData.domestic || ""}"></td>
+        <td><input type="text" name="other_cert[]" class="form-control" placeholder="例:專題競賽" value="${certData.other || ""}"></td>
+        <td><button type="button" class="btn btn-outline-danger btn-sm remove-row">移除</button></td>
+      </tr>`;
+      tbody.insertAdjacentHTML("beforeend", newRowHTML);
 
-    function createCertificateEntryElement(entryId) {
-      const wrapper = document.createElement('div');
-      wrapper.className = 'certificate-entry border rounded p-3 mb-3';
-      wrapper.dataset.entryId = entryId;
-      wrapper.innerHTML = `
-       <div class="row g-2 align-items-end">
-         <div class="col-12 d-flex align-items-center gap-2">
-           <span class="badge bg-primary-subtle text-primary cert-index-badge">#</span>
-           <div class="text-muted small">證照項目</div>
-           <div class="ms-auto">
-             <button type="button" class="btn btn-outline-danger btn-sm remove-cert">移除</button>
-           </div>
-         </div>
-         <div class="col-md-3">
-           <label class="form-label form-label-sm">證照代碼 (選填)</label>
-           <input type="text" class="form-control form-control-sm cert-code-input" 
-                  id="cert_code_${entryId}" placeholder="">
-         </div>
-         <div class="col-md-4">
-           <label class="form-label form-label-sm">證照名稱</label>
-           <input type="text" class="form-control form-control-sm cert-name-input" 
-                  name="cert_names[]" id="cert_name_${entryId}" placeholder="" required>
-         </div>
-         <div class="col-md-3">
-           <label class="form-label form-label-sm">證照類別</label>
-           <select class="form-select form-select-sm cert-category-select" name="cert_type[]" required>
-             <option value="labor">勞動部</option>
-             <option value="intl">國際證照</option>
-             <option value="local">國內證照</option>
-             <option value="other">其他證照</option>
-           </select>
-         </div>
-         <div class="col-md-6 col-lg-4">
-           <label class="form-label form-label-sm">佐證圖片 (可選)</label>
-           <input type="file" class="form-control form-control-sm" name="cert_photos[]" accept="image/*">
-         </div>
-       </div>
-     `;
-      return wrapper;
-    }
-
-    function addCertificateEntry(prefill = {}, options = {}) {
-      const { silent = false } = options;
-      if (certEntries.length >= CERT_MAX_COUNT) {
-        alert(`最多只能輸入 ${CERT_MAX_COUNT} 項證照`);
-        return;
-      }
-
-      const entryId = `cert-${Date.now()}-${certIdSeed++}`;
-      const container = document.getElementById(CERT_CONTAINER_ID);
-      if (!container) return;
-
-      const element = createCertificateEntryElement(entryId);
-      const codeInput = element.querySelector('.cert-code-input');
-      // 這裡我們仍然使用 nameInput 作為初始元素，但不再將它傳給 handleCertificateCodeInput
-      const nameInput = element.querySelector('.cert-name-input');
-      const categorySelect = element.querySelector('.cert-category-select');
-      const fileInput = element.querySelector('input[type="file"]');
-      const removeBtn = element.querySelector('.remove-cert');
-      const indexBadge = element.querySelector('.cert-index-badge');
-
-      codeInput.value = prefill.code || '';
-      nameInput.value = prefill.name || '';
-      categorySelect.value = prefill.category || 'labor';
-
-      // =========================================================
-      // ❗ 關鍵修正區域：確保事件監聽器能找到當前元素
-      // =========================================================
-      codeInput.addEventListener('input', () => {
-        // 🚨 修正：在每次 'input' 事件發生時，動態查詢當前該列中名稱欄位
-        // 無論它是 <input class="cert-name-input"> 還是 <select name="cert_names[]">
-        const currentNameElement = element.querySelector('.cert-name-input, select[name="cert_names[]"]');
-
-        // 傳入最新獲取到的 DOM 引用
-        if (currentNameElement) {
-          handleCertificateCodeInput(codeInput, currentNameElement, categorySelect);
-        }
+      // 新增: 為新加入的欄位添加自動儲存監聽器
+      const newRow = tbody.lastElementChild;
+      newRow.querySelectorAll('input').forEach(input => {
+        input.addEventListener('input', saveFormData);
       });
-      // =========================================================
-
-      nameInput.addEventListener('input', saveFormData);
-      categorySelect.addEventListener('change', saveFormData);
-      removeBtn.addEventListener('click', () => removeCertificateEntry(entryId));
-
-      container.appendChild(element);
-
-      certEntries.push({
-        id: entryId,
-        wrapper: element,
-        codeInput,
-        nameInput, 
-        categorySelect,
-        fileInput,
-        indexBadge
-      });
-
-      refreshCertificateIndices();
-      if (!silent) saveFormData();
     }
 
-    function refreshCertificateIndices() {
-      certEntries.forEach((entry, idx) => {
-        if (entry.indexBadge) {
-          entry.indexBadge.textContent = idx + 1;
-        }
-      });
-      updateCertificateControlsState();
-    }
-
-    // 🧩 處理證照代碼輸入：向後端查詢證照名稱和類別 (最終穩定版)
-    async function handleCertificateCodeInput(codeInput, currentNameInput, categorySelect) {
-      const raw = (codeInput.value || '').toUpperCase().trim();
-      codeInput.value = raw;
-      saveFormData();
-
-      // 確定當前使用的 Name 欄位（可能是 input 或 select）
-      let nameElement = currentNameInput;
-      if (nameElement.tagName === 'SELECT') {
-        // 如果當前是 <select>，我們要將它換回 <input>，並重新獲取 DOM 引用
-        const originalInput = document.createElement('input');
-        originalInput.type = 'text';
-        originalInput.className = nameElement.className;
-        originalInput.id = nameElement.id; // 依賴 createCertificateEntryElement 中設定的唯一 ID
-        originalInput.name = nameElement.name;
-        originalInput.required = nameElement.required;
-        originalInput.value = ''; // 清空值
-
-        nameElement.replaceWith(originalInput);
-        nameElement = originalInput; // 將 nameElement 重新指向新的 <input>
-      }
-
-      // 1. ❗ 查詢前，先清除欄位狀態 (關鍵修正，避免舊值殘留)
-      nameElement.value = '';
-      categorySelect.value = 'other';
-      nameElement.readOnly = false;
-
-      // 2. 如果代碼為空，則不做查詢並返回
-      if (!raw) {
-        // 狀態在前面已經被清除，直接返回
-        return;
-      }
-
-      // 3. 執行查詢
-      try {
-        const res = await fetch(`/api/get_certificate_info?code=${encodeURIComponent(raw)}`);
-        const result = await res.json();
-
-        // 確保成功且有資料
-        if (result.success && result.info && result.info.length > 0) {
-          const certs = result.info;
-
-          if (certs.length === 1) {
-            // 情況 1: 只有一個結果 (自動填入，覆蓋前面的空值)
-            const info = certs[0];
-            nameElement.value = info.name || '';
-            categorySelect.value = info.category || 'other';
-            nameElement.readOnly = false;
-
-          } else {
-            // 情況 2: 有多個結果 (替換為下拉選單)
-
-            const selectId = nameElement.id + '-select';
-            const newSelect = document.createElement('select');
-            newSelect.className = nameElement.className;
-            newSelect.id = selectId;
-            newSelect.name = nameElement.name;
-            newSelect.required = nameElement.required;
-
-            const defaultOption = document.createElement('option');
-            defaultOption.value = '';
-            defaultOption.textContent = '請選擇證照名稱...';
-            defaultOption.disabled = true;
-            defaultOption.selected = true;
-            newSelect.appendChild(defaultOption);
-
-            certs.forEach(cert => {
-              const option = document.createElement('option');
-              option.value = cert.name;
-              option.textContent = cert.name;
-              option.dataset.category = cert.category;
-              newSelect.appendChild(option);
-            });
-
-            // 替換原來的 <input>
-            nameElement.replaceWith(newSelect);
-
-            // 重新設置 nameElement 變數引用
-            nameElement = newSelect;
-
-            // 為下拉選單添加事件監聽器，以更新 Category
-            newSelect.addEventListener('change', function () {
-              const selectedOption = this.options[this.selectedIndex];
-              const selectedCategory = selectedOption.dataset.category;
-
-              if (selectedCategory) {
-                categorySelect.value = selectedCategory;
-              } else {
-                categorySelect.value = 'other';
-              }
-              saveFormData();
-            });
-          }
-        } else {
-          // 後端查不到，值在前面已經清空，保持現狀即可 (讓使用者手動輸入)
-          console.log(`⚠️ 後端查無代碼 ${raw}，請手動輸入名稱`);
-        }
-      } catch (error) {
-        console.error("❌ 查詢證照代碼失敗:", error);
-      }
-
-      saveFormData();
-    }
-
-    // 修正後的 removeCertificateEntry 函數
-    function removeCertificateEntry(entryId) {
-      // 獲取容器和相關元素（需要額外邏輯來獲取當前正確的 nameElement）
-      const index = certEntries.findIndex(entry => entry.id === entryId);
-      if (index === -1) return;
-
-      const entry = certEntries[index]; // 獲取當前項目的物件
-
-      // --- 情況 1: 僅剩一筆證照時，清空欄位而非移除整個 wrapper ---
-      if (certEntries.length === 1) {
-
-        // 🚨 關鍵步驟：獲取當前正確的名稱元素
-        const currentNameElement = entry.wrapper.querySelector('.cert-name-input, select[name="cert_names[]"]');
-
-        // 1. 強制清空代碼
-        entry.codeInput.value = '';
-
-        // 2. 呼叫 handleCertificateCodeInput：傳入空代碼，該函數會執行：
-        handleCertificateCodeInput(entry.codeInput, currentNameElement, entry.categorySelect);
-
-        // 清除檔案欄位 (如果存在)
-        if (entry.fileInput) entry.fileInput.value = '';
-        saveFormData();
-        return;
-      }
-
-      // --- 情況 2: 多於一筆證照時，移除整個 wrapper ---
-
-      // 原來的移除邏輯
-      const [removedEntry] = certEntries.splice(index, 1);
-      removedEntry.wrapper.remove();
-
-      refreshCertificateIndices();
-      saveFormData();
-    }
-
-    function initializeCertificatesUI(initialCerts = []) {
-      const container = document.getElementById(CERT_CONTAINER_ID);
-      if (!container) return;
-      container.innerHTML = '';
-      certEntries = [];
-
-      const data = initialCerts.length ? initialCerts.slice(0, CERT_MAX_COUNT) : [{}];
-      data.forEach(cert => addCertificateEntry(cert, { silent: true }));
-      refreshCertificateIndices();
-    }
-
-    // =========================================================================
-    // LocalStorage 儲存
-    // =========================================================================
-
+    // 🧩 儲存表單資料到 LocalStorage
     function saveFormData() {
       if (disableAutoSave) return;
+      const data = {};
       const form = document.getElementById("resumeForm");
-      const data = {
-        fields: {},
-        courses: allCoursesData.map(course => ({
-          name: course.name,
-          credits: course.credits,
-          isNotTaken: course.isNotTaken || false
-        })),
-        certificates: certEntries.map(entry => ({
-          code: entry.codeInput.value.trim(),
-          name: entry.nameInput.value.trim(),
-          category: entry.categorySelect.value
-        }))
-      };
 
-      const skip = new Set(["cert_names[]", "cert_type[]", "course_name[]", "course_credits[]"]);
-
+      // 1. 收集所有單一欄位的值 (排除檔案和按鈕)
       form.querySelectorAll('input, select, textarea').forEach(input => {
         const name = input.name;
-        if (!name || input.type === 'file' || skip.has(name)) return;
-        data.fields[name] = input.value;
+        const type = input.type;
+        if (name && type !== 'file' && type !== 'submit') {
+          data[name] = input.value;
+        }
       });
 
+      // 2. 收集證照資料 (動態表格)
+      const certificateRows = document.querySelectorAll("#certificate-table-body tr");
+      const certificates = [];
+      certificateRows.forEach(row => {
+        const certData = {
+          labor: row.querySelector('input[name="labor_cert[]"]').value,
+          international: row.querySelector('input[name="international_cert[]"]').value,
+          domestic: row.querySelector('input[name="domestic_cert[]"]').value,
+          other: row.querySelector('input[name="other_cert[]"]').value
+        };
+        certificates.push(certData);
+      });
+      data['certificates'] = certificates;
+
+      // 3. 收集課程資料 (課程清單，只儲存 allCoursesData 中的 isNotTaken 狀態)
+      data['courses'] = allCoursesData.map(course => ({
+        name: course.name,
+        credits: course.credits, // 儲存原始 credit
+        isNotTaken: course.isNotTaken || false
+      }));
+
+
       localStorage.setItem(AUTO_SAVE_KEY, JSON.stringify(data));
-      console.log("💾 表單已自動儲存");
+      console.log("✅ 表單已自動儲存到 LocalStorage");
     }
 
+    // 🧩 從 LocalStorage 載入表單資料
     function loadFormData() {
-      const savedDataString = localStorage.getItem(AUTO_SAVE_KEY);
-      const form = document.getElementById("resumeForm");
-      disableAutoSave = true;
-
-      if (!savedDataString) {
-        initializeCertificatesUI([]);
-        disableAutoSave = false;
+      const savedData = localStorage.getItem(AUTO_SAVE_KEY);
+      if (!savedData) {
+        // 如果沒有儲存的資料，則新增一條空白的證照列
+        addNewCertificateRow();
         return;
       }
 
       try {
-        const data = JSON.parse(savedDataString);
-        if (data.fields) {
-          Object.entries(data.fields).forEach(([name, value]) => {
-            const input = form.querySelector(`[name="${name}"]`);
+        const data = JSON.parse(savedData);
+        const form = document.getElementById("resumeForm");
+
+        // 1. 載入單一欄位
+        Object.keys(data).forEach(key => {
+          // 排除動態表格 data['certificates'] 和 data['courses']
+          if (key !== 'certificates' && key !== 'courses') {
+            const input = form.querySelector(`[name="${key}"]`);
             if (input) {
-              input.value = value;
-              if (name === 'conduct_score_numeric') {
+              input.value = data[key];
+              // 載入操行成績分數後，觸發 input 事件，讓轉換邏輯執行
+              if (key === 'conduct_score_numeric') {
                 input.dispatchEvent(new Event('input'));
               }
+            }
+          }
+        });
+
+        // 2. 載入證照資料 (動態表格)
+        const tbody = document.getElementById("certificate-table-body");
+        tbody.innerHTML = ""; // 清空 HTML 中可能的殘留
+
+        if (data.certificates && Array.isArray(data.certificates) && data.certificates.length > 0) {
+          data.certificates.forEach(cert => {
+            // 檢查所有欄位是否皆為空，若皆為空則不載入
+            const isEmpty = Object.values(cert).every(val => !val || val.trim() === '');
+            if (!isEmpty) {
+              addNewCertificateRow(cert);
             }
           });
         }
 
-        let certificateData = [];
-        if (Array.isArray(data.certificates) && data.certificates.length) {
-          certificateData = data.certificates;
-        } else if (Array.isArray(data.certNames) && data.certNames.length) {
-          certificateData = data.certNames.map(name => ({ name }));
-        } else if (Array.isArray(data.certificatesLegacy)) {
-          certificateData = data.certificatesLegacy;
+        // 確保至少有一條證照空白列
+        if (document.querySelectorAll("#certificate-table-body tr").length === 0) {
+          addNewCertificateRow();
         }
 
-        initializeCertificatesUI(certificateData);
-      } catch (error) {
-        console.error("❌ 載入 LocalStorage 資料失敗:", error);
-        localStorage.removeItem(AUTO_SAVE_KEY);
-        initializeCertificatesUI([]);
-      } finally {
-        disableAutoSave = false;
-      }
-    }
+        // 3. 課程資料會在 loadPersonalTemplate 中合併處理
 
-    const addCertBtn = document.getElementById(CERT_ADD_BTN_ID);
-    if (addCertBtn) {
-      addCertBtn.addEventListener('click', () => addCertificateEntry());
+      } catch (e) {
+        console.error("❌ 載入 LocalStorage 資料失敗:", e);
+        localStorage.removeItem(AUTO_SAVE_KEY); // 清除無效資料
+        addNewCertificateRow(); // 載入失敗也確保有一條空白證照列
+      }
     }
 
     // 🧩 載入履歷紀錄
@@ -1243,10 +1024,31 @@
 
       // 針對非動態生成的欄位，設定監聽器
       form.querySelectorAll('input:not([type="file"]), select, textarea').forEach(input => {
-        // 檔案欄位不儲存，動態生成的證照欄位在 addCertificateEntry 中自行綁定
+        // 檔案欄位不儲存，動態生成的證照欄位在 addNewCertificateRow 中處理
         input.addEventListener('input', saveFormData);
         input.addEventListener('change', saveFormData);
       });
+    });
+
+    // 🧩 「相關證照」新增
+
+    // 原本的新增證照列
+    document.getElementById("add-certificate-row").addEventListener("click", () => {
+      addNewCertificateRow(); // 不帶參數即為新增空白列
+      saveFormData(); // 新增後儲存狀態
+    });
+
+    // 替換原本的移除證照列監聽器
+    document.getElementById("certificate-table-body").addEventListener("click", e => {
+      if (e.target.classList.contains("remove-row")) {
+        e.target.closest("tr").remove();
+        saveFormData(); // 移除後儲存狀態
+
+        // 如果移除到沒有任何一列，則新增一條空白列
+        if (document.querySelectorAll("#certificate-table-body tr").length === 0) {
+          addNewCertificateRow();
+        }
+      }
     });
 
     // 操行成績轉換 (加入 saveFormData)

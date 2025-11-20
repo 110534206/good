@@ -732,3 +732,4 @@ def export_statistics():
 def manage_companies():
     return render_template('user_shared/manage_companies.html')               
 
+
