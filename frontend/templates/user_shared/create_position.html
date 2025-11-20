@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>智慧實習平台 | 廠商職位管理</title>
+  <title>智慧實習平台 | 新增職缺</title>
   <style>
     :root {
       --color-primary: #0066cc;
@@ -16,7 +16,6 @@
       --color-muted: #64748b;
       --color-success: #16a34a;
       --color-danger: #dc2626;
-      --color-warning: #f97316;
       --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.08);
       --shadow-md: 0 8px 24px rgba(15, 23, 42, 0.08);
       --radius-md: 12px;
@@ -37,11 +36,12 @@
 
     a {
       color: inherit;
+      text-decoration: none;
     }
 
     .container {
       width: 100%;
-      max-width: 1200px;
+      max-width: 1080px;
       margin: 0 auto;
       padding: 0 1rem;
     }
@@ -67,12 +67,6 @@
       height: 100%;
     }
 
-    .top-bar-left {
-      display: flex;
-      align-items: center;
-      gap: 16px;
-    }
-
     .top-bar-right {
       display: flex;
       align-items: center;
@@ -86,7 +80,6 @@
       border: 1.5px solid var(--color-primary);
       padding: 0.3rem 0.7rem;
       border-radius: 6px;
-      text-decoration: none;
       transition: background-color 0.3s ease, color 0.3s ease;
       font-size: 0.9rem;
       cursor: pointer;
@@ -121,213 +114,99 @@
       align-items: center;
       justify-content: space-between;
       gap: 16px;
-      margin-bottom: 20px;
+      background: #fff;
+      border-radius: var(--radius-lg);
+      padding: 28px 32px;
+      border: 1px solid var(--color-border);
+      box-shadow: var(--shadow-md);
+      margin-bottom: 28px;
+    }
+
+    .page-eyebrow {
+      font-size: 0.85rem;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--color-primary);
+      font-weight: 600;
     }
 
     .page-header h1 {
-      font-size: 1.75rem;
-      margin: 0;
+      margin: 4px 0 8px;
+      font-size: 1.9rem;
     }
 
     .page-header p {
-      margin: 4px 0 0;
+      margin: 0;
       color: var(--color-muted);
     }
 
-    .empty-hint {
-      background: #fff7ed;
-      color: #b45309;
-      padding: 12px 16px;
-      border-radius: 10px;
-      margin: 0 0 20px;
-      border: 1px solid #fed7aa;
-      display: none;
-    }
-
-    .empty-hint.show {
-      display: block;
-    }
-
-    .summary-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-      gap: 16px;
-      margin-bottom: 24px;
-    }
-
-    .summary-card {
-      background: var(--color-card);
-      border-radius: var(--radius-md);
-      padding: 20px;
-      box-shadow: var(--shadow-sm);
-      border: 1px solid var(--color-border);
-    }
-
-    .summary-card .label {
-      font-size: 0.9rem;
-      color: var(--color-muted);
-      margin-bottom: 10px;
-    }
-
-    .summary-card .value {
-      font-size: 1.8rem;
-      font-weight: 700;
+    .page-actions {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
     }
 
     .panel {
       background: var(--color-card);
       border-radius: var(--radius-lg);
-      padding: 24px;
+      padding: 32px;
       box-shadow: var(--shadow-md);
       border: 1px solid var(--color-border);
-      margin-bottom: 32px;
     }
 
-    .panel-header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 12px;
-      margin-bottom: 16px;
-    }
-
-    .panel-header h2 {
-      font-size: 1.2rem;
-      margin: 0;
-    }
-
-    .filter-grid {
+    .form-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-      gap: 16px;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 20px;
     }
 
-    .filter-grid label {
+    .form-group {
       display: flex;
       flex-direction: column;
-      gap: 6px;
+      gap: 8px;
+    }
+
+    label {
       font-weight: 600;
       color: var(--color-muted);
     }
 
     select,
-    input[type="text"],
-    input[type="number"],
+    input,
     textarea {
       width: 100%;
-      padding: 10px 12px;
-      border-radius: 8px;
+      padding: 11px 12px;
+      border-radius: 10px;
       border: 1px solid var(--color-border);
-      background: #fff;
       font-size: 0.95rem;
+      background: #fff;
       transition: border-color 0.2s ease, box-shadow 0.2s ease;
     }
 
     select:focus,
-    input[type="text"]:focus,
-    input[type="number"]:focus,
+    input:focus,
     textarea:focus {
       border-color: var(--color-primary);
       outline: none;
       box-shadow: 0 0 0 3px rgba(0, 102, 204, 0.15);
     }
 
-    input[type="number"]::-webkit-inner-spin-button {
-      height: 100%;
-    }
-
     textarea {
-      min-height: 100px;
+      min-height: 140px;
       resize: vertical;
     }
 
-    .table-wrapper {
-      overflow-x: auto;
-    }
-
-    table.positions-table {
-      width: 100%;
-      border-collapse: collapse;
-      min-width: 760px;
-    }
-
-    table.positions-table thead {
-      background: #f1f5f9;
-    }
-
-    table.positions-table th,
-    table.positions-table td {
-      padding: 14px 16px;
-      text-align: left;
-      border-bottom: 1px solid var(--color-border);
-      vertical-align: top;
-    }
-
-    table.positions-table tbody tr:hover {
-      background: rgba(15, 23, 42, 0.02);
-    }
-
-    table.positions-table .title-cell {
+    .form-actions {
+      margin-top: 28px;
       display: flex;
-      flex-direction: column;
-      gap: 6px;
-    }
-
-    .status-badge {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      padding: 4px 10px;
-      border-radius: 999px;
-      font-size: 0.8rem;
-      font-weight: 600;
-    }
-
-    .status-badge.active {
-      background: rgba(34, 197, 94, 0.12);
-      color: var(--color-success);
-    }
-
-    .status-badge.inactive {
-      background: rgba(100, 116, 139, 0.12);
-      color: var(--color-muted);
-    }
-
-    .link-button {
-      background: none;
-      border: none;
-      color: var(--color-primary);
-      font-weight: 600;
-      cursor: pointer;
-      padding: 4px 0;
-    }
-
-    .link-button:hover {
-      text-decoration: underline;
-    }
-
-    .detail-row td {
-      background: #f8fafc;
-    }
-
-    .detail-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-      gap: 12px 20px;
-      font-size: 0.92rem;
-      color: var(--color-muted);
-    }
-
-    .detail-label {
-      display: block;
-      font-weight: 600;
-      margin-bottom: 6px;
-      color: var(--color-text);
+      flex-wrap: wrap;
+      gap: 12px;
+      justify-content: flex-end;
     }
 
     .btn {
-      border-radius: 8px;
-      padding: 10px 18px;
+      border-radius: 10px;
+      padding: 11px 20px;
       font-weight: 600;
       font-size: 0.95rem;
       cursor: pointer;
@@ -356,15 +235,6 @@
       transform: translateY(-1px);
     }
 
-    .btn-ghost {
-      background: rgba(15, 23, 42, 0.05);
-      color: var(--color-text);
-    }
-
-    .btn-ghost:hover:not(:disabled) {
-      background: rgba(15, 23, 42, 0.08);
-    }
-
     .btn-outline {
       background: #fff;
       border: 1px solid var(--color-border);
@@ -376,91 +246,27 @@
       color: var(--color-primary);
     }
 
-    .flag {
-      font-size: 0.8rem;
-      border-radius: 999px;
-      padding: 2px 8px;
-      background: rgba(59, 130, 246, 0.12);
-      color: var(--color-primary);
-      font-weight: 600;
-      display: inline-block;
+    .btn-ghost {
+      background: rgba(15, 23, 42, 0.05);
+      color: var(--color-text);
     }
 
-    .modal {
-      position: fixed;
-      inset: 0;
-      background: rgba(15, 23, 42, 0.45);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      padding: 24px;
-      z-index: 1400;
-      opacity: 0;
-      pointer-events: none;
-      transition: opacity 0.2s ease;
+    .btn-ghost:hover:not(:disabled) {
+      background: rgba(15, 23, 42, 0.08);
     }
 
-    .modal.show {
-      opacity: 1;
-      pointer-events: auto;
+    .empty-hint {
+      background: #fff7ed;
+      color: #b45309;
+      padding: 12px 16px;
+      border-radius: 10px;
+      margin: 16px 0 0;
+      border: 1px solid #fed7aa;
+      display: none;
     }
 
-    .modal-content {
-      background: #fff;
-      border-radius: 18px;
-      max-width: 620px;
-      width: 100%;
-      box-shadow: 0 20px 48px rgba(15, 23, 42, 0.18);
-      overflow: hidden;
-    }
-
-    .modal-header {
-      padding: 20px 24px;
-      border-bottom: 1px solid var(--color-border);
-    }
-
-    .modal-header h3 {
-      margin: 0;
-      font-size: 1.3rem;
-    }
-
-    .modal-body {
-      padding: 20px 24px 8px;
-      display: grid;
-      gap: 16px;
-    }
-
-    .modal-body .form-group {
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
-    }
-
-    .option-row {
-      display: flex;
-      gap: 12px;
-      align-items: center;
-      flex-wrap: wrap;
-    }
-
-    .modal-footer {
-      padding: 16px 24px 24px;
-      display: flex;
-      justify-content: flex-end;
-      gap: 12px;
-    }
-
-    .checkbox-field {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      font-weight: 600;
-      color: var(--color-muted);
-    }
-
-    input[type="checkbox"] {
-      width: 18px;
-      height: 18px;
+    .empty-hint.show {
+      display: block;
     }
 
     .toast {
@@ -490,10 +296,6 @@
 
     .toast.error {
       background: var(--color-danger);
-    }
-
-    .toast.info {
-      background: var(--color-primary-dark);
     }
 
     @keyframes fade-in {
@@ -562,7 +364,6 @@
       padding: 0.6rem 0;
       font-size: 1.1rem;
       color: #e2e8f0;
-      text-decoration: none;
       border-radius: 4px;
       transition: background-color 0.2s ease;
     }
@@ -573,16 +374,12 @@
     }
 
     @media (max-width: 768px) {
-      .page-header h1 {
-        font-size: 1.5rem;
+      .page-header {
+        padding: 20px;
       }
 
       .panel {
         padding: 20px;
-      }
-
-      .modal-content {
-        max-width: 100%;
       }
     }
   </style>
@@ -612,35 +409,59 @@
   <main class="management-container container">
     <header class="page-header">
       <div>
-        <h1>職位需求管理</h1>
+        <div class="page-eyebrow">新增職缺</div>
+        <h1>填寫職缺資訊</h1>
+        <p>提交後將同步給指導老師與科助查看，請確認內容無誤。</p>
       </div>
-      <button id="createPositionBtn" class="btn btn-primary">＋ 新增職缺</button>
+      <div class="page-actions">
+        <a class="btn btn-outline" href="/manage_positions">返回職缺列表</a>
+      </div>
     </header>
 
-    <p id="companyHint" class="empty-hint">目前尚未建立與您對接指導老師關聯的公司資料。您新增的職缺將會顯示給對接的指導老師和科助查看。請確認您的指導老師已建立公司，或聯絡平台管理員設定對接關係。</p>
-
-    <section class="panel" aria-label="職缺列表">
-      <div class="panel-header">
-        <h2>職缺列表</h2>
-      </div>
-      <div class="table-wrapper">
-        <table class="positions-table">
-          <thead>
-            <tr>
-              <th style="width: 30%;">職缺名稱 / 公司</th>
-              <th style="width: 15%;">名額</th>
-              <th style="width: 20%;">期間 / 時間</th>
-              <th style="width: 15%;">薪資</th>
-              <th style="width: 20%;">操作</th>
-            </tr>
-          </thead>
-          <tbody id="positionsTableBody">
-            <tr>
-              <td colspan="5">資料載入中...</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
+    <section class="panel" aria-label="新增職缺表單">
+      <form id="positionForm">
+        <div class="form-grid">
+          <div class="form-group">
+            <label for="formCompany">所屬公司 <span style="color: var(--color-danger);">*</span></label>
+            <select id="formCompany" required>
+              <option value="">資料載入中...</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="formTitle">職缺名稱 <span style="color: var(--color-danger);">*</span></label>
+            <input id="formTitle" type="text" placeholder="例如：資料分析實習生" required maxlength="100" />
+          </div>
+          <div class="form-group">
+            <label for="formSlots">需求名額 <span style="color: var(--color-danger);">*</span></label>
+            <input id="formSlots" type="number" min="1" step="1" required />
+          </div>
+          <div class="form-group">
+            <label for="formPeriod">實習期間</label>
+            <input id="formPeriod" type="text" placeholder="例如：2025/07 - 2025/09 (暑期)" maxlength="120" />
+          </div>
+          <div class="form-group">
+            <label for="formWorkTime">上班時間 / 方式</label>
+            <input id="formWorkTime" type="text" placeholder="例如：週一至週五，09:00-18:00，可遠端" maxlength="160" />
+          </div>
+          <div class="form-group">
+            <label for="formSalary">薪資 / 津貼 (可留空)</label>
+            <input id="formSalary" type="text" placeholder="例如：月薪 30,000" maxlength="120" />
+          </div>
+        </div>
+        <div class="form-group" style="margin-top: 20px;">
+          <label for="formDescription">職務說明</label>
+          <textarea id="formDescription" placeholder="簡述職務內容、所需技能與工作重點" maxlength="1500"></textarea>
+        </div>
+        <div class="form-group" style="margin-top: 16px;">
+          <label for="formRemark">備註 (可留空)</label>
+          <textarea id="formRemark" placeholder="補充資訊、報到注意事項等" maxlength="800"></textarea>
+        </div>
+        <div class="form-actions">
+          <button type="button" class="btn btn-ghost" id="cancelFormBtn">取消</button>
+          <button type="submit" class="btn btn-primary" id="submitFormBtn">儲存職缺</button>
+        </div>
+        <p id="noCompanyHint" class="empty-hint">目前尚未建立與您對接指導老師關聯的公司資料，無法新增職缺。請聯絡指導老師或平台管理員協助建立。</p>
+      </form>
     </section>
   </main>
 
@@ -661,14 +482,22 @@
       'use strict';
 
       const state = {
-        companies: [],
-        jobs: []
+        companies: []
       };
 
       const els = {
-        companyHint: document.getElementById('companyHint'),
-        positionsTableBody: document.getElementById('positionsTableBody'),
-        createBtn: document.getElementById('createPositionBtn'),
+        form: document.getElementById('positionForm'),
+        formCompany: document.getElementById('formCompany'),
+        formTitle: document.getElementById('formTitle'),
+        formSlots: document.getElementById('formSlots'),
+        formPeriod: document.getElementById('formPeriod'),
+        formWorkTime: document.getElementById('formWorkTime'),
+        formSalary: document.getElementById('formSalary'),
+        formDescription: document.getElementById('formDescription'),
+        formRemark: document.getElementById('formRemark'),
+        cancelFormBtn: document.getElementById('cancelFormBtn'),
+        submitFormBtn: document.getElementById('submitFormBtn'),
+        noCompanyHint: document.getElementById('noCompanyHint'),
         toast: document.getElementById('toast')
       };
 
@@ -696,96 +525,33 @@
         }, 3600);
       }
 
-      function setTableLoading() {
-        if (!els.positionsTableBody) return;
-        els.positionsTableBody.innerHTML = `
-          <tr>
-            <td colspan="5">資料載入中...</td>
-          </tr>
-        `;
+      function toggleFormAvailability(hasCompanies) {
+        const fields = els.form.querySelectorAll('input, select, textarea');
+        fields.forEach((field) => {
+          field.disabled = !hasCompanies;
+        });
+        els.submitFormBtn.disabled = !hasCompanies;
+        els.noCompanyHint.classList.toggle('show', !hasCompanies);
       }
 
-      function updateCompaniesControls() {
-        const hasCompanies = state.companies.length > 0;
-        if (els.createBtn) {
-          els.createBtn.disabled = !hasCompanies;
-        }
-        if (els.companyHint) {
-          els.companyHint.classList.toggle('show', !hasCompanies);
-        }
-      }
-
-      function formatSalary(value) {
-        if (value === null || value === undefined || value === '') {
-          return '—';
-        }
-        if (typeof value === 'number') {
-          return value.toLocaleString('zh-TW');
-        }
-        return escapeHtml(String(value));
-      }
-
-      function renderPositions() {
-        const jobs = state.jobs || [];
-        if (!jobs.length) {
-          els.positionsTableBody.innerHTML = `
-            <tr>
-              <td colspan="5">尚無職缺資料。</td>
-            </tr>
-          `;
+      function populateCompanies() {
+        const { companies } = state;
+        if (!companies.length) {
+          els.formCompany.innerHTML = '<option value="">尚無可用公司</option>';
+          toggleFormAvailability(false);
           return;
         }
-
-        const rows = [];
-        jobs.forEach((job) => {
-          const salaryText = formatSalary(job.salary);
-          const periodText = job.period ? escapeHtml(job.period) : '—';
-          const workTimeText = job.work_time ? escapeHtml(job.work_time) : '—';
-          const descriptionText = job.description ? escapeHtml(job.description) : '尚未提供';
-          const remarkText = job.remark ? escapeHtml(job.remark) : '—';
-
-          rows.push(`
-            <tr data-id="${job.id}">
-              <td>
-                <div class="title-cell">
-                  <span style="font-weight:700;font-size:1.05rem;">${escapeHtml(job.title)}</span>
-                  <span style="color:var(--color-muted); font-size:0.9rem;">${escapeHtml(job.company_name || '')}</span>
-                </div>
-              </td>
-              <td>${job.slots ?? 0} 人</td>
-              <td>
-                <div class="title-cell" style="gap:4px;">
-                  <span>${periodText}</span>
-                  <span style="color:var(--color-muted); font-size:0.85rem;">${workTimeText}</span>
-                </div>
-              </td>
-              <td>${salaryText}</td>
-              <td>
-                <button class="link-button" data-action="delete" data-id="${job.id}" style="color:var(--color-danger);">刪除</button>
-              </td>
-            </tr>
-            <tr class="detail-row">
-              <td colspan="5">
-                <div class="detail-grid">
-                  <div>
-                    <span class="detail-label">職務說明</span>
-                    <p style="margin:0;">${descriptionText}</p>
-                  </div>
-                  <div>
-                    <span class="detail-label">備註</span>
-                    <p style="margin:0;">${remarkText}</p>
-                  </div>
-                </div>
-              </td>
-            </tr>
-          `);
+        const options = ['<option value="">請選擇公司</option>'];
+        companies.forEach((company) => {
+          options.push(
+            `<option value="${company.id}">${escapeHtml(company.name || `公司 #${company.id}`)}</option>`
+          );
         });
-
-        els.positionsTableBody.innerHTML = rows.join('');
+        els.formCompany.innerHTML = options.join('');
+        toggleFormAvailability(true);
       }
 
-      async function loadPositions() {
-        setTableLoading();
+      async function loadCompanies() {
         try {
           const response = await fetch('/vendor/api/positions', {
             headers: { 'Accept': 'application/json' },
@@ -796,60 +562,71 @@
             throw new Error(result.message || '載入失敗');
           }
           state.companies = result.companies || [];
-          state.jobs = result.items || [];
-
-          updateCompaniesControls();
-          renderPositions();
+          populateCompanies();
         } catch (error) {
           showToast(error.message || '資料載入失敗，請稍後再試', 'error');
-          els.positionsTableBody.innerHTML = `
-            <tr>
-              <td colspan="5">載入資料時發生錯誤，請稍後再試。</td>
-            </tr>
-          `;
+          state.companies = [];
+          populateCompanies();
         }
       }
 
-      async function deletePosition(jobId) {
-        if (!confirm('確定要刪除此職缺嗎？')) {
+      async function submitForm(event) {
+        event.preventDefault();
+        if (!state.companies.length) {
+          showToast('尚未建立任何公司，無法新增職缺。', 'error');
           return;
         }
 
+        const payload = {
+          company_id: els.formCompany.value,
+          title: els.formTitle.value.trim(),
+          slots: els.formSlots.value,
+          period: els.formPeriod.value.trim(),
+          work_time: els.formWorkTime.value.trim(),
+          salary: els.formSalary.value.trim(),
+          description: els.formDescription.value.trim(),
+          remark: els.formRemark.value.trim(),
+          is_active: true
+        };
+
+        if (!payload.company_id) {
+          showToast('請選擇所屬公司。', 'error');
+          return;
+        }
+        if (!payload.title) {
+          showToast('請輸入職缺名稱。', 'error');
+          return;
+        }
+
+        els.submitFormBtn.disabled = true;
         try {
-          const response = await fetch(`/vendor/api/positions/${jobId}`, {
-            method: 'DELETE',
-            headers: { 'Accept': 'application/json' },
-            credentials: 'include'
+          const response = await fetch('/vendor/api/positions', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify(payload)
           });
           const result = await response.json();
           if (!response.ok || !result.success) {
-            throw new Error(result.message || '刪除失敗');
+            throw new Error(result.message || '儲存失敗');
           }
-          showToast('職缺已刪除', 'success');
-          await loadPositions();
+          showToast('職缺新增成功', 'success');
+          setTimeout(() => {
+            window.location.href = '/manage_positions';
+          }, 800);
         } catch (error) {
-          showToast(error.message || '刪除失敗，請稍後再試', 'error');
+          showToast(error.message || '儲存失敗，請稍後再試', 'error');
+          els.submitFormBtn.disabled = false;
         }
       }
 
       function bindEvents() {
-        if (els.createBtn) {
-          els.createBtn.addEventListener('click', () => {
-            if (!state.companies.length) {
-              showToast('尚未建立任何公司，無法新增職缺。', 'error');
-              return;
-            }
-            window.location.href = '/manage_positions/new';
-          });
-        }
-        els.positionsTableBody.addEventListener('click', (event) => {
-          const target = event.target;
-          if (!(target instanceof HTMLElement)) return;
-          const action = target.dataset.action;
-          const id = Number(target.dataset.id);
-          if (!action || !id) return;
-          if (action === 'delete') {
-            deletePosition(id);
+        els.form.addEventListener('submit', submitForm);
+        els.cancelFormBtn.addEventListener('click', () => {
+          if (document.referrer && document.referrer.includes('/manage_positions')) {
+            history.back();
+          } else {
+            window.location.href = '/manage_positions';
           }
         });
       }
@@ -909,9 +686,9 @@
       function init() {
         initMenu();
         initAccountDropdown();
-        bindEvents();
         loadAvatar();
-        loadPositions();
+        bindEvents();
+        loadCompanies();
       }
 
       document.addEventListener('DOMContentLoaded', init);
@@ -920,3 +697,4 @@
 </body>
 
 </html>
+
