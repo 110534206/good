@@ -265,6 +265,22 @@
       box-shadow: var(--shadow-md);
     }
 
+    .summary-card--placeholder {
+      cursor: pointer;
+      border-style: dashed;
+      background: var(--color-card);
+    }
+
+    .summary-card--placeholder:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 12px 28px rgba(15, 23, 42, 0.12);
+    }
+
+    .summary-card--placeholder:focus {
+      outline: 2px solid rgba(0, 102, 204, 0.35);
+      outline-offset: 2px;
+    }
+
     .empty-state {
       text-align: center;
       padding: 48px 24px;
@@ -457,7 +473,8 @@
             company,
             color: colors[index % colors.length],
             label: feature.label,
-            noteWhenMissing: `尚未找到帳號 ${feature.account} 對應的公司`,
+            account: feature.account,
+            noteWhenMissing: `尚未找到帳號 ${feature.account} 對應的指導老師`,
             noteWhenAvailable: `由帳號 ${feature.account} 提供的合作廠商`
           }));
         });
@@ -487,10 +504,12 @@
         }
 
         container.innerHTML = cards.join('');
+        initPlaceholderListener();
 
-        function renderCard({ company, color, label, noteWhenMissing = '尚未頂上任何資料，請待廠商建立後再試', noteWhenAvailable = '點擊前往公司詳細資料' }) {
+        function renderCard({ company, color, label, account = '', noteWhenMissing = '尚未頂上任何資料，請待廠商建立後再試', noteWhenAvailable = '點擊前往公司詳細資料' }) {
           const title = escapeHtml(label || company?.name || `公司 #${company?.id ?? ''}`);
           const note = company && company.id ? noteWhenAvailable : noteWhenMissing;
+          const placeholderMessage = escapeHtml(noteWhenMissing);
           const content = `
             <div class="summary-card-content">
               <div class="summary-card-title">
@@ -501,7 +520,18 @@
             </div>
           `;
           if (!company || !company.id) {
-            return `<article class="summary-card summary-card--${color} disabled">${content}</article>`;
+            return `
+              <button type="button"
+                class="summary-card summary-card--${color} summary-card--placeholder"
+                data-message="${placeholderMessage}"
+                aria-label="${title}：${placeholderMessage}">
+                ${content}
+                <div class="summary-card-footer">
+                  <span>帳號 <strong>${escapeHtml(account || '未指定')}</strong></span>
+                  <span>狀態 <strong>待建立</strong></span>
+                </div>
+              </button>
+            `;
           }
           return `
             <a class="summary-card summary-card--${color}" href="/teacher/company/${company.id}" aria-label="查看${title}公司資料">
@@ -513,6 +543,24 @@
             </a>
           `;
         }
+      }
+
+      function handlePlaceholderClick(event) {
+        const placeholderCard = event.target.closest('.summary-card--placeholder');
+        if (!placeholderCard || !els.companySummaryGrid.contains(placeholderCard)) {
+          return;
+        }
+        event.preventDefault();
+        const message = placeholderCard.dataset.message || '尚未找到對應的公司資料';
+        showToast(message, 'info');
+      }
+
+      function initPlaceholderListener() {
+        if (!els.companySummaryGrid || els.companySummaryGrid._placeholderBound) {
+          return;
+        }
+        els.companySummaryGrid.addEventListener('click', handlePlaceholderClick);
+        els.companySummaryGrid._placeholderBound = true;
       }
 
       async function loadCompanies() {
