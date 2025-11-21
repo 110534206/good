@@ -14,6 +14,58 @@ def notifications_page():
     """一般使用者通知中心"""
     return render_template("user_shared/notifications.html")
 
+# =========================================================
+# 通知建立 Helper 函式
+# =========================================================
+def create_notification(user_id, title, message, category="general", link_url=None):
+    """統一建立通知，支援分類、自動分類"""
+    try:
+        # ================================
+        # 1. 自動分類（若 category = general）
+        # ================================
+        if category == "general":
+            title_lower = title.lower()
+            msg_lower = message.lower()
+
+            # 履歷相關
+            if any(k in title_lower for k in ["履歷", "resume"]) or \
+               any(k in msg_lower for k in ["履歷", "resume"]):
+                category = "resume"
+
+            # 志願序
+            elif any(k in title_lower for k in ["志願序", "ranking"]) or \
+                 any(k in msg_lower for k in ["志願序", "ranking"]):
+                category = "ranking"
+
+            # 實習公司
+            elif any(k in title_lower for k in ["公司", "實習", "廠商", "intern"]) or \
+                 any(k in msg_lower for k in ["公司", "實習", "廠商", "intern"]):
+                category = "company"
+
+            # 審核通知
+            elif any(k in title_lower for k in ["審核", "批准", "退件"]) or \
+                 any(k in msg_lower for k in ["審核", "批准", "退件"]):
+                category = "approval"
+
+        # ================================
+        # 2. 寫入資料庫
+        # ================================
+        conn = get_db()
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO notifications (user_id, title, message, category, link_url, is_read, created_at)
+            VALUES (%s, %s, %s, %s, %s, 0, NOW())
+        """, (user_id, title, message, category, link_url))
+        conn.commit()
+        return True
+
+    except Exception:
+        traceback.print_exc()
+        return False
+
+    finally:
+        cursor.close()
+        conn.close()
 
 # =========================================================
 # 個人通知 API
@@ -28,7 +80,7 @@ def get_my_notifications():
         conn = get_db()
         cursor = conn.cursor(dictionary=True)
         cursor.execute("""
-            SELECT id, title, message, link_url, is_read, created_at
+            SELECT id, title, message, category, link_url, is_read, created_at
             FROM notifications
             WHERE user_id = %s
             ORDER BY created_at DESC
@@ -42,13 +94,11 @@ def get_my_notifications():
         cursor.close()
         conn.close()
 
-
 @notification_bp.route("/api/mark_read/<int:nid>", methods=["POST"])
 def mark_read(nid):
     user_id = session.get("user_id")
     if not user_id:
         return jsonify({"success": False, "message": "未登入"}), 401
-
     try:
         conn = get_db()
         cursor = conn.cursor()
@@ -62,13 +112,11 @@ def mark_read(nid):
         cursor.close()
         conn.close()
 
-
 @notification_bp.route("/api/notification/delete/<int:nid>", methods=["DELETE"])
 def delete_notification(nid):
     user_id = session.get("user_id")
     if not user_id:
         return jsonify({"success": False, "message": "未登入"}), 401
-
     try:
         conn = get_db()
         cursor = conn.cursor()
@@ -84,9 +132,8 @@ def delete_notification(nid):
         cursor.close()
         conn.close()
 
-
 # =========================================================
-# 系統自動通知（例如履歷退件）
+# 系統自動通知 API 範例
 # =========================================================
 @notification_bp.route("/api/create_resume_rejection", methods=["POST"])
 def create_resume_rejection():
@@ -106,18 +153,56 @@ def create_resume_rejection():
         message += f"退件原因：{rejection_reason}\n"
     message += "請依建議修改後重新上傳。"
 
-    try:
-        conn = get_db()
-        cursor = conn.cursor()
-        cursor.execute("""
-            INSERT INTO notifications (user_id, title, message, link_url, is_read, created_at)
-            VALUES (%s, %s, %s, NULL, 0, NOW())
-        """, (student_user_id, title, message))
-        conn.commit()
+    # 使用 helper 函式建立通知
+    success = create_notification(student_user_id, title, message, category="resume")
+    if success:
         return jsonify({"success": True, "message": "退件通知已建立"})
-    except Exception:
-        traceback.print_exc()
+    else:
         return jsonify({"success": False, "message": "新增失敗"}), 500
-    finally:
-        cursor.close()
-        conn.close()
+
+# =========================================================
+# 範例：志願序通知
+# =========================================================
+@notification_bp.route("/api/create_ranking_update", methods=["POST"])
+def create_ranking_update():
+    data = request.get_json() or {}
+    student_user_id = data.get("student_user_id")
+    update_info = escape(data.get("update_info", ""))
+
+    try:
+        student_user_id = int(student_user_id)
+    except (TypeError, ValueError):
+        return jsonify({"success": False, "message": "student_user_id 無效"}), 400
+
+    title = "志願序更新通知"
+    message = f"您的志願序有新的更新：\n{update_info}"
+
+    success = create_notification(student_user_id, title, message, category="ranking")
+    if success:
+        return jsonify({"success": True, "message": "志願序通知已建立"})
+    else:
+        return jsonify({"success": False, "message": "新增失敗"}), 500
+
+# =========================================================
+# 範例：實習公司通知
+# =========================================================
+@notification_bp.route("/api/create_company_announcement", methods=["POST"])
+def create_company_announcement():
+    data = request.get_json() or {}
+    student_user_id = data.get("student_user_id")
+    company_name = escape(data.get("company_name", "公司"))
+    content = escape(data.get("content", ""))
+
+    try:
+        student_user_id = int(student_user_id)
+    except (TypeError, ValueError):
+        return jsonify({"success": False, "message": "student_user_id 無效"}), 400
+
+    title = f"{company_name} 公告"
+    message = content
+
+    success = create_notification(student_user_id, title, message, category="company")
+    if success:
+        return jsonify({"success": True, "message": "公司通知已建立"})
+    else:
+        return jsonify({"success": False, "message": "新增失敗"}), 500

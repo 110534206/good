@@ -5,138 +5,296 @@
   <meta charset="UTF-8">
   <title>智慧實習平台 | 通知中心</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+
   <style>
     body {
       padding: 2rem;
       font-family: "Noto Sans TC", sans-serif;
-      background: #f8fafc;
+      background: #f2f6fc;
     }
 
     h1 {
-      color: #0d6efd;
-      margin-bottom: 2rem;
+      font-weight: 700;
+      color: #1a2b4c;
     }
 
-    .unread {
-      background-color: #e9f3ff;
-      font-weight: bold;
+    /* 搜尋框 */
+    #searchInput {
+      max-width: 380px;
+      border-radius: 10px;
+      padding: 10px 14px;
+      border: 1px solid #c8d6e5;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);
     }
 
-    .read {
-      color: #555;
+    /* 分類標題卡片 */
+    .category-title {
+      font-size: 1.1rem;
+      font-weight: 600;
+      cursor: pointer;
+      padding: 12px 16px;
+      background: white;
+      border: 1px solid #dce7f7;
+      margin-top: 14px;
+      border-radius: 10px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      box-shadow: 0 3px 6px rgba(0, 0, 0, 0.06);
+      transition: 0.2s;
     }
 
-    .btn-sm {
-      margin-right: 0.25rem;
+    .category-title:hover {
+      background: #f5f9ff;
+      transform: translateY(-2px);
+    }
+
+    /* 箭頭動畫 */
+    .arrow {
+      transition: transform 0.25s;
+    }
+
+    .arrow.open {
+      transform: rotate(90deg);
+    }
+
+    /* 數字徽章 */
+    .category-count {
+      background: #0d6efd;
+      color: white;
+      padding: 3px 10px;
+      border-radius: 12px;
+      font-size: 0.75rem;
+      font-weight: 600;
+    }
+
+    /* 通知卡片 */
+    .notif-item {
+      border: 1px solid #e1e7f0;
+      border-radius: 12px;
+      padding: 14px;
+      margin-top: 10px;
+      background: white;
+      cursor: pointer;
+      transition: 0.15s;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);
+    }
+
+    .notif-item:hover {
+      background: #f8fbff;
+      transform: translateX(3px);
+    }
+
+    /* 未讀通知 */
+    .notif-unread {
+      border-left: 4px solid #0d6efd;
+      background: #eaf3ff;
+    }
+
+    /* 詳細內容區塊 */
+    .notif-detail {
+      display: none;
+      margin-top: 12px;
+      padding: 12px 16px;
+      background: #f0f6ff;
+      border-left: 3px solid #0d6efd;
+      border-radius: 8px;
+      animation: fadeIn 0.25s ease;
+    }
+
+    @keyframes fadeIn {
+      from {
+        opacity: 0;
+      }
+
+      to {
+        opacity: 1;
+      }
+    }
+
+    /* 按鈕排版 */
+    .notif-actions button {
+      margin-right: 8px;
     }
   </style>
 </head>
 
 <body>
   <div class="container">
-    <h1>通知中心</h1>
+    <h1 class="mb-4">通知中心</h1>
 
-    <table class="table table-hover align-middle">
-      <thead class="table-light">
-        <tr>
-          <th>標題</th>
-          <th>內容</th>
-          <th>時間</th>
-          <th>操作</th>
-        </tr>
-      </thead>
-      <tbody id="notifTable"></tbody>
-    </table>
+    <input type="text" id="searchInput" class="form-control mb-4" placeholder="搜尋通知（標題 / 內容）...">
+
+    <div id="groupContainer"></div>
   </div>
 
   <script>
-    // ------------------------------------
-    //  廠商審核 JS 函式
-    // ------------------------------------
-    async function approveVendor(notifId, vendorUserId) {
-        if (!confirm('確定要通過該廠商的帳號審核嗎？')) return;
+  let allNotifications = [];
 
-        // 1. 調用後端審核 API
-        const res = await fetch(`/admin/api/approve_vendor/${vendorUserId}`, { method: 'POST' }); 
-        const data = await res.json();
+  const categoryNames = {
+    resume: "📄 履歷相關通知",
+    ranking: "💡 志願序相關通知",
+    company: "🏢 實習公司通知",
+    system: "⚙️ 系統通知",
+    approval: "📝 審核通知",
+    general: "📢 一般通知"
+  };
 
-        if (data.success) {
-            alert(data.message);
-            // 2. 審核成功後，將該通知標記為已讀 (避免重複操作)
-            await markRead(notifId); 
-            loadNotifications(); // 重新載入通知列表
-        } else {
-            alert('審核失敗: ' + data.message);
-        }
-    }
-
-    // ------------------------------------
-    // 載入通知函式
-    // ------------------------------------
-    async function loadNotifications() {
-      const res = await fetch('/api/my_notifications');
+  async function loadNotifications() {
+    try {
+      const res = await fetch("/api/my_notifications");
       const data = await res.json();
-      const tbody = document.getElementById('notifTable');
-      tbody.innerHTML = '';
 
       if (!data.success) {
-        tbody.innerHTML = `<tr><td colspan="4" class="text-center text-danger">${data.message || '載入失敗'}</td></tr>`;
+        document.getElementById("groupContainer").innerHTML =
+          `<div class="alert alert-danger">${data.message}</div>`;
         return;
       }
 
-      data.notifications.forEach(n => {
-        const row = document.createElement('tr');
-        row.className = n.is_read ? 'read' : 'unread';
+      // 修正：沒有 category 時 fallback 至 general
+      allNotifications = data.notifications.map(n => ({
+        ...n,
+        category: n.category || "general"
+      }));
 
-        let actionButton = '';
-        // 🎯 核心修改：檢查是否為審核連結
-        const isApprovalLink = n.link_url && n.link_url.startsWith('/admin/api/approve_vendor/');
+      renderGroups();
+    } catch (err) {
+      document.getElementById("groupContainer").innerHTML =
+        `<div class="alert alert-danger">無法載入通知</div>`;
+    }
+  }
 
-        if (isApprovalLink) {
-            // 提取廠商 User ID (n.link_url 的最後一部分)
-            const userId = n.link_url.split('/').pop();
-            // n.id 是通知ID，用於 markRead；userId 是廠商ID，用於 approveVendor API
-            // 只有未讀通知才顯示審核按鈕
-            if (!n.is_read) {
-                 actionButton = `<button class="btn btn-sm btn-success" onclick="approveVendor(${n.id}, ${userId})">同意審核</button>`;
-            } else {
-                 actionButton = `<span class="badge bg-success">已審核</span>`;
-            }
-        } else {
-            // 保持現有的 "前往" 連結邏輯
-            actionButton = n.link_url ? `<a href="${n.link_url}" class="btn btn-sm btn-primary">前往</a>` : '';
-        }
-        
-        row.innerHTML = `
-        <td>${n.is_read ? '✅' : '🆕'} ${n.title}</td>
-        <td>${n.message.replace(/\\n/g, '<br>')}</td>
-        <td>${new Date(n.created_at).toLocaleString('zh-TW', { hour12: false })}</td>
-        <td>
-          ${!n.is_read ? `<button class="btn btn-sm btn-success" onclick="markRead(${n.id})">已讀</button>` : ''}
-          <button class="btn btn-sm btn-danger" onclick="deleteNotif(${n.id})">刪除</button>
-        </td>
+  function renderGroups() {
+    const keyword = document.getElementById("searchInput").value.toLowerCase();
+    const container = document.getElementById("groupContainer");
+    container.innerHTML = "";
+
+    const groups = {};
+
+    allNotifications.forEach(n => {
+      const cat = n.category || "general";
+
+      // 確保分類存在
+      if (!groups[cat]) groups[cat] = [];
+
+      // 支援搜尋
+      if (
+        n.title.toLowerCase().includes(keyword) ||
+        n.message.toLowerCase().includes(keyword)
+      ) {
+        groups[cat].push(n);
+      }
+    });
+
+    Object.keys(groups).forEach(cat => {
+      const list = groups[cat];
+      if (list.length === 0) return;
+
+      const section = document.createElement("div");
+
+      // ==== 分類標題 ====
+      const header = document.createElement("div");
+      header.className = "category-title";
+
+      header.innerHTML = `
+        <div>${categoryNames[cat] || "📁 " + cat}</div>
+        <div class="d-flex align-items-center">
+          <span class="category-count">${list.length}</span>
+          <span class="arrow ms-2">▶</span>
+        </div>
       `;
-        tbody.appendChild(row);
+
+      const arrow = header.querySelector(".arrow");
+
+      // 預設收合 (你選 A)
+      const box = document.createElement("div");
+      box.style.display = "none";
+
+      header.addEventListener("click", () => {
+        box.style.display = box.style.display === "block" ? "none" : "block";
+        arrow.classList.toggle("open");
       });
+
+      // ==== 通知列表 ====
+      list.forEach(n => {
+        const item = document.createElement("div");
+        item.className = "notif-item " + (n.is_read ? "" : "notif-unread");
+
+        const titleDiv = document.createElement("div");
+        titleDiv.innerHTML = `
+          <strong style="font-size:1.05rem;">${n.title}</strong>
+          <span class="text-muted float-end">${formatDate(n.created_at)}</span>
+        `;
+
+        const detailDiv = document.createElement("div");
+        detailDiv.className = "notif-detail";
+        detailDiv.innerHTML = `<p style="white-space:pre-line;">${n.message}</p>`;
+
+        item.appendChild(titleDiv);
+        item.appendChild(detailDiv);
+
+        // 展開詳細內容
+        item.addEventListener("click", () => {
+          detailDiv.style.display =
+            detailDiv.style.display === "block" ? "none" : "block";
+        });
+
+        addActionButtons(detailDiv, n);
+
+        box.appendChild(item);
+      });
+
+      section.appendChild(header);
+      section.appendChild(box);
+      container.appendChild(section);
+    });
+  }
+
+  function addActionButtons(detailDiv, n) {
+    const div = document.createElement("div");
+    div.className = "notif-actions mt-2";
+
+    if (!n.is_read) {
+      const readBtn = document.createElement("button");
+      readBtn.className = "btn btn-success btn-sm";
+      readBtn.innerHTML = "✔ 已讀";
+      readBtn.onclick = e => {
+        e.stopPropagation();
+        markRead(n.id);
+      };
+      div.appendChild(readBtn);
     }
 
-    async function markRead(id) {
-      const res = await fetch(`/api/mark_read/${id}`, { method: 'POST' });
-      const data = await res.json();
-      if (!data.success) return alert(data.message);
-      // 重新載入以更新 UI
-      loadNotifications();
-    }
-    
-    async function deleteNotif(id) {
-        if (!confirm('確定要刪除這則通知嗎？')) return;
-        const res = await fetch(`/api/delete_notification/${id}`, { method: 'POST' });
-        const data = await res.json();
-        if (!data.success) return alert(data.message);
-        loadNotifications(); // 重新載入通知列表
-    }
-    loadNotifications(); // 頁面載入時執行
+    const delBtn = document.createElement("button");
+    delBtn.className = "btn btn-danger btn-sm";
+    delBtn.innerHTML = "🗑 刪除";
+    delBtn.onclick = e => {
+      e.stopPropagation();
+      deleteNotif(n.id);
+    };
+    div.appendChild(delBtn);
+
+    detailDiv.appendChild(div);
+  }
+
+  async function markRead(id) {
+    await fetch(`/api/mark_read/${id}`, { method: "POST" });
+    loadNotifications();
+  }
+
+  async function deleteNotif(id) {
+    if (!confirm("確定要刪除？")) return;
+    await fetch(`/api/notification/delete/${id}`, { method: "DELETE" });
+    loadNotifications();
+  }
+
+  function formatDate(d) {
+    return new Date(d).toLocaleString("zh-TW", { hour12: false });
+  }
+
+  document.getElementById("searchInput").addEventListener("input", renderGroups);
+  loadNotifications();
 </script>
-</body>
 
+</body>
 </html>

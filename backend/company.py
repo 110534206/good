@@ -434,6 +434,135 @@ def get_company_detail():
 
 
 # =========================================================
+# 📚 實習 QA - 取得所有問答
+# =========================================================
+@company_bp.route('/api/qa/list', methods=['GET'])
+def qa_list():
+    try:
+        conn = get_db()
+        cursor = conn.cursor(dictionary=True)
+
+        cursor.execute("""
+            SELECT id, question, answer 
+            FROM internship_qa
+            ORDER BY sort_order ASC, id DESC
+        """)
+        data = cursor.fetchall()
+
+        return jsonify({"success": True, "data": data})
+
+    except Exception:
+        import traceback
+        print("❌ QA 列表錯誤：", traceback.format_exc())
+        return jsonify({"success": False, "message": "伺服器錯誤"}), 500
+
+    finally:
+        if cursor: cursor.close()
+        if conn: conn.close()
+
+
+# =========================================================
+# ➕ 實習 QA - 新增
+# =========================================================
+@company_bp.route('/api/qa/add', methods=['POST'])
+def qa_add():
+    data = request.json
+
+    question = data.get("question", "").strip()
+    answer   = data.get("answer", "").strip()
+    sort     = data.get("sort_order", 0)
+
+    if not question or not answer:
+        return jsonify({"success": False, "message": "問題與答案不得為空"}), 400
+
+    try:
+        conn = get_db()
+        cursor = conn.cursor()
+
+        cursor.execute("""
+            INSERT INTO internship_qa (question, answer, sort_order)
+            VALUES (%s, %s, %s)
+        """, (question, answer, sort))
+
+        conn.commit()
+        return jsonify({"success": True, "message": "新增成功"})
+
+    except Exception:
+        import traceback
+        print("❌ QA 新增錯誤：", traceback.format_exc())
+        return jsonify({"success": False, "message": "伺服器錯誤"}), 500
+
+    finally:
+        if cursor: cursor.close()
+        if conn: conn.close()
+
+
+# =========================================================
+# ✏️ 實習 QA - 更新
+# =========================================================
+@company_bp.route('/api/qa/update/<int:qa_id>', methods=['PUT'])
+def qa_update(qa_id):
+    data = request.json
+
+    question = data.get("question", "").strip()
+    answer   = data.get("answer", "").strip()
+    sort     = data.get("sort_order")
+
+    if not question or not answer:
+        return jsonify({"success": False, "message": "問題與答案不得為空"}), 400
+
+    try:
+        sort = int(sort) if str(sort).isdigit() else 0
+
+        conn = get_db()
+        cursor = conn.cursor()
+
+        cursor.execute("""
+            UPDATE internship_qa
+            SET question=%s, answer=%s, sort_order=%s
+            WHERE id=%s
+        """, (question, answer, sort, qa_id))
+
+        conn.commit()
+
+        if cursor.rowcount == 0:
+            return jsonify({"success": False, "message": "找不到該 QA"}), 404
+
+        return jsonify({"success": True, "message": "更新成功"})
+
+    except Exception:
+        import traceback
+        print("❌ QA 更新錯誤：", traceback.format_exc())
+        return jsonify({"success": False, "message": "伺服器錯誤"}), 500
+
+    finally:
+        if cursor: cursor.close()
+        if conn: conn.close()
+
+# =========================================================
+# 🗑️ 實習 QA - 刪除
+# =========================================================
+@company_bp.route('/api/qa/delete/<int:qa_id>', methods=['DELETE'])
+def qa_delete(qa_id):
+    try:
+        conn = get_db()
+        cursor = conn.cursor()
+
+        cursor.execute("DELETE FROM internship_qa WHERE id=%s", (qa_id,))
+        conn.commit()
+
+        return jsonify({"success": True, "message": "刪除成功"})
+
+    except Exception:
+        import traceback
+        print("❌ QA 刪除錯誤：", traceback.format_exc())
+        return jsonify({"success": False, "message": "伺服器錯誤"}), 500
+
+    finally:
+        if cursor: cursor.close()
+        if conn: conn.close()
+
+# =========================================================
 # API - 審核公司
 # =========================================================
 @company_bp.route("/api/approve_company", methods=["POST"])

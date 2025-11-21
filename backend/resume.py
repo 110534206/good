@@ -8,6 +8,8 @@ import os
 import traceback
 import json
 from datetime import datetime
+from notification import create_notification
+
 
 resume_bp = Blueprint("resume_bp", __name__)
 
@@ -1456,43 +1458,45 @@ def review_resume(resume_id):
 
         # 5. 處理 Email 寄送與通知 (僅在狀態改變時處理)
         from email_service import send_resume_rejection_email, send_resume_approval_email
-
         if old_status != status:
+            # =============== 退件 ===============
             if status == 'rejected':
-                # 寄送退件 Email (已確認成功)
-                email_success, email_message, log_id = send_resume_rejection_email( 
+                email_success, email_message, log_id = send_resume_rejection_email(
                     student_email, student_name, reviewer_name, comment or "無"
                 )
-                print(f"📧 履歷退件 Email 結果: {email_success}, {email_message}, Log ID: {log_id}")
-                
-                # 創建退件通知 (修正欄位名稱: content -> message, target_user_id -> user_id, 移除 type/status/created_by)
-                notification_content = f"您的履歷已被{reviewer_name}老師退件。\n\n退件原因：{comment if comment else '請查看老師留言'}\n\n請根據老師的建議修改履歷後重新上傳。"
-                cursor.execute("""
-                    INSERT INTO notifications (title, message, user_id, is_read, created_at)
-                    VALUES (%s, %s, %s, 0, NOW()) 
-                """, (
-                    "履歷退件通知",
-                    notification_content,
-                    student_user_id, 
-                ))
-                
+                print(f"📧 履歷退件 Email: {email_success}, {email_message}, Log ID: {log_id}")
+
+                # 🎯 建立退件通知（改成 create_notification）
+                notification_content = (
+                    f"您的履歷已被 {reviewer_name} 老師退件。\n\n"
+                    f"退件原因：{comment if comment else '請查看老師留言'}\n\n"
+                    f"請根據老師的建議修改後重新上傳。"
+                )
+
+                create_notification(
+                    user_id=student_user_id,
+                    title="履歷退件通知",
+                    message=notification_content
+                )
+
+            # =============== 通過 ===============
             elif status == 'approved':
-                # 寄送通過 Email
-                email_success, email_message, log_id = send_resume_approval_email( 
+                email_success, email_message, log_id = send_resume_approval_email(
                     student_email, student_name, reviewer_name
                 )
-                print(f"📧 履歷通過 Email 結果: {email_success}, {email_message}, Log ID: {log_id}")
-                
-                # 創建通過通知 (修正欄位名稱)
-                notification_content = f"恭喜您！您的履歷已由{reviewer_name}老師審核通過。您可以繼續後續的實習申請流程。"
-                cursor.execute("""
-                    INSERT INTO notifications (title, message, user_id, is_read, created_at)
-                    VALUES (%s, %s, %s, 0, NOW())
-                """, (
-                    "履歷審核通過通知",
-                    notification_content,
-                    student_user_id, 
-                ))
+                print(f"📧 履歷通過 Email: {email_success}, {email_message}, Log ID: {log_id}")
+
+                # 🎯 建立通過通知（改成 create_notification）
+                notification_content = (
+                    f"恭喜您！您的履歷已由 {reviewer_name} 老師審核通過。\n"
+                    f"您可以繼續後續的實習申請流程。"
+                )
+
+                create_notification(
+                    user_id=student_user_id,
+                    title="履歷審核通過通知",
+                    message=notification_content
+                )
 
         conn.commit()
 

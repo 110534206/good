@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+
+<head>
+  <meta charset="UTF-8" />
+  <title>後台管理 | 實習 Q&A 管理</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
+
+  <style>
+    body {
+      background: #f5f6fa;
+      font-family: "Noto Sans TC", sans-serif;
+    }
+
+    header {
+      background: #0454a3;
+      color: white;
+      padding: 1rem;
+      text-align: center;
+      font-size: 1.4rem;
+    }
+
+    .table th {
+      background: #eef3ff;
+    }
+  </style>
+</head>
+
+<body>
+  <header>實習 Q&A 管理後台</header>
+
+  <div class="container mt-4">
+
+    <!-- 上方操作列 -->
+    <div class="d-flex justify-content-between mb-3">
+      <h4>問答列表</h4>
+      <button class="btn btn-primary" onclick="openAddModal()">
+        ➕ 新增 Q&A
+      </button>
+    </div>
+
+    <!-- 資料表 -->
+    <table class="table table-bordered table-striped">
+      <thead>
+        <tr>
+          <th style="width: 60px">ID</th>
+          <th style="width: 250px">問題</th>
+          <th>答案</th>
+          <th style="width: 120px">排序</th>
+          <th style="width: 160px">操作</th>
+        </tr>
+      </thead>
+      <tbody id="qa-table"></tbody>
+    </table>
+  </div>
+
+  <!-- 新增/編輯 Modal -->
+  <div class="modal fade" id="qaModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="qaModalLabel">新增 Q&A</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+
+        <div class="modal-body">
+          <input type="hidden" id="qa-id">
+
+          <div class="mb-3">
+            <label class="form-label">問題</label>
+            <input id="qa-question" type="text" class="form-control" placeholder="輸入問題">
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label">答案（支援 HTML）</label>
+            <textarea id="qa-answer" class="form-control" rows="5" placeholder="輸入答案"></textarea>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label">排序（愈小愈前面）</label>
+            <input id="qa-sort" type="number" class="form-control" value="0">
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+          <button class="btn btn-success" onclick="saveQA()">💾 儲存</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bootstrap JS -->
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+  <script>
+    const qaModal = new bootstrap.Modal(document.getElementById("qaModal"));
+
+    // 讀取 Q&A 列表
+    async function loadQA() {
+      const res = await fetch("/api/qa/list");
+      const json = await res.json();
+
+      if (!json.success) {
+        alert("資料載入失敗");
+        return;
+      }
+
+      const tbody = document.getElementById("qa-table");
+      tbody.innerHTML = json.data.map(item => `
+        <tr>
+          <td>${item.id}</td>
+          <td>${item.question}</td>
+          <td>${item.answer}</td>
+          <td>${item.sort_order}</td>
+          <td>
+            <button class="btn btn-sm btn-warning" onclick="openEditModal(${item.id}, '${encodeURIComponent(item.question)}', '${encodeURIComponent(item.answer)}', ${item.sort_order})">編輯</button>
+            <button class="btn btn-sm btn-danger" onclick="deleteQA(${item.id})">刪除</button>
+          </td>
+        </tr>
+      `).join("");
+    }
+
+    // 開啟新增 Modal
+    function openAddModal() {
+      document.getElementById("qaModalLabel").textContent = "新增 Q&A";
+      document.getElementById("qa-id").value = "";
+      document.getElementById("qa-question").value = "";
+      document.getElementById("qa-answer").value = "";
+      document.getElementById("qa-sort").value = "0";
+      qaModal.show();
+    }
+
+    // 開啟編輯 Modal
+    function openEditModal(id, question, answer, sort) {
+      document.getElementById("qaModalLabel").textContent = "編輯 Q&A";
+      document.getElementById("qa-id").value = id;
+      document.getElementById("qa-question").value = decodeURIComponent(question);
+      document.getElementById("qa-answer").value = decodeURIComponent(answer);
+      document.getElementById("qa-sort").value = sort;
+      qaModal.show();
+    }
+
+    // 儲存（新增 / 編輯 共用）
+    async function saveQA() {
+      const id = document.getElementById("qa-id").value;
+      const question = document.getElementById("qa-question").value.trim();
+      const answer = document.getElementById("qa-answer").value.trim();
+      const sort = document.getElementById("qa-sort").value;
+
+      if (!question || !answer) {
+        alert("問題與答案不得為空！");
+        return;
+      }
+
+      const payload = { question, answer, sort_order: sort };
+
+      let url = "/api/qa/add";
+      let method = "POST";
+
+      if (id) {
+        url = `/api/qa/update/${id}`;
+        method = "PUT";
+      }
+
+      const res = await fetch(url, {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+
+      const json = await res.json();
+
+      if (json.success) {
+        alert("儲存成功！");
+        qaModal.hide();
+        loadQA();
+      } else {
+        alert(json.message || "儲存失敗");
+      }
+    }
+
+    // 刪除
+    async function deleteQA(id) {
+      if (!confirm("確定要刪除此 Q&A 嗎？")) return;
+
+      const res = await fetch(`/api/qa/delete/${id}`, { method: "DELETE" });
+      const json = await res.json();
+
+      if (json.success) {
+        alert("刪除成功！");
+        loadQA();
+      } else {
+        alert("刪除失敗");
+      }
+    }
+
+    // 初始化：載入資料
+    loadQA();
+  </script>
+</body>
+
+</html>
