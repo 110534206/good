@@ -94,11 +94,11 @@ def _get_vendor_companies(cursor, vendor_id, vendor_email):
     
     teacher_id = teacher_row["id"]
     
-    # 找到該指導老師對接的公司
+    # 找到該指導老師對接的公司（只回傳已審核通過的公司）
     cursor.execute("""
         SELECT id, company_name, contact_email
         FROM internship_companies
-        WHERE advisor_user_id = %s
+        WHERE advisor_user_id = %s AND status = 'reviewed'
         ORDER BY company_name
     """, (teacher_id,))
     return cursor.fetchall() or []
@@ -189,9 +189,9 @@ def _fetch_job_for_vendor(cursor, job_id, vendor_id, vendor_email):
             ij.is_active
         FROM internship_jobs ij
         JOIN internship_companies ic ON ij.company_id = ic.id
-        WHERE ij.id = %s AND ic.advisor_user_id = %s
+        WHERE ij.id = %s AND ic.advisor_user_id = %s AND ij.created_by_vendor_id = %s
         """,
-        (job_id, teacher_id),
+        (job_id, teacher_id, vendor_id),
     )
     row = cursor.fetchone()
     return row
@@ -661,8 +661,12 @@ def list_positions_for_vendor():
         if company_filter and company_filter not in company_ids:
             return jsonify({"success": False, "message": "無權限查看此公司"}), 403
 
-        where_clauses = [f"ij.company_id IN ({', '.join(['%s'] * len(company_ids))})"]
+        where_clauses = [
+            f"ij.company_id IN ({', '.join(['%s'] * len(company_ids))})",
+            "ij.created_by_vendor_id = %s"
+        ]
         params = company_ids[:]
+        params.append(vendor_id)
 
         if company_filter:
             where_clauses.append("ij.company_id = %s")
@@ -772,12 +776,13 @@ def create_position_for_vendor():
         if company_id not in company_ids:
             return jsonify({"success": False, "message": "無權限操作此公司"}), 403
 
+        vendor_id = session["user_id"]
         cursor.execute(
             """
             INSERT INTO internship_jobs
-                (company_id, title, slots, description, period, work_time, salary, remark, is_active)
+                (company_id, title, slots, description, period, work_time, salary, remark, is_active, created_by_vendor_id)
             VALUES
-                (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             """,
             (
                 company_id,
@@ -789,6 +794,7 @@ def create_position_for_vendor():
                 salary,
                 remark or None,
                 1 if is_active else 0,
+                vendor_id,
             ),
         )
         conn.commit()
