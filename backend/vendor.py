@@ -914,7 +914,7 @@ def update_position_for_vendor(job_id):
         if not profile:
             return jsonify({"success": False, "message": "帳號資料不完整"}), 403
 
-        job_row = _fetch_job_for_vendor(cursor, job_id, session["user_id"], vendor_email)
+        job_row = _fetch_job_for_vendor(cursor, job_id, session["user_id"], vendor_email, allow_teacher_created=True)
         if not job_row:
             return jsonify({"success": False, "message": "找不到職缺或無權限編輯"}), 404
 
@@ -974,7 +974,7 @@ def toggle_position_status(job_id):
         if not profile:
             return jsonify({"success": False, "message": "帳號資料不完整"}), 403
 
-        job_row = _fetch_job_for_vendor(cursor, job_id, session["user_id"], vendor_email)
+        job_row = _fetch_job_for_vendor(cursor, job_id, session["user_id"], vendor_email, allow_teacher_created=True)
         if not job_row:
             return jsonify({"success": False, "message": "找不到職缺或無權限操作"}), 404
 
@@ -983,7 +983,7 @@ def toggle_position_status(job_id):
             (1 if desired else 0, job_id),
         )
         conn.commit()
-        updated = _fetch_job_for_vendor(cursor, job_id, session["user_id"], vendor_email)
+        updated = _fetch_job_for_vendor(cursor, job_id, session["user_id"], vendor_email, allow_teacher_created=True)
         return jsonify({"success": True, "item": _serialize_job(updated)})
     except Exception as exc:
         conn.rollback()
@@ -1006,7 +1006,7 @@ def delete_position_for_vendor(job_id):
         if not profile:
             return jsonify({"success": False, "message": "帳號資料不完整"}), 403
 
-        job_row = _fetch_job_for_vendor(cursor, job_id, session["user_id"], vendor_email)
+        job_row = _fetch_job_for_vendor(cursor, job_id, session["user_id"], vendor_email, allow_teacher_created=True)
         if not job_row:
             return jsonify({"success": False, "message": "找不到職缺或無權限刪除"}), 404
 

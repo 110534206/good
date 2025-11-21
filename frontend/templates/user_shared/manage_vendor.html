@@ -461,33 +461,91 @@
         const colors = ['sky', 'mint', 'gold'];
         const cards = [];
 
+        // 按照廠商帳號分組
         const matchedCompanyIds = new Set();
-        featuredCompanies.forEach((feature, index) => {
+        const companiesByAccount = {};
+        
+        // 先處理 featuredCompanies，建立分組
+        featuredCompanies.forEach((feature) => {
+          if (!companiesByAccount[feature.account]) {
+            companiesByAccount[feature.account] = {
+              account: feature.account,
+              companies: []
+            };
+          }
           const company = (state.companies || []).find(
             (c) => (c.name || '').trim() === feature.label
           );
           if (company) {
             matchedCompanyIds.add(company.id);
+            companiesByAccount[feature.account].companies.push(company);
           }
-          cards.push(renderCard({
-            company,
-            color: colors[index % colors.length],
-            label: feature.label,
-            account: feature.account,
-            noteWhenMissing: `尚未找到帳號 ${feature.account} 對應的指導老師`,
-            noteWhenAvailable: `由帳號 ${feature.account} 提供的合作廠商`
-          }));
         });
 
-        (state.companies || []).forEach((company, idx) => {
+        // 處理其他公司，按照名稱匹配到對應的廠商帳號
+        (state.companies || []).forEach((company) => {
           if (matchedCompanyIds.has(company.id)) return;
-          cards.push(renderCard({
-            company,
-            color: colors[(idx + featuredCompanies.length) % colors.length],
-            label: company.name || `公司 #${company.id}`,
-            noteWhenAvailable: '點擊查看詳細資訊'
-          }));
+          
+          // 嘗試匹配到已知的廠商帳號
+          const matchedFeature = featuredCompanies.find(
+            (f) => (company.name || '').trim() === f.label
+          );
+          
+          if (matchedFeature) {
+            if (!companiesByAccount[matchedFeature.account]) {
+              companiesByAccount[matchedFeature.account] = {
+                account: matchedFeature.account,
+                companies: []
+              };
+            }
+            companiesByAccount[matchedFeature.account].companies.push(company);
+          } else {
+            // 無法匹配的公司，放到 'other' 分組
+            if (!companiesByAccount['other']) {
+              companiesByAccount['other'] = {
+                account: '',
+                companies: []
+              };
+            }
+            companiesByAccount['other'].companies.push(company);
+          }
         });
+
+        // 按照 featuredCompanies 的順序渲染，每個廠商帳號一個卡片
+        featuredCompanies.forEach((feature, accountIndex) => {
+          const group = companiesByAccount[feature.account];
+          const colorIndex = accountIndex % colors.length;
+          
+          if (group && group.companies.length > 0) {
+            // 有公司的情況：顯示一個卡片，內含所有公司
+            cards.push(renderCardGroup({
+              account: feature.account,
+              companies: group.companies,
+              color: colors[colorIndex]
+            }));
+          } else {
+            // 沒有公司的情況：顯示 placeholder
+            cards.push(renderCardPlaceholder({
+              account: feature.account,
+              label: feature.label,
+              color: colors[colorIndex],
+              noteWhenMissing: `尚未找到帳號 ${feature.account} 對應的指導老師`
+            }));
+          }
+        });
+
+        // 渲染其他無法匹配的公司（每個公司一個卡片）
+        if (companiesByAccount['other'] && companiesByAccount['other'].companies.length > 0) {
+          companiesByAccount['other'].companies.forEach((company, idx) => {
+            cards.push(renderCard({
+              company,
+              color: colors[(featuredCompanies.length + idx) % colors.length],
+              label: company.name || `公司 #${company.id}`,
+              account: '',
+              noteWhenAvailable: '點擊查看詳細資訊'
+            }));
+          });
+        }
 
         if (!cards.length) {
           cards.push(`
@@ -505,6 +563,71 @@
 
         container.innerHTML = cards.join('');
         initPlaceholderListener();
+
+        function renderCardGroup({ account, companies, color }) {
+          const accountName = escapeHtml(account);
+          const companiesList = companies.map(company => {
+            const companyName = escapeHtml(company.name || `公司 #${company.id}`);
+            return `
+              <a href="/teacher/company/${company.id}" 
+                 style="display: block; padding: 12px; margin: 8px 0; background: rgba(255,255,255,0.6); border-radius: 8px; text-decoration: none; color: inherit; border: 1px solid var(--color-border); transition: all 0.2s ease;"
+                 onmouseover="this.style.background='rgba(255,255,255,0.9)'; this.style.transform='translateX(4px)'"
+                 onmouseout="this.style.background='rgba(255,255,255,0.6)'; this.style.transform='translateX(0)'">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                  <div>
+                    <strong style="font-size: 1.05rem;">${companyName}</strong>
+                    <div style="font-size: 0.85rem; color: var(--color-muted); margin-top: 4px;">
+                      公司編號 ${company.id}
+                    </div>
+                  </div>
+                  <span style="color: var(--color-primary);">→</span>
+                </div>
+              </a>
+            `;
+          }).join('');
+          
+          return `
+            <article class="summary-card summary-card--${color}">
+              <div class="summary-card-content">
+                <div class="summary-card-title">
+                  <span>company</span>
+                  <h3>帳號 ${accountName}</h3>
+                </div>
+                <p class="summary-card-note">由帳號 ${accountName} 提供的合作廠商</p>
+                <div style="margin-top: 16px;">
+                  ${companiesList}
+                </div>
+              </div>
+              <div class="summary-card-footer">
+                <span>帳號 <strong>${accountName}</strong></span>
+                <span>共 <strong>${companies.length}</strong> 間公司</span>
+              </div>
+            </article>
+          `;
+        }
+
+        function renderCardPlaceholder({ account, label, color, noteWhenMissing }) {
+          const title = escapeHtml(label);
+          const placeholderMessage = escapeHtml(noteWhenMissing);
+          return `
+            <button type="button"
+              class="summary-card summary-card--${color} summary-card--placeholder"
+              data-message="${placeholderMessage}"
+              aria-label="${title}：${placeholderMessage}">
+              <div class="summary-card-content">
+                <div class="summary-card-title">
+                  <span>placeholder</span>
+                  <h3>${title}</h3>
+                </div>
+                <p class="summary-card-note">${placeholderMessage}</p>
+              </div>
+              <div class="summary-card-footer">
+                <span>帳號 <strong>${escapeHtml(account || '未指定')}</strong></span>
+                <span>狀態 <strong>待建立</strong></span>
+              </div>
+            </button>
+          `;
+        }
 
         function renderCard({ company, color, label, account = '', noteWhenMissing = '尚未頂上任何資料，請待廠商建立後再試', noteWhenAvailable = '點擊前往公司詳細資料' }) {
           const title = escapeHtml(label || company?.name || `公司 #${company?.id ?? ''}`);

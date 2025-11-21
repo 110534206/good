@@ -761,12 +761,13 @@
               </td>
               <td>${salaryText}</td>
               <td>
-                ${job.is_created_by_vendor !== false ? `
-                  <button class="link-button" data-action="edit" data-id="${job.id}" style="color:var(--color-primary); margin-right:12px;">修改</button>
+                <div style="display:flex; align-items:center; gap:12px;">
+                  ${job.is_created_by_vendor === false ? `
+                    <span style="color:var(--color-muted); font-size:0.85rem;">由指導老師建立</span>
+                  ` : ''}
+                  <button class="link-button" data-action="edit" data-id="${job.id}" style="color:var(--color-primary);">修改</button>
                   <button class="link-button" data-action="delete" data-id="${job.id}" style="color:var(--color-danger);">刪除</button>
-                ` : `
-                  <span style="color:var(--color-muted); font-size:0.9rem;">由指導老師建立</span>
-                `}
+                </div>
               </td>
             </tr>
             <tr class="detail-row">
