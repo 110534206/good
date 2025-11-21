@@ -5,6 +5,7 @@ from werkzeug.utils import secure_filename
 import os
 import traceback
 from docx import Document
+from notification import create_notification
 
 company_bp = Blueprint("company_bp", __name__)
 

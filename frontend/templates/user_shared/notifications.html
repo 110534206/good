@@ -1,300 +1,740 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="zh-Hant">
 
 <head>
-  <meta charset="UTF-8">
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>智慧實習平台 | 通知中心</title>
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
 
   <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    header {
+      background: #0454a3;
+      color: white;
+      padding: 1rem 2rem;
+      text-align: center;
+      font-size: 1.5rem;
+    }
+
+    :root {
+      --bg: #f4f7fb;
+      --card: #ffffff;
+      --muted: #6b7280;
+      --primary: #0d6efd;
+      --glass: rgba(255, 255, 255, 0.65);
+      --accent: #0b5ed7;
+    }
+
     body {
-      padding: 2rem;
       font-family: "Noto Sans TC", sans-serif;
-      background: #f2f6fc;
+      background: linear-gradient(180deg, var(--bg), #eef4ff 120px);
+      margin: 0;
+      padding: 0;
     }
 
-    h1 {
-      font-weight: 700;
-      color: #1a2b4c;
+    .container {
+      max-width: 1000px;
+      margin: 2rem auto;
+      border-radius: 12px;
     }
 
-    /* 搜尋框 */
-    #searchInput {
-      max-width: 380px;
-      border-radius: 10px;
-      padding: 10px 14px;
-      border: 1px solid #c8d6e5;
-      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);
+
+    /* 【修改】app-shell 為單欄，並調整最大寬度 */
+    .app-shell {
+      max-width: 900px;
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: 1fr;
+      /* 單欄 */
+      gap: 1rem;
     }
 
-    /* 分類標題卡片 */
-    .category-title {
-      font-size: 1.1rem;
-      font-weight: 600;
-      cursor: pointer;
-      padding: 12px 16px;
-      background: white;
-      border: 1px solid #dce7f7;
-      margin-top: 14px;
-      border-radius: 10px;
+    /* header */
+    .topbar {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      box-shadow: 0 3px 6px rgba(0, 0, 0, 0.06);
-      transition: 0.2s;
+      gap: 10px;
+      margin-bottom: 12px;
     }
 
-    .category-title:hover {
-      background: #f5f9ff;
-      transform: translateY(-2px);
+    .topbar .title {
+      font-size: 1.25rem;
+      font-weight: 700;
+      color: #0f1724;
     }
 
-    /* 箭頭動畫 */
-    .arrow {
-      transition: transform 0.25s;
+    .topbar .controls {
+      display: flex;
+      gap: 8px;
+      align-items: center;
     }
 
-    .arrow.open {
-      transform: rotate(90deg);
+    /* left column - main list */
+    .left-panel {
+      background: linear-gradient(180deg, var(--glass), #fff 40%);
+      border-radius: 14px;
+      padding: 14px;
+      box-shadow: 0 10px 30px rgba(13, 52, 122, 0.06);
+      min-height: 70vh;
+      overflow: auto;
+      position: relative;
     }
 
-    /* 數字徽章 */
-    .category-count {
-      background: #0d6efd;
-      color: white;
-      padding: 3px 10px;
-      border-radius: 12px;
-      font-size: 0.75rem;
+    .unread-badge {
+      position: absolute;
+      top: 12px;
+      right: 16px;
+      background: #ff4d4f;
+      color: #fff;
+      padding: 6px 12px;
+      border-radius: 20px;
+      font-weight: bold;
+      box-shadow: 0 4px 10px rgba(255, 77, 79, 0.25);
+      z-index: 10;
+    }
+
+    .unread-badge span {
+      font-weight: 700;
+    }
+
+    /* 搜尋/篩選列 */
+    .search-filter-row {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      margin-bottom: 12px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid #eef6ff;
+    }
+
+    #searchInput {
+      padding: 6px 12px;
+      height: 38px;
+      border: 1px solid #ced4da;
+      border-radius: 6px;
+      flex-grow: 1;
+      max-width: 360px;
+    }
+
+    /* filter row */
+    .chip {
+      border-radius: 999px;
+      padding: 6px 10px;
+      font-size: 0.9rem;
+      cursor: pointer;
+    }
+
+    .chip.active {
+      background: var(--primary);
+      color: #fff;
+      box-shadow: 0 6px 18px rgba(13, 110, 253, 0.12)
+    }
+
+    .chip.outline {
+      background: transparent;
+      border: 1px solid #e6eefb;
+      color: var(--muted)
+    }
+
+    /* group header */
+    .group-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 10px;
+      margin-bottom: 6px;
+      padding: 8px 10px;
+      border-radius: 10px;
+      background: linear-gradient(90deg, rgba(255, 255, 255, 0.6), rgba(246, 250, 255, 0.6));
+      border: 1px solid #e9f0ff;
       font-weight: 600;
     }
 
-    /* 通知卡片 */
-    .notif-item {
-      border: 1px solid #e1e7f0;
+    .group-title {
+      font-size: 0.95rem;
+      color: #0b2540;
+    }
+
+    .sort-btn-group {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .sort-btn {
+      padding: 4px 6px;
+      line-height: 1;
+      border-radius: 4px;
+      background: transparent;
+      border: none;
+      color: var(--muted);
+      transition: color 0.1s ease;
+    }
+
+    .sort-btn:hover {
+      color: var(--accent);
+    }
+
+    .sort-btn.active {
+      color: var(--primary);
+      font-weight: 700;
+    }
+
+    /* notification card */
+    .notif-card {
+      display: flex;
+      gap: 12px;
+      align-items: flex-start;
+      background: var(--card);
       border-radius: 12px;
-      padding: 14px;
-      margin-top: 10px;
-      background: white;
+      padding: 12px;
+      border: 1px solid #eef6ff;
+      margin-bottom: 10px;
+      transition: transform .12s ease, box-shadow .12s ease;
       cursor: pointer;
-      transition: 0.15s;
-      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);
     }
 
-    .notif-item:hover {
-      background: #f8fbff;
-      transform: translateX(3px);
+    .notif-card:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 10px 30px rgba(13, 52, 122, 0.06);
     }
 
-    /* 未讀通知 */
+    .notif-left {
+      min-width: 48px;
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+    }
+
+    .avatar {
+      width: 44px;
+      height: 44px;
+      border-radius: 10px;
+      background: linear-gradient(180deg, #eff6ff, #fff);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      color: var(--accent);
+      border: 1px solid #e6eefb;
+    }
+
+    .notif-body {
+      flex: 1;
+    }
+
+    .notif-meta {
+      font-size: 0.85rem;
+      color: var(--muted);
+    }
+
+    .notif-title {
+      font-weight: 700;
+      margin-bottom: 6px;
+      color: #0f1724;
+    }
+
+    .badge-tag {
+      font-size: 0.75rem;
+      padding: 3px 8px;
+      border-radius: 999px;
+      margin-right: 6px;
+    }
+
+    /* unread style */
     .notif-unread {
-      border-left: 4px solid #0d6efd;
-      background: #eaf3ff;
+      border-left: 4px solid var(--primary);
+      background: linear-gradient(90deg, #f8fbff, #ffffff);
     }
 
-    /* 詳細內容區塊 */
-    .notif-detail {
-      display: none;
-      margin-top: 12px;
-      padding: 12px 16px;
-      background: #f0f6ff;
-      border-left: 3px solid #0d6efd;
+    /* pinned */
+    .pin-icon {
+      color: #b5c7ff;
+    }
+
+    .pinned {
+      border-left-color: #ffbf00 !important;
+    }
+
+    /* detail small buttons */
+    .meta-actions {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+    }
+
+    /* 【移除】右側面板和 Drawer 樣式 */
+    .right-panel,
+    .drawer {
+      display: none !important;
+    }
+
+    /* small helpers */
+    .muted {
+      color: var(--muted);
+    }
+
+    .small {
+      font-size: 0.85rem;
+    }
+
+    .actions {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+
+    /* unread counter badge */
+    #unreadCounter {
+      font-weight: 700;
+      background: #ff4d4f;
+      color: white;
+      padding: 6px 9px;
+      border-radius: 999px;
+      box-shadow: 0 6px 18px rgba(255, 77, 79, .14);
+    }
+
+    /* tiny input style */
+    input[type="date"] {
+      height: 38px;
+      padding: 6px 8px;
       border-radius: 8px;
-      animation: fadeIn 0.25s ease;
-    }
-
-    @keyframes fadeIn {
-      from {
-        opacity: 0;
-      }
-
-      to {
-        opacity: 1;
-      }
-    }
-
-    /* 按鈕排版 */
-    .notif-actions button {
-      margin-right: 8px;
+      border: 1px solid #e6eefb;
+      background: white;
     }
   </style>
 </head>
 
 <body>
+  <header>智慧實習平台 | 通知中心</header>
   <div class="container">
-    <h1 class="mb-4">通知中心</h1>
 
-    <input type="text" id="searchInput" class="form-control mb-4" placeholder="搜尋通知（標題 / 內容）...">
+    <div class="app-shell">
 
-    <div id="groupContainer"></div>
+      <div class="left-panel">
+
+        <div class="unread-badge">
+          未讀 <span id="unreadCounter">0</span>
+        </div>
+
+        <div class="search-filter-row">
+          <input id="searchInput" placeholder="搜尋（標題/內容）" type="text">
+
+          <div class="dropdown">
+            <button class="btn btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown"
+              aria-expanded="false" id="filterDropdownBtn">
+              <span id="currentFilterLabel">全部</span>
+            </button>
+            <ul class="dropdown-menu">
+              <li><a class="dropdown-item active" href="#" data-filter="all">全部</a></li>
+              <li><a class="dropdown-item" href="#" data-filter="unread">未讀</a></li>
+              <li><a class="dropdown-item" href="#" data-filter="read">已讀</a></li>
+              <li>
+              <li>
+                <hr class="dropdown-divider">
+              </li>
+              <li><a class="dropdown-item text-danger" href="#" id="clearPinned">清除所有置頂</a></li>
+            </ul>
+          </div>
+
+          <button class="btn btn-outline-secondary btn-sm" id="btnRefresh" title="重新整理"><i
+              class="bi-arrow-clockwise"></i></button>
+        </div>
+
+        <div class="d-flex gap-2 flex-wrap mb-3" id="categoryFilter">
+          <label class="small muted me-1">類別</label>
+          <div class="chip outline active" data-category="all">全部通知</div>
+          <div class="chip outline" data-category="general">公告</div>
+          <div class="chip outline" data-category="resume">履歷</div>
+          <div class="chip outline" data-category="ranking">志願序</div>
+          <div class="chip outline" data-category="company">實習公司</div>
+        </div>
+
+        <div id="listContainer"></div>
+      </div>
+
+    </div>
   </div>
 
+  <div class="modal fade" id="notifModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="modalTitle">通知</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div id="modalBody"></div>
+        </div>
+        <div class="modal-footer">
+          <a class="btn btn-primary" id="modalLink" href="#" target="_blank" style="display:none;">前往內容</a>
+          <button class="btn btn-outline-secondary" data-bs-dismiss="modal">關閉</button>
+          <button class="btn btn-danger" id="modalDelete">刪除</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+
   <script>
-  let allNotifications = [];
+    // ---------- 初始狀態 ----------
+    let allNotifications = [];
+    let visibleNotifications = [];
+    let pinnedSet = new Set(JSON.parse(localStorage.getItem('notif_pinned') || '[]'));
+    let currentCategoryFilter = 'all';
+    let currentReadFilter = 'all';
+    let currentSortOrder = 'desc';
 
-  const categoryNames = {
-    resume: "📄 履歷相關通知",
-    ranking: "💡 志願序相關通知",
-    company: "🏢 實習公司通知",
-    system: "⚙️ 系統通知",
-    approval: "📝 審核通知",
-    general: "📢 一般通知"
-  };
+    // 元件
+    const listContainer = document.getElementById('listContainer');
+    const searchInput = document.getElementById('searchInput');
+    const unreadCounter = document.getElementById('unreadCounter');
+    const currentFilterLabel = document.getElementById('currentFilterLabel');
 
-  async function loadNotifications() {
-    try {
-      const res = await fetch("/api/my_notifications");
-      const data = await res.json();
+    // modal components
+    const notifModal = new bootstrap.Modal(document.getElementById('notifModal'), {});
+    const modalTitle = document.getElementById('modalTitle');
+    const modalBody = document.getElementById('modalBody');
+    const modalLink = document.getElementById('modalLink');
+    const modalDelete = document.getElementById('modalDelete'); // 新增刪除按鈕元件
 
-      if (!data.success) {
-        document.getElementById("groupContainer").innerHTML =
-          `<div class="alert alert-danger">${data.message}</div>`;
+    // helper: format date & relative group
+    function formatDateTime(d) {
+      const dt = new Date(d);
+      return dt.toLocaleString('zh-TW', { hour12: false, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+    }
+
+    function groupLabelForDate(d) {
+      const dt = new Date(d);
+      const today = new Date();
+      // 確保只比較日期部分
+      const diff = (today.setHours(0, 0, 0, 0) - new Date(dt).setHours(0, 0, 0, 0)) / (24 * 3600 * 1000);
+      if (diff === 0) return '今天';
+      if (diff === 1) return '昨天';
+      if (diff <= 6) return '本週';
+      return '更早之前';
+    }
+
+    // fetch notifications
+    async function loadNotifications() {
+      try {
+        const res = await fetch('/api/my_notifications');
+        const data = await res.json();
+        if (!data.success) {
+          listContainer.innerHTML = `<div class="alert alert-danger">${data.message || '讀取失敗'}</div>`;
+          return;
+        }
+
+        allNotifications = data.notifications.map(n => ({
+          id: n.id,
+          title: n.title || '(無標題)',
+          message: n.message || '',
+          category: n.category || 'general',
+          tags: n.tags || (n.tag ? [n.tag] : []),
+          is_read: !!n.is_read,
+          created_at: n.created_at || n.createdAt || new Date().toISOString(),
+          url: n.url || n.link || null,
+          meta: n.meta || {}
+        }));
+
+        allNotifications.forEach(n => { n.pinned = pinnedSet.has(String(n.id)); });
+
+        // sort: pinned first, then unread, then newest
+        allNotifications.sort((a, b) => {
+          if ((a.pinned ? 1 : 0) !== (b.pinned ? 1 : 0)) return (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0);
+          if ((a.is_read ? 1 : 0) !== (b.is_read ? 1 : 0)) return (a.is_read ? 1 : 0) - (b.is_read ? 1 : 0);
+          return new Date(b.created_at) - new Date(a.created_at);
+        });
+
+        render();
+      } catch (err) {
+        console.error(err);
+        listContainer.innerHTML = `<div class="alert alert-danger">無法載入通知</div>`;
+      }
+    }
+
+    // render list with grouping
+    function render() {
+      const keyword = (searchInput.value || '').trim().toLowerCase();
+
+      // 1. 篩選
+      visibleNotifications = allNotifications.filter(n => {
+        if (currentCategoryFilter !== 'all' && n.category !== currentCategoryFilter) return false;
+        if (currentReadFilter === 'unread' && n.is_read) return false;
+        if (currentReadFilter === 'read' && !n.is_read) return false;
+        if (currentReadFilter === 'pinned' && !n.pinned) return false;
+        if (keyword) {
+          const hay = (n.title + ' ' + n.message).toLowerCase();
+          if (!hay.includes(keyword)) return false;
+        }
+        return true;
+      });
+
+      // 2. 分組
+      const groups = {};
+      visibleNotifications.forEach(n => {
+        const g = groupLabelForDate(n.created_at);
+        if (!groups[g]) groups[g] = [];
+        groups[g].push(n);
+      });
+
+      // 3. 渲染
+      listContainer.innerHTML = '';
+      if (visibleNotifications.length === 0) {
+        listContainer.innerHTML = `<div class="alert alert-warning text-center">找不到符合條件的通知。</div>`;
+        updateUnreadBadge();
         return;
       }
 
-      // 修正：沒有 category 時 fallback 至 general
-      allNotifications = data.notifications.map(n => ({
-        ...n,
-        category: n.category || "general"
-      }));
+      // 確保分組順序：今天、昨天、本週、更早
+      const order = ['今天', '昨天', '本週', '更早之前'];
+      order.forEach(label => {
+        if (!groups[label]) return;
+        const section = document.createElement('div');
 
-      renderGroups();
-    } catch (err) {
-      document.getElementById("groupContainer").innerHTML =
-        `<div class="alert alert-danger">無法載入通知</div>`;
-    }
-  }
-
-  function renderGroups() {
-    const keyword = document.getElementById("searchInput").value.toLowerCase();
-    const container = document.getElementById("groupContainer");
-    container.innerHTML = "";
-
-    const groups = {};
-
-    allNotifications.forEach(n => {
-      const cat = n.category || "general";
-
-      // 確保分類存在
-      if (!groups[cat]) groups[cat] = [];
-
-      // 支援搜尋
-      if (
-        n.title.toLowerCase().includes(keyword) ||
-        n.message.toLowerCase().includes(keyword)
-      ) {
-        groups[cat].push(n);
-      }
-    });
-
-    Object.keys(groups).forEach(cat => {
-      const list = groups[cat];
-      if (list.length === 0) return;
-
-      const section = document.createElement("div");
-
-      // ==== 分類標題 ====
-      const header = document.createElement("div");
-      header.className = "category-title";
-
-      header.innerHTML = `
-        <div>${categoryNames[cat] || "📁 " + cat}</div>
-        <div class="d-flex align-items-center">
-          <span class="category-count">${list.length}</span>
-          <span class="arrow ms-2">▶</span>
-        </div>
-      `;
-
-      const arrow = header.querySelector(".arrow");
-
-      // 預設收合 (你選 A)
-      const box = document.createElement("div");
-      box.style.display = "none";
-
-      header.addEventListener("click", () => {
-        box.style.display = box.style.display === "block" ? "none" : "block";
-        arrow.classList.toggle("open");
-      });
-
-      // ==== 通知列表 ====
-      list.forEach(n => {
-        const item = document.createElement("div");
-        item.className = "notif-item " + (n.is_read ? "" : "notif-unread");
-
-        const titleDiv = document.createElement("div");
-        titleDiv.innerHTML = `
-          <strong style="font-size:1.05rem;">${n.title}</strong>
-          <span class="text-muted float-end">${formatDate(n.created_at)}</span>
-        `;
-
-        const detailDiv = document.createElement("div");
-        detailDiv.className = "notif-detail";
-        detailDiv.innerHTML = `<p style="white-space:pre-line;">${n.message}</p>`;
-
-        item.appendChild(titleDiv);
-        item.appendChild(detailDiv);
-
-        // 展開詳細內容
-        item.addEventListener("click", () => {
-          detailDiv.style.display =
-            detailDiv.style.display === "block" ? "none" : "block";
+        // 應用當前排序到該組通知
+        const currentGroup = groups[label];
+        currentGroup.sort((a, b) => {
+          const dateA = new Date(a.created_at);
+          const dateB = new Date(b.created_at);
+          return currentSortOrder === 'desc' ? dateB - dateA : dateA - dateB;
         });
 
-        addActionButtons(detailDiv, n);
+        // Group Header
+        const header = document.createElement('div');
+        header.className = 'group-header';
 
-        box.appendChild(item);
+        const sortControls = document.createElement('div');
+        sortControls.className = 'sort-btn-group';
+        sortControls.innerHTML = `
+            <div class="small muted">按時間排序</div>
+            <button class="sort-btn ${currentSortOrder === 'desc' ? 'active' : ''}" data-sort-order="desc" title="降冪排序（新到舊）">
+                <i class="bi-arrow-down-short"></i>
+            </button>
+            <button class="sort-btn ${currentSortOrder === 'asc' ? 'active' : ''}" data-sort-order="asc" title="升冪排序（舊到新）">
+                <i class="bi-arrow-up-short"></i>
+            </button>
+        `;
+
+        // 排序按鈕事件
+        sortControls.querySelector('[data-sort-order="desc"]').onclick = () => { currentSortOrder = 'desc'; render(); };
+        sortControls.querySelector('[data-sort-order="asc"]').onclick = () => { currentSortOrder = 'asc'; render(); };
+
+        const titleSpan = document.createElement('div');
+        titleSpan.className = 'group-title';
+        titleSpan.innerHTML = `${label} <span class="muted small">（${currentGroup.length}）</span>`;
+
+        header.appendChild(titleSpan);
+        header.appendChild(sortControls);
+        section.appendChild(header);
+
+        const groupBody = document.createElement('div');
+        groupBody.style.marginTop = '8px';
+
+        // render notifications in this group
+        currentGroup.forEach(n => {
+          const card = document.createElement('div');
+          card.className = 'notif-card ' + (n.is_read ? '' : 'notif-unread') + (n.pinned ? ' pinned' : '');
+          card.dataset.id = n.id;
+
+          const left = document.createElement('div'); left.className = 'notif-left';
+          const avatar = document.createElement('div'); avatar.className = 'avatar';
+          avatar.innerText = (n.title || '').slice(0, 1);
+          left.appendChild(avatar);
+
+          const body = document.createElement('div'); body.className = 'notif-body';
+          const t = document.createElement('div'); t.className = 'notif-title';
+          // tag badges
+          let tagHtml = '';
+          if (n.tags && n.tags.length) {
+            n.tags.forEach(tag => {
+              tagHtml += `<span class="badge bg-light text-muted badge-tag">#${tag}</span>`;
+            });
+          }
+          t.innerHTML = `${tagHtml} ${n.title}`;
+          const meta = document.createElement('div'); meta.className = 'notif-meta d-flex justify-content-between align-items-center';
+          meta.innerHTML = `<div class="small muted">${n.category || '一般'}</div><div class="small muted">${formatDateTime(n.created_at)}</div>`;
+
+          body.appendChild(t);
+          body.appendChild(meta);
+
+          // actions area
+          const actions = document.createElement('div');
+          actions.className = 'meta-actions ms-2';
+
+          // 【移除】標為已讀按鈕
+
+          const btnPin = document.createElement('button');
+          btnPin.className = 'btn btn-sm btn-outline-secondary';
+          btnPin.innerHTML = '<i class="bi-pin-angle"></i>';
+          btnPin.title = '置頂';
+          btnPin.onclick = (e) => { e.stopPropagation(); togglePin(n.id); };
+
+          const btnMore = document.createElement('button');
+          btnMore.className = 'btn btn-sm btn-outline-secondary';
+          btnMore.innerHTML = '<i class="bi-three-dots"></i>';
+          btnMore.title = '詳細/操作';
+          btnMore.onclick = (e) => { e.stopPropagation(); showModal(n); }; // 【修改】開啟 Modal
+
+          actions.appendChild(btnPin);
+          actions.appendChild(btnMore);
+
+          // combine
+          card.appendChild(left);
+          card.appendChild(body);
+          card.appendChild(actions);
+
+          // whole card click opens modal (detailed)
+          card.addEventListener('click', () => { showModal(n); });
+
+          groupBody.appendChild(card);
+        });
+
+        section.appendChild(groupBody);
+        listContainer.appendChild(section);
       });
 
-      section.appendChild(header);
-      section.appendChild(box);
-      container.appendChild(section);
-    });
-  }
-
-  function addActionButtons(detailDiv, n) {
-    const div = document.createElement("div");
-    div.className = "notif-actions mt-2";
-
-    if (!n.is_read) {
-      const readBtn = document.createElement("button");
-      readBtn.className = "btn btn-success btn-sm";
-      readBtn.innerHTML = "✔ 已讀";
-      readBtn.onclick = e => {
-        e.stopPropagation();
-        markRead(n.id);
-      };
-      div.appendChild(readBtn);
+      updateUnreadBadge();
     }
 
-    const delBtn = document.createElement("button");
-    delBtn.className = "btn btn-danger btn-sm";
-    delBtn.innerHTML = "🗑 刪除";
-    delBtn.onclick = e => {
-      e.stopPropagation();
-      deleteNotif(n.id);
-    };
-    div.appendChild(delBtn);
+    // ---------- 操作函式 ----------
+    async function markRead(id) {
+      const item = allNotifications.find(x => String(x.id) === String(id));
+      if (!item || item.is_read) return;
+      item.is_read = true;
+      render();
+      try { await fetch(`/api/mark_read/${id}`, { method: 'POST' }); } catch (err) { console.warn('markRead api failed', err); }
+    }
 
-    detailDiv.appendChild(div);
-  }
+    function togglePin(id) {
+      const item = allNotifications.find(x => String(x.id) === String(id));
+      if (!item) return;
+      item.pinned = !item.pinned;
+      if (item.pinned) pinnedSet.add(String(id)); else pinnedSet.delete(String(id));
+      localStorage.setItem('notif_pinned', JSON.stringify(Array.from(pinnedSet)));
 
-  async function markRead(id) {
-    await fetch(`/api/mark_read/${id}`, { method: "POST" });
-    loadNotifications();
-  }
+      allNotifications.sort((a, b) => {
+        if ((a.pinned ? 1 : 0) !== (b.pinned ? 1 : 0)) return (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0);
+        if ((a.is_read ? 1 : 0) !== (b.is_read ? 1 : 0)) return (a.is_read ? 1 : 0) - (b.is_read ? 1 : 0);
+        return new Date(b.created_at) - new Date(a.created_at);
+      });
+      render();
+    }
 
-  async function deleteNotif(id) {
-    if (!confirm("確定要刪除？")) return;
-    await fetch(`/api/notification/delete/${id}`, { method: "DELETE" });
-    loadNotifications();
-  }
+    async function deleteNotif(id) {
+      if (!confirm('確定要刪除這則通知？')) return;
+      allNotifications = allNotifications.filter(x => String(x.id) !== String(id));
+      render();
+      try { await fetch(`/api/notification/delete/${id}`, { method: 'DELETE' }); } catch (err) { console.warn('delete api failed', err); }
+      notifModal.hide(); // 刪除後關閉 Modal
+    }
 
-  function formatDate(d) {
-    return new Date(d).toLocaleString("zh-TW", { hour12: false });
-  }
+    // 【修改】show bootstrap modal
+    function showModal(n) {
+      // 【需求】點開 Modal 時自動標為已讀
+      if (!n.is_read) markRead(n.id);
 
-  document.getElementById("searchInput").addEventListener("input", renderGroups);
-  loadNotifications();
-</script>
+      modalTitle.innerText = n.title;
+      // 顯示通知內容
+      modalBody.innerHTML = `
+        <div class="small muted mb-2">時間: ${formatDateTime(n.created_at)} | 類別: ${n.category || '一般'}</div>
+        <p style="white-space:pre-wrap;">${n.message}</p>
+      `;
 
+      // 處理「前往內容」按鈕
+      if (n.url) {
+        modalLink.href = n.url;
+        modalLink.style.display = 'inline-block';
+        // 點擊前往後關閉 Modal
+        modalLink.onclick = () => { notifModal.hide(); };
+      } else {
+        modalLink.style.display = 'none';
+      }
+
+      // 處理「刪除」按鈕
+      modalDelete.onclick = () => { deleteNotif(n.id); };
+
+      notifModal.show();
+    }
+
+    // unread badge update
+    function updateUnreadBadge() {
+      const count = allNotifications.filter(n => !n.is_read).length;
+      unreadCounter.innerText = count;
+      document.title = count ? `(${count}) 通知中心` : '通知中心';
+    }
+
+
+    // ---------- 事件處理與初始化 ----------
+
+    // search input
+    searchInput.addEventListener('input', () => render());
+
+    // 下拉選單篩選邏輯
+    document.querySelectorAll('.dropdown-menu a').forEach(item => {
+      item.addEventListener('click', (e) => {
+        e.preventDefault();
+        const filter = e.currentTarget.dataset.filter;
+        if (filter) {
+          currentReadFilter = filter;
+          document.querySelectorAll('.dropdown-menu a').forEach(i => i.classList.remove('active'));
+          e.currentTarget.classList.add('active');
+
+          // 更新按鈕標籤
+          currentFilterLabel.innerText = e.currentTarget.innerText.replace('📌', '').trim();
+
+          render();
+        }
+      });
+    });
+
+    // 類別篩選
+    document.querySelectorAll('#categoryFilter .chip').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        currentCategoryFilter = e.currentTarget.dataset.category || 'all';
+        document.querySelectorAll('#categoryFilter .chip').forEach(b => b.classList.remove('active'));
+        e.currentTarget.classList.add('active');
+        render();
+      });
+    });
+
+    // 其他 UI actions
+    document.getElementById('btnRefresh').addEventListener('click', () => loadNotifications());
+
+    // 【移除】document.getElementById('openAll') 事件
+
+    // 【移除】document.getElementById('drawerClose') 事件
+
+    // 清除所有置頂
+    document.getElementById('clearPinned').addEventListener('click', (e) => {
+      e.preventDefault();
+      if (!confirm('確定要清除所有置頂嗎？')) return;
+      pinnedSet.clear();
+      localStorage.setItem('notif_pinned', JSON.stringify([]));
+      allNotifications.forEach(n => n.pinned = false);
+      render();
+    });
+
+    // 【移除】close drawer when clicking outside 相關事件
+
+    // init
+    (async function init() {
+      await loadNotifications();
+      // 【移除】refreshTagList();
+    })();
+
+  </script>
 </body>
+
 </html>
