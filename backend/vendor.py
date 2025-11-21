@@ -72,17 +72,19 @@ def _get_vendor_companies(cursor, vendor_id, vendor_email):
     """
     獲取廠商對應的公司列表。
     邏輯：廠商通過指導老師（teacher_name）關聯到公司。
-    1. 從 users 表獲取廠商的 teacher_name
+    1. 從 users 表獲取廠商的 teacher_name 和 username
     2. 找到該指導老師（users.name = teacher_name）
     3. 找到該指導老師對接的公司（internship_companies.advisor_user_id = 指導老師 ID）
+    4. 根據廠商帳號名稱過濾對應的公司（vendor -> 人人人, vendorA -> 嘻嘻嘻）
     """
-    # 先獲取廠商的 teacher_name
-    cursor.execute("SELECT teacher_name FROM users WHERE id = %s", (vendor_id,))
+    # 先獲取廠商的 teacher_name 和 username
+    cursor.execute("SELECT teacher_name, username FROM users WHERE id = %s", (vendor_id,))
     vendor_row = cursor.fetchone()
     if not vendor_row:
         return []
     
     teacher_name = vendor_row.get("teacher_name")
+    vendor_username = vendor_row.get("username", "").strip().lower()
     if not teacher_name or not teacher_name.strip():
         return []
     
@@ -94,13 +96,28 @@ def _get_vendor_companies(cursor, vendor_id, vendor_email):
     
     teacher_id = teacher_row["id"]
     
+    # 廠商帳號與公司名稱的對應關係
+    vendor_company_map = {
+        'vendor': '人人人',
+        'vendora': '嘻嘻嘻'
+    }
+    
     # 找到該指導老師對接的公司（只回傳已審核通過的公司）
-    cursor.execute("""
+    query = """
         SELECT id, company_name, contact_email
         FROM internship_companies
         WHERE advisor_user_id = %s AND status = 'reviewed'
-        ORDER BY company_name
-    """, (teacher_id,))
+    """
+    params = [teacher_id]
+    
+    # 如果廠商帳號有對應的公司名稱，則只回傳該公司
+    if vendor_username in vendor_company_map:
+        target_company_name = vendor_company_map[vendor_username]
+        query += " AND company_name = %s"
+        params.append(target_company_name)
+    
+    query += " ORDER BY company_name"
+    cursor.execute(query, tuple(params))
     return cursor.fetchall() or []
 
 
@@ -150,10 +167,13 @@ def _serialize_job(row):
     }
 
 
-def _fetch_job_for_vendor(cursor, job_id, vendor_id, vendor_email):
+def _fetch_job_for_vendor(cursor, job_id, vendor_id, vendor_email, allow_teacher_created=False):
     """
     獲取廠商有權限訪問的職缺。
     權限邏輯：通過指導老師（teacher_name）關聯到公司。
+    
+    Args:
+        allow_teacher_created: 如果為 True，也允許查看指導老師建立的職缺（created_by_vendor_id IS NULL）
     """
     # 先獲取廠商的 teacher_name
     cursor.execute("SELECT teacher_name FROM users WHERE id = %s", (vendor_id,))
@@ -173,8 +193,18 @@ def _fetch_job_for_vendor(cursor, job_id, vendor_id, vendor_email):
     
     teacher_id = teacher_row["id"]
     
+    # 構建查詢條件
+    if allow_teacher_created:
+        # 允許查看廠商自己建立的或指導老師建立的職缺
+        created_condition = "(ij.created_by_vendor_id = %s OR ij.created_by_vendor_id IS NULL)"
+        params = (job_id, teacher_id, vendor_id)
+    else:
+        # 只允許查看/操作廠商自己建立的職缺
+        created_condition = "ij.created_by_vendor_id = %s"
+        params = (job_id, teacher_id, vendor_id)
+    
     cursor.execute(
-        """
+        f"""
         SELECT
             ij.id,
             ij.company_id,
@@ -186,12 +216,13 @@ def _fetch_job_for_vendor(cursor, job_id, vendor_id, vendor_email):
             ij.work_time,
             ij.salary,
             ij.remark,
-            ij.is_active
+            ij.is_active,
+            ij.created_by_vendor_id
         FROM internship_jobs ij
         JOIN internship_companies ic ON ij.company_id = ic.id
-        WHERE ij.id = %s AND ic.advisor_user_id = %s AND ij.created_by_vendor_id = %s
+        WHERE ij.id = %s AND ic.advisor_user_id = %s AND {created_condition}
         """,
-        (job_id, teacher_id, vendor_id),
+        params,
     )
     row = cursor.fetchone()
     return row
@@ -663,7 +694,7 @@ def list_positions_for_vendor():
 
         where_clauses = [
             f"ij.company_id IN ({', '.join(['%s'] * len(company_ids))})",
-            "ij.created_by_vendor_id = %s"
+            "(ij.created_by_vendor_id = %s OR ij.created_by_vendor_id IS NULL)"
         ]
         params = company_ids[:]
         params.append(vendor_id)
@@ -695,7 +726,8 @@ def list_positions_for_vendor():
                 ij.work_time,
                 ij.salary,
                 ij.remark,
-                ij.is_active
+                ij.is_active,
+                ij.created_by_vendor_id
             FROM internship_jobs ij
             JOIN internship_companies ic ON ij.company_id = ic.id
             WHERE {' AND '.join(where_clauses)}
@@ -703,7 +735,13 @@ def list_positions_for_vendor():
         """
         cursor.execute(query, tuple(params))
         rows = cursor.fetchall() or []
-        items = [_serialize_job(row) for row in rows]
+        items = []
+        for row in rows:
+            job = _serialize_job(row)
+            if job:
+                # 標記是否為廠商建立的職缺
+                job["is_created_by_vendor"] = row.get("created_by_vendor_id") == vendor_id
+            items.append(job)
 
         stats = {
             "total": len(items),
@@ -819,11 +857,15 @@ def get_position_for_vendor(job_id):
         if not profile:
             return jsonify({"success": False, "message": "帳號資料不完整"}), 403
 
-        job_row = _fetch_job_for_vendor(cursor, job_id, session["user_id"], vendor_email)
+        vendor_id = session["user_id"]
+        job_row = _fetch_job_for_vendor(cursor, job_id, vendor_id, vendor_email, allow_teacher_created=True)
         if not job_row:
             return jsonify({"success": False, "message": "找不到職缺或無權限查看"}), 404
 
-        return jsonify({"success": True, "item": _serialize_job(job_row)})
+        job = _serialize_job(job_row)
+        if job:
+            job["is_created_by_vendor"] = job_row.get("created_by_vendor_id") == vendor_id
+        return jsonify({"success": True, "item": job})
     except Exception as exc:
         return jsonify({"success": False, "message": f"查詢失敗：{exc}"}), 500
     finally:
