@@ -761,6 +761,7 @@
               </td>
               <td>${salaryText}</td>
               <td>
+                <button class="link-button" data-action="edit" data-id="${job.id}" style="color:var(--color-primary); margin-right:12px;">修改</button>
                 <button class="link-button" data-action="delete" data-id="${job.id}" style="color:var(--color-danger);">刪除</button>
               </td>
             </tr>
@@ -848,7 +849,9 @@
           const action = target.dataset.action;
           const id = Number(target.dataset.id);
           if (!action || !id) return;
-          if (action === 'delete') {
+          if (action === 'edit') {
+            window.location.href = `/manage_positions/edit/${id}`;
+          } else if (action === 'delete') {
             deletePosition(id);
           }
         });

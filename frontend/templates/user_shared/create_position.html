@@ -409,8 +409,8 @@
   <main class="management-container container">
     <header class="page-header">
       <div>
-        <div class="page-eyebrow">新增職缺</div>
-        <h1>填寫職缺資訊</h1>
+        <div class="page-eyebrow" id="pageEyebrow">新增職缺</div>
+        <h1 id="pageTitle">填寫職缺資訊</h1>
         <p>提交後將同步給指導老師與科助查看，請確認內容無誤。</p>
       </div>
       <div class="page-actions">
@@ -436,8 +436,16 @@
             <input id="formSlots" type="number" min="1" step="1" required />
           </div>
           <div class="form-group">
-            <label for="formPeriod">實習期間</label>
-            <input id="formPeriod" type="text" placeholder="例如：2025/07 - 2025/09 (暑期)" maxlength="120" />
+            <label for="formPeriodStart">實習期間 - 開始日期</label>
+            <input id="formPeriodStart" type="date" />
+          </div>
+          <div class="form-group">
+            <label for="formPeriodEnd">實習期間 - 結束日期</label>
+            <input id="formPeriodEnd" type="date" />
+          </div>
+          <div class="form-group">
+            <label for="formPeriodNote">期間備註 (可留空)</label>
+            <input id="formPeriodNote" type="text" placeholder="例如：暑期實習" maxlength="50" />
           </div>
           <div class="form-group">
             <label for="formWorkTime">上班時間 / 方式</label>
@@ -482,15 +490,26 @@
       'use strict';
 
       const state = {
-        companies: []
+        companies: [],
+        jobId: null,
+        isEditMode: false
       };
+
+      // 從 URL 取得 job_id（如果有的話）
+      const pathParts = window.location.pathname.split('/');
+      if (pathParts[pathParts.length - 2] === 'edit' && pathParts[pathParts.length - 1]) {
+        state.jobId = parseInt(pathParts[pathParts.length - 1], 10);
+        state.isEditMode = !isNaN(state.jobId);
+      }
 
       const els = {
         form: document.getElementById('positionForm'),
         formCompany: document.getElementById('formCompany'),
         formTitle: document.getElementById('formTitle'),
         formSlots: document.getElementById('formSlots'),
-        formPeriod: document.getElementById('formPeriod'),
+        formPeriodStart: document.getElementById('formPeriodStart'),
+        formPeriodEnd: document.getElementById('formPeriodEnd'),
+        formPeriodNote: document.getElementById('formPeriodNote'),
         formWorkTime: document.getElementById('formWorkTime'),
         formSalary: document.getElementById('formSalary'),
         formDescription: document.getElementById('formDescription'),
@@ -498,7 +517,9 @@
         cancelFormBtn: document.getElementById('cancelFormBtn'),
         submitFormBtn: document.getElementById('submitFormBtn'),
         noCompanyHint: document.getElementById('noCompanyHint'),
-        toast: document.getElementById('toast')
+        toast: document.getElementById('toast'),
+        pageEyebrow: document.getElementById('pageEyebrow'),
+        pageTitle: document.getElementById('pageTitle')
       };
 
       function escapeHtml(str) {
@@ -523,6 +544,52 @@
         els.toast._timer = setTimeout(() => {
           els.toast.classList.remove('show');
         }, 3600);
+      }
+
+      function formatPeriodString(startDate, endDate, note) {
+        if (!startDate && !endDate) return '';
+        const parts = [];
+        if (startDate && endDate) {
+          const start = new Date(startDate);
+          const end = new Date(endDate);
+          const startStr = `${start.getFullYear()}/${String(start.getMonth() + 1).padStart(2, '0')}`;
+          const endStr = `${end.getFullYear()}/${String(end.getMonth() + 1).padStart(2, '0')}`;
+          parts.push(`${startStr} - ${endStr}`);
+        } else if (startDate) {
+          const start = new Date(startDate);
+          parts.push(`${start.getFullYear()}/${String(start.getMonth() + 1).padStart(2, '0')}`);
+        }
+        if (note && note.trim()) {
+          parts.push(`(${note.trim()})`);
+        }
+        return parts.join(' ');
+      }
+
+      function parsePeriodString(periodStr) {
+        if (!periodStr) return { start: '', end: '', note: '' };
+        // 解析格式：2025/07 - 2025/09 (暑期)
+        const match = periodStr.match(/(\d{4}\/\d{2})\s*-\s*(\d{4}\/\d{2})\s*(?:\(([^)]+)\))?/);
+        if (match) {
+          const [, startPart, endPart, note] = match;
+          const [startYear, startMonth] = startPart.split('/');
+          const [endYear, endMonth] = endPart.split('/');
+          return {
+            start: `${startYear}-${startMonth.padStart(2, '0')}-01`,
+            end: `${endYear}-${endMonth.padStart(2, '0')}-01`,
+            note: note || ''
+          };
+        }
+        // 嘗試解析單一日期：2025/07
+        const singleMatch = periodStr.match(/(\d{4}\/\d{2})/);
+        if (singleMatch) {
+          const [year, month] = singleMatch[1].split('/');
+          return {
+            start: `${year}-${month.padStart(2, '0')}-01`,
+            end: '',
+            note: periodStr.replace(singleMatch[0], '').trim().replace(/[()]/g, '').trim()
+          };
+        }
+        return { start: '', end: '', note: periodStr };
       }
 
       function toggleFormAvailability(hasCompanies) {
@@ -563,10 +630,53 @@
           }
           state.companies = result.companies || [];
           populateCompanies();
+          
+          // 如果是編輯模式，載入職缺資料
+          if (state.isEditMode && state.jobId) {
+            await loadJobData();
+          }
         } catch (error) {
           showToast(error.message || '資料載入失敗，請稍後再試', 'error');
           state.companies = [];
           populateCompanies();
+        }
+      }
+
+      async function loadJobData() {
+        try {
+          const response = await fetch(`/vendor/api/positions/${state.jobId}`, {
+            headers: { 'Accept': 'application/json' },
+            credentials: 'include'
+          });
+          const result = await response.json();
+          if (!response.ok || !result.success) {
+            throw new Error(result.message || '載入職缺資料失敗');
+          }
+          
+          const job = result.item;
+          if (job) {
+            els.formCompany.value = job.company_id || '';
+            els.formTitle.value = job.title || '';
+            els.formSlots.value = job.slots || '';
+            
+            // 解析日期字串
+            const periodData = parsePeriodString(job.period || '');
+            els.formPeriodStart.value = periodData.start || '';
+            els.formPeriodEnd.value = periodData.end || '';
+            els.formPeriodNote.value = periodData.note || '';
+            
+            els.formWorkTime.value = job.work_time || '';
+            els.formSalary.value = job.salary || '';
+            els.formDescription.value = job.description || '';
+            els.formRemark.value = job.remark || '';
+            
+            // 更新頁面標題
+            if (els.pageEyebrow) els.pageEyebrow.textContent = '編輯職缺';
+            if (els.pageTitle) els.pageTitle.textContent = '編輯職缺資訊';
+            if (els.submitFormBtn) els.submitFormBtn.textContent = '更新職缺';
+          }
+        } catch (error) {
+          showToast(error.message || '載入職缺資料失敗，請稍後再試', 'error');
         }
       }
 
@@ -577,13 +687,20 @@
           return;
         }
 
+        // 組合日期字串
+        const periodStr = formatPeriodString(
+          els.formPeriodStart.value,
+          els.formPeriodEnd.value,
+          els.formPeriodNote.value
+        );
+
         const payload = {
           company_id: els.formCompany.value,
           title: els.formTitle.value.trim(),
           slots: els.formSlots.value,
-          period: els.formPeriod.value.trim(),
+          period: periodStr,
           work_time: els.formWorkTime.value.trim(),
-          salary: els.formSalary.value.trim(),
+          salary: els.formSalary.value.trim() || null,
           description: els.formDescription.value.trim(),
           remark: els.formRemark.value.trim(),
           is_active: true
@@ -600,8 +717,13 @@
 
         els.submitFormBtn.disabled = true;
         try {
-          const response = await fetch('/vendor/api/positions', {
-            method: 'POST',
+          const url = state.isEditMode 
+            ? `/vendor/api/positions/${state.jobId}`
+            : '/vendor/api/positions';
+          const method = state.isEditMode ? 'PUT' : 'POST';
+          
+          const response = await fetch(url, {
+            method: method,
             headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
             credentials: 'include',
             body: JSON.stringify(payload)
@@ -610,7 +732,7 @@
           if (!response.ok || !result.success) {
             throw new Error(result.message || '儲存失敗');
           }
-          showToast('職缺新增成功', 'success');
+          showToast(state.isEditMode ? '職缺更新成功' : '職缺新增成功', 'success');
           setTimeout(() => {
             window.location.href = '/manage_positions';
           }, 800);

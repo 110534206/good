@@ -54,8 +54,8 @@ def get_companies():
     try:
         db = get_db()
         cursor = db.cursor(dictionary=True)
-        # 假設通過狀態為 'approved'；如果你使用其他值請調整條件
-        cursor.execute("SELECT id, company_name FROM internship_companies WHERE status = 'approved' ORDER BY company_name")
+        # 已審核通過的狀態為 'reviewed'
+        cursor.execute("SELECT id, company_name FROM internship_companies WHERE status = 'reviewed' ORDER BY company_name")
         companies = cursor.fetchall()
         return jsonify({"success": True, "data": companies})
     except Exception as e:

@@ -434,6 +434,15 @@ def manage_positions_create_page():
         return redirect(url_for('auth_bp.login_page'))
     return render_template('user_shared/create_position.html')
 
+@users_bp.route('/manage_positions/edit/<int:job_id>')
+def manage_positions_edit_page(job_id):
+    """
+    廠商編輯職缺頁面。
+    """
+    if 'username' not in session or session.get('role') != 'vendor':
+        return redirect(url_for('auth_bp.login_page'))
+    return render_template('user_shared/create_position.html', job_id=job_id)
+
 
 # -------------------------
 # 廠商媒合結果頁面
@@ -569,7 +578,7 @@ def get_public_positions():
     cursor = conn.cursor(dictionary=True)
     try:
         # 只查詢已審核通過的公司和啟用的職缺
-        where_clauses = ["ic.status = 'approved'", "ij.is_active = 1"]
+        where_clauses = ["ic.status = 'reviewed'", "ij.is_active = 1"]
         params = []
         
         # 指導老師只能看到自己對接的公司，科助可以看到所有公司
@@ -626,7 +635,7 @@ def get_public_positions():
             })
         
         # 獲取公司列表（指導老師只能看到自己對接的公司，科助可以看到所有）
-        company_where_clause = "ic.status = 'approved'"
+        company_where_clause = "ic.status = 'reviewed'"
         company_params = []
         if user_role == 'teacher':
             company_where_clause += " AND ic.advisor_user_id = %s"
@@ -680,7 +689,7 @@ def get_public_company(company_id):
     conn = get_db()
     cursor = conn.cursor(dictionary=True)
     try:
-        company_conditions = ["ic.id = %s", "ic.status = 'approved'"]
+        company_conditions = ["ic.id = %s", "ic.status = 'reviewed'"]
         params = [company_id]
         if role == 'teacher':
             company_conditions.append("ic.advisor_user_id = %s")

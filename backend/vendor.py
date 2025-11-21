@@ -753,10 +753,8 @@ def create_position_for_vendor():
     salary_value = data.get("salary")
     salary = None
     if salary_value not in (None, "", "null"):
-        try:
-            salary = Decimal(str(salary_value))
-        except (InvalidOperation, ValueError):
-            return jsonify({"success": False, "message": "薪資格式不正確"}), 400
+        # 薪資可以是文字格式（例如："月薪 30,000"、"面議" 等）
+        salary = str(salary_value).strip() if salary_value else None
 
     is_active = True
     if "is_active" in data:
@@ -808,6 +806,31 @@ def create_position_for_vendor():
         conn.close()
 
 
+@vendor_bp.route("/vendor/api/positions/<int:job_id>", methods=["GET"])
+def get_position_for_vendor(job_id):
+    """取得單一職缺資料"""
+    if "user_id" not in session or session.get("role") != "vendor":
+        return jsonify({"success": False, "message": "未授權"}), 403
+
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        profile, _companies, vendor_email = _get_vendor_scope(cursor, session["user_id"])
+        if not profile:
+            return jsonify({"success": False, "message": "帳號資料不完整"}), 403
+
+        job_row = _fetch_job_for_vendor(cursor, job_id, session["user_id"], vendor_email)
+        if not job_row:
+            return jsonify({"success": False, "message": "找不到職缺或無權限查看"}), 404
+
+        return jsonify({"success": True, "item": _serialize_job(job_row)})
+    except Exception as exc:
+        return jsonify({"success": False, "message": f"查詢失敗：{exc}"}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+
 @vendor_bp.route("/vendor/api/positions/<int:job_id>", methods=["PUT"])
 def update_position_for_vendor(job_id):
     if "user_id" not in session or session.get("role") != "vendor":
@@ -834,10 +857,8 @@ def update_position_for_vendor(job_id):
     salary_value = data.get("salary")
     salary = None
     if salary_value not in (None, "", "null"):
-        try:
-            salary = Decimal(str(salary_value))
-        except (InvalidOperation, ValueError):
-            return jsonify({"success": False, "message": "薪資格式不正確"}), 400
+        # 薪資可以是文字格式（例如："月薪 30,000"、"面議" 等）
+        salary = str(salary_value).strip() if salary_value else None
 
     try:
         is_active = _to_bool(data.get("is_active", True))
