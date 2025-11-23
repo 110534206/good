@@ -15,9 +15,18 @@
     .chart-container {
       background: #fff;
       border-radius: 16px;
-      padding: 24px;
+      padding: 16px;
       box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
       margin-bottom: 24px;
+    }
+    
+    .chart-container h5 {
+      font-size: 1rem;
+      margin-bottom: 12px;
+    }
+    
+    .chart-container canvas {
+      max-height: 250px;
     }
 
     h2 {
@@ -46,52 +55,48 @@
       color: #0d6efd;
     }
 
-    #studentsContainer {
-      margin-top: 24px;
+    .main-content {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 0 60px;
     }
+
   </style>
 </head>
 
 <body class="p-0">
   <div class="container-fluid">
-    <div class="row">
-      <div class="col-md-3 sidebar">
-        <h4>🛠 後台設定</h4>
-        <div class="mb-3">
-          <label for="classSelect" class="form-label">選擇班級</label>
-          <select id="classSelect" class="form-select">
-            <option value="all">所有班級</option>
-          </select>
-        </div>
-        <div class="mb-3">
-          <button class="btn btn-primary w-100 mb-2" id="refreshBtn">刷新統計</button>
-          <button class="btn btn-success w-100 mb-2" id="exportBtn">匯出 Excel</button>
-          <button class="btn btn-info w-100" id="manageStudentsBtn">學生資料</button>
-        </div>
-        <hr>
-        <h6>其他設定</h6>
-        <ul class="list-unstyled">
-          <li><a href="/approve_company">審核公司</a></li>
-          <li><a href="#">管理學生</a></li>
-        </ul>
-      </div>
-
-      <div class="col-md-9 p-4">
+    <div class="main-content">
+      <div class="p-4">
         <h2 class="mb-4 text-center">📊 實習公司統計儀表板</h2>
+        <div class="mb-4">
+          <div class="mb-3" style="max-width: 300px;">
+            <label for="classSelect" class="form-label">選擇班級</label>
+            <select id="classSelect" class="form-select">
+              <option value="all">所有班級</option>
+            </select>
+          </div>
+          <div class="d-flex gap-2">
+            <button class="btn btn-primary" id="refreshBtn">刷新統計</button>
+            <button class="btn btn-success" id="exportBtn">匯出 Excel</button>
+            <a href="/approve_company" class="btn btn-outline-primary">審核公司</a>
+            <button class="btn btn-outline-secondary" id="manageStudentsBtn">管理學生</button>
+          </div>
+        </div>
         <div class="row g-4">
-          <div class="col-lg-6">
+          <div class="col-lg-4">
             <div class="chart-container">
-              <h5 class="text-center">🏢 各公司被選志願次數（前五名）</h5>
+              <h5 class="text-center">🏢 各公司被選志願次數</h5>
               <canvas id="companyChart"></canvas>
             </div>
           </div>
-          <div class="col-lg-3">
+          <div class="col-lg-4">
             <div class="chart-container">
               <h5 class="text-center">📄 履歷繳交率</h5>
               <canvas id="resumeChart"></canvas>
             </div>
           </div>
-          <div class="col-lg-3">
+          <div class="col-lg-4">
             <div class="chart-container">
               <h5 class="text-center">🎯 志願序填寫率</h5>
               <canvas id="preferenceChart"></canvas>
@@ -108,7 +113,7 @@
           </div>
         </div>
 
-        <div id="studentsContainer"></div>
+        <div id="studentsContainer" class="mt-4"></div>
       </div>
     </div>
   </div>
@@ -307,6 +312,21 @@
       }
     }
 
+    // 刷新統計 (修改：同時呼叫 loadData 和 loadClassStats)
+    document.getElementById("refreshBtn").addEventListener("click", () => {
+      const classSelect = document.getElementById("classSelect");
+      const classId = classSelect.value;
+      const className = classSelect.options[classSelect.selectedIndex].text;
+
+      loadData(classId); // 載入原有 3 個圖表
+      loadClassStats(classId, className); // 載入新的班級統計圖表
+    });
+
+    // 匯出 Excel
+    document.getElementById("exportBtn").addEventListener("click", () => {
+      const classId = document.getElementById("classSelect").value;
+      window.location.href = `/ta/statistics/api/export_companies_stats${classId !== "all" ? '?class_id=' + classId : ''}`; // 修正: 確保路由正確
+    });
 
     // 管理學生
     document.getElementById("manageStudentsBtn").addEventListener("click", async () => {
@@ -326,44 +346,30 @@
         return;
       }
 
-      let html = `<table class="table table-striped">
-    <thead><tr>
-      <th>學號</th>
-      <th>姓名</th>
-      <th>Email</th>
-      <th>履歷上傳</th>
-      <th>志願填寫</th>
-    </tr></thead>
-    <tbody>`;
+      let html = `<div class="chart-container">
+        <h4 class="mb-3">學生履歷管理</h4>
+        <table class="table table-striped">
+          <thead><tr>
+            <th>學號</th>
+            <th>姓名</th>
+            <th>Email</th>
+            <th>履歷上傳</th>
+            <th>志願填寫</th>
+          </tr></thead>
+          <tbody>`;
 
       data.students.forEach(s => {
         html += `<tr>
-      <td>${s.username}</td>
-      <td>${s.name}</td>
-      <td>${s.email}</td>
-      <td>${s.resume_count > 0 ? '✅' : '❌'}</td>
-      <td>${s.preference_count > 0 ? '✅' : '❌'}</td>
-    </tr>`;
+          <td>${s.username}</td>
+          <td>${s.name}</td>
+          <td>${s.email}</td>
+          <td>${s.resume_count > 0 ? '✅' : '❌'}</td>
+          <td>${s.preference_count > 0 ? '✅' : '❌'}</td>
+        </tr>`;
       });
 
-      html += "</tbody></table>";
+      html += `</tbody></table></div>`;
       container.innerHTML = html;
-    });
-
-    // 刷新統計 (修改：同時呼叫 loadData 和 loadClassStats)
-    document.getElementById("refreshBtn").addEventListener("click", () => {
-      const classSelect = document.getElementById("classSelect");
-      const classId = classSelect.value;
-      const className = classSelect.options[classSelect.selectedIndex].text;
-
-      loadData(classId); // 載入原有 3 個圖表
-      loadClassStats(classId, className); // 載入新的班級統計圖表
-    });
-
-    // 匯出 Excel
-    document.getElementById("exportBtn").addEventListener("click", () => {
-      const classId = document.getElementById("classSelect").value;
-      window.location.href = `/ta/statistics/api/export_companies_stats${classId !== "all" ? '?class_id=' + classId : ''}`; // 修正: 確保路由正確
     });
 
     // 初始載入
