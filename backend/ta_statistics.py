@@ -3,7 +3,6 @@ from config import get_db
 from datetime import datetime
 from semester import get_current_semester_code
 import traceback
-import pandas as pd 
 import io 
 
 ta_statistics_bp = Blueprint("ta_statistics_bp", __name__, )
@@ -406,6 +405,8 @@ def export_companies_stats():
     conn = get_db()
     cursor = conn.cursor(dictionary=True)
     try:
+        from openpyxl import Workbook
+
         params = []
         query = """
             SELECT c.company_name, COUNT(sp.id) AS preference_count 
@@ -418,22 +419,92 @@ def export_companies_stats():
             # 如果有指定班級，需要 JOIN users 表進行過濾
             query += "JOIN users u ON sp.student_id = u.id WHERE u.role='student' AND u.class_id=%s "
             params.append(class_id)
-        elif class_id == "all":
-            # 針對所有學生進行統計（可加入過濾確保只計學生，但原 admin.py 邏輯較開放）
-             query += "LEFT JOIN users u ON sp.student_id = u.id WHERE u.role='student' "
+        else:
+            # 針對所有學生進行統計
+            query += "LEFT JOIN users u ON sp.student_id = u.id WHERE u.role='student' "
 
         query += "GROUP BY c.id, c.company_name ORDER BY preference_count DESC"
             
         cursor.execute(query, params)
-        data = cursor.fetchall()
-        
-        df = pd.DataFrame(data)
-        df.columns = ["公司名稱", "志願次數"] # 替換欄位名稱
-        
+        company_data = cursor.fetchall() or []
+
+        # 取得履歷與志願統計（與前端圖表一致）
+        student_filter = "WHERE u.role='student'"
+        student_params = []
+        if class_id and class_id != "all":
+            student_filter += " AND u.class_id=%s"
+            student_params.append(class_id)
+
+        cursor.execute(f"SELECT COUNT(*) AS total FROM users u {student_filter}", student_params)
+        total_students = cursor.fetchone()["total"] or 0
+
+        cursor.execute(f"""
+            SELECT COUNT(DISTINCT r.user_id) AS uploaded
+            FROM resumes r
+            JOIN users u ON r.user_id = u.id
+            {student_filter}
+        """, student_params)
+        uploaded = cursor.fetchone()["uploaded"] or 0
+        resume_stats = {
+            "已上傳": uploaded,
+            "未上傳": max(total_students - uploaded, 0)
+        }
+
+        cursor.execute(f"""
+            SELECT COUNT(DISTINCT sp.student_id) AS filled
+            FROM student_preferences sp
+            JOIN users u ON sp.student_id = u.id
+            {student_filter}
+        """, student_params)
+        filled = cursor.fetchone()["filled"] or 0
+        preference_stats = {
+            "已填寫": filled,
+            "未填寫": max(total_students - filled, 0)
+        }
+
+        # 建立 Excel 檔，分成三個工作表
+        wb = Workbook()
+
+        # 工作表 1：公司志願統計
+        ws1 = wb.active
+        ws1.title = "公司志願統計"
+        ws1.append(["排名", "公司名稱", "志願次數"])
+        if company_data:
+            for idx, row in enumerate(company_data, start=1):
+                ws1.append([idx, row.get("company_name", "-"), row.get("preference_count", 0)])
+        else:
+            ws1.append(["-", "目前沒有志願資料", 0])
+
+        # 工作表 2：履歷繳交率
+        ws2 = wb.create_sheet("履歷繳交率")
+        ws2.append(["項目", "人數", "比例"])
+        resume_total = sum(resume_stats.values()) or 0
+        for label, value in resume_stats.items():
+            percent = f"{(value / resume_total * 100):.0f}%" if resume_total else "0%"
+            ws2.append([label, value, percent])
+
+        # 工作表 3：志願填寫率
+        ws3 = wb.create_sheet("志願填寫率")
+        ws3.append(["項目", "人數", "比例"])
+        pref_total = sum(preference_stats.values()) or 0
+        for label, value in preference_stats.items():
+            percent = f"{(value / pref_total * 100):.0f}%" if pref_total else "0%"
+            ws3.append([label, value, percent])
+
+        # 調整欄寬以便閱讀
+        for ws in [ws1, ws2, ws3]:
+            for column_cells in ws.columns:
+                max_length = 0
+                for cell in column_cells:
+                    if cell.value is not None:
+                        max_length = max(max_length, len(str(cell.value)))
+                adjusted_width = max_length + 4
+                ws.column_dimensions[column_cells[0].column_letter].width = adjusted_width
+
         output = io.BytesIO()
-        df.to_excel(output, index=False)
+        wb.save(output)
         output.seek(0)
-        
+
         # 生成檔案名稱
         filename = f"公司志願統計_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
         
