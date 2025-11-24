@@ -64,7 +64,7 @@ def upload_company():
             return jsonify({"success": False, "message": "請先登入"}), 403
 
         role = session.get('role')
-        if role not in ['teacher', 'director']:
+        if role not in ['teacher', 'director', 'ta']:
            return jsonify({"success": False, "message": "無權限操作此功能"}), 403
 
         user_id = session['user_id']
@@ -108,12 +108,24 @@ def upload_company():
         conn = get_db()
         cursor = conn.cursor()
 
+        # 如果是科助，自動填入 advisor_user_id 和 reviewed_by_user_id，並設為已核准狀態
+        if role == 'ta':
+            advisor_user_id = user_id
+            reviewed_by_user_id = user_id
+            status = 'approved'
+            reviewed_at = datetime.now()
+        else:
+            advisor_user_id = None
+            reviewed_by_user_id = None
+            status = 'pending'
+            reviewed_at = None
+
         cursor.execute("""
             INSERT INTO internship_companies 
-            (company_name, uploaded_by_user_id, status, submitted_at, company_doc_path, 
+            (company_name, uploaded_by_user_id, advisor_user_id, reviewed_by_user_id, status, submitted_at, reviewed_at, company_doc_path, 
              description, location, contact_person, contact_title, contact_email, contact_phone)
-            VALUES (%s, %s, 'pending', NOW(), %s, '（詳見附檔）', '', '', '', '', '')
-        """, (company_name, user_id, file_path))
+            VALUES (%s, %s, %s, %s, %s, NOW(), %s, %s, '（詳見附檔）', '', '', '', '', '')
+        """, (company_name, user_id, advisor_user_id, reviewed_by_user_id, status, reviewed_at, file_path))
         company_id = cursor.lastrowid
 
         # 插入職缺
@@ -137,9 +149,15 @@ def upload_company():
 
         conn.commit()
 
+        # 根據角色顯示不同的成功訊息
+        if role == 'ta':
+            message = f"公司 '{company_name}' ({job_index} 個職缺) 上傳成功，已自動核准。"
+        else:
+            message = f"公司 '{company_name}' ({job_index} 個職缺) 上傳成功，等待審核。"
+
         return jsonify({
             "success": True,
-            "message": f"公司 '{company_name}' ({job_index} 個職缺) 上傳成功，等待審核。",
+            "message": message,
             "company_id": company_id
         })
 
@@ -588,11 +606,14 @@ def api_approve_company():
         if current_status != 'pending':
             return jsonify({"success": False, "message": f"公司已被審核過（目前狀態為 {current_status}）"}), 400
 
+        # 取得審核者的 user_id
+        reviewer_id = session.get('user_id') if 'user_id' in session else None
+
         cursor.execute("""
             UPDATE internship_companies
-            SET status = %s, reviewed_at = %s
+            SET status = %s, reviewed_at = %s, reviewed_by_user_id = %s
             WHERE id = %s
-        """, (status, datetime.now(), company_id))
+        """, (status, datetime.now(), reviewer_id, company_id))
         conn.commit()
 
         action_text = '核准' if status == 'approved' else '拒絕'
