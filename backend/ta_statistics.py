@@ -730,6 +730,13 @@ def export_statistics():
 # --------------------------------
 @ta_statistics_bp.route('/manage_companies')
 def manage_companies():
-    return render_template('user_shared/manage_companies.html')               
+    return render_template('user_shared/manage_companies.html')
+
+# --------------------------------
+# 學生管理頁面
+# --------------------------------
+@ta_statistics_bp.route('/manage_students')
+def manage_students():
+    return render_template('user_shared/manage_students.html')               
 
 

@@ -61,26 +61,40 @@
       padding: 0 60px;
     }
 
+    .page-banner {
+      background: #0066cc;
+      color: #fff;
+      padding: 1rem 2rem;
+      margin-bottom: 0;
+      width: 100%;
+    }
+
+    .page-banner h2 {
+      color: #fff;
+      font-weight: 600;
+      margin: 0;
+      text-align: center;
+      font-size: 1.5rem;
+    }
+
   </style>
 </head>
 
 <body class="p-0">
-  <div class="container-fluid">
+  <div class="container-fluid p-0">
+    <div class="page-banner">
+      <div class="main-content">
+        <h2>實習公司資料總覽</h2>
+      </div>
+    </div>
     <div class="main-content">
       <div class="p-4">
-        <h2 class="mb-4 text-center">📊 實習公司統計儀表板</h2>
         <div class="mb-4">
-          <div class="mb-3" style="max-width: 300px;">
-            <label for="classSelect" class="form-label">選擇班級</label>
-            <select id="classSelect" class="form-select">
-              <option value="all">所有班級</option>
-            </select>
-          </div>
-          <div class="d-flex gap-2">
+          <div class="d-flex gap-2 justify-content-center">
             <button class="btn btn-primary" id="refreshBtn">刷新統計</button>
             <button class="btn btn-success" id="exportBtn">匯出 Excel</button>
-            <a href="/approve_company" class="btn btn-outline-primary">審核公司</a>
-            <button class="btn btn-outline-secondary" id="manageStudentsBtn">管理學生</button>
+            <a href="/approve_company" class="btn btn-danger">審核公司</a>
+            <a href="/ta/statistics/manage_students" class="btn btn-warning">學生管理</a>
           </div>
         </div>
         <div class="row g-4">
@@ -104,39 +118,12 @@
           </div>
         </div>
 
-        <div class="row g-4 mt-4">
-          <div class="col-12">
-            <div id="classChartContainer" class="chart-container">
-              <h2>班級實習進度分析</h2>
-              <p>請選擇一個班級以查看詳細實習統計圖表。</p>
-            </div>
-          </div>
-        </div>
-
-        <div id="studentsContainer" class="mt-4"></div>
       </div>
     </div>
   </div>
 
   <script>
     let companyChart, resumeChart, preferenceChart;
-    let myClassChart = null; // 新增：用於儲存單一班級 Chart 實例
-
-    // 載入班級列表
-    async function loadClasses() {
-      const res = await fetch("/ta/statistics/api/get_classes"); // 修正: 確保路由正確
-      const data = await res.json();
-      const select = document.getElementById("classSelect");
-
-      if (data.success) {
-        data.classes.forEach(c => {
-          const option = document.createElement("option");
-          option.value = c.id;
-          option.textContent = `${c.department.replace('管科', '')}${c.name}`;
-          select.appendChild(option);
-        });
-      }
-    }
 
     // 載入統計資料 (原有的三個圖表)
     async function loadData(classId = "all") {
@@ -218,164 +205,19 @@
       });
     }
 
-    // 新增函式：載入單一班級的統計圖表
-    async function loadClassStats(classId, className) {
-      const chartContainer = document.getElementById("classChartContainer");
-
-      // 處理「所有班級」的特殊情況
-      if (classId === 'all') {
-        if (myClassChart) { myClassChart.destroy(); myClassChart = null; }
-        chartContainer.innerHTML = '<h2>班級實習進度分析</h2><p>請選擇一個班級以查看詳細實習統計圖表。</p>';
-        return;
-      }
-
-      // 清空並準備新的 Chart 元素
-      chartContainer.innerHTML = '<h2>' + className + ' 實習統計分析</h2><canvas id="classStatsChart"></canvas>';
-
-      try {
-        // 呼叫新的 API 路由
-        const res = await fetch(`/ta/statistics/api/get_class_stats/${classId}`);
-        const data = await res.json();
-
-        if (!data.success) {
-          if (myClassChart) { myClassChart.destroy(); myClassChart = null; }
-          chartContainer.innerHTML = `<div class="text-danger">載入統計圖表失敗：${data.message}</div>`;
-          return;
-        }
-
-        const stats = data.stats;
-        const ctx = document.getElementById('classStatsChart').getContext('2d');
-
-        // 銷毀舊的 Chart 實例（如果存在）
-        if (myClassChart) {
-          myClassChart.destroy();
-        }
-
-        // 使用 Chart.js 繪製長條圖
-        myClassChart = new Chart(ctx, {
-          type: 'bar',
-          data: {
-            labels: ['總學生數', '已上傳履歷', '已填寫志願'],
-            datasets: [{
-              label: '人數',
-              data: [
-                stats.total_students,
-                stats.students_with_resume,
-                stats.students_with_preference
-              ],
-              backgroundColor: [
-                'rgba(54, 162, 235, 0.7)', // 藍色: 總學生數
-                'rgba(75, 192, 192, 0.7)', // 綠色: 已上傳履歷
-                'rgba(153, 102, 255, 0.7)' // 紫色: 已填寫志願
-              ],
-              borderColor: [
-                'rgba(54, 162, 235, 1)',
-                'rgba(75, 192, 192, 1)',
-                'rgba(153, 102, 255, 1)'
-              ],
-              borderWidth: 1
-            }]
-          },
-          options: {
-            responsive: true,
-            scales: {
-              y: {
-                beginAtZero: true,
-                // 設定 Y 軸的最大值略大於總學生數，且至少為 5
-                max: stats.total_students > 0 ? Math.ceil(stats.total_students * 1.05) : 5,
-                ticks: {
-                  precision: 0 // 確保 Y 軸刻度是整數
-                }
-              },
-              x: {
-                grid: {
-                  display: false
-                }
-              }
-            },
-            plugins: {
-              legend: {
-                display: false
-              },
-              title: {
-                display: true,
-                text: stats.class_name + ' 實習進度統計'
-              }
-            }
-          }
-        });
-
-      } catch (error) {
-        console.error("Fetch error:", error);
-        if (myClassChart) { myClassChart.destroy(); myClassChart = null; }
-        chartContainer.innerHTML = `<div class="text-danger">網路連線或資料處理錯誤</div>`;
-      }
-    }
-
-    // 刷新統計 (修改：同時呼叫 loadData 和 loadClassStats)
+    // 刷新統計 (顯示所有班級的統計)
     document.getElementById("refreshBtn").addEventListener("click", () => {
-      const classSelect = document.getElementById("classSelect");
-      const classId = classSelect.value;
-      const className = classSelect.options[classSelect.selectedIndex].text;
-
-      loadData(classId); // 載入原有 3 個圖表
-      loadClassStats(classId, className); // 載入新的班級統計圖表
+      loadData("all"); // 載入所有班級的統計
     });
 
-    // 匯出 Excel
+    // 匯出 Excel (所有班級)
     document.getElementById("exportBtn").addEventListener("click", () => {
-      const classId = document.getElementById("classSelect").value;
-      window.location.href = `/ta/statistics/api/export_companies_stats${classId !== "all" ? '?class_id=' + classId : ''}`; // 修正: 確保路由正確
+      window.location.href = `/ta/statistics/api/export_companies_stats`; // 匯出所有班級的統計
     });
 
-    // 管理學生
-    document.getElementById("manageStudentsBtn").addEventListener("click", async () => {
-      const classId = document.getElementById("classSelect").value;
-      const res = await fetch("/ta/statistics/api/get_students_by_class?class_id=" + classId); // 修正: 確保路由正確
-      const data = await res.json();
-      const container = document.getElementById("studentsContainer");
-      container.innerHTML = "";
-
-      if (!data.success) {
-        container.innerHTML = `<div class="text-danger">載入學生資料失敗：${data.message}</div>`;
-        return;
-      }
-
-      if (data.students.length === 0) {
-        container.innerHTML = "<div>該班級沒有學生資料</div>";
-        return;
-      }
-
-      let html = `<div class="chart-container">
-        <h4 class="mb-3">學生履歷管理</h4>
-        <table class="table table-striped">
-          <thead><tr>
-            <th>學號</th>
-            <th>姓名</th>
-            <th>Email</th>
-            <th>履歷上傳</th>
-            <th>志願填寫</th>
-          </tr></thead>
-          <tbody>`;
-
-      data.students.forEach(s => {
-        html += `<tr>
-          <td>${s.username}</td>
-          <td>${s.name}</td>
-          <td>${s.email}</td>
-          <td>${s.resume_count > 0 ? '✅' : '❌'}</td>
-          <td>${s.preference_count > 0 ? '✅' : '❌'}</td>
-        </tr>`;
-      });
-
-      html += `</tbody></table></div>`;
-      container.innerHTML = html;
-    });
 
     // 初始載入
-    loadClasses();
-    loadData();
-    loadClassStats("all", "所有班級"); // 初始載入班級統計 (顯示預設文字)
+    loadData("all"); // 載入所有班級的統計
   </script>
 </body>
 
