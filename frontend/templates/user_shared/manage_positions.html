@@ -707,11 +707,15 @@
 
       function updateCompaniesControls() {
         const hasCompanies = state.companies.length > 0;
+        // 檢查是否有公司且該公司有對接的指導老師（advisor_user_id 不為 null）
+        const hasAdvisor = hasCompanies && state.companies.some(c => c.advisor_user_id != null);
+        
         if (els.createBtn) {
           els.createBtn.disabled = !hasCompanies;
         }
         if (els.companyHint) {
-          els.companyHint.classList.toggle('show', !hasCompanies);
+          // 如果沒有公司，或公司沒有對接的指導老師，則顯示提示
+          els.companyHint.classList.toggle('show', !hasAdvisor);
         }
       }
 

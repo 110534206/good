@@ -104,9 +104,9 @@ def _get_vendor_companies(cursor, vendor_id, vendor_email):
     
     # 找到該指導老師對接的公司（只回傳已審核通過的公司）
     query = """
-        SELECT id, company_name, contact_email
+        SELECT id, company_name, contact_email, advisor_user_id
         FROM internship_companies
-        WHERE advisor_user_id = %s AND status = 'reviewed'
+        WHERE advisor_user_id = %s AND status = 'approved'
     """
     params = [teacher_id]
     
@@ -748,7 +748,7 @@ def list_positions_for_vendor():
             "active": sum(1 for item in items if item["is_active"]),
             "inactive": sum(1 for item in items if not item["is_active"]),
         }
-        companies_payload = [{"id": c["id"], "name": c["company_name"]} for c in companies]
+        companies_payload = [{"id": c["id"], "name": c["company_name"], "advisor_user_id": c.get("advisor_user_id")} for c in companies]
         return jsonify({"success": True, "companies": companies_payload, "items": items, "stats": stats})
     except Exception as exc:
         return jsonify({"success": False, "message": f"載入失敗：{exc}"}), 500
