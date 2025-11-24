@@ -173,7 +173,7 @@
 
         async function init() {
             try {
-                const res = await fetch("/student/api/get_my_internship_results");
+                const res = await fetch("/admission/api/get_my_admission");
                 if (!res.ok) throw new Error("資料讀取失敗");
                 const data = await res.json();
                 if (!data.success) throw new Error(data.message || "查詢失敗");
@@ -195,8 +195,8 @@
                     statusChip.textContent = "尚未有錄取紀錄";
                 }
 
-                if (final_preference) {
-                    internPeriod.textContent = final_preference.internship_period || fallback;
+                if (final_preference && final_preference.internship_period) {
+                    internPeriod.textContent = final_preference.internship_period;
                 } else {
                     internPeriod.textContent = "由公司另行通知";
                 }
