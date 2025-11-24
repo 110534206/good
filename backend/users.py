@@ -578,7 +578,7 @@ def get_public_positions():
     cursor = conn.cursor(dictionary=True)
     try:
         # 只查詢已審核通過的公司和啟用的職缺
-        where_clauses = ["ic.status = 'reviewed'", "ij.is_active = 1"]
+        where_clauses = ["ic.status = 'approved'", "ij.is_active = 1"]
         params = []
         
         # 指導老師只能看到自己對接的公司，科助可以看到所有公司
@@ -635,20 +635,20 @@ def get_public_positions():
             })
         
         # 獲取公司列表（指導老師只能看到自己對接的公司，科助可以看到所有）
-        company_where_clause = "ic.status = 'reviewed'"
+        company_where_clause = "ic.status = 'approved'"
         company_params = []
         if user_role == 'teacher':
             company_where_clause += " AND ic.advisor_user_id = %s"
             company_params.append(user_id)
         
         cursor.execute(f"""
-            SELECT DISTINCT ic.id, ic.company_name
+            SELECT DISTINCT ic.id, ic.company_name, ic.advisor_user_id
             FROM internship_companies ic
             WHERE {company_where_clause}
             ORDER BY ic.company_name
         """, tuple(company_params))
         companies = cursor.fetchall() or []
-        companies_payload = [{"id": c["id"], "name": c["company_name"]} for c in companies]
+        companies_payload = [{"id": c["id"], "name": c["company_name"], "advisor_user_id": c["advisor_user_id"]} for c in companies]
         
         # 統計資訊
         stats = {
@@ -689,7 +689,7 @@ def get_public_company(company_id):
     conn = get_db()
     cursor = conn.cursor(dictionary=True)
     try:
-        company_conditions = ["ic.id = %s", "ic.status = 'reviewed'"]
+        company_conditions = ["ic.id = %s", "ic.status = 'approved'"]
         params = [company_id]
         if role == 'teacher':
             company_conditions.append("ic.advisor_user_id = %s")

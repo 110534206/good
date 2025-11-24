@@ -426,11 +426,6 @@
         toast: document.getElementById('toast')
       };
 
-      const featuredCompanies = [
-        { label: '人人人', account: 'vendor' },
-        { label: '嘻嘻嘻', account: 'vendorA' }
-      ];
-
       function escapeHtml(str) {
         if (typeof str !== 'string') return '';
         return str.replace(/[&<>"']/g, (char) => {
@@ -461,91 +456,42 @@
         const colors = ['sky', 'mint', 'gold'];
         const cards = [];
 
-        // 按照廠商帳號分組
-        const matchedCompanyIds = new Set();
-        const companiesByAccount = {};
+        // 按照 advisor_user_id 分組
+        const companiesByAdvisor = {};
         
-        // 先處理 featuredCompanies，建立分組
-        featuredCompanies.forEach((feature) => {
-          if (!companiesByAccount[feature.account]) {
-            companiesByAccount[feature.account] = {
-              account: feature.account,
+        (state.companies || []).forEach((company) => {
+          const advisorId = company.advisor_user_id || 'unassigned';
+          
+          if (!companiesByAdvisor[advisorId]) {
+            companiesByAdvisor[advisorId] = {
+              advisor_user_id: advisorId,
               companies: []
             };
           }
-          const company = (state.companies || []).find(
-            (c) => (c.name || '').trim() === feature.label
-          );
-          if (company) {
-            matchedCompanyIds.add(company.id);
-            companiesByAccount[feature.account].companies.push(company);
-          }
+          companiesByAdvisor[advisorId].companies.push(company);
         });
 
-        // 處理其他公司，按照名稱匹配到對應的廠商帳號
-        (state.companies || []).forEach((company) => {
-          if (matchedCompanyIds.has(company.id)) return;
-          
-          // 嘗試匹配到已知的廠商帳號
-          const matchedFeature = featuredCompanies.find(
-            (f) => (company.name || '').trim() === f.label
-          );
-          
-          if (matchedFeature) {
-            if (!companiesByAccount[matchedFeature.account]) {
-              companiesByAccount[matchedFeature.account] = {
-                account: matchedFeature.account,
-                companies: []
-              };
-            }
-            companiesByAccount[matchedFeature.account].companies.push(company);
-          } else {
-            // 無法匹配的公司，放到 'other' 分組
-            if (!companiesByAccount['other']) {
-              companiesByAccount['other'] = {
-                account: '',
-                companies: []
-              };
-            }
-            companiesByAccount['other'].companies.push(company);
-          }
+        // 按照 advisor_user_id 渲染，每個指導老師一個卡片組
+        const advisorIds = Object.keys(companiesByAdvisor).sort((a, b) => {
+          // 將 'unassigned' 排在最後
+          if (a === 'unassigned') return 1;
+          if (b === 'unassigned') return -1;
+          return parseInt(a) - parseInt(b);
         });
 
-        // 按照 featuredCompanies 的順序渲染，每個廠商帳號一個卡片
-        featuredCompanies.forEach((feature, accountIndex) => {
-          const group = companiesByAccount[feature.account];
-          const colorIndex = accountIndex % colors.length;
+        advisorIds.forEach((advisorId, index) => {
+          const group = companiesByAdvisor[advisorId];
+          const colorIndex = index % colors.length;
           
           if (group && group.companies.length > 0) {
             // 有公司的情況：顯示一個卡片，內含所有公司
             cards.push(renderCardGroup({
-              account: feature.account,
+              advisor_user_id: advisorId,
               companies: group.companies,
               color: colors[colorIndex]
             }));
-          } else {
-            // 沒有公司的情況：顯示 placeholder
-            cards.push(renderCardPlaceholder({
-              account: feature.account,
-              label: feature.label,
-              color: colors[colorIndex],
-              noteWhenMissing: `尚未找到帳號 ${feature.account} 對應的指導老師`
-            }));
           }
         });
-
-        // 渲染其他無法匹配的公司（每個公司一個卡片）
-        if (companiesByAccount['other'] && companiesByAccount['other'].companies.length > 0) {
-          companiesByAccount['other'].companies.forEach((company, idx) => {
-            cards.push(renderCard({
-              company,
-              color: colors[(featuredCompanies.length + idx) % colors.length],
-              label: company.name || `公司 #${company.id}`,
-              account: '',
-              noteWhenAvailable: '點擊查看詳細資訊'
-            }));
-          });
-        }
 
         if (!cards.length) {
           cards.push(`
@@ -564,8 +510,10 @@
         container.innerHTML = cards.join('');
         initPlaceholderListener();
 
-        function renderCardGroup({ account, companies, color }) {
-          const accountName = escapeHtml(account);
+        function renderCardGroup({ advisor_user_id, companies, color }) {
+          const advisorLabel = advisor_user_id === 'unassigned' 
+            ? '未分配指導老師' 
+            : `指導老師 ID: ${escapeHtml(advisor_user_id)}`;
           const companiesList = companies.map(company => {
             const companyName = escapeHtml(company.name || `公司 #${company.id}`);
             return `
@@ -591,15 +539,14 @@
               <div class="summary-card-content">
                 <div class="summary-card-title">
                   <span>company</span>
-                  <h3>帳號 ${accountName}</h3>
+                  <h3>${advisorLabel}</h3>
                 </div>
-                <p class="summary-card-note">由帳號 ${accountName} 提供的合作廠商</p>
+                <p class="summary-card-note">${advisor_user_id === 'unassigned' ? '尚未分配指導老師的廠商' : '由該指導老師負責的廠商'}</p>
                 <div style="margin-top: 16px;">
                   ${companiesList}
                 </div>
               </div>
               <div class="summary-card-footer">
-                <span>帳號 <strong>${accountName}</strong></span>
                 <span>共 <strong>${companies.length}</strong> 間公司</span>
               </div>
             </article>
