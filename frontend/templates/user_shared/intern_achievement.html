@@ -5,72 +5,209 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>我的實習成果</title>
     <style>
-        /* 基礎樣式 */
-        body { font-family: Arial, sans-serif; background-color: #f7f7f7; margin: 20px; color: #333; }
-        .container { max-width: 700px; margin: 0 auto; }
-        h1 { color: #0056b3; border-bottom: 2px solid #0056b3; padding-bottom: 5px; margin-bottom: 30px; }
-
-        /* 實習成果卡片樣式 */
-        .result-card {
-            background-color: #ffffff;
-            border-radius: 8px;
-            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
-            padding: 25px;
-            margin-bottom: 20px;
-            border-left: 5px solid #28a745; /* 強調錄取狀態 */
+        :root {
+            --bg: radial-gradient(circle at top, rgba(34,197,94,0.12), transparent 60%),
+                  linear-gradient(180deg, #f8fafc 0%, #eef2ff 60%, #f8fafc 100%);
+            --card-bg: rgba(255,255,255,0.9);
+            --text: #0f172a;
+            --muted: #556070;
+            --accent: #2563eb;
+            --border: #d9e2f3;
         }
 
-        /* 資訊區塊 */
-        .info-block {
-            padding: 10px 0;
-            border-bottom: 1px dotted #e0e0e0;
+        * { box-sizing: border-box; }
+
+        body {
+            margin: 0;
+            min-height: 100vh;
+            font-family: "Noto Sans TC","Segoe UI",sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            padding: 48px 16px 64px;
         }
-        .info-block:last-child {
+
+        .shell {
+            max-width: 960px;
+            margin: 0 auto;
+        }
+
+        header {
+            margin-bottom: 32px;
+        }
+
+        h1 {
+            font-size: clamp(2.1rem, 4vw, 2.8rem);
+            margin-bottom: 8px;
+        }
+
+        .desc {
+            color: var(--muted);
+            margin: 0;
+        }
+
+        .status {
+            margin-top: 16px;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 16px;
+            border-radius: 999px;
+            font-size: 0.9rem;
+            background: rgba(37,99,235,0.12);
+            color: var(--accent);
+            font-weight: 600;
+        }
+
+        section {
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+            border-radius: 18px;
+            padding: 28px;
+            backdrop-filter: blur(8px);
+            box-shadow: 0 24px 50px rgba(15,23,42,0.08);
+        }
+
+        section + section {
+            margin-top: 28px;
+        }
+
+        .info-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+            gap: 18px 24px;
+        }
+
+        .info-row {
+            border-bottom: 1px dashed rgba(15,23,42,0.08);
+            padding-bottom: 16px;
+        }
+
+        .info-row:last-child {
             border-bottom: none;
+            padding-bottom: 0;
         }
 
-        /* 標籤與數值 */
         .info-label {
-            font-weight: bold;
-            color: #555;
+            font-size: 0.9rem;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: var(--muted);
+            margin-bottom: 4px;
             display: block;
-            margin-bottom: 3px;
-            font-size: 0.9em;
         }
+
         .info-value {
-            font-size: 1.1em;
-            color: #333;
-            /* 讓佔位符更容易被看見 */
-            background-color: #f9f9f9;
-            padding: 5px;
-            border-radius: 3px;
-            display: block;
+            font-size: 1.15rem;
+            font-weight: 600;
+        }
+
+        .assist {
+            font-size: 0.95rem;
+            color: var(--muted);
+            margin-top: 6px;
+        }
+
+        @media (max-width: 640px) {
+            section {
+                padding: 22px;
+            }
         }
     </style>
 </head>
 <body>
-    <div class="container">
+    <div class="shell">
         <h1>我的實習成果</h1>
+        <p class="desc">學生可在此頁查看錄取公司、實習期間、最終志願與指導老師等資訊，快速掌握目前媒合進度。</p>
+        <span class="status" id="statusChip">資料載入中…</span>
 
-        <div class="result-card">
+        <section aria-live="polite">
+            <div class="info-grid">
+                <div class="info-row">
+                    <span class="info-label">錄取公司</span>
+                    <div class="info-value" id="companyName">—</div>
+                    <p class="assist" id="companyAddress">—</p>
+                    <p class="assist" id="contactBlock"></p>
+                </div>
 
-            <div class="info-block">
-                <span class="info-label">錄取公司</span>
-                <span class="info-value">[動態資料 - 錄取公司名稱]</span>
+                <div class="info-row">
+                    <span class="info-label">實習期間</span>
+                    <div class="info-value" id="internPeriod">—</div>
+                    <p class="assist" id="internSemester"></p>
+                </div>
+
+                <div class="info-row">
+                    <span class="info-label">指導老師</span>
+                    <div class="info-value" id="teacherInfo">—</div>
+                    <p class="assist" id="admitDate"></p>
+                </div>
             </div>
-
-            <div class="info-block">
-                <span class="info-label">實習期間</span>
-                <span class="info-value">[動態資料 - 實習開始日期 至 實習結束日期]</span>
-            </div>
-
-            <div class="info-block">
-                <span class="info-label">最終錄取志願 / 職位</span>
-                <span class="info-value">[動態資料 - 職位名稱]</span>
-            </div>
-            
-        </div>
-        
+        </section>
     </div>
+
+    <script>
+        const statusChip = document.getElementById("statusChip");
+        const companyName = document.getElementById("companyName");
+        const companyAddress = document.getElementById("companyAddress");
+        const contactBlock = document.getElementById("contactBlock");
+        const internPeriod = document.getElementById("internPeriod");
+        const internSemester = document.getElementById("internSemester");
+        const teacherInfo = document.getElementById("teacherInfo");
+        const admitDate = document.getElementById("admitDate");
+        const fallback = "—";
+
+        const formatDate = (value) => {
+            if (!value) return fallback;
+            const dt = new Date(value);
+            return Number.isNaN(dt.getTime())
+                ? value
+                : dt.toLocaleDateString("zh-TW", { year: "numeric", month: "short", day: "numeric" });
+        };
+
+        const updateContact = (admission) => {
+            const blocks = [];
+            if (admission.contact_name) blocks.push(`聯絡人：${admission.contact_name}`);
+            if (admission.contact_email) blocks.push(`Email：${admission.contact_email}`);
+            if (admission.contact_phone) blocks.push(`電話：${admission.contact_phone}`);
+            contactBlock.textContent = blocks.length ? blocks.join(" ｜ ") : "";
+        };
+
+        async function init() {
+            try {
+                const res = await fetch("/student/api/get_my_internship_results");
+                if (!res.ok) throw new Error("資料讀取失敗");
+                const data = await res.json();
+                if (!data.success) throw new Error(data.message || "查詢失敗");
+
+                const { admission, final_preference } = data;
+
+                if (admission) {
+                    companyName.textContent = admission.company_name || fallback;
+                    companyAddress.textContent = admission.company_address || fallback;
+                    internSemester.textContent = admission.semester ? `學期：${admission.semester}` : "";
+                    teacherInfo.textContent = admission.teacher_name
+                        ? `${admission.teacher_name}${admission.teacher_email ? `（${admission.teacher_email}）` : ""}`
+                        : "尚未指派承辦老師";
+                    admitDate.textContent = admission.admitted_at ? `錄取時間：${formatDate(admission.admitted_at)}` : "";
+                    updateContact(admission);
+                    statusChip.textContent = "錄取資料最新";
+                } else {
+                    companyName.textContent = "尚未有錄取紀錄";
+                    statusChip.textContent = "尚未有錄取紀錄";
+                }
+
+                if (final_preference) {
+                    internPeriod.textContent = final_preference.internship_period || fallback;
+                } else {
+                    internPeriod.textContent = "由公司另行通知";
+                }
+
+            } catch (error) {
+                console.error(error);
+                statusChip.textContent = "載入失敗";
+            }
+        }
+
+        init();
+    </script>
 </body>
 </html>
