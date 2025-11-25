@@ -447,7 +447,24 @@ def review_preferences():
                   AND sp.semester_id = %s
             """, (class_id, current_semester_id))
             count_result = cursor.fetchone()
-            print(f"📊 該班級在當前學期有 {count_result.get('count', 0) if count_result else 0} 筆志願序記錄")
+            count_in_current_semester = count_result.get('count', 0) if count_result else 0
+            print(f"📊 該班級在當前學期（semester_id={current_semester_id}）有 {count_in_current_semester} 筆志願序記錄")
+            
+            # 如果當前學期沒有資料，檢查該班級在其他學期是否有資料
+            if count_in_current_semester == 0:
+                cursor.execute("""
+                    SELECT COUNT(*) as count, sp.semester_id
+                    FROM student_preferences sp
+                    JOIN users u ON sp.student_id = u.id
+                    WHERE u.class_id = %s 
+                      AND u.role = 'student'
+                    GROUP BY sp.semester_id
+                """, (class_id,))
+                other_semester_data = cursor.fetchall()
+                if other_semester_data:
+                    print(f"⚠️ 該班級在其他學期有資料:")
+                    for row in other_semester_data:
+                        print(f"   - 學期ID {row.get('semester_id')}: {row.get('count')} 筆")
             
             cursor.execute("""
                 SELECT 
@@ -550,18 +567,153 @@ def review_preferences():
 
         print(f"✅ 資料處理完成: 處理 {processed_count} 筆，跳過 {skipped_count} 筆，最終學生數: {len(student_data)}")
         
-        # 如果沒有資料，添加調試信息
+        # 如果沒有資料，添加詳細調試信息
         if len(student_data) == 0:
             print(f"⚠️ 警告: 沒有找到任何學生的志願序資料")
             print(f"   查詢條件: class_id={class_id}, current_semester_id={current_semester_id}")
+            
             # 檢查是否有該班級的學生
             cursor.execute("SELECT COUNT(*) as count FROM users WHERE class_id = %s AND role = 'student'", (class_id,))
             student_count = cursor.fetchone()
             print(f"   該班級共有學生: {student_count.get('count', 0) if student_count else 0} 人")
+            
             # 檢查是否有志願序（不限班級）
             cursor.execute("SELECT COUNT(*) as count FROM student_preferences", ())
             all_prefs_count = cursor.fetchone()
             print(f"   系統中總共有志願序: {all_prefs_count.get('count', 0) if all_prefs_count else 0} 筆")
+            
+            # 檢查該班級學生的志願序（不限制學期）
+            cursor.execute("""
+                SELECT COUNT(*) as count
+                FROM student_preferences sp
+                JOIN users u ON sp.student_id = u.id
+                WHERE u.class_id = %s AND u.role = 'student'
+            """, (class_id,))
+            class_prefs_count = cursor.fetchone()
+            print(f"   該班級學生填寫的志願序（不限學期）: {class_prefs_count.get('count', 0) if class_prefs_count else 0} 筆")
+            
+            # 檢查當前學期的所有志願序（不限班級）
+            if current_semester_id:
+                cursor.execute("""
+                    SELECT COUNT(*) as count
+                    FROM student_preferences
+                    WHERE semester_id = %s
+                """, (current_semester_id,))
+                semester_prefs_count = cursor.fetchone()
+                print(f"   當前學期的所有志願序（不限班級）: {semester_prefs_count.get('count', 0) if semester_prefs_count else 0} 筆")
+                
+                # 檢查該班級學生在當前學期的志願序（詳細）
+                cursor.execute("""
+                    SELECT 
+                        u.id AS student_id,
+                        u.name AS student_name,
+                        u.username AS student_number,
+                        sp.preference_order,
+                        sp.semester_id,
+                        sp.company_id,
+                        sp.status,
+                        sp.submitted_at
+                    FROM student_preferences sp
+                    JOIN users u ON sp.student_id = u.id
+                    WHERE u.class_id = %s 
+                      AND u.role = 'student'
+                      AND sp.semester_id = %s
+                    ORDER BY u.name, sp.preference_order
+                    LIMIT 5
+                """, (class_id, current_semester_id))
+                sample_data = cursor.fetchall()
+                if sample_data:
+                    print(f"   ✅ 找到了 {len(sample_data)} 筆樣本資料:")
+                    for sample in sample_data:
+                        print(f"      - 學生: {sample.get('student_name')} ({sample.get('student_number')}), 志願序: {sample.get('preference_order')}, 學期ID: {sample.get('semester_id')}")
+                else:
+                    print(f"   ❌ 查詢結果為空（即使使用相同的條件）")
+                
+                # 檢查該班級學生在當前學期的志願序（但查詢所有學期）
+                cursor.execute("""
+                    SELECT 
+                        u.id AS student_id,
+                        u.name AS student_name,
+                        u.username AS student_number,
+                        sp.preference_order,
+                        sp.semester_id,
+                        sp.company_id,
+                        sp.status
+                    FROM student_preferences sp
+                    JOIN users u ON sp.student_id = u.id
+                    WHERE u.class_id = %s 
+                      AND u.role = 'student'
+                    ORDER BY u.name, sp.preference_order
+                    LIMIT 5
+                """, (class_id,))
+                all_semester_data = cursor.fetchall()
+                if all_semester_data:
+                    print(f"   📋 該班級學生在所有學期的志願序（樣本）:")
+                    for sample in all_semester_data:
+                        print(f"      - 學生: {sample.get('student_name')}, 志願序: {sample.get('preference_order')}, 學期ID: {sample.get('semester_id')}")
+            
+            # 檢查所有志願序的學期ID分佈
+            cursor.execute("""
+                SELECT semester_id, COUNT(*) as count
+                FROM student_preferences
+                GROUP BY semester_id
+            """)
+            semester_dist = cursor.fetchall()
+            if semester_dist:
+                print(f"   志願序的學期ID分佈:")
+                for dist in semester_dist:
+                    print(f"      - 學期ID {dist.get('semester_id')}: {dist.get('count')} 筆")
+        
+        # 如果沒有資料，並且有設定當前學期，嘗試查詢所有學期的資料作為備用
+        if len(student_data) == 0 and current_semester_id:
+            print(f"🔄 嘗試查詢該班級在所有學期的志願序（作為診斷）...")
+            cursor.execute("""
+                SELECT 
+                    u.id AS student_id,
+                    u.name AS student_name,
+                    u.username AS student_number,
+                    sp.id AS preference_id,
+                    sp.preference_order,
+                    sp.company_id,
+                    COALESCE(ic.company_name, '未知公司') AS company_name,
+                    sp.job_id,
+                    sp.job_title,
+                    sp.status,
+                    sp.submitted_at,
+                    sp.semester_id
+                FROM student_preferences sp
+                JOIN users u ON sp.student_id = u.id
+                LEFT JOIN internship_companies ic ON sp.company_id = ic.id
+                WHERE u.class_id = %s 
+                  AND u.role = 'student'
+                ORDER BY u.name, sp.preference_order
+            """, (class_id,))
+            all_semester_results = cursor.fetchall()
+            print(f"📋 該班級在所有學期的志願序數量: {len(all_semester_results)} 筆")
+            
+            if all_semester_results:
+                print(f"💡 建議: 將查詢條件改為不限制學期，以顯示所有志願序")
+                # 重新處理所有學期的資料
+                for row in all_semester_results:
+                    student_name = row.get('student_name')
+                    student_id = row.get('student_id')
+                    preference_id = row.get('preference_id')
+                    preference_order = row.get('preference_order')
+                    company_name = row.get('company_name') or '未知公司'
+                    status = row.get('status') or 'pending'
+                    submitted_at = row.get('submitted_at', '')
+                    
+                    if student_name and preference_order:
+                        if student_data[student_name]['student_id'] is None:
+                            student_data[student_name]['student_id'] = student_id
+                        student_data[student_name]['preferences'].append({
+                            'preference_id': preference_id,
+                            'order': preference_order,
+                            'company': company_name,
+                            'status': status,
+                            'submitted_at': submitted_at or ''
+                        })
+                print(f"✅ 已載入該班級在所有學期的志願序: {len(student_data)} 位學生")
         
         return render_template('preferences/review_preferences.html', student_data=student_data)
 
