@@ -25,10 +25,15 @@
     <h2 class="mb-4">實習心得分享</h2>
 
     <div class="row mb-3">
-      <div class="col-md-4">
+      <div class="col-md-3">
         <input id="searchKeyword" class="form-control" placeholder="搜尋公司名稱...">
       </div>
       <div class="col-md-3">
+        <select id="filterCompany" class="form-select">
+          <option value="">選擇公司</option>
+        </select>
+      </div>
+      <div class="col-md-2">
         <select id="filterYear" class="form-select">
           <option value="">選擇年份</option>
         </select>
@@ -36,7 +41,7 @@
       <div class="col-md-2">
         <button id="btnSearch" class="btn btn-primary w-100">搜尋</button>
       </div>
-      <div class="col-md-3 text-end">
+      <div class="col-md-2 text-end">
         <button class="btn btn-success" data-bs-toggle="modal" data-bs-target="#addModal">+ 上傳心得</button>
       </div>
     </div>
@@ -115,6 +120,13 @@
 
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
   <script>
+    // 從後端注入目前登入者與指定公司 (若有)
+    window.USER_ID = {{ (user_id or 0)|tojson }};
+    window.INITIAL_COMPANY_ID = {{ (initial_company_id or '')|tojson }};
+    let selectedCompanyId = window.INITIAL_COMPANY_ID || '';
+    let hasPrefilledFormCompany = false;
+    let hasPrefilledFilterCompany = false;
+
     // 產生民國年下拉 (近 6 年)
     (function populateYearSelect() {
       const sel = document.getElementById('filterYear');
@@ -127,18 +139,60 @@
       }
     })();
 
-    // 載入公司下拉
+    // 載入公司下拉 - 從後端 API 抓取資料表公司資料
     async function loadCompanies() {
-      const res = await fetch('/intern_experience/api/companies');
-      const data = await res.json();
-      const companySelect = document.getElementById('company_id');
-      companySelect.innerHTML = '<option value="">請選擇公司</option>';
-      if (data.success) {
-        data.data.forEach(c => {
-          companySelect.innerHTML += `<option value="${c.id}">${c.company_name}</option>`;
-        });
-      } else {
-        companySelect.innerHTML = '<option value="">載入公司失敗</option>';
+      try {
+        const companySelect = document.getElementById('company_id');
+        const companyFilter = document.getElementById('filterCompany');
+        
+        // 顯示載入中狀態
+        companySelect.innerHTML = '<option value="">載入公司中...</option>';
+        companyFilter.innerHTML = '<option value="">載入公司中...</option>';
+        
+        const res = await fetch('/intern_experience/api/companies');
+        const data = await res.json();
+        
+        // 重置選單
+        companySelect.innerHTML = '<option value="">請選擇公司</option>';
+        companyFilter.innerHTML = '<option value="">選擇公司</option>';
+        
+        if (data.success && data.data && Array.isArray(data.data)) {
+          // 從資料表抓取到的公司資料，逐一加入下拉選單
+          if (data.data.length > 0) {
+            data.data.forEach(c => {
+              if (c.id && c.company_name) {
+                companySelect.innerHTML += `<option value="${c.id}">${c.company_name}</option>`;
+                companyFilter.innerHTML += `<option value="${c.id}">${c.company_name}</option>`;
+              }
+            });
+            
+            // 如果有初始公司 ID，自動選取
+            if (!hasPrefilledFormCompany && selectedCompanyId) {
+              companySelect.value = selectedCompanyId;
+              hasPrefilledFormCompany = true;
+              companySelect.dispatchEvent(new Event('change'));
+            }
+            if (!hasPrefilledFilterCompany && selectedCompanyId) {
+              companyFilter.value = selectedCompanyId;
+              hasPrefilledFilterCompany = true;
+            }
+          } else {
+            companySelect.innerHTML = '<option value="">目前無可用公司</option>';
+            companyFilter.innerHTML = '<option value="">目前無可用公司</option>';
+          }
+        } else {
+          // API 回傳失敗或資料格式錯誤
+          const errorMsg = data.message || '載入公司資料失敗';
+          companySelect.innerHTML = `<option value="">${errorMsg}</option>`;
+          companyFilter.innerHTML = `<option value="">${errorMsg}</option>`;
+          console.error('載入公司資料失敗:', data);
+        }
+      } catch (error) {
+        console.error('抓取公司資料時發生錯誤:', error);
+        const companySelect = document.getElementById('company_id');
+        const companyFilter = document.getElementById('filterCompany');
+        companySelect.innerHTML = '<option value="">載入失敗，請重新整理頁面</option>';
+        companyFilter.innerHTML = '<option value="">載入失敗，請重新整理頁面</option>';
       }
     }
 
@@ -165,7 +219,12 @@
     async function loadExperiences() {
       const keyword = document.getElementById('searchKeyword').value;
       const year = document.getElementById('filterYear').value;
-      const res = await fetch(`/intern_experience/api/list?keyword=${encodeURIComponent(keyword)}&year=${encodeURIComponent(year)}`);
+      const params = new URLSearchParams({
+        keyword,
+        year,
+        company_id: selectedCompanyId || ''
+      });
+      const res = await fetch(`/intern_experience/api/list?${params.toString()}`);
       const data = await res.json();
       const list = document.getElementById('experienceList');
       list.innerHTML = '';
@@ -258,8 +317,12 @@
       }
     });
 
-    // 綁定搜尋按鈕
+    // 綁定篩選事件
     document.getElementById('btnSearch').addEventListener('click', loadExperiences);
+    document.getElementById('filterCompany').addEventListener('change', function () {
+      selectedCompanyId = this.value;
+      loadExperiences();
+    });
 
     // 初始載入
     window.onload = function () {

@@ -38,29 +38,49 @@ def to_gregorian_if_needed(year):
 def page_intern_exp():
     if not require_login():
         return redirect(url_for('auth_bp.login'))
-        
+
     # 新增邏輯：從 URL 取得 company_id 參數
     company_id = request.args.get('company_id')
-    
-    # 將 company_id 傳遞給前端範本
-    # 前端可以利用這個 ID 來自動設定篩選器或作為額外參數
-    return render_template('user_shared/intern_experience.html', initial_company_id=company_id)
+
+    # 將 company_id 與目前登入者資訊傳遞給前端範本
+    return render_template(
+        'user_shared/intern_experience.html',
+        initial_company_id=company_id,
+        user_id=session.get('user_id')
+    )
 
 # --------------------
-# API：公司清單（下拉用） - 只回傳已通過或可見的公司
+# API：公司清單（下拉用） - 從資料表抓取所有公司資料
 # --------------------
 @intern_exp_bp.route('/api/companies', methods=['GET'])
 def get_companies():
     try:
         db = get_db()
         cursor = db.cursor(dictionary=True)
-        # 已審核通過的狀態為 'reviewed'
-        cursor.execute("SELECT id, company_name FROM internship_companies WHERE status = 'reviewed' ORDER BY company_name")
+        # 從 internship_companies 資料表抓取所有公司資料（不限狀態）
+        # 移除狀態限制，顯示資料表中的所有公司
+        cursor.execute("""
+            SELECT id, company_name, status 
+            FROM internship_companies 
+            ORDER BY company_name ASC
+        """)
         companies = cursor.fetchall()
-        return jsonify({"success": True, "data": companies})
+        
+        # 確保回傳資料格式正確
+        if not companies:
+            companies = []
+        
+        return jsonify({
+            "success": True, 
+            "data": companies,
+            "count": len(companies)
+        })
     except Exception as e:
-        print(traceback.format_exc())
-        return jsonify({"success": False, "message": str(e)}), 500
+        print(f"抓取公司資料時發生錯誤: {traceback.format_exc()}")
+        return jsonify({
+            "success": False, 
+            "message": f"無法載入公司資料: {str(e)}"
+        }), 500
 
 # --------------------
 # API：取得某公司職缺
@@ -85,6 +105,7 @@ def get_experience_list():
     try:
         keyword = request.args.get('keyword', '').strip()
         year = request.args.get('year', '').strip()  # 前端會傳民國年
+        company_id = request.args.get('company_id', '').strip()
         db = get_db()
         cursor = db.cursor(dictionary=True)
 
@@ -109,6 +130,10 @@ def get_experience_list():
             # year 前端傳民國年（如110），資料庫也儲存為民國年
             query += " AND ie.year = %s"
             params.append(year)
+
+        if company_id:
+            query += " AND ie.company_id = %s"
+            params.append(company_id)
 
         query += " ORDER BY ie.created_at DESC"
 
