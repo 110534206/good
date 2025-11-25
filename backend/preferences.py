@@ -15,6 +15,8 @@ from reportlab.lib import colors
 from docx import Document
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.enum.table import WD_TABLE_ALIGNMENT
+from semester import get_current_semester_code, get_current_semester_id
+from notification import create_notification
 preferences_bp = Blueprint("preferences_bp", __name__)
 
 # -------------------------
@@ -62,8 +64,24 @@ def fill_preferences_page():
     cursor = conn.cursor(dictionary=True)
 
     try:
-        # 1) 取得所有公司（id, name）
-        cursor.execute("SELECT id, company_name AS name FROM internship_companies")
+        # 1) 取得本學期開放的公司（id, name）
+        # 只顯示已審核通過且在當前學期開放的公司
+        current_semester_code = get_current_semester_code(cursor)
+        
+        if current_semester_code:
+            cursor.execute("""
+                SELECT DISTINCT ic.id, ic.company_name AS name
+                FROM internship_companies ic
+                INNER JOIN company_openings co ON ic.id = co.company_id
+                WHERE ic.status = 'approved'
+                  AND co.semester = %s
+                  AND co.is_open = TRUE
+                ORDER BY ic.company_name
+            """, (current_semester_code,))
+        else:
+            # 如果沒有設定當前學期，返回空列表
+            cursor.execute("SELECT id, company_name AS name FROM internship_companies WHERE 1=0")
+        
         companies = cursor.fetchall() or []
 
         # 2) 簡化：不再計算名額，改為取得所有公司的 ID 列表
@@ -180,9 +198,21 @@ def save_preferences():
                 return jsonify({"success": False, "message": f"職缺(ID: {jid}) 已在其他志願中選擇，同一職缺只能選擇一次。"}), 400
             selected_job_ids.add(jid)
 
-        # 2) 刪除學生舊紀錄並插入新志願
-        cursor.execute("DELETE FROM student_preferences WHERE student_id=%s", (student_id,))
+        # 2) 取得當前學期ID
+        current_semester_id = get_current_semester_id(cursor)
+        print(f"💾 儲存志願序 - student_id: {student_id}, current_semester_id: {current_semester_id}, preferences數量: {len(preferences)}")
+        
+        # 3) 刪除學生舊紀錄並插入新志願
+        if current_semester_id:
+            cursor.execute("DELETE FROM student_preferences WHERE student_id=%s AND semester_id=%s", (student_id, current_semester_id))
+            deleted_count = cursor.rowcount
+            print(f"🗑️ 刪除舊志願序: {deleted_count} 筆")
+        else:
+            cursor.execute("DELETE FROM student_preferences WHERE student_id=%s", (student_id,))
+            deleted_count = cursor.rowcount
+            print(f"🗑️ 刪除舊志願序（無學期限制）: {deleted_count} 筆")
 
+        inserted_count = 0
         for p in preferences:
             pref_order = int(p.get("order"))
             company_id = int(p.get("company_id"))
@@ -204,33 +234,146 @@ def save_preferences():
                 conn.rollback()
                 return jsonify({"success": False, "message": f"無法取得職缺名稱：job_id={job_id}"}), 400
 
+            # 插入志願序（包含 semester_id）
+            if current_semester_id:
+                cursor.execute("""
+                    INSERT INTO student_preferences
+                    (student_id, semester_id, preference_order, company_id, job_id, job_title, status, submitted_at)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                """, (
+                    student_id,
+                    current_semester_id,
+                    pref_order,
+                    company_id,
+                    job_id,
+                    job_title,
+                    'pending',  # 預設狀態為「待審核」
+                    datetime.now()
+                ))
+                inserted_count += 1
+                print(f"✅ 插入志願序 {pref_order}: company_id={company_id}, job_id={job_id}, semester_id={current_semester_id}")
+            else:
+                # 如果沒有設定當前學期，仍然可以儲存（不包含 semester_id）
+                cursor.execute("""
+                    INSERT INTO student_preferences
+                    (student_id, preference_order, company_id, job_id, job_title, status, submitted_at)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s)
+                """, (
+                    student_id,
+                    pref_order,
+                    company_id,
+                    job_id,
+                    job_title,
+                    'pending',  # 預設狀態為「待審核」
+                    datetime.now()
+                ))
+                inserted_count += 1
+                print(f"✅ 插入志願序 {pref_order}: company_id={company_id}, job_id={job_id} (無學期)")
 
-            cursor.execute("""
-                INSERT INTO student_preferences
-                (student_id, preference_order, company_id, job_id, job_title, status, submitted_at)
-                VALUES (%s, %s, %s, %s, %s, %s, %s)
-            """, (
-                student_id,
-                pref_order,
-                company_id,
-                job_id,
-                job_title,
-                'pending',  # 預設狀態為「待審核」
-                datetime.now()
-            ))
-
-        # 3) 提交 transaction
+        # 4) 提交 transaction
         conn.commit()
-        return jsonify({"success": True, "message": "志願序已成功送出。"})
+        print(f"💾 志願序儲存完成: 共插入 {inserted_count} 筆")
+        
+        # 5) 驗證資料是否正確寫入
+        try:
+            if current_semester_id:
+                cursor.execute("""
+                    SELECT COUNT(*) as count
+                    FROM student_preferences
+                    WHERE student_id = %s AND semester_id = %s
+                """, (student_id, current_semester_id))
+            else:
+                cursor.execute("""
+                    SELECT COUNT(*) as count
+                    FROM student_preferences
+                    WHERE student_id = %s
+                """, (student_id,))
+            verify_result = cursor.fetchone()
+            saved_count = verify_result.get('count', 0) if verify_result else 0
+            print(f"✅ 驗證資料寫入: 資料庫中有 {saved_count} 筆志願序記錄")
+            
+            if saved_count != inserted_count:
+                print(f"⚠️ 警告: 插入 {inserted_count} 筆，但資料庫中只有 {saved_count} 筆")
+        except Exception as verify_error:
+            print(f"⚠️ 驗證資料時發生錯誤: {verify_error}")
+        
+        # 6) 通知班導：學生已填寫志願序
+        try:
+            # 獲取學生資訊（姓名、班級）
+            cursor.execute("""
+                SELECT u.name AS student_name, u.class_id, c.name AS class_name
+                FROM users u
+                LEFT JOIN classes c ON u.class_id = c.id
+                WHERE u.id = %s
+            """, (student_id,))
+            student_info = cursor.fetchone()
+            
+            if student_info:
+                student_name = student_info.get('student_name', '學生')
+                class_id = student_info.get('class_id')
+                class_name = student_info.get('class_name', '')
+                
+                if class_id:
+                    # 查找該班級的班導
+                    cursor.execute("""
+                        SELECT teacher_id
+                        FROM classes_teacher
+                        WHERE class_id = %s AND role = '班導師'
+                        LIMIT 1
+                    """, (class_id,))
+                    teacher_row = cursor.fetchone()
+                    
+                    if teacher_row and teacher_row.get('teacher_id'):
+                        teacher_id = teacher_row.get('teacher_id')
+                        
+                        # 創建通知給班導
+                        title = "學生志願序已提交"
+                        message = f"{student_name} 已提交實習志願序，請前往審核頁面查看。"
+                        link_url = "/review_preferences"  # 志願序審核頁面
+                        
+                        notification_success = create_notification(
+                            user_id=teacher_id,
+                            title=title,
+                            message=message,
+                            category="ranking",  # 志願序分類
+                            link_url=link_url
+                        )
+                        
+                        if notification_success:
+                            print(f"✅ 已通知班導（teacher_id: {teacher_id}）：學生 {student_name} 已提交志願序")
+                        else:
+                            print(f"⚠️ 通知班導失敗（teacher_id: {teacher_id}）")
+                    else:
+                        print(f"⚠️ 學生 {student_name} 的班級（class_id: {class_id}）沒有找到班導")
+                else:
+                    print(f"⚠️ 學生 {student_name} 沒有分配班級（class_id 為空）")
+            else:
+                print(f"⚠️ 無法找到學生資訊（student_id: {student_id}）")
+                
+        except Exception as notify_error:
+            # 通知失敗不影響主流程，只記錄錯誤
+            print(f"⚠️ 通知班導時發生錯誤: {notify_error}")
+            traceback.print_exc()
+        
+        # 返回成功訊息，包含儲存的筆數
+        return jsonify({
+            "success": True, 
+            "message": f"志願序已成功送出（共 {inserted_count} 筆志願）。",
+            "inserted_count": inserted_count
+        })
 
-    except Exception:
+    except Exception as e:
         # rollback
         try:
             conn.rollback()
         except Exception:
             pass
+        print(f"❌ 儲存志願序時發生錯誤: {e}")
         traceback.print_exc()
-        return jsonify({"success": False, "message": "儲存失敗，請稍後再試。"}), 500
+        return jsonify({
+            "success": False, 
+            "message": f"儲存失敗：{str(e)}。請稍後再試或聯絡管理員。"
+        }), 500
     finally:
         try:
             cursor.close()
@@ -287,32 +430,291 @@ def review_preferences():
 
         class_id = class_info['class_id']
 
-        # 查詢班上學生及其志願
-        cursor.execute("""
-            SELECT 
-                u.id AS student_id,
-                u.name AS student_name,
-                sp.preference_order,
-                ic.company_name,
-                sp.submitted_at
-            FROM users u
-            LEFT JOIN student_preferences sp ON u.id = sp.student_id
-            LEFT JOIN internship_companies ic ON sp.company_id = ic.id
-            WHERE u.class_id = %s AND u.role = 'student'
-            ORDER BY u.name, sp.preference_order
-        """, (class_id,))
+        # 取得當前學期ID
+        current_semester_id = get_current_semester_id(cursor)
+        
+        print(f"🔍 班導審核志願序 - class_id: {class_id}, current_semester_id: {current_semester_id}")
+
+        # 查詢班上學生及其志願（只顯示當前學期已填寫志願序的學生）
+        if current_semester_id:
+            # 先檢查是否有該班級的學生填寫了志願序
+            cursor.execute("""
+                SELECT COUNT(*) as count
+                FROM student_preferences sp
+                JOIN users u ON sp.student_id = u.id
+                WHERE u.class_id = %s 
+                  AND u.role = 'student'
+                  AND sp.semester_id = %s
+            """, (class_id, current_semester_id))
+            count_result = cursor.fetchone()
+            count_in_current_semester = count_result.get('count', 0) if count_result else 0
+            print(f"📊 該班級在當前學期（semester_id={current_semester_id}）有 {count_in_current_semester} 筆志願序記錄")
+            
+            # 如果當前學期沒有資料，檢查該班級在其他學期是否有資料
+            if count_in_current_semester == 0:
+                cursor.execute("""
+                    SELECT COUNT(*) as count, sp.semester_id
+                    FROM student_preferences sp
+                    JOIN users u ON sp.student_id = u.id
+                    WHERE u.class_id = %s 
+                      AND u.role = 'student'
+                    GROUP BY sp.semester_id
+                """, (class_id,))
+                other_semester_data = cursor.fetchall()
+                if other_semester_data:
+                    print(f"⚠️ 該班級在其他學期有資料:")
+                    for row in other_semester_data:
+                        print(f"   - 學期ID {row.get('semester_id')}: {row.get('count')} 筆")
+            
+            cursor.execute("""
+                SELECT 
+                    u.id AS student_id,
+                    u.name AS student_name,
+                    u.username AS student_number,
+                    sp.id AS preference_id,
+                    sp.preference_order,
+                    sp.company_id,
+                    COALESCE(ic.company_name, '未知公司') AS company_name,
+                    sp.job_id,
+                    sp.job_title,
+                    sp.status,
+                    sp.submitted_at,
+                    sp.semester_id
+                FROM student_preferences sp
+                JOIN users u ON sp.student_id = u.id
+                LEFT JOIN internship_companies ic ON sp.company_id = ic.id
+                WHERE u.class_id = %s 
+                  AND u.role = 'student'
+                  AND sp.semester_id = %s
+                ORDER BY u.name, sp.preference_order
+            """, (class_id, current_semester_id))
+        else:
+            # 如果沒有設定當前學期，查詢所有志願序
+            print("⚠️ 沒有設定當前學期，查詢所有志願序")
+            cursor.execute("""
+                SELECT 
+                    u.id AS student_id,
+                    u.name AS student_name,
+                    u.username AS student_number,
+                    sp.id AS preference_id,
+                    sp.preference_order,
+                    sp.company_id,
+                    COALESCE(ic.company_name, '未知公司') AS company_name,
+                    sp.job_id,
+                    sp.job_title,
+                    sp.status,
+                    sp.submitted_at,
+                    sp.semester_id
+                FROM student_preferences sp
+                JOIN users u ON sp.student_id = u.id
+                LEFT JOIN internship_companies ic ON sp.company_id = ic.id
+                WHERE u.class_id = %s 
+                  AND u.role = 'student'
+                ORDER BY u.name, sp.preference_order
+            """, (class_id,))
+        
         results = cursor.fetchall()
+        print(f"📋 查詢結果數量: {len(results)} 筆")
+        if results:
+            print(f"📋 第一筆資料: {results[0]}")
+        
+        # 格式化時間
+        from datetime import timezone, timedelta
+        taiwan_tz = timezone(timedelta(hours=8))
+        
+        for row in results:
+            if row.get('submitted_at') and isinstance(row['submitted_at'], datetime):
+                row['submitted_at'] = row['submitted_at'].astimezone(taiwan_tz).strftime("%Y-%m-%d %H:%M:%S")
+            elif row.get('submitted_at'):
+                row['submitted_at'] = str(row['submitted_at'])
+            else:
+                row['submitted_at'] = ""
 
         # 整理資料結構給前端使用
-        student_data = defaultdict(list)
+        student_data = defaultdict(lambda: {'student_id': None, 'preferences': []})
+        processed_count = 0
+        skipped_count = 0
+        
+        print(f"📋 開始處理 {len(results)} 筆查詢結果")
+        
         for row in results:
-            if row['preference_order'] and row['company_name']:
-                student_data[row['student_name']].append({
-                    'order': row['preference_order'],
-                    'company': row['company_name'],
-                    'submitted_at': row['submitted_at']
+            student_name = row.get('student_name')
+            student_id = row.get('student_id')
+            preference_id = row.get('preference_id')
+            preference_order = row.get('preference_order')
+            company_name = row.get('company_name') or '未知公司'  # 如果為 NULL，使用預設值
+            status = row.get('status') or 'pending'
+            submitted_at = row.get('submitted_at', '')
+            
+            # 調試：顯示每筆資料
+            print(f"📝 處理資料: student={student_name}, student_id={student_id}, order={preference_order}, company={company_name}, company_id={row.get('company_id')}, status={status}")
+            
+            # 只添加有完整資料的志願序（至少要有學生名稱和順序）
+            if student_name and preference_order:
+                if student_data[student_name]['student_id'] is None:
+                    student_data[student_name]['student_id'] = student_id
+                student_data[student_name]['preferences'].append({
+                    'preference_id': preference_id,
+                    'order': preference_order,
+                    'company': company_name,
+                    'status': status,
+                    'submitted_at': submitted_at or ''
                 })
+                processed_count += 1
+            else:
+                skipped_count += 1
+                print(f"⚠️ 跳過資料: student_name={student_name}, order={preference_order}, company={company_name}")
 
+        print(f"✅ 資料處理完成: 處理 {processed_count} 筆，跳過 {skipped_count} 筆，最終學生數: {len(student_data)}")
+        
+        # 如果沒有資料，添加詳細調試信息
+        if len(student_data) == 0:
+            print(f"⚠️ 警告: 沒有找到任何學生的志願序資料")
+            print(f"   查詢條件: class_id={class_id}, current_semester_id={current_semester_id}")
+            
+            # 檢查是否有該班級的學生
+            cursor.execute("SELECT COUNT(*) as count FROM users WHERE class_id = %s AND role = 'student'", (class_id,))
+            student_count = cursor.fetchone()
+            print(f"   該班級共有學生: {student_count.get('count', 0) if student_count else 0} 人")
+            
+            # 檢查是否有志願序（不限班級）
+            cursor.execute("SELECT COUNT(*) as count FROM student_preferences", ())
+            all_prefs_count = cursor.fetchone()
+            print(f"   系統中總共有志願序: {all_prefs_count.get('count', 0) if all_prefs_count else 0} 筆")
+            
+            # 檢查該班級學生的志願序（不限制學期）
+            cursor.execute("""
+                SELECT COUNT(*) as count
+                FROM student_preferences sp
+                JOIN users u ON sp.student_id = u.id
+                WHERE u.class_id = %s AND u.role = 'student'
+            """, (class_id,))
+            class_prefs_count = cursor.fetchone()
+            print(f"   該班級學生填寫的志願序（不限學期）: {class_prefs_count.get('count', 0) if class_prefs_count else 0} 筆")
+            
+            # 檢查當前學期的所有志願序（不限班級）
+            if current_semester_id:
+                cursor.execute("""
+                    SELECT COUNT(*) as count
+                    FROM student_preferences
+                    WHERE semester_id = %s
+                """, (current_semester_id,))
+                semester_prefs_count = cursor.fetchone()
+                print(f"   當前學期的所有志願序（不限班級）: {semester_prefs_count.get('count', 0) if semester_prefs_count else 0} 筆")
+                
+                # 檢查該班級學生在當前學期的志願序（詳細）
+                cursor.execute("""
+                    SELECT 
+                        u.id AS student_id,
+                        u.name AS student_name,
+                        u.username AS student_number,
+                        sp.preference_order,
+                        sp.semester_id,
+                        sp.company_id,
+                        sp.status,
+                        sp.submitted_at
+                    FROM student_preferences sp
+                    JOIN users u ON sp.student_id = u.id
+                    WHERE u.class_id = %s 
+                      AND u.role = 'student'
+                      AND sp.semester_id = %s
+                    ORDER BY u.name, sp.preference_order
+                    LIMIT 5
+                """, (class_id, current_semester_id))
+                sample_data = cursor.fetchall()
+                if sample_data:
+                    print(f"   ✅ 找到了 {len(sample_data)} 筆樣本資料:")
+                    for sample in sample_data:
+                        print(f"      - 學生: {sample.get('student_name')} ({sample.get('student_number')}), 志願序: {sample.get('preference_order')}, 學期ID: {sample.get('semester_id')}")
+                else:
+                    print(f"   ❌ 查詢結果為空（即使使用相同的條件）")
+                
+                # 檢查該班級學生在當前學期的志願序（但查詢所有學期）
+                cursor.execute("""
+                    SELECT 
+                        u.id AS student_id,
+                        u.name AS student_name,
+                        u.username AS student_number,
+                        sp.preference_order,
+                        sp.semester_id,
+                        sp.company_id,
+                        sp.status
+                    FROM student_preferences sp
+                    JOIN users u ON sp.student_id = u.id
+                    WHERE u.class_id = %s 
+                      AND u.role = 'student'
+                    ORDER BY u.name, sp.preference_order
+                    LIMIT 5
+                """, (class_id,))
+                all_semester_data = cursor.fetchall()
+                if all_semester_data:
+                    print(f"   📋 該班級學生在所有學期的志願序（樣本）:")
+                    for sample in all_semester_data:
+                        print(f"      - 學生: {sample.get('student_name')}, 志願序: {sample.get('preference_order')}, 學期ID: {sample.get('semester_id')}")
+            
+            # 檢查所有志願序的學期ID分佈
+            cursor.execute("""
+                SELECT semester_id, COUNT(*) as count
+                FROM student_preferences
+                GROUP BY semester_id
+            """)
+            semester_dist = cursor.fetchall()
+            if semester_dist:
+                print(f"   志願序的學期ID分佈:")
+                for dist in semester_dist:
+                    print(f"      - 學期ID {dist.get('semester_id')}: {dist.get('count')} 筆")
+        
+        # 如果沒有資料，並且有設定當前學期，嘗試查詢所有學期的資料作為備用
+        if len(student_data) == 0 and current_semester_id:
+            print(f"🔄 嘗試查詢該班級在所有學期的志願序（作為診斷）...")
+            cursor.execute("""
+                SELECT 
+                    u.id AS student_id,
+                    u.name AS student_name,
+                    u.username AS student_number,
+                    sp.id AS preference_id,
+                    sp.preference_order,
+                    sp.company_id,
+                    COALESCE(ic.company_name, '未知公司') AS company_name,
+                    sp.job_id,
+                    sp.job_title,
+                    sp.status,
+                    sp.submitted_at,
+                    sp.semester_id
+                FROM student_preferences sp
+                JOIN users u ON sp.student_id = u.id
+                LEFT JOIN internship_companies ic ON sp.company_id = ic.id
+                WHERE u.class_id = %s 
+                  AND u.role = 'student'
+                ORDER BY u.name, sp.preference_order
+            """, (class_id,))
+            all_semester_results = cursor.fetchall()
+            print(f"📋 該班級在所有學期的志願序數量: {len(all_semester_results)} 筆")
+            
+            if all_semester_results:
+                print(f"💡 建議: 將查詢條件改為不限制學期，以顯示所有志願序")
+                # 重新處理所有學期的資料
+                for row in all_semester_results:
+                    student_name = row.get('student_name')
+                    student_id = row.get('student_id')
+                    preference_id = row.get('preference_id')
+                    preference_order = row.get('preference_order')
+                    company_name = row.get('company_name') or '未知公司'
+                    status = row.get('status') or 'pending'
+                    submitted_at = row.get('submitted_at', '')
+                    
+                    if student_name and preference_order:
+                        if student_data[student_name]['student_id'] is None:
+                            student_data[student_name]['student_id'] = student_id
+                        student_data[student_name]['preferences'].append({
+                            'preference_id': preference_id,
+                            'order': preference_order,
+                            'company': company_name,
+                            'status': status,
+                            'submitted_at': submitted_at or ''
+                        })
+                print(f"✅ 已載入該班級在所有學期的志願序: {len(student_data)} 位學生")
+        
         return render_template('preferences/review_preferences.html', student_data=student_data)
 
     except Exception as e:
@@ -325,6 +727,129 @@ def review_preferences():
             conn.close()
         except Exception:
             pass
+
+# -------------------------
+# API - 審核學生志願序（通過/退件）
+# -------------------------
+@preferences_bp.route('/api/review_preferences', methods=['POST'])
+def review_preferences_api():
+    user_id = session.get('user_id')
+    user_role = session.get('role')
+
+    # 權限檢查：只允許班導、老師、主任審核
+    ALLOWED_ROLES = ['teacher', 'admin', 'class_teacher', 'director']
+    if not user_id or user_role not in ALLOWED_ROLES:
+        return jsonify({"success": False, "message": "未授權或無權限"}), 403
+
+    data = request.get_json()
+    student_id = data.get('student_id')
+    status = data.get('status')
+    reason = data.get('reason', '')
+
+    if not student_id:
+        return jsonify({"success": False, "message": "缺少學生ID"}), 400
+
+    if status not in ['approved', 'rejected']:
+        return jsonify({"success": False, "message": "無效的狀態碼"}), 400
+
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+
+    try:
+        # 檢查是否為班導（只能審核自己班級的學生）
+        if user_role == 'class_teacher' or user_role == 'teacher':
+            cursor.execute("""
+                SELECT ct.teacher_id, u.class_id
+                FROM classes_teacher ct
+                JOIN users u ON ct.class_id = u.class_id
+                WHERE ct.teacher_id = %s AND u.id = %s AND u.role = 'student'
+            """, (user_id, student_id))
+            relation = cursor.fetchone()
+            if not relation:
+                return jsonify({"success": False, "message": "您只能審核自己班級學生的志願序"}), 403
+
+        # 取得當前學期ID
+        current_semester_id = get_current_semester_id(cursor)
+
+        if not current_semester_id:
+            return jsonify({"success": False, "message": "尚未設定當前學期"}), 400
+
+        # 取得學生資訊
+        cursor.execute("SELECT name, email FROM users WHERE id = %s", (student_id,))
+        student_info = cursor.fetchone()
+        if not student_info:
+            return jsonify({"success": False, "message": "找不到學生資料"}), 404
+
+        student_name = student_info['name']
+        student_email = student_info.get('email', '')
+
+        # 取得審核者姓名
+        cursor.execute("SELECT name FROM users WHERE id = %s", (user_id,))
+        reviewer = cursor.fetchone()
+        reviewer_name = reviewer['name'] if reviewer else "審核老師"
+
+        # 更新該學生在當前學期的所有志願序狀態
+        if status == 'approved':
+            # 通過：更新所有志願序狀態
+            cursor.execute("""
+                UPDATE student_preferences 
+                SET status = %s
+                WHERE student_id = %s 
+                  AND semester_id = %s
+            """, (status, student_id, current_semester_id))
+            
+            # 發送通過通知
+            notification_content = (
+                f"恭喜您！您的實習志願序已由 {reviewer_name} 老師審核通過。\n"
+                f"您可以繼續後續的實習申請流程。"
+            )
+            create_notification(
+                user_id=student_id,
+                title="志願序審核通過通知",
+                message=notification_content,
+                category="preferences"
+            )
+
+        elif status == 'rejected':
+            # 退件：更新所有志願序狀態並記錄退件原因
+            if not reason:
+                return jsonify({"success": False, "message": "退件時必須填寫退件原因"}), 400
+
+            cursor.execute("""
+                UPDATE student_preferences 
+                SET status = %s
+                WHERE student_id = %s 
+                  AND semester_id = %s
+            """, (status, student_id, current_semester_id))
+
+            # 記錄退件原因（可以考慮新增 reject_reason 欄位到 student_preferences，或使用其他方式存儲）
+            # 目前先透過通知發送退件原因
+
+            # 發送退件通知
+            notification_content = (
+                f"您的實習志願序已被 {reviewer_name} 老師退件。\n\n"
+                f"退件原因：{reason}\n\n"
+                f"請根據老師的建議修改後重新提交。"
+            )
+            create_notification(
+                user_id=student_id,
+                title="志願序退件通知",
+                message=notification_content,
+                category="preferences"
+            )
+
+        conn.commit()
+
+        return jsonify({"success": True, "message": "志願序審核狀態更新成功"})
+
+    except Exception as e:
+        conn.rollback()
+        traceback.print_exc()
+        return jsonify({"success": False, "message": f"伺服器錯誤: {str(e)}"}), 500
+
+    finally:
+        cursor.close()
+        conn.close()
 
 # -------------------------
 # Excel 導出功能

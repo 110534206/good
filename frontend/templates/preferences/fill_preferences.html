@@ -595,18 +595,66 @@
                 return Swal.fire({ icon: 'warning', title: '尚未填寫志願', text: '至少選擇一個完整志願。' });
 
             try {
+                // 顯示載入中的提示
+                Swal.fire({
+                    title: '正在送出志願序...',
+                    text: '請稍候，系統正在處理您的資料',
+                    allowOutsideClick: false,
+                    didOpen: () => {
+                        Swal.showLoading();
+                    }
+                });
+
+                console.log('準備送出志願序:', preferences);
+                
                 const res = await fetch("/api/save_preferences", {
                     method: "POST",
-                    headers: { "Content-Type": "application/json" },
+                    headers: { 
+                        "Content-Type": "application/json"
+                    },
+                    credentials: 'same-origin', // 確保帶上 session cookie
                     body: JSON.stringify({ preferences })
                 });
+                
+                console.log('API 回應狀態:', res.status, res.statusText);
+                
+                if (!res.ok) {
+                    const errorText = await res.text();
+                    console.error('API 錯誤回應:', errorText);
+                    throw new Error(`伺服器錯誤 (${res.status}): ${errorText}`);
+                }
+                
                 const result = await res.json();
+                console.log('API 回應結果:', result);
+                
                 if (result.success) {
-                    Swal.fire({ icon: 'success', title: '送出成功！', text: result.message })
-                        .then(() => { setReadOnlyMode(true); updateSelections(); });
-                } else Swal.fire({ icon: 'error', title: '儲存失敗', text: result.message });
-            } catch {
-                Swal.fire({ icon: 'error', title: '網路錯誤', text: '無法連線到伺服器。' });
+                    Swal.fire({ 
+                        icon: 'success', 
+                        title: '送出成功！', 
+                        text: '您的志願序已成功送出。',
+                        confirmButtonText: '確定',
+                        confirmButtonColor: '#00a651'
+                    })
+                    .then(() => { 
+                        setReadOnlyMode(true); 
+                        updateSelections(); 
+                        // 重新載入頁面以確保資料同步
+                        window.location.reload();
+                    });
+                } else {
+                    Swal.fire({ 
+                        icon: 'error', 
+                        title: '儲存失敗', 
+                        text: result.message || '發生未知錯誤，請稍後再試。' 
+                    });
+                }
+            } catch (error) {
+                console.error('送出錯誤:', error);
+                Swal.fire({ 
+                    icon: 'error', 
+                    title: '網路錯誤', 
+                    text: '無法連線到伺服器，請稍後再試。錯誤詳情：' + error.message 
+                });
             }
         });
     </script>

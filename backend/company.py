@@ -6,6 +6,7 @@ import os
 import traceback
 from docx import Document
 from notification import create_notification
+from semester import get_current_semester_code
 
 company_bp = Blueprint("company_bp", __name__)
 
@@ -362,34 +363,77 @@ def api_get_pending_companies():
 # =========================================================
 @company_bp.route("/api/get_reviewed_companies", methods=["GET"])
 def api_get_reviewed_companies():
+    conn = None
+    cursor = None
     try:
         conn = get_db()
         cursor = conn.cursor(dictionary=True)
 
-        cursor.execute("""
-            SELECT 
-                ic.id,
-                u.name AS upload_teacher_name,
-                ic.company_name, 
-                ic.status,
-                ic.submitted_at AS upload_time,
-                ic.reviewed_at
-            FROM internship_companies ic
-            LEFT JOIN users u ON ic.uploaded_by_user_id = u.id
-            LEFT JOIN classes_teacher ct ON ct.teacher_id = u.id
-            WHERE ic.status IN ('approved', 'rejected')
-            ORDER BY ic.reviewed_at DESC
-        """)
+        # 取得當前學期代碼
+        current_semester_code = get_current_semester_code(cursor)
+
+        # 如果沒有設定當前學期，仍然可以顯示公司列表，但無法顯示開放狀態
+        if current_semester_code:
+            cursor.execute("""
+                SELECT 
+                    ic.id,
+                    u.name AS upload_teacher_name,
+                    ic.company_name, 
+                    ic.status,
+                    ic.submitted_at AS upload_time,
+                    ic.reviewed_at,
+                    COALESCE(co.is_open, FALSE) AS is_open_current_semester
+                FROM internship_companies ic
+                LEFT JOIN users u ON ic.uploaded_by_user_id = u.id
+                LEFT JOIN company_openings co ON ic.id = co.company_id 
+                    AND co.semester = %s
+                WHERE ic.status IN ('approved', 'rejected')
+                ORDER BY ic.reviewed_at DESC
+            """, (current_semester_code,))
+        else:
+            cursor.execute("""
+                SELECT 
+                    ic.id,
+                    u.name AS upload_teacher_name,
+                    ic.company_name, 
+                    ic.status,
+                    ic.submitted_at AS upload_time,
+                    ic.reviewed_at,
+                    FALSE AS is_open_current_semester
+                FROM internship_companies ic
+                LEFT JOIN users u ON ic.uploaded_by_user_id = u.id
+                WHERE ic.status IN ('approved', 'rejected')
+                ORDER BY ic.reviewed_at DESC
+            """)
 
         companies = cursor.fetchall()
-        cursor.close()
-        conn.close()
-
-        return jsonify({"success": True, "companies": companies})
+        
+        # 格式化時間
+        from datetime import timezone, timedelta
+        taiwan_tz = timezone(timedelta(hours=8))
+        
+        for company in companies:
+            if company.get('upload_time') and isinstance(company['upload_time'], datetime):
+                company['upload_time'] = company['upload_time'].astimezone(taiwan_tz).strftime("%Y-%m-%d %H:%M")
+            else:
+                company['upload_time'] = "-"
+            
+            if company.get('reviewed_at') and isinstance(company['reviewed_at'], datetime):
+                company['reviewed_at'] = company['reviewed_at'].astimezone(taiwan_tz).strftime("%Y-%m-%d %H:%M")
+            else:
+                company['reviewed_at'] = "-"
+            
+            # 確保 is_open_current_semester 是布林值
+            company['is_open_current_semester'] = bool(company.get('is_open_current_semester', False))
+        
+        return jsonify({"success": True, "companies": companies, "current_semester": current_semester_code})
 
     except Exception:
         print("❌ 取得已審核公司錯誤：", traceback.format_exc())
         return jsonify({"success": False, "message": "伺服器錯誤"}), 500
+    finally:
+        if cursor: cursor.close()
+        if conn: conn.close()
 
 # =========================================================
 # 🔎 取得公司詳細資料 (包含職缺)
@@ -626,6 +670,76 @@ def api_approve_company():
     finally:
         cursor.close()
         conn.close()
+
+# =========================================================
+# API - 設定公司本學期開放狀態
+# =========================================================
+@company_bp.route("/api/set_company_open_status", methods=["POST"])
+def api_set_company_open_status():
+    """設定公司在本學期是否開放"""
+    data = request.get_json()
+    company_id = data.get("company_id")
+    is_open = data.get("is_open", False)
+
+    if company_id is None:
+        return jsonify({"success": False, "message": "缺少 company_id"}), 400
+
+    try:
+        conn = get_db()
+        cursor = conn.cursor(dictionary=True)
+        
+        # 取得當前學期代碼
+        current_semester_code = get_current_semester_code(cursor)
+        if not current_semester_code:
+            return jsonify({"success": False, "message": "目前沒有設定當前學期"}), 400
+
+        # 檢查公司是否存在且已審核通過
+        cursor.execute("SELECT id, company_name, status FROM internship_companies WHERE id = %s", (company_id,))
+        company = cursor.fetchone()
+        
+        if not company:
+            return jsonify({"success": False, "message": "找不到該公司"}), 404
+        
+        if company['status'] != 'approved':
+            return jsonify({"success": False, "message": "只有已審核通過的公司才能設定開放狀態"}), 400
+
+        # 檢查是否已存在該公司該學期的記錄
+        cursor.execute("""
+            SELECT id FROM company_openings 
+            WHERE company_id = %s AND semester = %s
+        """, (company_id, current_semester_code))
+        existing = cursor.fetchone()
+
+        if existing:
+            # 更新現有記錄
+            cursor.execute("""
+                UPDATE company_openings 
+                SET is_open = %s, opened_at = %s
+                WHERE company_id = %s AND semester = %s
+            """, (is_open, datetime.now(), company_id, current_semester_code))
+        else:
+            # 建立新記錄
+            cursor.execute("""
+                INSERT INTO company_openings (company_id, semester, is_open, opened_at)
+                VALUES (%s, %s, %s, %s)
+            """, (company_id, current_semester_code, is_open, datetime.now()))
+
+        conn.commit()
+        
+        status_text = '開放' if is_open else '關閉'
+        return jsonify({
+            "success": True, 
+            "message": f"公司「{company['company_name']}」已{status_text}",
+            "is_open": bool(is_open)
+        })
+
+    except Exception as e:
+        print("❌ 設定公司開放狀態錯誤：", traceback.format_exc())
+        return jsonify({"success": False, "message": f"伺服器錯誤: {str(e)}"}), 500
+
+    finally:
+        if cursor: cursor.close()
+        if conn: conn.close()
 
 # =========================================================
 # 🖥️ 上傳公司頁面

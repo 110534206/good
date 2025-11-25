@@ -244,24 +244,50 @@ def recommend_preferences():
                 "error": "目前系統中沒有任何公司資料，請聯繫管理員新增公司。"
                 }), 400
         
-        # 取得所有公司和職缺（不過濾狀態，與頁面顯示一致）
-        cursor.execute("""
-            SELECT 
-                ic.id AS company_id,
-                ic.company_name,
-                ic.description AS company_description,
-                ic.location AS company_address,
-                ij.id AS job_id,
-                ij.title AS job_title,
-                ij.description AS job_description,
-                ij.period AS job_period,
-                ij.work_time AS job_work_time,
-                ij.remark AS job_remark
-            FROM internship_companies ic
-            JOIN internship_jobs ij ON ic.id = ij.company_id
-            WHERE ij.is_active = TRUE
-            ORDER BY ic.company_name, ij.title
-        """)
+        # 取得本學期開放的公司和職缺（只顯示已審核通過且在當前學期開放的公司）
+        from semester import get_current_semester_code
+        current_semester_code = get_current_semester_code(cursor)
+        
+        if current_semester_code:
+            cursor.execute("""
+                SELECT 
+                    ic.id AS company_id,
+                    ic.company_name,
+                    ic.description AS company_description,
+                    ic.location AS company_address,
+                    ij.id AS job_id,
+                    ij.title AS job_title,
+                    ij.description AS job_description,
+                    ij.period AS job_period,
+                    ij.work_time AS job_work_time,
+                    ij.remark AS job_remark
+                FROM internship_companies ic
+                INNER JOIN company_openings co ON ic.id = co.company_id
+                JOIN internship_jobs ij ON ic.id = ij.company_id
+                WHERE ic.status = 'approved'
+                  AND co.semester = %s
+                  AND co.is_open = TRUE
+                  AND ij.is_active = TRUE
+                ORDER BY ic.company_name, ij.title
+            """, (current_semester_code,))
+        else:
+            # 如果沒有設定當前學期，返回空列表
+            cursor.execute("""
+                SELECT 
+                    ic.id AS company_id,
+                    ic.company_name,
+                    ic.description AS company_description,
+                    ic.location AS company_address,
+                    ij.id AS job_id,
+                    ij.title AS job_title,
+                    ij.description AS job_description,
+                    ij.period AS job_period,
+                    ij.work_time AS job_work_time,
+                    ij.remark AS job_remark
+                FROM internship_companies ic
+                JOIN internship_jobs ij ON ic.id = ij.company_id
+                WHERE 1=0
+            """)
         companies_jobs = cursor.fetchall()
         
         if not companies_jobs:
