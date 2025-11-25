@@ -10,6 +10,21 @@
       background: #f8f9fa;
     }
 
+    .hero-bar {
+      background: #0057b8;
+      color: #fff;
+      text-align: center;
+      padding: 18px 15px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.16);
+    }
+
+    .hero-bar h1 {
+      font-size: 24px;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+      margin: 0;
+    }
+
     .card:hover {
       box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
     }
@@ -21,8 +36,11 @@
 </head>
 
 <body>
+  <div class="hero-bar">
+    <h1>實習心得分享</h1>
+  </div>
+
   <div class="container mt-4">
-    <h2 class="mb-4">實習心得分享</h2>
 
     <div class="row mb-3">
       <div class="col-md-3">
@@ -260,6 +278,33 @@
       }
     }
 
+    // 格式化日期時間為 "YYYY-MM-DD HH:MM" 格式
+    function formatDateTime(dateTimeString) {
+      if (!dateTimeString) return '';
+
+      // 若是 MySQL DATETIME 格式（YYYY-MM-DD HH:MM:SS），直接截取，避免瀏覽器時區轉換
+      const mysqlPattern = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}(:\d{2})?$/;
+      if (mysqlPattern.test(dateTimeString)) {
+        return dateTimeString.slice(0, 16); // 取到分鐘
+      }
+
+      // 其他格式交由 Date 解析，再輸出同樣樣式
+      try {
+        const date = new Date(dateTimeString);
+        if (isNaN(date.getTime())) return dateTimeString;
+
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        const hours = String(date.getHours()).padStart(2, '0');
+        const minutes = String(date.getMinutes()).padStart(2, '0');
+
+        return `${year}-${month}-${day} ${hours}:${minutes}`;
+      } catch (error) {
+        return dateTimeString;
+      }
+    }
+
     // 取得單篇內容並顯示
     async function viewExp(id) {
       const res = await fetch(`/intern_experience/api/view/${id}`);
@@ -270,7 +315,7 @@
         document.getElementById('modalAuthor').innerText = data.data.author || '';
         document.getElementById('modalYear').innerText = data.data.year || '';
         document.getElementById('modalContent').innerText = data.data.content || '';
-        document.getElementById('modalCreated').innerText = data.data.created_at || '';
+        document.getElementById('modalCreated').innerText = formatDateTime(data.data.created_at) || '';
         new bootstrap.Modal(document.getElementById('viewModal')).show();
       } else {
         alert('取得內容失敗');
