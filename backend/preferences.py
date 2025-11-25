@@ -15,6 +15,7 @@ from reportlab.lib import colors
 from docx import Document
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.enum.table import WD_TABLE_ALIGNMENT
+from semester import get_current_semester_code
 preferences_bp = Blueprint("preferences_bp", __name__)
 
 # -------------------------
@@ -62,8 +63,24 @@ def fill_preferences_page():
     cursor = conn.cursor(dictionary=True)
 
     try:
-        # 1) 取得所有公司（id, name）
-        cursor.execute("SELECT id, company_name AS name FROM internship_companies")
+        # 1) 取得本學期開放的公司（id, name）
+        # 只顯示已審核通過且在當前學期開放的公司
+        current_semester_code = get_current_semester_code(cursor)
+        
+        if current_semester_code:
+            cursor.execute("""
+                SELECT DISTINCT ic.id, ic.company_name AS name
+                FROM internship_companies ic
+                INNER JOIN company_openings co ON ic.id = co.company_id
+                WHERE ic.status = 'approved'
+                  AND co.semester = %s
+                  AND co.is_open = TRUE
+                ORDER BY ic.company_name
+            """, (current_semester_code,))
+        else:
+            # 如果沒有設定當前學期，返回空列表
+            cursor.execute("SELECT id, company_name AS name FROM internship_companies WHERE 1=0")
+        
         companies = cursor.fetchall() or []
 
         # 2) 簡化：不再計算名額，改為取得所有公司的 ID 列表

@@ -77,6 +77,77 @@
       font-size: 1.5rem;
     }
 
+    /* 表格樣式 - 與圖片格式相同 */
+    .table {
+      border-collapse: separate;
+      border-spacing: 0;
+    }
+
+    .table thead th {
+      text-align: center;
+      background-color: #fafafb;
+      font-weight: 600;
+      border: 1px solid #dee2e6;
+      padding: 0.75rem;
+      vertical-align: middle;
+    }
+
+    .table tbody td {
+      text-align: center;
+      vertical-align: middle;
+      border: 1px solid #dee2e6;
+      padding: 0.75rem;
+      background-color: #ffffff;
+    }
+
+    .table tbody tr {
+      background-color: #ffffff;
+    }
+
+    .table tbody tr:hover {
+      background-color: rgba(0, 0, 0, 0.03);
+    }
+
+    .table tbody tr:hover td {
+      background-color: rgba(0, 0, 0, 0.03);
+    }
+
+    /* 狀態標籤樣式 */
+    .status-badge {
+      font-size: 0.9em;
+      padding: 0.3em 0.8em;
+      border-radius: 0.25rem;
+      display: inline-block;
+      font-weight: 600;
+      border: none;
+    }
+
+    /* 已核准狀態使用與 btn-success 完全相同的顏色和樣式 */
+    .status-badge.btn-success {
+      background-color: #198754;
+      border-color: #198754;
+      color: #ffffff;
+    }
+    
+    .status-badge.btn-success:hover {
+      background-color: #157347;
+      border-color: #146c43;
+      color: #ffffff;
+    }
+    
+    .status-badge.btn-success:disabled {
+      background-color: #198754;
+      border-color: #198754;
+      color: #ffffff;
+      opacity: 1;
+    }
+
+    /* 按鈕樣式 */
+    .btn-sm {
+      padding: 0.25rem 0.75rem;
+      font-size: 0.875rem;
+    }
+
   </style>
 </head>
 
@@ -84,7 +155,7 @@
   <div class="container-fluid p-0">
     <div class="page-banner">
       <div class="main-content">
-        <h2>實習公司資料總覽</h2>
+        <h2>實習廠商管理</h2>
       </div>
     </div>
     <div class="main-content">
@@ -97,6 +168,35 @@
             <a href="/ta/statistics/manage_students" class="btn btn-warning">學生管理</a>
           </div>
         </div>
+
+        <!-- 已審核公司列表 -->
+        <div class="mb-4">
+          <div class="card shadow-sm">
+            <div class="card-body p-4">
+              <h5 class="mb-3 text-center" style="color: #000000; font-weight: bold;">公司管理（<span id="currentSemesterDisplay">載入中...</span>）</h5>
+              <div class="table-responsive">
+                <table class="table table-bordered align-middle" style="margin-bottom: 0;">
+                  <thead>
+                    <tr>
+                      <th style="text-align: center; background-color: #fafafb; border: 1px solid #dee2e6;">公司名稱</th>
+                      <th style="text-align: center; background-color: #fafafb; border: 1px solid #dee2e6;">上傳教師</th>
+                      <th style="text-align: center; background-color: #fafafb; border: 1px solid #dee2e6;">審核狀態</th>
+                      <th style="text-align: center; background-color: #fafafb; border: 1px solid #dee2e6;">審核時間</th>
+                      <th style="text-align: center; background-color: #fafafb; border: 1px solid #dee2e6;">本學期開放</th>
+                      <th style="text-align: center; background-color: #fafafb; border: 1px solid #dee2e6;">狀態</th>
+                    </tr>
+                  </thead>
+                  <tbody id="reviewedCompaniesTableBody">
+                    <tr>
+                      <td colspan="6" class="text-center text-muted">載入中...</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <div class="row g-4">
           <div class="col-lg-4">
             <div class="chart-container">
@@ -124,6 +224,112 @@
 
   <script>
     let companyChart, resumeChart, preferenceChart;
+    let currentSemesterCode = null;
+
+    // 載入已審核公司列表
+    async function loadReviewedCompanies() {
+      const tbody = document.getElementById('reviewedCompaniesTableBody');
+      const semesterDisplay = document.getElementById('currentSemesterDisplay');
+      
+      tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">載入中...</td></tr>';
+
+      try {
+        const res = await fetch('/api/get_reviewed_companies');
+        const data = await res.json();
+
+        if (!data.success) {
+          tbody.innerHTML = `<tr><td colspan="6" class="text-center text-danger">載入失敗: ${data.message}</td></tr>`;
+          return;
+        }
+
+        currentSemesterCode = data.current_semester || '未設定';
+        semesterDisplay.textContent = currentSemesterCode || '未設定';
+
+        if (!data.companies || data.companies.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">目前沒有已審核的公司</td></tr>';
+          return;
+        }
+
+        tbody.innerHTML = data.companies.map(company => {
+          // 審核狀態顯示為按鈕樣式（已核准使用與匯出 Excel 相同的 btn-success 類別）
+          const statusBadge = company.status === 'approved' 
+            ? '<button class="btn btn-sm btn-success status-badge" style="cursor: default;" disabled>已核准</button>'
+            : '<button class="btn btn-sm btn-danger status-badge" style="cursor: default;" disabled>已退回</button>';
+          
+          // 開放狀態顯示為按鈕樣式（開放中使用與匯出 Excel 相同的 btn-success 類別）
+          const openStatusBadge = company.is_open_current_semester
+            ? '<button class="btn btn-sm btn-success status-badge" style="cursor: default;" disabled>開放中</button>'
+            : '<button class="btn btn-sm btn-secondary status-badge" style="cursor: default;" disabled>未開放</button>';
+
+          const checkboxDisabled = company.status !== 'approved' ? 'disabled' : '';
+          const checkboxChecked = company.is_open_current_semester ? 'checked' : '';
+
+          return `
+            <tr>
+              <td>${company.company_name || '-'}</td>
+              <td>${company.upload_teacher_name || '-'}</td>
+              <td>${statusBadge}</td>
+              <td>${company.reviewed_at || '-'}</td>
+              <td>
+                <div class="form-check form-switch d-inline-block">
+                  <input class="form-check-input company-open-checkbox" 
+                         type="checkbox" 
+                         data-company-id="${company.id}"
+                         ${checkboxChecked}
+                         ${checkboxDisabled}
+                         style="cursor: pointer;">
+                </div>
+              </td>
+              <td>${openStatusBadge}</td>
+            </tr>
+          `;
+        }).join('');
+
+        // 綁定勾選框事件
+        document.querySelectorAll('.company-open-checkbox').forEach(checkbox => {
+          checkbox.addEventListener('change', async function() {
+            const companyId = parseInt(this.dataset.companyId);
+            const isOpen = this.checked;
+
+            // 顯示載入狀態
+            this.disabled = true;
+            const originalChecked = this.checked;
+
+            try {
+              const res = await fetch('/api/set_company_open_status', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ company_id: companyId, is_open: isOpen })
+              });
+
+              const data = await res.json();
+
+              if (!data.success) {
+                alert(data.message || '設定失敗');
+                this.checked = !originalChecked; // 還原勾選狀態
+              } else {
+                // 更新狀態標籤（開放中使用與匯出 Excel 相同的 btn-success 類別）
+                const row = this.closest('tr');
+                const statusCell = row.querySelector('td:last-child');
+                statusCell.innerHTML = isOpen
+                  ? '<button class="btn btn-sm btn-success status-badge" style="cursor: default;" disabled>開放中</button>'
+                  : '<button class="btn btn-sm btn-secondary status-badge" style="cursor: default;" disabled>未開放</button>';
+              }
+            } catch (error) {
+              console.error('設定公司開放狀態錯誤:', error);
+              alert('設定時發生錯誤，請稍後再試');
+              this.checked = !originalChecked; // 還原勾選狀態
+            } finally {
+              this.disabled = false;
+            }
+          });
+        });
+
+      } catch (error) {
+        console.error('載入已審核公司列表錯誤:', error);
+        tbody.innerHTML = '<tr><td colspan="6" class="text-center text-danger">載入時發生錯誤</td></tr>';
+      }
+    }
 
     // 載入統計資料 (原有的三個圖表)
     async function loadData(classId = "all") {
@@ -218,6 +424,7 @@
 
     // 初始載入
     loadData("all"); // 載入所有班級的統計
+    loadReviewedCompanies(); // 載入已審核公司列表
   </script>
 </body>
 
