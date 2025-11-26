@@ -856,7 +856,7 @@ def review_preferences_api():
 # -------------------------
 @preferences_bp.route('/export_preferences_excel')
 def export_preferences_excel():
-    if 'username' not in session or session.get('role') not in ['teacher', 'director']:
+    if 'username' not in session or session.get('role') not in ['teacher', 'director', 'class_teacher']:
         return redirect(url_for('auth_bp.login_page'))
 
     user_id = session.get('user_id')
@@ -878,21 +878,46 @@ def export_preferences_excel():
         class_id = class_info['class_id']
         class_name = class_info['class_name']
 
-        # 查詢班上學生及其志願
-        cursor.execute("""
-            SELECT 
-                u.id AS student_id,
-                u.name AS student_name,
-                u.username AS student_number, 
-                sp.preference_order,
-                ic.company_name,
-                sp.submitted_at
-            FROM users u
-            LEFT JOIN student_preferences sp ON u.id = sp.student_id
-            LEFT JOIN internship_companies ic ON sp.company_id = ic.id
-            WHERE u.class_id = %s AND u.role = 'student'
-            ORDER BY u.name, sp.preference_order
-        """, (class_id,))
+        # 取得當前學期ID
+        current_semester_id = get_current_semester_id(cursor)
+
+        # 查詢班上學生及其志願（只匯出已通過的志願序）
+        if current_semester_id:
+            cursor.execute("""
+                SELECT 
+                    u.id AS student_id,
+                    u.name AS student_name,
+                    u.username AS student_number, 
+                    sp.preference_order,
+                    ic.company_name,
+                    sp.submitted_at
+                FROM users u
+                INNER JOIN student_preferences sp ON u.id = sp.student_id
+                LEFT JOIN internship_companies ic ON sp.company_id = ic.id
+                WHERE u.class_id = %s 
+                  AND u.role = 'student'
+                  AND sp.status = 'approved'
+                  AND sp.semester_id = %s
+                ORDER BY u.name, sp.preference_order
+            """, (class_id, current_semester_id))
+        else:
+            # 如果沒有設定當前學期，只匯出已通過的志願序
+            cursor.execute("""
+                SELECT 
+                    u.id AS student_id,
+                    u.name AS student_name,
+                    u.username AS student_number, 
+                    sp.preference_order,
+                    ic.company_name,
+                    sp.submitted_at
+                FROM users u
+                INNER JOIN student_preferences sp ON u.id = sp.student_id
+                LEFT JOIN internship_companies ic ON sp.company_id = ic.id
+                WHERE u.class_id = %s 
+                  AND u.role = 'student'
+                  AND sp.status = 'approved'
+                ORDER BY u.name, sp.preference_order
+            """, (class_id,))
         results = cursor.fetchall()
 
         # 創建 Excel 工作簿
@@ -915,7 +940,7 @@ def export_preferences_excel():
         # 寫入標題
         ws.merge_cells('A1:G1')
         title_cell = ws['A1']
-        title_cell.value = f"{class_name} - 學生實習志願序統計表"
+        title_cell.value = f"{class_name} - 已通過學生實習志願序統計表"
         title_cell.font = Font(bold=True, size=16)
         title_cell.alignment = Alignment(horizontal="center", vertical="center")
         ws.row_dimensions[1].height = 30
@@ -970,21 +995,23 @@ def export_preferences_excel():
             data = student_data[student_name]
             
             # 學生姓名
-            ws.cell(row=row_num, column=1, value=data['name']).border = border
+            name_cell = ws.cell(row=row_num, column=1, value=data['name'])
+            name_cell.border = border
+            name_cell.alignment = Alignment(horizontal="center", vertical="center")
             # 學號
-            ws.cell(row=row_num, column=2, value=data['student_number']).border = border
+            number_cell = ws.cell(row=row_num, column=2, value=data['student_number'])
+            number_cell.border = border
+            number_cell.alignment = Alignment(horizontal="center", vertical="center")
             
             # 志願序
             for i in range(5):
-                pref_text = data['preferences'][i]
-                if pref_text and data['submitted_times'][i]:
-                    pref_text += f"\n({data['submitted_times'][i]})"
+                pref_text = data['preferences'][i] or ''
                 
                 cell = ws.cell(row=row_num, column=3+i, value=pref_text)
                 cell.border = border
-                cell.alignment = Alignment(wrap_text=True, vertical="top")
+                cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
                 
-            ws.row_dimensions[row_num].height = 40 # 確保有足夠空間顯示兩行文字
+            ws.row_dimensions[row_num].height = 30
             row_num += 1
 
         # 添加統計資訊
@@ -1013,7 +1040,7 @@ def export_preferences_excel():
         wb.save(output)
         output.seek(0)
         
-        filename = f"{class_name}_實習志願序_{datetime.now().strftime('%Y%m%d')}.xlsx"
+        filename = f"{class_name}_已通過實習志願序_{datetime.now().strftime('%Y%m%d')}.xlsx"
         
         return send_file(
             output,
@@ -1037,7 +1064,7 @@ def export_preferences_excel():
 # -------------------------
 @preferences_bp.route('/export_preferences_pdf')
 def export_preferences_pdf():
-    if 'username' not in session or session.get('role') not in ['teacher', 'director']:
+    if 'username' not in session or session.get('role') not in ['teacher', 'director', 'class_teacher']:
         return redirect(url_for('auth_bp.login_page'))
 
     user_id = session.get('user_id')
@@ -1059,29 +1086,92 @@ def export_preferences_pdf():
         class_id = class_info['class_id']
         class_name = class_info['class_name']
 
-        # 查詢班上學生及其志願
-        cursor.execute("""
-            SELECT 
-                u.id AS student_id,
-                u.name AS student_name,
-                u.username AS student_number, 
-                sp.preference_order,
-                ic.company_name,
-                sp.submitted_at
-            FROM users u
-            LEFT JOIN student_preferences sp ON u.id = sp.student_id
-            LEFT JOIN internship_companies ic ON sp.company_id = ic.id
-            WHERE u.class_id = %s AND u.role = 'student'
-            ORDER BY u.name, sp.preference_order
-        """, (class_id,))
+        # 取得當前學期ID
+        current_semester_id = get_current_semester_id(cursor)
+
+        # 查詢班上學生及其志願（只匯出已通過的志願序）
+        if current_semester_id:
+            cursor.execute("""
+                SELECT 
+                    u.id AS student_id,
+                    u.name AS student_name,
+                    u.username AS student_number, 
+                    sp.preference_order,
+                    ic.company_name,
+                    sp.submitted_at
+                FROM users u
+                INNER JOIN student_preferences sp ON u.id = sp.student_id
+                LEFT JOIN internship_companies ic ON sp.company_id = ic.id
+                WHERE u.class_id = %s 
+                  AND u.role = 'student'
+                  AND sp.status = 'approved'
+                  AND sp.semester_id = %s
+                ORDER BY u.name, sp.preference_order
+            """, (class_id, current_semester_id))
+        else:
+            # 如果沒有設定當前學期，只匯出已通過的志願序
+            cursor.execute("""
+                SELECT 
+                    u.id AS student_id,
+                    u.name AS student_name,
+                    u.username AS student_number, 
+                    sp.preference_order,
+                    ic.company_name,
+                    sp.submitted_at
+                FROM users u
+                INNER JOIN student_preferences sp ON u.id = sp.student_id
+                LEFT JOIN internship_companies ic ON sp.company_id = ic.id
+                WHERE u.class_id = %s 
+                  AND u.role = 'student'
+                  AND sp.status = 'approved'
+                ORDER BY u.name, sp.preference_order
+            """, (class_id,))
         results = cursor.fetchall()
 
         # 創建 PDF 緩衝區
         pdf_buffer = io.BytesIO()
-        # 設置字體（需要 ReportLab 環境支持繁體中文字體，這裡假設已配置）
-        # from reportlab.pdfbase import pdfmetrics
-        # from reportlab.pdfbase.ttfonts import TTFont
-        # pdfmetrics.registerFont(TTFont('SimSun', 'SimSun.ttf'))
+        
+        # 註冊中文字體（嘗試使用系統字體）
+        try:
+            from reportlab.pdfbase import pdfmetrics
+            from reportlab.pdfbase.ttfonts import TTFont
+            import platform
+            
+            # 根據作業系統選擇字體路徑
+            if platform.system() == 'Windows':
+                # Windows 系統字體路徑
+                font_paths = [
+                    'C:/Windows/Fonts/msjh.ttc',  # 微軟正黑體
+                    'C:/Windows/Fonts/simsun.ttc',  # 新細明體
+                    'C:/Windows/Fonts/kaiu.ttf',  # 標楷體
+                ]
+                font_name = None
+                for font_path in font_paths:
+                    try:
+                        if 'msjh' in font_path.lower():
+                            pdfmetrics.registerFont(TTFont('ChineseFont', font_path, subfontIndex=0))
+                            font_name = 'ChineseFont'
+                            break
+                        elif 'simsun' in font_path.lower():
+                            pdfmetrics.registerFont(TTFont('ChineseFont', font_path, subfontIndex=0))
+                            font_name = 'ChineseFont'
+                            break
+                        elif 'kaiu' in font_path.lower():
+                            pdfmetrics.registerFont(TTFont('ChineseFont', font_path))
+                            font_name = 'ChineseFont'
+                            break
+                    except:
+                        continue
+                
+                if not font_name:
+                    # 如果找不到字體，使用 reportlab 的內建字體處理
+                    font_name = 'Helvetica'
+            else:
+                # Linux/Mac 系統，嘗試使用常見字體
+                font_name = 'Helvetica'
+        except Exception as e:
+            print(f"字體註冊失敗: {e}")
+            font_name = 'Helvetica'
         
         doc = SimpleDocTemplate(pdf_buffer, pagesize=A4, topMargin=1*inch, bottomMargin=1*inch)
         
@@ -1090,21 +1180,24 @@ def export_preferences_pdf():
         title_style = ParagraphStyle(
             'CustomTitle',
             parent=styles['Heading1'],
-            fontSize=18,
-            spaceAfter=30,
+            fontSize=14,
+            spaceAfter=20,
             alignment=1, # 置中
-            textColor=colors.HexColor('#0066CC')
-            # fontName='SimSun' # 假設已註冊字體
+            textColor=colors.HexColor('#0066CC'),
+            fontName=font_name if font_name else 'Helvetica'
         )
-        normal_style = styles['Normal']
-        normal_style.fontSize = 10
-        # normal_style.fontName = 'SimSun' # 假設已註冊字體
+        normal_style = ParagraphStyle(
+            'CustomNormal',
+            parent=styles['Normal'],
+            fontSize=8,
+            fontName=font_name if font_name else 'Helvetica'
+        )
 
         # 建立內容
         story = []
 
         # 標題
-        title = Paragraph(f"{class_name} - 學生實習志願序統計表", title_style)
+        title = Paragraph(f"{class_name} - 已通過學生實習志願序統計表", title_style)
         story.append(title)
         
         # 日期
@@ -1147,9 +1240,7 @@ def export_preferences_pdf():
             row = [data['name'], data['student_number']]
             
             for i in range(5):
-                pref_text = data['preferences'][i]
-                if pref_text and data['submitted_times'][i]:
-                    pref_text += f" ({data['submitted_times'][i]})"
+                pref_text = data['preferences'][i] or ''
                 row.append(pref_text)
             
             table_data.append(row)
@@ -1160,10 +1251,10 @@ def export_preferences_pdf():
             ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#0066CC')),
             ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
             ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-            # ('FONTNAME', (0, 0), (-1, -1), 'SimSun'), # 假設已註冊字體
-            ('FONTSIZE', (0, 0), (-1, -1), 9),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('FONTNAME', (0, 0), (-1, -1), font_name if font_name else 'Helvetica'),
+            ('FONTSIZE', (0, 0), (-1, -1), 8),
             ('GRID', (0, 0), (-1, -1), 1, colors.black),
-            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
             ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f0f0f0')])
         ])
         table.setStyle(table_style)
@@ -1192,9 +1283,9 @@ def export_preferences_pdf():
             ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#0066CC')),
             ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
             ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-            # ('FONTNAME', (0, 0), (-1, 0), 'SimSun-Bold'), # 假設已註冊字體
-            # ('FONTNAME', (0, 1), (-1, -1), 'SimSun'), # 假設已註冊字體
-            ('FONTSIZE', (0, 0), (-1, -1), 10),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('FONTNAME', (0, 0), (-1, -1), font_name if font_name else 'Helvetica'),
+            ('FONTSIZE', (0, 0), (-1, -1), 8),
             ('GRID', (0, 0), (-1, -1), 1, colors.black),
             ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
         ])
@@ -1205,7 +1296,7 @@ def export_preferences_pdf():
         doc.build(story)
         pdf_buffer.seek(0)
 
-        filename = f"{class_name}_實習志願序_{datetime.now().strftime('%Y%m%d')}.pdf"
+        filename = f"{class_name}_已通過實習志願序_{datetime.now().strftime('%Y%m%d')}.pdf"
 
         return send_file(
             pdf_buffer,
@@ -1228,9 +1319,10 @@ def export_preferences_pdf():
 # -------------------------
 # Word 導出功能
 # -------------------------
+@preferences_bp.route('/export_preferences_word')
 @preferences_bp.route('/export_preferences_docx')
 def export_preferences_docx():
-    if 'username' not in session or session.get('role') not in ['teacher', 'director']:
+    if 'username' not in session or session.get('role') not in ['teacher', 'director', 'class_teacher']:
         return redirect(url_for('auth_bp.login_page'))
 
     user_id = session.get('user_id')
@@ -1252,21 +1344,46 @@ def export_preferences_docx():
         class_id = class_info['class_id']
         class_name = class_info['class_name']
 
-        # 查詢班上學生及其志願
-        cursor.execute("""
-            SELECT 
-                u.id AS student_id,
-                u.name AS student_name,
-                u.username AS student_number, 
-                sp.preference_order,
-                ic.company_name,
-                sp.submitted_at
-            FROM users u
-            LEFT JOIN student_preferences sp ON u.id = sp.student_id
-            LEFT JOIN internship_companies ic ON sp.company_id = ic.id
-            WHERE u.class_id = %s AND u.role = 'student'
-            ORDER BY u.name, sp.preference_order
-        """, (class_id,))
+        # 取得當前學期ID
+        current_semester_id = get_current_semester_id(cursor)
+
+        # 查詢班上學生及其志願（只匯出已通過的志願序）
+        if current_semester_id:
+            cursor.execute("""
+                SELECT 
+                    u.id AS student_id,
+                    u.name AS student_name,
+                    u.username AS student_number, 
+                    sp.preference_order,
+                    ic.company_name,
+                    sp.submitted_at
+                FROM users u
+                INNER JOIN student_preferences sp ON u.id = sp.student_id
+                LEFT JOIN internship_companies ic ON sp.company_id = ic.id
+                WHERE u.class_id = %s 
+                  AND u.role = 'student'
+                  AND sp.status = 'approved'
+                  AND sp.semester_id = %s
+                ORDER BY u.name, sp.preference_order
+            """, (class_id, current_semester_id))
+        else:
+            # 如果沒有設定當前學期，只匯出已通過的志願序
+            cursor.execute("""
+                SELECT 
+                    u.id AS student_id,
+                    u.name AS student_name,
+                    u.username AS student_number, 
+                    sp.preference_order,
+                    ic.company_name,
+                    sp.submitted_at
+                FROM users u
+                INNER JOIN student_preferences sp ON u.id = sp.student_id
+                LEFT JOIN internship_companies ic ON sp.company_id = ic.id
+                WHERE u.class_id = %s 
+                  AND u.role = 'student'
+                  AND sp.status = 'approved'
+                ORDER BY u.name, sp.preference_order
+            """, (class_id,))
         results = cursor.fetchall()
 
         # 整理學生資料
@@ -1292,7 +1409,7 @@ def export_preferences_docx():
 
         # 建立 Word 文件
         doc = Document()
-        title = doc.add_heading(f"{class_name} - 學生實習志願序統計表", 0)
+        title = doc.add_heading(f"{class_name} - 已通過學生實習志願序統計表", 0)
         title.alignment = WD_ALIGN_PARAGRAPH.CENTER
         
         doc.add_paragraph(f"導出時間：{datetime.now().strftime('%Y年%m月%d日 %H:%M:%S')}")
@@ -1313,15 +1430,15 @@ def export_preferences_docx():
             data = student_data[student_name]
             row = table.add_row().cells
             row[0].text = data['name']
+            row[0].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
             row[1].text = data['student_number']
+            row[1].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
             
             for i in range(5):
-                pref_text = data['preferences'][i]
-                if pref_text and data['submitted_times'][i]:
-                    pref_text += f"\n({data['submitted_times'][i]})"
+                pref_text = data['preferences'][i] or ''
                 row[2+i].text = pref_text
-                # 設置內容靠左對齊
-                row[2+i].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.LEFT
+                # 設置內容置中對齊
+                row[2+i].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
 
         doc.add_paragraph("")
         doc.add_heading("統計資訊", level=1)
@@ -1349,7 +1466,7 @@ def export_preferences_docx():
         doc.save(output)
         output.seek(0)
         
-        filename = f"{class_name}_實習志願序_{datetime.now().strftime('%Y%m%d')}.docx"
+        filename = f"{class_name}_已通過實習志願序_{datetime.now().strftime('%Y%m%d')}.docx"
         
         return send_file(
             output,
