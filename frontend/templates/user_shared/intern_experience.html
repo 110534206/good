@@ -77,7 +77,7 @@
         </div>
         <div class="modal-body">
           <h5 id="modalCompany"></h5>
-          <p class="text-muted">職缺：<span id="modalJob"></span>｜發表者：<span id="modalAuthor"></span>｜年份：<span
+          <p class="text-muted">職缺：<span id="modalJob"></span>｜薪資：<span id="modalSalary"></span>｜發表者：<span id="modalAuthor"></span>｜年份：<span
               id="modalYear"></span></p>
           <p id="modalContent"></p>
           <p class="text-muted small">發表時間：<span id="modalCreated"></span></p>
@@ -327,6 +327,7 @@
       if (data.success && data.data) {
         document.getElementById('modalCompany').innerText = data.data.company_name || '未填寫公司';
         document.getElementById('modalJob').innerText = data.data.job_title || '';
+        document.getElementById('modalSalary').innerText = data.data.job_salary || '—';
         document.getElementById('modalAuthor').innerText = data.data.author || '';
         document.getElementById('modalYear').innerText = data.data.year || '';
         document.getElementById('modalContent').innerText = data.data.content || '';
@@ -483,7 +484,7 @@
         addModalInstance?.hide();
 
         setTimeout(async () => {
-          await showResultModal('新增心得', '心得上傳成功！');
+        await showResultModal('新增心得', '心得上傳成功！');
           loadExperiences();
         }, 250);
       } else {

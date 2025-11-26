@@ -116,7 +116,7 @@ def get_experience_list():
             SELECT ie.id, ie.year, ie.content, ie.rating, ie.created_at,
                    u.id AS author_id, COALESCE(u.name, '未知使用者') AS author, 
                    c.id AS company_id, COALESCE(c.company_name, '未填寫公司') AS company_name,
-                   j.id AS job_id, j.title AS job_title
+                   j.id AS job_id, j.title AS job_title, j.salary AS job_salary
             FROM internship_experiences ie
             LEFT JOIN users u ON ie.user_id = u.id
             LEFT JOIN internship_companies c ON ie.company_id = c.id
@@ -205,7 +205,7 @@ def view_experience(exp_id):
             SELECT ie.id, ie.year, ie.content, ie.rating, ie.created_at, ie.user_id,
                    u.name AS author,
                    c.id AS company_id, c.company_name,
-                   j.id AS job_id, j.title AS job_title
+                   j.id AS job_id, j.title AS job_title, j.salary AS job_salary
             FROM internship_experiences ie
             JOIN users u ON ie.user_id = u.id
             LEFT JOIN internship_companies c ON ie.company_id = c.id
