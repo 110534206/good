@@ -235,19 +235,29 @@
 
     // 載入心得列表
     async function loadExperiences() {
-      const keyword = document.getElementById('searchKeyword').value;
-      const year = document.getElementById('filterYear').value;
-      const params = new URLSearchParams({
-        keyword,
-        year,
-        company_id: selectedCompanyId || ''
-      });
-      const res = await fetch(`/intern_experience/api/list?${params.toString()}`);
-      const data = await res.json();
-      const list = document.getElementById('experienceList');
-      list.innerHTML = '';
+      try {
+        const keyword = document.getElementById('searchKeyword').value;
+        const year = document.getElementById('filterYear').value;
+        const params = new URLSearchParams({
+          keyword,
+          year,
+          company_id: selectedCompanyId || ''
+        });
+        
+        console.log('[載入心得] 請求參數:', params.toString());
+        const res = await fetch(`/intern_experience/api/list?${params.toString()}`);
+        
+        if (!res.ok) {
+          throw new Error(`HTTP 錯誤: ${res.status} ${res.statusText}`);
+        }
+        
+        const data = await res.json();
+        console.log('[載入心得] API 回應:', data);
+        
+        const list = document.getElementById('experienceList');
+        list.innerHTML = '';
 
-      if (data.success && data.data && data.data.length > 0) {
+        if (data.success && data.data && data.data.length > 0) {
         data.data.forEach(item => {
           const company = item.company_name || '未填寫公司';
           const job = item.job_title ? `／${item.job_title}` : '';
@@ -275,6 +285,11 @@
         });
       } else {
         list.innerHTML = '<p class="text-muted">找不到資料</p>';
+      }
+      } catch (error) {
+        console.error('[載入心得] 發生錯誤:', error);
+        const list = document.getElementById('experienceList');
+        list.innerHTML = `<p class="text-danger">載入失敗: ${error.message}<br>請檢查網路連線或重新整理頁面</p>`;
       }
     }
 

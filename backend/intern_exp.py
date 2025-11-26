@@ -121,6 +121,7 @@ def get_experience_list():
             JOIN users u ON ie.user_id = u.id
             LEFT JOIN internship_companies c ON ie.company_id = c.id
             LEFT JOIN internship_jobs j ON ie.job_id = j.id
+            WHERE 1=1
         """
         params = []
 
@@ -149,10 +150,22 @@ def get_experience_list():
             except:
                 e['year'] = None
 
-        return jsonify({"success": True, "data": experiences})
+        # 記錄查詢結果數量（用於除錯）
+        print(f"[心得列表] 查詢條件: keyword={keyword}, year={year}, company_id={company_id}, 結果數量: {len(experiences)}")
+        
+        return jsonify({
+            "success": True, 
+            "data": experiences,
+            "count": len(experiences)
+        })
     except Exception as e:
+        error_msg = f"取得心得列表時發生錯誤: {str(e)}"
+        print(f"[錯誤] {error_msg}")
         print(traceback.format_exc())
-        return jsonify({"success": False, "message": str(e)}), 500
+        return jsonify({
+            "success": False, 
+            "message": error_msg
+        }), 500
 
 # --------------------
 # API：查看單篇心得
