@@ -43,6 +43,21 @@
       font-weight: bold;
     }
 
+    .controls-bar {
+      gap: 0.75rem;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .controls-bar .btn {
+      height: 40px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding-inline: 1rem;
+      font-size: 0.95rem;
+    }
+
     /* --- 主要內容 --- */
     h2 {
       margin-top: 80px;
@@ -58,6 +73,30 @@
       width: 100%;
       border-collapse: collapse;
       margin-bottom: 30px;
+    }
+
+    .preferences-table {
+      table-layout: fixed;
+    }
+
+    .preferences-table th:nth-child(1),
+    .preferences-table td:nth-child(1) {
+      width: 12%;
+    }
+
+    .preferences-table th:nth-child(2),
+    .preferences-table td:nth-child(2) {
+      width: 44%;
+    }
+
+    .preferences-table th:nth-child(3),
+    .preferences-table td:nth-child(3) {
+      width: 12%;
+    }
+
+    .preferences-table th:nth-child(4),
+    .preferences-table td:nth-child(4) {
+      width: 32%;
     }
 
     th,
@@ -97,13 +136,30 @@
     }
 
     #searchResult {
-      margin-top: 1rem;
+      margin-top: 0;
     }
 
     .alert {
       border-radius: 8px;
       border: none;
       box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    }
+
+    #searchResult {
+      display: inline-flex;
+      align-items: center;
+      margin-left: 0.5rem;
+      height: 40px;
+    }
+
+    .alert-compact {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0 0.85rem;
+      font-size: 0.95rem;
+      margin: 0;
+      height: 100%;
     }
 
     .alert-info {
@@ -151,7 +207,7 @@
   </div>
 
   <div class="container my-5 pt-1">
-    <div class="d-flex justify-content-center mb-3">
+    <div class="d-flex justify-content-center mb-3 controls-bar align-items-center">
       <div class="input-group me-2" style="width: 300px;">
         <input type="text" id="studentSearchInput" class="form-control" placeholder="輸入學生姓名查詢志願序">
         <button id="searchStudentBtn" class="btn btn-outline-secondary">
@@ -190,7 +246,7 @@
         </div>
       </div>
       <div class="table-responsive">
-        <table class="table table-striped table-hover align-middle">
+        <table class="table table-striped table-hover align-middle preferences-table">
           <thead>
             <tr>
               <th>志願序</th>
@@ -249,13 +305,6 @@
         if (studentName.includes(searchTerm)) {
           section.style.display = 'block';
           foundCount++;
-
-          // 高亮顯示匹配的學生姓名
-          const nameElement = section.querySelector('h3');
-          nameElement.style.backgroundColor = '#fff3cd';
-          nameElement.style.padding = '0.5rem';
-          nameElement.style.borderRadius = '4px';
-          nameElement.style.border = '2px solid #ffc107';
         } else {
           section.style.display = 'none';
         }
@@ -265,7 +314,7 @@
       if (foundCount > 0) {
         const resultDiv = document.getElementById('searchResult') || createSearchResultDiv();
         resultDiv.innerHTML = `
-          <div class="alert alert-info">
+          <div class="alert alert-info alert-compact">
             <i class="fas fa-info-circle"></i> 
             找到 ${foundCount} 位符合條件的學生
             <button type="button" class="btn-close" onclick="clearSearch()" aria-label="關閉"></button>
@@ -275,7 +324,7 @@
       } else {
         const resultDiv = document.getElementById('searchResult') || createSearchResultDiv();
         resultDiv.innerHTML = `
-          <div class="alert alert-warning">
+          <div class="alert alert-warning alert-compact">
             <i class="fas fa-exclamation-triangle"></i> 
             未找到符合條件的學生
             <button type="button" class="btn-close" onclick="clearSearch()" aria-label="關閉"></button>
@@ -322,13 +371,6 @@
       const studentSections = document.querySelectorAll('.student-section');
       studentSections.forEach(section => {
         section.style.display = 'block';
-
-        // 移除高亮樣式
-        const nameElement = section.querySelector('h3');
-        nameElement.style.backgroundColor = '';
-        nameElement.style.padding = '';
-        nameElement.style.borderRadius = '';
-        nameElement.style.border = '';
       });
     };
 
