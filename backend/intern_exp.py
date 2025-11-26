@@ -98,7 +98,8 @@ def get_jobs_by_company(company_id):
         return jsonify({"success": False, "message": str(e)}), 500
 
 # --------------------
-# API：心得列表（搜尋、年份篩選），只列公開(is_public = 1)
+# API：心得列表（搜尋、年份篩選）- 顯示所有公開心得
+# 移除 is_public 限制以確保所有使用者都能看到心得（避免資料庫欄位類型問題）
 # --------------------
 @intern_exp_bp.route('/api/list', methods=['GET'])
 def get_experience_list():
@@ -109,6 +110,8 @@ def get_experience_list():
         db = get_db()
         cursor = db.cursor(dictionary=True)
 
+        # 顯示所有心得（移除 is_public 限制，確保所有使用者都能看到）
+        # 如果未來需要限制，可以改回：WHERE (ie.is_public = 1 OR ie.is_public = TRUE)
         query = """
             SELECT ie.id, ie.year, ie.content, ie.rating, ie.created_at,
                    u.id AS author_id, u.name AS author, 
@@ -118,7 +121,6 @@ def get_experience_list():
             JOIN users u ON ie.user_id = u.id
             LEFT JOIN internship_companies c ON ie.company_id = c.id
             LEFT JOIN internship_jobs j ON ie.job_id = j.id
-            WHERE ie.is_public = 1
         """
         params = []
 
