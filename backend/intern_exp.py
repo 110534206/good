@@ -111,14 +111,14 @@ def get_experience_list():
         cursor = db.cursor(dictionary=True)
 
         # 顯示所有心得（移除 is_public 限制，確保所有使用者都能看到）
-        # 如果未來需要限制，可以改回：WHERE (ie.is_public = 1 OR ie.is_public = TRUE)
+        # 使用 LEFT JOIN 確保即使使用者或公司資料不存在也能顯示心得
         query = """
             SELECT ie.id, ie.year, ie.content, ie.rating, ie.created_at,
-                   u.id AS author_id, u.name AS author, 
-                   c.id AS company_id, c.company_name,
+                   u.id AS author_id, COALESCE(u.name, '未知使用者') AS author, 
+                   c.id AS company_id, COALESCE(c.company_name, '未填寫公司') AS company_name,
                    j.id AS job_id, j.title AS job_title
             FROM internship_experiences ie
-            JOIN users u ON ie.user_id = u.id
+            LEFT JOIN users u ON ie.user_id = u.id
             LEFT JOIN internship_companies c ON ie.company_id = c.id
             LEFT JOIN internship_jobs j ON ie.job_id = j.id
             WHERE 1=1
@@ -151,12 +151,26 @@ def get_experience_list():
                 e['year'] = None
 
         # 記錄查詢結果數量（用於除錯）
-        print(f"[心得列表] 查詢條件: keyword={keyword}, year={year}, company_id={company_id}, 結果數量: {len(experiences)}")
+        client_ip = request.remote_addr
+        print(f"[心得列表] IP={client_ip}, 查詢條件: keyword={keyword}, year={year}, company_id={company_id}, 結果數量: {len(experiences)}")
+        
+        # 如果沒有資料，記錄更多資訊
+        if len(experiences) == 0:
+            # 檢查資料庫中是否有任何心得
+            cursor.execute("SELECT COUNT(*) as total FROM internship_experiences")
+            total_count = cursor.fetchone()
+            print(f"[心得列表] 資料庫中心得總數: {total_count.get('total', 0) if total_count else 0}")
         
         return jsonify({
             "success": True, 
             "data": experiences,
-            "count": len(experiences)
+            "count": len(experiences),
+            "debug": {
+                "keyword": keyword,
+                "year": year,
+                "company_id": company_id,
+                "client_ip": client_ip
+            }
         })
     except Exception as e:
         error_msg = f"取得心得列表時發生錯誤: {str(e)}"
