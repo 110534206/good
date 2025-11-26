@@ -35,7 +35,7 @@
   </style>
 </head>
 
-<body>
+<body data-user-id="{{ user_id or 0 }}" data-initial-company-id="{{ initial_company_id or '' }}">
   <div class="hero-bar">
     <h1>實習心得分享</h1>
   </div>
@@ -128,7 +128,9 @@
               <textarea class="form-control" id="content" rows="5" required></textarea>
             </div>
 
-            <button type="submit" class="btn btn-success">送出</button>
+            <div class="d-flex justify-content-end">
+              <button type="submit" class="btn btn-success px-4">送出</button>
+            </div>
           </form>
         </div>
       </div>
@@ -138,10 +140,10 @@
 
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
   <script>
-    // 從後端注入目前登入者與指定公司 (若有)
-    window.USER_ID = {{ (user_id or 0)|tojson }};
-    window.INITIAL_COMPANY_ID = {{ (initial_company_id or '')|tojson }};
-    let selectedCompanyId = window.INITIAL_COMPANY_ID || '';
+    // 從 body data 屬性注入目前登入者與指定公司 (若有)
+    const USER_ID = Number(document.body.dataset.userId || 0);
+    const INITIAL_COMPANY_ID = document.body.dataset.initialCompanyId || '';
+    let selectedCompanyId = INITIAL_COMPANY_ID || '';
     let hasPrefilledFormCompany = false;
     let hasPrefilledFilterCompany = false;
 
@@ -266,18 +268,16 @@
           const card = document.createElement('div');
           card.className = 'col-md-4';
           card.innerHTML = `
-            <div class="card p-3">
+            <div class="card p-3 position-relative">
               <div class="card-body">
                 <h6>${company} ${job}</h6>
                 <p class="text-muted mb-2">${yearText} 年 ｜ 評分 ${rating} ⭐</p>
                 <p class="small text-truncate">${(item.content || '').slice(0, 200)}</p>
-                <div class="mt-2 d-flex justify-content-between">
-                  <div>
-                    <button class="btn btn-outline-primary btn-sm" onclick="viewExp(${item.id})">查看</button>
-                  </div>
-                  <div>
-                    ${item.author_id && item.author_id === Number(window.USER_ID || 0) ? `<button class="btn btn-danger btn-sm" onclick="deleteExp(${item.id})">刪除</button>` : ''}
-                  </div>
+                <div class="mt-3 d-flex justify-content-between align-items-center">
+                  <button class="btn btn-outline-primary btn-sm" onclick="viewExp(${item.id})">查看</button>
+                  ${item.author_id && item.author_id === Number(USER_ID || 0) ? `
+                    <button class="btn btn-danger btn-sm" onclick="deleteExp(${item.id})">刪除</button>
+                  ` : ''}
                 </div>
               </div>
             </div>`;
@@ -339,15 +339,124 @@
 
     // 刪除心得（按鈕出現在自己的心得卡片）
     async function deleteExp(id) {
-      if (!confirm('確定要刪除此心得？')) return;
+      const confirmed = await showConfirmModal(
+        '刪除心得',
+        '確定要刪除此心得？',
+        '#dc2626',
+        '#dc2626'
+      );
+      if (!confirmed) return;
+
       const res = await fetch(`/intern_experience/api/delete/${id}`, { method: 'DELETE' });
       const data = await res.json();
       if (data.success) {
-        alert('已刪除');
+        await showResultModal('刪除心得', '心得已刪除。');
         loadExperiences();
       } else {
-        alert('刪除失敗：' + data.message);
+        await showResultModal('刪除心得', '刪除失敗：' + data.message);
       }
+    }
+
+    function showConfirmModal(title, message, okColor = '#1d4ed8', okBorderColor = '#1d4ed8') {
+      return new Promise((resolve) => {
+        let modalEl = document.getElementById('confirmModal');
+        if (!modalEl) {
+          modalEl = document.createElement('div');
+          modalEl.innerHTML = `
+            <div class="modal fade" id="confirmModal" tabindex="-1">
+              <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content" style="border-radius: 18px; border:none; padding:20px 24px;">
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"
+                    style="position:absolute; top:18px; right:18px;"></button>
+                  <div class="modal-header border-0 pb-0">
+                    <h5 class="modal-title" id="confirmModalTitle"></h5>
+                  </div>
+                  <div class="modal-body pt-2">
+                    <p id="confirmModalMessage"></p>
+                  </div>
+                  <div class="modal-footer border-0 d-flex justify-content-end gap-2">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="button" class="btn btn-primary" id="confirmModalOkBtn">確定</button>
+                  </div>
+                </div>
+              </div>
+            </div>`;
+          document.body.appendChild(modalEl);
+        }
+
+        document.getElementById('confirmModalTitle').textContent = title;
+        document.getElementById('confirmModalMessage').textContent = message;
+        const okBtn = document.getElementById('confirmModalOkBtn');
+        okBtn.style.background = okColor;
+        okBtn.style.borderColor = okBorderColor;
+
+        const modal = new bootstrap.Modal(document.getElementById('confirmModal'));
+        modal.show();
+
+        const cancelBtn = document.querySelector('#confirmModal .btn-secondary');
+
+        const cleanup = () => {
+          okBtn.removeEventListener('click', onOk);
+          cancelBtn.removeEventListener('click', onCancel);
+        };
+
+        const onOk = () => {
+          cleanup();
+          modal.hide();
+          resolve(true);
+        };
+
+        const onCancel = () => {
+          cleanup();
+          modal.hide();
+          resolve(false);
+        };
+
+        okBtn.addEventListener('click', onOk);
+        cancelBtn.addEventListener('click', onCancel);
+      });
+    }
+
+    function showResultModal(title, message) {
+      return new Promise((resolve) => {
+        let modalEl = document.getElementById('resultModal');
+        if (!modalEl) {
+          modalEl = document.createElement('div');
+          modalEl.innerHTML = `
+            <div class="modal fade" id="resultModal" tabindex="-1">
+              <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content" style="border-radius: 18px; border:none; padding:20px 24px;">
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"
+                    style="position:absolute; top:18px; right:18px;"></button>
+                  <div class="modal-header border-0 pb-0">
+                    <h5 class="modal-title" id="resultModalTitle"></h5>
+                  </div>
+                  <div class="modal-body pt-2">
+                    <p id="resultModalMessage"></p>
+                  </div>
+                  <div class="modal-footer border-0 d-flex justify-content-end">
+                    <button type="button" class="btn btn-danger" id="resultModalOkBtn" style="background:#dc2626; border:none;">確定</button>
+                  </div>
+                </div>
+              </div>
+            </div>`;
+          document.body.appendChild(modalEl);
+        }
+
+        document.getElementById('resultModalTitle').textContent = title;
+        document.getElementById('resultModalMessage').textContent = message;
+
+        const modal = new bootstrap.Modal(document.getElementById('resultModal'));
+        modal.show();
+
+        const okBtn = document.getElementById('resultModalOkBtn');
+        const onOk = () => {
+          okBtn.removeEventListener('click', onOk);
+          modal.hide();
+          resolve();
+        };
+        okBtn.addEventListener('click', onOk);
+      });
     }
 
     // 新增心得送出
@@ -368,12 +477,17 @@
       });
       const data = await res.json();
       if (data.success) {
-        alert('心得上傳成功！');
+        const addModalEl = document.getElementById('addModal');
+        const addModalInstance = bootstrap.Modal.getInstance(addModalEl);
         document.getElementById('addForm').reset();
-        bootstrap.Modal.getInstance(document.getElementById('addModal')).hide();
-        loadExperiences();
+        addModalInstance?.hide();
+
+        setTimeout(async () => {
+          await showResultModal('新增心得', '心得上傳成功！');
+          loadExperiences();
+        }, 250);
       } else {
-        alert('上傳失敗：' + data.message);
+        await showResultModal('新增心得', '上傳失敗：' + data.message);
       }
     });
 

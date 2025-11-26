@@ -1,7 +1,7 @@
 from flask import Blueprint, request, jsonify, session, render_template, redirect, url_for
 from config import get_db
 import traceback
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 
 intern_exp_bp = Blueprint('intern_exp_bp', __name__, url_prefix='/intern_experience')
 
@@ -143,12 +143,24 @@ def get_experience_list():
         cursor.execute(query, params)
         experiences = cursor.fetchall()
 
+        taiwan_tz = timezone(timedelta(hours=8))
+
         # 確保 year 為 int（並以民國年輸出）
         for e in experiences:
             try:
                 e['year'] = int(e['year']) if e.get('year') is not None else None
             except:
                 e['year'] = None
+
+            created_at = e.get('created_at')
+            if isinstance(created_at, datetime):
+                e['created_at'] = created_at.astimezone(taiwan_tz).strftime("%Y-%m-%d %H:%M")
+            elif created_at:
+                try:
+                    parsed = datetime.fromisoformat(str(created_at))
+                    e['created_at'] = parsed.astimezone(taiwan_tz).strftime("%Y-%m-%d %H:%M")
+                except:
+                    e['created_at'] = str(created_at)
 
         # 記錄查詢結果數量（用於除錯）
         client_ip = request.remote_addr
@@ -206,6 +218,18 @@ def view_experience(exp_id):
                 exp['year'] = int(exp['year']) if exp.get('year') is not None else None
             except:
                 exp['year'] = None
+
+            taiwan_tz = timezone(timedelta(hours=8))
+            created_at = exp.get('created_at')
+            if isinstance(created_at, datetime):
+                exp['created_at'] = created_at.astimezone(taiwan_tz).strftime("%Y-%m-%d %H:%M")
+            elif created_at:
+                try:
+                    parsed = datetime.fromisoformat(str(created_at))
+                    exp['created_at'] = parsed.astimezone(taiwan_tz).strftime("%Y-%m-%d %H:%M")
+                except:
+                    exp['created_at'] = str(created_at)
+
         return jsonify({"success": True, "data": exp})
     except Exception as e:
         print(traceback.format_exc())
