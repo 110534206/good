@@ -878,7 +878,6 @@ def export_preferences_excel():
         class_id = class_info['class_id']
         class_name = class_info['class_name']
 
-<<<<<<< HEAD
         # 取得當前學期ID
         current_semester_id = get_current_semester_id(cursor)
 
@@ -919,23 +918,6 @@ def export_preferences_excel():
                   AND sp.status = 'approved'
                 ORDER BY u.name, sp.preference_order
             """, (class_id,))
-=======
-        # 查詢班上學生及其志願（只查詢已通過的志願序）
-        cursor.execute("""
-            SELECT 
-                u.id AS student_id,
-                u.name AS student_name,
-                u.username AS student_number, 
-                sp.preference_order,
-                ic.company_name,
-                sp.submitted_at
-            FROM users u
-            LEFT JOIN student_preferences sp ON u.id = sp.student_id AND sp.status = 'approved'
-            LEFT JOIN internship_companies ic ON sp.company_id = ic.id
-            WHERE u.class_id = %s AND u.role = 'student'
-            ORDER BY u.name, sp.preference_order
-        """, (class_id,))
->>>>>>> a05928da05af32d1c54636f89b4dcb0143e5ceda
         results = cursor.fetchall()
 
         # 創建 Excel 工作簿
