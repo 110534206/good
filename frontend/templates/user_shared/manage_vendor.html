@@ -32,6 +32,7 @@
       background: var(--color-bg);
       color: var(--color-text);
       margin: 0;
+      padding: 0;
       min-height: 100vh;
     }
 
@@ -112,7 +113,7 @@
     }
 
     main.management-container {
-      padding: 96px 0 64px;
+      padding: 32px 0 64px;
     }
 
     .page-header {
@@ -144,6 +145,26 @@
       letter-spacing: 0.12em;
       color: var(--color-primary);
       font-weight: 600;
+    }
+
+    .page-title-banner {
+      background-color: #024689;
+      color: #ffffff;
+      text-align: center;
+      padding: 20px 32px;
+      margin: 0;
+      border-radius: 0;
+      width: 100%;
+      box-sizing: border-box;
+      box-shadow: 0 2px 8px rgba(15, 23, 42, 0.1);
+      position: relative;
+    }
+
+    .page-title-banner h1 {
+      margin: 0;
+      font-size: 1.8rem;
+      font-weight: 600;
+      color: #ffffff;
     }
 
     .summary-section-header {
@@ -352,6 +373,15 @@
         font-size: 1.5rem;
       }
 
+      .page-title-banner {
+        padding: 16px 24px;
+        margin: 0 0 24px 0;
+      }
+
+      .page-title-banner h1 {
+        font-size: 1.4rem;
+      }
+
       .panel {
         padding: 20px;
       }
@@ -368,33 +398,11 @@
 </head>
 
 <body>
-  <div class="top-bar">
-    <div class="container">
-      <div class="top-bar-left">
-      </div>
-      <div class="top-bar-right">
-        <a href="/profile">
-          <img src="{{ url_for('static', filename='images/avatar.png') }}" alt="頭像" id="login-avatar" />
-        </a>
-        <div class="dropdown" style="position: relative;">
-          <button id="accountDropdownBtn" class="btn-link" aria-expanded="false">帳號 ▾</button>
-          <div id="accountDropdownMenu" class="dropdown-menu"
-            style="position:absolute; right:0; top:120%; background:#fff; border:1px solid #ccc; border-radius:10px; padding:8px; min-width:180px; display:none; box-shadow:0 12px 28px rgba(15,23,42,0.16);">
-            <a href="/profile" class="btn-link" style="display:block; border:none; margin:4px 0;">個人資料</a>
-            <a href="/logout" class="btn-link" style="display:block; border:none; margin:4px 0;">登出</a>
-          </div>
-        </div>
-      </div>
-    </div>
+  <div class="page-title-banner">
+    <h1>實習廠商管理</h1>
   </div>
 
-
-
   <main class="management-container container">
-    <div>
-      <h1>實習廠商管理</h1>
-    </div>
-
     <section aria-label="廠商捷徑">
       <div class="summary-grid" id="companySummaryGrid">
         <article class="summary-card summary-card--sky disabled">
@@ -465,6 +473,7 @@
           if (!companiesByAdvisor[advisorId]) {
             companiesByAdvisor[advisorId] = {
               advisor_user_id: advisorId,
+              advisor_name: company.advisor_name || null,
               companies: []
             };
           }
@@ -487,6 +496,7 @@
             // 有公司的情況：顯示一個卡片，內含所有公司
             cards.push(renderCardGroup({
               advisor_user_id: advisorId,
+              advisor_name: group.advisor_name,
               companies: group.companies,
               color: colors[colorIndex]
             }));
@@ -510,10 +520,10 @@
         container.innerHTML = cards.join('');
         initPlaceholderListener();
 
-        function renderCardGroup({ advisor_user_id, companies, color }) {
+        function renderCardGroup({ advisor_user_id, advisor_name, companies, color }) {
           const advisorLabel = advisor_user_id === 'unassigned' 
             ? '未分配指導老師' 
-            : `指導老師 ID: ${escapeHtml(advisor_user_id)}`;
+            : (advisor_name ? escapeHtml(advisor_name) : `指導老師 ID: ${escapeHtml(advisor_user_id)}`);
           const companiesList = companies.map(company => {
             const companyName = escapeHtml(company.name || `公司 #${company.id}`);
             return `
@@ -538,7 +548,6 @@
             <article class="summary-card summary-card--${color}">
               <div class="summary-card-content">
                 <div class="summary-card-title">
-                  <span>company</span>
                   <h3>${advisorLabel}</h3>
                 </div>
                 <p class="summary-card-note">${advisor_user_id === 'unassigned' ? '尚未分配指導老師的廠商' : '由該指導老師負責的廠商'}</p>
@@ -583,7 +592,6 @@
           const content = `
             <div class="summary-card-content">
               <div class="summary-card-title">
-                <span>${company && company.id ? 'company' : 'placeholder'}</span>
                 <h3>${title}</h3>
               </div>
               <p class="summary-card-note">${escapeHtml(note)}</p>
@@ -652,44 +660,7 @@
         }
       }
 
-      function initAccountDropdown() {
-        const btn = document.getElementById('accountDropdownBtn');
-        const menu = document.getElementById('accountDropdownMenu');
-        if (!btn || !menu) return;
-        btn.addEventListener('click', () => {
-          const open = menu.style.display === 'block';
-          menu.style.display = open ? 'none' : 'block';
-          btn.setAttribute('aria-expanded', String(!open));
-        });
-        document.addEventListener('click', (event) => {
-          if (!menu.contains(event.target) && !btn.contains(event.target)) {
-            menu.style.display = 'none';
-            btn.setAttribute('aria-expanded', 'false');
-          }
-        });
-      }
-
-      function loadAvatar() {
-        fetch('/api/profile', { credentials: 'include' })
-          .then((res) => res.ok ? res.json() : Promise.reject())
-          .then((data) => {
-            if (data && data.success && data.user && data.user.avatar_url) {
-              const rawUrl = data.user.avatar_url.startsWith('http')
-                ? data.user.avatar_url
-                : window.location.origin + data.user.avatar_url;
-              const avatarUrl = `${rawUrl}${rawUrl.includes('?') ? '&' : '?'}t=${Date.now()}`;
-              const avatar = document.getElementById('login-avatar');
-              if (avatar) {
-                avatar.src = avatarUrl;
-              }
-            }
-          })
-          .catch(() => { /* ignore avatar errors */ });
-      }
-
       function init() {
-        initAccountDropdown();
-        loadAvatar();
         renderCompanyShortcuts();
         loadCompanies();
       }

@@ -642,13 +642,14 @@ def get_public_positions():
             company_params.append(user_id)
         
         cursor.execute(f"""
-            SELECT DISTINCT ic.id, ic.company_name, ic.advisor_user_id
+            SELECT DISTINCT ic.id, ic.company_name, ic.advisor_user_id, u.name AS advisor_name
             FROM internship_companies ic
+            LEFT JOIN users u ON ic.advisor_user_id = u.id
             WHERE {company_where_clause}
             ORDER BY ic.company_name
         """, tuple(company_params))
         companies = cursor.fetchall() or []
-        companies_payload = [{"id": c["id"], "name": c["company_name"], "advisor_user_id": c["advisor_user_id"]} for c in companies]
+        companies_payload = [{"id": c["id"], "name": c["company_name"], "advisor_user_id": c["advisor_user_id"], "advisor_name": c.get("advisor_name")} for c in companies]
         
         # 統計資訊
         stats = {
