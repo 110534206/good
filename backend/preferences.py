@@ -878,7 +878,7 @@ def export_preferences_excel():
         class_id = class_info['class_id']
         class_name = class_info['class_name']
 
-        # 查詢班上學生及其志願
+        # 查詢班上學生及其志願（只查詢已通過的志願序）
         cursor.execute("""
             SELECT 
                 u.id AS student_id,
@@ -888,7 +888,7 @@ def export_preferences_excel():
                 ic.company_name,
                 sp.submitted_at
             FROM users u
-            LEFT JOIN student_preferences sp ON u.id = sp.student_id
+            LEFT JOIN student_preferences sp ON u.id = sp.student_id AND sp.status = 'approved'
             LEFT JOIN internship_companies ic ON sp.company_id = ic.id
             WHERE u.class_id = %s AND u.role = 'student'
             ORDER BY u.name, sp.preference_order
