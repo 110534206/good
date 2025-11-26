@@ -171,6 +171,64 @@
       background-color: #fff3cd;
       color: #856404;
     }
+
+    /* 退件確認樣式 */
+    .modal-confirm .modal-content {
+      border-radius: 18px;
+      border: none;
+      padding: 24px 28px;
+      box-shadow: 0 18px 45px rgba(15, 23, 42, 0.2);
+    }
+
+    .modal-confirm .modal-title {
+      font-size: 1.1rem;
+      font-weight: 700;
+      margin-bottom: 0;
+    }
+
+    .modal-confirm .modal-body p {
+      margin-bottom: 0;
+      color: #4b5563;
+    }
+
+    .modal-confirm .modal-footer {
+      border: none;
+      justify-content: flex-end;
+      gap: 10px;
+    }
+
+    .modal-confirm .btn-secondary {
+      background: #f3f4f6;
+      color: #475467;
+      border: none;
+      font-weight: 600;
+      padding: 8px 18px;
+    }
+
+    .modal-confirm .btn-danger {
+      background: #e02424;
+      border: none;
+      font-weight: 700;
+      padding: 8px 20px;
+    }
+
+    .modal-confirm .btn-primary {
+      background: #16a34a;
+      border: none;
+      font-weight: 700;
+      padding: 8px 20px;
+    }
+
+    .modal-confirm .btn-danger:focus,
+    .modal-confirm .btn-secondary:focus {
+      box-shadow: none;
+    }
+
+    .modal-confirm .btn-close {
+      position: absolute;
+      top: 18px;
+      right: 18px;
+    }
   </style>
 </head>
 
@@ -184,23 +242,83 @@
         </div>
       </div>
 
-  <!-- 退件原因輸入模態框 -->
-  <div class="modal fade" id="rejectModal" tabindex="-1" aria-labelledby="rejectModalLabel" aria-hidden="true">
-    <div class="modal-dialog">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h5 class="modal-title" id="rejectModalLabel">退件原因</h5>
-          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+  <!-- 退件確認模態框 -->
+  <div class="modal fade modal-confirm" id="rejectModal" tabindex="-1" aria-labelledby="rejectModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content position-relative">
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        <div class="modal-header border-0 pb-0">
+          <h5 class="modal-title" id="rejectModalLabel">志願序退件提醒</h5>
         </div>
-        <div class="modal-body">
-          <div class="mb-3">
-            <label for="rejectReason" class="form-label">請填寫退件原因：</label>
-            <textarea class="form-control" id="rejectReason" rows="4" placeholder="請說明為何退件此志願序..."></textarea>
-          </div>
+        <div class="modal-body pt-2">
+          <p>
+            即將把 <strong id="rejectStudentName"></strong> 的志願序標記為退件，
+            並立即通知學生。
+          </p>
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
           <button type="button" class="btn btn-danger" id="confirmRejectBtn">確認退件</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 退件結果通知 -->
+  <div class="modal fade modal-confirm" id="resultModal" tabindex="-1" aria-labelledby="resultModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content position-relative">
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        <div class="modal-header border-0 pb-0">
+          <h5 class="modal-title" id="resultModalLabel">志願序退件提醒</h5>
+        </div>
+        <div class="modal-body pt-2">
+          <p id="resultModalMessage">志願序已標記為退件，已通知學生。</p>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+          <button type="button" class="btn btn-danger" id="resultOkBtn">確定</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 通過確認模態框 -->
+  <div class="modal fade modal-confirm" id="approveModal" tabindex="-1" aria-labelledby="approveModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content position-relative">
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        <div class="modal-header border-0 pb-0">
+          <h5 class="modal-title" id="approveModalLabel">志願序通過提醒</h5>
+        </div>
+        <div class="modal-body pt-2">
+          <p>
+            即將把 <strong id="approveStudentName"></strong> 的志願序標記為審核通過，
+            並立即通知學生。請再確認一次。
+          </p>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+          <button type="button" class="btn btn-primary" id="confirmApproveBtn">確認通過</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 通過結果通知 -->
+  <div class="modal fade modal-confirm" id="approveResultModal" tabindex="-1" aria-labelledby="approveResultModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content position-relative">
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        <div class="modal-header border-0 pb-0">
+          <h5 class="modal-title" id="approveResultModalLabel">志願序通過提醒</h5>
+        </div>
+        <div class="modal-body pt-2">
+          <p id="approveResultMessage">志願序已標記為審核通過，並立即通知學生。</p>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+          <button type="button" class="btn btn-primary" id="approveResultOkBtn">確定</button>
         </div>
       </div>
     </div>
@@ -232,8 +350,9 @@
     </div>
 
     {% if student_data %}
+    <div class="d-flex flex-column align-items-center gap-3">
     {% for student_name, student_info in student_data.items() %}
-    <div class="student-section" data-student-id="{{ student_info.student_id }}" data-student-name="{{ student_name }}">
+    <div class="student-section w-100" data-student-id="{{ student_info.student_id }}" data-student-name="{{ student_name }}" style="max-width: 1100px;">
       <div class="d-flex justify-content-between align-items-center mb-3">
         <h3>{{ student_name }}</h3>
         <div class="btn-group">
@@ -277,11 +396,13 @@
       </div>
     </div>
     {% endfor %}
+    </div>
     {% else %}
     <p class="text-muted text-center">目前尚無學生填寫志願。</p>
     {% endif %}
   </div>
 
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <script>
     // 學生查詢功能
@@ -508,29 +629,27 @@
 
     // 通過志願序
     function approvePreferences(studentId, studentName) {
-      if (!confirm('確定要將 ' + studentName + ' 的志願序標記為審核通過嗎？')) return;
+      currentStudentId = studentId;
+      currentStudentName = studentName;
 
-      fetch('/api/review_preferences', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          student_id: studentId,
-          status: 'approved'
-        })
-      })
-      .then(res => res.json())
-      .then(data => {
-        if (data.success) {
-          alert('✅ 志願序已標記為審核通過');
-          location.reload();
-        } else {
-          alert('標記失敗：' + data.message);
-        }
-      })
-      .catch(error => {
-        console.error('Approve error:', error);
-        alert('通過失敗，網路錯誤或 API 錯誤。');
-      });
+      const nameElement = document.getElementById('approveStudentName');
+      if (nameElement) {
+        nameElement.textContent = studentName;
+      }
+
+      const modalElement = document.getElementById('approveModal');
+      if (!modalElement) {
+        alert('無法開啟通過視窗，請重新整理頁面');
+        return;
+      }
+
+      try {
+        const approveModal = new bootstrap.Modal(modalElement);
+        approveModal.show();
+      } catch (error) {
+        console.error('顯示模態框時發生錯誤:', error);
+        alert('無法開啟通過視窗，請確認 Bootstrap 已正確載入');
+      }
     }
 
     // 退件志願序
@@ -538,43 +657,49 @@
       currentStudentId = studentId;
       currentStudentName = studentName;
       
-      // 清空退件原因輸入框
-      document.getElementById('rejectReason').value = '';
+      // 更新模態框中的學生姓名
+      const studentNameElement = document.getElementById('rejectStudentName');
+      if (studentNameElement) {
+        studentNameElement.textContent = studentName;
+      }
       
       // 顯示模態框
-      const rejectModal = new bootstrap.Modal(document.getElementById('rejectModal'));
-      rejectModal.show();
+      const modalElement = document.getElementById('rejectModal');
+      if (!modalElement) {
+        alert('無法開啟退件視窗，請重新整理頁面');
+        return;
+      }
+      
+      try {
+        const rejectModal = new bootstrap.Modal(modalElement);
+        rejectModal.show();
+      } catch (error) {
+        console.error('顯示模態框時發生錯誤:', error);
+        alert('無法開啟退件視窗，請確認 Bootstrap 已正確載入');
+      }
     }
 
-    // 綁定通過按鈕事件
-    document.querySelectorAll('.approve-btn').forEach(btn => {
-      btn.addEventListener('click', function() {
-        const studentId = parseInt(this.getAttribute('data-student-id'));
-        const studentName = this.getAttribute('data-student-name');
+    // 使用事件委派綁定通過和退件按鈕事件（確保動態內容也能觸發）
+    document.addEventListener('click', function(e) {
+      // 處理通過按鈕
+      if (e.target.closest('.approve-btn')) {
+        const btn = e.target.closest('.approve-btn');
+        const studentId = parseInt(btn.getAttribute('data-student-id'));
+        const studentName = btn.getAttribute('data-student-name');
         approvePreferences(studentId, studentName);
-      });
-    });
-
-    // 綁定退件按鈕事件
-    document.querySelectorAll('.reject-btn').forEach(btn => {
-      btn.addEventListener('click', function() {
-        const studentId = parseInt(this.getAttribute('data-student-id'));
-        const studentName = this.getAttribute('data-student-name');
+      }
+      
+      // 處理退件按鈕
+      if (e.target.closest('.reject-btn')) {
+        const btn = e.target.closest('.reject-btn');
+        const studentId = parseInt(btn.getAttribute('data-student-id'));
+        const studentName = btn.getAttribute('data-student-name');
         rejectPreferences(studentId, studentName);
-      });
+      }
     });
 
     // 確認退件
     document.getElementById('confirmRejectBtn')?.addEventListener('click', function() {
-      const reason = document.getElementById('rejectReason').value.trim();
-      
-      if (!reason) {
-        alert('請填寫退件原因');
-        return;
-      }
-
-      if (!confirm('確定要將 ' + currentStudentName + ' 的志願序標記為退件嗎？')) return;
-
       const btn = this;
       const originalText = btn.innerHTML;
       btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 處理中...';
@@ -586,15 +711,29 @@
         body: JSON.stringify({
           student_id: currentStudentId,
           status: 'rejected',
-          reason: reason
+          reason: ''
         })
       })
       .then(res => res.json())
       .then(data => {
         if (data.success) {
-          alert('✅ 志願序已標記為退件，已通知學生');
-          bootstrap.Modal.getInstance(document.getElementById('rejectModal')).hide();
-          location.reload();
+          const rejectModalInstance = bootstrap.Modal.getInstance(document.getElementById('rejectModal'));
+          rejectModalInstance?.hide();
+
+          const resultModalEl = document.getElementById('resultModal');
+          const resultModalMessage = document.getElementById('resultModalMessage');
+          const resultOkBtn = document.getElementById('resultOkBtn');
+          if (resultModalEl && resultModalMessage && resultOkBtn) {
+            resultModalMessage.innerHTML = `志願序已標記為退件，並立即通知學生。`;
+            const resultModal = new bootstrap.Modal(resultModalEl);
+            resultModal.show();
+            resultOkBtn.onclick = () => {
+              resultModal.hide();
+              location.reload();
+            };
+          } else {
+            location.reload();
+          }
         } else {
           alert('退件失敗：' + data.message);
           btn.innerHTML = originalText;
@@ -604,6 +743,53 @@
       .catch(error => {
         console.error('Reject error:', error);
         alert('退件失敗，網路錯誤或 API 錯誤。');
+        btn.innerHTML = originalText;
+        btn.disabled = false;
+      });
+    });
+
+    // 確認通過
+    document.getElementById('confirmApproveBtn')?.addEventListener('click', function() {
+      const btn = this;
+      const originalText = btn.innerHTML;
+      btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 處理中...';
+      btn.disabled = true;
+
+      fetch('/api/review_preferences', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          student_id: currentStudentId,
+          status: 'approved'
+        })
+      })
+      .then(res => res.json())
+      .then(data => {
+        if (data.success) {
+          const approveModalInstance = bootstrap.Modal.getInstance(document.getElementById('approveModal'));
+          approveModalInstance?.hide();
+
+          const resultModalEl = document.getElementById('approveResultModal');
+          const resultOkBtn = document.getElementById('approveResultOkBtn');
+          if (resultModalEl && resultOkBtn) {
+            const resultModal = new bootstrap.Modal(resultModalEl);
+            resultModal.show();
+            resultOkBtn.onclick = () => {
+              resultModal.hide();
+              location.reload();
+            };
+          } else {
+            location.reload();
+          }
+        } else {
+          alert('標記失敗：' + data.message);
+          btn.innerHTML = originalText;
+          btn.disabled = false;
+        }
+      })
+      .catch(error => {
+        console.error('Approve error:', error);
+        alert('通過失敗，網路錯誤或 API 錯誤。');
         btn.innerHTML = originalText;
         btn.disabled = false;
       });
