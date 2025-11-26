@@ -811,10 +811,7 @@ def review_preferences_api():
             )
 
         elif status == 'rejected':
-            # 退件：更新所有志願序狀態並記錄退件原因
-            if not reason:
-                return jsonify({"success": False, "message": "退件時必須填寫退件原因"}), 400
-
+            # 退件：更新所有志願序狀態並記錄退件原因（可選）
             cursor.execute("""
                 UPDATE student_preferences 
                 SET status = %s
@@ -822,20 +819,17 @@ def review_preferences_api():
                   AND semester_id = %s
             """, (status, student_id, current_semester_id))
 
-            # 記錄退件原因（可以考慮新增 reject_reason 欄位到 student_preferences，或使用其他方式存儲）
-            # 目前先透過通知發送退件原因
-
             # 發送退件通知
             notification_content = (
                 f"您的實習志願序已被 {reviewer_name} 老師退件。\n\n"
-                f"退件原因：{reason}\n\n"
-                f"請根據老師的建議修改後重新提交。"
+                f"請修改後重新提交。"
             )
             create_notification(
                 user_id=student_id,
                 title="志願序退件通知",
                 message=notification_content,
-                category="preferences"
+                category="preferences",
+                link_url="/fill_preferences"  # 連結到志願填寫頁面，方便學生修改
             )
 
         conn.commit()
