@@ -231,3 +231,5 @@ def send_admission_email(student_email, student_name, company_name, teacher_name
 """
     return send_email(student_email, subject, content)
 
+
+

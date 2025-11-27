@@ -261,38 +261,27 @@
                   缺勤紀錄已儲存，可於下方統計表查看。
                 </div>
                 <div id="absenceRecordContainer">
+                  <!-- 學期選擇器 -->
                   <div class="mb-3">
-                    <label for="absence_date" class="form-label">缺勤日期</label>
-                    <input type="date" class="form-control" id="absence_date" name="absence_date" required>
-                  </div>
-
-                  <div class="mb-3">
-                    <label for="absence_type" class="form-label">缺勤類型</label>
-                    <select class="form-select" id="absence_type" name="absence_type" required>
-                      <option value="">請選擇</option>
-                      <option value="曠課">曠課</option>
-                      <option value="遲到">遲到</option>
-                      <option value="事假">事假</option>
-                      <option value="病假">病假</option>
-                      <option value="生理假">生理假</option>
-                      <option value="公假">公假</option>
-                      <option value="喪假">喪假</option>
+                    <label for="semester_select" class="form-label">選擇學期</label>
+                    <select class="form-select" id="semester_select" name="semester_select">
+                      <option value="">載入中...</option>
                     </select>
+                    <div class="form-text">💡 提示：選擇學期以查看該學期的缺勤記錄。</div>
                   </div>
 
+                  <!-- 缺勤記錄列表（從資料庫讀取） -->
                   <div class="mb-3">
-                    <label for="duration_units" class="form-label">請假/缺勤節數</label>
-                    <input type="number" min="1" class="form-control" id="duration_units" name="duration_units"
-                      required>
-                    <div class="form-text">請輸入缺勤或請假節數 (例如：3節課請輸入 3)。</div>
+                    <label class="form-label">缺勤記錄列表（從資料庫讀取）</label>
+                    <div class="form-text mb-2">💡 提示：以下為您累積的缺勤記錄（日期、類型、節數、事由）。</div>
+                    <div id="absenceRecordsDisplay" class="border rounded p-3" style="max-height: 500px; overflow-y: auto;">
+                      <p class="text-muted text-center">請選擇學期以載入缺勤記錄</p>
+                    </div>
                   </div>
 
+                  <!-- 缺勤統計表格 -->
                   <div class="mb-3">
-                    <label for="reason" class="form-label">事由說明</label>
-                    <textarea class="form-control" id="reason" name="reason" rows="3" required></textarea>
-                  </div>
-                  <div class="mb-3">
-                    <label for="reason" class="form-label">缺勤紀錄統計 (總節數)</label>
+                    <label class="form-label">缺勤紀錄統計 (總節數)</label>
                   </div>
                   <table class="table table-bordered table-sm text-center">
                     <thead class="table-light">
@@ -319,18 +308,13 @@
                     </tbody>
                   </table>
 
-                  <div class="text-start mt-2">
-                    <button type="button" id="updateAbsenceStatsBtn" class="btn btn-warning">
-                      更新缺勤資訊
-                    </button>
-                  </div>
-
                   <div class="mt-3"></div>
 
+                  <!-- 缺勤記錄佐證圖上傳 -->
                   <div class="mb-3">
-                    <label for="proof_image" class="form-label">缺勤記錄佐證圖上傳</label>
+                    <label for="proof_image" class="form-label">缺勤記錄佐證圖上傳（選填）</label>
                     <input class="form-control" type="file" id="proof_image" name="proof_image" accept="image/*">
-                    <div class="form-text">接受圖片檔案 (PNG, JPG, JPEG)。</div>
+                    <div class="form-text">💡 提示：接受圖片檔案 (PNG, JPG, JPEG)。此佐證圖片將用於缺勤記錄。</div>
                   </div>
                 </div>
               </div>
@@ -638,24 +622,27 @@
              <button type="button" class="btn btn-outline-danger btn-sm remove-cert">移除</button>
            </div>
          </div>
-         <div class="col-md-3">
-           <label class="form-label form-label-sm">證照代碼 (選填)</label>
-           <input type="text" class="form-control form-control-sm cert-code-input" 
-                  id="cert_code_${entryId}" placeholder="">
+         <div class="col-md-4">
+           <label class="form-label form-label-sm">發證中心 <span class="text-danger">*</span></label>
+           <select class="form-select form-select-sm cert-authority-select" 
+                  name="cert_authority[]" id="cert_authority_${entryId}" required>
+             <option value="">請選擇發證中心...</option>
+           </select>
          </div>
          <div class="col-md-4">
-           <label class="form-label form-label-sm">證照名稱</label>
-           <input type="text" class="form-control form-control-sm cert-name-input" 
-                  name="cert_names[]" id="cert_name_${entryId}" placeholder="" required>
-         </div>
-         <div class="col-md-3">
-           <label class="form-label form-label-sm">證照類別</label>
-           <select class="form-select form-select-sm cert-category-select" name="cert_type[]" required>
-             <option value="labor">勞動部</option>
-             <option value="intl">國際證照</option>
-             <option value="local">國內證照</option>
-             <option value="other">其他證照</option>
+           <label class="form-label form-label-sm">證照名稱 <span class="text-danger">*</span></label>
+           <select class="form-select form-select-sm cert-certificate-select" 
+                  name="cert_certificate[]" id="cert_certificate_${entryId}" required>
+             <option value="">請先選擇發證中心</option>
            </select>
+           <input type="hidden" class="cert-code-input" name="cert_code[]" id="cert_code_${entryId}">
+           <input type="hidden" class="cert-name-input" name="cert_names[]" id="cert_name_${entryId}">
+           <input type="hidden" class="cert-category-input" name="cert_type[]" id="cert_type_${entryId}">
+         </div>
+         <div class="col-md-4">
+           <label class="form-label form-label-sm">發證人 (選填)</label>
+           <input type="text" class="form-control form-control-sm cert-issuer-input" 
+                  name="cert_issuer[]" id="cert_issuer_${entryId}" placeholder="請輸入發證人姓名">
          </div>
          <div class="col-md-6 col-lg-4">
            <label class="form-label form-label-sm">佐證圖片 (可選)</label>
@@ -678,35 +665,60 @@
       if (!container) return;
 
       const element = createCertificateEntryElement(entryId);
+      const authoritySelect = element.querySelector('.cert-authority-select');
+      const certificateSelect = element.querySelector('.cert-certificate-select');
       const codeInput = element.querySelector('.cert-code-input');
-      // 這裡我們仍然使用 nameInput 作為初始元素，但不再將它傳給 handleCertificateCodeInput
       const nameInput = element.querySelector('.cert-name-input');
-      const categorySelect = element.querySelector('.cert-category-select');
+      const categoryInput = element.querySelector('.cert-category-input');
+      const issuerInput = element.querySelector('.cert-issuer-input');
       const fileInput = element.querySelector('input[type="file"]');
       const removeBtn = element.querySelector('.remove-cert');
       const indexBadge = element.querySelector('.cert-index-badge');
 
-      codeInput.value = prefill.code || '';
-      nameInput.value = prefill.name || '';
-      categorySelect.value = prefill.category || 'labor';
+      // 預填充資料（如果有）
+      if (prefill.authority_id) {
+        authoritySelect.value = prefill.authority_id;
+      }
+      if (prefill.issuer) {
+        issuerInput.value = prefill.issuer;
+      }
 
-      // =========================================================
-      // ❗ 關鍵修正區域：確保事件監聽器能找到當前元素
-      // =========================================================
-      codeInput.addEventListener('input', () => {
-        // 🚨 修正：在每次 'input' 事件發生時，動態查詢當前該列中名稱欄位
-        // 無論它是 <input class="cert-name-input"> 還是 <select name="cert_names[]">
-        const currentNameElement = element.querySelector('.cert-name-input, select[name="cert_names[]"]');
+      // 載入發證中心列表
+      loadCertAuthorities(authoritySelect);
 
-        // 傳入最新獲取到的 DOM 引用
-        if (currentNameElement) {
-          handleCertificateCodeInput(codeInput, currentNameElement, categorySelect);
+      // 發證中心選擇改變時，載入該中心的證照列表
+      authoritySelect.addEventListener('change', async () => {
+        const authorityId = authoritySelect.value;
+        certificateSelect.innerHTML = '<option value="">載入中...</option>';
+        codeInput.value = '';
+        nameInput.value = '';
+        categoryInput.value = '';
+        
+        if (authorityId) {
+          await loadCertificatesByAuthority(authorityId, certificateSelect, codeInput, nameInput, categoryInput);
+        } else {
+          certificateSelect.innerHTML = '<option value="">請先選擇發證中心</option>';
         }
+        saveFormData();
       });
-      // =========================================================
 
-      nameInput.addEventListener('input', saveFormData);
-      categorySelect.addEventListener('change', saveFormData);
+      // 證照選擇改變時，更新隱藏欄位
+      certificateSelect.addEventListener('change', () => {
+        const selectedOption = certificateSelect.options[certificateSelect.selectedIndex];
+        if (selectedOption && selectedOption.value) {
+          codeInput.value = selectedOption.dataset.code || '';
+          nameInput.value = selectedOption.textContent || '';
+          categoryInput.value = selectedOption.dataset.category || 'other';
+        } else {
+          codeInput.value = '';
+          nameInput.value = '';
+          categoryInput.value = '';
+        }
+        saveFormData();
+      });
+
+      // 發證人輸入改變時保存
+      issuerInput.addEventListener('input', saveFormData);
       removeBtn.addEventListener('click', () => removeCertificateEntry(entryId));
 
       container.appendChild(element);
@@ -714,9 +726,12 @@
       certEntries.push({
         id: entryId,
         wrapper: element,
+        authoritySelect,
+        certificateSelect,
         codeInput,
         nameInput, 
-        categorySelect,
+        categoryInput,
+        issuerInput,
         fileInput,
         indexBadge
       });
@@ -734,7 +749,60 @@
       updateCertificateControlsState();
     }
 
-    // 🧩 處理證照代碼輸入：向後端查詢證照名稱和類別 (最終穩定版)
+    // 🧩 載入發證中心列表
+    async function loadCertAuthorities(authoritySelect) {
+      try {
+        const res = await fetch("/api/get_cert_authorities");
+        const result = await res.json();
+        
+        if (result.success && result.authorities) {
+          // 保留第一個選項（請選擇...）
+          const firstOption = authoritySelect.querySelector('option[value=""]');
+          authoritySelect.innerHTML = '';
+          if (firstOption) {
+            authoritySelect.appendChild(firstOption);
+          }
+          
+          // 添加發證中心選項
+          result.authorities.forEach(auth => {
+            const option = document.createElement('option');
+            option.value = auth.id;
+            option.textContent = auth.name;
+            authoritySelect.appendChild(option);
+          });
+        }
+      } catch (error) {
+        console.error("❌ 載入發證中心列表失敗:", error);
+      }
+    }
+
+    // 🧩 根據發證中心載入證照列表
+    async function loadCertificatesByAuthority(authorityId, certificateSelect, codeInput, nameInput, categoryInput) {
+      try {
+        const res = await fetch(`/api/get_certificates_by_authority?authority_id=${encodeURIComponent(authorityId)}`);
+        const result = await res.json();
+        
+        certificateSelect.innerHTML = '<option value="">請選擇證照...</option>';
+        
+        if (result.success && result.certificates) {
+          result.certificates.forEach(cert => {
+            const option = document.createElement('option');
+            option.value = cert.code;
+            option.textContent = cert.name;
+            option.dataset.code = cert.code;
+            option.dataset.category = cert.category || 'other';
+            certificateSelect.appendChild(option);
+          });
+        } else {
+          certificateSelect.innerHTML = '<option value="">該發證中心暫無證照</option>';
+        }
+      } catch (error) {
+        console.error("❌ 載入證照列表失敗:", error);
+        certificateSelect.innerHTML = '<option value="">載入失敗</option>';
+      }
+    }
+
+    // 🧩 處理證照代碼輸入：向後端查詢證照名稱和類別 (保留以兼容舊代碼，但新版本使用下拉選單)
     async function handleCertificateCodeInput(codeInput, currentNameInput, categorySelect) {
       const raw = (codeInput.value || '').toUpperCase().trim();
       codeInput.value = raw;
@@ -848,17 +916,15 @@
 
       // --- 情況 1: 僅剩一筆證照時，清空欄位而非移除整個 wrapper ---
       if (certEntries.length === 1) {
-
-        // 🚨 關鍵步驟：獲取當前正確的名稱元素
-        const currentNameElement = entry.wrapper.querySelector('.cert-name-input, select[name="cert_names[]"]');
-
-        // 1. 強制清空代碼
-        entry.codeInput.value = '';
-
-        // 2. 呼叫 handleCertificateCodeInput：傳入空代碼，該函數會執行：
-        handleCertificateCodeInput(entry.codeInput, currentNameElement, entry.categorySelect);
-
-        // 清除檔案欄位 (如果存在)
+        // 清空所有欄位
+        if (entry.authoritySelect) entry.authoritySelect.value = '';
+        if (entry.certificateSelect) {
+          entry.certificateSelect.innerHTML = '<option value="">請先選擇發證中心</option>';
+        }
+        if (entry.codeInput) entry.codeInput.value = '';
+        if (entry.nameInput) entry.nameInput.value = '';
+        if (entry.categoryInput) entry.categoryInput.value = '';
+        if (entry.issuerInput) entry.issuerInput.value = '';
         if (entry.fileInput) entry.fileInput.value = '';
         saveFormData();
         return;
@@ -900,13 +966,15 @@
           isNotTaken: course.isNotTaken || false
         })),
         certificates: certEntries.map(entry => ({
-          code: entry.codeInput.value.trim(),
-          name: entry.nameInput.value.trim(),
-          category: entry.categorySelect.value
+          authority_id: entry.authoritySelect ? entry.authoritySelect.value : '',
+          code: entry.codeInput ? entry.codeInput.value.trim() : '',
+          name: entry.nameInput ? entry.nameInput.value.trim() : '',
+          category: entry.categoryInput ? entry.categoryInput.value : 'other',
+          issuer: entry.issuerInput ? entry.issuerInput.value.trim() : ''
         }))
       };
 
-      const skip = new Set(["cert_names[]", "cert_type[]", "course_name[]", "course_credits[]"]);
+      const skip = new Set(["cert_names[]", "cert_type[]", "cert_code[]", "course_name[]", "course_credits[]"]);
 
       form.querySelectorAll('input, select, textarea').forEach(input => {
         const name = input.name;
@@ -915,7 +983,11 @@
       });
 
       localStorage.setItem(AUTO_SAVE_KEY, JSON.stringify(data));
-      console.log("💾 表單已自動儲存");
+      console.log("💾 表單已自動儲存", {
+        fieldsCount: Object.keys(data.fields).length,
+        coursesCount: data.courses.length,
+        certificatesCount: data.certificates.length
+      });
     }
 
     function loadFormData() {
@@ -924,6 +996,7 @@
       disableAutoSave = true;
 
       if (!savedDataString) {
+        console.log("📭 LocalStorage 中沒有保存的資料");
         initializeCertificatesUI([]);
         disableAutoSave = false;
         return;
@@ -931,16 +1004,22 @@
 
       try {
         const data = JSON.parse(savedDataString);
+        console.log("📥 從 LocalStorage 載入資料:", data);
         if (data.fields) {
+          let loadedCount = 0;
           Object.entries(data.fields).forEach(([name, value]) => {
             const input = form.querySelector(`[name="${name}"]`);
             if (input) {
               input.value = value;
+              loadedCount++;
               if (name === 'conduct_score_numeric') {
                 input.dispatchEvent(new Event('input'));
               }
+            } else {
+              console.warn(`⚠️ 找不到欄位: ${name}`);
             }
           });
+          console.log(`✅ 成功載入 ${loadedCount} 個欄位`);
         }
 
         let certificateData = [];
@@ -1013,6 +1092,119 @@
     }
 
     // 🧩 載入缺勤統計資料
+    // 🧩 載入學期列表
+    async function loadSemesters() {
+      const semesterSelect = document.getElementById("semester_select");
+      if (!semesterSelect) {
+        console.error('找不到學期選擇器元素');
+        return;
+      }
+
+      try {
+        const res = await fetch("/semester/api/list");
+        
+        if (!res.ok) {
+          throw new Error(`HTTP錯誤: ${res.status} ${res.statusText}`);
+        }
+        
+        const result = await res.json();
+        console.log('學期列表API回應:', result);
+
+        semesterSelect.innerHTML = '<option value="">請選擇學期</option>';
+
+        if (result.success && result.semesters) {
+          if (result.semesters.length === 0) {
+            semesterSelect.innerHTML = '<option value="">暫無學期資料</option>';
+            console.warn('學期列表為空');
+            return;
+          }
+          
+          result.semesters.forEach(semester => {
+            const option = document.createElement("option");
+            option.value = semester.id;
+            option.textContent = `${semester.code}${semester.is_active ? ' (當前學期)' : ''}`;
+            if (semester.is_active) {
+              option.selected = true;
+            }
+            semesterSelect.appendChild(option);
+          });
+
+          // 如果有當前學期，自動載入該學期的缺勤記錄
+          const currentSemester = result.semesters.find(s => s.is_active);
+          if (currentSemester) {
+            await loadSemesterAbsenceRecords(currentSemester.id);
+          }
+        } else {
+          console.error('學期列表API返回失敗:', result.message || '未知錯誤');
+          semesterSelect.innerHTML = `<option value="">載入失敗: ${result.message || '未知錯誤'}</option>`;
+        }
+      } catch (error) {
+        console.error('載入學期列表失敗:', error);
+        semesterSelect.innerHTML = `<option value="">載入失敗: ${error.message}</option>`;
+      }
+    }
+
+    // 🧩 載入指定學期的缺勤記錄
+    async function loadSemesterAbsenceRecords(semesterId) {
+      if (!semesterId) {
+        document.getElementById("absenceRecordsDisplay").innerHTML = '<p class="text-muted text-center">請選擇學期</p>';
+        return;
+      }
+
+      const displayDiv = document.getElementById("absenceRecordsDisplay");
+      displayDiv.innerHTML = '<p class="text-muted text-center">載入中...</p>';
+
+      try {
+        const res = await fetch(`/api/get_semester_absence_records?semester_id=${semesterId}`);
+        const result = await res.json();
+
+        if (result.success && result.records) {
+          const records = result.records;
+          const stats = result.stats || {};
+
+          // 更新統計表格
+          const orderedKeys = ["曠課", "遲到", "事假", "病假", "生理假", "公假", "喪假"];
+          orderedKeys.forEach(key => {
+            const statElement = document.getElementById(`stat_${key}`);
+            if (statElement) {
+              statElement.textContent = stats[key] || 0;
+            }
+          });
+
+          // 顯示缺勤記錄列表（只顯示日期、類型、節數、事由）
+          if (records.length === 0) {
+            displayDiv.innerHTML = '<p class="text-muted text-center">該學期無缺勤記錄</p>';
+          } else {
+            let html = '<div class="table-responsive">';
+            html += '<table class="table table-sm table-bordered align-middle">';
+            html += '<thead class="table-light"><tr><th>日期</th><th>類型</th><th>節數</th><th>事由</th></tr></thead>';
+            html += '<tbody>';
+            records.forEach((record, index) => {
+              const date = record.absence_date || '';
+              const type = record.absence_type || '';
+              const units = record.duration_units || 0;
+              const reason = record.reason || '';
+              
+              html += `<tr>
+                <td>${date}</td>
+                <td>${type}</td>
+                <td>${units} 節</td>
+                <td>${reason}</td>
+              </tr>`;
+            });
+            html += '</tbody></table>';
+            html += '</div>';
+            displayDiv.innerHTML = html;
+          }
+        } else {
+          displayDiv.innerHTML = '<p class="text-danger text-center">載入失敗</p>';
+        }
+      } catch (error) {
+        console.error('載入缺勤記錄失敗:', error);
+        displayDiv.innerHTML = '<p class="text-danger text-center">載入失敗</p>';
+      }
+    }
+
     async function loadAbsenceStats() {
       const statsBody = document.getElementById("absenceStatsBody");
 
@@ -1027,7 +1219,10 @@
       });
 
       try {
-        const res = await fetch("/api/get_absence_stats");
+        const semesterSelect = document.getElementById("semester_select");
+        const semesterId = semesterSelect ? semesterSelect.value : null;
+        const url = semesterId ? `/api/get_absence_stats?semester_id=${semesterId}` : "/api/get_absence_stats";
+        const res = await fetch(url);
         const result = await res.json();
 
         if (result.success && result.stats) {
@@ -1097,8 +1292,34 @@
         listBody.innerHTML = '<tr><td colspan="5" class="text-danger">列表載入失敗</td></tr>';
       }
     }
-    // 🧩 更新缺勤統計（不寫入資料庫、不清空欄位）
-    document.getElementById('updateAbsenceStatsBtn').addEventListener('click', function (e) {
+    // 🧩 學期選擇器事件監聽
+    document.addEventListener('DOMContentLoaded', function() {
+      const semesterSelect = document.getElementById('semester_select');
+      if (semesterSelect) {
+        semesterSelect.addEventListener('change', function() {
+          const semesterId = this.value;
+          if (semesterId) {
+            loadSemesterAbsenceRecords(semesterId);
+          } else {
+            document.getElementById("absenceRecordsDisplay").innerHTML = '<p class="text-muted text-center">請選擇學期</p>';
+            // 重置統計表格
+            const orderedKeys = ["曠課", "遲到", "事假", "病假", "生理假", "公假", "喪假"];
+            orderedKeys.forEach(key => {
+              const statElement = document.getElementById(`stat_${key}`);
+              if (statElement) {
+                statElement.textContent = 0;
+              }
+            });
+          }
+        });
+      }
+    });
+
+    // 🧩 更新缺勤統計（已廢棄，現在從資料庫讀取）
+    // 注意：此按鈕已從 HTML 中移除，但保留此代碼以防其他地方引用
+    const updateAbsenceStatsBtn = document.getElementById('updateAbsenceStatsBtn');
+    if (updateAbsenceStatsBtn) {
+      updateAbsenceStatsBtn.addEventListener('click', function (e) {
       e.preventDefault();
 
       const btn = this;
@@ -1175,48 +1396,14 @@
       }
 
 
-      // ⭐ 寫入統計資料給後端
+      // ⭐ 寫入統計資料到隱藏欄位（供最終提交時使用）
       const statsInput = document.getElementById("absence_stats_json");
       if (statsInput) {
         statsInput.value = JSON.stringify(absenceStats);
       }
 
-      // 8. 清空圖片輸入
-      proof_image_input.value = '';
-
-      // ⭐⭐⭐ 最重要：送出資料給後端 ⭐⭐⭐
-      const formData = new FormData();
-      formData.append("absence_date", absence_date);
-      formData.append("absence_type", absence_type);
-      formData.append("duration_units", duration_units_int);
-      formData.append("reason", reason);
-      formData.append("absence_stats_json", JSON.stringify(absenceStats));
-      formData.append("absence_records_json", JSON.stringify(allAbsenceRecords));
-      formData.append("proof_image", document.getElementById('proof_image').files[0])
-
-      if (proof_image_file) {
-        formData.append("proof_image", proof_image_file);
-      }
-
-      fetch("/api/submit_absence_record", {
-        method: "POST",
-        body: formData
-      })
-        .then(res => res.json())
-        .then(data => {
-          if (data.success) {
-            console.log("缺勤紀錄成功寫入資料庫");
-            loadAbsenceStats();
-            loadAbsenceRecordsList();
-          } else {
-            alert("缺勤紀錄提交失敗：" + data.message);
-          }
-        })
-        .catch(err => {
-          console.error("提交缺勤紀錄錯誤:", err);
-          alert("提交缺勤紀錄至伺服器時發生錯誤");
-        });
-
+      // ⚠️ 注意：此按鈕只更新前端統計，不發送資料到後端
+      // ⚠️ 不清空圖片輸入，保留給最終提交時使用
 
       // 顯示本地更新成功提示
       const msgBox = document.getElementById('absenceSavedMsg');
@@ -1230,7 +1417,9 @@
       // 還原按鈕
       btn.disabled = false;
       btn.textContent = originalText;
-    });
+      });
+    }
+
 
     // =========================================================================
     // 事件綁定和初始化
@@ -1306,10 +1495,54 @@
       // 移除舊的課程相關欄位，因為我們統一用 JSON 傳遞
       formData.delete("course_name[]");
       formData.delete("course_credits[]");
-      formData.append("absence_date", document.getElementById("absence_date").value);
-      formData.append("absence_type", document.getElementById("absence_type").value);
-      formData.append("duration_units", document.getElementById("duration_units").value);
-      formData.append("reason", document.getElementById("reason").value);
+      
+      // 收集缺勤記錄資料（從資料庫讀取的記錄）
+      // 1. 收集所有缺勤記錄ID和對應的佐證圖片
+      const absenceRecordsWithImages = [];
+      const recordImageInputs = document.querySelectorAll('.absence-proof-image');
+      recordImageInputs.forEach(input => {
+        const recordId = input.getAttribute('data-record-id');
+        const file = input.files[0];
+        if (recordId && file) {
+          absenceRecordsWithImages.push({
+            record_id: recordId,
+            image_file: file.name
+          });
+          // 將圖片添加到 FormData，使用 record_id 作為鍵的一部分
+          formData.append(`proof_image_${recordId}`, file);
+          console.log(`📤 為記錄 ${recordId} 上傳佐證圖片:`, file.name);
+        }
+      });
+      
+      // 2. 如果有整體佐證圖片（作為備用），也添加
+      const proofImageInput = document.getElementById('proof_image');
+      if (proofImageInput && proofImageInput.files && proofImageInput.files[0]) {
+        formData.append("proof_image", proofImageInput.files[0]);
+        console.log("📤 表單提交時包含整體缺勤佐證圖片:", proofImageInput.files[0].name);
+      }
+      
+      // 3. 收集缺勤記錄ID列表（用於後端查詢和更新）
+      const semesterSelect = document.getElementById('semester_select');
+      const semesterId = semesterSelect ? semesterSelect.value : null;
+      if (semesterId) {
+        formData.append("semester_id", semesterId);
+      }
+      
+      // 4. 將缺勤記錄和圖片對應關係以 JSON 格式傳送
+      if (absenceRecordsWithImages.length > 0) {
+        formData.append("absence_records_with_images", JSON.stringify(absenceRecordsWithImages));
+      }
+      
+      // 5. 收集缺勤統計資料（從資料庫讀取）
+      const orderedKeys = ["曠課", "遲到", "事假", "病假", "生理假", "公假", "喪假"];
+      const absenceStats = {};
+      orderedKeys.forEach(key => {
+        const statElement = document.getElementById(`stat_${key}`);
+        if (statElement) {
+          absenceStats[key] = parseInt(statElement.textContent) || 0;
+        }
+      });
+      formData.append("absence_stats_json", JSON.stringify(absenceStats));
 
 
       try {
@@ -1349,6 +1582,8 @@
     loadPersonalTemplate();
     loadResumeRecords();
     console.log("缺勤紀錄成功寫入資料庫");
+    // 載入學期列表（自動載入當前學期的缺勤記錄）
+    loadSemesters();
     loadAbsenceRecordsList(); 
   </script>
 </body>

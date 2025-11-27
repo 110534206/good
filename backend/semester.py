@@ -62,9 +62,10 @@ def get_current():
 # =========================================================
 @semester_bp.route("/api/list", methods=["GET"])
 def list_semesters():
-    """取得所有學期列表（管理員/科助）"""
-    if session.get('role') not in ['admin', 'ta']:
-        return jsonify({"success": False, "message": "未授權"}), 403
+    """取得所有學期列表（所有使用者都可以查看）"""
+    # 移除權限檢查，讓學生也能查看學期列表
+    # if session.get('role') not in ['admin', 'ta']:
+    #     return jsonify({"success": False, "message": "未授權"}), 403
     
     try:
         conn = get_db()
