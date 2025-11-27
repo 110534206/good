@@ -343,7 +343,8 @@
         <input type="hidden" id="absence_stats_json" name="absence_stats_json" value="{}">
 
         <div class="text-center mt-4">
-          <button type="submit" class="btn btn-primary btn-lg">提交並生成履歷</button>
+          <button type="submit" id="submitResumeBtn" class="btn btn-primary btn-lg">提交並生成履歷</button>
+          <button type="button" id="editResumeBtn" class="btn btn-warning btn-lg d-none">修改履歷</button>
         </div>
         </form>
       </div>
@@ -376,6 +377,7 @@
     // 儲存所有課程的原始資料，用於篩選和查詢
     let disableAutoSave = false;
     let allCoursesData = [];
+    let resumeDataLoaded = false; // 標誌：是否已從資料庫載入履歷資料
     // 儲存所有缺勤記錄（用於前端篩選）
     let allAbsenceRecords = [];
 
@@ -478,6 +480,12 @@
 
     // 🧩 從後端載入學生個人模板
     async function loadPersonalTemplate() {
+      // 如果已經從資料庫載入履歷資料，則不覆蓋
+      if (resumeDataLoaded) {
+        console.log("📋 已從資料庫載入履歷資料，跳過載入個人模板");
+        return;
+      }
+      
       const tbody = document.getElementById("courseTableBody");
       tbody.innerHTML = '<tr><td colspan="3" class="text-muted text-center">載入中...</td></tr>';
       try {
@@ -1083,6 +1091,254 @@
       addCertBtn.addEventListener('click', () => addCertificateEntry());
     }
 
+    // 🧩 設置表單只讀/可編輯狀態
+    function setFormReadonly(readonly) {
+      const form = document.getElementById("resumeForm");
+      if (!form) return;
+
+      // 設置所有輸入欄位（使用 readonly 而不是 disabled，這樣值仍然可以提交）
+      form.querySelectorAll('input:not([type="file"]):not([type="button"]):not([type="submit"]), select, textarea').forEach(input => {
+        if (readonly) {
+          input.setAttribute('readonly', 'readonly');
+          input.classList.add('bg-light');
+          input.style.cursor = 'not-allowed';
+        } else {
+          input.removeAttribute('readonly');
+          input.classList.remove('bg-light');
+          input.style.cursor = '';
+        }
+      });
+
+      // 設置檔案上傳欄位（使用 disabled）
+      form.querySelectorAll('input[type="file"]').forEach(input => {
+        input.disabled = readonly;
+      });
+
+      // 設置動態生成的課程表格
+      const courseRows = document.querySelectorAll("#courseTableBody tr");
+      courseRows.forEach(row => {
+        // 處理輸入框和選擇框
+        const inputs = row.querySelectorAll('input:not([type="button"]):not([type="checkbox"]), select');
+        inputs.forEach(input => {
+          if (readonly) {
+            input.setAttribute('readonly', 'readonly');
+            input.classList.add('bg-light');
+            input.style.cursor = 'not-allowed';
+          } else {
+            input.removeAttribute('readonly');
+            input.classList.remove('bg-light');
+            input.style.cursor = '';
+          }
+        });
+        // 處理複選框（使用 disabled）
+        const checkboxes = row.querySelectorAll('input[type="checkbox"]');
+        checkboxes.forEach(checkbox => {
+          checkbox.disabled = readonly;
+        });
+        // 處理課程表格中的按鈕（未修課按鈕）
+        const buttons = row.querySelectorAll('button');
+        buttons.forEach(button => {
+          button.disabled = readonly;
+        });
+      });
+
+      // 設置證照相關按鈕
+      const addCertBtn = document.getElementById(CERT_ADD_BTN_ID);
+      if (addCertBtn) {
+        addCertBtn.disabled = readonly;
+      }
+      document.querySelectorAll('.remove-cert-btn, .btn-remove-cert').forEach(btn => {
+        btn.disabled = readonly;
+      });
+
+      // 設置缺勤篩選按鈕和選擇器
+      const filterBtn = document.getElementById("filterAbsenceBtn");
+      if (filterBtn) {
+        filterBtn.disabled = readonly;
+      }
+      const startSemester = document.getElementById("startSemester");
+      const endSemester = document.getElementById("endSemester");
+      if (startSemester) {
+        startSemester.disabled = readonly;
+      }
+      if (endSemester) {
+        endSemester.disabled = readonly;
+      }
+
+      // 設置提交和修改按鈕
+      const submitBtn = document.getElementById("submitResumeBtn");
+      const editBtn = document.getElementById("editResumeBtn");
+      
+      if (readonly) {
+        // 只讀模式：隱藏提交按鈕，顯示修改按鈕
+        if (submitBtn) {
+          submitBtn.classList.add('d-none');
+        }
+        if (editBtn) {
+          editBtn.classList.remove('d-none');
+        }
+      } else {
+        // 可編輯模式：顯示提交按鈕，隱藏修改按鈕
+        if (submitBtn) {
+          submitBtn.classList.remove('d-none');
+        }
+        if (editBtn) {
+          editBtn.classList.add('d-none');
+        }
+      }
+    }
+
+    // 🧩 檢查是否有已提交的履歷（最新一筆）並載入資料
+    async function checkLatestResume() {
+      try {
+        const res = await fetch("/api/get_my_resumes");
+        const result = await res.json();
+        
+        if (result.success && result.resumes && result.resumes.length > 0) {
+          // 獲取最新的履歷（第一筆，因為已經按時間倒序排列）
+          const latestResume = result.resumes[0];
+          // 如果有履歷記錄，載入資料並設置表單為只讀
+          if (latestResume) {
+            console.log("📋 發現已提交的履歷，載入資料並設置表單為只讀模式");
+            
+            // 載入履歷資料
+            await loadResumeData();
+            
+            // 設置表單為只讀
+            setFormReadonly(true);
+            return true;
+          }
+        }
+        return false;
+      } catch (error) {
+        console.error("❌ 檢查履歷記錄失敗:", error);
+        return false;
+      }
+    }
+
+    // 🧩 載入已提交履歷的完整資料並填充表單
+    async function loadResumeData() {
+      try {
+        const res = await fetch("/api/get_resume_data");
+        const result = await res.json();
+        
+        if (!result.success || !result.data) {
+          console.warn("⚠️ 無法載入履歷資料:", result.message);
+          return;
+        }
+
+        const data = result.data;
+        const form = document.getElementById("resumeForm");
+        if (!form) {
+          console.warn("⚠️ 找不到表單元素");
+          return;
+        }
+
+        // 1. 填充基本資料
+        const studentInfo = data.student_info || {};
+        const nameInput = form.querySelector('input[name="name"]');
+        if (nameInput) nameInput.value = studentInfo.name || '';
+        
+        const birthDateInput = form.querySelector('input[name="birth_date"]');
+        if (birthDateInput) birthDateInput.value = studentInfo.birth_date || '';
+        
+        const genderSelect = form.querySelector('select[name="gender"]');
+        if (genderSelect) genderSelect.value = studentInfo.gender || '';
+        
+        const phoneInput = form.querySelector('input[name="phone"]');
+        if (phoneInput) phoneInput.value = studentInfo.phone || '';
+        
+        const emailInput = form.querySelector('input[name="email"]');
+        if (emailInput) emailInput.value = studentInfo.email || '';
+        
+        const addressInput = form.querySelector('input[name="address"]');
+        if (addressInput) addressInput.value = studentInfo.address || '';
+        
+        // 處理操行成績
+        const conductScore = studentInfo.conduct_score || '';
+        const conductScoreNumericInput = form.querySelector('input[name="conduct_score_numeric"]');
+        const conductScoreHidden = document.getElementById("conduct_score");
+        
+        if (conductScoreNumericInput && conductScore) {
+          // 將等級轉換為分數（優=95, 甲=85, 乙=75, 丙=65, 丁=55）
+          const scoreMap = { "優": 95, "甲": 85, "乙": 75, "丙": 65, "丁": 55 };
+          const numericScore = scoreMap[conductScore] || parseInt(conductScore) || 0;
+          conductScoreNumericInput.value = numericScore;
+          if (conductScoreHidden) conductScoreHidden.value = conductScore;
+          // 觸發 input 事件以更新隱藏欄位
+          conductScoreNumericInput.dispatchEvent(new Event('input'));
+        }
+        
+        const autobiographyTextarea = form.querySelector('textarea[name="autobiography"]');
+        if (autobiographyTextarea) autobiographyTextarea.value = studentInfo.autobiography || '';
+
+        // 2. 填充課程資料
+        if (data.courses && Array.isArray(data.courses) && data.courses.length > 0) {
+          // 將課程資料轉換為 allCoursesData 格式
+          allCoursesData = data.courses.map(course => ({
+            name: course.name || '',
+            credits: course.credits || '0',
+            grade: course.grade || '',
+            isNotTaken: (course.credits === 0 || course.credits === '0')
+          }));
+          
+          // 排序
+          allCoursesData.sort((a, b) => a.name.localeCompare(b.name, 'zh-TW', {
+            sensitivity: 'base'
+          }));
+          
+          // 渲染課程表格
+          renderCourseTable(allCoursesData);
+          
+          // 標記已從資料庫載入資料
+          resumeDataLoaded = true;
+        }
+
+        // 3. 填充證照資料
+        if (data.certifications && Array.isArray(data.certifications) && data.certifications.length > 0) {
+          const certData = data.certifications.map(cert => ({
+            code: cert.code || '',
+            name: cert.name || '',
+            acquire_date: cert.acquire_date || '',
+            issuer: cert.issuer || '',
+            cert_path: cert.cert_path || ''
+          }));
+          initializeCertificatesUI(certData);
+        }
+
+        // 4. 填充語言能力
+        if (data.languages && Array.isArray(data.languages) && data.languages.length > 0) {
+          data.languages.forEach(lang => {
+            const langName = lang.language || '';
+            const langLevel = lang.level || '';
+            
+            // 根據語言名稱找到對應的選擇框
+            let selectElement = null;
+            if (langName.includes('英語') || langName.includes('English') || langName === 'en') {
+              selectElement = form.querySelector('select[name="lang_en_level"]');
+            } else if (langName.includes('日語') || langName.includes('Japanese') || langName === 'ja') {
+              selectElement = form.querySelector('select[name="lang_ja_level"]');
+            } else if (langName.includes('韓語') || langName.includes('Korean') || langName === 'ko') {
+              selectElement = form.querySelector('select[name="lang_ko_level"]');
+            } else if (langName.includes('其他') || langName.includes('Other')) {
+              selectElement = form.querySelector('select[name="lang_other_level"]');
+            }
+            
+            if (selectElement) {
+              selectElement.value = langLevel;
+            }
+          });
+        }
+
+        // 標記已從資料庫載入資料（即使沒有課程資料也要標記，防止被覆蓋）
+        resumeDataLoaded = true;
+        
+        console.log("✅ 履歷資料已成功載入並填充到表單");
+      } catch (error) {
+        console.error("❌ 載入履歷資料失敗:", error);
+      }
+    }
+
     // 🧩 載入履歷紀錄
     async function loadResumeRecords() {
       const res = await fetch("/api/get_my_resumes");
@@ -1594,11 +1850,8 @@
     // =========================================================================
     // 事件綁定和初始化
     // =========================================================================
-    document.addEventListener("DOMContentLoaded", () => {
+    document.addEventListener("DOMContentLoaded", async () => {
       const form = document.getElementById("resumeForm");
-
-      // 先載入 LocalStorage 資料到表單
-      loadFormData();
 
       // 針對非動態生成的欄位，設定監聽器
       form.querySelectorAll('input:not([type="file"]), select, textarea').forEach(input => {
@@ -1607,14 +1860,40 @@
         input.addEventListener('change', saveFormData);
       });
 
-      // 在載入 LocalStorage 資料後，再載入其他資料
-      // 確保 LocalStorage 的資料不會被後端資料覆蓋
-      loadPersonalTemplate();
+      // 先檢查是否有已提交的履歷
+      const hasResume = await checkLatestResume();
+      
+      if (!hasResume) {
+        // 如果沒有已提交的履歷，才載入 LocalStorage 資料
+        loadFormData();
+        // 在載入 LocalStorage 資料後，再載入其他資料
+        // 確保 LocalStorage 的資料不會被後端資料覆蓋
+        loadPersonalTemplate();
+      } else {
+        // 如果有已提交的履歷，已經在 checkLatestResume 中載入了資料
+        // 但仍需要載入課程模板（如果有的話），但不會覆蓋已載入的資料
+        loadPersonalTemplate();
+      }
+      
       loadResumeRecords();
       // 載入學期列表（自動載入當前學期的缺勤記錄）
       loadSemesters();
       loadAbsenceRecordsList();
+      
+      // 檢查是否有已提交的履歷，如果有則設置表單為只讀
+      checkLatestResume();
     });
+
+    // 🧩 修改履歷按鈕點擊事件
+    const editResumeBtn = document.getElementById("editResumeBtn");
+    if (editResumeBtn) {
+      editResumeBtn.addEventListener("click", function() {
+        // 解除只讀狀態
+        setFormReadonly(false);
+        // 滾動到表單頂部
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      });
+    }
 
     // 操行成績轉換 (加入 saveFormData)
     const scoreInput = document.querySelector('input[name="conduct_score_numeric"]');
@@ -1735,6 +2014,9 @@
           alert("✅ 履歷已生成，可於紀錄頁籤下載");
           // 提交成功後清除 LocalStorage
           localStorage.removeItem(AUTO_SAVE_KEY);
+
+          // 設置表單為只讀模式
+          setFormReadonly(true);
 
           // 🚨 核心要求：切換到紀錄頁籤
           const recordsTab = document.querySelector('[data-bs-target="#records-pane"]');

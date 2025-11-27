@@ -2066,6 +2066,124 @@ def get_my_resumes():
         conn.close()
 
 # -------------------------
+# API：取得已提交履歷的完整資料（用於頁面刷新後恢復表單）
+# -------------------------
+@resume_bp.route('/api/get_resume_data', methods=['GET'])
+def get_resume_data():
+    if 'user_id' not in session or session.get('role') != 'student':
+        return jsonify({"success": False, "message": "未授權"}), 403
+
+    user_id = session['user_id']
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        # 檢查是否有已提交的履歷
+        cursor.execute("""
+            SELECT id FROM resumes 
+            WHERE user_id = %s 
+            ORDER BY created_at DESC 
+            LIMIT 1
+        """, (user_id,))
+        resume = cursor.fetchone()
+        
+        if not resume:
+            return jsonify({"success": False, "message": "沒有已提交的履歷"}), 404
+
+        # 1. 獲取基本資料 (Student_Info)
+        cursor.execute("SELECT * FROM Student_Info WHERE StuID=%s", (user_id,))
+        student_info = cursor.fetchone() or {}
+        
+        # 2. 獲取課程資料 (course_grades)
+        cursor.execute("""
+            SELECT CourseName AS name, Credits AS credits, Grade AS grade
+            FROM course_grades
+            WHERE StuID=%s
+            ORDER BY CourseName
+        """, (user_id,))
+        courses = cursor.fetchall() or []
+        
+        # 3. 獲取證照資料 (student_certifications)
+        cursor.execute("""
+            SELECT
+                COALESCE(cc.name, sc.CertName) AS name,
+                sc.CertPath AS cert_path,
+                sc.AcquisitionDate AS acquire_date,
+                sc.cert_code AS code,
+                COALESCE(ca.name, sc.IssuingBody) AS issuer
+            FROM student_certifications sc
+            LEFT JOIN certificate_codes cc ON sc.cert_code = cc.code
+            LEFT JOIN cert_authorities ca ON cc.authority_id = ca.id
+            WHERE sc.StuID = %s
+            ORDER BY sc.AcquisitionDate DESC, sc.id ASC
+        """, (user_id,))
+        certifications = cursor.fetchall() or []
+        
+        # 4. 獲取語言能力 (student_languageskills)
+        cursor.execute("""
+            SELECT Language AS language, Level AS level
+            FROM student_languageskills
+            WHERE StuID=%s
+            ORDER BY Language
+        """, (user_id,))
+        languages = cursor.fetchall() or []
+        
+        # 格式化日期
+        birth_date = student_info.get('BirthDate')
+        if birth_date:
+            if isinstance(birth_date, datetime):
+                birth_date = birth_date.strftime("%Y-%m-%d")
+            elif isinstance(birth_date, str):
+                try:
+                    # 嘗試解析並格式化
+                    dt = datetime.strptime(birth_date, "%Y-%m-%d")
+                    birth_date = dt.strftime("%Y-%m-%d")
+                except:
+                    pass
+        
+        # 格式化證照日期
+        formatted_certs = []
+        for cert in certifications:
+            cert_copy = dict(cert)
+            acquire_date = cert.get('acquire_date')
+            if acquire_date:
+                if isinstance(acquire_date, datetime):
+                    cert_copy['acquire_date'] = acquire_date.strftime("%Y-%m-%d")
+                elif isinstance(acquire_date, str):
+                    try:
+                        dt = datetime.strptime(acquire_date, "%Y-%m-%d")
+                        cert_copy['acquire_date'] = dt.strftime("%Y-%m-%d")
+                    except:
+                        pass
+            formatted_certs.append(cert_copy)
+        
+        return jsonify({
+            "success": True,
+            "data": {
+                "student_info": {
+                    "name": student_info.get('StuName', ''),
+                    "birth_date": birth_date or '',
+                    "gender": student_info.get('Gender', ''),
+                    "phone": student_info.get('Phone', ''),
+                    "email": student_info.get('Email', ''),
+                    "address": student_info.get('Address', ''),
+                    "conduct_score": student_info.get('ConductScore', ''),
+                    "autobiography": student_info.get('Autobiography', ''),
+                    "photo_path": student_info.get('PhotoPath', '')
+                },
+                "courses": courses,
+                "certifications": formatted_certs,
+                "languages": languages
+            }
+        })
+    except Exception as e:
+        print("❌ 取得履歷資料錯誤:", e)
+        traceback.print_exc()
+        return jsonify({"success": False, "message": f"取得履歷資料失敗: {str(e)}"}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+# -------------------------
 # API：取得標準核心科目
 # -------------------------
 @resume_bp.route('/api/get_standard_courses', methods=['GET'])
