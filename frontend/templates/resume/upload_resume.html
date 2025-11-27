@@ -380,6 +380,8 @@
     let resumeDataLoaded = false; // 標誌：是否已從資料庫載入履歷資料
     // 儲存所有缺勤記錄（用於前端篩選）
     let allAbsenceRecords = [];
+    // 編輯狀態標誌（參考 fill_preferences 頁面）
+    let isEditing = false;
 
     const CERT_MAX_COUNT = 32;
     const CERT_CONTAINER_ID = 'certificatesContainer';
@@ -480,13 +482,22 @@
 
     // 🧩 從後端載入學生個人模板
     async function loadPersonalTemplate() {
-      // 如果已經從資料庫載入履歷資料，則不覆蓋
-      if (resumeDataLoaded) {
+      const tbody = document.getElementById("courseTableBody");
+      if (!tbody) return;
+      
+      // 檢查是否已經有課程資料（如果已經載入且表格不為空，則跳過）
+      if (resumeDataLoaded && allCoursesData.length > 0) {
         console.log("📋 已從資料庫載入履歷資料，跳過載入個人模板");
         return;
       }
       
-      const tbody = document.getElementById("courseTableBody");
+      // 如果表格還在顯示"載入中"或為空，則需要載入
+      const currentContent = tbody.innerHTML.trim();
+      if (currentContent && !currentContent.includes("載入中") && !currentContent.includes("目前無")) {
+        // 表格已經有內容，不需要重新載入
+        return;
+      }
+      
       tbody.innerHTML = '<tr><td colspan="3" class="text-muted text-center">載入中...</td></tr>';
       try {
         const res = await fetch("/api/load_personal_template");
@@ -983,7 +994,9 @@
     // =========================================================================
 
     function saveFormData() {
-      if (disableAutoSave) return;
+      // 只有在編輯模式下才保存到 LocalStorage（參考 fill_preferences 頁面）
+      if (disableAutoSave || !isEditing) return;
+      
       const form = document.getElementById("resumeForm");
       const data = {
         fields: {},
@@ -1010,7 +1023,7 @@
       });
 
       localStorage.setItem(AUTO_SAVE_KEY, JSON.stringify(data));
-      console.log("💾 表單已自動儲存", {
+      console.log("💾 表單已自動儲存（編輯模式）", {
         fieldsCount: Object.keys(data.fields).length,
         coursesCount: data.courses.length,
         certificatesCount: data.certificates.length
@@ -1091,10 +1104,13 @@
       addCertBtn.addEventListener('click', () => addCertificateEntry());
     }
 
-    // 🧩 設置表單只讀/可編輯狀態
+    // 🧩 設置表單只讀/可編輯狀態（參考 fill_preferences 頁面）
     function setFormReadonly(readonly) {
       const form = document.getElementById("resumeForm");
       if (!form) return;
+
+      // 更新編輯狀態
+      isEditing = !readonly;
 
       // 設置所有輸入欄位（使用 readonly 而不是 disabled，這樣值仍然可以提交）
       form.querySelectorAll('input:not([type="file"]):not([type="button"]):not([type="submit"]), select, textarea').forEach(input => {
@@ -1165,7 +1181,7 @@
         endSemester.disabled = readonly;
       }
 
-      // 設置提交和修改按鈕
+      // 設置提交和修改按鈕（參考 fill_preferences 頁面）
       const submitBtn = document.getElementById("submitResumeBtn");
       const editBtn = document.getElementById("editResumeBtn");
       
@@ -1176,6 +1192,8 @@
         }
         if (editBtn) {
           editBtn.classList.remove('d-none');
+          editBtn.innerHTML = '<i class="bi bi-pencil-square me-2"></i>修改履歷';
+          editBtn.classList.replace('btn-warning', 'btn-primary');
         }
       } else {
         // 可編輯模式：顯示提交按鈕，隱藏修改按鈕
@@ -1219,6 +1237,7 @@
     // 🧩 載入已提交履歷的完整資料並填充表單
     async function loadResumeData() {
       try {
+        console.log("🔄 開始載入履歷資料...");
         const res = await fetch("/api/get_resume_data");
         const result = await res.json();
         
@@ -1228,11 +1247,16 @@
         }
 
         const data = result.data;
+        console.log("📥 收到履歷資料:", data);
+        
         const form = document.getElementById("resumeForm");
         if (!form) {
           console.warn("⚠️ 找不到表單元素");
           return;
         }
+
+        // 暫時禁用自動保存，避免在載入資料時觸發保存
+        disableAutoSave = true;
 
         // 1. 填充基本資料
         const studentInfo = data.student_info || {};
@@ -1271,6 +1295,22 @@
         
         const autobiographyTextarea = form.querySelector('textarea[name="autobiography"]');
         if (autobiographyTextarea) autobiographyTextarea.value = studentInfo.autobiography || '';
+        
+        // 1.5 填充照片路徑（顯示提示，因為文件上傳欄位無法直接設置值）
+        if (studentInfo.photo_path) {
+          console.log("📷 照片路徑:", studentInfo.photo_path);
+          const photoInput = form.querySelector('input[name="photo"]');
+          if (photoInput && photoInput.parentElement) {
+            // 移除舊的提示（如果存在）
+            const oldHint = photoInput.parentElement.querySelector('.photo-hint');
+            if (oldHint) oldHint.remove();
+            
+            const hint = document.createElement('small');
+            hint.className = 'text-muted d-block mt-1 photo-hint';
+            hint.textContent = `已上傳照片: ${studentInfo.photo_path.split('/').pop()}`;
+            photoInput.parentElement.appendChild(hint);
+          }
+        }
 
         // 2. 填充課程資料
         if (data.courses && Array.isArray(data.courses) && data.courses.length > 0) {
@@ -1290,8 +1330,13 @@
           // 渲染課程表格
           renderCourseTable(allCoursesData);
           
-          // 標記已從資料庫載入資料
+          // 標記已從資料庫載入資料（只有在成功載入課程後才標記）
           resumeDataLoaded = true;
+        } else {
+          // 如果沒有課程資料，需要載入標準課程或個人模板
+          console.log("⚠️ 履歷資料中沒有課程資料，將由 loadPersonalTemplate 載入");
+          // 不設置 resumeDataLoaded，讓後續的 loadPersonalTemplate 可以執行
+          // 這樣可以確保課程表格會被正確載入
         }
 
         // 3. 填充證照資料
@@ -1300,10 +1345,92 @@
             code: cert.code || '',
             name: cert.name || '',
             acquire_date: cert.acquire_date || '',
-            issuer: cert.issuer || '',
+            issuer: cert.issuer || '',  // 發證人（選填）
             cert_path: cert.cert_path || ''
           }));
           initializeCertificatesUI(certData);
+          console.log(`✅ 已載入 ${certData.length} 筆證照資料`);
+        }
+        
+        // 3.5 填充成績單路徑（顯示提示，因為文件上傳欄位無法直接設置值）
+        if (data.transcript_path) {
+          console.log("📄 成績單路徑:", data.transcript_path);
+          const transcriptInput = form.querySelector('input[name="transcript_file"]');
+          if (transcriptInput && transcriptInput.parentElement) {
+            // 移除舊的提示（如果存在）
+            const oldHint = transcriptInput.parentElement.querySelector('.transcript-hint');
+            if (oldHint) oldHint.remove();
+            
+            const hint = document.createElement('small');
+            hint.className = 'text-muted d-block mt-1 transcript-hint';
+            hint.textContent = `已上傳成績單: ${data.transcript_path.split('/').pop()}`;
+            transcriptInput.parentElement.appendChild(hint);
+          }
+        }
+        
+        // 3.6 填充缺勤記錄相關資料
+        // 注意：需要等待學期列表載入完成後才能設置學期範圍
+        if (data.absence_data) {
+          const absenceData = data.absence_data;
+          
+          // 設置學期範圍（需要等待學期列表載入）
+          const setAbsenceData = () => {
+            if (absenceData.start_semester_id && absenceData.end_semester_id) {
+              const startSemesterSelect = document.getElementById('startSemester');
+              const endSemesterSelect = document.getElementById('endSemester');
+              
+              // 如果學期選擇器已經載入，直接設置
+              if (startSemesterSelect && startSemesterSelect.options.length > 1) {
+                startSemesterSelect.value = absenceData.start_semester_id;
+              }
+              if (endSemesterSelect && endSemesterSelect.options.length > 1) {
+                endSemesterSelect.value = absenceData.end_semester_id;
+              }
+              
+              console.log(`📅 學期範圍: ${absenceData.start_semester_id} - ${absenceData.end_semester_id}`);
+              
+              // 載入缺勤記錄列表和統計
+              if (absenceData.records && Array.isArray(absenceData.records)) {
+                allAbsenceRecords = absenceData.records.map(record => ({
+                  absence_date: record.absence_date || '',
+                  absence_type: record.absence_type || '',
+                  duration_units: record.duration_units || 0,
+                  reason: record.reason || '',
+                  id: record.id || null,
+                  image_path: record.image_path || ''
+                }));
+                
+                // 渲染缺勤記錄列表
+                renderAbsenceList(allAbsenceRecords);
+                
+                // 更新統計
+                updateAbsenceStats(allAbsenceRecords);
+                
+                console.log(`✅ 已載入 ${allAbsenceRecords.length} 筆缺勤記錄`);
+              }
+              
+              // 更新統計（如果後端有提供）
+              if (absenceData.stats) {
+                const orderedKeys = ["曠課", "遲到", "事假", "病假", "生理假", "公假", "喪假"];
+                orderedKeys.forEach(key => {
+                  const statElement = document.getElementById(`stat_${key}`);
+                  if (statElement && absenceData.stats[key] !== undefined) {
+                    statElement.textContent = absenceData.stats[key];
+                    absenceStats[key] = absenceData.stats[key];
+                  }
+                });
+              }
+            }
+          };
+          
+          // 如果學期列表還沒載入，等待一下
+          const startSemesterSelect = document.getElementById('startSemester');
+          if (startSemesterSelect && startSemesterSelect.options.length > 1) {
+            setAbsenceData();
+          } else {
+            // 等待學期列表載入完成
+            setTimeout(setAbsenceData, 500);
+          }
         }
 
         // 4. 填充語言能力
@@ -1330,12 +1457,25 @@
           });
         }
 
-        // 標記已從資料庫載入資料（即使沒有課程資料也要標記，防止被覆蓋）
-        resumeDataLoaded = true;
+        // 標記已從資料庫載入資料（只有在成功載入課程後才標記，防止被覆蓋）
+        // 注意：如果課程資料為空，會在課程資料處理部分載入標準課程後再標記
+        // 這裡不需要再次設置 resumeDataLoaded，因為已經在課程資料處理部分設置了
+        
+        // 恢復自動保存
+        disableAutoSave = false;
         
         console.log("✅ 履歷資料已成功載入並填充到表單");
+        console.log("📊 載入的資料摘要:", {
+          "基本資料": data.student_info ? "有" : "無",
+          "課程數": data.courses ? data.courses.length : 0,
+          "證照數": data.certifications ? data.certifications.length : 0,
+          "語言能力數": data.languages ? data.languages.length : 0,
+          "缺勤記錄數": data.absence_data && data.absence_data.records ? data.absence_data.records.length : 0
+        });
       } catch (error) {
         console.error("❌ 載入履歷資料失敗:", error);
+        // 確保在錯誤時也恢復自動保存
+        disableAutoSave = false;
       }
     }
 
@@ -1864,13 +2004,16 @@
       const hasResume = await checkLatestResume();
       
       if (!hasResume) {
-        // 如果沒有已提交的履歷，才載入 LocalStorage 資料
+        // 如果沒有已提交的履歷，進入編輯模式並載入 LocalStorage 資料
+        isEditing = true;
         loadFormData();
         // 在載入 LocalStorage 資料後，再載入其他資料
         // 確保 LocalStorage 的資料不會被後端資料覆蓋
         loadPersonalTemplate();
       } else {
-        // 如果有已提交的履歷，已經在 checkLatestResume 中載入了資料
+        // 如果有已提交的履歷，設置為只讀模式（不載入 LocalStorage）
+        isEditing = false;
+        // 已經在 checkLatestResume 中載入了資料
         // 但仍需要載入課程模板（如果有的話），但不會覆蓋已載入的資料
         loadPersonalTemplate();
       }
@@ -1879,19 +2022,29 @@
       // 載入學期列表（自動載入當前學期的缺勤記錄）
       loadSemesters();
       loadAbsenceRecordsList();
-      
-      // 檢查是否有已提交的履歷，如果有則設置表單為只讀
-      checkLatestResume();
     });
 
-    // 🧩 修改履歷按鈕點擊事件
+    // 🧩 修改履歷按鈕點擊事件（參考 fill_preferences 頁面）
     const editResumeBtn = document.getElementById("editResumeBtn");
     if (editResumeBtn) {
-      editResumeBtn.addEventListener("click", function() {
-        // 解除只讀狀態
-        setFormReadonly(false);
-        // 滾動到表單頂部
-        window.scrollTo({ top: 0, behavior: 'smooth' });
+      editResumeBtn.addEventListener("click", async function() {
+        // 切換編輯狀態
+        isEditing = !isEditing;
+        setFormReadonly(!isEditing);
+        
+        if (isEditing) {
+          // 如果進入編輯模式，載入 LocalStorage 資料（如果有）
+          loadFormData();
+          // 滾動到表單頂部
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        } else {
+          // 如果取消編輯，清除 LocalStorage 並重新從資料庫載入資料
+          localStorage.removeItem(AUTO_SAVE_KEY);
+          disableAutoSave = true;
+          await loadResumeData();
+          disableAutoSave = false;
+          setFormReadonly(true);
+        }
       });
     }
 
@@ -2012,11 +2165,18 @@
 
         if (result.success) {
           alert("✅ 履歷已生成，可於紀錄頁籤下載");
-          // 提交成功後清除 LocalStorage
+          
+          // 提交成功後清除 LocalStorage（參考 fill_preferences 頁面）
           localStorage.removeItem(AUTO_SAVE_KEY);
-
+          
+          // 更新編輯狀態為 false
+          isEditing = false;
+          
           // 設置表單為只讀模式
           setFormReadonly(true);
+          
+          // 重新從資料庫載入資料（確保顯示最新資料）
+          await loadResumeData();
 
           // 🚨 核心要求：切換到紀錄頁籤
           const recordsTab = document.querySelector('[data-bs-target="#records-pane"]');
