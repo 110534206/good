@@ -754,7 +754,14 @@ def generate_application_form_docx(student_data, output_path):
         absence_fields = ['曠課', '遲到', '事假', '病假', '生理假', '公假', '喪假', '總計']
         for t in absence_fields:
             key = f"absence_{t}_units"
-            context[key] = student_data.get(key, "0 節")
+            # 從 student_data 中獲取缺勤統計數據
+            value = student_data.get(key, "0 節")
+            context[key] = value
+            # 調試輸出
+            if value == "0 節" and t != "總計":
+                print(f"⚠️ 缺勤統計 {key} 未找到，使用預設值: {value}")
+            else:
+                print(f"✅ 缺勤統計 {key} = {value}")
         
         # 如果模板中有額外的行（例如第9、10、11行），將它們設為空字符串
         # 常見的額外變數名可能是：absence_row_9, absence_row_10, absence_row_11 等
@@ -1111,16 +1118,42 @@ def submit_and_generate_api():
             cert_photo_paths.insert(0, image_path_for_template or "")
             cert_names.insert(0, certificate_description or "")
 
-        # 組合缺勤統計（與你現有邏輯相同）
+        # 組合缺勤統計（支援學期範圍篩選）
         absence_stats = {}
-        cursor.execute("""
+        
+        # 獲取學期範圍參數
+        start_semester_id = request.form.get("start_semester_id", None)
+        end_semester_id = request.form.get("end_semester_id", None)
+        
+        # 構建查詢條件
+        where_conditions = ["user_id = %s"]
+        query_params = [user_id]
+        
+        # 如果有學期範圍，添加學期篩選
+        if start_semester_id and end_semester_id:
+            # 獲取所有在範圍內的學期ID
+            cursor.execute("""
+                SELECT id FROM semesters 
+                WHERE code >= (SELECT code FROM semesters WHERE id = %s)
+                AND code <= (SELECT code FROM semesters WHERE id = %s)
+                ORDER BY code
+            """, (start_semester_id, end_semester_id))
+            semester_ids_in_range = [row['id'] for row in cursor.fetchall()]
+            if semester_ids_in_range:
+                placeholders = ','.join(['%s'] * len(semester_ids_in_range))
+                where_conditions.append(f"semester_id IN ({placeholders})")
+                query_params.extend(semester_ids_in_range)
+        
+        where_clause = " AND ".join(where_conditions)
+        
+        cursor.execute(f"""
             SELECT 
                 absence_type, 
                 SUM(duration_units) AS total_units 
             FROM absence_records
-            WHERE user_id = %s
+            WHERE {where_clause}
             GROUP BY absence_type
-        """, (user_id,))
+        """, tuple(query_params))
         results = cursor.fetchall()
         all_types = ["曠課", "遲到", "事假", "病假", "生理假", "公假", "喪假"]
         db_stats = {t: 0 for t in all_types}
@@ -1160,7 +1193,14 @@ def submit_and_generate_api():
             except Exception:
                 pass
         absence_stats["absence_總計_units"] = f"{total} 節"
+        
+        # 調試輸出：確認缺勤統計數據
+        print("📊 缺勤統計數據:", absence_stats)
+        
         context.update(absence_stats)
+        
+        # 調試輸出：確認 context 中的缺勤統計數據
+        print("📊 context 中的缺勤統計數據:", {k: v for k, v in context.items() if k.startswith("absence_")})
 
         # 處理並儲存缺勤佐證圖片（與你原邏輯一致）
         absence_image_path = None
@@ -1433,8 +1473,12 @@ def submit_and_generate_api():
         # 傳遞證照圖片與名稱清單（generate 會自行從 certs 讀）
         student_data_for_doc["cert_photo_paths"] = cert_photo_paths
         student_data_for_doc["cert_names"] = cert_names
-        # 合併 context
+        # 合併 context（包含缺勤統計數據）
         student_data_for_doc.update(context)
+        
+        # 調試輸出：確認 student_data_for_doc 中的缺勤統計數據
+        absence_keys_in_doc = {k: v for k, v in student_data_for_doc.items() if k.startswith("absence_")}
+        print("📊 student_data_for_doc 中的缺勤統計數據:", absence_keys_in_doc)
 
         filename = f"{student_id}_履歷_{datetime.now().strftime('%Y%m%d_%H%M%S')}.docx"
         save_path = os.path.join(UPLOAD_FOLDER, filename)
@@ -1452,7 +1496,7 @@ def submit_and_generate_api():
             user_id,
             save_path,
             filename,
-            'submitted',
+            'uploaded',  # 使用資料庫 enum 定義的狀態值
             semester_id
         ))
 
@@ -1606,7 +1650,9 @@ def get_absence_stats():
         return jsonify({"success": False, "message": "請先登入"}), 401
 
     user_id = session['user_id']
-    semester_id = request.args.get('semester_id', None)  # 可選：指定學期ID
+    semester_id = request.args.get('semester_id', None)  # 可選：指定單一學期ID（向後兼容）
+    start_semester_id = request.args.get('start_semester_id', None)  # 可選：開始學期ID
+    end_semester_id = request.args.get('end_semester_id', None)  # 可選：結束學期ID
     
     conn = get_db()
     cursor = conn.cursor(dictionary=True)
@@ -1617,19 +1663,50 @@ def get_absence_stats():
         has_semester_id = cursor.fetchone() is not None
         
         # 查詢並計算各類別缺勤總節數（按學期分組）
-        if has_semester_id and semester_id:
-            # 如果有 semester_id 欄位且指定了學期，按學期查詢
-            cursor.execute("""
-                SELECT 
-                    ar.absence_type, 
-                    SUM(ar.duration_units) AS total_units,
-                    s.code AS semester_code,
-                    s.id AS semester_id
-                FROM absence_records ar
-                LEFT JOIN semesters s ON ar.semester_id = s.id
-                WHERE ar.user_id = %s AND ar.semester_id = %s
-                GROUP BY ar.absence_type, s.code, s.id
-            """, (user_id, semester_id))
+        if has_semester_id:
+            # 優先使用學期範圍篩選
+            if start_semester_id and end_semester_id:
+                # 學期範圍篩選：獲取所有在範圍內的學期ID
+                cursor.execute("""
+                    SELECT id FROM semesters 
+                    WHERE code >= (SELECT code FROM semesters WHERE id = %s)
+                    AND code <= (SELECT code FROM semesters WHERE id = %s)
+                    ORDER BY code
+                """, (start_semester_id, end_semester_id))
+                semester_ids_in_range = [row['id'] for row in cursor.fetchall()]
+                if semester_ids_in_range:
+                    placeholders = ','.join(['%s'] * len(semester_ids_in_range))
+                    cursor.execute(f"""
+                        SELECT 
+                            ar.absence_type, 
+                            SUM(ar.duration_units) AS total_units
+                        FROM absence_records ar
+                        LEFT JOIN semesters s ON ar.semester_id = s.id
+                        WHERE ar.user_id = %s AND ar.semester_id IN ({placeholders})
+                        GROUP BY ar.absence_type
+                    """, (user_id, *semester_ids_in_range))
+                else:
+                    cursor.execute("""
+                        SELECT 
+                            ar.absence_type, 
+                            SUM(ar.duration_units) AS total_units
+                        FROM absence_records ar
+                        WHERE ar.user_id = %s AND 1=0
+                        GROUP BY ar.absence_type
+                    """, (user_id,))
+            elif semester_id:
+                # 單一學期查詢（向後兼容）
+                cursor.execute("""
+                    SELECT 
+                        ar.absence_type, 
+                        SUM(ar.duration_units) AS total_units,
+                        s.code AS semester_code,
+                        s.id AS semester_id
+                    FROM absence_records ar
+                    LEFT JOIN semesters s ON ar.semester_id = s.id
+                    WHERE ar.user_id = %s AND ar.semester_id = %s
+                    GROUP BY ar.absence_type, s.code, s.id
+                """, (user_id, semester_id))
         elif has_semester_id:
             # 如果有 semester_id 欄位但未指定學期，查詢當前學期
             current_semester_id = get_current_semester_id(cursor)
@@ -1697,7 +1774,11 @@ def get_semester_absence_records():
         return jsonify({"success": False, "message": "請先登入"}), 401
 
     user_id = session['user_id']
-    semester_id = request.args.get('semester_id', None)  # 可選：指定學期ID
+    semester_id = request.args.get('semester_id', None)  # 可選：指定單一學期ID（向後兼容）
+    start_semester_id = request.args.get('start_semester_id', None)  # 可選：開始學期ID
+    end_semester_id = request.args.get('end_semester_id', None)  # 可選：結束學期ID
+    start_date = request.args.get('start_date', None)  # 可選：開始日期（向後兼容）
+    end_date = request.args.get('end_date', None)  # 可選：結束日期（向後兼容）
     
     conn = get_db()
     cursor = conn.cursor(dictionary=True)
@@ -1707,15 +1788,49 @@ def get_semester_absence_records():
         cursor.execute("SHOW COLUMNS FROM absence_records LIKE 'semester_id'")
         has_semester_id = cursor.fetchone() is not None
         
-        # 獲取當前學期ID（如果未指定）
-        if not semester_id:
-            current_semester_id = get_current_semester_id(cursor)
-            semester_id = current_semester_id
+        # 構建 WHERE 條件和參數
+        where_conditions = ["ar.user_id = %s"]
+        query_params = [user_id]
+        
+        # 優先使用學期範圍篩選
+        if has_semester_id:
+            if start_semester_id and end_semester_id:
+                # 學期範圍篩選：需要獲取學期代碼來比較
+                cursor.execute("SELECT code FROM semesters WHERE id IN (%s, %s)", (start_semester_id, end_semester_id))
+                semester_codes = {row['code']: None for row in cursor.fetchall()}
+                if len(semester_codes) == 2:
+                    # 獲取所有在範圍內的學期ID
+                    cursor.execute("""
+                        SELECT id FROM semesters 
+                        WHERE code >= (SELECT code FROM semesters WHERE id = %s)
+                        AND code <= (SELECT code FROM semesters WHERE id = %s)
+                        ORDER BY code
+                    """, (start_semester_id, end_semester_id))
+                    semester_ids_in_range = [row['id'] for row in cursor.fetchall()]
+                    if semester_ids_in_range:
+                        placeholders = ','.join(['%s'] * len(semester_ids_in_range))
+                        where_conditions.append(f"ar.semester_id IN ({placeholders})")
+                        query_params.extend(semester_ids_in_range)
+            elif semester_id:
+                # 單一學期篩選（向後兼容）
+                where_conditions.append("ar.semester_id = %s")
+                query_params.append(semester_id)
+        
+        # 添加日期範圍篩選（向後兼容，但優先使用學期範圍）
+        if not (start_semester_id and end_semester_id):
+            if start_date:
+                where_conditions.append("ar.absence_date >= %s")
+                query_params.append(start_date)
+            if end_date:
+                where_conditions.append("ar.absence_date <= %s")
+                query_params.append(end_date)
+        
+        where_clause = " AND ".join(where_conditions)
         
         # 查詢缺勤記錄
-        if has_semester_id and semester_id:
-            # 如果有 semester_id 欄位且指定了學期，按學期查詢
-            cursor.execute("""
+        if has_semester_id:
+            # 如果有 semester_id 欄位，使用 JOIN 查詢
+            query = f"""
                 SELECT 
                     ar.id,
                     ar.absence_date,
@@ -1731,33 +1846,13 @@ def get_semester_absence_records():
                 FROM absence_records ar
                 LEFT JOIN semesters s ON ar.semester_id = s.id
                 LEFT JOIN users u ON ar.user_id = u.id
-                WHERE ar.user_id = %s AND ar.semester_id = %s
+                WHERE {where_clause}
                 ORDER BY ar.absence_date DESC, ar.created_at DESC
-            """, (user_id, semester_id))
-        elif has_semester_id:
-            # 如果有 semester_id 欄位但未指定學期，查詢所有學期
-            cursor.execute("""
-                SELECT 
-                    ar.id,
-                    ar.absence_date,
-                    ar.absence_type,
-                    ar.duration_units,
-                    ar.reason,
-                    ar.image_path,
-                    ar.created_at,
-                    s.code AS semester_code,
-                    s.id AS semester_id,
-                    u.username AS student_id,
-                    u.name AS student_name
-                FROM absence_records ar
-                LEFT JOIN semesters s ON ar.semester_id = s.id
-                LEFT JOIN users u ON ar.user_id = u.id
-                WHERE ar.user_id = %s
-                ORDER BY ar.absence_date DESC, ar.created_at DESC
-            """, (user_id,))
+            """
+            cursor.execute(query, tuple(query_params))
         else:
-            # 沒有 semester_id 欄位，查詢所有缺勤記錄
-            cursor.execute("""
+            # 沒有 semester_id 欄位，不使用 JOIN
+            query = f"""
                 SELECT 
                     ar.id,
                     ar.absence_date,
@@ -1772,20 +1867,71 @@ def get_semester_absence_records():
                     u.name AS student_name
                 FROM absence_records ar
                 LEFT JOIN users u ON ar.user_id = u.id
-                WHERE ar.user_id = %s
+                WHERE {where_clause}
                 ORDER BY ar.absence_date DESC, ar.created_at DESC
-            """, (user_id,))
+            """
+            cursor.execute(query, tuple(query_params))
         
         records = cursor.fetchall()
         
         # 格式化日期
         for record in records:
             if record.get('absence_date'):
-                if isinstance(record['absence_date'], datetime):
-                    record['absence_date'] = record['absence_date'].strftime("%Y-%m-%d")
+                absence_date = record['absence_date']
+                if isinstance(absence_date, datetime):
+                    record['absence_date'] = absence_date.strftime("%Y-%m-%d")
+                elif isinstance(absence_date, str):
+                    # 如果是字符串，嘗試解析並格式化
+                    try:
+                        # 先嘗試提取 YYYY-MM-DD 格式
+                        date_match = re.search(r'(\d{4})-(\d{2})-(\d{2})', absence_date)
+                        if date_match:
+                            # 如果找到 YYYY-MM-DD 格式，直接使用
+                            record['absence_date'] = date_match.group(0)
+                        else:
+                            # 嘗試解析各種日期格式
+                            if 'T' in absence_date:
+                                # ISO 格式: 2024-03-27T00:00:00
+                                date_str = absence_date.split('T')[0]
+                                record['absence_date'] = date_str
+                            elif 'GMT' in absence_date or 'UTC' in absence_date:
+                                # GMT 格式: Sat, 29 Nov 2025 00:00:00 GMT
+                                # 使用正則表達式提取日期部分
+                                date_match = re.search(r'(\w{3}),\s+(\d{1,2})\s+(\w{3})\s+(\d{4})', absence_date)
+                                if date_match:
+                                    # 轉換月份名稱
+                                    month_map = {
+                                        'Jan': '01', 'Feb': '02', 'Mar': '03', 'Apr': '04',
+                                        'May': '05', 'Jun': '06', 'Jul': '07', 'Aug': '08',
+                                        'Sep': '09', 'Oct': '10', 'Nov': '11', 'Dec': '12'
+                                    }
+                                    day = date_match.group(2).zfill(2)
+                                    month = month_map.get(date_match.group(3), '01')
+                                    year = date_match.group(4)
+                                    record['absence_date'] = f"{year}-{month}-{day}"
+                                else:
+                                    # 嘗試使用 datetime 解析
+                                    try:
+                                        date_obj = datetime.strptime(absence_date.split(',')[1].strip().split()[0], "%d %b %Y")
+                                        record['absence_date'] = date_obj.strftime("%Y-%m-%d")
+                                    except:
+                                        print(f"⚠️ 無法解析日期格式: {absence_date}")
+                            else:
+                                # 嘗試標準格式
+                                date_obj = datetime.strptime(absence_date.split()[0], "%Y-%m-%d")
+                                record['absence_date'] = date_obj.strftime("%Y-%m-%d")
+                    except (ValueError, AttributeError, IndexError) as e:
+                        print(f"⚠️ 無法解析日期格式: {absence_date}, 錯誤: {e}")
             if record.get('created_at'):
                 if isinstance(record['created_at'], datetime):
                     record['created_at'] = record['created_at'].strftime("%Y-%m-%d %H:%M:%S")
+                elif isinstance(record['created_at'], str):
+                    try:
+                        if 'T' in record['created_at']:
+                            date_obj = datetime.fromisoformat(record['created_at'].replace('Z', '+00:00'))
+                            record['created_at'] = date_obj.strftime("%Y-%m-%d %H:%M:%S")
+                    except (ValueError, AttributeError):
+                        pass
         
         # 計算統計數據
         stats = {}
