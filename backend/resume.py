@@ -2102,20 +2102,21 @@ def get_resume_data():
         """, (user_id,))
         courses = cursor.fetchall() or []
         
-        # 3. 獲取證照資料 (student_certifications)
+        # 3. 取得證照資料 (student_certifications)
         cursor.execute("""
             SELECT
-                COALESCE(cc.name, sc.CertName) AS name,
-                sc.CertPath AS cert_path,
-                sc.AcquisitionDate AS acquire_date,
-                sc.cert_code AS code,
-                COALESCE(ca.name, sc.IssuingBody) AS issuer
-            FROM student_certifications sc
-            LEFT JOIN certificate_codes cc ON sc.cert_code = cc.code
-            LEFT JOIN cert_authorities ca ON cc.authority_id = ca.id
-            WHERE sc.StuID = %s
-            ORDER BY sc.AcquisitionDate DESC, sc.id ASC
-        """, (user_id,))
+                sc.CertPath,
+                sc.AcquisitionDate,
+                sc.cert_code, 
+                COALESCE(cc.name, '') AS CertName,   
+                COALESCE(cc.category, 'other') AS CertType,  
+                COALESCE(ca.name, 'N/A') AS IssuingBody     
+             FROM student_certifications sc
+             LEFT JOIN certificate_codes cc ON sc.cert_code = cc.code
+             LEFT JOIN cert_authorities ca ON cc.authority_id = ca.id 
+             WHERE sc.StuID = %s
+             ORDER BY sc.AcquisitionDate DESC, sc.id ASC
+        """, (user_id,)) 
         certifications = cursor.fetchall() or []
         
         # 4. 獲取語言能力 (student_languageskills)
