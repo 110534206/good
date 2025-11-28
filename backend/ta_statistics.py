@@ -899,6 +899,10 @@ def export_statistics():
 # --------------------------------
 @ta_statistics_bp.route('/manage_companies')
 def manage_companies():
+    # 權限檢查：允許 ta, admin 訪問
+    if 'user_id' not in session or session.get('role') not in ['ta', 'admin']:
+        from flask import redirect, url_for
+        return redirect(url_for('auth_bp.login_page'))
     return render_template('user_shared/manage_companies.html')
 
 # --------------------------------
@@ -906,6 +910,10 @@ def manage_companies():
 # --------------------------------
 @ta_statistics_bp.route('/manage_students')
 def manage_students():
+    # 權限檢查：允許 ta, admin 訪問
+    if 'user_id' not in session or session.get('role') not in ['ta', 'admin']:
+        from flask import redirect, url_for
+        return redirect(url_for('auth_bp.login_page'))
     return render_template('user_shared/manage_students.html')               
 
 

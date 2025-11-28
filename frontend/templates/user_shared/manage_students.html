@@ -477,7 +477,11 @@
         const data = await res.json();
 
         if (!data.success) {
-          tbody.innerHTML = `<tr><td colspan="5" class="text-center text-danger">載入失敗：${data.message}</td></tr>`;
+          let errorMsg = data.message || '載入失敗';
+          if (errorMsg === '未授權' || res.status === 403) {
+            errorMsg = '權限不足：此功能僅限科助和管理員使用。請確認您已以正確角色登入。';
+          }
+          tbody.innerHTML = `<tr><td colspan="5" class="text-center text-danger">${errorMsg}</td></tr>`;
           return;
         }
 
