@@ -76,6 +76,40 @@
     .chart-container canvas {
       max-height: 300px;
     }
+
+    /* 統計圖表容器樣式 - 與公司管理頁面一致 */
+    #statsChartsContainer {
+      display: flex !important;
+      flex-wrap: nowrap;
+    }
+    
+    .stats-chart-container {
+      background: #fff;
+      border-radius: 16px;
+      padding: 16px;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+      margin-bottom: 24px;
+      flex: 1;
+      min-width: 0;
+    }
+    
+    .stats-chart-container h5 {
+      font-size: 1rem;
+      margin-bottom: 12px;
+    }
+    
+    .stats-chart-container canvas {
+      max-height: 250px;
+    }
+    
+    @media (max-width: 768px) {
+      #statsChartsContainer {
+        flex-wrap: wrap;
+      }
+      .stats-chart-container {
+        flex: 0 0 100%;
+      }
+    }
   </style>
 </head>
 
@@ -84,17 +118,42 @@
   <div class="container">
     <div class="filter-section">
       <div class="row align-items-end">
-        <div class="col-md-4">
+        <div class="col-md-3">
           <label for="classSelect" class="form-label">選擇班級</label>
           <select id="classSelect" class="form-select">
             <option value="all">所有班級</option>
           </select>
         </div>
-        <div class="col-md-4">
+        <div class="col-md-3">
           <button class="btn btn-primary w-100" id="loadBtn">學生資料</button>
         </div>
-        <div class="col-md-4">
+        <div class="col-md-3">
+          <button class="btn btn-success w-100" id="exportBtn">匯出 Excel</button>
+        </div>
+        <div class="col-md-3">
           <a href="/ta/statistics/manage_companies" class="btn btn-outline-secondary w-100">返回統計頁面</a>
+        </div>
+      </div>
+    </div>
+
+    <!-- 統計圖表區域 -->
+    <div class="row g-4 mb-4" id="statsChartsContainer" style="display: none;">
+      <div class="col-md-4 col-sm-12">
+        <div class="stats-chart-container">
+          <h5 class="text-center">🏢 各公司被選志願次數</h5>
+          <canvas id="companyChart"></canvas>
+        </div>
+      </div>
+      <div class="col-md-4 col-sm-12">
+        <div class="stats-chart-container">
+          <h5 class="text-center">📄 履歷繳交率</h5>
+          <canvas id="resumeChart"></canvas>
+        </div>
+      </div>
+      <div class="col-md-4 col-sm-12">
+        <div class="stats-chart-container">
+          <h5 class="text-center">🎯 志願序填寫率</h5>
+          <canvas id="preferenceChart"></canvas>
         </div>
       </div>
     </div>
@@ -127,6 +186,7 @@
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
   <script>
     let myClassChart = null; // 用於儲存單一班級 Chart 實例
+    let companyChart, resumeChart, preferenceChart; // 用於儲存統計圖表實例
 
     // 載入班級列表
     async function loadClasses() {
@@ -288,10 +348,110 @@
 
         // 載入班級統計圖表
         loadClassStats(classId, className);
+        
+        // 載入統計圖表（三個圖表）
+        loadStatsCharts(classId);
 
       } catch (error) {
         console.error("載入學生資料失敗:", error);
         tbody.innerHTML = `<tr><td colspan="5" class="text-center text-danger">伺服器錯誤，載入失敗。</td></tr>`;
+      }
+    }
+
+    // 載入統計圖表（三個圖表：各公司被選志願次數、履歷繳交率、志願序填寫率）
+    async function loadStatsCharts(classId = "all") {
+      const statsContainer = document.getElementById("statsChartsContainer");
+      
+      // 顯示統計圖表容器（使用 flex 確保橫向排列）
+      statsContainer.style.display = "flex";
+      
+      let url = "/ta/statistics/api/manage_companies_stats"; 
+      if (classId !== "all") url += `?class_id=${classId}`;
+
+      try {
+        const res = await fetch(url);
+        const data = await res.json();
+
+        if (!data.success) {
+          console.error("載入統計資料失敗：" + data.message);
+          return;
+        }
+
+        // 各公司被選志願次數
+        const companies = data.top_companies.map(c => c.company_name);
+        const counts = data.top_companies.map(c => c.preference_count);
+
+        if (companyChart) companyChart.destroy();
+        companyChart = new Chart(document.getElementById("companyChart"), {
+          type: "bar",
+          data: {
+            labels: companies,
+            datasets: [{ label: "志願次數", data: counts, backgroundColor: "#4e79a7" }]
+          },
+          options: { 
+            scales: { y: { beginAtZero: true } },
+            plugins: {
+              legend: { display: false }
+            }
+          }
+        });
+
+        // 履歷繳交率
+        const resumeData = [data.resume_stats.uploaded, data.resume_stats.not_uploaded];
+        const resumeTotal = resumeData.reduce((a, b) => a + b, 0);
+
+        if (resumeChart) resumeChart.destroy();
+        resumeChart = new Chart(document.getElementById("resumeChart"), {
+          type: "doughnut",
+          data: {
+            labels: ["已上傳", "未上傳"],
+            datasets: [{ data: resumeData, backgroundColor: ["#59a14f", "#e15759"] }]
+          },
+          options: {
+            plugins: {
+              legend: { position: 'bottom' },
+              tooltip: {
+                callbacks: {
+                  label: function (context) {
+                    const value = context.raw;
+                    const percent = resumeTotal > 0 ? ((value / resumeTotal) * 100).toFixed(1) + '%' : '0%';
+                    return `${context.label}: ${value} (${percent})`;
+                  }
+                }
+              }
+            }
+          }
+        });
+
+        // 志願序填寫率
+        const prefData = [data.preference_stats.filled, data.preference_stats.not_filled];
+        const prefTotal = prefData.reduce((a, b) => a + b, 0);
+
+        if (preferenceChart) preferenceChart.destroy();
+        preferenceChart = new Chart(document.getElementById("preferenceChart"), {
+          type: "doughnut",
+          data: {
+            labels: ["已填寫", "未填寫"],
+            datasets: [{ data: prefData, backgroundColor: ["#edc948", "#bab0ab"] }]
+          },
+          options: {
+            plugins: {
+              legend: { position: 'bottom' },
+              tooltip: {
+                callbacks: {
+                  label: function (context) {
+                    const value = context.raw;
+                    const percent = prefTotal > 0 ? ((value / prefTotal) * 100).toFixed(1) + '%' : '0%';
+                    return `${context.label}: ${value} (${percent})`;
+                  }
+                }
+              }
+            }
+          }
+        });
+      } catch (error) {
+        console.error("載入統計圖表失敗:", error);
+        statsContainer.style.display = "none";
       }
     }
 
@@ -313,7 +473,18 @@
           myClassChart.destroy(); 
           myClassChart = null; 
         }
+        // 清空統計圖表
+        const statsContainer = document.getElementById("statsChartsContainer");
+        statsContainer.style.display = 'none';
+        if (companyChart) { companyChart.destroy(); companyChart = null; }
+        if (resumeChart) { resumeChart.destroy(); resumeChart = null; }
+        if (preferenceChart) { preferenceChart.destroy(); preferenceChart = null; }
       }
+    });
+
+    // 匯出 Excel (所有班級)
+    document.getElementById("exportBtn").addEventListener("click", () => {
+      window.location.href = `/ta/statistics/api/export_companies_stats`; // 匯出所有班級的統計
     });
 
     // 初始載入班級列表

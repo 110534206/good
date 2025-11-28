@@ -491,8 +491,15 @@ def export_companies_stats():
             percent = f"{(value / pref_total * 100):.0f}%" if pref_total else "0%"
             ws3.append([label, value, percent])
 
+        # 工作表 4：班級實習進度統計
+        ws4 = wb.create_sheet("班級實習進度統計")
+        ws4.append(["項目", "人數"])
+        ws4.append(["總學生數", total_students])
+        ws4.append(["已上傳履歷", uploaded])
+        ws4.append(["已填寫志願", filled])
+
         # 調整欄寬以便閱讀
-        for ws in [ws1, ws2, ws3]:
+        for ws in [ws1, ws2, ws3, ws4]:
             for column_cells in ws.columns:
                 max_length = 0
                 for cell in column_cells:

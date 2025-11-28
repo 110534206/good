@@ -116,7 +116,11 @@ def upload_company():
             status = 'approved'
             reviewed_at = datetime.now()
         else:
-            advisor_user_id = None
+            # 如果是老師或主任，預設上傳教師為指導老師
+            if role in ['teacher', 'director']:
+                advisor_user_id = user_id
+            else:
+                advisor_user_id = None
             reviewed_by_user_id = None
             status = 'pending'
             reviewed_at = None
@@ -378,6 +382,18 @@ def api_get_reviewed_companies():
                 SELECT 
                     ic.id,
                     u.name AS upload_teacher_name,
+                    COALESCE(advisor.name, 
+                        CASE 
+                            WHEN ic.advisor_user_id IS NULL AND u.role IN ('teacher', 'director') THEN u.name 
+                            ELSE NULL 
+                        END
+                    ) AS advisor_teacher_name,
+                    COALESCE(ic.advisor_user_id, 
+                        CASE 
+                            WHEN u.role IN ('teacher', 'director') THEN ic.uploaded_by_user_id 
+                            ELSE NULL 
+                        END
+                    ) AS advisor_user_id,
                     ic.company_name, 
                     ic.status,
                     ic.submitted_at AS upload_time,
@@ -385,16 +401,32 @@ def api_get_reviewed_companies():
                     COALESCE(co.is_open, FALSE) AS is_open_current_semester
                 FROM internship_companies ic
                 LEFT JOIN users u ON ic.uploaded_by_user_id = u.id
+                LEFT JOIN users advisor ON ic.advisor_user_id = advisor.id
                 LEFT JOIN company_openings co ON ic.id = co.company_id 
                     AND co.semester = %s
-                WHERE ic.status IN ('approved', 'rejected')
-                ORDER BY ic.reviewed_at DESC
+                WHERE ic.status = 'approved'
+                ORDER BY 
+                    CASE WHEN ic.reviewed_at IS NULL THEN 1 ELSE 0 END,
+                    ic.reviewed_at DESC,
+                    ic.submitted_at DESC
             """, (current_semester_code,))
         else:
             cursor.execute("""
                 SELECT 
                     ic.id,
                     u.name AS upload_teacher_name,
+                    COALESCE(advisor.name, 
+                        CASE 
+                            WHEN ic.advisor_user_id IS NULL AND u.role IN ('teacher', 'director') THEN u.name 
+                            ELSE NULL 
+                        END
+                    ) AS advisor_teacher_name,
+                    COALESCE(ic.advisor_user_id, 
+                        CASE 
+                            WHEN u.role IN ('teacher', 'director') THEN ic.uploaded_by_user_id 
+                            ELSE NULL 
+                        END
+                    ) AS advisor_user_id,
                     ic.company_name, 
                     ic.status,
                     ic.submitted_at AS upload_time,
@@ -402,11 +434,22 @@ def api_get_reviewed_companies():
                     FALSE AS is_open_current_semester
                 FROM internship_companies ic
                 LEFT JOIN users u ON ic.uploaded_by_user_id = u.id
-                WHERE ic.status IN ('approved', 'rejected')
-                ORDER BY ic.reviewed_at DESC
+                LEFT JOIN users advisor ON ic.advisor_user_id = advisor.id
+                WHERE ic.status = 'approved'
+                ORDER BY 
+                    CASE WHEN ic.reviewed_at IS NULL THEN 1 ELSE 0 END,
+                    ic.reviewed_at DESC,
+                    ic.submitted_at DESC
             """)
 
         companies = cursor.fetchall()
+        
+        # 調試：記錄返回的公司狀態分布
+        status_count = {}
+        for company in companies:
+            status = company.get('status', 'unknown')
+            status_count[status] = status_count.get(status, 0) + 1
+        print(f"📊 已審核公司查詢結果: 總數={len(companies)}, 狀態分布={status_count}")
         
         # 格式化時間
         from datetime import timezone, timedelta
@@ -747,6 +790,95 @@ def api_set_company_open_status():
 @company_bp.route('/upload_company', methods=['GET'])
 def upload_company_form_page():
     return render_template('company/upload_company.html')
+
+# =========================================================
+# API - 取得所有指導老師
+# =========================================================
+@company_bp.route("/api/get_all_teachers", methods=["GET"])
+def api_get_all_teachers():
+    """取得所有指導老師（teacher 和 director 角色）"""
+    conn = None
+    cursor = None
+    try:
+        conn = get_db()
+        cursor = conn.cursor(dictionary=True)
+        
+        cursor.execute("""
+            SELECT id, name
+            FROM users
+            WHERE role IN ('teacher', 'director')
+            ORDER BY name ASC
+        """)
+        teachers = cursor.fetchall()
+        
+        return jsonify({"success": True, "teachers": teachers})
+    except Exception:
+        print("❌ 取得指導老師列表錯誤：", traceback.format_exc())
+        return jsonify({"success": False, "message": "伺服器錯誤"}), 500
+    finally:
+        if cursor: cursor.close()
+        if conn: conn.close()
+
+# =========================================================
+# API - 更新公司指導老師
+# =========================================================
+@company_bp.route("/api/update_company_advisor", methods=["POST"])
+def api_update_company_advisor():
+    """更新公司的指導老師"""
+    data = request.get_json()
+    company_id = data.get("company_id")
+    advisor_user_id = data.get("advisor_user_id")  # 可以是 None
+    
+    if not company_id:
+        return jsonify({"success": False, "message": "缺少 company_id"}), 400
+    
+    conn = None
+    cursor = None
+    try:
+        conn = get_db()
+        cursor = conn.cursor(dictionary=True)
+        
+        # 檢查公司是否存在
+        cursor.execute("SELECT id, company_name FROM internship_companies WHERE id = %s", (company_id,))
+        company = cursor.fetchone()
+        if not company:
+            return jsonify({"success": False, "message": "找不到該公司"}), 404
+        
+        # 如果提供了 advisor_user_id，驗證該用戶是老師或主任
+        if advisor_user_id:
+            cursor.execute("SELECT id, name, role FROM users WHERE id = %s AND role IN ('teacher', 'director')", (advisor_user_id,))
+            teacher = cursor.fetchone()
+            if not teacher:
+                return jsonify({"success": False, "message": "指定的用戶不是有效的指導老師"}), 400
+        
+        # 更新指導老師
+        cursor.execute("""
+            UPDATE internship_companies
+            SET advisor_user_id = %s
+            WHERE id = %s
+        """, (advisor_user_id, company_id))
+        conn.commit()
+        
+        # 取得更新後的指導老師名稱
+        advisor_name = None
+        if advisor_user_id:
+            cursor.execute("SELECT name FROM users WHERE id = %s", (advisor_user_id,))
+            advisor = cursor.fetchone()
+            if advisor:
+                advisor_name = advisor['name']
+        
+        return jsonify({
+            "success": True,
+            "message": f"公司「{company['company_name']}」的指導老師已更新",
+            "advisor_name": advisor_name
+        })
+    except Exception:
+        print("❌ 更新公司指導老師錯誤：", traceback.format_exc())
+        conn.rollback()
+        return jsonify({"success": False, "message": "伺服器錯誤"}), 500
+    finally:
+        if cursor: cursor.close()
+        if conn: conn.close()
 
 # =========================================================
 # 🖥️ 審核公司頁面
