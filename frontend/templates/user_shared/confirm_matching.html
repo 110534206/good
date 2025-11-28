@@ -23,16 +23,20 @@
     body {
       margin: 0;
       font-family: "Noto Sans TC", "Segoe UI", sans-serif;
-      background: var(--bg-light);
+      background: #ffffff;
       color: var(--text-dark);
+      position: relative;
+      min-height: 100vh;
+      overflow-x: hidden;
     }
 
     header {
-      background: #fff;
-      border-bottom: 1px solid var(--border-light);
+      background: linear-gradient(135deg, #0055a8 0%, #006acb 50%, #004f94 100%);
+      border-bottom: none;
       position: sticky;
       top: 0;
       z-index: 10;
+      box-shadow: 0 8px 20px rgba(0, 68, 148, 0.35);
     }
 
     .topbar {
@@ -41,7 +45,9 @@
       padding: 18px 24px;
       display: flex;
       align-items: center;
-      justify-content: space-between;
+      justify-content: center;
+      color: #fff;
+      position: relative;
     }
 
     .topbar h1 {
@@ -49,28 +55,38 @@
       margin: 0;
       display: flex;
       align-items: center;
+      justify-content: center;
       gap: 12px;
+      color: #fff;
+      flex: 1;
+      text-align: center;
     }
 
     .topbar h1 i {
-      color: var(--brand-blue);
+      color: #ffe27a;
     }
 
     .topbar a {
-      color: var(--brand-blue);
+      color: #fff;
       text-decoration: none;
       font-weight: 600;
       display: inline-flex;
       align-items: center;
       gap: 6px;
-      padding: 8px 14px;
+      padding: 8px 16px;
       border-radius: 9999px;
-      border: 1px solid var(--brand-blue);
+      border: 1px solid rgba(255, 255, 255, 0.75);
       transition: all 0.2s ease;
+      background: rgba(255, 255, 255, 0.1);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+      position: absolute;
+      right: 24px;
+      top: 50%;
+      transform: translateY(-50%);
     }
 
     .topbar a:hover {
-      background: var(--brand-blue);
+      background: rgba(255, 255, 255, 0.25);
       color: #fff;
     }
 
@@ -85,10 +101,10 @@
 
     .card {
       background: #fff;
-      border-radius: 16px;
-      border: 1px solid var(--border-light);
-      padding: 24px;
-      box-shadow: 0 10px 30px rgba(0, 40, 80, 0.08);
+      border-radius: 22px;
+      border: 1px solid rgba(0, 0, 0, 0.04);
+      padding: 28px;
+      box-shadow: 0 15px 45px rgba(9, 51, 121, 0.1);
     }
 
     .card h2 {
@@ -112,13 +128,14 @@
     }
 
     .summary-item {
-      border: 1px solid var(--border-light);
-      border-radius: 14px;
-      padding: 18px;
+      border: 1px solid rgba(0, 0, 0, 0.06);
+      border-radius: 16px;
+      padding: 20px;
       display: flex;
       flex-direction: column;
-      gap: 8px;
-      background: linear-gradient(145deg, rgba(0, 102, 204, 0.08), rgba(255, 255, 255, 0.9));
+      gap: 10px;
+      background: #fff;
+      box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.02);
     }
 
     .summary-item span:first-child {
@@ -254,7 +271,7 @@
 <body>
   <header>
     <div class="topbar">
-      <h1><i class="fa-solid fa-handshake"></i>媒合結果確認</h1>
+      <h1>媒合結果確認</h1>
       <a href="/vendor_home"><i class="fa-solid fa-home"></i>返回廠商首頁</a>
     </div>
   </header>
@@ -264,8 +281,8 @@
       <h2><i class="fa-solid fa-chart-pie"></i>媒合摘要</h2>
       <div id="summaryContent" class="summary-grid">
         <div class="summary-item">
-          <span>關聯公司數</span>
-          <span id="summaryCompanyCount">-</span>
+          <span>公司職缺數</span>
+          <span id="summaryJobCount">-</span>
         </div>
         <div class="summary-item">
           <span>媒合學生數</span>
@@ -278,13 +295,13 @@
     <section class="card">
       <h2><i class="fa-solid fa-users-gear"></i>媒合學生列表</h2>
       <div class="filter-bar">
-        <label for="companyFilter">篩選公司</label>
+        <label for="companyFilter">選擇職缺</label>
         <select id="companyFilter">
-          <option value="">全部公司</option>
+          <option value="">選擇職缺</option>
         </select>
 
-        <label for="keywordInput">搜尋學生/職缺</label>
-        <input id="keywordInput" type="search" placeholder="輸入學生姓名、學號或職缺關鍵字">
+        <label for="keywordInput">搜尋學生姓名</label>
+        <input id="keywordInput" type="search" placeholder="輸入學生姓名">
       </div>
 
       <div id="tableContainer">
@@ -296,19 +313,143 @@
   </main>
 
   <script>
-    const companyFilter = document.getElementById('companyFilter');
+    const positionFilter = document.getElementById('companyFilter');
     const keywordInput = document.getElementById('keywordInput');
-    const summaryCompanyCount = document.getElementById('summaryCompanyCount');
+    const summaryJobCount = document.getElementById('summaryJobCount');
     const summaryStudentCount = document.getElementById('summaryStudentCount');
     const summaryGrid = document.getElementById('companyBreakdown');
     const tableContainer = document.getElementById('tableContainer');
 
     let cachedMatches = [];
-    let companyMap = new Map();
+    let vendorJobs = [];
+    let totalJobCount = 0; // 從職位需求管理頁面獲取的職缺總數
+    let hasLoadedPositions = false; // 標記是否已經加載過職位數據
+    let currentSummary = null; // 保存當前的摘要數據
+    let studentResumes = []; // 從學生履歷API獲取的學生列表
+
+    async function loadVendorPositions() {
+      if (!positionFilter) return;
+      positionFilter.innerHTML = '<option value="">載入職缺中...</option>';
+      try {
+        const res = await fetch('/vendor/api/positions', {
+          headers: { 'Accept': 'application/json' },
+          credentials: 'include'
+        });
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+          throw new Error(data.message || '載入職缺失敗');
+        }
+        vendorJobs = data.items || [];
+        // 從職位需求管理API獲取職缺總數
+        totalJobCount = (data.stats && typeof data.stats.total === 'number') ? data.stats.total : vendorJobs.length;
+        hasLoadedPositions = true; // 標記已加載職位數據
+        
+        positionFilter.innerHTML = '<option value="">選擇職缺</option>';
+        const fragment = document.createDocumentFragment();
+        vendorJobs.forEach(job => {
+          if (!job || typeof job.id === 'undefined') {
+            return;
+          }
+          const option = document.createElement('option');
+          option.value = job.id;
+          option.textContent = job.title || '未命名職缺';
+          fragment.appendChild(option);
+        });
+        positionFilter.appendChild(fragment);
+        
+        // 如果已經有摘要數據，重新渲染摘要以更新職缺數
+        if (currentSummary) {
+          renderSummary(currentSummary);
+        } else {
+          // 否則直接更新職缺數
+          if (summaryJobCount) {
+            summaryJobCount.textContent = totalJobCount;
+          }
+        }
+      } catch (error) {
+        console.error('載入職缺清單失敗:', error);
+        positionFilter.innerHTML = '<option value="">選擇職缺</option>';
+      }
+    }
+
+    function calculateJobCount(summary) {
+      // 優先使用從職位需求管理頁面獲取的職缺數
+      if (hasLoadedPositions) {
+        return totalJobCount;
+      }
+      // 備用方案：從摘要中獲取
+      if (summary && typeof summary.total_jobs === 'number') {
+        return summary.total_jobs;
+      }
+      // 最後備用方案：從媒合結果中計算
+      const jobKeys = new Set();
+      cachedMatches.forEach(item => {
+        const jobId = item.job_id;
+        if (jobId) {
+          jobKeys.add(`job-${jobId}`);
+        } else {
+          const fallbackKey = `${item.company_id || 'company'}-${item.job_title || ''}`;
+          jobKeys.add(fallbackKey);
+        }
+      });
+      return jobKeys.size;
+    }
+
+    async function loadStudentResumes() {
+      try {
+        const res = await fetch('/api/get_class_resumes', {
+          headers: { 'Accept': 'application/json' },
+          credentials: 'include'
+        });
+        const data = await res.json();
+        if (res.ok && data.success) {
+          studentResumes = data.resumes || [];
+          // 如果有已保存的摘要，重新渲染以更新學生數
+          if (currentSummary) {
+            renderSummary(currentSummary);
+          }
+        }
+      } catch (error) {
+        console.error('載入學生履歷失敗:', error);
+      }
+    }
+
+    function calculateStudentCount() {
+      // 從學生履歷API獲取的學生數量（去重，每個學生只計算一次）
+      if (studentResumes && studentResumes.length > 0) {
+        const uniqueStudents = new Set();
+        studentResumes.forEach(resume => {
+          const studentId = resume.student_number || resume.username || resume.user_id;
+          if (studentId) {
+            uniqueStudents.add(String(studentId));
+          }
+        });
+        return uniqueStudents.size;
+      }
+      // 備用方案：從媒合結果中計算
+      if (cachedMatches && cachedMatches.length > 0) {
+        const uniqueStudents = new Set();
+        cachedMatches.forEach(match => {
+          const studentId = match.student_id || match.student_number;
+          if (studentId) {
+            uniqueStudents.add(String(studentId));
+          }
+        });
+        return uniqueStudents.size;
+      }
+      return 0;
+    }
 
     function renderSummary(summary) {
-      summaryCompanyCount.textContent = summary.total_companies || 0;
-      summaryStudentCount.textContent = summary.total_students || 0;
+      // 保存摘要數據，以便在職位數據加載完成後可以重新渲染
+      currentSummary = summary || {};
+      
+      const jobCount = calculateJobCount(summary);
+      summaryJobCount.textContent = jobCount;
+      
+      // 從學生履歷API獲取學生數
+      const studentCount = calculateStudentCount();
+      summaryStudentCount.textContent = studentCount || summary.total_students || 0;
 
       summaryGrid.innerHTML = '';
       if (summary.by_company && summary.by_company.length) {
@@ -378,18 +519,46 @@
     }
 
     function applyFilters() {
-      const selectedCompany = companyFilter.value;
+      const selectedJob = positionFilter.value;
       const keyword = keywordInput.value.trim().toLowerCase();
 
+      // 構建學生履歷的姓名映射表（用於搜索）
+      let studentNameMap = new Map(); // key: student_number, value: student_name
+      if (studentResumes && studentResumes.length > 0) {
+        studentResumes.forEach(resume => {
+          const studentId = resume.student_number || resume.username;
+          const studentName = resume.student_name || resume.name;
+          if (studentId && studentName) {
+            studentNameMap.set(String(studentId), studentName.toLowerCase());
+          }
+        });
+      }
+      
       const filtered = cachedMatches.filter(item => {
-        const matchCompany = !selectedCompany || String(item.company_id) === selectedCompany;
-        const matchKeyword = !keyword || [
-          item.student_name,
-          item.student_number,
-          item.job_title,
-          item.company_name
-        ].some(value => value && value.toLowerCase().includes(keyword));
-        return matchCompany && matchKeyword;
+        const matchJob = !selectedJob || (item.job_id && String(item.job_id) === selectedJob);
+        
+        const studentNumber = String(item.student_number || '');
+        
+        // 如果學生履歷列表已加載，只顯示在列表中的學生
+        if (studentNameMap.size > 0) {
+          const studentNameFromResume = studentNameMap.get(studentNumber);
+          // 如果學生不在履歷列表中，過濾掉
+          if (!studentNameFromResume) {
+            return false;
+          }
+          // 如果有搜索關鍵字，檢查學生姓名是否匹配
+          if (keyword) {
+            return matchJob && studentNameFromResume.includes(keyword);
+          }
+          // 沒有搜索關鍵字，只檢查職缺匹配
+          return matchJob;
+        }
+        
+        // 如果履歷列表未加載，使用原來的邏輯
+        if (keyword) {
+          return matchJob && (item.student_name && item.student_name.toLowerCase().includes(keyword));
+        }
+        return matchJob;
       });
 
       renderTable(filtered);
@@ -407,21 +576,10 @@
           throw new Error(data.message || '查詢失敗');
         }
 
-        const { companies, matches, summary, message } = data;
-
-        companyMap = new Map();
-        companyFilter.innerHTML = '<option value="">全部公司</option>';
-
-        (companies || []).forEach(comp => {
-          companyMap.set(String(comp.id), comp.company_name);
-          const option = document.createElement('option');
-          option.value = comp.id;
-          option.textContent = comp.company_name;
-          companyFilter.appendChild(option);
-        });
+        const { matches, summary, message } = data;
 
         cachedMatches = matches || [];
-        renderSummary(summary || { total_companies: 0, total_students: 0, by_company: [] });
+        renderSummary(summary || { total_jobs: 0, total_students: 0, by_company: [] });
 
         if (message && !(matches && matches.length)) {
           tableContainer.innerHTML = `
@@ -445,12 +603,14 @@
       }
     }
 
-    companyFilter.addEventListener('change', applyFilters);
+    positionFilter.addEventListener('change', applyFilters);
     keywordInput.addEventListener('input', () => {
       window.clearTimeout(keywordInput._timer);
       keywordInput._timer = setTimeout(applyFilters, 220);
     });
 
+    loadVendorPositions();
+    loadStudentResumes();
     loadMatchingResults();
   </script>
 </body>
