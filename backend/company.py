@@ -881,6 +881,125 @@ def api_update_company_advisor():
         if conn: conn.close()
 
 # =========================================================
+# 📥 導出公司審核數據
+# =========================================================
+@company_bp.route("/api/export_company_reviews", methods=["GET"])
+def api_export_company_reviews():
+    """導出公司審核數據為SQL文件"""
+    conn = None
+    cursor = None
+    try:
+        conn = get_db()
+        cursor = conn.cursor(dictionary=True)
+        
+        # 查詢所有已審核的公司
+        cursor.execute("""
+            SELECT 
+                ic.id,
+                ic.company_name,
+                ic.status,
+                ic.reviewed_at,
+                ic.reviewed_by_user_id,
+                ic.advisor_user_id
+            FROM internship_companies ic
+            WHERE ic.status IN ('approved', 'rejected')
+            ORDER BY ic.id
+        """)
+        companies = cursor.fetchall()
+        
+        # 查詢公司開放狀態
+        cursor.execute("""
+            SELECT 
+                co.company_id,
+                co.semester,
+                co.is_open,
+                co.opened_at
+            FROM company_openings co
+            ORDER BY co.company_id, co.semester
+        """)
+        openings = cursor.fetchall()
+        openings_dict = {}
+        for opening in openings:
+            company_id = opening['company_id']
+            if company_id not in openings_dict:
+                openings_dict[company_id] = []
+            openings_dict[company_id].append(opening)
+        
+        # 生成SQL內容
+        sql_lines = []
+        sql_lines.append("-- ============================================")
+        sql_lines.append(f"-- 公司審核數據導出")
+        sql_lines.append(f"-- 導出時間: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        sql_lines.append(f"-- 共 {len(companies)} 家公司")
+        sql_lines.append("-- ============================================\n")
+        sql_lines.append("START TRANSACTION;\n")
+        
+        # 更新審核狀態
+        sql_lines.append("-- 更新公司審核狀態\n")
+        for company in companies:
+            company_id = company['id']
+            company_name = company['company_name'].replace("'", "''")
+            status = company['status']
+            reviewed_at = company['reviewed_at']
+            reviewed_by_user_id = company['reviewed_by_user_id']
+            
+            reviewed_at_str = f"'{reviewed_at.strftime('%Y-%m-%d %H:%M:%S')}'" if reviewed_at else "NULL"
+            reviewed_by_str = str(reviewed_by_user_id) if reviewed_by_user_id else "NULL"
+            
+            sql_lines.append(f"-- 公司: {company_name} (ID: {company_id})")
+            sql_lines.append(f"UPDATE internship_companies")
+            sql_lines.append(f"SET status = '{status}',")
+            sql_lines.append(f"    reviewed_at = {reviewed_at_str},")
+            sql_lines.append(f"    reviewed_by_user_id = {reviewed_by_str}")
+            sql_lines.append(f"WHERE id = {company_id};")
+            sql_lines.append("")
+        
+        # 更新指導老師
+        sql_lines.append("-- 更新公司指導老師\n")
+        for company in companies:
+            if company['advisor_user_id']:
+                sql_lines.append(f"UPDATE internship_companies")
+                sql_lines.append(f"SET advisor_user_id = {company['advisor_user_id']}")
+                sql_lines.append(f"WHERE id = {company['id']};")
+                sql_lines.append("")
+        
+        # 更新開放狀態
+        sql_lines.append("-- 更新公司開放狀態\n")
+        for company_id, opening_list in openings_dict.items():
+            for opening in opening_list:
+                semester = opening['semester']
+                is_open = 1 if opening['is_open'] else 0
+                opened_at = opening['opened_at']
+                opened_at_str = f"'{opened_at.strftime('%Y-%m-%d %H:%M:%S')}'" if opened_at else "NOW()"
+                
+                sql_lines.append(f"INSERT INTO company_openings (company_id, semester, is_open, opened_at)")
+                sql_lines.append(f"VALUES ({company_id}, '{semester}', {is_open}, {opened_at_str})")
+                sql_lines.append(f"ON DUPLICATE KEY UPDATE")
+                sql_lines.append(f"    is_open = {is_open},")
+                sql_lines.append(f"    opened_at = {opened_at_str};")
+                sql_lines.append("")
+        
+        sql_lines.append("COMMIT;")
+        
+        sql_content = '\n'.join(sql_lines)
+        
+        from flask import Response
+        return Response(
+            sql_content,
+            mimetype='text/plain',
+            headers={
+                'Content-Disposition': f'attachment; filename=company_reviews_export_{datetime.now().strftime("%Y%m%d")}.sql'
+            }
+        )
+        
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"success": False, "message": f"導出失敗: {str(e)}"}), 500
+    finally:
+        if cursor: cursor.close()
+        if conn: conn.close()
+
+# =========================================================
 # 🖥️ 審核公司頁面
 # =========================================================
 @company_bp.route('/approve_company', methods=['GET'])
