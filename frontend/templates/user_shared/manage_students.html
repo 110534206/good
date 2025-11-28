@@ -118,19 +118,25 @@
   <div class="container">
     <div class="filter-section">
       <div class="row align-items-end">
-        <div class="col-md-3">
-          <label for="classSelect" class="form-label">選擇班級</label>
-          <select id="classSelect" class="form-select">
-            <option value="all">所有班級</option>
+        <div class="col-md-2">
+          <label for="semesterSelect" class="form-label">選擇學年</label>
+          <select id="semesterSelect" class="form-select">
+            <option value="all">所有學年</option>
           </select>
         </div>
-        <div class="col-md-3">
+        <div class="col-md-2">
+          <label for="classSelect" class="form-label">選擇班級</label>
+          <select id="classSelect" class="form-select" disabled>
+            <option value="all">請先選擇學年</option>
+          </select>
+        </div>
+        <div class="col-md-2">
           <button class="btn btn-primary w-100" id="loadBtn">學生資料</button>
         </div>
-        <div class="col-md-3">
+        <div class="col-md-2">
           <button class="btn btn-success w-100" id="exportBtn">匯出 Excel</button>
         </div>
-        <div class="col-md-3">
+        <div class="col-md-2">
           <a href="/ta/statistics/manage_companies" class="btn btn-outline-secondary w-100">返回統計頁面</a>
         </div>
       </div>
@@ -187,36 +193,168 @@
   <script>
     let myClassChart = null; // 用於儲存單一班級 Chart 實例
     let companyChart, resumeChart, preferenceChart; // 用於儲存統計圖表實例
+    let allClassesData = []; // 儲存所有班級資料
 
-    // 載入班級列表
-    async function loadClasses() {
+    // 固定載入 1132、1142 兩個學年
+    function loadSemesters() {
+      const semesterSelect = document.getElementById("semesterSelect");
+      const semesters = ['1132', '1142'];
+
+      semesterSelect.innerHTML = "";
+      semesters.forEach(code => {
+        const option = document.createElement("option");
+        option.value = code;
+        option.textContent = code;
+        semesterSelect.appendChild(option);
+      });
+      semesterSelect.disabled = false;
+      semesterSelect.value = semesters[0];
+      loadClassesBySemester(semesters[0]);
+    }
+
+    // 從班級名稱中提取「忠」、「孝」等字
+    function extractClassShortName(className) {
+      const classNames = ['忠', '孝', '仁', '愛', '信', '義', '和', '平', '甲', '乙', '丙', '丁', '戊', '己', '庚', '辛', '壬', '癸'];
+      for (const name of classNames) {
+        if (className.includes(name)) {
+          return name;
+        }
+      }
+      // 如果沒找到，嘗試移除數字和常見前綴
+      let shortName = className.replace(/^[^忠孝仁愛信義和平甲乙丙丁戊己庚辛壬癸]+/, '');
+      if (!shortName) {
+        shortName = className.slice(-1);
+      }
+      return shortName;
+    }
+
+    // 載入所有班級資料
+    async function loadAllClasses() {
       try {
         const res = await fetch("/ta/statistics/api/get_classes");
         const data = await res.json();
-        const select = document.getElementById("classSelect");
-
+        
         if (data.success) {
+          const rawClasses = data.classes || [];
           // 要排除的班級名稱
           const excludedClasses = ['資一孝', '資二孝', '資三孝', '資一忠', '資二忠', '資三忠'];
-          
-          data.classes.forEach(c => {
-            const className = `${c.department.replace('管科', '')}${c.name}`;
-            // 過濾掉資一孝到資三孝和資一忠到資三忠
-            if (!excludedClasses.some(excluded => className.includes(excluded))) {
-              const option = document.createElement("option");
-              option.value = c.id;
-              option.textContent = className;
-              select.appendChild(option);
+          const allowedSemesterCodes = ['1132', '1142'];
+
+          const normalizeClasses = classes => classes.map(c => {
+            let semesterCode = '';
+            if (c.semester_code) {
+              semesterCode = String(c.semester_code);
+            } else if (c.admission_year) {
+              const yearStr = String(c.admission_year);
+              semesterCode = yearStr.length >= 4 ? yearStr : `${yearStr}2`;
             }
+            return {
+              ...c,
+              semester_code: semesterCode
+            };
           });
+
+          let normalized = normalizeClasses(rawClasses).filter(c => {
+            const fullClassName = `${(c.department || '').replace('管科', '')}${c.name || ''}`;
+            if (excludedClasses.some(excluded => fullClassName.includes(excluded))) {
+              return false;
+            }
+            const semesterCode = c.semester_code || '';
+            return semesterCode && allowedSemesterCodes.includes(semesterCode);
+          });
+
+          // 若依指定學年過濾後沒有資料，退回使用全部班級（仍排除指定班級）
+          if (normalized.length === 0) {
+            normalized = normalizeClasses(
+              rawClasses.filter(c => {
+                const fullClassName = `${(c.department || '').replace('管科', '')}${c.name || ''}`;
+                return !excludedClasses.some(excluded => fullClassName.includes(excluded));
+              })
+            );
+          }
+
+          allClassesData = normalized;
         }
       } catch (error) {
         console.error("載入班級列表失敗:", error);
       }
     }
 
+    // 根據選擇的學年載入對應的班級（只顯示忠、孝兩班）
+    function loadClassesBySemester(semesterCode) {
+      const classSelect = document.getElementById("classSelect");
+      classSelect.innerHTML = '<option value="all" disabled selected>請選擇班級</option>';
+      
+      if (semesterCode === 'all') {
+        classSelect.disabled = true;
+        return;
+      }
+      
+      classSelect.disabled = false;
+      
+      // 過濾出該學年的班級
+      let filteredClasses = allClassesData.filter(c => (c.semester_code || '') === String(semesterCode));
+      // 若該學年沒有資料，退回使用所有班級中符合條件的班級
+      if (filteredClasses.length === 0) {
+        filteredClasses = [...allClassesData];
+      }
+      
+      // 只顯示「忠」、「孝」兩班
+      const allowedClasses = ['忠', '孝'];
+      
+      // 提取班級名稱（忠、孝等）
+      const classMap = new Map(); // 用來去重（同一個班級名稱可能有多個班級ID）
+      
+      filteredClasses.forEach(c => {
+        const fullName = `${(c.department || '').replace('管科', '')}${c.name || ''}`;
+        let classShortName = null;
+        if (fullName.includes('忠')) {
+          classShortName = '忠';
+        } else if (fullName.includes('孝')) {
+          classShortName = '孝';
+        } else {
+          // 退而求其次使用原邏輯辨識
+          const extracted = extractClassShortName(fullName);
+          if (allowedClasses.includes(extracted)) {
+            classShortName = extracted;
+          }
+        }
+
+        if (classShortName && allowedClasses.includes(classShortName)) {
+          if (!classMap.has(classShortName)) {
+            classMap.set(classShortName, []);
+          }
+          classMap.get(classShortName).push(c);
+        }
+      });
+      
+      // 依 allowedClasses 順序（忠、孝）加入
+      allowedClasses.forEach(className => {
+        const classes = classMap.get(className);
+        if (classes && classes.length > 0) {
+          const classData = classes[0];
+          const option = document.createElement("option");
+          option.value = classData.id;
+          option.textContent = className;
+          classSelect.appendChild(option);
+        }
+      });
+
+      // 若沒有任何班級可選，繼續停用
+      if (classSelect.options.length === 1) {
+        classSelect.disabled = true;
+        document.getElementById("studentsTableBody").innerHTML = 
+          '<tr><td colspan="5" class="text-center text-muted">該學年目前無可用班級</td></tr>';
+        return;
+      }
+
+      // 預設選擇第一個班級並載入資料
+      classSelect.selectedIndex = 1;
+      loadStudents();
+    }
+
     // 載入單一班級的統計圖表
-    async function loadClassStats(classId, className) {
+    async function loadClassStats(classId, className, semesterCode = "all") {
       const chartContainer = document.getElementById("classChartContainer");
 
       // 處理「所有班級」的特殊情況
@@ -237,7 +375,7 @@
 
       try {
         // 呼叫新的 API 路由
-        const res = await fetch(`/ta/statistics/api/get_class_stats/${classId}`);
+        const res = await fetch(`/ta/statistics/api/get_class_stats/${classId}?semester_code=${semesterCode}`);
         const data = await res.json();
 
         if (!data.success) {
@@ -317,13 +455,25 @@
 
     // 載入學生資料
     async function loadStudents() {
+      const semesterCode = document.getElementById("semesterSelect").value;
       const classId = document.getElementById("classSelect").value;
       const className = document.getElementById("classSelect").options[document.getElementById("classSelect").selectedIndex].text;
       const tbody = document.getElementById("studentsTableBody");
       tbody.innerHTML = `<tr><td colspan="5" class="text-center text-muted">載入中...</td></tr>`;
 
+      // 檢查是否已選擇學年和班級
+      if (semesterCode === 'all') {
+        tbody.innerHTML = `<tr><td colspan="5" class="text-center text-muted">請先選擇學年</td></tr>`;
+        return;
+      }
+
+      if (classId === 'all') {
+        tbody.innerHTML = `<tr><td colspan="5" class="text-center text-muted">請選擇班級</td></tr>`;
+        return;
+      }
+
       try {
-        const res = await fetch(`/ta/statistics/api/get_students_by_class?class_id=${classId}`);
+        const res = await fetch(`/ta/statistics/api/get_students_by_class?class_id=${classId}&semester_code=${semesterCode}`);
         const data = await res.json();
 
         if (!data.success) {
@@ -333,24 +483,26 @@
 
         if (data.students.length === 0) {
           tbody.innerHTML = `<tr><td colspan="5" class="text-center text-muted">該班級沒有學生資料</td></tr>`;
-          return;
+        } else {
+          tbody.innerHTML = data.students.map(s => `
+            <tr>
+              <td>${s.username}</td>
+              <td>${s.name}</td>
+              <td>${s.email}</td>
+              <td>${s.resume_count > 0 ? '✅' : '❌'}</td>
+              <td>${s.preference_count > 0 ? '✅' : '❌'}</td>
+            </tr>
+          `).join("");
         }
 
-        tbody.innerHTML = data.students.map(s => `
-          <tr>
-            <td>${s.username}</td>
-            <td>${s.name}</td>
-            <td>${s.email}</td>
-            <td>${s.resume_count > 0 ? '✅' : '❌'}</td>
-            <td>${s.preference_count > 0 ? '✅' : '❌'}</td>
-          </tr>
-        `).join("");
-
+        // 組合顯示名稱：學年+班級
+        const displayName = `${semesterCode}${className}`;
+        
         // 載入班級統計圖表
-        loadClassStats(classId, className);
+        loadClassStats(classId, displayName, semesterCode);
         
         // 載入統計圖表（三個圖表）
-        loadStatsCharts(classId);
+        loadStatsCharts(classId, semesterCode);
 
       } catch (error) {
         console.error("載入學生資料失敗:", error);
@@ -359,14 +511,16 @@
     }
 
     // 載入統計圖表（三個圖表：各公司被選志願次數、履歷繳交率、志願序填寫率）
-    async function loadStatsCharts(classId = "all") {
+    async function loadStatsCharts(classId = "all", semesterCode = "all") {
       const statsContainer = document.getElementById("statsChartsContainer");
       
-      // 顯示統計圖表容器（使用 flex 確保橫向排列）
+      // 顯示統計圖表容器（CSS 已設置為 flex）
       statsContainer.style.display = "flex";
       
-      let url = "/ta/statistics/api/manage_companies_stats"; 
-      if (classId !== "all") url += `?class_id=${classId}`;
+      const params = new URLSearchParams();
+      if (classId && classId !== "all") params.append("class_id", classId);
+      if (semesterCode && semesterCode !== "all") params.append("semester_code", semesterCode);
+      const url = params.toString() ? `/ta/statistics/api/manage_companies_stats?${params.toString()}` : "/ta/statistics/api/manage_companies_stats";
 
       try {
         const res = await fetch(url);
@@ -458,6 +612,28 @@
     // 事件監聽
     document.getElementById("loadBtn").addEventListener("click", loadStudents);
     
+    // 當學年選擇改變時，載入對應的班級列表
+    document.getElementById("semesterSelect").addEventListener("change", function() {
+      const semesterCode = this.value;
+      loadClassesBySemester(semesterCode);
+      
+      // 清空表格和圖表
+      document.getElementById("studentsTableBody").innerHTML = 
+        '<tr><td colspan="5" class="text-center text-muted">請選擇班級並點擊「學生資料」</td></tr>';
+      const chartContainer = document.getElementById("classChartContainer");
+      chartContainer.style.display = 'none';
+      if (myClassChart) { 
+        myClassChart.destroy(); 
+        myClassChart = null; 
+      }
+      // 清空統計圖表
+      const statsContainer = document.getElementById("statsChartsContainer");
+      statsContainer.style.display = 'none';
+      if (companyChart) { companyChart.destroy(); companyChart = null; }
+      if (resumeChart) { resumeChart.destroy(); resumeChart = null; }
+      if (preferenceChart) { preferenceChart.destroy(); preferenceChart = null; }
+    });
+    
     // 當班級選擇改變時自動載入資料
     document.getElementById("classSelect").addEventListener("change", function() {
       const classId = this.value;
@@ -487,8 +663,15 @@
       window.location.href = `/ta/statistics/api/export_companies_stats`; // 匯出所有班級的統計
     });
 
-    // 初始載入班級列表
-    loadClasses();
+    // 初始載入：先載入學年列表和所有班級資料
+    async function initialize() {
+      await loadAllClasses();
+      loadSemesters();
+      // 預設顯示全部班級統計圖表
+      loadStatsCharts();
+    }
+    
+    initialize();
   </script>
 </body>
 

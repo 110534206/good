@@ -230,6 +230,28 @@ def get_classes():
             "ORDER BY department ASC, admission_year DESC, name ASC"
         )
         classes = cursor.fetchall()
+        
+        # 為每個班級計算學期代碼（假設是第2學期，所以 113 -> 1132, 114 -> 1142）
+        for c in classes:
+            if c.get('admission_year'):
+                admission_year = c['admission_year']
+                # 如果 admission_year 已經是 4 位數（如 1132、1142），直接使用
+                if isinstance(admission_year, int):
+                    if admission_year >= 1000:  # 已經是完整學期代碼
+                        c['semester_code'] = str(admission_year)
+                    else:  # 只有年度（如 113、114），轉換為學期代碼（假設是第2學期）
+                        c['semester_code'] = f"{admission_year}2"
+                else:
+                    admission_str = str(admission_year)
+                    if len(admission_str) >= 4:  # 已經是完整學期代碼
+                        c['semester_code'] = admission_str
+                    elif admission_str.isdigit():  # 只有年度，轉換為學期代碼
+                        c['semester_code'] = admission_str + "2"
+                    else:
+                        c['semester_code'] = None
+            else:
+                c['semester_code'] = None
+        
         return jsonify({"success": True, "classes": classes})
     except Exception as e:
         print(f"取得班級列表錯誤: {e}")
@@ -248,15 +270,30 @@ def get_students_by_class():
         return jsonify({"success": False, "message": "未授權"}), 403
 
     class_id = request.args.get('class_id')
+    semester_code = request.args.get('semester_code')
     conn = get_db()
     cursor = conn.cursor(dictionary=True)
     try:
+        semester_id = None
+        if semester_code:
+            cursor.execute("SELECT id FROM semesters WHERE code = %s LIMIT 1", (semester_code,))
+            semester_row = cursor.fetchone()
+            semester_id = semester_row['id'] if semester_row else None
+
+        resume_clause = " AND r.semester_id = %s" if semester_id else ""
+        preference_clause = " AND sp.semester_id = %s" if semester_id else ""
+
         # 查詢指定班級（或所有）的學生基本資料、履歷數、志願數
-        query = "SELECT u.id, u.username, u.name, u.email, " \
-                "(SELECT COUNT(*) FROM resumes r WHERE r.user_id = u.id) AS resume_count, " \
-                "(SELECT COUNT(*) FROM student_preferences sp WHERE sp.student_id = u.id) AS preference_count " \
-                "FROM users u WHERE u.role='student' "
+        query = f"""
+            SELECT u.id, u.username, u.name, u.email,
+                   (SELECT COUNT(*) FROM resumes r WHERE r.user_id = u.id {resume_clause}) AS resume_count,
+                   (SELECT COUNT(*) FROM student_preferences sp WHERE sp.student_id = u.id {preference_clause}) AS preference_count
+            FROM users u
+            WHERE u.role='student'
+        """
         params = []
+        if semester_id:
+            params.extend([semester_id, semester_id])
         if class_id and class_id != "all":
             query += "AND u.class_id=%s "
             params.append(class_id)
@@ -286,26 +323,44 @@ def get_class_stats(class_id):
     conn = get_db()
     cursor = conn.cursor(dictionary=True)
     try:
+        semester_code = request.args.get('semester_code')
+        semester_id = None
+        if semester_code:
+            cursor.execute("SELECT id FROM semesters WHERE code=%s LIMIT 1", (semester_code,))
+            semester = cursor.fetchone()
+            semester_id = semester['id'] if semester else None
+
         # 1. 查詢班級名稱
         cursor.execute("SELECT name FROM classes WHERE id = %s", (class_id,))
         class_info = cursor.fetchone()
         if not class_info:
             return jsonify({"success": False, "message": "找不到該班級資料"}), 404
 
-        # 2. 查詢班級統計數據：
-        # total_students: 總學生數 (users.role = 'student')
-        # students_with_resume: 已上傳履歷人數 (與 resumes 表 LEFT JOIN)
-        # students_with_preference: 已填寫志願人數 (與 student_preferences 表 LEFT JOIN)
-        cursor.execute("""
+        resume_filter = ""
+        preference_filter = ""
+        params = []
+        if semester_id:
+            resume_filter = " AND r.semester_id = %s"
+            preference_filter = " AND sp.semester_id = %s"
+            params.extend([semester_id, semester_id])
+        params.append(class_id)
+
+        cursor.execute(f"""
             SELECT
                 COUNT(u.id) AS total_students,
-                SUM(CASE WHEN r.user_id IS NOT NULL THEN 1 ELSE 0 END) AS students_with_resume,
-                SUM(CASE WHEN sp.student_id IS NOT NULL THEN 1 ELSE 0 END) AS students_with_preference
+                SUM(
+                    CASE WHEN EXISTS (
+                        SELECT 1 FROM resumes r WHERE r.user_id = u.id {resume_filter}
+                    ) THEN 1 ELSE 0 END
+                ) AS students_with_resume,
+                SUM(
+                    CASE WHEN EXISTS (
+                        SELECT 1 FROM student_preferences sp WHERE sp.student_id = u.id {preference_filter}
+                    ) THEN 1 ELSE 0 END
+                ) AS students_with_preference
             FROM users u
-            LEFT JOIN (SELECT DISTINCT user_id FROM resumes) r ON r.user_id = u.id
-            LEFT JOIN (SELECT DISTINCT student_id FROM student_preferences) sp ON sp.student_id = u.id
             WHERE u.class_id = %s AND u.role = 'student'
-        """, (class_id,))
+        """, params)
         stats = cursor.fetchone()
 
         # 組合結果
@@ -331,53 +386,89 @@ def get_class_stats(class_id):
 @ta_statistics_bp.route('/api/manage_companies_stats')
 def manage_companies_stats():
     class_id = request.args.get("class_id")
+    semester_code = request.args.get("semester_code")
     conn = get_db()
     cursor = conn.cursor(dictionary=True)
     try:
-        params = []
-        student_filter = "WHERE u.role='student'"
+        semester_id = None
+        if semester_code:
+            cursor.execute("SELECT id FROM semesters WHERE code=%s LIMIT 1", (semester_code,))
+            semester = cursor.fetchone()
+            semester_id = semester['id'] if semester else None
 
+        # 共同的學生過濾條件
+        class_condition = ""
+        class_params = []
         if class_id and class_id != "all":
-            student_filter += " AND u.class_id=%s"
-            params.append(class_id)
+            class_condition = " AND u.class_id=%s"
+            class_params.append(class_id)
 
         # 各公司被選志願次數
+        company_params = []
+        sp_semester_clause = ""
+        u_class_clause = ""
+        if semester_id:
+            sp_semester_clause = " AND sp.semester_id = %s"
+            company_params.append(semester_id)
+        if class_id and class_id != "all":
+            u_class_clause = " AND u.class_id = %s"
+            company_params.append(class_id)
+
         cursor.execute(f"""
             SELECT c.company_name, COUNT(sp.id) AS preference_count
             FROM internship_companies c
-            LEFT JOIN student_preferences sp ON c.id=sp.company_id
-            LEFT JOIN users u ON sp.student_id=u.id
-            {student_filter}
-            GROUP BY c.id
+            LEFT JOIN student_preferences sp ON c.id = sp.company_id {sp_semester_clause}
+            LEFT JOIN users u ON sp.student_id = u.id AND u.role='student' {u_class_clause}
+            GROUP BY c.id, c.company_name
             ORDER BY preference_count DESC
             LIMIT 5
-        """, params)
+        """, company_params)
         top_companies = cursor.fetchall()
 
         # 履歷繳交率
         cursor.execute(f"""
-            SELECT COUNT(*) AS total FROM users u {student_filter}
-        """, params)
+            SELECT COUNT(*) AS total
+            FROM users u
+            WHERE u.role='student'{class_condition}
+        """, class_params)
         total_students = cursor.fetchone()["total"]
+
+        resume_params = []
+        resume_where = "WHERE u.role='student'"
+        if class_id and class_id != "all":
+            resume_where += " AND u.class_id=%s"
+            resume_params.append(class_id)
+        if semester_id:
+            resume_where += " AND r.semester_id=%s"
+            resume_params.append(semester_id)
 
         cursor.execute(f"""
             SELECT COUNT(DISTINCT r.user_id) AS uploaded
             FROM resumes r
             JOIN users u ON r.user_id = u.id
-            {student_filter}
-        """, params)
+            {resume_where}
+        """, resume_params)
         uploaded = cursor.fetchone()["uploaded"]
-        resume_stats = {"uploaded": uploaded, "not_uploaded": total_students - uploaded}
+        resume_stats = {"uploaded": uploaded, "not_uploaded": max(total_students - uploaded, 0)}
 
         # 志願序填寫率
+        pref_params = []
+        pref_where = "WHERE u.role='student'"
+        if class_id and class_id != "all":
+            pref_where += " AND u.class_id=%s"
+            pref_params.append(class_id)
+        if semester_id:
+            pref_where += " AND sp.semester_id=%s"
+            pref_params.append(semester_id)
+
         cursor.execute(f"""
             SELECT COUNT(DISTINCT sp.student_id) AS filled
             FROM student_preferences sp
-            JOIN users u ON sp.student_id=u.id
-            {student_filter}
-        """, params)
+            JOIN users u ON sp.student_id = u.id
+            {pref_where}
+        """, pref_params)
         filled = cursor.fetchone()["filled"]
-        preference_stats = {"filled": filled, "not_filled": total_students - filled}
+        preference_stats = {"filled": filled, "not_filled": max(total_students - filled, 0)}
 
         return jsonify({
             "success": True,
