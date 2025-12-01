@@ -136,13 +136,14 @@ def generate_company_word_document(data):
     
     doc.add_paragraph()  # 空行
     
-    # II. 營業項目 - 使用表格格式
+    # II. 營業項目與企業規模 - 合併為一個區塊
     section2_title = doc.add_paragraph()
-    section2_run = section2_title.add_run('II. 營業項目')
+    section2_run = section2_title.add_run('II. 營業項目與企業規模')
     section2_run.font.size = Pt(14)
     section2_run.bold = True
     set_chinese_font(section2_run, '標楷體')
     
+    # 營業項目表格
     business_table = doc.add_table(rows=1, cols=2)
     business_table.style = 'Light Grid Accent 1'
     set_table_borders(business_table)
@@ -168,15 +169,7 @@ def generate_company_word_document(data):
             set_chinese_font(run, '標楷體')
             run.font.size = Pt(12)
     
-    doc.add_paragraph()  # 空行
-    
-    # III. 企業規模 - 使用表格格式
-    section3_title = doc.add_paragraph()
-    section3_run = section3_title.add_run('III. 企業規模')
-    section3_run.font.size = Pt(14)
-    section3_run.bold = True
-    set_chinese_font(section3_run, '標楷體')
-    
+    # 企業規模表格（在同一區塊內）
     scale_table = doc.add_table(rows=1, cols=2)
     scale_table.style = 'Light Grid Accent 1'
     set_table_borders(scale_table)
@@ -212,12 +205,12 @@ def generate_company_word_document(data):
     
     doc.add_paragraph()  # 空行
     
-    # IV. 職缺明細
-    section4_title = doc.add_paragraph()
-    section4_run = section4_title.add_run('IV. 職缺明細')
-    section4_run.font.size = Pt(14)
-    section4_run.bold = True
-    set_chinese_font(section4_run, '標楷體')
+    # III. 職缺明細
+    section3_title = doc.add_paragraph()
+    section3_run = section3_title.add_run('III. 工作項目')
+    section3_run.font.size = Pt(14)
+    section3_run.bold = True
+    set_chinese_font(section3_run, '標楷體')
     
     jobs = data.get('jobs', [])
     if jobs:
@@ -233,17 +226,18 @@ def generate_company_word_document(data):
         
         # 表頭
         header_cells = jobs_table.rows[0].cells
-        for cell in header_cells:
-            for paragraph in cell.paragraphs:
-                for run in paragraph.runs:
-                    set_chinese_font(run, '標楷體')
-                    run.font.size = Pt(12)
-                    run.bold = True
-        
         header_cells[0].text = '工作編號'
         header_cells[1].text = '工作項目'
         header_cells[2].text = '需求條件/工作內容'
         header_cells[3].text = '名額'
+        
+        for cell in header_cells:
+            for paragraph in cell.paragraphs:
+                paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                for run in paragraph.runs:
+                    set_chinese_font(run, '標楷體')
+                    run.font.size = Pt(12)
+                    run.bold = True
         
         # 職缺資料
         for idx, job in enumerate(jobs, 1):
@@ -253,21 +247,26 @@ def generate_company_word_document(data):
             row_cells[2].text = job.get('description', '')
             row_cells[3].text = str(job.get('slots', 1))
             
-            # 設定表格內容字體
-            for cell in row_cells:
+            # 設定表格內容字體和對齊
+            for cell_idx, cell in enumerate(row_cells):
                 for paragraph in cell.paragraphs:
+                    # 工作編號和名額置中對齊，其他左對齊
+                    if cell_idx == 0 or cell_idx == 3:
+                        paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                    else:
+                        paragraph.alignment = WD_ALIGN_PARAGRAPH.LEFT
                     for run in paragraph.runs:
                         set_chinese_font(run, '標楷體')
                         run.font.size = Pt(12)
     
     doc.add_paragraph()  # 空行
     
-    # V. 待遇和來源 - 使用表格格式
-    section5_title = doc.add_paragraph()
-    section5_run = section5_title.add_run('V. 待遇和來源')
-    section5_run.font.size = Pt(14)
-    section5_run.bold = True
-    set_chinese_font(section5_run, '標楷體')
+    # IV. 待遇與來源 - 使用表格格式
+    section4_title = doc.add_paragraph()
+    section4_run = section4_title.add_run('IV. 待遇與來源')
+    section4_run.font.size = Pt(14)
+    section4_run.bold = True
+    set_chinese_font(section4_run, '標楷體')
     
     compensation_source_table = doc.add_table(rows=2, cols=2)
     compensation_source_table.style = 'Light Grid Accent 1'
