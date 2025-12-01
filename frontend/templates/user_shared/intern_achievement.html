@@ -33,8 +33,7 @@
             text-align: center;
             font-size: 1.5rem;
             font-weight: 600;
-            border-bottom-left-radius: 16px;
-            border-bottom-right-radius: 16px;
+            border-radius: 0;
             box-shadow: 0 6px 15px rgba(4,84,163,0.35);
         }
 
@@ -138,7 +137,7 @@
                     <div class="info-row">
                         <span class="info-label">錄取公司</span>
                         <div class="info-value" id="companyName">—</div>
-                        <p class="assist" id="companyAddress">—</p>
+                        <p class="assist" id="companyAddress"></p>
                         <p class="assist" id="contactBlock"></p>
                     </div>
 
@@ -196,7 +195,7 @@
 
                 if (admission) {
                     companyName.textContent = admission.company_name || fallback;
-                    companyAddress.textContent = admission.company_address || fallback;
+                    companyAddress.textContent = admission.company_address || "";
                     internSemester.textContent = admission.semester ? `學期：${admission.semester}` : "";
                     teacherInfo.textContent = admission.teacher_name
                         ? `${admission.teacher_name}${admission.teacher_email ? `（${admission.teacher_email}）` : ""}`
@@ -205,14 +204,15 @@
                     updateContact(admission);
                     statusChip.textContent = "錄取資料最新";
                 } else {
-                    companyName.textContent = "尚未有錄取紀錄";
+                    companyName.textContent = fallback;
                     statusChip.textContent = "尚未有錄取紀錄";
                 }
 
+                // 顯示實習期間：優先從 final_preference 獲取，如果沒有則顯示空值
                 if (final_preference && final_preference.internship_period) {
                     internPeriod.textContent = final_preference.internship_period;
                 } else {
-                    internPeriod.textContent = "由公司另行通知";
+                    internPeriod.textContent = fallback;
                 }
 
             } catch (error) {

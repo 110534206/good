@@ -1,4 +1,4 @@
-from flask import Flask, redirect, url_for, session
+from flask import Flask, redirect, url_for, session, render_template
 from flask_cors import CORS
 from jinja2 import ChoiceLoader, FileSystemLoader
 from dotenv import load_dotenv
@@ -86,6 +86,22 @@ def admin_index():
     if "username" in session and session.get("role") == "admin":
         return redirect(url_for("admin_bp.admin_home"))
     return redirect(url_for("auth_bp.login_page"))
+
+# -------------------------
+# 查看錄取結果頁面（兼容舊連結）
+# -------------------------
+@app.route("/admission_results")
+def admission_results_redirect():
+    """查看學生錄取結果頁面（兼容舊連結格式）"""
+    if 'user_id' not in session:
+        return redirect('/login')
+    
+    user_role = session.get('role')
+    # 允許班導、老師、主任、ta、admin 訪問
+    if user_role not in ['class_teacher', 'teacher', 'director', 'ta', 'admin']:
+        return "無權限訪問此頁面", 403
+    
+    return render_template('user_shared/admission_results.html')
 
 # -------------------------
 # 主程式入口
