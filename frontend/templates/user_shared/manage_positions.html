@@ -112,21 +112,39 @@
     }
 
     main.management-container {
-      padding: 96px 0 64px;
+      padding: 32px 0 64px;
     }
 
     .page-header {
+      margin-left: calc(-50vw + 50%);
+      margin-right: calc(-50vw + 50%);
+      margin-top: -32px;
+      margin-bottom: 20px;
+      width: 100vw;
+      padding: 0;
+    }
+
+    .page-header-actions {
       display: flex;
       flex-wrap: wrap;
       align-items: center;
-      justify-content: space-between;
+      justify-content: flex-end;
       gap: 16px;
-      margin-bottom: 20px;
+      margin-top: 20px;
+      padding: 0 1rem;
     }
 
     .page-header h1 {
       font-size: 1.75rem;
       margin: 0;
+      background: var(--color-primary);
+      color: #fff;
+      padding: 16px 24px;
+      border-radius: 0;
+      box-shadow: none;
+      display: block;
+      width: 100%;
+      text-align: center;
     }
 
     .page-header p {
@@ -589,32 +607,12 @@
 </head>
 
 <body>
-  <div class="top-bar">
-    <div class="container">
-      <div class="top-bar-left">
-      </div>
-      <div class="top-bar-right">
-        <a href="/profile">
-          <img src="{{ url_for('static', filename='images/avatar.png') }}" alt="頭像" id="login-avatar" />
-        </a>
-        <div class="dropdown" style="position: relative;">
-          <button id="accountDropdownBtn" class="btn-link" aria-expanded="false">帳號 ▾</button>
-          <div id="accountDropdownMenu" class="dropdown-menu"
-            style="position:absolute; right:0; top:120%; background:#fff; border:1px solid #ccc; border-radius:10px; padding:8px; min-width:180px; display:none; box-shadow:0 12px 28px rgba(15,23,42,0.16);">
-            <a href="/profile" class="btn-link" style="display:block; border:none; margin:4px 0;">個人資料</a>
-            <a href="/logout" class="btn-link" style="display:block; border:none; margin:4px 0;">登出</a>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-
   <main class="management-container container">
     <header class="page-header">
-      <div>
-        <h1>職位需求管理</h1>
+      <h1>職位需求管理</h1>
+      <div class="page-header-actions">
+        <button id="createPositionBtn" class="btn btn-primary">＋ 新增職缺</button>
       </div>
-      <button id="createPositionBtn" class="btn btn-primary">＋ 新增職缺</button>
     </header>
 
     <p id="companyHint" class="empty-hint">目前尚未建立與您對接指導老師關聯的公司資料。您新增的職缺將會顯示給對接的指導老師和科助查看。請確認您的指導老師已建立公司，或聯絡平台管理員設定對接關係。</p>
@@ -883,46 +881,9 @@
         });
       }
 
-      function initAccountDropdown() {
-        const btn = document.getElementById('accountDropdownBtn');
-        const menu = document.getElementById('accountDropdownMenu');
-        if (!btn || !menu) return;
-        btn.addEventListener('click', () => {
-          const open = menu.style.display === 'block';
-          menu.style.display = open ? 'none' : 'block';
-          btn.setAttribute('aria-expanded', String(!open));
-        });
-        document.addEventListener('click', (event) => {
-          if (!menu.contains(event.target) && !btn.contains(event.target)) {
-            menu.style.display = 'none';
-            btn.setAttribute('aria-expanded', 'false');
-          }
-        });
-      }
-
-      function loadAvatar() {
-        fetch('/api/profile', { credentials: 'include' })
-          .then((res) => res.ok ? res.json() : Promise.reject())
-          .then((data) => {
-            if (data && data.success && data.user && data.user.avatar_url) {
-              const rawUrl = data.user.avatar_url.startsWith('http')
-                ? data.user.avatar_url
-                : window.location.origin + data.user.avatar_url;
-              const avatarUrl = `${rawUrl}${rawUrl.includes('?') ? '&' : '?'}t=${Date.now()}`;
-              const avatar = document.getElementById('login-avatar');
-              if (avatar) {
-                avatar.src = avatarUrl;
-              }
-            }
-          })
-          .catch(() => { /* ignore avatar errors */ });
-      }
-
       function init() {
         initMenu();
-        initAccountDropdown();
         bindEvents();
-        loadAvatar();
         loadPositions();
       }
 

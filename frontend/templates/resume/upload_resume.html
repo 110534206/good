@@ -640,6 +640,55 @@
     // 證照動態管理（代碼 + 名稱 + 類別 + 圖片）
     // =========================================================================
 
+    // 輔助函數：格式化日期為 yyyy-MM-dd 格式（用於 HTML5 date 輸入框）
+    function formatDateForInput(dateValue) {
+      if (!dateValue) return '';
+      
+      // 如果已經是 yyyy-MM-dd 格式，直接返回
+      if (/^\d{4}-\d{2}-\d{2}$/.test(dateValue)) {
+        return dateValue;
+      }
+      
+      try {
+        // 嘗試解析各種日期格式
+        const date = new Date(dateValue);
+        if (isNaN(date.getTime())) {
+          console.warn('無法解析日期:', dateValue);
+          return '';
+        }
+        
+        // 格式化為 yyyy-MM-dd
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+      } catch (e) {
+        console.warn('日期格式化失敗:', dateValue, e);
+        return '';
+      }
+    }
+
+    // 輔助函數：從證照名稱中解析職類和級別
+    function parseCertNameToJobCategoryAndLevel(certName) {
+      if (!certName) return { jobCategory: '', level: '' };
+      
+      // 常見級別：甲級、乙級、丙級、丁級
+      const levelPattern = /(甲級|乙級|丙級|丁級|甲|乙|丙|丁)/;
+      const match = certName.match(levelPattern);
+      
+      if (match) {
+        const level = match[1];
+        // 將簡寫轉換為完整形式
+        const levelMap = { '甲': '甲級', '乙': '乙級', '丙': '丙級', '丁': '丁級' };
+        const fullLevel = levelMap[level] || level;
+        const jobCategory = certName.replace(levelPattern, '').trim();
+        return { jobCategory, level: fullLevel };
+      }
+      
+      // 如果沒有找到級別，整個名稱作為職類，級別為空
+      return { jobCategory: certName, level: '' };
+    }
+
     function updateCertificateControlsState() {
       const countEl = document.getElementById("cert-count");
       if (countEl) countEl.textContent = certEntries.length;
@@ -667,15 +716,51 @@
              <option value="">請選擇發證中心...</option>
            </select>
          </div>
-         <div class="col-md-4">
-           <label class="form-label form-label-sm">證照名稱 <span class="text-danger">*</span></label>
-           <select class="form-select form-select-sm cert-certificate-select" 
-                  name="cert_certificate[]" id="cert_certificate_${entryId}" required>
+         <div class="col-md-4 cert-authority-name-wrapper" style="display: none;">
+           <label class="form-label form-label-sm">發證中心名稱 <span class="text-danger">*</span></label>
+           <input type="text" class="form-control form-control-sm cert-authority-name-input" 
+                  name="cert_authority_name[]" id="cert_authority_name_${entryId}" 
+                  placeholder="請輸入發證中心名稱">
+         </div>
+         <div class="col-md-4 cert-job-category-wrapper">
+           <label class="form-label form-label-sm">職類(項)名稱 <span class="text-danger">*</span></label>
+           <select class="form-select form-select-sm cert-job-category-select" 
+                  name="cert_job_category[]" id="cert_job_category_${entryId}" required>
              <option value="">請先選擇發證中心</option>
            </select>
            <input type="hidden" class="cert-code-input" name="cert_code[]" id="cert_code_${entryId}">
            <input type="hidden" class="cert-name-input" name="cert_names[]" id="cert_name_${entryId}">
            <input type="hidden" class="cert-category-input" name="cert_type[]" id="cert_type_${entryId}">
+         </div>
+         <div class="col-md-4 cert-level-wrapper">
+           <label class="form-label form-label-sm">級別 <span class="text-danger">*</span></label>
+           <select class="form-select form-select-sm cert-level-select" 
+                  name="cert_level[]" id="cert_level_${entryId}" required>
+             <option value="">請先選擇職類</option>
+           </select>
+         </div>
+         <div class="col-md-4 cert-custom-name-wrapper" style="display: none;">
+           <label class="form-label form-label-sm">證照名稱（自填） <span class="text-danger">*</span></label>
+           <input type="text" class="form-control form-control-sm cert-custom-name-input" 
+                  name="cert_custom_name[]" id="cert_custom_name_${entryId}" 
+                  placeholder="請輸入證照名稱" required>
+         </div>
+         <div class="col-md-4 cert-other-job-category-wrapper" style="display: none;">
+           <label class="form-label form-label-sm">職類(項)名稱（自填） <span class="text-danger">*</span></label>
+           <input type="text" class="form-control form-control-sm cert-other-job-category-input" 
+                  name="cert_other_job_category[]" id="cert_other_job_category_${entryId}" 
+                  placeholder="例：電腦軟體應用">
+         </div>
+         <div class="col-md-4 cert-other-level-wrapper" style="display: none;">
+           <label class="form-label form-label-sm">級別（自填） <span class="text-danger">*</span></label>
+           <input type="text" class="form-control form-control-sm cert-other-level-input" 
+                  name="cert_other_level[]" id="cert_other_level_${entryId}" 
+                  placeholder="例：丙級、乙級">
+         </div>
+         <div class="col-md-4">
+           <label class="form-label form-label-sm">取得日期 <span class="text-danger">*</span></label>
+           <input type="date" class="form-control form-control-sm cert-acquisition-date-input" 
+                  name="cert_acquisition_date[]" id="cert_acquisition_date_${entryId}" required>
          </div>
          <div class="col-md-4">
            <label class="form-label form-label-sm">發證人 (選填)</label>
@@ -684,7 +769,8 @@
          </div>
          <div class="col-md-6 col-lg-4">
            <label class="form-label form-label-sm">佐證圖片 (可選)</label>
-           <input type="file" class="form-control form-control-sm" name="cert_photos[]" accept="image/*">
+           <input type="file" class="form-control form-control-sm cert-photo-input" 
+                  name="cert_photos[]" id="cert_photo_${entryId}" accept="image/*">
          </div>
        </div>
      `;
@@ -704,18 +790,96 @@
 
       const element = createCertificateEntryElement(entryId);
       const authoritySelect = element.querySelector('.cert-authority-select');
-      const certificateSelect = element.querySelector('.cert-certificate-select');
+      const authorityNameWrapper = element.querySelector('.cert-authority-name-wrapper');
+      const authorityNameInput = element.querySelector('.cert-authority-name-input');
+      const jobCategoryWrapper = element.querySelector('.cert-job-category-wrapper');
+      const jobCategorySelect = element.querySelector('.cert-job-category-select');
+      const levelWrapper = element.querySelector('.cert-level-wrapper');
+      const levelSelect = element.querySelector('.cert-level-select');
+      const customNameWrapper = element.querySelector('.cert-custom-name-wrapper');
+      const customNameInput = element.querySelector('.cert-custom-name-input');
+      const otherJobCategoryWrapper = element.querySelector('.cert-other-job-category-wrapper');
+      const otherJobCategoryInput = element.querySelector('.cert-other-job-category-input');
+      const otherLevelWrapper = element.querySelector('.cert-other-level-wrapper');
+      const otherLevelInput = element.querySelector('.cert-other-level-input');
       const codeInput = element.querySelector('.cert-code-input');
       const nameInput = element.querySelector('.cert-name-input');
       const categoryInput = element.querySelector('.cert-category-input');
+      const acquisitionDateInput = element.querySelector('.cert-acquisition-date-input');
       const issuerInput = element.querySelector('.cert-issuer-input');
-      const fileInput = element.querySelector('input[type="file"]');
+      const fileInput = element.querySelector('.cert-photo-input');
       const removeBtn = element.querySelector('.remove-cert');
       const indexBadge = element.querySelector('.cert-index-badge');
 
       // 預填充資料（如果有）
       if (prefill.authority_id) {
         authoritySelect.value = prefill.authority_id;
+        if (prefill.authority_id === 'OTHER') {
+          // 選擇「其他」發證中心時，顯示自填輸入框
+          if (prefill.authority_name) {
+            authorityNameInput.value = prefill.authority_name;
+          }
+          authorityNameWrapper.style.display = 'block';
+          authorityNameInput.required = true;
+          
+          // 隱藏職類和級別下拉框，顯示自填輸入框（不顯示證照名稱自填）
+          jobCategoryWrapper.style.display = 'none';
+          jobCategorySelect.required = false;
+          levelWrapper.style.display = 'none';
+          levelSelect.required = false;
+          customNameWrapper.style.display = 'none';
+          customNameInput.required = false;
+          otherJobCategoryWrapper.style.display = 'block';
+          otherJobCategoryInput.required = true;
+          otherLevelWrapper.style.display = 'block';
+          otherLevelInput.required = true;
+          
+          if (prefill.custom_cert_name) {
+            customNameInput.value = prefill.custom_cert_name;
+            nameInput.value = prefill.custom_cert_name;
+          }
+          
+          // 預填充職類和級別（如果有的話）
+          if (prefill.job_category) {
+            otherJobCategoryInput.value = prefill.job_category;
+          }
+          if (prefill.level) {
+            otherLevelInput.value = prefill.level;
+          }
+          
+          // 設置隱藏欄位
+          codeInput.value = 'OTHER';
+          categoryInput.value = 'other';
+        } else {
+          // 非「其他」發證中心時，顯示職類和級別下拉框
+          jobCategoryWrapper.style.display = 'block';
+          jobCategorySelect.required = true;
+          levelWrapper.style.display = 'block';
+          levelSelect.required = true;
+          customNameWrapper.style.display = 'none';
+          customNameInput.required = false;
+          
+          // 如果有預填充的職類和級別，將在載入職類列表後設置
+          const prefillJobCategory = prefill.job_category || (prefill.cert_name ? parseCertNameToJobCategoryAndLevel(prefill.cert_name).jobCategory : null);
+          const prefillLevel = prefill.level || (prefill.cert_name ? parseCertNameToJobCategoryAndLevel(prefill.cert_name).level : null);
+          
+          if (prefill.cert_code) {
+            codeInput.value = prefill.cert_code;
+          }
+          if (prefill.cert_name) {
+            nameInput.value = prefill.cert_name;
+          }
+          
+          // 載入職類和級別列表（如果有預填充值，會自動設置）
+          if (prefill.authority_id && prefill.authority_id !== 'OTHER') {
+            loadJobCategoriesAndLevels(prefill.authority_id, jobCategorySelect, levelSelect, codeInput, nameInput, categoryInput, prefillJobCategory, prefillLevel);
+          }
+        }
+      }
+      if (prefill.acquisition_date) {
+        // 格式化日期為 yyyy-MM-dd 格式
+        const formattedAcqDate = formatDateForInput(prefill.acquisition_date);
+        acquisitionDateInput.value = formattedAcqDate;
       }
       if (prefill.issuer) {
         issuerInput.value = prefill.issuer;
@@ -724,39 +888,128 @@
       // 載入發證中心列表
       loadCertAuthorities(authoritySelect);
 
-      // 發證中心選擇改變時，載入該中心的證照列表
+      // 發證中心選擇改變時，載入該中心的職類和級別列表
       authoritySelect.addEventListener('change', async () => {
         const authorityId = authoritySelect.value;
-        certificateSelect.innerHTML = '<option value="">載入中...</option>';
-        codeInput.value = '';
-        nameInput.value = '';
-        categoryInput.value = '';
-
-        if (authorityId) {
-          await loadCertificatesByAuthority(authorityId, certificateSelect, codeInput, nameInput, categoryInput);
+        
+        // 顯示/隱藏「其他」發證中心名稱輸入欄位
+        if (authorityId === 'OTHER') {
+          authorityNameWrapper.style.display = 'block';
+          authorityNameInput.required = true;
+          
+          // 選擇「其他」發證中心時，隱藏職類和級別下拉框，直接顯示自填輸入框（不顯示證照名稱自填）
+          jobCategoryWrapper.style.display = 'none';
+          jobCategorySelect.required = false;
+          levelWrapper.style.display = 'none';
+          levelSelect.required = false;
+          customNameWrapper.style.display = 'none';
+          customNameInput.required = false;
+          otherJobCategoryWrapper.style.display = 'block';
+          otherJobCategoryInput.required = true;
+          otherLevelWrapper.style.display = 'block';
+          otherLevelInput.required = true;
+          
+          // 清空職類和級別
+          jobCategorySelect.value = '';
+          levelSelect.value = '';
+          
+          // 設置隱藏欄位
+          codeInput.value = 'OTHER';
+          nameInput.value = '';
+          categoryInput.value = 'other';
         } else {
-          certificateSelect.innerHTML = '<option value="">請先選擇發證中心</option>';
-        }
-        saveFormData();
-      });
-
-      // 證照選擇改變時，更新隱藏欄位
-      certificateSelect.addEventListener('change', () => {
-        const selectedOption = certificateSelect.options[certificateSelect.selectedIndex];
-        if (selectedOption && selectedOption.value) {
-          codeInput.value = selectedOption.dataset.code || '';
-          nameInput.value = selectedOption.textContent || '';
-          categoryInput.value = selectedOption.dataset.category || 'other';
-        } else {
+          authorityNameWrapper.style.display = 'none';
+          authorityNameInput.required = false;
+          authorityNameInput.value = '';
+          
+          // 顯示職類和級別下拉框，隱藏自填輸入框
+          jobCategoryWrapper.style.display = 'block';
+          jobCategorySelect.required = true;
+          levelWrapper.style.display = 'block';
+          levelSelect.required = true;
+          customNameWrapper.style.display = 'none';
+          customNameInput.required = false;
+          otherJobCategoryWrapper.style.display = 'none';
+          otherJobCategoryInput.required = false;
+          otherLevelWrapper.style.display = 'none';
+          otherLevelInput.required = false;
+          otherJobCategoryInput.value = '';
+          otherLevelInput.value = '';
+          customNameInput.value = '';
+          
+          // 清空職類和級別
+          jobCategorySelect.innerHTML = '<option value="">載入中...</option>';
+          levelSelect.innerHTML = '<option value="">請先選擇職類</option>';
           codeInput.value = '';
           nameInput.value = '';
           categoryInput.value = '';
+
+          if (authorityId) {
+            await loadJobCategoriesAndLevels(authorityId, jobCategorySelect, levelSelect, codeInput, nameInput, categoryInput);
+          } else {
+            jobCategorySelect.innerHTML = '<option value="">請先選擇發證中心</option>';
+          }
         }
         saveFormData();
       });
 
-      // 發證人輸入改變時保存
+      // 職類選擇改變時，載入對應的級別列表
+      jobCategorySelect.addEventListener('change', () => {
+        const selectedJobCategory = jobCategorySelect.value;
+        levelSelect.innerHTML = '<option value="">請選擇級別</option>';
+        codeInput.value = '';
+        nameInput.value = '';
+        categoryInput.value = '';
+        
+        if (selectedJobCategory) {
+          // 從 dataset 中獲取該職類對應的級別列表
+          const levelsDataStr = jobCategorySelect.dataset.levelsData;
+          if (levelsDataStr) {
+            try {
+              const levelsData = JSON.parse(levelsDataStr);
+              const levels = levelsData[selectedJobCategory] || [];
+              
+              levels.forEach(level => {
+                const option = document.createElement('option');
+                option.value = level;
+                option.textContent = level;
+                levelSelect.appendChild(option);
+              });
+            } catch (e) {
+              console.error("解析級別數據失敗:", e);
+            }
+          }
+        }
+        saveFormData();
+      });
+      
+      // 級別選擇改變時，查找對應的證照代碼
+      levelSelect.addEventListener('change', async () => {
+        const selectedJobCategory = jobCategorySelect.value;
+        const selectedLevel = levelSelect.value;
+        const authorityId = authoritySelect.value;
+        
+        if (selectedJobCategory && selectedLevel && authorityId && authorityId !== 'OTHER') {
+          // 查找對應的證照代碼
+          await findCertCodeByJobCategoryAndLevel(authorityId, selectedJobCategory, selectedLevel, codeInput, nameInput, categoryInput);
+        }
+        saveFormData();
+      });
+      
+      // 取得日期、發證人、自填欄位輸入改變時保存
+      acquisitionDateInput.addEventListener('change', saveFormData);
       issuerInput.addEventListener('input', saveFormData);
+      authorityNameInput.addEventListener('input', saveFormData);
+      customNameInput.addEventListener('input', () => {
+        // 當自填證照名稱改變時，更新隱藏欄位（用於「其他」發證中心的情況）
+        if (customNameInput.value) {
+          nameInput.value = customNameInput.value;
+        }
+        saveFormData();
+      });
+      otherJobCategoryInput.addEventListener('input', saveFormData);
+      otherLevelInput.addEventListener('input', saveFormData);
+      
       removeBtn.addEventListener('click', () => removeCertificateEntry(entryId));
 
       container.appendChild(element);
@@ -765,10 +1018,22 @@
         id: entryId,
         wrapper: element,
         authoritySelect,
-        certificateSelect,
+        authorityNameWrapper,
+        authorityNameInput,
+        jobCategoryWrapper,
+        jobCategorySelect,
+        levelWrapper,
+        levelSelect,
+        customNameWrapper,
+        customNameInput,
+        otherJobCategoryWrapper,
+        otherJobCategoryInput,
+        otherLevelWrapper,
+        otherLevelInput,
         codeInput,
         nameInput,
         categoryInput,
+        acquisitionDateInput,
         issuerInput,
         fileInput,
         indexBadge
@@ -793,50 +1058,124 @@
         const res = await fetch("/api/get_cert_authorities");
         const result = await res.json();
 
-        if (result.success && result.authorities) {
-          // 保留第一個選項（請選擇...）
-          const firstOption = authoritySelect.querySelector('option[value=""]');
-          authoritySelect.innerHTML = '';
-          if (firstOption) {
-            authoritySelect.appendChild(firstOption);
-          }
+        // 保留第一個選項（請選擇...）
+        const firstOption = authoritySelect.querySelector('option[value=""]');
+        
+        // 清空所有選項（包括可能存在的「其他」選項）
+        authoritySelect.innerHTML = '';
+        if (firstOption) {
+          authoritySelect.appendChild(firstOption);
+        }
 
-          // 添加發證中心選項
+        if (result.success && result.authorities) {
+          // 添加發證中心選項（過濾掉資料庫中的「其他」選項，因為我們會在最後添加）
           result.authorities.forEach(auth => {
+            // 跳過 name 為「其他」的記錄，避免重複
+            if (auth.name && auth.name.trim() === '其他') {
+              return;
+            }
             const option = document.createElement('option');
             option.value = auth.id;
             option.textContent = auth.name;
             authoritySelect.appendChild(option);
           });
         }
+        
+        // 在所有發證中心選項之後，添加「其他」選項（使用 value='OTHER' 以區分）
+        // 檢查是否已存在，避免重複（雖然已經清空，但以防萬一）
+        if (!authoritySelect.querySelector('option[value="OTHER"]')) {
+          const otherOption = document.createElement('option');
+          otherOption.value = 'OTHER';
+          otherOption.textContent = '其他';
+          authoritySelect.appendChild(otherOption);
+        }
       } catch (error) {
         console.error("❌ 載入發證中心列表失敗:", error);
+        // 檢查是否已存在「其他」選項，避免重複添加
+        if (!authoritySelect.querySelector('option[value="OTHER"]')) {
+          const otherOption = document.createElement('option');
+          otherOption.value = 'OTHER';
+          otherOption.textContent = '其他';
+          authoritySelect.appendChild(otherOption);
+        }
       }
     }
 
     // 🧩 根據發證中心載入證照列表
-    async function loadCertificatesByAuthority(authorityId, certificateSelect, codeInput, nameInput, categoryInput) {
+    // 🧩 根據發證中心載入職類和級別列表
+    async function loadJobCategoriesAndLevels(authorityId, jobCategorySelect, levelSelect, codeInput, nameInput, categoryInput, prefillJobCategory = null, prefillLevel = null) {
       try {
-        const res = await fetch(`/api/get_certificates_by_authority?authority_id=${encodeURIComponent(authorityId)}`);
+        const res = await fetch(`/api/get_job_categories_and_levels?authority_id=${encodeURIComponent(authorityId)}`);
         const result = await res.json();
 
-        certificateSelect.innerHTML = '<option value="">請選擇證照...</option>';
+        jobCategorySelect.innerHTML = '<option value="">請選擇職類...</option>';
+        levelSelect.innerHTML = '<option value="">請先選擇職類</option>';
 
-        if (result.success && result.certificates) {
-          result.certificates.forEach(cert => {
+        if (result.success && result.job_categories) {
+          // 儲存職類和級別的對應關係到選擇器的 dataset
+          const jobCategoryLevelsData = result.job_category_levels || {};
+          jobCategorySelect.dataset.levelsData = JSON.stringify(jobCategoryLevelsData);
+          
+          // 填充職類下拉框
+          result.job_categories.forEach(jobCategory => {
             const option = document.createElement('option');
-            option.value = cert.code;
-            option.textContent = cert.name;
-            option.dataset.code = cert.code;
-            option.dataset.category = cert.category || 'other';
-            certificateSelect.appendChild(option);
+            option.value = jobCategory;
+            option.textContent = jobCategory;
+            jobCategorySelect.appendChild(option);
           });
-        } else {
-          certificateSelect.innerHTML = '<option value="">該發證中心暫無證照</option>';
+          
+          // 如果有預填充的職類，設置它
+          if (prefillJobCategory) {
+            jobCategorySelect.value = prefillJobCategory;
+            // 觸發職類選擇事件以載入級別
+            const changeEvent = new Event('change', { bubbles: true });
+            jobCategorySelect.dispatchEvent(changeEvent);
+            
+            // 如果有預填充的級別，設置它
+            if (prefillLevel) {
+              setTimeout(() => {
+                levelSelect.value = prefillLevel;
+                // 觸發級別選擇事件以設置證照代碼
+                const levelChangeEvent = new Event('change', { bubbles: true });
+                levelSelect.dispatchEvent(levelChangeEvent);
+              }, 200);
+            }
+          }
         }
       } catch (error) {
-        console.error("❌ 載入證照列表失敗:", error);
-        certificateSelect.innerHTML = '<option value="">載入失敗</option>';
+        console.error("❌ 載入職類和級別列表失敗:", error);
+        jobCategorySelect.innerHTML = '<option value="">載入失敗</option>';
+      }
+    }
+    
+    // 🧩 根據職類和級別查找對應的證照代碼
+    async function findCertCodeByJobCategoryAndLevel(authorityId, jobCategory, level, codeInput, nameInput, categoryInput) {
+      try {
+        // 先獲取該發證中心的所有證照
+        const res = await fetch(`/api/get_certificates_by_authority?authority_id=${encodeURIComponent(authorityId)}`);
+        const result = await res.json();
+        
+        if (result.success && result.certificates) {
+          // 組合完整證照名稱
+          const fullCertName = `${jobCategory}${level}`;
+          
+          // 查找匹配的證照（精確匹配或包含匹配）
+          const matchedCert = result.certificates.find(cert => {
+            return cert.name === fullCertName || 
+                   (cert.name.includes(jobCategory) && cert.name.includes(level));
+          });
+          
+          if (matchedCert) {
+            codeInput.value = matchedCert.code;
+            nameInput.value = matchedCert.name;
+            categoryInput.value = matchedCert.category || 'other';
+            return true;
+          }
+        }
+        return false;
+      } catch (error) {
+        console.error("❌ 查找證照代碼失敗:", error);
+        return false;
       }
     }
 
@@ -956,12 +1295,32 @@
       if (certEntries.length === 1) {
         // 清空所有欄位
         if (entry.authoritySelect) entry.authoritySelect.value = '';
-        if (entry.certificateSelect) {
-          entry.certificateSelect.innerHTML = '<option value="">請先選擇發證中心</option>';
+        if (entry.authorityNameWrapper) entry.authorityNameWrapper.style.display = 'none';
+        if (entry.authorityNameInput) {
+          entry.authorityNameInput.value = '';
+          entry.authorityNameInput.required = false;
         }
+        if (entry.jobCategoryWrapper) entry.jobCategoryWrapper.style.display = 'block';
+        if (entry.jobCategorySelect) {
+          entry.jobCategorySelect.innerHTML = '<option value="">請先選擇發證中心</option>';
+          entry.jobCategorySelect.required = true;
+        }
+        if (entry.levelWrapper) entry.levelWrapper.style.display = 'block';
+        if (entry.levelSelect) {
+          entry.levelSelect.innerHTML = '<option value="">請先選擇職類</option>';
+          entry.levelSelect.required = true;
+        }
+        if (entry.customNameWrapper) entry.customNameWrapper.style.display = 'none';
+        if (entry.customNameInput) {
+          entry.customNameInput.value = '';
+          entry.customNameInput.required = false;
+        }
+        if (entry.jobCategorySelect) entry.jobCategorySelect.value = '';
+        if (entry.levelSelect) entry.levelSelect.value = '';
         if (entry.codeInput) entry.codeInput.value = '';
         if (entry.nameInput) entry.nameInput.value = '';
         if (entry.categoryInput) entry.categoryInput.value = '';
+        if (entry.acquisitionDateInput) entry.acquisitionDateInput.value = '';
         if (entry.issuerInput) entry.issuerInput.value = '';
         if (entry.fileInput) entry.fileInput.value = '';
         saveFormData();
@@ -984,7 +1343,16 @@
       container.innerHTML = '';
       certEntries = [];
 
-      const data = initialCerts.length ? initialCerts.slice(0, CERT_MAX_COUNT) : [{}];
+      // 如果沒有證照資料，不創建空條目（讓用戶手動添加）
+      if (!initialCerts || initialCerts.length === 0) {
+        console.log('📋 沒有證照資料，不創建空條目');
+        refreshCertificateIndices();
+        return;
+      }
+
+      // 只添加實際有資料的證照條目
+      const data = initialCerts.slice(0, CERT_MAX_COUNT);
+      console.log(`📋 初始化證照UI: ${data.length} 筆證照資料`);
       data.forEach(cert => addCertificateEntry(cert, { silent: true }));
       refreshCertificateIndices();
     }
@@ -1005,13 +1373,22 @@
           credits: course.credits,
           isNotTaken: course.isNotTaken || false
         })),
-        certificates: certEntries.map(entry => ({
-          authority_id: entry.authoritySelect ? entry.authoritySelect.value : '',
-          code: entry.codeInput ? entry.codeInput.value.trim() : '',
-          name: entry.nameInput ? entry.nameInput.value.trim() : '',
-          category: entry.categoryInput ? entry.categoryInput.value : 'other',
-          issuer: entry.issuerInput ? entry.issuerInput.value.trim() : ''
-        }))
+        certificates: certEntries.map(entry => {
+          const authorityId = entry.authoritySelect ? entry.authoritySelect.value : '';
+          const isOther = authorityId === 'OTHER';
+          return {
+            authority_id: authorityId,
+            authority_name: entry.authorityNameInput ? entry.authorityNameInput.value.trim() : '',
+            code: entry.codeInput ? entry.codeInput.value.trim() : '',
+            name: entry.nameInput ? entry.nameInput.value.trim() : '',
+            custom_cert_name: entry.customNameInput ? entry.customNameInput.value.trim() : '',
+            job_category: isOther && entry.otherJobCategoryInput ? entry.otherJobCategoryInput.value.trim() : (entry.jobCategorySelect ? entry.jobCategorySelect.value.trim() : ''),
+            level: isOther && entry.otherLevelInput ? entry.otherLevelInput.value : (entry.levelSelect ? entry.levelSelect.value : ''),
+            category: entry.categoryInput ? entry.categoryInput.value : 'other',
+            acquisition_date: entry.acquisitionDateInput ? entry.acquisitionDateInput.value : '',
+            issuer: entry.issuerInput ? entry.issuerInput.value.trim() : ''
+          };
+        })
       };
 
       const skip = new Set(["cert_names[]", "cert_type[]", "cert_code[]", "course_name[]", "course_credits[]"]);
@@ -1260,23 +1637,44 @@
 
         // 1. 填充基本資料
         const studentInfo = data.student_info || {};
+        console.log("📋 準備填充基本資料:", studentInfo);
+        
         const nameInput = form.querySelector('input[name="name"]');
-        if (nameInput) nameInput.value = studentInfo.name || '';
+        if (nameInput) {
+          nameInput.value = studentInfo.name || '';
+          console.log('✅ 姓名:', studentInfo.name || '(空)');
+        }
         
         const birthDateInput = form.querySelector('input[name="birth_date"]');
-        if (birthDateInput) birthDateInput.value = studentInfo.birth_date || '';
+        if (birthDateInput) {
+          const formattedDate = formatDateForInput(studentInfo.birth_date);
+          birthDateInput.value = formattedDate;
+          console.log('✅ 出生日期:', studentInfo.birth_date, '→', formattedDate);
+        }
         
         const genderSelect = form.querySelector('select[name="gender"]');
-        if (genderSelect) genderSelect.value = studentInfo.gender || '';
+        if (genderSelect) {
+          genderSelect.value = studentInfo.gender || '';
+          console.log('✅ 性別:', studentInfo.gender || '(空)');
+        }
         
         const phoneInput = form.querySelector('input[name="phone"]');
-        if (phoneInput) phoneInput.value = studentInfo.phone || '';
+        if (phoneInput) {
+          phoneInput.value = studentInfo.phone || '';
+          console.log('✅ 電話:', studentInfo.phone || '(空)');
+        }
         
         const emailInput = form.querySelector('input[name="email"]');
-        if (emailInput) emailInput.value = studentInfo.email || '';
+        if (emailInput) {
+          emailInput.value = studentInfo.email || '';
+          console.log('✅ 電子郵件:', studentInfo.email || '(空)');
+        }
         
         const addressInput = form.querySelector('input[name="address"]');
-        if (addressInput) addressInput.value = studentInfo.address || '';
+        if (addressInput) {
+          addressInput.value = studentInfo.address || '';
+          console.log('✅ 地址:', studentInfo.address || '(空)');
+        }
         
         // 處理操行成績
         const conductScore = studentInfo.conduct_score || '';
@@ -1340,16 +1738,34 @@
         }
 
         // 3. 填充證照資料
-        if (data.certifications && Array.isArray(data.certifications) && data.certifications.length > 0) {
-          const certData = data.certifications.map(cert => ({
-            code: cert.code || '',
-            name: cert.name || '',
-            acquire_date: cert.acquire_date || '',
-            issuer: cert.issuer || '',  // 發證人（選填）
-            cert_path: cert.cert_path || ''
-          }));
-          initializeCertificatesUI(certData);
-          console.log(`✅ 已載入 ${certData.length} 筆證照資料`);
+        if (data.certifications && Array.isArray(data.certifications)) {
+          console.log(`🔍 後端返回的證照資料: ${data.certifications.length} 筆`, data.certifications);
+          
+          if (data.certifications.length > 0) {
+            const certData = data.certifications.map(cert => ({
+              authority_id: cert.authority_id || (cert.authority_name ? 'OTHER' : ''),
+              authority_name: cert.authority_name || '',
+              code: cert.cert_code || cert.code || '',
+              name: cert.CertName || cert.name || '',
+              custom_cert_name: cert.custom_cert_name || '',
+              job_category: cert.job_category || '',
+              level: cert.level || '',
+              acquire_date: formatDateForInput(cert.AcquisitionDate || cert.acquire_date || ''),
+              issuer: cert.issuer || '',  // 發證人（選填）
+              cert_path: cert.CertPath || cert.cert_path || ''
+            }));
+            console.log(`📋 準備載入 ${certData.length} 筆證照資料到UI`);
+            initializeCertificatesUI(certData);
+            console.log(`✅ 已載入 ${certData.length} 筆證照資料`);
+          } else {
+            // 沒有證照資料，不創建空條目
+            console.log('📋 沒有證照資料，清空證照UI');
+            initializeCertificatesUI([]);
+          }
+        } else {
+          // 沒有證照資料欄位，不創建空條目
+          console.log('📋 沒有證照資料欄位，清空證照UI');
+          initializeCertificatesUI([]);
         }
         
         // 3.5 填充成績單路徑（顯示提示，因為文件上傳欄位無法直接設置值）
@@ -1460,6 +1876,29 @@
         // 標記已從資料庫載入資料（只有在成功載入課程後才標記，防止被覆蓋）
         // 注意：如果課程資料為空，會在課程資料處理部分載入標準課程後再標記
         // 這裡不需要再次設置 resumeDataLoaded，因為已經在課程資料處理部分設置了
+        
+        // 驗證資料是否正確填充（延遲檢查，確保 DOM 已更新）
+        setTimeout(() => {
+          const form = document.getElementById("resumeForm");
+          if (form) {
+            const nameValue = form.querySelector('input[name="name"]')?.value || '';
+            const birthValue = form.querySelector('input[name="birth_date"]')?.value || '';
+            const phoneValue = form.querySelector('input[name="phone"]')?.value || '';
+            const emailValue = form.querySelector('input[name="email"]')?.value || '';
+            console.log("🔍 驗證表單資料填充（載入後）:", {
+              "姓名": nameValue || "(空)",
+              "出生日期": birthValue || "(空)",
+              "電話": phoneValue || "(空)",
+              "電子郵件": emailValue || "(空)",
+              "表單是否只讀": form.querySelector('input[name="name"]')?.hasAttribute('readonly')
+            });
+            
+            // 如果資料為空，發出警告
+            if (!nameValue && !birthValue && !phoneValue && !emailValue) {
+              console.warn("⚠️ 警告：表單資料似乎為空，可能是載入失敗或被清空");
+            }
+          }
+        }, 200);
         
         // 恢復自動保存
         disableAutoSave = false;
@@ -2009,13 +2448,14 @@
         loadFormData();
         // 在載入 LocalStorage 資料後，再載入其他資料
         // 確保 LocalStorage 的資料不會被後端資料覆蓋
-        loadPersonalTemplate();
+        await loadPersonalTemplate();
       } else {
         // 如果有已提交的履歷，設置為只讀模式（不載入 LocalStorage）
         isEditing = false;
         // 已經在 checkLatestResume 中載入了資料
-        // 但仍需要載入課程模板（如果有的話），但不會覆蓋已載入的資料
-        loadPersonalTemplate();
+        // 等待 loadResumeData 完成後，再載入課程模板（如果有的話），但不會覆蓋已載入的資料
+        // 注意：loadResumeData 已經在 checkLatestResume 中完成，這裡只需要載入課程模板
+        await loadPersonalTemplate();
       }
       
       loadResumeRecords();

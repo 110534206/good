@@ -5,6 +5,10 @@ from werkzeug.utils import secure_filename
 import os
 import traceback
 from docx import Document
+from docx.shared import Pt, Inches, RGBColor
+from docx.enum.text import WD_ALIGN_PARAGRAPH
+from docx.oxml.ns import qn
+from docx.oxml import OxmlElement
 from notification import create_notification
 from semester import get_current_semester_code
 
@@ -24,6 +28,312 @@ def ensure_upload_folder():
 
 def allowed_file(filename):
     return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
+
+
+# =========================================================
+# 📄 生成實習單位基本資料表 Word 檔
+# =========================================================
+def generate_company_word_document(data):
+    """
+    根據表單資料生成實習單位基本資料表 Word 檔
+    格式符合圖片中的表單格式
+    """
+    doc = Document()
+    
+    # 設定中文字體
+    def set_chinese_font(run, font_name='標楷體'):
+        run.font.name = font_name
+        run._element.rPr.rFonts.set(qn('w:eastAsia'), font_name)
+    
+    # 設定表格邊框
+    def set_table_borders(table):
+        """設定表格邊框為實線"""
+        tbl = table._tbl
+        tblBorders = OxmlElement('w:tblBorders')
+        for border_name in ['top', 'left', 'bottom', 'right', 'insideH', 'insideV']:
+            border = OxmlElement(f'w:{border_name}')
+            border.set(qn('w:val'), 'single')
+            border.set(qn('w:sz'), '4')
+            border.set(qn('w:space'), '0')
+            border.set(qn('w:color'), '000000')
+            tblBorders.append(border)
+        tbl.tblPr.append(tblBorders)
+    
+    # 標題
+    title = doc.add_paragraph()
+    title.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    title_run = title.add_run('實習單位基本資料表')
+    title_run.font.size = Pt(18)
+    title_run.bold = True
+    set_chinese_font(title_run, '標楷體')
+    
+    # 學校資訊
+    school_info = doc.add_paragraph()
+    school_info.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    school_run = school_info.add_run('康寧學校財團法人康寧大學資訊管理科')
+    school_run.font.size = Pt(12)
+    set_chinese_font(school_run, '標楷體')
+    
+    # 實習期間（可以從學期設定中取得，這裡先留空或使用預設值）
+    period_info = doc.add_paragraph()
+    period_info.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    period_run = period_info.add_run('實習期間：115年2月23日至115年6月26日止')
+    period_run.font.size = Pt(12)
+    set_chinese_font(period_run, '標楷體')
+    
+    doc.add_paragraph()  # 空行
+    
+    # I. 基本單位資訊 - 使用表格格式
+    section1_title = doc.add_paragraph()
+    section1_run = section1_title.add_run('I. 基本單位資訊')
+    section1_run.font.size = Pt(14)
+    section1_run.bold = True
+    set_chinese_font(section1_run, '標楷體')
+    
+    # 建立基本資訊表格（2欄，多行）
+    basic_info_data = [
+        ('編號', data.get('serial_number', '')),
+        ('單位名稱', data.get('company_name', '')),
+        ('負責人', data.get('person_in_charge', '')),
+        ('統一編號', data.get('uniform_number', '')),
+        ('聯絡人', data.get('contact_person', '')),
+        ('職稱', data.get('contact_title', '')),
+        ('聯絡電話', data.get('contact_phone', '')),
+        ('傳真', data.get('fax', '')),
+        ('地址', data.get('address', '')),
+        ('交通說明', data.get('transportation', '')),
+        ('E-mail', data.get('email', '')),
+        ('單位簡介', data.get('company_intro', ''))
+    ]
+    
+    basic_table = doc.add_table(rows=len(basic_info_data), cols=2)
+    basic_table.style = 'Light Grid Accent 1'
+    set_table_borders(basic_table)
+    
+    # 設定欄寬：左欄（標籤）較窄，右欄（內容）較寬
+    basic_table.columns[0].width = Inches(1.5)
+    basic_table.columns[1].width = Inches(5.5)
+    
+    for idx, (label, value) in enumerate(basic_info_data):
+        # 左欄：標籤
+        label_cell = basic_table.rows[idx].cells[0]
+        label_cell.text = label
+        for paragraph in label_cell.paragraphs:
+            paragraph.alignment = WD_ALIGN_PARAGRAPH.LEFT
+            for run in paragraph.runs:
+                set_chinese_font(run, '標楷體')
+                run.font.size = Pt(12)
+                run.bold = True
+        
+        # 右欄：值
+        value_cell = basic_table.rows[idx].cells[1]
+        value_cell.text = value
+        for paragraph in value_cell.paragraphs:
+            paragraph.alignment = WD_ALIGN_PARAGRAPH.LEFT
+            for run in paragraph.runs:
+                set_chinese_font(run, '標楷體')
+                run.font.size = Pt(12)
+    
+    doc.add_paragraph()  # 空行
+    
+    # II. 營業項目與企業規模 - 合併為一個區塊
+    section2_title = doc.add_paragraph()
+    section2_run = section2_title.add_run('II. 營業項目與企業規模')
+    section2_run.font.size = Pt(14)
+    section2_run.bold = True
+    set_chinese_font(section2_run, '標楷體')
+    
+    # 營業項目表格
+    business_table = doc.add_table(rows=1, cols=2)
+    business_table.style = 'Light Grid Accent 1'
+    set_table_borders(business_table)
+    business_table.columns[0].width = Inches(1.5)
+    business_table.columns[1].width = Inches(5.5)
+    
+    # 左欄：標籤
+    label_cell = business_table.rows[0].cells[0]
+    label_cell.text = '營業項目'
+    for paragraph in label_cell.paragraphs:
+        paragraph.alignment = WD_ALIGN_PARAGRAPH.LEFT
+        for run in paragraph.runs:
+            set_chinese_font(run, '標楷體')
+            run.font.size = Pt(12)
+            run.bold = True
+    
+    # 右欄：值
+    value_cell = business_table.rows[0].cells[1]
+    value_cell.text = data.get("business_scope", "")
+    for paragraph in value_cell.paragraphs:
+        paragraph.alignment = WD_ALIGN_PARAGRAPH.LEFT
+        for run in paragraph.runs:
+            set_chinese_font(run, '標楷體')
+            run.font.size = Pt(12)
+    
+    # 企業規模表格（在同一區塊內）
+    scale_table = doc.add_table(rows=1, cols=2)
+    scale_table.style = 'Light Grid Accent 1'
+    set_table_borders(scale_table)
+    scale_table.columns[0].width = Inches(1.5)
+    scale_table.columns[1].width = Inches(5.5)
+    
+    # 左欄：標籤
+    label_cell = scale_table.rows[0].cells[0]
+    label_cell.text = '企業規模'
+    for paragraph in label_cell.paragraphs:
+        paragraph.alignment = WD_ALIGN_PARAGRAPH.LEFT
+        for run in paragraph.runs:
+            set_chinese_font(run, '標楷體')
+            run.font.size = Pt(12)
+            run.bold = True
+    
+    # 右欄：選項
+    value_cell = scale_table.rows[0].cells[1]
+    scale_options = ['1000人以上', '500-999人', '100-499人', '10-99人', '10以下']
+    selected_scale = data.get('company_scale', '')
+    scale_text = ''
+    for option in scale_options:
+        if option == selected_scale:
+            scale_text += f'☑ {option}  '
+        else:
+            scale_text += f'☐ {option}  '
+    value_cell.text = scale_text
+    for paragraph in value_cell.paragraphs:
+        paragraph.alignment = WD_ALIGN_PARAGRAPH.LEFT
+        for run in paragraph.runs:
+            set_chinese_font(run, '標楷體')
+            run.font.size = Pt(12)
+    
+    doc.add_paragraph()  # 空行
+    
+    # III. 職缺明細
+    section3_title = doc.add_paragraph()
+    section3_run = section3_title.add_run('III. 工作項目')
+    section3_run.font.size = Pt(14)
+    section3_run.bold = True
+    set_chinese_font(section3_run, '標楷體')
+    
+    jobs = data.get('jobs', [])
+    if jobs:
+        jobs_table = doc.add_table(rows=len(jobs) + 1, cols=4)
+        jobs_table.style = 'Light Grid Accent 1'
+        set_table_borders(jobs_table)
+        
+        # 設定職缺表格欄寬
+        jobs_table.columns[0].width = Inches(0.8)  # 工作編號
+        jobs_table.columns[1].width = Inches(1.8)    # 工作項目
+        jobs_table.columns[2].width = Inches(3.5)   # 需求條件/工作內容
+        jobs_table.columns[3].width = Inches(0.9)   # 名額
+        
+        # 表頭
+        header_cells = jobs_table.rows[0].cells
+        header_cells[0].text = '工作編號'
+        header_cells[1].text = '工作項目'
+        header_cells[2].text = '需求條件/工作內容'
+        header_cells[3].text = '名額'
+        
+        for cell in header_cells:
+            for paragraph in cell.paragraphs:
+                paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                for run in paragraph.runs:
+                    set_chinese_font(run, '標楷體')
+                    run.font.size = Pt(12)
+                    run.bold = True
+        
+        # 職缺資料
+        for idx, job in enumerate(jobs, 1):
+            row_cells = jobs_table.rows[idx].cells
+            row_cells[0].text = str(idx)
+            row_cells[1].text = job.get('title', '')
+            row_cells[2].text = job.get('description', '')
+            row_cells[3].text = str(job.get('slots', 1))
+            
+            # 設定表格內容字體和對齊
+            for cell_idx, cell in enumerate(row_cells):
+                for paragraph in cell.paragraphs:
+                    # 工作編號和名額置中對齊，其他左對齊
+                    if cell_idx == 0 or cell_idx == 3:
+                        paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                    else:
+                        paragraph.alignment = WD_ALIGN_PARAGRAPH.LEFT
+                    for run in paragraph.runs:
+                        set_chinese_font(run, '標楷體')
+                        run.font.size = Pt(12)
+    
+    doc.add_paragraph()  # 空行
+    
+    # IV. 待遇與來源 - 使用表格格式
+    section4_title = doc.add_paragraph()
+    section4_run = section4_title.add_run('IV. 待遇與來源')
+    section4_run.font.size = Pt(14)
+    section4_run.bold = True
+    set_chinese_font(section4_run, '標楷體')
+    
+    compensation_source_table = doc.add_table(rows=2, cols=2)
+    compensation_source_table.style = 'Light Grid Accent 1'
+    set_table_borders(compensation_source_table)
+    compensation_source_table.columns[0].width = Inches(1.5)
+    compensation_source_table.columns[1].width = Inches(5.5)
+    
+    # 待遇行
+    comp_label_cell = compensation_source_table.rows[0].cells[0]
+    comp_label_cell.text = '待遇'
+    for paragraph in comp_label_cell.paragraphs:
+        paragraph.alignment = WD_ALIGN_PARAGRAPH.LEFT
+        for run in paragraph.runs:
+            set_chinese_font(run, '標楷體')
+            run.font.size = Pt(12)
+            run.bold = True
+    
+    comp_value_cell = compensation_source_table.rows[0].cells[1]
+    compensation_options = ['月薪', '時薪', '獎金(津貼)', '無']
+    compensation_selected = data.get('compensation', [])
+    comp_text = ''
+    for option in compensation_options:
+        if option in compensation_selected:
+            comp_text += f'☑ {option}  '
+        else:
+            comp_text += f'☐ {option}  '
+    comp_value_cell.text = comp_text
+    for paragraph in comp_value_cell.paragraphs:
+        paragraph.alignment = WD_ALIGN_PARAGRAPH.LEFT
+        for run in paragraph.runs:
+            set_chinese_font(run, '標楷體')
+            run.font.size = Pt(12)
+    
+    # 來源行
+    source_label_cell = compensation_source_table.rows[1].cells[0]
+    source_label_cell.text = '來源'
+    for paragraph in source_label_cell.paragraphs:
+        paragraph.alignment = WD_ALIGN_PARAGRAPH.LEFT
+        for run in paragraph.runs:
+            set_chinese_font(run, '標楷體')
+            run.font.size = Pt(12)
+            run.bold = True
+    
+    source_value_cell = compensation_source_table.rows[1].cells[1]
+    source_options = ['廠商申請', '老師推薦', '學生申請', '其它']
+    source_selected = data.get('source', [])
+    source_text = ''
+    for option in source_options:
+        if option in source_selected:
+            source_text += f'☑ {option}  '
+        else:
+            source_text += f'☐ {option}  '
+    
+    # 如果選擇了「其它」，加上說明
+    if '其它' in source_selected:
+        other_text = data.get('source_other_text', '')
+        if other_text:
+            source_text += f'（{other_text}）'
+    
+    source_value_cell.text = source_text
+    for paragraph in source_value_cell.paragraphs:
+        paragraph.alignment = WD_ALIGN_PARAGRAPH.LEFT
+        for run in paragraph.runs:
+            set_chinese_font(run, '標楷體')
+            run.font.size = Pt(12)
+    
+    return doc
 
 
 # =========================================================
@@ -52,7 +362,7 @@ def download_company_template():
 
 
 # =========================================================
-# 📤 上傳公司資料（線上填表 + Word 附檔）
+# 📤 上傳公司資料（網頁填表，自動生成 Word 檔）
 # =========================================================
 @company_bp.route('/api/upload_company', methods=['POST'])
 def upload_company():
@@ -65,45 +375,62 @@ def upload_company():
             return jsonify({"success": False, "message": "請先登入"}), 403
 
         role = session.get('role')
-        if role not in ['teacher', 'director', 'ta']:
+        if role not in ['teacher', 'director', 'ta', 'vendor']:
            return jsonify({"success": False, "message": "無權限操作此功能"}), 403
 
         user_id = session['user_id']
-        company_name = request.form.get("company_name", "").strip()
         upload_dir = ensure_upload_folder()
+
+        # 判斷是 JSON 資料（新方式）還是表單資料（舊方式，保留向後兼容）
+        if request.is_json:
+            data = request.get_json()
+            company_name = data.get("company_name", "").strip()
+            jobs_data = data.get("jobs", [])
+        else:
+            # 舊方式：表單上傳（向後兼容）
+            company_name = request.form.get("company_name", "").strip()
+            jobs_data = []
+            job_index = 0
+            while True:
+                job_title = request.form.get(f"job[{job_index}][title]", "").strip()
+                slots_str = request.form.get(f"job[{job_index}][slots]", "0").strip()
+                if not job_title:
+                    break
+                try:
+                    slots = int(slots_str)
+                    if slots <= 0:
+                        raise ValueError
+                except ValueError:
+                    return jsonify({"success": False, "message": f"職缺 #{job_index+1} 名額必須是正整數"}), 400
+                jobs_data.append({"title": job_title, "slots": slots})
+                job_index += 1
 
         if not company_name:
             return jsonify({"success": False, "message": "公司名稱為必填欄位"}), 400
 
-        # 處理 Word 檔案
-        file = request.files.get("company_doc")
-        if file and file.filename and allowed_file(file.filename):
-            safe_name = secure_filename(f"{company_name}_{datetime.now().strftime('%Y%m%d%H%M%S')}_{file.filename}")
-            save_path = os.path.join(upload_dir, safe_name)
-            file.save(save_path)
-            file_path = os.path.join(UPLOAD_FOLDER, safe_name)
-        else:
-            return jsonify({"success": False, "message": "請上傳有效的 Word 檔案 (.doc 或 .docx)"}), 400
-
-        # 解析職缺資料
-        jobs_data = []
-        job_index = 0
-        while True:
-            job_title = request.form.get(f"job[{job_index}][title]", "").strip()
-            slots_str = request.form.get(f"job[{job_index}][slots]", "0").strip()
-            if not job_title:
-                break
-            try:
-                slots = int(slots_str)
-                if slots <= 0:
-                    raise ValueError
-            except ValueError:
-                return jsonify({"success": False, "message": f"職缺 #{job_index+1} 名額必須是正整數"}), 400
-            jobs_data.append({"title": job_title, "slots": slots})
-            job_index += 1
-
         if not jobs_data:
             return jsonify({"success": False, "message": "請至少新增一個職缺"}), 400
+
+        # 如果是 JSON 資料，生成 Word 檔
+        if request.is_json:
+            # 生成 Word 檔
+            doc = generate_company_word_document(data)
+            
+            # 儲存 Word 檔
+            safe_name = secure_filename(f"{company_name}_{datetime.now().strftime('%Y%m%d%H%M%S')}.docx")
+            save_path = os.path.join(upload_dir, safe_name)
+            doc.save(save_path)
+            file_path = os.path.join(UPLOAD_FOLDER, safe_name)
+        else:
+            # 舊方式：處理上傳的 Word 檔案
+            file = request.files.get("company_doc")
+            if file and file.filename and allowed_file(file.filename):
+                safe_name = secure_filename(f"{company_name}_{datetime.now().strftime('%Y%m%d%H%M%S')}_{file.filename}")
+                save_path = os.path.join(upload_dir, safe_name)
+                file.save(save_path)
+                file_path = os.path.join(UPLOAD_FOLDER, safe_name)
+            else:
+                return jsonify({"success": False, "message": "請上傳有效的 Word 檔案 (.doc 或 .docx)"}), 400
 
         # 寫入資料庫
         conn = get_db()
@@ -115,6 +442,21 @@ def upload_company():
             reviewed_by_user_id = user_id
             status = 'approved'
             reviewed_at = datetime.now()
+        elif role == 'vendor':
+            # 廠商上傳：根據廠商的 teacher_name 找到對應的指導老師
+            cursor.execute("SELECT teacher_name FROM users WHERE id = %s", (user_id,))
+            vendor_row = cursor.fetchone()
+            advisor_user_id = None
+            if vendor_row and vendor_row[0]:
+                teacher_name = vendor_row[0].strip()
+                if teacher_name:
+                    cursor.execute("SELECT id FROM users WHERE name = %s AND role IN ('teacher', 'director')", (teacher_name,))
+                    teacher_row = cursor.fetchone()
+                    if teacher_row:
+                        advisor_user_id = teacher_row[0]
+            reviewed_by_user_id = None
+            status = 'pending'
+            reviewed_at = None
         else:
             # 如果是老師或主任，預設上傳教師為指導老師
             if role in ['teacher', 'director']:
@@ -125,22 +467,40 @@ def upload_company():
             status = 'pending'
             reviewed_at = None
 
+        # 準備公司資料
+        if request.is_json:
+            company_description = data.get("company_intro", "（詳見附檔）")
+            company_location = data.get("address", "")
+            contact_person = data.get("contact_person", "")
+            contact_title = data.get("contact_title", "")
+            contact_email = data.get("email", "")
+            contact_phone = data.get("contact_phone", "")
+        else:
+            company_description = "（詳見附檔）"
+            company_location = ""
+            contact_person = ""
+            contact_title = ""
+            contact_email = ""
+            contact_phone = ""
+        
         cursor.execute("""
             INSERT INTO internship_companies 
             (company_name, uploaded_by_user_id, advisor_user_id, reviewed_by_user_id, status, submitted_at, reviewed_at, company_doc_path, 
              description, location, contact_person, contact_title, contact_email, contact_phone)
-            VALUES (%s, %s, %s, %s, %s, NOW(), %s, %s, '（詳見附檔）', '', '', '', '', '')
-        """, (company_name, user_id, advisor_user_id, reviewed_by_user_id, status, reviewed_at, file_path))
+            VALUES (%s, %s, %s, %s, %s, NOW(), %s, %s, %s, %s, %s, %s, %s, %s)
+        """, (company_name, user_id, advisor_user_id, reviewed_by_user_id, status, reviewed_at, file_path,
+              company_description, company_location, contact_person, contact_title, contact_email, contact_phone))
         company_id = cursor.lastrowid
 
         # 插入職缺
         job_records = []
         for j in jobs_data:
+            job_description = j.get("description", "（詳見附檔）")
             job_records.append((
                 company_id,
-                j["title"],
-                j["slots"],
-                "（詳見附檔）",
+                j.get("title", ""),
+                j.get("slots", 1),
+                job_description,
                 "",
                 "",
                 "",
@@ -154,17 +514,27 @@ def upload_company():
 
         conn.commit()
 
+        job_count = len(jobs_data)
+        
         # 根據角色顯示不同的成功訊息
         if role == 'ta':
-            message = f"公司 '{company_name}' ({job_index} 個職缺) 上傳成功，已自動核准。"
+            message = f"公司 '{company_name}' ({job_count} 個職缺) 上傳成功，已自動核准。"
+        elif role == 'vendor':
+            message = f"公司 '{company_name}' ({job_count} 個職缺) 上傳成功，資料已標記為「待科助開放」。"
         else:
-            message = f"公司 '{company_name}' ({job_index} 個職缺) 上傳成功，等待審核。"
+            message = f"公司 '{company_name}' ({job_count} 個職缺) 上傳成功，等待審核。"
 
-        return jsonify({
+        response_data = {
             "success": True,
             "message": message,
             "company_id": company_id
-        })
+        }
+        
+        # 如果是新方式（JSON），提供下載連結
+        if request.is_json and file_path:
+            response_data["download_url"] = f"/api/download_company_file/{company_id}"
+
+        return jsonify(response_data)
 
     except Exception as e:
         traceback.print_exc()
@@ -198,14 +568,16 @@ def get_my_companies():
 
         cursor.execute("""
             SELECT 
-                id,
-                company_name,
-                status,
-                company_doc_path AS filepath,
-                submitted_at AS upload_time
-            FROM internship_companies
-            WHERE uploaded_by_user_id = %s
-            ORDER BY submitted_at DESC
+                ic.id,
+                ic.company_name,
+                ic.status,
+                ic.company_doc_path AS filepath,
+                ic.submitted_at AS upload_time,
+                u.role AS uploader_role
+            FROM internship_companies ic
+            JOIN users u ON ic.uploaded_by_user_id = u.id
+            WHERE ic.uploaded_by_user_id = %s
+            ORDER BY ic.submitted_at DESC
         """, (user_id,))
         records = cursor.fetchall()
 
