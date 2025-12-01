@@ -269,14 +269,28 @@
 
             allPreferenceCards.forEach(card => {
                 const jobSelect = card.querySelector(".job-select");
-                if (jobSelect.value) selectedJobIds.add(jobSelect.value);
+                if (jobSelect.value) {
+                    selectedJobIds.add(jobSelect.value);
+                }
             });
 
             companies.forEach(company => {
                 const jobs = companyJobsCache[String(company.id)];
                 if (!jobs) return;
-                const selectedCount = jobs.filter(j => selectedJobIds.has(String(j.id))).length;
-                if (selectedCount >= jobs.length) excludedCompanyIds.add(String(company.id));
+                
+                // 如果公司只有一個職缺，且該職缺已被選，則排除該公司
+                if (jobs.length === 1) {
+                    const singleJobId = String(jobs[0].id);
+                    if (selectedJobIds.has(singleJobId)) {
+                        excludedCompanyIds.add(String(company.id));
+                    }
+                } else {
+                    // 如果公司有多個職缺，檢查是否所有職缺都被選完
+                    const selectedCount = jobs.filter(j => selectedJobIds.has(String(j.id))).length;
+                    if (selectedCount >= jobs.length) {
+                        excludedCompanyIds.add(String(company.id));
+                    }
+                }
             });
 
             allPreferenceCards.forEach(card => {
