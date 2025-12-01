@@ -107,10 +107,14 @@ def get_experience_list():
         keyword = request.args.get('keyword', '').strip()
         year = request.args.get('year', '').strip()  # 前端會傳民國年
         company_id = request.args.get('company_id', '').strip()
+        my_experiences = request.args.get('my_experiences', '').strip()  # 'true' 表示只顯示自己的心得
         db = get_db()
         cursor = db.cursor(dictionary=True)
+        
+        # 取得目前登入的使用者 ID（如果有的話）
+        current_user_id = session.get('user_id') if 'user_id' in session else None
 
-        # 顯示所有心得（移除 is_public 限制，確保所有使用者都能看到）
+        # 顯示所有公開的心得（is_public = 1），確保所有學生都能看到
         # 使用 LEFT JOIN 確保即使使用者或公司資料不存在也能顯示心得
         query = """
             SELECT ie.id, ie.year, ie.content, ie.rating, ie.created_at,
@@ -124,6 +128,15 @@ def get_experience_list():
             WHERE 1=1
         """
         params = []
+
+        # 如果要求只顯示自己的心得
+        if my_experiences.lower() == 'true' and current_user_id:
+            # 顯示自己的所有心得（包括未公開的）
+            query += " AND ie.user_id = %s"
+            params.append(current_user_id)
+        else:
+            # 否則只顯示公開的心得（所有心得）
+            query += " AND ie.is_public = 1"
 
         if keyword:
             query += " AND c.company_name LIKE %s"
