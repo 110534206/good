@@ -5,7 +5,7 @@
   <meta charset="UTF-8" />
   <title>智慧實習平台 | 學生管理</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js" crossorigin="anonymous"></script>
   <style>
     header {
       background: #0066cc;
@@ -110,6 +110,40 @@
         flex: 0 0 100%;
       }
     }
+
+    /* 詳細資訊樣式 */
+    .detail-row {
+      background-color: #f8f9fa;
+    }
+    
+    .detail-row td {
+      padding: 0 !important;
+    }
+    
+    .resume-details, .preference-details {
+      max-height: 400px;
+      overflow-y: auto;
+    }
+    
+    .resume-details .border, .preference-details .border {
+      background-color: white;
+    }
+    
+    .toggle-details {
+      border: none;
+      background: transparent;
+      padding: 0.25rem 0.5rem;
+    }
+    
+    .toggle-details:hover {
+      background-color: #e9ecef;
+      border-radius: 4px;
+    }
+    
+    .toggle-icon {
+      font-size: 0.75rem;
+      transition: transform 0.2s;
+    }
   </style>
 </head>
 
@@ -173,16 +207,18 @@
       <table class="table table-bordered table-striped table-hover align-middle">
         <thead class="custom-header-blue">
           <tr>
+            <th style="width: 50px;"></th>
             <th>學號</th>
             <th>姓名</th>
             <th>Email</th>
             <th>履歷上傳</th>
             <th>志願填寫</th>
+            <th>操作</th>
           </tr>
         </thead>
         <tbody id="studentsTableBody">
           <tr>
-            <td colspan="5" class="text-center text-muted">請選擇班級並點擊「學生資料」</td>
+            <td colspan="7" class="text-center text-muted">請選擇班級並點擊「學生資料」</td>
           </tr>
         </tbody>
       </table>
@@ -236,9 +272,11 @@
         
         if (data.success) {
           const rawClasses = data.classes || [];
-          // 要排除的班級名稱
+          // 要排除的班級名稱（排除一、二、三年級，保留四年級）
           const excludedClasses = ['資一孝', '資二孝', '資三孝', '資一忠', '資二忠', '資三忠'];
           const allowedSemesterCodes = ['1132', '1142'];
+          
+          console.log('[DEBUG] 載入班級列表，排除:', excludedClasses);
 
           const normalizeClasses = classes => classes.map(c => {
             let semesterCode = '';
@@ -307,6 +345,7 @@
       
       filteredClasses.forEach(c => {
         const fullName = `${(c.department || '').replace('管科', '')}${c.name || ''}`;
+        console.log(`[DEBUG] 檢查班級: fullName=${fullName}, id=${c.id}, department=${c.department}, name=${c.name}`);
         let classShortName = null;
         if (fullName.includes('忠')) {
           classShortName = '忠';
@@ -325,6 +364,7 @@
             classMap.set(classShortName, []);
           }
           classMap.get(classShortName).push(c);
+          console.log(`[DEBUG] 加入班級到列表: ${fullName} -> ${classShortName}`);
         }
       });
       
@@ -332,11 +372,16 @@
       allowedClasses.forEach(className => {
         const classes = classMap.get(className);
         if (classes && classes.length > 0) {
+          // 如果有多個班級，選擇第一個（通常是四年級的）
           const classData = classes[0];
+          const fullName = `${(classData.department || '').replace('管科', '')}${classData.name || ''}`;
+          console.log(`[DEBUG] 加入下拉選單: ${fullName} (ID: ${classData.id}) -> ${className}`);
           const option = document.createElement("option");
           option.value = classData.id;
           option.textContent = className;
           classSelect.appendChild(option);
+        } else {
+          console.log(`[DEBUG] 沒有找到 ${className} 班級`);
         }
       });
 
@@ -344,7 +389,7 @@
       if (classSelect.options.length === 1) {
         classSelect.disabled = true;
         document.getElementById("studentsTableBody").innerHTML = 
-          '<tr><td colspan="5" class="text-center text-muted">該學年目前無可用班級</td></tr>';
+          '<tr><td colspan="7" class="text-center text-muted">該學年目前無可用班級</td></tr>';
         return;
       }
 
@@ -355,6 +400,12 @@
 
     // 載入單一班級的統計圖表
     async function loadClassStats(classId, className, semesterCode = "all") {
+      // 檢查 Chart.js 是否已載入
+      if (typeof Chart === 'undefined') {
+        console.error("Chart.js 未正確載入");
+        return;
+      }
+
       const chartContainer = document.getElementById("classChartContainer");
 
       // 處理「所有班級」的特殊情況
@@ -385,6 +436,19 @@
         }
 
         const stats = data.stats;
+        console.log('[DEBUG] 班級統計資料:', stats);
+        
+        // 確保資料是數字
+        const totalStudents = parseInt(stats.total_students) || 0;
+        const studentsWithResume = parseInt(stats.students_with_resume) || 0;
+        const studentsWithPreference = parseInt(stats.students_with_preference) || 0;
+        
+        console.log('[DEBUG] 圖表資料:', {
+          totalStudents,
+          studentsWithResume,
+          studentsWithPreference
+        });
+        
         const ctx = document.getElementById('classStatsChart').getContext('2d');
 
         // 銷毀舊的 Chart 實例（如果存在）
@@ -400,9 +464,9 @@
             datasets: [{
               label: '人數',
               data: [
-                stats.total_students,
-                stats.students_with_resume,
-                stats.students_with_preference
+                totalStudents,
+                studentsWithResume,
+                studentsWithPreference
               ],
               backgroundColor: [
                 'rgba(54, 162, 235, 0.7)', // 藍色: 總學生數
@@ -423,9 +487,10 @@
               y: {
                 beginAtZero: true,
                 // 設定 Y 軸的最大值略大於總學生數，且至少為 5
-                max: stats.total_students > 0 ? Math.ceil(stats.total_students * 1.05) : 5,
+                max: totalStudents > 0 ? Math.ceil(totalStudents * 1.2) : 5,
                 ticks: {
-                  precision: 0 // 確保 Y 軸刻度是整數
+                  precision: 0, // 確保 Y 軸刻度是整數
+                  stepSize: 1
                 }
               },
               x: {
@@ -459,44 +524,165 @@
       const classId = document.getElementById("classSelect").value;
       const className = document.getElementById("classSelect").options[document.getElementById("classSelect").selectedIndex].text;
       const tbody = document.getElementById("studentsTableBody");
-      tbody.innerHTML = `<tr><td colspan="5" class="text-center text-muted">載入中...</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="7" class="text-center text-muted">載入中...</td></tr>`;
 
       // 檢查是否已選擇學年和班級
       if (semesterCode === 'all') {
-        tbody.innerHTML = `<tr><td colspan="5" class="text-center text-muted">請先選擇學年</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="7" class="text-center text-muted">請先選擇學年</td></tr>`;
         return;
       }
 
       if (classId === 'all') {
-        tbody.innerHTML = `<tr><td colspan="5" class="text-center text-muted">請選擇班級</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="7" class="text-center text-muted">請選擇班級</td></tr>`;
         return;
       }
 
       try {
-        const res = await fetch(`/ta/statistics/api/get_students_by_class?class_id=${classId}&semester_code=${semesterCode}`);
+        console.log(`[DEBUG] 載入學生資料: class_id=${classId}, semester_code=${semesterCode}`);
+        const url = `/ta/statistics/api/get_students_by_class?class_id=${classId}&semester_code=${semesterCode}`;
+        console.log(`[DEBUG] API URL: ${url}`);
+        
+        const res = await fetch(url);
+        console.log(`[DEBUG] API 回應狀態: ${res.status} ${res.statusText}`);
+        
+        if (!res.ok) {
+          throw new Error(`HTTP error! status: ${res.status}`);
+        }
+        
         const data = await res.json();
+        
+        console.log('[DEBUG] API 返回資料:', JSON.stringify(data, null, 2));
+        console.log('[DEBUG] 學生數量:', data.students ? data.students.length : 0);
+        
+        if (data.students && data.students.length > 0) {
+          console.log('[DEBUG] 第一位學生完整資料:', JSON.stringify(data.students[0], null, 2));
+        }
 
         if (!data.success) {
           let errorMsg = data.message || '載入失敗';
           if (errorMsg === '未授權' || res.status === 403) {
             errorMsg = '權限不足：此功能僅限科助和管理員使用。請確認您已以正確角色登入。';
           }
-          tbody.innerHTML = `<tr><td colspan="5" class="text-center text-danger">${errorMsg}</td></tr>`;
+          console.error('[ERROR] API 返回錯誤:', errorMsg);
+          tbody.innerHTML = `<tr><td colspan="7" class="text-center text-danger">${errorMsg}</td></tr>`;
           return;
         }
 
-        if (data.students.length === 0) {
-          tbody.innerHTML = `<tr><td colspan="5" class="text-center text-muted">該班級沒有學生資料</td></tr>`;
+        if (!data.students || data.students.length === 0) {
+          console.warn('[WARN] 沒有學生資料');
+          tbody.innerHTML = `<tr><td colspan="7" class="text-center text-muted">該班級沒有學生資料</td></tr>`;
         } else {
-          tbody.innerHTML = data.students.map(s => `
-            <tr>
-              <td>${s.username}</td>
-              <td>${s.name}</td>
-              <td>${s.email}</td>
-              <td>${s.resume_count > 0 ? '✅' : '❌'}</td>
-              <td>${s.preference_count > 0 ? '✅' : '❌'}</td>
-            </tr>
-          `).join("");
+          console.log('[DEBUG] 開始渲染學生列表，共', data.students.length, '位學生');
+          tbody.innerHTML = data.students.map((s, index) => {
+            // 調試輸出
+            if (index === 0) {
+              console.log('[DEBUG] 第一位學生資料範例:', {
+                id: s.id,
+                username: s.username,
+                name: s.name,
+                resume_count: s.resume_count,
+                preference_count: s.preference_count,
+                resumes: s.resumes ? s.resumes.length : 0,
+                preferences: s.preferences ? s.preferences.length : 0
+              });
+            }
+            
+            const resumeStatus = (s.resume_count && s.resume_count > 0) ? 
+              `<span class="badge bg-success">已上傳 (${s.resume_count})</span>` : 
+              '<span class="badge bg-danger">未上傳</span>';
+            const preferenceStatus = (s.preference_count && s.preference_count > 0) ? 
+              `<span class="badge bg-success">已填寫 (${s.preference_count})</span>` : 
+              '<span class="badge bg-danger">未填寫</span>';
+            
+            // 履歷詳細資訊
+            const resumeDetails = s.resumes && s.resumes.length > 0 ? s.resumes.map(r => `
+              <div class="mb-2 p-2 border rounded">
+                <strong>履歷 #${r.id}</strong><br>
+                <small>狀態: <span class="badge ${r.status === 'approved' ? 'bg-success' : r.status === 'rejected' ? 'bg-danger' : 'bg-warning'}">${r.status === 'approved' ? '已審核' : r.status === 'rejected' ? '已退件' : '待審核'}</span></small><br>
+                <small>上傳時間: ${r.created_at || 'N/A'}</small><br>
+                ${r.reviewed_at ? `<small>審核時間: ${r.reviewed_at}</small><br>` : ''}
+                ${r.reject_reason ? `<small class="text-danger">退件原因: ${r.reject_reason}</small>` : ''}
+              </div>
+            `).join('') : '<p class="text-muted mb-0">無履歷資料</p>';
+            
+            // 志願序詳細資訊
+            const preferenceDetails = s.preferences && s.preferences.length > 0 ? s.preferences.map(p => `
+              <div class="mb-2 p-2 border rounded">
+                <strong>志願 #${p.preference_order}</strong><br>
+                <small>公司: ${p.company_name || 'N/A'}</small><br>
+                <small>職位: ${p.job_title || p.job_title_full || 'N/A'}</small><br>
+                <small>狀態: <span class="badge ${p.status === 'approved' ? 'bg-success' : p.status === 'rejected' ? 'bg-danger' : 'bg-warning'}">${p.status === 'approved' ? '已通過' : p.status === 'rejected' ? '已退件' : '待審核'}</span></small><br>
+                <small>提交時間: ${p.submitted_at || 'N/A'}</small>
+              </div>
+            `).join('') : '<p class="text-muted mb-0">無志願序資料</p>';
+            
+            // 顯示學生的實際班級（如果有）
+            const studentClass = s.class_name ? `${s.department ? s.department.replace('管科', '') : ''}${s.class_name}` : '未分班';
+            
+            return `
+              <tr class="student-row" data-student-id="${s.id}">
+                <td>
+                  <button class="btn btn-sm btn-outline-primary toggle-details" data-index="${index}" type="button">
+                    <span class="toggle-icon">▼</span>
+                  </button>
+                </td>
+                <td>${s.username}</td>
+                <td>${s.name}</td>
+                <td>${s.email || 'N/A'}</td>
+                <td>${resumeStatus}</td>
+                <td>${preferenceStatus}</td>
+                <td>
+                  <button class="btn btn-sm btn-info view-details" data-index="${index}">查看詳情</button>
+                  ${studentClass !== '未分班' ? `<br><small class="text-muted">${studentClass}</small>` : ''}
+                </td>
+              </tr>
+              <tr class="detail-row" data-index="${index}" style="display: none;">
+                <td colspan="7">
+                  <div class="row p-3">
+                    <div class="col-md-6">
+                      <h6 class="text-primary">📄 履歷資訊</h6>
+                      <div class="resume-details">${resumeDetails}</div>
+                    </div>
+                    <div class="col-md-6">
+                      <h6 class="text-primary">🎯 志願序資訊</h6>
+                      <div class="preference-details">${preferenceDetails}</div>
+                    </div>
+                  </div>
+                </td>
+              </tr>
+            `;
+          }).join("");
+          
+          // 綁定展開/收合事件
+          document.querySelectorAll('.toggle-details').forEach(btn => {
+            btn.addEventListener('click', function() {
+              const index = this.getAttribute('data-index');
+              const detailRow = document.querySelector(`.detail-row[data-index="${index}"]`);
+              const icon = this.querySelector('.toggle-icon');
+              
+              if (detailRow.style.display === 'none') {
+                detailRow.style.display = 'table-row';
+                icon.textContent = '▲';
+              } else {
+                detailRow.style.display = 'none';
+                icon.textContent = '▼';
+              }
+            });
+          });
+          
+          // 綁定查看詳情按鈕
+          document.querySelectorAll('.view-details').forEach(btn => {
+            btn.addEventListener('click', function() {
+              const index = this.getAttribute('data-index');
+              const detailRow = document.querySelector(`.detail-row[data-index="${index}"]`);
+              const toggleBtn = document.querySelector(`.toggle-details[data-index="${index}"]`);
+              
+              if (detailRow.style.display === 'none') {
+                detailRow.style.display = 'table-row';
+                toggleBtn.querySelector('.toggle-icon').textContent = '▲';
+              }
+            });
+          });
         }
 
         // 組合顯示名稱：學年+班級
@@ -510,12 +696,20 @@
 
       } catch (error) {
         console.error("載入學生資料失敗:", error);
-        tbody.innerHTML = `<tr><td colspan="5" class="text-center text-danger">伺服器錯誤，載入失敗。</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="7" class="text-center text-danger">伺服器錯誤，載入失敗。</td></tr>`;
       }
     }
 
     // 載入統計圖表（三個圖表：各公司被選志願次數、履歷繳交率、志願序填寫率）
     async function loadStatsCharts(classId = "all", semesterCode = "all") {
+      // 檢查 Chart.js 是否已載入
+      if (typeof Chart === 'undefined') {
+        console.error("Chart.js 未正確載入，請檢查網路連線或瀏覽器設定");
+        const statsContainer = document.getElementById("statsChartsContainer");
+        statsContainer.innerHTML = '<div class="alert alert-warning">圖表庫載入失敗，請重新整理頁面或檢查瀏覽器設定</div>';
+        return;
+      }
+
       const statsContainer = document.getElementById("statsChartsContainer");
       
       // 顯示統計圖表容器（CSS 已設置為 flex）
@@ -555,57 +749,121 @@
         });
 
         // 履歷繳交率
-        const resumeData = [data.resume_stats.uploaded, data.resume_stats.not_uploaded];
+        const resumeUploaded = data.resume_stats?.uploaded || 0;
+        const resumeNotUploaded = data.resume_stats?.not_uploaded || 0;
+        const resumeData = [resumeUploaded, resumeNotUploaded];
         const resumeTotal = resumeData.reduce((a, b) => a + b, 0);
 
         if (resumeChart) resumeChart.destroy();
+        
         resumeChart = new Chart(document.getElementById("resumeChart"), {
           type: "doughnut",
           data: {
             labels: ["已上傳", "未上傳"],
-            datasets: [{ data: resumeData, backgroundColor: ["#59a14f", "#e15759"] }]
+            datasets: [{ 
+              data: resumeData, 
+              backgroundColor: ["#59a14f", "#e15759"] 
+            }]
           },
           options: {
+            responsive: true,
+            maintainAspectRatio: true,
             plugins: {
-              legend: { position: 'bottom' },
+              legend: { 
+                position: 'bottom',
+                display: true
+              },
               tooltip: {
+                enabled: resumeTotal > 0,
                 callbacks: {
                   label: function (context) {
-                    const value = context.raw;
+                    const value = context.raw || 0;
                     const percent = resumeTotal > 0 ? ((value / resumeTotal) * 100).toFixed(1) + '%' : '0%';
                     return `${context.label}: ${value} (${percent})`;
                   }
                 }
               }
+            },
+            animation: {
+              animateRotate: resumeTotal > 0
             }
-          }
+          },
+          plugins: [{
+            id: 'emptyDataPlugin',
+            afterDraw: (chart) => {
+              if (resumeTotal === 0) {
+                const ctx = chart.ctx;
+                const width = chart.width;
+                const height = chart.height;
+                ctx.save();
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.font = '14px Arial';
+                ctx.fillStyle = '#666';
+                ctx.fillText('目前無資料', width / 2, height / 2);
+                ctx.restore();
+              }
+            }
+          }]
         });
 
         // 志願序填寫率
-        const prefData = [data.preference_stats.filled, data.preference_stats.not_filled];
+        const prefFilled = data.preference_stats?.filled || 0;
+        const prefNotFilled = data.preference_stats?.not_filled || 0;
+        const prefData = [prefFilled, prefNotFilled];
         const prefTotal = prefData.reduce((a, b) => a + b, 0);
 
         if (preferenceChart) preferenceChart.destroy();
+        
         preferenceChart = new Chart(document.getElementById("preferenceChart"), {
           type: "doughnut",
           data: {
             labels: ["已填寫", "未填寫"],
-            datasets: [{ data: prefData, backgroundColor: ["#edc948", "#bab0ab"] }]
+            datasets: [{ 
+              data: prefData, 
+              backgroundColor: ["#edc948", "#bab0ab"] 
+            }]
           },
           options: {
+            responsive: true,
+            maintainAspectRatio: true,
             plugins: {
-              legend: { position: 'bottom' },
+              legend: { 
+                position: 'bottom',
+                display: true
+              },
               tooltip: {
+                enabled: prefTotal > 0,
                 callbacks: {
                   label: function (context) {
-                    const value = context.raw;
+                    const value = context.raw || 0;
                     const percent = prefTotal > 0 ? ((value / prefTotal) * 100).toFixed(1) + '%' : '0%';
                     return `${context.label}: ${value} (${percent})`;
                   }
                 }
               }
+            },
+            animation: {
+              animateRotate: prefTotal > 0
             }
-          }
+          },
+          plugins: [{
+            id: 'emptyDataPlugin',
+            afterDraw: (chart) => {
+              if (prefTotal === 0) {
+                const ctx = chart.ctx;
+                const width = chart.width;
+                const height = chart.height;
+                ctx.save();
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.font = '14px Arial';
+                ctx.fillStyle = '#666';
+                ctx.fillText('目前無資料', width / 2, height / 2);
+                ctx.restore();
+              }
+            }
+          }]
         });
       } catch (error) {
         console.error("載入統計圖表失敗:", error);
@@ -623,7 +881,7 @@
       
       // 清空表格和圖表
       document.getElementById("studentsTableBody").innerHTML = 
-        '<tr><td colspan="5" class="text-center text-muted">請選擇班級並點擊「學生資料」</td></tr>';
+        '<tr><td colspan="7" class="text-center text-muted">請選擇班級並點擊「學生資料」</td></tr>';
       const chartContainer = document.getElementById("classChartContainer");
       chartContainer.style.display = 'none';
       if (myClassChart) { 
@@ -646,7 +904,7 @@
       } else {
         // 如果選擇「所有班級」，清空表格和圖表
         document.getElementById("studentsTableBody").innerHTML = 
-          '<tr><td colspan="5" class="text-center text-muted">請選擇班級並點擊「學生資料」</td></tr>';
+          '<tr><td colspan="7" class="text-center text-muted">請選擇班級並點擊「學生資料」</td></tr>';
         const chartContainer = document.getElementById("classChartContainer");
         chartContainer.style.display = 'none';
         if (myClassChart) { 

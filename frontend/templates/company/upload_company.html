@@ -314,6 +314,11 @@
 
       <!-- 送出按鈕 -->
       <div class="card">
+        {% if user_role in ['teacher', 'director'] %}
+        <div class="alert alert-info mb-3" role="alert">
+          <i class="bi bi-info-circle"></i> <strong>提示：</strong>您新增的實習公司將自動設定您為指導老師。
+        </div>
+        {% endif %}
         <button type="submit" class="btn btn-primary w-100" id="submitBtn">
           <span id="btnText">送出並生成 Word 檔</span>
           <div id="spinner" class="spinner-border spinner-border-sm ms-2 d-none"></div>

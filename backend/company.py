@@ -461,6 +461,33 @@ def upload_company():
             # 如果是老師或主任，預設上傳教師為指導老師
             if role in ['teacher', 'director']:
                 advisor_user_id = user_id
+                
+                # 取得上傳者的名字（用於更新廠商的 teacher_name）
+                cursor.execute("SELECT name FROM users WHERE id = %s", (user_id,))
+                teacher_info = cursor.fetchone()
+                teacher_name = teacher_info[0] if teacher_info and teacher_info[0] else None
+                
+                # 檢查公司名稱是否匹配廠商對應的公司名稱
+                # 如果匹配，則更新該廠商的 teacher_name 為該指導老師的名字
+                vendor_company_map = {
+                    'vendor': '人人人',
+                    'vendora': '嘻嘻嘻'
+                }
+                
+                # 檢查公司名稱是否在 vendor_company_map 的值中
+                matched_vendor_username = None
+                for vendor_username, mapped_company_name in vendor_company_map.items():
+                    if company_name == mapped_company_name:
+                        matched_vendor_username = vendor_username
+                        break
+                
+                # 如果找到匹配的廠商，更新該廠商的 teacher_name 為該指導老師的名字
+                if matched_vendor_username and teacher_name:
+                    cursor.execute("""
+                        UPDATE users 
+                        SET teacher_name = %s 
+                        WHERE username = %s AND role = 'vendor'
+                    """, (teacher_name, matched_vendor_username))
             else:
                 advisor_user_id = None
             reviewed_by_user_id = None
@@ -1161,7 +1188,9 @@ def api_set_company_open_status():
 # =========================================================
 @company_bp.route('/upload_company', methods=['GET'])
 def upload_company_form_page():
-    return render_template('company/upload_company.html')
+    # 傳遞使用者角色資訊給前端，用於顯示提示
+    user_role = session.get('role', '')
+    return render_template('company/upload_company.html', user_role=user_role)
 
 # =========================================================
 # API - 取得所有指導老師
