@@ -309,30 +309,55 @@ def get_students_by_class():
         all_students = cursor.fetchall()
         print(f"[DEBUG] 查詢到所有學生: {len(all_students)} 位")
         
-        # 如果指定了班級，過濾出該班級的學生
+        # 如果指定了班級，根據班級類型（忠/孝）過濾
         if class_id and class_id != "all":
             try:
                 class_id_int = int(class_id)
-                students = [s for s in all_students if s.get('class_id') == class_id_int]
-                print(f"[DEBUG] 過濾後（class_id={class_id_int}）: {len(students)} 位學生")
+                # 先查詢該班級的名稱，判斷是「忠」還是「孝」
+                cursor.execute("SELECT name, department FROM classes WHERE id = %s", (class_id_int,))
+                class_info = cursor.fetchone()
                 
-                # 如果沒有找到，嘗試字串比較
-                if len(students) == 0:
-                    students = [s for s in all_students if str(s.get('class_id')) == str(class_id)]
-                    print(f"[DEBUG] 字串過濾後: {len(students)} 位學生")
-            except (ValueError, TypeError):
-                students = all_students
-                print(f"[DEBUG] class_id 轉換失敗，返回所有學生")
+                if class_info:
+                    class_name = class_info.get('name', '')
+                    department = class_info.get('department', '').replace('管科', '')
+                    full_class_name = f"{department}{class_name}"
+                    
+                    # 判斷是「忠」還是「孝」
+                    if '忠' in full_class_name or '忠' in class_name:
+                        class_type = '忠'
+                    elif '孝' in full_class_name or '孝' in class_name:
+                        class_type = '孝'
+                    else:
+                        class_type = None
+                    
+                    print(f"[DEBUG] 班級 {class_id_int} ({full_class_name}) 類型: {class_type}")
+                    
+                    if class_type:
+                        # 查詢所有「忠」或「孝」班的學生
+                        students = []
+                        for s in all_students:
+                            s_class_name = s.get('class_name', '')
+                            s_department = (s.get('department', '') or '').replace('管科', '')
+                            s_full_name = f"{s_department}{s_class_name}"
+                            if class_type in s_full_name or class_type in s_class_name:
+                                students.append(s)
+                        print(f"[DEBUG] 查詢到所有「{class_type}」班的學生: {len(students)} 位")
+                    else:
+                        # 如果無法判斷類型，只查詢該班級的學生
+                        students = [s for s in all_students if s.get('class_id') == class_id_int]
+                        print(f"[DEBUG] 查詢到 class_id={class_id_int} 的學生: {len(students)} 位")
+                else:
+                    students = []
+                    print(f"[DEBUG] 找不到 class_id={class_id_int} 的班級")
+            except (ValueError, TypeError) as e:
+                students = []
+                print(f"[DEBUG] class_id 轉換失敗: {e}")
         else:
             students = all_students
         
         print(f"[DEBUG] 最終查詢結果: {len(students)} 位學生")
         
-        # 如果選擇的班級沒有學生，改為顯示所有學生（讓用戶可以看到所有學生的履歷和志願序）
-        if len(students) == 0 and class_id and class_id != "all":
-            print(f"[DEBUG] 該班級沒有學生，改為顯示所有學生")
-            students = all_students
-            print(f"[DEBUG] 改為顯示所有學生: {len(students)} 位")
+        # 嚴格按照選擇的班級顯示，如果沒有學生就返回空列表（前端會顯示「無資料」）
         
         # 顯示所有學生的 class_id 供調試
         if len(all_students) > 0:
@@ -483,24 +508,30 @@ def get_class_stats(class_id):
             semester = cursor.fetchone()
             semester_id = semester['id'] if semester else None
 
-        # 1. 查詢班級名稱
-        cursor.execute("SELECT name FROM classes WHERE id = %s", (class_id,))
+        # 1. 查詢班級名稱和部門
+        cursor.execute("SELECT name, department FROM classes WHERE id = %s", (class_id,))
         class_info = cursor.fetchone()
         if not class_info:
             return jsonify({"success": False, "message": "找不到該班級資料"}), 404
 
-        # 使用與 get_students_by_class 相同的邏輯：先查詢所有學生
-        cursor.execute("SELECT COUNT(*) AS total FROM users WHERE role = 'student'", ())
-        all_students_count = cursor.fetchone()["total"] or 0
+        # 根據班級類型（忠/孝）計算統計
+        class_name = class_info.get('name', '')
+        department = class_info.get('department', '').replace('管科', '')
+        full_class_name = f"{department}{class_name}"
         
-        # 查詢該班級的學生數
-        cursor.execute("SELECT COUNT(*) AS total FROM users WHERE class_id = %s AND role = 'student'", (class_id,))
-        class_students_count = cursor.fetchone()["total"] or 0
+        # 判斷是「忠」還是「孝」
+        if '忠' in full_class_name or '忠' in class_name:
+            class_type = '忠'
+            class_pattern = '%忠%'
+        elif '孝' in full_class_name or '孝' in class_name:
+            class_type = '孝'
+            class_pattern = '%孝%'
+        else:
+            class_type = None
+            class_pattern = None
         
-        # 如果該班級沒有學生，使用所有學生來計算統計
-        if class_students_count == 0:
-            print(f"[DEBUG] 班級 {class_id} 沒有學生，使用所有學生計算統計")
-            # 查詢所有學生的統計
+        if class_type:
+            # 查詢所有「忠」或「孝」班的統計
             cursor.execute("""
                 SELECT
                     COUNT(u.id) AS total_students,
@@ -515,12 +546,14 @@ def get_class_stats(class_id):
                         ) THEN 1 ELSE 0 END
                     ) AS students_with_preference
                 FROM users u
-                WHERE u.role = 'student'
-            """)
+                LEFT JOIN classes c ON u.class_id = c.id
+                WHERE u.role = 'student' 
+                  AND (c.name LIKE %s OR CONCAT(REPLACE(c.department, '管科', ''), c.name) LIKE %s)
+            """, (class_pattern, class_pattern))
             stats = cursor.fetchone()
-            class_name = f"所有班級 ({class_info['name']})"
+            class_name = f"所有{class_type}班"
         else:
-            # 查詢該班級的統計
+            # 如果無法判斷類型，只查詢該班級的統計
             cursor.execute("""
                 SELECT
                     COUNT(u.id) AS total_students,
@@ -538,7 +571,6 @@ def get_class_stats(class_id):
                 WHERE u.class_id = %s AND u.role = 'student'
             """, (class_id,))
             stats = cursor.fetchone()
-            class_name = class_info['name']
 
         # 組合結果
         result = {
@@ -575,96 +607,183 @@ def manage_companies_stats():
             semester = cursor.fetchone()
             semester_id = semester['id'] if semester else None
 
-        # 共同的學生過濾條件
-        class_condition = ""
-        class_params = []
-        if class_id and class_id != "all":
-            class_condition = " AND u.class_id=%s"
-            class_params.append(class_id)
-
-        # 各公司被選志願次數
+        # 各公司被選志願次數 - 根據班級類型（忠/孝）過濾
         company_params = []
         sp_semester_clause = ""
         u_class_clause = ""
+        
         if semester_id:
             sp_semester_clause = " AND sp.semester_id = %s"
             company_params.append(semester_id)
+        
         if class_id and class_id != "all":
-            u_class_clause = " AND u.class_id = %s"
-            company_params.append(class_id)
+            try:
+                class_id_int = int(class_id)
+                # 先查詢該班級的名稱，判斷是「忠」還是「孝」
+                cursor.execute("SELECT name, department FROM classes WHERE id = %s", (class_id_int,))
+                class_info = cursor.fetchone()
+                
+                if class_info:
+                    class_name = class_info.get('name', '')
+                    department = class_info.get('department', '').replace('管科', '')
+                    full_class_name = f"{department}{class_name}"
+                    
+                    # 判斷是「忠」還是「孝」
+                    if '忠' in full_class_name or '忠' in class_name:
+                        class_pattern = '%忠%'
+                    elif '孝' in full_class_name or '孝' in class_name:
+                        class_pattern = '%孝%'
+                    else:
+                        class_pattern = None
+                    
+                    if class_pattern:
+                        # 使用班級類型過濾
+                        u_class_clause = " AND (cls.name LIKE %s OR CONCAT(REPLACE(cls.department, '管科', ''), cls.name) LIKE %s)"
+                        company_params.append(class_pattern)
+                        company_params.append(class_pattern)
+                    else:
+                        # 使用 class_id 過濾
+                        u_class_clause = " AND u.class_id = %s"
+                        company_params.append(class_id_int)
+            except (ValueError, TypeError):
+                pass
 
         cursor.execute(f"""
             SELECT c.company_name, COUNT(sp.id) AS preference_count
             FROM internship_companies c
             LEFT JOIN student_preferences sp ON c.id = sp.company_id {sp_semester_clause}
-            LEFT JOIN users u ON sp.student_id = u.id AND u.role='student' {u_class_clause}
+            LEFT JOIN users u ON sp.student_id = u.id AND u.role='student'
+            LEFT JOIN classes cls ON u.class_id = cls.id {u_class_clause}
             GROUP BY c.id, c.company_name
+            HAVING COUNT(sp.id) > 0
             ORDER BY preference_count DESC
             LIMIT 5
         """, company_params)
         top_companies = cursor.fetchall()
 
-        # 履歷繳交率 - 使用與 get_students_by_class 相同的邏輯
-        # 先查詢所有學生
-        cursor.execute("SELECT COUNT(*) AS total FROM users u WHERE u.role='student'", ())
-        all_students_count = cursor.fetchone()["total"] or 0
-        
-        # 如果指定了班級，嘗試查詢該班級的學生
+        # 履歷繳交率 - 根據班級類型（忠/孝）計算
         if class_id and class_id != "all":
             try:
                 class_id_int = int(class_id)
-                cursor.execute("""
-                    SELECT COUNT(*) AS total
-                    FROM users u
-                    WHERE u.role='student' AND u.class_id = %s
-                """, (class_id_int,))
-                class_students_count = cursor.fetchone()["total"] or 0
+                # 先查詢該班級的名稱，判斷是「忠」還是「孝」
+                cursor.execute("SELECT name, department FROM classes WHERE id = %s", (class_id_int,))
+                class_info = cursor.fetchone()
                 
-                # 如果該班級沒有學生，使用所有學生
-                if class_students_count == 0:
-                    print(f"[DEBUG] 班級 {class_id} 沒有學生，使用所有學生計算統計")
-                    total_students = all_students_count
-                    class_condition = ""  # 移除班級限制
-                    class_params = []
+                if class_info:
+                    class_name = class_info.get('name', '')
+                    department = class_info.get('department', '').replace('管科', '')
+                    full_class_name = f"{department}{class_name}"
+                    
+                    # 判斷是「忠」還是「孝」
+                    if '忠' in full_class_name or '忠' in class_name:
+                        class_type = '忠'
+                        class_pattern = '%忠%'
+                    elif '孝' in full_class_name or '孝' in class_name:
+                        class_type = '孝'
+                        class_pattern = '%孝%'
+                    else:
+                        class_type = None
+                        class_pattern = None
+                    
+                    print(f"[DEBUG] 統計圖表 - 班級 {class_id_int} ({full_class_name}) 類型: {class_type}")
+                    
+                    if class_type:
+                        # 查詢所有「忠」或「孝」班的學生
+                        cursor.execute("""
+                            SELECT COUNT(*) AS total
+                            FROM users u
+                            LEFT JOIN classes c ON u.class_id = c.id
+                            WHERE u.role = 'student' 
+                              AND (c.name LIKE %s OR CONCAT(REPLACE(c.department, '管科', ''), c.name) LIKE %s)
+                        """, (class_pattern, class_pattern))
+                        total_students = cursor.fetchone()["total"] or 0
+                        class_condition = " AND (c.name LIKE %s OR CONCAT(REPLACE(c.department, '管科', ''), c.name) LIKE %s)"
+                        class_params = [class_pattern, class_pattern]
+                    else:
+                        # 如果無法判斷類型，只查詢該班級的學生
+                        cursor.execute("""
+                            SELECT COUNT(*) AS total
+                            FROM users u
+                            WHERE u.role='student' AND u.class_id = %s
+                        """, (class_id_int,))
+                        total_students = cursor.fetchone()["total"] or 0
+                        class_condition = " AND u.class_id=%s"
+                        class_params = [class_id_int]
                 else:
-                    total_students = class_students_count
+                    total_students = 0
+                    class_condition = ""
+                    class_params = []
             except (ValueError, TypeError):
-                total_students = all_students_count
+                total_students = 0
                 class_condition = ""
                 class_params = []
         else:
-            total_students = all_students_count
+            # 查詢所有學生
+            cursor.execute("SELECT COUNT(*) AS total FROM users u WHERE u.role='student'", ())
+            total_students = cursor.fetchone()["total"] or 0
+            class_condition = ""
+            class_params = []
 
-        # 構建履歷查詢 - 不限制學期，查詢所有履歷
-        resume_params = list(class_params)
-        resume_query = f"""
-            SELECT COUNT(DISTINCT r.user_id) AS uploaded
-            FROM resumes r
-            JOIN users u ON r.user_id = u.id
-            WHERE u.role='student'{class_condition}
-        """
+        # 構建履歷查詢 - 根據班級類型過濾
+        if class_condition and class_params and len(class_params) == 2 and '%' in str(class_params[0]):
+            # 使用班級類型過濾（忠/孝）
+            resume_query = """
+                SELECT COUNT(DISTINCT r.user_id) AS uploaded
+                FROM resumes r
+                JOIN users u ON r.user_id = u.id
+                LEFT JOIN classes c ON u.class_id = c.id
+                WHERE u.role='student' AND (c.name LIKE %s OR CONCAT(REPLACE(c.department, '管科', ''), c.name) LIKE %s)
+            """
+            cursor.execute(resume_query, class_params)
+        else:
+            # 使用 class_id 過濾或所有學生
+            resume_params = list(class_params)
+            resume_query = f"""
+                SELECT COUNT(DISTINCT r.user_id) AS uploaded
+                FROM resumes r
+                JOIN users u ON r.user_id = u.id
+                WHERE u.role='student'{class_condition}
+            """
+            cursor.execute(resume_query, resume_params)
         
-        cursor.execute(resume_query, resume_params)
         result = cursor.fetchone()
         uploaded = result["uploaded"] if result and result.get("uploaded") is not None else 0
         resume_stats = {"uploaded": uploaded, "not_uploaded": max(total_students - uploaded, 0)}
         
         print(f"[DEBUG] 履歷統計: 總學生={total_students}, 已上傳={uploaded}, 未上傳={resume_stats['not_uploaded']}")
 
-        # 志願序填寫率 - 不限制學期，查詢所有志願序
-        pref_params = list(class_params)
-        pref_query = f"""
-            SELECT COUNT(DISTINCT sp.student_id) AS filled
-            FROM student_preferences sp
-            JOIN users u ON sp.student_id = u.id
-            WHERE u.role='student'{class_condition}
-        """
+        # 志願序填寫率 - 根據班級類型過濾
+        if class_condition and class_params and len(class_params) == 2 and '%' in str(class_params[0]):
+            # 使用班級類型過濾（忠/孝）
+            pref_query = """
+                SELECT COUNT(DISTINCT sp.student_id) AS filled
+                FROM student_preferences sp
+                JOIN users u ON sp.student_id = u.id
+                LEFT JOIN classes c ON u.class_id = c.id
+                WHERE u.role='student' AND (c.name LIKE %s OR CONCAT(REPLACE(c.department, '管科', ''), c.name) LIKE %s)
+            """
+            cursor.execute(pref_query, class_params)
+        else:
+            # 使用 class_id 過濾或所有學生
+            pref_params = list(class_params)
+            pref_query = f"""
+                SELECT COUNT(DISTINCT sp.student_id) AS filled
+                FROM student_preferences sp
+                JOIN users u ON sp.student_id = u.id
+                WHERE u.role='student'{class_condition}
+            """
+            cursor.execute(pref_query, pref_params)
         
-        cursor.execute(pref_query, pref_params)
         result = cursor.fetchone()
         filled = result["filled"] if result and result.get("filled") is not None else 0
         preference_stats = {"filled": filled, "not_filled": max(total_students - filled, 0)}
         
+        print(f"[DEBUG] 志願序統計: 總學生={total_students}, 已填寫={filled}, 未填寫={preference_stats['not_filled']}")
+        
+        resume_stats = {"uploaded": uploaded, "not_uploaded": max(total_students - uploaded, 0)}
+        preference_stats = {"filled": filled, "not_filled": max(total_students - filled, 0)}
+        
+        print(f"[DEBUG] 履歷統計: 總學生={total_students}, 已上傳={uploaded}, 未上傳={resume_stats['not_uploaded']}")
         print(f"[DEBUG] 志願序統計: 總學生={total_students}, 已填寫={filled}, 未填寫={preference_stats['not_filled']}")
 
         return jsonify({
