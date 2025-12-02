@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>智慧實習平台 | 查看錄取結果</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet" />
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    header {
+      background: #0454a3;
+      color: white;
+      padding: 1rem 2rem;
+      text-align: center;
+      font-size: 1.5rem;
+      font-weight: 600;
+    }
+
+    body {
+      font-family: "Noto Sans TC", sans-serif;
+      background: #f7f9fc;
+      margin: 0;
+      padding: 0;
+    }
+
+    .container {
+      max-width: 1400px;
+      margin: 2rem auto;
+      padding: 0 1rem;
+    }
+
+    .card {
+      background: white;
+      border-radius: 10px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+      padding: 1.5rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .filter-bar {
+      display: flex;
+      gap: 0.75rem;
+      flex-wrap: wrap;
+      align-items: center;
+      margin-bottom: 1.5rem;
+    }
+
+    .filter-bar .form-select,
+    .filter-bar .form-control {
+      min-width: 150px;
+    }
+
+    .table {
+      margin-bottom: 0;
+    }
+
+    .table thead th {
+      background-color: #e9f3ff;
+      color: #004a99;
+      font-weight: 600;
+      text-align: center;
+      vertical-align: middle;
+      border-bottom: 2px solid #0066cc;
+    }
+
+    .table tbody td {
+      text-align: center;
+      vertical-align: middle;
+    }
+
+    .table-striped > tbody > tr:nth-of-type(odd) {
+      background-color: rgba(0, 0, 0, 0.02);
+    }
+
+    .status-badge {
+      display: inline-block;
+      padding: 0.35em 0.65em;
+      font-size: 0.875rem;
+      font-weight: 600;
+      border-radius: 0.5rem;
+      white-space: nowrap;
+    }
+
+    .status-badge.admitted {
+      background-color: #28a745;
+      color: white;
+    }
+
+    .status-badge.pending {
+      background-color: #ffc107;
+      color: #212529;
+    }
+
+    .status-badge.not-admitted {
+      background-color: #6c757d;
+      color: white;
+    }
+
+    .empty-state {
+      text-align: center;
+      padding: 3rem 1rem;
+      color: #6c757d;
+    }
+
+    .empty-state i {
+      font-size: 3rem;
+      margin-bottom: 1rem;
+      opacity: 0.5;
+    }
+
+    .count-badge {
+      display: inline-block;
+      background-color: #0066cc;
+      color: white;
+      padding: 0.25rem 0.75rem;
+      border-radius: 1rem;
+      font-size: 0.875rem;
+      font-weight: 600;
+      margin-left: 0.5rem;
+    }
+
+    @media (max-width: 768px) {
+      .filter-bar {
+        flex-direction: column;
+      }
+
+      .filter-bar .form-select,
+      .filter-bar .form-control {
+        width: 100%;
+      }
+
+      .table {
+        font-size: 0.875rem;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header>查看錄取結果</header>
+  
+  <div class="container">
+    <div class="card">
+      <div class="filter-bar">
+        <select id="classFilter" class="form-select">
+          <option value="">所有班級</option>
+        </select>
+        <select id="semesterFilter" class="form-select">
+          <option value="">所有學期</option>
+        </select>
+        <select id="companyFilter" class="form-select">
+          <option value="">所有公司</option>
+        </select>
+        <input type="text" id="keywordSearch" class="form-control" placeholder="搜尋學生姓名、學號或公司名稱..." />
+        <button class="btn btn-primary" onclick="loadAdmissions()">
+          <i class="fas fa-search"></i> 搜尋
+        </button>
+        <button class="btn btn-secondary" onclick="resetFilters()">
+          <i class="fas fa-redo"></i> 重置
+        </button>
+      </div>
+
+      <div class="d-flex justify-content-between align-items-center mb-3">
+        <h5 class="mb-0">錄取結果列表</h5>
+        <span class="count-badge" id="resultCount">0 筆</span>
+      </div>
+
+      <div class="table-responsive">
+        <table class="table table-striped table-hover">
+          <thead>
+            <tr>
+              <th>學號</th>
+              <th>姓名</th>
+              <th>班級</th>
+              <th>科別</th>
+              <th>錄取公司</th>
+              <th>職缺名稱</th>
+              <th>志願序</th>
+              <th>指導老師</th>
+              <th>學期</th>
+              <th>錄取時間</th>
+              <th>狀態</th>
+            </tr>
+          </thead>
+          <tbody id="admissionTableBody">
+            <tr>
+              <td colspan="11" class="text-center text-muted py-4">
+                <div class="spinner-border spinner-border-sm me-2" role="status"></div>
+                載入中...
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div id="emptyState" class="empty-state" style="display: none;">
+        <i class="fas fa-inbox"></i>
+        <p>目前沒有錄取紀錄</p>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script>
+    let allAdmissions = [];
+    let allClasses = [];
+    let allCompanies = [];
+    let allSemesters = [];
+
+    // 頁面載入時初始化
+    document.addEventListener('DOMContentLoaded', function() {
+      loadClasses();
+      loadAdmissions();
+      
+      // 綁定搜尋框 Enter 鍵事件
+      document.getElementById('keywordSearch').addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') {
+          loadAdmissions();
+        }
+      });
+    });
+
+    // 載入班級列表
+    async function loadClasses() {
+      try {
+        const response = await fetch('/api/get_classes');
+        const data = await response.json();
+        if (data.success) {
+          allClasses = data.classes;
+          const classFilter = document.getElementById('classFilter');
+          allClasses.forEach(cls => {
+            const option = document.createElement('option');
+            option.value = cls.id;
+            option.textContent = `${cls.department || ''} ${cls.name || ''}`.trim();
+            classFilter.appendChild(option);
+          });
+        }
+      } catch (error) {
+        console.error('載入班級列表失敗:', error);
+      }
+    }
+
+    // 載入公司列表（從錄取結果中提取）
+    function updateCompanyFilter(admissions) {
+      const companyMap = new Map();
+      admissions.forEach(adm => {
+        if (adm.company_id && adm.company_name) {
+          if (!companyMap.has(adm.company_id)) {
+            companyMap.set(adm.company_id, adm.company_name);
+          }
+        }
+      });
+      
+      const companyFilter = document.getElementById('companyFilter');
+      const currentValue = companyFilter.value;
+      
+      // 清空現有選項（保留「所有公司」）
+      companyFilter.innerHTML = '<option value="">所有公司</option>';
+      
+      // 添加公司選項
+      Array.from(companyMap.entries())
+        .sort((a, b) => a[1].localeCompare(b[1], 'zh-TW'))
+        .forEach(([id, name]) => {
+          const option = document.createElement('option');
+          option.value = id;
+          option.textContent = name;
+          companyFilter.appendChild(option);
+        });
+      
+      // 恢復之前選擇的值
+      if (currentValue) {
+        companyFilter.value = currentValue;
+      }
+    }
+
+    // 載入錄取結果
+    async function loadAdmissions() {
+      const tbody = document.getElementById('admissionTableBody');
+      const emptyState = document.getElementById('emptyState');
+      const resultCount = document.getElementById('resultCount');
+      
+      // 顯示載入中
+      tbody.innerHTML = `
+        <tr>
+          <td colspan="11" class="text-center text-muted py-4">
+            <div class="spinner-border spinner-border-sm me-2" role="status"></div>
+            載入中...
+          </td>
+        </tr>
+      `;
+      emptyState.style.display = 'none';
+
+      // 獲取篩選條件
+      const classId = document.getElementById('classFilter').value;
+      const semester = document.getElementById('semesterFilter').value;
+      const companyId = document.getElementById('companyFilter').value;
+      const keyword = document.getElementById('keywordSearch').value.trim();
+
+      // 構建查詢參數
+      const params = new URLSearchParams();
+      if (classId) params.append('class_id', classId);
+      if (semester) params.append('semester', semester);
+      if (companyId) params.append('company_id', companyId);
+      if (keyword) params.append('keyword', keyword);
+
+      try {
+        const response = await fetch(`/admission/api/get_all_admissions?${params.toString()}`);
+        const data = await response.json();
+        
+        if (data.success) {
+          allAdmissions = data.students || [];
+          renderTable(allAdmissions);
+          resultCount.textContent = `${data.count || 0} 筆`;
+          
+          // 更新學期和公司選單
+          updateSemesterFilter(allAdmissions);
+          updateCompanyFilter(allAdmissions);
+        } else {
+          tbody.innerHTML = `
+            <tr>
+              <td colspan="11" class="text-center text-danger py-4">
+                <i class="fas fa-exclamation-triangle me-2"></i>
+                ${data.message || '載入失敗'}
+              </td>
+            </tr>
+          `;
+          resultCount.textContent = '0 筆';
+        }
+      } catch (error) {
+        console.error('載入錄取結果失敗:', error);
+        tbody.innerHTML = `
+          <tr>
+            <td colspan="11" class="text-center text-danger py-4">
+              <i class="fas fa-exclamation-triangle me-2"></i>
+              載入失敗，請稍後再試
+            </td>
+          </tr>
+        `;
+        resultCount.textContent = '0 筆';
+      }
+    }
+
+    // 更新學期選單
+    function updateSemesterFilter(admissions) {
+      const semesterSet = new Set();
+      admissions.forEach(adm => {
+        if (adm.semester) {
+          semesterSet.add(adm.semester);
+        }
+      });
+      
+      const semesterFilter = document.getElementById('semesterFilter');
+      const currentValue = semesterFilter.value;
+      
+      // 清空現有選項（保留「所有學期」）
+      semesterFilter.innerHTML = '<option value="">所有學期</option>';
+      
+      // 添加學期選項
+      Array.from(semesterSet).sort().reverse().forEach(sem => {
+        const option = document.createElement('option');
+        option.value = sem;
+        option.textContent = sem;
+        semesterFilter.appendChild(option);
+      });
+      
+      // 恢復之前選擇的值
+      if (currentValue) {
+        semesterFilter.value = currentValue;
+      }
+    }
+
+    // 渲染表格
+    function renderTable(admissions) {
+      const tbody = document.getElementById('admissionTableBody');
+      const emptyState = document.getElementById('emptyState');
+      
+      if (admissions.length === 0) {
+        tbody.innerHTML = '';
+        emptyState.style.display = 'block';
+        return;
+      }
+      
+      emptyState.style.display = 'none';
+      tbody.innerHTML = '';
+      
+      admissions.forEach(adm => {
+        const row = document.createElement('tr');
+        row.innerHTML = `
+          <td>${escapeHtml(adm.student_number || '-')}</td>
+          <td>${escapeHtml(adm.student_name || '-')}</td>
+          <td>${escapeHtml(adm.class_name || '-')}</td>
+          <td>${escapeHtml(adm.department || '-')}</td>
+          <td>${escapeHtml(adm.company_name || '-')}</td>
+          <td>${escapeHtml(adm.job_title || '-')}</td>
+          <td>${adm.preference_order ? `第 ${adm.preference_order} 志願` : '-'}</td>
+          <td>${escapeHtml(adm.teacher_name || '-')}</td>
+          <td>${escapeHtml(adm.semester || '-')}</td>
+          <td>${adm.admitted_at || '-'}</td>
+          <td>
+            <span class="status-badge admitted">已錄取</span>
+          </td>
+        `;
+        tbody.appendChild(row);
+      });
+    }
+
+    // 重置篩選條件
+    function resetFilters() {
+      document.getElementById('classFilter').value = '';
+      document.getElementById('semesterFilter').value = '';
+      document.getElementById('companyFilter').value = '';
+      document.getElementById('keywordSearch').value = '';
+      loadAdmissions();
+    }
+
+    // HTML 轉義函數
+    function escapeHtml(text) {
+      if (text == null) return '';
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+  </script>
+</body>
+</html>
