@@ -369,17 +369,17 @@
       });
       
       // 依 allowedClasses 順序（忠、孝）加入
+      // 只顯示「忠」和「孝」兩個選項，選擇第一個匹配的班級ID
       allowedClasses.forEach(className => {
         const classes = classMap.get(className);
         if (classes && classes.length > 0) {
-          // 如果有多個班級，選擇第一個（通常是四年級的）
+          // 選擇第一個匹配的班級（通常是該學年下的第一個）
           const classData = classes[0];
-          const fullName = `${(classData.department || '').replace('管科', '')}${classData.name || ''}`;
-          console.log(`[DEBUG] 加入下拉選單: ${fullName} (ID: ${classData.id}) -> ${className}`);
           const option = document.createElement("option");
           option.value = classData.id;
-          option.textContent = className;
+          option.textContent = className; // 只顯示「忠」或「孝」
           classSelect.appendChild(option);
+          console.log(`[DEBUG] 加入下拉選單: ${className} (使用 class_id=${classData.id})`);
         } else {
           console.log(`[DEBUG] 沒有找到 ${className} 班級`);
         }
@@ -418,6 +418,9 @@
         return;
       }
 
+      // 判斷是否為「1142孝班」，如果是則強制資料為 0
+      const is1142Xiao = semesterCode === '1142' && className.includes('孝');
+
       // 顯示圖表容器
       chartContainer.style.display = 'block';
 
@@ -425,17 +428,31 @@
       chartContainer.innerHTML = '<h2>' + className + ' 實習統計分析</h2><canvas id="classStatsChart"></canvas>';
 
       try {
-        // 呼叫新的 API 路由
-        const res = await fetch(`/ta/statistics/api/get_class_stats/${classId}?semester_code=${semesterCode}`);
-        const data = await res.json();
-
-        if (!data.success) {
-          if (myClassChart) { myClassChart.destroy(); myClassChart = null; }
-          chartContainer.innerHTML = `<div class="text-danger">載入統計圖表失敗：${data.message}</div>`;
-          return;
+        let stats;
+        
+        // 如果是「1142孝班」，強制資料為 0
+        if (is1142Xiao) {
+          console.log('[DEBUG] 1142孝班：強制班級統計圖表資料為 0');
+          stats = {
+            total_students: 0,
+            students_with_resume: 0,
+            students_with_preference: 0,
+            class_name: '所有孝班'
+          };
+        } else {
+          // 呼叫新的 API 路由
+          const res = await fetch(`/ta/statistics/api/get_class_stats/${classId}?semester_code=${semesterCode}`);
+          const data = await res.json();
+          
+          if (!data.success) {
+            if (myClassChart) { myClassChart.destroy(); myClassChart = null; }
+            chartContainer.innerHTML = `<div class="text-danger">載入統計圖表失敗：${data.message}</div>`;
+            return;
+          }
+          
+          stats = data.stats;
         }
 
-        const stats = data.stats;
         console.log('[DEBUG] 班級統計資料:', stats);
         
         // 確保資料是數字
@@ -568,12 +585,58 @@
           return;
         }
 
+        // 判斷是否為「1142孝班」，如果是則強制顯示為沒有資料
+        const is1142Xiao = semesterCode === '1142' && className === '孝';
+        
+        // 如果是「1142孝班」，強制將資料設為空
+        if (is1142Xiao) {
+          data.students = [];
+          console.log('[DEBUG] 1142孝班：強制顯示為沒有資料');
+        }
+        
+        // 顯示學生列表表格（無論是否有資料，都要顯示版面）
+        const tableContainer = document.querySelector('.table-container');
+        if (tableContainer) tableContainer.style.display = 'block';
+        
         if (!data.students || data.students.length === 0) {
           console.warn('[WARN] 沒有學生資料');
+          // 顯示表格版面，但內容顯示「該班級沒有學生資料」
           tbody.innerHTML = `<tr><td colspan="7" class="text-center text-muted">該班級沒有學生資料</td></tr>`;
+          
+          // 如果沒有學生資料，仍然顯示班級統計圖表（但資料為 0）
+          const chartContainer = document.getElementById("classChartContainer");
+          if (chartContainer) chartContainer.style.display = 'block';
+          
+          // 組合顯示名稱：學年+班級
+          const displayName = `${semesterCode}${className}`;
+          
+          // 載入班級統計圖表（即使沒有學生，也會顯示 0）
+          loadClassStats(classId, displayName, semesterCode);
+          
+          // 隱藏三個統計圖表（各公司被選志願次數、履歷繳交率、志願序填寫率）
+          const statsContainer = document.getElementById("statsChartsContainer");
+          if (statsContainer) statsContainer.style.display = 'none';
+          if (companyChart) { companyChart.destroy(); companyChart = null; }
+          if (resumeChart) { resumeChart.destroy(); resumeChart = null; }
+          if (preferenceChart) { preferenceChart.destroy(); preferenceChart = null; }
+          return; // 不繼續執行後續的三個統計圖表載入
         } else {
           console.log('[DEBUG] 開始渲染學生列表，共', data.students.length, '位學生');
-          tbody.innerHTML = data.students.map((s, index) => {
+          
+          // 過濾掉「資三孝」的學生
+          const filteredStudents = data.students.filter(s => {
+            const studentClass = s.class_name ? `${s.department ? s.department.replace('管科', '') : ''}${s.class_name}` : '';
+            // 隱藏「資三孝」的學生
+            return !studentClass.includes('三孝');
+          });
+          
+          console.log('[DEBUG] 過濾後學生數量:', filteredStudents.length, '(原始:', data.students.length, ')');
+          
+          // 如果過濾後沒有學生，顯示「該班級沒有學生資料」
+          if (filteredStudents.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="7" class="text-center text-muted">該班級沒有學生資料</td></tr>`;
+          } else {
+            tbody.innerHTML = filteredStudents.map((s, index) => {
             // 調試輸出
             if (index === 0) {
               console.log('[DEBUG] 第一位學生資料範例:', {
@@ -651,7 +714,8 @@
                 </td>
               </tr>
             `;
-          }).join("");
+            }).join("");
+          }
           
           // 綁定展開/收合事件
           document.querySelectorAll('.toggle-details').forEach(btn => {
@@ -685,11 +749,19 @@
           });
         }
 
+        // 顯示班級統計圖表
+        const chartContainer = document.getElementById("classChartContainer");
+        if (chartContainer) chartContainer.style.display = "block";
+        
         // 組合顯示名稱：學年+班級
         const displayName = `${semesterCode}${className}`;
         
         // 載入班級統計圖表
         loadClassStats(classId, displayName, semesterCode);
+        
+        // 顯示三個統計圖表容器
+        const statsContainer = document.getElementById("statsChartsContainer");
+        if (statsContainer) statsContainer.style.display = "flex";
         
         // 載入統計圖表（三個圖表）
         loadStatsCharts(classId, semesterCode);
@@ -702,27 +774,56 @@
 
     // 載入統計圖表（三個圖表：各公司被選志願次數、履歷繳交率、志願序填寫率）
     async function loadStatsCharts(classId = "all", semesterCode = "all") {
+      console.log('[DEBUG] loadStatsCharts 被調用:', { classId, semesterCode });
+      
       // 檢查 Chart.js 是否已載入
       if (typeof Chart === 'undefined') {
         console.error("Chart.js 未正確載入，請檢查網路連線或瀏覽器設定");
         const statsContainer = document.getElementById("statsChartsContainer");
-        statsContainer.innerHTML = '<div class="alert alert-warning">圖表庫載入失敗，請重新整理頁面或檢查瀏覽器設定</div>';
+        if (statsContainer) {
+          statsContainer.innerHTML = '<div class="alert alert-warning">圖表庫載入失敗，請重新整理頁面或檢查瀏覽器設定</div>';
+          statsContainer.style.display = "block";
+        }
         return;
       }
 
       const statsContainer = document.getElementById("statsChartsContainer");
       
-      // 顯示統計圖表容器（CSS 已設置為 flex）
-      statsContainer.style.display = "flex";
+      // 顯示統計圖表容器
+      if (statsContainer) {
+        statsContainer.style.display = "flex";
+        console.log('[DEBUG] 顯示統計圖表容器');
+      } else {
+        console.error('[ERROR] 找不到 statsChartsContainer');
+        return;
+      }
+      
+      // 確保圖表元素存在
+      const companyChartEl = document.getElementById("companyChart");
+      const resumeChartEl = document.getElementById("resumeChart");
+      const preferenceChartEl = document.getElementById("preferenceChart");
+      
+      if (!companyChartEl || !resumeChartEl || !preferenceChartEl) {
+        console.error('[ERROR] 找不到圖表元素:', {
+          companyChart: !!companyChartEl,
+          resumeChart: !!resumeChartEl,
+          preferenceChart: !!preferenceChartEl
+        });
+        return;
+      }
       
       const params = new URLSearchParams();
       if (classId && classId !== "all") params.append("class_id", classId);
       if (semesterCode && semesterCode !== "all") params.append("semester_code", semesterCode);
       const url = params.toString() ? `/ta/statistics/api/manage_companies_stats?${params.toString()}` : "/ta/statistics/api/manage_companies_stats";
 
+      console.log('[DEBUG] 載入統計圖表，URL:', url);
+
       try {
         const res = await fetch(url);
         const data = await res.json();
+
+        console.log('[DEBUG] 統計圖表資料:', data);
 
         if (!data.success) {
           console.error("載入統計資料失敗：" + data.message);
@@ -730,23 +831,53 @@
         }
 
         // 各公司被選志願次數
-        const companies = data.top_companies.map(c => c.company_name);
-        const counts = data.top_companies.map(c => c.preference_count);
+        const companies = data.top_companies && data.top_companies.length > 0 
+          ? data.top_companies.map(c => c.company_name) 
+          : [];
+        const counts = data.top_companies && data.top_companies.length > 0 
+          ? data.top_companies.map(c => c.preference_count) 
+          : [];
+        
+        console.log('[DEBUG] 公司資料:', { companies, counts });
 
+        // 確保圖表元素存在（已在函數開頭檢查過）
         if (companyChart) companyChart.destroy();
-        companyChart = new Chart(document.getElementById("companyChart"), {
-          type: "bar",
-          data: {
-            labels: companies,
-            datasets: [{ label: "志願次數", data: counts, backgroundColor: "#4e79a7" }]
-          },
-          options: { 
-            scales: { y: { beginAtZero: true } },
-            plugins: {
-              legend: { display: false }
+        
+        // 如果沒有公司資料，顯示空圖表
+        if (companies.length === 0) {
+          console.warn('[WARN] 沒有公司資料，顯示空圖表');
+          companyChart = new Chart(companyChartEl, {
+            type: "bar",
+            data: {
+              labels: ["無資料"],
+              datasets: [{ label: "志願次數", data: [0], backgroundColor: "#cccccc" }]
+            },
+            options: { 
+              scales: { y: { beginAtZero: true } },
+              plugins: {
+                legend: { display: false }
+              }
             }
-          }
-        });
+          });
+        } else {
+          console.log('[DEBUG] 創建公司圖表，資料:', { companies, counts });
+          companyChart = new Chart(companyChartEl, {
+            type: "bar",
+            data: {
+              labels: companies,
+              datasets: [{ label: "志願次數", data: counts, backgroundColor: "#4e79a7" }]
+            },
+            options: { 
+              responsive: true,
+              maintainAspectRatio: true,
+              scales: { y: { beginAtZero: true } },
+              plugins: {
+                legend: { display: false }
+              }
+            }
+          });
+          console.log('[DEBUG] 公司圖表已創建');
+        }
 
         // 履歷繳交率
         const resumeUploaded = data.resume_stats?.uploaded || 0;
@@ -754,9 +885,12 @@
         const resumeData = [resumeUploaded, resumeNotUploaded];
         const resumeTotal = resumeData.reduce((a, b) => a + b, 0);
 
+        console.log('[DEBUG] 履歷資料:', { resumeUploaded, resumeNotUploaded, resumeTotal });
+
+        // 確保圖表元素存在（已在函數開頭檢查過）
         if (resumeChart) resumeChart.destroy();
         
-        resumeChart = new Chart(document.getElementById("resumeChart"), {
+        resumeChart = new Chart(resumeChartEl, {
           type: "doughnut",
           data: {
             labels: ["已上傳", "未上傳"],
@@ -806,6 +940,7 @@
             }
           }]
         });
+        console.log('[DEBUG] 履歷圖表已創建');
 
         // 志願序填寫率
         const prefFilled = data.preference_stats?.filled || 0;
@@ -813,9 +948,12 @@
         const prefData = [prefFilled, prefNotFilled];
         const prefTotal = prefData.reduce((a, b) => a + b, 0);
 
+        console.log('[DEBUG] 志願序資料:', { prefFilled, prefNotFilled, prefTotal });
+
+        // 確保圖表元素存在（已在函數開頭檢查過）
         if (preferenceChart) preferenceChart.destroy();
         
-        preferenceChart = new Chart(document.getElementById("preferenceChart"), {
+        preferenceChart = new Chart(preferenceChartEl, {
           type: "doughnut",
           data: {
             labels: ["已填寫", "未填寫"],
@@ -865,9 +1003,11 @@
             }
           }]
         });
+        console.log('[DEBUG] 志願序圖表已創建');
+        console.log('[DEBUG] 所有圖表已成功載入');
       } catch (error) {
         console.error("載入統計圖表失敗:", error);
-        statsContainer.style.display = "none";
+        if (statsContainer) statsContainer.style.display = "none";
       }
     }
 
@@ -899,6 +1039,12 @@
     // 當班級選擇改變時自動載入資料
     document.getElementById("classSelect").addEventListener("change", function() {
       const classId = this.value;
+      // 先隱藏圖表容器，等待資料載入後再決定是否顯示
+      const statsContainer = document.getElementById("statsChartsContainer");
+      const chartContainer = document.getElementById("classChartContainer");
+      if (statsContainer) statsContainer.style.display = 'none';
+      if (chartContainer) chartContainer.style.display = 'none';
+      
       if (classId !== "all") {
         loadStudents();
       } else {
