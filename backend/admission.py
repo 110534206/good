@@ -10,7 +10,6 @@ admission_bp = Blueprint("admission_bp", __name__, url_prefix="/admission")
 # 頁面路由：查看錄取結果
 # =========================================================
 @admission_bp.route("/results", methods=["GET"])
-@admission_bp.route("/admission results", methods=["GET"])
 def admission_results_page():
     """查看學生錄取結果頁面"""
     if 'user_id' not in session:
@@ -394,7 +393,7 @@ def get_all_admissions():
             FROM teacher_student_relations tsr
             JOIN users u_student ON tsr.student_id = u_student.id
             LEFT JOIN classes c ON u_student.class_id = c.id
-            LEFT JOIN student_preferences sp ON tsr.student_id = sp.student_id AND sp.status = 'approved'
+            LEFT JOIN student_preferences sp ON tsr.student_id = sp.student_id
             LEFT JOIN internship_companies ic ON sp.company_id = ic.id
             LEFT JOIN internship_jobs ij ON sp.job_id = ij.id
             LEFT JOIN users u_teacher ON tsr.teacher_id = u_teacher.id
@@ -445,9 +444,9 @@ def get_all_admissions():
             params.append(company_id)
         
         if keyword:
-            base_query += " AND (u_student.name LIKE %s OR u_student.username LIKE %s OR ic.company_name LIKE %s)"
+            base_query += " AND (u_student.name LIKE %s OR u_student.username LIKE %s OR ic.company_name LIKE %s OR c.name LIKE %s)"
             keyword_pattern = f"%{keyword}%"
-            params.extend([keyword_pattern, keyword_pattern, keyword_pattern])
+            params.extend([keyword_pattern, keyword_pattern, keyword_pattern, keyword_pattern])
         
         base_query += " ORDER BY tsr.created_at DESC, u_student.name ASC"
         

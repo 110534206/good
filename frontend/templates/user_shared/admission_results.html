@@ -46,14 +46,19 @@
     .filter-bar {
       display: flex;
       gap: 0.75rem;
-      flex-wrap: wrap;
+      flex-wrap: nowrap;
       align-items: center;
       margin-bottom: 1.5rem;
     }
 
     .filter-bar .form-select,
     .filter-bar .form-control {
-      min-width: 150px;
+      flex: 1;
+      min-width: 0;
+    }
+    
+    .filter-bar .btn {
+      flex-shrink: 0;
     }
 
     .table {
@@ -147,21 +152,18 @@
   <div class="container">
     <div class="card">
       <div class="filter-bar">
-        <select id="classFilter" class="form-select">
-          <option value="">所有班級</option>
-        </select>
         <select id="semesterFilter" class="form-select">
           <option value="">所有學期</option>
+        </select>
+        <select id="classFilter" class="form-select">
+          <option value="">所有班級</option>
         </select>
         <select id="companyFilter" class="form-select">
           <option value="">所有公司</option>
         </select>
-        <input type="text" id="keywordSearch" class="form-control" placeholder="搜尋學生姓名、學號或公司名稱..." />
+        <input type="text" id="keywordSearch" class="form-control" placeholder="搜尋學生姓名、學號、公司名稱或班級..." />
         <button class="btn btn-primary" onclick="loadAdmissions()">
           <i class="fas fa-search"></i> 搜尋
-        </button>
-        <button class="btn btn-secondary" onclick="resetFilters()">
-          <i class="fas fa-redo"></i> 重置
         </button>
       </div>
 
@@ -176,20 +178,17 @@
             <tr>
               <th>學號</th>
               <th>姓名</th>
+              <th>學期</th>
               <th>班級</th>
-              <th>科別</th>
               <th>錄取公司</th>
               <th>職缺名稱</th>
-              <th>志願序</th>
               <th>指導老師</th>
-              <th>學期</th>
-              <th>錄取時間</th>
               <th>狀態</th>
             </tr>
           </thead>
           <tbody id="admissionTableBody">
             <tr>
-              <td colspan="11" class="text-center text-muted py-4">
+              <td colspan="8" class="text-center text-muted py-4">
                 <div class="spinner-border spinner-border-sm me-2" role="status"></div>
                 載入中...
               </td>
@@ -214,7 +213,9 @@
 
     // 頁面載入時初始化
     document.addEventListener('DOMContentLoaded', function() {
+      initSemesterFilter();
       loadClasses();
+      loadOpenCompanies();
       loadAdmissions();
       
       // 綁定搜尋框 Enter 鍵事件
@@ -228,53 +229,90 @@
     // 載入班級列表
     async function loadClasses() {
       try {
-        const response = await fetch('/api/get_classes');
+        const response = await fetch('/ta/statistics/api/get_classes');
         const data = await response.json();
-        if (data.success) {
+        
+        console.log('班級 API 響應:', data); // 調試信息
+        
+        const classFilter = document.getElementById('classFilter');
+        
+        if (data.success && data.classes) {
           allClasses = data.classes;
-          const classFilter = document.getElementById('classFilter');
-          allClasses.forEach(cls => {
-            const option = document.createElement('option');
-            option.value = cls.id;
-            option.textContent = `${cls.department || ''} ${cls.name || ''}`.trim();
-            classFilter.appendChild(option);
+          console.log('所有班級數據:', allClasses); // 調試信息
+          
+          // 只顯示第一個包含「忠」的班級和第一個包含「孝」的班級
+          const zhongClass = allClasses.find(cls => {
+            const className = cls.name || '';
+            const fullName = `${cls.department || ''} ${cls.name || ''}`.trim();
+            return className.includes('忠') || fullName.includes('忠');
           });
+          
+          const xiaoClass = allClasses.find(cls => {
+            const className = cls.name || '';
+            const fullName = `${cls.department || ''} ${cls.name || ''}`.trim();
+            return className.includes('孝') || fullName.includes('孝');
+          });
+          
+          // 添加忠班選項
+          if (zhongClass) {
+            const option = document.createElement('option');
+            option.value = zhongClass.id;
+            option.textContent = '忠班';
+            classFilter.appendChild(option);
+          }
+          
+          // 添加孝班選項
+          if (xiaoClass) {
+            const option = document.createElement('option');
+            option.value = xiaoClass.id;
+            option.textContent = '孝班';
+            classFilter.appendChild(option);
+          }
+          
+          if (!zhongClass && !xiaoClass) {
+            console.warn('沒有找到包含「忠」或「孝」的班級');
+          }
+        } else {
+          console.error('API 返回失敗:', data.message || '未知錯誤');
         }
       } catch (error) {
         console.error('載入班級列表失敗:', error);
       }
     }
 
-    // 載入公司列表（從錄取結果中提取）
-    function updateCompanyFilter(admissions) {
-      const companyMap = new Map();
-      admissions.forEach(adm => {
-        if (adm.company_id && adm.company_name) {
-          if (!companyMap.has(adm.company_id)) {
-            companyMap.set(adm.company_id, adm.company_name);
-          }
+    // 載入開放中的公司列表
+    async function loadOpenCompanies() {
+      try {
+        const response = await fetch('/api/get_reviewed_companies');
+        const data = await response.json();
+        
+        const companyFilter = document.getElementById('companyFilter');
+        const currentValue = companyFilter.value;
+        
+        // 清空現有選項（保留「所有公司」）
+        companyFilter.innerHTML = '<option value="">所有公司</option>';
+        
+        if (data.success && data.companies) {
+          // 只顯示開放中的公司
+          const openCompanies = data.companies.filter(company => company.is_open_current_semester === true);
+          
+          // 添加公司選項
+          openCompanies
+            .sort((a, b) => (a.company_name || '').localeCompare(b.company_name || '', 'zh-TW'))
+            .forEach(company => {
+              const option = document.createElement('option');
+              option.value = company.id;
+              option.textContent = company.company_name || '-';
+              companyFilter.appendChild(option);
+            });
         }
-      });
-      
-      const companyFilter = document.getElementById('companyFilter');
-      const currentValue = companyFilter.value;
-      
-      // 清空現有選項（保留「所有公司」）
-      companyFilter.innerHTML = '<option value="">所有公司</option>';
-      
-      // 添加公司選項
-      Array.from(companyMap.entries())
-        .sort((a, b) => a[1].localeCompare(b[1], 'zh-TW'))
-        .forEach(([id, name]) => {
-          const option = document.createElement('option');
-          option.value = id;
-          option.textContent = name;
-          companyFilter.appendChild(option);
-        });
-      
-      // 恢復之前選擇的值
-      if (currentValue) {
-        companyFilter.value = currentValue;
+        
+        // 恢復之前選擇的值
+        if (currentValue) {
+          companyFilter.value = currentValue;
+        }
+      } catch (error) {
+        console.error('載入開放中公司列表失敗:', error);
       }
     }
 
@@ -296,15 +334,15 @@
       emptyState.style.display = 'none';
 
       // 獲取篩選條件
-      const classId = document.getElementById('classFilter').value;
       const semester = document.getElementById('semesterFilter').value;
+      const classId = document.getElementById('classFilter').value;
       const companyId = document.getElementById('companyFilter').value;
       const keyword = document.getElementById('keywordSearch').value.trim();
 
       // 構建查詢參數
       const params = new URLSearchParams();
-      if (classId) params.append('class_id', classId);
       if (semester) params.append('semester', semester);
+      if (classId) params.append('class_id', classId);
       if (companyId) params.append('company_id', companyId);
       if (keyword) params.append('keyword', keyword);
 
@@ -317,9 +355,7 @@
           renderTable(allAdmissions);
           resultCount.textContent = `${data.count || 0} 筆`;
           
-          // 更新學期和公司選單
-          updateSemesterFilter(allAdmissions);
-          updateCompanyFilter(allAdmissions);
+          // 學期選單已在頁面載入時初始化，無需更新
         } else {
           tbody.innerHTML = `
             <tr>
@@ -345,23 +381,17 @@
       }
     }
 
-    // 更新學期選單
-    function updateSemesterFilter(admissions) {
-      const semesterSet = new Set();
-      admissions.forEach(adm => {
-        if (adm.semester) {
-          semesterSet.add(adm.semester);
-        }
-      });
-      
+    // 初始化學期選單（固定顯示 1132 和 1142）
+    function initSemesterFilter() {
       const semesterFilter = document.getElementById('semesterFilter');
       const currentValue = semesterFilter.value;
       
       // 清空現有選項（保留「所有學期」）
       semesterFilter.innerHTML = '<option value="">所有學期</option>';
       
-      // 添加學期選項
-      Array.from(semesterSet).sort().reverse().forEach(sem => {
+      // 添加固定的學期選項：1132 和 1142
+      const fixedSemesters = ['1132', '1142'];
+      fixedSemesters.forEach(sem => {
         const option = document.createElement('option');
         option.value = sem;
         option.textContent = sem;
@@ -393,29 +423,38 @@
         row.innerHTML = `
           <td>${escapeHtml(adm.student_number || '-')}</td>
           <td>${escapeHtml(adm.student_name || '-')}</td>
+          <td>${escapeHtml(adm.semester || '-')}</td>
           <td>${escapeHtml(adm.class_name || '-')}</td>
-          <td>${escapeHtml(adm.department || '-')}</td>
           <td>${escapeHtml(adm.company_name || '-')}</td>
           <td>${escapeHtml(adm.job_title || '-')}</td>
-          <td>${adm.preference_order ? `第 ${adm.preference_order} 志願` : '-'}</td>
           <td>${escapeHtml(adm.teacher_name || '-')}</td>
-          <td>${escapeHtml(adm.semester || '-')}</td>
-          <td>${adm.admitted_at || '-'}</td>
           <td>
-            <span class="status-badge admitted">已錄取</span>
+            ${getStatusBadge(adm)}
           </td>
         `;
         tbody.appendChild(row);
       });
     }
 
-    // 重置篩選條件
-    function resetFilters() {
-      document.getElementById('classFilter').value = '';
-      document.getElementById('semesterFilter').value = '';
-      document.getElementById('companyFilter').value = '';
-      document.getElementById('keywordSearch').value = '';
-      loadAdmissions();
+    // 獲取狀態標籤
+    function getStatusBadge(adm) {
+      // 如果有錄取關係（relation_id 存在），表示已錄取
+      if (adm.relation_id) {
+        return '<span class="status-badge admitted">已錄取</span>';
+      }
+      
+      // 根據 preference_status 判斷狀態
+      const status = adm.preference_status;
+      if (status === 'pending') {
+        return '<span class="status-badge pending">審核中</span>';
+      } else if (status === 'rejected') {
+        return '<span class="status-badge not-admitted">未錄取</span>';
+      } else if (status === 'approved') {
+        return '<span class="status-badge admitted">已錄取</span>';
+      }
+      
+      // 預設顯示已錄取（因為有錄取關係）
+      return '<span class="status-badge admitted">已錄取</span>';
     }
 
     // HTML 轉義函數
