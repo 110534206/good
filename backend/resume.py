@@ -8,7 +8,7 @@ import os
 import traceback
 import json
 import re
-from datetime import datetime
+from datetime import datetime, date
 from notification import create_notification
 
 # 添加圖片驗證函數
@@ -191,14 +191,17 @@ def load_student_certifications(cursor, student_id):
     """
     sql = """
         SELECT
-            cc.name AS cert_name,
+            CONCAT(COALESCE(cc.job_category, ''), COALESCE(cc.level, '')) AS cert_name,
             cc.category AS cert_category,
-            CONCAT(cc.name, ' (', ca.name, ')') AS full_name,
+            CONCAT(CONCAT(COALESCE(cc.job_category, ''), COALESCE(cc.level, '')), ' (', ca.name, ')') AS full_name,
             sc.CertPath AS cert_path,
-            sc.AcquisitionDate AS acquire_date
+            sc.AcquisitionDate AS acquire_date,
+            sc.cert_code AS cert_code
         FROM student_certifications sc
-        JOIN certificate_codes cc ON sc.cert_code = cc.code
-        JOIN cert_authorities ca ON cc.authority_id = ca.id
+        LEFT JOIN certificate_codes cc 
+            ON sc.cert_code COLLATE utf8mb4_unicode_ci = cc.code COLLATE utf8mb4_unicode_ci
+        LEFT JOIN cert_authorities ca 
+            ON cc.authority_id = ca.id
         WHERE sc.StuID = %s
         ORDER BY sc.AcquisitionDate DESC, sc.id ASC
     """
@@ -208,9 +211,30 @@ def load_student_certifications(cursor, student_id):
     results = []
     for r in rows:
         if r:  # 確保 r 不是 None
+            cert_code = r.get('cert_code', '')
+            cert_name_from_join = r.get('cert_name', '')
+            cert_category_from_join = r.get('cert_category', '')
+            
+            # 如果 JOIN 失敗，嘗試通過 cert_code 查詢 category
+            category = cert_category_from_join if cert_category_from_join else 'other'
+            if not cert_category_from_join and cert_code and cert_code.strip() and cert_code.upper() != 'OTHER':
+                try:
+                    cursor.execute("""
+                        SELECT category 
+                        FROM certificate_codes 
+                        WHERE code COLLATE utf8mb4_unicode_ci = %s COLLATE utf8mb4_unicode_ci
+                        LIMIT 1
+                    """, (cert_code,))
+                    category_row = cursor.fetchone()
+                    if category_row:
+                        category = category_row.get('category', 'other')
+                        print(f"✅ load_student_certifications: 通過 cert_code 查詢 category: code={cert_code}, category={category}")
+                except Exception as e:
+                    print(f"⚠️ load_student_certifications: 查詢 category 失敗: {e}")
+            
             results.append({
-                "cert_name": r.get('cert_name', '') or '',
-                "category": r.get('cert_category', 'other'),        # labor / intl / local / other
+                "cert_name": cert_name_from_join or '',
+                "category": category,        # labor / intl / local / other
                 "full_name": r.get('full_name', '') or '',       # 表格區使用 → 例: 電腦軟體乙級 (勞動部)
                 "cert_path": r.get('cert_path', '') or '',       # 圖片路徑
                 "acquire_date": r.get('acquire_date', '') or '',    # 日期
@@ -283,321 +307,376 @@ def fill_certificate_photos(context, doc, items, start_index, max_count=8):
             context[f"CertPhotoName_{idx}"] = ""
 
 # -------------------------
-# 儲存結構化資料
+# 儲存結構化資料（重整 + 稳定版）
 # -------------------------
 def save_structured_data(cursor, student_id, data, semester_id=None):
     try:
-        # 1) 儲存 Student_Info (基本資料)
+        # -------------------------------------------------------------
+        # 1) 儲存 Student_Info（基本資料）
+        # -------------------------------------------------------------
         cursor.execute("""
-            INSERT INTO Student_Info (StuID, StuName, BirthDate, Gender, Phone, Email, Address, ConductScore, Autobiography, PhotoPath, UpdatedAt)
+            INSERT INTO Student_Info 
+                (StuID, StuName, BirthDate, Gender, Phone, Email, Address, 
+                 ConductScore, Autobiography, PhotoPath, UpdatedAt)
             VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,NOW())
             ON DUPLICATE KEY UPDATE 
-                StuName=VALUES(StuName), BirthDate=VALUES(BirthDate), Gender=VALUES(Gender),
-                Phone=VALUES(Phone), Email=VALUES(Email), Address=VALUES(Address),
-                ConductScore=VALUES(ConductScore), Autobiography=VALUES(Autobiography),
-                PhotoPath=VALUES(PhotoPath), UpdatedAt=NOW()
+                StuName=VALUES(StuName),
+                BirthDate=VALUES(BirthDate),
+                Gender=VALUES(Gender),
+                Phone=VALUES(Phone),
+                Email=VALUES(Email),
+                Address=VALUES(Address),
+                ConductScore=VALUES(ConductScore),
+                Autobiography=VALUES(Autobiography),
+                PhotoPath=VALUES(PhotoPath),
+                UpdatedAt=NOW()
         """, (
-            student_id, data.get('name'), data.get('birth_date'), data.get('gender'),
-            data.get('phone'), data.get('email'), data.get('address'),
-            data.get('conduct_score'), data.get('autobiography'), data.get('photo_path')
+            student_id,
+            data.get("name"),
+            data.get("birth_date"),
+            data.get("gender"),
+            data.get("phone"),
+            data.get("email"),
+            data.get("address"),
+            data.get("conduct_score"),
+            data.get("autobiography"),
+            data.get("photo_path")
         ))
-        print(f"🔍 保存學生資料: name={data.get('name')}, birth_date={data.get('birth_date')}, gender={data.get('gender')}")
 
-        # 2) 儲存課程 (先刪除同學同學期的課程，再插入)
-        # 檢查表是否有 SemesterID 列
-        try:
-            cursor.execute("SHOW COLUMNS FROM course_grades LIKE 'SemesterID'")
-            has_semester_id = cursor.fetchone() is not None
-        except:
-            has_semester_id = False
-        
-        if semester_id is None:
-            # 若沒有 semester_id，仍刪除所有該 StuID 的課程（保守處理）
-            cursor.execute("DELETE FROM course_grades WHERE StuID=%s", (student_id,))
+        # -------------------------------------------------------------
+        # 2) 儲存 course_grades
+        # -------------------------------------------------------------
+        cursor.execute("SHOW COLUMNS FROM course_grades LIKE 'SemesterID'")
+        has_semester_id = cursor.fetchone() is not None
+
+        if has_semester_id and semester_id:
+            cursor.execute(
+                "DELETE FROM course_grades WHERE StuID=%s AND IFNULL(SemesterID,'')=%s",
+                (student_id, semester_id)
+            )
         else:
-            if has_semester_id:
-                cursor.execute("DELETE FROM course_grades WHERE StuID=%s AND IFNULL(SemesterID, '')=%s", (student_id, semester_id))
-            else:
-                # 如果表沒有 SemesterID 列，只根據 StuID 刪除
-                cursor.execute("DELETE FROM course_grades WHERE StuID=%s", (student_id,))
+            cursor.execute("DELETE FROM course_grades WHERE StuID=%s", (student_id,))
 
-        seen_course_names = set()
-        unique_courses = []
+        seen_courses = set()
+        for c in data.get("courses", []):
+            cname = (c.get("name") or "").strip()
+            if not cname:
+                continue
+            if cname in seen_courses:
+                continue
+            seen_courses.add(cname)
 
-        for c in data.get('courses', []):
-            course_name = (c.get('name') or '').strip()
-            if course_name and course_name not in seen_course_names:
-                unique_courses.append(c)
-                seen_course_names.add(course_name)
-            elif course_name:
-                # 重複課程，跳過
-                print(f"⚠️ 偵測到重複課程名稱並已跳過: {course_name}")
-
-        for c in unique_courses:
-            # 支援 semester_id 儲存（如果表有 SemesterID 列）
-            if semester_id is not None and has_semester_id:
+            if has_semester_id and semester_id:
                 cursor.execute("""
-                    REPLACE INTO course_grades (StuID, CourseName, Credits, Grade, SemesterID)
+                    INSERT INTO course_grades
+                        (StuID, CourseName, Credits, Grade, SemesterID)
                     VALUES (%s,%s,%s,%s,%s)
-                """, (student_id, c.get('name'), c.get('credits'), c.get('grade'), semester_id))
+                """, (student_id, cname, c.get("credits"), c.get("grade"), semester_id))
             else:
                 cursor.execute("""
-                    INSERT INTO course_grades (StuID, CourseName, Credits, Grade)
+                    INSERT INTO course_grades
+                        (StuID, CourseName, Credits, Grade)
                     VALUES (%s,%s,%s,%s)
-                """, (student_id, c.get('name'), c.get('credits'), c.get('grade')))
+                """, (student_id, cname, c.get("credits"), c.get("grade")))
 
-        # 3) 儲存證照（整合：文本 + 圖片皆放 student_certifications）
-        # 為簡潔處理：刪除該學生既有證照（提交履歷時，視為更新整份證照清單）
-        cursor.execute("DELETE FROM student_certifications WHERE StuID=%s", (student_id,))
+        # -------------------------------------------------------------
+        # 3) 儲存 student_certifications
+        # -------------------------------------------------------------
 
-        # 檢查 student_certifications 表的實際列結構
-        try:
-            cursor.execute("SHOW COLUMNS FROM student_certifications")
-            columns_info = cursor.fetchall()
-            # 確保完全讀取所有結果，避免 "Unread result found" 錯誤
-            if columns_info:
-                column_names = [col['Field'] for col in columns_info]
-            else:
-                column_names = []
-            
-            has_cert_code = 'cert_code' in column_names
-            has_cert_name = 'CertName' in column_names
-            has_cert_type = 'CertType' in column_names
-            has_cert_path = 'CertPath' in column_names
-            has_acquisition_date = 'AcquisitionDate' in column_names
-            has_issuing_body = 'IssuingBody' in column_names
-            has_authority_name = 'authority_name' in column_names
-            has_custom_cert_name = 'custom_cert_name' in column_names
-            has_issuer = 'issuer' in column_names
-            has_job_category = 'job_category' in column_names
-            has_level = 'level' in column_names
-        except:
-            # 如果查詢失敗，假設所有列都不存在（保守處理）
-            has_cert_code = False
-            has_cert_name = False
-            has_cert_type = False
-            has_cert_path = False
-            has_acquisition_date = False
-            has_issuing_body = False
+        # (1) 拿欄位
+        cursor.execute("SHOW COLUMNS FROM student_certifications")
+        known_columns = {row["Field"] for row in cursor.fetchall()}
 
-        # 3a) 插入文本證照 (structured_certifications)
-        # 現在需要保存 cert_code, authority_name, custom_cert_name, issuer, AcquisitionDate
-        structured_certs = data.get('structured_certifications', [])
-        # 獲取證照圖片路徑列表（與 structured_certs 對應，按順序）
-        cert_photo_paths = data.get('cert_photo_paths', [])
-        print(f"🔍 證照記錄數: {len(structured_certs)}, 證照圖片數: {len(cert_photo_paths)}")
+        # (2) 合併兩種來源
+        cert_text_rows = data.get("structured_certifications", []) or []
+        cert_photo_paths = data.get("cert_photo_paths", []) or []
+        cert_photo_names = data.get("cert_names", []) or []
+        cert_photo_codes = data.get("cert_codes", []) or []
+        cert_photo_issuers = data.get("cert_issuers", []) or []
+
+        cert_rows = []
         
-        for idx, cert in enumerate(structured_certs):
-            cert_code = cert.get('code', '').strip().upper()
-            name = cert.get('name', '').strip()
-            ctype = cert.get('type', 'other')
-            acquire_date = cert.get('acquisition_date') or cert.get('acquire_date')
-            issuer = cert.get('issuer', '').strip()
-            authority_id = cert.get('authority_id')
-            authority_name = cert.get('authority_name', '').strip()
-            custom_cert_name = cert.get('custom_cert_name', '').strip()
-            job_category = cert.get('job_category', '').strip()
-            level = cert.get('level', '').strip()
-            
-            # 檢查是否為空記錄：必須至少有職類+級別，或者有證照名稱/代碼/自填名稱
-            has_job_category_and_level = job_category and level and job_category.strip() and level.strip()
-            has_cert_name_value = name and name.strip()  # 改為 has_cert_name_value 避免與 has_cert_name 變數衝突
-            has_cert_code = cert_code and cert_code.strip()
-            has_custom_name = custom_cert_name and custom_cert_name.strip()
-            
-            # 如果沒有任何有效數據，跳過（不保存空記錄）
-            if not has_job_category_and_level and not has_cert_name_value and not has_cert_code and not has_custom_name:
-                print(f"⚠️ 跳過空的證照記錄 (save_structured_data, 索引 {idx}): job_category={job_category}, level={level}, name={name}, code={cert_code}, custom_name={custom_cert_name}")
+        # 用於去重：記錄已處理的證照（使用 (cert_code, job_category, level) 作為唯一標識）
+        # 注意：如果 cert_code 為 NULL，使用 (None, job_category, level) 作為標識
+        processed_certs = set()
+
+        # (3) 處理 structured certifications
+        # 建立索引映射：將 cert_photo_paths 與 structured_certifications 關聯
+        # 假設索引對應（第0個證照的圖片在第0個位置）
+        for idx, cert in enumerate(cert_text_rows):
+            cert_code = (cert.get("cert_code") or "").strip().upper()
+            job_category = (cert.get("job_category") or "").strip()
+            level = (cert.get("level") or "").strip()
+
+            # 空資料跳過（不再檢查 custom_cert_name，因為該欄位已刪除）
+            if not any([cert_code, job_category, level]):
                 continue
             
-            # 如果 authority_id 不是 'OTHER' 且不是 None，從數據庫獲取發證中心名稱
-            final_authority_name = authority_name
-            if authority_id and str(authority_id).strip() and str(authority_id).strip() != 'OTHER':
-                try:
-                    cursor.execute("SELECT name FROM cert_authorities WHERE id = %s", (int(authority_id),))
-                    auth_result = cursor.fetchone()
-                    if auth_result:
-                        final_authority_name = auth_result.get('name', '')
-                except Exception as e:
-                    print(f"⚠️ 獲取發證中心名稱失敗: {e}")
-                    # 如果獲取失敗，使用 authority_name（如果有的話）
+            # 檢查是否已處理過相同的證照（去重）
+            # 優先使用 (job_category, level) 作為唯一標識（因為同一學生的相同職類+級別應該只有一筆記錄）
+            # 如果 job_category 和 level 都有值，使用它們作為主要標識
+            job_cat = job_category.strip() if job_category else ''
+            level_val = level.strip() if level else ''
             
-            # 如果 cert_code 不是 'OTHER' 且不為空，從 certificate_codes 表獲取 job_category 和 level
-            final_job_category = job_category
-            final_level = level
-            if cert_code and cert_code.strip() and cert_code.strip().upper() != 'OTHER':
-                try:
-                    # 確保之前的查詢結果已完全讀取
-                    cursor.fetchall() if cursor.with_rows else None
-                    cursor.execute("SELECT job_category, level FROM certificate_codes WHERE code = %s", (cert_code,))
-                    cert_result = cursor.fetchone()
-                    if cert_result:
-                        # 從 certificate_codes 表獲取的 job_category 和 level 優先
-                        if cert_result.get('job_category'):
-                            final_job_category = cert_result.get('job_category', '').strip()
-                        if cert_result.get('level'):
-                            final_level = cert_result.get('level', '').strip()
-                except Exception as e:
-                    print(f"⚠️ 從 certificate_codes 獲取 job_category 和 level 失敗: {e}")
-                    # 如果獲取失敗，使用表單傳入的值（如果有的話）
-            
-            # 獲取對應的證照圖片路徑（如果有的話）
-            cert_photo_path = None
-            if idx < len(cert_photo_paths) and cert_photo_paths[idx]:
-                cert_photo_path = cert_photo_paths[idx]
-            
-            # 根據實際存在的列動態構建 SQL
-            columns = ['StuID']
-            values = [student_id]
-            
-            if has_cert_code:
-                # 如果 cert_code 為空但 custom_cert_name 有值，使用 'OTHER'
-                final_cert_code = cert_code if cert_code else ('OTHER' if custom_cert_name else '')
-                if final_cert_code:
-                    columns.append('cert_code')
-                    values.append(final_cert_code)
-            
-            if has_authority_name and final_authority_name:
-                columns.append('authority_name')
-                values.append(final_authority_name)
-            
-            if has_custom_cert_name and custom_cert_name:
-                columns.append('custom_cert_name')
-                values.append(custom_cert_name)
-            
-            if has_cert_name:  # has_cert_name 是檢查列是否存在的變數
-                # 優先使用 custom_cert_name，否則使用 name
-                final_name = custom_cert_name if custom_cert_name else name
-                if final_name:
-                    columns.append('CertName')
-                    values.append(final_name)
-            
-            if has_cert_type:
-                columns.append('CertType')
-                values.append(ctype)
-            
-            if has_cert_path:
-                columns.append('CertPath')
-                values.append(cert_photo_path)  # 使用對應的圖片路徑，如果沒有則為 None
-            
-            if has_acquisition_date and acquire_date:
-                columns.append('AcquisitionDate')
-                values.append(acquire_date)
-            
-            if has_issuer and issuer:
-                columns.append('issuer')
-                values.append(issuer)
-            
-            # 使用最終確定的 job_category 和 level
-            # 邏輯：
-            # - 如果 cert_code 不是 'OTHER'，從 certificate_codes 表獲取並保存到 student_certifications（連動）
-            # - 如果 cert_code 是 'OTHER'，使用表單輸入的值並保存到 student_certifications（用戶自填）
-            if has_job_category:
-                # 無論是從 certificate_codes 獲取還是表單輸入，都保存到 student_certifications
-                if final_job_category:
-                    columns.append('job_category')
-                    values.append(final_job_category)
-                else:
-                    # 如果沒有值，也保存空字串（確保列存在）
-                    columns.append('job_category')
-                    values.append('')
-            
-            if has_level:
-                # 無論是從 certificate_codes 獲取還是表單輸入，都保存到 student_certifications
-                if final_level:
-                    columns.append('level')
-                    values.append(final_level)
-                else:
-                    # 如果沒有值，也保存空字串（確保列存在）
-                    columns.append('level')
-                    values.append('')
-            
-            columns.append('CreatedAt')
-            
-            if len(columns) > 1:  # 至少要有 StuID 和 CreatedAt
-                placeholders = ', '.join(['%s'] * (len(columns) - 1)) + ', NOW()'
-                columns_str = ', '.join(columns[:-1])  # 排除 CreatedAt，因為用 NOW()
-                sql = f"INSERT INTO student_certifications ({columns_str}, CreatedAt) VALUES ({placeholders})"
-                try:
-                    cursor.execute(sql, tuple(values))  # values 不包含 CreatedAt 的值
-                except Exception as e:
-                    # 如果出現 "Unread result found" 錯誤，先清空未讀取的結果
-                    if "Unread result" in str(e):
-                        try:
-                            cursor.fetchall()
-                        except:
-                            pass
-                        # 重新執行插入
-                        cursor.execute(sql, tuple(values))
-                    else:
-                        raise
+            if job_cat and level_val:
+                # 如果 job_category 和 level 都有值，使用它們作為唯一標識（忽略 cert_code 的差異）
+                cert_identifier = (job_cat, level_val)
+                if cert_identifier in processed_certs:
+                    print(f"⚠️ 跳過重複的證照記錄（相同職類+級別）: job_category={job_cat}, level={level_val}, cert_code={cert_code}")
+                    continue
+                processed_certs.add(cert_identifier)
+            # 如果只有 cert_code 有值，使用 cert_code 作為標識
+            elif cert_code and cert_code != 'OTHER' and cert_code != '':
+                cert_identifier = (cert_code,)
+                if cert_identifier in processed_certs:
+                    print(f"⚠️ 跳過重複的證照記錄（相同代碼）: cert_code={cert_code}")
+                    continue
+                processed_certs.add(cert_identifier)
+            # 如果都沒有值，跳過（已在前面檢查過）
 
-        # 3b) 插入上傳的證照圖片
-        cert_photo_paths = data.get('cert_photo_paths') or []
-        cert_names = data.get('cert_names') or []
-        cert_codes = data.get('cert_codes') or []  # 新增：證照代碼列表
-        cert_issuers = data.get('cert_issuers') or []  # 新增：發證人列表
-        # 四個陣列可能長度不同，取最大
-        max_len = max(len(cert_photo_paths), len(cert_names), len(cert_codes), len(cert_issuers))
+            row = {"StuID": student_id}
+
+            # 判斷是否為標準發證中心（有 cert_code 且不是 'OTHER'）
+            is_standard_authority = cert_code and cert_code != 'OTHER' and cert_code != ''
+            
+            # 獲取前端傳來的 authority_id（如果有的話）
+            frontend_authority_id = cert.get("authority_id")
+            if frontend_authority_id:
+                try:
+                    frontend_authority_id = int(frontend_authority_id) if str(frontend_authority_id).strip() else None
+                except (ValueError, TypeError):
+                    frontend_authority_id = None
+            
+            if "cert_code" in known_columns:
+                row["cert_code"] = cert_code or None
+
+            # 如果是標準發證中心，從 certificate_codes 表查詢 job_category、level 和 authority_id
+            if is_standard_authority:
+                try:
+                    cursor.execute("""
+                        SELECT job_category, level, authority_id 
+                        FROM certificate_codes 
+                        WHERE code COLLATE utf8mb4_unicode_ci = %s COLLATE utf8mb4_unicode_ci
+                        LIMIT 1
+                    """, (cert_code,))
+                    cert_info = cursor.fetchone()
+                    if cert_info:
+                        # 使用從 certificate_codes 表查詢的值
+                        db_job_category = cert_info.get('job_category', '').strip() if cert_info.get('job_category') else ''
+                        db_level = cert_info.get('level', '').strip() if cert_info.get('level') else ''
+                        db_authority_id = cert_info.get('authority_id')
+                        
+                        if "job_category" in known_columns:
+                            row["job_category"] = db_job_category if db_job_category else None
+                        if "level" in known_columns:
+                            row["level"] = db_level if db_level else None
+                        
+                        # 保存 authority_id（優先使用從 certificate_codes 查詢的，否則使用前端傳來的）
+                        if "authority_id" in known_columns:
+                            if db_authority_id:
+                                row["authority_id"] = int(db_authority_id)
+                            elif frontend_authority_id:
+                                row["authority_id"] = frontend_authority_id
+                            else:
+                                row["authority_id"] = None
+                        
+                        # 標準發證中心不保存 authority_name（custom_cert_name 欄位已刪除）
+                        if "authority_name" in known_columns:
+                            row["authority_name"] = None
+                    else:
+                        # 如果查不到，使用前端傳來的值（向後兼容）
+                        if "job_category" in known_columns:
+                            row["job_category"] = job_category if job_category else None
+                        if "level" in known_columns:
+                            row["level"] = level if level else None
+                except Exception as e:
+                    print(f"⚠️ 查詢 certificate_codes 失敗: {e}")
+                    # 查詢失敗時，使用前端傳來的值
+                    if "job_category" in known_columns:
+                        row["job_category"] = job_category if job_category else None
+                    if "level" in known_columns:
+                        row["level"] = level if level else None
+            else:
+                # 如果是「其他」發證中心或沒有 cert_code，保存前端傳來的自填資料
+                if "authority_name" in known_columns:
+                    row["authority_name"] = (cert.get("authority_name") or "").strip() or None
+                
+                # 「其他」發證中心：如果有前端傳來的 authority_id 則使用，否則設為 NULL
+                if "authority_id" in known_columns:
+                    row["authority_id"] = frontend_authority_id if frontend_authority_id else None
+
+                # custom_cert_name 欄位已刪除，不再保存
+
+                if "job_category" in known_columns:
+                    row["job_category"] = job_category if job_category else None
+
+                if "level" in known_columns:
+                    row["level"] = level if level else None
+
+            if "issuer" in known_columns:
+                row["issuer"] = (cert.get("issuer") or "").strip() or None
+
+            if "AcquisitionDate" in known_columns:
+                row["AcquisitionDate"] = cert.get("acquire_date") or cert.get("acquisition_date") or None
+
+            # 嘗試從 cert_photo_paths 獲取對應的圖片路徑（通過索引匹配）
+            cert_path = cert.get("cert_path") or None
+            if not cert_path and idx < len(cert_photo_paths):
+                cert_path = cert_photo_paths[idx] if cert_photo_paths[idx] else None
+            
+            if "CertPath" in known_columns:
+                row["CertPath"] = cert_path
+
+            cert_rows.append(row)
+
+        # (4) 處理上傳證照圖片（舊的圖片上傳方式，向後兼容）
+        # 注意：這部分邏輯應該已經被 structured_certifications 取代，但保留以向後兼容
+        # 只處理那些在 structured_certifications 中沒有對應圖片路徑的證照，避免重複創建記錄
+        processed_paths = set()
+        for cert_row in cert_rows:
+            if cert_row.get("CertPath"):
+                processed_paths.add(cert_row.get("CertPath"))
+        
+        max_len = max(len(cert_photo_paths), len(cert_photo_codes), len(cert_photo_names), len(cert_photo_issuers))
         for i in range(max_len):
             path = cert_photo_paths[i] if i < len(cert_photo_paths) else None
-            name = cert_names[i] if i < len(cert_names) else ''
-            cert_code = cert_codes[i].strip().upper() if i < len(cert_codes) and cert_codes[i] else None
-            issuer = cert_issuers[i].strip() if i < len(cert_issuers) and cert_issuers[i] else None
-            
-            if not path and not name:
+            if not path:
                 continue
             
-            # 根據實際存在的列動態構建 SQL
-            columns = ['StuID']
-            values = [student_id]
-            
-            if has_cert_code and cert_code:
-                columns.append('cert_code')
-                values.append(cert_code)
-            
-            if has_cert_name:
-                columns.append('CertName')
-                values.append(name or None)
-            
-            if has_cert_type:
-                columns.append('CertType')
-                values.append('photo')
-            
-            if has_cert_path:
-                columns.append('CertPath')
-                values.append(path or None)
-            
-            if has_issuing_body:
-                columns.append('IssuingBody')
-                values.append(issuer or None)
-            
-            if has_issuing_body:
-                columns.append('IssuingBody')
-                values.append(issuer or None)
-            
-            columns.append('CreatedAt')
-            
-            if len(columns) > 1:  # 至少要有 StuID 和 CreatedAt
-                placeholders = ', '.join(['%s'] * (len(columns) - 1)) + ', NOW()'
-                columns_str = ', '.join(columns[:-1])  # 排除 CreatedAt，因為用 NOW()
-                sql = f"INSERT INTO student_certifications ({columns_str}, CreatedAt) VALUES ({placeholders})"
-                cursor.execute(sql, tuple(values))  # values 不包含 CreatedAt 的值
+            # 如果這個圖片路徑已經在 structured_certifications 中處理過，跳過（避免重複）
+            if path in processed_paths:
+                print(f"⚠️ 跳過已處理的證照圖片: {path}")
+                continue
 
-        # 4) 儲存語文能力（student_languageskills 表）
+            row = {"StuID": student_id}
+
+            code = cert_photo_codes[i].strip().upper() if i < len(cert_photo_codes) and cert_photo_codes[i] else None
+            
+            # 檢查是否已處理過相同的證照（去重）
+            # 如果有 cert_code，先查詢 job_category 和 level，然後使用 (job_category, level) 作為唯一標識
+            if code and code != 'OTHER' and code != '':
+                # 先查詢 job_category 和 level（用於去重檢查）
+                try:
+                    cursor.execute("""
+                        SELECT job_category, level 
+                        FROM certificate_codes 
+                        WHERE code COLLATE utf8mb4_unicode_ci = %s COLLATE utf8mb4_unicode_ci
+                        LIMIT 1
+                    """, (code,))
+                    cert_info = cursor.fetchone()
+                    if cert_info:
+                        db_job_category = cert_info.get('job_category', '').strip() if cert_info.get('job_category') else ''
+                        db_level = cert_info.get('level', '').strip() if cert_info.get('level') else ''
+                        # 如果 job_category 和 level 都有值，使用它們作為唯一標識（與第(3)部分一致）
+                        if db_job_category and db_level:
+                            cert_identifier = (db_job_category, db_level)
+                            if cert_identifier in processed_certs:
+                                print(f"⚠️ 跳過重複的證照記錄（從圖片上傳，相同職類+級別）: cert_code={code}, job_category={db_job_category}, level={db_level}")
+                                continue
+                            processed_certs.add(cert_identifier)
+                except Exception as e:
+                    print(f"⚠️ 查詢 certificate_codes 失敗（去重檢查）: {e}")
+            
+            if "cert_code" in known_columns:
+                row["cert_code"] = code
+
+            # 如果有 cert_code 且不是 'OTHER'，從 certificate_codes 表查詢 job_category、level 和 authority_id
+            if code and code != 'OTHER' and code != '':
+                try:
+                    cursor.execute("""
+                        SELECT job_category, level, authority_id 
+                        FROM certificate_codes 
+                        WHERE code COLLATE utf8mb4_unicode_ci = %s COLLATE utf8mb4_unicode_ci
+                        LIMIT 1
+                    """, (code,))
+                    cert_info = cursor.fetchone()
+                    if cert_info:
+                        db_job_category = cert_info.get('job_category', '').strip() if cert_info.get('job_category') else ''
+                        db_level = cert_info.get('level', '').strip() if cert_info.get('level') else ''
+                        db_authority_id = cert_info.get('authority_id')
+                        
+                        if "job_category" in known_columns:
+                            row["job_category"] = db_job_category if db_job_category else None
+                        if "level" in known_columns:
+                            row["level"] = db_level if db_level else None
+                        
+                        # 保存 authority_id（如果欄位存在）
+                        if "authority_id" in known_columns and db_authority_id:
+                            row["authority_id"] = int(db_authority_id)
+                        
+                        # 標準發證中心（custom_cert_name 欄位已刪除）
+                    else:
+                        # 如果查不到，不保存 job_category 和 level
+                        if "job_category" in known_columns:
+                            row["job_category"] = None
+                        if "level" in known_columns:
+                            row["level"] = None
+                except Exception as e:
+                    print(f"⚠️ 查詢 certificate_codes 失敗: {e}")
+                    if "job_category" in known_columns:
+                        row["job_category"] = None
+                    if "level" in known_columns:
+                        row["level"] = None
+            else:
+                # 如果是「其他」發證中心或沒有 cert_code，保存自填資料
+                # custom_cert_name 欄位已刪除，不再保存
+                # 注意：這種舊的上傳方式無法獲取 job_category 和 level，所以設為 NULL
+                if "authority_id" in known_columns:
+                    row["authority_id"] = None
+                if "job_category" in known_columns:
+                    row["job_category"] = None
+                if "level" in known_columns:
+                    row["level"] = None
+
+            if "issuer" in known_columns:
+                row["issuer"] = cert_photo_issuers[i] if i < len(cert_photo_issuers) and cert_photo_issuers[i] else None
+
+            if "CertPath" in known_columns:
+                row["CertPath"] = path
+
+            cert_rows.append(row)
+
+        # (5) 實際寫入資料庫
+        # 注意：由於有唯一索引 uk_student_cert_unique (StuID, cert_code, level)，
+        # 如果同一學生重複提交相同證照，會觸發唯一索引衝突
+        # 這裡使用 DELETE 後 INSERT 的方式，確保不會有重複記錄
+        if cert_rows:
+            cursor.execute("DELETE FROM student_certifications WHERE StuID=%s", (student_id,))
+            for row in cert_rows:
+                cols = list(row.keys())
+                values = list(row.values())
+                cols.append("CreatedAt")
+                placeholders = ", ".join(["%s"] * (len(values) + 1))
+                try:
+                    cursor.execute(
+                        f"INSERT INTO student_certifications ({','.join(cols)}) VALUES ({placeholders})",
+                        (*values, datetime.now())
+                    )
+                except Exception as e:
+                    # 如果因為唯一索引衝突導致插入失敗，記錄錯誤但繼續處理其他記錄
+                    print(f"⚠️ 插入證照記錄失敗（可能是唯一索引衝突）: {e}")
+                    print(f"   記錄內容: {row}")
+                    # 不拋出異常，繼續處理下一筆記錄
+
+        # -------------------------------------------------------------
+        # 4) 儲存語言能力 student_languageskills
+        # -------------------------------------------------------------
         cursor.execute("DELETE FROM student_languageskills WHERE StuID=%s", (student_id,))
-        for lang_skill in data.get('structured_languages', []):
-            if lang_skill.get('language') and lang_skill.get('level'):
+        for row in data.get("structured_languages", []):
+            if row.get("language") and row.get("level"):
                 cursor.execute("""
-                    INSERT INTO student_languageskills (StuID, Language, Level, CreatedAt)
-                    VALUES (%s, %s, %s, NOW())
-                """, (student_id, lang_skill['language'], lang_skill['level']))
+                    INSERT INTO student_languageskills
+                        (StuID, Language, Level, CreatedAt)
+                    VALUES (%s,%s,%s,NOW())
+                """, (student_id, row["language"], row["level"]))
 
         return True
+
     except Exception as e:
         print("❌ 儲存結構化資料錯誤:", e)
         traceback.print_exc()
         return False
+
 
 # -------------------------
 # 取回學生資料 (for 生成履歷)
@@ -629,12 +708,14 @@ def get_student_info_for_doc(cursor, student_id, semester_id=None):
                 SELECT CourseName, Credits, Grade, IFNULL({transcript_field}, '') AS transcript_path, SemesterID
                 FROM course_grades
                 WHERE StuID=%s AND SemesterID=%s
+                ORDER BY CourseName COLLATE utf8mb4_unicode_ci
             """, (student_id, semester_id))
         else:
             cursor.execute("""
                 SELECT CourseName, Credits, Grade, SemesterID
                 FROM course_grades
                 WHERE StuID=%s AND SemesterID=%s
+                ORDER BY CourseName COLLATE utf8mb4_unicode_ci
             """, (student_id, semester_id))
     else:
         if transcript_field:
@@ -642,12 +723,14 @@ def get_student_info_for_doc(cursor, student_id, semester_id=None):
                 SELECT CourseName, Credits, Grade, IFNULL({transcript_field}, '') AS transcript_path
                 FROM course_grades
                 WHERE StuID=%s
+                ORDER BY CourseName COLLATE utf8mb4_unicode_ci
             """, (student_id,))
         else:
             cursor.execute("""
                 SELECT CourseName, Credits, Grade
                 FROM course_grades
                 WHERE StuID=%s
+                ORDER BY CourseName COLLATE utf8mb4_unicode_ci
             """, (student_id,))
 
     grades_rows = cursor.fetchall() or []
@@ -664,16 +747,20 @@ def get_student_info_for_doc(cursor, student_id, semester_id=None):
 
     # 證照 - 使用新的查詢方式（JOIN certificate_codes 和 cert_authorities）
     # 先嘗試使用新的 JOIN 查詢（有 cert_code 的記錄）
+    # 使用 COLLATE 確保字符集匹配正確
     cursor.execute("""
         SELECT
-            cc.name AS cert_name,
+            CONCAT(COALESCE(cc.job_category, ''), COALESCE(cc.level, '')) AS cert_name,
             cc.category AS cert_category,
-            CONCAT(cc.name, ' (', ca.name, ')') AS full_name,
+            CONCAT(CONCAT(COALESCE(cc.job_category, ''), COALESCE(cc.level, '')), ' (', ca.name, ')') AS full_name,
             sc.CertPath AS cert_path,
-            sc.AcquisitionDate AS acquire_date
+            sc.AcquisitionDate AS acquire_date,
+            sc.cert_code AS cert_code
         FROM student_certifications sc
-        LEFT JOIN certificate_codes cc ON sc.cert_code = cc.code
-        LEFT JOIN cert_authorities ca ON cc.authority_id = ca.id
+        LEFT JOIN certificate_codes cc 
+            ON sc.cert_code COLLATE utf8mb4_unicode_ci = cc.code COLLATE utf8mb4_unicode_ci
+        LEFT JOIN cert_authorities ca 
+            ON cc.authority_id = ca.id
         WHERE sc.StuID = %s
         ORDER BY sc.AcquisitionDate DESC, sc.id ASC
     """, (student_id,))
@@ -682,24 +769,49 @@ def get_student_info_for_doc(cursor, student_id, semester_id=None):
     # 轉換為統一格式
     certifications = []
     for row in cert_rows:
+        cert_code = row.get('cert_code', '')
+        cert_name_from_join = row.get('cert_name', '')
+        cert_category_from_join = row.get('cert_category', '')
+        
         # 如果有 JOIN 結果，使用 JOIN 的資料
-        if row.get('cert_name'):
+        if cert_name_from_join:
             certifications.append({
-                "cert_name": row.get('cert_name', ''),
-                "category": row.get('cert_category', 'other'),
+                "cert_name": cert_name_from_join,
+                "category": cert_category_from_join if cert_category_from_join else 'other',
                 "full_name": row.get('full_name', ''),
                 "cert_path": row.get('cert_path', ''),
                 "acquire_date": row.get('acquire_date', ''),
             })
+            print(f"✅ 證照 JOIN 成功: code={cert_code}, name={cert_name_from_join}, category={cert_category_from_join}")
         else:
-            # 兼容舊資料：沒有 cert_code 的記錄，使用原始欄位
+            # JOIN 失敗：嘗試通過 cert_code 單獨查詢 category
+            category = 'other'
+            if cert_code and cert_code.strip() and cert_code.upper() != 'OTHER':
+                try:
+                    cursor.execute("""
+                        SELECT category 
+                        FROM certificate_codes 
+                        WHERE code COLLATE utf8mb4_unicode_ci = %s COLLATE utf8mb4_unicode_ci
+                        LIMIT 1
+                    """, (cert_code,))
+                    category_row = cursor.fetchone()
+                    if category_row:
+                        category = category_row.get('category', 'other')
+                        print(f"✅ 通過 cert_code 查詢 category: code={cert_code}, category={category}")
+                    else:
+                        print(f"⚠️ 找不到 cert_code 對應的 category: code={cert_code}")
+                except Exception as e:
+                    print(f"⚠️ 查詢 category 失敗: {e}")
+            
+            # 兼容舊資料：沒有 cert_code 的記錄，使用原始欄位（custom_cert_name 已刪除）
             certifications.append({
                 "cert_name": row.get('CertName', ''),
-                "category": row.get('CertType', 'other'),
+                "category": category,
                 "full_name": row.get('CertName', ''),
-                "cert_path": row.get('CertPhotoPath', ''),
-                "acquire_date": row.get('AcquisitionDate', ''),
+                "cert_path": row.get('CertPhotoPath', '') or row.get('cert_path', ''),
+                "acquire_date": row.get('AcquisitionDate', '') or row.get('acquire_date', ''),
             })
+            print(f"⚠️ 證照 JOIN 失敗，使用回退邏輯: code={cert_code}, category={category}")
     
     data['certifications'] = certifications
 
@@ -785,17 +897,47 @@ def generate_application_form_docx(student_data, output_path):
         photo_path = info.get("PhotoPath")
         image_obj = safe_create_inline_image(doc, photo_path, Inches(1.2), "照片")
 
-        # 處理課程資料（保留原邏輯）
+        # 處理課程資料（按名稱排序）
         MAX_COURSES = 30
-        padded_grades = grades[:MAX_COURSES]
-        padded_grades += [{'CourseName': '', 'Credits': ''}] * (MAX_COURSES - len(padded_grades))
+        # 確保課程按名稱排序（使用自然排序，讓「資訊科技進階」排在「資訊科技」之後）
+        if grades:
+            # 過濾掉空課程名稱
+            non_empty_grades = [g for g in grades if g.get('CourseName', '').strip()]
+            # 使用更可靠的中文排序方法
+            # 使用 locale-aware 排序，如果可用；否則使用 Unicode 排序
+            try:
+                import locale
+                # 嘗試設置中文 locale
+                try:
+                    locale.setlocale(locale.LC_ALL, 'zh_TW.UTF-8')
+                except (locale.Error, OSError):
+                    try:
+                        locale.setlocale(locale.LC_ALL, 'zh_CN.UTF-8')
+                    except (locale.Error, OSError):
+                        pass  # 如果設置失敗，使用默認排序
+                # 使用 locale.strxfrm 進行排序
+                sorted_grades = sorted(non_empty_grades, 
+                                     key=lambda x: locale.strxfrm(x.get('CourseName', '').strip()))
+            except (ImportError, Exception):
+                # 如果 locale 不可用或設置失敗，使用 Unicode 排序（Python 默認排序已支持中文）
+                # 確保使用正確的排序鍵：去除首尾空格並使用 Unicode 排序
+                # Python 的默認字符串排序已經能夠正確處理中文，例如「資訊科技」會排在「資訊科技進階」之前
+                sorted_grades = sorted(non_empty_grades, 
+                                     key=lambda x: x.get('CourseName', '').strip())
+            # 添加空課程以填充到 MAX_COURSES
+            padded_grades = sorted_grades[:MAX_COURSES]
+            padded_grades += [{'CourseName': '', 'Credits': ''}] * (MAX_COURSES - len(padded_grades))
+        else:
+            padded_grades = [{'CourseName': '', 'Credits': ''}] * MAX_COURSES
 
         context_courses = {}
         NUM_ROWS = 10
         NUM_COLS = 3
-        for i in range(NUM_ROWS):
-            for j in range(NUM_COLS):
-                index = i * NUM_COLS + j
+        # 改為按列填充，使得相鄰的課程（如「資訊科技」和「資訊科技進階」）能夠垂直排列
+        # 填充順序：第1列的所有行，然後第2列的所有行，最後第3列的所有行
+        for j in range(NUM_COLS):
+            for i in range(NUM_ROWS):
+                index = j * NUM_ROWS + i
                 if index < MAX_COURSES:
                     course = padded_grades[index]
                     row_num = i + 1
@@ -826,26 +968,48 @@ def generate_application_form_docx(student_data, output_path):
         cert_photo_paths_from_form = student_data.get("cert_photo_paths", [])
         
         # 如果有前端提交的證照名稱，使用它們來覆蓋數據庫查詢結果
+        cert_codes_from_form = student_data.get("cert_codes", [])
         if cert_names_from_form:
             # 重新構建證照列表，使用前端提交的名稱
             certs_with_form_names = []
             for idx, (name, path) in enumerate(zip(cert_names_from_form, cert_photo_paths_from_form)):
                 if name and name.strip():
-                    # 從原始 certs 中找到對應的證照（通過索引或路徑匹配）
+                    # 從原始 certs 中找到對應的證照（優先通過 cert_code 匹配，其次通過索引或路徑匹配）
                     matching_cert = None
-                    if idx < len(certs):
+                    cert_code = cert_codes_from_form[idx] if idx < len(cert_codes_from_form) else ''
+                    
+                    # 優先通過 cert_code 匹配（最準確）
+                    if cert_code and cert_code.strip() and cert_code.upper() != 'OTHER':
+                        for c in certs:
+                            # 檢查 certs 中是否有對應的 cert_code（需要從數據庫查詢結果中獲取）
+                            # 由於 certs 可能不包含 cert_code，我們通過名稱匹配
+                            if c.get("cert_name", "").strip() == name.strip():
+                                matching_cert = c
+                                break
+                    
+                    # 如果 cert_code 匹配失敗，嘗試通過索引匹配
+                    if not matching_cert and idx < len(certs):
                         matching_cert = certs[idx]
-                    elif path:
-                        # 通過路徑匹配
+                    
+                    # 如果索引匹配失敗，嘗試通過路徑匹配
+                    if not matching_cert and path:
                         for c in certs:
                             if c.get("cert_path") == path:
                                 matching_cert = c
                                 break
                     
+                    # 獲取 category（優先從匹配的證照中獲取）
+                    category = "other"
+                    if matching_cert:
+                        category = matching_cert.get("category", "other")
+                        print(f"✅ 從匹配的證照獲取 category: name={name}, category={category}")
+                    else:
+                        print(f"⚠️ 未找到匹配的證照，使用默認 category 'other': name={name}, cert_code={cert_code}")
+                    
                     # 使用前端提交的名稱，但保留其他信息（類別、路徑等）
                     cert_item = {
                         "cert_name": name.strip(),  # 使用前端提交的名稱
-                        "category": matching_cert.get("category", "other") if matching_cert else "other",
+                        "category": category,
                         "cert_path": path if path else (matching_cert.get("cert_path", "") if matching_cert else ""),
                         "acquire_date": matching_cert.get("acquire_date", "") if matching_cert else "",
                     }
@@ -1154,11 +1318,23 @@ def get_certificates_by_authority():
         conn = get_db()
         cursor = conn.cursor(dictionary=True)
         
-        cursor.execute("""
-            SELECT code, name, category 
+        # 檢查是否有 name 欄位（向後兼容）
+        cursor.execute("SHOW COLUMNS FROM certificate_codes LIKE 'name'")
+        has_name_column = cursor.fetchone() is not None
+        
+        if has_name_column:
+            name_select = "name"
+            order_by = "name"
+        else:
+            # 如果沒有 name 欄位，使用 job_category 和 level 組合
+            name_select = "CONCAT(COALESCE(job_category, ''), COALESCE(level, '')) AS name"
+            order_by = "COALESCE(job_category, ''), COALESCE(level, '')"
+        
+        cursor.execute(f"""
+            SELECT code, {name_select}, category 
             FROM certificate_codes 
             WHERE authority_id = %s 
-            ORDER BY name
+            ORDER BY {order_by}
         """, (authority_id,))
         certificates = cursor.fetchall()
         
@@ -1196,15 +1372,28 @@ def get_job_categories_and_levels():
         cursor = conn.cursor(dictionary=True)
         
         # 取得該發證中心的所有證照
-        # 優先使用 certificate_codes 表的 job_category 和 level 字段（如果存在）
-        # 否則從 name 字段解析職類和級別
-        cursor.execute("""
-            SELECT code, name, 
+        # 使用 certificate_codes 表的 job_category 和 level 字段組合生成 name
+        # 檢查是否有 name 欄位（向後兼容）
+        cursor.execute("SHOW COLUMNS FROM certificate_codes LIKE 'name'")
+        has_name_column = cursor.fetchone() is not None
+        
+        if has_name_column:
+            # 如果還有 name 欄位，使用 COALESCE 向後兼容
+            name_select = "COALESCE(CONCAT(job_category, level), name) AS name"
+            order_by = "COALESCE(job_category, name), COALESCE(level, '')"
+        else:
+            # 如果沒有 name 欄位，直接使用 CONCAT
+            name_select = "CONCAT(COALESCE(job_category, ''), COALESCE(level, '')) AS name"
+            order_by = "COALESCE(job_category, ''), COALESCE(level, '')"
+        
+        cursor.execute(f"""
+            SELECT code, 
+                   {name_select},
                    COALESCE(job_category, '') AS job_category,
                    COALESCE(level, '') AS level
             FROM certificate_codes 
             WHERE authority_id = %s 
-            ORDER BY COALESCE(job_category, name), COALESCE(level, '')
+            ORDER BY {order_by}
         """, (authority_id,))
         certificates = cursor.fetchall()
         
@@ -1215,28 +1404,57 @@ def get_job_categories_and_levels():
         
         level_pattern = re.compile(r'(甲級|乙級|丙級|丁級|甲|乙|丙|丁)')
         
+        print(f"🔍 查詢發證中心 {authority_id} 的證照，共 {len(certificates)} 筆")
+        
         for cert in certificates:
             # 優先使用 certificate_codes 表的 job_category 和 level 字段
             job_category = cert.get('job_category', '').strip()
             level = cert.get('level', '').strip()
+            cert_name = cert.get('name', '').strip()
             
+            # 情況1: job_category 和 level 都有值，直接使用
             if job_category and level:
-                # 如果 certificate_codes 表有 job_category 和 level，直接使用
                 job_categories.add(job_category)
                 if job_category not in job_category_levels:
                     job_category_levels[job_category] = set()
                 job_category_levels[job_category].add(level)
-            else:
-                # 否則從 name 字段解析職類和級別（向後兼容）
-                cert_name = cert.get('name', '').strip()
-                if not cert_name:
-                    continue
-                
-                # 嘗試從證照名稱中解析職類和級別
+                print(f"  ✅ 使用欄位值: 職類={job_category}, 級別={level}")
+            # 情況2: 只有 job_category 有值（即使沒有 level 也顯示職類）
+            elif job_category:
+                job_categories.add(job_category)
+                if job_category not in job_category_levels:
+                    job_category_levels[job_category] = set()
+                # 嘗試從 name 解析 level（如果有的話）
+                if not level and cert_name:
+                    match = level_pattern.search(cert_name)
+                    if match:
+                        parsed_level = match.group(1)
+                        level_map = {'甲': '甲級', '乙': '乙級', '丙': '丙級', '丁': '丁級'}
+                        full_level = level_map.get(parsed_level, parsed_level)
+                        job_category_levels[job_category].add(full_level)
+                        print(f"  ✅ 職類有值，從名稱解析級別: 職類={job_category}, 級別={full_level}")
+                    else:
+                        print(f"  ✅ 職類有值，無級別: 職類={job_category}")
+                elif level:
+                    job_category_levels[job_category].add(level)
+                    print(f"  ✅ 職類和級別都有值: 職類={job_category}, 級別={level}")
+                else:
+                    print(f"  ✅ 職類有值，無級別: 職類={job_category}")
+            # 情況3: 只有 level 有值，嘗試從 name 解析 job_category
+            elif level and not job_category and cert_name:
+                # 從名稱中移除級別，剩下的作為職類
+                parsed_job_category = level_pattern.sub('', cert_name).strip()
+                if parsed_job_category:
+                    job_categories.add(parsed_job_category)
+                    if parsed_job_category not in job_category_levels:
+                        job_category_levels[parsed_job_category] = set()
+                    job_category_levels[parsed_job_category].add(level)
+                    print(f"  ✅ 級別有值，從名稱解析職類: 職類={parsed_job_category}, 級別={level}")
+            # 情況4: 都沒有值，從 name 字段解析職類和級別（向後兼容）
+            elif cert_name:
                 match = level_pattern.search(cert_name)
                 if match:
                     parsed_level = match.group(1)
-                    # 將簡寫轉換為完整形式
                     level_map = {'甲': '甲級', '乙': '乙級', '丙': '丙級', '丁': '丁級'}
                     full_level = level_map.get(parsed_level, parsed_level)
                     
@@ -1248,6 +1466,15 @@ def get_job_categories_and_levels():
                         if parsed_job_category not in job_category_levels:
                             job_category_levels[parsed_job_category] = set()
                         job_category_levels[parsed_job_category].add(full_level)
+                        print(f"  ✅ 從名稱解析: 職類={parsed_job_category}, 級別={full_level}")
+                else:
+                    # 如果無法解析級別，但名稱不為空，將整個名稱作為職類（無級別）
+                    job_categories.add(cert_name)
+                    if cert_name not in job_category_levels:
+                        job_category_levels[cert_name] = set()
+                    print(f"  ✅ 從名稱解析（無級別）: 職類={cert_name}")
+            else:
+                print(f"  ⚠️ 跳過無效證照記錄: code={cert.get('code')}, name={cert_name}")
         
         # 轉換為列表並排序
         job_categories_list = sorted(list(job_categories))
@@ -1287,7 +1514,14 @@ def get_certificate_info():
         cursor = conn.cursor(dictionary=True) 
 
         # ❗ 查詢所有匹配的記錄
-        sql_query = "SELECT name, category FROM certificate_codes WHERE code = %s"
+        # 使用 job_category 和 level 組合生成 name，如果沒有則使用 name 字段（向後兼容）
+        sql_query = """
+            SELECT 
+                COALESCE(CONCAT(job_category, level), name) AS name, 
+                category 
+            FROM certificate_codes 
+            WHERE code = %s
+        """
         cursor.execute(sql_query, (cert_code,))
         
         # ❗ 使用 fetchall() 獲取所有結果
@@ -1669,7 +1903,7 @@ def submit_and_generate_api():
             issuer = cert_issuers_text[i] if i < len(cert_issuers_text) else ''
             authority_id = cert_authority_ids[i] if i < len(cert_authority_ids) else ''
             authority_name = cert_authority_names[i] if i < len(cert_authority_names) else ''
-            custom_cert_name = cert_custom_names[i] if i < len(cert_custom_names) else ''
+            # custom_cert_name 欄位已從資料庫刪除，不再使用
             job_category = cert_job_categories[i] if i < len(cert_job_categories) else ''
             level = cert_levels[i] if i < len(cert_levels) else ''
             other_job_category = cert_other_job_categories[i] if i < len(cert_other_job_categories) else ''
@@ -1681,14 +1915,14 @@ def submit_and_generate_api():
                 job_category = other_job_category
                 level = other_level
             
-            # 檢查是否為空記錄：必須至少有職類+級別，或者有證照名稱/代碼/自填名稱
+            # 檢查是否為空記錄：必須至少有職類+級別，或者有證照名稱/代碼（custom_cert_name 欄位已刪除）
             has_job_category_and_level = job_category.strip() and level.strip()
-            has_cert_name = n.strip() or custom_cert_name.strip()
+            has_cert_name = n.strip()
             has_cert_code = code.strip()
             
             # 如果沒有任何有效數據，跳過（不保存空記錄）
             if not has_job_category_and_level and not has_cert_name and not has_cert_code:
-                print(f"⚠️ 跳過空的證照記錄 (索引 {i}): job_category='{job_category}', level='{level}', name='{n}', code='{code}', custom_name='{custom_cert_name}'")
+                print(f"⚠️ 跳過空的證照記錄 (索引 {i}): job_category='{job_category}', level='{level}', name='{n}', code='{code}'")
                 continue
             
             # 如果只有職類或只有級別（不完整），也跳過
@@ -1700,13 +1934,16 @@ def submit_and_generate_api():
             if has_job_category_and_level:
                 # 如果有職類和級別，組合為完整名稱
                 final_cert_name = f"{job_category.strip()}{level.strip()}"
-            elif custom_cert_name.strip():
-                final_cert_name = custom_cert_name.strip()
             else:
                 final_cert_name = n.strip()
             
             # 確定最終使用的證照代碼
-            final_cert_code = code.strip().upper() if code.strip() else ('OTHER' if custom_cert_name.strip() else '')
+            final_cert_code = code.strip().upper() if code.strip() else 'OTHER'
+            
+            # 嘗試從 cert_photo_paths 獲取對應的圖片路徑（通過索引匹配）
+            cert_path = None
+            if i < len(cert_photo_paths) and cert_photo_paths[i]:
+                cert_path = cert_photo_paths[i]
             
             structured_certifications.append({
                 "name": final_cert_name,
@@ -1714,11 +1951,11 @@ def submit_and_generate_api():
                 "code": final_cert_code,
                 "authority_id": authority_id.strip() if authority_id.strip() and authority_id.strip() != 'OTHER' else None,
                 "authority_name": authority_name.strip() if authority_id.strip() == 'OTHER' else '',
-                "custom_cert_name": custom_cert_name.strip() if custom_cert_name.strip() else '',
                 "job_category": job_category.strip() if job_category.strip() else '',
                 "level": level.strip() if level.strip() else '',
                 "acquisition_date": acquisition_date.strip() if acquisition_date.strip() else None,
-                "issuer": issuer.strip() if issuer else ""
+                "issuer": issuer.strip() if issuer else "",
+                "cert_path": cert_path  # 添加圖片路徑
             })
 
         # 解析語言能力資料
@@ -1834,8 +2071,19 @@ def submit_and_generate_api():
         # 傳遞證照圖片與名稱清單（generate 會自行從 certs 讀）
         student_data_for_doc["cert_photo_paths"] = cert_photo_paths
         student_data_for_doc["cert_names"] = cert_names
+        student_data_for_doc["cert_codes"] = cert_codes  # 傳遞證照代碼，用於匹配 category
+        
+        # 優先使用從 absence_records 表讀取的缺勤佐證圖片路徑
+        # 如果 get_student_info_for_doc 已經從 absence_records 表讀取到路徑，保留它
+        absence_proof_from_db = student_data_for_doc.get("Absence_Proof_Path")
+        
         # 合併 context（包含缺勤統計數據）
         student_data_for_doc.update(context)
+        
+        # 如果從資料庫讀取到了缺勤佐證圖片路徑，優先使用它（覆蓋 context 中的值）
+        if absence_proof_from_db:
+            student_data_for_doc["Absence_Proof_Path"] = absence_proof_from_db
+            print(f"✅ 優先使用從 absence_records 表讀取的缺勤佐證圖片: {absence_proof_from_db}")
         
         # 調試輸出：確認 student_data_for_doc 中的缺勤統計數據
         absence_keys_in_doc = {k: v for k, v in student_data_for_doc.items() if k.startswith("absence_")}
@@ -2437,8 +2685,9 @@ def get_resume_data():
     user_id = session['user_id']
     conn = get_db()
     cursor = conn.cursor(dictionary=True)
+
     try:
-        # 檢查是否有已提交的履歷
+        # ===== 1. 檢查是否有已提交履歷 =====
         cursor.execute("""
             SELECT id FROM resumes 
             WHERE user_id = %s 
@@ -2446,22 +2695,23 @@ def get_resume_data():
             LIMIT 1
         """, (user_id,))
         resume = cursor.fetchone()
-        
+
         if not resume:
             return jsonify({"success": False, "message": "沒有已提交的履歷"}), 404
 
-        # 獲取學生的 username（學號），因為 Student_Info 表的 StuID 存儲的是 username
+        # ===== 2. 抓 StudentID（學號）=====
         cursor.execute("SELECT username FROM users WHERE id=%s", (user_id,))
         user_result = cursor.fetchone()
         if not user_result:
             return jsonify({"success": False, "message": "找不到使用者"}), 404
-        student_id = user_result['username']
 
-        # 1. 獲取基本資料 (Student_Info)
+        student_id = user_result["username"]
+
+        # ===== 3. 基本資料 =====
         cursor.execute("SELECT * FROM Student_Info WHERE StuID=%s", (student_id,))
         student_info = cursor.fetchone() or {}
-        
-        # 2. 獲取課程資料 (course_grades)
+
+        # ===== 4. 課程資料 =====
         cursor.execute("""
             SELECT CourseName AS name, Credits AS credits, Grade AS grade
             FROM course_grades
@@ -2469,171 +2719,161 @@ def get_resume_data():
             ORDER BY CourseName
         """, (student_id,))
         courses = cursor.fetchall() or []
-        
-        # 3. 取得證照資料 (student_certifications) - 只取最新的記錄
-        # 邏輯：
-        # 1. 如果學生有選擇發證中心（cert_code 存在且不是 'OTHER'），則從 certificate_codes 表獲取 job_category 和 level
-        # 2. 如果學生沒有選擇發證中心（cert_code 為 'OTHER' 或 NULL），則使用 student_certifications 表中的 job_category、level 或 custom_cert_name
-        
-        # 先檢查 student_certifications 表是否有 job_category 和 level 列
-        cursor.execute("SHOW COLUMNS FROM student_certifications LIKE 'job_category'")
-        has_job_category_col = cursor.fetchone() is not None
-        cursor.execute("SHOW COLUMNS FROM student_certifications LIKE 'level'")
-        has_level_col = cursor.fetchone() is not None
-        
-        # 根據列是否存在動態構建 SQL
-        if has_job_category_col and has_level_col:
-            # 如果列存在，使用完整的查詢
-            # 邏輯：
-            # - 如果 cert_code 不是 'OTHER'，使用 certificate_codes 表的 job_category 和 level（連動）
-            # - 如果 cert_code 是 'OTHER' 或 NULL，使用 student_certifications 表的 job_category 和 level（用戶自填）
-            sql = """
-                SELECT
-                    sc.CertPath,
-                    sc.AcquisitionDate,
-                    sc.cert_code, 
-                    sc.issuer,
-                    sc.authority_name,
-                    sc.custom_cert_name,
-                    -- 如果 cert_code 不是 'OTHER'，使用 certificate_codes 的值（連動）
-                    -- 如果 cert_code 是 'OTHER' 或 NULL，使用 student_certifications 的值（用戶自填）
+
+        # ===== 5. 證照資料 — 單一 SQL，不再三段重複 =====
+
+        sql_cert = """
+            SELECT
+                sc.id,
+                sc.CertPath,
+                sc.AcquisitionDate,
+                sc.cert_code,
+                sc.issuer,
+                sc.authority_name,
+                sc.job_category AS sc_job_category,
+                sc.level AS sc_level,
+                sc.CreatedAt,
+                
+                -- 發證中心ID：優先使用 sc.authority_id（如果存在），否則從 certificate_codes 獲取
+                COALESCE(
+                    sc.authority_id,
                     CASE 
-                        WHEN sc.cert_code IS NOT NULL AND BINARY sc.cert_code != BINARY 'OTHER' AND sc.cert_code != ''
-                        THEN COALESCE(cc.job_category, '')
-                        ELSE COALESCE(sc.job_category, '')
-                    END AS job_category,
+                        WHEN sc.cert_code IS NOT NULL 
+                             AND BINARY sc.cert_code != BINARY 'OTHER'
+                             AND sc.cert_code != ''
+                        THEN cc.authority_id
+                        ELSE NULL
+                    END
+                ) AS authority_id,
+
+                -- 職類：若 cert_code 有值且不是 OTHER → 取 certificate_codes
+                CASE 
+                    WHEN sc.cert_code IS NOT NULL 
+                         AND BINARY sc.cert_code != BINARY 'OTHER'
+                         AND sc.cert_code != ''
+                    THEN COALESCE(cc.job_category, '')
+                    ELSE COALESCE(sc.job_category, '')
+                END AS job_category,
+
+                -- 等級
+                CASE 
+                    WHEN sc.cert_code IS NOT NULL 
+                         AND BINARY sc.cert_code != BINARY 'OTHER'
+                         AND sc.cert_code != ''
+                    THEN COALESCE(cc.level, '')
+                    ELSE COALESCE(sc.level, '')
+                END AS level,
+
+                -- 組合證照名稱
+                CASE 
+                    WHEN (
+                        CASE 
+                            WHEN sc.cert_code IS NOT NULL 
+                                 AND BINARY sc.cert_code != BINARY 'OTHER'
+                                 AND sc.cert_code != ''
+                            THEN cc.job_category
+                            ELSE sc.job_category
+                        END
+                    ) IS NOT NULL
+                    AND (
+                        CASE 
+                            WHEN sc.cert_code IS NOT NULL 
+                                 AND BINARY sc.cert_code != BINARY 'OTHER'
+                                 AND sc.cert_code != ''
+                            THEN cc.level
+                            ELSE sc.level
+                        END
+                    ) IS NOT NULL
+                    AND (
+                        CASE 
+                            WHEN sc.cert_code IS NOT NULL 
+                                 AND BINARY sc.cert_code != BINARY 'OTHER'
+                                 AND sc.cert_code != ''
+                            THEN cc.job_category
+                            ELSE sc.job_category
+                        END
+                    ) != ''
+                    AND (
+                        CASE 
+                            WHEN sc.cert_code IS NOT NULL 
+                                 AND BINARY sc.cert_code != BINARY 'OTHER'
+                                 AND sc.cert_code != ''
+                            THEN cc.level
+                            ELSE sc.level
+                        END
+                    ) != ''
+                THEN CONCAT(
                     CASE 
-                        WHEN sc.cert_code IS NOT NULL AND BINARY sc.cert_code != BINARY 'OTHER' AND sc.cert_code != ''
-                        THEN COALESCE(cc.level, '')
-                        ELSE COALESCE(sc.level, '')
-                    END AS level,
-                    sc.CreatedAt,
-                    sc.id,
-                    -- 組合證照名稱：優先使用 job_category + level，否則使用 custom_cert_name
+                        WHEN sc.cert_code IS NOT NULL 
+                             AND BINARY sc.cert_code != BINARY 'OTHER'
+                             AND sc.cert_code != ''
+                        THEN cc.job_category
+                        ELSE sc.job_category
+                    END,
                     CASE 
-                        WHEN (CASE 
-                                WHEN sc.cert_code IS NOT NULL AND BINARY sc.cert_code != BINARY 'OTHER' AND sc.cert_code != ''
-                                THEN COALESCE(cc.job_category, '')
-                                ELSE COALESCE(sc.job_category, '')
-                              END) != '' 
-                              AND (CASE 
-                                WHEN sc.cert_code IS NOT NULL AND BINARY sc.cert_code != BINARY 'OTHER' AND sc.cert_code != ''
-                                THEN COALESCE(cc.level, '')
-                                ELSE COALESCE(sc.level, '')
-                              END) != ''
-                        THEN CONCAT(
-                            CASE 
-                                WHEN sc.cert_code IS NOT NULL AND BINARY sc.cert_code != BINARY 'OTHER' AND sc.cert_code != ''
-                                THEN COALESCE(cc.job_category, '')
-                                ELSE COALESCE(sc.job_category, '')
-                            END,
-                            CASE 
-                                WHEN sc.cert_code IS NOT NULL AND BINARY sc.cert_code != BINARY 'OTHER' AND sc.cert_code != ''
-                                THEN COALESCE(cc.level, '')
-                                ELSE COALESCE(sc.level, '')
-                            END
-                        )
-                        WHEN sc.custom_cert_name IS NOT NULL AND sc.custom_cert_name != ''
-                        THEN sc.custom_cert_name
-                        ELSE ''
-                    END AS CertName,
-                    -- 獲取 authority_id（從 certificate_codes 或 cert_authorities）
-                    COALESCE(ca.id, NULL) AS authority_id,
-                    -- IssuingBody 使用 authority_name（如果有的話）
-                    COALESCE(ca.name, sc.authority_name, 'N/A') AS IssuingBody,
-                    -- CertType 從 certificate_codes 獲取
-                    COALESCE(cc.category, 'other') AS CertType
-                 FROM student_certifications sc
-                 LEFT JOIN certificate_codes cc ON sc.cert_code = cc.code AND sc.cert_code IS NOT NULL AND BINARY sc.cert_code != BINARY 'OTHER'
-                 LEFT JOIN cert_authorities ca ON cc.authority_id = ca.id
-                 WHERE sc.StuID = %s
-                 ORDER BY sc.id DESC
-            """
-        else:
-            # 如果列不存在，只從 certificate_codes 表獲取 job_category 和 level
-            sql = """
-                SELECT
-                    sc.CertPath,
-                    sc.AcquisitionDate,
-                    sc.cert_code, 
-                    sc.issuer,
-                    sc.authority_name,
-                    sc.custom_cert_name,
-                    -- 只從 certificate_codes 表獲取 job_category 和 level（如果列不存在）
-                    COALESCE(cc.job_category, '') AS job_category,
-                    COALESCE(cc.level, '') AS level,
-                    sc.CreatedAt,
-                    sc.id,
-                    -- 組合證照名稱：優先使用 job_category + level，否則使用 custom_cert_name
-                    CASE 
-                        WHEN (COALESCE(cc.job_category, '') IS NOT NULL 
-                              AND COALESCE(cc.job_category, '') != '' 
-                              AND COALESCE(cc.level, '') IS NOT NULL 
-                              AND COALESCE(cc.level, '') != '') 
-                        THEN CONCAT(COALESCE(cc.job_category, ''), COALESCE(cc.level, ''))
-                        WHEN sc.custom_cert_name IS NOT NULL AND sc.custom_cert_name != ''
-                        THEN sc.custom_cert_name
-                        ELSE ''
-                    END AS CertName,
-                    -- 獲取 authority_id（從 certificate_codes 或 cert_authorities）
-                    COALESCE(ca.id, NULL) AS authority_id,
-                    -- IssuingBody 使用 authority_name（如果有的話）
-                    COALESCE(ca.name, sc.authority_name, 'N/A') AS IssuingBody,
-                    -- CertType 從 certificate_codes 獲取
-                    COALESCE(cc.category, 'other') AS CertType
-                 FROM student_certifications sc
-                 LEFT JOIN certificate_codes cc ON sc.cert_code = cc.code AND sc.cert_code IS NOT NULL AND BINARY sc.cert_code != BINARY 'OTHER'
-                 LEFT JOIN cert_authorities ca ON cc.authority_id = ca.id
-                 WHERE sc.StuID = %s
-                 ORDER BY sc.id DESC
-            """
-        
-        cursor.execute(sql, (student_id,)) 
+                        WHEN sc.cert_code IS NOT NULL 
+                             AND BINARY sc.cert_code != BINARY 'OTHER'
+                             AND sc.cert_code != ''
+                        THEN cc.level
+                        ELSE sc.level
+                    END
+                )
+                ELSE ''
+                END AS CertName,
+
+                -- 發證中心名稱：優先使用 sc.authority_id 關聯的 cert_authorities，否則使用從 certificate_codes 獲取的 authority_id，最後使用 authority_name
+                COALESCE(
+                    ca_from_sc.name,
+                    ca.name, 
+                    sc.authority_name, 
+                    'N/A'
+                ) AS IssuingBody,
+                COALESCE(cc.category, 'other') AS CertType
+            FROM student_certifications sc
+            LEFT JOIN certificate_codes cc 
+                ON sc.cert_code COLLATE utf8mb4_unicode_ci = cc.code COLLATE utf8mb4_unicode_ci
+            LEFT JOIN cert_authorities ca 
+                ON cc.authority_id = ca.id
+            LEFT JOIN cert_authorities ca_from_sc 
+                ON sc.authority_id = ca_from_sc.id
+            WHERE sc.StuID = %s
+            ORDER BY sc.id DESC
+        """
+
+        cursor.execute(sql_cert, (student_id,))
         all_certifications = cursor.fetchall() or []
-        
-        # 只取最新一批的證照
-        # 方法：按 CreatedAt 分組，如果 CreatedAt 相同（或為 NULL），則按 id 分組
-        # 取 id 最大的那一批（假設同一批次插入的記錄 id 是連續的）
+
+        # ===== 6. 取最新一批證照 =====
+
         certifications = []
         if all_certifications:
-            # 獲取最新的 CreatedAt 時間和 id
-            latest_created_at = all_certifications[0].get('CreatedAt')
-            latest_id = all_certifications[0].get('id')
-            
+            latest_created_at = all_certifications[0]["CreatedAt"]
+            latest_id = all_certifications[0]["id"]
+
             if latest_created_at:
-                # 如果有 CreatedAt，只保留與最新時間相同的記錄
-                certifications = [cert for cert in all_certifications 
-                                if cert.get('CreatedAt') == latest_created_at]
+                certifications = [
+                    c for c in all_certifications
+                    if c["CreatedAt"] == latest_created_at
+                ]
             else:
-                # 如果 CreatedAt 為 NULL，則按 id 分組
-                # 找出與最大 id 相近的記錄（假設同一批次的 id 是連續的）
-                # 取 id 最大的記錄，然後找出所有 id 在合理範圍內的記錄（id 差距在 50 以內）
                 max_id = latest_id
-                certifications = [cert for cert in all_certifications 
-                                if cert.get('id') and cert.get('id') >= (max_id - 50)]
-            
-            # 過濾掉空的證照記錄（必須至少有職類+級別，或者有證照名稱/代碼/自填名稱）
-            # 優先檢查 job_category + level（這是新的主要方式）
-            certifications = [cert for cert in certifications 
-                            if ((cert.get('job_category') and cert.get('level') and 
-                                 cert.get('job_category').strip() and cert.get('level').strip()) or
-                                (cert.get('CertName') and cert.get('CertName').strip()) or 
-                                (cert.get('cert_code') and cert.get('cert_code').strip() and cert.get('cert_code').strip() != 'OTHER') or 
-                                (cert.get('custom_cert_name') and cert.get('custom_cert_name').strip()))]
-            
-            # 再次過濾：確保職類和級別要麼都有，要麼都沒有（不能只有一個）
-            certifications = [cert for cert in certifications 
-                            if not ((cert.get('job_category') and cert.get('job_category').strip() and 
-                                    not (cert.get('level') and cert.get('level').strip())) or
-                                   (cert.get('level') and cert.get('level').strip() and 
-                                    not (cert.get('job_category') and cert.get('job_category').strip())))]
-            
-            # 如果需要 authority_id，可以通過 cert_code 查詢（但用戶說不需要，所以這裡先跳過）
-            # 如果需要，可以在這裡添加查詢邏輯
-            
-            print(f"🔍 總證照記錄數: {len(all_certifications)}, 最新批次記錄數: {len(certifications)}, 過濾後記錄數: {len(certifications)}, 最新ID: {latest_id}, 最新CreatedAt: {latest_created_at}")
-        
-        # 4. 獲取語言能力 (student_languageskills)
+                certifications = [
+                    c for c in all_certifications
+                    if c["id"] >= (max_id - 50)
+                ]
+
+            # 過濾空白資料
+            certifications = [
+                c for c in certifications
+                if (
+                    (c["job_category"] and c["level"]) or
+                    (c["CertName"]) or
+                    (c["cert_code"] and c["cert_code"] != "OTHER")
+                )
+            ]
+
+        # ===== 7. 語言能力 =====
+
         cursor.execute("""
             SELECT Language AS language, Level AS level
             FROM student_languageskills
@@ -2641,81 +2881,85 @@ def get_resume_data():
             ORDER BY Language
         """, (student_id,))
         languages = cursor.fetchall() or []
-        
-        # 格式化日期
-        birth_date = student_info.get('BirthDate')
+
+        # ===== 8. 日期格式轉換 =====
+        birth_date = student_info.get("BirthDate")
         if birth_date:
             if isinstance(birth_date, datetime):
                 birth_date = birth_date.strftime("%Y-%m-%d")
-            elif isinstance(birth_date, str):
+            else:
                 try:
-                    # 嘗試解析並格式化
-                    dt = datetime.strptime(birth_date, "%Y-%m-%d")
-                    birth_date = dt.strftime("%Y-%m-%d")
+                    birth_date = datetime.strptime(birth_date, "%Y-%m-%d").strftime("%Y-%m-%d")
                 except:
                     pass
-        
-        # 格式化證照日期並映射字段名（前端期望的字段名）
+
+        # ===== 9. 格式化證照輸出 =====
         formatted_certs = []
         for cert in certifications:
-            cert_copy = {
-                'id': cert.get('id'),
-                'cert_code': cert.get('cert_code', ''),
-                'cert_path': cert.get('CertPath', ''),
-                'name': cert.get('CertName', ''),  # 由 job_category + level 組合，或 custom_cert_name
-                'job_category': cert.get('job_category', ''),
-                'level': cert.get('level', ''),
-                'custom_cert_name': cert.get('custom_cert_name', ''),
-                'authority_name': cert.get('authority_name', ''),
-                'issuer': cert.get('issuer', ''),
-                'authority_id': cert.get('authority_id'),
-                'IssuingBody': cert.get('IssuingBody', ''),
-                'CertType': cert.get('CertType', 'other')
-            }
+            acquire_date = cert.get("AcquisitionDate")
+            formatted_acquire_date = ""
+            acquisition_date_str = None  # 用於 JSON 序列化的字符串格式
             
-            # 格式化取得日期
-            acquire_date = cert.get('AcquisitionDate')
-            if acquire_date:
+            if acquire_date is not None:
                 if isinstance(acquire_date, datetime):
-                    cert_copy['acquire_date'] = acquire_date.strftime("%Y-%m-%d")
-                elif isinstance(acquire_date, str):
+                    formatted_acquire_date = acquire_date.strftime("%Y-%m-%d")
+                    acquisition_date_str = formatted_acquire_date
+                elif isinstance(acquire_date, date):
+                    formatted_acquire_date = acquire_date.strftime("%Y-%m-%d")
+                    acquisition_date_str = formatted_acquire_date
+                elif acquire_date:
                     try:
-                        dt = datetime.strptime(acquire_date, "%Y-%m-%d")
-                        cert_copy['acquire_date'] = dt.strftime("%Y-%m-%d")
-                    except:
-                        # 嘗試其他日期格式
-                        try:
-                            from dateutil import parser
-                            dt = parser.parse(acquire_date)
-                            cert_copy['acquire_date'] = dt.strftime("%Y-%m-%d")
-                        except:
-                            cert_copy['acquire_date'] = acquire_date
-                else:
-                    cert_copy['acquire_date'] = str(acquire_date)
-            else:
-                cert_copy['acquire_date'] = ''
+                        # 嘗試解析字符串格式的日期
+                        if isinstance(acquire_date, str):
+                            formatted_acquire_date = datetime.strptime(acquire_date, "%Y-%m-%d").strftime("%Y-%m-%d")
+                            acquisition_date_str = formatted_acquire_date
+                        else:
+                            formatted_acquire_date = str(acquire_date)
+                            acquisition_date_str = formatted_acquire_date
+                    except Exception as e:
+                        print(f"⚠️ 日期格式化失敗: {acquire_date}, 錯誤: {e}")
+                        formatted_acquire_date = str(acquire_date) if acquire_date else ""
+                        acquisition_date_str = formatted_acquire_date
             
-            formatted_certs.append(cert_copy)
-        
+            print(f"🔍 證照日期處理: id={cert.get('id')}, AcquisitionDate={acquire_date}, formatted={formatted_acquire_date}, str={acquisition_date_str}")
+            
+            formatted_certs.append({
+                "id": cert["id"],
+                "cert_code": cert.get("cert_code", ""),
+                "cert_path": cert.get("CertPath", ""),
+                "name": cert.get("CertName", ""),
+                "job_category": cert.get("job_category", ""),
+                "level": cert.get("level", ""),
+                "authority_name": cert.get("authority_name", ""),
+                "issuer": cert.get("issuer", ""),
+                "authority_id": cert.get("authority_id") if "authority_id" in cert else None,
+                "IssuingBody": cert.get("IssuingBody", ""),
+                "CertType": cert.get("CertType", "other"),
+                "acquire_date": formatted_acquire_date,
+                "AcquisitionDate": acquisition_date_str  # 轉換為字符串格式，確保 JSON 序列化正常
+            })
+
+        # ===== 10. 回傳結果 =====
         return jsonify({
             "success": True,
             "data": {
                 "student_info": {
-                    "name": student_info.get('StuName', ''),
-                    "birth_date": birth_date or '',
-                    "gender": student_info.get('Gender', ''),
-                    "phone": student_info.get('Phone', ''),
-                    "email": student_info.get('Email', ''),
-                    "address": student_info.get('Address', ''),
-                    "conduct_score": student_info.get('ConductScore', ''),
-                    "autobiography": student_info.get('Autobiography', ''),
-                    "photo_path": student_info.get('PhotoPath', '')
+                    "name": student_info.get("StuName", ""),
+                    "birth_date": birth_date or "",
+                    "gender": student_info.get("Gender", ""),
+                    "phone": student_info.get("Phone", ""),
+                    "email": student_info.get("Email", ""),
+                    "address": student_info.get("Address", ""),
+                    "conduct_score": student_info.get("ConductScore", ""),
+                    "autobiography": student_info.get("Autobiography", ""),
+                    "photo_path": student_info.get("PhotoPath", "")
                 },
                 "courses": courses,
                 "certifications": formatted_certs,
                 "languages": languages
             }
         })
+
     except Exception as e:
         print("❌ 取得履歷資料錯誤:", e)
         traceback.print_exc()
