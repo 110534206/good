@@ -155,13 +155,13 @@
         <div class="col-md-2">
           <label for="semesterSelect" class="form-label">選擇學年</label>
           <select id="semesterSelect" class="form-select">
-            <option value="all">所有學年</option>
+            <option value="all" selected>所有學年</option>
           </select>
         </div>
         <div class="col-md-2">
           <label for="classSelect" class="form-label">選擇班級</label>
-          <select id="classSelect" class="form-select" disabled>
-            <option value="all">請先選擇學年</option>
+          <select id="classSelect" class="form-select">
+            <option value="all" selected>所有班級</option>
           </select>
         </div>
         <div class="col-md-2">
@@ -231,12 +231,13 @@
     let companyChart, resumeChart, preferenceChart; // 用於儲存統計圖表實例
     let allClassesData = []; // 儲存所有班級資料
 
-    // 固定載入 1132、1142 兩個學年
+    // 固定載入 1132、1142 兩個學年（不自動選擇，保留「所有學年」選項）
     function loadSemesters() {
       const semesterSelect = document.getElementById("semesterSelect");
       const semesters = ['1132', '1142'];
 
-      semesterSelect.innerHTML = "";
+      // 保留「所有學年」選項，然後添加具體學年選項
+      semesterSelect.innerHTML = '<option value="all" selected>所有學年</option>';
       semesters.forEach(code => {
         const option = document.createElement("option");
         option.value = code;
@@ -244,8 +245,7 @@
         semesterSelect.appendChild(option);
       });
       semesterSelect.disabled = false;
-      semesterSelect.value = semesters[0];
-      loadClassesBySemester(semesters[0]);
+      // 不自動選擇第一個，保持「所有學年」為預設值
     }
 
     // 從班級名稱中提取「忠」、「孝」等字
@@ -318,24 +318,11 @@
       }
     }
 
-    // 根據選擇的學年載入對應的班級（只顯示忠、孝兩班）
-    function loadClassesBySemester(semesterCode) {
+    // 載入所有班級選項（不限學年，只顯示忠、孝兩班）
+    function loadAllClassesOptions() {
       const classSelect = document.getElementById("classSelect");
-      classSelect.innerHTML = '<option value="all" disabled selected>請選擇班級</option>';
-      
-      if (semesterCode === 'all') {
-        classSelect.disabled = true;
-        return;
-      }
-      
+      classSelect.innerHTML = '<option value="all" selected>所有班級</option>';
       classSelect.disabled = false;
-      
-      // 過濾出該學年的班級
-      let filteredClasses = allClassesData.filter(c => (c.semester_code || '') === String(semesterCode));
-      // 若該學年沒有資料，退回使用所有班級中符合條件的班級
-      if (filteredClasses.length === 0) {
-        filteredClasses = [...allClassesData];
-      }
       
       // 只顯示「忠」、「孝」兩班
       const allowedClasses = ['忠', '孝'];
@@ -343,9 +330,8 @@
       // 提取班級名稱（忠、孝等）
       const classMap = new Map(); // 用來去重（同一個班級名稱可能有多個班級ID）
       
-      filteredClasses.forEach(c => {
+      allClassesData.forEach(c => {
         const fullName = `${(c.department || '').replace('管科', '')}${c.name || ''}`;
-        console.log(`[DEBUG] 檢查班級: fullName=${fullName}, id=${c.id}, department=${c.department}, name=${c.name}`);
         let classShortName = null;
         if (fullName.includes('忠')) {
           classShortName = '忠';
@@ -364,38 +350,21 @@
             classMap.set(classShortName, []);
           }
           classMap.get(classShortName).push(c);
-          console.log(`[DEBUG] 加入班級到列表: ${fullName} -> ${classShortName}`);
         }
       });
       
       // 依 allowedClasses 順序（忠、孝）加入
-      // 只顯示「忠」和「孝」兩個選項，選擇第一個匹配的班級ID
       allowedClasses.forEach(className => {
         const classes = classMap.get(className);
         if (classes && classes.length > 0) {
-          // 選擇第一個匹配的班級（通常是該學年下的第一個）
+          // 選擇第一個匹配的班級
           const classData = classes[0];
           const option = document.createElement("option");
           option.value = classData.id;
           option.textContent = className; // 只顯示「忠」或「孝」
           classSelect.appendChild(option);
-          console.log(`[DEBUG] 加入下拉選單: ${className} (使用 class_id=${classData.id})`);
-        } else {
-          console.log(`[DEBUG] 沒有找到 ${className} 班級`);
         }
       });
-
-      // 若沒有任何班級可選，繼續停用
-      if (classSelect.options.length === 1) {
-        classSelect.disabled = true;
-        document.getElementById("studentsTableBody").innerHTML = 
-          '<tr><td colspan="7" class="text-center text-muted">該學年目前無可用班級</td></tr>';
-        return;
-      }
-
-      // 預設選擇第一個班級並載入資料
-      classSelect.selectedIndex = 1;
-      loadStudents();
     }
 
     // 載入單一班級的統計圖表
@@ -1014,23 +983,20 @@
     // 事件監聽
     document.getElementById("loadBtn").addEventListener("click", loadStudents);
     
-    // 當學年選擇改變時，載入對應的班級列表
+    // 當學年選擇改變時，只清空表格和圖表，不影響班級選單
     document.getElementById("semesterSelect").addEventListener("change", function() {
-      const semesterCode = this.value;
-      loadClassesBySemester(semesterCode);
-      
       // 清空表格和圖表
       document.getElementById("studentsTableBody").innerHTML = 
         '<tr><td colspan="7" class="text-center text-muted">請選擇班級並點擊「學生資料」</td></tr>';
       const chartContainer = document.getElementById("classChartContainer");
-      chartContainer.style.display = 'none';
+      if (chartContainer) chartContainer.style.display = 'none';
       if (myClassChart) { 
         myClassChart.destroy(); 
         myClassChart = null; 
       }
       // 清空統計圖表
       const statsContainer = document.getElementById("statsChartsContainer");
-      statsContainer.style.display = 'none';
+      if (statsContainer) statsContainer.style.display = 'none';
       if (companyChart) { companyChart.destroy(); companyChart = null; }
       if (resumeChart) { resumeChart.destroy(); resumeChart = null; }
       if (preferenceChart) { preferenceChart.destroy(); preferenceChart = null; }
@@ -1075,8 +1041,9 @@
     async function initialize() {
       await loadAllClasses();
       loadSemesters();
-      // 預設顯示全部班級統計圖表
-      loadStatsCharts();
+      // 載入所有班級選項（不限學年）
+      loadAllClassesOptions();
+      // 不預設載入統計圖表，等待用戶選擇後再載入
     }
     
     initialize();
