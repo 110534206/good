@@ -459,6 +459,7 @@ def upload_company():
             reviewed_at = None
         else:
             # 如果是老師或主任，預設上傳教師為指導老師
+            updated_vendor_username = None  # 初始化變數
             if role in ['teacher', 'director']:
                 advisor_user_id = user_id
                 
@@ -488,6 +489,8 @@ def upload_company():
                         SET teacher_name = %s 
                         WHERE username = %s AND role = 'vendor'
                     """, (teacher_name, matched_vendor_username))
+                    # 記錄更新的廠商資訊（用於後續的成功訊息）
+                    updated_vendor_username = matched_vendor_username
             else:
                 advisor_user_id = None
             reviewed_by_user_id = None
@@ -549,7 +552,11 @@ def upload_company():
         elif role == 'vendor':
             message = f"公司 '{company_name}' ({job_count} 個職缺) 上傳成功，資料已標記為「待科助開放」。"
         else:
+            # 老師或主任上傳
             message = f"公司 '{company_name}' ({job_count} 個職缺) 上傳成功，等待審核。"
+            # 如果匹配到廠商並更新了 teacher_name，在訊息中提示
+            if updated_vendor_username:
+                message += f" 已自動更新廠商 '{updated_vendor_username}' 的指導老師關聯。"
 
         response_data = {
             "success": True,
@@ -1082,13 +1089,13 @@ def api_approve_company():
     try:
         conn = get_db()
         cursor = conn.cursor()
-        cursor.execute("SELECT company_name, status FROM internship_companies WHERE id = %s", (company_id,))
+        cursor.execute("SELECT company_name, status, advisor_user_id FROM internship_companies WHERE id = %s", (company_id,))
         company_row = cursor.fetchone()
 
         if not company_row:
             return jsonify({"success": False, "message": "查無此公司"}), 404
 
-        company_name, current_status = company_row
+        company_name, current_status, advisor_user_id = company_row
         if current_status != 'pending':
             return jsonify({"success": False, "message": f"公司已被審核過（目前狀態為 {current_status}）"}), 400
 
@@ -1100,10 +1107,46 @@ def api_approve_company():
             SET status = %s, reviewed_at = %s, reviewed_by_user_id = %s
             WHERE id = %s
         """, (status, datetime.now(), reviewer_id, company_id))
+        
+        # 如果核准且公司有指導老師，檢查是否需要更新廠商的 teacher_name
+        updated_vendor_username = None
+        if status == 'approved' and advisor_user_id:
+            # 取得指導老師的名字
+            cursor.execute("SELECT name FROM users WHERE id = %s", (advisor_user_id,))
+            teacher_info = cursor.fetchone()
+            teacher_name = teacher_info[0] if teacher_info and teacher_info[0] else None
+            
+            if teacher_name:
+                # 檢查公司名稱是否匹配廠商對應的公司名稱
+                vendor_company_map = {
+                    'vendor': '人人人',
+                    'vendora': '嘻嘻嘻'
+                }
+                
+                # 檢查公司名稱是否在 vendor_company_map 的值中
+                matched_vendor_username = None
+                for vendor_username, mapped_company_name in vendor_company_map.items():
+                    if company_name == mapped_company_name:
+                        matched_vendor_username = vendor_username
+                        break
+                
+                # 如果找到匹配的廠商，更新該廠商的 teacher_name 為該指導老師的名字
+                if matched_vendor_username:
+                    cursor.execute("""
+                        UPDATE users 
+                        SET teacher_name = %s 
+                        WHERE username = %s AND role = 'vendor'
+                    """, (teacher_name, matched_vendor_username))
+                    updated_vendor_username = matched_vendor_username
+        
         conn.commit()
 
         action_text = '核准' if status == 'approved' else '拒絕'
-        return jsonify({"success": True, "message": f"公司「{company_name}」已{action_text}"})
+        message = f"公司「{company_name}」已{action_text}"
+        # 如果更新了廠商的 teacher_name，在訊息中提示
+        if updated_vendor_username:
+            message += f" 已自動更新廠商 '{updated_vendor_username}' 的指導老師關聯。"
+        return jsonify({"success": True, "message": message})
 
     except Exception:
         print("❌ 審核公司錯誤：", traceback.format_exc())
@@ -1258,7 +1301,6 @@ def api_update_company_advisor():
             SET advisor_user_id = %s
             WHERE id = %s
         """, (advisor_user_id, company_id))
-        conn.commit()
         
         # 取得更新後的指導老師名稱
         advisor_name = None
@@ -1268,9 +1310,42 @@ def api_update_company_advisor():
             if advisor:
                 advisor_name = advisor['name']
         
+        # 如果公司有指導老師，檢查是否需要更新廠商的 teacher_name
+        updated_vendor_username = None
+        if advisor_user_id and advisor_name:
+            company_name = company['company_name']
+            # 檢查公司名稱是否匹配廠商對應的公司名稱
+            vendor_company_map = {
+                'vendor': '人人人',
+                'vendora': '嘻嘻嘻'
+            }
+            
+            # 檢查公司名稱是否在 vendor_company_map 的值中
+            matched_vendor_username = None
+            for vendor_username, mapped_company_name in vendor_company_map.items():
+                if company_name == mapped_company_name:
+                    matched_vendor_username = vendor_username
+                    break
+            
+            # 如果找到匹配的廠商，更新該廠商的 teacher_name 為該指導老師的名字
+            if matched_vendor_username:
+                cursor.execute("""
+                    UPDATE users 
+                    SET teacher_name = %s 
+                    WHERE username = %s AND role = 'vendor'
+                """, (advisor_name, matched_vendor_username))
+                updated_vendor_username = matched_vendor_username
+        
+        conn.commit()
+        
+        message = f"公司「{company['company_name']}」的指導老師已更新"
+        # 如果更新了廠商的 teacher_name，在訊息中提示
+        if updated_vendor_username:
+            message += f" 已自動更新廠商 '{updated_vendor_username}' 的指導老師關聯。"
+        
         return jsonify({
             "success": True,
-            "message": f"公司「{company['company_name']}」的指導老師已更新",
+            "message": message,
             "advisor_name": advisor_name
         })
     except Exception:

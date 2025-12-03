@@ -1,6 +1,7 @@
 from flask import Blueprint, request, jsonify, session
 from config import get_db
 from datetime import datetime
+from semester import get_current_semester_code
 import traceback
 
 director_overview_bp = Blueprint("director_overview_bp", __name__, url_prefix="/director")
@@ -358,7 +359,198 @@ def get_class_preferences_detail(class_id):
         cursor.close()
         conn.close()
 
-
+# =========================================================
+# API: 主任統計資料總覽（用於圖表）
+# =========================================================
+@director_overview_bp.route("/api/get_statistics", methods=["GET"])
+def get_statistics():
+    """主任取得統計資料（履歷、志願序等）"""
+    if 'user_id' not in session or session.get('role') != 'director':
+        return jsonify({"success": False, "message": "未授權"}), 403
+    
+    user_id = session.get('user_id')
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+    
+    try:
+        # 獲取主任所屬科系
+        department = get_director_department(cursor, user_id)
+        if not department:
+            return jsonify({"success": False, "message": "無法取得主任所屬科系"}), 403
+        
+        # 獲取當前學期
+        current_semester_code = get_current_semester_code(cursor)
+        cursor.execute("SELECT id FROM semesters WHERE is_active = 1 LIMIT 1")
+        current_semester = cursor.fetchone()
+        semester_id = current_semester['id'] if current_semester else None
+        
+        # 1. 全系學生總數
+        cursor.execute("""
+            SELECT COUNT(DISTINCT u.id) AS total_students
+            FROM classes c
+            LEFT JOIN users u ON u.class_id = c.id AND u.role = 'student'
+            WHERE c.department = %s
+        """, (department,))
+        total_students_result = cursor.fetchone()
+        total_students = total_students_result['total_students'] or 0
+        
+        # 2. 履歷統計（當前學期）
+        if semester_id:
+            cursor.execute("""
+                SELECT 
+                    COUNT(DISTINCT r.user_id) AS students_with_resume,
+                    COUNT(DISTINCT CASE WHEN r.status = 'approved' THEN r.user_id END) AS students_approved,
+                    COUNT(DISTINCT CASE WHEN r.status = 'rejected' THEN r.user_id END) AS students_rejected,
+                    COUNT(DISTINCT CASE WHEN r.status = 'uploaded' THEN r.user_id END) AS students_pending,
+                    COUNT(*) AS total_resumes
+                FROM classes c
+                LEFT JOIN users u ON u.class_id = c.id AND u.role = 'student'
+                LEFT JOIN resumes r ON r.user_id = u.id AND r.semester_id = %s
+                WHERE c.department = %s
+            """, (semester_id, department))
+        else:
+            cursor.execute("""
+                SELECT 
+                    COUNT(DISTINCT r.user_id) AS students_with_resume,
+                    COUNT(DISTINCT CASE WHEN r.status = 'approved' THEN r.user_id END) AS students_approved,
+                    COUNT(DISTINCT CASE WHEN r.status = 'rejected' THEN r.user_id END) AS students_rejected,
+                    COUNT(DISTINCT CASE WHEN r.status = 'uploaded' THEN r.user_id END) AS students_pending,
+                    COUNT(*) AS total_resumes
+                FROM classes c
+                LEFT JOIN users u ON u.class_id = c.id AND u.role = 'student'
+                LEFT JOIN resumes r ON r.user_id = u.id
+                WHERE c.department = %s
+            """, (department,))
+        resume_stats = cursor.fetchone()
+        
+        # 3. 志願序統計（當前學期）
+        if semester_id:
+            cursor.execute("""
+                SELECT 
+                    COUNT(DISTINCT sp.student_id) AS students_with_preferences,
+                    COUNT(DISTINCT CASE WHEN sp.status = 'approved' THEN sp.student_id END) AS students_approved,
+                    COUNT(DISTINCT CASE WHEN sp.status = 'rejected' THEN sp.student_id END) AS students_rejected,
+                    COUNT(DISTINCT CASE WHEN sp.status = 'pending' THEN sp.student_id END) AS students_pending,
+                    COUNT(*) AS total_preferences
+                FROM classes c
+                LEFT JOIN users u ON u.class_id = c.id AND u.role = 'student'
+                LEFT JOIN student_preferences sp ON sp.student_id = u.id AND sp.semester_id = %s
+                WHERE c.department = %s
+            """, (semester_id, department))
+        else:
+            cursor.execute("""
+                SELECT 
+                    COUNT(DISTINCT sp.student_id) AS students_with_preferences,
+                    COUNT(DISTINCT CASE WHEN sp.status = 'approved' THEN sp.student_id END) AS students_approved,
+                    COUNT(DISTINCT CASE WHEN sp.status = 'rejected' THEN sp.student_id END) AS students_rejected,
+                    COUNT(DISTINCT CASE WHEN sp.status = 'pending' THEN sp.student_id END) AS students_pending,
+                    COUNT(*) AS total_preferences
+                FROM classes c
+                LEFT JOIN users u ON u.class_id = c.id AND u.role = 'student'
+                LEFT JOIN student_preferences sp ON sp.student_id = u.id
+                WHERE c.department = %s
+            """, (department,))
+        preference_stats = cursor.fetchone()
+        
+        # 4. 各公司被選擇次數（前10名）
+        if semester_id:
+            cursor.execute("""
+                SELECT 
+                    ic.company_name,
+                    COUNT(sp.id) AS preference_count
+                FROM internship_companies ic
+                LEFT JOIN student_preferences sp ON ic.id = sp.company_id AND sp.semester_id = %s
+                LEFT JOIN users u ON sp.student_id = u.id
+                LEFT JOIN classes c ON u.class_id = c.id
+                WHERE c.department = %s OR c.department IS NULL
+                GROUP BY ic.id, ic.company_name
+                ORDER BY preference_count DESC
+                LIMIT 10
+            """, (semester_id, department))
+        else:
+            cursor.execute("""
+                SELECT 
+                    ic.company_name,
+                    COUNT(sp.id) AS preference_count
+                FROM internship_companies ic
+                LEFT JOIN student_preferences sp ON ic.id = sp.company_id
+                LEFT JOIN users u ON sp.student_id = u.id
+                LEFT JOIN classes c ON u.class_id = c.id
+                WHERE c.department = %s OR c.department IS NULL
+                GROUP BY ic.id, ic.company_name
+                ORDER BY preference_count DESC
+                LIMIT 10
+            """, (department,))
+        top_companies = cursor.fetchall()
+        
+        # 5. 各班級統計
+        if semester_id:
+            cursor.execute("""
+                SELECT 
+                    c.id AS class_id,
+                    c.name AS class_name,
+                    COUNT(DISTINCT u.id) AS total_students,
+                    COUNT(DISTINCT r.user_id) AS students_with_resume,
+                    COUNT(DISTINCT sp.student_id) AS students_with_preferences
+                FROM classes c
+                LEFT JOIN users u ON u.class_id = c.id AND u.role = 'student'
+                LEFT JOIN resumes r ON r.user_id = u.id AND r.semester_id = %s
+                LEFT JOIN student_preferences sp ON sp.student_id = u.id AND sp.semester_id = %s
+                WHERE c.department = %s
+                GROUP BY c.id, c.name
+                ORDER BY c.name
+            """, (semester_id, semester_id, department))
+        else:
+            cursor.execute("""
+                SELECT 
+                    c.id AS class_id,
+                    c.name AS class_name,
+                    COUNT(DISTINCT u.id) AS total_students,
+                    COUNT(DISTINCT r.user_id) AS students_with_resume,
+                    COUNT(DISTINCT sp.student_id) AS students_with_preferences
+                FROM classes c
+                LEFT JOIN users u ON u.class_id = c.id AND u.role = 'student'
+                LEFT JOIN resumes r ON r.user_id = u.id
+                LEFT JOIN student_preferences sp ON sp.student_id = u.id
+                WHERE c.department = %s
+                GROUP BY c.id, c.name
+                ORDER BY c.name
+            """, (department,))
+        classes_stats = cursor.fetchall()
+        
+        # 計算完成率
+        resume_completion_rate = round(
+            (resume_stats['students_with_resume'] or 0) * 100.0 / total_students 
+            if total_students > 0 else 0, 2
+        )
+        preference_completion_rate = round(
+            (preference_stats['students_with_preferences'] or 0) * 100.0 / total_students 
+            if total_students > 0 else 0, 2
+        )
+        
+        return jsonify({
+            "success": True,
+            "department": department,
+            "current_semester": current_semester_code,
+            "total_students": total_students,
+            "resume_stats": {
+                **resume_stats,
+                "completion_rate": resume_completion_rate
+            },
+            "preference_stats": {
+                **preference_stats,
+                "completion_rate": preference_completion_rate
+            },
+            "top_companies": top_companies,
+            "classes_stats": classes_stats
+        })
+    
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"success": False, "message": f"查詢失敗: {str(e)}"}), 500
+    finally:
+        cursor.close()
+        conn.close()
 
 
 

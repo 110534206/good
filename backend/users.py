@@ -502,6 +502,13 @@ def admin_home():
 def profile():
     return render_template('user_shared/profile.html')
 
+# 主任統計資料頁面
+@users_bp.route('/admin_statistics')
+def admin_statistics():
+    if "username" not in session or session.get("role") != "director":
+        return redirect(url_for("auth_bp.login_page"))
+    return render_template('user_shared/admin_statistics.html')
+
 # 取得 session 資訊
 @users_bp.route('/api/get-session')
 def get_session():
