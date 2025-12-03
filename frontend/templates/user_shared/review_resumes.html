@@ -187,7 +187,7 @@
         <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
           <div class="d-flex gap-2 flex-wrap">
             <select id="departmentFilter" class="form-select form-select-sm w-auto">
-              <option value="">所有科別</option>
+              <option value="">所有學年</option>
             </select>
             <select id="classFilter" class="form-select form-select-sm w-auto">
               <option value="">所有班級</option>
@@ -341,30 +341,29 @@
       // ------------------------------------
 
       function populateFilters(data) {
-        const deptSet = new Set();
         const classSet = new Set();
 
         data.forEach(r => {
-          if (r.department) deptSet.add(r.department);
           if (r.className) classSet.add(r.className);
         });
         
-        deptSet.add("資管科");
         classSet.add("忠班");
         classSet.add("孝班");
 
         const deptSelect = document.getElementById("departmentFilter");
         const classSelect = document.getElementById("classFilter");
 
-        deptSelect.innerHTML = `<option value="">所有科別</option>`;
-        classSelect.innerHTML = `<option value="">所有班級</option>`;
-
-        Array.from(deptSet).sort().forEach(d => {
+        // 固定顯示 1132 和 1142 作為學年選項
+        deptSelect.innerHTML = `<option value="">所有學年</option>`;
+        const semesters = ['1132', '1142'];
+        semesters.forEach(semester => {
           const option = document.createElement("option");
-          option.value = d;
-          option.textContent = d;
+          option.value = semester;
+          option.textContent = semester;
           deptSelect.appendChild(option);
         });
+
+        classSelect.innerHTML = `<option value="">所有班級</option>`;
 
         Array.from(classSet).sort().forEach(c => {
           const option = document.createElement("option");
