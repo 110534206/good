@@ -117,6 +117,9 @@
             <select id="classFilter" class="form-select form-select-sm w-auto">
               <option value="">所有班級</option>
             </select>
+            <select id="companyFilter" class="form-select form-select-sm w-auto">
+              <option value="">所有公司</option>
+            </select>
             <select id="statusFilter" class="form-select form-select-sm w-auto">
               <option value="">所有狀態</option>
               <option value="submitted">待審查</option>
@@ -253,6 +256,7 @@
         // 綁定篩選事件
         document.getElementById("departmentFilter").addEventListener("change", applyFilters);
         document.getElementById("classFilter").addEventListener("change", applyFilters);
+        document.getElementById("companyFilter").addEventListener("change", applyFilters);
         document.getElementById("statusFilter").addEventListener("change", applyFilters);
         document.getElementById("searchBox").addEventListener("input", applyFilters);
         document.getElementById("saveCommentBtn").addEventListener("click", saveComment); // 綁定 "儲存留言"
@@ -273,17 +277,21 @@
       function populateFilters(data) {
         const deptSet = new Set();
         const classSet = new Set();
+        const companySet = new Set();
 
         data.forEach(r => {
           if (r.department) deptSet.add(r.department);
           if (r.className) classSet.add(r.className);
+          if (r.company_name) companySet.add(r.company_name);
         });
 
         const deptSelect = document.getElementById("departmentFilter");
         const classSelect = document.getElementById("classFilter");
+        const companySelect = document.getElementById("companyFilter");
 
         deptSelect.innerHTML = `<option value="">所有科別</option>`;
         classSelect.innerHTML = `<option value="">所有班級</option>`;
+        companySelect.innerHTML = `<option value="">所有公司</option>`;
 
         Array.from(deptSet).sort().forEach(d => {
           const option = document.createElement("option");
@@ -298,24 +306,33 @@
           option.textContent = c;
           classSelect.appendChild(option);
         });
+
+        Array.from(companySet).sort().forEach(company => {
+          const option = document.createElement("option");
+          option.value = company;
+          option.textContent = company;
+          companySelect.appendChild(option);
+        });
       }
 
       function applyFilters() {
         currentPage = 1;
         const dept = document.getElementById("departmentFilter").value.trim();
         const cls = document.getElementById("classFilter").value.trim();
+        const company = document.getElementById("companyFilter").value.trim();
         const status = document.getElementById("statusFilter").value.trim();
         const keyword = document.getElementById("searchBox").value.trim().toLowerCase();
 
         const filtered = allResumes.filter(r => {
           const matchesDept = !dept || r.department === dept;
           const matchesClass = !cls || r.className === cls;
+          const matchesCompany = !company || r.company_name === company;
           const matchesStatus = !status || r.status === status;
           const matchesKeyword =
             (r.username && r.username.toLowerCase().includes(keyword)) ||
             (r.original_filename && r.original_filename.toLowerCase().includes(keyword));
 
-          return matchesDept && matchesClass && matchesStatus && matchesKeyword;
+          return matchesDept && matchesClass && matchesCompany && matchesStatus && matchesKeyword;
         });
 
         renderTable(filtered);
