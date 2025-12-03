@@ -245,10 +245,24 @@
           const checkboxChecked = company.is_open_current_semester ? 'checked' : '';
 
           // 建立指導老師下拉選單
-          let advisorSelect = '<select class="form-select form-select-sm advisor-select" data-company-id="' + company.id + '" data-original-value="' + (company.advisor_user_id || '') + '" style="width: 120px; font-size: 0.875rem;">';
+          // 優先根據 advisor_teacher_name 匹配，如果沒有則根據 advisor_user_id 匹配
+          let selectedTeacherId = '';
+          if (company.advisor_teacher_name) {
+            // 根據 teacher_name 匹配
+            const matchedTeacher = allTeachers.find(t => t.name === company.advisor_teacher_name);
+            if (matchedTeacher) {
+              selectedTeacherId = matchedTeacher.id;
+            }
+          }
+          // 如果根據名稱沒找到，則根據 advisor_user_id 匹配
+          if (!selectedTeacherId && company.advisor_user_id) {
+            selectedTeacherId = company.advisor_user_id;
+          }
+          
+          let advisorSelect = '<select class="form-select form-select-sm advisor-select" data-company-id="' + company.id + '" data-original-value="' + (selectedTeacherId || '') + '" style="width: 120px; font-size: 0.875rem;">';
           advisorSelect += '<option value="">-- 請選擇 --</option>';
           allTeachers.forEach(teacher => {
-            const selected = company.advisor_user_id == teacher.id ? 'selected' : '';
+            const selected = selectedTeacherId == teacher.id ? 'selected' : '';
             advisorSelect += `<option value="${teacher.id}" ${selected}>${teacher.name}</option>`;
           });
           advisorSelect += '</select>';
