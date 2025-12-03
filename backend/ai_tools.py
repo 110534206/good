@@ -164,43 +164,186 @@ def recommend_preferences():
         cursor.execute("SELECT * FROM Student_Info WHERE StuID=%s", (student_id,))
         student_info = cursor.fetchone() or {}
         
-        # 2. 獲取課程成績
-        cursor.execute("SELECT CourseName, Credits, Grade FROM Course_Grades WHERE StuID=%s", (student_id,))
+        # 2. 獲取課程成績（從 course_grades 資料表讀取）
+        # 檢查是否有成績單圖片欄位
+        try:
+            cursor.execute("SHOW COLUMNS FROM course_grades LIKE 'ProofImage'")
+            has_proof_image = cursor.fetchone() is not None
+            cursor.execute("SHOW COLUMNS FROM course_grades LIKE 'transcript_path'")
+            has_transcript_path = cursor.fetchone() is not None
+        except:
+            has_proof_image = False
+            has_transcript_path = False
+        
+        # 查詢成績資料（可能包含成績單圖片路徑）
+        if has_proof_image:
+            cursor.execute("SELECT CourseName, Credits, Grade, ProofImage FROM course_grades WHERE StuID=%s", (student_id,))
+        elif has_transcript_path:
+            cursor.execute("SELECT CourseName, Credits, Grade, transcript_path FROM course_grades WHERE StuID=%s", (student_id,))
+        else:
+            cursor.execute("SELECT CourseName, Credits, Grade FROM course_grades WHERE StuID=%s", (student_id,))
         grades = cursor.fetchall() or []
         
-        # 3. 獲取證照
-        cursor.execute("SELECT CertName, CertType FROM Student_Certifications WHERE StuID=%s", (student_id,))
-        certifications = cursor.fetchall() or []
+        # 檢查是否有成績單圖片
+        has_transcript_image = False
+        for grade in grades:
+            if grade.get('ProofImage') or grade.get('transcript_path'):
+                has_transcript_image = True
+                break
+        
+        # 3. 獲取證照（使用完整的 JOIN 查詢，獲取證照完整資訊）
+        # 先檢查證照圖片路徑欄位的實際名稱
+        try:
+            cursor.execute("SHOW COLUMNS FROM student_certifications")
+            cert_columns = {row["Field"] for row in cursor.fetchall()}
+            has_cert_path = 'CertPath' in cert_columns
+            has_cert_photo_path = 'CertPhotoPath' in cert_columns
+            
+            # 選擇正確的圖片路徑欄位名稱
+            cert_path_field = 'CertPath' if has_cert_path else ('CertPhotoPath' if has_cert_photo_path else None)
+        except:
+            cert_path_field = None
+        
+        try:
+            # 構建 SELECT 語句，根據實際欄位動態選擇
+            cert_path_select = f"sc.{cert_path_field} AS CertPath" if cert_path_field else "NULL AS CertPath"
+            
+            # 嘗試使用完整的 JOIN 查詢（包含證照名稱、類別、取得日期等）
+            cursor.execute(f"""
+                SELECT
+                    sc.CertName AS CertName,
+                    sc.CertType AS CertType,
+                    {cert_path_select},
+                    sc.AcquisitionDate AS AcquisitionDate,
+                    sc.cert_code AS cert_code,
+                    CONCAT(COALESCE(cc.job_category, ''), COALESCE(cc.level, '')) AS cert_name_from_code,
+                    cc.category AS cert_category,
+                    ca.name AS authority_name
+                FROM student_certifications sc
+                LEFT JOIN certificate_codes cc 
+                    ON sc.cert_code COLLATE utf8mb4_unicode_ci = cc.code COLLATE utf8mb4_unicode_ci
+                LEFT JOIN cert_authorities ca 
+                    ON cc.authority_id = ca.id
+                WHERE sc.StuID = %s
+                ORDER BY sc.AcquisitionDate DESC, sc.id ASC
+            """, (student_id,))
+            cert_rows = cursor.fetchall() or []
+            
+            # 轉換為統一格式
+            certifications = []
+            for row in cert_rows:
+                # 優先使用 JOIN 結果的證照名稱，否則使用原始欄位
+                cert_name = row.get('cert_name_from_code', '').strip() or row.get('CertName', '').strip()
+                cert_type = row.get('cert_category', '').strip() or row.get('CertType', '').strip()
+                cert_path = row.get('CertPath', '').strip() or ''
+                acquisition_date = row.get('AcquisitionDate', '')
+                
+                if cert_name:
+                    certifications.append({
+                        'CertName': cert_name,
+                        'CertType': cert_type if cert_type else '其他',
+                        'CertPath': cert_path,
+                        'AcquisitionDate': acquisition_date,
+                        'AuthorityName': row.get('authority_name', '').strip()
+                    })
+        except Exception as e:
+            # 如果 JOIN 查詢失敗，使用簡單查詢
+            print(f"⚠️ 證照完整查詢失敗，使用簡單查詢: {e}")
+            try:
+                # 先檢查可用欄位
+                if cert_path_field:
+                    cursor.execute(f"SELECT CertName, CertType, {cert_path_field} AS CertPath, AcquisitionDate FROM student_certifications WHERE StuID=%s", (student_id,))
+                else:
+                    cursor.execute("SELECT CertName, CertType, AcquisitionDate FROM student_certifications WHERE StuID=%s", (student_id,))
+                cert_rows = cursor.fetchall() or []
+                certifications = []
+                for row in cert_rows:
+                    if row.get('CertName'):
+                        certifications.append({
+                            'CertName': row.get('CertName', '').strip(),
+                            'CertType': row.get('CertType', '').strip() or '其他',
+                            'CertPath': row.get('CertPath', '').strip() if cert_path_field else '',
+                            'AcquisitionDate': row.get('AcquisitionDate', ''),
+                            'AuthorityName': ''
+                        })
+            except Exception as e2:
+                print(f"⚠️ 簡單查詢也失敗: {e2}")
+                certifications = []
         
         # 4. 獲取語言能力
-        cursor.execute("SELECT Language, Level FROM Student_LanguageSkills WHERE StuID=%s", (student_id,))
+        cursor.execute("SELECT Language, Level FROM student_languageskills WHERE StuID=%s", (student_id,))
         languages = cursor.fetchall() or []
         
-        # 5. 整理履歷重點文字
+        # 5. 整理履歷重點文字（從資料庫讀取的完整履歷資料）
         resume_parts = []
         
-        # 基本資訊
+        # 基本資訊區塊（從 Student_Info 資料表讀取）
+        basic_info = []
         if student_info:
+            # 檢查並加入所有可能的欄位
             if student_info.get('Major'):
-                resume_parts.append(f"主修：{student_info.get('Major')}")
+                basic_info.append(f"主修領域：{student_info.get('Major')}")
             if student_info.get('Skills'):
-                resume_parts.append(f"技能：{student_info.get('Skills')}")
+                skills = str(student_info.get('Skills', '')).strip()
+                if skills:
+                    basic_info.append(f"技能專長：{skills}")
         
-        # 證照
+        if basic_info:
+            resume_parts.append("【基本資訊（從資料庫 Student_Info 表讀取）】\n" + "\n".join(basic_info))
+        
+        # 證照區塊（從 student_certifications 資料表讀取，包含取得日期等完整資訊）
         if certifications:
-            cert_names = [c.get('CertName', '') for c in certifications if c.get('CertName')]
-            if cert_names:
-                resume_parts.append(f"證照：{', '.join(cert_names)}")
+            cert_list = []
+            for c in certifications:
+                cert_name = c.get('CertName', '').strip()
+                cert_type = c.get('CertType', '').strip()
+                acquisition_date = c.get('AcquisitionDate', '')
+                authority_name = c.get('AuthorityName', '').strip()
+                
+                if cert_name:
+                    cert_info = f"  - {cert_name}"
+                    if cert_type:
+                        cert_info += f" ({cert_type})"
+                    if authority_name:
+                        cert_info += f" - 發證單位：{authority_name}"
+                    if acquisition_date:
+                        cert_info += f" - 取得日期：{acquisition_date}"
+                    cert_list.append(cert_info)
+            if cert_list:
+                resume_parts.append("【證照資格（從資料庫 student_certifications 表讀取，包含證照名稱、類別、發證單位、取得日期等完整資訊）】\n" + "\n".join(cert_list))
         
-        # 語言能力
+        # 語言能力區塊（從 student_languageskills 資料表讀取）
         if languages:
-            lang_list = [f"{l.get('Language', '')} {l.get('Level', '')}" for l in languages if l.get('Language')]
+            lang_list = []
+            for l in languages:
+                lang = l.get('Language', '').strip()
+                level = l.get('Level', '').strip()
+                if lang:
+                    if level:
+                        lang_list.append(f"  - {lang}：{level}")
+                    else:
+                        lang_list.append(f"  - {lang}")
             if lang_list:
-                resume_parts.append(f"語言能力：{', '.join(lang_list)}")
+                resume_parts.append("【語言能力（從資料庫 student_languageskills 表讀取）】\n" + "\n".join(lang_list))
         
-        resume_text = "\n".join(resume_parts) if resume_parts else "（無履歷資料）"
+        # 自傳區塊（從 Student_Info 資料表的 Autobiography 欄位讀取 - AI 分析重點）
+        if student_info and student_info.get('Autobiography'):
+            autobiography = str(student_info.get('Autobiography', '')).strip()
+            if autobiography:
+                # 保留完整自傳內容（從資料庫讀取，不截斷以確保完整性）
+                # 如果太長，最多保留2000字以確保分析品質
+                if len(autobiography) > 2000:
+                    autobiography = autobiography[:2000] + "..."
+                resume_parts.append("【自傳內容（從資料庫 Student_Info.Autobiography 欄位讀取 - AI 分析重點，請優先引用此內容）】\n" + autobiography)
         
-        # 6. 整理學業成績摘要
+        # 加入證照圖片說明（如果有的話）
+        cert_images_count = sum(1 for c in certifications if c.get('CertPath'))
+        if cert_images_count > 0:
+            resume_parts.append(f"【證照圖片說明】\n學生已上傳 {cert_images_count} 張證照圖片至資料庫系統中，證照資料已完整記錄。")
+        
+        resume_text = "\n\n".join(resume_parts) if resume_parts else ""
+        
+        # 6. 整理學業成績摘要（從 course_grades 資料表讀取的完整課程資訊）
         grades_parts = []
         
         # 計算 GPA（如果有成績資料）
@@ -210,9 +353,15 @@ def recommend_preferences():
             total_points = 0
             total_credits = 0
             
-            key_courses = []
+            excellent_courses = []  # A以上
+            good_courses = []  # B+和B
+            all_courses_list = []  # 所有課程（用於完整分析）
+            
             for grade in grades:
-                course_name = grade.get('CourseName', '')
+                course_name = grade.get('CourseName', '').strip()
+                if not course_name:
+                    continue
+                    
                 credits = float(grade.get('Credits', 0) or 0)
                 grade_str = str(grade.get('Grade', '')).strip().upper()
                 
@@ -220,18 +369,42 @@ def recommend_preferences():
                     total_points += grade_points[grade_str] * credits
                     total_credits += credits
                 
-                # 記錄關鍵課程（A以上）
-                if grade_str in ['A+', 'A', 'A-'] and course_name:
-                    key_courses.append(f"{course_name} {grade_str}")
+                # 分類課程
+                if grade_str in ['A+', 'A', 'A-']:
+                    excellent_courses.append(f"{course_name} ({grade_str})")
+                elif grade_str in ['B+', 'B']:
+                    good_courses.append(f"{course_name} ({grade_str})")
+                
+                # 記錄所有課程（用於 AI 分析）
+                if grade_str in grade_points:
+                    all_courses_list.append(f"{course_name}: {grade_str}")
             
             if total_credits > 0:
                 gpa = total_points / total_credits
                 grades_parts.append(f"GPA: {gpa:.2f}/4.3")
             
-            if key_courses:
-                grades_parts.append(f"關鍵課程成績：{', '.join(key_courses[:5])}")  # 最多顯示5個
+            if excellent_courses:
+                grades_parts.append(f"優秀課程成績（A以上）：{', '.join(excellent_courses[:8])}")  # 最多顯示8個
+            
+            if good_courses:
+                grades_parts.append(f"良好課程成績（B以上）：{', '.join(good_courses[:5])}")  # 最多顯示5個
+            
+            # 加入所有課程列表（供 AI 深度分析使用 - 對應履歷中的「已修習專業核心科目」表格）
+            if all_courses_list:
+                grades_parts.append(f"\n完整課程列表（從資料庫 course_grades 資料表讀取，對應履歷中的「已修習專業核心科目」）：\n" + "\n".join(all_courses_list[:50]))  # 增加到最多50門課程，確保包含所有專業核心科目
         
-        grades_text = "\n".join(grades_parts) if grades_parts else "（無成績資料）"
+        # 加入操行成績（從 Student_Info 資料表的 ConductScore 欄位讀取，對應截圖中的「操行平均成績」）
+        if student_info and student_info.get('ConductScore'):
+            conduct_score = student_info.get('ConductScore')
+            if conduct_score:
+                # 操行成績等級：優、甲、乙、丙、丁
+                grades_parts.append(f"操行平均成績（從資料庫 Student_Info.ConductScore 欄位讀取）：{conduct_score}（等級：優/甲/乙/丙/丁）")
+        
+        # 說明成績單圖片狀態（從資料庫讀取）
+        if has_transcript_image:
+            grades_parts.append("成績單圖片：已上傳至資料庫（可於系統中查看）")
+        
+        grades_text = "\n".join(grades_parts) if grades_parts else ""
         
         # 取得所有公司和職缺（與 fill_preferences 頁面保持一致）
         # 先檢查是否有公司
@@ -358,24 +531,191 @@ def recommend_preferences():
 ---
 """
 
+        # 根據是否有履歷資料來構建不同的 prompt
+        has_resume_data = bool(resume_text.strip())
+        has_grades_data = bool(grades_text.strip())
+        
+        if has_resume_data or has_grades_data:
+            # 檢查是否有自傳內容
+            has_autobiography = '【自傳內容' in resume_text or '自傳內容' in resume_text
+            
+            # 有履歷或成績資料時的 prompt
+            resume_section = f"""
+【學生履歷重點（系統已自動從資料庫中讀取的完整履歷資料）】
+資料來源說明：
+- 所有資料都是從資料庫中直接查詢取得，代表學生的真實履歷記錄
+- 基本資訊和自傳：來自 Student_Info 資料表（包含 Autobiography 自傳欄位）
+- 證照：來自 student_certifications 資料表
+- 語言能力：來自 student_languageskills 資料表
+
+{resume_text if has_resume_data else "（履歷資料較少，主要參考成績資料）"}
+"""
+            
+            if has_autobiography:
+                resume_section += "\n⚠️ **特別提醒**：上述履歷中包含【自傳內容】區塊（從資料庫 Student_Info.Autobiography 欄位讀取），這是學生在系統中填寫的真實自傳內容。請優先分析自傳中的興趣、經驗、動機和目標，並在推薦理由中明確引用自傳的具體內容。\n"
+            
+            grades_section = f"""
+【學業成績摘要（系統已自動從資料庫 course_grades 資料表讀取）】
+資料來源說明：
+- 所有成績資料都是從資料庫 course_grades 資料表中直接查詢取得
+- 包含課程名稱、學分數、成績等級等完整資訊
+
+{grades_text if has_grades_data else "（成績資料較少，主要參考履歷資料）"}
+"""
+            
+            task_requirements = """
+【任務要求】
+1. **嚴格要求**：你已經獲得上述【學生履歷重點】和【學業成績摘要】的完整資料。這些資料都是系統自動從資料庫中直接查詢取得的真實記錄：
+   - **履歷資料來源**（必須引用）：
+     * Student_Info 資料表：基本資訊、自傳內容（Autobiography 欄位）- **這是推薦理由的核心依據**
+     * student_certifications 資料表：證照資格、取得日期、發證單位 - **必須在推薦理由中明確引用證照資訊**
+     * student_languageskills 資料表：語言能力
+   - **成績單資料來源**（必須引用）：
+     * course_grades 資料表：完整課程成績、GPA計算、課程表現 - **必須在推薦理由中明確引用成績單中的課程表現**
+   這些都是學生在系統中填寫和儲存的真實履歷資料，你必須基於這些**資料庫中的實際資料**進行分析。
+   
+   **重要**：每個推薦理由都必須綜合引用以下三類資料：
+   - **履歷（特別是自傳內容）**：學生的興趣、經驗、技能、動機
+   - **成績單**：相關課程成績、GPA表現、學習能力
+   - **證照**：證照資格、取得日期、相關技能認證
+   
+   推薦理由必須明確指出這三類資料如何共同支持該職缺的適合度。
+2. **履歷為本的分析原則（嚴格遵守）**：
+   - 所有推薦理由必須**直接引用**履歷、成績單和證照中的具體資料內容
+   - **不要使用介紹性語句**：不要說「根據履歷...」、「履歷顯示...」、「從履歷中可以看到...」等，直接引用資料內容
+   - **絕對禁止推測或假設**：不能使用「可見」、「可能」、「應該」、「推測」、「或許」等推測性詞彙
+   - **只能引用履歷中明確提到的內容**：如果履歷中沒有提到「專案」、「個人研究」、「課程專案」等，絕對不能說「從其課程專案或個人研究中可見」
+   - 如果履歷中沒有相關內容，就只引用履歷中實際存在的內容，不要推測或補充
+   - 推薦理由必須基於履歷中的實際資料，不能使用假設或推測
+3. **自傳分析優先原則**：如果履歷中包含【自傳內容】區塊，你必須優先分析自傳內容，深入理解學生的興趣、經驗、動機和職涯目標，並在推薦理由中優先引用自傳中的具體描述。
+4. **絕對禁止**：在任何推薦理由中，絕對不要提到「未提供履歷資料」、「未提供成績資料」、「由於未提供...」或類似字眼。這些資料已經提供給你了。
+3. **深度分析要求**（按優先順序）：
+   - **自傳內容深度分析（最高優先級）**：
+     * 仔細閱讀【學生履歷重點】中的「【自傳內容】」區塊，深入分析自傳中提到的：
+       - 學生的興趣領域和專業方向
+       - 過往相關經驗或專案
+       - 學習動機和職涯目標
+       - 個人特質和能力描述
+       - 對特定技術或領域的熱忱
+     * 將自傳內容與職缺描述進行匹配，找出：
+       - 自傳中提到的技能、技術與職缺要求的關聯
+       - 自傳中表達的興趣與職缺領域的匹配
+       - 自傳中描述的能力與職缺需求的對應
+     * **如果自傳有相關內容，必須優先引用自傳中的具體描述**
+   
+   - **技能匹配分析**：仔細比對職缺描述中提到的技能要求（如程式語言、工具、技術等），與學生履歷中的「技能」、「主修」、「證照」進行匹配。
+   
+   - **成績單分析（必須明確引用）**：
+     * 分析【學業成績摘要】中的「完整課程列表」，找出與職缺要求相關的課程（例如：職缺要求 Java，就尋找學生修過的 Java 相關課程）
+     * 優先引用「優秀課程成績（A以上）」和「良好課程成績（B以上）」中與職缺相關的課程
+     * 明確指出學生在哪些具體課程中表現優秀，獲得的成績等級，以及這些課程成績如何證明學生的相關能力
+     * 引用 GPA 數據說明學生的整體學習表現
+     * 必須在推薦理由中明確引用課程名稱和成績，例如：「根據成績單，學生在[課程名稱]課程獲得[成績]，展現了[相關能力]，這與職缺要求的[具體需求]相關...」
+     * **重要**：只能說成績單中明確列出的課程和成績，不能推測「從課程專案中可見」等履歷中沒有的內容
+   
+   - **證照匹配（必須明確引用）**：
+     * 仔細比對學生擁有的證照（從【學生履歷重點】中的【證照資格】區塊）與職缺描述中的證照要求
+     * 明確指出學生擁有哪些證照，證照的取得日期，以及這些證照如何符合職缺需求
+     * 必須在推薦理由中明確引用證照的全名、類別、發證單位等資訊
+     * 例如：「根據履歷，學生擁有[證照全名]（[證照類別]），取得日期為[日期]，發證單位為[單位]，這與職缺要求的[具體需求]高度匹配...」
+   
+   - **語言能力匹配**：如果職缺有語言要求，明確指出學生的語言能力等級。
+   
+   - **綜合評估**：結合 GPA、操行成績、整體表現，說明學生的學習態度和能力。
+4. **推薦理由撰寫規範**（必須嚴格遵守）：
+   - **每個推薦理由必須基於履歷資料，並包含以下結構**：
+     
+     a) **直接引用履歷資料**（不要說「根據履歷」，直接引用內容）：
+        * 直接說：「學生主修[主修領域]，具備[具體技能]技能...」
+        * 直接說：「學生在自傳中提及[自傳中的具體內容，如：對網頁開發有高度興趣/曾參與...專案/希望學習...技術]...」
+        * **不要使用「根據履歷」、「履歷顯示」、「從履歷中可以看到」等介紹性語句，直接引用資料內容**
+     
+     b) **優先引用自傳內容**（如果有自傳資料，必須優先引用，直接引用不要介紹）：
+        * 直接說：「學生在自傳中提到[自傳中的具體內容，如：對網頁開發有高度興趣/曾參與...專案/希望學習...技術]...」
+        * 直接說：「學生表達[具體的興趣、經驗或目標]，與此職缺的[職缺特色]高度相關...」
+        * **直接引用自傳內容，不要說「根據學生自傳」或「自傳內容顯示」**
+     
+     c) **直接引用三類資料**（每個推薦理由都必須包含，不要介紹直接引用）：
+        * **履歷資料（特別是自傳）**：直接說「學生提到[具體內容]...」或「學生具備[具體技能名稱]技能...」
+        * **成績單資料**：直接說「學生在[具體課程名稱]課程獲得[成績]，展現了[相關能力]，這與職缺要求的[具體需求]相關...」或「學生的 GPA 為[具體數值]，在[相關課程]方面表現優秀...」
+        * **證照資料**：直接說「學生擁有[證照全名]（[證照類別]），取得日期為[日期]，發證單位為[單位]，這證明其[相關能力]，與職缺要求高度匹配...」
+        
+        **重要**：不要使用「根據履歷」、「根據成績單」、「根據證照資料」等介紹性語句，直接引用資料內容。
+     
+     d) **具體比對職缺要求**（直接引用資料，不要介紹）：
+        * 直接說：「此職缺明確要求[職缺要求]，而學生在自傳中提到[相關經驗/興趣]，並在[課程/證照/技能]方面表現優異...」
+        * 直接說：「職缺描述提到需要[技能/知識]，學生在自傳中表達對此領域的[興趣/經驗]，且通過[課程/證照]已具備此能力...」
+        * 直接說：「學生的[具體背景]與職缺要求的[具體需求]高度匹配...」
+     
+     e) **明確說明學生為什麼適合此職缺**（必須明確展示適合度，直接說明不要介紹）：
+        * **開頭明確說明適合度**：直接說：「學生非常適合此職缺，因為...」或「學生的背景與此職缺高度匹配，主要原因包括...」
+        * 直接說：「學生在自傳中展現的[具體特質/興趣/目標]與此職缺的要求高度吻合，[具體說明匹配點]...」
+        * 直接說：「此職缺將能讓學生實現自傳中提到的[職涯目標/學習期望]，並進一步深化[相關技能]，因此非常適合...」
+        * 直接說：「綜合學生的[自傳內容]、[課程成績]、[證照資格]等資料，學生非常適合此職缺，因為[具體說明理由]...」
+        * **結尾強調適合度**：每個推薦理由的結尾都應該明確說明「因此，學生非常適合此職缺」或「綜上所述，學生的[具體背景]使其成為此職缺的理想人選」
+   
+   - **重要規則（嚴格遵守）**：
+     * **所有推薦理由必須直接引用履歷、成績單和證照中的資料內容，不要使用「根據履歷」、「從履歷中可以看到」、「履歷顯示」等介紹性語句**
+     * **絕對禁止推測性描述**：不能使用「可見」、「可能」、「應該」、「推測」、「或許」、「從...中可見」、「從...中可以看出」等推測性詞彙
+     * **只能引用履歷中明確提到的內容**：
+       - 如果履歷中沒有提到「專案」，不能說「從其專案中可見」
+       - 如果履歷中沒有提到「個人研究」，不能說「從其個人研究中可見」
+       - 如果履歷中沒有提到「課程專案」，不能說「從其課程專案中可見」
+       - 直接引用履歷中實際存在的內容，例如：直接說「學生具備 Java 技能」、「學生在自傳中提到對網頁開發有興趣」，不要說「履歷顯示」或「根據履歷」
+     * **如果有自傳內容，必須優先引用自傳中的具體描述，並將自傳內容作為推薦理由的核心依據**
+     * **每個推薦理由必須綜合引用履歷、成績單和證照三類資料**：
+       - 至少引用1項履歷資料（優先引用自傳內容）
+       - 至少引用1項成績單資料（具體課程名稱和成績）
+       - 至少引用1項證照資料（證照名稱、類別、取得日期等）
+     * **直接引用資料內容，不要使用「根據履歷」、「根據成績單」、「根據證照資料」等介紹性語句**
+     * 例如：直接說「學生在自傳中提到...」而不是「根據履歷中的自傳內容，學生提到...」
+     * 必須具體指出履歷、成績單和證照中的具體內容，不能使用模糊的表述
+     * 絕對不要以「未提供資料」或「無法確認」作為理由
+     * 如果某些資料較少，就深入分析現有的資料，特別是自傳內容，找出與職缺的匹配點，但不要推測履歷中沒有的內容
+     * **每個推薦理由都必須明確展示學生的適合度**：
+       - 開頭明確說明「學生非常適合此職缺」或「學生的背景與此職缺高度匹配」
+       - 中間詳細說明為什麼適合（引用履歷、成績單、證照資料）
+       - 結尾強調適合度，明確說明「因此，學生非常適合此職缺」
+     * 推薦理由必須讓讀者清楚地理解「學生為什麼適合這個職缺」
+     * **如果履歷中沒有明確提到某項內容，就只說履歷中有的，不要推測或假設**
+5. 按適合度排序，推薦最多5個志願（由最適合至較適合）。
+"""
+        else:
+            # 如果完全沒有履歷和成績資料（這種情況應該很少見）
+            resume_section = """
+【學生履歷重點】
+（系統中暫無履歷資料）
+"""
+            grades_section = """
+【學業成績摘要】
+（系統中暫無成績資料）
+"""
+            task_requirements = """
+【任務要求】
+1. 由於系統中暫時缺少學生的履歷和成績資料，請基於職缺的要求和一般學生的背景進行推薦。
+2. 按職缺的熱門程度和一般適合度排序，推薦最多5個志願。
+3. 推薦理由可以說明該職缺的一般要求，但不要提及「未提供資料」等字眼，而是說明職缺的特色和發展機會。
+"""
+
         prompt = f"""{SYSTEM_PROMPT}
 你是一位專業的實習顧問，請根據學生的履歷重點和學業成績，推薦最適合的實習志願序（最多5個）。
 
-【學生履歷重點（系統自動擷取）】
-{resume_text}
+**重要提醒**：
+1. **資料來源**：以下所有履歷和成績資料都是系統從資料庫中直接查詢取得的真實記錄，包括：
+   - Student_Info 資料表：基本資訊、自傳（Autobiography 欄位）
+   - student_certifications 資料表：證照資格
+   - student_languageskills 資料表：語言能力
+   - course_grades 資料表：課程成績
+2. **分析要求**：你必須完全基於資料庫中的實際履歷資料進行分析，所有推薦理由都必須直接引用履歷中的具體內容。
+3. **絕對禁止推測或假設**：不能使用「可見」、「可能」、「應該」、「推測」、「或許」、「從...中可見」、「從...中可以看出」等推測性詞彙。
+4. **只能引用資料庫中的實際內容**：如果履歷中沒有提到「專案」、「個人研究」、「課程專案」等，絕對不能說「從其課程專案或個人研究中可見」。
+5. 如果履歷中沒有相關內容，就只引用履歷中實際存在的內容，不要推測或補充。
 
-【學業成績摘要（系統自動擷取）】
-{grades_text}
-
+{resume_section}
+{grades_section}
 【可選的公司和職缺資訊】
 {companies_text}
-
-【任務要求】
-1. 分析並比對【學生履歷重點】、【學業成績摘要】與【可選的公司和職缺資訊】。
-2. 根據學生的技能、證照、語言能力、成績表現，匹配最符合的公司與職缺。
-3. 按適合度排序，推薦最多5個志願（由最適合至較適合）。
-4. 每個推薦需包含：公司ID、職缺ID、推薦理由 (理由必須明確說明如何符合學生的履歷和成績)。
-
+{task_requirements}
 【輸出格式】
 請以 JSON 格式輸出：
 {{
@@ -386,11 +726,24 @@ def recommend_preferences():
       "job_id": 職缺ID,
       "company_name": "公司名稱",
       "job_title": "職缺名稱",
-      "reason": "推薦理由"
+      "reason": "推薦理由（必須直接引用三類資料內容，不要加「根據履歷」等介紹：1. 履歷資料（特別是自傳內容）- 例如：直接說'學生在自傳中提到...'或'學生具備...技能' 2. 成績單資料（具體課程名稱和成績）- 例如：直接說'學生在[課程名稱]課程獲得[成績]'或'學生GPA為[數值]' 3. 證照資料（證照名稱、類別、取得日期）- 例如：直接說'學生擁有[證照全名]（[類別]），取得日期為[日期]'。每個推薦理由必須綜合這三類資料來說明為什麼學生適合此職缺）"
     }},
     ...
   ]
 }}
+
+**再次強調**：
+- **每個推薦理由必須明確展示學生為什麼適合此職缺**：
+  1. **開頭明確說明適合度**：直接說「學生非常適合此職缺，因為...」或「學生的背景與此職缺高度匹配，主要原因包括...」
+  2. **直接引用三類資料內容**（不要加「根據履歷」等介紹性語句）：
+     * 履歷資料（特別是自傳內容）：直接說「學生在自傳中提到...」或「學生具備...技能」
+     * 成績單資料：直接說「學生在[課程名稱]課程獲得[成績]」或「學生GPA為[數值]」
+     * 證照資料：直接說「學生擁有[證照全名]（[類別]），取得日期為[日期]」
+  3. **詳細說明為什麼適合**：明確說明學生的哪些具體資料（自傳、課程、證照）如何匹配職缺要求
+  4. **結尾強調適合度**：明確說明「因此，學生非常適合此職缺」或「綜上所述，學生的[具體背景]使其成為此職缺的理想人選」
+- **不要使用介紹性語句**：不要說「根據履歷」、「根據成績單」、「根據證照資料」等，直接引用資料內容
+- **推薦理由必須明確展示適合度**：讓讀者清楚地理解「學生為什麼適合這個職缺」
+- 絕對不要使用推測性詞彙，只能引用資料庫中實際存在的內容
 """
 
         print(
