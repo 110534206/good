@@ -750,20 +750,38 @@ def get_student_info_for_doc(cursor, student_id, semester_id=None):
     # 使用 COLLATE 確保字符集匹配正確
     cursor.execute("""
         SELECT
-            CONCAT(COALESCE(cc.job_category, ''), COALESCE(cc.level, '')) AS cert_name,
-            cc.category AS cert_category,
-            CONCAT(CONCAT(COALESCE(cc.job_category, ''), COALESCE(cc.level, '')), ' (', ca.name, ')') AS full_name,
+            -- 1. 證照名稱：優先使用代碼表(cc)，若無則使用資料表(sc)的手填欄位
+            CASE 
+                WHEN cc.code IS NOT NULL THEN CONCAT(COALESCE(cc.job_category, ''), COALESCE(cc.level, ''))
+                ELSE CONCAT(COALESCE(sc.job_category, ''), COALESCE(sc.level, ''))
+            END AS cert_name,
+            
+            -- 2. 類別：若無則歸類為 other
+            COALESCE(cc.category, 'other') AS cert_category,
+            
+            -- 3. 完整顯示名稱 (含發證中心)
+            CASE 
+                WHEN cc.code IS NOT NULL THEN CONCAT(COALESCE(cc.job_category, ''), COALESCE(cc.level, ''), ' (', COALESCE(ca.name, ''), ')')
+                ELSE CONCAT(COALESCE(sc.job_category, ''), COALESCE(sc.level, ''), ' (', COALESCE(IFNULL(ca_sc.name, sc.authority_name), '自填'), ')')
+            END AS full_name,
+            
             sc.CertPath AS cert_path,
             sc.AcquisitionDate AS acquire_date,
             sc.cert_code AS cert_code
         FROM student_certifications sc
+        -- 關聯1: 嘗試透過代碼關聯標準代碼表
         LEFT JOIN certificate_codes cc 
             ON sc.cert_code COLLATE utf8mb4_unicode_ci = cc.code COLLATE utf8mb4_unicode_ci
+        -- 關聯2: 透過代碼表找到發證中心 (正常情況)
         LEFT JOIN cert_authorities ca 
             ON cc.authority_id = ca.id
+        -- 關聯3: 若代碼關聯失敗，嘗試直接透過 sc.authority_id 關聯發證中心 (補救情況)
+        LEFT JOIN cert_authorities ca_sc 
+            ON sc.authority_id = ca_sc.id
         WHERE sc.StuID = %s
         ORDER BY sc.AcquisitionDate DESC, sc.id ASC
     """, (student_id,))
+    
     cert_rows = cursor.fetchall() or []
     
     # 轉換為統一格式
@@ -2731,7 +2749,6 @@ def get_resume_data():
                 sc.issuer,
                 sc.authority_name,
                 sc.job_category AS sc_job_category,
-                sc.level AS sc_level,
                 sc.CreatedAt,
                 
                 -- 發證中心ID：優先使用 sc.authority_id（如果存在），否則從 certificate_codes 獲取
@@ -2842,6 +2859,11 @@ def get_resume_data():
 
         cursor.execute(sql_cert, (student_id,))
         all_certifications = cursor.fetchall() or []
+        
+        # 調試：打印查詢結果，確認 level 字段
+        print(f"🔍 查詢證照資料: 共 {len(all_certifications)} 筆")
+        for idx, cert in enumerate(all_certifications[:3]):  # 只打印前3筆
+            print(f"  證照 {idx+1}: id={cert.get('id')}, cert_code={cert.get('cert_code')}, job_category={cert.get('job_category')}, level={cert.get('level')}, authority_id={cert.get('authority_id')}")
 
         # ===== 6. 取最新一批證照 =====
 
@@ -2921,7 +2943,9 @@ def get_resume_data():
                         formatted_acquire_date = str(acquire_date) if acquire_date else ""
                         acquisition_date_str = formatted_acquire_date
             
-            print(f"🔍 證照日期處理: id={cert.get('id')}, AcquisitionDate={acquire_date}, formatted={formatted_acquire_date}, str={acquisition_date_str}")
+            # 獲取級別字段（SQL 返回的字段名是 level）
+            cert_level = cert.get("level", "")
+            print(f"🔍 證照資料處理: id={cert.get('id')}, AcquisitionDate={acquire_date}, formatted={formatted_acquire_date}, level={cert_level}, job_category={cert.get('job_category', '')}")
             
             formatted_certs.append({
                 "id": cert["id"],
@@ -2929,7 +2953,7 @@ def get_resume_data():
                 "cert_path": cert.get("CertPath", ""),
                 "name": cert.get("CertName", ""),
                 "job_category": cert.get("job_category", ""),
-                "level": cert.get("level", ""),
+                "level": cert_level,  # 修正：SQL 返回的字段名是 level，不是 CertLevel
                 "authority_name": cert.get("authority_name", ""),
                 "issuer": cert.get("issuer", ""),
                 "authority_id": cert.get("authority_id") if "authority_id" in cert else None,
