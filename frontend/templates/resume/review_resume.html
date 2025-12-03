@@ -95,6 +95,90 @@
       color: #0066cc;
       font-weight: bold;
     }
+
+    /* 選單按鈕樣式 */
+    #menu-btn {
+      width: 30px;
+      height: 22px;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      margin: 1rem;
+    }
+
+    #menu-btn span {
+      height: 4px;
+      background-color: #333;
+      border-radius: 2px;
+    }
+
+    /* 側邊選單樣式 */
+    #side-menu {
+      position: fixed;
+      top: 0;
+      left: 0;
+      height: 100vh;
+      width: 320px;
+      max-width: 80vw;
+      background-color: rgba(10, 10, 10, 0.95);
+      backdrop-filter: blur(6px);
+      box-shadow: 3px 0 12px rgb(0 0 0 / 0.7);
+      padding: 2rem 1.5rem;
+      transform: translateX(-100%);
+      transition: transform 0.3s ease-in-out;
+      z-index: 1100;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      color: white;
+      user-select: none;
+    }
+
+    #side-menu.open {
+      transform: translateX(0);
+    }
+
+    #close-btn {
+      position: absolute;
+      top: 2rem;
+      right: 1.6rem;
+      font-size: 2.2rem;
+      background: none;
+      border: none;
+      color: white;
+      cursor: pointer;
+      line-height: 1;
+      width: 2.5rem;
+      height: 2.5rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    #side-menu h2 {
+      width: 100%;
+      margin-bottom: 1.5rem;
+      font-weight: 700;
+      font-size: 1.5rem;
+      text-align: left;
+    }
+
+    #side-menu a {
+      display: block;
+      width: 100%;
+      padding: 0.5rem 0;
+      font-size: 1.1rem;
+      color: #ddd;
+      text-decoration: none;
+      border-radius: 4px;
+      transition: background-color 0.2s ease;
+    }
+
+    #side-menu a:hover {
+      background-color: rgba(255, 255, 255, 0.15);
+      color: white;
+    }
   </style>
 </head>
 
@@ -112,7 +196,7 @@
         <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
           <div class="d-flex gap-2 flex-wrap">
             <select id="departmentFilter" class="form-select form-select-sm w-auto">
-              <option value="">所有科別</option>
+              <option value="">所有學年</option>
             </select>
             <select id="classFilter" class="form-select form-select-sm w-auto">
               <option value="">所有班級</option>
@@ -189,6 +273,19 @@
         </div>
       </div>
     </div>
+
+    <!-- 側邊選單 -->
+    <nav id="side-menu" aria-hidden="true" role="navigation" aria-label="功能選單">
+      <button id="close-btn" aria-label="關閉功能選單">×</button>
+      <h2>功能選單</h2>
+      <a href="/teacher_home">首頁</a>
+      <a href="/profile">個人資料</a>
+      <a href="/upload_company">建立實習機會</a>
+      <a href="/admission_results">查看錄取結果</a>
+      <a href="/manage_vendor">實習廠商管理</a>
+      <a href="/notifications">查看公告</a>
+      <a href="/review_resume">學生履歷審核</a>
+    </nav>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
@@ -275,30 +372,33 @@
       // ------------------------------------
 
       function populateFilters(data) {
-        const deptSet = new Set();
         const classSet = new Set();
         const companySet = new Set();
 
         data.forEach(r => {
-          if (r.department) deptSet.add(r.department);
           if (r.className) classSet.add(r.className);
           if (r.company_name) companySet.add(r.company_name);
         });
+        
+        classSet.add("忠班");
+        classSet.add("孝班");
 
         const deptSelect = document.getElementById("departmentFilter");
         const classSelect = document.getElementById("classFilter");
         const companySelect = document.getElementById("companyFilter");
 
-        deptSelect.innerHTML = `<option value="">所有科別</option>`;
-        classSelect.innerHTML = `<option value="">所有班級</option>`;
-        companySelect.innerHTML = `<option value="">所有公司</option>`;
-
-        Array.from(deptSet).sort().forEach(d => {
+        // 固定顯示 1132 和 1142 作為學年選項
+        deptSelect.innerHTML = `<option value="">所有學年</option>`;
+        const semesters = ['1132', '1142'];
+        semesters.forEach(semester => {
           const option = document.createElement("option");
-          option.value = d;
-          option.textContent = d;
+          option.value = semester;
+          option.textContent = semester;
           deptSelect.appendChild(option);
         });
+
+        classSelect.innerHTML = `<option value="">所有班級</option>`;
+        companySelect.innerHTML = `<option value="">所有公司</option>`;
 
         Array.from(classSet).sort().forEach(c => {
           const option = document.createElement("option");
@@ -514,7 +614,7 @@
       }
 
 
-      // 側邊選單控制 (保留原有邏輯)
+      // 側邊選單控制
       document.getElementById('menu-btn').addEventListener('click', () => {
         document.getElementById('side-menu').classList.add('open');
       });

@@ -524,7 +524,7 @@ def _get_application_access(cursor, preference_id, vendor_id, vendor_email):
 def vendor_resume_review():
     if "user_id" not in session or session.get("role") != "vendor":
         return render_template("auth/login.html")
-    return render_template("user_shared/review_resumes.html")
+    return render_template("resume/review_resume.html")
 
 
 @vendor_bp.route("/vendor/api/applications", methods=["GET"])

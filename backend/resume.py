@@ -3646,14 +3646,7 @@ def review_resume_page():
     if not require_login():
         return redirect('/login')
     
-    # 根據角色返回對應的模板
-    role = session.get('role', '')
-    
-    # 老師、班導、主任、TA、管理員、廠商使用審核頁面
-    if role in ['teacher', 'class_teacher', 'director', 'ta', 'admin', 'vendor']:
-        return render_template('user_shared/review_resumes.html')
-    
-    # 其他角色使用一般查看頁面
+    # 統一使用整合後的審核頁面
     return render_template('resume/review_resume.html')
 
 @resume_bp.route('/ai_edit_resume')
