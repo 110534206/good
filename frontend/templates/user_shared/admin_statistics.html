@@ -1,0 +1,667 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>智慧實習平台 | 統計資料</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js" crossorigin="anonymous"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    header {
+      background: #0454a3;
+      color: white;
+      padding: 1rem 2rem;
+      text-align: center;
+      font-size: 1.5rem;
+    }
+
+    body {
+      font-family: "Noto Sans TC", sans-serif;
+      background: #f7f9fc;
+      margin: 0;
+      padding: 0;
+    }
+
+    /* 側邊選單樣式 */
+    #side-menu {
+      position: fixed;
+      top: 0;
+      left: 0;
+      height: 100vh;
+      width: 320px;
+      max-width: 80vw;
+      background-color: rgba(10, 10, 10, 0.95);
+      backdrop-filter: blur(6px);
+      box-shadow: 3px 0 12px rgb(0 0 0 / 0.7);
+      padding: 2rem 1.5rem;
+      transform: translateX(-100%);
+      transition: transform 0.3s ease-in-out;
+      z-index: 1100;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      color: white;
+      user-select: none;
+    }
+
+    #side-menu.open {
+      transform: translateX(0);
+    }
+
+    #close-btn {
+      position: absolute;
+      top: 2rem;
+      right: 1.6rem;
+      font-size: 2.2rem;
+      background: none;
+      border: none;
+      color: white;
+      cursor: pointer;
+      line-height: 1;
+      width: 2.5rem;
+      height: 2.5rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    #side-menu h2 {
+      width: 100%;
+      margin-bottom: 1.5rem;
+      font-weight: 700;
+      font-size: 1.5rem;
+      text-align: left;
+    }
+
+    #side-menu a {
+      display: block;
+      width: 100%;
+      padding: 0.5rem 0;
+      font-size: 1.1rem;
+      color: #ddd;
+      text-decoration: none;
+      border-radius: 4px;
+      transition: background-color 0.2s ease;
+    }
+
+    #side-menu a:hover {
+      background-color: rgba(255, 255, 255, 0.15);
+      color: white;
+    }
+
+    /* 統計卡片樣式 */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .stat-card {
+      background: linear-gradient(135deg, #fff 0%, #f8f9fa 100%);
+      border: 1px solid #e0e7ff;
+      border-radius: 8px;
+      padding: 1rem;
+      text-align: center;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .stat-card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+    }
+
+    .stat-card h3 {
+      color: #666;
+      font-size: 0.85rem;
+      margin-bottom: 0.4rem;
+      font-weight: 500;
+    }
+
+    .stat-card .value {
+      color: #0066cc;
+      font-size: 1.8rem;
+      font-weight: bold;
+      margin-bottom: 0.2rem;
+    }
+
+    .stat-card .rate {
+      color: #59a14f;
+      font-size: 0.8rem;
+      font-weight: 500;
+    }
+
+    /* 圖表區域 - 2x2網格佈局 */
+    .chart-section {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 1rem;
+    }
+
+    .chart-container {
+      background: #fff;
+      border: 1px solid #e0e7ff;
+      border-radius: 8px;
+      padding: 1rem;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    }
+
+    .chart-container h3 {
+      color: #0066cc;
+      margin-bottom: 0.75rem;
+      font-size: 1rem;
+      font-weight: 600;
+      text-align: center;
+    }
+
+    .chart-container canvas {
+      max-height: 250px;
+    }
+
+    .loading {
+      text-align: center;
+      padding: 2rem;
+      color: #666;
+    }
+
+    .error {
+      text-align: center;
+      padding: 2rem;
+      color: #e15759;
+      background: #ffe6e6;
+      border-radius: 8px;
+      margin: 1rem 0;
+    }
+
+    /* 響應式設計 */
+    @media (max-width: 768px) {
+      .chart-section {
+        grid-template-columns: 1fr;
+      }
+      
+      .stats-grid {
+        grid-template-columns: repeat(2, 1fr);
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <header>查詢統計資料</header>
+    <div class="container my-5 pt-1">
+      <div class="card shadow-sm p-4">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <h4 class="mb-0" style="color: #0066cc; font-weight: bold;">統計資料</h4>
+          <button id="exportPdfBtn" class="btn btn-danger btn-sm" style="display: none;">
+            <i class="fas fa-file-pdf"></i> 匯出 PDF
+          </button>
+        </div>
+        
+        <div id="loading" class="loading">載入中...</div>
+        <div id="error" class="error" style="display: none;"></div>
+        
+        <div id="content" style="display: none;">
+          <!-- 統計卡片 -->
+          <div class="stats-grid">
+            <div class="stat-card">
+              <h3>總學生數</h3>
+              <div class="value" id="total-students">0</div>
+            </div>
+            <div class="stat-card">
+              <h3>已上傳履歷</h3>
+              <div class="value" id="resume-uploaded">0</div>
+              <div class="rate" id="resume-rate">0%</div>
+            </div>
+            <div class="stat-card">
+              <h3>已填寫志願</h3>
+              <div class="value" id="preference-filled">0</div>
+              <div class="rate" id="preference-rate">0%</div>
+            </div>
+            <div class="stat-card">
+              <h3>履歷通過</h3>
+              <div class="value" id="resume-approved">0</div>
+            </div>
+            <div class="stat-card">
+              <h3>志願通過</h3>
+              <div class="value" id="preference-approved">0</div>
+            </div>
+          </div>
+
+          <!-- 圖表區域 - 2x2網格 -->
+          <div class="chart-section">
+            <div class="chart-container">
+              <h3>履歷繳交狀況</h3>
+              <canvas id="resumeChart"></canvas>
+            </div>
+
+            <div class="chart-container">
+              <h3>志願序填寫狀況</h3>
+              <canvas id="preferenceChart"></canvas>
+            </div>
+
+            <div class="chart-container">
+              <h3>熱門公司（被選擇次數）</h3>
+              <canvas id="companyChart"></canvas>
+            </div>
+
+            <div class="chart-container">
+              <h3>各班級完成率</h3>
+              <canvas id="classChart"></canvas>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+
+  <script>
+    // 圖表實例
+    let resumeChart = null;
+    let preferenceChart = null;
+    let companyChart = null;
+    let classChart = null;
+
+    // 載入統計資料
+    async function loadStatistics() {
+      const loading = document.getElementById('loading');
+      const error = document.getElementById('error');
+      const content = document.getElementById('content');
+
+      try {
+        loading.style.display = 'block';
+        error.style.display = 'none';
+        content.style.display = 'none';
+
+        const response = await fetch('/director/api/get_statistics');
+        const data = await response.json();
+
+        if (!data.success) {
+          throw new Error(data.message || '載入統計資料失敗');
+        }
+
+        // 更新統計卡片
+        document.getElementById('total-students').textContent = data.total_students || 0;
+        document.getElementById('resume-uploaded').textContent = data.resume_stats.students_with_resume || 0;
+        document.getElementById('resume-rate').textContent = (data.resume_stats.completion_rate || 0) + '%';
+        document.getElementById('preference-filled').textContent = data.preference_stats.students_with_preferences || 0;
+        document.getElementById('preference-rate').textContent = (data.preference_stats.completion_rate || 0) + '%';
+        document.getElementById('resume-approved').textContent = data.resume_stats.students_approved || 0;
+        document.getElementById('preference-approved').textContent = data.preference_stats.students_approved || 0;
+
+        // 繪製圖表
+        drawResumeChart(data.resume_stats, data.total_students);
+        drawPreferenceChart(data.preference_stats, data.total_students);
+        drawCompanyChart(data.top_companies);
+        drawClassChart(data.classes_stats);
+
+        loading.style.display = 'none';
+        content.style.display = 'block';
+        document.getElementById('exportPdfBtn').style.display = 'block';
+      } catch (err) {
+        console.error('載入統計資料失敗:', err);
+        loading.style.display = 'none';
+        error.style.display = 'block';
+        error.textContent = '載入統計資料失敗: ' + err.message;
+      }
+    }
+
+    // 繪製履歷圖表
+    function drawResumeChart(resumeStats, totalStudents) {
+      const ctx = document.getElementById('resumeChart').getContext('2d');
+      
+      if (resumeChart) {
+        resumeChart.destroy();
+      }
+
+      const uploaded = resumeStats.students_with_resume || 0;
+      const notUploaded = totalStudents - uploaded;
+
+      resumeChart = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+          labels: ['已上傳', '未上傳'],
+          datasets: [{
+            data: [uploaded, notUploaded],
+            backgroundColor: ['#59a14f', '#e15759']
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: true,
+          plugins: {
+            legend: {
+              position: 'bottom',
+              labels: {
+                padding: 10,
+                font: { size: 11 }
+              }
+            },
+            tooltip: {
+              callbacks: {
+                label: function(context) {
+                  const value = context.raw || 0;
+                  const total = uploaded + notUploaded;
+                  const percent = total > 0 ? ((value / total) * 100).toFixed(1) + '%' : '0%';
+                  return context.label + ': ' + value + ' (' + percent + ')';
+                }
+              }
+            }
+          }
+        }
+      });
+    }
+
+    // 繪製志願序圖表
+    function drawPreferenceChart(preferenceStats, totalStudents) {
+      const ctx = document.getElementById('preferenceChart').getContext('2d');
+      
+      if (preferenceChart) {
+        preferenceChart.destroy();
+      }
+
+      const filled = preferenceStats.students_with_preferences || 0;
+      const notFilled = totalStudents - filled;
+
+      preferenceChart = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+          labels: ['已填寫', '未填寫'],
+          datasets: [{
+            data: [filled, notFilled],
+            backgroundColor: ['#4e79a7', '#e15759']
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: true,
+          plugins: {
+            legend: {
+              position: 'bottom',
+              labels: {
+                padding: 10,
+                font: { size: 11 }
+              }
+            },
+            tooltip: {
+              callbacks: {
+                label: function(context) {
+                  const value = context.raw || 0;
+                  const total = filled + notFilled;
+                  const percent = total > 0 ? ((value / total) * 100).toFixed(1) + '%' : '0%';
+                  return context.label + ': ' + value + ' (' + percent + ')';
+                }
+              }
+            }
+          }
+        }
+      });
+    }
+
+    // 繪製公司圖表
+    function drawCompanyChart(topCompanies) {
+      const ctx = document.getElementById('companyChart').getContext('2d');
+      
+      if (companyChart) {
+        companyChart.destroy();
+      }
+
+      const companies = topCompanies.map(c => c.company_name || '未知公司');
+      const counts = topCompanies.map(c => c.preference_count || 0);
+
+      companyChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: companies,
+          datasets: [{
+            label: '被選擇次數',
+            data: counts,
+            backgroundColor: '#4e79a7'
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: true,
+          scales: {
+            y: {
+              beginAtZero: true,
+              ticks: {
+                precision: 0
+              }
+            },
+            x: {
+              ticks: {
+                maxRotation: 45,
+                minRotation: 0
+              }
+            }
+          },
+          plugins: {
+            legend: {
+              display: false
+            }
+          }
+        }
+      });
+    }
+
+    // 繪製班級圖表
+    function drawClassChart(classesStats) {
+      const ctx = document.getElementById('classChart').getContext('2d');
+      
+      if (classChart) {
+        classChart.destroy();
+      }
+
+      const classNames = classesStats.map(c => c.class_name || '未知班級');
+      const resumeRates = classesStats.map(c => {
+        const total = c.total_students || 0;
+        const withResume = c.students_with_resume || 0;
+        return total > 0 ? (withResume / total * 100).toFixed(1) : 0;
+      });
+      const preferenceRates = classesStats.map(c => {
+        const total = c.total_students || 0;
+        const withPreference = c.students_with_preferences || 0;
+        return total > 0 ? (withPreference / total * 100).toFixed(1) : 0;
+      });
+
+      classChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: classNames,
+          datasets: [
+            {
+              label: '履歷完成率 (%)',
+              data: resumeRates,
+              backgroundColor: '#59a14f'
+            },
+            {
+              label: '志願序完成率 (%)',
+              data: preferenceRates,
+              backgroundColor: '#4e79a7'
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: true,
+          scales: {
+            y: {
+              beginAtZero: true,
+              max: 100,
+              ticks: {
+                callback: function(value) {
+                  return value + '%';
+                }
+              }
+            },
+            x: {
+              ticks: {
+                maxRotation: 45,
+                minRotation: 0
+              }
+            }
+          },
+          plugins: {
+            legend: {
+              display: true,
+              position: 'top',
+              labels: {
+                padding: 8,
+                font: { size: 11 }
+              }
+            }
+          }
+        }
+      });
+    }
+
+    // 匯出PDF功能
+    document.getElementById('exportPdfBtn')?.addEventListener('click', function() {
+      const btn = this;
+      const originalText = btn.innerHTML;
+      btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 匯出中...';
+      btn.disabled = true;
+
+      // 獲取要匯出的內容
+      const content = document.getElementById('content');
+      if (!content || content.style.display === 'none') {
+        alert('請先載入統計資料');
+        btn.innerHTML = originalText;
+        btn.disabled = false;
+        return;
+      }
+
+      // 創建一個臨時容器用於PDF匯出
+      const printContainer = document.createElement('div');
+      printContainer.style.padding = '20px';
+      printContainer.style.backgroundColor = '#fff';
+      
+      // 添加標題
+      const title = document.createElement('h2');
+      title.textContent = '資管科文件繳交狀況';
+      title.style.textAlign = 'center';
+      title.style.color = '#0454a3';
+      title.style.marginBottom = '20px';
+      printContainer.appendChild(title);
+
+      // 添加日期
+      const date = document.createElement('p');
+      date.textContent = '匯出時間：' + new Date().toLocaleString('zh-TW');
+      date.style.textAlign = 'center';
+      date.style.color = '#666';
+      date.style.marginBottom = '20px';
+      printContainer.appendChild(date);
+
+      // 複製統計卡片
+      const statsGrid = document.querySelector('.stats-grid');
+      if (statsGrid) {
+        const statsClone = statsGrid.cloneNode(true);
+        statsClone.style.display = 'grid';
+        statsClone.style.gridTemplateColumns = 'repeat(5, 1fr)';
+        statsClone.style.gap = '10px';
+        statsClone.style.marginBottom = '20px';
+        printContainer.appendChild(statsClone);
+      }
+
+      // 為每個圖表創建canvas圖片
+      const chartSection = document.createElement('div');
+      chartSection.style.display = 'grid';
+      chartSection.style.gridTemplateColumns = 'repeat(2, 1fr)';
+      chartSection.style.gap = '15px';
+      chartSection.style.marginTop = '20px';
+
+      // 將圖表轉換為圖片
+      const charts = [
+        { id: 'resumeChart', title: '履歷繳交狀況', chart: resumeChart },
+        { id: 'preferenceChart', title: '志願序填寫狀況', chart: preferenceChart },
+        { id: 'companyChart', title: '熱門公司（被選擇次數）', chart: companyChart },
+        { id: 'classChart', title: '各班級完成率', chart: classChart }
+      ];
+
+      Promise.all(charts.map(({ id, title, chart }) => {
+        return new Promise((resolve) => {
+          if (!chart) {
+            resolve(null);
+            return;
+          }
+
+          const chartDiv = document.createElement('div');
+          chartDiv.style.textAlign = 'center';
+          chartDiv.style.marginBottom = '15px';
+
+          const chartTitle = document.createElement('h4');
+          chartTitle.textContent = title;
+          chartTitle.style.color = '#0066cc';
+          chartTitle.style.marginBottom = '10px';
+          chartTitle.style.fontSize = '14px';
+          chartDiv.appendChild(chartTitle);
+
+          // 將圖表轉換為base64圖片
+          const imageUrl = chart.toBase64Image();
+          const img = document.createElement('img');
+          img.src = imageUrl;
+          img.style.maxWidth = '100%';
+          img.style.height = 'auto';
+          chartDiv.appendChild(img);
+
+          resolve(chartDiv);
+        });
+      })).then(chartDivs => {
+        chartDivs.forEach(div => {
+          if (div) {
+            chartSection.appendChild(div);
+          }
+        });
+
+        printContainer.appendChild(chartSection);
+
+        // 配置PDF選項
+        const opt = {
+          margin: [10, 10, 10, 10],
+          filename: '統計資料_' + new Date().toISOString().slice(0, 10) + '.pdf',
+          image: { type: 'jpeg', quality: 0.98 },
+          html2canvas: { 
+            scale: 2,
+            useCORS: true,
+            logging: false
+          },
+          jsPDF: { 
+            unit: 'mm', 
+            format: 'a4', 
+            orientation: 'portrait' 
+          }
+        };
+
+        // 生成PDF
+        html2pdf().set(opt).from(printContainer).save().then(() => {
+          btn.innerHTML = originalText;
+          btn.disabled = false;
+          // 清理臨時元素
+          printContainer.remove();
+        }).catch(err => {
+          console.error('PDF匯出失敗:', err);
+          alert('PDF匯出失敗，請稍後再試');
+          btn.innerHTML = originalText;
+          btn.disabled = false;
+          printContainer.remove();
+        });
+      });
+    });
+
+    // 頁面載入時執行
+    document.addEventListener('DOMContentLoaded', () => {
+      loadStatistics();
+    });
+  </script>
+</body>
+</html>

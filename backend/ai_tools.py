@@ -157,6 +157,24 @@ def recommend_preferences():
         cursor = conn.cursor(dictionary=True)
         
         # ==========================================================
+        # 檢查是否有上傳履歷（不管審核狀態）
+        # ==========================================================
+        cursor.execute("""
+            SELECT id, status 
+            FROM resumes 
+            WHERE user_id = %s
+            ORDER BY created_at DESC
+            LIMIT 1
+        """, (student_id,))
+        resume_record = cursor.fetchone()
+        
+        if not resume_record:
+            return jsonify({
+                "success": False,
+                "error": "您尚未上傳履歷，請先完成履歷上傳後再使用推薦功能。"
+            }), 400
+        
+        # ==========================================================
         # 自動從資料庫獲取學生的履歷和成績資料
         # ==========================================================
         
