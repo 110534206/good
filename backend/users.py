@@ -779,3 +779,98 @@ def get_public_company(company_id):
     finally:
         cursor.close()
         conn.close()
+
+# =========================================================================
+# ⭐ 新增功能：公司指導老師管理 API (為前端 manage_companies.html 服務)
+# =========================================================================
+
+# -------------------------
+# API - 取得所有指導老師列表
+# -------------------------
+@users_bp.route('/api/get_all_teachers', methods=['GET'])
+def get_all_teachers_api():
+    """
+    獲取所有可作為指導老師的使用者列表 (role: teacher, director)。
+    用於前端下拉選單。
+    """
+    # 權限檢查：只允許科助 (ta)、主任 (director) 或管理員 (admin)
+    allowed_roles = ['ta', 'director', 'admin']
+    if 'username' not in session or session.get('role') not in allowed_roles:
+        return jsonify({"success": False, "message": "無權限"}), 403
+
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        # 查詢所有指導老師和主任
+        cursor.execute("""
+            SELECT id, name, username
+            FROM users
+            WHERE role IN ('teacher', 'director')
+            ORDER BY name
+        """)
+        teachers = cursor.fetchall()
+        
+        # 格式化輸出
+        teachers_payload = [{
+            "id": t["id"],
+            "name": t["name"],
+            "username": t["username"]
+        } for t in teachers]
+
+        return jsonify({"success": True, "teachers": teachers_payload})
+    except Exception as e:
+        print("❌ 取得指導老師列表錯誤:", e)
+        return jsonify({"success": False, "message": "伺服器錯誤"}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+# -------------------------
+# API - 更新公司指導老師
+# -------------------------
+@users_bp.route('/api/update_company_advisor', methods=['POST'])
+def update_company_advisor():
+    """
+    更新 internship_companies 表中特定公司的 advisor_user_id 欄位。
+    """
+    # 權限檢查：只允許科助 (ta) 或 主任 (director) 進行操作
+    allowed_roles = ['ta', 'director']
+    if 'username' not in session or session.get('role') not in allowed_roles:
+        return jsonify({"success": False, "message": "無權限"}), 403
+
+    data = request.get_json()
+    company_id = data.get("company_id", type=int)
+    # advisor_user_id 可以是 None (前端傳入空值代表移除指導老師)
+    advisor_user_id = data.get("advisor_user_id") 
+
+    if not company_id:
+        return jsonify({"success": False, "message": "缺少公司 ID"}), 400
+    
+    # 將 None 或空字串轉換為 None (在 Python 中代表 SQL 的 NULL)
+    if advisor_user_id == "":
+        advisor_user_id = None
+        
+    conn = get_db()
+    cursor = conn.cursor()
+    try:
+        # 執行更新操作：更新 internship_companies.advisor_user_id
+        cursor.execute("""
+            UPDATE internship_companies 
+            SET advisor_user_id = %s
+            WHERE id = %s
+        """, (advisor_user_id, company_id))
+
+        if cursor.rowcount == 0:
+            conn.rollback()
+            return jsonify({"success": False, "message": "找不到公司或更新失敗 (ID: {company_id})"}), 404
+        
+        conn.commit()
+
+        return jsonify({"success": True, "message": "指導老師已更新"})
+    except Exception as e:
+        print("❌ 更新公司指導老師錯誤:", e)
+        conn.rollback()
+        return jsonify({"success": False, "message": "資料庫錯誤"}), 500
+    finally:
+        cursor.close()
+        conn.close()
