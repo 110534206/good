@@ -65,6 +65,7 @@
       align-items: center;
       gap: 24px;
       height: 100%;
+      padding: 0 1rem;
     }
 
     .top-bar-left {
@@ -72,6 +73,28 @@
       align-items: center;
       gap: 16px;
     }
+
+    .top-bar-left #menu-btn {
+      width: 30px;
+      height: 22px;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      background: none;
+      border: none;
+      padding: 0;
+    }
+
+    .top-bar-left #menu-btn span {
+      display: block;
+      width: 100%;
+      height: 4px;
+      background-color: #333;
+      border-radius: 2px;
+      transition: all 0.3s ease;
+    }
+
 
     .top-bar-right {
       display: flex;
@@ -129,10 +152,33 @@
       display: flex;
       flex-wrap: wrap;
       align-items: center;
-      justify-content: flex-end;
+      justify-content: space-between;
       gap: 16px;
       margin-top: 20px;
-      padding: 0 1rem;
+      padding: 0;
+      padding-left: 170px;
+      padding-right: 1rem;
+    }
+
+    .page-header-actions #menu-btn {
+      width: 30px;
+      height: 22px;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      background: none;
+      border: none;
+      padding: 0;
+    }
+
+    .page-header-actions #menu-btn span {
+      display: block;
+      width: 100%;
+      height: 4px;
+      background-color: #333;
+      border-radius: 2px;
+      transition: all 0.3s ease;
     }
 
     .page-header h1 {
@@ -612,6 +658,11 @@
     <header class="page-header">
       <h1>職位需求管理</h1>
       <div class="page-header-actions">
+        <button id="menu-btn" title="選單" role="button" tabindex="0" aria-label="開啟側邊選單">
+          <span></span>
+          <span></span>
+          <span></span>
+        </button>
         <button id="createPositionBtn" class="btn btn-primary">＋ 新增職缺</button>
       </div>
     </header>
@@ -645,7 +696,7 @@
 
   <nav id="side-menu" aria-hidden="true" role="navigation" aria-label="廠商功能選單">
     <button id="close-btn" aria-label="關閉功能選單">×</button>
-    <h2>廠商功能</h2>
+    <h2>功能選單</h2>
     <a href="/vendor_home">首頁總覽</a>
     <a href="/vendor/resume-review">履歷審核</a>
     <a href="/manage_positions">職位需求管理</a>
@@ -867,15 +918,25 @@
 
       function initMenu() {
         const sideMenu = document.getElementById('side-menu');
+        const menuBtn = document.getElementById('menu-btn');
         const closeBtn = document.getElementById('close-btn');
+        
+        if (menuBtn) {
+          menuBtn.addEventListener('click', () => {
+            sideMenu.classList.add('open');
+            sideMenu.setAttribute('aria-hidden', 'false');
+          });
+        }
+        
         if (closeBtn) {
           closeBtn.addEventListener('click', () => {
             sideMenu.classList.remove('open');
             sideMenu.setAttribute('aria-hidden', 'true');
           });
         }
+        
         document.addEventListener('click', (event) => {
-          if (sideMenu && !sideMenu.contains(event.target)) {
+          if (sideMenu && !sideMenu.contains(event.target) && menuBtn && !menuBtn.contains(event.target)) {
             sideMenu.classList.remove('open');
             sideMenu.setAttribute('aria-hidden', 'true');
           }
