@@ -407,26 +407,58 @@
   </div>
 
   <main class="management-container container">
-    <header class="page-header">
-      <div>
-        <div class="page-eyebrow" id="pageEyebrow">新增職缺</div>
-        <h1 id="pageTitle">填寫職缺資訊</h1>
-        <p>提交後將同步給指導老師與科助查看，請確認內容無誤。</p>
-      </div>
-      <div class="page-actions">
-        <a class="btn btn-outline" href="/manage_positions">返回職缺列表</a>
-      </div>
-    </header>
-
     <section class="panel" aria-label="新增職缺表單">
+      <h1 id="pageTitle" style="margin-top: 0; margin-bottom: 24px; font-size: 1.9rem;">填寫職缺資訊</h1>
       <form id="positionForm">
         <div class="form-grid">
           <div class="form-group">
-            <label for="formCompany">所屬公司 <span style="color: var(--color-danger);">*</span></label>
+            <label for="formCode">編號</label>
+            <input id="formCode" type="text" readonly style="background-color: #f5f5f5;" />
+          </div>
+          <div class="form-group">
+            <label for="formCompany">單位名稱 <span style="color: var(--color-danger);">*</span></label>
             <select id="formCompany" required>
               <option value="">資料載入中...</option>
             </select>
           </div>
+          <div class="form-group">
+            <label for="formResponsible">負責人</label>
+            <input id="formResponsible" type="text" maxlength="50" />
+          </div>
+          <div class="form-group">
+            <label for="formTaxId">統一編號</label>
+            <input id="formTaxId" type="text" placeholder="例如：12345678" maxlength="20" />
+          </div>
+          <div class="form-group">
+            <label for="formContact">聯絡人</label>
+            <input id="formContact" type="text" maxlength="50" />
+          </div>
+          <div class="form-group">
+            <label for="formContactTitle">職稱</label>
+            <input id="formContactTitle" type="text" placeholder="例如：人事經理" maxlength="50" />
+          </div>
+          <div class="form-group">
+            <label for="formPhone">聯絡電話</label>
+            <input id="formPhone" type="tel" placeholder="例如：02-1234-5678" maxlength="30" />
+          </div>
+          <div class="form-group">
+            <label for="formFax">傳真</label>
+            <input id="formFax" type="tel" placeholder="例如：02-1234-5679" maxlength="30" />
+          </div>
+          <div class="form-group">
+            <label for="formAddress">地址</label>
+            <input id="formAddress" type="text" placeholder="例如：台北市信義區信義路五段7號" maxlength="200" />
+          </div>
+          <div class="form-group">
+            <label for="formTransport">交通說明</label>
+            <input id="formTransport" type="text" placeholder="例如：捷運板南線市政府站2號出口" maxlength="200" />
+          </div>
+          <div class="form-group">
+            <label for="formEmail">E-mail</label>
+            <input id="formEmail" type="email" placeholder="例如：contact@example.com" maxlength="100" />
+          </div>
+        </div>
+        <div class="form-grid" style="margin-top: 20px;">
           <div class="form-group">
             <label for="formTitle">職缺名稱 <span style="color: var(--color-danger);">*</span></label>
             <input id="formTitle" type="text" placeholder="例如：資料分析實習生" required maxlength="100" />
@@ -437,11 +469,11 @@
           </div>
           <div class="form-group">
             <label for="formPeriodStart">實習期間 - 開始日期</label>
-            <input id="formPeriodStart" type="date" />
+            <input id="formPeriodStart" type="text" placeholder="yyyy/mm/dd（直接輸入數字即可）" pattern="\d{4}/\d{2}/\d{2}" maxlength="10" />
           </div>
           <div class="form-group">
             <label for="formPeriodEnd">實習期間 - 結束日期</label>
-            <input id="formPeriodEnd" type="date" />
+            <input id="formPeriodEnd" type="text" placeholder="yyyy/mm/dd（直接輸入數字即可）" pattern="\d{4}/\d{2}/\d{2}" maxlength="10" />
           </div>
           <div class="form-group">
             <label for="formPeriodNote">期間備註 (可留空)</label>
@@ -457,6 +489,14 @@
           </div>
         </div>
         <div class="form-group" style="margin-top: 20px;">
+          <label for="formCompanyIntro">單位簡介</label>
+          <textarea id="formCompanyIntro" placeholder="請輸入單位簡介" maxlength="1000"></textarea>
+        </div>
+        <div class="form-group" style="margin-top: 16px;">
+          <label for="formBusinessScope">營業項目</label>
+          <textarea id="formBusinessScope" placeholder="請輸入營業項目" maxlength="500"></textarea>
+        </div>
+        <div class="form-group" style="margin-top: 16px;">
           <label for="formDescription">職務說明</label>
           <textarea id="formDescription" placeholder="簡述職務內容、所需技能與工作重點" maxlength="1500"></textarea>
         </div>
@@ -504,7 +544,19 @@
 
       const els = {
         form: document.getElementById('positionForm'),
+        formCode: document.getElementById('formCode'),
         formCompany: document.getElementById('formCompany'),
+        formResponsible: document.getElementById('formResponsible'),
+        formTaxId: document.getElementById('formTaxId'),
+        formContact: document.getElementById('formContact'),
+        formContactTitle: document.getElementById('formContactTitle'),
+        formPhone: document.getElementById('formPhone'),
+        formFax: document.getElementById('formFax'),
+        formAddress: document.getElementById('formAddress'),
+        formTransport: document.getElementById('formTransport'),
+        formEmail: document.getElementById('formEmail'),
+        formCompanyIntro: document.getElementById('formCompanyIntro'),
+        formBusinessScope: document.getElementById('formBusinessScope'),
         formTitle: document.getElementById('formTitle'),
         formSlots: document.getElementById('formSlots'),
         formPeriodStart: document.getElementById('formPeriodStart'),
@@ -518,7 +570,6 @@
         submitFormBtn: document.getElementById('submitFormBtn'),
         noCompanyHint: document.getElementById('noCompanyHint'),
         toast: document.getElementById('toast'),
-        pageEyebrow: document.getElementById('pageEyebrow'),
         pageTitle: document.getElementById('pageTitle')
       };
 
@@ -536,6 +587,11 @@
         });
       }
 
+      function generateRandomCode() {
+        // 生成六碼隨機數字
+        return Math.floor(100000 + Math.random() * 900000).toString();
+      }
+
       function showToast(message, type = 'info') {
         if (!els.toast) return;
         els.toast.textContent = message;
@@ -546,23 +602,81 @@
         }, 3600);
       }
 
+      function parseDateInput(dateStr) {
+        // 解析 yyyy/mm/dd 或 yyyy-mm-dd 格式
+        if (!dateStr || !dateStr.trim()) return null;
+        try {
+          const parts = dateStr.replace(/-/g, '/').split('/');
+          if (parts.length >= 2) {
+            const year = parseInt(parts[0], 10);
+            const month = parseInt(parts[1], 10);
+            const day = parts[2] ? parseInt(parts[2], 10) : 1;
+            
+            // 驗證日期是否有效
+            if (isNaN(year) || isNaN(month) || isNaN(day)) return null;
+            if (year < 1000 || year > 9999) return null;
+            if (month < 1 || month > 12) return null;
+            if (day < 1 || day > 31) return null;
+            
+            const date = new Date(year, month - 1, day);
+            // 驗證日期是否有效（例如 2月30日會被調整）
+            if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day) {
+              return null;
+            }
+            return date;
+          }
+        } catch (e) {
+          return null;
+        }
+        return null;
+      }
+
       function formatPeriodString(startDate, endDate, note) {
         if (!startDate && !endDate) return '';
         const parts = [];
+        
+        // 處理開始日期和結束日期
         if (startDate && endDate) {
-          const start = new Date(startDate);
-          const end = new Date(endDate);
-          const startStr = `${start.getFullYear()}/${String(start.getMonth() + 1).padStart(2, '0')}`;
-          const endStr = `${end.getFullYear()}/${String(end.getMonth() + 1).padStart(2, '0')}`;
-          parts.push(`${startStr} - ${endStr}`);
+          const start = parseDateInput(startDate.trim());
+          const end = parseDateInput(endDate.trim());
+          if (start && !isNaN(start.getTime()) && end && !isNaN(end.getTime())) {
+            const startStr = `${start.getFullYear()}/${String(start.getMonth() + 1).padStart(2, '0')}`;
+            const endStr = `${end.getFullYear()}/${String(end.getMonth() + 1).padStart(2, '0')}`;
+            parts.push(`${startStr} - ${endStr}`);
+          } else if (startDate.trim() && endDate.trim()) {
+            // 如果解析失敗，但輸入不為空，返回原始值（可能需要後端處理）
+            parts.push(`${startDate.trim()} - ${endDate.trim()}`);
+          }
         } else if (startDate) {
-          const start = new Date(startDate);
-          parts.push(`${start.getFullYear()}/${String(start.getMonth() + 1).padStart(2, '0')}`);
+          const start = parseDateInput(startDate.trim());
+          if (start && !isNaN(start.getTime())) {
+            parts.push(`${start.getFullYear()}/${String(start.getMonth() + 1).padStart(2, '0')}`);
+          } else if (startDate.trim()) {
+            parts.push(startDate.trim());
+          }
+        } else if (endDate) {
+          const end = parseDateInput(endDate.trim());
+          if (end && !isNaN(end.getTime())) {
+            parts.push(`- ${end.getFullYear()}/${String(end.getMonth() + 1).padStart(2, '0')}`);
+          } else if (endDate.trim()) {
+            parts.push(`- ${endDate.trim()}`);
+          }
         }
+        
         if (note && note.trim()) {
           parts.push(`(${note.trim()})`);
         }
         return parts.join(' ');
+      }
+
+      function formatDateForDisplay(dateStr) {
+        // 將 YYYY-MM-DD 格式轉換為 yyyy/mm/dd 顯示格式
+        if (!dateStr) return '';
+        const parts = dateStr.split('-');
+        if (parts.length >= 3) {
+          return `${parts[0]}/${parts[1]}/${parts[2]}`;
+        }
+        return dateStr;
       }
 
       function parsePeriodString(periodStr) {
@@ -655,14 +769,26 @@
           
           const job = result.item;
           if (job) {
+            if (els.formCode) els.formCode.value = job.code || '';
             els.formCompany.value = job.company_id || '';
+            if (els.formResponsible) els.formResponsible.value = job.responsible || '';
+            if (els.formTaxId) els.formTaxId.value = job.tax_id || '';
+            if (els.formContact) els.formContact.value = job.contact || '';
+            if (els.formContactTitle) els.formContactTitle.value = job.contact_title || '';
+            if (els.formPhone) els.formPhone.value = job.phone || '';
+            if (els.formFax) els.formFax.value = job.fax || '';
+            if (els.formAddress) els.formAddress.value = job.address || '';
+            if (els.formTransport) els.formTransport.value = job.transport || '';
+            if (els.formEmail) els.formEmail.value = job.email || '';
+            if (els.formCompanyIntro) els.formCompanyIntro.value = job.company_intro || '';
+            if (els.formBusinessScope) els.formBusinessScope.value = job.business_scope || '';
             els.formTitle.value = job.title || '';
             els.formSlots.value = job.slots || '';
             
             // 解析日期字串
             const periodData = parsePeriodString(job.period || '');
-            els.formPeriodStart.value = periodData.start || '';
-            els.formPeriodEnd.value = periodData.end || '';
+            els.formPeriodStart.value = formatDateForDisplay(periodData.start || '');
+            els.formPeriodEnd.value = formatDateForDisplay(periodData.end || '');
             els.formPeriodNote.value = periodData.note || '';
             
             els.formWorkTime.value = job.work_time || '';
@@ -671,7 +797,6 @@
             els.formRemark.value = job.remark || '';
             
             // 更新頁面標題
-            if (els.pageEyebrow) els.pageEyebrow.textContent = '編輯職缺';
             if (els.pageTitle) els.pageTitle.textContent = '編輯職缺資訊';
             if (els.submitFormBtn) els.submitFormBtn.textContent = '更新職缺';
           }
@@ -695,7 +820,19 @@
         );
 
         const payload = {
+          code: els.formCode ? els.formCode.value.trim() : '',
           company_id: els.formCompany.value,
+          responsible: els.formResponsible ? els.formResponsible.value.trim() : '',
+          tax_id: els.formTaxId ? els.formTaxId.value.trim() : '',
+          contact: els.formContact ? els.formContact.value.trim() : '',
+          contact_title: els.formContactTitle ? els.formContactTitle.value.trim() : '',
+          phone: els.formPhone ? els.formPhone.value.trim() : '',
+          fax: els.formFax ? els.formFax.value.trim() : '',
+          address: els.formAddress ? els.formAddress.value.trim() : '',
+          transport: els.formTransport ? els.formTransport.value.trim() : '',
+          email: els.formEmail ? els.formEmail.value.trim() : '',
+          company_intro: els.formCompanyIntro ? els.formCompanyIntro.value.trim() : '',
+          business_scope: els.formBusinessScope ? els.formBusinessScope.value.trim() : '',
           title: els.formTitle.value.trim(),
           slots: els.formSlots.value,
           period: periodStr,
@@ -742,6 +879,87 @@
         }
       }
 
+      function formatDateInput(input) {
+        // 保存當前游標位置前的數字長度
+        const cursorPos = input.selectionStart;
+        const beforeCursor = input.value.substring(0, cursorPos).replace(/\D/g, '');
+        const digitCountBefore = beforeCursor.length;
+        
+        // 只保留數字
+        let value = input.value.replace(/\D/g, '');
+        
+        // 限制最多8位數字
+        if (value.length > 8) {
+          value = value.slice(0, 8);
+        }
+        
+        // 根據輸入長度自動添加斜線
+        let formatted = '';
+        if (value.length > 0) {
+          formatted = value.slice(0, 4);
+          if (value.length > 4) {
+            formatted += '/' + value.slice(4, 6);
+            if (value.length > 6) {
+              formatted += '/' + value.slice(6, 8);
+            }
+          }
+        }
+        
+        input.value = formatted;
+        
+        // 計算新的游標位置
+        let newCursorPos = 0;
+        if (digitCountBefore <= 4) {
+          newCursorPos = digitCountBefore;
+        } else if (digitCountBefore <= 6) {
+          newCursorPos = digitCountBefore + 1; // 加上第一個斜線
+        } else {
+          newCursorPos = digitCountBefore + 2; // 加上兩個斜線
+        }
+        
+        // 確保游標位置不超過格式化後的字符串長度
+        newCursorPos = Math.min(newCursorPos, formatted.length);
+        input.setSelectionRange(newCursorPos, newCursorPos);
+      }
+
+      function bindDateInputs() {
+        const dateInputs = [els.formPeriodStart, els.formPeriodEnd];
+        
+        dateInputs.forEach(input => {
+          if (!input) return;
+          
+          input.addEventListener('input', function() {
+            formatDateInput(this);
+          });
+          
+          input.addEventListener('keydown', function(e) {
+            const key = e.key;
+            // 允許特殊鍵：刪除、退格、Tab、箭頭鍵、Home、End
+            const allowedKeys = ['Backspace', 'Delete', 'Tab', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End'];
+            if (allowedKeys.includes(key)) {
+              return true;
+            }
+            // 只允許數字
+            if (!/[0-9]/.test(key)) {
+              e.preventDefault();
+              return false;
+            }
+          });
+          
+          // 防止粘貼非數字內容
+          input.addEventListener('paste', function(e) {
+            e.preventDefault();
+            const paste = (e.clipboardData || window.clipboardData).getData('text');
+            const numbers = paste.replace(/\D/g, '');
+            if (numbers) {
+              input.value = '';
+              input.value = numbers.slice(0, 8);
+              formatDateInput(input);
+            }
+          });
+        });
+      }
+
       function bindEvents() {
         els.form.addEventListener('submit', submitForm);
         els.cancelFormBtn.addEventListener('click', () => {
@@ -751,6 +969,7 @@
             window.location.href = '/manage_positions';
           }
         });
+        bindDateInputs();
       }
 
       function initMenu() {
@@ -810,6 +1029,10 @@
         initAccountDropdown();
         loadAvatar();
         bindEvents();
+        // 如果是新增模式，自動生成六碼隨機編號
+        if (!state.isEditMode && els.formCode) {
+          els.formCode.value = generateRandomCode();
+        }
         loadCompanies();
       }
 
@@ -819,4 +1042,5 @@
 </body>
 
 </html>
+
 
