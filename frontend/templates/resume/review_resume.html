@@ -334,15 +334,19 @@
         const urlParams = new URLSearchParams(window.location.search);
         const mode = urlParams.get('mode');
         const apiUrl = mode ? `/api/get_class_resumes?mode=${encodeURIComponent(mode)}` : `/api/get_class_resumes`;
-        fetch(apiUrl)
-          .then(res => res.json())
-          .then(data => {
-            if (data.success) {
-              allResumes = data.resumes;
-              populateFilters(allResumes);
+        
+        // 同時載入開放的公司列表
+        Promise.all([
+          fetch(apiUrl).then(res => res.json()),
+          fetch('/api/get_reviewed_companies').then(res => res.json())
+        ])
+          .then(([resumeData, companyData]) => {
+            if (resumeData.success) {
+              allResumes = resumeData.resumes;
+              populateFilters(allResumes, companyData);
               applyFilters();
             } else {
-              alert("載入資料失敗：" + (data.message || "未知錯誤"));
+              alert("載入資料失敗：" + (resumeData.message || "未知錯誤"));
             }
           })
           .catch(error => {
@@ -371,13 +375,11 @@
       // 篩選與渲染函式
       // ------------------------------------
 
-      function populateFilters(data) {
+      function populateFilters(data, companyData) {
         const classSet = new Set();
-        const companySet = new Set();
 
         data.forEach(r => {
           if (r.className) classSet.add(r.className);
-          if (r.company_name) companySet.add(r.company_name);
         });
         
         classSet.add("忠班");
@@ -407,12 +409,19 @@
           classSelect.appendChild(option);
         });
 
-        Array.from(companySet).sort().forEach(company => {
-          const option = document.createElement("option");
-          option.value = company;
-          option.textContent = company;
-          companySelect.appendChild(option);
-        });
+        // 從 API 獲取的開放公司列表中，只顯示當前學期開放的公司
+        if (companyData && companyData.success && companyData.companies) {
+          const openCompanies = companyData.companies.filter(company => 
+            company.is_open_current_semester === true || company.is_open_current_semester === 1
+          );
+          
+          openCompanies.forEach(company => {
+            const option = document.createElement("option");
+            option.value = company.company_name;
+            option.textContent = company.company_name;
+            companySelect.appendChild(option);
+          });
+        }
       }
 
       function applyFilters() {

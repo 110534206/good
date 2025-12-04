@@ -1310,43 +1310,63 @@ def api_update_company_advisor():
             if advisor:
                 advisor_name = advisor['name']
         
-        # 如果公司有指導老師，檢查是否需要更新廠商的 teacher_name
-        updated_vendor_username = None
-        if advisor_user_id and advisor_name:
-            company_name = company['company_name']
-            # 檢查公司名稱是否匹配廠商對應的公司名稱
-            vendor_company_map = {
-                'vendor': '人人人',
-                'vendora': '嘻嘻嘻'
-            }
-            
-            # 檢查公司名稱是否在 vendor_company_map 的值中
-            matched_vendor_username = None
-            for vendor_username, mapped_company_name in vendor_company_map.items():
-                if company_name == mapped_company_name:
-                    matched_vendor_username = vendor_username
-                    break
-            
-            # 如果找到匹配的廠商，更新該廠商的 teacher_name 為該指導老師的名字
-            if matched_vendor_username:
-                cursor.execute("""
-                    UPDATE users 
-                    SET teacher_name = %s 
-                    WHERE username = %s AND role = 'vendor'
-                """, (advisor_name, matched_vendor_username))
-                updated_vendor_username = matched_vendor_username
+        # 更新所有相關廠商的 teacher_name
+        updated_vendor_count = 0
+        # 取得公司的 uploaded_by_user_id 和 contact_email
+        cursor.execute("""
+            SELECT uploaded_by_user_id, contact_email 
+            FROM internship_companies 
+            WHERE id = %s
+        """, (company_id,))
+        company_info = cursor.fetchone()
+        
+        vendor_ids_to_update = []
+        
+        # 1. 如果上傳者是廠商，更新該廠商的 teacher_name
+        if company_info and company_info.get('uploaded_by_user_id'):
+            cursor.execute("""
+                SELECT id FROM users 
+                WHERE id = %s AND role = 'vendor'
+            """, (company_info['uploaded_by_user_id'],))
+            vendor = cursor.fetchone()
+            if vendor:
+                vendor_ids_to_update.append(vendor['id'])
+        
+        # 2. 如果公司有 contact_email，查找所有匹配該 email 的廠商
+        if company_info and company_info.get('contact_email'):
+            cursor.execute("""
+                SELECT id FROM users 
+                WHERE email = %s AND role = 'vendor'
+            """, (company_info['contact_email'],))
+            vendors_by_email = cursor.fetchall()
+            for vendor in vendors_by_email:
+                if vendor['id'] not in vendor_ids_to_update:
+                    vendor_ids_to_update.append(vendor['id'])
+        
+        # 3. 更新所有找到的廠商的 teacher_name
+        # 如果 advisor_user_id 為 None，則清除 teacher_name（設為 NULL）
+        # 如果 advisor_user_id 有值，則設定為指導老師的名稱
+        teacher_name_value = advisor_name if advisor_user_id and advisor_name else None
+        for vendor_id in vendor_ids_to_update:
+            cursor.execute("""
+                UPDATE users 
+                SET teacher_name = %s 
+                WHERE id = %s AND role = 'vendor'
+            """, (teacher_name_value, vendor_id))
+            updated_vendor_count += 1
         
         conn.commit()
         
         message = f"公司「{company['company_name']}」的指導老師已更新"
         # 如果更新了廠商的 teacher_name，在訊息中提示
-        if updated_vendor_username:
-            message += f" 已自動更新廠商 '{updated_vendor_username}' 的指導老師關聯。"
+        if updated_vendor_count > 0:
+            message += f" 已自動更新 {updated_vendor_count} 個相關廠商的指導老師關聯。"
         
         return jsonify({
             "success": True,
             "message": message,
-            "advisor_name": advisor_name
+            "advisor_name": advisor_name,
+            "updated_vendor_count": updated_vendor_count
         })
     except Exception:
         print("❌ 更新公司指導老師錯誤：", traceback.format_exc())

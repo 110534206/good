@@ -107,17 +107,50 @@
       line-height: 1.7;
     }
 
+    .company-description-panel {
+      background: var(--color-card);
+      border-radius: var(--radius-lg);
+      border: 1px solid var(--color-border);
+      padding: 24px;
+      box-shadow: var(--shadow-md);
+      margin-top: 24px;
+    }
+
+    .company-description-panel h2 {
+      margin: 0 0 12px;
+      font-size: 1.25rem;
+      color: var(--color-text);
+    }
+
+    .company-description-content {
+      font-size: 1rem;
+      line-height: 1.6;
+      color: var(--color-text);
+      white-space: pre-wrap;
+      margin: 0;
+      padding: 0;
+      text-align: left;
+      word-spacing: 0;
+      letter-spacing: 0;
+    }
+
+    .company-description-panel .info-grid {
+      margin-top: 16px;
+    }
+
     .info-grid {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-      gap: 16px;
+      gap: 0;
+      column-gap: 12px;
+      row-gap: 12px;
     }
 
     .info-card {
       background: #f8fbff;
       border-radius: var(--radius-md);
       border: 1px solid #dee7f3;
-      padding: 16px;
+      padding: 12px 14px;
     }
 
     .info-card span {
@@ -129,7 +162,7 @@
       text-transform: uppercase;
       letter-spacing: 0.08em;
       color: var(--color-muted);
-      margin-bottom: 6px;
+      margin-bottom: 4px;
     }
 
     .info-value {
@@ -351,8 +384,22 @@
         els.companyHero.innerHTML = `
           <div>
             <h1>${escapeHtml(company.name)}</h1>
-            <p class="hero-description">${escapeHtml(description)}</p>
           </div>
+        `;
+
+        // 移除舊的公司介紹面板（如果存在）
+        const existingDescriptionPanel = document.querySelector('.company-description-panel');
+        if (existingDescriptionPanel) {
+          existingDescriptionPanel.remove();
+        }
+
+        // 渲染公司介紹到獨立的框框中，包含聯絡資訊
+        const descriptionPanel = document.createElement('section');
+        descriptionPanel.className = 'company-description-panel';
+        descriptionPanel.setAttribute('aria-label', '公司簡介');
+        descriptionPanel.innerHTML = `
+          <h2>公司簡介</h2>
+          <div class="company-description-content">${escapeHtml(description)}</div>
           <div class="info-grid">
             ${contactBlocks.map(block => `
               <div class="info-card">
@@ -362,6 +409,10 @@
             `).join('')}
           </div>
         `;
+        // 將公司介紹面板插入到 company-hero 之後
+        if (els.companyHero && els.companyHero.parentNode) {
+          els.companyHero.parentNode.insertBefore(descriptionPanel, els.companyHero.nextSibling);
+        }
       }
 
       function renderJobs() {
