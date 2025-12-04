@@ -153,8 +153,18 @@
       padding: 12px 14px;
     }
 
-    .info-card span {
+    .info-card:hover {
+      background: #e8f2ff;
+      border-color: var(--color-primary);
+      transform: translateY(-1px);
+    }
+
+    .info-card > a > span {
       display: block;
+    }
+    
+    .info-card span span {
+      display: inline;
     }
 
     .info-label {
@@ -329,7 +339,12 @@
 
       const state = {
         company: null,
-        jobs: []
+        jobs: [],
+        resumeStats: {
+          approved: 0,
+          uploaded: 0,
+          rejected: 0
+        }
       };
 
       const els = {
@@ -384,6 +399,32 @@
         els.companyHero.innerHTML = `
           <div>
             <h1>${escapeHtml(company.name)}</h1>
+          </div>
+          <div class="info-grid" style="margin-top: 16px;">
+            <div class="info-card" style="cursor: pointer;">
+              <a href="/review_resume" style="display: block; text-decoration: none; color: inherit;">
+                <span class="info-label">相關功能</span>
+                <span class="info-value" style="color: var(--color-primary);">查看學生履歷 →</span>
+              </a>
+            </div>
+            <div class="info-card" style="cursor: pointer;">
+              <a href="/review_resume?status=approved" style="display: block; text-decoration: none; color: inherit;">
+                <span class="info-label">履歷狀態</span>
+                <span class="info-value" style="color: var(--color-success);">已通過<span id="approvedCount" style="margin-left: 4px;">${state.resumeStats.approved}</span></span>
+              </a>
+            </div>
+            <div class="info-card" style="cursor: pointer;">
+              <a href="/review_resume?status=uploaded" style="display: block; text-decoration: none; color: inherit;">
+                <span class="info-label">履歷狀態</span>
+                <span class="info-value" style="color: var(--color-muted);">未通過<span id="uploadedCount" style="margin-left: 4px;">${state.resumeStats.uploaded}</span></span>
+              </a>
+            </div>
+            <div class="info-card" style="cursor: pointer;">
+              <a href="/review_resume?status=rejected" style="display: block; text-decoration: none; color: inherit;">
+                <span class="info-label">履歷狀態</span>
+                <span class="info-value" style="color: var(--color-danger);">退件<span id="rejectedCount" style="margin-left: 4px;">${state.resumeStats.rejected}</span></span>
+              </a>
+            </div>
           </div>
         `;
 
@@ -470,6 +511,35 @@
         }
       }
 
+      async function loadResumeStats() {
+        try {
+          const response = await fetch('/api/get_class_resumes', {
+            headers: { 'Accept': 'application/json' },
+            credentials: 'include'
+          });
+          const result = await response.json();
+          if (response.ok && result.success && result.resumes) {
+            // 統計各狀態的數量
+            state.resumeStats.approved = result.resumes.filter(r => r.status === 'approved').length;
+            state.resumeStats.uploaded = result.resumes.filter(r => r.status === 'uploaded' || r.status === 'pending').length;
+            state.resumeStats.rejected = result.resumes.filter(r => r.status === 'rejected').length;
+          }
+        } catch (error) {
+          console.error('載入履歷統計失敗:', error);
+        }
+      }
+
+      function updateResumeCounts() {
+        // 更新顯示的數量
+        const approvedEl = document.getElementById('approvedCount');
+        const uploadedEl = document.getElementById('uploadedCount');
+        const rejectedEl = document.getElementById('rejectedCount');
+        
+        if (approvedEl) approvedEl.textContent = state.resumeStats.approved;
+        if (uploadedEl) uploadedEl.textContent = state.resumeStats.uploaded;
+        if (rejectedEl) rejectedEl.textContent = state.resumeStats.rejected;
+      }
+
       async function loadDetail() {
         setLoading();
         try {
@@ -483,8 +553,12 @@
           }
           state.company = result.company;
           state.jobs = result.jobs || [];
+          // 先載入履歷統計，再渲染公司信息
+          await loadResumeStats();
           renderCompany();
           renderJobs();
+          // 渲染後更新數量（確保元素已存在）
+          updateResumeCounts();
         } catch (error) {
           showToast(error.message || '載入資料失敗', 'error');
           if (els.companyHero) {
