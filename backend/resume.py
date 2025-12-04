@@ -3141,8 +3141,13 @@ def get_class_resumes():
         # 1. 班導 / 教師 (role == "teacher" or "class_teacher")
         # ------------------------------------------------------------------
         if role in ["teacher", "class_teacher"]:
+            # 合併查詢：班導的學生履歷 + 指導老師綁定公司的學生履歷
+            # 使用 UNION 合併三種情況：
+            # 1. 班導的學生（通過 classes_teacher）
+            # 2. 指導老師綁定的學生（通過 teacher_student_relations）
+            # 3. 選擇了該老師作為指導老師的公司的學生（通過 student_preferences 和 internship_companies）
             sql_query = """
-                SELECT 
+                SELECT DISTINCT
                     r.id,
                     u.name AS student_name,
                     u.username AS student_number,
@@ -3153,21 +3158,47 @@ def get_class_resumes():
                     r.status,
                     r.comment,
                     r.note,
-                    r.created_at
+                    r.created_at,
+                    COALESCE(
+                        (SELECT ic3.company_name 
+                         FROM student_preferences sp3
+                         JOIN internship_companies ic3 ON sp3.company_id = ic3.id
+                         WHERE sp3.student_id = u.id 
+                         AND ic3.advisor_user_id = %s
+                         ORDER BY sp3.preference_order ASC
+                         LIMIT 1),
+                        ''
+                    ) AS company_name
                 FROM resumes r
                 JOIN users u ON r.user_id = u.id
                 LEFT JOIN classes c ON u.class_id = c.id
-                JOIN classes_teacher ct ON ct.class_id = c.id
-                WHERE ct.teacher_id = %s
+                WHERE EXISTS (
+                    -- 情況1：班導的學生
+                    SELECT 1
+                    FROM classes c2
+                    JOIN classes_teacher ct ON ct.class_id = c2.id
+                    WHERE c2.id = u.class_id AND ct.teacher_id = %s
+                ) OR EXISTS (
+                    -- 情況2：指導老師綁定的學生（從 teacher_student_relations）
+                    SELECT 1
+                    FROM teacher_student_relations tsr
+                    WHERE tsr.student_id = u.id AND tsr.teacher_id = %s
+                ) OR EXISTS (
+                    -- 情況3：選擇了該老師作為指導老師的公司的學生
+                    SELECT 1
+                    FROM student_preferences sp
+                    JOIN internship_companies ic2 ON sp.company_id = ic2.id
+                    WHERE sp.student_id = u.id AND ic2.advisor_user_id = %s
+                )
                 ORDER BY c.name, u.name
             """
-            sql_params = (user_id,)
+            sql_params = (user_id, user_id, user_id, user_id)
 
             cursor.execute(sql_query, sql_params)
             resumes = cursor.fetchall()
 
             if not resumes:
-                print(f"⚠️ [DEBUG] Teacher/class_teacher user {user_id} has no assigned classes.")
+                print(f"⚠️ [DEBUG] Teacher/class_teacher user {user_id} has no assigned classes or advisor students.")
                 resumes = []
 
         # ------------------------------------------------------------------
@@ -3338,7 +3369,7 @@ def review_resume(resume_id):
     user_role = session.get('role')
 
     # 1. 權限檢查
-    ALLOWED_ROLES = ['teacher', 'admin', 'class_teacher']
+    ALLOWED_ROLES = ['teacher', 'admin', 'class_teacher', 'vendor']
     if not user_id or user_role not in ALLOWED_ROLES:
         return jsonify({"success": False, "message": "未授權或無權限"}), 403
 
@@ -3384,9 +3415,15 @@ def review_resume(resume_id):
         """, (status, comment, user_id, resume_id))
         
         # 4. 取得審核者姓名
-        cursor.execute("SELECT name FROM users WHERE id = %s", (user_id,))
+        cursor.execute("SELECT name, role FROM users WHERE id = %s", (user_id,))
         reviewer = cursor.fetchone()
-        reviewer_name = reviewer['name'] if reviewer else "審核老師"
+        if reviewer:
+            if reviewer.get('role') == 'vendor':
+                reviewer_name = reviewer['name'] if reviewer['name'] else "審核廠商"
+            else:
+                reviewer_name = reviewer['name'] if reviewer['name'] else "審核老師"
+        else:
+            reviewer_name = "審核者"
 
         # 5. 處理 Email 寄送與通知 (僅在狀態改變時處理)
         from email_service import send_resume_rejection_email, send_resume_approval_email
