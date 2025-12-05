@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal
+import traceback
 
 from flask import Blueprint, jsonify, render_template, request, session
 
@@ -7,6 +8,7 @@ from config import get_db
 
 vendor_bp = Blueprint('vendor', __name__)
 
+# --- 常量定義 ---
 STATUS_LABELS = {
     "pending": "待審核",
     "approved": "已通過",
@@ -23,13 +25,16 @@ ACTION_TEXT = {
 DEFAULT_AVATAR = "/static/images/avatar-default.png"
 HISTORY_TABLE_READY = False
 
+# --- 輔助函數 ---
 
 def _format_datetime(value):
+    """格式化 datetime 物件為 YYYY/MM/DD HH:MM 格式"""
     if not value:
         return None
     if isinstance(value, datetime):
         return value.strftime("%Y/%m/%d %H:%M")
     try:
+        # 嘗試從 ISO 格式字串解析，如果失敗則返回原始字串
         parsed = datetime.fromisoformat(str(value))
         return parsed.strftime("%Y/%m/%d %H:%M")
     except Exception:
@@ -37,9 +42,11 @@ def _format_datetime(value):
 
 
 def _ensure_history_table(cursor):
+    """確保廠商志願偏好歷史紀錄表存在"""
     global HISTORY_TABLE_READY
     if HISTORY_TABLE_READY:
         return
+    # 這裡使用 IF NOT EXISTS，並假設此函數在實際執行時會被調用，避免每次請求都執行 DDL
     cursor.execute(
         """
         CREATE TABLE IF NOT EXISTS vendor_preference_history (
@@ -61,6 +68,7 @@ def _ensure_history_table(cursor):
 
 
 def _get_vendor_profile(cursor, vendor_id):
+    """獲取廠商的基本資料"""
     cursor.execute(
         "SELECT id, name, email FROM users WHERE id = %s AND role = 'vendor'",
         (vendor_id,),
@@ -68,69 +76,56 @@ def _get_vendor_profile(cursor, vendor_id):
     return cursor.fetchone()
 
 
-def _get_vendor_companies(cursor, vendor_id, vendor_email):
+def _get_vendor_companies(cursor, vendor_id):
     """
     獲取廠商對應的公司列表。
     邏輯：廠商通過指導老師（teacher_name）關聯到公司。
-    1. 從 users 表獲取廠商的 teacher_name 和 username
-    2. 找到該指導老師（users.name = teacher_name）
-    3. 找到該指導老師對接的公司（internship_companies.advisor_user_id = 指導老師 ID）
-    4. 根據廠商帳號名稱過濾對應的公司（vendor -> 人人人, vendorA -> 嘻嘻嘻）
+    **【優化點：移除硬編碼】**
     """
-    # 先獲取廠商的 teacher_name 和 username
-    cursor.execute("SELECT teacher_name, username FROM users WHERE id = %s", (vendor_id,))
+    # 1. 獲取廠商的 teacher_name
+    cursor.execute("SELECT teacher_name FROM users WHERE id = %s", (vendor_id,))
     vendor_row = cursor.fetchone()
-    if not vendor_row:
+    if not vendor_row or not vendor_row.get("teacher_name"):
         return []
     
-    teacher_name = vendor_row.get("teacher_name")
-    vendor_username = vendor_row.get("username", "").strip().lower()
-    if not teacher_name or not teacher_name.strip():
+    teacher_name = vendor_row.get("teacher_name").strip()
+    if not teacher_name:
         return []
     
-    # 找到指導老師的 ID（根據 name 匹配）
-    cursor.execute("SELECT id FROM users WHERE name = %s AND role IN ('teacher', 'director')", (teacher_name.strip(),))
+    # 2. 找到指導老師的 ID
+    cursor.execute("SELECT id FROM users WHERE name = %s AND role IN ('teacher', 'director')", (teacher_name,))
     teacher_row = cursor.fetchone()
     if not teacher_row:
         return []
     
     teacher_id = teacher_row["id"]
     
-    # 廠商帳號與公司名稱的對應關係
-    vendor_company_map = {
-        'vendor': '人人人',
-        'vendora': '嘻嘻嘻'
-    }
-    
-    # 找到該指導老師對接的公司（只回傳已審核通過的公司）
+    # 3. 找到該指導老師對接的公司（只回傳已審核通過的公司）
     query = """
         SELECT id, company_name, contact_email, advisor_user_id
         FROM internship_companies
         WHERE advisor_user_id = %s AND status = 'approved'
+        ORDER BY company_name
     """
     params = [teacher_id]
     
-    # 如果廠商帳號有對應的公司名稱，則只回傳該公司
-    if vendor_username in vendor_company_map:
-        target_company_name = vendor_company_map[vendor_username]
-        query += " AND company_name = %s"
-        params.append(target_company_name)
-    
-    query += " ORDER BY company_name"
     cursor.execute(query, tuple(params))
     return cursor.fetchall() or []
 
 
 def _get_vendor_scope(cursor, vendor_id):
+    """獲取廠商的個人資料、公司權限範圍和信箱"""
     profile = _get_vendor_profile(cursor, vendor_id)
     if not profile:
         return None, [], None
     email = profile.get("email")
-    companies = _get_vendor_companies(cursor, vendor_id, email)
+    # 傳入 cursor 和 vendor_id 即可
+    companies = _get_vendor_companies(cursor, vendor_id)
     return profile, companies, email
 
 
 def _to_bool(value):
+    """將輸入值轉換為布林值"""
     if isinstance(value, bool):
         return value
     if isinstance(value, (int, float)):
@@ -145,10 +140,12 @@ def _to_bool(value):
 
 
 def _serialize_job(row):
+    """格式化職缺資料"""
     if not row:
         return None
     salary_val = row.get("salary")
     if isinstance(salary_val, Decimal):
+        # 確保 Decimal 類型正確轉換
         salary_val = float(salary_val)
     return {
         "id": row.get("id"),
@@ -162,40 +159,36 @@ def _serialize_job(row):
         "salary": salary_val,
         "remark": row.get("remark") or "",
         "is_active": bool(row.get("is_active")),
-        "updated_at": _format_datetime(row.get("updated_at")),
-        "created_at": _format_datetime(row.get("created_at")),
     }
 
 
-def _fetch_job_for_vendor(cursor, job_id, vendor_id, vendor_email, allow_teacher_created=False):
+def _fetch_job_for_vendor(cursor, job_id, vendor_id, allow_teacher_created=False):
     """
     獲取廠商有權限訪問的職缺。
     權限邏輯：通過指導老師（teacher_name）關聯到公司。
-    
-    Args:
-        allow_teacher_created: 如果為 True，也允許查看指導老師建立的職缺（created_by_vendor_id IS NULL）
+    **【優化點：移除 vendor_email 參數，因為不再用於權限判斷】**
     """
-    # 先獲取廠商的 teacher_name
+    # 1. 獲取廠商的 teacher_name
     cursor.execute("SELECT teacher_name FROM users WHERE id = %s", (vendor_id,))
     vendor_row = cursor.fetchone()
-    if not vendor_row:
+    if not vendor_row or not vendor_row.get("teacher_name"):
         return None
     
-    teacher_name = vendor_row.get("teacher_name")
-    if not teacher_name or not teacher_name.strip():
+    teacher_name = vendor_row.get("teacher_name").strip()
+    if not teacher_name:
         return None
     
-    # 找到指導老師的 ID
-    cursor.execute("SELECT id FROM users WHERE name = %s AND role IN ('teacher', 'director')", (teacher_name.strip(),))
+    # 2. 找到指導老師的 ID
+    cursor.execute("SELECT id FROM users WHERE name = %s AND role IN ('teacher', 'director')", (teacher_name,))
     teacher_row = cursor.fetchone()
     if not teacher_row:
         return None
     
     teacher_id = teacher_row["id"]
     
-    # 構建查詢條件
+    # 3. 構建查詢條件
     if allow_teacher_created:
-        # 允許查看廠商自己建立的或指導老師建立的職缺
+        # 允許查看廠商自己建立的或指導老師建立的職缺 (created_by_vendor_id IS NULL)
         created_condition = "(ij.created_by_vendor_id = %s OR ij.created_by_vendor_id IS NULL)"
         params = (job_id, teacher_id, vendor_id)
     else:
@@ -203,32 +196,23 @@ def _fetch_job_for_vendor(cursor, job_id, vendor_id, vendor_email, allow_teacher
         created_condition = "ij.created_by_vendor_id = %s"
         params = (job_id, teacher_id, vendor_id)
     
-    cursor.execute(
-        f"""
+    # 使用參數化查詢，防止 SQL 注入
+    query = f"""
         SELECT
-            ij.id,
-            ij.company_id,
-            ic.company_name,
-            ij.title,
-            ij.slots,
-            ij.description,
-            ij.period,
-            ij.work_time,
-            ij.salary,
-            ij.remark,
-            ij.is_active,
+            ij.id, ij.company_id, ic.company_name, ij.title, ij.slots, ij.description,
+            ij.period, ij.work_time, ij.salary, ij.remark, ij.is_active,
             ij.created_by_vendor_id
         FROM internship_jobs ij
         JOIN internship_companies ic ON ij.company_id = ic.id
         WHERE ij.id = %s AND ic.advisor_user_id = %s AND {created_condition}
-        """,
-        params,
-    )
+    """
+    cursor.execute(query, params)
     row = cursor.fetchone()
     return row
 
 
 def _record_history(cursor, preference_id, reviewer_id, action, comment):
+    """記錄廠商對志願申請的審核或備註歷史"""
     if action not in ACTION_TEXT:
         return
     _ensure_history_table(cursor)
@@ -243,6 +227,7 @@ def _record_history(cursor, preference_id, reviewer_id, action, comment):
 
 
 def _notify_student(cursor, student_id, title, message, link_url="/vendor/resume-review"):
+    """發送通知給學生"""
     cursor.execute(
         """
         INSERT INTO notifications (user_id, title, message, link_url, is_read, created_at)
@@ -253,17 +238,15 @@ def _notify_student(cursor, student_id, title, message, link_url="/vendor/resume
 
 
 def _fetch_latest_resume(cursor, student_id):
+    """獲取學生最新的一份履歷"""
     cursor.execute(
         """
         SELECT r.id, r.original_filename, r.status, r.comment, r.note,
                r.created_at, r.updated_at, r.filepath
         FROM resumes r
-        JOIN (
-            SELECT user_id, MAX(created_at) AS max_created_at
-            FROM resumes
-            GROUP BY user_id
-        ) latest ON latest.user_id = r.user_id AND latest.max_created_at = r.created_at
         WHERE r.user_id = %s
+        ORDER BY r.created_at DESC
+        LIMIT 1
         """,
         (student_id,),
     )
@@ -271,7 +254,9 @@ def _fetch_latest_resume(cursor, student_id):
 
 
 def _fetch_skill_tags(cursor, student_id):
+    """獲取學生的證照和語言技能作為標籤"""
     skills = []
+    # 證照
     cursor.execute(
         "SELECT CertName FROM Student_Certifications WHERE StuID = %s ORDER BY CertName",
         (student_id,),
@@ -279,6 +264,7 @@ def _fetch_skill_tags(cursor, student_id):
     certifications = cursor.fetchall() or []
     skills.extend([row["CertName"] for row in certifications if row.get("CertName")])
 
+    # 語言技能
     cursor.execute(
         "SELECT Language, Level FROM Student_LanguageSkills WHERE StuID = %s ORDER BY Language",
         (student_id,),
@@ -294,6 +280,7 @@ def _fetch_skill_tags(cursor, student_id):
 
 
 def _fetch_history(cursor, preference_id, submitted_at, current_status):
+    """獲取志願申請的歷史紀錄 (包含提交紀錄和廠商審核紀錄)"""
     history = []
     if submitted_at:
         history.append(
@@ -336,7 +323,8 @@ def _fetch_history(cursor, preference_id, submitted_at, current_status):
     if current_status in STATUS_LABELS and current_status != "pending":
         history.append(
             {
-                "timestamp": _format_datetime(datetime.utcnow()),
+                # 使用當前時間作為狀態更新時間，除非有更準確的欄位
+                "timestamp": _format_datetime(datetime.now()),
                 "text": f"目前狀態：{STATUS_LABELS[current_status]}",
                 "type": "status",
             }
@@ -348,8 +336,10 @@ def _fetch_history(cursor, preference_id, submitted_at, current_status):
 
 
 def _build_application_summary_row(row):
+    """將志願申請的資料列轉換為摘要字典"""
     submitted_at = row.get("submitted_at")
     skills = []
+    # 假設 skill_tags 是從其他地方獲取並以 '||' 分隔
     if row.get("skill_tags"):
         skills = row["skill_tags"].split("||")
     
@@ -383,33 +373,18 @@ def _build_application_summary_row(row):
 
 
 def _fetch_application_detail(cursor, preference_id):
+    """獲取單一志願申請的詳細資料"""
     cursor.execute(
         """
         SELECT
-            sp.id,
-            sp.status,
-            sp.preference_order,
-            sp.submitted_at,
-            sp.student_id,
-            sp.company_id,
-            sp.job_id,
-            sp.job_title,
-            ic.company_name,
-            ic.contact_person,
-            ic.contact_email,
-            ic.contact_phone,
+            sp.id, sp.status, sp.preference_order, sp.submitted_at,
+            sp.student_id, sp.company_id, sp.job_id, sp.job_title,
+            ic.company_name, ic.contact_person, ic.contact_email, ic.contact_phone,
             ij.title AS job_title_db,
-            u.name AS student_name,
-            u.username AS student_number,
-            u.email AS student_email,
-            c.id AS class_id,
-            c.name AS class_name,
-            c.department,
-            si.Phone AS student_phone,
-            si.Autobiography AS autobiography,
-            si.PhotoPath AS photo_path,
-            si.Email AS info_email,
-            si.Address AS student_address,
+            u.name AS student_name, u.username AS student_number, u.email AS student_email,
+            c.id AS class_id, c.name AS class_name, c.department,
+            si.Phone AS student_phone, si.Autobiography AS autobiography,
+            si.PhotoPath AS photo_path, si.Email AS info_email, si.Address AS student_address,
             EXISTS (
                 SELECT 1
                 FROM teacher_student_relations tsr
@@ -430,6 +405,7 @@ def _fetch_application_detail(cursor, preference_id):
     if not row:
         return None
 
+    # 獲取最新履歷、技能標籤、歷史紀錄
     resume = _fetch_latest_resume(cursor, row["student_id"])
     skills = _fetch_skill_tags(cursor, row["student_id"])
     history = _fetch_history(
@@ -484,18 +460,18 @@ def _get_application_access(cursor, preference_id, vendor_id, vendor_email):
     獲取廠商有權限訪問的申請。
     權限邏輯：通過指導老師（teacher_name）關聯到公司。
     """
-    # 先獲取廠商的 teacher_name
+    # 獲取廠商的 teacher_name
     cursor.execute("SELECT teacher_name FROM users WHERE id = %s", (vendor_id,))
     vendor_row = cursor.fetchone()
-    if not vendor_row:
+    if not vendor_row or not vendor_row.get("teacher_name"):
         return None
     
-    teacher_name = vendor_row.get("teacher_name")
-    if not teacher_name or not teacher_name.strip():
+    teacher_name = vendor_row.get("teacher_name").strip()
+    if not teacher_name:
         return None
     
     # 找到指導老師的 ID
-    cursor.execute("SELECT id FROM users WHERE name = %s AND role IN ('teacher', 'director')", (teacher_name.strip(),))
+    cursor.execute("SELECT id FROM users WHERE name = %s AND role IN ('teacher', 'director')", (teacher_name,))
     teacher_row = cursor.fetchone()
     if not teacher_row:
         return None
@@ -505,11 +481,7 @@ def _get_application_access(cursor, preference_id, vendor_id, vendor_email):
     cursor.execute(
         """
         SELECT
-            sp.id,
-            sp.student_id,
-            sp.company_id,
-            sp.status,
-            ic.company_name
+            sp.id, sp.student_id, sp.company_id, sp.status, ic.company_name
         FROM student_preferences sp
         JOIN internship_companies ic ON sp.company_id = ic.id
         WHERE sp.id = %s AND ic.advisor_user_id = %s
@@ -520,15 +492,153 @@ def _get_application_access(cursor, preference_id, vendor_id, vendor_email):
     return record
 
 
+# --- 路由定義 ---
+
 @vendor_bp.route("/vendor/resume-review")
 def vendor_resume_review():
+    """廠商履歷審核頁面路由"""
     if "user_id" not in session or session.get("role") != "vendor":
         return render_template("auth/login.html")
     return render_template("resume/review_resume.html")
 
 
+@vendor_bp.route("/vendor/api/resumes", methods=["GET"])
+def get_vendor_resumes():
+    """
+    獲取廠商可以查看的已通過審核的學生履歷。
+    邏輯：
+    1. 老師已通過 (resumes.status = 'approved')。
+    2. 學生對廠商所屬公司提交了志願申請 (student_preferences)。
+    3. 廠商介面狀態取決於 student_preferences.status。
+    **【優化點：修正查詢邏輯，基於 student_preferences.status 顯示廠商審核狀態】**
+    """
+    if "user_id" not in session or session.get("role") != "vendor":
+        return jsonify({"success": False, "message": "未授權"}), 403
+
+    vendor_id = session["user_id"]
+    status_filter = request.args.get("status", "").strip()
+    company_filter = request.args.get("company_id", type=int)
+    keyword_filter = request.args.get("keyword", "").strip()
+
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        profile, companies, _ = _get_vendor_scope(cursor, vendor_id)
+        if not profile:
+            return jsonify({"success": False, "message": "帳號資料不完整"}), 403
+
+        company_ids = [c["id"] for c in companies]
+        if not company_ids:
+            return jsonify({"success": True, "resumes": [], "companies": []})
+
+        # 構建查詢：獲取老師已通過的最新履歷，並帶出學生在該公司的申請狀態 (sp.status)
+        placeholders = ", ".join(["%s"] * len(company_ids))
+        params = company_ids[:]
+
+        query = f"""
+            SELECT
+                r.id, r.user_id AS student_id, u.name AS student_name, u.username AS student_number,
+                c.name AS class_name, c.department, r.original_filename, r.filepath,
+                r.comment, r.note, r.created_at, r.reviewed_at, r.reviewed_by,
+                ic.company_name, ic.id AS company_id,
+                sp.status AS vendor_review_status, sp.id AS preference_id
+            FROM resumes r
+            JOIN users u ON r.user_id = u.id
+            LEFT JOIN classes c ON u.class_id = c.id
+            
+            -- 只取最新一份已通過老師審核的履歷
+            JOIN (
+                SELECT user_id, MAX(created_at) AS max_created_at
+                FROM resumes
+                WHERE status = 'approved'
+                GROUP BY user_id
+            ) latest ON latest.user_id = r.user_id AND latest.max_created_at = r.created_at
+            
+            -- 關聯學生的志願申請，只找目標公司的申請
+            JOIN student_preferences sp ON sp.student_id = u.id AND sp.company_id IN ({placeholders})
+            JOIN internship_companies ic ON sp.company_id = ic.id
+            -- 這裡只篩選老師已通過的履歷 (r.status='approved')
+            WHERE r.status = 'approved'
+        """
+        # 添加 company_ids 參數
+        params.extend(company_ids)
+
+        where_clauses = [f"sp.company_id IN ({placeholders})"]
+        
+        # 添加公司篩選
+        if company_filter and company_filter in company_ids:
+            where_clauses.append("ic.id = %s")
+            params.append(company_filter)
+
+        # 添加狀態篩選 (基於 student_preferences.status)
+        if status_filter and status_filter in ['approved', 'rejected', 'pending']:
+            where_clauses.append("sp.status = %s")
+            params.append(status_filter)
+
+        # 添加關鍵字搜尋
+        if keyword_filter:
+            keyword = f"%{keyword_filter}%"
+            where_clauses.append("(u.name LIKE %s OR u.username LIKE %s OR r.original_filename LIKE %s)")
+            params.extend([keyword, keyword, keyword])
+
+        if where_clauses:
+            query += " AND " + " AND ".join(where_clauses)
+
+        query += " ORDER BY r.created_at DESC"
+
+        cursor.execute(query, tuple(params))
+        rows = cursor.fetchall() or []
+
+        resumes = []
+        for row in rows:
+            sp_status = row.get("vendor_review_status")
+            
+            # 廠商視角狀態：如果 student_preferences.status 是 pending/approved/rejected 則顯示其值
+            # 預設為 pending (待審核)
+            display_status = sp_status if sp_status in STATUS_LABELS else "pending"
+            
+            resume = {
+                "id": row.get("id"),
+                "student_id": row.get("student_id"),
+                "name": row.get("student_name"),
+                "username": row.get("student_number"),
+                "className": row.get("class_name") or "",
+                "department": row.get("department") or "",
+                "original_filename": row.get("original_filename"),
+                "filepath": row.get("filepath"),
+                "status": display_status,  # 顯示基於 student_preferences 的狀態
+                "comment": row.get("comment") or "",
+                "note": row.get("note") or "",
+                "upload_time": _format_datetime(row.get("created_at")),
+                "reviewed_at": _format_datetime(row.get("reviewed_at")),
+                "company_name": row.get("company_name"),
+                "company_id": row.get("company_id"),
+                "preference_id": row.get("preference_id"), # 用於廠商審核操作
+            }
+            resumes.append(resume)
+
+        companies_payload = [
+            {"id": c["id"], "name": c["company_name"]} 
+            for c in companies
+        ]
+
+        return jsonify({
+            "success": True,
+            "resumes": resumes,
+            "companies": companies_payload
+        })
+
+    except Exception as exc:
+        traceback.print_exc()
+        return jsonify({"success": False, "message": f"查詢失敗：{exc}"}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+
 @vendor_bp.route("/vendor/api/applications", methods=["GET"])
 def list_applications():
+    """獲取廠商可查看的志願申請列表"""
     if "user_id" not in session or session.get("role") != "vendor":
         return jsonify({"error": "未授權"}), 403
 
@@ -543,11 +653,13 @@ def list_applications():
     try:
         profile = _get_vendor_profile(cursor, vendor_id)
         if not profile:
-            return jsonify({"items": [], "summary": {"pending": 0, "approved": 0, "rejected": 0, "new_this_week": 0}})
+            empty_summary = {"pending": 0, "approved": 0, "rejected": 0, "new_this_week": 0}
+            return jsonify({"items": [], "summary": empty_summary})
 
-        companies = _get_vendor_companies(cursor, vendor_id, profile.get("email"))
+        companies = _get_vendor_companies(cursor, vendor_id)
         if not companies:
-            return jsonify({"items": [], "summary": {"pending": 0, "approved": 0, "rejected": 0, "new_this_week": 0}})
+            empty_summary = {"pending": 0, "approved": 0, "rejected": 0, "new_this_week": 0}
+            return jsonify({"items": [], "summary": empty_summary})
 
         company_ids = [company["id"] for company in companies]
         placeholders = ", ".join(["%s"] * len(company_ids))
@@ -555,21 +667,11 @@ def list_applications():
 
         query = f"""
             SELECT
-                sp.id,
-                sp.status,
-                sp.submitted_at,
-                sp.student_id,
-                sp.company_id,
-                sp.job_id,
-                sp.job_title,
-                ic.company_name,
-                ij.title AS job_title_db,
-                u.name AS student_name,
-                u.username AS student_number,
-                c.id AS class_id,
+                sp.id, sp.status, sp.submitted_at, sp.student_id, sp.company_id,
+                sp.job_id, sp.job_title, ic.company_name, ij.title AS job_title_db,
+                u.name AS student_name, u.username AS student_number, c.id AS class_id,
                 CONCAT_WS(' ', c.name, c.department) AS school_label,
-                si.Autobiography AS autobiography,
-                si.PhotoPath AS photo_path,
+                si.Autobiography AS autobiography, si.PhotoPath AS photo_path,
                 (
                     SELECT r.id
                     FROM resumes r
@@ -620,6 +722,7 @@ def list_applications():
                 counts[status] += 1
             submitted_at = row.get("submitted_at")
             if submitted_at and isinstance(submitted_at, datetime):
+                # 假設 submitted_at 已經是 UTC 格式
                 if submitted_at >= now - timedelta(days=7):
                     new_this_week += 1
             items.append(_build_application_summary_row(row))
@@ -632,6 +735,7 @@ def list_applications():
         }
         return jsonify({"items": items, "summary": summary})
     except Exception as exc:
+        traceback.print_exc()
         return jsonify({"error": f"查詢失敗：{exc}"}), 500
     finally:
         cursor.close()
@@ -640,6 +744,7 @@ def list_applications():
 
 @vendor_bp.route("/vendor/api/applications/<int:application_id>", methods=["GET"])
 def retrieve_application(application_id):
+    """獲取單一志願申請的詳細資料"""
     if "user_id" not in session or session.get("role") != "vendor":
         return jsonify({"error": "未授權"}), 403
 
@@ -660,6 +765,7 @@ def retrieve_application(application_id):
             return jsonify({"error": "找不到此履歷"}), 404
         return jsonify({"item": detail})
     except Exception as exc:
+        traceback.print_exc()
         return jsonify({"error": f"查詢失敗：{exc}"}), 500
     finally:
         cursor.close()
@@ -668,6 +774,7 @@ def retrieve_application(application_id):
 
 @vendor_bp.route("/vendor/api/positions", methods=["GET"])
 def list_positions_for_vendor():
+    """獲取廠商可查看的職缺列表"""
     if "user_id" not in session or session.get("role") != "vendor":
         return jsonify({"success": False, "message": "未授權"}), 403
 
@@ -679,7 +786,7 @@ def list_positions_for_vendor():
     conn = get_db()
     cursor = conn.cursor(dictionary=True)
     try:
-        profile, companies, vendor_email = _get_vendor_scope(cursor, vendor_id)
+        profile, companies, _ = _get_vendor_scope(cursor, vendor_id)
         if not profile:
             payload = {"success": True, "companies": [], "items": [], "stats": {"total": 0, "active": 0, "inactive": 0}}
             return jsonify(payload)
@@ -692,6 +799,7 @@ def list_positions_for_vendor():
         if company_filter and company_filter not in company_ids:
             return jsonify({"success": False, "message": "無權限查看此公司"}), 403
 
+        # 基礎權限判斷：屬於廠商公司範圍 AND (廠商建立 OR 老師建立)
         where_clauses = [
             f"ij.company_id IN ({', '.join(['%s'] * len(company_ids))})",
             "(ij.created_by_vendor_id = %s OR ij.created_by_vendor_id IS NULL)"
@@ -699,6 +807,7 @@ def list_positions_for_vendor():
         params = company_ids[:]
         params.append(vendor_id)
 
+        # 篩選條件
         if company_filter:
             where_clauses.append("ij.company_id = %s")
             params.append(company_filter)
@@ -716,17 +825,8 @@ def list_positions_for_vendor():
 
         query = f"""
             SELECT
-                ij.id,
-                ij.company_id,
-                ic.company_name,
-                ij.title,
-                ij.slots,
-                ij.description,
-                ij.period,
-                ij.work_time,
-                ij.salary,
-                ij.remark,
-                ij.is_active,
+                ij.id, ij.company_id, ic.company_name, ij.title, ij.slots, ij.description,
+                ij.period, ij.work_time, ij.salary, ij.remark, ij.is_active,
                 ij.created_by_vendor_id
             FROM internship_jobs ij
             JOIN internship_companies ic ON ij.company_id = ic.id
@@ -751,6 +851,7 @@ def list_positions_for_vendor():
         companies_payload = [{"id": c["id"], "name": c["company_name"], "advisor_user_id": c.get("advisor_user_id")} for c in companies]
         return jsonify({"success": True, "companies": companies_payload, "items": items, "stats": stats})
     except Exception as exc:
+        traceback.print_exc()
         return jsonify({"success": False, "message": f"載入失敗：{exc}"}), 500
     finally:
         cursor.close()
@@ -759,6 +860,7 @@ def list_positions_for_vendor():
 
 @vendor_bp.route("/vendor/api/positions", methods=["POST"])
 def create_position_for_vendor():
+    """廠商新增職缺"""
     if "user_id" not in session or session.get("role") != "vendor":
         return jsonify({"success": False, "message": "未授權"}), 403
 
@@ -791,7 +893,6 @@ def create_position_for_vendor():
     salary_value = data.get("salary")
     salary = None
     if salary_value not in (None, "", "null"):
-        # 薪資可以是文字格式（例如："月薪 30,000"、"面議" 等）
         salary = str(salary_value).strip() if salary_value else None
 
     is_active = True
@@ -804,7 +905,7 @@ def create_position_for_vendor():
     conn = get_db()
     cursor = conn.cursor(dictionary=True)
     try:
-        profile, companies, vendor_email = _get_vendor_scope(cursor, session["user_id"])
+        profile, companies, _ = _get_vendor_scope(cursor, session["user_id"])
         if not profile:
             return jsonify({"success": False, "message": "帳號資料不完整"}), 403
 
@@ -834,10 +935,11 @@ def create_position_for_vendor():
             ),
         )
         conn.commit()
-        job_row = _fetch_job_for_vendor(cursor, cursor.lastrowid, session["user_id"], vendor_email)
+        job_row = _fetch_job_for_vendor(cursor, cursor.lastrowid, session["user_id"])
         return jsonify({"success": True, "item": _serialize_job(job_row)})
     except Exception as exc:
         conn.rollback()
+        traceback.print_exc()
         return jsonify({"success": False, "message": f"新增失敗：{exc}"}), 500
     finally:
         cursor.close()
@@ -853,12 +955,12 @@ def get_position_for_vendor(job_id):
     conn = get_db()
     cursor = conn.cursor(dictionary=True)
     try:
-        profile, _companies, vendor_email = _get_vendor_scope(cursor, session["user_id"])
+        profile, _, _ = _get_vendor_scope(cursor, session["user_id"])
         if not profile:
             return jsonify({"success": False, "message": "帳號資料不完整"}), 403
 
         vendor_id = session["user_id"]
-        job_row = _fetch_job_for_vendor(cursor, job_id, vendor_id, vendor_email, allow_teacher_created=True)
+        job_row = _fetch_job_for_vendor(cursor, job_id, vendor_id, allow_teacher_created=True)
         if not job_row:
             return jsonify({"success": False, "message": "找不到職缺或無權限查看"}), 404
 
@@ -867,6 +969,7 @@ def get_position_for_vendor(job_id):
             job["is_created_by_vendor"] = job_row.get("created_by_vendor_id") == vendor_id
         return jsonify({"success": True, "item": job})
     except Exception as exc:
+        traceback.print_exc()
         return jsonify({"success": False, "message": f"查詢失敗：{exc}"}), 500
     finally:
         cursor.close()
@@ -875,6 +978,7 @@ def get_position_for_vendor(job_id):
 
 @vendor_bp.route("/vendor/api/positions/<int:job_id>", methods=["PUT"])
 def update_position_for_vendor(job_id):
+    """廠商更新職缺資料"""
     if "user_id" not in session or session.get("role") != "vendor":
         return jsonify({"success": False, "message": "未授權"}), 403
 
@@ -899,7 +1003,6 @@ def update_position_for_vendor(job_id):
     salary_value = data.get("salary")
     salary = None
     if salary_value not in (None, "", "null"):
-        # 薪資可以是文字格式（例如："月薪 30,000"、"面議" 等）
         salary = str(salary_value).strip() if salary_value else None
 
     try:
@@ -910,11 +1013,12 @@ def update_position_for_vendor(job_id):
     conn = get_db()
     cursor = conn.cursor(dictionary=True)
     try:
-        profile, _companies, vendor_email = _get_vendor_scope(cursor, session["user_id"])
+        profile, _, _ = _get_vendor_scope(cursor, session["user_id"])
         if not profile:
             return jsonify({"success": False, "message": "帳號資料不完整"}), 403
 
-        job_row = _fetch_job_for_vendor(cursor, job_id, session["user_id"], vendor_email, allow_teacher_created=True)
+        # 檢查權限
+        job_row = _fetch_job_for_vendor(cursor, job_id, session["user_id"], allow_teacher_created=True)
         if not job_row:
             return jsonify({"success": False, "message": "找不到職缺或無權限編輯"}), 404
 
@@ -944,10 +1048,11 @@ def update_position_for_vendor(job_id):
             ),
         )
         conn.commit()
-        updated = _fetch_job_for_vendor(cursor, job_id, session["user_id"], vendor_email)
+        updated = _fetch_job_for_vendor(cursor, job_id, session["user_id"])
         return jsonify({"success": True, "item": _serialize_job(updated)})
     except Exception as exc:
         conn.rollback()
+        traceback.print_exc()
         return jsonify({"success": False, "message": f"更新失敗：{exc}"}), 500
     finally:
         cursor.close()
@@ -956,6 +1061,7 @@ def update_position_for_vendor(job_id):
 
 @vendor_bp.route("/vendor/api/positions/<int:job_id>/status", methods=["PATCH"])
 def toggle_position_status(job_id):
+    """切換職缺的啟用狀態"""
     if "user_id" not in session or session.get("role") != "vendor":
         return jsonify({"success": False, "message": "未授權"}), 403
 
@@ -970,11 +1076,12 @@ def toggle_position_status(job_id):
     conn = get_db()
     cursor = conn.cursor(dictionary=True)
     try:
-        profile, _companies, vendor_email = _get_vendor_scope(cursor, session["user_id"])
+        profile, _, _ = _get_vendor_scope(cursor, session["user_id"])
         if not profile:
             return jsonify({"success": False, "message": "帳號資料不完整"}), 403
 
-        job_row = _fetch_job_for_vendor(cursor, job_id, session["user_id"], vendor_email, allow_teacher_created=True)
+        # 檢查權限
+        job_row = _fetch_job_for_vendor(cursor, job_id, session["user_id"], allow_teacher_created=True)
         if not job_row:
             return jsonify({"success": False, "message": "找不到職缺或無權限操作"}), 404
 
@@ -983,10 +1090,11 @@ def toggle_position_status(job_id):
             (1 if desired else 0, job_id),
         )
         conn.commit()
-        updated = _fetch_job_for_vendor(cursor, job_id, session["user_id"], vendor_email, allow_teacher_created=True)
+        updated = _fetch_job_for_vendor(cursor, job_id, session["user_id"], allow_teacher_created=True)
         return jsonify({"success": True, "item": _serialize_job(updated)})
     except Exception as exc:
         conn.rollback()
+        traceback.print_exc()
         return jsonify({"success": False, "message": f"更新狀態失敗：{exc}"}), 500
     finally:
         cursor.close()
@@ -1002,11 +1110,12 @@ def delete_position_for_vendor(job_id):
     conn = get_db()
     cursor = conn.cursor(dictionary=True)
     try:
-        profile, _companies, vendor_email = _get_vendor_scope(cursor, session["user_id"])
+        profile, _, _ = _get_vendor_scope(cursor, session["user_id"])
         if not profile:
             return jsonify({"success": False, "message": "帳號資料不完整"}), 403
 
-        job_row = _fetch_job_for_vendor(cursor, job_id, session["user_id"], vendor_email, allow_teacher_created=True)
+        # 檢查權限
+        job_row = _fetch_job_for_vendor(cursor, job_id, session["user_id"], allow_teacher_created=True)
         if not job_row:
             return jsonify({"success": False, "message": "找不到職缺或無權限刪除"}), 404
 
@@ -1015,6 +1124,7 @@ def delete_position_for_vendor(job_id):
         return jsonify({"success": True, "message": "職缺已刪除"})
     except Exception as exc:
         conn.rollback()
+        traceback.print_exc()
         return jsonify({"success": False, "message": f"刪除失敗：{exc}"}), 500
     finally:
         cursor.close()
@@ -1022,6 +1132,7 @@ def delete_position_for_vendor(job_id):
 
 
 def _handle_status_update(application_id, action):
+    """處理志願申請狀態的通用更新函數"""
     if "user_id" not in session or session.get("role") != "vendor":
         return jsonify({"error": "未授權"}), 403
 
@@ -1036,6 +1147,7 @@ def _handle_status_update(application_id, action):
         if not profile:
             return jsonify({"error": "帳號資訊有誤"}), 403
 
+        # 檢查廠商是否有權限操作此申請
         access = _get_application_access(cursor, application_id, vendor_id, profile.get("email"))
         if not access:
             return jsonify({"error": "找不到此申請或無權限操作"}), 404
@@ -1057,6 +1169,8 @@ def _handle_status_update(application_id, action):
                 "UPDATE student_preferences SET status = %s WHERE id = %s",
                 (new_status, application_id),
             )
+            
+            # 發送通知
             title = "履歷審核結果"
             message = f"您的履歷申請已被更新為「{STATUS_LABELS.get(new_status, new_status)}」。"
             if comment:
@@ -1068,15 +1182,18 @@ def _handle_status_update(application_id, action):
         else:
             return jsonify({"error": "未知的操作"}), 400
 
+        # 記錄歷史
         _record_history(cursor, application_id, vendor_id, action, comment or None)
         conn.commit()
 
+        # 返回最新資料
         detail = _fetch_application_detail(cursor, application_id)
         if not detail:
             return jsonify({"error": "更新成功但無法重新載入資料"}), 200
         return jsonify({"item": detail})
     except Exception as exc:
         conn.rollback()
+        traceback.print_exc()
         return jsonify({"error": f"操作失敗：{exc}"}), 500
     finally:
         cursor.close()
@@ -1085,19 +1202,23 @@ def _handle_status_update(application_id, action):
 
 @vendor_bp.route("/vendor/api/applications/<int:application_id>/approve", methods=["POST"])
 def approve_application(application_id):
+    """廠商通過志願申請"""
     return _handle_status_update(application_id, "approve")
 
 
 @vendor_bp.route("/vendor/api/applications/<int:application_id>/reject", methods=["POST"])
 def reject_application(application_id):
+    """廠商退回志願申請"""
     return _handle_status_update(application_id, "reject")
 
 
 @vendor_bp.route("/vendor/api/applications/<int:application_id>/reopen", methods=["POST"])
 def reopen_application(application_id):
+    """廠商重啟志願申請 (狀態設為待審核)"""
     return _handle_status_update(application_id, "reopen")
 
 
 @vendor_bp.route("/vendor/api/applications/<int:application_id>/comment", methods=["POST"])
 def comment_application(application_id):
+    """廠商對志願申請新增備註"""
     return _handle_status_update(application_id, "comment")

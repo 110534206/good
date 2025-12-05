@@ -780,6 +780,244 @@ def get_public_company(company_id):
         cursor.close()
         conn.close()
 
+
+@users_bp.route('/api/public/company/<int:company_id>', methods=['PUT'])
+def update_public_company(company_id):
+    """
+    更新指定公司的資訊，僅供指導老師、科助使用。
+    """
+    if 'username' not in session:
+        return jsonify({"success": False, "message": "未登入"}), 401
+
+    allowed_roles = ['teacher', 'ta']
+    role = session.get('role')
+    if role not in allowed_roles:
+        return jsonify({"success": False, "message": "無權限"}), 403
+
+    user_id = session.get('user_id')
+    data = request.get_json() or {}
+
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        # 檢查公司是否存在且用戶有權限
+        company_conditions = ["ic.id = %s", "ic.status = 'approved'"]
+        params = [company_id]
+        if role == 'teacher':
+            company_conditions.append("ic.advisor_user_id = %s")
+            params.append(user_id)
+
+        cursor.execute(f"""
+            SELECT id
+            FROM internship_companies ic
+            WHERE {' AND '.join(company_conditions)}
+            LIMIT 1
+        """, tuple(params))
+        company = cursor.fetchone()
+
+        if not company:
+            return jsonify({"success": False, "message": "找不到公司資料或無權限"}), 404
+
+        # 準備更新欄位
+        update_fields = []
+        update_values = []
+
+        if 'description' in data:
+            update_fields.append("description = %s")
+            update_values.append(data.get('description', '').strip())
+
+        if 'contact_person' in data:
+            update_fields.append("contact_person = %s")
+            update_values.append(data.get('contact_person', '').strip())
+
+        if 'contact_title' in data:
+            update_fields.append("contact_title = %s")
+            update_values.append(data.get('contact_title', '').strip())
+
+        if 'contact_email' in data:
+            update_fields.append("contact_email = %s")
+            update_values.append(data.get('contact_email', '').strip())
+
+        if 'contact_phone' in data:
+            update_fields.append("contact_phone = %s")
+            update_values.append(data.get('contact_phone', '').strip())
+
+        if 'location' in data:
+            update_fields.append("location = %s")
+            update_values.append(data.get('location', '').strip())
+
+        if not update_fields:
+            return jsonify({"success": False, "message": "沒有要更新的欄位"}), 400
+
+        # 執行更新
+        update_values.append(company_id)
+        cursor.execute(f"""
+            UPDATE internship_companies
+            SET {', '.join(update_fields)}
+            WHERE id = %s
+        """, tuple(update_values))
+
+        conn.commit()
+
+        return jsonify({
+            "success": True,
+            "message": "公司資訊更新成功"
+        })
+    except Exception as exc:
+        conn.rollback()
+        print(f"❌ 更新公司資訊失敗：{exc}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({"success": False, "message": "更新失敗，請稍後再試"}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+
+@users_bp.route('/api/public/company/<int:company_id>/jobs/<int:job_id>', methods=['PUT'])
+def update_public_company_job(company_id, job_id):
+    """
+    更新指定公司的職缺資訊，僅供指導老師、科助使用。
+    """
+    if 'username' not in session:
+        return jsonify({"success": False, "message": "未登入"}), 401
+
+    allowed_roles = ['teacher', 'ta']
+    role = session.get('role')
+    if role not in allowed_roles:
+        return jsonify({"success": False, "message": "無權限"}), 403
+
+    user_id = session.get('user_id')
+    data = request.get_json() or {}
+
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        # 檢查公司是否存在且用戶有權限
+        company_conditions = ["ic.id = %s", "ic.status = 'approved'"]
+        params = [company_id]
+        if role == 'teacher':
+            company_conditions.append("ic.advisor_user_id = %s")
+            params.append(user_id)
+
+        cursor.execute(f"""
+            SELECT id
+            FROM internship_companies ic
+            WHERE {' AND '.join(company_conditions)}
+            LIMIT 1
+        """, tuple(params))
+        company = cursor.fetchone()
+
+        if not company:
+            return jsonify({"success": False, "message": "找不到公司資料或無權限"}), 404
+
+        # 檢查職缺是否屬於該公司
+        cursor.execute("""
+            SELECT id, company_id
+            FROM internship_jobs
+            WHERE id = %s AND company_id = %s
+            LIMIT 1
+        """, (job_id, company_id))
+        job = cursor.fetchone()
+
+        if not job:
+            return jsonify({"success": False, "message": "找不到職缺資料"}), 404
+
+        # 準備更新欄位
+        update_fields = []
+        update_values = []
+
+        if 'title' in data:
+            title = data.get('title', '').strip()
+            if title:
+                update_fields.append("title = %s")
+                update_values.append(title)
+
+        if 'slots' in data:
+            try:
+                slots = int(data.get('slots', 0))
+                if slots > 0:
+                    update_fields.append("slots = %s")
+                    update_values.append(slots)
+            except (TypeError, ValueError):
+                pass
+
+        if 'period' in data:
+            update_fields.append("period = %s")
+            update_values.append(data.get('period', '').strip() or None)
+
+        if 'work_time' in data:
+            update_fields.append("work_time = %s")
+            update_values.append(data.get('work_time', '').strip() or None)
+
+        if 'salary' in data:
+            update_fields.append("salary = %s")
+            salary_value = data.get('salary', '').strip()
+            update_values.append(salary_value if salary_value else None)
+
+        if 'description' in data:
+            update_fields.append("description = %s")
+            update_values.append(data.get('description', '').strip() or None)
+
+        if 'remark' in data:
+            update_fields.append("remark = %s")
+            update_values.append(data.get('remark', '').strip() or None)
+
+        if not update_fields:
+            return jsonify({"success": False, "message": "沒有要更新的欄位"}), 400
+
+        # 執行更新
+        update_values.append(job_id)
+        cursor.execute(f"""
+            UPDATE internship_jobs
+            SET {', '.join(update_fields)}
+            WHERE id = %s
+        """, tuple(update_values))
+
+        conn.commit()
+
+        # 取得更新後的職缺資料
+        cursor.execute("""
+            SELECT
+                id,
+                title,
+                slots,
+                description,
+                period,
+                work_time,
+                salary,
+                remark,
+                is_active
+            FROM internship_jobs
+            WHERE id = %s
+        """, (job_id,))
+        updated_job = cursor.fetchone()
+
+        return jsonify({
+            "success": True,
+            "message": "職缺資訊更新成功",
+            "item": {
+                "id": updated_job["id"],
+                "title": updated_job["title"],
+                "slots": updated_job["slots"],
+                "description": updated_job.get("description") or "",
+                "period": updated_job.get("period") or "",
+                "work_time": updated_job.get("work_time") or "",
+                "salary": str(updated_job["salary"]) if updated_job.get("salary") not in (None, "") else "",
+                "remark": updated_job.get("remark") or "",
+                "is_active": bool(updated_job.get("is_active"))
+            }
+        })
+    except Exception as exc:
+        conn.rollback()
+        print(f"❌ 更新職缺資訊失敗：{exc}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({"success": False, "message": "更新失敗，請稍後再試"}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
 # =========================================================================
 # ⭐ 新增功能：公司指導老師管理 API (為前端 manage_companies.html 服務)
 # =========================================================================

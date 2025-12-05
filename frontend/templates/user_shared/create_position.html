@@ -469,11 +469,11 @@
           </div>
           <div class="form-group">
             <label for="formPeriodStart">實習期間 - 開始日期</label>
-            <input id="formPeriodStart" type="text" placeholder="yyyy/mm/dd（直接輸入數字即可）" pattern="\d{4}/\d{2}/\d{2}" maxlength="10" />
+            <input id="formPeriodStart" type="date" placeholder="點選或輸入日期" />
           </div>
           <div class="form-group">
             <label for="formPeriodEnd">實習期間 - 結束日期</label>
-            <input id="formPeriodEnd" type="text" placeholder="yyyy/mm/dd（直接輸入數字即可）" pattern="\d{4}/\d{2}/\d{2}" maxlength="10" />
+            <input id="formPeriodEnd" type="date" placeholder="點選或輸入日期" />
           </div>
           <div class="form-group">
             <label for="formPeriodNote">期間備註 (可留空)</label>
@@ -603,10 +603,20 @@
       }
 
       function parseDateInput(dateStr) {
-        // 解析 yyyy/mm/dd 或 yyyy-mm-dd 格式
+        // 解析 YYYY-MM-DD 或 yyyy/mm/dd 格式
         if (!dateStr || !dateStr.trim()) return null;
         try {
-          const parts = dateStr.replace(/-/g, '/').split('/');
+          // 統一處理為標準格式
+          let dateValue = dateStr.trim();
+          // 如果是 YYYY-MM-DD 格式，直接使用
+          if (/^\d{4}-\d{2}-\d{2}$/.test(dateValue)) {
+            const date = new Date(dateValue + 'T00:00:00');
+            if (!isNaN(date.getTime())) {
+              return date;
+            }
+          }
+          // 如果是 yyyy/mm/dd 格式，轉換
+          const parts = dateValue.replace(/-/g, '/').split('/');
           if (parts.length >= 2) {
             const year = parseInt(parts[0], 10);
             const month = parseInt(parts[1], 10);
@@ -644,8 +654,14 @@
             const endStr = `${end.getFullYear()}/${String(end.getMonth() + 1).padStart(2, '0')}`;
             parts.push(`${startStr} - ${endStr}`);
           } else if (startDate.trim() && endDate.trim()) {
-            // 如果解析失敗，但輸入不為空，返回原始值（可能需要後端處理）
-            parts.push(`${startDate.trim()} - ${endDate.trim()}`);
+            // 如果解析失敗，但輸入不為空，嘗試格式化為 yyyy/mm 格式
+            const startParsed = parseDateInput(startDate.trim());
+            const endParsed = parseDateInput(endDate.trim());
+            if (startParsed && endParsed) {
+              parts.push(`${startParsed.getFullYear()}/${String(startParsed.getMonth() + 1).padStart(2, '0')} - ${endParsed.getFullYear()}/${String(endParsed.getMonth() + 1).padStart(2, '0')}`);
+            } else {
+              parts.push(`${startDate.trim()} - ${endDate.trim()}`);
+            }
           }
         } else if (startDate) {
           const start = parseDateInput(startDate.trim());
@@ -670,11 +686,16 @@
       }
 
       function formatDateForDisplay(dateStr) {
-        // 將 YYYY-MM-DD 格式轉換為 yyyy/mm/dd 顯示格式
+        // 將 YYYY-MM-DD 或 yyyy/mm/dd 格式轉換為 YYYY-MM-DD 格式（用於 date input）
         if (!dateStr) return '';
-        const parts = dateStr.split('-');
+        // 如果已經是 YYYY-MM-DD 格式，直接返回
+        if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+          return dateStr;
+        }
+        // 如果是 yyyy/mm/dd 格式，轉換為 YYYY-MM-DD
+        const parts = dateStr.replace(/-/g, '/').split('/');
         if (parts.length >= 3) {
-          return `${parts[0]}/${parts[1]}/${parts[2]}`;
+          return `${parts[0]}-${parts[1].padStart(2, '0')}-${parts[2].padStart(2, '0')}`;
         }
         return dateStr;
       }
@@ -879,82 +900,28 @@
         }
       }
 
-      function formatDateInput(input) {
-        // 保存當前游標位置前的數字長度
-        const cursorPos = input.selectionStart;
-        const beforeCursor = input.value.substring(0, cursorPos).replace(/\D/g, '');
-        const digitCountBefore = beforeCursor.length;
-        
-        // 只保留數字
-        let value = input.value.replace(/\D/g, '');
-        
-        // 限制最多8位數字
-        if (value.length > 8) {
-          value = value.slice(0, 8);
-        }
-        
-        // 根據輸入長度自動添加斜線
-        let formatted = '';
-        if (value.length > 0) {
-          formatted = value.slice(0, 4);
-          if (value.length > 4) {
-            formatted += '/' + value.slice(4, 6);
-            if (value.length > 6) {
-              formatted += '/' + value.slice(6, 8);
-            }
-          }
-        }
-        
-        input.value = formatted;
-        
-        // 計算新的游標位置
-        let newCursorPos = 0;
-        if (digitCountBefore <= 4) {
-          newCursorPos = digitCountBefore;
-        } else if (digitCountBefore <= 6) {
-          newCursorPos = digitCountBefore + 1; // 加上第一個斜線
-        } else {
-          newCursorPos = digitCountBefore + 2; // 加上兩個斜線
-        }
-        
-        // 確保游標位置不超過格式化後的字符串長度
-        newCursorPos = Math.min(newCursorPos, formatted.length);
-        input.setSelectionRange(newCursorPos, newCursorPos);
-      }
 
       function bindDateInputs() {
+        // type="date" 輸入框會自動處理日期格式驗證，無需額外限制
+        // 使用者可以點選日期選擇器或手動輸入日期
         const dateInputs = [els.formPeriodStart, els.formPeriodEnd];
         
         dateInputs.forEach(input => {
           if (!input) return;
           
-          input.addEventListener('input', function() {
-            formatDateInput(this);
-          });
-          
-          input.addEventListener('keydown', function(e) {
-            const key = e.key;
-            // 允許特殊鍵：刪除、退格、Tab、箭頭鍵、Home、End
-            const allowedKeys = ['Backspace', 'Delete', 'Tab', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End'];
-            if (allowedKeys.includes(key)) {
-              return true;
-            }
-            // 只允許數字
-            if (!/[0-9]/.test(key)) {
-              e.preventDefault();
-              return false;
-            }
-          });
-          
-          // 防止粘貼非數字內容
-          input.addEventListener('paste', function(e) {
-            e.preventDefault();
-            const paste = (e.clipboardData || window.clipboardData).getData('text');
-            const numbers = paste.replace(/\D/g, '');
-            if (numbers) {
-              input.value = '';
-              input.value = numbers.slice(0, 8);
-              formatDateInput(input);
+          // 當輸入日期時，可以進行額外的格式化（如果需要）
+          // 但 date input 本身已經有良好的驗證機制
+          input.addEventListener('change', function() {
+            // 確保日期格式正確（date input 會自動處理）
+            if (this.value && !/^\d{4}-\d{2}-\d{2}$/.test(this.value)) {
+              // 如果格式不對，嘗試轉換
+              const date = parseDateInput(this.value);
+              if (date && !isNaN(date.getTime())) {
+                const year = date.getFullYear();
+                const month = String(date.getMonth() + 1).padStart(2, '0');
+                const day = String(date.getDate()).padStart(2, '0');
+                this.value = `${year}-${month}-${day}`;
+              }
             }
           });
         });

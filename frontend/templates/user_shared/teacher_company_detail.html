@@ -120,18 +120,24 @@
       margin: 0 0 12px;
       font-size: 1.25rem;
       color: var(--color-text);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
     }
 
     .company-description-content {
       font-size: 1rem;
-      line-height: 1.6;
+      line-height: 1.7;
       color: var(--color-text);
       white-space: pre-wrap;
       margin: 0;
       padding: 0;
-      text-align: left;
-      word-spacing: 0;
-      letter-spacing: 0;
+      text-align: justify;
+      text-align-last: left;
+      word-spacing: normal;
+      letter-spacing: normal;
+      text-indent: 0;
     }
 
     .company-description-panel .info-grid {
@@ -151,10 +157,22 @@
       border-radius: var(--radius-md);
       border: 1px solid #dee7f3;
       padding: 12px 14px;
+      display: flex;
+      flex-direction: column;
     }
 
-    .info-card span {
+    .info-card:hover {
+      background: #e8f2ff;
+      border-color: var(--color-primary);
+      transform: translateY(-1px);
+    }
+
+    .info-card > a > span {
       display: block;
+    }
+    
+    .info-card span span {
+      display: inline;
     }
 
     .info-label {
@@ -163,11 +181,14 @@
       letter-spacing: 0.08em;
       color: var(--color-muted);
       margin-bottom: 4px;
+      display: block;
     }
 
     .info-value {
       font-weight: 600;
       color: var(--color-text);
+      display: block;
+      word-break: break-word;
     }
 
     .panel {
@@ -276,6 +297,112 @@
       background: var(--color-danger);
     }
 
+    .btn-edit {
+      background: var(--color-primary);
+      color: #fff;
+      padding: 8px 16px;
+      font-size: 0.875rem;
+      font-weight: 600;
+      border-radius: 8px;
+      border: none;
+      cursor: pointer;
+      transition: background-color 0.2s ease, transform 0.15s ease;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .btn-edit:hover {
+      background: var(--color-primary-dark);
+      transform: translateY(-1px);
+    }
+
+    .btn-edit:active {
+      transform: translateY(0);
+    }
+
+    .edit-form-group {
+      margin-bottom: 16px;
+    }
+
+    .edit-form-group label {
+      display: block;
+      font-weight: 600;
+      color: var(--color-muted);
+      margin-bottom: 6px;
+      font-size: 0.9rem;
+    }
+
+    .edit-form-group textarea,
+    .edit-form-group input[type="text"],
+    .edit-form-group input[type="email"],
+    .edit-form-group input[type="tel"] {
+      width: 100%;
+      padding: 10px 12px;
+      border-radius: 8px;
+      border: 1px solid var(--color-border);
+      font-size: 0.95rem;
+      background: #fff;
+      transition: border-color 0.2s ease, box-shadow 0.2s ease;
+      font-family: inherit;
+    }
+
+    .edit-form-group textarea:focus,
+    .edit-form-group input:focus {
+      border-color: var(--color-primary);
+      outline: none;
+      box-shadow: 0 0 0 3px rgba(0, 102, 204, 0.15);
+    }
+
+    .edit-form-group textarea {
+      min-height: 120px;
+      resize: vertical;
+    }
+
+    .edit-actions {
+      display: flex;
+      gap: 12px;
+      justify-content: flex-end;
+      margin-top: 16px;
+    }
+
+    .btn-save {
+      background: var(--color-success);
+      color: #fff;
+      padding: 10px 20px;
+      font-size: 0.95rem;
+      font-weight: 600;
+      border-radius: 8px;
+      border: none;
+      cursor: pointer;
+      transition: background-color 0.2s ease;
+    }
+
+    .btn-save:hover:not(:disabled) {
+      background: #15803d;
+    }
+
+    .btn-save:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
+    .btn-cancel {
+      background: rgba(15, 23, 42, 0.05);
+      color: var(--color-text);
+      padding: 10px 20px;
+      font-size: 0.95rem;
+      font-weight: 600;
+      border-radius: 8px;
+      border: none;
+      cursor: pointer;
+      transition: background-color 0.2s ease;
+    }
+
+    .btn-cancel:hover {
+      background: rgba(15, 23, 42, 0.08);
+    }
+
     @media (max-width: 768px) {
       .company-hero {
         padding: 24px;
@@ -291,25 +418,12 @@
 <body>
 
   <main class="company-detail-container container" data-company-id="{{ company_id }}" id="main-container">
-    <a class="back-link" href="/manage_vendor">← 返回廠商職缺列表</a>
-
     <section class="company-hero" id="companyHero">
       <div>
         <span class="hero-meta">公司資訊載入中...</span>
       </div>
     </section>
 
-    <section class="panel" aria-label="職缺清單">
-      <div class="panel-header">
-        <h2>提供中的職缺</h2>
-        <span id="jobsCount" style="color:var(--color-muted);">0 個職缺</span>
-      </div>
-      <div id="jobsContainer">
-        <div class="empty-state">
-          <p>職缺資料載入中...</p>
-        </div>
-      </div>
-    </section>
   </main>
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
@@ -329,13 +443,18 @@
 
       const state = {
         company: null,
-        jobs: []
+        jobs: [],
+        resumeStats: {
+          approved: 0,
+          uploaded: 0,
+          rejected: 0
+        },
+        isEditing: false,
+        originalData: null
       };
 
       const els = {
         companyHero: document.getElementById('companyHero'),
-        jobsContainer: document.getElementById('jobsContainer'),
-        jobsCount: document.getElementById('jobsCount'),
         toast: document.getElementById('toast')
       };
 
@@ -362,6 +481,61 @@
         return escapeHtml(String(value));
       }
 
+      function renderJobsEditSection() {
+        const jobs = state.jobs || [];
+        if (jobs.length === 0) {
+          return `
+            <div style="margin-top: 32px; padding-top: 32px; border-top: 1px solid var(--color-border);">
+              <h3 style="margin: 0 0 16px; font-size: 1.1rem;">提供中的職缺</h3>
+              <p style="color: var(--color-muted);">目前沒有職缺</p>
+            </div>
+          `;
+        }
+        
+        return `
+          <div style="margin-top: 32px; padding-top: 32px; border-top: 1px solid var(--color-border);">
+            <h3 style="margin: 0 0 16px; font-size: 1.1rem;">提供中的職缺</h3>
+            <div style="display: grid; gap: 20px;">
+              ${jobs.map((job, index) => `
+                <div class="job-edit-card" style="border: 1px solid var(--color-border); border-radius: 8px; padding: 16px; background: #f8fafc;">
+                  <div class="edit-form-group">
+                    <label for="editJobTitle_${index}">職缺名稱</label>
+                    <input type="text" id="editJobTitle_${index}" name="job_title_${job.id}" value="${escapeHtml(job.title || '')}" />
+                  </div>
+                  <div class="info-grid" style="margin-top: 12px;">
+                    <div class="edit-form-group">
+                      <label for="editJobSlots_${index}">名額</label>
+                      <input type="number" id="editJobSlots_${index}" name="job_slots_${job.id}" value="${job.slots || 0}" min="1" />
+                    </div>
+                    <div class="edit-form-group">
+                      <label for="editJobPeriod_${index}">期間</label>
+                      <input type="text" id="editJobPeriod_${index}" name="job_period_${job.id}" value="${escapeHtml(job.period || '')}" />
+                    </div>
+                    <div class="edit-form-group">
+                      <label for="editJobWorkTime_${index}">上班時間</label>
+                      <input type="text" id="editJobWorkTime_${index}" name="job_work_time_${job.id}" value="${escapeHtml(job.work_time || '')}" />
+                    </div>
+                    <div class="edit-form-group">
+                      <label for="editJobSalary_${index}">薪資</label>
+                      <input type="text" id="editJobSalary_${index}" name="job_salary_${job.id}" value="${escapeHtml(job.salary || '')}" />
+                    </div>
+                  </div>
+                  <div class="edit-form-group" style="margin-top: 12px;">
+                    <label for="editJobDescription_${index}">職務說明</label>
+                    <textarea id="editJobDescription_${index}" name="job_description_${job.id}" rows="3">${escapeHtml(job.description || '')}</textarea>
+                  </div>
+                  <div class="edit-form-group" style="margin-top: 12px;">
+                    <label for="editJobRemark_${index}">備註</label>
+                    <textarea id="editJobRemark_${index}" name="job_remark_${job.id}" rows="2">${escapeHtml(job.remark || '')}</textarea>
+                  </div>
+                  <input type="hidden" name="job_id_${index}" value="${job.id}" />
+                </div>
+              `).join('')}
+            </div>
+          </div>
+        `;
+      }
+
       function renderCompany() {
         const company = state.company;
         if (!company) {
@@ -385,6 +559,32 @@
           <div>
             <h1>${escapeHtml(company.name)}</h1>
           </div>
+          <div class="info-grid" style="margin-top: 16px;">
+            <div class="info-card" style="cursor: pointer;">
+              <a href="/review_resume" style="display: block; text-decoration: none; color: inherit;">
+                <span class="info-label">相關功能</span>
+                <span class="info-value" style="color: var(--color-primary);">查看學生履歷 →</span>
+              </a>
+            </div>
+            <div class="info-card" style="cursor: pointer;">
+              <a href="/review_resume?status=approved" style="display: block; text-decoration: none; color: inherit;">
+                <span class="info-label">履歷狀態</span>
+                <span class="info-value" style="color: var(--color-success);">已通過<span id="approvedCount" style="margin-left: 4px;">${state.resumeStats.approved}</span></span>
+              </a>
+            </div>
+            <div class="info-card" style="cursor: pointer;">
+              <a href="/review_resume?status=uploaded" style="display: block; text-decoration: none; color: inherit;">
+                <span class="info-label">履歷狀態</span>
+                <span class="info-value" style="color: var(--color-muted);">未通過<span id="uploadedCount" style="margin-left: 4px;">${state.resumeStats.uploaded}</span></span>
+              </a>
+            </div>
+            <div class="info-card" style="cursor: pointer;">
+              <a href="/review_resume?status=rejected" style="display: block; text-decoration: none; color: inherit;">
+                <span class="info-label">履歷狀態</span>
+                <span class="info-value" style="color: var(--color-danger);">退件<span id="rejectedCount" style="margin-left: 4px;">${state.resumeStats.rejected}</span></span>
+              </a>
+            </div>
+          </div>
         `;
 
         // 移除舊的公司介紹面板（如果存在）
@@ -397,63 +597,121 @@
         const descriptionPanel = document.createElement('section');
         descriptionPanel.className = 'company-description-panel';
         descriptionPanel.setAttribute('aria-label', '公司簡介');
-        descriptionPanel.innerHTML = `
-          <h2>公司簡介</h2>
-          <div class="company-description-content">${escapeHtml(description)}</div>
-          <div class="info-grid">
-            ${contactBlocks.map(block => `
-              <div class="info-card">
-                <span class="info-label">${escapeHtml(block.label)}</span>
-                <span class="info-value">${escapeHtml(block.value)}</span>
+        
+        if (state.isEditing) {
+          // 編輯模式
+          descriptionPanel.innerHTML = `
+            <h2>
+              <span>公司簡介</span>
+            </h2>
+            <form id="companyEditForm">
+              <div class="edit-form-group">
+                <label for="editDescription">公司簡介</label>
+                <textarea id="editDescription" name="description">${escapeHtml(description)}</textarea>
               </div>
-            `).join('')}
-          </div>
-        `;
+              <div class="info-grid">
+                <div class="edit-form-group">
+                  <label for="editContactPerson">聯絡人</label>
+                  <input type="text" id="editContactPerson" name="contact_person" value="${escapeHtml(company.contact_person || '')}" />
+                </div>
+                <div class="edit-form-group">
+                  <label for="editContactTitle">職稱</label>
+                  <input type="text" id="editContactTitle" name="contact_title" value="${escapeHtml(company.contact_title || '')}" />
+                </div>
+                <div class="edit-form-group">
+                  <label for="editContactEmail">電子郵件</label>
+                  <input type="email" id="editContactEmail" name="contact_email" value="${escapeHtml(company.contact_email || '')}" />
+                </div>
+                <div class="edit-form-group">
+                  <label for="editContactPhone">聯絡電話</label>
+                  <input type="tel" id="editContactPhone" name="contact_phone" value="${escapeHtml(company.contact_phone || '')}" />
+                </div>
+                <div class="edit-form-group" style="grid-column: 1 / -1;">
+                  <label for="editLocation">公司地址</label>
+                  <input type="text" id="editLocation" name="location" value="${escapeHtml(company.location || '')}" />
+                </div>
+              </div>
+              ${renderJobsEditSection()}
+              <div class="edit-actions" style="margin-top: 32px;">
+                <button type="button" class="btn-cancel" id="cancelEditBtn">取消</button>
+                <button type="submit" class="btn-save" id="saveEditBtn">儲存</button>
+              </div>
+            </form>
+          `;
+        } else {
+          // 檢視模式
+          const jobs = state.jobs || [];
+          const jobsHtml = jobs.length > 0 ? `
+            <div style="margin-top: 32px; padding-top: 32px; border-top: 1px solid var(--color-border);">
+              <div class="panel-header" style="margin-bottom: 20px;">
+                <h2>提供中的職缺</h2>
+                <span style="color:var(--color-muted);">${jobs.length} 個職缺</span>
+              </div>
+              <div class="jobs-list">
+                ${jobs.map(job => `
+                  <article class="job-card">
+                    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;">
+                      <div>
+                        <h3>${escapeHtml(job.title)}</h3>
+                        <div class="status-pill ${job.is_active ? 'active' : 'inactive'}">
+                          ${job.is_active ? '啟用中' : '未啟用'}
+                        </div>
+                      </div>
+                    </div>
+                    <div class="job-meta">
+                      <span>名額：${job.slots ?? 0} 人</span>
+                      <span>期間：${formatText(job.period)}</span>
+                      <span>上班時間：${formatText(job.work_time)}</span>
+                      <span>薪資：${formatText(job.salary)}</span>
+                    </div>
+                    ${job.description ? `<div class="job-section"><strong>職務說明：</strong>${escapeHtml(job.description)}</div>` : ''}
+                    ${job.remark ? `<div class="job-section"><strong>備註：</strong>${escapeHtml(job.remark)}</div>` : ''}
+                  </article>
+                `).join('')}
+              </div>
+            </div>
+          ` : `
+            <div style="margin-top: 32px; padding-top: 32px; border-top: 1px solid var(--color-border);">
+              <div class="panel-header" style="margin-bottom: 20px;">
+                <h2>提供中的職缺</h2>
+                <span style="color:var(--color-muted);">0 個職缺</span>
+              </div>
+              <div class="empty-state">
+                <p>目前沒有可供顯示的職缺。</p>
+              </div>
+            </div>
+          `;
+          
+          descriptionPanel.innerHTML = `
+            <h2>
+              <span>公司簡介</span>
+              <button class="btn-edit" id="editCompanyBtn">修改</button>
+            </h2>
+            <div class="company-description-content">${escapeHtml(description)}</div>
+            <div class="info-grid">
+              ${contactBlocks.map(block => `
+                <div class="info-card">
+                  <span class="info-label">${escapeHtml(block.label)}</span>
+                  <span class="info-value">${escapeHtml(block.value)}</span>
+                </div>
+              `).join('')}
+            </div>
+            ${jobsHtml}
+          `;
+        }
         // 將公司介紹面板插入到 company-hero 之後
         if (els.companyHero && els.companyHero.parentNode) {
           els.companyHero.parentNode.insertBefore(descriptionPanel, els.companyHero.nextSibling);
         }
+        
+        // 綁定編輯模式的事件
+        if (state.isEditing) {
+          bindEditEvents();
+        } else {
+          bindViewEvents();
+        }
       }
 
-      function renderJobs() {
-        const jobs = state.jobs || [];
-        if (els.jobsCount) {
-          els.jobsCount.textContent = `${jobs.length} 個職缺`;
-        }
-        if (!jobs.length) {
-          els.jobsContainer.innerHTML = `
-            <div class="empty-state">
-              <p>目前沒有可供顯示的職缺。</p>
-            </div>
-          `;
-          return;
-        }
-
-        els.jobsContainer.innerHTML = `
-          <div class="jobs-list">
-            ${jobs.map(job => `
-              <article class="job-card">
-                <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;">
-                  <div>
-                    <h3>${escapeHtml(job.title)}</h3>
-                    <div class="status-pill ${job.is_active ? 'active' : 'inactive'}">
-                      ${job.is_active ? '啟用中' : '未啟用'}
-                    </div>
-                  </div>
-                </div>
-                <div class="job-meta">
-                  <span>名額：${job.slots ?? 0} 人</span>
-                  <span>期間：${formatText(job.period)}</span>
-                  <span>上班時間：${formatText(job.work_time)}</span>
-                  <span>薪資：${formatText(job.salary)}</span>
-                </div>
-                ${job.description ? `<div class="job-section"><strong>職務說明：</strong>${escapeHtml(job.description)}</div>` : ''}
-                ${job.remark ? `<div class="job-section"><strong>備註：</strong>${escapeHtml(job.remark)}</div>` : ''}
-              </article>
-            `).join('')}
-          </div>
-        `;
-      }
 
       function setLoading() {
         if (els.companyHero) {
@@ -461,13 +719,35 @@
             <div class="hero-meta">公司資料載入中...</div>
           `;
         }
-        if (els.jobsContainer) {
-          els.jobsContainer.innerHTML = `
-            <div class="empty-state">
-              <p>職缺資料載入中...</p>
-            </div>
-          `;
+      }
+
+      async function loadResumeStats() {
+        try {
+          const response = await fetch('/api/get_class_resumes', {
+            headers: { 'Accept': 'application/json' },
+            credentials: 'include'
+          });
+          const result = await response.json();
+          if (response.ok && result.success && result.resumes) {
+            // 統計各狀態的數量
+            state.resumeStats.approved = result.resumes.filter(r => r.status === 'approved').length;
+            state.resumeStats.uploaded = result.resumes.filter(r => r.status === 'uploaded' || r.status === 'pending').length;
+            state.resumeStats.rejected = result.resumes.filter(r => r.status === 'rejected').length;
+          }
+        } catch (error) {
+          console.error('載入履歷統計失敗:', error);
         }
+      }
+
+      function updateResumeCounts() {
+        // 更新顯示的數量
+        const approvedEl = document.getElementById('approvedCount');
+        const uploadedEl = document.getElementById('uploadedCount');
+        const rejectedEl = document.getElementById('rejectedCount');
+        
+        if (approvedEl) approvedEl.textContent = state.resumeStats.approved;
+        if (uploadedEl) uploadedEl.textContent = state.resumeStats.uploaded;
+        if (rejectedEl) rejectedEl.textContent = state.resumeStats.rejected;
       }
 
       async function loadDetail() {
@@ -483,8 +763,11 @@
           }
           state.company = result.company;
           state.jobs = result.jobs || [];
+          // 先載入履歷統計，再渲染公司信息
+          await loadResumeStats();
           renderCompany();
-          renderJobs();
+          // 渲染後更新數量（確保元素已存在）
+          updateResumeCounts();
         } catch (error) {
           showToast(error.message || '載入資料失敗', 'error');
           if (els.companyHero) {
@@ -494,13 +777,156 @@
               </div>
             `;
           }
-          if (els.jobsContainer) {
-            els.jobsContainer.innerHTML = `
-              <div class="empty-state">
-                <p>無法載入職缺資訊。</p>
-              </div>
-            `;
-          }
+        }
+      }
+
+      function bindViewEvents() {
+        const editBtn = document.getElementById('editCompanyBtn');
+        if (editBtn) {
+          editBtn.addEventListener('click', () => {
+            state.originalData = {
+              description: state.company.description || '',
+              contact_person: state.company.contact_person || '',
+              contact_title: state.company.contact_title || '',
+              contact_email: state.company.contact_email || '',
+              contact_phone: state.company.contact_phone || '',
+              location: state.company.location || ''
+            };
+            state.isEditing = true;
+            renderCompany();
+          });
+        }
+      }
+
+      function bindEditEvents() {
+        const form = document.getElementById('companyEditForm');
+        const cancelBtn = document.getElementById('cancelEditBtn');
+        const saveBtn = document.getElementById('saveEditBtn');
+        
+        if (cancelBtn) {
+          cancelBtn.addEventListener('click', () => {
+            state.isEditing = false;
+            renderCompany();
+          });
+        }
+        
+        if (form) {
+          form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            if (saveBtn) {
+              saveBtn.disabled = true;
+              saveBtn.textContent = '儲存中...';
+            }
+            
+            try {
+              const formData = new FormData(form);
+              const updateData = {
+                description: document.getElementById('editDescription').value.trim(),
+                contact_person: document.getElementById('editContactPerson').value.trim(),
+                contact_title: document.getElementById('editContactTitle').value.trim(),
+                contact_email: document.getElementById('editContactEmail').value.trim(),
+                contact_phone: document.getElementById('editContactPhone').value.trim(),
+                location: document.getElementById('editLocation').value.trim()
+              };
+              
+              // 調用 API 更新公司資訊
+              const response = await fetch(`/api/public/company/${COMPANY_ID}`, {
+                method: 'PUT',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Accept': 'application/json'
+                },
+                credentials: 'include',
+                body: JSON.stringify(updateData)
+              });
+              
+              const result = await response.json();
+              
+              if (!response.ok || !result.success) {
+                throw new Error(result.message || '更新失敗');
+              }
+              
+              // 更新本地狀態
+              state.company.description = updateData.description;
+              state.company.contact_person = updateData.contact_person;
+              state.company.contact_title = updateData.contact_title;
+              state.company.contact_email = updateData.contact_email;
+              state.company.contact_phone = updateData.contact_phone;
+              state.company.location = updateData.location;
+              
+              // 更新職缺資訊
+              const jobs = state.jobs || [];
+              for (let index = 0; index < jobs.length; index++) {
+                const job = jobs[index];
+                const jobId = job.id;
+                const jobTitleEl = document.getElementById(`editJobTitle_${index}`);
+                const jobSlotsEl = document.getElementById(`editJobSlots_${index}`);
+                const jobPeriodEl = document.getElementById(`editJobPeriod_${index}`);
+                const jobWorkTimeEl = document.getElementById(`editJobWorkTime_${index}`);
+                const jobSalaryEl = document.getElementById(`editJobSalary_${index}`);
+                const jobDescriptionEl = document.getElementById(`editJobDescription_${index}`);
+                const jobRemarkEl = document.getElementById(`editJobRemark_${index}`);
+                
+                if (!jobId || !jobTitleEl) continue;
+                
+                const jobUpdateData = {
+                  title: jobTitleEl.value.trim(),
+                  slots: parseInt(jobSlotsEl?.value || '0', 10),
+                  period: jobPeriodEl?.value.trim() || null,
+                  work_time: jobWorkTimeEl?.value.trim() || null,
+                  salary: jobSalaryEl?.value.trim() || null,
+                  description: jobDescriptionEl?.value.trim() || null,
+                  remark: jobRemarkEl?.value.trim() || null
+                };
+                
+                // 更新本地職缺狀態
+                const jobIndex = state.jobs.findIndex(j => j.id === jobId);
+                if (jobIndex !== -1) {
+                  state.jobs[jobIndex] = {
+                    ...state.jobs[jobIndex],
+                    ...jobUpdateData
+                  };
+                }
+                
+                // 嘗試更新職缺（如果 API 可用）
+                try {
+                  const jobResponse = await fetch(`/api/public/company/${COMPANY_ID}/jobs/${jobId}`, {
+                    method: 'PUT',
+                    headers: {
+                      'Content-Type': 'application/json',
+                      'Accept': 'application/json'
+                    },
+                    credentials: 'include',
+                    body: JSON.stringify(jobUpdateData)
+                  });
+                  
+                  if (jobResponse.ok) {
+                    const jobResult = await jobResponse.json();
+                    if (jobResult.success && jobResult.item) {
+                      // 使用伺服器返回的資料更新本地狀態
+                      state.jobs[jobIndex] = jobResult.item;
+                    }
+                  }
+                } catch (err) {
+                  // 忽略職缺更新錯誤，不影響公司資訊更新
+                  console.warn('職缺更新失敗:', err);
+                }
+              }
+              
+              state.isEditing = false;
+              showToast('公司資訊更新成功', 'success');
+              
+              // 重新載入資料以確保同步
+              await loadDetail();
+            } catch (error) {
+              showToast(error.message || '更新失敗，請稍後再試', 'error');
+              if (saveBtn) {
+                saveBtn.disabled = false;
+                saveBtn.textContent = '儲存';
+              }
+            }
+          });
         }
       }
 

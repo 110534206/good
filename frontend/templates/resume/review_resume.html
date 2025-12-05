@@ -73,15 +73,6 @@
       color: #212529;
     }
 
-    #noteViewer {
-      width: 100%;
-      height: 180px;
-      resize: vertical;
-      padding: 0.5rem;
-      font-size: 1rem;
-      line-height: 1.4;
-    }
-
     #commentInput {
       width: 100%;
       height: 180px;
@@ -224,13 +215,12 @@
                 <th>檔案名稱</th>
                 <th>狀態</th>
                 <th>老師留言</th>
-                <th>學生備註</th>
                 <th>操作</th>
               </tr>
             </thead>
             <tbody id="resumeTableBody">
               <tr>
-                <td colspan="8" class="text-muted text-center">載入中...</td>
+                <td colspan="7" class="text-muted text-center">載入中...</td>
               </tr>
             </tbody>
           </table>
@@ -255,20 +245,6 @@
           <div class="modal-footer">
             <button class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
             <button class="btn btn-primary" id="saveCommentBtn">送出</button>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <div class="modal fade" id="noteModal" tabindex="-1" aria-hidden="true">
-      <div class="modal-dialog modal-lg modal-dialog-centered">
-        <div class="modal-content">
-          <div class="modal-header">
-            <h5 class="modal-title">查看備註</h5>
-            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-          </div>
-          <div class="modal-body">
-            <textarea id="noteViewer" readonly></textarea>
           </div>
         </div>
       </div>
@@ -303,9 +279,10 @@
        * 根據履歷狀態返回對應的 Bootstrap 顏色類別。
        */
       function statusColor(status) {
-        // status: 'submitted', 'under_review', 'approved', 'rejected'
+        // status: 'submitted', 'under_review', 'approved', 'rejected', 'pending'
         return {
           'submitted': 'info',       // 已提交 (藍色)
+          'pending': 'info',         // 待審查 (藍色) - 廠商視角
           'approved': 'success',     // 通過 (綠色)
           'rejected': 'danger',      // 退件 (紅色)
           'uploaded': 'info'         // 保留舊狀態 'uploaded'
@@ -316,9 +293,10 @@
        * 將履歷狀態碼轉換為中文顯示名稱。
        */
       function mapStatus(status) {
-        // status: 'submitted', 'under_review', 'approved', 'rejected'
+        // status: 'submitted', 'under_review', 'approved', 'rejected', 'pending'
         return {
           'submitted': '待審查',
+          'pending': '待審查',  // 廠商視角：待審查（未知狀態）
           'approved': '通過',
           'rejected': '退件',
           'uploaded': '待審查'
@@ -330,28 +308,75 @@
       // ------------------------------------
 
       document.addEventListener("DOMContentLoaded", () => {
-        // 取得所有學生履歷（若 URL 帶有 mode=director，則傳給後端）
-        const urlParams = new URLSearchParams(window.location.search);
-        const mode = urlParams.get('mode');
-        const apiUrl = mode ? `/api/get_class_resumes?mode=${encodeURIComponent(mode)}` : `/api/get_class_resumes`;
-        
-        // 同時載入開放的公司列表
-        Promise.all([
-          fetch(apiUrl).then(res => res.json()),
-          fetch('/api/get_reviewed_companies').then(res => res.json())
-        ])
-          .then(([resumeData, companyData]) => {
-            if (resumeData.success) {
-              allResumes = resumeData.resumes;
-              populateFilters(allResumes, companyData);
-              applyFilters();
+        // 先獲取用戶角色，根據角色調用不同的 API
+        fetch('/api/profile')
+          .then(res => res.json())
+          .then(profileData => {
+            const userRole = profileData.success && profileData.user ? profileData.user.role : null;
+            
+            let apiUrl;
+            let companyApiUrl = '/api/get_reviewed_companies';
+            
+            // 根據角色選擇不同的 API
+            if (userRole === 'vendor') {
+              // 廠商：調用廠商專用的履歷 API
+              apiUrl = '/vendor/api/resumes';
             } else {
-              alert("載入資料失敗：" + (resumeData.message || "未知錯誤"));
+              // 老師/其他角色：使用原有的 API
+              const urlParams = new URLSearchParams(window.location.search);
+              const mode = urlParams.get('mode');
+              apiUrl = mode ? `/api/get_class_resumes?mode=${encodeURIComponent(mode)}` : `/api/get_class_resumes`;
             }
+            
+            // 載入履歷資料
+            Promise.all([
+              fetch(apiUrl).then(res => res.json()),
+              userRole === 'vendor' ? Promise.resolve({success: true, companies: []}) : fetch(companyApiUrl).then(res => res.json())
+            ])
+              .then(([resumeData, companyData]) => {
+                if (resumeData.success) {
+                  allResumes = resumeData.resumes || [];
+                  
+                  // 如果是廠商，從 API 返回的 companies 中獲取公司列表
+                  if (userRole === 'vendor' && resumeData.companies) {
+                    companyData = {success: true, companies: resumeData.companies};
+                  }
+                  
+                  populateFilters(allResumes, companyData);
+                  applyFilters();
+                } else {
+                  alert("載入資料失敗：" + (resumeData.message || "未知錯誤"));
+                }
+              })
+              .catch(error => {
+                console.error("API調用錯誤:", error);
+                alert("載入資料失敗，請檢查網路連線");
+              });
           })
           .catch(error => {
-            console.error("API調用錯誤:", error);
-            alert("載入資料失敗，請檢查網路連線");
+            console.error("獲取用戶資料失敗:", error);
+            // 如果獲取用戶資料失敗，使用預設 API
+            const urlParams = new URLSearchParams(window.location.search);
+            const mode = urlParams.get('mode');
+            const apiUrl = mode ? `/api/get_class_resumes?mode=${encodeURIComponent(mode)}` : `/api/get_class_resumes`;
+            
+            Promise.all([
+              fetch(apiUrl).then(res => res.json()),
+              fetch('/api/get_reviewed_companies').then(res => res.json())
+            ])
+              .then(([resumeData, companyData]) => {
+                if (resumeData.success) {
+                  allResumes = resumeData.resumes;
+                  populateFilters(allResumes, companyData);
+                  applyFilters();
+                } else {
+                  alert("載入資料失敗：" + (resumeData.message || "未知錯誤"));
+                }
+              })
+              .catch(err => {
+                console.error("API調用錯誤:", err);
+                alert("載入資料失敗，請檢查網路連線");
+              });
           });
 
         // 綁定篩選事件
@@ -411,14 +436,22 @@
 
         // 從 API 獲取的開放公司列表中，只顯示當前學期開放的公司
         if (companyData && companyData.success && companyData.companies) {
-          const openCompanies = companyData.companies.filter(company => 
-            company.is_open_current_semester === true || company.is_open_current_semester === 1
-          );
+          // 處理兩種格式：老師的格式（有 is_open_current_semester）和廠商的格式（只有 id 和 name）
+          const openCompanies = companyData.companies.filter(company => {
+            // 如果是廠商格式（有 name 屬性），直接顯示
+            if (company.name) {
+              return true;
+            }
+            // 如果是老師格式（有 company_name 和 is_open_current_semester），需要檢查是否開放
+            return company.is_open_current_semester === true || company.is_open_current_semester === 1;
+          });
           
           openCompanies.forEach(company => {
             const option = document.createElement("option");
-            option.value = company.company_name;
-            option.textContent = company.company_name;
+            // 處理兩種格式的公司名稱
+            const companyName = company.name || company.company_name;
+            option.value = companyName;
+            option.textContent = companyName;
             companySelect.appendChild(option);
           });
         }
@@ -452,7 +485,7 @@
         tbody.innerHTML = "";
 
         if (resumes.length === 0) {
-          tbody.innerHTML = `<tr><td colspan="8" class="text-center text-muted">目前沒有資料</td></tr>`;
+          tbody.innerHTML = `<tr><td colspan="7" class="text-center text-muted">目前沒有資料</td></tr>`;
           document.getElementById("pagination").innerHTML = "";
           return;
         }
@@ -473,12 +506,6 @@
             <button class="btn btn-sm btn-outline-secondary ${r.comment ? 'text-success' : ''}"
               onclick="openCommentModal(${r.id}, '${escapeHtml(r.comment || '')}')">
               ${r.comment ? '已填寫' : '未填寫'}
-            </button>
-          </td>
-          <td>
-            <button class="btn btn-sm btn-outline-secondary ${r.note ? 'text-success' : ''}"
-              onclick="openNoteModal('${escapeHtml(r.note || '無內容')}')">
-              ${r.note ? '請查看' : '無內容'}
             </button>
           </td>
           <td>
@@ -557,11 +584,6 @@
               alert("留言更新失敗");
             }
           });
-      }
-
-      function openNoteModal(note) {
-        document.getElementById("noteViewer").value = note;
-        new bootstrap.Modal(document.getElementById("noteModal")).show();
       }
 
       // 處理退件：先嘗試退件API，若成功則強制彈出留言Modal讓老師填寫原因

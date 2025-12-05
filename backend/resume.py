@@ -525,7 +525,23 @@ def save_structured_data(cursor, student_id, data, semester_id=None):
                 cert_path = cert_photo_paths[idx] if cert_photo_paths[idx] else None
             
             if "CertPath" in known_columns:
-                row["CertPath"] = cert_path
+                # 將路徑轉換為相對路徑格式（使用正斜杠）
+                if cert_path:
+                    # 將 Windows 路徑格式（反斜杠）轉換為 Web 路徑格式（正斜杠）
+                    normalized_path = cert_path.replace("\\", "/")
+                    # 確保路徑是相對路徑格式
+                    if normalized_path.startswith("uploads/"):
+                        row["CertPath"] = normalized_path
+                    else:
+                        # 如果路徑包含絕對路徑，提取相對路徑部分
+                        parts = normalized_path.split("/")
+                        if "uploads" in parts:
+                            idx_uploads = parts.index("uploads")
+                            row["CertPath"] = "/".join(parts[idx_uploads:])
+                        else:
+                            row["CertPath"] = normalized_path
+                else:
+                    row["CertPath"] = None
 
             cert_rows.append(row)
 
@@ -632,7 +648,23 @@ def save_structured_data(cursor, student_id, data, semester_id=None):
                 row["issuer"] = cert_photo_issuers[i] if i < len(cert_photo_issuers) and cert_photo_issuers[i] else None
 
             if "CertPath" in known_columns:
-                row["CertPath"] = path
+                # 將路徑轉換為相對路徑格式（使用正斜杠）
+                if path:
+                    # 將 Windows 路徑格式（反斜杠）轉換為 Web 路徑格式（正斜杠）
+                    normalized_path = path.replace("\\", "/")
+                    # 確保路徑是相對路徑格式
+                    if normalized_path.startswith("uploads/"):
+                        row["CertPath"] = normalized_path
+                    else:
+                        # 如果路徑包含絕對路徑，提取相對路徑部分
+                        parts = normalized_path.split("/")
+                        if "uploads" in parts:
+                            idx_uploads = parts.index("uploads")
+                            row["CertPath"] = "/".join(parts[idx_uploads:])
+                        else:
+                            row["CertPath"] = normalized_path
+                else:
+                    row["CertPath"] = None
 
             cert_rows.append(row)
 
@@ -1596,7 +1628,7 @@ def submit_and_generate_api():
 
         ALLOWED_IMAGE_MIMES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
 
-        # 儲存照片
+        # 1. 儲存個人照片
         photo_path = None
         if photo and photo.filename:
             if photo.mimetype not in ALLOWED_IMAGE_MIMES:
@@ -1609,7 +1641,7 @@ def submit_and_generate_api():
             photo_path = os.path.join(photo_dir, new_filename)
             photo.save(photo_path)
 
-        # 儲存成績單檔案（先儲存檔案，再 update 到 course_grades 的 transcript_path）
+        # 2. 儲存成績單檔案
         transcript_path = None
         if transcript_file and transcript_file.filename:
             if transcript_file.mimetype not in ALLOWED_IMAGE_MIMES:
@@ -1622,7 +1654,7 @@ def submit_and_generate_api():
             transcript_path = os.path.join(transcript_dir, new_filename)
             transcript_file.save(transcript_path)
 
-        # 儲存多張證照
+        # 3. 儲存多張證照圖片
         cert_photo_paths = []
         if cert_files:
             cert_dir = os.path.join(UPLOAD_FOLDER, "cert_photos")
@@ -1637,9 +1669,22 @@ def submit_and_generate_api():
                 new_filename = f"{user_id}_cert_{idx}_{datetime.now().strftime('%Y%m%d_%H%M%S')}{ext}"
                 file_path = os.path.join(cert_dir, new_filename)
                 file.save(file_path)
-                cert_photo_paths.append(file_path)
+                # 將絕對路徑轉換為相對路徑（使用正斜杠），用於保存到數據庫
+                relative_path = file_path.replace("\\", "/")
+                # 確保路徑以相對路徑格式保存（不包含絕對路徑前綴）
+                if relative_path.startswith("uploads/"):
+                    cert_photo_paths.append(relative_path)
+                else:
+                    # 如果路徑不是以 uploads/ 開頭，嘗試提取相對路徑部分
+                    parts = relative_path.split("/")
+                    if "uploads" in parts:
+                        idx_uploads = parts.index("uploads")
+                        relative_path = "/".join(parts[idx_uploads:])
+                        cert_photo_paths.append(relative_path)
+                    else:
+                        cert_photo_paths.append(relative_path)
 
-        # 處理單張證照圖片（certificate_image + certificate_description）
+        # 4. 處理單張證照圖片（兼容舊版）
         certificate_image_file = request.files.get('certificate_image')
         certificate_description = request.form.get('certificate_description', '')
         image_path_for_template = None
@@ -1656,7 +1701,6 @@ def submit_and_generate_api():
             except Exception as e:
                 print(f"❌ 儲存單一證照圖片失敗: {e}")
                 traceback.print_exc()
-                image_path_for_template = None
 
         if image_path_for_template or certificate_description:
             if cert_photo_paths is None:
@@ -1666,7 +1710,7 @@ def submit_and_generate_api():
             cert_photo_paths.insert(0, image_path_for_template or "")
             cert_names.insert(0, certificate_description or "")
 
-        # 組合缺勤統計（支援學期範圍篩選）
+        # 5. 組合缺勤統計
         absence_stats = {}
         
         # 獲取學期範圍參數
@@ -1679,7 +1723,6 @@ def submit_and_generate_api():
         
         # 如果有學期範圍，添加學期篩選
         if start_semester_id and end_semester_id:
-            # 獲取所有在範圍內的學期ID
             cursor.execute("""
                 SELECT id FROM semesters 
                 WHERE code >= (SELECT code FROM semesters WHERE id = %s)
@@ -1703,6 +1746,7 @@ def submit_and_generate_api():
             GROUP BY absence_type
         """, tuple(query_params))
         results = cursor.fetchall()
+        
         all_types = ["曠課", "遲到", "事假", "病假", "生理假", "公假", "喪假"]
         db_stats = {t: 0 for t in all_types}
         for row in results:
@@ -1715,6 +1759,7 @@ def submit_and_generate_api():
         for t in all_types:
             absence_stats[f"absence_{t}_units"] = f"{db_stats.get(t,0)} 節"
 
+        # 處理前端傳來的 JSON 統計值 (作為備用)
         incoming_stats_json = request.form.get("absence_stats_json", None)
         if incoming_stats_json:
             try:
@@ -1742,15 +1787,9 @@ def submit_and_generate_api():
                 pass
         absence_stats["absence_總計_units"] = f"{total} 節"
         
-        # 調試輸出：確認缺勤統計數據
-        print("📊 缺勤統計數據:", absence_stats)
-        
         context.update(absence_stats)
-        
-        # 調試輸出：確認 context 中的缺勤統計數據
-        print("📊 context 中的缺勤統計數據:", {k: v for k, v in context.items() if k.startswith("absence_")})
 
-        # 處理並儲存缺勤佐證圖片（與你原邏輯一致）
+        # 6. 處理缺勤佐證圖片 (上傳與儲存)
         absence_image_path = None
         try:
             uploaded_proof = request.files.get('proof_image') or request.files.get('absence_proof')
@@ -1768,22 +1807,21 @@ def submit_and_generate_api():
             print("⚠️ 儲存上傳的缺勤佐證圖片失敗:", e)
             traceback.print_exc()
 
+        # 嘗試從 JSON 找圖片路徑
         if not absence_image_path:
             try:
                 ar_json = request.form.get("absence_records_json", None)
                 if ar_json:
-                    try:
-                        ar_list = json.loads(ar_json)
-                        for rec in reversed(ar_list):
-                            img = rec.get("image_filename") or rec.get("image_path")
-                            if img:
-                                absence_image_path = img
-                                break
-                    except Exception as e:
-                        print("⚠️ 解析 absence_records_json 失敗:", e)
+                    ar_list = json.loads(ar_json)
+                    for rec in reversed(ar_list):
+                        img = rec.get("image_filename") or rec.get("image_path")
+                        if img:
+                            absence_image_path = img
+                            break
             except Exception as e:
                 print("⚠️ 嘗試讀取 absence_records_json 失敗:", e)
 
+        # 嘗試從資料庫找最新的圖片路徑
         if not absence_image_path:
             try:
                 cursor.execute("""
@@ -1801,118 +1839,131 @@ def submit_and_generate_api():
 
         context['Absence_Proof_Path'] = absence_image_path
 
-        # 更新缺勤記錄的佐證圖片（從資料庫讀取的記錄，只需更新圖片）
+        # 7. 更新缺勤記錄的圖片路徑到資料庫
         try:
-            # 1. 處理個別記錄的佐證圖片上傳
+            # (A) 處理個別記錄的圖片
             absence_records_with_images_json = request.form.get("absence_records_with_images", None)
             if absence_records_with_images_json:
                 try:
                     records_with_images = json.loads(absence_records_with_images_json)
-                    print(f"📝 準備更新 {len(records_with_images)} 筆缺勤記錄的佐證圖片")
-                    
                     for record_info in records_with_images:
                         record_id = record_info.get("record_id")
-                        if not record_id:
-                            continue
+                        if not record_id: continue
                         
-                        # 獲取對應的圖片文件
                         image_key = f"proof_image_{record_id}"
                         uploaded_image = request.files.get(image_key)
                         
                         if uploaded_image and uploaded_image.filename:
                             try:
-                                # 保存圖片
                                 os.makedirs(ABSENCE_PROOF_FOLDER, exist_ok=True)
                                 ext = os.path.splitext(secure_filename(uploaded_image.filename))[1] or ".png"
                                 fname = f"{user_id}_record_{record_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}{ext}"
                                 save_path = os.path.join(ABSENCE_PROOF_FOLDER, fname)
                                 uploaded_image.save(save_path)
                                 
-                                # 更新資料庫中對應記錄的 image_path
                                 cursor.execute("""
-                                    UPDATE absence_records 
-                                    SET image_path = %s, updated_at = NOW()
+                                    UPDATE absence_records SET image_path = %s, updated_at = NOW()
                                     WHERE id = %s AND user_id = %s
                                 """, (save_path, record_id, user_id))
-                                
-                                print(f"✅ 已更新缺勤記錄 {record_id} 的佐證圖片: {save_path}")
                             except Exception as e:
                                 print(f"⚠️ 更新缺勤記錄 {record_id} 的佐證圖片失敗: {e}")
-                                traceback.print_exc()
-                    
-                    conn.commit()
-                    print(f"✅ 所有缺勤記錄的佐證圖片已成功更新")
                 except Exception as e:
                     print(f"⚠️ 解析 absence_records_with_images 失敗: {e}")
-                    traceback.print_exc()
             
-            # 2. 如果有整體佐證圖片，更新到該學期所有沒有圖片的記錄
+            # (B) 處理整體佐證圖片 (更新到符合條件的缺勤記錄)
+            # ================== 修正重點開始 ==================
             if absence_image_path:
                 semester_id = request.form.get("semester_id", None)
-                if semester_id:
-                    try:
-                        # 檢查是否有 semester_id 欄位
-                        cursor.execute("SHOW COLUMNS FROM absence_records LIKE 'semester_id'")
-                        has_semester_id = cursor.fetchone() is not None
-                        
-                        if has_semester_id:
-                            # 更新該學期所有沒有圖片的記錄
+                start_semester_id = request.form.get("start_semester_id", None)
+                end_semester_id = request.form.get("end_semester_id", None)
+
+                try:
+                    cursor.execute("SHOW COLUMNS FROM absence_records LIKE 'semester_id'")
+                    has_semester_id = cursor.fetchone() is not None
+                    
+                    if has_semester_id:
+                        # 情況 1: 單一學期 (舊版)
+                        if semester_id:
                             cursor.execute("""
                                 UPDATE absence_records 
                                 SET image_path = %s, updated_at = NOW()
                                 WHERE user_id = %s AND semester_id = %s 
                                 AND (image_path IS NULL OR image_path = '')
                             """, (absence_image_path, user_id, semester_id))
+                            
+                        # 情況 2: 學期範圍 (新版)
+                        elif start_semester_id and end_semester_id:
+                            cursor.execute("""
+                                SELECT id FROM semesters 
+                                WHERE code >= (SELECT code FROM semesters WHERE id = %s)
+                                AND code <= (SELECT code FROM semesters WHERE id = %s)
+                            """, (start_semester_id, end_semester_id))
+                            sem_rows = cursor.fetchall()
+                            sem_ids = [r['id'] for r in sem_rows]
+                            
+                            if sem_ids:
+                                placeholders = ','.join(['%s'] * len(sem_ids))
+                                cursor.execute(f"""
+                                    UPDATE absence_records 
+                                    SET image_path = %%s, updated_at = NOW()
+                                    WHERE user_id = %%s AND semester_id IN ({placeholders})
+                                    AND (image_path IS NULL OR image_path = '')
+                                """, (absence_image_path, user_id, *sem_ids))
+
+                        # 情況 3: 未指定 (更新該生所有無圖記錄)
                         else:
-                            # 如果沒有 semester_id 欄位，更新所有沒有圖片的記錄
                             cursor.execute("""
                                 UPDATE absence_records 
                                 SET image_path = %s, updated_at = NOW()
                                 WHERE user_id = %s 
                                 AND (image_path IS NULL OR image_path = '')
                             """, (absence_image_path, user_id))
-                        
-                        conn.commit()
-                        print(f"✅ 已將整體佐證圖片更新到缺勤記錄")
-                    except Exception as e:
-                        print(f"⚠️ 更新整體佐證圖片失敗: {e}")
-                        traceback.print_exc()
+                    else:
+                        # 無 semester_id 欄位
+                        cursor.execute("""
+                            UPDATE absence_records 
+                            SET image_path = %s, updated_at = NOW()
+                            WHERE user_id = %s 
+                            AND (image_path IS NULL OR image_path = '')
+                        """, (absence_image_path, user_id))
+                    
+                    print(f"✅ 已將整體佐證圖片更新到缺勤記錄 (路徑: {absence_image_path})")
+                except Exception as e:
+                    print(f"⚠️ 更新整體佐證圖片失敗: {e}")
+                    traceback.print_exc()
+            # ================== 修正重點結束 ==================
+
         except Exception as e:
             print(f"⚠️ 處理缺勤記錄圖片失敗: {e}")
             traceback.print_exc()
 
-        # 查學生學號 (username)
+        # 8. 取得學生 ID
         cursor.execute("SELECT username FROM users WHERE id=%s", (user_id,))
         result = cursor.fetchone()
         if not result:
             return jsonify({"success": False, "message": "找不到使用者"}), 404
         student_id = result['username']
 
-        # 確保 courses 中的 grade 欄位存在
+        # 9. 處理課程 Grade
         for c in courses:
             c['grade'] = c.get('grade', '')
 
-        # 解析文本證照資料（非圖片）
+        # 10. 解析證照資料
         structured_certifications = []
+        # (讀取各個 list ...)
         cert_names_text = request.form.getlist('cert_name[]')
         cert_types = request.form.getlist('cert_type[]')
         cert_codes_text = request.form.getlist('cert_code[]')
         cert_issuers_text = request.form.getlist('cert_issuer[]')
         cert_authority_ids = request.form.getlist('cert_authority[]')
         cert_authority_names = request.form.getlist('cert_authority_name[]')
-        cert_custom_names = request.form.getlist('cert_custom_name[]')
         cert_job_categories = request.form.getlist('cert_job_category[]')
         cert_levels = request.form.getlist('cert_level[]')
         cert_other_job_categories = request.form.getlist('cert_other_job_category[]')
         cert_other_levels = request.form.getlist('cert_other_level[]')
         cert_acquisition_dates = request.form.getlist('cert_acquisition_date[]')
 
-        # 使用最長列表的長度來確保所有數據都被處理
-        max_len = max(len(cert_names_text), len(cert_types), len(cert_codes_text), 
-                     len(cert_issuers_text), len(cert_authority_ids), len(cert_authority_names),
-                     len(cert_custom_names), len(cert_job_categories), len(cert_levels),
-                     len(cert_other_job_categories), len(cert_other_levels),
-                     len(cert_acquisition_dates))
+        max_len = max(len(cert_names_text), len(cert_codes_text), len(cert_levels), len(cert_job_categories))
         
         for i in range(max_len):
             n = cert_names_text[i] if i < len(cert_names_text) else ''
@@ -1921,44 +1972,24 @@ def submit_and_generate_api():
             issuer = cert_issuers_text[i] if i < len(cert_issuers_text) else ''
             authority_id = cert_authority_ids[i] if i < len(cert_authority_ids) else ''
             authority_name = cert_authority_names[i] if i < len(cert_authority_names) else ''
-            # custom_cert_name 欄位已從資料庫刪除，不再使用
             job_category = cert_job_categories[i] if i < len(cert_job_categories) else ''
             level = cert_levels[i] if i < len(cert_levels) else ''
             other_job_category = cert_other_job_categories[i] if i < len(cert_other_job_categories) else ''
             other_level = cert_other_levels[i] if i < len(cert_other_levels) else ''
             acquisition_date = cert_acquisition_dates[i] if i < len(cert_acquisition_dates) else ''
             
-            # 如果 cert_code 是 'OTHER'，使用 other_job_category 和 other_level
             if code.strip().upper() == 'OTHER':
                 job_category = other_job_category
                 level = other_level
             
-            # 檢查是否為空記錄：必須至少有職類+級別，或者有證照名稱/代碼（custom_cert_name 欄位已刪除）
-            has_job_category_and_level = job_category.strip() and level.strip()
-            has_cert_name = n.strip()
-            has_cert_code = code.strip()
-            
-            # 如果沒有任何有效數據，跳過（不保存空記錄）
-            if not has_job_category_and_level and not has_cert_name and not has_cert_code:
-                print(f"⚠️ 跳過空的證照記錄 (索引 {i}): job_category='{job_category}', level='{level}', name='{n}', code='{code}'")
+            # 檢查有效性
+            if not (job_category.strip() and level.strip()) and not n.strip() and not code.strip():
                 continue
             
-            # 如果只有職類或只有級別（不完整），也跳過
-            if (job_category.strip() and not level.strip()) or (not job_category.strip() and level.strip()):
-                print(f"⚠️ 跳過不完整的證照記錄 (索引 {i}): job_category='{job_category}', level='{level}' (必須同時有職類和級別)")
-                continue
-            
-            # 確定最終使用的證照名稱（職類+級別優先）
-            if has_job_category_and_level:
-                # 如果有職類和級別，組合為完整名稱
-                final_cert_name = f"{job_category.strip()}{level.strip()}"
-            else:
-                final_cert_name = n.strip()
-            
-            # 確定最終使用的證照代碼
+            # 決定名稱
+            final_cert_name = f"{job_category.strip()}{level.strip()}" if (job_category.strip() and level.strip()) else n.strip()
             final_cert_code = code.strip().upper() if code.strip() else 'OTHER'
             
-            # 嘗試從 cert_photo_paths 獲取對應的圖片路徑（通過索引匹配）
             cert_path = None
             if i < len(cert_photo_paths) and cert_photo_paths[i]:
                 cert_path = cert_photo_paths[i]
@@ -1973,33 +2004,22 @@ def submit_and_generate_api():
                 "level": level.strip() if level.strip() else '',
                 "acquisition_date": acquisition_date.strip() if acquisition_date.strip() else None,
                 "issuer": issuer.strip() if issuer else "",
-                "cert_path": cert_path  # 添加圖片路徑
+                "cert_path": cert_path
             })
 
-        # 解析語言能力資料
+        # 11. 解析語言能力
         structured_languages = []
-        # 前端使用 lang_en_level, lang_tw_level, lang_jp_level, lang_hk_level
-        lang_mapping = {
-            'lang_en_level': '英語',
-            'lang_tw_level': '台語',
-            'lang_jp_level': '日語',
-            'lang_hk_level': '客語'
-        }
-        
+        lang_mapping = {'lang_en_level': '英語', 'lang_tw_level': '台語', 'lang_jp_level': '日語', 'lang_hk_level': '客語'}
         for form_field, lang_name in lang_mapping.items():
             level = request.form.get(form_field, '').strip()
-            if level:  # 如果有選擇等級
-                structured_languages.append({
-                    "language": lang_name,
-                    "level": level
-                })
+            if level:
+                structured_languages.append({"language": lang_name, "level": level})
 
-        # 收集證照代碼和發證人（從前端表單）
+        # 12. 儲存結構化資料
         cert_codes = request.form.getlist('cert_code[]')
-        cert_issuers = request.form.getlist('cert_issuer[]')  # 新增：發證人列表
-        
-        # 建立結構化資料（傳入 save_structured_data）
+        cert_issuers = request.form.getlist('cert_issuer[]')
         semester_id = get_current_semester_id(cursor)
+        
         structured_data = {
             "name": data.get("name"),
             "birth_date": data.get("birth_date"),
@@ -2015,97 +2035,49 @@ def submit_and_generate_api():
             "structured_languages": structured_languages,
             "cert_photo_paths": cert_photo_paths,
             "cert_names": cert_names,
-            "cert_codes": cert_codes,  # 新增：證照代碼列表
-            "cert_issuers": cert_issuers  # 新增：發證人列表
+            "cert_codes": cert_codes,
+            "cert_issuers": cert_issuers
         }
 
-        # 將表單數據和結構化數據也加入 context (以便套版)
         context.update(data)
         context.update(structured_data)
 
-        # 儲存結構化資料（包含 language / Certs / course_grades）
         if not save_structured_data(cursor, student_id, structured_data, semester_id=semester_id):
             conn.rollback()
             return jsonify({"success": False, "message": "資料儲存失敗"}), 500
 
-        # 將成績單圖片路徑更新到 course_grades 表的 ProofImage 欄位
+        # 13. 更新成績單路徑到資料庫
         if transcript_path:
             try:
-                # 檢查表是否有 SemesterID 和 ProofImage 列
-                cursor.execute("SHOW COLUMNS FROM course_grades LIKE 'SemesterID'")
-                has_semester_id = cursor.fetchone() is not None
                 cursor.execute("SHOW COLUMNS FROM course_grades LIKE 'ProofImage'")
                 has_proof_image = cursor.fetchone() is not None
-                
                 if has_proof_image:
-                    if has_semester_id and semester_id:
-                        # 嘗試 update 同學該學期的 course_grades（若沒有，插入一筆佔位紀錄）
-                        cursor.execute("""
-                            UPDATE course_grades
-                            SET ProofImage = %s
-                            WHERE StuID = %s AND SemesterID = %s
-                        """, (transcript_path, student_id, semester_id))
-                        if cursor.rowcount == 0:
-                            # 沒有更新到任何列，插入一筆僅含 ProofImage 的占位
-                            cursor.execute("""
-                                INSERT INTO course_grades (StuID, CourseName, Credits, Grade, SemesterID, ProofImage)
-                                VALUES (%s, %s, %s, %s, %s, %s)
-                            """, (student_id, '', 0, '', semester_id, transcript_path))
-                    else:
-                        # 沒有 SemesterID 列，只根據 StuID 更新
-                        cursor.execute("""
-                            UPDATE course_grades
-                            SET ProofImage = %s
-                            WHERE StuID = %s
-                            LIMIT 1
-                        """, (transcript_path, student_id))
+                    cursor.execute("""
+                        UPDATE course_grades SET ProofImage = %s WHERE StuID = %s
+                    """, (transcript_path, student_id))
                 else:
-                    # 如果沒有 ProofImage 列，嘗試使用 transcript_path（兼容舊結構）
                     cursor.execute("SHOW COLUMNS FROM course_grades LIKE 'transcript_path'")
-                    has_transcript_path = cursor.fetchone() is not None
-                    if has_transcript_path:
-                        if has_semester_id and semester_id:
-                            cursor.execute("""
-                                UPDATE course_grades
-                                SET transcript_path = %s
-                                WHERE StuID = %s AND SemesterID = %s
-                            """, (transcript_path, student_id, semester_id))
-                        else:
-                            cursor.execute("""
-                                UPDATE course_grades
-                                SET transcript_path = %s
-                                WHERE StuID = %s
-                                LIMIT 1
-                            """, (transcript_path, student_id))
+                    if cursor.fetchone():
+                        cursor.execute("""
+                            UPDATE course_grades SET transcript_path = %s WHERE StuID = %s
+                        """, (transcript_path, student_id))
             except Exception as e:
                 print("⚠️ 更新 course_grades.ProofImage 失敗:", e)
-                traceback.print_exc()
 
-        # 生成 Word 文件
+        # 14. 生成 Word 文件
         student_data_for_doc = get_student_info_for_doc(cursor, student_id, semester_id=semester_id)
-        # PhotoPath & ConductScoreNumeric
         student_data_for_doc["info"]["PhotoPath"] = photo_path
         student_data_for_doc["info"]["ConductScoreNumeric"] = data.get("conduct_score_numeric")
-        # 傳遞證照圖片與名稱清單（generate 會自行從 certs 讀）
         student_data_for_doc["cert_photo_paths"] = cert_photo_paths
         student_data_for_doc["cert_names"] = cert_names
-        student_data_for_doc["cert_codes"] = cert_codes  # 傳遞證照代碼，用於匹配 category
+        student_data_for_doc["cert_codes"] = cert_codes
         
-        # 優先使用從 absence_records 表讀取的缺勤佐證圖片路徑
-        # 如果 get_student_info_for_doc 已經從 absence_records 表讀取到路徑，保留它
+        # 優先使用 DB 中的缺勤圖片
         absence_proof_from_db = student_data_for_doc.get("Absence_Proof_Path")
-        
-        # 合併 context（包含缺勤統計數據）
         student_data_for_doc.update(context)
         
-        # 如果從資料庫讀取到了缺勤佐證圖片路徑，優先使用它（覆蓋 context 中的值）
         if absence_proof_from_db:
             student_data_for_doc["Absence_Proof_Path"] = absence_proof_from_db
-            print(f"✅ 優先使用從 absence_records 表讀取的缺勤佐證圖片: {absence_proof_from_db}")
-        
-        # 調試輸出：確認 student_data_for_doc 中的缺勤統計數據
-        absence_keys_in_doc = {k: v for k, v in student_data_for_doc.items() if k.startswith("absence_")}
-        print("📊 student_data_for_doc 中的缺勤統計數據:", absence_keys_in_doc)
 
         filename = f"{student_id}_履歷_{datetime.now().strftime('%Y%m%d_%H%M%S')}.docx"
         save_path = os.path.join(UPLOAD_FOLDER, filename)
@@ -2114,18 +2086,12 @@ def submit_and_generate_api():
             conn.rollback()
             return jsonify({"success": False, "message": "文件生成失敗"}), 500
 
-        # 寫入 resumes
+        # 15. 寫入 Resumes 表
         cursor.execute("""
             INSERT INTO resumes
             (user_id, filepath, original_filename, status, semester_id, created_at)
             VALUES (%s, %s, %s, %s, %s, NOW())
-        """, (
-            user_id,
-            save_path,
-            filename,
-            'uploaded',  # 使用資料庫 enum 定義的狀態值
-            semester_id
-        ))
+        """, (user_id, save_path, filename, 'uploaded', semester_id))
 
         conn.commit()
         return jsonify({
@@ -2612,6 +2578,8 @@ def submit_absence_record():
     image_path = None
     # 處理佐證圖片上傳
     print(f"🔍 檢查上傳的文件: request.files.keys() = {list(request.files.keys())}")
+    print(f"🔍 request.content_type: {request.content_type}")
+    print(f"🔍 request.is_json: {request.is_json}")
     
     if 'proof_image' in request.files:
         proof_image = request.files['proof_image']
@@ -2620,26 +2588,61 @@ def submit_absence_record():
         print(f"🔍 proof_image.content_type: {proof_image.content_type if proof_image else 'None'}")
         
         # 檢查文件是否存在且有效（不僅檢查 filename，也檢查文件大小）
-        if proof_image and proof_image.filename and len(proof_image.filename.strip()) > 0:
-            try:
-                # 確保目錄存在
-                os.makedirs(ABSENCE_PROOF_FOLDER, exist_ok=True)
-                # 確保檔名安全，並加上 user_id 和時間戳以避免重複
-                original_filename = proof_image.filename
-                filename = secure_filename(f"{user_id}_{datetime.now().strftime('%Y%m%d%H%M%S')}_{original_filename}")
-                save_path = os.path.join(ABSENCE_PROOF_FOLDER, filename)
-                proof_image.save(save_path)
-                image_path = save_path # 儲存到資料庫的路徑
-                print(f"✅ 缺勤佐證圖片已保存: {image_path}")
-                print(f"✅ 文件大小: {os.path.getsize(save_path) if os.path.exists(save_path) else 'N/A'} bytes")
-            except Exception as e:
-                print(f"⚠️ 儲存缺勤佐證圖片失敗: {e}")
-                traceback.print_exc()
-                # 即使圖片保存失敗，也繼續處理其他資料（image_path 保持為 None）
+        # 注意：即使 filename 為空，也要檢查文件內容（可能是瀏覽器兼容性問題）
+        if proof_image:
+            # 檢查文件是否有內容（通過檢查 content_length 或嘗試讀取）
+            file_has_content = False
+            if hasattr(proof_image, 'content_length') and proof_image.content_length:
+                file_has_content = proof_image.content_length > 0
+            elif proof_image.filename and len(proof_image.filename.strip()) > 0:
+                file_has_content = True
+            else:
+                # 嘗試讀取文件內容來判斷
+                try:
+                    proof_image.seek(0)
+                    content = proof_image.read(1)
+                    proof_image.seek(0)  # 重置指針
+                    file_has_content = len(content) > 0
+                except:
+                    file_has_content = False
+            
+            if file_has_content:
+                try:
+                    # 確保目錄存在
+                    os.makedirs(ABSENCE_PROOF_FOLDER, exist_ok=True)
+                    # 確保檔名安全，並加上 user_id 和時間戳以避免重複
+                    original_filename = proof_image.filename or f"proof_{datetime.now().strftime('%Y%m%d%H%M%S')}.jpg"
+                    # 如果沒有副檔名，根據 content_type 添加
+                    if '.' not in original_filename:
+                        ext_map = {
+                            'image/jpeg': '.jpg',
+                            'image/jpg': '.jpg',
+                            'image/png': '.png',
+                            'image/gif': '.gif'
+                        }
+                        ext = ext_map.get(proof_image.content_type, '.jpg')
+                        original_filename = original_filename + ext
+                    
+                    filename = secure_filename(f"{user_id}_{datetime.now().strftime('%Y%m%d%H%M%S')}_{original_filename}")
+                    save_path = os.path.join(ABSENCE_PROOF_FOLDER, filename)
+                    # 將路徑中的反斜杠轉換為正斜杠（統一格式）
+                    save_path = save_path.replace('\\', '/')
+                    proof_image.save(save_path)
+                    image_path = save_path  # 儲存到資料庫的路徑
+                    print(f"✅ 缺勤佐證圖片已保存: {image_path}")
+                    print(f"✅ 文件大小: {os.path.getsize(save_path) if os.path.exists(save_path) else 'N/A'} bytes")
+                    print(f"✅ 文件是否存在: {os.path.exists(save_path)}")
+                except Exception as e:
+                    print(f"⚠️ 儲存缺勤佐證圖片失敗: {e}")
+                    traceback.print_exc()
+                    # 即使圖片保存失敗，也繼續處理其他資料（image_path 保持為 None）
+            else:
+                print(f"⚠️ proof_image 文件內容為空: filename={proof_image.filename if proof_image else 'None'}, content_length={getattr(proof_image, 'content_length', 'N/A')}")
         else:
-            print(f"⚠️ proof_image 無效: proof_image={proof_image}, filename={proof_image.filename if proof_image else 'None'}")
+            print(f"⚠️ proof_image 對象為 None")
     else:
         print(f"⚠️ request.files 中沒有 'proof_image' 鍵")
+        print(f"🔍 可用的文件鍵: {list(request.files.keys())}")
 
     conn = get_db()
     cursor = conn.cursor(dictionary=True)
@@ -2730,13 +2733,33 @@ def get_resume_data():
         student_info = cursor.fetchone() or {}
 
         # ===== 4. 課程資料 =====
-        cursor.execute("""
-            SELECT CourseName AS name, Credits AS credits, Grade AS grade
-            FROM course_grades
-            WHERE StuID=%s
-            ORDER BY CourseName
-        """, (student_id,))
+        # 檢查是否有 ProofImage 欄位
+        cursor.execute("SHOW COLUMNS FROM course_grades LIKE 'ProofImage'")
+        has_proof_image = cursor.fetchone() is not None
+        
+        if has_proof_image:
+            cursor.execute("""
+                SELECT CourseName AS name, Credits AS credits, Grade AS grade, ProofImage AS transcript_path
+                FROM course_grades
+                WHERE StuID=%s
+                ORDER BY CourseName
+            """, (student_id,))
+        else:
+            cursor.execute("""
+                SELECT CourseName AS name, Credits AS credits, Grade AS grade
+                FROM course_grades
+                WHERE StuID=%s
+                ORDER BY CourseName
+            """, (student_id,))
         courses = cursor.fetchall() or []
+        
+        # 提取成績單路徑（從 ProofImage 欄位）
+        transcript_path = ''
+        for course in courses:
+            tp = course.get('transcript_path')
+            if tp:
+                transcript_path = tp
+                break
 
         # ===== 5. 證照資料 — 單一 SQL，不再三段重複 =====
 
@@ -2903,6 +2926,40 @@ def get_resume_data():
             ORDER BY Language
         """, (student_id,))
         languages = cursor.fetchall() or []
+        
+        # ===== 7.5 缺勤記錄佐證圖片 =====
+        # 從 absence_records 表獲取最新的 image_path
+        absence_proof_path = ''
+        try:
+            cursor.execute("SELECT id FROM users WHERE username=%s", (student_id,))
+            user_row = cursor.fetchone()
+            if user_row:
+                user_id = user_row.get('id')
+                # 嘗試使用 created_at 排序，如果沒有該欄位則使用 id
+                try:
+                    cursor.execute("""
+                        SELECT image_path, created_at
+                        FROM absence_records
+                        WHERE user_id = %s AND image_path IS NOT NULL AND image_path != ''
+                        ORDER BY created_at DESC
+                        LIMIT 1
+                    """, (user_id,))
+                except:
+                    # 如果 created_at 欄位不存在，使用 id 排序
+                    cursor.execute("""
+                        SELECT image_path
+                        FROM absence_records
+                        WHERE user_id = %s AND image_path IS NOT NULL AND image_path != ''
+                        ORDER BY id DESC
+                        LIMIT 1
+                    """, (user_id,))
+                absence_row = cursor.fetchone()
+                if absence_row:
+                    absence_proof_path = absence_row.get('image_path', '')
+                    print(f"🔍 找到缺勤佐證圖片: {absence_proof_path}")
+        except Exception as e:
+            print(f"⚠️ 查詢缺勤佐證圖片失敗: {e}")
+            traceback.print_exc()
 
         # ===== 8. 日期格式轉換 =====
         birth_date = student_info.get("BirthDate")
@@ -2947,10 +3004,14 @@ def get_resume_data():
             cert_level = cert.get("level", "")
             print(f"🔍 證照資料處理: id={cert.get('id')}, AcquisitionDate={acquire_date}, formatted={formatted_acquire_date}, level={cert_level}, job_category={cert.get('job_category', '')}")
             
+            # 獲取證照圖片路徑，並將 Windows 路徑格式（反斜杠）轉換為 Web 路徑格式（正斜杠）
+            cert_path_raw = cert.get("CertPath", "")
+            cert_path = cert_path_raw.replace("\\", "/") if cert_path_raw else ""
+            
             formatted_certs.append({
                 "id": cert["id"],
                 "cert_code": cert.get("cert_code", ""),
-                "cert_path": cert.get("CertPath", ""),
+                "cert_path": cert_path,
                 "name": cert.get("CertName", ""),
                 "job_category": cert.get("job_category", ""),
                 "level": cert_level,  # 修正：SQL 返回的字段名是 level，不是 CertLevel
@@ -2980,7 +3041,9 @@ def get_resume_data():
                 },
                 "courses": courses,
                 "certifications": formatted_certs,
-                "languages": languages
+                "languages": languages,
+                "transcript_path": transcript_path,
+                "absence_proof_path": absence_proof_path
             }
         })
 
@@ -3140,9 +3203,14 @@ def get_class_resumes():
         # ------------------------------------------------------------------
         # 1. 班導 / 教師 (role == "teacher" or "class_teacher")
         # ------------------------------------------------------------------
+            # 合併查詢：班導的學生履歷 + 指導老師綁定公司的學生履歷
+            # 使用 UNION 合併三種情況：
+            # 1. 班導的學生（通過 classes_teacher）
+            # 2. 指導老師綁定的學生（通過 teacher_student_relations）
+            # 3. 選擇了該老師作為指導老師的公司的學生（通過 student_preferences 和 internship_companies）
         if role in ["teacher", "class_teacher"]:
             sql_query = """
-                SELECT 
+                SELECT DISTINCT
                     r.id,
                     u.name AS student_name,
                     u.username AS student_number,
@@ -3153,21 +3221,48 @@ def get_class_resumes():
                     r.status,
                     r.comment,
                     r.note,
-                    r.created_at
+                    r.created_at,
+                    COALESCE(
+                        (SELECT ic3.company_name 
+                         FROM student_preferences sp3
+                         JOIN internship_companies ic3 ON sp3.company_id = ic3.id
+                         WHERE sp3.student_id = u.id 
+                         AND ic3.advisor_user_id = %s
+                         ORDER BY sp3.preference_order ASC
+                         LIMIT 1),
+                        ''
+                    ) AS company_name   
                 FROM resumes r
                 JOIN users u ON r.user_id = u.id
                 LEFT JOIN classes c ON u.class_id = c.id
-                JOIN classes_teacher ct ON ct.class_id = c.id
-                WHERE ct.teacher_id = %s
+                WHERE EXISTS (
+                    -- 情況1：班導的學生
+                    SELECT 1
+                    FROM classes c2
+                    JOIN classes_teacher ct ON ct.class_id = c2.id
+                    WHERE c2.id = u.class_id AND ct.teacher_id = %s
+                ) OR EXISTS (
+                    -- 情況2：指導老師綁定的學生（從 teacher_student_relations）
+                    SELECT 1
+                    FROM teacher_student_relations tsr
+                    WHERE tsr.student_id = u.id AND tsr.teacher_id = %s
+                ) OR EXISTS (
+                    -- 情況3：選擇了該老師作為指導老師的公司的學生
+                    SELECT 1
+                    FROM student_preferences sp
+                    JOIN internship_companies ic2 ON sp.company_id = ic2.id
+                    WHERE sp.student_id = u.id AND ic2.advisor_user_id = %s
+                )
                 ORDER BY c.name, u.name
             """
-            sql_params = (user_id,)
+            sql_params = (user_id, user_id, user_id, user_id)
+
 
             cursor.execute(sql_query, sql_params)
             resumes = cursor.fetchall()
 
             if not resumes:
-                print(f"⚠️ [DEBUG] Teacher/class_teacher user {user_id} has no assigned classes.")
+                print(f"⚠️ [DEBUG] Teacher/class_teacher user {user_id} has no assigned classes or advisor students.")
                 resumes = []
 
         # ------------------------------------------------------------------
@@ -3338,7 +3433,7 @@ def review_resume(resume_id):
     user_role = session.get('role')
 
     # 1. 權限檢查
-    ALLOWED_ROLES = ['teacher', 'admin', 'class_teacher']
+    ALLOWED_ROLES = ['teacher', 'admin', 'class_teacher', 'vendor']
     if not user_id or user_role not in ALLOWED_ROLES:
         return jsonify({"success": False, "message": "未授權或無權限"}), 403
 
@@ -3384,9 +3479,15 @@ def review_resume(resume_id):
         """, (status, comment, user_id, resume_id))
         
         # 4. 取得審核者姓名
-        cursor.execute("SELECT name FROM users WHERE id = %s", (user_id,))
+        cursor.execute("SELECT name, role FROM users WHERE id = %s", (user_id,))
         reviewer = cursor.fetchone()
-        reviewer_name = reviewer['name'] if reviewer else "審核老師"
+        if reviewer:
+            if reviewer.get('role') == 'vendor':
+                reviewer_name = reviewer['name'] if reviewer['name'] else "審核廠商"
+            else:
+                reviewer_name = reviewer['name'] if reviewer['name'] else "審核老師"
+        else:
+            reviewer_name = "審核者"
 
         # 5. 處理 Email 寄送與通知 (僅在狀態改變時處理)
         from email_service import send_resume_rejection_email, send_resume_approval_email
@@ -3634,6 +3735,28 @@ def get_student_resumes():
         conn.close()
 
 # -------------------------
+# 提供上傳文件的訪問
+# -------------------------
+@resume_bp.route('/uploads/<path:filename>')
+def serve_uploaded_file(filename):
+    """提供上傳文件的訪問"""
+    try:
+        # 構建文件完整路徑
+        file_path = os.path.join('uploads', filename)
+        # 確保路徑安全（防止路徑遍歷攻擊）
+        if not os.path.abspath(file_path).startswith(os.path.abspath('uploads')):
+            return jsonify({"success": False, "message": "無效的路徑"}), 403
+        
+        if os.path.exists(file_path) and os.path.isfile(file_path):
+            return send_file(file_path)
+        else:
+            return jsonify({"success": False, "message": "文件不存在"}), 404
+    except Exception as e:
+        print(f"❌ 提供上傳文件失敗: {e}")
+        traceback.print_exc()
+        return jsonify({"success": False, "message": "文件訪問失敗"}), 500
+
+# -------------------------
 # 頁面路由
 # -------------------------
 @resume_bp.route('/upload_resume')
@@ -3646,7 +3769,7 @@ def review_resume_page():
     if not require_login():
         return redirect('/login')
     
-    # 統一使用整合後的審核頁面
+     # 統一使用整合後的審核頁面
     return render_template('resume/review_resume.html')
 
 @resume_bp.route('/ai_edit_resume')
