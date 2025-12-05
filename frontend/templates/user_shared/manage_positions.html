@@ -172,6 +172,27 @@
       padding: 0;
     }
 
+    .page-header h1 #menu-btn {
+      width: 30px;
+      height: 22px;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      background: none;
+      border: none;
+      padding: 0;
+    }
+
+    .page-header h1 #menu-btn span {
+      display: block;
+      width: 100%;
+      height: 3px;
+      background-color: white;
+      border-radius: 2px;
+      transition: all 0.3s ease;
+    }
+
     .page-header-actions #menu-btn span {
       display: block;
       width: 100%;
@@ -189,8 +210,15 @@
       padding: 16px 24px;
       border-radius: 0 !important;
       box-shadow: none;
-      display: block;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
       width: 100%;
+    }
+
+    .page-header h1 .header-title {
+      flex: 1;
       text-align: center;
     }
 
@@ -578,12 +606,12 @@
       top: 0;
       left: 0;
       height: 100vh;
-      width: 320px;
-      max-width: 80vw;
+      width: 280px;
+      max-width: 75vw;
       background-color: rgba(10, 10, 10, 0.95);
       backdrop-filter: blur(6px);
       box-shadow: 3px 0 12px rgba(0, 0, 0, 0.6);
-      padding: 2rem 1.5rem;
+      padding: 1.5rem 1.2rem;
       transform: translateX(-100%);
       transition: transform 0.3s ease-in-out;
       z-index: 1300;
@@ -600,32 +628,32 @@
 
     #close-btn {
       position: absolute;
-      top: 2rem;
-      right: 1.6rem;
-      font-size: 2.2rem;
+      top: 1.5rem;
+      right: 1.2rem;
+      font-size: 2rem;
       background: none;
       border: none;
       color: #fff;
       cursor: pointer;
       line-height: 1;
-      width: 2.4rem;
-      height: 2.4rem;
+      width: 2.2rem;
+      height: 2.2rem;
       display: flex;
       align-items: center;
       justify-content: center;
     }
 
     #side-menu h2 {
-      margin: 3.5rem 0 1.5rem;
+      margin: 2.5rem 0 1.2rem;
       font-weight: 700;
-      font-size: 1.6rem;
+      font-size: 1.4rem;
     }
 
     #side-menu a {
       display: block;
       width: 100%;
-      padding: 0.6rem 0;
-      font-size: 1.1rem;
+      padding: 0.5rem 0.8rem;
+      font-size: 1rem;
       color: #e2e8f0;
       text-decoration: none;
       border-radius: 4px;
@@ -656,15 +684,15 @@
 <body>
   <main class="management-container container">
     <header class="page-header">
-      <h1>職位需求管理</h1>
-      <div class="page-header-actions">
+      <h1>
         <button id="menu-btn" title="選單" role="button" tabindex="0" aria-label="開啟側邊選單">
           <span></span>
           <span></span>
           <span></span>
         </button>
-        <button id="createPositionBtn" class="btn btn-primary">＋ 新增職缺</button>
-      </div>
+        <div class="header-title">職位需求管理</div>
+        <div style="width: 30px;"></div> <!-- 佔位元素，保持標題置中 -->
+      </h1>
     </header>
 
     <p id="companyHint" class="empty-hint">目前尚未建立與您對接指導老師關聯的公司資料。您新增的職缺將會顯示給對接的指導老師和科助查看。請確認您的指導老師已建立公司，或聯絡平台管理員設定對接關係。</p>
@@ -672,6 +700,7 @@
     <section class="panel" aria-label="職缺列表">
       <div class="panel-header">
         <h2>職缺列表</h2>
+        <button id="createPositionBtn" class="btn btn-primary">＋ 新增職缺</button>
       </div>
       <div class="table-wrapper">
         <table class="positions-table">
