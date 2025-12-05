@@ -171,6 +171,9 @@
           <button class="btn btn-success w-100" id="exportBtn">匯出 Excel</button>
         </div>
         <div class="col-md-2">
+          <a href="/ta_home" class="btn btn-outline-primary w-100">返回首頁</a>
+        </div>
+        <div class="col-md-2">
           <a href="/ta/statistics/manage_companies" class="btn btn-outline-secondary w-100">返回統計頁面</a>
         </div>
       </div>
@@ -230,7 +233,10 @@
     <div class="modal-dialog modal-xl modal-dialog-scrollable">
       <div class="modal-content" style="font-size: 1.1rem;">
         <div class="modal-header">
-          <h4 class="modal-title" id="studentDetailModalLabel" style="font-size: 1.5rem; font-weight: bold;">學生詳情</h4>
+          <button type="button" class="btn btn-outline-secondary me-3" data-bs-dismiss="modal" style="font-size: 1.1rem; padding: 0.5rem 1rem;">
+            ← 返回
+          </button>
+          <h4 class="modal-title flex-grow-1" id="studentDetailModalLabel" style="font-size: 1.5rem; font-weight: bold;">學生詳情</h4>
           <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
         </div>
         <div class="modal-body" style="font-size: 1.1rem;">
@@ -259,6 +265,9 @@
           </div>
         </div>
         <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary btn-lg me-auto" data-bs-dismiss="modal" style="font-size: 1.1rem;">
+            ← 返回
+          </button>
           <button type="button" class="btn btn-secondary btn-lg" data-bs-dismiss="modal" style="font-size: 1.1rem;">關閉</button>
         </div>
       </div>
