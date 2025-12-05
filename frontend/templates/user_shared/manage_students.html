@@ -225,11 +225,53 @@
     </div>
   </div>
 
+  <!-- 學生詳情 Modal -->
+  <div class="modal fade" id="studentDetailModal" tabindex="-1" aria-labelledby="studentDetailModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+      <div class="modal-content" style="font-size: 1.1rem;">
+        <div class="modal-header">
+          <h4 class="modal-title" id="studentDetailModalLabel" style="font-size: 1.5rem; font-weight: bold;">學生詳情</h4>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body" style="font-size: 1.1rem;">
+          <div class="mb-4">
+            <h5 class="text-primary mb-3" style="font-size: 1.3rem; font-weight: bold;">學生基本資訊</h5>
+            <p class="mb-2" style="font-size: 1.1rem;"><strong>學號：</strong><span id="modalStudentNumber"></span></p>
+            <p class="mb-2" style="font-size: 1.1rem;"><strong>姓名：</strong><span id="modalStudentName"></span></p>
+            <p class="mb-2" style="font-size: 1.1rem;"><strong>Email：</strong><span id="modalStudentEmail"></span></p>
+            <p class="mb-0" style="font-size: 1.1rem;"><strong>班級：</strong><span id="modalStudentClass"></span></p>
+          </div>
+          <hr style="margin: 1.5rem 0;">
+          <!-- 履歷資訊（在上） -->
+          <div class="mb-4">
+            <h5 class="text-primary mb-3" style="font-size: 1.3rem; font-weight: bold;">📄 履歷資訊</h5>
+            <div id="modalResumeDetails" class="resume-details" style="max-height: 500px; overflow-y: auto; padding: 0.5rem; font-size: 1.05rem;">
+              <p class="text-muted mb-0">載入中...</p>
+            </div>
+          </div>
+          <hr style="margin: 1.5rem 0;">
+          <!-- 志願序資訊（在下） -->
+          <div class="mb-4">
+            <h5 class="text-primary mb-3" style="font-size: 1.3rem; font-weight: bold;">🎯 志願序資訊</h5>
+            <div id="modalPreferenceDetails" class="preference-details" style="max-height: 500px; overflow-y: auto; padding: 0.5rem; font-size: 1.05rem;">
+              <p class="text-muted mb-0">載入中...</p>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary btn-lg" data-bs-dismiss="modal" style="font-size: 1.1rem;">關閉</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
   <script>
     let myClassChart = null; // 用於儲存單一班級 Chart 實例
     let companyChart, resumeChart, preferenceChart; // 用於儲存統計圖表實例
     let allClassesData = []; // 儲存所有班級資料
+    let currentStudentsData = []; // 儲存當前顯示的學生資料
+    let studentDetailModal = null; // Modal 實例
 
     // 固定載入 1132、1142 兩個學年（不自動選擇，保留「所有學年」選項）
     function loadSemesters() {
@@ -604,7 +646,11 @@
           // 如果過濾後沒有學生，顯示「該班級沒有學生資料」
           if (filteredStudents.length === 0) {
             tbody.innerHTML = `<tr><td colspan="7" class="text-center text-muted">該班級沒有學生資料</td></tr>`;
+            currentStudentsData = []; // 清空學生資料
           } else {
+            // 儲存學生資料供 Modal 使用
+            currentStudentsData = filteredStudents;
+            
             tbody.innerHTML = filteredStudents.map((s, index) => {
             // 調試輸出
             if (index === 0) {
@@ -703,16 +749,12 @@
             });
           });
           
-          // 綁定查看詳情按鈕
+          // 綁定查看詳情按鈕 - 開啟 Modal
           document.querySelectorAll('.view-details').forEach(btn => {
             btn.addEventListener('click', function() {
-              const index = this.getAttribute('data-index');
-              const detailRow = document.querySelector(`.detail-row[data-index="${index}"]`);
-              const toggleBtn = document.querySelector(`.toggle-details[data-index="${index}"]`);
-              
-              if (detailRow.style.display === 'none') {
-                detailRow.style.display = 'table-row';
-                toggleBtn.querySelector('.toggle-icon').textContent = '▲';
+              const index = parseInt(this.getAttribute('data-index'));
+              if (currentStudentsData && currentStudentsData[index]) {
+                showStudentDetailModal(currentStudentsData[index]);
               }
             });
           });
@@ -988,6 +1030,7 @@
       // 清空表格和圖表
       document.getElementById("studentsTableBody").innerHTML = 
         '<tr><td colspan="7" class="text-center text-muted">請選擇班級並點擊「學生資料」</td></tr>';
+      currentStudentsData = []; // 清空學生資料
       const chartContainer = document.getElementById("classChartContainer");
       if (chartContainer) chartContainer.style.display = 'none';
       if (myClassChart) { 
@@ -1017,6 +1060,7 @@
         // 如果選擇「所有班級」，清空表格和圖表
         document.getElementById("studentsTableBody").innerHTML = 
           '<tr><td colspan="7" class="text-center text-muted">請選擇班級並點擊「學生資料」</td></tr>';
+        currentStudentsData = []; // 清空學生資料
         const chartContainer = document.getElementById("classChartContainer");
         chartContainer.style.display = 'none';
         if (myClassChart) { 
@@ -1036,6 +1080,71 @@
     document.getElementById("exportBtn").addEventListener("click", () => {
       window.location.href = `/ta/statistics/api/export_companies_stats`; // 匯出所有班級的統計
     });
+
+    // 顯示學生詳情 Modal
+    function showStudentDetailModal(student) {
+      // 初始化 Modal（如果尚未初始化）
+      if (!studentDetailModal) {
+        const modalElement = document.getElementById('studentDetailModal');
+        studentDetailModal = new bootstrap.Modal(modalElement);
+      }
+      
+      // 設定學生基本資訊
+      document.getElementById('modalStudentNumber').textContent = student.username || 'N/A';
+      document.getElementById('modalStudentName').textContent = student.name || 'N/A';
+      document.getElementById('modalStudentEmail').textContent = student.email || 'N/A';
+      
+      // 顯示學生的實際班級
+      const studentClass = student.class_name ? 
+        `${student.department ? student.department.replace('管科', '') : ''}${student.class_name}` : 
+        '未分班';
+      document.getElementById('modalStudentClass').textContent = studentClass;
+      
+      // 履歷詳細資訊
+      const resumeDetails = student.resumes && student.resumes.length > 0 ? 
+        student.resumes.map(r => `
+          <div class="mb-3 p-4 border rounded bg-light" style="font-size: 1.05rem;">
+            <div class="d-flex justify-content-between align-items-start mb-3">
+              <strong class="text-primary" style="font-size: 1.2rem;">履歷 #${r.id}</strong>
+              <span class="badge ${r.status === 'approved' ? 'bg-success' : r.status === 'rejected' ? 'bg-danger' : 'bg-warning'}" style="font-size: 1rem; padding: 0.5rem 0.75rem;">
+                ${r.status === 'approved' ? '已審核' : r.status === 'rejected' ? '已退件' : '待審核'}
+              </span>
+            </div>
+            <div style="font-size: 1.05rem;">
+              <div class="mb-2">⏰ <strong>上傳時間:</strong> ${r.created_at || 'N/A'}</div>
+              ${r.reviewed_at ? `<div class="mb-2">✅ <strong>審核時間:</strong> ${r.reviewed_at}</div>` : ''}
+              ${r.reject_reason ? `<div class="mb-2 text-danger">⚠️ <strong>退件原因:</strong> ${r.reject_reason}</div>` : ''}
+            </div>
+          </div>
+        `).join('') : 
+        '<div class="text-center p-5"><p class="text-muted mb-0" style="font-size: 1.1rem;">無履歷資料</p></div>';
+      document.getElementById('modalResumeDetails').innerHTML = resumeDetails;
+      
+      // 志願序詳細資訊（按志願順序排序）
+      const sortedPreferences = student.preferences && student.preferences.length > 0 ? 
+        [...student.preferences].sort((a, b) => (a.preference_order || 0) - (b.preference_order || 0)) : [];
+      const preferenceDetails = sortedPreferences.length > 0 ? 
+        sortedPreferences.map(p => `
+          <div class="mb-3 p-4 border rounded bg-light" style="font-size: 1.05rem;">
+            <div class="d-flex justify-content-between align-items-start mb-3">
+              <strong class="text-primary" style="font-size: 1.2rem;">志願 #${p.preference_order}</strong>
+              <span class="badge ${p.status === 'approved' ? 'bg-success' : p.status === 'rejected' ? 'bg-danger' : 'bg-warning'}" style="font-size: 1rem; padding: 0.5rem 0.75rem;">
+                ${p.status === 'approved' ? '已通過' : p.status === 'rejected' ? '已退件' : '待審核'}
+              </span>
+            </div>
+            <div style="font-size: 1.05rem;">
+              <div class="mb-2"><strong>公司:</strong> ${p.company_name || 'N/A'}</div>
+              <div class="mb-2"><strong>職位:</strong> ${p.job_title || p.job_title_full || 'N/A'}</div>
+              <div class="mb-2 text-muted">⏰ <strong>提交時間:</strong> ${p.submitted_at || 'N/A'}</div>
+            </div>
+          </div>
+        `).join('') : 
+        '<div class="text-center p-5"><p class="text-muted mb-0" style="font-size: 1.1rem;">無志願序資料</p></div>';
+      document.getElementById('modalPreferenceDetails').innerHTML = preferenceDetails;
+      
+      // 顯示 Modal
+      studentDetailModal.show();
+    }
 
     // 初始載入：先載入學年列表和所有班級資料
     async function initialize() {
