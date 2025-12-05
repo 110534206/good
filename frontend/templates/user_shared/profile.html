@@ -259,6 +259,23 @@
           document.getElementById('email').value = user.email || '';
           document.getElementById('admissionYear').value = user.admission_year || '';
           document.getElementById('studentId').value = user.username || '';
+          
+          // 根據 user_changed 字段控制帳號是否可編輯
+          const studentIdInput = document.getElementById('studentId');
+          if (studentIdInput) {
+            const userChanged = user.user_changed === 0 || user.user_changed === null || user.user_changed === undefined;
+            if (userChanged) {
+              // user_changed = 0 或 null，允許修改
+              studentIdInput.removeAttribute('readonly');
+              studentIdInput.style.backgroundColor = '';
+              studentIdInput.title = '可以修改帳號（僅能修改一次）';
+            } else {
+              // user_changed = 1，不允許修改
+              studentIdInput.setAttribute('readonly', 'readonly');
+              studentIdInput.style.backgroundColor = '#f8f9fa';
+              studentIdInput.title = '帳號已修改過，無法再次修改';
+            }
+          }
           document.getElementById('avatarPreview').src = user.avatar_url
             ? user.avatar_url + '?t=' + Date.now()
             : 'https://via.placeholder.com/100?text=頭像';
@@ -412,6 +429,27 @@
                 });
             } else {
               nextBtn.disabled = false;
+              
+              // 如果修改了帳號，重新獲取用戶資料以更新 user_changed 狀態
+              const studentIdInput = document.getElementById('studentId');
+              if (studentIdInput && !studentIdInput.hasAttribute('readonly')) {
+                // 帳號是可編輯的，可能在這次保存中被修改了
+                fetch('/api/profile')
+                  .then(res => res.json())
+                  .then(profileData => {
+                    if (profileData.success && profileData.user) {
+                      const userChanged = profileData.user.user_changed === 0 || profileData.user.user_changed === null || profileData.user.user_changed === undefined;
+                      if (!userChanged) {
+                        // 帳號已被修改，設置為只讀
+                        studentIdInput.setAttribute('readonly', 'readonly');
+                        studentIdInput.style.backgroundColor = '#f8f9fa';
+                        studentIdInput.title = '帳號已修改過，無法再次修改';
+                      }
+                    }
+                  })
+                  .catch(err => console.error('重新獲取用戶資料失敗:', err));
+              }
+              
               alert('資料更新成功！');
               window.location.href = finalRedirectUrl;
             }

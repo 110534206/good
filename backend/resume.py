@@ -816,47 +816,58 @@ def get_student_info_for_doc(cursor, student_id, semester_id=None):
     
     cert_rows = cursor.fetchall() or []
     
-    # 轉換為統一格式
+  # 轉換為統一格式
     certifications = []
     for row in cert_rows:
         cert_code = row.get('cert_code', '')
         cert_name_from_join = row.get('cert_name', '')
         cert_category_from_join = row.get('cert_category', '')
         
-        # 如果有 JOIN 結果，使用 JOIN 的資料
+        # 預設分類
+        category = cert_category_from_join if cert_category_from_join else 'other'
+
+        # =========================================================================
+        # 🔥 新增補救邏輯：若分類為 'other'，嘗試用「證照名稱」去資料庫反查正確分類
+        # 解決手動輸入正確名稱 (如: 電腦軟體設計乙級) 卻被歸類在「其他」的問題
+        # =========================================================================
+        if category == 'other':
+            # 決定要用來查詢的名稱 (優先使用 SQL 組合出來的名稱，若無則用舊欄位)
+            search_name = cert_name_from_join or row.get('CertName', '')
+            
+            if search_name:
+                try:
+                    # 使用 CONCAT 模擬資料庫中的名稱格式進行比對
+                    cursor.execute("""
+                        SELECT category 
+                        FROM certificate_codes 
+                        WHERE CONCAT(COALESCE(job_category, ''), COALESCE(level, '')) = %s
+                        LIMIT 1
+                    """, (search_name,))
+                    match_row = cursor.fetchone()
+                    
+                    if match_row and match_row.get('category'):
+                        category = match_row['category']
+                        print(f"✅ (DOC補救) 成功透過名稱 '{search_name}' 修正分類為: {category}")
+                except Exception as e:
+                    print(f"⚠️ (DOC補救) 名稱反查失敗: {e}")
+        # =========================================================================
+
+        # 組合資料並加入列表
         if cert_name_from_join:
+            # 來自新的 SQL 邏輯
             certifications.append({
                 "cert_name": cert_name_from_join,
-                "category": cert_category_from_join if cert_category_from_join else 'other',
+                "category": category, # 使用修正後的 category
                 "full_name": row.get('full_name', ''),
                 "cert_path": row.get('cert_path', ''),
                 "acquire_date": row.get('acquire_date', ''),
             })
-            print(f"✅ 證照 JOIN 成功: code={cert_code}, name={cert_name_from_join}, category={cert_category_from_join}")
+            print(f"✅ 證照 JOIN 成功: code={cert_code}, name={cert_name_from_join}, category={category}")
         else:
-            # JOIN 失敗：嘗試通過 cert_code 單獨查詢 category
-            category = 'other'
-            if cert_code and cert_code.strip() and cert_code.upper() != 'OTHER':
-                try:
-                    cursor.execute("""
-                        SELECT category 
-                        FROM certificate_codes 
-                        WHERE code COLLATE utf8mb4_unicode_ci = %s COLLATE utf8mb4_unicode_ci
-                        LIMIT 1
-                    """, (cert_code,))
-                    category_row = cursor.fetchone()
-                    if category_row:
-                        category = category_row.get('category', 'other')
-                        print(f"✅ 通過 cert_code 查詢 category: code={cert_code}, category={category}")
-                    else:
-                        print(f"⚠️ 找不到 cert_code 對應的 category: code={cert_code}")
-                except Exception as e:
-                    print(f"⚠️ 查詢 category 失敗: {e}")
-            
-            # 兼容舊資料：沒有 cert_code 的記錄，使用原始欄位（custom_cert_name 已刪除）
+            # 舊資料兼容邏輯 (若 SQL JOIN 沒產出名稱)
             certifications.append({
                 "cert_name": row.get('CertName', ''),
-                "category": category,
+                "category": category, # 使用修正後的 category
                 "full_name": row.get('CertName', ''),
                 "cert_path": row.get('CertPhotoPath', '') or row.get('cert_path', ''),
                 "acquire_date": row.get('AcquisitionDate', '') or row.get('acquire_date', ''),
@@ -3509,7 +3520,8 @@ def review_resume(resume_id):
                 create_notification(
                     user_id=student_user_id,
                     title="履歷退件通知",
-                    message=notification_content
+                    message=notification_content,
+                    category="resume"
                 )
 
             # =============== 通過 ===============
@@ -3528,7 +3540,8 @@ def review_resume(resume_id):
                 create_notification(
                     user_id=student_user_id,
                     title="履歷審核通過通知",
-                    message=notification_content
+                    message=notification_content,
+                    category="resume"
                 )
 
         conn.commit()

@@ -98,7 +98,7 @@ def get_profile():
         cursor.execute("""
             SELECT u.id, u.username, u.email, u.role AS original_role, u.name,
                    c.department, c.name AS class_name, u.class_id, u.avatar_url, u.current_semester_code,
-                   u.teacher_name
+                   u.teacher_name, u.user_changed
             FROM users u
             LEFT JOIN classes c ON u.class_id = c.id
             WHERE u.id = %s
@@ -233,12 +233,44 @@ def save_profile():
         return jsonify({"success": False, "message": "身分錯誤"}), 400
 
     conn = get_db()
-    cursor = conn.cursor()
+    cursor = conn.cursor(dictionary=True)
     user_id = session.get("user_id")
 
     try:
         if not user_id:
             return jsonify({"success": False, "message": "請重新登入"}), 401
+
+        # 檢查是否要修改帳號
+        cursor.execute("SELECT username, user_changed, role FROM users WHERE id = %s", (user_id,))
+        current_user = cursor.fetchone()
+        
+        if not current_user:
+            return jsonify({"success": False, "message": "使用者不存在"}), 404
+
+        # 如果提供了新的 username 且與當前不同，則嘗試修改帳號
+        if username and username.strip() and username.strip() != current_user.get("username", ""):
+            # 檢查是否已經修改過帳號
+            if current_user.get("user_changed") == 1:
+                return jsonify({"success": False, "message": "帳號只能修改一次，無法再次修改"}), 403
+            
+            # 檢查新帳號是否已被使用（同一角色下）
+            cursor.execute("""
+                SELECT id FROM users 
+                WHERE username = %s AND role = %s AND id != %s
+            """, (username.strip(), current_user["role"], user_id))
+            existing = cursor.fetchone()
+            if existing:
+                return jsonify({"success": False, "message": "此帳號已被使用"}), 400
+            
+            # 更新帳號並設置 user_changed = 1
+            cursor.execute("""
+                UPDATE users 
+                SET username = %s, user_changed = 1 
+                WHERE id = %s
+            """, (username.strip(), user_id))
+            
+            # 更新 session 中的 username
+            session['username'] = username.strip()
 
         cursor.execute("UPDATE users SET name=%s WHERE id=%s", (name, user_id))
 
@@ -335,6 +367,71 @@ def upload_avatar():
         return jsonify({"success": True, "avatar_url": avatar_url})
     else:
         return jsonify({"success": False, "message": "檔案格式錯誤"}), 400
+
+# -------------------------
+# API - 變更帳號
+# -------------------------
+@users_bp.route('/api/change_username', methods=['POST'])
+def change_username():
+    if "user_id" not in session or session.get('role') == 'guest':
+        return jsonify({"success": False, "message": "尚未登入或訪客無權限"}), 401
+
+    data = request.get_json()
+    new_username = data.get("new_username")
+
+    if not new_username:
+        return jsonify({"success": False, "message": "請輸入新帳號"}), 400
+
+    user_id = session["user_id"]
+
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        # 檢查 user_changed 狀態，確認是否可以修改
+        cursor.execute("SELECT username, user_changed FROM users WHERE id = %s", (user_id,))
+        user = cursor.fetchone()
+
+        if not user:
+            return jsonify({"success": False, "message": "使用者不存在"}), 404
+
+        # 如果已經修改過帳號（user_changed = 1），則不允許再次修改
+        if user.get("user_changed") == 1:
+            return jsonify({"success": False, "message": "帳號只能修改一次，無法再次修改"}), 403
+
+        # 檢查新帳號是否已被使用（同一角色下）
+        cursor.execute("SELECT role FROM users WHERE id = %s", (user_id,))
+        current_user = cursor.fetchone()
+        if current_user:
+            cursor.execute("""
+                SELECT id FROM users 
+                WHERE username = %s AND role = %s AND id != %s
+            """, (new_username, current_user["role"], user_id))
+            existing = cursor.fetchone()
+            if existing:
+                return jsonify({"success": False, "message": "此帳號已被使用"}), 400
+
+        # 更新帳號並設置 user_changed = 1
+        cursor.execute("""
+            UPDATE users 
+            SET username = %s, user_changed = 1 
+            WHERE id = %s
+        """, (new_username, user_id))
+        conn.commit()
+
+        # 更新 session 中的 username
+        session['username'] = new_username
+
+        return jsonify({
+            "success": True,
+            "message": "帳號已更新"
+        })
+    except Exception as e:
+        print("❌ 帳號變更錯誤:", e)
+        conn.rollback()
+        return jsonify({"success": False, "message": "伺服器錯誤"}), 500
+    finally:
+        cursor.close()
+        conn.close()
 
 # -------------------------
 # API - 變更密碼

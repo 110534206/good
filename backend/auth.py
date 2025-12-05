@@ -34,7 +34,7 @@ def check_is_homeroom(user_id):
 # =========================================================
 # 輔助函式：發送通知給所有科助
 # =========================================================
-def notify_all_ta(conn, title, message, link_url=None):
+def notify_all_ta(conn, title, message, link_url=None, category="general"):
     """發送通知給所有科助（role='ta'）"""
     cursor = None
     try:
@@ -47,9 +47,9 @@ def notify_all_ta(conn, title, message, link_url=None):
         for ta_user in ta_users:
             ta_user_id = ta_user[0]
             cursor.execute("""
-                INSERT INTO notifications (user_id, title, message, link_url, is_read, created_at)
-                VALUES (%s, %s, %s, %s, 0, NOW())
-            """, (ta_user_id, title, message, link_url))
+                INSERT INTO notifications (user_id, title, message, category, link_url, is_read, created_at)
+                VALUES (%s, %s, %s, %s, %s, 0, NOW())
+            """, (ta_user_id, title, message, category, link_url))
         
         # 注意：不在此處 commit，由調用者負責 commit
         if cursor:
@@ -63,7 +63,7 @@ def notify_all_ta(conn, title, message, link_url=None):
 # =========================================================
 # 輔助函式：發送通知給所有主任
 # =========================================================
-def notify_all_directors(conn, title, message, link_url=None):
+def notify_all_directors(conn, title, message, link_url=None, category="general"):
     """發送通知給所有主任（role='director'）"""
     cursor = None
     try:
@@ -76,9 +76,9 @@ def notify_all_directors(conn, title, message, link_url=None):
         for director_user in director_users:
             director_user_id = director_user[0]
             cursor.execute("""
-                INSERT INTO notifications (user_id, title, message, link_url, is_read, created_at)
-                VALUES (%s, %s, %s, %s, 0, NOW())
-            """, (director_user_id, title, message, link_url))
+                INSERT INTO notifications (user_id, title, message, category, link_url, is_read, created_at)
+                VALUES (%s, %s, %s, %s, %s, 0, NOW())
+            """, (director_user_id, title, message, category, link_url))
         
         # 注意：不在此處 commit，由調用者負責 commit
         if cursor:
@@ -308,8 +308,8 @@ def register_company():
         message = f"有新的廠商已完成註冊：\n帳號：{username}\nEmail：{email}\n請前往管理頁面留意後續合作。"
         link_url = "/admin/user_management"  # 連結到用戶管理頁面，科助可以在此審核廠商
         
-        notify_all_ta(conn, title, message, link_url)
-        notify_all_directors(conn, title, message, link_url)
+        notify_all_ta(conn, title, message, link_url, category="company")
+        notify_all_directors(conn, title, message, link_url, category="company")
         
         conn.commit()
 

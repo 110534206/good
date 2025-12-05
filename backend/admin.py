@@ -287,9 +287,10 @@ def create_user():
 
         hashed = generate_password_hash(password)
 
+        # 後台註冊的用戶，狀態設為 'approved'（已啟用）
         query = """
-            INSERT INTO users (username, name, email, role, class_id, password)
-            VALUES (%s, %s, %s, %s, %s, %s)
+            INSERT INTO users (username, name, email, role, class_id, password, user_changed, status)
+            VALUES (%s, %s, %s, %s, %s, %s, 0, 'approved')
         """
         cursor.execute(query, (username, name, email, role, class_id, hashed))
         conn.commit()
@@ -381,6 +382,31 @@ def get_teacher_classes(teacher_id):
     except Exception as e:
         traceback.print_exc()
         return jsonify({"success": False, "message": str(e)}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+# --------------------------------
+# API - 取得所有班級列表
+# --------------------------------
+@admin_bp.route('/api/get_classes', methods=['GET'])
+def get_classes():
+    """取得所有班級列表，用於用戶管理頁面"""
+    if 'user_id' not in session or session.get('role') not in ['admin', 'ta']:
+        return jsonify({"success": False, "message": "未授權"}), 403
+    
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute(
+            "SELECT id, name, department, admission_year FROM classes "
+            "ORDER BY department ASC, admission_year DESC, name ASC"
+        )
+        classes = cursor.fetchall()
+        return jsonify({"success": True, "classes": classes})
+    except Exception as e:
+        print(f"取得班級列表錯誤: {e}")
+        return jsonify({"success": False, "message": "取得班級列表失敗"}), 500
     finally:
         cursor.close()
         conn.close()

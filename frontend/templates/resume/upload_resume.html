@@ -166,14 +166,15 @@
                 <table class="table table-bordered align-middle">
                   <thead>
                     <tr>
-                      <th style="width: 50%;">課程名稱</th>
-                      <th style="width: 25%;">學分數</th>
+                      <th style="width: 40%;">課程名稱</th>
+                      <th style="width: 15%;">學分數</th>
+                      <th style="width: 20%;">成績</th>
                       <th style="width: 25%;">狀態</th>
                     </tr>
                   </thead>
                   <tbody id="courseTableBody">
                     <tr>
-                      <td colspan="3" class="text-muted text-center">載入中...</td>
+                      <td colspan="4" class="text-muted text-center">載入中...</td>
                     </tr>
                   </tbody>
                 </table>
@@ -416,9 +417,24 @@
 
       tr.innerHTML = `
       <td><input type="text" name="course_name[]" class="form-control form-control-sm" value="${course.name || ""}" placeholder="輸入課程名稱"></td>
-      <td><input type="text" name="course_credits[]" class="form-control form-control-sm course-credits-input" value="${displayCredits}" placeholder="學分" readonly></td>
+      <td><input type="text" name="course_credits[]" class="form-control form-control-sm course-credits-input" value="${displayCredits}" placeholder="學分"></td>
+      <td><input type="text" name="course_grade[]" class="form-control form-control-sm course-grade-input" value="${course.grade || ""}" placeholder="輸入成績"></td>
       <td><button type="button" class="btn ${buttonClass} btn-sm toggle-not-taken">${buttonText}</button></td>
       `;
+      
+      // 添加事件监听器，当成绩输入改变时同步到 allCoursesData
+      const gradeInput = tr.querySelector('input[name="course_grade[]"]');
+      if (gradeInput) {
+        gradeInput.addEventListener('input', () => {
+          const courseName = tr.querySelector('input[name="course_name[]"]').value;
+          const index = allCoursesData.findIndex(c => c.name === courseName);
+          if (index > -1) {
+            allCoursesData[index].grade = gradeInput.value.trim();
+            saveFormData();
+          }
+        });
+      }
+      
       return tr;
     }
 
@@ -429,7 +445,7 @@
 
       if (courses.length === 0) {
         const row = document.createElement("tr");
-        row.innerHTML = `<td colspan="3" class="text-muted text-center">查無課程或尚未新增課程</td>`;
+        row.innerHTML = `<td colspan="4" class="text-muted text-center">查無課程或尚未新增課程</td>`;
         tbody.appendChild(row);
         return;
       }
@@ -498,7 +514,7 @@
         return;
       }
       
-      tbody.innerHTML = '<tr><td colspan="3" class="text-muted text-center">載入中...</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="4" class="text-muted text-center">載入中...</td></tr>';
       try {
         const res = await fetch("/api/load_personal_template");
         const result = await res.json();
@@ -529,7 +545,7 @@
         }
       } catch (err) {
         console.error("❌ 載入個人模板失敗:", err);
-        tbody.innerHTML = '<tr><td colspan="3" class="text-danger text-center">載入失敗</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="4" class="text-danger text-center">載入失敗</td></tr>';
         allCoursesData = [];
       }
     }
@@ -537,7 +553,7 @@
     // 🧩 若無個人模板，載入系統預設課程
     async function loadStandardCourses() {
       const tbody = document.getElementById("courseTableBody");
-      tbody.innerHTML = '<tr><td colspan="3" class="text-muted text-center">載入標準課程中...</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="4" class="text-muted text-center">載入標準課程中...</td></tr>';
       try {
         const res = await fetch("/api/get_standard_courses");
         const result = await res.json();
@@ -551,12 +567,12 @@
 
           renderCourseTable(allCoursesData);
         } else {
-          tbody.innerHTML = '<tr><td colspan="3" class="text-muted text-center">目前無標準課程</td></tr>';
+          tbody.innerHTML = '<tr><td colspan="4" class="text-muted text-center">目前無標準課程</td></tr>';
           allCoursesData = [];
         }
       } catch (err) {
         console.error("❌ 載入標準課程失敗:", err);
-        tbody.innerHTML = '<tr><td colspan="3" class="text-danger text-center">載入失敗</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="4" class="text-danger text-center">載入失敗</td></tr>';
         allCoursesData = [];
       }
     }
@@ -567,6 +583,7 @@
       const courses = allCoursesData.map(course => ({
         name: course.name,
         credits: course.credits,
+        grade: course.grade || '',
         isNotTaken: course.isNotTaken || false // 確保有 isNotTaken 屬性
       }));
 
@@ -930,9 +947,6 @@
         const oldHint = fileInput.parentElement.querySelector('.cert-photo-hint');
         if (oldHint) oldHint.remove();
         
-        // 添加瀏覽和下載按鈕（無論是只讀還是編輯模式）
-        setupFileInputButtons(fileInput, certImagePath, !isEditing);
-        console.log(`✅ 證照圖片按鈕已設置: ${certImagePath}`);
       } else {
         console.log(`⚠️ 沒有證照圖片路徑，跳過設置按鈕`);
       }
@@ -1485,57 +1499,6 @@
       
       refreshCertificateIndices();
       
-      // 如果當前處於只讀狀態，設置新創建的證照輸入框為只讀
-      // 使用延遲確保所有異步操作（如級別選項載入）完成後再設置為只讀
-      if (!isEditing) {
-        setTimeout(() => {
-          const certContainer = document.getElementById(CERT_CONTAINER_ID);
-          if (certContainer) {
-            // 先檢查並記錄所有級別字段的值
-            certContainer.querySelectorAll('.cert-level-select').forEach(levelSelect => {
-              const currentValue = levelSelect.value;
-              console.log(`🔍 設置只讀前檢查級別字段: 值=${currentValue || '(空)'}, 選項數=${levelSelect.options.length}`);
-              
-              // 如果值為空但應該有值，嘗試從選項中查找
-              if (!currentValue && levelSelect.options.length > 1) {
-                // 檢查是否有選中的選項（可能是因為 disabled 導致值不顯示）
-                for (let i = 0; i < levelSelect.options.length; i++) {
-                  const option = levelSelect.options[i];
-                  if (option.selected && option.value) {
-                    console.log(`✅ 找到已選中的級別選項: ${option.value}`);
-                    levelSelect.value = option.value;
-                    break;
-                  }
-                }
-              }
-            });
-            
-            certContainer.querySelectorAll('input:not([type="file"]):not([type="hidden"]), select').forEach(input => {
-              input.setAttribute('readonly', 'readonly');
-              input.classList.add('bg-light');
-              input.style.cursor = 'not-allowed';
-              if (input.tagName === 'SELECT') {
-                // 注意：disabled 的 select 仍然會顯示選中的值
-                input.disabled = true;
-              }
-            });
-            certContainer.querySelectorAll('input[type="file"]').forEach(input => {
-              input.disabled = true;
-              
-              // 獲取圖片路徑並設置按鈕
-              const imagePath = input.getAttribute('data-image-path');
-              setupFileInputButtons(input, imagePath, true);
-            });
-            
-            // 再次檢查級別字段的值
-            certContainer.querySelectorAll('.cert-level-select').forEach(levelSelect => {
-              console.log(`✅ 設置只讀後級別字段: 值=${levelSelect.value || '(空)'}, disabled=${levelSelect.disabled}`);
-            });
-            
-            console.log('✅ 證照欄位已設置為只讀模式');
-          }
-        }, 800); // 增加延遲時間，確保級別選項載入完成
-      }
     }
 
     // =========================================================================
@@ -1552,6 +1515,7 @@
         courses: allCoursesData.map(course => ({
           name: course.name,
           credits: course.credits,
+          grade: course.grade || '',
           isNotTaken: course.isNotTaken || false
         })),
         certificates: certEntries.map(entry => {
@@ -1572,7 +1536,7 @@
         })
       };
 
-      const skip = new Set(["cert_names[]", "cert_type[]", "cert_code[]", "course_name[]", "course_credits[]"]);
+      const skip = new Set(["cert_names[]", "cert_type[]", "cert_code[]", "course_name[]", "course_credits[]", "course_grade[]"]);
 
       form.querySelectorAll('input, select, textarea').forEach(input => {
         const name = input.name;
@@ -1673,231 +1637,7 @@
       addCertBtn.addEventListener('click', () => addCertificateEntry());
     }
 
-    // 🧩 為文件上傳欄位添加/移除瀏覽和下載按鈕
-    function setupFileInputButtons(input, imagePath, readonly) {
-      const container = input.parentElement;
-      if (!container) return;
-      
-      // 移除現有的按鈕組（如果存在）
-      const existingBtnGroup = container.querySelector('.file-input-btn-group');
-      if (existingBtnGroup) {
-        existingBtnGroup.remove();
-      }
-      
-      // 只要有圖片路徑就顯示按鈕（無論是只讀還是編輯模式）
-      if (imagePath) {
-        const btnGroup = document.createElement('div');
-        btnGroup.className = 'file-input-btn-group d-flex gap-2 mt-2';
-        
-        // 瀏覽按鈕
-        const viewBtn = document.createElement('button');
-        viewBtn.type = 'button';
-        viewBtn.className = 'btn btn-sm btn-outline-primary';
-        viewBtn.innerHTML = '<i class="bi bi-eye me-1"></i>瀏覽';
-        viewBtn.onclick = () => {
-          // 在新視窗中打開圖片
-          let imageUrl = imagePath;
-          if (!imagePath.startsWith('http')) {
-            // 如果路徑是相對路徑，構建正確的URL
-            // 路徑格式可能是：uploads/resumes/photos/... 或 resumes/photos/...
-            if (imagePath.startsWith('uploads/')) {
-              // 路徑格式：uploads/resumes/photos/... -> /uploads/resumes/photos/...
-              imageUrl = `/${imagePath}`;
-            } else if (imagePath.startsWith('resumes/')) {
-              // 路徑格式：resumes/photos/... -> /uploads/resumes/photos/...
-              imageUrl = `/uploads/${imagePath}`;
-            } else {
-              // 預設使用 /uploads/ 前綴
-              imageUrl = `/uploads/${imagePath}`;
-            }
-          }
-          console.log(`🔍 瀏覽圖片: ${imagePath} -> ${imageUrl}`);
-          window.open(imageUrl, '_blank');
-        };
-        
-        // 下載按鈕
-        const downloadBtn = document.createElement('button');
-        downloadBtn.type = 'button';
-        downloadBtn.className = 'btn btn-sm btn-outline-success';
-        downloadBtn.innerHTML = '<i class="bi bi-download me-1"></i>下載';
-        downloadBtn.onclick = () => {
-          // 下載圖片
-          let imageUrl = imagePath;
-          if (!imagePath.startsWith('http')) {
-            // 如果路徑是相對路徑，構建正確的URL
-            if (imagePath.startsWith('uploads/')) {
-              imageUrl = `/${imagePath}`;
-            } else if (imagePath.startsWith('resumes/')) {
-              imageUrl = `/uploads/${imagePath}`;
-            } else {
-              imageUrl = `/uploads/${imagePath}`;
-            }
-          }
-          console.log(`🔍 下載圖片: ${imagePath} -> ${imageUrl}`);
-          const link = document.createElement('a');
-          link.href = imageUrl;
-          link.download = imagePath.split('/').pop() || 'image';
-          document.body.appendChild(link);
-          link.click();
-          document.body.removeChild(link);
-        };
-        
-        btnGroup.appendChild(viewBtn);
-        btnGroup.appendChild(downloadBtn);
-        container.appendChild(btnGroup);
-      }
-    }
 
-    // 🧩 設置表單只讀/可編輯狀態（參考 fill_preferences 頁面）
-    function setFormReadonly(readonly) {
-      const form = document.getElementById("resumeForm");
-      if (!form) return;
-
-      // 更新編輯狀態
-      isEditing = !readonly;
-
-      // 設置所有輸入欄位（使用 readonly 而不是 disabled，這樣值仍然可以提交）
-      form.querySelectorAll('input:not([type="file"]):not([type="button"]):not([type="submit"]), select, textarea').forEach(input => {
-        if (readonly) {
-          input.setAttribute('readonly', 'readonly');
-          input.classList.add('bg-light');
-          input.style.cursor = 'not-allowed';
-        } else {
-          input.removeAttribute('readonly');
-          input.classList.remove('bg-light');
-          input.style.cursor = '';
-        }
-      });
-
-      // 設置檔案上傳欄位（使用 disabled）並添加/移除瀏覽和下載按鈕
-      form.querySelectorAll('input[type="file"]').forEach(input => {
-        input.disabled = readonly;
-        
-        // 獲取圖片路徑（從 data-image-path 屬性）
-        let imagePath = input.getAttribute('data-image-path');
-        
-        // 如果沒有從 data 屬性獲取到路徑，嘗試從後端重新獲取
-        // 這對於成績單和缺勤記錄佐證圖特別重要，因為它們的路徑可能還沒有設置到 data 屬性
-        if (!imagePath) {
-          // 檢查是否是成績單輸入框
-          if (input.name === 'transcript_file' || input.id === 'transcript_file') {
-            // 嘗試從後端獲取成績單路徑
-            fetch('/api/get_resume_data')
-              .then(res => res.json())
-              .then(result => {
-                if (result.success && result.data && result.data.transcript_path) {
-                  const transcriptPath = result.data.transcript_path;
-                  input.setAttribute('data-image-path', transcriptPath);
-                  setupFileInputButtons(input, transcriptPath, readonly);
-                  console.log(`✅ 成績單路徑已恢復: ${transcriptPath}`);
-                }
-              })
-              .catch(error => {
-                console.error('❌ 獲取成績單路徑失敗:', error);
-              });
-          }
-          // 檢查是否是缺勤記錄佐證圖輸入框
-          else if (input.id === 'proof_image' || input.name === 'proof_image') {
-            // 嘗試從後端獲取缺勤記錄佐證圖路徑
-            fetch('/api/get_resume_data')
-              .then(res => res.json())
-              .then(result => {
-                if (result.success && result.data && result.data.absence_proof_path) {
-                  const proofPath = result.data.absence_proof_path;
-                  input.setAttribute('data-image-path', proofPath);
-                  setupFileInputButtons(input, proofPath, readonly);
-                  console.log(`✅ 缺勤記錄佐證圖路徑已恢復: ${proofPath}`);
-                }
-              })
-              .catch(error => {
-                console.error('❌ 獲取缺勤記錄佐證圖路徑失敗:', error);
-              });
-          }
-        }
-
-        
-        
-        // 設置按鈕（如果有圖片路徑）
-        if (imagePath) {
-          setupFileInputButtons(input, imagePath, readonly);
-        }
-      });
-
-      // 設置動態生成的課程表格
-      const courseRows = document.querySelectorAll("#courseTableBody tr");
-      courseRows.forEach(row => {
-        // 處理輸入框和選擇框
-        const inputs = row.querySelectorAll('input:not([type="button"]):not([type="checkbox"]), select');
-        inputs.forEach(input => {
-          if (readonly) {
-            input.setAttribute('readonly', 'readonly');
-            input.classList.add('bg-light');
-            input.style.cursor = 'not-allowed';
-          } else {
-            input.removeAttribute('readonly');
-            input.classList.remove('bg-light');
-            input.style.cursor = '';
-          }
-        });
-        // 處理複選框（使用 disabled）
-        const checkboxes = row.querySelectorAll('input[type="checkbox"]');
-        checkboxes.forEach(checkbox => {
-          checkbox.disabled = readonly;
-        });
-        // 處理課程表格中的按鈕（未修課按鈕）
-        const buttons = row.querySelectorAll('button');
-        buttons.forEach(button => {
-          button.disabled = readonly;
-        });
-      });
-
-      // 設置證照相關按鈕
-      const addCertBtn = document.getElementById(CERT_ADD_BTN_ID);
-      if (addCertBtn) {
-        addCertBtn.disabled = readonly;
-      }
-      document.querySelectorAll('.remove-cert-btn, .btn-remove-cert').forEach(btn => {
-        btn.disabled = readonly;
-      });
-
-      // 設置缺勤篩選按鈕和選擇器
-      const filterBtn = document.getElementById("filterAbsenceBtn");
-      if (filterBtn) {
-        filterBtn.disabled = readonly;
-      }
-      const startSemester = document.getElementById("startSemester");
-      const endSemester = document.getElementById("endSemester");
-      if (startSemester) {
-        startSemester.disabled = readonly;
-      }
-      if (endSemester) {
-        endSemester.disabled = readonly;
-      }
-
-      // 設置提交和修改按鈕（參考 fill_preferences 頁面）
-      const submitBtn = document.getElementById("submitResumeBtn");
-      const editBtn = document.getElementById("editResumeBtn");
-      
-      if (readonly) {
-        // 只讀模式：隱藏提交按鈕，顯示修改按鈕
-        if (submitBtn) {
-          submitBtn.classList.add('d-none');
-        }
-        if (editBtn) {
-          editBtn.classList.remove('d-none');
-          editBtn.innerHTML = '<i class="bi bi-pencil-square me-2"></i>修改履歷';
-          editBtn.classList.replace('btn-warning', 'btn-primary');
-        }
-      } else {
-        // 可編輯模式：顯示提交按鈕，隱藏修改按鈕
-        if (submitBtn) {
-          submitBtn.classList.remove('d-none');
-        }
-        if (editBtn) {
-          editBtn.classList.add('d-none');
-        }
-      }
-    }
 
     // 🧩 檢查是否有已提交的履歷（最新一筆）並載入資料
     async function checkLatestResume() {
@@ -1915,8 +1655,6 @@
             // 載入履歷資料
             await loadResumeData();
             
-            // 設置表單為只讀
-            setFormReadonly(true);
             return true;
           }
         }
@@ -2022,8 +1760,6 @@
             // 保存圖片路徑到 data 屬性，用於瀏覽和下載
             photoInput.setAttribute('data-image-path', studentInfo.photo_path);
             
-            // 添加瀏覽和下載按鈕（無論是只讀還是編輯模式）
-            setupFileInputButtons(photoInput, studentInfo.photo_path, !isEditing);
           }
         }
 
@@ -2124,11 +1860,6 @@
             // 保存圖片路徑到 data 屬性，用於瀏覽和下載
             transcriptInput.setAttribute('data-image-path', transcriptPath);
             
-            // 添加瀏覽和下載按鈕（無論是只讀還是編輯模式）
-            // 使用當前的只讀狀態（通過檢查 input 的 disabled 屬性）
-            const isCurrentlyReadonly = transcriptInput.disabled;
-            setupFileInputButtons(transcriptInput, transcriptPath, isCurrentlyReadonly);
-            console.log(`✅ 成績單按鈕已設置: ${transcriptPath}, readonly=${isCurrentlyReadonly}`);
           }
         } else {
           console.log("⚠️ 沒有成績單路徑");
@@ -2145,10 +1876,6 @@
             const oldHint = proofImageInput.parentElement.querySelector('.proof-image-hint');
             if (oldHint) oldHint.remove();
             
-            // 添加瀏覽和下載按鈕
-            const isCurrentlyReadonly = proofImageInput.disabled;
-            setupFileInputButtons(proofImageInput, data.absence_proof_path, isCurrentlyReadonly);
-            console.log(`✅ 缺勤記錄佐證圖按鈕已設置（從 API）: ${data.absence_proof_path}, readonly=${isCurrentlyReadonly}`);
           }
         }
         
@@ -2203,11 +1930,6 @@
                     const oldHint = proofImageInput.parentElement.querySelector('.proof-image-hint');
                     if (oldHint) oldHint.remove();
                     
-                    // 添加瀏覽和下載按鈕（無論是只讀還是編輯模式）
-                    // 使用當前的只讀狀態（通過檢查 input 的 disabled 屬性）
-                    const isCurrentlyReadonly = proofImageInput.disabled;
-                    setupFileInputButtons(proofImageInput, absenceProofPath, isCurrentlyReadonly);
-                    console.log(`✅ 缺勤記錄佐證圖按鈕已設置: ${absenceProofPath}, readonly=${isCurrentlyReadonly}`);
                   }
                 } else {
                   console.log("⚠️ 沒有缺勤記錄佐證圖路徑");
@@ -2287,7 +2009,6 @@
               "出生日期": birthValue || "(空)",
               "電話": phoneValue || "(空)",
               "電子郵件": emailValue || "(空)",
-              "表單是否只讀": form.querySelector('input[name="name"]')?.hasAttribute('readonly')
             });
             
             // 如果資料為空，發出警告
@@ -2295,28 +2016,6 @@
               console.warn("⚠️ 警告：表單資料似乎為空，可能是載入失敗或被清空");
             }
             
-            // 確保成績單和缺勤記錄佐證圖的按鈕正確顯示
-            // 檢查成績單輸入框
-            const transcriptInput = form.querySelector('input[name="transcript_file"]');
-            if (transcriptInput) {
-              const transcriptPath = transcriptInput.getAttribute('data-image-path');
-              if (transcriptPath) {
-                const isCurrentlyReadonly = transcriptInput.disabled;
-                setupFileInputButtons(transcriptInput, transcriptPath, isCurrentlyReadonly);
-                console.log(`🔄 重新設置成績單按鈕: ${transcriptPath}, readonly=${isCurrentlyReadonly}`);
-              }
-            }
-            
-            // 檢查缺勤記錄佐證圖輸入框
-            const proofImageInput = document.getElementById('proof_image');
-            if (proofImageInput) {
-              const proofImagePath = proofImageInput.getAttribute('data-image-path');
-              if (proofImagePath) {
-                const isCurrentlyReadonly = proofImageInput.disabled;
-                setupFileInputButtons(proofImageInput, proofImagePath, isCurrentlyReadonly);
-                console.log(`🔄 重新設置缺勤記錄佐證圖按鈕: ${proofImagePath}, readonly=${isCurrentlyReadonly}`);
-              }
-            }
           }
         }, 500); // 增加延遲時間，確保所有數據都已載入
         
@@ -2678,8 +2377,6 @@
             if (proofImageInput) {
               proofImageInput.setAttribute('data-image-path', latestRecordWithImage.image_path);
               const isCurrentlyReadonly = proofImageInput.disabled;
-              setupFileInputButtons(proofImageInput, latestRecordWithImage.image_path, isCurrentlyReadonly);
-              console.log(`✅ 缺勤記錄佐證圖按鈕已設置（載入後）: ${latestRecordWithImage.image_path}, readonly=${isCurrentlyReadonly}`);
             }
           }
         } else {
@@ -2976,8 +2673,6 @@
                         const absenceProofPath = result.data.absence_proof_path;
                         proofImageInput.setAttribute('data-image-path', absenceProofPath);
                         const isCurrentlyReadonly = proofImageInput.disabled;
-                        setupFileInputButtons(proofImageInput, absenceProofPath, isCurrentlyReadonly);
-                        console.log(`✅ 缺勤記錄佐證圖按鈕已設置（保存後）: ${absenceProofPath}, readonly=${isCurrentlyReadonly}`);
                       }
                     })
                     .catch(error => {
@@ -3110,7 +2805,6 @@
               if (photoInput && !photoInput.getAttribute('data-image-path')) {
                 photoInput.setAttribute('data-image-path', data.student_info.photo_path);
                 const isCurrentlyReadonly = photoInput.disabled;
-                setupFileInputButtons(photoInput, data.student_info.photo_path, isCurrentlyReadonly);
                 console.log(`✅ 照片路徑已恢復: ${data.student_info.photo_path}`);
               }
             }
@@ -3121,7 +2815,6 @@
               if (transcriptInput && !transcriptInput.getAttribute('data-image-path')) {
                 transcriptInput.setAttribute('data-image-path', data.transcript_path);
                 const isCurrentlyReadonly = transcriptInput.disabled;
-                setupFileInputButtons(transcriptInput, data.transcript_path, isCurrentlyReadonly);
                 console.log(`✅ 成績單路徑已恢復: ${data.transcript_path}`);
               }
             }
@@ -3132,7 +2825,6 @@
               if (proofImageInput && !proofImageInput.getAttribute('data-image-path')) {
                 proofImageInput.setAttribute('data-image-path', data.absence_proof_path);
                 const isCurrentlyReadonly = proofImageInput.disabled;
-                setupFileInputButtons(proofImageInput, data.absence_proof_path, isCurrentlyReadonly);
                 console.log(`✅ 缺勤記錄佐證圖路徑已恢復: ${data.absence_proof_path}`);
               }
             }
@@ -3160,7 +2852,6 @@
       editResumeBtn.addEventListener("click", async function() {
         // 切換編輯狀態
         isEditing = !isEditing;
-        setFormReadonly(!isEditing);
         
         if (isEditing) {
           // 如果進入編輯模式，先從資料庫重新載入完整資料，確保所有欄位都有值
@@ -3209,7 +2900,6 @@
           }
           
           disableAutoSave = false;
-          setFormReadonly(true);
         }
       });
     }
@@ -3259,17 +2949,20 @@
       courseRows.forEach(row => {
         const nameInput = row.querySelector('input[name="course_name[]"]');
         const creditsInput = row.querySelector('input[name="course_credits[]"]');
+        const gradeInput = row.querySelector('input[name="course_grade[]"]');
         const isNotTaken = row.dataset.isNotTaken === 'true';
 
         if (nameInput && creditsInput) {
           const name = nameInput.value.trim();
           // 提交時，無論是否未修課，都使用顯示的值 (0 或實際學分)
           const credits = creditsInput.value.trim();
+          const grade = gradeInput ? gradeInput.value.trim() : '';
 
           if (name && credits) {
             courses.push({
               name: name,
               credits: credits,
+              grade: grade,
               isNotTaken: isNotTaken // 傳遞狀態給後端
             });
           }
@@ -3281,6 +2974,7 @@
       // 移除舊的課程相關欄位，因為我們統一用 JSON 傳遞
       formData.delete("course_name[]");
       formData.delete("course_credits[]");
+      formData.delete("course_grade[]");
 
       // 收集缺勤記錄資料（從資料庫讀取的記錄）
       // 1. 收集所有缺勤記錄ID和對應的佐證圖片
@@ -3349,7 +3043,6 @@
           isEditing = false;
           
           // 設置表單為只讀模式
-          setFormReadonly(true);
           
           // 重新從資料庫載入資料（確保顯示最新資料）
           await loadResumeData();

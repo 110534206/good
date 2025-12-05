@@ -76,15 +76,29 @@ def get_my_notifications():
     if not user_id:
         return jsonify({"success": False, "message": "未登入"}), 401
 
+    # 獲取可選的類別篩選參數
+    category_filter = request.args.get("category", None)
+
     try:
         conn = get_db()
         cursor = conn.cursor(dictionary=True)
-        cursor.execute("""
-            SELECT id, title, message, category, link_url, is_read, created_at
-            FROM notifications
-            WHERE user_id = %s
-            ORDER BY created_at DESC
-        """, (user_id,))
+        
+        # 根據是否有 category 篩選來構建查詢
+        if category_filter and category_filter != "all":
+            cursor.execute("""
+                SELECT id, title, message, category, link_url, is_read, created_at
+                FROM notifications
+                WHERE user_id = %s AND category = %s
+                ORDER BY created_at DESC
+            """, (user_id, category_filter))
+        else:
+            cursor.execute("""
+                SELECT id, title, message, category, link_url, is_read, created_at
+                FROM notifications
+                WHERE user_id = %s
+                ORDER BY created_at DESC
+            """, (user_id,))
+        
         rows = cursor.fetchall()
         return jsonify({"success": True, "notifications": rows})
     except Exception:

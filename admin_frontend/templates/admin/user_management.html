@@ -76,10 +76,10 @@
 
         /* 藍色 */
         .role-teacher {
-            background-color: #198754;
+            background-color: #6f42c1;
         }
 
-        /* 綠色 */
+        /* 紫色 */
         .role-director {
             background-color: #ffc107;
             color: #343a40;
@@ -110,9 +110,9 @@
         }
 
         .action-btns {
-            min-width: 150px;
+            min-width: 200px;
             /* 確保操作按鈕區域足夠寬 */
-            text-align: center;
+            text-align: left;
         }
 
         .modal-body .form-control[readonly] {
@@ -175,10 +175,6 @@
                             <th>Email</th>
                             <th>角色</th>
                             <th>狀態</th>
-                            <th>科系/班級</th>
-                            <th>屆數</th>
-                            <th>帶班列表</th>
-                            <th>建立日期</th>
                             <th class="action-btns">操作</th>
                         </tr>
                     </thead>
@@ -201,23 +197,23 @@
                 <form id="createUserForm">
                     <div class="modal-body">
                         <div class="mb-3">
-                            <label for="createUsername" class="form-label">帳號 (必填)</label>
+                            <label for="createUsername" class="form-label">帳號</label>
                             <input type="text" class="form-control" id="createUsername" required>
                         </div>
                         <div class="mb-3">
-                            <label for="createPassword" class="form-label">密碼 (必填)</label>
+                            <label for="createPassword" class="form-label">密碼</label>
                             <input type="password" class="form-control" id="createPassword" required>
                         </div>
                         <div class="mb-3">
-                            <label for="createName" class="form-label">姓名 (必填)</label>
+                            <label for="createName" class="form-label">姓名</label>
                             <input type="text" class="form-control" id="createName" required>
                         </div>
                         <div class="mb-3">
                             <label for="createEmail" class="form-label">Email</label>
-                            <input type="email" class="form-control" id="createEmail" placeholder="學生角色需填寫">
+                            <input type="email" class="form-control" id="createEmail" placeholder="">
                         </div>
                         <div class="mb-3">
-                            <label for="createRole" class="form-label">角色 (必選)</label>
+                            <label for="createRole" class="form-label">角色</label>
                             <select class="form-select" id="createRole" required>
                                 <option value="">請選擇角色</option>
                                 <option value="student">學生</option>
@@ -353,6 +349,76 @@
         </div>
     </div>
 
+    <div class="modal fade" id="viewUserDetailModal" tabindex="-1" aria-labelledby="viewUserDetailModalLabel"
+        aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header bg-info text-white">
+                    <h5 class="modal-title" id="viewUserDetailModalLabel"><i class="bi bi-info-circle"></i> 用戶詳情</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"
+                        aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label fw-bold">ID</label>
+                            <p class="form-control-plaintext" id="detailUserId">-</p>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-bold">帳號</label>
+                            <p class="form-control-plaintext" id="detailUsername">-</p>
+                        </div>
+                    </div>
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label fw-bold">姓名</label>
+                            <p class="form-control-plaintext" id="detailName">-</p>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-bold">Email</label>
+                            <p class="form-control-plaintext" id="detailEmail">-</p>
+                        </div>
+                    </div>
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label fw-bold">角色</label>
+                            <p class="form-control-plaintext" id="detailRole">-</p>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-bold">狀態</label>
+                            <p class="form-control-plaintext" id="detailStatus">-</p>
+                        </div>
+                    </div>
+                    <div class="row mb-3" id="detailClassDeptRow" style="display: none;">
+                        <div class="col-md-6">
+                            <label class="form-label fw-bold">科系/班級</label>
+                            <p class="form-control-plaintext" id="detailClassDept">-</p>
+                        </div>
+                        <div class="col-md-6" id="detailAdmissionYearCol" style="display: none;">
+                            <label class="form-label fw-bold">屆數</label>
+                            <p class="form-control-plaintext" id="detailAdmissionYear">-</p>
+                        </div>
+                    </div>
+                    <div class="row mb-3" id="detailTeachingClassesRow" style="display: none;">
+                        <div class="col-md-12">
+                            <label class="form-label fw-bold">帶班列表</label>
+                            <p class="form-control-plaintext" id="detailTeachingClasses">-</p>
+                        </div>
+                    </div>
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label fw-bold">建立日期</label>
+                            <p class="form-control-plaintext" id="detailCreatedAt">-</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">關閉</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
         document.addEventListener('DOMContentLoaded', () => {
@@ -384,6 +450,9 @@
                 vendor: 'role-vendor'
             };
 
+            // 儲存用戶詳細資料，用於查看詳情 Modal
+            let usersDetailData = {};
+
             /**
              * 顯示提示訊息 (Alert)
              * @param {string} message - 訊息內容
@@ -391,6 +460,10 @@
              */
             function showAlert(message, type) {
                 const alertEl = document.getElementById('alertMessage');
+                if (!alertEl) {
+                    console.error('找不到 alertMessage 元素');
+                    return;
+                }
                 alertEl.innerHTML = `${message}<button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>`;
                 alertEl.className = `alert alert-${type} alert-dismissible fade show`;
                 alertEl.classList.remove('d-none');
@@ -410,8 +483,11 @@
             function renderUserTable(users) {
                 const tbody = document.getElementById('userTableBody');
                 tbody.innerHTML = "";
+                // 清空用戶詳細資料快取
+                usersDetailData = {};
+                
                 if (users.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="11" class="text-center text-muted"><i class="bi bi-info-circle"></i> 無符合條件的用戶數據</td></tr>';
+                    tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted"><i class="bi bi-info-circle"></i> 無符合條件的用戶數據</td></tr>';
                     return;
                 }
 
@@ -426,7 +502,7 @@
                         '-';
                     const admissionYear = user.role === 'student' ? (user.admission_year || '-') : '-';
                     const teachingClasses = ['teacher', 'director'].includes(user.role) ?
-                        (user.teaching_classes || '-').replace(/, /g, ',<br>') : /* 分行顯示班級 */
+                        (user.teaching_classes || '-') :
                         '-';
 
                     // 簡化 Email 顯示
@@ -434,12 +510,29 @@
                     // 簡化建立時間顯示 (只保留日期)
                     const displayCreatedAt = user.created_at ? user.created_at.substring(0, 10) : '-';
 
-                    // 狀態顯示邏輯（僅對廠商顯示狀態，其他角色顯示 '-'）
+                    // 狀態顯示邏輯（所有用戶都顯示狀態）
                     let statusDisplay = '-';
                     let statusBadgeClass = '';
+                    const status = user.status || 'approved'; // 默認值為 'approved'
+                    
                     if (user.role === 'vendor') {
-                        const status = user.status || 'pending';
+                        // 廠商狀態顯示
                         if (status === 'pending') {
+                            statusDisplay = '待審核';
+                            statusBadgeClass = 'badge bg-warning text-dark';
+                        } else if (status === 'active') {
+                            statusDisplay = '已啟用';
+                            statusBadgeClass = 'badge bg-success';
+                        } else {
+                            statusDisplay = status;
+                            statusBadgeClass = 'badge bg-secondary';
+                        }
+                    } else {
+                        // 其他角色狀態顯示
+                        if (status === 'approved') {
+                            statusDisplay = '已啟用';
+                            statusBadgeClass = 'badge bg-success';
+                        } else if (status === 'pending') {
                             statusDisplay = '待審核';
                             statusBadgeClass = 'badge bg-warning text-dark';
                         } else if (status === 'active') {
@@ -455,6 +548,21 @@
                     const approveButton = (user.role === 'vendor' && (user.status || 'pending') === 'pending') ?
                         `<button class="btn btn-sm btn-success" onclick="approveVendor(${user.id})" title="審核通過"><i class="bi bi-check-circle"></i> 審核</button>` : '';
 
+                    // 儲存用戶詳細資料，用於查看詳情 Modal
+                    usersDetailData[user.id] = {
+                        username: user.username || '-',
+                        name: user.name || '-',
+                        email: user.email || '-',
+                        role: roleDisplay,
+                        originalRole: user.role, // 保存原始角色，用於判斷是否顯示字段
+                        status: statusDisplay,
+                        statusBadgeClass: statusBadgeClass,
+                        classDeptInfo: classDeptInfo,
+                        admissionYear: admissionYear,
+                        teachingClasses: teachingClasses,
+                        displayCreatedAt: displayCreatedAt
+                    };
+
                     const tr = document.createElement('tr');
                     tr.innerHTML = `
                         <td>${user.id}</td>
@@ -463,12 +571,9 @@
                         <td class="text-truncate" title="${escapeHtml(user.email || '-')}">${escapeHtml(displayEmail)}</td>
                         <td><span class="badge ${roleClass}">${roleDisplay}</span></td>
                         <td>${statusDisplay !== '-' ? `<span class="${statusBadgeClass}">${statusDisplay}</span>` : statusDisplay}</td>
-                        <td>${escapeHtml(classDeptInfo)}</td>
-                        <td>${admissionYear}</td>
-                        <td>${teachingClasses}</td>
-                        <td>${displayCreatedAt}</td>
                         <td class="action-btns">
-                          <div class="d-flex gap-1 justify-content-center">
+                          <div class="d-flex gap-1 justify-content-start">
+                            <button class="btn btn-sm btn-info text-white" onclick="openViewDetailModal(${user.id})" title="查看詳情"><i class="bi bi-info-circle"></i> 詳情</button>
                             ${approveButton}
                             <button class="btn btn-sm btn-warning" onclick="openEditModal(${user.id}, '${escapeHtml(user.username).replace(/'/g, "\\'")}', '${escapeHtml(user.name || '').replace(/'/g, "\\'")}', '${escapeHtml(user.email || '').replace(/'/g, "\\'")}', '${user.role}', '${user.class_id || ''}')" title="編輯"><i class="bi bi-pencil"></i></button>
                             <button class="btn btn-sm btn-danger" onclick="deleteUser(${user.id})" title="刪除"><i class="bi bi-trash"></i></button>
@@ -486,19 +591,19 @@
              */
             async function loadUsers() {
                 try {
-                    document.getElementById('userTableBody').innerHTML = '<tr><td colspan="10" class="text-center text-info"><i class="bi bi-arrow-clockwise"></i> 載入數據中，請稍候...</td></tr>';
+                    document.getElementById('userTableBody').innerHTML = '<tr><td colspan="7" class="text-center text-info"><i class="bi bi-arrow-clockwise"></i> 載入數據中，請稍候...</td></tr>';
                     const res = await fetch('/admin/api/get_all_users');
                     const data = await res.json();
                     if (!data.success) {
                         showAlert("載入失敗：" + data.message, 'danger');
-                        document.getElementById('userTableBody').innerHTML = '<tr><td colspan="10" class="text-center text-danger">載入失敗</td></tr>';
+                        document.getElementById('userTableBody').innerHTML = '<tr><td colspan="7" class="text-center text-danger">載入失敗</td></tr>';
                         return;
                     }
                     renderUserTable(data.users);
                 } catch (err) {
                     console.error("載入用戶錯誤：", err);
                     showAlert('連線錯誤，載入用戶資料失敗', 'danger');
-                    document.getElementById('userTableBody').innerHTML = '<tr><td colspan="10" class="text-center text-danger">連線錯誤，載入失敗</td></tr>';
+                    document.getElementById('userTableBody').innerHTML = '<tr><td colspan="7" class="text-center text-danger">連線錯誤，載入失敗</td></tr>';
                 }
             }
             window.loadUsers = loadUsers;
@@ -520,7 +625,7 @@
                 if (role) params.append('role', role); // 後端已支援
 
                 try {
-                    document.getElementById('userTableBody').innerHTML = '<tr><td colspan="10" class="text-center text-primary"><i class="bi bi-search"></i> 搜尋中...</td></tr>';
+                    document.getElementById('userTableBody').innerHTML = '<tr><td colspan="7" class="text-center text-primary"><i class="bi bi-search"></i> 搜尋中...</td></tr>';
                     const res = await fetch('/admin/api/search_users?' + params.toString());
                     const data = await res.json();
                     if (!data.success) {
@@ -534,7 +639,7 @@
                 } catch (err) {
                     console.error("搜尋用戶錯誤：", err);
                     showAlert('連線錯誤，搜尋失敗', 'danger');
-                    document.getElementById('userTableBody').innerHTML = '<tr><td colspan="10" class="text-center text-danger">連線錯誤，搜尋失敗</td></tr>';
+                    document.getElementById('userTableBody').innerHTML = '<tr><td colspan="7" class="text-center text-danger">連線錯誤，搜尋失敗</td></tr>';
                 }
             };
 
@@ -699,6 +804,97 @@
                 }
 
                 new bootstrap.Modal(document.getElementById('editUserModal')).show();
+            };
+
+            // 開啟查看詳情 Modal
+            window.openViewDetailModal = (userId) => {
+                const userDetail = usersDetailData[userId];
+                if (!userDetail) {
+                    showAlert('找不到用戶詳細資料', 'warning');
+                    return;
+                }
+
+                // 填充詳情 Modal 的資料
+                document.getElementById('detailUserId').textContent = userId;
+                document.getElementById('detailUsername').textContent = userDetail.username || '-';
+                document.getElementById('detailName').textContent = userDetail.name || '-';
+                document.getElementById('detailEmail').textContent = userDetail.email || '-';
+                document.getElementById('detailRole').textContent = userDetail.role || '-';
+                
+                // 顯示狀態（使用徽章）
+                const statusEl = document.getElementById('detailStatus');
+                if (userDetail.statusBadgeClass && userDetail.status !== '-') {
+                    statusEl.innerHTML = `<span class="${userDetail.statusBadgeClass}">${userDetail.status}</span>`;
+                } else {
+                    statusEl.textContent = userDetail.status || '-';
+                }
+                
+                const originalRole = userDetail.originalRole || '';
+                
+                // 科系/班級和屆數：只有學生才顯示，且值不為空或'-'
+                const classDeptRow = document.getElementById('detailClassDeptRow');
+                const admissionYearCol = document.getElementById('detailAdmissionYearCol');
+                
+                if (originalRole === 'student') {
+                    // 科系/班級：去除空格后检查是否有有效值
+                    const classDeptValue = userDetail.classDeptInfo && 
+                                          userDetail.classDeptInfo.trim() !== '-' && 
+                                          userDetail.classDeptInfo.trim() !== '' ? 
+                                          userDetail.classDeptInfo.trim() : '';
+                    
+                    // 屆數：检查是否有有效值
+                    const admissionYearValue = userDetail.admissionYear && 
+                                             userDetail.admissionYear !== '-' && 
+                                             userDetail.admissionYear !== '' ? 
+                                             userDetail.admissionYear : '';
+                    
+                    if (classDeptValue) {
+                        classDeptRow.style.display = '';
+                        document.getElementById('detailClassDept').textContent = classDeptValue;
+                    } else {
+                        classDeptRow.style.display = 'none';
+                    }
+                    
+                    if (admissionYearValue) {
+                        admissionYearCol.style.display = '';
+                        document.getElementById('detailAdmissionYear').textContent = admissionYearValue;
+                        // 如果屆數有值，确保行显示
+                        if (!classDeptValue) {
+                            classDeptRow.style.display = '';
+                        }
+                    } else {
+                        admissionYearCol.style.display = 'none';
+                        // 如果兩個字段都沒有值，隐藏整行
+                        if (!classDeptValue) {
+                            classDeptRow.style.display = 'none';
+                        }
+                    }
+                } else {
+                    classDeptRow.style.display = 'none';
+                }
+                
+                // 帶班列表：只有教師或主任才顯示，且值不為空或'-'
+                const teachingClassesRow = document.getElementById('detailTeachingClassesRow');
+                if (['teacher', 'director'].includes(originalRole)) {
+                    const teachingClassesValue = userDetail.teachingClasses && 
+                                                userDetail.teachingClasses.trim() !== '-' && 
+                                                userDetail.teachingClasses.trim() !== '' ? 
+                                                userDetail.teachingClasses.trim() : null;
+                    
+                    if (teachingClassesValue) {
+                        teachingClassesRow.style.display = '';
+                        document.getElementById('detailTeachingClasses').textContent = teachingClassesValue;
+                    } else {
+                        teachingClassesRow.style.display = 'none';
+                    }
+                } else {
+                    // 非教師/主任角色，隱藏帶班列表
+                    teachingClassesRow.style.display = 'none';
+                }
+                
+                document.getElementById('detailCreatedAt').textContent = userDetail.displayCreatedAt || '-';
+
+                new bootstrap.Modal(document.getElementById('viewUserDetailModal')).show();
             };
 
             // 刪除使用者

@@ -226,14 +226,14 @@ def _record_history(cursor, preference_id, reviewer_id, action, comment):
     )
 
 
-def _notify_student(cursor, student_id, title, message, link_url="/vendor/resume-review"):
+def _notify_student(cursor, student_id, title, message, link_url="/vendor/resume-review", category="resume"):
     """發送通知給學生"""
     cursor.execute(
         """
-        INSERT INTO notifications (user_id, title, message, link_url, is_read, created_at)
-        VALUES (%s, %s, %s, %s, 0, NOW())
+        INSERT INTO notifications (user_id, title, message, category, link_url, is_read, created_at)
+        VALUES (%s, %s, %s, %s, %s, 0, NOW())
         """,
-        (student_id, title, message, link_url),
+        (student_id, title, message, category, link_url),
     )
 
 

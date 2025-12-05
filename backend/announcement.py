@@ -162,17 +162,27 @@ def delete_announcement(aid):
 # ============================================================
 def push_announcement_notifications(conn, title, content, ann_id):
     """當公告發布時，推送給所有使用者通知"""
+    from notification import create_notification
+    
     cursor = conn.cursor()
     cursor.execute("SELECT id FROM users")  # 全體使用者皆推送
     users = cursor.fetchall()
+    cursor.close()
 
-    notif_sql = """
-        INSERT INTO notifications (user_id, title, message, link_url, is_read, created_at)
-        VALUES (%s, %s, %s, %s, 0, NOW())
-    """
     link = f"/view_announcement/{ann_id}"
+    notification_title = f"新公告：{title}"
+    notification_message = content[:150] + ("..." if len(content) > 150 else "")
+    
+    # 使用 create_notification 函數，設置 category 為 "announcement"
     for u in users:
-        cursor.execute(notif_sql, (u[0], f"新公告：{title}", content[:150] + "...", link))
+        user_id = u[0]
+        # 注意：create_notification 會自己創建連接，但我們已經有 conn
+        # 為了保持一致性，我們直接使用 conn 但添加 category
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO notifications (user_id, title, message, category, link_url, is_read, created_at)
+            VALUES (%s, %s, %s, %s, %s, 0, NOW())
+        """, (user_id, notification_title, notification_message, "announcement", link))
+        cursor.close()
 
     conn.commit()
-    cursor.close()

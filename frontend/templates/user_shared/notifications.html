@@ -251,10 +251,16 @@
       margin-right: 6px;
     }
 
-    /* unread style */
+    /* unread style - 未讀為白色 */
     .notif-unread {
       border-left: 4px solid var(--primary);
-      background: linear-gradient(90deg, #f8fbff, #ffffff);
+      background: #ffffff;
+    }
+
+    /* read style - 已讀為灰色 */
+    .notif-read {
+      background: #f5f5f5;
+      border-left: 4px solid transparent;
     }
 
     /* pinned */
@@ -354,7 +360,7 @@
         <div class="d-flex gap-2 flex-wrap mb-3" id="categoryFilter">
           <label class="small muted me-1">類別</label>
           <div class="chip outline active" data-category="all">全部通知</div>
-          <div class="chip outline" data-category="general">公告</div>
+          <div class="chip outline" data-category="announcement">公告</div>
           <div class="chip outline" data-category="resume">履歷</div>
           <div class="chip outline" data-category="ranking">志願序</div>
           <div class="chip outline" data-category="company">實習公司</div>
@@ -413,6 +419,19 @@
     function formatDateTime(d) {
       const dt = new Date(d);
       return dt.toLocaleString('zh-TW', { hour12: false, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+    }
+
+    // helper: 將類別轉換為中文顯示
+    function getCategoryLabel(category) {
+      const categoryMap = {
+        'announcement': '公告',
+        'resume': '履歷',
+        'ranking': '志願序',
+        'company': '實習公司',
+        'general': '一般',
+        'preferences': '志願序'  // 兼容舊的 preferences 類別
+      };
+      return categoryMap[category] || category || '一般';
     }
 
     function groupLabelForDate(d) {
@@ -545,7 +564,7 @@
         // render notifications in this group
         currentGroup.forEach(n => {
           const card = document.createElement('div');
-          card.className = 'notif-card ' + (n.is_read ? '' : 'notif-unread') + (n.pinned ? ' pinned' : '');
+          card.className = 'notif-card ' + (n.is_read ? 'notif-read' : 'notif-unread') + (n.pinned ? ' pinned' : '');
           card.dataset.id = n.id;
 
           const left = document.createElement('div'); left.className = 'notif-left';
@@ -564,7 +583,7 @@
           }
           t.innerHTML = `${tagHtml} ${n.title}`;
           const meta = document.createElement('div'); meta.className = 'notif-meta d-flex justify-content-between align-items-center';
-          meta.innerHTML = `<div class="small muted">${n.category || '一般'}</div><div class="small muted">${formatDateTime(n.created_at)}</div>`;
+          meta.innerHTML = `<div class="small muted">${getCategoryLabel(n.category)}</div><div class="small muted">${formatDateTime(n.created_at)}</div>`;
 
           body.appendChild(t);
           body.appendChild(meta);
@@ -648,7 +667,7 @@
       modalTitle.innerText = n.title;
       // 顯示通知內容
       modalBody.innerHTML = `
-        <div class="small muted mb-2">時間: ${formatDateTime(n.created_at)} | 類別: ${n.category || '一般'}</div>
+        <div class="small muted mb-2">時間: ${formatDateTime(n.created_at)} | 類別: ${getCategoryLabel(n.category)}</div>
         <p style="white-space:pre-wrap;">${n.message}</p>
       `;
 

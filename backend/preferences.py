@@ -807,7 +807,7 @@ def review_preferences_api():
                 user_id=student_id,
                 title="志願序審核通過通知",
                 message=notification_content,
-                category="preferences"
+                category="ranking"
             )
 
         elif status == 'rejected':
@@ -828,7 +828,7 @@ def review_preferences_api():
                 user_id=student_id,
                 title="志願序退件通知",
                 message=notification_content,
-                category="preferences",
+                category="ranking",
                 link_url="/fill_preferences"  # 連結到志願填寫頁面，方便學生修改
             )
 
