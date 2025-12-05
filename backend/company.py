@@ -362,6 +362,67 @@ def download_company_template():
 
 
 # =========================================================
+# 🔢 獲取下一個編號序號
+# =========================================================
+@company_bp.route('/api/get_next_serial_number', methods=['GET'])
+def get_next_serial_number():
+    """根據民國年份獲取下一個序號"""
+    conn = None
+    cursor = None
+    try:
+        year = request.args.get('year', '').strip()
+        if not year or len(year) != 3:
+            # 如果沒有提供年份，使用當前民國年份
+            now = datetime.now()
+            year = str(now.year - 1911).zfill(3)
+        
+        conn = get_db()
+        cursor = conn.cursor()
+        
+        # 計算該年份的起始和結束日期（西元年）
+        roc_year = int(year)
+        gregorian_year_start = roc_year + 1911
+        gregorian_year_end = gregorian_year_start + 1
+        
+        # 查詢該年份內提交的公司數量
+        cursor.execute("""
+            SELECT COUNT(*) 
+            FROM internship_companies 
+            WHERE submitted_at >= %s 
+            AND submitted_at < %s
+        """, (
+            datetime(gregorian_year_start, 1, 1),
+            datetime(gregorian_year_end, 1, 1)
+        ))
+        
+        count = cursor.fetchone()[0]
+        
+        # 下一個序號 = 該年份的公司數量 + 1
+        next_sequence = count + 1
+        
+        return jsonify({
+            "success": True,
+            "year": year,
+            "next_sequence": next_sequence,
+            "serial_number": year + str(next_sequence).zfill(3)
+        })
+        
+    except Exception as e:
+        traceback.print_exc()
+        # 如果出錯，返回預設值 001
+        now = datetime.now()
+        year = str(now.year - 1911).zfill(3)
+        return jsonify({
+            "success": True,
+            "year": year,
+            "next_sequence": 1,
+            "serial_number": year + "001"
+        })
+    finally:
+        if cursor: cursor.close()
+        if conn: conn.close()
+
+# =========================================================
 # 📤 上傳公司資料（網頁填表，自動生成 Word 檔）
 # =========================================================
 @company_bp.route('/api/upload_company', methods=['POST'])
