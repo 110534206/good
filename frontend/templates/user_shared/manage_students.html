@@ -11,8 +11,19 @@
       background: #0066cc;
       color: white;
       padding: 1rem 2rem;
-      text-align: center;
       font-size: 1.5rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    header > div:first-child {
+      flex: 1;
+    }
+
+    header > div:last-child {
+      flex: 1;
+      text-align: right;
     }
 
     body {
@@ -148,7 +159,13 @@
 </head>
 
 <body>
-  <header>學生履歷管理</header>
+  <header>
+    <div></div>
+    <div style="flex: 1; text-align: center;">學生履歷管理</div>
+    <div>
+      <a href="/ta_home" class="btn btn-outline-light" style="font-size: 1rem; padding: 0.5rem 1rem;">返回首頁</a>
+    </div>
+  </header>
   <div class="container">
     <div class="filter-section">
       <div class="row align-items-end">
@@ -169,9 +186,6 @@
         </div>
         <div class="col-md-2">
           <button class="btn btn-success w-100" id="exportBtn">匯出 Excel</button>
-        </div>
-        <div class="col-md-2">
-          <a href="/ta_home" class="btn btn-outline-primary w-100">返回首頁</a>
         </div>
         <div class="col-md-2">
           <a href="/ta/statistics/manage_companies" class="btn btn-outline-secondary w-100">返回統計頁面</a>
