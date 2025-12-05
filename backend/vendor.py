@@ -159,8 +159,6 @@ def _serialize_job(row):
         "salary": salary_val,
         "remark": row.get("remark") or "",
         "is_active": bool(row.get("is_active")),
-        "updated_at": _format_datetime(row.get("updated_at")),
-        "created_at": _format_datetime(row.get("created_at")),
     }
 
 
@@ -203,7 +201,7 @@ def _fetch_job_for_vendor(cursor, job_id, vendor_id, allow_teacher_created=False
         SELECT
             ij.id, ij.company_id, ic.company_name, ij.title, ij.slots, ij.description,
             ij.period, ij.work_time, ij.salary, ij.remark, ij.is_active,
-            ij.created_by_vendor_id, ij.updated_at, ij.created_at
+            ij.created_by_vendor_id
         FROM internship_jobs ij
         JOIN internship_companies ic ON ij.company_id = ic.id
         WHERE ij.id = %s AND ic.advisor_user_id = %s AND {created_condition}
@@ -829,7 +827,7 @@ def list_positions_for_vendor():
             SELECT
                 ij.id, ij.company_id, ic.company_name, ij.title, ij.slots, ij.description,
                 ij.period, ij.work_time, ij.salary, ij.remark, ij.is_active,
-                ij.created_by_vendor_id, ij.updated_at, ij.created_at
+                ij.created_by_vendor_id
             FROM internship_jobs ij
             JOIN internship_companies ic ON ij.company_id = ic.id
             WHERE {' AND '.join(where_clauses)}
@@ -919,9 +917,9 @@ def create_position_for_vendor():
         cursor.execute(
             """
             INSERT INTO internship_jobs
-                (company_id, title, slots, description, period, work_time, salary, remark, is_active, created_by_vendor_id, created_at, updated_at)
+                (company_id, title, slots, description, period, work_time, salary, remark, is_active, created_by_vendor_id)
             VALUES
-                (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW(), NOW())
+                (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             """,
             (
                 company_id,
@@ -1034,8 +1032,7 @@ def update_position_for_vendor(job_id):
                 work_time = %s,
                 salary = %s,
                 remark = %s,
-                is_active = %s,
-                updated_at = NOW()
+                is_active = %s
             WHERE id = %s
             """,
             (
@@ -1089,7 +1086,7 @@ def toggle_position_status(job_id):
             return jsonify({"success": False, "message": "找不到職缺或無權限操作"}), 404
 
         cursor.execute(
-            "UPDATE internship_jobs SET is_active = %s, updated_at = NOW() WHERE id = %s",
+            "UPDATE internship_jobs SET is_active = %s WHERE id = %s",
             (1 if desired else 0, job_id),
         )
         conn.commit()
