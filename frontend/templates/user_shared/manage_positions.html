@@ -172,6 +172,28 @@
       padding: 0;
     }
 
+    .page-header h1 #menu-btn {
+      width: 30px;
+      height: 22px;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      background: none;
+      border: none;
+      padding: 0;
+      margin-left: 150px;
+    }
+
+    .page-header h1 #menu-btn span {
+      display: block;
+      width: 100%;
+      height: 3px;
+      background-color: white;
+      border-radius: 2px;
+      transition: all 0.3s ease;
+    }
+
     .page-header-actions #menu-btn span {
       display: block;
       width: 100%;
@@ -189,8 +211,17 @@
       padding: 16px 24px;
       border-radius: 0 !important;
       box-shadow: none;
-      display: block;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
       width: 100%;
+    }
+
+    .page-header h1 .header-title {
+      position: absolute;
+      left: 50%;
+      transform: translateX(-50%);
       text-align: center;
     }
 
@@ -656,15 +687,14 @@
 <body>
   <main class="management-container container">
     <header class="page-header">
-      <h1>職位需求管理</h1>
-      <div class="page-header-actions">
+      <h1>
         <button id="menu-btn" title="選單" role="button" tabindex="0" aria-label="開啟側邊選單">
           <span></span>
           <span></span>
           <span></span>
         </button>
-        <button id="createPositionBtn" class="btn btn-primary">＋ 新增職缺</button>
-      </div>
+        <div class="header-title">職位需求管理</div>
+      </h1>
     </header>
 
     <p id="companyHint" class="empty-hint">目前尚未建立與您對接指導老師關聯的公司資料。您新增的職缺將會顯示給對接的指導老師和科助查看。請確認您的指導老師已建立公司，或聯絡平台管理員設定對接關係。</p>
@@ -672,6 +702,7 @@
     <section class="panel" aria-label="職缺列表">
       <div class="panel-header">
         <h2>職缺列表</h2>
+        <button id="createPositionBtn" class="btn btn-primary">＋ 新增職缺</button>
       </div>
       <div class="table-wrapper">
         <table class="positions-table">

@@ -351,15 +351,42 @@
 
   <script>
     // === 編號自動生成 ===
-    function generateRandomCode() {
-      // 生成六碼隨機數字
-      return Math.floor(100000 + Math.random() * 900000).toString();
+    function getROCYear() {
+      // 取得民國年份（西元年 - 1911）
+      const now = new Date();
+      const rocYear = now.getFullYear() - 1911;
+      return rocYear.toString().padStart(3, '0');
     }
 
-    function initSerialNumber() {
+    async function generateSerialNumber() {
+      // 前3碼：民國年份
+      const yearPrefix = getROCYear();
+      
+      try {
+        // 從後端獲取該年份的下一個序號
+        const res = await fetch(`/api/get_next_serial_number?year=${yearPrefix}`);
+        const data = await res.json();
+        
+        if (data.success) {
+          // 後3碼：序號（001, 002, ...）
+          const sequence = data.next_sequence.toString().padStart(3, '0');
+          return yearPrefix + sequence;
+        } else {
+          // 如果後端失敗，使用預設值 001
+          return yearPrefix + '001';
+        }
+      } catch (error) {
+        console.error('獲取序號失敗:', error);
+        // 如果請求失敗，使用預設值 001
+        return yearPrefix + '001';
+      }
+    }
+
+    async function initSerialNumber() {
       const serialInput = document.getElementById('serial_number');
       if (serialInput) {
-        serialInput.value = generateRandomCode();
+        const serialNumber = await generateSerialNumber();
+        serialInput.value = serialNumber;
       }
     }
 
@@ -493,7 +520,7 @@
             msg.innerHTML += `<div class="alert alert-info"><a href="${result.download_url}" class="btn btn-success" download>下載 Word 檔</a></div>`;
           }
           e.target.reset();
-          initSerialNumber(); // 重新生成編號
+          await initSerialNumber(); // 重新生成編號
           document.getElementById('jobsTableBody').innerHTML = '';
           jobIndex = 0;
           addJobRow();

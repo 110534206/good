@@ -53,9 +53,9 @@ def create_notification(user_id, title, message, category="general", link_url=No
         conn = get_db()
         cursor = conn.cursor()
         cursor.execute("""
-            INSERT INTO notifications (user_id, title, message, category, link_url, is_read, created_at)
-            VALUES (%s, %s, %s, %s, %s, 0, NOW())
-        """, (user_id, title, message, category, link_url))
+            INSERT INTO notifications (user_id, title, message, link_url, is_read, created_at)
+            VALUES (%s, %s, %s, %s, 0, NOW())
+        """, (user_id, title, message, link_url))
         conn.commit()
         return True
 
@@ -66,6 +66,37 @@ def create_notification(user_id, title, message, category="general", link_url=No
     finally:
         cursor.close()
         conn.close()
+
+# =========================================================
+# 分類輔助函數
+# =========================================================
+def _detect_category(title, message):
+    """根據標題和內容自動判斷通知分類"""
+    title_lower = (title or "").lower()
+    msg_lower = (message or "").lower()
+    
+    # 履歷相關
+    if any(k in title_lower for k in ["履歷", "resume"]) or \
+       any(k in msg_lower for k in ["履歷", "resume"]):
+        return "resume"
+    
+    # 志願序
+    elif any(k in title_lower for k in ["志願序", "ranking"]) or \
+         any(k in msg_lower for k in ["志願序", "ranking"]):
+        return "ranking"
+    
+    # 實習公司
+    elif any(k in title_lower for k in ["公司", "實習", "廠商", "intern"]) or \
+         any(k in msg_lower for k in ["公司", "實習", "廠商", "intern"]):
+        return "company"
+    
+    # 審核通知
+    elif any(k in title_lower for k in ["審核", "批准", "退件"]) or \
+         any(k in msg_lower for k in ["審核", "批准", "退件"]):
+        return "approval"
+    
+    # 預設為一般/公告
+    return "general"
 
 # =========================================================
 # 個人通知 API
@@ -100,6 +131,11 @@ def get_my_notifications():
             """, (user_id,))
         
         rows = cursor.fetchall()
+        
+        # 為每個通知動態計算分類
+        for row in rows:
+            row["category"] = _detect_category(row.get("title"), row.get("message"))
+        
         return jsonify({"success": True, "notifications": rows})
     except Exception:
         traceback.print_exc()

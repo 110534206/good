@@ -17,8 +17,17 @@
       background: #0454a3;
       color: white;
       padding: 1rem 2rem;
-      text-align: center;
       font-size: 1.5rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      position: relative;
+    }
+
+    header .header-title {
+      flex: 1;
+      text-align: center;
     }
 
     body {
@@ -95,13 +104,19 @@
       display: flex;
       flex-direction: column;
       justify-content: space-between;
-      margin: 1rem;
+      background: none;
+      border: none;
+      padding: 0;
+      margin-left: 100px;
     }
 
     #menu-btn span {
-      height: 4px;
-      background-color: #333;
+      display: block;
+      width: 100%;
+      height: 3px;
+      background-color: white;
       border-radius: 2px;
+      transition: all 0.3s ease;
     }
 
     /* 側邊選單樣式 */
@@ -158,7 +173,7 @@
     #side-menu a {
       display: block;
       width: 100%;
-      padding: 0.5rem 0;
+      padding: 0.6rem 0;
       font-size: 1.1rem;
       color: #ddd;
       text-decoration: none;
@@ -167,20 +182,20 @@
     }
 
     #side-menu a:hover {
-      background-color: rgba(255, 255, 255, 0.15);
+      background-color: rgba(255, 255, 255, 0.18);
       color: white;
     }
   </style>
 </head>
 
 <body>
-  <header>學生履歷審查</header>
-  <div class="container">
-    <div class="top-bar-left">
-      <div id="menu-btn" title="選單" role="button" tabindex="0">
-        <span></span><span></span><span></span>
-      </div>
+  <header>
+    <div id="menu-btn" title="選單" role="button" tabindex="0">
+      <span></span><span></span><span></span>
     </div>
+    <div class="header-title">學生履歷審查</div>
+  </header>
+  <div class="container">
 
     <div class="container my-5 pt-1">
       <div class="card shadow-sm p-4">
@@ -198,6 +213,8 @@
             <select id="statusFilter" class="form-select form-select-sm w-auto">
               <option value="">所有狀態</option>
               <option value="submitted">待審查</option>
+              <option value="pending">待審核</option>
+              <option value="uploaded">未通過</option>
               <option value="approved">通過</option>
               <option value="rejected">退件</option>
             </select>
@@ -254,7 +271,7 @@
     <nav id="side-menu" aria-hidden="true" role="navigation" aria-label="功能選單">
       <button id="close-btn" aria-label="關閉功能選單">×</button>
       <h2>功能選單</h2>
-      <a href="/teacher_home">首頁</a>
+      <a href="/vendor_home">首頁</a>
       <a href="/profile">個人資料</a>
       <a href="/upload_company">建立實習機會</a>
       <a href="/admission_results">查看錄取結果</a>
@@ -343,6 +360,17 @@
                   }
                   
                   populateFilters(allResumes, companyData);
+                  // 從 URL 參數讀取狀態並設置篩選器
+                  const urlParams = new URLSearchParams(window.location.search);
+                  const statusParam = urlParams.get('status');
+                  if (statusParam) {
+                    const statusFilter = document.getElementById('statusFilter');
+                    if (statusFilter) {
+                      // 將 pending 映射到 submitted 或保持原值
+                      const mappedStatus = statusParam === 'pending' ? 'submitted' : statusParam;
+                      statusFilter.value = mappedStatus;
+                    }
+                  }
                   applyFilters();
                 } else {
                   alert("載入資料失敗：" + (resumeData.message || "未知錯誤"));
@@ -368,6 +396,17 @@
                 if (resumeData.success) {
                   allResumes = resumeData.resumes;
                   populateFilters(allResumes, companyData);
+                  // 從 URL 參數讀取狀態並設置篩選器
+                  const urlParams = new URLSearchParams(window.location.search);
+                  const statusParam = urlParams.get('status');
+                  if (statusParam) {
+                    const statusFilter = document.getElementById('statusFilter');
+                    if (statusFilter) {
+                      // 將 pending 映射到 submitted 或保持原值
+                      const mappedStatus = statusParam === 'pending' ? 'submitted' : statusParam;
+                      statusFilter.value = mappedStatus;
+                    }
+                  }
                   applyFilters();
                 } else {
                   alert("載入資料失敗：" + (resumeData.message || "未知錯誤"));
@@ -469,7 +508,16 @@
           const matchesDept = !dept || r.department === dept;
           const matchesClass = !cls || r.className === cls;
           const matchesCompany = !company || r.company_name === company;
-          const matchesStatus = !status || r.status === status;
+          // 狀態匹配：支持 pending 映射到 submitted 或 uploaded
+          let matchesStatus = true;
+          if (status) {
+            if (status === 'submitted') {
+              // submitted 狀態匹配 submitted、pending 或 uploaded
+              matchesStatus = r.status === 'submitted' || r.status === 'pending' || r.status === 'uploaded';
+            } else {
+              matchesStatus = r.status === status;
+            }
+          }
           const matchesKeyword =
             (r.username && r.username.toLowerCase().includes(keyword)) ||
             (r.original_filename && r.original_filename.toLowerCase().includes(keyword));
