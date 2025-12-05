@@ -447,7 +447,8 @@
         resumeStats: {
           approved: 0,
           uploaded: 0,
-          rejected: 0
+          rejected: 0,
+          pending: 0
         },
         isEditing: false,
         originalData: null
@@ -561,9 +562,9 @@
           </div>
           <div class="info-grid" style="margin-top: 16px;">
             <div class="info-card" style="cursor: pointer;">
-              <a href="/review_resume" style="display: block; text-decoration: none; color: inherit;">
-                <span class="info-label">相關功能</span>
-                <span class="info-value" style="color: var(--color-primary);">查看學生履歷 →</span>
+              <a href="/review_resume?status=pending" style="display: block; text-decoration: none; color: inherit;">
+                <span class="info-label">履歷狀態</span>
+                <span class="info-value" style="color: var(--color-primary);">待審核<span id="pendingCount" style="margin-left: 4px;">${state.resumeStats.pending}</span></span>
               </a>
             </div>
             <div class="info-card" style="cursor: pointer;">
@@ -731,8 +732,9 @@
           if (response.ok && result.success && result.resumes) {
             // 統計各狀態的數量
             state.resumeStats.approved = result.resumes.filter(r => r.status === 'approved').length;
-            state.resumeStats.uploaded = result.resumes.filter(r => r.status === 'uploaded' || r.status === 'pending').length;
+            state.resumeStats.uploaded = result.resumes.filter(r => r.status === 'uploaded').length;
             state.resumeStats.rejected = result.resumes.filter(r => r.status === 'rejected').length;
+            state.resumeStats.pending = result.resumes.filter(r => r.status === 'pending').length;
           }
         } catch (error) {
           console.error('載入履歷統計失敗:', error);
@@ -744,10 +746,12 @@
         const approvedEl = document.getElementById('approvedCount');
         const uploadedEl = document.getElementById('uploadedCount');
         const rejectedEl = document.getElementById('rejectedCount');
+        const pendingEl = document.getElementById('pendingCount');
         
         if (approvedEl) approvedEl.textContent = state.resumeStats.approved;
         if (uploadedEl) uploadedEl.textContent = state.resumeStats.uploaded;
         if (rejectedEl) rejectedEl.textContent = state.resumeStats.rejected;
+        if (pendingEl) pendingEl.textContent = state.resumeStats.pending;
       }
 
       async function loadDetail() {
