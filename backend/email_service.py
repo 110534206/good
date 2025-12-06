@@ -79,10 +79,18 @@ def send_email(recipient_email, subject, content, related_user_id=None):
         # 寫入 email_logs (pending)
         conn = get_db()
         cursor = conn.cursor(dictionary=True)
-        cursor.execute("""
-            INSERT INTO email_logs (recipient_email, subject, content, related_user_id, status, sent_at)
-            VALUES (%s, %s, %s, %s, 'pending', NOW())
-        """, (recipient_email, subject, content, related_user_id))
+        # 檢查欄位名稱：可能是 recipient 或 recipient_email
+        try:
+            cursor.execute("""
+                INSERT INTO email_logs (recipient_email, subject, content, related_user_id, status, sent_at)
+                VALUES (%s, %s, %s, %s, 'pending', NOW())
+            """, (recipient_email, subject, content, related_user_id))
+        except Exception:
+            # 如果失敗，嘗試使用 recipient 欄位名稱
+            cursor.execute("""
+                INSERT INTO email_logs (recipient, subject, content, related_user_id, status, sent_at)
+                VALUES (%s, %s, %s, %s, 'pending', NOW())
+            """, (recipient_email, subject, content, related_user_id))
         log_id = cursor.lastrowid
         conn.commit()
 
@@ -229,6 +237,66 @@ def send_admission_email(student_email, student_name, company_name, teacher_name
 --
 智慧實習平台
 """
+    return send_email(student_email, subject, content)
+
+def send_interview_email(student_email, student_name, company_name, vendor_name="", custom_content=""):
+    """
+    發送面試通知郵件
+    
+    參數:
+        student_email: 學生 Email
+        student_name: 學生姓名
+        company_name: 公司名稱
+        vendor_name: 廠商姓名（可選）
+        custom_content: 自訂通知內容（可選）
+    
+    回傳:
+        (success: bool, message: str, log_id: int 或 None)
+    """
+    subject = "【智慧實習平台】面試通知"
+    
+    if custom_content:
+        content = f"""
+親愛的 {student_name} 同學：
+
+您好！
+
+{company_name} 邀請您參加面試。
+
+{f'聯絡人：{vendor_name}' if vendor_name else ''}
+
+面試相關資訊：
+{custom_content}
+
+請您準備相關資料，並準時參加面試。
+
+如有任何疑問，請聯絡您的班導師或系統管理員。
+
+此為系統自動發送，請勿直接回覆此郵件。
+
+--
+智慧實習平台
+"""
+    else:
+        content = f"""
+親愛的 {student_name} 同學：
+
+您好！
+
+{company_name} 邀請您參加面試。
+
+{f'聯絡人：{vendor_name}' if vendor_name else ''}
+
+請您準備相關資料，並準時參加面試。詳細面試時間與地點將另行通知。
+
+如有任何疑問，請聯絡您的班導師或系統管理員。
+
+此為系統自動發送，請勿直接回覆此郵件。
+
+--
+智慧實習平台
+"""
+    
     return send_email(student_email, subject, content)
 
 
