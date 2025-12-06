@@ -355,6 +355,36 @@
                 if (resumeData.success) {
                   allResumes = resumeData.resumes || [];
                   
+                  // 如果是廠商，處理狀態：確保未審核的履歷顯示為「待審核」
+                  if (userRole === 'vendor') {
+                    allResumes = allResumes.map(resume => {
+                      // 對於廠商來說，如果 preference_id 存在（表示有志願序），需要檢查狀態
+                      if (resume.preference_id) {
+                        // 如果狀態是 'approved'，檢查是否有審核標記
+                        // 如果沒有 reviewed_at 且沒有 comment（廠商審核備註），視為未審核
+                        if (resume.status === 'approved') {
+                          const hasVendorReview = resume.reviewed_at || resume.comment;
+                          if (!hasVendorReview) {
+                            console.log(`⚠️ 履歷 ${resume.id} (學生: ${resume.name}) 狀態為 'approved' 但沒有廠商審核標記，強制改為 'pending'`);
+                            resume.status = 'pending';
+                          }
+                        }
+                        // 如果狀態不是 'approved' 或 'rejected'，確保是 'pending'
+                        if (resume.status !== 'approved' && resume.status !== 'rejected') {
+                          resume.status = 'pending';
+                        }
+                      } else {
+                        // 如果沒有 preference_id，狀態應該是 'pending'（待審核）
+                        resume.status = 'pending';
+                      }
+                      // 確保狀態有效，無效狀態改為 'pending'
+                      if (!resume.status || !['pending', 'approved', 'rejected'].includes(resume.status)) {
+                        resume.status = 'pending';
+                      }
+                      return resume;
+                    });
+                  }
+                  
                   // 如果是廠商，從 API 返回的 companies 中獲取公司列表
                   if (userRole === 'vendor' && resumeData.companies) {
                     companyData = {success: true, companies: resumeData.companies};
@@ -761,17 +791,26 @@
               .then(data => {
                 // 後端返回格式：{"item": detail} 或 {"error": "..."}
                 if (data.item) {
-                  // 重新從 API 獲取最新的履歷列表，確保狀態正確更新
-                  // 如果當前篩選的是「待審核」狀態，自動切換到「通過」狀態，讓用戶看到更新後的結果
+                  // 立即更新本地數據中的狀態，確保界面即時反映變化
+                  const resume = allResumes.find(r => r.preference_id === preferenceId);
+                  if (resume) {
+                    resume.status = 'approved';
+                  }
+                  
+                  // 獲取當前篩選條件
                   const currentStatusFilter = document.getElementById("statusFilter").value.trim();
                   const companyFilter = document.getElementById("companyFilter").value.trim();
                   const keywordFilter = document.getElementById("searchBox").value.trim();
                   
-                  // 如果當前篩選的是「待審核」，自動切換到「通過」狀態
+                  // 如果當前篩選的是「待審核」，自動切換到「通過」狀態，讓用戶看到更新後的結果
                   if (currentStatusFilter === 'pending') {
                     document.getElementById("statusFilter").value = 'approved';
                   }
                   
+                  // 立即重新渲染表格，讓用戶立即看到狀態變化（從「待審核」變為「通過」）
+                  applyFilters();
+                  
+                  // 在背景重新從 API 獲取最新的履歷列表，確保數據同步
                   const statusFilter = document.getElementById("statusFilter").value.trim();
                   
                   let apiUrl = '/vendor/api/resumes';
@@ -793,6 +832,7 @@
                     apiUrl += '?' + params.join('&');
                   }
                   
+                  // 在背景重新獲取數據，確保與後端同步
                   fetch(apiUrl)
                     .then(res => res.json())
                     .then(resumeData => {
@@ -800,27 +840,16 @@
                         allResumes = resumeData.resumes || [];
                         // 重新應用篩選並渲染表格
                         applyFilters();
-                        alert("✅ 履歷已標記為審核通過");
-                      } else {
-                        // 如果重新獲取失敗，至少更新本地數據
-                        const resume = allResumes.find(r => r.id === resumeId);
-                        if (resume) {
-                          resume.status = 'approved';
-                        }
-                        applyFilters();
-                        alert("✅ 履歷已標記為審核通過（已更新本地數據）");
                       }
+                      // 不顯示額外的提示，因為界面已經更新了
                     })
                     .catch(error => {
                       console.error("Reload error:", error);
-                      // 如果重新獲取失敗，至少更新本地數據
-                      const resume = allResumes.find(r => r.id === resumeId);
-                      if (resume) {
-                        resume.status = 'approved';
-                      }
-                      applyFilters();
-                      alert("✅ 履歷已標記為審核通過（已更新本地數據）");
+                      // 如果重新獲取失敗，使用已更新的本地數據（已經在 applyFilters 中處理）
                     });
+                  
+                  // 顯示成功提示
+                  alert("✅ 履歷已標記為審核通過");
                 } else if (data.error) {
                   alert("標記失敗：" + data.error);
                 } else {

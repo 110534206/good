@@ -295,6 +295,38 @@
       color: rgba(0, 102, 204, 0.35);
     }
 
+    .confirm-btn {
+      padding: 10px 20px;
+      background: var(--brand-blue);
+      color: #fff;
+      border: none;
+      border-radius: 10px;
+      font-size: 0.95rem;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      transition: all 0.3s ease;
+      box-shadow: 0 2px 8px rgba(0, 102, 204, 0.2);
+    }
+
+    .confirm-btn:hover {
+      background: var(--brand-blue-dark);
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(0, 102, 204, 0.3);
+    }
+
+    .confirm-btn:active {
+      transform: translateY(0);
+    }
+
+    .confirm-btn:disabled {
+      background: var(--text-muted);
+      cursor: not-allowed;
+      transform: none;
+    }
+
     .loading {
       display: flex;
       align-items: center;
@@ -392,6 +424,10 @@
 
         <label for="keywordInput">搜尋學生姓名</label>
         <input id="keywordInput" type="search" placeholder="輸入學生姓名">
+        
+        <button id="confirmMatchingBtn" class="confirm-btn" style="margin-left: auto;">
+          <i class="fa-solid fa-check-circle"></i> 確認媒合結果
+        </button>
       </div>
 
       <div id="tableContainer">
@@ -409,6 +445,7 @@
     const summaryStudentCount = document.getElementById('summaryStudentCount');
     const summaryGrid = document.getElementById('companyBreakdown');
     const tableContainer = document.getElementById('tableContainer');
+    const confirmMatchingBtn = document.getElementById('confirmMatchingBtn');
 
     let cachedMatches = [];
     let vendorJobs = [];
@@ -487,16 +524,44 @@
 
     async function loadStudentResumes() {
       try {
-        const res = await fetch('/api/get_class_resumes', {
+        // 對於廠商，使用 vendor_matching_results API 獲取所有狀態為 approved 的學生履歷
+        // 這個 API 會返回所有狀態為 approved 的學生履歷，用於統計媒合學生數
+        const res = await fetch('/admission/api/vendor_matching_results', {
           headers: { 'Accept': 'application/json' },
           credentials: 'include'
         });
         const data = await res.json();
         if (res.ok && data.success) {
-          studentResumes = data.resumes || [];
+          // 從媒合結果中提取學生履歷信息
+          const matches = data.matches || [];
+          studentResumes = matches.map(match => ({
+            student_number: match.student_number,
+            student_name: match.student_name,
+            name: match.student_name,
+            username: match.student_number,
+            user_id: match.student_id,
+            status: 'approved', // 這些都是狀態為 approved 的學生履歷
+            class_name: match.class_name,
+            company_name: match.company_name
+          }));
           // 如果有已保存的摘要，重新渲染以更新學生數
           if (currentSummary) {
             renderSummary(currentSummary);
+          }
+        } else {
+          // 如果 vendor_matching_results API 失敗，回退到原來的 API
+          const fallbackRes = await fetch('/api/get_class_resumes', {
+            headers: { 'Accept': 'application/json' },
+            credentials: 'include'
+          });
+          const fallbackData = await fallbackRes.json();
+          if (fallbackRes.ok && fallbackData.success) {
+            studentResumes = fallbackData.resumes || [];
+            // 只統計狀態為 approved 的學生履歷
+            studentResumes = studentResumes.filter(resume => resume.status === 'approved');
+            if (currentSummary) {
+              renderSummary(currentSummary);
+            }
           }
         }
       } catch (error) {
@@ -505,24 +570,28 @@
     }
 
     function calculateStudentCount() {
-      // 從學生履歷API獲取的學生數量（去重，每個學生只計算一次）
-      if (studentResumes && studentResumes.length > 0) {
-        const uniqueStudents = new Set();
-        studentResumes.forEach(resume => {
-          const studentId = resume.student_number || resume.username || resume.user_id;
-          if (studentId) {
-            uniqueStudents.add(String(studentId));
-          }
-        });
-        return uniqueStudents.size;
-      }
-      // 備用方案：從媒合結果中計算
+      // 優先從媒合結果中計算（這些是狀態為 approved 的學生）
       if (cachedMatches && cachedMatches.length > 0) {
         const uniqueStudents = new Set();
         cachedMatches.forEach(match => {
           const studentId = match.student_id || match.student_number;
           if (studentId) {
             uniqueStudents.add(String(studentId));
+          }
+        });
+        return uniqueStudents.size;
+      }
+      // 備用方案：從學生履歷API獲取的學生數量（去重，每個學生只計算一次）
+      // 注意：這裡只統計狀態為 approved 的學生履歷
+      if (studentResumes && studentResumes.length > 0) {
+        const uniqueStudents = new Set();
+        studentResumes.forEach(resume => {
+          // 只統計狀態為 approved 的學生履歷
+          if (resume.status === 'approved') {
+            const studentId = resume.student_number || resume.username || resume.user_id;
+            if (studentId) {
+              uniqueStudents.add(String(studentId));
+            }
           }
         });
         return uniqueStudents.size;
@@ -556,6 +625,17 @@
     }
 
     function renderTable(matches) {
+      // 更新確認按鈕狀態
+      if (confirmMatchingBtn) {
+        if (!matches || matches.length === 0) {
+          confirmMatchingBtn.disabled = true;
+          confirmMatchingBtn.style.opacity = '0.5';
+        } else {
+          confirmMatchingBtn.disabled = false;
+          confirmMatchingBtn.style.opacity = '1';
+        }
+      }
+
       if (!matches.length) {
         tableContainer.innerHTML = `
           <div class="empty-state">
@@ -698,6 +778,134 @@
       window.clearTimeout(keywordInput._timer);
       keywordInput._timer = setTimeout(applyFilters, 220);
     });
+
+    // 確認媒合結果功能（只確認同一間公司的學生）
+    if (confirmMatchingBtn) {
+      confirmMatchingBtn.addEventListener('click', async function() {
+        // 獲取當前顯示的學生（經過篩選後的）
+        const selectedJob = positionFilter.value;
+        const keyword = keywordInput.value.trim().toLowerCase();
+        
+        // 構建學生履歷的姓名映射表（用於搜索）
+        let studentNameMap = new Map();
+        if (studentResumes && studentResumes.length > 0) {
+          studentResumes.forEach(resume => {
+            const studentId = resume.student_number || resume.username;
+            const studentName = resume.student_name || resume.name;
+            if (studentId && studentName) {
+              studentNameMap.set(String(studentId), studentName.toLowerCase());
+            }
+          });
+        }
+        
+        // 應用與 applyFilters 相同的過濾邏輯
+        const filteredMatches = cachedMatches.filter(item => {
+          const matchJob = !selectedJob || (item.job_id && String(item.job_id) === selectedJob);
+          
+          const studentNumber = String(item.student_number || '');
+          
+          if (studentNameMap.size > 0) {
+            const studentNameFromResume = studentNameMap.get(studentNumber);
+            if (!studentNameFromResume) {
+              return false;
+            }
+            if (keyword) {
+              return matchJob && studentNameFromResume.includes(keyword);
+            }
+            return matchJob;
+          }
+          
+          if (keyword) {
+            return matchJob && (item.student_name && item.student_name.toLowerCase().includes(keyword));
+          }
+          return matchJob;
+        });
+
+        if (!filteredMatches || filteredMatches.length === 0) {
+          alert('目前沒有媒合學生，無法確認媒合結果');
+          return;
+        }
+
+        // 檢查是否所有學生都屬於同一間公司
+        const companyIds = new Set(filteredMatches.map(m => m.company_id).filter(id => id));
+        if (companyIds.size === 0) {
+          alert('無法確認：找不到公司資訊');
+          return;
+        }
+        if (companyIds.size > 1) {
+          const companyNames = [...new Set(filteredMatches.map(m => m.company_name).filter(name => name))];
+          alert(`無法確認：目前顯示的學生來自多間公司（${companyNames.join('、')}）\n\n請先使用篩選功能，只顯示同一間公司的學生後再確認。`);
+          return;
+        }
+
+        const companyId = Array.from(companyIds)[0];
+        const companyName = filteredMatches[0].company_name || '該公司';
+        const studentCount = filteredMatches.length;
+
+        if (!confirm(`確定要確認「${companyName}」的 ${studentCount} 位學生媒合結果嗎？\n\n確認後，這些學生將可以在實習成果頁面看到相關資訊。`)) {
+          return;
+        }
+
+        confirmMatchingBtn.disabled = true;
+        confirmMatchingBtn.innerHTML = '<span class="spinner"></span> 確認中...';
+
+        let successCount = 0;
+        let failCount = 0;
+        const errors = [];
+
+        // 只確認同一間公司的學生
+        for (const match of filteredMatches) {
+          // 再次確認公司ID一致
+          if (match.company_id !== companyId) {
+            continue;
+          }
+          try {
+            const response = await fetch('/admission/api/record_admission', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json'
+              },
+              credentials: 'include',
+              body: JSON.stringify({
+                student_id: match.student_id,
+                company_id: match.company_id,
+                job_id: match.job_id || null,
+                preference_order: match.preference_order || null
+              })
+            });
+
+            const data = await response.json();
+            if (data.success) {
+              successCount++;
+            } else {
+              failCount++;
+              errors.push(`${match.student_name}: ${data.message || '未知錯誤'}`);
+            }
+          } catch (error) {
+            failCount++;
+            errors.push(`${match.student_name}: 網路錯誤`);
+            console.error('確認媒合結果失敗:', error);
+          }
+        }
+
+        confirmMatchingBtn.disabled = false;
+        confirmMatchingBtn.innerHTML = '<i class="fa-solid fa-check-circle"></i> 確認媒合結果';
+
+        if (failCount === 0) {
+          alert(`✅ 成功確認「${companyName}」的 ${successCount} 位學生媒合結果！\n\n學生現在可以在實習成果頁面看到相關資訊。`);
+          // 重新載入媒合結果以顯示更新後的媒合時間
+          loadMatchingResults();
+        } else {
+          const errorMsg = errors.length > 0 ? '\n\n錯誤詳情：\n' + errors.slice(0, 5).join('\n') : '';
+          if (errors.length > 5) {
+            errorMsg += `\n... 還有 ${errors.length - 5} 個錯誤`;
+          }
+          alert(`⚠️ 確認完成：成功 ${successCount} 位，失敗 ${failCount} 位${errorMsg}`);
+          // 即使有部分失敗，也重新載入以顯示已成功的記錄
+          loadMatchingResults();
+        }
+      });
+    }
 
     // 側邊選單控制
     const sideMenu = document.getElementById('side-menu');

@@ -202,7 +202,7 @@
                         : "尚未指派承辦老師";
                     admitDate.textContent = admission.admitted_at ? `錄取時間：${formatDate(admission.admitted_at)}` : "";
                     updateContact(admission);
-                    statusChip.textContent = "錄取資料最新";
+                    statusChip.textContent = "錄取資料";
                 } else {
                     companyName.textContent = fallback;
                     statusChip.textContent = "尚未有錄取紀錄";
@@ -210,7 +210,10 @@
 
                 // 顯示實習期間：優先從 final_preference 獲取，如果沒有則顯示空值
                 if (final_preference && final_preference.internship_period) {
-                    internPeriod.textContent = final_preference.internship_period;
+                    // 移除「一學期」或「一個學期」的文字
+                    let periodText = final_preference.internship_period;
+                    periodText = periodText.replace(/\(一學期\)/g, '').replace(/\(一個學期\)/g, '').trim();
+                    internPeriod.textContent = periodText;
                 } else {
                     internPeriod.textContent = fallback;
                 }

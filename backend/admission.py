@@ -69,10 +69,8 @@ def record_admission():
         if not advisor:
             return jsonify({"success": False, "message": "找不到該指導老師"}), 404
         
-        # 3. 獲取當前學期代碼
-        semester_code = get_current_semester_code(cursor)
-        if not semester_code:
-            return jsonify({"success": False, "message": "目前沒有設定當前學期"}), 400
+        # 3. 設置學期代碼為 1132（固定值）
+        semester_code = '1132'
         
         # 4. 檢查是否已經存在該關係（避免重複）
         cursor.execute("""
@@ -82,18 +80,24 @@ def record_admission():
         existing_relation = cursor.fetchone()
         
         if existing_relation:
-            # 如果已存在，不需要更新（公司資訊從 student_preferences 獲取）
-            pass
+            # 如果已存在，更新 created_at 為當天日期（媒合時間）
+            cursor.execute("""
+                UPDATE teacher_student_relations 
+                SET created_at = CURDATE()
+                WHERE id = %s
+            """, (existing_relation['id'],))
         else:
             # 5. 創建師生關係記錄（不包含 company_id，因為該欄位可能不存在）
+            # 媒合時間使用當天日期（CURDATE()），學期為 1132
             cursor.execute("""
                 INSERT INTO teacher_student_relations 
                 (teacher_id, student_id, semester, role, created_at)
-                VALUES (%s, %s, %s, '指導老師', NOW())
+                VALUES (%s, %s, %s, '指導老師', CURDATE())
             """, (advisor_user_id, student_id, semester_code))
         
-        # 6. 可選：在 internship_experiences 表中記錄錄取結果
+        # 6. 在 internship_experiences 表中記錄錄取結果（廠商確認的錄取結果）
         # 注意：這裡只記錄錄取結果，不包含實習心得
+        # 這是廠商實際錄取的記錄，用於在學生實習成果頁面顯示
         if job_id:
             # 檢查是否已存在該記錄
             cursor.execute("""
@@ -110,6 +114,22 @@ def record_admission():
                     (user_id, company_id, job_id, year, content, is_public, created_at)
                     VALUES (%s, %s, %s, %s, '已錄取', 0, NOW())
                 """, (student_id, company_id, job_id, current_year))
+        else:
+            # 即使沒有 job_id，也記錄公司錄取結果（使用 NULL job_id）
+            cursor.execute("""
+                SELECT id FROM internship_experiences
+                WHERE user_id = %s AND company_id = %s AND job_id IS NULL
+            """, (student_id, company_id))
+            existing_exp = cursor.fetchone()
+            
+            if not existing_exp:
+                # 獲取當前年度（民國年）
+                current_year = datetime.now().year - 1911
+                cursor.execute("""
+                    INSERT INTO internship_experiences
+                    (user_id, company_id, job_id, year, content, is_public, created_at)
+                    VALUES (%s, %s, NULL, %s, '已錄取', 0, NOW())
+                """, (student_id, company_id, current_year))
         
         # 7. 更新學生的志願序狀態（如果提供了 preference_order）
         if preference_order:
@@ -179,52 +199,133 @@ def get_my_admission():
                 "message": "目前尚未錄取任何實習公司"
             })
         
-        # 從 student_preferences 獲取公司資訊（錄取的學生應該有已批准的志願）
+        # 優先從 internship_experiences 獲取公司資訊（廠商確認媒合結果時記錄的）
+        # 這代表廠商實際錄取的結果，而不是按照志願序
         cursor.execute("""
             SELECT 
-                sp.company_id,
-                sp.preference_order,
-                sp.submitted_at,
+                ie.company_id,
+                ie.job_id,
+                ie.year,
+                ie.created_at AS admitted_at,
                 ic.company_name,
                 ic.location AS company_address,
                 ic.contact_person AS contact_name,
                 ic.contact_email,
                 ic.contact_phone,
-                ij.id AS job_id,
                 ij.title AS job_title,
                 ij.description AS job_description,
                 ij.period AS internship_period,
                 ij.work_time AS internship_time
-            FROM student_preferences sp
-            LEFT JOIN internship_companies ic ON sp.company_id = ic.id
-            LEFT JOIN internship_jobs ij ON sp.job_id = ij.id
-            WHERE sp.student_id = %s 
-              AND sp.status = 'approved'
-            ORDER BY sp.preference_order ASC
+            FROM internship_experiences ie
+            LEFT JOIN internship_companies ic ON ie.company_id = ic.id
+            LEFT JOIN internship_jobs ij ON ie.job_id = ij.id
+            WHERE ie.user_id = %s 
+              AND ie.content = '已錄取'
+            ORDER BY ie.created_at DESC
             LIMIT 1
         """, (student_id,))
-        final_preference = cursor.fetchone()
+        company_info = cursor.fetchone()
         
-        # 如果從 student_preferences 獲取到公司資訊，合併到 admission 中
-        if final_preference:
-            admission['company_id'] = final_preference.get('company_id')
-            admission['company_name'] = final_preference.get('company_name')
-            admission['company_address'] = final_preference.get('company_address')
-            admission['contact_name'] = final_preference.get('contact_name')
-            admission['contact_email'] = final_preference.get('contact_email')
-            admission['contact_phone'] = final_preference.get('contact_phone')
+        # 如果從 internship_experiences 獲取到公司資訊，使用它
+        if company_info:
+            admission['company_id'] = company_info.get('company_id')
+            admission['company_name'] = company_info.get('company_name')
+            admission['company_address'] = company_info.get('company_address')
+            admission['contact_name'] = company_info.get('contact_name')
+            admission['contact_email'] = company_info.get('contact_email')
+            admission['contact_phone'] = company_info.get('contact_phone')
             
-            # 清理 final_preference，只保留志願相關資訊
-            final_preference_clean = {
-                'preference_order': final_preference.get('preference_order'),
-                'submitted_at': final_preference.get('submitted_at'),
-                'job_id': final_preference.get('job_id'),
-                'job_title': final_preference.get('job_title'),
-                'job_description': final_preference.get('job_description'),
-                'internship_period': final_preference.get('internship_period'),
-                'internship_time': final_preference.get('internship_time')
+            # 更新錄取時間為 internship_experiences 的創建時間（廠商確認的時間）
+            if company_info.get('admitted_at'):
+                admission['admitted_at'] = company_info.get('admitted_at')
+            
+            # 從對應的 student_preferences 獲取志願相關資訊（用於顯示志願序等）
+            job_id_for_query = company_info.get('job_id')
+            if job_id_for_query:
+                cursor.execute("""
+                    SELECT 
+                        sp.preference_order,
+                        sp.submitted_at
+                    FROM student_preferences sp
+                    WHERE sp.student_id = %s 
+                      AND sp.company_id = %s
+                      AND sp.job_id = %s
+                    ORDER BY sp.preference_order ASC
+                    LIMIT 1
+                """, (student_id, company_info.get('company_id'), job_id_for_query))
+            else:
+                cursor.execute("""
+                    SELECT 
+                        sp.preference_order,
+                        sp.submitted_at
+                    FROM student_preferences sp
+                    WHERE sp.student_id = %s 
+                      AND sp.company_id = %s
+                      AND sp.job_id IS NULL
+                    ORDER BY sp.preference_order ASC
+                    LIMIT 1
+                """, (student_id, company_info.get('company_id')))
+            preference_info = cursor.fetchone()
+            
+            final_preference = {
+                'preference_order': preference_info.get('preference_order') if preference_info else None,
+                'submitted_at': preference_info.get('submitted_at') if preference_info else None,
+                'job_id': company_info.get('job_id'),
+                'job_title': company_info.get('job_title'),
+                'job_description': company_info.get('job_description'),
+                'internship_period': company_info.get('internship_period'),
+                'internship_time': company_info.get('internship_time')
             }
-            final_preference = final_preference_clean
+        else:
+            # 如果沒有從 internship_experiences 獲取到，則從 student_preferences 獲取（備用方案）
+            # 但按照錄取時間排序，而不是志願序
+            cursor.execute("""
+                SELECT 
+                    sp.company_id,
+                    sp.preference_order,
+                    sp.submitted_at,
+                    ic.company_name,
+                    ic.location AS company_address,
+                    ic.contact_person AS contact_name,
+                    ic.contact_email,
+                    ic.contact_phone,
+                    ij.id AS job_id,
+                    ij.title AS job_title,
+                    ij.description AS job_description,
+                    ij.period AS internship_period,
+                    ij.work_time AS internship_time
+                FROM student_preferences sp
+                LEFT JOIN internship_companies ic ON sp.company_id = ic.id
+                LEFT JOIN internship_jobs ij ON sp.job_id = ij.id
+                WHERE sp.student_id = %s 
+                  AND sp.status = 'approved'
+                ORDER BY sp.submitted_at DESC
+                LIMIT 1
+            """, (student_id,))
+            final_preference = cursor.fetchone()
+            
+            # 如果從 student_preferences 獲取到公司資訊，合併到 admission 中
+            if final_preference:
+                admission['company_id'] = final_preference.get('company_id')
+                admission['company_name'] = final_preference.get('company_name')
+                admission['company_address'] = final_preference.get('company_address')
+                admission['contact_name'] = final_preference.get('contact_name')
+                admission['contact_email'] = final_preference.get('contact_email')
+                admission['contact_phone'] = final_preference.get('contact_phone')
+                
+                # 清理 final_preference，只保留志願相關資訊
+                final_preference_clean = {
+                    'preference_order': final_preference.get('preference_order'),
+                    'submitted_at': final_preference.get('submitted_at'),
+                    'job_id': final_preference.get('job_id'),
+                    'job_title': final_preference.get('job_title'),
+                    'job_description': final_preference.get('job_description'),
+                    'internship_period': final_preference.get('internship_period'),
+                    'internship_time': final_preference.get('internship_time')
+                }
+                final_preference = final_preference_clean
+            else:
+                final_preference = None
         
         # 獲取實習心得（從 internship_experiences）
         company_id = admission.get('company_id')
@@ -248,7 +349,13 @@ def get_my_admission():
             admission['admitted_at'] = admission['admitted_at'].strftime("%Y-%m-%d %H:%M:%S")
         
         if final_preference and isinstance(final_preference.get('submitted_at'), datetime):
-            final_preference['submitted_at'] = final_preference['submitted_at'].strftime("%Y-%m-%d %H:%M:%S")
+            # 錄取志願的提交時間只顯示年月日
+            final_preference['submitted_at'] = final_preference['submitted_at'].strftime("%Y-%m-%d")
+        elif final_preference and final_preference.get('submitted_at'):
+            # 如果已經是字串格式，確保只顯示日期部分
+            submitted_at_str = str(final_preference.get('submitted_at'))
+            if ' ' in submitted_at_str:
+                final_preference['submitted_at'] = submitted_at_str.split(' ')[0]
         
         for exp in experiences:
             if isinstance(exp.get('created_at'), datetime):
@@ -462,6 +569,195 @@ def get_all_admissions():
             "success": True,
             "students": students,
             "count": len(students)
+        })
+    
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"success": False, "message": f"查詢失敗: {str(e)}"}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+# =========================================================
+# API: 廠商查看媒合結果（包含所有狀態為 approved 的學生履歷）
+# =========================================================
+@admission_bp.route("/api/vendor_matching_results", methods=["GET"])
+def vendor_matching_results():
+    """廠商查看媒合結果，返回所有狀態為 approved 的學生履歷"""
+    if 'user_id' not in session or session.get('role') != 'vendor':
+        return jsonify({"success": False, "message": "未授權"}), 403
+    
+    vendor_id = session.get('user_id')
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+    
+    try:
+        # 獲取廠商關聯的公司（通過 advisor_user_id，與 vendor.py 中的邏輯一致）
+        # 先獲取廠商的 teacher_name，然後找到對應的指導老師，再找到該指導老師對接的公司
+        cursor.execute("""
+            SELECT teacher_name FROM users WHERE id = %s AND role = 'vendor'
+        """, (vendor_id,))
+        vendor_row = cursor.fetchone()
+        
+        if not vendor_row or not vendor_row.get("teacher_name"):
+            return jsonify({
+                "success": True,
+                "matches": [],
+                "summary": {
+                    "total_jobs": 0,
+                    "total_students": 0,
+                    "by_company": []
+                },
+                "message": "廠商帳號資料不完整，無法查詢媒合結果"
+            })
+        
+        teacher_name = vendor_row.get("teacher_name").strip()
+        if not teacher_name:
+            return jsonify({
+                "success": True,
+                "matches": [],
+                "summary": {
+                    "total_jobs": 0,
+                    "total_students": 0,
+                    "by_company": []
+                },
+                "message": "廠商尚未指派指導老師，無法查詢媒合結果"
+            })
+        
+        # 找到指導老師的 ID
+        cursor.execute("""
+            SELECT id FROM users WHERE name = %s AND role IN ('teacher', 'director')
+        """, (teacher_name,))
+        teacher_row = cursor.fetchone()
+        
+        if not teacher_row:
+            return jsonify({
+                "success": True,
+                "matches": [],
+                "summary": {
+                    "total_jobs": 0,
+                    "total_students": 0,
+                    "by_company": []
+                },
+                "message": "找不到對應的指導老師，無法查詢媒合結果"
+            })
+        
+        teacher_id = teacher_row["id"]
+        
+        # 找到該指導老師對接的公司（只回傳已審核通過的公司）
+        cursor.execute("""
+            SELECT DISTINCT ic.id, ic.company_name
+            FROM internship_companies ic
+            WHERE ic.advisor_user_id = %s AND ic.status = 'approved'
+            ORDER BY ic.company_name
+        """, (teacher_id,))
+        companies = cursor.fetchall() or []
+        company_ids = [c['id'] for c in companies] if companies else []
+        
+        if not company_ids:
+            return jsonify({
+                "success": True,
+                "matches": [],
+                "summary": {
+                    "total_jobs": 0,
+                    "total_students": 0,
+                    "by_company": []
+                },
+                "message": "您尚未上傳任何公司或沒有關聯的公司"
+            })
+        
+        # 獲取所有狀態為 approved 的學生履歷（選擇了該廠商公司的學生）
+        placeholders = ','.join(['%s'] * len(company_ids))
+        cursor.execute(f"""
+            SELECT DISTINCT
+                u.id AS student_id,
+                u.name AS student_name,
+                u.username AS student_number,
+                u.email AS student_email,
+                c.name AS class_name,
+                c.department AS class_department,
+                ic.id AS company_id,
+                ic.company_name,
+                ij.id AS job_id,
+                ij.title AS job_title,
+                sp.preference_order,
+                sp.submitted_at AS preference_submitted_at,
+                sp.status AS preference_status,
+                COALESCE(tsr.created_at, CURDATE()) AS admitted_at,
+                COALESCE(tsr.semester, '1132') AS semester
+            FROM student_preferences sp
+            JOIN users u ON sp.student_id = u.id
+            LEFT JOIN classes c ON u.class_id = c.id
+            JOIN internship_companies ic ON sp.company_id = ic.id
+            LEFT JOIN internship_jobs ij ON sp.job_id = ij.id
+            LEFT JOIN teacher_student_relations tsr ON tsr.student_id = u.id AND tsr.semester = '1132'
+            WHERE sp.company_id IN ({placeholders})
+              AND sp.status = 'approved'
+            ORDER BY ic.company_name, sp.preference_order, u.name
+        """, tuple(company_ids))
+        
+        matches = cursor.fetchall()
+        
+        # 格式化日期
+        for match in matches:
+            if isinstance(match.get('preference_submitted_at'), datetime):
+                # 錄取志願的提交時間只顯示年月日
+                match['preference_submitted_at'] = match['preference_submitted_at'].strftime("%Y-%m-%d")
+            elif match.get('preference_submitted_at'):
+                # 如果已經是字串格式，確保只顯示日期部分
+                submitted_at_str = str(match.get('preference_submitted_at'))
+                if ' ' in submitted_at_str:
+                    match['preference_submitted_at'] = submitted_at_str.split(' ')[0]
+            if isinstance(match.get('admitted_at'), datetime):
+                # 媒合時間只顯示日期部分（YYYY-MM-DD）
+                match['admitted_at'] = match['admitted_at'].strftime("%Y-%m-%d")
+            elif match.get('admitted_at'):
+                # 如果已經是字串格式，確保只顯示日期部分
+                admitted_at_str = str(match.get('admitted_at'))
+                if ' ' in admitted_at_str:
+                    match['admitted_at'] = admitted_at_str.split(' ')[0]
+            else:
+                # 如果沒有媒合時間，使用當天日期
+                match['admitted_at'] = datetime.now().strftime("%Y-%m-%d")
+            
+            # 確保學期為 1132
+            if not match.get('semester'):
+                match['semester'] = '1132'
+        
+        # 統計信息：計算所有狀態為 approved 的學生履歷數量（去重，每個學生只計算一次）
+        total_students = len(set(m['student_id'] for m in matches)) if matches else 0
+        
+        # 按公司統計
+        by_company = {}
+        for match in matches:
+            company_name = match['company_name']
+            if company_name not in by_company:
+                by_company[company_name] = {
+                    'company_name': company_name,
+                    'matched_students': set()
+                }
+            by_company[company_name]['matched_students'].add(match['student_id'])
+        
+        # 轉換為列表格式
+        by_company_list = [
+            {
+                'company_name': k,
+                'matched_students': len(v['matched_students'])
+            }
+            for k, v in by_company.items()
+        ]
+        
+        # 獲取職缺總數（從 vendor/api/positions API 獲取，這裡先返回 0，由前端補充）
+        total_jobs = 0
+        
+        return jsonify({
+            "success": True,
+            "matches": matches,
+            "summary": {
+                "total_jobs": total_jobs,
+                "total_students": total_students,
+                "by_company": by_company_list
+            }
         })
     
     except Exception as e:

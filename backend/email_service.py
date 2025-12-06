@@ -31,10 +31,27 @@ SMTP_FROM_EMAIL = os.getenv("SMTP_USER", "")  # 假設 SMTP_USER 是你的 Gmail
 # =========================================================
 
 def get_gmail_service():
+    """建立 Gmail API Service，如果 credentials.json 不存在則拋出明確的錯誤"""
+    if not os.path.exists(CREDENTIALS_PATH):
+        raise FileNotFoundError(
+            f"找不到 Gmail 認證檔案：{CREDENTIALS_PATH}。"
+            f"請確認檔案存在於後端目錄中，或檢查 EMAIL.env 中的 GMAIL_CREDENTIALS_PATH 設定。"
+        )
+    
     creds = None
     if os.path.exists(TOKEN_PATH):
-        creds = Credentials.from_authorized_user_file(TOKEN_PATH, SCOPES)
+        try:
+            creds = Credentials.from_authorized_user_file(TOKEN_PATH, SCOPES)
+        except Exception as e:
+            print(f"⚠️ 讀取 token 檔案失敗: {e}")
+            creds = None
+    
     if not creds or not creds.valid:
+        if not os.path.exists(CREDENTIALS_PATH):
+            raise FileNotFoundError(
+                f"找不到 Gmail 認證檔案：{CREDENTIALS_PATH}。"
+                f"請確認檔案存在於後端目錄中。"
+            )
         flow = InstalledAppFlow.from_client_secrets_file(CREDENTIALS_PATH, SCOPES)
         creds = flow.run_local_server(port=0)
         # 儲存 token
@@ -128,19 +145,36 @@ def send_email(recipient_email, subject, content, related_user_id=None):
         print(f"❌ 郵件發送失敗: {err}")
         traceback.print_exc()
 
+        # 處理 FileNotFoundError，提供更友好的錯誤訊息
+        if isinstance(e, FileNotFoundError) and 'credentials.json' in err:
+            friendly_err = "Gmail 認證檔案未設定，請聯絡系統管理員設定郵件服務"
+        elif 'credentials.json' in err:
+            friendly_err = "Gmail 認證檔案設定錯誤，請聯絡系統管理員"
+        else:
+            friendly_err = err
+
         # 更新 email_logs 為失敗
         if conn and cursor and log_id:
             try:
-                cursor.execute("""
-                    UPDATE email_logs
-                    SET status = 'failed', error_message = %s
-                    WHERE id = %s
-                """, (err, log_id))
+                # 先嘗試更新 status 和 error_message
+                try:
+                    cursor.execute("""
+                        UPDATE email_logs
+                        SET status = 'failed', error_message = %s
+                        WHERE id = %s
+                    """, (friendly_err, log_id))
+                except Exception:
+                    # 如果 error_message 欄位不存在，只更新 status
+                    cursor.execute("""
+                        UPDATE email_logs
+                        SET status = 'failed'
+                        WHERE id = %s
+                    """, (log_id,))
                 conn.commit()
             except Exception as inner_e:
                 print(f"⚠️ 更新記錄失敗: {inner_e}")
 
-        return (False, f"郵件發送失敗: {err}", log_id)
+        return (False, friendly_err, log_id)
 
     finally:
         if cursor:

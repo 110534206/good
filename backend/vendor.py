@@ -690,9 +690,23 @@ def get_vendor_resumes():
         preferences_map = {}
         if company_ids:
             # 只查詢選擇了該廠商公司的學生志願序
+            # 同時檢查是否有審核歷史記錄，如果狀態是 'approved' 但沒有審核記錄，則視為 'pending'
             preference_placeholders = ", ".join(["%s"] * len(company_ids))
+            _ensure_history_table(cursor)  # 確保歷史表存在
+            
             cursor.execute(f"""
-                SELECT student_id, sp.status AS vendor_review_status, company_id, ic.company_name, sp.id AS preference_id
+                SELECT 
+                    sp.student_id, 
+                    sp.id AS preference_id,
+                    sp.company_id, 
+                    ic.company_name,
+                    CASE 
+                        WHEN sp.status = 'approved' AND NOT EXISTS (
+                            SELECT 1 FROM vendor_preference_history vph 
+                            WHERE vph.preference_id = sp.id AND vph.action = 'approve'
+                        ) THEN 'pending'
+                        ELSE COALESCE(sp.status, 'pending')
+                    END AS vendor_review_status
                 FROM student_preferences sp
                 JOIN internship_companies ic ON sp.company_id = ic.id
                 WHERE sp.company_id IN ({preference_placeholders})
@@ -709,8 +723,21 @@ def get_vendor_resumes():
         else:
             # 如果沒有公司關聯，查詢所有志願序（用於顯示所有履歷，但這不是正常情況）
             print("⚠️ 廠商沒有關聯公司，顯示所有志願序")
+            _ensure_history_table(cursor)  # 確保歷史表存在
+            
             cursor.execute("""
-                SELECT student_id, sp.status AS vendor_review_status, company_id, ic.company_name, sp.id AS preference_id
+                SELECT 
+                    sp.student_id, 
+                    sp.id AS preference_id,
+                    sp.company_id, 
+                    ic.company_name,
+                    CASE 
+                        WHEN sp.status = 'approved' AND NOT EXISTS (
+                            SELECT 1 FROM vendor_preference_history vph 
+                            WHERE vph.preference_id = sp.id AND vph.action = 'approve'
+                        ) THEN 'pending'
+                        ELSE COALESCE(sp.status, 'pending')
+                    END AS vendor_review_status
                 FROM student_preferences sp
                 JOIN internship_companies ic ON sp.company_id = ic.id
             """)
@@ -727,6 +754,7 @@ def get_vendor_resumes():
             student_id = row["student_id"]
             
             # 預設狀態：老師通過，廠商尚未審核 (或學生沒有填志願序)
+            # 對於廠商來說，初始狀態應該是 'pending'（待審核）
             display_status = "pending" 
             company_id = None
             company_name = ""
@@ -764,13 +792,44 @@ def get_vendor_resumes():
             if filtered_preferences:
                 # 簡單地取第一個志願序的狀態作為展示狀態。
                 pref_to_show = filtered_preferences[0]
-                sp_status = pref_to_show['vendor_review_status']
+                sp_status = pref_to_show.get('vendor_review_status')
+                preference_id = pref_to_show.get("preference_id")
                 
-                # 廠商視角狀態：
-                display_status = sp_status if sp_status in STATUS_LABELS else "pending"
+                # 調試信息：記錄原始狀態
+                print(f"🔍 學生 {student_id} 的志願序狀態: {sp_status} (preference_id: {preference_id})")
+                print(f"   從 SQL 查詢返回的 vendor_review_status: {sp_status}")
+                
+                # 如果狀態是 'approved'，檢查是否有審核歷史記錄
+                if sp_status == 'approved' and preference_id:
+                    _ensure_history_table(cursor)
+                    cursor.execute("""
+                        SELECT COUNT(*) as count, MAX(created_at) as last_approve_time
+                        FROM vendor_preference_history 
+                        WHERE preference_id = %s AND action = 'approve'
+                    """, (preference_id,))
+                    history_result = cursor.fetchone()
+                    has_approve_history = history_result and history_result.get('count', 0) > 0
+                    last_approve_time = history_result.get('last_approve_time') if history_result else None
+                    
+                    if not has_approve_history:
+                        # 如果狀態是 'approved' 但沒有審核記錄，強制改為 'pending'
+                        print(f"⚠️ 狀態為 'approved' 但沒有審核記錄，強制改為 'pending' (preference_id: {preference_id})")
+                        sp_status = 'pending'
+                        display_status = 'pending'
+                    else:
+                        # 有審核記錄，使用 'approved'
+                        display_status = 'approved'
+                        print(f"✅ 狀態為 'approved' 且有審核記錄，使用 'approved' (preference_id: {preference_id}, 最後審核時間: {last_approve_time})")
+                else:
+                    # 廠商視角狀態：如果狀態為 NULL、空值或不在 STATUS_LABELS 中，則使用 "pending"（待審核）
+                    if sp_status and sp_status in STATUS_LABELS:
+                        display_status = sp_status
+                        print(f"✅ 使用志願序狀態: {display_status}")
+                    else:
+                        display_status = "pending"  # 預設為待審核
+                        print(f"⚠️ 狀態無效或為空，使用預設狀態: {display_status}")
                 company_id = pref_to_show.get("company_id")
                 company_name = pref_to_show.get("company_name") or ""
-                preference_id = pref_to_show.get("preference_id")
             elif company_ids:
                 # 如果沒有志願序，但廠商有關聯的公司，顯示第一個公司名稱
                 # 這種情況不應該出現（因為上面已經過濾掉了），但保留作為備用
@@ -905,7 +964,6 @@ def list_applications():
                     SELECT 1
                     FROM teacher_student_relations tsr
                     WHERE tsr.student_id = sp.student_id
-                      AND tsr.company_id = sp.company_id
                 ) AS has_relation
             FROM student_preferences sp
             JOIN users u ON sp.student_id = u.id
@@ -1453,10 +1511,195 @@ def comment_application(application_id):
 
 @vendor_bp.route("/publish_announcements")
 def publish_announcements_page():
-    """廠商查看履歷與通知頁面"""
+    """廠商發布公告頁面"""
     if "user_id" not in session or session.get("role") != "vendor":
         return render_template("auth/login.html")
     return render_template("user_shared/publish_announcements.html")
+
+
+@vendor_bp.route("/reviews_resumes_notifications")
+def reviews_resumes_notifications_page():
+    """廠商查看履歷與通知頁面"""
+    if "user_id" not in session or session.get("role") != "vendor":
+        return render_template("auth/login.html")
+    return render_template("user_shared/reviews_resumes_notifications.html")
+
+
+@vendor_bp.route("/vendor/api/announcement_history", methods=["GET"])
+def get_announcement_history():
+    """獲取廠商發布的公告歷史"""
+    if "user_id" not in session or session.get("role") != "vendor":
+        return jsonify({"success": False, "message": "未授權"}), 403
+
+    vendor_id = session["user_id"]
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+
+    try:
+        # 獲取廠商關聯的公司
+        profile, companies, _ = _get_vendor_scope(cursor, vendor_id)
+        if not profile:
+            return jsonify({"success": True, "announcements": []})
+
+        company_ids = [c["id"] for c in companies] if companies else []
+        
+        # 從通知記錄中獲取廠商發布的公告（只顯示公告，排除面試通知、錄取通知等）
+        if company_ids:
+            placeholders = ", ".join(["%s"] * len(company_ids))
+            # 只查詢標題中包含「公告」的記錄，排除「面試通知」、「錄取通知」等
+            cursor.execute(f"""
+                SELECT 
+                    n.title,
+                    n.message AS content,
+                    n.created_at,
+                    COUNT(DISTINCT n.user_id) AS recipient_count
+                FROM notifications n
+                WHERE n.category = 'company'
+                  AND n.title LIKE '%公告%'
+                  AND n.title NOT LIKE '%面試通知%'
+                  AND n.title NOT LIKE '%錄取通知%'
+                  AND EXISTS (
+                      SELECT 1 
+                      FROM student_preferences sp 
+                      WHERE sp.student_id = n.user_id 
+                        AND sp.company_id IN ({placeholders})
+                  )
+                GROUP BY n.title, n.message, n.created_at
+                ORDER BY n.created_at DESC
+                LIMIT 50
+            """, tuple(company_ids))
+        else:
+            # 如果沒有關聯公司，返回空列表
+            announcements = []
+            return jsonify({
+                "success": True,
+                "announcements": []
+            })
+
+        announcements = cursor.fetchall()
+        
+        # 格式化日期
+        for ann in announcements:
+            if ann.get('created_at'):
+                if isinstance(ann['created_at'], datetime):
+                    ann['created_at'] = ann['created_at'].strftime('%Y-%m-%d %H:%M:%S')
+                else:
+                    ann['created_at'] = str(ann['created_at'])
+
+        return jsonify({
+            "success": True,
+            "announcements": announcements
+        })
+
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"success": False, "message": f"獲取公告歷史失敗：{str(e)}"}), 500
+    finally:
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
+
+
+@vendor_bp.route("/vendor/api/publish_announcement", methods=["POST"])
+def publish_announcement():
+    """廠商發布公告給相關學生"""
+    if "user_id" not in session or session.get("role") != "vendor":
+        return jsonify({"success": False, "message": "未授權"}), 403
+
+    data = request.get_json(silent=True) or {}
+    title = data.get("title", "").strip()
+    content = data.get("content", "").strip()
+    company_id = data.get("company_id")  # 可選，指定特定公司
+    if company_id:
+        try:
+            company_id = int(company_id)
+        except (ValueError, TypeError):
+            company_id = None
+
+    if not title:
+        return jsonify({"success": False, "message": "標題不可為空"}), 400
+    if not content:
+        return jsonify({"success": False, "message": "內容不可為空"}), 400
+
+    vendor_id = session["user_id"]
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+
+    try:
+        # 獲取廠商關聯的公司
+        profile, companies, _ = _get_vendor_scope(cursor, vendor_id)
+        if not profile:
+            return jsonify({"success": False, "message": "帳號資料不完整"}), 403
+
+        if not companies:
+            return jsonify({"success": False, "message": "您尚未關聯任何公司，無法發布公告"}), 400
+
+        # 如果指定了 company_id，檢查是否有權限
+        target_company_ids = []
+        if company_id:
+            company_ids = [c["id"] for c in companies]
+            if company_id not in company_ids:
+                return jsonify({"success": False, "message": "無權限向該公司發布公告"}), 403
+            target_company_ids = [company_id]
+        else:
+            # 向所有關聯公司的學生發布
+            target_company_ids = [c["id"] for c in companies]
+
+        # 查詢選擇了這些公司的學生
+        placeholders = ", ".join(["%s"] * len(target_company_ids))
+        cursor.execute(f"""
+            SELECT DISTINCT u.id AS student_id
+            FROM student_preferences sp
+            JOIN users u ON sp.student_id = u.id
+            WHERE sp.company_id IN ({placeholders})
+              AND u.role = 'student'
+        """, tuple(target_company_ids))
+
+        students = cursor.fetchall()
+        student_ids = [s["student_id"] for s in students]
+
+        if not student_ids:
+            return jsonify({"success": False, "message": "沒有學生選擇您的公司，無法發布公告"}), 400
+
+        # 獲取公司名稱用於通知標題
+        company_name = companies[0]["company_name"] if companies else "公司"
+        if company_id:
+            for c in companies:
+                if c["id"] == company_id:
+                    company_name = c["company_name"]
+                    break
+
+        # 向所有相關學生發送通知
+        # 標題格式：【公司名稱】公告：標題，以便在查詢時區分公告和通知
+        notification_title = f"【{company_name}】公告：{title}"
+        notification_message = content
+        link_url = "/notifications"
+        category = "company"
+
+        notification_count = 0
+        for student_id in student_ids:
+            _notify_student(cursor, student_id, notification_title, notification_message, link_url, category)
+            notification_count += 1
+
+        conn.commit()
+
+        return jsonify({
+            "success": True,
+            "message": f"公告已成功發布給 {notification_count} 位學生",
+            "notification_count": notification_count
+        })
+
+    except Exception as e:
+        traceback.print_exc()
+        if conn:
+            conn.rollback()
+        return jsonify({"success": False, "message": f"發布公告失敗：{str(e)}"}), 500
+    finally:
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
 
 
 @vendor_bp.route("/vendor/api/debug_info", methods=["GET"])
@@ -1633,7 +1876,8 @@ def send_notification():
                 "company_name": company_name
             })
         else:
-            return jsonify({"success": False, "message": f"郵件發送失敗：{email_message}"}), 500
+            # email_message 已經包含完整的錯誤訊息，不需要再加「郵件發送失敗」
+            return jsonify({"success": False, "message": email_message}), 500
             
     except Exception as exc:
         traceback.print_exc()
@@ -1671,10 +1915,19 @@ def get_email_logs():
         placeholders = ", ".join(["%s"] * len(company_ids))
         
         # 查詢 email_logs，關聯到該廠商公司的學生
+        # 檢查 error_message 欄位是否存在
+        try:
+            cursor.execute("SHOW COLUMNS FROM email_logs LIKE 'error_message'")
+            has_error_message = cursor.fetchone() is not None
+        except Exception:
+            has_error_message = False
+        
+        error_message_field = "el.error_message," if has_error_message else "NULL AS error_message,"
+        
         query = f"""
             SELECT 
                 el.id, el.recipient_email, el.recipient, el.subject, 
-                el.status, el.sent_at, el.error_message,
+                el.status, el.sent_at, {error_message_field}
                 u.id AS student_id, u.name AS student_name, u.username AS student_number
             FROM email_logs el
             LEFT JOIN users u ON el.related_user_id = u.id

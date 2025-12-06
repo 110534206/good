@@ -154,6 +154,21 @@ def can_access_target_resume(cursor, session_user_id, session_role, target_user_
     if session_role == "ta":
         return True
 
+    # vendor 可以查看已通過老師審核的履歷
+    if session_role == "vendor":
+        # 檢查履歷狀態是否為 'approved'（老師已通過）
+        cursor.execute("""
+            SELECT status 
+            FROM resumes 
+            WHERE user_id = %s 
+            ORDER BY created_at DESC 
+            LIMIT 1
+        """, (target_user_id,))
+        resume = cursor.fetchone()
+        if resume and resume.get('status') == 'approved':
+            return True
+        return False
+
     # 取得 target student's class_id
     cursor.execute("SELECT class_id FROM users WHERE id = %s", (target_user_id,))
     u = cursor.fetchone()
@@ -2139,7 +2154,7 @@ def download_resume(resume_id):
     try:
         # 取得履歷資料
         cursor.execute("""
-            SELECT filepath, original_filename, user_id 
+            SELECT filepath, original_filename, user_id, status 
             FROM resumes 
             WHERE id = %s
         """, (resume_id,))
@@ -2152,8 +2167,14 @@ def download_resume(resume_id):
         session_user_id = session['user_id']
         session_role = session['role']
 
-        if not can_access_target_resume(cursor, session_user_id, session_role, resume['user_id']):
-            return jsonify({"success": False, "message": "無權限"}), 403
+        # vendor 特殊處理：檢查該履歷狀態是否為 'approved'
+        if session_role == "vendor":
+            if resume.get('status') != 'approved':
+                return jsonify({"success": False, "message": "無權限：只能下載已通過審核的履歷"}), 403
+        else:
+            # 其他角色使用原有的權限檢查
+            if not can_access_target_resume(cursor, session_user_id, session_role, resume['user_id']):
+                return jsonify({"success": False, "message": "無權限"}), 403
 
         # 統一路徑格式
         file_path = os.path.normpath(resume['filepath'])
