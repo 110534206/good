@@ -761,14 +761,66 @@
               .then(data => {
                 // 後端返回格式：{"item": detail} 或 {"error": "..."}
                 if (data.item) {
-                  // 更新本地資料中的狀態
-                  const resume = allResumes.find(r => r.id === resumeId);
-                  if (resume) {
-                    resume.status = 'approved';
+                  // 重新從 API 獲取最新的履歷列表，確保狀態正確更新
+                  // 如果當前篩選的是「待審核」狀態，自動切換到「通過」狀態，讓用戶看到更新後的結果
+                  const currentStatusFilter = document.getElementById("statusFilter").value.trim();
+                  const companyFilter = document.getElementById("companyFilter").value.trim();
+                  const keywordFilter = document.getElementById("searchBox").value.trim();
+                  
+                  // 如果當前篩選的是「待審核」，自動切換到「通過」狀態
+                  if (currentStatusFilter === 'pending') {
+                    document.getElementById("statusFilter").value = 'approved';
                   }
-                  // 重新應用篩選並渲染表格（不重新載入頁面）
-                  applyFilters();
-                  alert("✅ 履歷已標記為審核通過");
+                  
+                  const statusFilter = document.getElementById("statusFilter").value.trim();
+                  
+                  let apiUrl = '/vendor/api/resumes';
+                  const params = [];
+                  if (statusFilter) {
+                    params.push(`status=${encodeURIComponent(statusFilter)}`);
+                  }
+                  if (companyFilter) {
+                    // 從 allResumes 中查找對應的公司 ID
+                    const matchingResume = allResumes.find(r => r.company_name === companyFilter);
+                    if (matchingResume && matchingResume.company_id) {
+                      params.push(`company_id=${matchingResume.company_id}`);
+                    }
+                  }
+                  if (keywordFilter) {
+                    params.push(`keyword=${encodeURIComponent(keywordFilter)}`);
+                  }
+                  if (params.length > 0) {
+                    apiUrl += '?' + params.join('&');
+                  }
+                  
+                  fetch(apiUrl)
+                    .then(res => res.json())
+                    .then(resumeData => {
+                      if (resumeData.success) {
+                        allResumes = resumeData.resumes || [];
+                        // 重新應用篩選並渲染表格
+                        applyFilters();
+                        alert("✅ 履歷已標記為審核通過");
+                      } else {
+                        // 如果重新獲取失敗，至少更新本地數據
+                        const resume = allResumes.find(r => r.id === resumeId);
+                        if (resume) {
+                          resume.status = 'approved';
+                        }
+                        applyFilters();
+                        alert("✅ 履歷已標記為審核通過（已更新本地數據）");
+                      }
+                    })
+                    .catch(error => {
+                      console.error("Reload error:", error);
+                      // 如果重新獲取失敗，至少更新本地數據
+                      const resume = allResumes.find(r => r.id === resumeId);
+                      if (resume) {
+                        resume.status = 'approved';
+                      }
+                      applyFilters();
+                      alert("✅ 履歷已標記為審核通過（已更新本地數據）");
+                    });
                 } else if (data.error) {
                   alert("標記失敗：" + data.error);
                 } else {

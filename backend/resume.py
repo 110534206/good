@@ -2102,7 +2102,7 @@ def submit_and_generate_api():
             INSERT INTO resumes
             (user_id, filepath, original_filename, status, semester_id, created_at)
             VALUES (%s, %s, %s, %s, %s, NOW())
-        """, (user_id, save_path, filename, 'uploaded', semester_id))
+        """, (user_id, save_path, filename, 'pending', semester_id))
 
         conn.commit()
         return jsonify({
