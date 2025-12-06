@@ -212,9 +212,7 @@
             </select>
             <select id="statusFilter" class="form-select form-select-sm w-auto">
               <option value="">所有狀態</option>
-              <option value="submitted">待審查</option>
               <option value="pending">待審核</option>
-              <option value="uploaded">未通過</option>
               <option value="approved">通過</option>
               <option value="rejected">退件</option>
             </select>
@@ -267,7 +265,6 @@
       </div>
     </div>
 
-    <!-- 側邊選單 -->
     <nav id="side-menu" aria-hidden="true" role="navigation" aria-label="功能選單">
       <button id="close-btn" aria-label="關閉功能選單">×</button>
       <h2>功能選單</h2>
@@ -285,38 +282,42 @@
 
       let allResumes = [];
       let currentResumeId = null;
+      let currentPreferenceId = null; // 儲存當前的 preference_id（用於廠商審核）
       let currentPage = 1;
       const rowsPerPage = 10;
+      let userRole = null; // 儲存用戶角色
 
       // ------------------------------------
-      // 狀態轉換函式 (已修正：使用 submitted 和 under_review)
+      // 狀態轉換函式 (已修正：統一使用 pending 作為待審核狀態)
       // ------------------------------------
 
       /**
        * 根據履歷狀態返回對應的 Bootstrap 顏色類別。
+       * status: 'pending', 'approved', 'rejected'
        */
       function statusColor(status) {
-        // status: 'submitted', 'under_review', 'approved', 'rejected', 'pending'
         return {
-          'submitted': 'info',       // 已提交 (藍色)
-          'pending': 'info',         // 待審查 (藍色) - 廠商視角
+          'pending': 'info',       // 待審核 (藍色)
           'approved': 'success',     // 通過 (綠色)
           'rejected': 'danger',      // 退件 (紅色)
-          'uploaded': 'info'         // 保留舊狀態 'uploaded'
+          // 兼容舊狀態
+          'submitted': 'info',
+          'uploaded': 'info'
         }[status] || 'secondary'; // 未知使用灰色
       }
 
       /**
        * 將履歷狀態碼轉換為中文顯示名稱。
+       * status: 'pending', 'approved', 'rejected'
        */
       function mapStatus(status) {
-        // status: 'submitted', 'under_review', 'approved', 'rejected', 'pending'
         return {
-          'submitted': '待審查',
-          'pending': '待審查',  // 廠商視角：待審查（未知狀態）
+          'pending': '待審核',      // 廠商視角：待審核
           'approved': '通過',
           'rejected': '退件',
-          'uploaded': '待審查'
+          // 兼容舊狀態
+          'submitted': '待審核',
+          'uploaded': '待審核'
         }[status] || '未知';
       }
 
@@ -329,7 +330,7 @@
         fetch('/api/profile')
           .then(res => res.json())
           .then(profileData => {
-            const userRole = profileData.success && profileData.user ? profileData.user.role : null;
+            userRole = profileData.success && profileData.user ? profileData.user.role : null;
             
             let apiUrl;
             let companyApiUrl = '/api/get_reviewed_companies';
@@ -366,8 +367,8 @@
                   if (statusParam) {
                     const statusFilter = document.getElementById('statusFilter');
                     if (statusFilter) {
-                      // 將 pending 映射到 submitted 或保持原值
-                      const mappedStatus = statusParam === 'pending' ? 'submitted' : statusParam;
+                      // 將 submitted/uploaded 映射到 pending，或保持原值
+                      const mappedStatus = (statusParam === 'submitted' || statusParam === 'uploaded') ? 'pending' : statusParam;
                       statusFilter.value = mappedStatus;
                     }
                   }
@@ -402,8 +403,7 @@
                   if (statusParam) {
                     const statusFilter = document.getElementById('statusFilter');
                     if (statusFilter) {
-                      // 將 pending 映射到 submitted 或保持原值
-                      const mappedStatus = statusParam === 'pending' ? 'submitted' : statusParam;
+                      const mappedStatus = (statusParam === 'submitted' || statusParam === 'uploaded') ? 'pending' : statusParam;
                       statusFilter.value = mappedStatus;
                     }
                   }
@@ -475,7 +475,6 @@
 
         // 從 API 獲取的開放公司列表中，只顯示當前學期開放的公司
         if (companyData && companyData.success && companyData.companies) {
-          // 處理兩種格式：老師的格式（有 is_open_current_semester）和廠商的格式（只有 id 和 name）
           const openCompanies = companyData.companies.filter(company => {
             // 如果是廠商格式（有 name 屬性），直接顯示
             if (company.name) {
@@ -489,7 +488,7 @@
             const option = document.createElement("option");
             // 處理兩種格式的公司名稱
             const companyName = company.name || company.company_name;
-            option.value = companyName;
+            option.value = companyName; // 這裡使用公司名稱作為 value，前端過濾需要依賴此
             option.textContent = companyName;
             companySelect.appendChild(option);
           });
@@ -500,24 +499,22 @@
         currentPage = 1;
         const dept = document.getElementById("departmentFilter").value.trim();
         const cls = document.getElementById("classFilter").value.trim();
-        const company = document.getElementById("companyFilter").value.trim();
+        const companyName = document.getElementById("companyFilter").value.trim(); // 使用公司名稱
         const status = document.getElementById("statusFilter").value.trim();
         const keyword = document.getElementById("searchBox").value.trim().toLowerCase();
 
         const filtered = allResumes.filter(r => {
           const matchesDept = !dept || r.department === dept;
           const matchesClass = !cls || r.className === cls;
-          const matchesCompany = !company || r.company_name === company;
-          // 狀態匹配：支持 pending 映射到 submitted 或 uploaded
+          // 使用 companyName 進行過濾
+          const matchesCompany = !companyName || r.company_name === companyName; 
+          
+          // 狀態匹配：現在只匹配後端返回的 'pending', 'approved', 'rejected'
           let matchesStatus = true;
           if (status) {
-            if (status === 'submitted') {
-              // submitted 狀態匹配 submitted、pending 或 uploaded
-              matchesStatus = r.status === 'submitted' || r.status === 'pending' || r.status === 'uploaded';
-            } else {
-              matchesStatus = r.status === status;
-            }
+            matchesStatus = r.status === status;
           }
+          
           const matchesKeyword =
             (r.username && r.username.toLowerCase().includes(keyword)) ||
             (r.original_filename && r.original_filename.toLowerCase().includes(keyword));
@@ -543,6 +540,7 @@
         const pageData = resumes.slice(start, end);
 
         pageData.forEach(r => {
+          const preferenceId = r.preference_id || null;
           const row = `
         <tr>
           <td>${r.username}</td>
@@ -559,8 +557,8 @@
           <td>
             <div class="btn-group btn-group-sm">
          <a href="/api/download_resume/${r.id}" class="btn btn-outline-primary btn-sm me-1" target="_blank">下載</a>
-         <button type="button" class="btn btn-outline-danger" onclick="rejectResume(${r.id})">退件</button>
-         <button type="button" class="btn btn-outline-success" onclick="approveResume(${r.id})">完成</button>
+         <button type="button" class="btn btn-outline-danger" onclick="rejectResume(${r.id}, ${preferenceId ? preferenceId : 'null'})">退件</button>
+         <button type="button" class="btn btn-outline-success" onclick="approveResume(${r.id}, ${preferenceId ? preferenceId : 'null'})">完成</button>
 
           </td>
         </tr>`;
@@ -615,81 +613,203 @@
       }
 
       // 這是給老師單純編輯 'comment' 用的，不改變狀態
+      // 如果是廠商退件後填寫原因，則更新志願申請的 comment
       function saveComment() {
         const newVal = document.getElementById("commentInput").value.trim();
-        fetch("/api/update_resume_field", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ resume_id: currentResumeId, field: "comment", value: newVal })
-        })
-          .then(res => res.json())
-          .then(data => {
-            if (data.success) {
-              bootstrap.Modal.getInstance(document.getElementById("commentModal")).hide();
-              alert("留言更新成功");
-              location.reload(); // 重新載入以更新表格顯示
-            } else {
-              alert("留言更新失敗");
-            }
-          });
+        
+        // 如果是廠商且有 preference_id，使用志願申請的 comment API
+        if (userRole === 'vendor' && currentPreferenceId) {
+          fetch(`/vendor/api/applications/${currentPreferenceId}/comment`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ comment: newVal })
+          })
+            .then(res => res.json())
+            .then(data => {
+              // 後端返回格式：{"item": detail} 或 {"error": "..."}
+              if (data.item) {
+                bootstrap.Modal.getInstance(document.getElementById("commentModal")).hide();
+                alert("退件原因已更新");
+                currentPreferenceId = null; // 清除
+                // 重新應用篩選並渲染表格（不重新載入頁面）
+                applyFilters();
+              } else if (data.error) {
+                alert("更新失敗：" + data.error);
+              } else {
+                alert("更新失敗：未知錯誤");
+              }
+            })
+            .catch(error => {
+              console.error("Comment error:", error);
+              alert("更新失敗，網路錯誤或 API 錯誤。");
+            });
+        } else {
+          // 老師或其他角色，使用履歷的 comment API
+          fetch("/api/update_resume_field", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ resume_id: currentResumeId, field: "comment", value: newVal })
+          })
+            .then(res => res.json())
+            .then(data => {
+              if (data.success) {
+                bootstrap.Modal.getInstance(document.getElementById("commentModal")).hide();
+                alert("留言更新成功");
+                location.reload(); // 重新載入以更新表格顯示
+              } else {
+                alert("留言更新失敗");
+              }
+            });
+        }
       }
 
       // 處理退件：先嘗試退件API，若成功則強制彈出留言Modal讓老師填寫原因
-      function rejectResume(resumeId) {
+      function rejectResume(resumeId, preferenceId) {
         if (!confirm("確定要將此履歷標記為退件？退件後，請務必填寫退件原因。")) return;
 
-        // 注意：根據後端邏輯，/api/review_resume/<id> 預期 body 包含 status 和 comment
-        // 我們先呼叫 API，但不傳 comment
-        fetch(`/api/review_resume/${resumeId}`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ status: "rejected" }) // 初始呼叫不傳 comment
-        })
-          .then(res => res.json())
-          .then(data => {
-            if (data.success) {
-              alert("已成功標記為退件狀態。請填寫退件原因。");
-
-              currentResumeId = resumeId;
-              document.getElementById("commentInput").value = "";
-
-              // 修正 Modal 標題，強調這是退件原因填寫
-              document.getElementById("commentModalLabel").textContent = "❌ 填寫退件原因";
-              document.getElementById("saveCommentBtn").textContent = "送出";
-
-              // 顯示留言Modal
-              new bootstrap.Modal(document.getElementById("commentModal")).show();
-            } else {
-              alert("退件失敗：" + data.message);
-            }
+        // 如果是廠商
+        if (userRole === 'vendor') {
+          // 如果有 preference_id，使用志願申請的退件 API
+          if (preferenceId) {
+          fetch(`/vendor/api/applications/${preferenceId}/reject`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ comment: "" }) // 初始呼叫不傳 comment，稍後在 Modal 中填寫
           })
-          .catch(error => {
-            console.error("Reject error:", error);
-            alert("退件失敗，網路錯誤或 API 錯誤。");
-          });
+            .then(res => res.json())
+            .then(data => {
+              // 後端返回格式：{"item": detail} 或 {"error": "..."}
+              if (data.item) {
+                // 更新本地資料中的狀態
+                const resume = allResumes.find(r => r.id === resumeId);
+                if (resume) {
+                  resume.status = 'rejected';
+                }
+                
+                alert("已成功標記為退件狀態。請填寫退件原因。");
+
+                currentResumeId = resumeId;
+                currentPreferenceId = preferenceId; // 儲存 preference_id 用於後續更新 comment
+                document.getElementById("commentInput").value = "";
+
+                // 修正 Modal 標題，強調這是退件原因填寫
+                document.getElementById("commentModalLabel").textContent = "❌ 填寫退件原因";
+                document.getElementById("saveCommentBtn").textContent = "送出";
+
+                // 顯示留言Modal
+                new bootstrap.Modal(document.getElementById("commentModal")).show();
+              } else if (data.error) {
+                alert("退件失敗：" + data.error);
+              } else {
+                alert("退件失敗：未知錯誤");
+              }
+            })
+            .catch(error => {
+              console.error("Reject error:", error);
+              alert("退件失敗，網路錯誤或 API 錯誤。");
+            });
+          } else {
+            // 沒有 preference_id，提示用戶
+            alert("此學生尚未填寫志願序，無法進行退件。請等待學生填寫志願序後再進行操作。");
+          }
+        } else {
+          // 老師或其他角色，使用履歷審核 API
+          fetch(`/api/review_resume/${resumeId}`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ status: "rejected" }) // 初始呼叫不傳 comment
+          })
+            .then(res => res.json())
+            .then(data => {
+              if (data.success) {
+                alert("已成功標記為退件狀態。請填寫退件原因。");
+
+                currentResumeId = resumeId;
+                document.getElementById("commentInput").value = "";
+
+                // 修正 Modal 標題，強調這是退件原因填寫
+                document.getElementById("commentModalLabel").textContent = "❌ 填寫退件原因";
+                document.getElementById("saveCommentBtn").textContent = "送出";
+
+                // 顯示留言Modal
+                new bootstrap.Modal(document.getElementById("commentModal")).show();
+              } else {
+                alert("退件失敗：" + data.message);
+              }
+            })
+            .catch(error => {
+              console.error("Reject error:", error);
+              alert("退件失敗，網路錯誤或 API 錯誤。");
+            });
+        }
       }
 
 
-      function approveResume(resumeId) {
+      function approveResume(resumeId, preferenceId) {
         if (!confirm("確定要將此履歷標記為審核通過嗎？")) return;
-        fetch(`/api/review_resume/${resumeId}`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ status: "approved" })
-        })
-          .then(res => res.json())
-          .then(data => {
-            if (data.success) {
-              alert("✅ 履歷已標記為審核通過");
-              location.reload();
-            } else {
-              alert("標記失敗：" + data.message);
-            }
+        
+        // 如果是廠商
+        if (userRole === 'vendor') {
+          // 如果有 preference_id，使用志願申請的通過 API
+          if (preferenceId) {
+            fetch(`/vendor/api/applications/${preferenceId}/approve`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({})
+            })
+              .then(res => res.json())
+              .then(data => {
+                // 後端返回格式：{"item": detail} 或 {"error": "..."}
+                if (data.item) {
+                  // 更新本地資料中的狀態
+                  const resume = allResumes.find(r => r.id === resumeId);
+                  if (resume) {
+                    resume.status = 'approved';
+                  }
+                  // 重新應用篩選並渲染表格（不重新載入頁面）
+                  applyFilters();
+                  alert("✅ 履歷已標記為審核通過");
+                } else if (data.error) {
+                  alert("標記失敗：" + data.error);
+                } else {
+                  alert("標記失敗：未知錯誤");
+                }
+              })
+              .catch(error => {
+                console.error("Approve error:", error);
+                alert("通過失敗，網路錯誤或 API 錯誤。");
+              });
+          } else {
+            // 沒有 preference_id，提示用戶
+            alert("此學生尚未填寫志願序，無法進行審核。請等待學生填寫志願序後再進行審核。");
+          }
+        } else {
+          // 老師或其他角色，使用履歷審核 API
+          fetch(`/api/review_resume/${resumeId}`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ status: "approved" })
           })
-          .catch(error => {
-            console.error("Approve error:", error);
-            alert("通過失敗，網路錯誤或 API 錯誤。");
-          });
+            .then(res => res.json())
+            .then(data => {
+              if (data.success) {
+                // 更新本地資料中的狀態
+                const resume = allResumes.find(r => r.id === resumeId);
+                if (resume) {
+                  resume.status = 'approved';
+                }
+                // 重新應用篩選並渲染表格（不重新載入頁面）
+                applyFilters();
+                alert("✅ 履歷已標記為審核通過");
+              } else {
+                alert("標記失敗：" + data.message);
+              }
+            })
+            .catch(error => {
+              console.error("Approve error:", error);
+              alert("通過失敗，網路錯誤或 API 錯誤。");
+            });
+        }
       }
 
 

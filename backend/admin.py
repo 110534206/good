@@ -289,8 +289,8 @@ def create_user():
 
         # 後台註冊的用戶，狀態設為 'approved'（已啟用）
         query = """
-            INSERT INTO users (username, name, email, role, class_id, password, user_changed, status)
-            VALUES (%s, %s, %s, %s, %s, %s, 0, 'approved')
+            INSERT INTO users (username, name, email, role, class_id, password, status)
+            VALUES (%s, %s, %s, %s, %s, %s, 'approved')
         """
         cursor.execute(query, (username, name, email, role, class_id, hashed))
         conn.commit()

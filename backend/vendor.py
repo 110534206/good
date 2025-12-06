@@ -46,25 +46,88 @@ def _ensure_history_table(cursor):
     global HISTORY_TABLE_READY
     if HISTORY_TABLE_READY:
         return
-    # 這裡使用 IF NOT EXISTS，並假設此函數在實際執行時會被調用，避免每次請求都執行 DDL
-    cursor.execute(
-        """
-        CREATE TABLE IF NOT EXISTS vendor_preference_history (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            preference_id INT NOT NULL,
-            reviewer_id INT NOT NULL,
-            action VARCHAR(20) NOT NULL,
-            comment TEXT,
-            created_at DATETIME NOT NULL,
-            INDEX idx_vph_preference (preference_id),
-            CONSTRAINT fk_vph_preference FOREIGN KEY (preference_id)
-                REFERENCES student_preferences(id) ON DELETE CASCADE,
-            CONSTRAINT fk_vph_reviewer FOREIGN KEY (reviewer_id)
-                REFERENCES users(id) ON DELETE CASCADE
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-        """
-    )
-    HISTORY_TABLE_READY = True
+    
+    try:
+        # 先檢查表是否存在
+        cursor.execute("""
+            SELECT COUNT(*) as count
+            FROM information_schema.tables
+            WHERE table_schema = DATABASE()
+            AND table_name = 'vendor_preference_history'
+        """)
+        table_exists = cursor.fetchone().get('count', 0) > 0
+        
+        if not table_exists:
+            # 檢查 student_preferences 表是否存在
+            cursor.execute("""
+                SELECT COUNT(*) as count
+                FROM information_schema.tables
+                WHERE table_schema = DATABASE()
+                AND table_name = 'student_preferences'
+            """)
+            pref_table_exists = cursor.fetchone().get('count', 0) > 0
+            
+            if not pref_table_exists:
+                print("⚠️ student_preferences 表不存在，無法創建 vendor_preference_history 表")
+                HISTORY_TABLE_READY = True  # 標記為已處理，避免重複嘗試
+                return
+            
+            # 檢查 users 表是否存在
+            cursor.execute("""
+                SELECT COUNT(*) as count
+                FROM information_schema.tables
+                WHERE table_schema = DATABASE()
+                AND table_name = 'users'
+            """)
+            users_table_exists = cursor.fetchone().get('count', 0) > 0
+            
+            if not users_table_exists:
+                print("⚠️ users 表不存在，無法創建 vendor_preference_history 表")
+                HISTORY_TABLE_READY = True
+                return
+            
+            # 創建表（不包含外鍵約束，先創建表結構）
+            cursor.execute("""
+                CREATE TABLE vendor_preference_history (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    preference_id INT NOT NULL,
+                    reviewer_id INT NOT NULL,
+                    action VARCHAR(20) NOT NULL,
+                    comment TEXT,
+                    created_at DATETIME NOT NULL,
+                    INDEX idx_vph_preference (preference_id),
+                    INDEX idx_vph_reviewer (reviewer_id)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+            """)
+            
+            # 嘗試添加外鍵約束（如果失敗，不影響表的使用）
+            try:
+                cursor.execute("""
+                    ALTER TABLE vendor_preference_history
+                    ADD CONSTRAINT fk_vph_preference 
+                    FOREIGN KEY (preference_id)
+                    REFERENCES student_preferences(id) ON DELETE CASCADE
+                """)
+            except Exception as fk_error:
+                print(f"⚠️ 無法添加 preference_id 外鍵約束: {fk_error}")
+                # 繼續執行，不影響功能
+            
+            try:
+                cursor.execute("""
+                    ALTER TABLE vendor_preference_history
+                    ADD CONSTRAINT fk_vph_reviewer 
+                    FOREIGN KEY (reviewer_id)
+                    REFERENCES users(id) ON DELETE CASCADE
+                """)
+            except Exception as fk_error:
+                print(f"⚠️ 無法添加 reviewer_id 外鍵約束: {fk_error}")
+                # 繼續執行，不影響功能
+        
+        HISTORY_TABLE_READY = True
+    except Exception as e:
+        print(f"⚠️ 創建 vendor_preference_history 表時發生錯誤: {e}")
+        # 標記為已處理，避免重複嘗試
+        HISTORY_TABLE_READY = True
 
 
 def _get_vendor_profile(cursor, vendor_id):
@@ -80,7 +143,6 @@ def _get_vendor_companies(cursor, vendor_id):
     """
     獲取廠商對應的公司列表。
     邏輯：廠商通過指導老師（teacher_name）關聯到公司。
-    **【優化點：移除硬編碼】**
     """
     # 1. 獲取廠商的 teacher_name
     cursor.execute("SELECT teacher_name FROM users WHERE id = %s", (vendor_id,))
@@ -166,7 +228,6 @@ def _fetch_job_for_vendor(cursor, job_id, vendor_id, allow_teacher_created=False
     """
     獲取廠商有權限訪問的職缺。
     權限邏輯：通過指導老師（teacher_name）關聯到公司。
-    **【優化點：移除 vendor_email 參數，因為不再用於權限判斷】**
     """
     # 1. 獲取廠商的 teacher_name
     cursor.execute("SELECT teacher_name FROM users WHERE id = %s", (vendor_id,))
@@ -256,13 +317,42 @@ def _fetch_latest_resume(cursor, student_id):
 def _fetch_skill_tags(cursor, student_id):
     """獲取學生的證照和語言技能作為標籤"""
     skills = []
-    # 證照
-    cursor.execute(
-        "SELECT CertName FROM Student_Certifications WHERE StuID = %s ORDER BY CertName",
-        (student_id,),
-    )
-    certifications = cursor.fetchall() or []
-    skills.extend([row["CertName"] for row in certifications if row.get("CertName")])
+    # 證照 - 嘗試多種可能的表名和欄位名
+    try:
+        # 先嘗試使用與 resume.py 一致的方式（通過 JOIN 獲取證照名稱）
+        cursor.execute("""
+            SELECT
+                CONCAT(COALESCE(cc.job_category, ''), COALESCE(cc.level, '')) AS cert_name
+            FROM student_certifications sc
+            LEFT JOIN certificate_codes cc 
+                ON sc.cert_code COLLATE utf8mb4_unicode_ci = cc.code COLLATE utf8mb4_unicode_ci
+            WHERE sc.StuID = %s
+            ORDER BY sc.AcquisitionDate DESC
+        """, (student_id,))
+        certifications = cursor.fetchall() or []
+        skills.extend([row.get("cert_name") for row in certifications if row.get("cert_name")])
+    except Exception as e1:
+        # 如果上述查詢失敗，嘗試使用舊的表名和欄位名
+        try:
+            cursor.execute(
+                "SELECT CertName FROM Student_Certifications WHERE StuID = %s ORDER BY CertName",
+                (student_id,),
+            )
+            certifications = cursor.fetchall() or []
+            skills.extend([row.get("CertName") for row in certifications if row.get("CertName")])
+        except Exception as e2:
+            # 如果都失敗，嘗試使用小寫欄位名
+            try:
+                cursor.execute(
+                    "SELECT cert_name FROM student_certifications WHERE StuID = %s ORDER BY cert_name",
+                    (student_id,),
+                )
+                certifications = cursor.fetchall() or []
+                skills.extend([row.get("cert_name") for row in certifications if row.get("cert_name")])
+            except Exception as e3:
+                # 如果所有查詢都失敗，記錄錯誤但不中斷流程
+                print(f"⚠️ 無法獲取證照資料: {e1}, {e2}, {e3}")
+                certifications = []
 
     # 語言技能
     cursor.execute(
@@ -389,7 +479,6 @@ def _fetch_application_detail(cursor, preference_id):
                 SELECT 1
                 FROM teacher_student_relations tsr
                 WHERE tsr.student_id = sp.student_id
-                  AND tsr.company_id = sp.company_id
             ) AS has_relation
         FROM student_preferences sp
         JOIN internship_companies ic ON sp.company_id = ic.id
@@ -455,7 +544,7 @@ def _fetch_application_detail(cursor, preference_id):
     return detail
 
 
-def _get_application_access(cursor, preference_id, vendor_id, vendor_email):
+def _get_application_access(cursor, preference_id, vendor_id):
     """
     獲取廠商有權限訪問的申請。
     權限邏輯：通過指導老師（teacher_name）關聯到公司。
@@ -508,9 +597,8 @@ def get_vendor_resumes():
     獲取廠商可以查看的已通過審核的學生履歷。
     邏輯：
     1. 老師已通過 (resumes.status = 'approved')。
-    2. 學生對廠商所屬公司提交了志願申請 (student_preferences)。
-    3. 廠商介面狀態取決於 student_preferences.status。
-    **【優化點：修正查詢邏輯，基於 student_preferences.status 顯示廠商審核狀態】**
+    2. 履歷會自動進入廠商的學生履歷審核流程。
+    3. 廠商介面狀態取決於 student_preferences.status（如果存在），否則為 pending。
     """
     if "user_id" not in session or session.get("role") != "vendor":
         return jsonify({"success": False, "message": "未授權"}), 403
@@ -531,17 +619,13 @@ def get_vendor_resumes():
         if not company_ids:
             return jsonify({"success": True, "resumes": [], "companies": []})
 
-        # 構建查詢：獲取老師已通過的最新履歷，並帶出學生在該公司的申請狀態 (sp.status)
-        placeholders = ", ".join(["%s"] * len(company_ids))
-        params = company_ids[:]
-
-        query = f"""
+        # 步驟 1: 獲取所有老師已通過的最新履歷
+        # 這裡不進行公司/志願序的過濾，只找出所有老師通過的最新履歷
+        base_query = """
             SELECT
                 r.id, r.user_id AS student_id, u.name AS student_name, u.username AS student_number,
                 c.name AS class_name, c.department, r.original_filename, r.filepath,
-                r.comment, r.note, r.created_at, r.reviewed_at, r.reviewed_by,
-                ic.company_name, ic.id AS company_id,
-                sp.status AS vendor_review_status, sp.id AS preference_id
+                r.comment, r.note, r.created_at, r.reviewed_at, r.reviewed_by
             FROM resumes r
             JOIN users u ON r.user_id = u.id
             LEFT JOIN classes c ON u.class_id = c.id
@@ -554,49 +638,97 @@ def get_vendor_resumes():
                 GROUP BY user_id
             ) latest ON latest.user_id = r.user_id AND latest.max_created_at = r.created_at
             
-            -- 關聯學生的志願申請，只找目標公司的申請
-            JOIN student_preferences sp ON sp.student_id = u.id AND sp.company_id IN ({placeholders})
-            JOIN internship_companies ic ON sp.company_id = ic.id
             -- 這裡只篩選老師已通過的履歷 (r.status='approved')
             WHERE r.status = 'approved'
         """
-        # 添加 company_ids 參數
-        params.extend(company_ids)
-
-        where_clauses = [f"sp.company_id IN ({placeholders})"]
         
-        # 添加公司篩選
-        if company_filter and company_filter in company_ids:
-            where_clauses.append("ic.id = %s")
-            params.append(company_filter)
-
-        # 添加狀態篩選 (基於 student_preferences.status)
-        if status_filter and status_filter in ['approved', 'rejected', 'pending']:
-            where_clauses.append("sp.status = %s")
-            params.append(status_filter)
-
-        # 添加關鍵字搜尋
+        # 步驟 2: 處理關鍵字篩選
+        params = []
+        where_clauses = []
+        
         if keyword_filter:
             keyword = f"%{keyword_filter}%"
             where_clauses.append("(u.name LIKE %s OR u.username LIKE %s OR r.original_filename LIKE %s)")
             params.extend([keyword, keyword, keyword])
 
         if where_clauses:
-            query += " AND " + " AND ".join(where_clauses)
+            base_query += " AND " + " AND ".join(where_clauses)
+            
+        base_query += " ORDER BY r.created_at DESC"
+        
+        cursor.execute(base_query, tuple(params))
+        latest_resumes = cursor.fetchall() or []
 
-        query += " ORDER BY r.created_at DESC"
+        # 步驟 3: 查詢學生對該廠商所屬公司填寫的志願序，並用來覆蓋狀態
+        preference_placeholders = ", ".join(["%s"] * len(company_ids))
+        cursor.execute(f"""
+            SELECT student_id, sp.status AS vendor_review_status, company_id, ic.company_name, sp.id AS preference_id
+            FROM student_preferences sp
+            JOIN internship_companies ic ON sp.company_id = ic.id
+            WHERE sp.company_id IN ({preference_placeholders})
+        """, tuple(company_ids))
+        
+        # 使用字典儲存學生的志願申請，鍵為 student_id
+        preferences_map = {}
+        for pref in cursor.fetchall() or []:
+            student_id = pref['student_id']
+            if student_id not in preferences_map:
+                preferences_map[student_id] = []
+            preferences_map[student_id].append(pref)
 
-        cursor.execute(query, tuple(params))
-        rows = cursor.fetchall() or []
-
+        # 步驟 4: 整合資料並應用狀態與公司篩選
         resumes = []
-        for row in rows:
-            sp_status = row.get("vendor_review_status")
+        for row in latest_resumes:
+            student_id = row["student_id"]
             
-            # 廠商視角狀態：如果 student_preferences.status 是 pending/approved/rejected 則顯示其值
-            # 預設為 pending (待審核)
-            display_status = sp_status if sp_status in STATUS_LABELS else "pending"
+            # 預設狀態：老師通過，廠商尚未審核 (或學生沒有填志願序)
+            display_status = "pending" 
+            company_id = None
+            company_name = ""
+            preference_id = None
             
+            # 檢查是否有對該廠商公司的志願序
+            student_preferences = preferences_map.get(student_id, [])
+            
+            # 篩選出學生對 *當前廠商* 的 *特定公司* 的志願
+            filtered_preferences = []
+            if company_filter:
+                 # 如果有公司篩選，只看該公司的志願
+                filtered_preferences = [
+                    p for p in student_preferences 
+                    if p['company_id'] == company_filter
+                ]
+            else:
+                # 如果沒有公司篩選，看學生對 *任何* 相關公司的志願
+                filtered_preferences = student_preferences
+            
+            # 如果存在志願序，則使用志願序的狀態和公司資訊。
+            if filtered_preferences:
+                # 簡單地取第一個志願序的狀態作為展示狀態。
+                pref_to_show = filtered_preferences[0]
+                sp_status = pref_to_show['vendor_review_status']
+                
+                # 廠商視角狀態：
+                display_status = sp_status if sp_status in STATUS_LABELS else "pending"
+                company_id = pref_to_show.get("company_id")
+                company_name = pref_to_show.get("company_name")
+                preference_id = pref_to_show.get("preference_id")
+
+            # 狀態篩選：如果篩選器啟用，檢查是否匹配
+            if status_filter:
+                if status_filter == 'pending':
+                    # pending 篩選匹配 'pending' 狀態
+                    if display_status != 'pending':
+                        continue # 不匹配，跳過
+                elif display_status != status_filter:
+                    continue # 不匹配，跳過
+            
+            # 公司篩選：如果前面已經根據 filtered_preferences 做了判斷
+            # 這裡需要確保，如果進行了公司篩選 (company_filter)，那麼該履歷必須與之相關聯
+            if company_filter and company_id != company_filter:
+                continue
+                
+            # 構建結果
             resume = {
                 "id": row.get("id"),
                 "student_id": row.get("student_id"),
@@ -606,14 +738,14 @@ def get_vendor_resumes():
                 "department": row.get("department") or "",
                 "original_filename": row.get("original_filename"),
                 "filepath": row.get("filepath"),
-                "status": display_status,  # 顯示基於 student_preferences 的狀態
-                "comment": row.get("comment") or "",
+                "status": display_status,  # 顯示基於 student_preferences 的狀態，如果沒有則為 pending
+                "comment": row.get("comment") or "", # 老師的履歷備註 (非廠商的志願備註)
                 "note": row.get("note") or "",
                 "upload_time": _format_datetime(row.get("created_at")),
                 "reviewed_at": _format_datetime(row.get("reviewed_at")),
-                "company_name": row.get("company_name"),
-                "company_id": row.get("company_id"),
-                "preference_id": row.get("preference_id"), # 用於廠商審核操作
+                "company_name": company_name,
+                "company_id": company_id,
+                "preference_id": preference_id, # 用於廠商審核操作，如果沒有填寫志願序則為 None
             }
             resumes.append(resume)
 
@@ -756,7 +888,8 @@ def retrieve_application(application_id):
         if not profile:
             return jsonify({"error": "帳號資訊有誤"}), 403
 
-        access = _get_application_access(cursor, application_id, vendor_id, profile.get("email"))
+        # 修正：移除 vendor_email 參數
+        access = _get_application_access(cursor, application_id, vendor_id)
         if not access:
             return jsonify({"error": "未找到資料或無權限查看"}), 404
 
@@ -1147,8 +1280,8 @@ def _handle_status_update(application_id, action):
         if not profile:
             return jsonify({"error": "帳號資訊有誤"}), 403
 
-        # 檢查廠商是否有權限操作此申請
-        access = _get_application_access(cursor, application_id, vendor_id, profile.get("email"))
+        # 修正：移除 vendor_email 參數
+        access = _get_application_access(cursor, application_id, vendor_id)
         if not access:
             return jsonify({"error": "找不到此申請或無權限操作"}), 404
 

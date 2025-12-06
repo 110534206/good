@@ -98,7 +98,7 @@ def get_profile():
         cursor.execute("""
             SELECT u.id, u.username, u.email, u.role AS original_role, u.name,
                    c.department, c.name AS class_name, u.class_id, u.avatar_url, u.current_semester_code,
-                   u.teacher_name, u.user_changed
+                   u.teacher_name
             FROM users u
             LEFT JOIN classes c ON u.class_id = c.id
             WHERE u.id = %s
@@ -241,7 +241,7 @@ def save_profile():
             return jsonify({"success": False, "message": "請重新登入"}), 401
 
         # 檢查是否要修改帳號
-        cursor.execute("SELECT username, user_changed, role FROM users WHERE id = %s", (user_id,))
+        cursor.execute("SELECT username, role FROM users WHERE id = %s", (user_id,))
         current_user = cursor.fetchone()
         
         if not current_user:
@@ -249,10 +249,6 @@ def save_profile():
 
         # 如果提供了新的 username 且與當前不同，則嘗試修改帳號
         if username and username.strip() and username.strip() != current_user.get("username", ""):
-            # 檢查是否已經修改過帳號
-            if current_user.get("user_changed") == 1:
-                return jsonify({"success": False, "message": "帳號只能修改一次，無法再次修改"}), 403
-            
             # 檢查新帳號是否已被使用（同一角色下）
             cursor.execute("""
                 SELECT id FROM users 
@@ -262,10 +258,10 @@ def save_profile():
             if existing:
                 return jsonify({"success": False, "message": "此帳號已被使用"}), 400
             
-            # 更新帳號並設置 user_changed = 1
+            # 更新帳號
             cursor.execute("""
                 UPDATE users 
-                SET username = %s, user_changed = 1 
+                SET username = %s
                 WHERE id = %s
             """, (username.strip(), user_id))
             
@@ -387,33 +383,26 @@ def change_username():
     conn = get_db()
     cursor = conn.cursor(dictionary=True)
     try:
-        # 檢查 user_changed 狀態，確認是否可以修改
-        cursor.execute("SELECT username, user_changed FROM users WHERE id = %s", (user_id,))
+        # 檢查使用者是否存在
+        cursor.execute("SELECT username, role FROM users WHERE id = %s", (user_id,))
         user = cursor.fetchone()
 
         if not user:
             return jsonify({"success": False, "message": "使用者不存在"}), 404
 
-        # 如果已經修改過帳號（user_changed = 1），則不允許再次修改
-        if user.get("user_changed") == 1:
-            return jsonify({"success": False, "message": "帳號只能修改一次，無法再次修改"}), 403
-
         # 檢查新帳號是否已被使用（同一角色下）
-        cursor.execute("SELECT role FROM users WHERE id = %s", (user_id,))
-        current_user = cursor.fetchone()
-        if current_user:
-            cursor.execute("""
-                SELECT id FROM users 
-                WHERE username = %s AND role = %s AND id != %s
-            """, (new_username, current_user["role"], user_id))
-            existing = cursor.fetchone()
-            if existing:
-                return jsonify({"success": False, "message": "此帳號已被使用"}), 400
+        cursor.execute("""
+            SELECT id FROM users 
+            WHERE username = %s AND role = %s AND id != %s
+        """, (new_username, user["role"], user_id))
+        existing = cursor.fetchone()
+        if existing:
+            return jsonify({"success": False, "message": "此帳號已被使用"}), 400
 
-        # 更新帳號並設置 user_changed = 1
+        # 更新帳號
         cursor.execute("""
             UPDATE users 
-            SET username = %s, user_changed = 1 
+            SET username = %s
             WHERE id = %s
         """, (new_username, user_id))
         conn.commit()

@@ -3413,7 +3413,7 @@ def get_class_resumes():
         # 格式化日期時間並統一字段名稱
         for r in resumes:
             if isinstance(r.get('created_at'), datetime):
-                r['created_at'] = r['created_at'].strftime("%Y-%m-%d %H:%M:%S")
+                r['created_at'] = r['created_at'].strftime("%Y/%m/%d %H:%M")
             # 統一字段名稱，確保前端能正確訪問
             if 'student_name' in r:
                 r['name'] = r['student_name']
