@@ -2660,20 +2660,8 @@ def submit_absence_record():
                     # 將路徑中的反斜杠轉換為正斜杠（統一格式）
                     save_path = save_path.replace('\\', '/')
                     proof_image.save(save_path)
-                    # 確保保存到資料庫的路徑是相對路徑（統一格式）
-                    # 如果 save_path 是絕對路徑，提取相對路徑部分
-                    if os.path.isabs(save_path):
-                        # 獲取當前工作目錄，然後計算相對路徑
-                        abs_absence_folder = os.path.abspath(ABSENCE_PROOF_FOLDER)
-                        if save_path.startswith(abs_absence_folder):
-                            image_path = save_path.replace(abs_absence_folder, ABSENCE_PROOF_FOLDER).replace('\\', '/')
-                        else:
-                            # 如果無法計算相對路徑，使用原始路徑
-                            image_path = save_path.replace('\\', '/')
-                    else:
-                        image_path = save_path  # 已經是相對路徑
-                    print(f"✅ 缺勤佐證圖片已保存: {save_path}")
-                    print(f"✅ 儲存到資料庫的路徑: {image_path}")
+                    image_path = save_path  # 儲存到資料庫的路徑
+                    print(f"✅ 缺勤佐證圖片已保存: {image_path}")
                     print(f"✅ 文件大小: {os.path.getsize(save_path) if os.path.exists(save_path) else 'N/A'} bytes")
                     print(f"✅ 文件是否存在: {os.path.exists(save_path)}")
                 except Exception as e:
@@ -2693,64 +2681,15 @@ def submit_absence_record():
 
     try:
         # 插入缺勤紀錄到 absence_records 表格
-        print(f"📝 準備插入缺勤紀錄:")
-        print(f"   user_id={user_id}")
-        print(f"   absence_date={absence_date}")
-        print(f"   absence_type={absence_type}")
-        print(f"   duration_units={duration_units}")
-        print(f"   reason={reason}")
-        print(f"   image_path={image_path}")
-        print(f"   image_path type={type(image_path)}")
-        print(f"   image_path is None={image_path is None}")
-        
-        # 檢查 absence_records 表是否有 semester_id 欄位
-        cursor.execute("SHOW COLUMNS FROM absence_records LIKE 'semester_id'")
-        has_semester_id = cursor.fetchone() is not None
-        
-        # 根據 absence_date 計算 semester_id（如果表有該欄位）
-        semester_id = None
-        if has_semester_id:
-            try:
-                from datetime import datetime as dt
-                absence_dt = dt.strptime(absence_date, '%Y-%m-%d')
-                # 查詢包含該日期的學期
-                cursor.execute("""
-                    SELECT id FROM semesters 
-                    WHERE start_date <= %s AND end_date >= %s
-                    LIMIT 1
-                """, (absence_date, absence_date))
-                semester_row = cursor.fetchone()
-                if semester_row:
-                    semester_id = semester_row['id']
-                    print(f"   semester_id={semester_id} (根據日期 {absence_date} 計算)")
-            except Exception as e:
-                print(f"⚠️ 計算 semester_id 失敗: {e}")
-        
-        if has_semester_id and semester_id:
-            cursor.execute("""
-                INSERT INTO absence_records 
-                (user_id, absence_date, absence_type, duration_units, reason, image_path, semester_id)
-                VALUES (%s, %s, %s, %s, %s, %s, %s)
-            """, (user_id, absence_date, absence_type, duration_units, reason, image_path, semester_id))
-        else:
-            cursor.execute("""
-                INSERT INTO absence_records 
-                (user_id, absence_date, absence_type, duration_units, reason, image_path)
-                VALUES (%s, %s, %s, %s, %s, %s)
-            """, (user_id, absence_date, absence_type, duration_units, reason, image_path))
+        print(f"📝 準備插入缺勤紀錄: user_id={user_id}, date={absence_date}, type={absence_type}, image_path={image_path}")
+        cursor.execute("""
+            INSERT INTO absence_records 
+            (user_id, absence_date, absence_type, duration_units, reason, image_path)
+            VALUES (%s, %s, %s, %s, %s, %s)
+        """, (user_id, absence_date, absence_type, duration_units, reason, image_path))
         
         conn.commit()
-        record_id = cursor.lastrowid
-        print(f"✅ 缺勤紀錄已成功插入資料庫 (ID: {record_id})")
-        print(f"✅ image_path 已保存: {image_path}")
-        
-        # 驗證插入的資料
-        cursor.execute("SELECT image_path FROM absence_records WHERE id = %s", (record_id,))
-        inserted_record = cursor.fetchone()
-        if inserted_record:
-            print(f"✅ 驗證：資料庫中的 image_path = {inserted_record.get('image_path')}")
-        else:
-            print(f"⚠️ 警告：無法驗證插入的資料")
+        print(f"✅ 缺勤紀錄已成功插入資料庫，image_path={image_path}")
 
         return jsonify({"success": True, "message": "缺勤紀錄提交成功！"})
 
@@ -2758,203 +2697,6 @@ def submit_absence_record():
         traceback.print_exc()
         return jsonify({"success": False, "message": f"資料庫操作失敗: {str(e)}"}), 500
 
-    finally:
-        cursor.close()
-        conn.close()
-
-# -------------------------
-# 缺勤預設學期範圍 API
-# -------------------------
-@resume_bp.route('/api/absence/default_range', methods=['GET'])
-def get_absence_default_range():
-    """取得缺勤預設學期範圍"""
-    try:
-        conn = get_db()
-        cursor = conn.cursor(dictionary=True)
-        
-        cursor.execute("""
-            SELECT start_semester_code, end_semester_code
-            FROM absence_default_semester_range
-            ORDER BY id DESC
-            LIMIT 1
-        """)
-        result = cursor.fetchone()
-        
-        if result:
-            return jsonify({
-                "success": True,
-                "defaultStart": result['start_semester_code'],
-                "defaultEnd": result['end_semester_code']
-            })
-        else:
-            # 如果沒有設定，返回空值
-            return jsonify({
-                "success": True,
-                "defaultStart": "",
-                "defaultEnd": ""
-            })
-    except Exception as e:
-        traceback.print_exc()
-        return jsonify({"success": False, "message": f"取得預設學期範圍失敗: {str(e)}"}), 500
-    finally:
-        cursor.close()
-        conn.close()
-
-@resume_bp.route('/api/absence/default_range', methods=['POST'])
-def update_absence_default_range():
-    """更新缺勤預設學期範圍（後台用）"""
-    if session.get('role') not in ['admin', 'ta']:
-        return jsonify({"success": False, "message": "未授權"}), 403
-    
-    data = request.get_json() or {}
-    start_code = data.get('start', '').strip()
-    end_code = data.get('end', '').strip()
-    
-    if not start_code or not end_code:
-        return jsonify({"success": False, "message": "請提供開始和結束學期代碼"}), 400
-    
-    try:
-        conn = get_db()
-        cursor = conn.cursor(dictionary=True)
-        
-        # 檢查是否已存在記錄
-        cursor.execute("SELECT id FROM absence_default_semester_range LIMIT 1")
-        exists = cursor.fetchone()
-        
-        if exists:
-            # 更新現有記錄
-            cursor.execute("""
-                UPDATE absence_default_semester_range
-                SET start_semester_code = %s, end_semester_code = %s
-                WHERE id = %s
-            """, (start_code, end_code, exists['id']))
-        else:
-            # 插入新記錄
-            cursor.execute("""
-                INSERT INTO absence_default_semester_range (start_semester_code, end_semester_code)
-                VALUES (%s, %s)
-            """, (start_code, end_code))
-        
-        conn.commit()
-        return jsonify({
-            "success": True,
-            "message": "預設學期範圍已更新",
-            "defaultStart": start_code,
-            "defaultEnd": end_code
-        })
-    except Exception as e:
-        traceback.print_exc()
-        conn.rollback()
-        return jsonify({"success": False, "message": f"更新預設學期範圍失敗: {str(e)}"}), 500
-    finally:
-        cursor.close()
-        conn.close()
-
-# -------------------------
-# 獲取學生可用的學期列表（根據預設範圍和入學年度過濾）
-# -------------------------
-@resume_bp.route('/api/absence/available_semesters', methods=['GET'])
-def get_available_semesters_for_student():
-    """獲取學生可用的學期列表（根據預設範圍和入學年度過濾）"""
-    if 'user_id' not in session or session.get('role') != 'student':
-        return jsonify({"success": False, "message": "未授權"}), 403
-    
-    user_id = session.get('user_id')
-    
-    try:
-        conn = get_db()
-        cursor = conn.cursor(dictionary=True)
-        
-        # 1. 獲取學生的入學年度
-        cursor.execute("""
-            SELECT c.admission_year
-            FROM users u
-            LEFT JOIN classes c ON u.class_id = c.id
-            WHERE u.id = %s
-        """, (user_id,))
-        student_info = cursor.fetchone()
-        
-        admission_year = None
-        if student_info and student_info.get('admission_year'):
-            admission_year = student_info['admission_year']
-            # 如果 admission_year 是字符串，嘗試轉換
-            if isinstance(admission_year, str):
-                # 如果是4位數（如1122），提取前3位作為年度
-                if len(admission_year) >= 4 and admission_year[:3].isdigit():
-                    admission_year = int(admission_year[:3])
-                elif admission_year.isdigit():
-                    admission_year = int(admission_year)
-            elif isinstance(admission_year, int):
-                # 如果是4位數（如1122），提取前3位作為年度
-                if admission_year >= 1000:
-                    admission_year = admission_year // 10
-        
-        # 2. 獲取預設學期範圍
-        cursor.execute("""
-            SELECT start_semester_code, end_semester_code
-            FROM absence_default_semester_range
-            ORDER BY id DESC
-            LIMIT 1
-        """)
-        default_range = cursor.fetchone()
-        
-        if not default_range or not default_range.get('start_semester_code') or not default_range.get('end_semester_code'):
-            # 如果沒有設定預設範圍，返回空列表
-            return jsonify({
-                "success": True,
-                "semesters": [],
-                "message": "尚未設定預設學期範圍"
-            })
-        
-        start_code = default_range['start_semester_code']
-        end_code = default_range['end_semester_code']
-        
-        # 3. 獲取所有在預設範圍內的學期
-        cursor.execute("""
-            SELECT id, code, start_date, end_date, is_active, created_at
-            FROM semesters
-            WHERE code >= %s AND code <= %s
-            ORDER BY code ASC
-        """, (start_code, end_code))
-        all_semesters = cursor.fetchall()
-        
-        # 4. 根據入學年度過濾學期
-        filtered_semesters = []
-        if admission_year:
-            # 110年度入學的學生應該只顯示：
-            # - 1122（入學年度+2的第2學期）
-            # - 1131（入學年度+3的第1學期）
-            # 這些是實習相關的學期
-            
-            target_semester_codes = [
-                f"{admission_year + 2}2",  # 入學年度+2的第2學期（如1122）
-                f"{admission_year + 3}1"   # 入學年度+3的第1學期（如1131）
-            ]
-            
-            for semester in all_semesters:
-                semester_code = semester['code']
-                if semester_code in target_semester_codes:
-                    filtered_semesters.append(semester)
-        else:
-            # 如果無法獲取入學年度，只根據預設範圍過濾（不進行入學年度過濾）
-            filtered_semesters = all_semesters
-        
-        # 格式化日期
-        for s in filtered_semesters:
-            if isinstance(s.get('start_date'), datetime):
-                s['start_date'] = s['start_date'].strftime("%Y-%m-%d")
-            if isinstance(s.get('end_date'), datetime):
-                s['end_date'] = s['end_date'].strftime("%Y-%m-%d")
-            if isinstance(s.get('created_at'), datetime):
-                s['created_at'] = s['created_at'].strftime("%Y-%m-%d %H:%M:%S")
-        
-        return jsonify({
-            "success": True,
-            "semesters": filtered_semesters
-        })
-    except Exception as e:
-        traceback.print_exc()
-        return jsonify({"success": False, "message": f"取得可用學期列表失敗: {str(e)}"}), 500
     finally:
         cursor.close()
         conn.close()
@@ -3496,8 +3238,9 @@ def get_class_resumes():
             # 合併查詢：班導的學生履歷 + 指導老師綁定公司的學生履歷
             # 使用 UNION 合併三種情況：
             # 1. 班導的學生（通過 classes_teacher）
-            # 2. 指導老師綁定的學生（通過 teacher_student_relations）
+            # 2. 指導老師綁定的學生（從 teacher_student_relations）
             # 3. 選擇了該老師作為指導老師的公司的學生（通過 student_preferences 和 internship_companies）
+            #    重點：學生的履歷會根據填寫的志願序，傳給選擇公司的指導老師
         if role in ["teacher", "class_teacher"]:
             sql_query = """
                 SELECT DISTINCT
@@ -3521,7 +3264,18 @@ def get_class_resumes():
                          ORDER BY sp3.preference_order ASC
                          LIMIT 1),
                         ''
-                    ) AS company_name   
+                    ) AS company_name,
+                    COALESCE(
+                        (SELECT ij3.title
+                         FROM student_preferences sp3
+                         JOIN internship_companies ic3 ON sp3.company_id = ic3.id
+                         LEFT JOIN internship_jobs ij3 ON sp3.job_id = ij3.id
+                         WHERE sp3.student_id = u.id 
+                         AND ic3.advisor_user_id = %s
+                         ORDER BY sp3.preference_order ASC
+                         LIMIT 1),
+                        ''
+                    ) AS job_title
                 FROM resumes r
                 JOIN users u ON r.user_id = u.id
                 LEFT JOIN classes c ON u.class_id = c.id
@@ -3538,6 +3292,7 @@ def get_class_resumes():
                     WHERE tsr.student_id = u.id AND tsr.teacher_id = %s
                 ) OR EXISTS (
                     -- 情況3：選擇了該老師作為指導老師的公司的學生
+                    -- 重點：學生的履歷會根據填寫的志願序，傳給選擇公司的指導老師
                     SELECT 1
                     FROM student_preferences sp
                     JOIN internship_companies ic2 ON sp.company_id = ic2.id
@@ -3545,7 +3300,7 @@ def get_class_resumes():
                 )
                 ORDER BY c.name, u.name
             """
-            sql_params = (user_id, user_id, user_id, user_id)
+            sql_params = (user_id, user_id, user_id, user_id, user_id)
 
 
             cursor.execute(sql_query, sql_params)

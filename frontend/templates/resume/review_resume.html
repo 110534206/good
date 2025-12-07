@@ -229,7 +229,7 @@
                 <th>上傳時間</th>
                 <th>檔案名稱</th>
                 <th>選擇公司</th>
-                <th>志願序</th>
+                <th>職缺</th>
                 <th>狀態</th>
                 <th>老師留言</th>
                 <th>操作</th>
@@ -237,7 +237,7 @@
             </thead>
             <tbody id="resumeTableBody">
               <tr>
-                <td colspan="9" class="text-muted text-center">載入中...</td>
+                <td colspan="7" class="text-muted text-center">載入中...</td>
               </tr>
             </tbody>
           </table>
@@ -505,25 +505,43 @@
           classSelect.appendChild(option);
         });
 
-        // 從 API 獲取的開放公司列表中，只顯示當前學期開放的公司
-        if (companyData && companyData.success && companyData.companies) {
-          const openCompanies = companyData.companies.filter(company => {
-            // 如果是廠商格式（有 name 屬性），直接顯示
-            if (company.name) {
-              return true;
-            }
-            // 如果是老師格式（有 company_name 和 is_open_current_semester），需要檢查是否開放
-            return company.is_open_current_semester === true || company.is_open_current_semester === 1;
-          });
-          
-          openCompanies.forEach(company => {
+        // 從履歷資料中提取公司名稱（指導老師會看到選擇了他們管理公司的學生）
+        const companySet = new Set();
+        data.forEach(r => {
+          if (r.company_name && r.company_name.trim()) {
+            companySet.add(r.company_name.trim());
+          }
+        });
+
+        // 如果是指導老師，只顯示履歷中出現的公司（即選擇了該老師管理公司的學生）
+        if (userRole === 'teacher' || userRole === 'class_teacher') {
+          Array.from(companySet).sort().forEach(companyName => {
             const option = document.createElement("option");
-            // 處理兩種格式的公司名稱
-            const companyName = company.name || company.company_name;
-            option.value = companyName; // 這裡使用公司名稱作為 value，前端過濾需要依賴此
+            option.value = companyName;
             option.textContent = companyName;
             companySelect.appendChild(option);
           });
+        } else {
+          // 其他角色（如廠商、主任等）使用 API 返回的公司列表
+          if (companyData && companyData.success && companyData.companies) {
+            const openCompanies = companyData.companies.filter(company => {
+              // 如果是廠商格式（有 name 屬性），直接顯示
+              if (company.name) {
+                return true;
+              }
+              // 如果是老師格式（有 company_name 和 is_open_current_semester），需要檢查是否開放
+              return company.is_open_current_semester === true || company.is_open_current_semester === 1;
+            });
+            
+            openCompanies.forEach(company => {
+              const option = document.createElement("option");
+              // 處理兩種格式的公司名稱
+              const companyName = company.name || company.company_name;
+              option.value = companyName; // 這裡使用公司名稱作為 value，前端過濾需要依賴此
+              option.textContent = companyName;
+              companySelect.appendChild(option);
+            });
+          }
         }
       }
 
@@ -574,32 +592,15 @@
         pageData.forEach(r => {
           const preferenceId = r.preference_id || null;
           const companyName = r.company_name || '';
-          const preferenceOrder = r.preference_order || null;
           const jobTitle = r.job_title || '';
-          
-          // 顯示公司與志願序資訊
-          let companyInfo = '';
-          if (companyName) {
-            if (preferenceOrder) {
-              companyInfo = `<span class="badge bg-info">${escapeHtml(companyName)}</span><br><small class="text-muted">第 ${preferenceOrder} 志願</small>`;
-            } else {
-              companyInfo = `<span class="badge bg-info">${escapeHtml(companyName)}</span>`;
-            }
-            if (jobTitle) {
-              companyInfo += `<br><small class="text-muted">${escapeHtml(jobTitle)}</small>`;
-            }
-          } else {
-            companyInfo = '<span class="text-muted">—</span>';
-          }
-          
           const row = `
         <tr>
           <td>${r.username}</td>
           <td>${escapeHtml(r.name || '')}</td>
           <td>${r.upload_time}</td>
           <td>${escapeHtml(r.original_filename)}</td>
-          <td>${companyInfo}</td>
-          <td>${preferenceOrder ? `<span class="badge bg-primary">第 ${preferenceOrder} 志願</span>` : '<span class="text-muted">—</span>'}</td>
+          <td>${escapeHtml(companyName) || '<span class="text-muted">—</span>'}</td>
+          <td>${escapeHtml(jobTitle) || '<span class="text-muted">—</span>'}</td>
           <td><span class="status-badge bg-${statusColor(r.status)}">${mapStatus(r.status)}</span></td>
           <td>
             <button class="btn btn-sm btn-outline-secondary ${r.comment ? 'text-success' : ''}"
