@@ -474,7 +474,7 @@
                     });
                   }
                   
-                  populateFilters(allResumes, companyData);
+                  populateFilters(allResumes, companyData, positionData);
                   // 從 URL 參數讀取狀態並設置篩選器
                   const urlParams = new URLSearchParams(window.location.search);
                   const statusParam = urlParams.get('status');
@@ -505,12 +505,13 @@
             
             Promise.all([
               fetch(apiUrl).then(res => res.json()),
-              fetch('/api/get_reviewed_companies').then(res => res.json())
+              fetch('/api/get_reviewed_companies').then(res => res.json()),
+              Promise.resolve({success: true, items: []}) // 備用方案：空的職缺資料
             ])
-              .then(([resumeData, companyData]) => {
+              .then(([resumeData, companyData, positionData]) => {
                 if (resumeData.success) {
                   allResumes = resumeData.resumes;
-                  populateFilters(allResumes, companyData);
+                  populateFilters(allResumes, companyData, positionData);
                   // 從 URL 參數讀取狀態並設置篩選器
                   const urlParams = new URLSearchParams(window.location.search);
                   const statusParam = urlParams.get('status');
@@ -590,8 +591,9 @@
         // 填充職缺篩選器
         let hasJobs = false;
         
-        // 如果是廠商，從職缺 API 獲取職缺列表
-        if (userRole === 'vendor' && positionData && positionData.success && positionData.items && Array.isArray(positionData.items) && positionData.items.length > 0) {
+        // 從職缺 API 獲取職缺列表（如果是廠商）
+        if (positionData && positionData.success && positionData.items && Array.isArray(positionData.items) && positionData.items.length > 0) {
+          console.log("從職缺 API 填充，數量:", positionData.items.length);
           positionData.items.forEach(job => {
             if (job.title && job.title.trim()) {
               const option = document.createElement("option");
@@ -605,6 +607,7 @@
         
         // 備用方案：從履歷資料中提取職缺資訊
         if (!hasJobs && data.length > 0) {
+          console.log("從履歷資料中提取職缺名稱");
           const jobSet = new Set();
           data.forEach(r => {
             const jobTitle = r.job_title || r.jobTitle;
@@ -614,6 +617,7 @@
           });
           
           if (jobSet.size > 0) {
+            console.log("從履歷中找到的職缺:", Array.from(jobSet));
             Array.from(jobSet).sort().forEach(jobTitle => {
               const option = document.createElement("option");
               option.value = jobTitle;
@@ -621,6 +625,22 @@
               companySelect.appendChild(option);
               hasJobs = true;
             });
+          }
+        }
+        
+        // 如果還是沒有職缺，顯示提示
+        if (!hasJobs) {
+          console.warn("⚠️ 沒有找到職缺資料");
+          console.warn("可能的原因：");
+          console.warn("1. 尚未建立任何職缺");
+          console.warn("2. 沒有學生填寫志願序");
+          console.warn("3. 履歷資料中沒有職缺資訊");
+          
+          // 在控制台顯示更多調試信息
+          if (data.length > 0) {
+            console.log("履歷範例:", data[0]);
+          } else {
+            console.warn("⚠️ 也沒有找到任何履歷資料");
           }
         }
       }
