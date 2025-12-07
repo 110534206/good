@@ -12,28 +12,81 @@
       padding: 0;
     }
 
-    header {
-      background: #0454a3;
-      color: white;
-      padding: 1rem 2rem;
-      font-size: 1.5rem;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 1rem;
-      position: relative;
+    :root {
+      --color-primary: #0066cc;
+      --color-primary-dark: #024689;
+      --color-border: #e2e8f0;
+      --color-bg: #f5f7fb;
+      --color-card: #ffffff;
+      --color-text: #1f2933;
+      --color-muted: #64748b;
+      --color-success: #16a34a;
+      --color-danger: #dc2626;
+      --color-warning: #f97316;
+      --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.08);
+      --shadow-md: 0 8px 24px rgba(15, 23, 42, 0.08);
+      --radius-md: 12px;
+      --radius-lg: 16px;
     }
 
-    header .header-title {
-      flex: 1;
-      text-align: center;
+    * {
+      box-sizing: border-box;
     }
 
     body {
-      font-family: "Noto Sans TC", sans-serif;
-      background: #f7f9fc;
+      font-family: 'Inter', 'Noto Sans TC', sans-serif;
+      background: var(--color-bg);
+      color: var(--color-text);
       margin: 0;
-      padding: 0;
+      min-height: 100vh;
+    }
+
+    a {
+      color: inherit;
+    }
+
+    header {
+      background: linear-gradient(135deg, #0055a8 0%, #006acb 50%, #004f94 100%);
+      border-bottom: none;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      box-shadow: 0 8px 20px rgba(0, 68, 148, 0.35);
+    }
+
+    .topbar {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 18px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #fff;
+      position: relative;
+    }
+
+    .topbar h1 {
+      font-size: 1.5rem;
+      margin: 0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      color: #fff;
+      flex: 1;
+    }
+
+    .topbar h1 .header-title {
+      flex: 1;
+      text-align: center;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+    }
+
+    .topbar h1 i {
+      color: #ffe27a;
     }
 
     .table thead th {
@@ -70,6 +123,7 @@
       color: #212529;
     }
 
+    /* 選單按鈕樣式 */
     #menu-btn {
       width: 30px;
       height: 22px;
@@ -83,9 +137,69 @@
     }
 
     #menu-btn span {
-      height: 4px;
+      display: block;
+      width: 100%;
+      height: 3px;
       background-color: white;
       border-radius: 2px;
+      transition: all 0.3s ease;
+    }
+
+    main.management-container {
+      max-width: 1200px;
+      margin: 24px auto 60px;
+      padding: 0 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+    }
+
+    .panel {
+      background: var(--color-card);
+      border-radius: var(--radius-lg);
+      padding: 24px;
+      box-shadow: var(--shadow-md);
+      border: 1px solid var(--color-border);
+      margin-bottom: 32px;
+    }
+
+    .panel-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+
+    .panel-header h2 {
+      font-size: 1.2rem;
+      margin: 0;
+    }
+
+    .table-wrapper {
+      overflow-x: auto;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      min-width: 1000px;
+    }
+
+    table thead {
+      background: #f1f5f9;
+    }
+
+    table th,
+    table td {
+      padding: 14px 16px;
+      text-align: left;
+      border-bottom: 1px solid var(--color-border);
+      vertical-align: top;
+    }
+
+    table tbody tr:hover {
+      background: rgba(15, 23, 42, 0.02);
     }
 
     #side-menu {
@@ -167,49 +281,54 @@
 </head>
 <body>
   <header>
-    <button id="menu-btn" aria-label="開啟選單">
-      <span></span><span></span><span></span>
-    </button>
-    <div class="header-title">廠商查看履歷與通知</div>
-    <div style="width: 30px;"></div>
+    <div class="topbar">
+      <h1>
+        <button id="menu-btn" title="選單" role="button" tabindex="0" aria-label="開啟側邊選單">
+          <span></span>
+          <span></span>
+          <span></span>
+        </button>
+        <div class="header-title">查看履歷與通知</div>
+        <div style="width: 30px;"></div> <!-- 佔位元素，保持標題置中 -->
+      </h1>
+    </div>
   </header>
 
-  <div class="container my-5 pt-1">
-    <div class="card shadow-sm p-4">
-      <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
-        <div class="d-flex gap-2 flex-wrap">
-          <select id="companyFilter" class="form-select form-select-sm w-auto">
-            <option value="">所有公司</option>
-          </select>
-          <select id="statusFilter" class="form-select form-select-sm w-auto">
-            <option value="">所有狀態</option>
-            <option value="pending">待審核</option>
-            <option value="approved">通過</option>
-            <option value="rejected">退件</option>
-          </select>
-        </div>
-        <div class="d-flex gap-2 flex-wrap">
-          <input type="text" id="searchBox" class="form-control form-control-sm w-auto" placeholder="搜尋學生姓名或學號" />
-          <button class="btn btn-sm btn-info" onclick="viewEmailLogs()">查看 Email 記錄</button>
-        </div>
+  <main class="management-container">
+    <section class="panel" aria-label="履歷列表">
+      <div class="panel-header">
+        <h2>履歷列表</h2>
+      </div>
+      <div style="display: flex; flex-wrap: wrap; gap: 16px; align-items: center; margin-bottom: 16px;">
+        <select id="companyFilter" style="padding: 10px 12px; border-radius: 8px; border: 1px solid var(--color-border); background: #fff; font-size: 0.95rem; min-width: 150px;">
+          <option value="">所有職缺</option>
+        </select>
+        <select id="statusFilter" style="padding: 10px 12px; border-radius: 8px; border: 1px solid var(--color-border); background: #fff; font-size: 0.95rem; min-width: 150px;">
+          <option value="">所有狀態</option>
+          <option value="pending">待審核</option>
+          <option value="approved">通過</option>
+          <option value="rejected">退件</option>
+        </select>
+        <input type="text" id="searchBox" style="padding: 10px 12px; border-radius: 8px; border: 1px solid var(--color-border); background: #fff; font-size: 0.95rem; min-width: 200px; flex: 1;" placeholder="搜尋學生姓名或學號" />
+        <button class="btn" style="background: var(--color-primary); color: #fff; padding: 10px 18px; border-radius: 8px; font-weight: 600; font-size: 0.95rem; cursor: pointer; border: none;" onclick="viewEmailLogs()">查看 Email 記錄</button>
       </div>
 
-      <div class="table-responsive">
-        <table class="table table-hover align-middle">
-          <thead>
+      <div class="table-wrapper">
+        <table style="width: 100%; border-collapse: collapse; min-width: 1000px;">
+          <thead style="background: #f1f5f9;">
             <tr>
-              <th>學生學號</th>
-              <th>姓名</th>
-              <th>公司名稱</th>
-              <th>上傳時間</th>
-              <th>履歷檔案</th>
-              <th>狀態</th>
-              <th>操作</th>
+              <th style="padding: 14px 16px; text-align: left; border-bottom: 1px solid var(--color-border); font-weight: 600;">學生學號</th>
+              <th style="padding: 14px 16px; text-align: left; border-bottom: 1px solid var(--color-border); font-weight: 600;">姓名</th>
+              <th style="padding: 14px 16px; text-align: left; border-bottom: 1px solid var(--color-border); font-weight: 600;">職缺</th>
+              <th style="padding: 14px 16px; text-align: left; border-bottom: 1px solid var(--color-border); font-weight: 600;">上傳時間</th>
+              <th style="padding: 14px 16px; text-align: left; border-bottom: 1px solid var(--color-border); font-weight: 600;">履歷檔案</th>
+              <th style="padding: 14px 16px; text-align: left; border-bottom: 1px solid var(--color-border); font-weight: 600;">狀態</th>
+              <th style="padding: 14px 16px; text-align: left; border-bottom: 1px solid var(--color-border); font-weight: 600;">操作</th>
             </tr>
           </thead>
           <tbody id="resumeTableBody">
             <tr>
-              <td colspan="7" class="text-muted text-center">載入中...</td>
+              <td colspan="7" style="padding: 14px 16px; text-align: center; color: var(--color-muted); border-bottom: 1px solid var(--color-border);">載入中...</td>
             </tr>
           </tbody>
         </table>
@@ -218,8 +337,8 @@
       <nav>
         <ul class="pagination justify-content-center mt-3" id="pagination"></ul>
       </nav>
-    </div>
-  </div>
+    </section>
+  </main>
 
   <!-- 發送通知 Modal -->
   <div class="modal fade" id="notificationModal" tabindex="-1" aria-hidden="true">
@@ -368,82 +487,95 @@
       document.getElementById("sendNotificationBtn").addEventListener("click", sendNotification);
       
       // 側邊選單
-      document.getElementById('menu-btn').addEventListener('click', () => {
-        document.getElementById('side-menu').classList.add('open');
-      });
+      const sideMenu = document.getElementById('side-menu');
+      const menuBtn = document.getElementById('menu-btn');
+      const closeBtn = document.getElementById('close-btn');
       
-      document.getElementById('close-btn').addEventListener('click', () => {
-        document.getElementById('side-menu').classList.remove('open');
+      if (menuBtn) {
+        menuBtn.addEventListener('click', () => {
+          sideMenu.classList.add('open');
+          sideMenu.setAttribute('aria-hidden', 'false');
+        });
+      }
+      
+      if (closeBtn) {
+        closeBtn.addEventListener('click', () => {
+          sideMenu.classList.remove('open');
+          sideMenu.setAttribute('aria-hidden', 'true');
+        });
+      }
+      
+      document.addEventListener('click', (event) => {
+        if (sideMenu && !sideMenu.contains(event.target) && menuBtn && !menuBtn.contains(event.target)) {
+          sideMenu.classList.remove('open');
+          sideMenu.setAttribute('aria-hidden', 'true');
+        }
       });
     });
 
     // 載入履歷資料
     function loadResumes() {
-      fetch('/vendor/api/resumes')
-        .then(res => res.json())
-        .then(data => {
-          console.log("API 返回資料:", data); // 調試用
+      Promise.all([
+        fetch('/vendor/api/resumes').then(res => res.json()),
+        fetch('/vendor/api/positions').then(res => res.json())
+      ])
+        .then(([resumeData, positionData]) => {
+          console.log("API 返回資料:", resumeData); // 調試用
           
-          if (data.success) {
-            allResumes = data.resumes || [];
+          if (resumeData.success) {
+            allResumes = resumeData.resumes || [];
             console.log("履歷數量:", allResumes.length); // 調試用
-            console.log("公司列表:", data.companies); // 調試用
             
-            // 填充公司篩選器
+            // 填充職缺篩選器
             const companySelect = document.getElementById("companyFilter");
-            companySelect.innerHTML = '<option value="">所有公司</option>';
+            companySelect.innerHTML = '<option value="">所有職缺</option>';
             
-            let hasCompanies = false;
+            let hasJobs = false;
             
-            // 方法1: 從 API 返回的 companies 列表填充
-            if (data.companies && Array.isArray(data.companies) && data.companies.length > 0) {
-              console.log("從 API companies 列表填充，數量:", data.companies.length);
-              data.companies.forEach(company => {
-                const companyName = company.name || company.company_name;
-                // 跳過提示訊息
-                if (companyName && companyName !== "暫無公司資料") {
+            // 從職缺 API 獲取職缺列表
+            if (positionData.success && positionData.items && Array.isArray(positionData.items) && positionData.items.length > 0) {
+              console.log("從職缺 API 填充，數量:", positionData.items.length);
+              positionData.items.forEach(job => {
+                if (job.title && job.title.trim()) {
                   const option = document.createElement("option");
-                  option.value = companyName;
-                  option.textContent = companyName;
+                  option.value = job.id;
+                  option.textContent = job.title;
                   companySelect.appendChild(option);
-                  hasCompanies = true;
+                  hasJobs = true;
                 }
               });
             }
             
-            // 方法2: 如果 API 沒有返回公司列表，從履歷資料中提取
-            if (!hasCompanies && allResumes.length > 0) {
-              console.log("從履歷資料中提取公司名稱");
-              const companySet = new Set();
+            // 備用方案：從履歷資料中提取職缺資訊
+            if (!hasJobs && allResumes.length > 0) {
+              console.log("從履歷資料中提取職缺名稱");
+              const jobSet = new Set();
               allResumes.forEach(r => {
-                if (r.company_name && r.company_name.trim()) {
-                  companySet.add(r.company_name.trim());
+                const jobTitle = r.job_title || r.jobTitle;
+                if (jobTitle && jobTitle.trim()) {
+                  jobSet.add(jobTitle.trim());
                 }
               });
               
-              if (companySet.size > 0) {
-                console.log("從履歷中找到的公司:", Array.from(companySet));
-                Array.from(companySet).sort().forEach(company => {
+              if (jobSet.size > 0) {
+                console.log("從履歷中找到的職缺:", Array.from(jobSet));
+                Array.from(jobSet).sort().forEach(jobTitle => {
                   const option = document.createElement("option");
-                  option.value = company;
-                  option.textContent = company;
+                  option.value = jobTitle;
+                  option.textContent = jobTitle;
                   companySelect.appendChild(option);
-                  hasCompanies = true;
+                  hasJobs = true;
                 });
               }
             }
             
-            // 如果還是沒有公司，顯示提示並提供解決方案
-            if (!hasCompanies) {
-              console.warn("⚠️ 沒有找到公司資料");
+            // 如果還是沒有職缺，顯示提示
+            if (!hasJobs) {
+              console.warn("⚠️ 沒有找到職缺資料");
               console.warn("可能的原因：");
-              console.warn("1. 廠商未關聯指導老師");
-              console.warn("2. 指導老師沒有已審核通過的公司");
-              console.warn("3. 沒有學生填寫志願序");
-              console.warn("4. 履歷資料中沒有公司名稱");
-              console.warn("5. 資料庫中沒有任何已審核通過的公司");
-              console.info("💡 解決方案：");
-              console.info("- 請確認資料庫中有 status='approved' 的公司");
+              console.warn("1. 尚未建立任何職缺");
+              console.warn("2. 沒有學生填寫志願序");
+              console.warn("3. 履歷資料中沒有職缺資訊");
               
               // 在控制台顯示更多調試信息
               if (allResumes.length > 0) {
@@ -453,12 +585,12 @@
               }
               
               // 顯示 API 返回的完整資料
-              console.log("完整 API 回應:", data);
+              console.log("完整 API 回應:", resumeData);
             }
             
             applyFilters();
           } else {
-            alert("載入資料失敗：" + (data.message || "未知錯誤"));
+            alert("載入資料失敗：" + (resumeData.message || "未知錯誤"));
           }
         })
         .catch(error => {
@@ -470,18 +602,31 @@
     // 應用篩選
     function applyFilters() {
       currentPage = 1;
-      const companyFilter = document.getElementById("companyFilter").value;
+      const jobFilter = document.getElementById("companyFilter").value;
       const statusFilter = document.getElementById("statusFilter").value;
       const searchText = document.getElementById("searchBox").value.toLowerCase();
 
       let filtered = allResumes.filter(r => {
-        const matchCompany = !companyFilter || r.company_name === companyFilter;
+        // 職缺篩選：根據職缺 ID 或職缺名稱匹配
+        let matchJob = true;
+        if (jobFilter) {
+          const jobTitle = r.job_title || r.jobTitle || '';
+          const jobId = r.job_id || r.jobId;
+          // 如果篩選值是數字，則匹配 job_id；否則匹配 job_title
+          const filterIsNumeric = /^\d+$/.test(jobFilter);
+          if (filterIsNumeric) {
+            matchJob = jobId && String(jobId) === jobFilter;
+          } else {
+            matchJob = jobTitle && jobTitle.trim() === jobFilter.trim();
+          }
+        }
+        
         const matchStatus = !statusFilter || r.status === statusFilter;
         const matchSearch = !searchText || 
           (r.name && r.name.toLowerCase().includes(searchText)) ||
           (r.username && r.username.toLowerCase().includes(searchText));
         
-        return matchCompany && matchStatus && matchSearch;
+        return matchJob && matchStatus && matchSearch;
       });
 
       renderTable(filtered);
@@ -495,7 +640,7 @@
       const pageData = data.slice(start, end);
 
       if (pageData.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="7" class="text-muted text-center">沒有符合條件的資料</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="7" style="padding: 14px 16px; text-align: center; color: var(--color-muted); border-bottom: 1px solid var(--color-border);">沒有符合條件的資料</td></tr>';
         document.getElementById("pagination").innerHTML = '';
         return;
       }
@@ -505,19 +650,19 @@
         const statusLabel = mapStatus(r.status);
         
         return `
-          <tr>
-            <td>${r.username || '—'}</td>
-            <td>${r.name || '—'}</td>
-            <td>${r.company_name || '—'}</td>
-            <td>${r.upload_time || '—'}</td>
-            <td>
-              ${r.filepath ? `<a href="/api/download_resume/${r.id}" target="_blank" class="btn btn-sm btn-outline-primary">查看履歷</a>` : '—'}
+          <tr style="border-bottom: 1px solid var(--color-border);">
+            <td style="padding: 14px 16px; vertical-align: middle;">${r.username || '—'}</td>
+            <td style="padding: 14px 16px; vertical-align: middle;">${r.name || '—'}</td>
+            <td style="padding: 14px 16px; vertical-align: middle;">${(r.job_title || r.jobTitle || '—')}</td>
+            <td style="padding: 14px 16px; vertical-align: middle;">${r.upload_time || '—'}</td>
+            <td style="padding: 14px 16px; vertical-align: middle;">
+              ${r.filepath ? `<a href="/api/download_resume/${r.id}" target="_blank" style="padding: 6px 12px; border-radius: 6px; border: 1px solid var(--color-primary); background: #fff; color: var(--color-primary); text-decoration: none; font-size: 0.875rem; display: inline-block;">查看履歷</a>` : '—'}
             </td>
-            <td>
+            <td style="padding: 14px 16px; vertical-align: middle;">
               <span class="badge bg-${statusColorClass} status-badge">${statusLabel}</span>
             </td>
-            <td>
-              <button class="btn btn-sm btn-success btn-action" onclick="openNotificationModal(${r.student_id}, '${(r.name || '').replace(/'/g, "\\'")}', '')">發送通知</button>
+            <td style="padding: 14px 16px; vertical-align: middle;">
+              <button class="btn" style="background: var(--color-success); color: #fff; padding: 6px 12px; border-radius: 6px; border: none; font-size: 0.875rem; cursor: pointer;" onclick="openNotificationModal(${r.student_id}, '${(r.name || '').replace(/'/g, "\\'")}', '')">發送通知</button>
             </td>
           </tr>
         `;

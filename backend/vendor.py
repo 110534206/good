@@ -699,7 +699,10 @@ def get_vendor_resumes():
                     sp.student_id, 
                     sp.id AS preference_id,
                     sp.company_id, 
+                    sp.job_id,
+                    sp.job_title,
                     ic.company_name,
+                    COALESCE(ij.title, sp.job_title) AS job_title_display,
                     CASE 
                         WHEN sp.status = 'approved' AND NOT EXISTS (
                             SELECT 1 FROM vendor_preference_history vph 
@@ -709,6 +712,7 @@ def get_vendor_resumes():
                     END AS vendor_review_status
                 FROM student_preferences sp
                 JOIN internship_companies ic ON sp.company_id = ic.id
+                LEFT JOIN internship_jobs ij ON sp.job_id = ij.id
                 WHERE sp.company_id IN ({preference_placeholders})
             """, tuple(company_ids))
             
@@ -730,7 +734,10 @@ def get_vendor_resumes():
                     sp.student_id, 
                     sp.id AS preference_id,
                     sp.company_id, 
+                    sp.job_id,
+                    sp.job_title,
                     ic.company_name,
+                    COALESCE(ij.title, sp.job_title) AS job_title_display,
                     CASE 
                         WHEN sp.status = 'approved' AND NOT EXISTS (
                             SELECT 1 FROM vendor_preference_history vph 
@@ -740,6 +747,7 @@ def get_vendor_resumes():
                     END AS vendor_review_status
                 FROM student_preferences sp
                 JOIN internship_companies ic ON sp.company_id = ic.id
+                LEFT JOIN internship_jobs ij ON sp.job_id = ij.id
             """)
             for pref in cursor.fetchall() or []:
                 student_id = pref['student_id']
@@ -758,6 +766,8 @@ def get_vendor_resumes():
             display_status = "pending" 
             company_id = None
             company_name = ""
+            job_id = None
+            job_title = ""
             preference_id = None
             
             # 檢查是否有對該廠商公司的志願序
@@ -830,6 +840,8 @@ def get_vendor_resumes():
                         print(f"⚠️ 狀態無效或為空，使用預設狀態: {display_status}")
                 company_id = pref_to_show.get("company_id")
                 company_name = pref_to_show.get("company_name") or ""
+                job_id = pref_to_show.get("job_id")
+                job_title = pref_to_show.get("job_title_display") or pref_to_show.get("job_title") or ""
             elif company_ids:
                 # 如果沒有志願序，但廠商有關聯的公司，顯示第一個公司名稱
                 # 這種情況不應該出現（因為上面已經過濾掉了），但保留作為備用
@@ -872,6 +884,8 @@ def get_vendor_resumes():
                 "reviewed_at": _format_datetime(row.get("reviewed_at")),
                 "company_name": company_name,
                 "company_id": company_id,
+                "job_id": job_id,
+                "job_title": job_title,
                 "preference_id": preference_id, # 用於廠商審核操作，如果沒有填寫志願序則為 None
             }
             resumes.append(resume)
