@@ -39,128 +39,63 @@
       color: inherit;
     }
 
-    .container {
-      width: 100%;
-      max-width: 1200px;
-      margin: 0 auto;
-      padding: 0 1rem;
-    }
 
-    .top-bar {
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 60px;
-      background-color: #fff;
-      z-index: 1200;
-      display: flex;
-      align-items: center;
-      box-shadow: 0 1px 4px rgba(15, 23, 42, 0.12);
-    }
-
-    .top-bar>.container {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      gap: 24px;
-      height: 100%;
-      padding: 0 1rem;
-    }
-
-    .top-bar-left {
-      display: flex;
-      align-items: center;
-      gap: 16px;
-    }
-
-    .top-bar-left #menu-btn {
-      width: 30px;
-      height: 22px;
-      cursor: pointer;
-      display: flex;
-      flex-direction: column;
-      justify-content: space-between;
-      background: none;
-      border: none;
-      padding: 0;
-    }
-
-    .top-bar-left #menu-btn span {
-      display: block;
-      width: 100%;
-      height: 4px;
-      background-color: #333;
-      border-radius: 2px;
-      transition: all 0.3s ease;
-    }
-
-
-    .top-bar-right {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      font-weight: 600;
-    }
-
-    .top-bar-right .btn-link {
-      color: var(--color-primary);
-      background-color: transparent;
-      border: 1.5px solid var(--color-primary);
-      padding: 0.3rem 0.7rem;
-      border-radius: 6px;
-      text-decoration: none;
-      transition: background-color 0.3s ease, color 0.3s ease;
-      font-size: 0.9rem;
-      cursor: pointer;
-    }
-
-    .top-bar-right .btn-link:hover {
-      background-color: var(--color-primary);
-      color: #fff;
-    }
-
-    #login-avatar {
-      width: 40px;
-      height: 40px;
-      border-radius: 50%;
-      object-fit: cover;
-      cursor: pointer;
-      border: 2px solid transparent;
-      transition: border-color 0.2s ease;
-    }
-
-    #login-avatar:hover {
-      border-color: var(--color-primary);
-    }
 
     main.management-container {
-      padding: 32px 0 64px;
-    }
-
-    .page-header {
-      margin-left: calc(-50vw + 50%);
-      margin-right: calc(-50vw + 50%);
-      margin-top: -32px;
-      margin-bottom: 20px;
-      width: 100vw;
-      padding: 0;
-      border-radius: 0;
-    }
-
-    .page-header-actions {
+      max-width: 1200px;
+      margin: 24px auto 60px;
+      padding: 0 24px;
       display: flex;
-      flex-wrap: wrap;
+      flex-direction: column;
+      gap: 24px;
+    }
+
+    header {
+      background: linear-gradient(135deg, #0055a8 0%, #006acb 50%, #004f94 100%);
+      border-bottom: none;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      box-shadow: 0 8px 20px rgba(0, 68, 148, 0.35);
+    }
+
+    .topbar {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 18px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #fff;
+      position: relative;
+    }
+
+    .topbar h1 {
+      font-size: 1.5rem;
+      margin: 0;
+      display: flex;
       align-items: center;
       justify-content: space-between;
-      gap: 16px;
-      margin-top: 20px;
-      padding: 0;
-      padding-left: 170px;
-      padding-right: 1rem;
+      gap: 12px;
+      color: #fff;
+      flex: 1;
     }
 
-    .page-header-actions #menu-btn {
+    .topbar h1 .header-title {
+      flex: 1;
+      text-align: center;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+    }
+
+    .topbar h1 i {
+      color: #ffe27a;
+    }
+
+    /* 選單按鈕樣式 */
+    #menu-btn {
       width: 30px;
       height: 22px;
       cursor: pointer;
@@ -172,62 +107,13 @@
       padding: 0;
     }
 
-    .page-header h1 #menu-btn {
-      width: 30px;
-      height: 22px;
-      cursor: pointer;
-      display: flex;
-      flex-direction: column;
-      justify-content: space-between;
-      background: none;
-      border: none;
-      padding: 0;
-      margin-left: 150px;
-    }
-
-    .page-header h1 #menu-btn span {
+    #menu-btn span {
       display: block;
       width: 100%;
       height: 3px;
       background-color: white;
       border-radius: 2px;
       transition: all 0.3s ease;
-    }
-
-    .page-header-actions #menu-btn span {
-      display: block;
-      width: 100%;
-      height: 4px;
-      background-color: #333;
-      border-radius: 2px;
-      transition: all 0.3s ease;
-    }
-
-    .page-header h1 {
-      font-size: 1.75rem;
-      margin: 0;
-      background: var(--color-primary);
-      color: #fff;
-      padding: 16px 24px;
-      border-radius: 0 !important;
-      box-shadow: none;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 1rem;
-      width: 100%;
-    }
-
-    .page-header h1 .header-title {
-      position: absolute;
-      left: 50%;
-      transform: translateX(-50%);
-      text-align: center;
-    }
-
-    .page-header p {
-      margin: 4px 0 0;
-      color: var(--color-muted);
     }
 
     .empty-hint {
@@ -685,8 +571,8 @@
 </head>
 
 <body>
-  <main class="management-container container">
-    <header class="page-header">
+  <header>
+    <div class="topbar">
       <h1>
         <button id="menu-btn" title="選單" role="button" tabindex="0" aria-label="開啟側邊選單">
           <span></span>
@@ -694,8 +580,12 @@
           <span></span>
         </button>
         <div class="header-title">職位需求管理</div>
+        <div style="width: 30px;"></div> <!-- 佔位元素，保持標題置中 -->
       </h1>
-    </header>
+    </div>
+  </header>
+
+  <main class="management-container">
 
     <p id="companyHint" class="empty-hint">目前尚未建立與您對接指導老師關聯的公司資料。您新增的職缺將會顯示給對接的指導老師和科助查看。請確認您的指導老師已建立公司，或聯絡平台管理員設定對接關係。</p>
 

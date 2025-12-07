@@ -14,27 +14,93 @@
     }
 
     header {
-      background: #0454a3;
-      color: white;
-      padding: 1rem 2rem;
-      font-size: 1.5rem;
+      background: linear-gradient(135deg, #0055a8 0%, #006acb 50%, #004f94 100%);
+      border-bottom: none;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      box-shadow: 0 8px 20px rgba(0, 68, 148, 0.35);
+    }
+
+    .topbar {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 18px 24px;
       display: flex;
       align-items: center;
-      justify-content: space-between;
-      gap: 1rem;
+      justify-content: center;
+      color: #fff;
       position: relative;
     }
 
-    header .header-title {
+    .topbar h1 {
+      font-size: 1.5rem;
+      margin: 0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      color: #fff;
+      flex: 1;
+    }
+
+    .topbar h1 .header-title {
       flex: 1;
       text-align: center;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+    }
+
+    .topbar h1 i {
+      color: #ffe27a;
     }
 
     body {
       font-family: "Noto Sans TC", sans-serif;
-      background: #f7f9fc;
+      background: #ffffff;
       margin: 0;
       padding: 0;
+    }
+
+    main {
+      max-width: 1200px;
+      margin: 24px auto 60px;
+      padding: 0 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+    }
+
+    .panel {
+      background: #ffffff;
+      border-radius: 16px;
+      padding: 24px;
+      box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
+      border: 1px solid #e2e8f0;
+      margin-bottom: 32px;
+    }
+
+    .panel-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+
+    .panel-header h2 {
+      font-size: 1.2rem;
+      margin: 0;
+    }
+
+    .table-wrapper {
+      overflow-x: auto;
+    }
+
+    .table-wrapper table tbody tr:hover {
+      background: rgba(15, 23, 42, 0.02);
     }
 
     /* 表格樣式 */
@@ -107,7 +173,6 @@
       background: none;
       border: none;
       padding: 0;
-      margin-left: 100px;
     }
 
     #menu-btn span {
@@ -190,64 +255,70 @@
 
 <body>
   <header>
-    <div id="menu-btn" title="選單" role="button" tabindex="0">
-      <span></span><span></span><span></span>
+    <div class="topbar">
+      <h1>
+        <button id="menu-btn" title="選單" role="button" tabindex="0" aria-label="開啟側邊選單">
+          <span></span>
+          <span></span>
+          <span></span>
+        </button>
+        <div class="header-title">學生履歷審查</div>
+        <div style="width: 30px;"></div> <!-- 佔位元素，保持標題置中 -->
+      </h1>
     </div>
-    <div class="header-title">學生履歷審查</div>
   </header>
-  <div class="container">
+  <main>
+    <section class="panel" aria-label="履歷列表">
+      <div class="panel-header">
+        <h2>履歷列表</h2>
+      </div>
+      <div style="display: flex; flex-wrap: wrap; gap: 16px; align-items: center; margin-bottom: 16px;">
+        <select id="departmentFilter" style="padding: 10px 12px; border-radius: 8px; border: 1px solid #e2e8f0; background: #fff; font-size: 0.95rem; min-width: 150px;">
+          <option value="">所有學年</option>
+        </select>
+        <select id="classFilter" style="padding: 10px 12px; border-radius: 8px; border: 1px solid #e2e8f0; background: #fff; font-size: 0.95rem; min-width: 150px;">
+          <option value="">所有班級</option>
+        </select>
+        <select id="companyFilter" style="padding: 10px 12px; border-radius: 8px; border: 1px solid #e2e8f0; background: #fff; font-size: 0.95rem; min-width: 150px;">
+          <option value="">所有公司</option>
+        </select>
+        <select id="statusFilter" style="padding: 10px 12px; border-radius: 8px; border: 1px solid #e2e8f0; background: #fff; font-size: 0.95rem; min-width: 150px;">
+          <option value="">所有狀態</option>
+          <option value="pending">待審核</option>
+          <option value="approved">通過</option>
+          <option value="rejected">退件</option>
+        </select>
+        <input type="text" id="searchBox" style="padding: 10px 12px; border-radius: 8px; border: 1px solid #e2e8f0; background: #fff; font-size: 0.95rem; min-width: 200px; flex: 1;" placeholder="搜尋帳號/檔案" />
+      </div>
 
-    <div class="container my-5 pt-1">
-      <div class="card shadow-sm p-4">
-        <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
-          <div class="d-flex gap-2 flex-wrap">
-            <select id="departmentFilter" class="form-select form-select-sm w-auto">
-              <option value="">所有學年</option>
-            </select>
-            <select id="classFilter" class="form-select form-select-sm w-auto">
-              <option value="">所有班級</option>
-            </select>
-            <select id="companyFilter" class="form-select form-select-sm w-auto">
-              <option value="">所有公司</option>
-            </select>
-            <select id="statusFilter" class="form-select form-select-sm w-auto">
-              <option value="">所有狀態</option>
-              <option value="pending">待審核</option>
-              <option value="approved">通過</option>
-              <option value="rejected">退件</option>
-            </select>
-          </div>
-          <input type="text" id="searchBox" class="form-control form-control-sm w-auto" placeholder="搜尋帳號/檔案" />
-        </div>
-
-        <div class="table-responsive">
-          <table class="table table-hover align-middle">
-            <thead>
+      <div class="table-wrapper">
+        <table style="width: 100%; border-collapse: collapse; min-width: 1000px;">
+          <thead style="background: #f1f5f9;">
+            <tr>
+              <th style="padding: 14px 16px; text-align: left; border-bottom: 1px solid #e2e8f0; font-weight: 600;">學生帳號</th>
+              <th style="padding: 14px 16px; text-align: left; border-bottom: 1px solid #e2e8f0; font-weight: 600;">姓名</th>
+              <th style="padding: 14px 16px; text-align: left; border-bottom: 1px solid #e2e8f0; font-weight: 600;">上傳時間</th>
+              <th style="padding: 14px 16px; text-align: left; border-bottom: 1px solid #e2e8f0; font-weight: 600;">檔案名稱</th>
+              <th style="padding: 14px 16px; text-align: left; border-bottom: 1px solid #e2e8f0; font-weight: 600;">選擇公司</th>
+              <th style="padding: 14px 16px; text-align: left; border-bottom: 1px solid #e2e8f0; font-weight: 600;">職缺</th>
+              <th style="padding: 14px 16px; text-align: left; border-bottom: 1px solid #e2e8f0; font-weight: 600;">狀態</th>
+              <th style="padding: 14px 16px; text-align: left; border-bottom: 1px solid #e2e8f0; font-weight: 600;">老師留言</th>
+              <th style="padding: 14px 16px; text-align: left; border-bottom: 1px solid #e2e8f0; font-weight: 600;">操作</th>
+            </tr>
+          </thead>
+          <tbody id="resumeTableBody">
               <tr>
-                <th>學生帳號</th>
-                <th>姓名</th>
-                <th>上傳時間</th>
-                <th>檔案名稱</th>
-                <th>選擇公司</th>
-                <th>職缺</th>
-                <th>狀態</th>
-                <th>老師留言</th>
-                <th>操作</th>
+                <td colspan="9" style="padding: 14px 16px; text-align: center; color: #64748b; border-bottom: 1px solid #e2e8f0;">載入中...</td>
               </tr>
-            </thead>
-            <tbody id="resumeTableBody">
-              <tr>
-                <td colspan="7" class="text-muted text-center">載入中...</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
+          </tbody>
+        </table>
+      </div>
 
         <nav>
           <ul class="pagination justify-content-center mt-3" id="pagination"></ul>
         </nav>
-      </div>
-    </div>
+    </section>
+  </main>
 
     <div class="modal fade" id="commentModal" tabindex="-1" aria-hidden="true">
       <div class="modal-dialog modal-lg modal-dialog-centered">
@@ -600,7 +671,7 @@
         tbody.innerHTML = "";
 
         if (resumes.length === 0) {
-          tbody.innerHTML = `<tr><td colspan="9" class="text-center text-muted">目前沒有資料</td></tr>`;
+          tbody.innerHTML = `<tr><td colspan="9" style="padding: 14px 16px; text-align: center; color: #64748b;">目前沒有資料</td></tr>`;
           document.getElementById("pagination").innerHTML = "";
           return;
         }
@@ -614,26 +685,27 @@
           const companyName = r.company_name || '';
           const jobTitle = r.job_title || '';
           const row = `
-        <tr>
-          <td>${r.username}</td>
-          <td>${escapeHtml(r.name || '')}</td>
-          <td>${r.upload_time}</td>
-          <td>${escapeHtml(r.original_filename)}</td>
-          <td>${escapeHtml(companyName) || '<span class="text-muted">—</span>'}</td>
-          <td>${escapeHtml(jobTitle) || '<span class="text-muted">—</span>'}</td>
-          <td><span class="status-badge bg-${statusColor(r.status)}">${mapStatus(r.status)}</span></td>
-          <td>
+        <tr style="border-bottom: 1px solid #e2e8f0;">
+          <td style="padding: 14px 16px; vertical-align: middle;">${r.username}</td>
+          <td style="padding: 14px 16px; vertical-align: middle;">${escapeHtml(r.name || '')}</td>
+          <td style="padding: 14px 16px; vertical-align: middle;">${r.upload_time}</td>
+          <td style="padding: 14px 16px; vertical-align: middle;">${escapeHtml(r.original_filename)}</td>
+          <td style="padding: 14px 16px; vertical-align: middle;">${escapeHtml(companyName) || '<span style="color: #64748b;">—</span>'}</td>
+          <td style="padding: 14px 16px; vertical-align: middle;">${escapeHtml(jobTitle) || '<span style="color: #64748b;">—</span>'}</td>
+          <td style="padding: 14px 16px; vertical-align: middle;"><span class="status-badge bg-${statusColor(r.status)}">${mapStatus(r.status)}</span></td>
+          <td style="padding: 14px 16px; vertical-align: middle;">
             <button class="btn btn-sm btn-outline-secondary ${r.comment ? 'text-success' : ''}"
-              onclick="openCommentModal(${r.id}, '${escapeHtml(r.comment || '')}')">
+              onclick="openCommentModal(${r.id}, '${escapeHtml(r.comment || '')}')"
+              style="padding: 6px 12px; border-radius: 6px; border: 1px solid #e2e8f0; background: #fff; cursor: pointer; font-size: 0.875rem;">
               ${r.comment ? '已填寫' : '未填寫'}
             </button>
           </td>
-          <td>
-            <div class="btn-group btn-group-sm">
-         <a href="/api/download_resume/${r.id}" class="btn btn-outline-primary btn-sm me-1" target="_blank">下載</a>
-         <button type="button" class="btn btn-outline-danger" onclick="rejectResume(${r.id}, ${preferenceId ? preferenceId : 'null'})">退件</button>
-         <button type="button" class="btn btn-outline-success" onclick="approveResume(${r.id}, ${preferenceId ? preferenceId : 'null'})">完成</button>
-
+          <td style="padding: 14px 16px; vertical-align: middle;">
+            <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+         <a href="/api/download_resume/${r.id}" style="padding: 6px 12px; border-radius: 6px; border: 1px solid #0066cc; background: #fff; color: #0066cc; text-decoration: none; font-size: 0.875rem; display: inline-block;" target="_blank">下載</a>
+         <button type="button" style="padding: 6px 12px; border-radius: 6px; border: 1px solid #dc2626; background: #fff; color: #dc2626; cursor: pointer; font-size: 0.875rem;" onclick="rejectResume(${r.id}, ${preferenceId ? preferenceId : 'null'})">退件</button>
+         <button type="button" style="padding: 6px 12px; border-radius: 6px; border: 1px solid #16a34a; background: #fff; color: #16a34a; cursor: pointer; font-size: 0.875rem;" onclick="approveResume(${r.id}, ${preferenceId ? preferenceId : 'null'})">完成</button>
+            </div>
           </td>
         </tr>`;
           tbody.innerHTML += row;

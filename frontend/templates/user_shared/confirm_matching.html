@@ -171,25 +171,41 @@
       gap: 24px;
     }
 
-    .card {
-      background: #fff;
-      border-radius: 22px;
-      border: 1px solid rgba(0, 0, 0, 0.04);
-      padding: 28px;
-      box-shadow: 0 15px 45px rgba(9, 51, 121, 0.1);
+    .panel {
+      background: #ffffff;
+      border-radius: 16px;
+      padding: 24px;
+      box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
+      border: 1px solid #e2e8f0;
+      margin-bottom: 32px;
     }
 
-    .card h2 {
-      font-size: 1.25rem;
-      margin-top: 0;
-      margin-bottom: 12px;
+    .panel-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+
+    .panel-header h2 {
+      font-size: 1.2rem;
+      margin: 0;
       display: flex;
       align-items: center;
       gap: 10px;
     }
 
-    .card h2 i {
-      color: var(--brand-blue);
+    .panel-header h2 i {
+      color: #0066cc;
+    }
+
+    .table-wrapper {
+      overflow-x: auto;
+    }
+
+    .table-wrapper table tbody tr:hover {
+      background: rgba(15, 23, 42, 0.02);
     }
 
     .summary-grid {
@@ -391,16 +407,20 @@
   <nav id="side-menu" aria-hidden="true" role="navigation" aria-label="功能選單">
     <button id="close-btn" aria-label="關閉功能選單">×</button>
     <h2>功能選單</h2>
-    <a href="/vendor_home">首頁總覽</a>
-    <a href="/vendor/resume-review">履歷審核</a>
+    <a href="/vendor_home">首頁</a>
+    <a href="/profile">個人資料</a>
+    <a href="/vendor/resume-review">學生履歷審核</a>
     <a href="/manage_positions">職位需求管理</a>
-    <a href="/confirm_matching">媒合結果確認</a>
-    <a href="/publish_announcements">公告發布</a>
+    <a href="/confirm_matching">媒合結果</a>
+    <a href="/publish_announcements">發布公告</a>
+    <a href="/reviews_resumes_notifications">查看履歷與通知</a>
   </nav>
 
   <main>
-    <section class="card">
-      <h2><i class="fa-solid fa-chart-pie"></i>媒合摘要</h2>
+    <section class="panel" aria-label="媒合摘要">
+      <div class="panel-header">
+        <h2><i class="fa-solid fa-chart-pie"></i>媒合摘要</h2>
+      </div>
       <div id="summaryContent" class="summary-grid">
         <div class="summary-item">
           <span>公司職缺數</span>
@@ -414,8 +434,10 @@
       <div id="companyBreakdown" class="summary-grid" style="margin-top: 8px;"></div>
     </section>
 
-    <section class="card">
-      <h2><i class="fa-solid fa-users-gear"></i>媒合學生列表</h2>
+    <section class="panel" aria-label="媒合學生列表">
+      <div class="panel-header">
+        <h2><i class="fa-solid fa-users-gear"></i>媒合學生列表</h2>
+      </div>
       <div class="filter-bar">
         <label for="companyFilter">選擇職缺</label>
         <select id="companyFilter">
@@ -430,7 +452,7 @@
         </button>
       </div>
 
-      <div id="tableContainer">
+      <div id="tableContainer" class="table-wrapper">
         <div class="loading" id="loadingState">
           <span class="spinner"></span> 資料載入中...
         </div>
@@ -647,44 +669,42 @@
       }
 
       const rowsHtml = matches.map(row => `
-        <tr>
-          <td>
+        <tr style="border-bottom: 1px solid #e2e8f0;">
+          <td style="padding: 14px 16px; vertical-align: middle;">
             <div style="font-weight:600;">${row.student_name || '-'}</div>
-            <div class="text-muted" style="font-size:0.85rem;color:var(--text-muted);">${row.student_number || ''}</div>
+            <div style="font-size:0.85rem;color:#64748b;">${row.student_number || ''}</div>
           </td>
-          <td>${row.class_department ? `${row.class_department}${row.class_name || ''}` : (row.class_name || '-')}</td>
-          <td>${row.student_email || '-'}</td>
-          <td>
+          <td style="padding: 14px 16px; vertical-align: middle;">${row.class_department ? `${row.class_department}${row.class_name || ''}` : (row.class_name || '-')}</td>
+          <td style="padding: 14px 16px; vertical-align: middle;">${row.student_email || '-'}</td>
+          <td style="padding: 14px 16px; vertical-align: middle;">
             <div style="font-weight:600;">${row.company_name}</div>
             <div class="badge"><i class="fa-solid fa-briefcase"></i>${row.job_title || '未指定職缺'}</div>
           </td>
-          <td>
+          <td style="padding: 14px 16px; vertical-align: middle;">
             <div>志願序：${row.preference_order ?? '—'}</div>
-            <div style="font-size:0.85rem;color:var(--text-muted);">提交時間：${row.preference_submitted_at || '-'}</div>
+            <div style="font-size:0.85rem;color:#64748b;">提交時間：${row.preference_submitted_at || '-'}</div>
           </td>
-          <td>
+          <td style="padding: 14px 16px; vertical-align: middle;">
             <div>媒合時間：${row.admitted_at || '-'}</div>
-            <div style="font-size:0.85rem;color:var(--text-muted);">學期：${row.semester || '-'}</div>
+            <div style="font-size:0.85rem;color:#64748b;">學期：${row.semester || '-'}</div>
           </td>
         </tr>
       `).join('');
 
       tableContainer.innerHTML = `
-        <div style="overflow-x:auto;">
-          <table>
-            <thead>
-              <tr>
-                <th>學生</th>
-                <th>班級</th>
-                <th>Email</th>
-                <th>媒合公司 / 職缺</th>
-                <th>錄取志願</th>
-                <th>媒合資訊</th>
-              </tr>
-            </thead>
-            <tbody>${rowsHtml}</tbody>
-          </table>
-        </div>
+        <table style="width: 100%; border-collapse: collapse; min-width: 1000px;">
+          <thead style="background: #f1f5f9;">
+            <tr>
+              <th style="padding: 14px 16px; text-align: left; border-bottom: 1px solid #e2e8f0; font-weight: 600;">學生</th>
+              <th style="padding: 14px 16px; text-align: left; border-bottom: 1px solid #e2e8f0; font-weight: 600;">班級</th>
+              <th style="padding: 14px 16px; text-align: left; border-bottom: 1px solid #e2e8f0; font-weight: 600;">Email</th>
+              <th style="padding: 14px 16px; text-align: left; border-bottom: 1px solid #e2e8f0; font-weight: 600;">媒合公司 / 職缺</th>
+              <th style="padding: 14px 16px; text-align: left; border-bottom: 1px solid #e2e8f0; font-weight: 600;">錄取志願</th>
+              <th style="padding: 14px 16px; text-align: left; border-bottom: 1px solid #e2e8f0; font-weight: 600;">媒合資訊</th>
+            </tr>
+          </thead>
+          <tbody>${rowsHtml}</tbody>
+        </table>
       `;
     }
 
