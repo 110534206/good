@@ -14,27 +14,93 @@
     }
 
     header {
-      background: #0454a3;
-      color: white;
-      padding: 1rem 2rem;
-      font-size: 1.5rem;
+      background: linear-gradient(135deg, #0055a8 0%, #006acb 50%, #004f94 100%);
+      border-bottom: none;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      box-shadow: 0 8px 20px rgba(0, 68, 148, 0.35);
+    }
+
+    .topbar {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 18px 24px;
       display: flex;
       align-items: center;
-      justify-content: space-between;
-      gap: 1rem;
+      justify-content: center;
+      color: #fff;
       position: relative;
     }
 
-    header .header-title {
+    .topbar h1 {
+      font-size: 1.5rem;
+      margin: 0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      color: #fff;
+      flex: 1;
+    }
+
+    .topbar h1 .header-title {
       flex: 1;
       text-align: center;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+    }
+
+    .topbar h1 i {
+      color: #ffe27a;
     }
 
     body {
       font-family: "Noto Sans TC", sans-serif;
-      background: #f7f9fc;
+      background: #ffffff;
       margin: 0;
       padding: 0;
+    }
+
+    main {
+      max-width: 1200px;
+      margin: 24px auto 60px;
+      padding: 0 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+    }
+
+    .panel {
+      background: #ffffff;
+      border-radius: 16px;
+      padding: 24px;
+      box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
+      border: 1px solid #e2e8f0;
+      margin-bottom: 32px;
+    }
+
+    .panel-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+
+    .panel-header h2 {
+      font-size: 1.2rem;
+      margin: 0;
+    }
+
+    .table-wrapper {
+      overflow-x: auto;
+    }
+
+    .table-wrapper table tbody tr:hover {
+      background: rgba(15, 23, 42, 0.02);
     }
 
     /* 表格樣式 */
@@ -107,7 +173,6 @@
       background: none;
       border: none;
       padding: 0;
-      margin-left: 100px;
     }
 
     #menu-btn span {
@@ -129,15 +194,15 @@
       max-width: 80vw;
       background-color: rgba(10, 10, 10, 0.95);
       backdrop-filter: blur(6px);
-      box-shadow: 3px 0 12px rgb(0 0 0 / 0.7);
+      box-shadow: 3px 0 12px rgba(0, 0, 0, 0.6);
       padding: 2rem 1.5rem;
       transform: translateX(-100%);
       transition: transform 0.3s ease-in-out;
-      z-index: 1100;
+      z-index: 1300;
       display: flex;
       flex-direction: column;
       align-items: flex-start;
-      color: white;
+      color: #fff;
       user-select: none;
     }
 
@@ -152,22 +217,20 @@
       font-size: 2.2rem;
       background: none;
       border: none;
-      color: white;
+      color: #fff;
       cursor: pointer;
       line-height: 1;
-      width: 2.5rem;
-      height: 2.5rem;
+      width: 2.4rem;
+      height: 2.4rem;
       display: flex;
       align-items: center;
       justify-content: center;
     }
 
     #side-menu h2 {
-      width: 100%;
-      margin-bottom: 1.5rem;
+      margin: 0.5rem 0 1.5rem;
       font-weight: 700;
-      font-size: 1.5rem;
-      text-align: left;
+      font-size: 1.6rem;
     }
 
     #side-menu a {
@@ -175,7 +238,7 @@
       width: 100%;
       padding: 0.6rem 0;
       font-size: 1.1rem;
-      color: #ddd;
+      color: #e2e8f0;
       text-decoration: none;
       border-radius: 4px;
       transition: background-color 0.2s ease;
@@ -183,69 +246,77 @@
 
     #side-menu a:hover {
       background-color: rgba(255, 255, 255, 0.18);
-      color: white;
+      color: #fff;
     }
   </style>
 </head>
 
 <body>
   <header>
-    <div id="menu-btn" title="選單" role="button" tabindex="0">
-      <span></span><span></span><span></span>
+    <div class="topbar">
+      <h1>
+        <button id="menu-btn" title="選單" role="button" tabindex="0" aria-label="開啟側邊選單">
+          <span></span>
+          <span></span>
+          <span></span>
+        </button>
+        <div class="header-title">學生履歷審查</div>
+        <div style="width: 30px;"></div> <!-- 佔位元素，保持標題置中 -->
+      </h1>
     </div>
-    <div class="header-title">學生履歷審查</div>
   </header>
-  <div class="container">
+  <main>
+    <section class="panel" aria-label="履歷列表">
+      <div class="panel-header">
+        <h2>履歷列表</h2>
+      </div>
+      <div style="display: flex; flex-wrap: wrap; gap: 16px; align-items: center; margin-bottom: 16px;">
+        <select id="departmentFilter" style="padding: 10px 12px; border-radius: 8px; border: 1px solid #e2e8f0; background: #fff; font-size: 0.95rem; min-width: 150px;">
+          <option value="">所有學年</option>
+        </select>
+        <select id="classFilter" style="padding: 10px 12px; border-radius: 8px; border: 1px solid #e2e8f0; background: #fff; font-size: 0.95rem; min-width: 150px;">
+          <option value="">所有班級</option>
+        </select>
+        <select id="companyFilter" style="padding: 10px 12px; border-radius: 8px; border: 1px solid #e2e8f0; background: #fff; font-size: 0.95rem; min-width: 150px;">
+          <option value="">所有公司</option>
+        </select>
+        <select id="statusFilter" style="padding: 10px 12px; border-radius: 8px; border: 1px solid #e2e8f0; background: #fff; font-size: 0.95rem; min-width: 150px;">
+          <option value="">所有狀態</option>
+          <option value="pending">待審核</option>
+          <option value="approved">通過</option>
+          <option value="rejected">退件</option>
+        </select>
+        <input type="text" id="searchBox" style="padding: 10px 12px; border-radius: 8px; border: 1px solid #e2e8f0; background: #fff; font-size: 0.95rem; min-width: 200px; flex: 1;" placeholder="搜尋帳號/檔案" />
+      </div>
 
-    <div class="container my-5 pt-1">
-      <div class="card shadow-sm p-4">
-        <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
-          <div class="d-flex gap-2 flex-wrap">
-            <select id="departmentFilter" class="form-select form-select-sm w-auto">
-              <option value="">所有學年</option>
-            </select>
-            <select id="classFilter" class="form-select form-select-sm w-auto">
-              <option value="">所有班級</option>
-            </select>
-            <select id="companyFilter" class="form-select form-select-sm w-auto">
-              <option value="">所有公司</option>
-            </select>
-            <select id="statusFilter" class="form-select form-select-sm w-auto">
-              <option value="">所有狀態</option>
-              <option value="pending">待審核</option>
-              <option value="approved">通過</option>
-              <option value="rejected">退件</option>
-            </select>
-          </div>
-          <input type="text" id="searchBox" class="form-control form-control-sm w-auto" placeholder="搜尋帳號/檔案" />
-        </div>
-
-        <div class="table-responsive">
-          <table class="table table-hover align-middle">
-            <thead>
+      <div class="table-wrapper">
+        <table style="width: 100%; border-collapse: collapse; min-width: 1000px;">
+          <thead style="background: #f1f5f9;">
+            <tr>
+              <th style="padding: 14px 16px; text-align: left; border-bottom: 1px solid #e2e8f0; font-weight: 600;">學生帳號</th>
+              <th style="padding: 14px 16px; text-align: left; border-bottom: 1px solid #e2e8f0; font-weight: 600;">姓名</th>
+              <th style="padding: 14px 16px; text-align: left; border-bottom: 1px solid #e2e8f0; font-weight: 600;">上傳時間</th>
+              <th style="padding: 14px 16px; text-align: left; border-bottom: 1px solid #e2e8f0; font-weight: 600;">檔案名稱</th>
+              <th style="padding: 14px 16px; text-align: left; border-bottom: 1px solid #e2e8f0; font-weight: 600;">選擇公司</th>
+              <th style="padding: 14px 16px; text-align: left; border-bottom: 1px solid #e2e8f0; font-weight: 600;">職缺</th>
+              <th style="padding: 14px 16px; text-align: left; border-bottom: 1px solid #e2e8f0; font-weight: 600;">狀態</th>
+              <th style="padding: 14px 16px; text-align: left; border-bottom: 1px solid #e2e8f0; font-weight: 600;">老師留言</th>
+              <th style="padding: 14px 16px; text-align: left; border-bottom: 1px solid #e2e8f0; font-weight: 600;">操作</th>
+            </tr>
+          </thead>
+          <tbody id="resumeTableBody">
               <tr>
-                <th>學生帳號</th>
-                <th>姓名</th>
-                <th>上傳時間</th>
-                <th>檔案名稱</th>
-                <th>狀態</th>
-                <th>老師留言</th>
-                <th>操作</th>
+                <td colspan="9" style="padding: 14px 16px; text-align: center; color: #64748b; border-bottom: 1px solid #e2e8f0;">載入中...</td>
               </tr>
-            </thead>
-            <tbody id="resumeTableBody">
-              <tr>
-                <td colspan="7" class="text-muted text-center">載入中...</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
+          </tbody>
+        </table>
+      </div>
 
         <nav>
           <ul class="pagination justify-content-center mt-3" id="pagination"></ul>
         </nav>
-      </div>
-    </div>
+    </section>
+  </main>
 
     <div class="modal fade" id="commentModal" tabindex="-1" aria-hidden="true">
       <div class="modal-dialog modal-lg modal-dialog-centered">
@@ -270,11 +341,12 @@
       <h2>功能選單</h2>
       <a href="/vendor_home">首頁</a>
       <a href="/profile">個人資料</a>
-      <a href="/upload_company">建立實習機會</a>
-      <a href="/admission_results">查看錄取結果</a>
-      <a href="/manage_vendor">實習廠商管理</a>
-      <a href="/notifications">查看公告</a>
-      <a href="/review_resume">學生履歷審核</a>
+      <a href="/vendor/resume-review">學生履歷審核</a>
+      <a href="/manage_positions">職位需求管理</a>
+      <a href="/confirm_matching">媒合結果</a>
+      <a href="/publish_announcements">發布公告</a>
+      <a href="/reviews_resumes_notifications">查看履歷與通知</a>
+      <a href="/logout">登出</a>
     </nav>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
@@ -325,12 +397,15 @@
       // DOMContentLoaded 載入與事件綁定
       // ------------------------------------
 
+      let currentUserId = null; // 儲存當前用戶 ID
+
       document.addEventListener("DOMContentLoaded", () => {
         // 先獲取用戶角色，根據角色調用不同的 API
         fetch('/api/profile')
           .then(res => res.json())
           .then(profileData => {
             userRole = profileData.success && profileData.user ? profileData.user.role : null;
+            currentUserId = profileData.success && profileData.user ? profileData.user.id : null;
             
             let apiUrl;
             let companyApiUrl = '/api/get_reviewed_companies';
@@ -388,6 +463,14 @@
                   // 如果是廠商，從 API 返回的 companies 中獲取公司列表
                   if (userRole === 'vendor' && resumeData.companies) {
                     companyData = {success: true, companies: resumeData.companies};
+                  }
+                  
+                  // 如果是指導老師，過濾出他們管理的公司
+                  if ((userRole === 'teacher' || userRole === 'class_teacher') && companyData && companyData.success && companyData.companies && currentUserId) {
+                    companyData.companies = companyData.companies.filter(company => {
+                      // 檢查 advisor_user_id 是否匹配當前指導老師
+                      return company.advisor_user_id === currentUserId;
+                    });
                   }
                   
                   populateFilters(allResumes, companyData);
@@ -503,25 +586,52 @@
           classSelect.appendChild(option);
         });
 
-        // 從 API 獲取的開放公司列表中，只顯示當前學期開放的公司
-        if (companyData && companyData.success && companyData.companies) {
-          const openCompanies = companyData.companies.filter(company => {
-            // 如果是廠商格式（有 name 屬性），直接顯示
-            if (company.name) {
-              return true;
-            }
-            // 如果是老師格式（有 company_name 和 is_open_current_semester），需要檢查是否開放
-            return company.is_open_current_semester === true || company.is_open_current_semester === 1;
-          });
-          
-          openCompanies.forEach(company => {
-            const option = document.createElement("option");
-            // 處理兩種格式的公司名稱
-            const companyName = company.name || company.company_name;
-            option.value = companyName; // 這裡使用公司名稱作為 value，前端過濾需要依賴此
-            option.textContent = companyName;
-            companySelect.appendChild(option);
-          });
+        // 如果是指導老師，顯示所有他們管理的公司（從 API 獲取）
+        if (userRole === 'teacher' || userRole === 'class_teacher') {
+          if (companyData && companyData.success && companyData.companies) {
+            // 顯示所有指導老師管理的公司（即使沒有學生選擇）
+            companyData.companies.forEach(company => {
+              const option = document.createElement("option");
+              option.value = company.company_name;
+              option.textContent = company.company_name;
+              companySelect.appendChild(option);
+            });
+          } else {
+            // 如果 API 沒有返回公司列表，從履歷資料中提取公司名稱（備用方案）
+            const companySet = new Set();
+            data.forEach(r => {
+              if (r.company_name && r.company_name.trim()) {
+                companySet.add(r.company_name.trim());
+              }
+            });
+            Array.from(companySet).sort().forEach(companyName => {
+              const option = document.createElement("option");
+              option.value = companyName;
+              option.textContent = companyName;
+              companySelect.appendChild(option);
+            });
+          }
+        } else {
+          // 其他角色（如廠商、主任等）使用 API 返回的公司列表
+          if (companyData && companyData.success && companyData.companies) {
+            const openCompanies = companyData.companies.filter(company => {
+              // 如果是廠商格式（有 name 屬性），直接顯示
+              if (company.name) {
+                return true;
+              }
+              // 如果是老師格式（有 company_name 和 is_open_current_semester），需要檢查是否開放
+              return company.is_open_current_semester === true || company.is_open_current_semester === 1;
+            });
+            
+            openCompanies.forEach(company => {
+              const option = document.createElement("option");
+              // 處理兩種格式的公司名稱
+              const companyName = company.name || company.company_name;
+              option.value = companyName; // 這裡使用公司名稱作為 value，前端過濾需要依賴此
+              option.textContent = companyName;
+              companySelect.appendChild(option);
+            });
+          }
         }
       }
 
@@ -560,7 +670,7 @@
         tbody.innerHTML = "";
 
         if (resumes.length === 0) {
-          tbody.innerHTML = `<tr><td colspan="7" class="text-center text-muted">目前沒有資料</td></tr>`;
+          tbody.innerHTML = `<tr><td colspan="9" style="padding: 14px 16px; text-align: center; color: #64748b;">目前沒有資料</td></tr>`;
           document.getElementById("pagination").innerHTML = "";
           return;
         }
@@ -571,25 +681,30 @@
 
         pageData.forEach(r => {
           const preferenceId = r.preference_id || null;
+          const companyName = r.company_name || '';
+          const jobTitle = r.job_title || '';
           const row = `
-        <tr>
-          <td>${r.username}</td>
-          <td>${escapeHtml(r.name || '')}</td>
-          <td>${r.upload_time}</td>
-          <td>${escapeHtml(r.original_filename)}</td>
-          <td><span class="status-badge bg-${statusColor(r.status)}">${mapStatus(r.status)}</span></td>
-          <td>
+        <tr style="border-bottom: 1px solid #e2e8f0;">
+          <td style="padding: 14px 16px; vertical-align: middle;">${r.username}</td>
+          <td style="padding: 14px 16px; vertical-align: middle;">${escapeHtml(r.name || '')}</td>
+          <td style="padding: 14px 16px; vertical-align: middle;">${r.upload_time}</td>
+          <td style="padding: 14px 16px; vertical-align: middle;">${escapeHtml(r.original_filename)}</td>
+          <td style="padding: 14px 16px; vertical-align: middle;">${escapeHtml(companyName) || '<span style="color: #64748b;">—</span>'}</td>
+          <td style="padding: 14px 16px; vertical-align: middle;">${escapeHtml(jobTitle) || '<span style="color: #64748b;">—</span>'}</td>
+          <td style="padding: 14px 16px; vertical-align: middle;"><span class="status-badge bg-${statusColor(r.status)}">${mapStatus(r.status)}</span></td>
+          <td style="padding: 14px 16px; vertical-align: middle;">
             <button class="btn btn-sm btn-outline-secondary ${r.comment ? 'text-success' : ''}"
-              onclick="openCommentModal(${r.id}, '${escapeHtml(r.comment || '')}')">
+              onclick="openCommentModal(${r.id}, '${escapeHtml(r.comment || '')}')"
+              style="padding: 6px 12px; border-radius: 6px; border: 1px solid #e2e8f0; background: #fff; cursor: pointer; font-size: 0.875rem;">
               ${r.comment ? '已填寫' : '未填寫'}
             </button>
           </td>
-          <td>
-            <div class="btn-group btn-group-sm">
-         <a href="/api/download_resume/${r.id}" class="btn btn-outline-primary btn-sm me-1" target="_blank">下載</a>
-         <button type="button" class="btn btn-outline-danger" onclick="rejectResume(${r.id}, ${preferenceId ? preferenceId : 'null'})">退件</button>
-         <button type="button" class="btn btn-outline-success" onclick="approveResume(${r.id}, ${preferenceId ? preferenceId : 'null'})">完成</button>
-
+          <td style="padding: 14px 16px; vertical-align: middle;">
+            <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+         <a href="/api/download_resume/${r.id}" style="padding: 6px 12px; border-radius: 6px; border: 1px solid #0066cc; background: #fff; color: #0066cc; text-decoration: none; font-size: 0.875rem; display: inline-block;" target="_blank">下載</a>
+         <button type="button" style="padding: 6px 12px; border-radius: 6px; border: 1px solid #dc2626; background: #fff; color: #dc2626; cursor: pointer; font-size: 0.875rem;" onclick="rejectResume(${r.id}, ${preferenceId ? preferenceId : 'null'})">退件</button>
+         <button type="button" style="padding: 6px 12px; border-radius: 6px; border: 1px solid #16a34a; background: #fff; color: #16a34a; cursor: pointer; font-size: 0.875rem;" onclick="approveResume(${r.id}, ${preferenceId ? preferenceId : 'null'})">完成</button>
+            </div>
           </td>
         </tr>`;
           tbody.innerHTML += row;

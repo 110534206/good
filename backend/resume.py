@@ -3238,8 +3238,9 @@ def get_class_resumes():
             # 合併查詢：班導的學生履歷 + 指導老師綁定公司的學生履歷
             # 使用 UNION 合併三種情況：
             # 1. 班導的學生（通過 classes_teacher）
-            # 2. 指導老師綁定的學生（通過 teacher_student_relations）
+            # 2. 指導老師綁定的學生（從 teacher_student_relations）
             # 3. 選擇了該老師作為指導老師的公司的學生（通過 student_preferences 和 internship_companies）
+            #    重點：學生的履歷會根據填寫的志願序，傳給選擇公司的指導老師
         if role in ["teacher", "class_teacher"]:
             sql_query = """
                 SELECT DISTINCT
@@ -3263,7 +3264,28 @@ def get_class_resumes():
                          ORDER BY sp3.preference_order ASC
                          LIMIT 1),
                         ''
-                    ) AS company_name   
+                    ) AS company_name,
+                    COALESCE(
+                        (SELECT ij3.title
+                         FROM student_preferences sp3
+                         JOIN internship_companies ic3 ON sp3.company_id = ic3.id
+                         LEFT JOIN internship_jobs ij3 ON sp3.job_id = ij3.id
+                         WHERE sp3.student_id = u.id 
+                         AND ic3.advisor_user_id = %s
+                         ORDER BY sp3.preference_order ASC
+                         LIMIT 1),
+                        ''
+                    ) AS job_title,
+                    COALESCE(
+                        (SELECT sp3.preference_order
+                         FROM student_preferences sp3
+                         JOIN internship_companies ic3 ON sp3.company_id = ic3.id
+                         WHERE sp3.student_id = u.id 
+                         AND ic3.advisor_user_id = %s
+                         ORDER BY sp3.preference_order ASC
+                         LIMIT 1),
+                        NULL
+                    ) AS preference_order
                 FROM resumes r
                 JOIN users u ON r.user_id = u.id
                 LEFT JOIN classes c ON u.class_id = c.id
@@ -3280,6 +3302,7 @@ def get_class_resumes():
                     WHERE tsr.student_id = u.id AND tsr.teacher_id = %s
                 ) OR EXISTS (
                     -- 情況3：選擇了該老師作為指導老師的公司的學生
+                    -- 重點：學生的履歷會根據填寫的志願序，傳給選擇公司的指導老師
                     SELECT 1
                     FROM student_preferences sp
                     JOIN internship_companies ic2 ON sp.company_id = ic2.id
@@ -3287,13 +3310,19 @@ def get_class_resumes():
                 )
                 ORDER BY c.name, u.name
             """
-            sql_params = (user_id, user_id, user_id, user_id)
+            sql_params = (user_id, user_id, user_id, user_id, user_id)
 
 
             cursor.execute(sql_query, sql_params)
             resumes = cursor.fetchall()
 
-            if not resumes:
+            # 調試：記錄查詢結果
+            if resumes:
+                print(f"✅ [DEBUG] Teacher/class_teacher user {user_id} found {len(resumes)} resumes")
+                # 統計有多少履歷是通過「選擇了該老師管理的公司」這個條件出現的
+                company_based_count = sum(1 for r in resumes if r.get('company_name'))
+                print(f"📊 [DEBUG] {company_based_count} resumes are from students who selected companies managed by this teacher")
+            else:
                 print(f"⚠️ [DEBUG] Teacher/class_teacher user {user_id} has no assigned classes or advisor students.")
                 resumes = []
 
