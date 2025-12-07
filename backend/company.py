@@ -68,19 +68,22 @@ def generate_company_word_document(data):
             for run in paragraph.runs:
                 set_chinese_font(run, '標楷體')
                 run.font.size = font_size
-                if bold:
-                    run.bold = True
+                # 所有文字都不加粗
+                run.bold = False
     
     # 創建簡單兩欄表格的輔助函數
-    def create_two_column_table(label, value, label_width=Inches(0.8), value_width=Inches(5.8)):
-        """創建一個兩欄表格（標籤和值）"""
+    def create_two_column_table(label, value, label_width=Inches(1.2), value_width=Inches(6.3)):
+        """創建一個兩欄表格（標籤和值，總寬度7.5 inches）"""
         table = doc.add_table(rows=1, cols=2)
         set_table_borders(table)
         table.columns[0].width = label_width
         table.columns[1].width = value_width
-        set_cell_format(table.rows[0].cells[0], label, bold=True)
+        set_cell_format(table.rows[0].cells[0], label, bold=False, alignment=WD_ALIGN_PARAGRAPH.LEFT)
         set_cell_format(table.rows[0].cells[1], value)
         return table
+    
+    # 統一的表格總寬度（6.6 inches，與基本資訊表格一致）
+    TABLE_TOTAL_WIDTH = 6.6
     
     # 學校資訊（最上方）
     school_info = doc.add_paragraph()
@@ -136,42 +139,82 @@ def generate_company_word_document(data):
     # 右欄資料（與左欄對齊）
     right_column_data = [
         ('', ''),  # 編號對應位置（空白）
+        ('', ''),  # 單位名稱對應位置（空白）
         ('統一編號', data.get('uniform_number', '')),
         ('職稱', data.get('contact_title', '')),
         ('傳真', data.get('fax', '')),
         ('', ''),  # 地址對應位置（空白）
         ('', ''),  # 交通說明對應位置（空白）
         ('', ''),  # E-mail對應位置（空白）
-        ('', '')   # 額外空白行
     ]
     
     # 建立表格：8行 x 4欄（左標籤、左值、右標籤、右值）
     basic_table = doc.add_table(rows=len(left_column_data), cols=4)
     set_table_borders(basic_table)
     
-    # 設定欄寬
-    basic_table.columns[0].width = Inches(0.8)  # 左標籤
-    basic_table.columns[1].width = Inches(2.5)   # 左值
-    basic_table.columns[2].width = Inches(0.8)   # 右標籤
-    basic_table.columns[3].width = Inches(2.5)   # 右值
+    # 設定欄寬（總寬度7.5 inches，比原來更寬）
+    basic_table.columns[0].width = Inches(1.0)  # 左標籤（適應「聯絡電話」、「交通說明」等文字）
+    basic_table.columns[1].width = Inches(2.6)   # 左值
+    basic_table.columns[2].width = Inches(1.0)   # 右標籤（與左標籤接近）
+    basic_table.columns[3].width = Inches(2.7)   # 右值
+    
+    # 需要合併第2~4格的行索引：編號(0)、單位名稱(1)、地址(5)、交通說明(6)、E-mail(7)
+    merge_rows = [0, 1, 5, 6, 7]
     
     for idx in range(len(left_column_data)):
-        set_cell_format(basic_table.rows[idx].cells[0], left_column_data[idx][0], bold=True)
-        set_cell_format(basic_table.rows[idx].cells[1], left_column_data[idx][1])
-        set_cell_format(basic_table.rows[idx].cells[2], right_column_data[idx][0], bold=True)
-        set_cell_format(basic_table.rows[idx].cells[3], right_column_data[idx][1])
+        if idx in merge_rows:  # 需要合併第2~4格的行
+            set_cell_format(basic_table.rows[idx].cells[0], left_column_data[idx][0], bold=False, alignment=WD_ALIGN_PARAGRAPH.LEFT)
+            # 合併第2、3、4格（索引1、2、3）
+            basic_table.rows[idx].cells[1].merge(basic_table.rows[idx].cells[2])
+            basic_table.rows[idx].cells[1].merge(basic_table.rows[idx].cells[3])
+            # 設定合併後的單元格內容
+            set_cell_format(basic_table.rows[idx].cells[1], left_column_data[idx][1])
+        else:
+            set_cell_format(basic_table.rows[idx].cells[0], left_column_data[idx][0], bold=False, alignment=WD_ALIGN_PARAGRAPH.LEFT)
+            set_cell_format(basic_table.rows[idx].cells[1], left_column_data[idx][1])
+            set_cell_format(basic_table.rows[idx].cells[2], right_column_data[idx][0], bold=False, alignment=WD_ALIGN_PARAGRAPH.LEFT)
+            set_cell_format(basic_table.rows[idx].cells[3], right_column_data[idx][1])
     
-    # 單位簡介（獨立一行，跨兩欄，直接連接在上一個表格下方）
-    create_two_column_table('單位簡介', data.get('company_intro', ''))
+    # 單位簡介（獨立一行，4欄結構，合併第2~4格）
+    intro_table = doc.add_table(rows=1, cols=4)
+    set_table_borders(intro_table)
+    intro_table.columns[0].width = Inches(1.0)  # 標籤（與基本資訊表格一致）
+    intro_table.columns[1].width = Inches(2.6)   # 值（合併後）
+    intro_table.columns[2].width = Inches(1.0)   # 合併
+    intro_table.columns[3].width = Inches(2.7)   # 合併
+    # 設定行高（單位簡介行高較高）
+    intro_table.rows[0].height = Inches(0.8)
+    set_cell_format(intro_table.rows[0].cells[0], '單位簡介', bold=False, alignment=WD_ALIGN_PARAGRAPH.LEFT)
+    intro_table.rows[0].cells[1].merge(intro_table.rows[0].cells[2])
+    intro_table.rows[0].cells[1].merge(intro_table.rows[0].cells[3])
+    set_cell_format(intro_table.rows[0].cells[1], data.get('company_intro', ''))
     
-    # 營業項目表格（直接連接在上一個表格下方）
-    create_two_column_table('營業項目', data.get("business_scope", ""))
+    # 營業項目表格（4欄結構，合併第2~4格）
+    business_table = doc.add_table(rows=1, cols=4)
+    set_table_borders(business_table)
+    business_table.columns[0].width = Inches(1.0)  # 標籤（與基本資訊表格一致）
+    business_table.columns[1].width = Inches(2.6)   # 值（合併後）
+    business_table.columns[2].width = Inches(1.0)   # 合併
+    business_table.columns[3].width = Inches(2.7)   # 合併
+    set_cell_format(business_table.rows[0].cells[0], '營業項目', bold=False, alignment=WD_ALIGN_PARAGRAPH.LEFT)
+    business_table.rows[0].cells[1].merge(business_table.rows[0].cells[2])
+    business_table.rows[0].cells[1].merge(business_table.rows[0].cells[3])
+    set_cell_format(business_table.rows[0].cells[1], data.get("business_scope", ""))
     
-    # 企業規模表格（直接連接在上一個表格下方）
+    # 企業規模表格
+    scale_table = doc.add_table(rows=1, cols=4)
+    set_table_borders(scale_table)
+    scale_table.columns[0].width = Inches(1.0)  # 標籤（與基本資訊表格一致）
+    scale_table.columns[1].width = Inches(2.6)   # 值（合併後）
+    scale_table.columns[2].width = Inches(1.0)   # 合併
+    scale_table.columns[3].width = Inches(2.7)   # 合併
     scale_options = ['1000人以上', '500-999人', '100-499人', '10-99人', '10以下']
     selected_scale = data.get('company_scale', '')
     scale_text = ''.join([f'☑ {opt}  ' if opt == selected_scale else f'☐ {opt}  ' for opt in scale_options])
-    create_two_column_table('企業規模', scale_text)
+    set_cell_format(scale_table.rows[0].cells[0], '企業規模', bold=False, alignment=WD_ALIGN_PARAGRAPH.LEFT)
+    scale_table.rows[0].cells[1].merge(scale_table.rows[0].cells[2])
+    scale_table.rows[0].cells[1].merge(scale_table.rows[0].cells[3])
+    set_cell_format(scale_table.rows[0].cells[1], scale_text)
     
     # 職缺明細表格（直接連接在上一個表格下方）
     jobs = data.get('jobs', [])
@@ -179,18 +222,18 @@ def generate_company_word_document(data):
         jobs_table = doc.add_table(rows=len(jobs) + 1, cols=4)
         set_table_borders(jobs_table)
         
-        # 設定職缺表格欄寬
-        jobs_table.columns[0].width = Inches(0.8)  # 工作編號
-        jobs_table.columns[1].width = Inches(1.8)    # 工作項目
-        jobs_table.columns[2].width = Inches(3.5)   # 需求條件/工作內容
+        # 設定職缺表格欄寬（總寬度與基本資訊表格一致：7.5 inches）
+        jobs_table.columns[0].width = Inches(0.9)  # 工作編號
+        jobs_table.columns[1].width = Inches(2.0)    # 工作項目
+        jobs_table.columns[2].width = Inches(3.7)   # 需求條件/工作內容
         jobs_table.columns[3].width = Inches(0.9)   # 名額
         
         # 表頭
         header_cells = jobs_table.rows[0].cells
-        set_cell_format(header_cells[0], '工作編號', alignment=WD_ALIGN_PARAGRAPH.CENTER, bold=True)
-        set_cell_format(header_cells[1], '工作項目', alignment=WD_ALIGN_PARAGRAPH.CENTER, bold=True)
-        set_cell_format(header_cells[2], '需求條件/工作內容', alignment=WD_ALIGN_PARAGRAPH.CENTER, bold=True)
-        set_cell_format(header_cells[3], '名額', alignment=WD_ALIGN_PARAGRAPH.CENTER, bold=True)
+        set_cell_format(header_cells[0], '工作編號', alignment=WD_ALIGN_PARAGRAPH.CENTER, bold=False)
+        set_cell_format(header_cells[1], '工作項目', alignment=WD_ALIGN_PARAGRAPH.CENTER, bold=False)
+        set_cell_format(header_cells[2], '需求條件/工作內容', alignment=WD_ALIGN_PARAGRAPH.CENTER, bold=False)
+        set_cell_format(header_cells[3], '名額', alignment=WD_ALIGN_PARAGRAPH.CENTER, bold=False)
         
         # 職缺資料
         for idx, job in enumerate(jobs, 1):
@@ -200,17 +243,17 @@ def generate_company_word_document(data):
             set_cell_format(row_cells[2], job.get('description', ''))
             set_cell_format(row_cells[3], str(job.get('slots', 1)), alignment=WD_ALIGN_PARAGRAPH.CENTER)
     
-    # 待遇和來源表格（直接連接在上一個表格下方）
+    # 待遇和來源表格（直接連接在上一個表格下方，總寬度與基本資訊表格一致：7.5 inches）
     compensation_source_table = doc.add_table(rows=2, cols=2)
     set_table_borders(compensation_source_table)
-    compensation_source_table.columns[0].width = Inches(0.8)
-    compensation_source_table.columns[1].width = Inches(5.8)
+    compensation_source_table.columns[0].width = Inches(1.2)
+    compensation_source_table.columns[1].width = Inches(6.3)  # 1.2 + 6.3 = 7.5
     
     # 待遇行
     compensation_options = ['月薪', '時薪', '獎金(津貼)', '無']
     compensation_selected = data.get('compensation', [])
     comp_text = ''.join([f'☑ {opt}  ' if opt in compensation_selected else f'☐ {opt}  ' for opt in compensation_options])
-    set_cell_format(compensation_source_table.rows[0].cells[0], '待遇', bold=True)
+    set_cell_format(compensation_source_table.rows[0].cells[0], '待遇', bold=False)
     set_cell_format(compensation_source_table.rows[0].cells[1], comp_text)
     
     # 來源行
@@ -221,7 +264,7 @@ def generate_company_word_document(data):
         other_text = data.get('source_other_text', '')
         if other_text:
             source_text += f'（{other_text}）'
-    set_cell_format(compensation_source_table.rows[1].cells[0], '來源', bold=True)
+    set_cell_format(compensation_source_table.rows[1].cells[0], '來源', bold=False)
     set_cell_format(compensation_source_table.rows[1].cells[1], source_text)
     
     return doc
