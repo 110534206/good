@@ -425,4 +425,16 @@ def user_management():
     except Exception as e:
         print(f"用戶管理頁面錯誤: {e}")
         return f"用戶管理頁面載入錯誤: {str(e)}", 500
+
+@admin_bp.route('/absence_default_range')
+def absence_default_range_page():
+    """缺勤預設學期範圍設定頁面（科助/管理員）"""
+    if 'user_id' not in session or session.get('role') not in ['admin', 'ta']:
+        from flask import redirect, url_for
+        return redirect(url_for('auth_bp.login_page'))
+    try:
+        return render_template('admin/absence_default_range.html')
+    except Exception as e:
+        print(f"缺勤預設學期範圍設定頁面錯誤: {e}")
+        return f"頁面載入錯誤: {str(e)}", 500
     

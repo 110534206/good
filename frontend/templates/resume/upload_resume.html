@@ -1966,6 +1966,12 @@
             // 等待學期列表載入完成
             setTimeout(setAbsenceData, 500);
           }
+          
+          // 標記已從 loadResumeData 中加載了缺勤記錄
+          window.absenceDataLoadedFromResume = true;
+        } else {
+          // 沒有 absence_data，標記為未從履歷加載
+          window.absenceDataLoadedFromResume = false;
         }
 
         // 4. 填充語言能力
@@ -2179,23 +2185,24 @@
       }
 
       try {
-        const res = await fetch("/semester/api/list");
+        // 使用新的API，獲取根據預設範圍和入學年度過濾後的學期列表
+        const res = await fetch("/api/absence/available_semesters");
 
         if (!res.ok) {
           throw new Error(`HTTP錯誤: ${res.status} ${res.statusText}`);
         }
 
         const result = await res.json();
-        console.log('學期列表API回應:', result);
+        console.log('可用學期列表API回應:', result);
 
         startSemesterSelect.innerHTML = '<option value="">請選擇開始學期</option>';
         endSemesterSelect.innerHTML = '<option value="">請選擇結束學期</option>';
 
         if (result.success && result.semesters) {
           if (result.semesters.length === 0) {
-            startSemesterSelect.innerHTML = '<option value="">暫無學期資料</option>';
-            endSemesterSelect.innerHTML = '<option value="">暫無學期資料</option>';
-            console.warn('學期列表為空');
+            startSemesterSelect.innerHTML = '<option value="">暫無可用學期資料（請確認已設定預設學期範圍）</option>';
+            endSemesterSelect.innerHTML = '<option value="">暫無可用學期資料（請確認已設定預設學期範圍）</option>';
+            console.warn('可用學期列表為空');
             return;
           }
 
@@ -2205,7 +2212,7 @@
             return a.code.localeCompare(b.code);
           });
 
-          // 填充兩個下拉框
+          // 填充兩個下拉框（只顯示過濾後的學期）
           allSemesters.forEach(semester => {
             const option1 = document.createElement("option");
             option1.value = semester.id;
@@ -2217,15 +2224,55 @@
             option2.textContent = `${semester.code}${semester.is_active ? ' ' : ''}`;
             endSemesterSelect.appendChild(option2);
           });
+          
+          // 載入並設置預設學期範圍
+          await loadDefaultSemesterRange();
         } else {
-          console.error('學期列表API返回失敗:', result.message || '未知錯誤');
+          console.error('可用學期列表API返回失敗:', result.message || '未知錯誤');
           startSemesterSelect.innerHTML = `<option value="">載入失敗: ${result.message || '未知錯誤'}</option>`;
           endSemesterSelect.innerHTML = `<option value="">載入失敗: ${result.message || '未知錯誤'}</option>`;
         }
       } catch (error) {
-        console.error('載入學期列表失敗:', error);
+        console.error('載入可用學期列表失敗:', error);
         startSemesterSelect.innerHTML = `<option value="">載入失敗: ${error.message}</option>`;
         endSemesterSelect.innerHTML = `<option value="">載入失敗: ${error.message}</option>`;
+      }
+    }
+
+    // 🧩 載入預設學期範圍並自動設置
+    async function loadDefaultSemesterRange() {
+      try {
+        const res = await fetch('/api/absence/default_range');
+        const result = await res.json();
+        
+        if (result.success && result.defaultStart && result.defaultEnd) {
+          const startSemesterSelect = document.getElementById("startSemester");
+          const endSemesterSelect = document.getElementById("endSemester");
+          
+          if (!startSemesterSelect || !endSemesterSelect) {
+            console.warn('找不到學期選擇器，無法設置預設範圍');
+            return;
+          }
+          
+          // 根據學期代碼找到對應的學期ID
+          const startSemester = allSemesters.find(s => s.code === result.defaultStart);
+          const endSemester = allSemesters.find(s => s.code === result.defaultEnd);
+          
+          if (startSemester && endSemester) {
+            startSemesterSelect.value = startSemester.id;
+            endSemesterSelect.value = endSemester.id;
+            
+            console.log(`✅ 已設置預設學期範圍: ${result.defaultStart} - ${result.defaultEnd}`);
+            
+            // 自動觸發查詢缺勤記錄
+            await loadSemesterRangeAbsenceRecords(startSemester.id, endSemester.id);
+            await loadAbsenceStats();
+          } else {
+            console.warn(`⚠️ 找不到預設學期範圍對應的學期: ${result.defaultStart} - ${result.defaultEnd}`);
+          }
+        }
+      } catch (error) {
+        console.error('❌ 載入預設學期範圍失敗:', error);
       }
     }
 
@@ -2746,6 +2793,9 @@
         });
       }
 
+      // 初始化缺勤記錄加載標記（確保變量存在）
+      window.absenceDataLoadedFromResume = false;
+      
       // 先檢查是否有已提交的履歷
       const hasResume = await checkLatestResume();
       
@@ -2768,19 +2818,16 @@
       }
       
       loadResumeRecords();
-      // 載入學期列表（不自動載入缺勤記錄，需要先篩選學期）
+      // 載入學期列表
       loadSemesters();
-      // 不自動載入缺勤記錄列表和統計，需要先選擇學期範圍並點擊篩選按鈕
-      // loadAbsenceRecordsList(); // 已移除，改為在篩選學期後才顯示
-      // loadAbsenceStats(); // 已移除，改為在篩選學期後才顯示
       
-      // 初始化缺勤記錄顯示區域（顯示提示訊息）
+      // 初始化缺勤記錄顯示區域（顯示載入中）
       const absenceRecordsDisplay = document.getElementById("absenceRecordsDisplay");
       if (absenceRecordsDisplay) {
-        absenceRecordsDisplay.innerHTML = '<p class="text-muted text-center">請選擇學期範圍並點擊「篩選」按鈕以載入缺勤記錄</p>';
+        absenceRecordsDisplay.innerHTML = '<p class="text-muted text-center">載入缺勤記錄中...</p>';
       }
       
-      // 初始化缺勤統計（顯示 0）
+      // 初始化缺勤統計（顯示 0）- 這個會在載入缺勤記錄後自動更新
       const orderedKeys = ["曠課", "遲到", "事假", "病假", "生理假", "公假", "喪假"];
       orderedKeys.forEach(key => {
         const statElement = document.getElementById(`stat_${key}`);
@@ -2788,6 +2835,41 @@
           statElement.textContent = 0;
         }
       });
+      
+      // 等待學期列表載入完成後，自動載入缺勤記錄（無論是否有已提交履歷）
+      // 注意：loadDefaultSemesterRange 會在 loadSemesters 完成後自動調用，並自動查詢缺勤記錄
+      // 所以這裡只需要處理沒有預設範圍的情況
+      setTimeout(async () => {
+        try {
+          // 檢查是否已經有缺勤記錄被載入了（從 loadResumeData 或 loadDefaultSemesterRange）
+          const loadedFromResume = window.absenceDataLoadedFromResume === true;
+          const currentRecordsCount = allAbsenceRecords.length;
+          const startSemesterId = document.getElementById("startSemester")?.value || '';
+          const endSemesterId = document.getElementById("endSemester")?.value || '';
+          
+          // 如果已經有預設範圍被設置，則已經自動載入，不需要重複載入
+          if (startSemesterId && endSemesterId) {
+            console.log('✅ 已使用預設學期範圍載入缺勤記錄');
+            return;
+          }
+          
+          // 如果沒有從履歷資料中載入，且沒有預設範圍，則自動從資料庫載入所有缺勤記錄
+          if (!loadedFromResume || currentRecordsCount === 0) {
+            console.log('📥 沒有預設範圍，自動載入所有缺勤記錄（從資料庫）...');
+            // 自動載入所有缺勤記錄（不篩選學期）
+            await loadSemesterRangeAbsenceRecords('', '');
+            // 載入缺勤統計
+            await loadAbsenceStats();
+          } else {
+            console.log(`✅ 缺勤記錄已從履歷資料中載入（${currentRecordsCount} 筆），跳過自動載入`);
+          }
+        } catch (error) {
+          console.error('❌ 自動載入缺勤記錄失敗:', error);
+          if (absenceRecordsDisplay) {
+            absenceRecordsDisplay.innerHTML = '<p class="text-muted text-center">請選擇學期範圍並點擊「篩選」按鈕以載入缺勤記錄</p>';
+          }
+        }
+      }, 2500); // 等待學期列表和預設範圍載入完成
       
       // 確保所有圖片路徑在頁面載入時能夠恢復（從資料庫重新載入）
       // 這對於返回上一頁後再次進入頁面時特別重要

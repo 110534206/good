@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>缺勤預設學期範圍設定</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons/font/bootstrap-icons.css" rel="stylesheet">
+    <style>
+        body {
+            font-family: "Noto Sans TC", sans-serif;
+            background: #f7f9fc;
+        }
+        .container {
+            max-width: 800px;
+            margin: 2rem auto;
+            background: white;
+            padding: 2rem;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        }
+        .card {
+            border: none;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2 class="mb-4"><i class="bi bi-calendar-range"></i> 缺勤預設學期範圍設定</h2>
+        <p class="text-muted mb-4">
+            設定學生新增缺勤資訊時的預設學期範圍。學生進入缺勤資訊頁面時，會自動帶入此範圍進行查詢。
+        </p>
+
+        <div id="alertMessage" class="alert alert-dismissible fade show d-none" role="alert">
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            <span id="alertText"></span>
+        </div>
+
+        <div class="card">
+            <div class="card-body">
+                <form id="defaultRangeForm">
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label for="startSemester" class="form-label">預設開始學期</label>
+                            <select class="form-select" id="startSemester" name="startSemester" required>
+                                <option value="">載入中...</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="endSemester" class="form-label">預設結束學期</label>
+                            <select class="form-select" id="endSemester" name="endSemester" required>
+                                <option value="">載入中...</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="d-flex gap-2">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bi bi-save"></i> 保存設定
+                        </button>
+                        <button type="button" class="btn btn-secondary" onclick="loadCurrentSettings()">
+                            <i class="bi bi-arrow-clockwise"></i> 重新載入
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <div class="card mt-4">
+            <div class="card-body">
+                <h5 class="card-title">說明</h5>
+                <ul class="mb-0">
+                    <li>此設定會影響所有學生在新增缺勤資訊時看到的預設學期範圍</li>
+                    <li>例如：設定為「1122」到「1131」，學生進入頁面時會自動查詢此範圍內的缺勤記錄</li>
+                    <li>學生仍可手動調整學期範圍進行查詢</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        let allSemesters = [];
+
+        // 載入學期列表
+        async function loadSemesters() {
+            try {
+                const res = await fetch('/semester/api/list');
+                const result = await res.json();
+
+                const startSelect = document.getElementById('startSemester');
+                const endSelect = document.getElementById('endSemester');
+
+                startSelect.innerHTML = '<option value="">請選擇開始學期</option>';
+                endSelect.innerHTML = '<option value="">請選擇結束學期</option>';
+
+                if (result.success && result.semesters) {
+                    allSemesters = result.semesters.sort((a, b) => a.code.localeCompare(b.code));
+                    
+                    allSemesters.forEach(semester => {
+                        const option1 = document.createElement('option');
+                        option1.value = semester.code;
+                        option1.textContent = semester.code;
+                        startSelect.appendChild(option1);
+
+                        const option2 = document.createElement('option');
+                        option2.value = semester.code;
+                        option2.textContent = semester.code;
+                        endSelect.appendChild(option2);
+                    });
+
+                    // 載入當前設定
+                    await loadCurrentSettings();
+                }
+            } catch (error) {
+                console.error('載入學期列表失敗:', error);
+                showAlert('載入學期列表失敗', 'danger');
+            }
+        }
+
+        // 載入當前預設範圍設定
+        async function loadCurrentSettings() {
+            try {
+                const res = await fetch('/api/absence/default_range');
+                const result = await res.json();
+
+                if (result.success) {
+                    if (result.defaultStart) {
+                        document.getElementById('startSemester').value = result.defaultStart;
+                    }
+                    if (result.defaultEnd) {
+                        document.getElementById('endSemester').value = result.defaultEnd;
+                    }
+                }
+            } catch (error) {
+                console.error('載入當前設定失敗:', error);
+            }
+        }
+
+        // 保存設定
+        document.getElementById('defaultRangeForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const startCode = document.getElementById('startSemester').value;
+            const endCode = document.getElementById('endSemester').value;
+
+            if (!startCode || !endCode) {
+                showAlert('請選擇開始和結束學期', 'warning');
+                return;
+            }
+
+            // 檢查學期順序
+            const startSemester = allSemesters.find(s => s.code === startCode);
+            const endSemester = allSemesters.find(s => s.code === endCode);
+
+            if (startSemester && endSemester && startSemester.code > endSemester.code) {
+                showAlert('開始學期不能晚於結束學期', 'warning');
+                return;
+            }
+
+            try {
+                const res = await fetch('/api/absence/default_range', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        start: startCode,
+                        end: endCode
+                    })
+                });
+
+                const result = await res.json();
+
+                if (result.success) {
+                    showAlert('預設學期範圍已更新', 'success');
+                } else {
+                    showAlert(result.message || '更新失敗', 'danger');
+                }
+            } catch (error) {
+                console.error('保存設定失敗:', error);
+                showAlert('保存設定失敗', 'danger');
+            }
+        });
+
+        // 顯示提示訊息
+        function showAlert(message, type) {
+            const alertEl = document.getElementById('alertMessage');
+            const alertText = document.getElementById('alertText');
+            
+            alertText.textContent = message;
+            alertEl.className = `alert alert-${type} alert-dismissible fade show`;
+            alertEl.classList.remove('d-none');
+
+            setTimeout(() => {
+                alertEl.classList.add('d-none');
+            }, 3000);
+        }
+
+        // 頁面載入時初始化
+        document.addEventListener('DOMContentLoaded', () => {
+            loadSemesters();
+        });
+    </script>
+</body>
+</html>
