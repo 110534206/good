@@ -694,27 +694,66 @@ def get_vendor_resumes():
             preference_placeholders = ", ".join(["%s"] * len(company_ids))
             _ensure_history_table(cursor)  # 確保歷史表存在
             
-            cursor.execute(f"""
-                SELECT 
-                    sp.student_id, 
-                    sp.id AS preference_id,
-                    sp.company_id, 
-                    sp.job_id,
-                    sp.job_title,
-                    ic.company_name,
-                    COALESCE(ij.title, sp.job_title) AS job_title_display,
-                    CASE 
-                        WHEN sp.status = 'approved' AND NOT EXISTS (
-                            SELECT 1 FROM vendor_preference_history vph 
-                            WHERE vph.preference_id = sp.id AND vph.action = 'approve'
-                        ) THEN 'pending'
-                        ELSE COALESCE(sp.status, 'pending')
-                    END AS vendor_review_status
-                FROM student_preferences sp
-                JOIN internship_companies ic ON sp.company_id = ic.id
-                LEFT JOIN internship_jobs ij ON sp.job_id = ij.id
-                WHERE sp.company_id IN ({preference_placeholders})
-            """, tuple(company_ids))
+            # 檢查 vendor_preference_history 表是否存在
+            try:
+                cursor.execute("""
+                    SELECT COUNT(*) as count
+                    FROM information_schema.tables
+                    WHERE table_schema = DATABASE()
+                    AND table_name = 'vendor_preference_history'
+                """)
+                history_table_exists = cursor.fetchone().get('count', 0) > 0
+            except Exception:
+                history_table_exists = False
+            
+            # 根據表是否存在選擇不同的查詢
+            if history_table_exists:
+                cursor.execute(f"""
+                    SELECT 
+                        sp.student_id, 
+                        sp.id AS preference_id,
+                        sp.company_id, 
+                        sp.job_id,
+                        sp.job_title,
+                        ic.company_name,
+                        COALESCE(ij.title, sp.job_title) AS job_title_display,
+                        CASE 
+                            WHEN sp.status = 'approved' AND NOT EXISTS (
+                                SELECT 1 FROM vendor_preference_history vph 
+                                WHERE vph.preference_id = sp.id AND vph.action = 'approve'
+                            ) THEN 'pending'
+                            WHEN EXISTS (
+                                SELECT 1 FROM vendor_preference_history vph 
+                                WHERE vph.preference_id = sp.id AND vph.action = 'approve'
+                            ) THEN 'approved'
+                            WHEN EXISTS (
+                                SELECT 1 FROM vendor_preference_history vph 
+                                WHERE vph.preference_id = sp.id AND vph.action = 'reject'
+                            ) THEN 'rejected'
+                            ELSE COALESCE(sp.status, 'pending')
+                        END AS vendor_review_status
+                    FROM student_preferences sp
+                    JOIN internship_companies ic ON sp.company_id = ic.id
+                    LEFT JOIN internship_jobs ij ON sp.job_id = ij.id
+                    WHERE sp.company_id IN ({preference_placeholders})
+                """, tuple(company_ids))
+            else:
+                # 如果歷史表不存在，使用簡化的查詢
+                cursor.execute(f"""
+                    SELECT 
+                        sp.student_id, 
+                        sp.id AS preference_id,
+                        sp.company_id, 
+                        sp.job_id,
+                        sp.job_title,
+                        ic.company_name,
+                        COALESCE(ij.title, sp.job_title) AS job_title_display,
+                        COALESCE(sp.status, 'pending') AS vendor_review_status
+                    FROM student_preferences sp
+                    JOIN internship_companies ic ON sp.company_id = ic.id
+                    LEFT JOIN internship_jobs ij ON sp.job_id = ij.id
+                    WHERE sp.company_id IN ({preference_placeholders})
+                """, tuple(company_ids))
             
             # 使用字典儲存學生的志願申請，鍵為 student_id
             for pref in cursor.fetchall() or []:
@@ -729,26 +768,64 @@ def get_vendor_resumes():
             print("⚠️ 廠商沒有關聯公司，顯示所有志願序")
             _ensure_history_table(cursor)  # 確保歷史表存在
             
-            cursor.execute("""
-                SELECT 
-                    sp.student_id, 
-                    sp.id AS preference_id,
-                    sp.company_id, 
-                    sp.job_id,
-                    sp.job_title,
-                    ic.company_name,
-                    COALESCE(ij.title, sp.job_title) AS job_title_display,
-                    CASE 
-                        WHEN sp.status = 'approved' AND NOT EXISTS (
-                            SELECT 1 FROM vendor_preference_history vph 
-                            WHERE vph.preference_id = sp.id AND vph.action = 'approve'
-                        ) THEN 'pending'
-                        ELSE COALESCE(sp.status, 'pending')
-                    END AS vendor_review_status
-                FROM student_preferences sp
-                JOIN internship_companies ic ON sp.company_id = ic.id
-                LEFT JOIN internship_jobs ij ON sp.job_id = ij.id
-            """)
+            # 檢查 vendor_preference_history 表是否存在
+            try:
+                cursor.execute("""
+                    SELECT COUNT(*) as count
+                    FROM information_schema.tables
+                    WHERE table_schema = DATABASE()
+                    AND table_name = 'vendor_preference_history'
+                """)
+                history_table_exists = cursor.fetchone().get('count', 0) > 0
+            except Exception:
+                history_table_exists = False
+            
+            # 根據表是否存在選擇不同的查詢
+            if history_table_exists:
+                cursor.execute("""
+                    SELECT 
+                        sp.student_id, 
+                        sp.id AS preference_id,
+                        sp.company_id, 
+                        sp.job_id,
+                        sp.job_title,
+                        ic.company_name,
+                        COALESCE(ij.title, sp.job_title) AS job_title_display,
+                        CASE 
+                            WHEN sp.status = 'approved' AND NOT EXISTS (
+                                SELECT 1 FROM vendor_preference_history vph 
+                                WHERE vph.preference_id = sp.id AND vph.action = 'approve'
+                            ) THEN 'pending'
+                            WHEN EXISTS (
+                                SELECT 1 FROM vendor_preference_history vph 
+                                WHERE vph.preference_id = sp.id AND vph.action = 'approve'
+                            ) THEN 'approved'
+                            WHEN EXISTS (
+                                SELECT 1 FROM vendor_preference_history vph 
+                                WHERE vph.preference_id = sp.id AND vph.action = 'reject'
+                            ) THEN 'rejected'
+                            ELSE COALESCE(sp.status, 'pending')
+                        END AS vendor_review_status
+                    FROM student_preferences sp
+                    JOIN internship_companies ic ON sp.company_id = ic.id
+                    LEFT JOIN internship_jobs ij ON sp.job_id = ij.id
+                """)
+            else:
+                # 如果歷史表不存在，使用簡化的查詢
+                cursor.execute("""
+                    SELECT 
+                        sp.student_id, 
+                        sp.id AS preference_id,
+                        sp.company_id, 
+                        sp.job_id,
+                        sp.job_title,
+                        ic.company_name,
+                        COALESCE(ij.title, sp.job_title) AS job_title_display,
+                        COALESCE(sp.status, 'pending') AS vendor_review_status
+                    FROM student_preferences sp
+                    JOIN internship_companies ic ON sp.company_id = ic.id
+                    LEFT JOIN internship_jobs ij ON sp.job_id = ij.id
+                """)
             for pref in cursor.fetchall() or []:
                 student_id = pref['student_id']
                 if student_id not in preferences_map:
@@ -1491,6 +1568,148 @@ def delete_position_for_vendor(job_id):
         conn.close()
 
 
+def _record_admission_and_bind_relation(cursor, student_id, company_id, job_id=None, preference_order=None):
+    """
+    記錄錄取結果並自動綁定公司 ↔ 指導老師 ↔ 學生關係
+    優先採用學生第一志願（preference_order = 1）
+    """
+    try:
+        # 1. 驗證學生和公司是否存在
+        cursor.execute("SELECT id, name, username FROM users WHERE id = %s AND role = 'student'", (student_id,))
+        student = cursor.fetchone()
+        if not student:
+            return {"success": False, "message": "找不到該學生"}
+        
+        cursor.execute("SELECT id, company_name, advisor_user_id FROM internship_companies WHERE id = %s", (company_id,))
+        company = cursor.fetchone()
+        if not company:
+            return {"success": False, "message": "找不到該公司"}
+        
+        # 2. 獲取指導老師ID（從公司的 advisor_user_id）
+        advisor_user_id = company.get('advisor_user_id')
+        if not advisor_user_id:
+            return {"success": False, "message": "該公司尚未指派指導老師"}
+        
+        # 驗證指導老師是否存在
+        cursor.execute("SELECT id, name FROM users WHERE id = %s AND role IN ('teacher', 'director')", (advisor_user_id,))
+        advisor = cursor.fetchone()
+        if not advisor:
+            return {"success": False, "message": "找不到該指導老師"}
+        
+        # 3. 優先採用學生第一志願（preference_order = 1）
+        # 如果當前錄取的不是第一志願，查找學生的第一志願
+        if preference_order != 1:
+            cursor.execute("""
+                SELECT id, company_id, job_id, preference_order, status
+                FROM student_preferences
+                WHERE student_id = %s AND preference_order = 1
+                ORDER BY submitted_at DESC
+                LIMIT 1
+            """, (student_id,))
+            first_preference = cursor.fetchone()
+            
+            if first_preference and first_preference.get('status') != 'approved':
+                # 使用第一志願的公司和職缺（僅當第一志願尚未被錄取時）
+                first_company_id = first_preference['company_id']
+                first_job_id = first_preference.get('job_id')
+                
+                # 重新獲取第一志願的公司資訊
+                cursor.execute("SELECT id, company_name, advisor_user_id FROM internship_companies WHERE id = %s", (first_company_id,))
+                first_company = cursor.fetchone()
+                
+                if first_company and first_company.get('advisor_user_id'):
+                    # 如果第一志願的公司有指導老師，使用第一志願
+                    company_id = first_company_id
+                    job_id = first_job_id
+                    preference_order = 1
+                    company = first_company
+                    advisor_user_id = first_company.get('advisor_user_id')
+                    cursor.execute("SELECT id, name FROM users WHERE id = %s AND role IN ('teacher', 'director')", (advisor_user_id,))
+                    advisor = cursor.fetchone()
+        
+        # 4. 設置學期代碼為 1132（固定值）
+        semester_code = '1132'
+        
+        # 5. 檢查是否已經存在該關係（避免重複）
+        cursor.execute("""
+            SELECT id FROM teacher_student_relations 
+            WHERE teacher_id = %s AND student_id = %s AND semester = %s
+        """, (advisor_user_id, student_id, semester_code))
+        existing_relation = cursor.fetchone()
+        
+        if existing_relation:
+            # 如果已存在，更新 created_at 為當天日期（媒合時間）
+            cursor.execute("""
+                UPDATE teacher_student_relations 
+                SET created_at = CURDATE()
+                WHERE id = %s
+            """, (existing_relation['id'],))
+        else:
+            # 6. 創建師生關係記錄
+            cursor.execute("""
+                INSERT INTO teacher_student_relations 
+                (teacher_id, student_id, semester, role, created_at)
+                VALUES (%s, %s, %s, '指導老師', CURDATE())
+            """, (advisor_user_id, student_id, semester_code))
+        
+        # 7. 在 internship_experiences 表中記錄錄取結果（廠商確認的錄取結果）
+        if job_id:
+            # 檢查是否已存在該記錄
+            cursor.execute("""
+                SELECT id FROM internship_experiences
+                WHERE user_id = %s AND company_id = %s AND job_id = %s
+            """, (student_id, company_id, job_id))
+            existing_exp = cursor.fetchone()
+            
+            if not existing_exp:
+                # 獲取當前年度（民國年）
+                current_year = datetime.now().year - 1911
+                cursor.execute("""
+                    INSERT INTO internship_experiences
+                    (user_id, company_id, job_id, year, content, is_public, created_at)
+                    VALUES (%s, %s, %s, %s, '已錄取', 0, NOW())
+                """, (student_id, company_id, job_id, current_year))
+        else:
+            # 即使沒有 job_id，也記錄公司錄取結果（使用 NULL job_id）
+            cursor.execute("""
+                SELECT id FROM internship_experiences
+                WHERE user_id = %s AND company_id = %s AND job_id IS NULL
+            """, (student_id, company_id))
+            existing_exp = cursor.fetchone()
+            
+            if not existing_exp:
+                # 獲取當前年度（民國年）
+                current_year = datetime.now().year - 1911
+                cursor.execute("""
+                    INSERT INTO internship_experiences
+                    (user_id, company_id, job_id, year, content, is_public, created_at)
+                    VALUES (%s, %s, NULL, %s, '已錄取', 0, NOW())
+                """, (student_id, company_id, current_year))
+        
+        # 8. 更新學生的第一志願狀態為 approved（如果 preference_order = 1 且尚未被錄取）
+        if preference_order == 1:
+            cursor.execute("""
+                UPDATE student_preferences
+                SET status = 'approved'
+                WHERE student_id = %s AND preference_order = 1 AND status != 'approved'
+            """, (student_id,))
+        
+        return {
+            "success": True,
+            "message": f"錄取結果已記錄，已自動綁定指導老師 {advisor['name']} 與學生 {student['name']}",
+            "teacher_id": advisor_user_id,
+            "teacher_name": advisor['name'],
+            "student_id": student_id,
+            "student_name": student['name'],
+            "company_id": company_id,
+            "company_name": company['company_name'],
+            "preference_order": preference_order
+        }
+    except Exception as e:
+        traceback.print_exc()
+        return {"success": False, "message": f"記錄錄取結果失敗: {str(e)}"}
+
+
 def _handle_status_update(application_id, action):
     """處理志願申請狀態的通用更新函數"""
     if "user_id" not in session or session.get("role") != "vendor":
@@ -1525,10 +1744,40 @@ def _handle_status_update(application_id, action):
 
         if action in status_map:
             new_status = status_map[action]
+            
+            # 如果是錄取操作，先獲取申請詳情（包含 preference_order）
+            preference_order = None
+            job_id = None
+            if action == "approve":
+                # 獲取申請詳情以獲取 preference_order 和 job_id
+                cursor.execute("""
+                    SELECT preference_order, job_id, company_id
+                    FROM student_preferences
+                    WHERE id = %s
+                """, (application_id,))
+                pref_info = cursor.fetchone()
+                if pref_info:
+                    preference_order = pref_info.get('preference_order')
+                    job_id = pref_info.get('job_id')
+                    company_id = pref_info.get('company_id')
+            
             cursor.execute(
                 "UPDATE student_preferences SET status = %s WHERE id = %s",
                 (new_status, application_id),
             )
+            
+            # 如果是錄取操作，自動記錄錄取結果並綁定關係
+            if action == "approve":
+                admission_result = _record_admission_and_bind_relation(
+                    cursor,
+                    access["student_id"],
+                    company_id,
+                    job_id,
+                    preference_order
+                )
+                if not admission_result.get("success"):
+                    # 記錄警告但不阻止錄取操作
+                    print(f"⚠️ 錄取結果記錄失敗: {admission_result.get('message')}")
             
             # 發送通知
             title = "履歷審核結果"
@@ -1621,7 +1870,7 @@ def get_announcement_history():
         # 從通知記錄中獲取廠商發布的公告（只顯示公告，排除面試通知、錄取通知等）
         if company_ids:
             placeholders = ", ".join(["%s"] * len(company_ids))
-            # 只查詢標題中包含「公告」的記錄，排除「面試通知」、「錄取通知」等
+            # 查詢類別為 "announcement" 的記錄，或標題中包含「公告」的記錄（兼容舊數據）
             cursor.execute(f"""
                 SELECT 
                     n.title,
@@ -1629,8 +1878,7 @@ def get_announcement_history():
                     n.created_at,
                     COUNT(DISTINCT n.user_id) AS recipient_count
                 FROM notifications n
-                WHERE n.category = 'company'
-                  AND n.title LIKE '%公告%'
+                WHERE (n.category = 'announcement' OR (n.category = 'company' AND n.title LIKE '%公告%'))
                   AND n.title NOT LIKE '%面試通知%'
                   AND n.title NOT LIKE '%錄取通知%'
                   AND EXISTS (
@@ -1749,8 +1997,8 @@ def publish_announcement():
         # 標題格式：【公司名稱】公告：標題，以便在查詢時區分公告和通知
         notification_title = f"【{company_name}】公告：{title}"
         notification_message = content
-        link_url = "/notifications"
-        category = "company"
+        link_url = "/notifications"  # 連結到通知中心，學生可以在那裡查看所有公告
+        category = "announcement"  # 使用 "announcement" 類別，讓學生可以在通知中心通過「公告」類別篩選看到
 
         notification_count = 0
         for student_id in student_ids:

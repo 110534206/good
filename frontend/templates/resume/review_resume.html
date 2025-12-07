@@ -23,7 +23,7 @@
     }
 
     .topbar {
-      max-width: 1200px;
+      max-width: 1800px;
       margin: 0 auto;
       padding: 18px 24px;
       display: flex;
@@ -65,7 +65,7 @@
     }
 
     main {
-      max-width: 1200px;
+      max-width: 1800px;
       margin: 24px auto 60px;
       padding: 0 24px;
       display: flex;
@@ -96,7 +96,8 @@
     }
 
     .table-wrapper {
-      overflow-x: auto;
+      overflow-x: visible;
+      width: 100%;
     }
 
     .table-wrapper table tbody tr:hover {
@@ -290,7 +291,7 @@
       </div>
 
       <div class="table-wrapper">
-        <table style="width: 100%; border-collapse: collapse; min-width: 1000px;">
+        <table style="width: 100%; border-collapse: collapse;">
           <thead style="background: #f1f5f9;">
             <tr>
               <th style="padding: 14px 16px; text-align: left; border-bottom: 1px solid #e2e8f0; font-weight: 600;">學生帳號</th>
@@ -339,14 +340,9 @@
     <nav id="side-menu" aria-hidden="true" role="navigation" aria-label="功能選單">
       <button id="close-btn" aria-label="關閉功能選單">×</button>
       <h2>功能選單</h2>
-      <a href="/vendor_home">首頁</a>
-      <a href="/profile">個人資料</a>
-      <a href="/vendor/resume-review">學生履歷審核</a>
-      <a href="/manage_positions">職位需求管理</a>
-      <a href="/confirm_matching">媒合結果</a>
-      <a href="/publish_announcements">發布公告</a>
-      <a href="/reviews_resumes_notifications">查看履歷與通知</a>
-      <a href="/logout">登出</a>
+      <div id="menu-content">
+        <!-- 選單內容將根據用戶角色動態生成 -->
+      </div>
     </nav>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
@@ -358,6 +354,7 @@
       let currentPage = 1;
       const rowsPerPage = 10;
       let userRole = null; // 儲存用戶角色
+      let isHomeroom = false; // 儲存是否為班導師
 
       // ------------------------------------
       // 狀態轉換函式 (已修正：統一使用 pending 作為待審核狀態)
@@ -400,12 +397,21 @@
       let currentUserId = null; // 儲存當前用戶 ID
 
       document.addEventListener("DOMContentLoaded", () => {
+        // 先顯示預設選單（老師選單），等獲取到用戶角色後再更新
+        userRole = 'teacher'; // 預設為老師
+        isHomeroom = false; // 預設不是班導師
+        renderMenu();
+        
         // 先獲取用戶角色，根據角色調用不同的 API
         fetch('/api/profile')
           .then(res => res.json())
           .then(profileData => {
             userRole = profileData.success && profileData.user ? profileData.user.role : null;
             currentUserId = profileData.success && profileData.user ? profileData.user.id : null;
+            isHomeroom = profileData.success && profileData.user ? (profileData.user.is_homeroom === true) : false;
+            
+            // 根據角色生成選單
+            renderMenu();
             
             let apiUrl;
             let companyApiUrl = '/api/get_reviewed_companies';
@@ -423,9 +429,32 @@
             
             // 載入履歷資料
             Promise.all([
-              fetch(apiUrl).then(res => res.json()),
-              userRole === 'vendor' ? Promise.resolve({success: true, companies: []}) : fetch(companyApiUrl).then(res => res.json()),
-              userRole === 'vendor' ? fetch('/vendor/api/positions').then(res => res.json()) : Promise.resolve({success: true, items: []})
+              fetch(apiUrl).then(async res => {
+                if (!res.ok) {
+                  const errorText = await res.text();
+                  let errorMessage = "伺服器錯誤";
+                  try {
+                    const errorJson = JSON.parse(errorText);
+                    errorMessage = errorJson.message || errorMessage;
+                  } catch (e) {
+                    errorMessage = `HTTP ${res.status}: ${errorText.substring(0, 100)}`;
+                  }
+                  return {success: false, message: errorMessage};
+                }
+                return res.json();
+              }),
+              userRole === 'vendor' ? Promise.resolve({success: true, companies: []}) : fetch(companyApiUrl).then(async res => {
+                if (!res.ok) {
+                  return {success: true, companies: []};
+                }
+                return res.json();
+              }),
+              userRole === 'vendor' ? fetch('/vendor/api/positions').then(async res => {
+                if (!res.ok) {
+                  return {success: true, items: []};
+                }
+                return res.json();
+              }) : Promise.resolve({success: true, items: []})
             ])
               .then(([resumeData, companyData, positionData]) => {
                 if (resumeData.success) {
@@ -498,6 +527,10 @@
           })
           .catch(error => {
             console.error("獲取用戶資料失敗:", error);
+            // 如果獲取用戶資料失敗，預設為老師角色並生成選單
+            userRole = 'teacher';
+            isHomeroom = false;
+            renderMenu();
             // 如果獲取用戶資料失敗，使用預設 API
             const urlParams = new URLSearchParams(window.location.search);
             const mode = urlParams.get('mode');
@@ -707,22 +740,22 @@
           const jobTitle = r.job_title || r.jobTitle || '';
           const row = `
         <tr style="border-bottom: 1px solid #e2e8f0;">
-          <td style="padding: 14px 16px; vertical-align: middle;">${r.username}</td>
-          <td style="padding: 14px 16px; vertical-align: middle;">${escapeHtml(r.name || '')}</td>
-          <td style="padding: 14px 16px; vertical-align: middle;">${r.upload_time}</td>
-          <td style="padding: 14px 16px; vertical-align: middle;">${escapeHtml(r.original_filename)}</td>
-          <td style="padding: 14px 16px; vertical-align: middle;">${escapeHtml(companyName) || '<span style="color: #64748b;">—</span>'}</td>
-          <td style="padding: 14px 16px; vertical-align: middle;">${escapeHtml(jobTitle) || '<span style="color: #64748b;">—</span>'}</td>
-          <td style="padding: 14px 16px; vertical-align: middle;"><span class="status-badge bg-${statusColor(r.status)}">${mapStatus(r.status)}</span></td>
-          <td style="padding: 14px 16px; vertical-align: middle;">
+          <td style="padding: 14px 16px; vertical-align: middle; white-space: nowrap;">${r.username}</td>
+          <td style="padding: 14px 16px; vertical-align: middle; white-space: nowrap;">${escapeHtml(r.name || '')}</td>
+          <td style="padding: 14px 16px; vertical-align: middle; white-space: nowrap;">${r.upload_time}</td>
+          <td style="padding: 14px 16px; vertical-align: middle; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 300px;">${escapeHtml(r.original_filename)}</td>
+          <td style="padding: 14px 16px; vertical-align: middle; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 200px;">${escapeHtml(companyName) || '<span style="color: #64748b;">—</span>'}</td>
+          <td style="padding: 14px 16px; vertical-align: middle; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 200px;">${escapeHtml(jobTitle) || '<span style="color: #64748b;">—</span>'}</td>
+          <td style="padding: 14px 16px; vertical-align: middle; white-space: nowrap;"><span class="status-badge bg-${statusColor(r.status)}">${mapStatus(r.status)}</span></td>
+          <td style="padding: 14px 16px; vertical-align: middle; white-space: nowrap;">
             <button class="btn btn-sm btn-outline-secondary ${r.comment ? 'text-success' : ''}"
               onclick="openCommentModal(${r.id}, '${escapeHtml(r.comment || '')}')"
               style="padding: 6px 12px; border-radius: 6px; border: 1px solid #e2e8f0; background: #fff; cursor: pointer; font-size: 0.875rem;">
               ${r.comment ? '已填寫' : '未填寫'}
             </button>
           </td>
-          <td style="padding: 14px 16px; vertical-align: middle;">
-            <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+          <td style="padding: 14px 16px; vertical-align: middle; white-space: nowrap;">
+            <div style="display: flex; gap: 8px; flex-wrap: nowrap;">
          <a href="/api/download_resume/${r.id}" style="padding: 6px 12px; border-radius: 6px; border: 1px solid #0066cc; background: #fff; color: #0066cc; text-decoration: none; font-size: 0.875rem; display: inline-block;" target="_blank">下載</a>
          <button type="button" style="padding: 6px 12px; border-radius: 6px; border: 1px solid #dc2626; background: #fff; color: #dc2626; cursor: pointer; font-size: 0.875rem;" onclick="rejectResume(${r.id}, ${preferenceId ? preferenceId : 'null'})">退件</button>
          <button type="button" style="padding: 6px 12px; border-radius: 6px; border: 1px solid #16a34a; background: #fff; color: #16a34a; cursor: pointer; font-size: 0.875rem;" onclick="approveResume(${r.id}, ${preferenceId ? preferenceId : 'null'})">完成</button>
@@ -1039,12 +1072,96 @@
       }
 
 
+      // 根據用戶角色生成選單
+      function renderMenu() {
+        const menuContent = document.getElementById('menu-content');
+        if (!menuContent) return;
+
+        let menuItems = [];
+        
+        if (userRole === 'vendor') {
+          // 廠商選單
+          menuItems = [
+            { href: '/vendor_home', text: '首頁' },
+            { href: '/profile', text: '個人資料' },
+            { href: '/vendor/resume-review', text: '學生履歷審核' },
+            { href: '/manage_positions', text: '職位需求管理' },
+            { href: '/confirm_matching', text: '媒合結果' },
+            { href: '/publish_announcements', text: '發布公告' },
+            { href: '/reviews_resumes_notifications', text: '查看履歷與通知' },
+            { href: '/login', text: '登出' }
+          ];
+        } else if (isHomeroom && (userRole === 'teacher' || userRole === 'director')) {
+          // 班導師選單
+          menuItems = [
+            { href: '/class_teacher_home', text: '首頁' },
+            { href: '/profile', text: '個人資料' },
+            { href: '/review_resume', text: '查看學生履歷' },
+            { href: '/review_preferences', text: '審核志願序' },
+            { href: '/admission/results', text: '查詢學生錄取結果' },
+            { href: '/notifications', text: '通知' },
+            { href: '/login', text: '登出' }
+          ];
+        } else if (userRole === 'teacher') {
+          // 指導老師選單
+          menuItems = [
+            { href: '/teacher_home', text: '首頁' },
+            { href: '/profile', text: '個人資料' },
+            { href: '/upload_company', text: '建立實習機會' },
+            { href: '/admission_results', text: '查看錄取結果' },
+            { href: '/manage_vendor', text: '實習廠商管理' },
+            { href: '/notifications', text: '查看公告' },
+            { href: '/review_resume', text: '學生履歷審核' },
+            { href: '/login', text: '登出' }
+          ];
+        } else if (userRole === 'director') {
+          // 主任選單（與指導老師相同）
+          menuItems = [
+            { href: '/teacher_home', text: '首頁' },
+            { href: '/profile', text: '個人資料' },
+            { href: '/upload_company', text: '建立實習機會' },
+            { href: '/admission_results', text: '查看錄取結果' },
+            { href: '/manage_vendor', text: '實習廠商管理' },
+            { href: '/notifications', text: '查看公告' },
+            { href: '/review_resume', text: '學生履歷審核' },
+            { href: '/login', text: '登出' }
+          ];
+        } else {
+          // 預設選單（其他角色）
+          menuItems = [
+            { href: '/teacher_home', text: '首頁' },
+            { href: '/profile', text: '個人資料' },
+            { href: '/review_resume', text: '學生履歷審核' },
+            { href: '/login', text: '登出' }
+          ];
+        }
+
+        menuContent.innerHTML = menuItems.map(item => 
+          `<a href="${item.href}">${item.text}</a>`
+        ).join('');
+      }
+
       // 側邊選單控制
       document.getElementById('menu-btn').addEventListener('click', () => {
         document.getElementById('side-menu').classList.add('open');
+        document.getElementById('side-menu').setAttribute('aria-hidden', 'false');
       });
+      
       document.getElementById('close-btn').addEventListener('click', () => {
         document.getElementById('side-menu').classList.remove('open');
+        document.getElementById('side-menu').setAttribute('aria-hidden', 'true');
+      });
+
+      // 點擊選單外部關閉選單
+      document.addEventListener('click', (e) => {
+        const sideMenu = document.getElementById('side-menu');
+        const menuBtn = document.getElementById('menu-btn');
+        if (sideMenu && menuBtn) {
+          if (!sideMenu.contains(e.target) && !menuBtn.contains(e.target) && sideMenu.classList.contains('open')) {
+            sideMenu.classList.remove('open');
+            sideMenu.setAttribute('aria-hidden', 'true');
+          }
+        }
       });
     </script>
 </body>

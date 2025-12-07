@@ -17,15 +17,58 @@
       padding: 0;
     }
 
-    header {
-      background: #0454a3;
-      color: white;
-      padding: 1rem 2rem;
-      text-align: center;
-      font-size: 1.5rem;
+    /* 頂部欄樣式 */
+    .top-bar {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 60px;
+      background-color: #0454a3;
+      z-index: 1100;
+      display: flex;
+      align-items: center;
+      box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
+    }
+
+    .top-bar-content {
+      max-width: 1000px;
+      width: 100%;
+      margin: 0 auto;
+      padding: 0 24px;
       display: flex;
       justify-content: space-between;
       align-items: center;
+      height: 100%;
+    }
+
+    .top-bar-left #menu-btn {
+      width: 30px;
+      height: 22px;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      background: none;
+      border: none;
+      padding: 0;
+    }
+
+    .top-bar-left #menu-btn span {
+      display: block;
+      width: 100%;
+      height: 3px;
+      background-color: white;
+      border-radius: 2px;
+      transition: all 0.3s ease;
+    }
+
+    .top-bar-title {
+      color: white;
+      font-size: 1.5rem;
+      font-weight: 600;
+      flex: 1;
+      text-align: center;
     }
 
     :root {
@@ -42,6 +85,7 @@
       background: linear-gradient(180deg, #f0f4f8, #e8f0f8 120px);
       margin: 0;
       padding: 0;
+      padding-top: 60px;
       min-height: 100vh;
     }
 
@@ -322,17 +366,91 @@
       border: 1px solid #e6eefb;
       background: white;
     }
+
+    /* 側邊選單樣式 */
+    #side-menu {
+      position: fixed;
+      top: 0;
+      left: 0;
+      height: 100vh;
+      width: 320px;
+      max-width: 80vw;
+      background-color: rgba(10, 10, 10, 0.95);
+      backdrop-filter: blur(6px);
+      box-shadow: 3px 0 12px rgb(0 0 0 / 0.7);
+      padding: 2rem 1.5rem;
+      transform: translateX(-100%);
+      transition: transform 0.3s ease-in-out;
+      z-index: 1300;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      color: white;
+      user-select: none;
+    }
+
+    #side-menu.open {
+      transform: translateX(0);
+    }
+
+    #close-btn {
+      position: absolute;
+      top: 2rem;
+      right: 1.6rem;
+      font-size: 2.2rem;
+      background: none;
+      border: none;
+      color: white;
+      cursor: pointer;
+      line-height: 1;
+      width: 2.5rem;
+      height: 2.5rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    #side-menu h2 {
+      width: 100%;
+      margin-bottom: 1.5rem;
+      font-weight: 700;
+      font-size: 1.5rem;
+      text-align: left;
+    }
+
+    #side-menu a {
+      display: block;
+      width: 100%;
+      padding: 0.5rem 0;
+      font-size: 1.1rem;
+      color: #ddd;
+      text-decoration: none;
+      border-radius: 4px;
+      transition: background-color 0.2s ease;
+    }
+
+    #side-menu a:hover {
+      background-color: rgba(255, 255, 255, 0.15);
+      color: white;
+    }
   </style>
 </head>
 
 <body>
-  <header>
-    <div style="flex: 1;"></div>
-    <div style="flex: 1; text-align: center;">智慧實習平台 | 通知中心</div>
-    <div style="flex: 1; text-align: right;">
-      <a href="/ta_home" class="btn btn-outline-light" style="font-size: 1rem; padding: 0.5rem 1rem;">返回首頁</a>
+  <!-- 頂部欄 -->
+  <div class="top-bar">
+    <div class="top-bar-content">
+      <div class="top-bar-left">
+        <button id="menu-btn" title="選單" role="button" tabindex="0" aria-label="開啟側邊選單">
+          <span></span>
+          <span></span>
+          <span></span>
+        </button>
+      </div>
+      <div class="top-bar-title">智慧實習平台 | 通知中心</div>
+      <div style="width: 30px;"></div> <!-- 佔位元素，保持標題置中 -->
     </div>
-  </header>
+  </div>
   <div class="container">
 
     <div class="app-shell">
@@ -367,8 +485,8 @@
               class="bi-arrow-clockwise"></i></button>
         </div>
 
-        <div class="d-flex gap-2 flex-wrap mb-3" id="categoryFilter">
-          <label class="small muted me-1">類別</label>
+        <div class="d-flex gap-2 flex-wrap mb-3 align-items-center" id="categoryFilter">
+          <label class="small muted me-1 mb-0" style="line-height: 1.5;">類別</label>
           <div class="chip outline active" data-category="all">全部通知</div>
           <div class="chip outline" data-category="announcement">公告</div>
           <div class="chip outline" data-category="resume">履歷</div>
@@ -381,6 +499,20 @@
 
     </div>
   </div>
+
+  <!-- 側邊選單 -->
+  <nav id="side-menu" aria-hidden="true" role="navigation" aria-label="功能選單">
+    <button id="close-btn" aria-label="關閉功能選單">×</button>
+    <h2>功能選單</h2>
+    <a href="/teacher_home">首頁</a>
+    <a href="/profile">個人資料</a>
+    <a href="/upload_company">建立實習機會</a>
+    <a href="/admission_results">查看錄取結果</a>
+    <a href="/manage_vendor">實習廠商管理</a>
+    <a href="/notifications">查看公告</a>
+    <a href="/review_resume">學生履歷審核</a>
+    <a href="/login">登出</a>
+  </nav>
 
   <div class="modal fade" id="notifModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-lg modal-dialog-centered">
@@ -432,7 +564,12 @@
     }
 
     // helper: 將類別轉換為中文顯示
-    function getCategoryLabel(category) {
+    function getCategoryLabel(category, title = '') {
+      // 如果標題包含「公告」，優先顯示為「公告」（兼容舊數據）
+      if (title && title.includes('公告') && !title.includes('面試通知') && !title.includes('錄取通知')) {
+        return '公告';
+      }
+      
       const categoryMap = {
         'announcement': '公告',
         'resume': '履歷',
@@ -465,17 +602,26 @@
           return;
         }
 
-        allNotifications = data.notifications.map(n => ({
-          id: n.id,
-          title: n.title || '(無標題)',
-          message: n.message || '',
-          category: n.category || 'general',
-          tags: n.tags || (n.tag ? [n.tag] : []),
-          is_read: !!n.is_read,
-          created_at: n.created_at || n.createdAt || new Date().toISOString(),
-          url: n.url || n.link || null,
-          meta: n.meta || {}
-        }));
+        allNotifications = data.notifications.map(n => {
+          const title = n.title || '(無標題)';
+          const category = n.category || 'general';
+          // 如果標題包含「公告」，將類別設為 "announcement"（兼容舊數據）
+          const finalCategory = (title.includes('公告') && !title.includes('面試通知') && !title.includes('錄取通知')) 
+            ? 'announcement' 
+            : category;
+          
+          return {
+            id: n.id,
+            title: title,
+            message: n.message || '',
+            category: finalCategory,
+            tags: n.tags || (n.tag ? [n.tag] : []),
+            is_read: !!n.is_read,
+            created_at: n.created_at || n.createdAt || new Date().toISOString(),
+            url: n.url || n.link || null,
+            meta: n.meta || {}
+          };
+        });
 
         allNotifications.forEach(n => { n.pinned = pinnedSet.has(String(n.id)); });
 
@@ -499,7 +645,18 @@
 
       // 1. 篩選
       visibleNotifications = allNotifications.filter(n => {
-        if (currentCategoryFilter !== 'all' && n.category !== currentCategoryFilter) return false;
+        // 類別篩選：如果選擇「公告」，也要包含標題包含「公告」的通知（兼容舊數據）
+        if (currentCategoryFilter !== 'all') {
+          if (currentCategoryFilter === 'announcement') {
+            // 公告類別：category 為 "announcement" 或標題包含「公告」（排除面試通知、錄取通知）
+            const isAnnouncement = n.category === 'announcement' || 
+              (n.title.includes('公告') && !n.title.includes('面試通知') && !n.title.includes('錄取通知'));
+            if (!isAnnouncement) return false;
+          } else {
+            // 其他類別：嚴格匹配
+            if (n.category !== currentCategoryFilter) return false;
+          }
+        }
         if (currentReadFilter === 'unread' && n.is_read) return false;
         if (currentReadFilter === 'read' && !n.is_read) return false;
         if (currentReadFilter === 'pinned' && !n.pinned) return false;
@@ -593,7 +750,7 @@
           }
           t.innerHTML = `${tagHtml} ${n.title}`;
           const meta = document.createElement('div'); meta.className = 'notif-meta d-flex justify-content-between align-items-center';
-          meta.innerHTML = `<div class="small muted">${getCategoryLabel(n.category)}</div><div class="small muted">${formatDateTime(n.created_at)}</div>`;
+          meta.innerHTML = `<div class="small muted">${getCategoryLabel(n.category, n.title)}</div><div class="small muted">${formatDateTime(n.created_at)}</div>`;
 
           body.appendChild(t);
           body.appendChild(meta);
@@ -677,7 +834,7 @@
       modalTitle.innerText = n.title;
       // 顯示通知內容
       modalBody.innerHTML = `
-        <div class="small muted mb-2">時間: ${formatDateTime(n.created_at)} | 類別: ${getCategoryLabel(n.category)}</div>
+        <div class="small muted mb-2">時間: ${formatDateTime(n.created_at)} | 類別: ${getCategoryLabel(n.category, n.title)}</div>
         <p style="white-space:pre-wrap;">${n.message}</p>
       `;
 
@@ -761,6 +918,39 @@
     (async function init() {
       await loadNotifications();
       // 【移除】refreshTagList();
+
+      // 側邊選單控制
+      const menuBtn = document.getElementById('menu-btn');
+      const sideMenu = document.getElementById('side-menu');
+      const closeBtn = document.getElementById('close-btn');
+
+      if (menuBtn) {
+        menuBtn.addEventListener('click', () => {
+          if (sideMenu) {
+            sideMenu.classList.add('open');
+            sideMenu.setAttribute('aria-hidden', 'false');
+          }
+        });
+      }
+
+      if (closeBtn) {
+        closeBtn.addEventListener('click', () => {
+          if (sideMenu) {
+            sideMenu.classList.remove('open');
+            sideMenu.setAttribute('aria-hidden', 'true');
+          }
+        });
+      }
+
+      // 點擊選單外部關閉選單
+      document.addEventListener('click', (e) => {
+        if (sideMenu && menuBtn) {
+          if (!sideMenu.contains(e.target) && !menuBtn.contains(e.target) && sideMenu.classList.contains('open')) {
+            sideMenu.classList.remove('open');
+            sideMenu.setAttribute('aria-hidden', 'true');
+          }
+        }
+      });
     })();
 
   </script>

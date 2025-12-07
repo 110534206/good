@@ -3310,7 +3310,7 @@ def get_class_resumes():
                 )
                 ORDER BY c.name, u.name
             """
-            sql_params = (user_id, user_id, user_id, user_id, user_id)
+            sql_params = (user_id, user_id, user_id, user_id, user_id, user_id)
 
 
             cursor.execute(sql_query, sql_params)
