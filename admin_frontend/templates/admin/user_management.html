@@ -110,8 +110,8 @@
         }
 
         .action-btns {
-            min-width: 200px;
-            /* 確保操作按鈕區域足夠寬 */
+            min-width: 300px;
+            /* 確保操作按鈕區域足夠寬（增加寬度以容納文字標籤） */
             text-align: left;
         }
 
@@ -297,8 +297,6 @@
                 </div>
                 <div class="modal-body">
                     <input type="hidden" id="assignTeacherId">
-                    <p class="text-danger"><i class="bi bi-exclamation-triangle"></i>
-                        注意：目前功能僅支援指派**一個**班級，新的指派會覆蓋舊的帶班紀錄。</p>
                     <div class="mb-3">
                         <label for="assignTeacherClassSelect" class="form-label">選擇帶班班級</label>
                         <select class="form-select" id="assignTeacherClassSelect">
@@ -575,10 +573,10 @@
                           <div class="d-flex gap-1 justify-content-start">
                             <button class="btn btn-sm btn-info text-white" onclick="openViewDetailModal(${user.id})" title="查看詳情"><i class="bi bi-info-circle"></i> 詳情</button>
                             ${approveButton}
-                            <button class="btn btn-sm btn-warning" onclick="openEditModal(${user.id}, '${escapeHtml(user.username).replace(/'/g, "\\'")}', '${escapeHtml(user.name || '').replace(/'/g, "\\'")}', '${escapeHtml(user.email || '').replace(/'/g, "\\'")}', '${user.role}', '${user.class_id || ''}')" title="編輯"><i class="bi bi-pencil"></i></button>
-                            <button class="btn btn-sm btn-danger" onclick="deleteUser(${user.id})" title="刪除"><i class="bi bi-trash"></i></button>
-                            ${user.role === 'student' ? `<button class="btn btn-sm btn-outline-primary" onclick="openAssignStudentClass(${user.id})" title="設班級"><i class="bi bi-person-badge"></i></button>` : ''}
-                            ${['teacher', 'director'].includes(user.role) ? `<button class="btn btn-sm btn-outline-secondary" onclick="openAssignTeacherClass(${user.id})" title="設帶班"><i class="bi bi-diagram-3"></i></button>` : ''}
+                            <button class="btn btn-sm btn-warning" onclick="openEditModal(${user.id}, '${escapeHtml(user.username).replace(/'/g, "\\'")}', '${escapeHtml(user.name || '').replace(/'/g, "\\'")}', '${escapeHtml(user.email || '').replace(/'/g, "\\'")}', '${user.role}', '${user.class_id || ''}')" title="編輯"><i class="bi bi-pencil"></i> 編輯</button>
+                            <button class="btn btn-sm btn-danger" onclick="deleteUser(${user.id})" title="刪除"><i class="bi bi-trash"></i> 刪除</button>
+                            ${user.role === 'student' ? `<button class="btn btn-sm btn-outline-primary" onclick="openAssignStudentClass(${user.id})" title="設班級"><i class="bi bi-person-badge"></i> 設班級</button>` : ''}
+                            ${['teacher', 'director'].includes(user.role) ? `<button class="btn btn-sm btn-outline-secondary" onclick="openAssignTeacherClass(${user.id})" title="設帶班"><i class="bi bi-diagram-3"></i> 設帶班</button>` : ''}
                           </div>
                         </td>`;
                     tbody.appendChild(tr);
