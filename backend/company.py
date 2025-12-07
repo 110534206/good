@@ -59,6 +59,7 @@ def generate_company_word_document(data):
             tblBorders.append(border)
         tbl.tblPr.append(tblBorders)
     
+<<<<<<< HEAD
     # 設定單元格格式的輔助函數
     def set_cell_format(cell, text='', alignment=WD_ALIGN_PARAGRAPH.LEFT, bold=False, font_size=Pt(12)):
         """設定單元格的文字和格式"""
@@ -95,47 +96,56 @@ def generate_company_word_document(data):
     school_run.font.size = Pt(16)
     set_chinese_font(school_run, '標楷體')
     
+=======
+>>>>>>> 2e836f956331ee408ff0560ceacd82b3a2f3761d
     # 標題
     title = doc.add_paragraph()
     title.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    title.paragraph_format.space_before = Pt(0)
-    title.paragraph_format.space_after = Pt(0)
-    title.paragraph_format.line_spacing = 1.0
     title_run = title.add_run('實習單位基本資料表')
-    title_run.font.size = Pt(16)
+    title_run.font.size = Pt(18)
+    title_run.bold = True
     set_chinese_font(title_run, '標楷體')
     
-    # 實習期間（從學期設定中取得）
-    try:
-        semester_code = get_current_semester_code()
-        # 這裡可以根據學期代碼計算實習期間，暫時使用預設值
-        period_text = '實習期間：115年2月23日至115年6月26日止'
-    except:
-        period_text = '實習期間：115年2月23日至115年6月26日止'
+    # 學校資訊
+    school_info = doc.add_paragraph()
+    school_info.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    school_run = school_info.add_run('康寧學校財團法人康寧大學資訊管理科')
+    school_run.font.size = Pt(12)
+    set_chinese_font(school_run, '標楷體')
     
+    # 實習期間（可以從學期設定中取得，這裡先留空或使用預設值）
     period_info = doc.add_paragraph()
     period_info.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    period_info.paragraph_format.space_before = Pt(0)
-    period_info.paragraph_format.space_after = Pt(0)
-    period_info.paragraph_format.line_spacing = 1.0
-    period_run = period_info.add_run(period_text)
-    period_run.font.size = Pt(14)
+    period_run = period_info.add_run('實習期間：115年2月23日至115年6月26日止')
+    period_run.font.size = Pt(12)
     set_chinese_font(period_run, '標楷體')
     
-
-    # 建立基本資訊表格（左右兩欄佈局，與圖片一致）
-    # 左欄資料
-    left_column_data = [
+    doc.add_paragraph()  # 空行
+    
+    # I. 基本單位資訊 - 使用表格格式
+    section1_title = doc.add_paragraph()
+    section1_run = section1_title.add_run('I. 基本單位資訊')
+    section1_run.font.size = Pt(14)
+    section1_run.bold = True
+    set_chinese_font(section1_run, '標楷體')
+    
+    # 建立基本資訊表格（2欄，多行）
+    basic_info_data = [
         ('編號', data.get('serial_number', '')),
         ('單位名稱', data.get('company_name', '')),
         ('負責人', data.get('person_in_charge', '')),
+        ('統一編號', data.get('uniform_number', '')),
         ('聯絡人', data.get('contact_person', '')),
+        ('職稱', data.get('contact_title', '')),
         ('聯絡電話', data.get('contact_phone', '')),
+        ('傳真', data.get('fax', '')),
         ('地址', data.get('address', '')),
         ('交通說明', data.get('transportation', '')),
-        ('E-mail', data.get('email', ''))
+        ('E-mail', data.get('email', '')),
+        ('單位簡介', data.get('company_intro', ''))
     ]
     
+<<<<<<< HEAD
     # 右欄資料（與左欄對齊）
     right_column_data = [
         ('', ''),  # 編號對應位置（空白）
@@ -215,11 +225,118 @@ def generate_company_word_document(data):
     scale_table.rows[0].cells[1].merge(scale_table.rows[0].cells[2])
     scale_table.rows[0].cells[1].merge(scale_table.rows[0].cells[3])
     set_cell_format(scale_table.rows[0].cells[1], scale_text)
+=======
+    basic_table = doc.add_table(rows=len(basic_info_data), cols=2)
+    basic_table.style = 'Light Grid Accent 1'
+    set_table_borders(basic_table)
     
-    # 職缺明細表格（直接連接在上一個表格下方）
+    # 設定欄寬：左欄（標籤）較窄，右欄（內容）較寬
+    basic_table.columns[0].width = Inches(1.5)
+    basic_table.columns[1].width = Inches(5.5)
+    
+    for idx, (label, value) in enumerate(basic_info_data):
+        # 左欄：標籤
+        label_cell = basic_table.rows[idx].cells[0]
+        label_cell.text = label
+        for paragraph in label_cell.paragraphs:
+            paragraph.alignment = WD_ALIGN_PARAGRAPH.LEFT
+            for run in paragraph.runs:
+                set_chinese_font(run, '標楷體')
+                run.font.size = Pt(12)
+                run.bold = True
+        
+        # 右欄：值
+        value_cell = basic_table.rows[idx].cells[1]
+        value_cell.text = value
+        for paragraph in value_cell.paragraphs:
+            paragraph.alignment = WD_ALIGN_PARAGRAPH.LEFT
+            for run in paragraph.runs:
+                set_chinese_font(run, '標楷體')
+                run.font.size = Pt(12)
+    
+    doc.add_paragraph()  # 空行
+    
+    # II. 營業項目與企業規模 - 合併為一個區塊
+    section2_title = doc.add_paragraph()
+    section2_run = section2_title.add_run('II. 營業項目與企業規模')
+    section2_run.font.size = Pt(14)
+    section2_run.bold = True
+    set_chinese_font(section2_run, '標楷體')
+    
+    # 營業項目表格
+    business_table = doc.add_table(rows=1, cols=2)
+    business_table.style = 'Light Grid Accent 1'
+    set_table_borders(business_table)
+    business_table.columns[0].width = Inches(1.5)
+    business_table.columns[1].width = Inches(5.5)
+    
+    # 左欄：標籤
+    label_cell = business_table.rows[0].cells[0]
+    label_cell.text = '營業項目'
+    for paragraph in label_cell.paragraphs:
+        paragraph.alignment = WD_ALIGN_PARAGRAPH.LEFT
+        for run in paragraph.runs:
+            set_chinese_font(run, '標楷體')
+            run.font.size = Pt(12)
+            run.bold = True
+    
+    # 右欄：值
+    value_cell = business_table.rows[0].cells[1]
+    value_cell.text = data.get("business_scope", "")
+    for paragraph in value_cell.paragraphs:
+        paragraph.alignment = WD_ALIGN_PARAGRAPH.LEFT
+        for run in paragraph.runs:
+            set_chinese_font(run, '標楷體')
+            run.font.size = Pt(12)
+    
+    # 企業規模表格（在同一區塊內）
+    scale_table = doc.add_table(rows=1, cols=2)
+    scale_table.style = 'Light Grid Accent 1'
+    set_table_borders(scale_table)
+    scale_table.columns[0].width = Inches(1.5)
+    scale_table.columns[1].width = Inches(5.5)
+    
+    # 左欄：標籤
+    label_cell = scale_table.rows[0].cells[0]
+    label_cell.text = '企業規模'
+    for paragraph in label_cell.paragraphs:
+        paragraph.alignment = WD_ALIGN_PARAGRAPH.LEFT
+        for run in paragraph.runs:
+            set_chinese_font(run, '標楷體')
+            run.font.size = Pt(12)
+            run.bold = True
+    
+    # 右欄：選項
+    value_cell = scale_table.rows[0].cells[1]
+    scale_options = ['1000人以上', '500-999人', '100-499人', '10-99人', '10以下']
+    selected_scale = data.get('company_scale', '')
+    scale_text = ''
+    for option in scale_options:
+        if option == selected_scale:
+            scale_text += f'☑ {option}  '
+        else:
+            scale_text += f'☐ {option}  '
+    value_cell.text = scale_text
+    for paragraph in value_cell.paragraphs:
+        paragraph.alignment = WD_ALIGN_PARAGRAPH.LEFT
+        for run in paragraph.runs:
+            set_chinese_font(run, '標楷體')
+            run.font.size = Pt(12)
+    
+    doc.add_paragraph()  # 空行
+    
+    # III. 職缺明細
+    section3_title = doc.add_paragraph()
+    section3_run = section3_title.add_run('III. 工作項目')
+    section3_run.font.size = Pt(14)
+    section3_run.bold = True
+    set_chinese_font(section3_run, '標楷體')
+>>>>>>> 2e836f956331ee408ff0560ceacd82b3a2f3761d
+    
     jobs = data.get('jobs', [])
     if jobs:
         jobs_table = doc.add_table(rows=len(jobs) + 1, cols=4)
+        jobs_table.style = 'Light Grid Accent 1'
         set_table_borders(jobs_table)
         
         # 設定職缺表格欄寬（總寬度與基本資訊表格一致：7.5 inches）
@@ -230,42 +347,139 @@ def generate_company_word_document(data):
         
         # 表頭
         header_cells = jobs_table.rows[0].cells
+<<<<<<< HEAD
         set_cell_format(header_cells[0], '工作編號', alignment=WD_ALIGN_PARAGRAPH.CENTER, bold=False)
         set_cell_format(header_cells[1], '工作項目', alignment=WD_ALIGN_PARAGRAPH.CENTER, bold=False)
         set_cell_format(header_cells[2], '需求條件/工作內容', alignment=WD_ALIGN_PARAGRAPH.CENTER, bold=False)
         set_cell_format(header_cells[3], '名額', alignment=WD_ALIGN_PARAGRAPH.CENTER, bold=False)
+=======
+        header_cells[0].text = '工作編號'
+        header_cells[1].text = '工作項目'
+        header_cells[2].text = '需求條件/工作內容'
+        header_cells[3].text = '名額'
+        
+        for cell in header_cells:
+            for paragraph in cell.paragraphs:
+                paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                for run in paragraph.runs:
+                    set_chinese_font(run, '標楷體')
+                    run.font.size = Pt(12)
+                    run.bold = True
+>>>>>>> 2e836f956331ee408ff0560ceacd82b3a2f3761d
         
         # 職缺資料
         for idx, job in enumerate(jobs, 1):
             row_cells = jobs_table.rows[idx].cells
-            set_cell_format(row_cells[0], str(idx), alignment=WD_ALIGN_PARAGRAPH.CENTER)
-            set_cell_format(row_cells[1], job.get('title', ''))
-            set_cell_format(row_cells[2], job.get('description', ''))
-            set_cell_format(row_cells[3], str(job.get('slots', 1)), alignment=WD_ALIGN_PARAGRAPH.CENTER)
+            row_cells[0].text = str(idx)
+            row_cells[1].text = job.get('title', '')
+            row_cells[2].text = job.get('description', '')
+            row_cells[3].text = str(job.get('slots', 1))
+            
+            # 設定表格內容字體和對齊
+            for cell_idx, cell in enumerate(row_cells):
+                for paragraph in cell.paragraphs:
+                    # 工作編號和名額置中對齊，其他左對齊
+                    if cell_idx == 0 or cell_idx == 3:
+                        paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                    else:
+                        paragraph.alignment = WD_ALIGN_PARAGRAPH.LEFT
+                    for run in paragraph.runs:
+                        set_chinese_font(run, '標楷體')
+                        run.font.size = Pt(12)
     
+    doc.add_paragraph()  # 空行
+    
+    # IV. 待遇與來源 - 使用表格格式
+    section4_title = doc.add_paragraph()
+    section4_run = section4_title.add_run('IV. 待遇與來源')
+    section4_run.font.size = Pt(14)
+    section4_run.bold = True
+    set_chinese_font(section4_run, '標楷體')
+    
+<<<<<<< HEAD
     # 待遇和來源表格（直接連接在上一個表格下方，總寬度與基本資訊表格一致：7.5 inches）
+=======
+>>>>>>> 2e836f956331ee408ff0560ceacd82b3a2f3761d
     compensation_source_table = doc.add_table(rows=2, cols=2)
+    compensation_source_table.style = 'Light Grid Accent 1'
     set_table_borders(compensation_source_table)
+<<<<<<< HEAD
     compensation_source_table.columns[0].width = Inches(1.2)
     compensation_source_table.columns[1].width = Inches(6.3)  # 1.2 + 6.3 = 7.5
+=======
+    compensation_source_table.columns[0].width = Inches(1.5)
+    compensation_source_table.columns[1].width = Inches(5.5)
+>>>>>>> 2e836f956331ee408ff0560ceacd82b3a2f3761d
     
     # 待遇行
+    comp_label_cell = compensation_source_table.rows[0].cells[0]
+    comp_label_cell.text = '待遇'
+    for paragraph in comp_label_cell.paragraphs:
+        paragraph.alignment = WD_ALIGN_PARAGRAPH.LEFT
+        for run in paragraph.runs:
+            set_chinese_font(run, '標楷體')
+            run.font.size = Pt(12)
+            run.bold = True
+    
+    comp_value_cell = compensation_source_table.rows[0].cells[1]
     compensation_options = ['月薪', '時薪', '獎金(津貼)', '無']
     compensation_selected = data.get('compensation', [])
+<<<<<<< HEAD
     comp_text = ''.join([f'☑ {opt}  ' if opt in compensation_selected else f'☐ {opt}  ' for opt in compensation_options])
     set_cell_format(compensation_source_table.rows[0].cells[0], '待遇', bold=False)
     set_cell_format(compensation_source_table.rows[0].cells[1], comp_text)
+=======
+    comp_text = ''
+    for option in compensation_options:
+        if option in compensation_selected:
+            comp_text += f'☑ {option}  '
+        else:
+            comp_text += f'☐ {option}  '
+    comp_value_cell.text = comp_text
+    for paragraph in comp_value_cell.paragraphs:
+        paragraph.alignment = WD_ALIGN_PARAGRAPH.LEFT
+        for run in paragraph.runs:
+            set_chinese_font(run, '標楷體')
+            run.font.size = Pt(12)
+>>>>>>> 2e836f956331ee408ff0560ceacd82b3a2f3761d
     
     # 來源行
+    source_label_cell = compensation_source_table.rows[1].cells[0]
+    source_label_cell.text = '來源'
+    for paragraph in source_label_cell.paragraphs:
+        paragraph.alignment = WD_ALIGN_PARAGRAPH.LEFT
+        for run in paragraph.runs:
+            set_chinese_font(run, '標楷體')
+            run.font.size = Pt(12)
+            run.bold = True
+    
+    source_value_cell = compensation_source_table.rows[1].cells[1]
     source_options = ['廠商申請', '老師推薦', '學生申請', '其它']
     source_selected = data.get('source', [])
-    source_text = ''.join([f'☑ {opt}  ' if opt in source_selected else f'☐ {opt}  ' for opt in source_options])
+    source_text = ''
+    for option in source_options:
+        if option in source_selected:
+            source_text += f'☑ {option}  '
+        else:
+            source_text += f'☐ {option}  '
+    
+    # 如果選擇了「其它」，加上說明
     if '其它' in source_selected:
         other_text = data.get('source_other_text', '')
         if other_text:
             source_text += f'（{other_text}）'
+<<<<<<< HEAD
     set_cell_format(compensation_source_table.rows[1].cells[0], '來源', bold=False)
     set_cell_format(compensation_source_table.rows[1].cells[1], source_text)
+=======
+    
+    source_value_cell.text = source_text
+    for paragraph in source_value_cell.paragraphs:
+        paragraph.alignment = WD_ALIGN_PARAGRAPH.LEFT
+        for run in paragraph.runs:
+            set_chinese_font(run, '標楷體')
+            run.font.size = Pt(12)
+>>>>>>> 2e836f956331ee408ff0560ceacd82b3a2f3761d
     
     return doc
 
