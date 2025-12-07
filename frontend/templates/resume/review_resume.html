@@ -327,12 +327,15 @@
       // DOMContentLoaded 載入與事件綁定
       // ------------------------------------
 
+      let currentUserId = null; // 儲存當前用戶 ID
+
       document.addEventListener("DOMContentLoaded", () => {
         // 先獲取用戶角色，根據角色調用不同的 API
         fetch('/api/profile')
           .then(res => res.json())
           .then(profileData => {
             userRole = profileData.success && profileData.user ? profileData.user.role : null;
+            currentUserId = profileData.success && profileData.user ? profileData.user.id : null;
             
             let apiUrl;
             let companyApiUrl = '/api/get_reviewed_companies';
@@ -390,6 +393,14 @@
                   // 如果是廠商，從 API 返回的 companies 中獲取公司列表
                   if (userRole === 'vendor' && resumeData.companies) {
                     companyData = {success: true, companies: resumeData.companies};
+                  }
+                  
+                  // 如果是指導老師，過濾出他們管理的公司
+                  if ((userRole === 'teacher' || userRole === 'class_teacher') && companyData && companyData.success && companyData.companies && currentUserId) {
+                    companyData.companies = companyData.companies.filter(company => {
+                      // 檢查 advisor_user_id 是否匹配當前指導老師
+                      return company.advisor_user_id === currentUserId;
+                    });
                   }
                   
                   populateFilters(allResumes, companyData);
@@ -505,22 +516,31 @@
           classSelect.appendChild(option);
         });
 
-        // 從履歷資料中提取公司名稱（指導老師會看到選擇了他們管理公司的學生）
-        const companySet = new Set();
-        data.forEach(r => {
-          if (r.company_name && r.company_name.trim()) {
-            companySet.add(r.company_name.trim());
-          }
-        });
-
-        // 如果是指導老師，只顯示履歷中出現的公司（即選擇了該老師管理公司的學生）
+        // 如果是指導老師，顯示所有他們管理的公司（從 API 獲取）
         if (userRole === 'teacher' || userRole === 'class_teacher') {
-          Array.from(companySet).sort().forEach(companyName => {
-            const option = document.createElement("option");
-            option.value = companyName;
-            option.textContent = companyName;
-            companySelect.appendChild(option);
-          });
+          if (companyData && companyData.success && companyData.companies) {
+            // 顯示所有指導老師管理的公司（即使沒有學生選擇）
+            companyData.companies.forEach(company => {
+              const option = document.createElement("option");
+              option.value = company.company_name;
+              option.textContent = company.company_name;
+              companySelect.appendChild(option);
+            });
+          } else {
+            // 如果 API 沒有返回公司列表，從履歷資料中提取公司名稱（備用方案）
+            const companySet = new Set();
+            data.forEach(r => {
+              if (r.company_name && r.company_name.trim()) {
+                companySet.add(r.company_name.trim());
+              }
+            });
+            Array.from(companySet).sort().forEach(companyName => {
+              const option = document.createElement("option");
+              option.value = companyName;
+              option.textContent = companyName;
+              companySelect.appendChild(option);
+            });
+          }
         } else {
           // 其他角色（如廠商、主任等）使用 API 返回的公司列表
           if (companyData && companyData.success && companyData.companies) {
