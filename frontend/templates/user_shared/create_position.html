@@ -183,6 +183,20 @@
       transition: border-color 0.2s ease, box-shadow 0.2s ease;
     }
 
+    select[multiple] {
+      padding: 8px 12px;
+    }
+
+    select[multiple] option {
+      padding: 6px 8px;
+      margin: 2px 0;
+    }
+
+    select[multiple] option:checked {
+      background: var(--color-primary);
+      color: #fff;
+    }
+
     select:focus,
     input:focus,
     textarea:focus {
@@ -451,7 +465,18 @@
           </div>
           <div class="form-group">
             <label for="formTransport">交通說明</label>
-            <input id="formTransport" type="text" placeholder="例如：捷運板南線市政府站2號出口" maxlength="200" />
+            <select id="formTransport" multiple style="min-height: 100px;">
+              <option value="捷運">捷運</option>
+              <option value="公車">公車</option>
+              <option value="開車">開車</option>
+              <option value="機車">機車</option>
+              <option value="腳踏車">腳踏車</option>
+              <option value="步行">步行</option>
+              <option value="計程車">計程車</option>
+              <option value="YouBike">YouBike</option>
+              <option value="其他">其他</option>
+            </select>
+            <small style="display: block; margin-top: 6px; color: var(--color-muted); font-size: 0.875rem;">可按住 Ctrl (Windows) 或 Cmd (Mac) 鍵進行多選</small>
           </div>
           <div class="form-group">
             <label for="formEmail">E-mail</label>
@@ -587,9 +612,31 @@
         });
       }
 
-      function generateRandomCode() {
-        // 生成六碼隨機數字
-        return Math.floor(100000 + Math.random() * 900000).toString();
+      async function generatePositionCode() {
+        // 獲取民國年度（前3碼）
+        const now = new Date();
+        const rocYear = now.getFullYear() - 1911;
+        const yearPrefix = rocYear.toString().padStart(3, '0');
+        
+        try {
+          // 從後端獲取下一個編號
+          const response = await fetch('/vendor/api/positions/next_code', {
+            headers: { 'Accept': 'application/json' },
+            credentials: 'include'
+          });
+          const result = await response.json();
+          
+          if (result.success && result.code) {
+            return result.code;
+          } else {
+            // 如果後端失敗，使用預設值
+            return yearPrefix + '001';
+          }
+        } catch (error) {
+          console.error('獲取編號失敗:', error);
+          // 如果請求失敗，使用預設值
+          return yearPrefix + '001';
+        }
       }
 
       function showToast(message, type = 'info') {
@@ -799,7 +846,13 @@
             if (els.formPhone) els.formPhone.value = job.phone || '';
             if (els.formFax) els.formFax.value = job.fax || '';
             if (els.formAddress) els.formAddress.value = job.address || '';
-            if (els.formTransport) els.formTransport.value = job.transport || '';
+            // 處理交通說明的多選
+            if (els.formTransport && job.transport) {
+              const transportValues = job.transport.split(',').map(v => v.trim()).filter(v => v);
+              Array.from(els.formTransport.options).forEach(option => {
+                option.selected = transportValues.includes(option.value);
+              });
+            }
             if (els.formEmail) els.formEmail.value = job.email || '';
             if (els.formCompanyIntro) els.formCompanyIntro.value = job.company_intro || '';
             if (els.formBusinessScope) els.formBusinessScope.value = job.business_scope || '';
@@ -850,7 +903,7 @@
           phone: els.formPhone ? els.formPhone.value.trim() : '',
           fax: els.formFax ? els.formFax.value.trim() : '',
           address: els.formAddress ? els.formAddress.value.trim() : '',
-          transport: els.formTransport ? els.formTransport.value.trim() : '',
+          transport: els.formTransport ? Array.from(els.formTransport.selectedOptions).map(opt => opt.value).join(', ') : '',
           email: els.formEmail ? els.formEmail.value.trim() : '',
           company_intro: els.formCompanyIntro ? els.formCompanyIntro.value.trim() : '',
           business_scope: els.formBusinessScope ? els.formBusinessScope.value.trim() : '',
@@ -991,14 +1044,14 @@
           .catch(() => { /* ignore avatar errors */ });
       }
 
-      function init() {
+      async function init() {
         initMenu();
         initAccountDropdown();
         loadAvatar();
         bindEvents();
-        // 如果是新增模式，自動生成六碼隨機編號
+        // 如果是新增模式，自動生成編號（前3碼：民國年度，後3碼：順序號碼）
         if (!state.isEditMode && els.formCode) {
-          els.formCode.value = generateRandomCode();
+          els.formCode.value = await generatePositionCode();
         }
         loadCompanies();
       }

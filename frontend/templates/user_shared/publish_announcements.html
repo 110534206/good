@@ -12,30 +12,84 @@
       padding: 0;
     }
 
-    header {
-      background: #0454a3;
-      color: white;
-      padding: 1rem 2rem;
-      font-size: 1.5rem;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 1rem;
-      position: relative;
+    :root {
+      --color-primary: #0066cc;
+      --color-primary-dark: #024689;
+      --color-border: #e2e8f0;
+      --color-bg: #f5f7fb;
+      --color-card: #ffffff;
+      --color-text: #1f2933;
+      --color-muted: #64748b;
+      --color-success: #16a34a;
+      --color-danger: #dc2626;
+      --color-warning: #f97316;
+      --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.08);
+      --shadow-md: 0 8px 24px rgba(15, 23, 42, 0.08);
+      --radius-md: 12px;
+      --radius-lg: 16px;
     }
 
-    header .header-title {
-      flex: 1;
-      text-align: center;
+    * {
+      box-sizing: border-box;
     }
 
     body {
-      font-family: "Noto Sans TC", sans-serif;
-      background: #f7f9fc;
+      font-family: 'Inter', 'Noto Sans TC', sans-serif;
+      background: var(--color-bg);
+      color: var(--color-text);
       margin: 0;
-      padding: 0;
+      min-height: 100vh;
     }
 
+    a {
+      color: inherit;
+    }
+
+    header {
+      background: linear-gradient(135deg, #0055a8 0%, #006acb 50%, #004f94 100%);
+      border-bottom: none;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      box-shadow: 0 8px 20px rgba(0, 68, 148, 0.35);
+    }
+
+    .topbar {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 18px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #fff;
+      position: relative;
+    }
+
+    .topbar h1 {
+      font-size: 1.5rem;
+      margin: 0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      color: #fff;
+      flex: 1;
+    }
+
+    .topbar h1 .header-title {
+      flex: 1;
+      text-align: center;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+    }
+
+    .topbar h1 i {
+      color: #ffe27a;
+    }
+
+    /* 選單按鈕樣式 */
     #menu-btn {
       width: 30px;
       height: 22px;
@@ -49,9 +103,134 @@
     }
 
     #menu-btn span {
-      height: 4px;
+      display: block;
+      width: 100%;
+      height: 3px;
       background-color: white;
       border-radius: 2px;
+      transition: all 0.3s ease;
+    }
+
+    main.management-container {
+      max-width: 1200px;
+      margin: 24px auto 60px;
+      padding: 0 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+    }
+
+    .panel {
+      background: var(--color-card);
+      border-radius: var(--radius-lg);
+      padding: 24px;
+      box-shadow: var(--shadow-md);
+      border: 1px solid var(--color-border);
+      margin-bottom: 32px;
+    }
+
+    .panel-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+
+    .panel-header h2 {
+      font-size: 1.2rem;
+      margin: 0;
+    }
+
+    .form-label {
+      font-weight: 600;
+      margin-bottom: 0.5rem;
+      color: var(--color-muted);
+    }
+
+    select,
+    input[type="text"],
+    textarea {
+      width: 100%;
+      padding: 10px 12px;
+      border-radius: 8px;
+      border: 1px solid var(--color-border);
+      background: #fff;
+      font-size: 0.95rem;
+      transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    select:focus,
+    input[type="text"]:focus,
+    textarea:focus {
+      border-color: var(--color-primary);
+      outline: none;
+      box-shadow: 0 0 0 3px rgba(0, 102, 204, 0.15);
+    }
+
+    textarea {
+      resize: vertical;
+      min-height: 150px;
+    }
+
+    .btn {
+      border-radius: 8px;
+      padding: 10px 18px;
+      font-weight: 600;
+      font-size: 0.95rem;
+      cursor: pointer;
+      border: none;
+      transition: transform 0.15s ease, box-shadow 0.15s ease;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+    }
+
+    .btn-primary {
+      background: var(--color-primary);
+      color: #fff;
+      box-shadow: 0 4px 12px rgba(0, 102, 204, 0.25);
+    }
+
+    .btn-primary:hover:not(:disabled) {
+      background: var(--color-primary-dark);
+      transform: translateY(-1px);
+    }
+
+    .btn-secondary {
+      background: rgba(15, 23, 42, 0.05);
+      color: var(--color-text);
+    }
+
+    .btn-secondary:hover:not(:disabled) {
+      background: rgba(15, 23, 42, 0.08);
+    }
+
+    .table-wrapper {
+      overflow-x: auto;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      min-width: 800px;
+    }
+
+    table thead {
+      background: #f1f5f9;
+    }
+
+    table th,
+    table td {
+      padding: 14px 16px;
+      text-align: left;
+      border-bottom: 1px solid var(--color-border);
+      vertical-align: top;
+    }
+
+    table tbody tr:hover {
+      background: rgba(15, 23, 42, 0.02);
     }
 
     #side-menu {
@@ -63,15 +242,15 @@
       max-width: 80vw;
       background-color: rgba(10, 10, 10, 0.95);
       backdrop-filter: blur(6px);
-      box-shadow: 3px 0 12px rgb(0 0 0 / 0.7);
+      box-shadow: 3px 0 12px rgba(0, 0, 0, 0.6);
       padding: 2rem 1.5rem;
       transform: translateX(-100%);
       transition: transform 0.3s ease-in-out;
-      z-index: 1100;
+      z-index: 1300;
       display: flex;
       flex-direction: column;
       align-items: flex-start;
-      color: white;
+      color: #fff;
       user-select: none;
     }
 
@@ -86,108 +265,93 @@
       font-size: 2.2rem;
       background: none;
       border: none;
-      color: white;
+      color: #fff;
       cursor: pointer;
       line-height: 1;
-      width: 2.5rem;
-      height: 2.5rem;
+      width: 2.4rem;
+      height: 2.4rem;
       display: flex;
       align-items: center;
       justify-content: center;
     }
 
     #side-menu h2 {
-      width: 100%;
-      margin-bottom: 1.5rem;
+      margin: 3.5rem 0 1.5rem;
       font-weight: 700;
-      font-size: 1.5rem;
-      text-align: left;
+      font-size: 1.6rem;
     }
 
     #side-menu a {
       display: block;
       width: 100%;
-      padding: 0.5rem 0;
+      padding: 0.6rem 0;
       font-size: 1.1rem;
-      color: #ddd;
+      color: #e2e8f0;
       text-decoration: none;
       border-radius: 4px;
       transition: background-color 0.2s ease;
     }
 
     #side-menu a:hover {
-      background-color: rgba(255, 255, 255, 0.15);
-      color: white;
-    }
-
-    .card {
-      border-radius: 12px;
-      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-    }
-
-    .form-label {
-      font-weight: 600;
-      margin-bottom: 0.5rem;
-    }
-
-    textarea {
-      resize: vertical;
-      min-height: 150px;
+      background-color: rgba(255, 255, 255, 0.18);
+      color: #fff;
     }
   </style>
 </head>
 <body>
   <header>
-    <button id="menu-btn" aria-label="開啟選單">
-      <span></span><span></span><span></span>
-    </button>
-    <div class="header-title">公告發布</div>
-    <div style="width: 30px;"></div>
+    <div class="topbar">
+      <h1>
+        <button id="menu-btn" title="選單" role="button" tabindex="0" aria-label="開啟側邊選單">
+          <span></span>
+          <span></span>
+          <span></span>
+        </button>
+        <div class="header-title">公告發布</div>
+        <div style="width: 30px;"></div> <!-- 佔位元素，保持標題置中 -->
+      </h1>
+    </div>
   </header>
 
-  <div class="container my-5">
+  <main class="management-container">
     <!-- 發布公告表單 -->
-    <div class="card shadow-sm mb-4">
-      <div class="card-header bg-primary text-white">
-        <h5 class="mb-0">發布新公告</h5>
+    <section class="panel" aria-label="發布新公告">
+      <div class="panel-header">
+        <h2>發布新公告</h2>
       </div>
-      <div class="card-body">
-        <form id="announcementForm">
-          <div class="mb-3">
-            <label for="announcementTitle" class="form-label">公告標題 <span class="text-danger">*</span></label>
-            <input type="text" class="form-control" id="announcementTitle" placeholder="請輸入公告標題" required />
-          </div>
-          <div class="mb-3">
-            <label for="announcementCompany" class="form-label">發布對象</label>
-            <select class="form-select" id="announcementCompany">
-              <option value="">所有關聯公司的學生</option>
-            </select>
-            <small class="form-text text-muted">選擇特定公司或向所有關聯公司的學生發布</small>
-          </div>
-          <div class="mb-3">
-            <label for="announcementContent" class="form-label">公告內容 <span class="text-danger">*</span></label>
-            <textarea class="form-control" id="announcementContent" rows="6" placeholder="請輸入公告內容..." required></textarea>
-          </div>
-          <div class="d-flex justify-content-end gap-2">
-            <button type="button" class="btn btn-secondary" onclick="resetForm()">清除</button>
-            <button type="submit" class="btn btn-primary" id="publishBtn">發布公告</button>
-          </div>
-        </form>
-      </div>
-    </div>
+      <form id="announcementForm" style="display: flex; flex-direction: column; gap: 16px;">
+        <div>
+          <label for="announcementTitle" class="form-label">公告標題 <span style="color: var(--color-danger);">*</span></label>
+          <input type="text" id="announcementTitle" placeholder="請輸入公告標題" required />
+        </div>
+        <div>
+          <label for="announcementCompany" class="form-label">發布對象</label>
+          <select id="announcementCompany">
+            <option value="">所有關聯公司的學生</option>
+          </select>
+          <small style="display: block; margin-top: 6px; color: var(--color-muted); font-size: 0.875rem;">選擇特定公司或向所有關聯公司的學生發布</small>
+        </div>
+        <div>
+          <label for="announcementContent" class="form-label">公告內容 <span style="color: var(--color-danger);">*</span></label>
+          <textarea id="announcementContent" rows="6" placeholder="請輸入公告內容..." required></textarea>
+        </div>
+        <div style="display: flex; justify-content: flex-end; gap: 12px; margin-top: 8px;">
+          <button type="button" class="btn btn-secondary" onclick="resetForm()">清除</button>
+          <button type="submit" class="btn btn-primary" id="publishBtn">發布公告</button>
+        </div>
+      </form>
+    </section>
 
     <!-- 發布記錄 -->
-    <div class="card shadow-sm">
-      <div class="card-header bg-light">
-        <h5 class="mb-0">發布記錄</h5>
+    <section class="panel" aria-label="發布記錄">
+      <div class="panel-header">
+        <h2>發布記錄</h2>
       </div>
-      <div class="card-body">
-        <div id="announcementList" class="text-muted text-center">
-          <p>載入中...</p>
-        </div>
+      <div id="announcementList" style="color: var(--color-muted); text-align: center;">
+        <p>載入中...</p>
       </div>
-    </div>
-  </div>
+    </section>
+  </main>
 
   <nav id="side-menu" aria-hidden="true" role="navigation" aria-label="功能選單">
     <button id="close-btn" aria-label="關閉功能選單">×</button>
@@ -215,12 +379,29 @@
       document.getElementById("announcementForm").addEventListener("submit", handleSubmit);
       
       // 側邊選單
-      document.getElementById('menu-btn').addEventListener('click', () => {
-        document.getElementById('side-menu').classList.add('open');
-      });
+      const sideMenu = document.getElementById('side-menu');
+      const menuBtn = document.getElementById('menu-btn');
+      const closeBtn = document.getElementById('close-btn');
       
-      document.getElementById('close-btn').addEventListener('click', () => {
-        document.getElementById('side-menu').classList.remove('open');
+      if (menuBtn) {
+        menuBtn.addEventListener('click', () => {
+          sideMenu.classList.add('open');
+          sideMenu.setAttribute('aria-hidden', 'false');
+        });
+      }
+      
+      if (closeBtn) {
+        closeBtn.addEventListener('click', () => {
+          sideMenu.classList.remove('open');
+          sideMenu.setAttribute('aria-hidden', 'true');
+        });
+      }
+      
+      document.addEventListener('click', (event) => {
+        if (sideMenu && !sideMenu.contains(event.target) && menuBtn && !menuBtn.contains(event.target)) {
+          sideMenu.classList.remove('open');
+          sideMenu.setAttribute('aria-hidden', 'true');
+        }
       });
     });
 
@@ -317,14 +498,14 @@
         .then(data => {
           if (data.success && data.announcements && data.announcements.length > 0) {
             listDiv.innerHTML = `
-              <div class="table-responsive">
-                <table class="table table-hover">
+              <div class="table-wrapper">
+                <table>
                   <thead>
                     <tr>
-                      <th>發布時間</th>
-                      <th>標題</th>
-                      <th>內容</th>
-                      <th>接收人數</th>
+                      <th style="font-weight: 600;">發布時間</th>
+                      <th style="font-weight: 600;">標題</th>
+                      <th style="font-weight: 600;">內容</th>
+                      <th style="font-weight: 600;">接收人數</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -332,7 +513,7 @@
                       <tr>
                         <td>${ann.created_at || '—'}</td>
                         <td>${escapeHtml(ann.title || '—')}</td>
-                        <td class="text-start">
+                        <td>
                           <div style="max-width: 400px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${escapeHtml(ann.content || '')}">
                             ${escapeHtml(ann.content || '—')}
                           </div>
@@ -345,12 +526,12 @@
               </div>
             `;
           } else {
-            listDiv.innerHTML = '<p class="text-muted">尚無發布記錄</p>';
+            listDiv.innerHTML = '<p style="color: var(--color-muted);">尚無發布記錄</p>';
           }
         })
         .catch(error => {
           console.error("載入公告歷史失敗:", error);
-          listDiv.innerHTML = '<p class="text-danger">載入失敗</p>';
+          listDiv.innerHTML = '<p style="color: var(--color-danger);">載入失敗</p>';
         });
     }
 

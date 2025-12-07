@@ -1057,6 +1057,67 @@ def retrieve_application(application_id):
         conn.close()
 
 
+@vendor_bp.route("/vendor/api/positions/next_code", methods=["GET"])
+def get_next_position_code():
+    """獲取下一個職缺編號（前3碼：民國年度，後3碼：順序號碼）"""
+    if "user_id" not in session or session.get("role") != "vendor":
+        return jsonify({"success": False, "message": "未授權"}), 403
+    
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        # 獲取當前民國年度（前3碼）
+        now = datetime.now()
+        roc_year = now.year - 1911
+        year_prefix = str(roc_year).zfill(3)
+        
+        # 計算該年度內創建的職缺數量（根據創建時間）
+        # 計算該年度的起始和結束日期（西元年）
+        gregorian_year_start = roc_year + 1911
+        gregorian_year_end = gregorian_year_start + 1
+        
+        cursor.execute("""
+            SELECT COUNT(*) as count
+            FROM internship_jobs 
+            WHERE created_at >= %s AND created_at < %s
+        """, (
+            datetime(gregorian_year_start, 1, 1),
+            datetime(gregorian_year_end, 1, 1)
+        ))
+        
+        result = cursor.fetchone()
+        count = result.get("count", 0) if result else 0
+        
+        # 下一個序號 = 該年度的職缺數量 + 1
+        next_sequence = count + 1
+        
+        # 生成完整編號
+        sequence_suffix = str(next_sequence).zfill(3)
+        full_code = year_prefix + sequence_suffix
+        
+        return jsonify({
+            "success": True,
+            "code": full_code,
+            "year": year_prefix,
+            "sequence": next_sequence
+        })
+    except Exception as exc:
+        traceback.print_exc()
+        # 如果出錯，返回預設值
+        now = datetime.now()
+        roc_year = now.year - 1911
+        year_prefix = str(roc_year).zfill(3)
+        return jsonify({
+            "success": True,
+            "code": year_prefix + "001",
+            "year": year_prefix,
+            "sequence": 1
+        })
+    finally:
+        cursor.close()
+        conn.close()
+
+
 @vendor_bp.route("/vendor/api/positions", methods=["GET"])
 def list_positions_for_vendor():
     """獲取廠商可查看的職缺列表"""
