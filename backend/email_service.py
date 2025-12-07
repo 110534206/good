@@ -102,10 +102,11 @@ def send_email_smtp(recipient_email, subject, content):
     try:
         # 設定連線超時時間（30秒）
         import socket
-        socket.setdefaulttimeout(30)
+        # 設定更長的超時時間（60 秒）
+        socket.setdefaulttimeout(60)
         
         # 建立 SMTP 連線，設定超時時間
-        server = smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=30)
+        server = smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=60)
         server.set_debuglevel(0)  # 關閉除錯模式
         
         # 啟用 TLS
@@ -122,7 +123,7 @@ def send_email_smtp(recipient_email, subject, content):
         
         return True, "郵件發送成功（SMTP）"
     except socket.timeout:
-        return False, "SMTP 連線超時：無法連線到郵件伺服器。請檢查網路連線或防火牆設定。"
+        return False, "SMTP 連線超時：無法連線到郵件伺服器。\n\n可能原因：\n1. 防火牆阻擋了 SMTP 連線（埠 587）\n2. 網路連線不穩定\n3. Gmail SMTP 伺服器暫時無法回應\n\n解決方法：\n1. 以系統管理員身分執行 PowerShell，執行：\n   netsh advfirewall firewall add rule name=\"Allow SMTP Outbound\" dir=out action=allow protocol=TCP localport=587\n2. 檢查網路連線是否正常\n3. 稍後再試"
     except socket.gaierror as e:
         return False, f"SMTP 連線失敗：無法解析主機名稱 '{SMTP_HOST}'。請檢查網路連線。錯誤：{str(e)}"
     except ConnectionRefusedError:
