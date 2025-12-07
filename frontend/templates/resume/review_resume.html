@@ -228,6 +228,8 @@
                 <th>姓名</th>
                 <th>上傳時間</th>
                 <th>檔案名稱</th>
+                <th>選擇公司</th>
+                <th>志願序</th>
                 <th>狀態</th>
                 <th>老師留言</th>
                 <th>操作</th>
@@ -235,7 +237,7 @@
             </thead>
             <tbody id="resumeTableBody">
               <tr>
-                <td colspan="7" class="text-muted text-center">載入中...</td>
+                <td colspan="9" class="text-muted text-center">載入中...</td>
               </tr>
             </tbody>
           </table>
@@ -560,7 +562,7 @@
         tbody.innerHTML = "";
 
         if (resumes.length === 0) {
-          tbody.innerHTML = `<tr><td colspan="7" class="text-center text-muted">目前沒有資料</td></tr>`;
+          tbody.innerHTML = `<tr><td colspan="9" class="text-center text-muted">目前沒有資料</td></tr>`;
           document.getElementById("pagination").innerHTML = "";
           return;
         }
@@ -571,12 +573,33 @@
 
         pageData.forEach(r => {
           const preferenceId = r.preference_id || null;
+          const companyName = r.company_name || '';
+          const preferenceOrder = r.preference_order || null;
+          const jobTitle = r.job_title || '';
+          
+          // 顯示公司與志願序資訊
+          let companyInfo = '';
+          if (companyName) {
+            if (preferenceOrder) {
+              companyInfo = `<span class="badge bg-info">${escapeHtml(companyName)}</span><br><small class="text-muted">第 ${preferenceOrder} 志願</small>`;
+            } else {
+              companyInfo = `<span class="badge bg-info">${escapeHtml(companyName)}</span>`;
+            }
+            if (jobTitle) {
+              companyInfo += `<br><small class="text-muted">${escapeHtml(jobTitle)}</small>`;
+            }
+          } else {
+            companyInfo = '<span class="text-muted">—</span>';
+          }
+          
           const row = `
         <tr>
           <td>${r.username}</td>
           <td>${escapeHtml(r.name || '')}</td>
           <td>${r.upload_time}</td>
           <td>${escapeHtml(r.original_filename)}</td>
+          <td>${companyInfo}</td>
+          <td>${preferenceOrder ? `<span class="badge bg-primary">第 ${preferenceOrder} 志願</span>` : '<span class="text-muted">—</span>'}</td>
           <td><span class="status-badge bg-${statusColor(r.status)}">${mapStatus(r.status)}</span></td>
           <td>
             <button class="btn btn-sm btn-outline-secondary ${r.comment ? 'text-success' : ''}"
