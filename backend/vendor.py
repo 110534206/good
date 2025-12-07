@@ -1967,3 +1967,69 @@ def get_email_logs():
     except Exception as exc:
         traceback.print_exc()
         return jsonify({"success": False, "message": f"查詢失敗：{exc}"}), 500
+
+@vendor_bp.route("/vendor/api/test_email", methods=["POST"])
+def test_email():
+    """測試 Email 發送功能"""
+    if "user_id" not in session or session.get("role") != "vendor":
+        return jsonify({"success": False, "message": "未授權"}), 403
+    
+    data = request.get_json(silent=True) or {}
+    recipient_email = data.get('recipient_email', '').strip()
+    
+    if not recipient_email:
+        return jsonify({"success": False, "message": "請輸入收件人 Email"}), 400
+    
+    if '@' not in recipient_email:
+        return jsonify({"success": False, "message": "Email 格式不正確"}), 400
+    
+    try:
+        from email_service import send_email
+        from datetime import datetime, timezone, timedelta
+        
+        # 發送測試郵件
+        subject = "【智慧實習平台】Email 發送測試"
+        content = f"""
+親愛的測試使用者：
+
+您好！
+
+這是一封測試郵件，用來確認 Email 發送功能正常運作。
+
+如果您收到這封郵件，表示系統的 Email 發送功能已成功設定並運作正常。
+
+測試資訊：
+- 收件人：{recipient_email}
+- 發送時間：{datetime.now(timezone(timedelta(hours=8))).strftime("%Y-%m-%d %H:%M:%S")}
+- 發送方式：SMTP
+
+--
+
+智慧實習平台
+自動測試系統
+"""
+        
+        success, message, log_id = send_email(
+            recipient_email=recipient_email,
+            subject=subject,
+            content=content,
+            related_user_id=session.get('user_id')
+        )
+        
+        if success:
+            return jsonify({
+                "success": True,
+                "message": "測試郵件發送成功！請檢查收件箱。",
+                "log_id": log_id
+            })
+        else:
+            return jsonify({
+                "success": False,
+                "message": f"郵件發送失敗：{message}",
+                "log_id": log_id
+            }), 500
+            
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({"success": False, "message": f"發生錯誤：{str(e)}"}), 500

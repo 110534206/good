@@ -1,0 +1,51 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+.venv
+
+# Environment variables (包含敏感資訊)
+*.env
+!*.env.example
+EMAIL.env
+GEMINI_API_KEY.env
+.env
+.env.local
+
+# Gmail API credentials (敏感資訊)
+credentials.json
+token.json
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Uploads (可能包含敏感檔案)
+backend/uploads/
+frontend/uploads/
+
+# Test files (可選)
+test_*.py
+*_test.py
+

@@ -2,6 +2,7 @@ from flask import Blueprint, request, jsonify, session, render_template, redirec
 from config import get_db
 import traceback
 from datetime import datetime, timezone, timedelta
+from email_service import send_email, send_interview_email, send_admission_email
 
 intern_exp_bp = Blueprint('intern_exp_bp', __name__, url_prefix='/intern_experience')
 
@@ -317,3 +318,174 @@ def delete_experience(exp_id):
     except Exception as e:
         print(traceback.format_exc())
         return jsonify({"success": False, "message": str(e)}), 500
+
+# --------------------
+# API：測試 Email 發送
+# --------------------
+@intern_exp_bp.route('/api/test_email', methods=['POST'])
+def test_email():
+    """測試 Email 發送功能"""
+    try:
+        if not require_login():
+            return jsonify({"success": False, "message": "請先登入"}), 403
+        
+        data = request.get_json(silent=True) or {}
+        recipient_email = data.get('recipient_email', '').strip()
+        
+        if not recipient_email:
+            return jsonify({"success": False, "message": "請輸入收件人 Email"}), 400
+        
+        if '@' not in recipient_email:
+            return jsonify({"success": False, "message": "Email 格式不正確"}), 400
+        
+        # 發送測試郵件
+        subject = "【智慧實習平台】Email 發送測試"
+        content = f"""
+親愛的測試使用者：
+
+您好！
+
+這是一封測試郵件，用來確認 Email 發送功能正常運作。
+
+如果您收到這封郵件，表示系統的 Email 發送功能已成功設定並運作正常。
+
+測試資訊：
+- 收件人：{recipient_email}
+- 發送時間：{datetime.now(timezone(timedelta(hours=8))).strftime("%Y-%m-%d %H:%M:%S")}
+- 發送方式：SMTP
+
+--
+
+智慧實習平台
+自動測試系統
+"""
+        
+        success, message, log_id = send_email(
+            recipient_email=recipient_email,
+            subject=subject,
+            content=content,
+            related_user_id=session.get('user_id')
+        )
+        
+        if success:
+            return jsonify({
+                "success": True,
+                "message": "測試郵件發送成功！請檢查收件箱。",
+                "log_id": log_id
+            })
+        else:
+            return jsonify({
+                "success": False,
+                "message": f"郵件發送失敗：{message}",
+                "log_id": log_id
+            }), 500
+            
+    except Exception as e:
+        print(traceback.format_exc())
+        return jsonify({"success": False, "message": f"發生錯誤：{str(e)}"}), 500
+
+# --------------------
+# API：發送面試或錄取通知
+# --------------------
+@intern_exp_bp.route('/api/send_notification', methods=['POST'])
+def send_notification():
+    """發送 Email 通知（面試或錄取）"""
+    try:
+        if not require_login():
+            return jsonify({"success": False, "message": "請先登入"}), 403
+        
+        data = request.get_json(silent=True) or {}
+        student_id = data.get('student_id')
+        student_email = data.get('student_email', '').strip()
+        student_name = data.get('student_name', '').strip()
+        notification_type = data.get('notification_type', 'interview')  # 'interview' 或 'admission'
+        content = data.get('content', '').strip()
+        company_name = data.get('company_name', '公司').strip()
+        
+        # 驗證必要參數
+        if not student_id and not student_email:
+            return jsonify({"success": False, "message": "請提供學生ID或Email"}), 400
+        
+        if notification_type == 'interview' and not content:
+            return jsonify({"success": False, "message": "面試通知必須填寫通知內容"}), 400
+        
+        conn = get_db()
+        cursor = conn.cursor(dictionary=True)
+        
+        # 如果提供了 student_id，從資料庫獲取學生資訊
+        if student_id:
+            cursor.execute("""
+                SELECT id, name, email, username
+                FROM users
+                WHERE id = %s AND role = 'student'
+            """, (student_id,))
+            student_info = cursor.fetchone()
+            
+            if not student_info:
+                cursor.close()
+                conn.close()
+                return jsonify({"success": False, "message": "找不到該學生資料"}), 404
+            
+            # 使用資料庫中的資訊
+            student_email = student_info.get('email') or student_email
+            student_name = student_info.get('name') or student_name
+        
+        if not student_email:
+            cursor.close()
+            conn.close()
+            return jsonify({"success": False, "message": "學生Email資訊不完整，無法發送通知"}), 400
+        
+        if not student_name:
+            student_name = "同學"
+        
+        # 獲取發送者資訊
+        sender_id = session.get('user_id')
+        cursor.execute("""
+            SELECT name, role
+            FROM users
+            WHERE id = %s
+        """, (sender_id,))
+        sender_info = cursor.fetchone()
+        sender_name = sender_info.get('name', '') if sender_info else ''
+        
+        # 根據通知類型發送不同的郵件
+        if notification_type == 'interview':
+            email_success, email_message, log_id = send_interview_email(
+                student_email, 
+                student_name, 
+                company_name, 
+                sender_name, 
+                content
+            )
+        elif notification_type == 'admission':
+            email_success, email_message, log_id = send_admission_email(
+                student_email, 
+                student_name, 
+                company_name, 
+                sender_name
+            )
+        else:
+            cursor.close()
+            conn.close()
+            return jsonify({"success": False, "message": "無效的通知類型（必須是 'interview' 或 'admission'）"}), 400
+        
+        cursor.close()
+        conn.close()
+        
+        if email_success:
+            return jsonify({
+                "success": True,
+                "message": f"{'面試' if notification_type == 'interview' else '錄取'}通知發送成功！",
+                "log_id": log_id,
+                "student_email": student_email
+            })
+        else:
+            return jsonify({
+                "success": False,
+                "message": f"郵件發送失敗：{email_message}",
+                "log_id": log_id
+            }), 500
+            
+    except Exception as e:
+        print(traceback.format_exc())
+        return jsonify({"success": False, "message": f"發生錯誤：{str(e)}"}), 500
