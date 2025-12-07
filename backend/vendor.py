@@ -1867,9 +1867,11 @@ def send_notification():
     student_name = data.get("student_name", "")
     notification_type = data.get("notification_type", "interview")
     content = data.get("content", "")
+    company_name = data.get("company_name", "")  # 快速通知可能直接提供公司名稱
 
-    if not student_id:
-        return jsonify({"success": False, "message": "學生ID不可為空"}), 400
+    # 允許快速通知模式：如果提供了 student_email 和 student_name，可以不需要 student_id
+    if not student_id and not (student_email and student_name):
+        return jsonify({"success": False, "message": "請提供學生ID，或同時提供學生Email和姓名"}), 400
 
     if not content and notification_type == "interview":
         return jsonify({"success": False, "message": "請輸入通知內容"}), 400
@@ -1881,27 +1883,31 @@ def send_notification():
         conn = get_db()
         cursor = conn.cursor(dictionary=True)
         
-        # 從資料庫獲取學生資訊（如果前端沒有提供 Email 或姓名）
-        cursor.execute("""
-            SELECT id, name, email, username
-            FROM users
-            WHERE id = %s AND role = 'student'
-        """, (student_id,))
-        student_info = cursor.fetchone()
-        
-        if not student_info:
-            cursor.close()
-            conn.close()
-            return jsonify({"success": False, "message": "找不到該學生資料"}), 404
-        
-        # 優先使用資料庫中的資訊，如果前端有提供則使用前端的（但以資料庫為準）
-        student_email = student_info.get("email") or student_email
-        student_name = student_info.get("name") or student_name
+        # 從資料庫獲取學生資訊（如果有 student_id）
+        if student_id:
+            cursor.execute("""
+                SELECT id, name, email, username
+                FROM users
+                WHERE id = %s AND role = 'student'
+            """, (student_id,))
+            student_info = cursor.fetchone()
+            
+            if not student_info:
+                cursor.close()
+                conn.close()
+                return jsonify({"success": False, "message": "找不到該學生資料"}), 404
+            
+            # 優先使用資料庫中的資訊，如果前端有提供則使用前端的（但以資料庫為準）
+            student_email = student_info.get("email") or student_email
+            student_name = student_info.get("name") or student_name
         
         if not student_email:
             cursor.close()
             conn.close()
             return jsonify({"success": False, "message": "學生Email資訊不完整，無法發送通知"}), 400
+        
+        if not student_name:
+            student_name = "同學"
         
         # 獲取廠商和公司資訊
         profile, companies, _ = _get_vendor_scope(cursor, vendor_id)
@@ -1911,7 +1917,9 @@ def send_notification():
             return jsonify({"success": False, "message": "帳號資料不完整"}), 403
         
         vendor_name = profile.get("name", "廠商")
-        company_name = companies[0].get("company_name", "公司") if companies else "公司"
+        # 如果前端提供了公司名稱，優先使用；否則從資料庫獲取
+        if not company_name:
+            company_name = companies[0].get("company_name", "公司") if companies else "公司"
         
         # 根據通知類型發送不同的郵件
         if notification_type == "interview":
@@ -1927,17 +1935,22 @@ def send_notification():
             conn.close()
             return jsonify({"success": False, "message": "無效的通知類型"}), 400
         
-        # 發送系統通知
-        _notify_student(
-            cursor, 
-            student_id, 
-            f"【{company_name}】{'面試通知' if notification_type == 'interview' else '錄取通知'}",
-            content if content else f"您已收到來自 {company_name} 的{'面試通知' if notification_type == 'interview' else '錄取通知'}",
-            "/vendor/resume-review",
-            "company"
-        )
+        # 發送系統通知（如果有 student_id）
+        if student_id:
+            try:
+                _notify_student(
+                    cursor, 
+                    student_id, 
+                    f"【{company_name}】{'面試通知' if notification_type == 'interview' else '錄取通知'}",
+                    content if content else f"您已收到來自 {company_name} 的{'面試通知' if notification_type == 'interview' else '錄取通知'}",
+                    "/vendor/resume-review",
+                    "company"
+                )
+                conn.commit()
+            except Exception as notify_error:
+                # 系統通知失敗不影響 Email 發送
+                print(f"⚠️ 系統通知發送失敗（不影響 Email）：{notify_error}")
         
-        conn.commit()
         cursor.close()
         conn.close()
         
