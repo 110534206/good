@@ -562,26 +562,26 @@
           </div>
           <div class="info-grid" style="margin-top: 16px;">
             <div class="info-card" style="cursor: pointer;">
-              <a href="/review_resume?status=submitted" style="display: block; text-decoration: none; color: inherit;">
-                <span class="info-label">履歷狀態</span>
+              <a href="/review_resume?status=submitted&company_id=${COMPANY_ID}" style="display: block; text-decoration: none; color: inherit;">
+                <span class="info-label">廠商審核狀態</span>
                 <span class="info-value" style="color: var(--color-primary);">待審核<span id="pendingCount" style="margin-left: 4px;">${state.resumeStats.pending}</span></span>
               </a>
             </div>
             <div class="info-card" style="cursor: pointer;">
-              <a href="/review_resume?status=approved" style="display: block; text-decoration: none; color: inherit;">
-                <span class="info-label">履歷狀態</span>
+              <a href="/review_resume?status=approved&company_id=${COMPANY_ID}" style="display: block; text-decoration: none; color: inherit;">
+                <span class="info-label">廠商審核狀態</span>
                 <span class="info-value" style="color: var(--color-success);">已通過<span id="approvedCount" style="margin-left: 4px;">${state.resumeStats.approved}</span></span>
               </a>
             </div>
             <div class="info-card" style="cursor: pointer;">
-              <a href="/review_resume?status=uploaded" style="display: block; text-decoration: none; color: inherit;">
-                <span class="info-label">履歷狀態</span>
+              <a href="/review_resume?status=uploaded&company_id=${COMPANY_ID}" style="display: block; text-decoration: none; color: inherit;">
+                <span class="info-label">廠商審核狀態</span>
                 <span class="info-value" style="color: var(--color-muted);">未通過<span id="uploadedCount" style="margin-left: 4px;">${state.resumeStats.uploaded}</span></span>
               </a>
             </div>
             <div class="info-card" style="cursor: pointer;">
-              <a href="/review_resume?status=rejected" style="display: block; text-decoration: none; color: inherit;">
-                <span class="info-label">履歷狀態</span>
+              <a href="/review_resume?status=rejected&company_id=${COMPANY_ID}" style="display: block; text-decoration: none; color: inherit;">
+                <span class="info-label">廠商審核狀態</span>
                 <span class="info-value" style="color: var(--color-danger);">退件<span id="rejectedCount" style="margin-left: 4px;">${state.resumeStats.rejected}</span></span>
               </a>
             </div>
@@ -705,6 +705,9 @@
           els.companyHero.parentNode.insertBefore(descriptionPanel, els.companyHero.nextSibling);
         }
         
+        // 載入並顯示廠商已審核的學生履歷
+        loadVendorReviewedStudents();
+        
         // 綁定編輯模式的事件
         if (state.isEditing) {
           bindEditEvents();
@@ -724,20 +727,53 @@
 
       async function loadResumeStats() {
         try {
-          const response = await fetch('/api/get_class_resumes', {
+          // 重置統計
+          state.resumeStats = {
+            approved: 0,
+            uploaded: 0,
+            rejected: 0,
+            pending: 0
+          };
+          
+          // 從廠商審核結果 API 獲取數據，統計廠商的審核狀態
+          const response = await fetch(`/api/public/company/${COMPANY_ID}/vendor-reviewed-students`, {
             headers: { 'Accept': 'application/json' },
             credentials: 'include'
           });
           const result = await response.json();
-          if (response.ok && result.success && result.resumes) {
-            // 統計各狀態的數量
-            state.resumeStats.approved = result.resumes.filter(r => r.status === 'approved').length;
-            state.resumeStats.uploaded = result.resumes.filter(r => r.status === 'uploaded').length;
-            state.resumeStats.rejected = result.resumes.filter(r => r.status === 'rejected').length;
-            // 待審核包括 submitted、pending 和 uploaded 狀態
-            state.resumeStats.pending = result.resumes.filter(r => 
-              r.status === 'submitted' || r.status === 'pending' || r.status === 'uploaded'
-            ).length;
+          
+          // 獲取廠商已審核的學生 ID 集合
+          const vendorReviewedStudentIds = new Set();
+          if (response.ok && result.success && result.students) {
+            // 根據廠商的審核狀態統計
+            result.students.forEach(s => {
+              vendorReviewedStudentIds.add(s.student_id);
+              const status = s.vendor_review_status;
+              if (status === 'approved') {
+                state.resumeStats.approved++;
+              } else if (status === 'rejected') {
+                state.resumeStats.rejected++;
+              }
+            });
+          }
+          
+          // 獲取所有選擇該公司的學生履歷，但只計算指導老師已審核通過的
+          const allResumesResponse = await fetch(`/api/get_class_resumes?company_id=${COMPANY_ID}`, {
+            headers: { 'Accept': 'application/json' },
+            credentials: 'include'
+          });
+          const allResumesResult = await allResumesResponse.json();
+          
+          if (allResumesResponse.ok && allResumesResult.success && allResumesResult.resumes) {
+            // 只計算：指導老師已審核通過（status = 'approved'）且廠商尚未審核的數量
+            const pendingResumes = allResumesResult.resumes.filter(r => {
+              // 必須是指導老師已審核通過的履歷
+              const isTeacherApproved = r.status === 'approved';
+              // 且廠商尚未審核（不在 vendor-reviewed-students 中）
+              const isNotVendorReviewed = !vendorReviewedStudentIds.has(r.user_id || r.student_id);
+              return isTeacherApproved && isNotVendorReviewed;
+            });
+            state.resumeStats.pending = pendingResumes.length;
           }
         } catch (error) {
           console.error('載入履歷統計失敗:', error);
@@ -755,6 +791,96 @@
         if (uploadedEl) uploadedEl.textContent = state.resumeStats.uploaded;
         if (rejectedEl) rejectedEl.textContent = state.resumeStats.rejected;
         if (pendingEl) pendingEl.textContent = state.resumeStats.pending;
+      }
+
+      async function loadVendorReviewedStudents() {
+        try {
+          const response = await fetch(`/api/public/company/${COMPANY_ID}/vendor-reviewed-students`, {
+            headers: { 'Accept': 'application/json' },
+            credentials: 'include'
+          });
+          const result = await response.json();
+          
+          if (!response.ok || !result.success) {
+            throw new Error(result.message || '載入失敗');
+          }
+          
+          const students = result.students || [];
+          
+          // 移除舊的廠商審核區塊（如果存在）
+          const existingPanel = document.getElementById('vendor-reviewed-panel');
+          if (existingPanel) {
+            existingPanel.remove();
+          }
+          
+          // 創建新的廠商審核區塊
+          const vendorPanel = document.createElement('section');
+          vendorPanel.id = 'vendor-reviewed-panel';
+          vendorPanel.className = 'company-description-panel';
+          vendorPanel.setAttribute('aria-label', '廠商審核結果');
+          
+          if (students.length > 0) {
+            vendorPanel.innerHTML = `
+              <h2>廠商審核結果</h2>
+              <div style="margin-top: 20px;">
+                <table style="width: 100%; border-collapse: collapse;">
+                  <thead>
+                    <tr style="background: #f1f5f9; border-bottom: 2px solid #e2e8f0;">
+                      <th style="padding: 12px; text-align: left; font-weight: 600;">學生姓名</th>
+                      <th style="padding: 12px; text-align: left; font-weight: 600;">學號</th>
+                      <th style="padding: 12px; text-align: left; font-weight: 600;">班級</th>
+                      <th style="padding: 12px; text-align: left; font-weight: 600;">職缺</th>
+                      <th style="padding: 12px; text-align: left; font-weight: 600;">審核狀態</th>
+                      <th style="padding: 12px; text-align: left; font-weight: 600;">廠商備註</th>
+                      <th style="padding: 12px; text-align: left; font-weight: 600;">審核時間</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    ${students.map(s => `
+                      <tr style="border-bottom: 1px solid #e2e8f0;">
+                        <td style="padding: 12px;">${escapeHtml(s.student_name || '—')}</td>
+                        <td style="padding: 12px;">${escapeHtml(s.student_number || '—')}</td>
+                        <td style="padding: 12px;">${escapeHtml(s.class_name || '—')}</td>
+                        <td style="padding: 12px;">${escapeHtml(s.job_title || '—')}</td>
+                        <td style="padding: 12px;">
+                          <span style="padding: 4px 8px; border-radius: 4px; font-size: 0.875rem; font-weight: 600; 
+                            ${s.vendor_review_status === 'approved' ? 'background: #dcfce7; color: #16a34a;' : 
+                              s.vendor_review_status === 'rejected' ? 'background: #fee2e2; color: #dc2626;' : 
+                              'background: #fef3c7; color: #f97316;'}">
+                            ${s.vendor_review_status === 'approved' ? '通過' : 
+                              s.vendor_review_status === 'rejected' ? '退件' : '待審核'}
+                          </span>
+                        </td>
+                        <td style="padding: 12px; max-width: 200px; overflow: hidden; text-overflow: ellipsis;">
+                          ${escapeHtml(s.vendor_comment || '—')}
+                        </td>
+                        <td style="padding: 12px;">${escapeHtml(s.vendor_reviewed_at || '—')}</td>
+                      </tr>
+                    `).join('')}
+                  </tbody>
+                </table>
+              </div>
+            `;
+          } else {
+            vendorPanel.innerHTML = `
+              <h2>廠商審核結果</h2>
+              <div class="empty-state" style="padding: 24px; text-align: center; color: var(--color-muted);">
+                <p>目前沒有廠商已審核的學生履歷。</p>
+              </div>
+            `;
+          }
+          
+          // 將廠商審核區塊插入到公司介紹面板之後
+          const descriptionPanel = document.querySelector('.company-description-panel');
+          if (descriptionPanel && descriptionPanel.parentNode) {
+            descriptionPanel.parentNode.insertBefore(vendorPanel, descriptionPanel.nextSibling);
+          } else if (els.companyHero && els.companyHero.parentNode) {
+            els.companyHero.parentNode.insertBefore(vendorPanel, els.companyHero.nextSibling);
+          }
+        } catch (error) {
+          console.error('載入廠商審核結果失敗:', error);
+          // 不顯示錯誤提示，因為這不是主要功能
+        }
       }
 
       async function loadDetail() {

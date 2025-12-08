@@ -3710,6 +3710,7 @@ def get_class_resumes():
     user_id = session['user_id']
     role = session['role']
     mode = request.args.get('mode', '').strip().lower()
+    company_id = request.args.get('company_id', type=int)  # 可選的公司 ID 參數
 
     conn = get_db()
     cursor = conn.cursor(dictionary=True)
@@ -3719,7 +3720,7 @@ def get_class_resumes():
         sql_query = ""
         sql_params = tuple()
 
-        print(f"🔍 [DEBUG] get_class_resumes called - user_id: {user_id}, role: {role}")
+        print(f"🔍 [DEBUG] get_class_resumes called - user_id: {user_id}, role: {role}, company_id: {company_id}")
 
         # ------------------------------------------------------------------
         # 1. 班導 / 教師 (role == "teacher" or "class_teacher")
@@ -3731,75 +3732,113 @@ def get_class_resumes():
             # 3. 選擇了該老師作為指導老師的公司的學生（通過 student_preferences 和 internship_companies）
             #    重點：學生的履歷會根據填寫的志願序，傳給選擇公司的指導老師
         if role in ["teacher", "class_teacher"]:
-            sql_query = """
-                SELECT DISTINCT
-                    r.id,
-                    u.name AS student_name,
-                    u.username AS student_number,
-                    c.name AS class_name,
-                    c.department,
-                    r.original_filename,
-                    r.filepath,
-                    r.status,
-                    r.comment,
-                    r.note,
-                    r.created_at,
-                    COALESCE(
-                        (SELECT ic3.company_name 
-                         FROM student_preferences sp3
-                         JOIN internship_companies ic3 ON sp3.company_id = ic3.id
-                         WHERE sp3.student_id = u.id 
-                         AND ic3.advisor_user_id = %s
-                         ORDER BY sp3.preference_order ASC
-                         LIMIT 1),
-                        ''
-                    ) AS company_name,
-                    COALESCE(
-                        (SELECT ij3.title
-                         FROM student_preferences sp3
-                         JOIN internship_companies ic3 ON sp3.company_id = ic3.id
-                         LEFT JOIN internship_jobs ij3 ON sp3.job_id = ij3.id
-                         WHERE sp3.student_id = u.id 
-                         AND ic3.advisor_user_id = %s
-                         ORDER BY sp3.preference_order ASC
-                         LIMIT 1),
-                        ''
-                    ) AS job_title,
-                    COALESCE(
-                        (SELECT sp3.preference_order
-                         FROM student_preferences sp3
-                         JOIN internship_companies ic3 ON sp3.company_id = ic3.id
-                         WHERE sp3.student_id = u.id 
-                         AND ic3.advisor_user_id = %s
-                         ORDER BY sp3.preference_order ASC
-                         LIMIT 1),
-                        NULL
-                    ) AS preference_order
-                FROM resumes r
-                JOIN users u ON r.user_id = u.id
-                LEFT JOIN classes c ON u.class_id = c.id
-                WHERE EXISTS (
-                    -- 情況1：班導的學生
-                    SELECT 1
-                    FROM classes c2
-                    JOIN classes_teacher ct ON ct.class_id = c2.id
-                    WHERE c2.id = u.class_id AND ct.teacher_id = %s
-                ) OR EXISTS (
-                    -- 情況2：指導老師綁定的學生（從 teacher_student_relations）
-                    SELECT 1
-                    FROM teacher_student_relations tsr
-                    WHERE tsr.student_id = u.id AND tsr.teacher_id = %s
-                ) OR EXISTS (
-                    -- 情況3：選擇了該老師作為指導老師的公司的學生
-                    -- 重點：學生的履歷會根據填寫的志願序，傳給選擇公司的指導老師
-                    SELECT 1
-                    FROM student_preferences sp
-                    JOIN internship_companies ic2 ON sp.company_id = ic2.id
-                    WHERE sp.student_id = u.id AND ic2.advisor_user_id = %s
-                )
-                ORDER BY c.name, u.name
-            """
-            sql_params = (user_id, user_id, user_id, user_id, user_id, user_id)
+            # 如果提供了 company_id，只顯示選擇了該公司職位的學生
+            if company_id:
+                sql_query = """
+                    SELECT DISTINCT
+                        r.id,
+                        u.id AS user_id,
+                        u.name AS student_name,
+                        u.username AS student_number,
+                        c.name AS class_name,
+                        c.department,
+                        r.original_filename,
+                        r.filepath,
+                        r.status,
+                        r.comment,
+                        r.note,
+                        r.created_at,
+                        ic3.company_name AS company_name,
+                        ij3.title AS job_title,
+                        sp3.id AS preference_id,
+                        sp3.preference_order,
+                        (SELECT vph.comment 
+                         FROM vendor_preference_history vph 
+                         WHERE vph.preference_id = sp3.id 
+                         ORDER BY vph.created_at DESC 
+                         LIMIT 1) AS vendor_comment
+                    FROM resumes r
+                    JOIN users u ON r.user_id = u.id
+                    LEFT JOIN classes c ON u.class_id = c.id
+                    JOIN student_preferences sp3 ON sp3.student_id = u.id
+                    JOIN internship_companies ic3 ON sp3.company_id = ic3.id
+                    LEFT JOIN internship_jobs ij3 ON sp3.job_id = ij3.id
+                    WHERE sp3.company_id = %s
+                    AND ic3.advisor_user_id = %s
+                    ORDER BY c.name, u.name
+                """
+                sql_params = (company_id, user_id)
+            else:
+                sql_query = """
+                    SELECT DISTINCT
+                        r.id,
+                        u.name AS student_name,
+                        u.username AS student_number,
+                        c.name AS class_name,
+                        c.department,
+                        r.original_filename,
+                        r.filepath,
+                        r.status,
+                        r.comment,
+                        r.note,
+                        r.created_at,
+                        COALESCE(
+                            (SELECT GROUP_CONCAT(
+                                DISTINCT ic3.company_name
+                                SEPARATOR ' | '
+                            )
+                             FROM student_preferences sp3
+                             JOIN internship_companies ic3 ON sp3.company_id = ic3.id
+                             WHERE sp3.student_id = u.id 
+                             AND ic3.advisor_user_id = %s),
+                            ''
+                        ) AS company_name,
+                        COALESCE(
+                            (SELECT GROUP_CONCAT(
+                                CONCAT(ic3.company_name, ' - ', COALESCE(ij3.title, '未指定職缺'))
+                                ORDER BY sp3.preference_order ASC
+                                SEPARATOR ' | '
+                            )
+                             FROM student_preferences sp3
+                             JOIN internship_companies ic3 ON sp3.company_id = ic3.id
+                             LEFT JOIN internship_jobs ij3 ON sp3.job_id = ij3.id
+                             WHERE sp3.student_id = u.id 
+                             AND ic3.advisor_user_id = %s),
+                            ''
+                        ) AS job_title,
+                        COALESCE(
+                            (SELECT MIN(sp3.preference_order)
+                             FROM student_preferences sp3
+                             JOIN internship_companies ic3 ON sp3.company_id = ic3.id
+                             WHERE sp3.student_id = u.id 
+                             AND ic3.advisor_user_id = %s),
+                            NULL
+                        ) AS preference_order
+                    FROM resumes r
+                    JOIN users u ON r.user_id = u.id
+                    LEFT JOIN classes c ON u.class_id = c.id
+                    WHERE EXISTS (
+                        -- 情況1：班導的學生
+                        SELECT 1
+                        FROM classes c2
+                        JOIN classes_teacher ct ON ct.class_id = c2.id
+                        WHERE c2.id = u.class_id AND ct.teacher_id = %s
+                    ) OR EXISTS (
+                        -- 情況2：指導老師綁定的學生（從 teacher_student_relations）
+                        SELECT 1
+                        FROM teacher_student_relations tsr
+                        WHERE tsr.student_id = u.id AND tsr.teacher_id = %s
+                    ) OR EXISTS (
+                        -- 情況3：選擇了該老師作為指導老師的公司的學生
+                        -- 重點：學生的履歷會根據填寫的志願序，傳給選擇公司的指導老師
+                        SELECT 1
+                        FROM student_preferences sp
+                        JOIN internship_companies ic2 ON sp.company_id = ic2.id
+                        WHERE sp.student_id = u.id AND ic2.advisor_user_id = %s
+                    )
+                    ORDER BY c.name, u.name
+                """
+                sql_params = (user_id, user_id, user_id, user_id, user_id, user_id)
 
 
             cursor.execute(sql_query, sql_params)
@@ -4082,6 +4121,18 @@ def review_resume(resume_id):
                     message=notification_content,
                     category="resume"
                 )
+                
+                # 🔄 如果是老師審核通過，更新 student_preferences 狀態為 'approved'，讓廠商可以看到
+                if user_role in ['teacher', 'class_teacher']:
+                    # 更新該學生所有志願序的狀態為 'approved'，讓廠商可以審核
+                    cursor.execute("""
+                        UPDATE student_preferences 
+                        SET status = 'approved'
+                        WHERE student_id = %s
+                        AND (status IS NULL OR status = 'pending')
+                    """, (student_user_id,))
+                    updated_count = cursor.rowcount
+                    print(f"✅ 已更新 {updated_count} 筆學生志願序狀態為 'approved'，廠商現在可以審核")
 
         conn.commit()
 

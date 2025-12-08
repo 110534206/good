@@ -6,9 +6,17 @@
   <title>智慧實習平台 | 科助後台</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
   <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
     body {
       font-family: "Noto Sans TC", sans-serif;
       background: #f9fafb;
+      margin: 0;
+      overflow-x: hidden;
     }
 
     h2 {
@@ -16,64 +24,129 @@
       color: #333;
     }
 
-    .sidebar {
-      min-height: 100vh;
-      background: #f1f3f5;
-      padding: 24px;
+    .top-bar {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 60px;
+      background-color: #0d6efd;
+      z-index: 1100;
+      display: flex;
+      align-items: center;
+      box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
     }
 
-    .sidebar h4 {
-      margin-bottom: 20px;
+    .top-bar > .container {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0 84px;
+      height: 100%;
+      gap: 30px;
+      width: 100%;
+      max-width: 1400px;
+      margin: 0 auto;
     }
 
-    .sidebar a {
-      display: block;
-      padding: 6px 0;
-      color: #495057;
+    .top-bar-left #menu-btn {
+      width: 30px;
+      height: 22px;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+
+    .top-bar-left #menu-btn span {
+      height: 4px;
+      background-color: #ffffff;
+      border-radius: 2px;
+    }
+
+    .top-bar-center h1 {
+      color: #ffffff;
+      font-weight: 600;
+      margin: 0;
+      font-size: 1.5rem;
+      flex: 1;
+      text-align: center;
+    }
+
+    .top-bar-right {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: bold;
+    }
+
+    #side-menu {
+      position: fixed;
+      top: 0;
+      left: 0;
+      height: 100vh;
+      width: 320px;
+      max-width: 80vw;
+      background-color: rgba(10, 10, 10, 0.95);
+      backdrop-filter: blur(6px);
+      box-shadow: 3px 0 12px rgb(0 0 0 / 0.7);
+      padding: 2rem 1.5rem;
+      transform: translateX(-100%);
+      transition: transform 0.3s ease-in-out;
+      z-index: 1100;
+      display: flex;
+      flex-direction: column;
+      color: white;
+    }
+
+    #side-menu.open {
+      transform: translateX(0);
+    }
+
+    #side-menu .menu-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1.5rem;
+    }
+
+    #close-btn {
+      font-size: 2.2rem;
+      background: none;
+      border: none;
+      color: white;
+      cursor: pointer;
+      padding: 0;
+      line-height: 1;
+    }
+
+    #side-menu h2 {
+      margin: 0;
+      font-weight: 700;
+      font-size: 1.5rem;
+      color: white;
+    }
+
+    #side-menu a {
+      padding: 0.5rem 0;
+      font-size: 1.1rem;
+      color: #ddd;
       text-decoration: none;
+      border-radius: 4px;
+      transition: background-color 0.2s ease;
+      display: block;
     }
 
-    .sidebar a:hover {
-      color: #0d6efd;
+    #side-menu a:hover {
+      background-color: rgba(255, 255, 255, 0.15);
+      color: white;
     }
 
     .main-content {
       max-width: 1400px;
       margin: 0 auto;
       padding: 0 60px;
-    }
-
-    .page-banner {
-      background: #0066cc;
-      color: #fff;
-      padding: 1rem 2rem;
-      margin-bottom: 0;
-      width: 100%;
-    }
-
-    .page-banner h2 {
-      color: #fff;
-      font-weight: 600;
-      margin: 0;
-      font-size: 1.5rem;
-    }
-
-    .page-banner .main-content {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-    }
-
-    .page-banner .main-content > div {
-      flex: 1;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-    }
-
-    .page-banner .main-content h2 {
-      flex: 1;
-      text-align: center;
+      margin-top: 80px;
     }
 
     /* 表格樣式 - 與圖片格式相同 */
@@ -151,15 +224,40 @@
 </head>
 
 <body class="p-0">
-  <div class="container-fluid p-0">
-    <div class="page-banner">
-      <div class="main-content">
-        <div class="d-flex justify-content-between align-items-center">
-          <h2 class="mb-0">實習廠商管理</h2>
-          <a href="/ta_home" class="btn btn-outline-light" style="font-size: 1rem; padding: 0.5rem 1rem;">返回首頁</a>
+  <!-- 頂部欄 -->
+  <div class="top-bar">
+    <div class="container">
+      <div class="top-bar-left">
+        <div id="menu-btn" title="選單" role="button" tabindex="0">
+          <span></span><span></span><span></span>
         </div>
       </div>
+      <div class="top-bar-center">
+        <h1>實習廠商管理</h1>
+      </div>
+      <div class="top-bar-right">
+      </div>
     </div>
+  </div>
+
+  <!-- 側邊選單 -->
+  <nav id="side-menu">
+    <div class="menu-header">
+      <h2>功能選單</h2>
+      <button id="close-btn">×</button>
+    </div>
+    <a href="/assistant_home">首頁</a>
+    <a href="/profile">個人資料</a>
+    <a href="/announcement/manage_announcements">公告管理</a>
+    <a href="/ta/statistics/manage_companies">實習廠商管理</a>
+    <a href="/final_results">志願序結果</a>
+    <a href="/notifications">通知</a>
+    <a href="/admin/absence_default_range">缺勤預設學期範圍設定</a>
+    <a href="/ta/upload_standard_courses">專業核心科目管理</a>
+    <a href="/login">登出</a>
+  </nav>
+
+  <div class="container-fluid p-0">
     <div class="main-content">
       <div class="p-4">
         <div class="mb-4">
@@ -203,6 +301,32 @@
   </div>
 
   <script>
+    // 選單開關邏輯
+    const menuBtn = document.getElementById("menu-btn");
+    const sideMenu = document.getElementById("side-menu");
+    const closeBtn = document.getElementById("close-btn");
+
+    menuBtn.addEventListener("click", () => {
+      sideMenu.classList.add("open");
+      sideMenu.setAttribute("aria-hidden", "false");
+    });
+
+    closeBtn.addEventListener("click", () => {
+      sideMenu.classList.remove("open");
+      sideMenu.setAttribute("aria-hidden", "true");
+    });
+
+    // 如果點擊 menu 以外的地方就關閉選單
+    document.addEventListener("click", (e) => {
+      if (
+        !sideMenu.contains(e.target) &&
+        !menuBtn.contains(e.target)
+      ) {
+        sideMenu.classList.remove("open");
+        sideMenu.setAttribute("aria-hidden", "true");
+      }
+    });
+
     let currentSemesterCode = null;
     let allTeachers = []; // 儲存所有指導老師列表
 

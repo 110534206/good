@@ -35,6 +35,8 @@ SYSTEM_PROMPT = """
 4. 全文使用繁體中文，可搭配必要的英文專有名詞。
 5. 以具體行動與可量化成果為核心，段落清晰，符合寄給廠商的禮節與期待。
 6. 全程使用純文字，禁止產生星號、井字號、底線或其他 Markdown 標記符號。
+7. **絕對禁止**在輸出中包含任何解釋性文字、前綴說明（如「這是為您改寫的...」、「以下是...」）、後綴註解或評論。
+8. **只輸出修改後的文本內容**，直接從修改後的文本開始，不要有任何說明或介紹。
 """
 
 # ==========================================================
@@ -54,7 +56,45 @@ def revise_resume():
         edit_style = data.get('style', 'polish')
         tone_style = data.get('tone', 'professional')
 
-        if not user_resume_text:
+        # 🌟 [新功能] 如果用戶沒有提供 resumeText，自動從資料庫讀取自傳
+        if not user_resume_text or not user_resume_text.strip():
+            # 檢查用戶是否已登入
+            if 'user_id' not in session or session.get('role') != 'student':
+                return jsonify({"error": "請先登入並提供履歷文本，或先上傳履歷。"}), 400
+            
+            user_id = session['user_id']
+            conn = get_db()
+            cursor = conn.cursor(dictionary=True)
+            
+            try:
+                # 獲取學號
+                cursor.execute("SELECT username FROM users WHERE id=%s", (user_id,))
+                user_result = cursor.fetchone()
+                if not user_result:
+                    return jsonify({"error": "找不到使用者資訊。"}), 404
+                
+                student_id = user_result["username"]
+                
+                # 從資料庫讀取自傳
+                cursor.execute("SELECT Autobiography FROM Student_Info WHERE StuID=%s", (student_id,))
+                student_info = cursor.fetchone()
+                
+                if student_info and student_info.get('Autobiography'):
+                    user_resume_text = str(student_info.get('Autobiography', '')).strip()
+                    print(f"✅ 自動從資料庫讀取自傳內容，長度: {len(user_resume_text)}")
+                else:
+                    return jsonify({"error": "資料庫中沒有自傳內容，請先上傳履歷或手動輸入。"}), 400
+                    
+            except Exception as e:
+                print(f"從資料庫讀取自傳失敗: {e}")
+                return jsonify({"error": "無法從資料庫讀取自傳，請手動輸入。"}), 500
+            finally:
+                if cursor:
+                    cursor.close()
+                if conn:
+                    conn.close()
+
+        if not user_resume_text or not user_resume_text.strip():
             return jsonify({"error": "請提供履歷文本。"}), 400
 
     except Exception as e:
@@ -91,19 +131,19 @@ def revise_resume():
             keywords = keyword_response.text.strip()
             print(f"偵測任務: 關鍵字導向 (關鍵字: {keywords}), 語氣: {tone_style}")
 
-            final_prompt = f"[任務] 你是一位頂尖的人力資源專家。請根據 [核心關鍵字] 重寫 [原始文本]。[關鍵規則] 1. **必須**突出並強調 [核心關鍵字] 相關的技能和成就。 2. **{tone_prompt}** [規則] 1. 使用強動詞開頭的行動句。 2. 量化成果。 3. 禁止包含任何原始文本之外的解釋或評論。[核心關鍵字] {keywords} [原始文本] {user_resume_text} [修改後的文本]"
+            final_prompt = f"[任務] 你是一位頂尖的人力資源專家。請根據 [核心關鍵字] 重寫 [原始文本]。[關鍵規則] 1. **必須**突出並強調 [核心關鍵字] 相關的技能和成就。 2. **{tone_prompt}** [規則] 1. 使用強動詞開頭的行動句。 2. 量化成果。 3. **絕對禁止**包含任何解釋性文字、前綴說明、後綴註解或評論。 4. **只輸出修改後的文本內容**，不要有任何「這是為您改寫的...」、「以下是...」等說明文字。 5. 直接從修改後的文本開始輸出，不要有任何前綴。[核心關鍵字] {keywords} [原始文本] {user_resume_text} [修改後的文本]"
         
         elif edit_style == 'concise':
             # --- 選項 2: 文案精簡 (一步驟) ---
             # 強化文案精簡任務，強制其以成就導向
             print(f"偵測任務: 文案精簡, 語氣: {tone_style}")
-            final_prompt = f"[任務] 將以下 [原始文本] 改寫得**極度精簡、清楚明瞭且成就導向**。[規則] 1. **{tone_prompt}** 2. **每句話必須以行動動詞開頭**。 3. 刪除所有贅字、口語化和非成就型描述。 4. 保留並強化核心資訊。 5. 禁止包含任何原始文本之外的解釋或評論。[原始文本] {user_resume_text} [修改後的文本]"
+            final_prompt = f"[任務] 將以下 [原始文本] 改寫得**極度精簡、清楚明瞭且成就導向**。[規則] 1. **{tone_prompt}** 2. **每句話必須以行動動詞開頭**。 3. 刪除所有贅字、口語化和非成就型描述。 4. 保留並強化核心資訊。 5. **絕對禁止**包含任何解釋性文字、前綴說明、後綴註解或評論。 6. **只輸出修改後的文本內容**，不要有任何「這是為您改寫的...」、「以下是...」等說明文字。 7. 直接從修改後的文本開始輸出，不要有任何前綴。[原始文本] {user_resume_text} [修改後的文本]"
 
         else: # 'polish' (預設)
             # --- 選項 3: 履歷美化 (預設) (一步驟) ---
             print(f"偵測任務: 履歷美化, 語氣: {tone_style}")
             # 修正原始程式碼中 tone_prompt 的引用錯誤 ($ 改為 {})
-            final_prompt = f"[任務] 專業地**美化並潤飾**以下 [原始文本]。[規則] 1. **{tone_prompt}** 2. 使用強動詞開頭的行動句。 3. 盡可能量化成果。 4. 修正文法。 5. 禁止包含任何原始文本之外的解釋或評論。[原始文本] {user_resume_text} [修改後的文本]"
+            final_prompt = f"[任務] 專業地**美化並潤飾**以下 [原始文本]。[規則] 1. **{tone_prompt}** 2. 使用強動詞開頭的行動句。 3. 盡可能量化成果。 4. 修正文法。 5. **絕對禁止**包含任何解釋性文字、前綴說明、後綴註解或評論。 6. **只輸出修改後的文本內容**，不要有任何「這是為您改寫的...」、「以下是...」等說明文字。 7. 直接從修改後的文本開始輸出，不要有任何前綴。[原始文本] {user_resume_text} [修改後的文本]"
 
         # --- 統一的串流輸出 ---
         
@@ -893,6 +933,66 @@ def recommend_preferences():
     except Exception as e:
         traceback.print_exc()
         return jsonify({"success": False, "error": f"AI 服務處理失敗: {str(e)}"}), 500
+    finally:
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
+
+
+# ==========================================================
+# API：更新自傳內容
+# ==========================================================
+@ai_bp.route('/api/update_autobiography', methods=['POST'])
+def update_autobiography():
+    """
+    將 AI 美化後的自傳更新至資料庫
+    """
+    # 權限檢查
+    if 'user_id' not in session or session.get('role') != 'student':
+        return jsonify({"success": False, "message": "只有學生可以使用此功能。"}), 403
+    
+    user_id = session['user_id']
+    conn = None
+    cursor = None
+    
+    try:
+        data = request.get_json()
+        autobiography = data.get('autobiography', '').strip()
+        
+        if not autobiography:
+            return jsonify({"success": False, "message": "自傳內容不能為空。"}), 400
+        
+        conn = get_db()
+        cursor = conn.cursor(dictionary=True)
+        
+        # 獲取學號
+        cursor.execute("SELECT username FROM users WHERE id=%s", (user_id,))
+        user_result = cursor.fetchone()
+        if not user_result:
+            return jsonify({"success": False, "message": "找不到使用者資訊。"}), 404
+        
+        student_id = user_result["username"]
+        
+        # 更新自傳（使用 ON DUPLICATE KEY UPDATE 確保如果記錄不存在則創建）
+        cursor.execute("""
+            INSERT INTO Student_Info (StuID, Autobiography, UpdatedAt)
+            VALUES (%s, %s, NOW())
+            ON DUPLICATE KEY UPDATE
+                Autobiography = VALUES(Autobiography),
+                UpdatedAt = NOW()
+        """, (student_id, autobiography))
+        
+        conn.commit()
+        
+        print(f"✅ 自傳已更新 - 學生ID: {student_id}, 長度: {len(autobiography)}")
+        return jsonify({"success": True, "message": "自傳已成功更新。"})
+        
+    except Exception as e:
+        traceback.print_exc()
+        if conn:
+            conn.rollback()
+        return jsonify({"success": False, "message": f"更新失敗: {str(e)}"}), 500
     finally:
         if cursor:
             cursor.close()

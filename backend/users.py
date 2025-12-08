@@ -867,6 +867,127 @@ def get_public_company(company_id):
         conn.close()
 
 
+@users_bp.route('/api/public/company/<int:company_id>/vendor-reviewed-students', methods=['GET'])
+def get_vendor_reviewed_students(company_id):
+    """
+    取得指定公司中廠商已審核的學生履歷列表，僅供指導老師使用。
+    """
+    if 'username' not in session:
+        return jsonify({"success": False, "message": "未登入"}), 401
+
+    allowed_roles = ['teacher', 'ta']
+    role = session.get('role')
+    if role not in allowed_roles:
+        return jsonify({"success": False, "message": "無權限"}), 403
+
+    user_id = session.get('user_id')
+
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        # 驗證公司是否屬於該指導老師
+        company_conditions = ["ic.id = %s", "ic.status = 'approved'"]
+        params = [company_id]
+        if role == 'teacher':
+            company_conditions.append("ic.advisor_user_id = %s")
+            params.append(user_id)
+
+        cursor.execute(f"""
+            SELECT ic.id, ic.company_name
+            FROM internship_companies ic
+            WHERE {' AND '.join(company_conditions)}
+            LIMIT 1
+        """, tuple(params))
+        company = cursor.fetchone()
+
+        if not company:
+            return jsonify({"success": False, "message": "找不到公司資料"}), 404
+
+        # 查詢所有選擇該公司的學生履歷（包括已審核和未審核的）
+        # 返回廠商審核狀態和留言（如果有的話）
+        # 只顯示有廠商審核記錄的學生，每個學生只顯示一筆（最新的審核記錄）
+        cursor.execute("""
+            SELECT 
+                u.id AS student_id,
+                u.name AS student_name,
+                u.username AS student_number,
+                c.name AS class_name,
+                r.id AS resume_id,
+                r.original_filename,
+                r.status AS resume_status,
+                r.created_at AS resume_uploaded_at,
+                sp.id AS preference_id,
+                sp.preference_order,
+                ij.title AS job_title,
+                CASE 
+                    WHEN EXISTS (
+                        SELECT 1 FROM vendor_preference_history vph 
+                        WHERE vph.preference_id = sp.id AND vph.action = 'approve'
+                    ) THEN 'approved'
+                    WHEN EXISTS (
+                        SELECT 1 FROM vendor_preference_history vph 
+                        WHERE vph.preference_id = sp.id AND vph.action = 'reject'
+                    ) THEN 'rejected'
+                    ELSE 'pending'
+                END AS vendor_review_status,
+                (SELECT vph.comment 
+                 FROM vendor_preference_history vph 
+                 WHERE vph.preference_id = sp.id 
+                 ORDER BY vph.created_at DESC 
+                 LIMIT 1) AS vendor_comment,
+                (SELECT vph.created_at 
+                 FROM vendor_preference_history vph 
+                 WHERE vph.preference_id = sp.id 
+                 ORDER BY vph.created_at DESC 
+                 LIMIT 1) AS vendor_reviewed_at
+            FROM student_preferences sp
+            JOIN users u ON sp.student_id = u.id
+            LEFT JOIN classes c ON u.class_id = c.id
+            LEFT JOIN resumes r ON r.user_id = u.id
+            LEFT JOIN internship_jobs ij ON sp.job_id = ij.id
+            WHERE sp.company_id = %s
+            AND EXISTS (
+                -- 只顯示有廠商審核記錄的學生
+                SELECT 1 FROM vendor_preference_history vph 
+                WHERE vph.preference_id = sp.id 
+                AND (vph.action = 'approve' OR vph.action = 'reject')
+            )
+            ORDER BY u.id, vendor_reviewed_at DESC
+        """, (company_id,))
+        
+        students = cursor.fetchall() or []
+        
+        # 去重：每個學生只保留一筆記錄（最新的審核記錄）
+        # 因為 ORDER BY u.id, vendor_reviewed_at DESC，所以每個學生的第一筆就是最新的
+        seen_students = {}
+        unique_students = []
+        for s in students:
+            student_id = s.get('student_id')
+            if student_id not in seen_students:
+                seen_students[student_id] = True
+                unique_students.append(s)
+        
+        students = unique_students
+        
+        # 格式化日期
+        from datetime import datetime
+        for s in students:
+            if isinstance(s.get('resume_uploaded_at'), datetime):
+                s['resume_uploaded_at'] = s['resume_uploaded_at'].strftime("%Y-%m-%d %H:%M:%S")
+            if isinstance(s.get('vendor_reviewed_at'), datetime):
+                s['vendor_reviewed_at'] = s['vendor_reviewed_at'].strftime("%Y-%m-%d %H:%M:%S")
+
+        return jsonify({"success": True, "students": students})
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({"success": False, "message": f"查詢失敗: {str(e)}"}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+
 @users_bp.route('/api/public/company/<int:company_id>', methods=['PUT'])
 def update_public_company(company_id):
     """
