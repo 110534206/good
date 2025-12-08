@@ -71,6 +71,7 @@ def record_admission():
         
         # 3. 設置學期代碼為 1132（固定值）
         semester_code = '1132'
+        current_datetime_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         
         # 4. 檢查是否已經存在該關係（避免重複）
         cursor.execute("""
@@ -87,19 +88,53 @@ def record_admission():
                 WHERE id = %s
             """, (existing_relation['id'],))
         else:
-            # 5. 創建師生關係記錄（不包含 company_id，因為該欄位可能不存在）
-            # 媒合時間使用當天日期（CURDATE()），學期為 1132
+            # 5. 創建師生關係記錄
             cursor.execute("""
                 INSERT INTO teacher_student_relations 
                 (teacher_id, student_id, semester, role, created_at)
                 VALUES (%s, %s, %s, '指導老師', CURDATE())
             """, (advisor_user_id, student_id, semester_code))
         
-        # 6. 在 internship_experiences 表中記錄錄取結果（廠商確認的錄取結果）
-        # 注意：這裡只記錄錄取結果，不包含實習心得
-        # 這是廠商實際錄取的記錄，用於在學生實習成果頁面顯示
+        # 6. 在 internship_offers 表中記錄錄取結果 (新增的邏輯)
+        # 這是 get_my_admission API 優先讀取的資料來源
+        print(f"🔍 [DEBUG] record_admission - 準備寫入 internship_offers: student_id={student_id}, job_id={job_id}")
+        
+        # 檢查是否已存在於 internship_offers
         if job_id:
-            # 檢查是否已存在該記錄
+            cursor.execute("""
+                SELECT id FROM internship_offers
+                WHERE student_id = %s AND job_id = %s
+            """, (student_id, job_id))
+        else:
+            # 如果 job_id 為 NULL，檢查是否有該學生的其他錄取記錄
+            cursor.execute("""
+                SELECT id FROM internship_offers
+                WHERE student_id = %s AND job_id IS NULL
+            """, (student_id,))
+        existing_offer = cursor.fetchone()
+        print(f"🔍 [DEBUG] existing_offer: {existing_offer}")
+
+        if existing_offer:
+            # 如果已存在，更新錄取狀態和時間（使用 'accepted' 狀態，與資料庫中的值一致）
+            cursor.execute("""
+                UPDATE internship_offers
+                SET status = 'accepted', offered_at = %s, responded_at = %s
+                WHERE id = %s
+            """, (current_datetime_str, current_datetime_str, existing_offer['id']))
+            print(f"✅ [DEBUG] 更新 internship_offers 記錄: id={existing_offer['id']}")
+        else:
+            # 插入新的錄取記錄（使用 'accepted' 狀態）
+            cursor.execute("""
+                INSERT INTO internship_offers 
+                (student_id, job_id, status, offered_at, responded_at)
+                VALUES (%s, %s, %s, %s, %s)
+            """, (student_id, job_id, 'accepted', current_datetime_str, current_datetime_str))
+            inserted_id = cursor.lastrowid
+            print(f"✅ [DEBUG] 插入新 internship_offers 記錄: id={inserted_id}, student_id={student_id}, job_id={job_id}")
+            
+        # 7. 在 internship_experiences 表中記錄錄取結果
+        # (原程式碼的邏輯，用於在學生實習成果頁面顯示或舊邏輯兼容)
+        if job_id:
             cursor.execute("""
                 SELECT id FROM internship_experiences
                 WHERE user_id = %s AND company_id = %s AND job_id = %s
@@ -107,7 +142,6 @@ def record_admission():
             existing_exp = cursor.fetchone()
             
             if not existing_exp:
-                # 獲取當前年度（民國年）
                 current_year = datetime.now().year - 1911
                 cursor.execute("""
                     INSERT INTO internship_experiences
@@ -115,7 +149,6 @@ def record_admission():
                     VALUES (%s, %s, %s, %s, '已錄取', 0, NOW())
                 """, (student_id, company_id, job_id, current_year))
         else:
-            # 即使沒有 job_id，也記錄公司錄取結果（使用 NULL job_id）
             cursor.execute("""
                 SELECT id FROM internship_experiences
                 WHERE user_id = %s AND company_id = %s AND job_id IS NULL
@@ -123,7 +156,6 @@ def record_admission():
             existing_exp = cursor.fetchone()
             
             if not existing_exp:
-                # 獲取當前年度（民國年）
                 current_year = datetime.now().year - 1911
                 cursor.execute("""
                     INSERT INTO internship_experiences
@@ -131,7 +163,7 @@ def record_admission():
                     VALUES (%s, %s, NULL, %s, '已錄取', 0, NOW())
                 """, (student_id, company_id, current_year))
         
-        # 7. 更新學生的志願序狀態（如果提供了 preference_order）
+        # 8. 更新學生的志願序狀態
         if preference_order:
             cursor.execute("""
                 UPDATE student_preferences
@@ -143,7 +175,7 @@ def record_admission():
         
         return jsonify({
             "success": True,
-            "message": f"錄取結果已記錄，已自動綁定指導老師 {advisor['name']} 與學生 {student['name']}",
+            "message": f"錄取結果已記錄，已自動綁定指導老師 {advisor['name']} 與學生 {student['name']}。資料已寫入 internship_offers。",
             "teacher_id": advisor_user_id,
             "teacher_name": advisor['name'],
             "student_id": student_id,
@@ -162,6 +194,7 @@ def record_admission():
 
 # =========================================================
 # API: 獲取學生的錄取結果（我的實習成果）
+# (此處保持不變，因為它已經設計為優先讀取 internship_offers)
 # =========================================================
 @admission_bp.route("/api/get_my_admission", methods=["GET"])
 def get_my_admission():
@@ -174,158 +207,458 @@ def get_my_admission():
     cursor = conn.cursor(dictionary=True)
     
     try:
-        # 獲取學生的錄取結果（從 teacher_student_relations）
-        # 先檢查是否有 company_id 欄位，如果沒有則從 student_preferences 獲取
+        # 優先從 internship_offers 表獲取錄取資料（廠商選擇學生時記錄的）
+        # 這是主要的資料來源，代表廠商實際錄取的結果
         cursor.execute("""
             SELECT 
-                tsr.id AS relation_id,
-                tsr.semester,
-                tsr.created_at AS admitted_at,
-                u_teacher.id AS teacher_id,
-                u_teacher.name AS teacher_name,
-                u_teacher.email AS teacher_email
-            FROM teacher_student_relations tsr
-            LEFT JOIN users u_teacher ON tsr.teacher_id = u_teacher.id
-            WHERE tsr.student_id = %s
-            ORDER BY tsr.created_at DESC
-            LIMIT 1
-        """, (student_id,))
-        admission = cursor.fetchone()
-        
-        if not admission:
-            return jsonify({
-                "success": True,
-                "admission": None,
-                "message": "目前尚未錄取任何實習公司"
-            })
-        
-        # 優先從 internship_experiences 獲取公司資訊（廠商確認媒合結果時記錄的）
-        # 這代表廠商實際錄取的結果，而不是按照志願序
-        cursor.execute("""
-            SELECT 
-                ie.company_id,
-                ie.job_id,
-                ie.year,
-                ie.created_at AS admitted_at,
+                io.id AS offer_id,
+                io.job_id,
+                io.status AS offer_status,
+                io.offered_at,
+                io.responded_at,
+                ij.company_id,
+                ij.title AS job_title,
+                ij.description AS job_description,
+                ij.period AS internship_period,
+                ij.work_time AS internship_time,
                 ic.company_name,
                 ic.location AS company_address,
                 ic.contact_person AS contact_name,
                 ic.contact_email,
                 ic.contact_phone,
-                ij.title AS job_title,
-                ij.description AS job_description,
-                ij.period AS internship_period,
-                ij.work_time AS internship_time
-            FROM internship_experiences ie
-            LEFT JOIN internship_companies ic ON ie.company_id = ic.id
-            LEFT JOIN internship_jobs ij ON ie.job_id = ij.id
-            WHERE ie.user_id = %s 
-              AND ie.content = '已錄取'
-            ORDER BY ie.created_at DESC
+                ic.advisor_user_id
+            FROM internship_offers io
+            LEFT JOIN internship_jobs ij ON io.job_id = ij.id
+            LEFT JOIN internship_companies ic ON ij.company_id = ic.id
+            WHERE io.student_id = %s
+              AND io.status IN ('offered', 'accepted', 'Approved')
+            ORDER BY io.offered_at DESC
             LIMIT 1
         """, (student_id,))
-        company_info = cursor.fetchone()
+        offer_info = cursor.fetchone()
         
-        # 如果從 internship_experiences 獲取到公司資訊，使用它
-        if company_info:
-            admission['company_id'] = company_info.get('company_id')
-            admission['company_name'] = company_info.get('company_name')
-            admission['company_address'] = company_info.get('company_address')
-            admission['contact_name'] = company_info.get('contact_name')
-            admission['contact_email'] = company_info.get('contact_email')
-            admission['contact_phone'] = company_info.get('contact_phone')
+        # 調試：打印查詢結果
+        print(f"🔍 [DEBUG] get_my_admission - student_id={student_id}")
+        print(f"🔍 [DEBUG] offer_info from internship_offers: {offer_info}")
+        
+        # 如果從 internship_offers 獲取到資料，使用它
+        if offer_info:
+            print(f"✅ [DEBUG] 找到 internship_offers 記錄")
+            print(f"    job_id={offer_info.get('job_id')}, company_id={offer_info.get('company_id')}")
             
-            # 更新錄取時間為 internship_experiences 的創建時間（廠商確認的時間）
-            if company_info.get('admitted_at'):
-                admission['admitted_at'] = company_info.get('admitted_at')
+            # 如果 company_id 為 NULL，嘗試從 student_preferences 獲取公司資訊
+            company_id = offer_info.get('company_id')
+            if not company_id and offer_info.get('job_id'):
+                # 從 student_preferences 獲取公司資訊
+                cursor.execute("""
+                    SELECT company_id
+                    FROM student_preferences
+                    WHERE student_id = %s AND job_id = %s
+                    LIMIT 1
+                """, (student_id, offer_info.get('job_id')))
+                pref_company = cursor.fetchone()
+                if pref_company and pref_company.get('company_id'):
+                    company_id = pref_company.get('company_id')
+                    print(f"🔍 [DEBUG] 從 student_preferences 獲取到 company_id={company_id}")
             
-            # 從對應的 student_preferences 獲取志願相關資訊（用於顯示志願序等）
-            job_id_for_query = company_info.get('job_id')
-            if job_id_for_query:
+            # 如果還是沒有 company_id，嘗試直接從 internship_jobs 獲取
+            if not company_id and offer_info.get('job_id'):
+                cursor.execute("""
+                    SELECT company_id
+                    FROM internship_jobs
+                    WHERE id = %s
+                """, (offer_info.get('job_id'),))
+                job_row = cursor.fetchone()
+                if job_row and job_row.get('company_id'):
+                    company_id = job_row.get('company_id')
+                    print(f"🔍 [DEBUG] 從 internship_jobs 獲取到 company_id={company_id}")
+            
+            # 如果有 company_id，重新查詢完整的公司資訊
+            if company_id:
                 cursor.execute("""
                     SELECT 
-                        sp.preference_order,
-                        sp.submitted_at
-                    FROM student_preferences sp
-                    WHERE sp.student_id = %s 
-                      AND sp.company_id = %s
-                      AND sp.job_id = %s
-                    ORDER BY sp.preference_order ASC
-                    LIMIT 1
-                """, (student_id, company_info.get('company_id'), job_id_for_query))
-            else:
-                cursor.execute("""
-                    SELECT 
-                        sp.preference_order,
-                        sp.submitted_at
-                    FROM student_preferences sp
-                    WHERE sp.student_id = %s 
-                      AND sp.company_id = %s
-                      AND sp.job_id IS NULL
-                    ORDER BY sp.preference_order ASC
-                    LIMIT 1
-                """, (student_id, company_info.get('company_id')))
-            preference_info = cursor.fetchone()
+                        id AS company_id,
+                        company_name,
+                        location AS company_address,
+                        contact_person AS contact_name,
+                        contact_email,
+                        contact_phone,
+                        advisor_user_id
+                    FROM internship_companies
+                    WHERE id = %s
+                """, (company_id,))
+                company_row = cursor.fetchone()
+                if company_row:
+                    offer_info['company_id'] = company_row.get('company_id')
+                    offer_info['company_name'] = company_row.get('company_name')
+                    offer_info['company_address'] = company_row.get('company_address')
+                    offer_info['contact_name'] = company_row.get('contact_name')
+                    offer_info['contact_email'] = company_row.get('contact_email')
+                    offer_info['contact_phone'] = company_row.get('contact_phone')
+                    offer_info['advisor_user_id'] = company_row.get('advisor_user_id')
+                    print(f"✅ [DEBUG] 重新查詢到完整的公司資訊: {company_row.get('company_name')}")
             
-            final_preference = {
-                'preference_order': preference_info.get('preference_order') if preference_info else None,
-                'submitted_at': preference_info.get('submitted_at') if preference_info else None,
-                'job_id': company_info.get('job_id'),
-                'job_title': company_info.get('job_title'),
-                'job_description': company_info.get('job_description'),
-                'internship_period': company_info.get('internship_period'),
-                'internship_time': company_info.get('internship_time')
+            # 獲取指導老師資訊（從公司的 advisor_user_id）
+            teacher_id = offer_info.get('advisor_user_id')
+            teacher_name = None
+            teacher_email = None
+            if teacher_id:
+                cursor.execute("""
+                    SELECT id, name, email
+                    FROM users
+                    WHERE id = %s AND role IN ('teacher', 'director')
+                """, (teacher_id,))
+                teacher_info = cursor.fetchone()
+                if teacher_info:
+                    teacher_name = teacher_info.get('name')
+                    teacher_email = teacher_info.get('email')
+            
+            # 構建 admission 物件
+            admission = {
+                'company_id': offer_info.get('company_id'),
+                'company_name': offer_info.get('company_name'),
+                'company_address': offer_info.get('company_address'),
+                'contact_name': offer_info.get('contact_name'),
+                'contact_email': offer_info.get('contact_email'),
+                'contact_phone': offer_info.get('contact_phone'),
+                'admitted_at': offer_info.get('offered_at'),
+                'teacher_id': teacher_id,
+                'teacher_name': teacher_name,
+                'teacher_email': teacher_email,
+                'semester': None  # 可以從其他地方獲取
             }
+            
+            # 構建 final_preference 物件
+            final_preference = {
+                'job_id': offer_info.get('job_id'),
+                'job_title': offer_info.get('job_title'),
+                'job_description': offer_info.get('job_description'),
+                'internship_period': offer_info.get('internship_period'),
+                'internship_time': offer_info.get('internship_time')
+            }
+            
+            # 如果 job_title 為空，嘗試從 internship_jobs 獲取
+            if not final_preference.get('job_title') and offer_info.get('job_id'):
+                cursor.execute("""
+                    SELECT title, description, period, work_time
+                    FROM internship_jobs
+                    WHERE id = %s
+                """, (offer_info.get('job_id'),))
+                job_info = cursor.fetchone()
+                if job_info:
+                    final_preference['job_title'] = job_info.get('title')
+                    final_preference['job_description'] = job_info.get('description')
+                    final_preference['internship_period'] = job_info.get('period')
+                    final_preference['internship_time'] = job_info.get('work_time')
+                    print(f"✅ [DEBUG] 重新查詢到職缺資訊: {job_info.get('title')}")
+            
+            # 嘗試從 student_preferences 獲取志願序資訊（優先選擇 preference_order 最小的）
+            if offer_info.get('job_id'):
+                cursor.execute("""
+                    SELECT preference_order, submitted_at, company_id
+                    FROM student_preferences
+                    WHERE student_id = %s AND job_id = %s
+                    ORDER BY preference_order ASC
+                    LIMIT 1
+                """, (student_id, offer_info.get('job_id')))
+                pref_info = cursor.fetchone()
+                if pref_info:
+                    final_preference['preference_order'] = pref_info.get('preference_order')
+                    final_preference['submitted_at'] = pref_info.get('submitted_at')
+            else:
+                # 如果沒有 job_id，查找該學生所有錄取的志願，選擇 preference_order 最小的
+                cursor.execute("""
+                    SELECT 
+                        sp.preference_order, 
+                        sp.submitted_at,
+                        sp.job_id,
+                        sp.company_id,
+                        ij.title AS job_title,
+                        ij.description AS job_description,
+                        ij.period AS internship_period,
+                        ij.work_time AS internship_time
+                    FROM student_preferences sp
+                    LEFT JOIN internship_jobs ij ON sp.job_id = ij.id
+                    WHERE sp.student_id = %s 
+                      AND sp.status = 'approved'
+                    ORDER BY sp.preference_order ASC
+                    LIMIT 1
+                """, (student_id,))
+                top_preference = cursor.fetchone()
+                if top_preference:
+                    # 如果找到排名更前面的志願，使用它
+                    if not final_preference.get('preference_order') or top_preference.get('preference_order') < final_preference.get('preference_order', 999):
+                        final_preference['preference_order'] = top_preference.get('preference_order')
+                        final_preference['submitted_at'] = top_preference.get('submitted_at')
+                        if top_preference.get('job_title'):
+                            final_preference['job_title'] = top_preference.get('job_title')
+                        if top_preference.get('job_description'):
+                            final_preference['job_description'] = top_preference.get('job_description')
+                        if top_preference.get('internship_period'):
+                            final_preference['internship_period'] = top_preference.get('internship_period')
+                        if top_preference.get('internship_time'):
+                            final_preference['internship_time'] = top_preference.get('internship_time')
+                        if top_preference.get('job_id'):
+                            final_preference['job_id'] = top_preference.get('job_id')
+                        # 如果公司資訊不同，也需要更新
+                        if top_preference.get('company_id') and top_preference.get('company_id') != offer_info.get('company_id'):
+                            cursor.execute("""
+                                SELECT 
+                                    id AS company_id,
+                                    company_name,
+                                    location AS company_address,
+                                    contact_person AS contact_name,
+                                    contact_email,
+                                    contact_phone,
+                                    advisor_user_id
+                                FROM internship_companies
+                                WHERE id = %s
+                            """, (top_preference.get('company_id'),))
+                            top_company = cursor.fetchone()
+                            if top_company:
+                                admission['company_id'] = top_company.get('company_id')
+                                admission['company_name'] = top_company.get('company_name')
+                                admission['company_address'] = top_company.get('company_address')
+                                admission['contact_name'] = top_company.get('contact_name')
+                                admission['contact_email'] = top_company.get('contact_email')
+                                admission['contact_phone'] = top_company.get('contact_phone')
+                                # 更新指導老師資訊
+                                if top_company.get('advisor_user_id'):
+                                    cursor.execute("""
+                                        SELECT id, name, email
+                                        FROM users
+                                        WHERE id = %s AND role IN ('teacher', 'director')
+                                    """, (top_company.get('advisor_user_id'),))
+                                    top_teacher = cursor.fetchone()
+                                    if top_teacher:
+                                        admission['teacher_id'] = top_teacher.get('id')
+                                        admission['teacher_name'] = top_teacher.get('name')
+                                        admission['teacher_email'] = top_teacher.get('email')
+                        print(f"✅ [DEBUG] 使用排名最前面的志願: preference_order={top_preference.get('preference_order')}")
+            
+            # 標記已從 internship_offers 獲取到資料，跳過後續的 company_info 處理
+            company_info = None
+            print(f"✅ [DEBUG] 使用 internship_offers 資料，跳過舊邏輯")
         else:
-            # 如果沒有從 internship_experiences 獲取到，則從 student_preferences 獲取（備用方案）
-            # 但按照錄取時間排序，而不是志願序
+            # 如果沒有從 internship_offers 獲取到，則使用舊的邏輯（向後兼容）
+            print(f"⚠️ [DEBUG] 未找到 internship_offers 記錄，使用舊邏輯")
+            # 獲取學生的錄取結果（從 teacher_student_relations）
             cursor.execute("""
                 SELECT 
-                    sp.company_id,
-                    sp.preference_order,
-                    sp.submitted_at,
+                    tsr.id AS relation_id,
+                    tsr.semester,
+                    tsr.created_at AS admitted_at,
+                    u_teacher.id AS teacher_id,
+                    u_teacher.name AS teacher_name,
+                    u_teacher.email AS teacher_email
+                FROM teacher_student_relations tsr
+                LEFT JOIN users u_teacher ON tsr.teacher_id = u_teacher.id
+                WHERE tsr.student_id = %s
+                ORDER BY tsr.created_at DESC
+                LIMIT 1
+            """, (student_id,))
+            admission = cursor.fetchone()
+            
+            if not admission:
+                return jsonify({
+                    "success": True,
+                    "admission": None,
+                    "message": "目前尚未錄取任何實習公司"
+                })
+            
+            # 優先從 internship_experiences 獲取公司資訊（廠商確認媒合結果時記錄的）
+            cursor.execute("""
+                SELECT 
+                    ie.company_id,
+                    ie.job_id,
+                    ie.year,
+                    ie.created_at AS admitted_at,
                     ic.company_name,
                     ic.location AS company_address,
                     ic.contact_person AS contact_name,
                     ic.contact_email,
                     ic.contact_phone,
-                    ij.id AS job_id,
+                    ic.advisor_user_id,
                     ij.title AS job_title,
                     ij.description AS job_description,
                     ij.period AS internship_period,
                     ij.work_time AS internship_time
-                FROM student_preferences sp
-                LEFT JOIN internship_companies ic ON sp.company_id = ic.id
-                LEFT JOIN internship_jobs ij ON sp.job_id = ij.id
-                WHERE sp.student_id = %s 
-                  AND sp.status = 'approved'
-                ORDER BY sp.submitted_at DESC
+                FROM internship_experiences ie
+                LEFT JOIN internship_companies ic ON ie.company_id = ic.id
+                LEFT JOIN internship_jobs ij ON ie.job_id = ij.id
+                WHERE ie.user_id = %s 
+                  AND ie.content = '已錄取'
+                ORDER BY ie.created_at DESC
                 LIMIT 1
             """, (student_id,))
-            final_preference = cursor.fetchone()
+            company_info = cursor.fetchone()
             
-            # 如果從 student_preferences 獲取到公司資訊，合併到 admission 中
-            if final_preference:
-                admission['company_id'] = final_preference.get('company_id')
-                admission['company_name'] = final_preference.get('company_name')
-                admission['company_address'] = final_preference.get('company_address')
-                admission['contact_name'] = final_preference.get('contact_name')
-                admission['contact_email'] = final_preference.get('contact_email')
-                admission['contact_phone'] = final_preference.get('contact_phone')
+            # 如果從 internship_experiences 獲取到公司資訊，使用它
+            if company_info:
+                # 優先使用公司的 advisor_user_id 作為指導老師（這是該公司實際的指導老師）
+                company_advisor_id = company_info.get('advisor_user_id')
+                if company_advisor_id:
+                    cursor.execute("""
+                        SELECT id, name, email
+                        FROM users
+                        WHERE id = %s AND role IN ('teacher', 'director')
+                    """, (company_advisor_id,))
+                    company_advisor = cursor.fetchone()
+                    if company_advisor:
+                        # 使用公司的指導老師資訊，而不是 teacher_student_relations 中的
+                        admission['teacher_id'] = company_advisor.get('id')
+                        admission['teacher_name'] = company_advisor.get('name')
+                        admission['teacher_email'] = company_advisor.get('email')
+                        print(f"✅ [DEBUG] 使用公司的指導老師: {company_advisor.get('name')} (advisor_user_id={company_advisor_id})")
+                admission['company_id'] = company_info.get('company_id')
+                admission['company_name'] = company_info.get('company_name')
+                admission['company_address'] = company_info.get('company_address')
+                admission['contact_name'] = company_info.get('contact_name')
+                admission['contact_email'] = company_info.get('contact_email')
+                admission['contact_phone'] = company_info.get('contact_phone')
                 
-                # 清理 final_preference，只保留志願相關資訊
-                final_preference_clean = {
-                    'preference_order': final_preference.get('preference_order'),
-                    'submitted_at': final_preference.get('submitted_at'),
-                    'job_id': final_preference.get('job_id'),
-                    'job_title': final_preference.get('job_title'),
-                    'job_description': final_preference.get('job_description'),
-                    'internship_period': final_preference.get('internship_period'),
-                    'internship_time': final_preference.get('internship_time')
-                }
-                final_preference = final_preference_clean
+                # 更新錄取時間為 internship_experiences 的創建時間（廠商確認的時間）
+                if company_info.get('admitted_at'):
+                    admission['admitted_at'] = company_info.get('admitted_at')
+                
+                # 優先從 student_preferences 獲取排名最前面的志願（preference_order 最小）
+                # 而不是只查詢當前 company_info 對應的志願
+                cursor.execute("""
+                    SELECT 
+                        sp.preference_order,
+                        sp.submitted_at,
+                        sp.job_id,
+                        sp.company_id,
+                        ij.title AS job_title,
+                        ij.description AS job_description,
+                        ij.period AS internship_period,
+                        ij.work_time AS internship_time,
+                        ic.company_name,
+                        ic.location AS company_address,
+                        ic.contact_person AS contact_name,
+                        ic.contact_email,
+                        ic.contact_phone,
+                        ic.advisor_user_id
+                    FROM student_preferences sp
+                    LEFT JOIN internship_jobs ij ON sp.job_id = ij.id
+                    LEFT JOIN internship_companies ic ON sp.company_id = ic.id
+                    WHERE sp.student_id = %s 
+                      AND sp.status = 'approved'
+                    ORDER BY sp.preference_order ASC, sp.submitted_at DESC
+                    LIMIT 1
+                """, (student_id,))
+                top_preference_info = cursor.fetchone()
+                
+                if top_preference_info:
+                    # 使用排名最前面的志願資訊
+                    final_preference = {
+                        'preference_order': top_preference_info.get('preference_order'),
+                        'submitted_at': top_preference_info.get('submitted_at'),
+                        'job_id': top_preference_info.get('job_id'),
+                        'job_title': top_preference_info.get('job_title'),
+                        'job_description': top_preference_info.get('job_description'),
+                        'internship_period': top_preference_info.get('internship_period'),
+                        'internship_time': top_preference_info.get('internship_time')
+                    }
+                    # 如果排名最前面的志願與當前 company_info 不同，更新公司資訊
+                    if top_preference_info.get('company_id') != company_info.get('company_id'):
+                        admission['company_id'] = top_preference_info.get('company_id')
+                        admission['company_name'] = top_preference_info.get('company_name')
+                        admission['company_address'] = top_preference_info.get('company_address')
+                        admission['contact_name'] = top_preference_info.get('contact_name')
+                        admission['contact_email'] = top_preference_info.get('contact_email')
+                        admission['contact_phone'] = top_preference_info.get('contact_phone')
+                        # 更新指導老師資訊
+                        if top_preference_info.get('advisor_user_id'):
+                            cursor.execute("""
+                                SELECT id, name, email
+                                FROM users
+                                WHERE id = %s AND role IN ('teacher', 'director')
+                            """, (top_preference_info.get('advisor_user_id'),))
+                            top_teacher = cursor.fetchone()
+                            if top_teacher:
+                                admission['teacher_id'] = top_teacher.get('id')
+                                admission['teacher_name'] = top_teacher.get('name')
+                                admission['teacher_email'] = top_teacher.get('email')
+                        print(f"✅ [DEBUG] 使用排名最前面的志願: preference_order={top_preference_info.get('preference_order')}, company={top_preference_info.get('company_name')}")
+                else:
+                    # 如果沒有找到 approved 的志願，使用 company_info 的資料
+                    final_preference = {
+                        'preference_order': None,
+                        'submitted_at': None,
+                        'job_id': company_info.get('job_id'),
+                        'job_title': company_info.get('job_title'),
+                        'job_description': company_info.get('job_description'),
+                        'internship_period': company_info.get('internship_period'),
+                        'internship_time': company_info.get('internship_time')
+                    }
             else:
-                final_preference = None
+                # 如果沒有從 internship_experiences 獲取到，則從 student_preferences 獲取（備用方案）
+                # 優先選擇 preference_order 最小的志願（排名最前面的）
+                cursor.execute("""
+                    SELECT 
+                        sp.company_id,
+                        sp.preference_order,
+                        sp.submitted_at,
+                        ic.company_name,
+                        ic.location AS company_address,
+                        ic.contact_person AS contact_name,
+                        ic.contact_email,
+                        ic.contact_phone,
+                        ic.advisor_user_id,
+                        ij.id AS job_id,
+                        ij.title AS job_title,
+                        ij.description AS job_description,
+                        ij.period AS internship_period,
+                        ij.work_time AS internship_time
+                    FROM student_preferences sp
+                    LEFT JOIN internship_companies ic ON sp.company_id = ic.id
+                    LEFT JOIN internship_jobs ij ON sp.job_id = ij.id
+                    WHERE sp.student_id = %s 
+                      AND sp.status = 'approved'
+                    ORDER BY sp.preference_order ASC, sp.submitted_at DESC
+                    LIMIT 1
+                """, (student_id,))
+                final_preference = cursor.fetchone()
+                
+                # 如果從 student_preferences 獲取到公司資訊，合併到 admission 中
+                if final_preference:
+                    admission['company_id'] = final_preference.get('company_id')
+                    admission['company_name'] = final_preference.get('company_name')
+                    admission['company_address'] = final_preference.get('company_address')
+                    admission['contact_name'] = final_preference.get('contact_name')
+                    admission['contact_email'] = final_preference.get('contact_email')
+                    admission['contact_phone'] = final_preference.get('contact_phone')
+                    
+                    # 優先使用公司的 advisor_user_id 作為指導老師（這是該公司實際的指導老師）
+                    company_advisor_id = final_preference.get('advisor_user_id')
+                    if company_advisor_id:
+                        cursor.execute("""
+                            SELECT id, name, email
+                            FROM users
+                            WHERE id = %s AND role IN ('teacher', 'director')
+                        """, (company_advisor_id,))
+                        company_advisor = cursor.fetchone()
+                        if company_advisor:
+                            # 使用公司的指導老師資訊，而不是 teacher_student_relations 中的
+                            admission['teacher_id'] = company_advisor.get('id')
+                            admission['teacher_name'] = company_advisor.get('name')
+                            admission['teacher_email'] = company_advisor.get('email')
+                            print(f"✅ [DEBUG] 使用公司的指導老師: {company_advisor.get('name')} (advisor_user_id={company_advisor_id})")
+                    
+                    # 清理 final_preference，只保留志願相關資訊
+                    final_preference_clean = {
+                        'preference_order': final_preference.get('preference_order'),
+                        'submitted_at': final_preference.get('submitted_at'),
+                        'job_id': final_preference.get('job_id'),
+                        'job_title': final_preference.get('job_title'),
+                        'job_description': final_preference.get('job_description'),
+                        'internship_period': final_preference.get('internship_period'),
+                        'internship_time': final_preference.get('internship_time')
+                    }
+                    final_preference = final_preference_clean
+                else:
+                    final_preference = None
         
         # 獲取實習心得（從 internship_experiences）
         company_id = admission.get('company_id')
@@ -361,6 +694,10 @@ def get_my_admission():
             if isinstance(exp.get('created_at'), datetime):
                 exp['created_at'] = exp['created_at'].strftime("%Y-%m-%d %H:%M:%S")
         
+        # 調試：打印最終返回的資料
+        print(f"🔍 [DEBUG] 最終返回的 admission: {admission}")
+        print(f"🔍 [DEBUG] 最終返回的 final_preference: {final_preference}")
+        
         return jsonify({
             "success": True,
             "admission": admission,
@@ -371,6 +708,95 @@ def get_my_admission():
     except Exception as e:
         traceback.print_exc()
         return jsonify({"success": False, "message": f"查詢失敗: {str(e)}"}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+# =========================================================
+# 臨時 API: 為現有錄取記錄補寫 internship_offers 資料
+# =========================================================
+@admission_bp.route("/api/sync_internship_offers", methods=["POST"])
+def sync_internship_offers():
+    """為現有錄取記錄補寫 internship_offers 資料（一次性操作）"""
+    if 'user_id' not in session or session.get('role') not in ['admin', 'ta']:
+        return jsonify({"success": False, "message": "未授權"}), 403
+    
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+    
+    try:
+        # 獲取所有有錄取關係但沒有 internship_offers 記錄的學生
+        cursor.execute("""
+            SELECT DISTINCT
+                tsr.student_id,
+                sp.job_id,
+                sp.company_id,
+                tsr.created_at AS admitted_at
+            FROM teacher_student_relations tsr
+            INNER JOIN student_preferences sp ON tsr.student_id = sp.student_id
+            WHERE sp.status = 'approved'
+              AND NOT EXISTS (
+                  SELECT 1 FROM internship_offers io
+                  WHERE io.student_id = tsr.student_id
+                    AND (io.job_id = sp.job_id OR (io.job_id IS NULL AND sp.job_id IS NULL))
+              )
+            ORDER BY tsr.student_id, sp.preference_order
+        """)
+        missing_records = cursor.fetchall()
+        
+        inserted_count = 0
+        updated_count = 0
+        
+        for record in missing_records:
+            student_id = record['student_id']
+            job_id = record['job_id']
+            admitted_at = record['admitted_at']
+            
+            # 檢查是否已存在
+            if job_id:
+                cursor.execute("""
+                    SELECT id FROM internship_offers
+                    WHERE student_id = %s AND job_id = %s
+                """, (student_id, job_id))
+            else:
+                cursor.execute("""
+                    SELECT id FROM internship_offers
+                    WHERE student_id = %s AND job_id IS NULL
+                """, (student_id,))
+            
+            existing = cursor.fetchone()
+            
+            if existing:
+                # 更新現有記錄
+                cursor.execute("""
+                    UPDATE internship_offers
+                    SET status = 'accepted', offered_at = %s, responded_at = %s
+                    WHERE id = %s
+                """, (admitted_at, admitted_at, existing['id']))
+                updated_count += 1
+            else:
+                # 插入新記錄
+                cursor.execute("""
+                    INSERT INTO internship_offers
+                    (student_id, job_id, status, offered_at, responded_at)
+                    VALUES (%s, %s, 'accepted', %s, %s)
+                """, (student_id, job_id, admitted_at, admitted_at))
+                inserted_count += 1
+        
+        conn.commit()
+        
+        return jsonify({
+            "success": True,
+            "message": f"同步完成：新增 {inserted_count} 筆記錄，更新 {updated_count} 筆記錄",
+            "inserted": inserted_count,
+            "updated": updated_count,
+            "total_processed": len(missing_records)
+        })
+    
+    except Exception as e:
+        traceback.print_exc()
+        conn.rollback()
+        return jsonify({"success": False, "message": f"同步失敗: {str(e)}"}), 500
     finally:
         cursor.close()
         conn.close()
@@ -766,4 +1192,3 @@ def vendor_matching_results():
     finally:
         cursor.close()
         conn.close()
-
