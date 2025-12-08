@@ -10,6 +10,10 @@ import json
 import re
 from datetime import datetime, date
 from notification import create_notification
+from openpyxl import Workbook, load_workbook
+from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
+from openpyxl.utils import get_column_letter
+import io
 
 # 添加圖片驗證函數
 def is_valid_image_file(file_path):
@@ -65,6 +69,44 @@ def safe_create_inline_image(doc, file_path, width, description=""):
 
 
 resume_bp = Blueprint("resume_bp", __name__)
+
+# -------------------------
+# 輔助函數：格式化學分數（整數顯示為整數，如2而不是2.0）
+# -------------------------
+def format_credits(credits_value):
+    """格式化學分數，整數顯示為整數格式"""
+    if credits_value is None:
+        return ''
+    
+    # 如果是字符串，嘗試解析
+    if isinstance(credits_value, str):
+        credits_value = credits_value.strip()
+        # 如果包含分數符號（如"2/2"），直接返回
+        if '/' in credits_value:
+            return credits_value
+        # 嘗試轉換為數字
+        try:
+            num_value = float(credits_value)
+            # 如果是整數，返回整數格式
+            if num_value.is_integer():
+                return str(int(num_value))
+            return str(num_value)
+        except (ValueError, TypeError):
+            # 無法轉換為數字，返回原字符串
+            return credits_value
+    
+    # 如果是數字類型
+    if isinstance(credits_value, (int, float)):
+        # 如果是整數，返回整數格式
+        if isinstance(credits_value, float) and credits_value.is_integer():
+            return str(int(credits_value))
+        elif isinstance(credits_value, int):
+            return str(credits_value)
+        else:
+            return str(credits_value)
+    
+    # 其他類型，轉換為字符串
+    return str(credits_value)
 
 # 上傳資料夾設定
 UPLOAD_FOLDER = "uploads/resumes"
@@ -2003,8 +2045,8 @@ def submit_and_generate_api():
                                 placeholders = ','.join(['%s'] * len(sem_ids))
                                 cursor.execute(f"""
                                     UPDATE absence_records 
-                                    SET image_path = %%s, updated_at = NOW()
-                                    WHERE user_id = %%s AND semester_id IN ({placeholders})
+                                    SET image_path = %s, updated_at = NOW()
+                                    WHERE user_id = %s AND semester_id IN ({placeholders})
                                     AND (image_path IS NULL OR image_path = '')
                                 """, (absence_image_path, user_id, *sem_ids))
 
@@ -3787,6 +3829,274 @@ def load_personal_template():
         conn.close()
 
 # -------------------------
+# 下載已修習專業核心科目Excel模板
+# -------------------------
+@resume_bp.route('/api/download_course_template', methods=['GET'])
+def download_course_template():
+    """下載已修習專業核心科目Excel模板"""
+    if 'user_id' not in session or session.get('role') != 'student':
+        return jsonify({"success": False, "message": "未授權"}), 403
+    
+    try:
+        # 使用現有的模板文件
+        template_path = os.path.join(os.path.dirname(__file__), '..', 'frontend', 'static', 'examples', '已修習專業核心科目範本.xlsx')
+        template_path = os.path.abspath(template_path)
+        
+        if not os.path.exists(template_path):
+            return jsonify({"success": False, "message": "模板文件不存在"}), 404
+        
+        return send_file(
+            template_path,
+            mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            as_attachment=True,
+            download_name='已修習專業核心科目範本.xlsx'
+        )
+    except Exception as e:
+        print("❌ 下載模板錯誤:", e)
+        traceback.print_exc()
+        return jsonify({"success": False, "message": "下載模板失敗"}), 500
+
+# -------------------------
+# 上傳並解析已修習專業核心科目Excel
+# -------------------------
+@resume_bp.route('/api/upload_course_excel', methods=['POST'])
+def upload_course_excel():
+    """上傳並解析已修習專業核心科目Excel文件"""
+    if 'user_id' not in session or session.get('role') != 'student':
+        return jsonify({"success": False, "message": "未授權"}), 403
+    
+    if 'file' not in request.files:
+        return jsonify({"success": False, "message": "未找到上傳文件"}), 400
+    
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({"success": False, "message": "文件名稱不能為空"}), 400
+    
+    # 檢查文件格式
+    if not file.filename.endswith(('.xlsx', '.xls')):
+        return jsonify({"success": False, "message": "只支援Excel文件(.xlsx, .xls)"}), 400
+    
+    try:
+        # 讀取Excel文件（不使用data_only，這樣可以獲取原始格式）
+        file_content = file.read()
+        wb = load_workbook(io.BytesIO(file_content), data_only=False)
+        ws = wb.active
+        
+        # 也創建一個data_only版本用於讀取公式計算結果（D欄的修課狀態）
+        wb_data = load_workbook(io.BytesIO(file_content), data_only=True)
+        ws_data = wb_data.active
+        
+        def get_cell_value(cell, data_cell=None):
+            """獲取單元格值，處理日期格式問題"""
+            if cell is None:
+                return None
+            
+            value = cell.value
+            if value is None:
+                return None
+            
+            # 檢查是否是日期類型
+            if isinstance(value, datetime):
+                # 如果是日期，嘗試從原始格式恢復
+                # 檢查number_format來判斷原始格式
+                number_format = cell.number_format
+                # 如果是日期格式（包含d、m、y等），嘗試恢復
+                if any(char in str(number_format).lower() for char in ['d', 'm', 'y']):
+                    # 嘗試轉換為 mm/dd 格式
+                    try:
+                        month = value.month
+                        day = value.day
+                        # 如果月份和日期相同（如2/2、3/3），返回分數格式
+                        if month == day:
+                            return f"{month}/{day}"
+                        else:
+                            return f"{month}/{day}"
+                    except:
+                        pass
+                # 返回日期字符串表示
+                return value.strftime('%Y-%m-%d %H:%M:%S')
+            
+            # 如果是數字，但格式看起來像是分數（檢查number_format）
+            if isinstance(value, (int, float)):
+                number_format = str(cell.number_format or '')
+                # 如果格式中包含分數符號，嘗試恢復
+                if '/' in number_format:
+                    # 嘗試從日期恢復（如果月份和日期相同）
+                    try:
+                        if isinstance(value, float) and 1 <= int(value) <= 12:
+                            # 可能是日期序列號，嘗試轉換
+                            from openpyxl.utils.datetime import from_excel
+                            date_val = from_excel(value)
+                            if date_val.month == date_val.day:
+                                return f"{date_val.month}/{date_val.day}"
+                    except:
+                        pass
+            
+            return value
+        
+        courses = []
+        # 從第2行開始讀取（第1行是標題）
+        for row_idx in range(2, ws.max_row + 1):
+            # A欄：課程名稱，B欄：學分數，C欄：成績，D欄：修課狀態
+            cell_name = ws.cell(row=row_idx, column=1)
+            cell_credits = ws.cell(row=row_idx, column=2)
+            cell_grade = ws.cell(row=row_idx, column=3)
+            cell_status = ws_data.cell(row=row_idx, column=4)  # 使用data_only版本讀取公式結果
+            
+            course_name = get_cell_value(cell_name)
+            credits_raw = cell_credits.value  # 直接獲取原始值，不使用get_cell_value（因為需要特殊處理學分數）
+            grade = get_cell_value(ws.cell(row=row_idx, column=3))
+            status = get_cell_value(cell_status) if cell_status.value is not None else None
+            
+            # 如果課程名稱為空，跳過這一行
+            if not course_name or str(course_name).strip() == '':
+                continue
+            
+            # 轉換為字符串並清理
+            course_name = str(course_name).strip()
+            
+            # 處理學分數：特別處理日期格式
+            credits_str = ''
+            if credits_raw is not None:
+                # 如果是datetime對象（Excel將"2/2"識別為日期）
+                if isinstance(credits_raw, datetime):
+                    month = credits_raw.month
+                    day = credits_raw.day
+                    # 恢復為分數格式（如"2/2"、"3/3"）
+                    credits_str = f"{month}/{day}"
+                # 如果是日期格式的字符串（如"2025-01-01 00:00:00"）
+                elif isinstance(credits_raw, str):
+                    credits_str = credits_raw.strip()
+                    # 檢查是否是日期格式字符串
+                    if ('2025-' in credits_str or '2024-' in credits_str or '2026-' in credits_str) and ('-' in credits_str):
+                        try:
+                            # 嘗試解析日期
+                            date_part = credits_str.split()[0] if ' ' in credits_str else credits_str
+                            date_obj = datetime.strptime(date_part, '%Y-%m-%d')
+                            month = date_obj.month
+                            day = date_obj.day
+                            # 恢復為分數格式
+                            credits_str = f"{month}/{day}"
+                        except:
+                            # 解析失敗，使用format_credits格式化
+                            credits_str = format_credits(credits_str)
+                    else:
+                        # 不是日期格式，使用format_credits格式化
+                        credits_str = format_credits(credits_str)
+                else:
+                    # 其他類型（數字等），格式化後轉換為字符串
+                    credits_str = format_credits(credits_raw)
+            
+            # 保留原始學分數（B欄的值），不管是否未修課
+            original_credits_str = credits_str
+            
+            # 處理成績：轉換為字符串
+            grade_str = str(grade).strip() if grade else ''
+            
+            # 判斷是否未修課（D欄為0或者C欄為空）
+            is_not_taken = False
+            if status is not None:
+                # 如果是數字，判斷是否為0
+                try:
+                    status_num = float(status)
+                    is_not_taken = (status_num == 0)
+                except (ValueError, TypeError):
+                    # 如果是字符串，檢查是否為"0"
+                    is_not_taken = (str(status).strip() == '0')
+            elif not grade_str:  # 如果C欄為空，也視為未修課
+                is_not_taken = True
+            
+            # 如果未修課，顯示學分數為0，但保留原始學分數
+            display_credits = '0' if is_not_taken else original_credits_str
+            
+            courses.append({
+                'name': course_name,
+                'credits': original_credits_str,  # 保留原始學分數，前端會根據isNotTaken決定顯示值
+                'grade': grade_str,
+                'isNotTaken': is_not_taken
+            })
+        
+        # 寫入course_grades表
+        student_id = session.get('user_id')
+        if not student_id:
+            return jsonify({"success": False, "message": "無法取得學生ID"}), 400
+        
+        # 取得學號（username）
+        conn = get_db()
+        cursor = conn.cursor(dictionary=True)
+        try:
+            cursor.execute("SELECT username FROM users WHERE id = %s", (student_id,))
+            user = cursor.fetchone()
+            if not user:
+                return jsonify({"success": False, "message": "找不到學生資料"}), 400
+            
+            student_number = user['username']
+            
+            # 檢查是否有SemesterID欄位
+            cursor.execute("SHOW COLUMNS FROM course_grades LIKE 'SemesterID'")
+            has_semester_id = cursor.fetchone() is not None
+            
+            # 取得當前學期ID（如果有）
+            semester_id = None
+            if has_semester_id:
+                semester_id = get_current_semester_id(cursor)
+            
+            # 刪除該學生的舊資料
+            if has_semester_id and semester_id:
+                cursor.execute(
+                    "DELETE FROM course_grades WHERE StuID=%s AND IFNULL(SemesterID,'')=%s",
+                    (student_number, semester_id)
+                )
+            else:
+                cursor.execute("DELETE FROM course_grades WHERE StuID=%s", (student_number,))
+            
+            # 重新插入Excel的成績
+            insert_count = 0
+            seen_courses = set()
+            for course in courses:
+                course_name = course['name'].strip()
+                if not course_name or course_name in seen_courses:
+                    continue
+                seen_courses.add(course_name)
+                
+                # 如果未修課，學分數設為0，成績為空
+                credits = '0' if course.get('isNotTaken', False) else course.get('credits', '')
+                grade = '' if course.get('isNotTaken', False) else course.get('grade', '')
+                
+                if has_semester_id and semester_id:
+                    cursor.execute("""
+                        INSERT INTO course_grades (StuID, CourseName, Credits, Grade, SemesterID)
+                        VALUES (%s, %s, %s, %s, %s)
+                    """, (student_number, course_name, credits, grade, semester_id))
+                else:
+                    cursor.execute("""
+                        INSERT INTO course_grades (StuID, CourseName, Credits, Grade)
+                        VALUES (%s, %s, %s, %s)
+                    """, (student_number, course_name, credits, grade))
+                insert_count += 1
+            
+            conn.commit()
+            
+            return jsonify({
+                "success": True,
+                "courses": courses,
+                "count": insert_count,
+                "message": f"成功匯入 {insert_count} 門課程資料並寫入資料庫"
+            })
+        except Exception as e:
+            conn.rollback()
+            print("❌ 寫入course_grades錯誤:", e)
+            traceback.print_exc()
+            return jsonify({"success": False, "message": f"寫入資料庫失敗: {str(e)}"}), 500
+        finally:
+            cursor.close()
+            conn.close()
+    except Exception as e:
+        print("❌ 解析Excel錯誤:", e)
+        traceback.print_exc()
+        return jsonify({"success": False, "message": f"解析Excel失敗: {str(e)}"}), 500
+
+# -------------------------
 # API - 取得班導 / 主任 履歷 (支援多班級 & 全系)（讀取）
 # -------------------------
 @resume_bp.route("/api/get_class_resumes", methods=["GET"])
@@ -4385,3 +4695,461 @@ def review_resume_page():
 @resume_bp.route('/ai_edit_resume')
 def ai_edit_resume_page():
     return render_template('resume/ai_edit_resume.html')
+
+# -------------------------
+# 科助上傳標準課程Excel（預覽）
+# -------------------------
+@resume_bp.route('/api/ta/preview_standard_courses', methods=['POST'])
+def preview_standard_courses():
+    """科助預覽標準課程Excel文件"""
+    if 'user_id' not in session or session.get('role') != 'ta':
+        return jsonify({"success": False, "message": "未授權"}), 403
+    
+    if 'file' not in request.files:
+        return jsonify({"success": False, "message": "未找到上傳文件"}), 400
+    
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({"success": False, "message": "文件名稱不能為空"}), 400
+    
+    if not file.filename.endswith(('.xlsx', '.xls')):
+        return jsonify({"success": False, "message": "只支援Excel文件(.xlsx, .xls)"}), 400
+    
+    try:
+        file_content = file.read()
+        wb = load_workbook(io.BytesIO(file_content), data_only=False)
+        ws = wb.active
+        
+        def get_cell_value(cell):
+            """獲取單元格值，處理日期格式問題"""
+            if cell is None or cell.value is None:
+                return None
+            value = cell.value
+            if isinstance(value, datetime):
+                month = value.month
+                day = value.day
+                return f"{month}/{day}"
+            return value
+        
+        courses = []
+        for row_idx in range(2, ws.max_row + 1):
+            cell_name = ws.cell(row=row_idx, column=1)
+            cell_credits = ws.cell(row=row_idx, column=2)
+            
+            course_name = get_cell_value(cell_name)
+            credits_raw = cell_credits.value
+            
+            if not course_name or str(course_name).strip() == '':
+                continue
+            
+            course_name = str(course_name).strip()
+            
+            # 處理學分數
+            credits_str = ''
+            if credits_raw is not None:
+                if isinstance(credits_raw, datetime):
+                    month = credits_raw.month
+                    day = credits_raw.day
+                    credits_str = f"{month}/{day}"
+                elif isinstance(credits_raw, str):
+                    credits_str = credits_raw.strip()
+                    if ('2025-' in credits_str or '2024-' in credits_str or '2026-' in credits_str) and ('-' in credits_str):
+                        try:
+                            date_part = credits_str.split()[0] if ' ' in credits_str else credits_str
+                            date_obj = datetime.strptime(date_part, '%Y-%m-%d')
+                            month = date_obj.month
+                            day = date_obj.day
+                            credits_str = f"{month}/{day}"
+                        except:
+                            # 解析失敗，使用format_credits格式化
+                            credits_str = format_credits(credits_str)
+                    else:
+                        # 不是日期格式，使用format_credits格式化
+                        credits_str = format_credits(credits_str)
+                else:
+                    credits_str = format_credits(credits_raw)
+            
+            courses.append({
+                'name': course_name,
+                'credits': credits_str
+            })
+        
+        return jsonify({
+            "success": True,
+            "courses": courses,
+            "message": f"成功解析 {len(courses)} 門課程"
+        })
+    except Exception as e:
+        print("❌ 預覽Excel錯誤:", e)
+        traceback.print_exc()
+        return jsonify({"success": False, "message": f"解析Excel失敗: {str(e)}"}), 500
+
+# -------------------------
+# 科助上傳標準課程Excel（寫入資料庫）
+# -------------------------
+@resume_bp.route('/api/ta/upload_standard_courses', methods=['POST'])
+def upload_standard_courses():
+    """科助上傳標準課程Excel並寫入standard_courses表"""
+    if 'user_id' not in session or session.get('role') != 'ta':
+        return jsonify({"success": False, "message": "未授權"}), 403
+    
+    if 'file' not in request.files:
+        return jsonify({"success": False, "message": "未找到上傳文件"}), 400
+    
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({"success": False, "message": "文件名稱不能為空"}), 400
+    
+    if not file.filename.endswith(('.xlsx', '.xls')):
+        return jsonify({"success": False, "message": "只支援Excel文件(.xlsx, .xls)"}), 400
+    
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+    
+    try:
+        file_content = file.read()
+        wb = load_workbook(io.BytesIO(file_content), data_only=False)
+        ws = wb.active
+        
+        def get_cell_value(cell):
+            if cell is None or cell.value is None:
+                return None
+            value = cell.value
+            if isinstance(value, datetime):
+                month = value.month
+                day = value.day
+                return f"{month}/{day}"
+            return value
+        
+        courses = []
+        for row_idx in range(2, ws.max_row + 1):
+            cell_name = ws.cell(row=row_idx, column=1)
+            cell_credits = ws.cell(row=row_idx, column=2)
+            
+            course_name = get_cell_value(cell_name)
+            credits_raw = cell_credits.value
+            
+            if not course_name or str(course_name).strip() == '':
+                continue
+            
+            course_name = str(course_name).strip()
+            
+            # 處理學分數
+            credits_str = ''
+            if credits_raw is not None:
+                if isinstance(credits_raw, datetime):
+                    month = credits_raw.month
+                    day = credits_raw.day
+                    credits_str = f"{month}/{day}"
+                elif isinstance(credits_raw, str):
+                    credits_str = credits_raw.strip()
+                    if ('2025-' in credits_str or '2024-' in credits_str or '2026-' in credits_str) and ('-' in credits_str):
+                        try:
+                            date_part = credits_str.split()[0] if ' ' in credits_str else credits_str
+                            date_obj = datetime.strptime(date_part, '%Y-%m-%d')
+                            month = date_obj.month
+                            day = date_obj.day
+                            credits_str = f"{month}/{day}"
+                        except:
+                            # 解析失敗，使用format_credits格式化
+                            credits_str = format_credits(credits_str)
+                    else:
+                        # 不是日期格式，使用format_credits格式化
+                        credits_str = format_credits(credits_str)
+                else:
+                    credits_str = format_credits(credits_raw)
+            
+            courses.append({
+                'name': course_name,
+                'credits': credits_str
+            })
+        
+        if len(courses) == 0:
+            return jsonify({"success": False, "message": "Excel文件中沒有找到課程資料"}), 400
+        
+        # 保存上傳的Excel文件
+        # 創建上傳目錄
+        upload_dir = os.path.join('uploads', 'standard_courses')
+        os.makedirs(upload_dir, exist_ok=True)
+        
+        # 生成安全的文件名
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        safe_filename = secure_filename(file.filename)
+        filename = f"{timestamp}_{safe_filename}"
+        file_path = os.path.join(upload_dir, filename)
+        
+        # 保存文件
+        file.seek(0)  # 重置文件指針
+        abs_file_path = os.path.abspath(file_path)
+        os.makedirs(os.path.dirname(abs_file_path), exist_ok=True)
+        with open(abs_file_path, 'wb') as f:
+            f.write(file_content)
+        
+        # 數據庫中的相對路徑
+        db_file_path = file_path.replace('\\', '/')
+        
+        # 檢查並創建 uploaded_course_templates 表（如果不存在）
+        cursor.execute("SHOW TABLES LIKE 'uploaded_course_templates'")
+        has_template_table = cursor.fetchone() is not None
+        
+        if not has_template_table:
+            # 創建 uploaded_course_templates 表
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS uploaded_course_templates (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    file_path VARCHAR(500) NOT NULL,
+                    uploaded_by INT NULL,
+                    uploaded_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    INDEX idx_uploaded_at (uploaded_at),
+                    INDEX idx_file_path (file_path)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+            """)
+            print("✅ 已創建 uploaded_course_templates 表")
+        
+        # 先將舊資料標記為非活躍（不直接刪除，保留歷史）
+        cursor.execute("UPDATE standard_courses SET is_active = 0")
+        
+        # 重新插入Excel中的課程（不包含文件路徑）
+        insert_count = 0
+        for idx, course in enumerate(courses, 1):
+            try:
+                cursor.execute("""
+                    INSERT INTO standard_courses (course_name, credits, order_index, is_active, created_at)
+                    VALUES (%s, %s, %s, 1, NOW())
+                """, (course['name'], course['credits'], idx))
+                insert_count += 1
+            except Exception as e:
+                print(f"⚠️ 插入課程失敗: {course['name']}, 錯誤: {e}")
+                # 繼續插入其他課程，不中斷
+                continue
+        
+        # 將文件路徑保存到 uploaded_course_templates 表
+        template_id = None
+        try:
+            cursor.execute("""
+                INSERT INTO uploaded_course_templates (file_path, uploaded_by, uploaded_at)
+                VALUES (%s, %s, NOW())
+            """, (db_file_path, session['user_id']))
+            cursor.execute("SELECT LAST_INSERT_ID() as id")
+            result = cursor.fetchone()
+            if result:
+                template_id = result['id']
+            print(f"✅ 已保存文件路徑到 uploaded_course_templates 表，ID: {template_id}, 文件路徑: {db_file_path}, 課程數: {insert_count}")
+        except Exception as e:
+            print(f"⚠️ 保存文件路徑失敗: {e}")
+            traceback.print_exc()
+        
+        print(f"✅ 已插入 {insert_count} 門課程到 standard_courses 表")
+        
+        # 確保事務提交
+        try:
+            conn.commit()
+            print(f"✅ 成功更新 standard_courses 表，插入 {insert_count} 門課程")
+            print(f"✅ 文件已保存到: {abs_file_path}")
+            
+            # 驗證更新是否成功
+            cursor.execute("SELECT COUNT(*) as count FROM standard_courses WHERE is_active = 1")
+            verify_result = cursor.fetchone()
+            active_count = verify_result['count'] if verify_result else 0
+            print(f"✅ 驗證：standard_courses 表中 is_active=1 的記錄數: {active_count}")
+            
+            # 驗證文件路徑是否正確保存到 uploaded_course_templates 表
+            if template_id:
+                cursor.execute("SELECT * FROM uploaded_course_templates WHERE id = %s", (template_id,))
+                verify_template = cursor.fetchone()
+                if verify_template:
+                    print(f"✅ 驗證：文件路徑已保存到 uploaded_course_templates 表，ID: {template_id}, 文件路徑: {verify_template.get('file_path', 'N/A')}")
+                else:
+                    print(f"⚠️ 警告：uploaded_course_templates 表記錄ID {template_id} 未找到")
+            
+            return jsonify({
+                "success": True,
+                "count": insert_count,
+                "message": f"成功上傳 {insert_count} 門課程",
+                "file_path": db_file_path
+            })
+        except Exception as commit_error:
+            conn.rollback()
+            print(f"❌ 提交事務失敗: {commit_error}")
+            traceback.print_exc()
+            raise commit_error
+    except Exception as e:
+        conn.rollback()
+        print("❌ 上傳標準課程錯誤:", e)
+        traceback.print_exc()
+        return jsonify({"success": False, "message": f"上傳失敗: {str(e)}"}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+# -------------------------
+# 科助取得標準課程上傳歷史
+# -------------------------
+@resume_bp.route('/api/ta/get_standard_courses_history', methods=['GET'])
+def get_standard_courses_history():
+    """取得標準課程上傳歷史記錄"""
+    if 'user_id' not in session or session.get('role') != 'ta':
+        return jsonify({"success": False, "message": "未授權"}), 403
+    
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+    
+    try:
+        # 檢查 uploaded_course_templates 表是否存在
+        cursor.execute("SHOW TABLES LIKE 'uploaded_course_templates'")
+        has_template_table = cursor.fetchone() is not None
+        
+        if has_template_table:
+            # 從 uploaded_course_templates 表獲取歷史記錄
+            # 並從 standard_courses 表計算每次上傳的課程數量（根據上傳日期匹配）
+            cursor.execute("""
+                SELECT 
+                    t.id,
+                    t.file_path,
+                    t.uploaded_by,
+                    t.uploaded_at,
+                    COALESCE(COUNT(DISTINCT s.id), 0) as course_count
+                FROM uploaded_course_templates t
+                LEFT JOIN standard_courses s ON DATE(s.created_at) = DATE(t.uploaded_at)
+                    AND s.is_active = 1
+                GROUP BY t.id, t.file_path, t.uploaded_by, t.uploaded_at
+                ORDER BY t.uploaded_at DESC
+                LIMIT 20
+            """)
+            history = cursor.fetchall()
+            # 調試：打印查詢結果
+            print(f"🔍 從 uploaded_course_templates 表查詢到 {len(history)} 筆歷史記錄")
+            for record in history:
+                print(f"  - ID: {record.get('id')}, 文件路徑: {record.get('file_path', 'NULL')}, 課程數: {record.get('course_count', 0)}")
+        else:
+            # 如果表不存在，返回空列表
+            print("⚠️ uploaded_course_templates 表不存在")
+            history = []
+        
+        return jsonify({
+            "success": True,
+            "history": history
+        })
+    except Exception as e:
+        print("❌ 取得上傳歷史錯誤:", e)
+        traceback.print_exc()
+        return jsonify({"success": False, "message": f"取得歷史記錄失敗: {str(e)}"}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+# -------------------------
+# 科助下載標準課程Excel文件
+# -------------------------
+@resume_bp.route('/api/ta/download_standard_course_file/<int:history_id>', methods=['GET'])
+def download_standard_course_file(history_id):
+    """下載上傳的Excel文件（從uploaded_course_templates表）"""
+    if 'user_id' not in session or session.get('role') != 'ta':
+        return jsonify({"success": False, "message": "未授權"}), 403
+    
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+    
+    try:
+        # 從 uploaded_course_templates 表獲取文件路徑
+        cursor.execute("""
+            SELECT file_path 
+            FROM uploaded_course_templates 
+            WHERE id = %s
+        """, (history_id,))
+        record = cursor.fetchone()
+        
+        if not record or not record.get('file_path'):
+            return jsonify({"success": False, "message": "找不到文件"}), 404
+        
+        file_path = record.get('file_path')
+        
+        # 處理相對路徑
+        if not os.path.isabs(file_path):
+            abs_file_path = os.path.abspath(file_path)
+        else:
+            abs_file_path = file_path
+        
+        if not os.path.exists(abs_file_path):
+            return jsonify({"success": False, "message": "文件不存在"}), 404
+        
+        # 獲取原始文件名（從路徑中提取）
+        original_filename = os.path.basename(file_path)
+        # 如果文件名包含時間戳，嘗試提取原始文件名
+        if '_' in original_filename:
+            parts = original_filename.split('_', 1)
+            if len(parts) > 1:
+                original_filename = parts[1]
+        
+        return send_file(abs_file_path, as_attachment=True, download_name=original_filename)
+    except Exception as e:
+        print(f"❌ 下載文件錯誤: {e}")
+        traceback.print_exc()
+        return jsonify({"success": False, "message": f"下載失敗: {str(e)}"}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+# -------------------------
+# 科助刪除標準課程上傳記錄
+# -------------------------
+@resume_bp.route('/api/ta/delete_standard_course_history/<int:history_id>', methods=['DELETE'])
+def delete_standard_course_history(history_id):
+    """刪除上傳歷史記錄及對應的文件（從uploaded_course_templates表）"""
+    if 'user_id' not in session or session.get('role') != 'ta':
+        return jsonify({"success": False, "message": "未授權"}), 403
+    
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+    
+    try:
+        # 從 uploaded_course_templates 表獲取文件路徑
+        cursor.execute("""
+            SELECT file_path
+            FROM uploaded_course_templates 
+            WHERE id = %s
+        """, (history_id,))
+        record = cursor.fetchone()
+        
+        if not record:
+            return jsonify({"success": False, "message": "找不到記錄"}), 404
+        
+        file_path = record.get('file_path')
+        
+        # 刪除文件（如果存在）
+        if file_path:
+            abs_file_path = os.path.abspath(file_path)
+            if os.path.exists(abs_file_path):
+                try:
+                    os.remove(abs_file_path)
+                    print(f"✅ 已刪除文件: {abs_file_path}")
+                except Exception as e:
+                    print(f"⚠️ 刪除文件失敗: {e}")
+        
+        # 刪除 uploaded_course_templates 表中的記錄
+        cursor.execute("DELETE FROM uploaded_course_templates WHERE id = %s", (history_id,))
+        conn.commit()
+        
+        print(f"✅ 已刪除 uploaded_course_templates 表記錄，ID: {history_id}")
+        
+        return jsonify({
+            "success": True,
+            "message": "已成功刪除記錄"
+        })
+    except Exception as e:
+        conn.rollback()
+        print(f"❌ 刪除記錄錯誤: {e}")
+        traceback.print_exc()
+        return jsonify({"success": False, "message": f"刪除失敗: {str(e)}"}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+# -------------------------
+# 科助上傳標準課程頁面
+# -------------------------
+@resume_bp.route('/ta/upload_standard_courses')
+def upload_standard_courses_page():
+    if 'user_id' not in session or session.get('role') != 'ta':
+        return redirect('/login')
+    return render_template('ta/upload_standard_courses.html')

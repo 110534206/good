@@ -144,8 +144,10 @@
               <h5 class="mb-3">已修習專業核心科目</h5>
 
               <div class="mb-3">
-                <button type="button" class="btn btn-outline-primary btn-sm" id="load-template-btn">查看我的課程</button>
+                <button type="button" class="btn btn-outline-info btn-sm" id="download-excel-template-btn">📥 下載Excel範本</button>
+                <button type="button" class="btn btn-outline-warning btn-sm" id="upload-excel-btn">📤 上傳Excel</button>
                 <button type="button" class="btn btn-outline-success btn-sm" id="save-template-btn">儲存</button>
+                <input type="file" id="excel-file-input" accept=".xlsx,.xls" style="display: none;">
               </div>
 
               <div class="row mb-3">
@@ -174,7 +176,7 @@
                   </thead>
                   <tbody id="courseTableBody">
                     <tr>
-                      <td colspan="4" class="text-muted text-center">載入中...</td>
+                      <td colspan="4" class="text-muted text-center">請先下載Excel範本，填寫完成後上傳以顯示課程資料</td>
                     </tr>
                   </tbody>
                 </table>
@@ -444,7 +446,7 @@
 
       if (courses.length === 0) {
         const row = document.createElement("tr");
-        row.innerHTML = `<td colspan="4" class="text-muted text-center">查無課程或尚未新增課程</td>`;
+        row.innerHTML = `<td colspan="4" class="text-muted text-center">請先下載Excel範本，填寫完成後上傳以顯示課程資料</td>`;
         tbody.appendChild(row);
         return;
       }
@@ -648,9 +650,136 @@
     document.getElementById("course-search").addEventListener("input", applyFilterAndSearch);
     document.getElementById("credit-filter").addEventListener("change", applyFilterAndSearch);
 
+    // 🧩 下載Excel模板
+    async function downloadExcelTemplate() {
+      try {
+        const response = await fetch("/api/download_course_template");
+        if (!response.ok) {
+          const error = await response.json();
+          alert("❌ 下載失敗：" + (error.message || "未知錯誤"));
+          return;
+        }
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = "已修習專業核心科目範本.xlsx";
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+        alert("✅ 模板下載成功！");
+      } catch (err) {
+        console.error("❌ 下載模板錯誤:", err);
+        alert("❌ 下載失敗：" + err.message);
+      }
+    }
+
+    // 🧩 上傳並解析Excel
+    async function uploadExcelFile(file) {
+      const formData = new FormData();
+      formData.append('file', file);
+      
+      try {
+        const response = await fetch("/api/upload_course_excel", {
+          method: "POST",
+          body: formData
+        });
+        
+        const result = await response.json();
+        
+        if (!result.success) {
+          alert("❌ 上傳失敗：" + (result.message || "未知錯誤"));
+          return;
+        }
+        
+        if (!result.courses || result.courses.length === 0) {
+          alert("⚠️ Excel文件中沒有找到課程資料");
+          return;
+        }
+        
+        // 直接使用Excel中的課程數據（如果allCoursesData為空，直接使用；否則合併）
+        if (allCoursesData.length === 0) {
+          // 如果還沒有課程數據，直接使用Excel數據
+          allCoursesData = result.courses.map(course => ({
+            name: course.name,
+            credits: course.credits || '',
+            grade: course.grade || '',
+            isNotTaken: course.isNotTaken || false
+          }));
+        } else {
+          // 將Excel數據合併到現有課程數據中
+          // 以Excel中的課程名稱為準，更新成績和修課狀態
+          const excelCoursesMap = new Map();
+          result.courses.forEach(course => {
+            excelCoursesMap.set(course.name, course);
+          });
+          
+          // 更新allCoursesData
+          allCoursesData.forEach(course => {
+            const excelCourse = excelCoursesMap.get(course.name);
+            if (excelCourse) {
+              // 更新成績
+              course.grade = excelCourse.grade || '';
+              // 更新修課狀態（isNotTaken）
+              course.isNotTaken = excelCourse.isNotTaken || false;
+              // 更新學分數（保留原始值，createCourseRow會根據isNotTaken決定顯示值）
+              if (excelCourse.credits) {
+                course.credits = excelCourse.credits;
+              }
+            }
+          });
+          
+          // 如果有Excel中的新課程（不在現有列表中的），也加入
+          result.courses.forEach(excelCourse => {
+            const exists = allCoursesData.find(c => c.name === excelCourse.name);
+            if (!exists) {
+              allCoursesData.push({
+                name: excelCourse.name,
+                credits: excelCourse.credits || '',  // 保留原始學分數
+                grade: excelCourse.grade || '',
+                isNotTaken: excelCourse.isNotTaken || false
+              });
+            }
+          });
+        }
+        
+        // 重新排序
+        allCoursesData.sort((a, b) => a.name.localeCompare(b.name, 'zh-TW', {
+          sensitivity: 'base'
+        }));
+        
+        // 重新渲染表格（顯示課程資料）
+        renderCourseTable(allCoursesData);
+        
+        // 保存表單數據
+        saveFormData();
+        
+        alert(`✅ 成功匯入 ${result.courses.length} 門課程資料！`);
+      } catch (err) {
+        console.error("❌ 上傳Excel錯誤:", err);
+        alert("❌ 上傳失敗：" + err.message);
+      }
+    }
+
     // 🧩 綁定按鈕事件
-    document.getElementById("load-template-btn").addEventListener("click", loadPersonalTemplate);
     document.getElementById("save-template-btn").addEventListener("click", savePersonalTemplate);
+    document.getElementById("download-excel-template-btn").addEventListener("click", downloadExcelTemplate);
+    
+    // 上傳Excel按鈕點擊事件
+    document.getElementById("upload-excel-btn").addEventListener("click", () => {
+      document.getElementById("excel-file-input").click();
+    });
+    
+    // Excel文件選擇事件
+    document.getElementById("excel-file-input").addEventListener("change", (e) => {
+      const file = e.target.files[0];
+      if (file) {
+        uploadExcelFile(file);
+        // 清空input，以便可以再次選擇同一文件
+        e.target.value = '';
+      }
+    });
 
     // =========================================================================
     // 證照動態管理（代碼 + 名稱 + 類別 + 圖片）
@@ -1783,10 +1912,13 @@
           // 標記已從資料庫載入資料（只有在成功載入課程後才標記）
           resumeDataLoaded = true;
         } else {
-          // 如果沒有課程資料，需要載入標準課程或個人模板
-          console.log("⚠️ 履歷資料中沒有課程資料，將由 loadPersonalTemplate 載入");
-          // 不設置 resumeDataLoaded，讓後續的 loadPersonalTemplate 可以執行
-          // 這樣可以確保課程表格會被正確載入
+          // 如果沒有課程資料，不自動載入，等待學生上傳Excel
+          console.log("⚠️ 履歷資料中沒有課程資料，請上傳Excel文件");
+          // 顯示提示信息
+          const tbody = document.getElementById("courseTableBody");
+          if (tbody) {
+            tbody.innerHTML = '<tr><td colspan="4" class="text-muted text-center">請先下載Excel範本，填寫完成後上傳以顯示課程資料</td></tr>';
+          }
         }
 
         // 3. 填充證照資料
@@ -2027,6 +2159,12 @@
         // 恢復自動保存
         disableAutoSave = false;
         
+        // 載入履歷數據後，嘗試恢復缺勤表單的臨時輸入數據（從LocalStorage）
+        // 這可以保留用戶正在輸入但尚未提交的缺勤記錄
+        setTimeout(() => {
+          loadAbsenceFormData();
+        }, 300);
+        
         console.log("✅ 履歷資料已成功載入並填充到表單");
         console.log("📊 載入的資料摘要:", {
           "基本資料": data.student_info ? "有" : "無",
@@ -2120,10 +2258,18 @@
     // 🧩 輔助函式：從 LocalStorage 恢復缺勤記錄表單資料
     function loadAbsenceFormData() {
       const container = document.getElementById('absenceRecordContainer');
-      if (!container) return;
+      if (!container) {
+        console.log('⚠️ 找不到缺勤記錄容器，稍後再試');
+        // 如果容器不存在，稍後再試（可能是DOM還沒載入完成）
+        setTimeout(loadAbsenceFormData, 200);
+        return;
+      }
       
       const savedDataString = localStorage.getItem(AUTO_SAVE_KEY);
-      if (!savedDataString) return;
+      if (!savedDataString) {
+        console.log('📭 LocalStorage 中沒有缺勤記錄表單資料');
+        return;
+      }
       
       try {
         const data = JSON.parse(savedDataString);
@@ -2134,17 +2280,30 @@
           const durationUnitsInput = container.querySelector('#duration_units');
           const reasonInput = container.querySelector('#reason');
           
+          // 只恢復非空的值，避免覆蓋用戶正在輸入的數據
           if (absenceDateInput && data.fields['absence_date']) {
-            absenceDateInput.value = data.fields['absence_date'];
+            // 如果輸入框為空，才恢復
+            if (!absenceDateInput.value) {
+              absenceDateInput.value = data.fields['absence_date'];
+            }
           }
           if (absenceTypeInput && data.fields['absence_type']) {
-            absenceTypeInput.value = data.fields['absence_type'];
+            // 如果輸入框為空，才恢復
+            if (!absenceTypeInput.value) {
+              absenceTypeInput.value = data.fields['absence_type'];
+            }
           }
           if (durationUnitsInput && data.fields['duration_units']) {
-            durationUnitsInput.value = data.fields['duration_units'];
+            // 如果輸入框為空，才恢復
+            if (!durationUnitsInput.value) {
+              durationUnitsInput.value = data.fields['duration_units'];
+            }
           }
           if (reasonInput && data.fields['reason']) {
-            reasonInput.value = data.fields['reason'];
+            // 如果輸入框為空，才恢復
+            if (!reasonInput.value) {
+              reasonInput.value = data.fields['reason'];
+            }
           }
           
           console.log('📥 缺勤記錄表單資料已從 LocalStorage 恢復');
@@ -2813,7 +2972,10 @@
         // 注意：loadResumeData 已經在 checkLatestResume 中完成，這裡只需要載入課程模板
         await loadPersonalTemplate();
         // 即使處於只讀模式，也嘗試恢復缺勤記錄表單資料（如果有的話）
-        loadAbsenceFormData();
+        // 先等待一下，確保所有數據都已載入，再恢復缺勤表單
+        setTimeout(() => {
+          loadAbsenceFormData();
+        }, 500);
       }
       
       loadResumeRecords();
