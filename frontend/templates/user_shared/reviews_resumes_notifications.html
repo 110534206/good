@@ -310,8 +310,7 @@
           <option value="rejected">退件</option>
         </select>
         <input type="text" id="searchBox" style="padding: 10px 12px; border-radius: 8px; border: 1px solid var(--color-border); background: #fff; font-size: 0.95rem; min-width: 200px; flex: 1;" placeholder="搜尋學生姓名或學號" />
-        <button class="btn" style="background: #28a745; color: #fff; padding: 10px 18px; border-radius: 8px; font-weight: 600; font-size: 0.95rem; cursor: pointer; border: none; margin-right: 8px;" data-bs-toggle="modal" data-bs-target="#testEmailModal">📧 測試 Email</button>
-        <button class="btn" style="background: #17a2b8; color: #fff; padding: 10px 18px; border-radius: 8px; font-weight: 600; font-size: 0.95rem; cursor: pointer; border: none; margin-right: 8px;" data-bs-toggle="modal" data-bs-target="#quickAdmissionModal">🎉 快速錄取通知</button>
+        <button class="btn" style="background: #17a2b8; color: #fff; padding: 10px 18px; border-radius: 8px; font-weight: 600; font-size: 0.95rem; cursor: pointer; border: none; margin-right: 8px;" data-bs-toggle="modal" data-bs-target="#quickAdmissionModal">發送錄取通知</button>
         <button class="btn" style="background: var(--color-primary); color: #fff; padding: 10px 18px; border-radius: 8px; font-weight: 600; font-size: 0.95rem; cursor: pointer; border: none;" onclick="viewEmailLogs()">查看 Email 記錄</button>
       </div>
 
@@ -379,38 +378,6 @@
     </div>
   </div>
 
-  <!-- 測試 Email Modal -->
-  <div class="modal fade" id="testEmailModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered">
-      <div class="modal-content">
-        <div class="modal-header bg-success text-white">
-          <h5 class="modal-title">📧 測試 Email 發送</h5>
-          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
-        </div>
-        <div class="modal-body">
-          <form id="testEmailForm">
-            <div class="mb-3">
-              <label for="testRecipientEmail" class="form-label">收件人 Email</label>
-              <input type="email" class="form-control" id="testRecipientEmail" 
-                     placeholder="例如：110534226@stu.ukn.edu.tw" required>
-              <div class="form-text">請輸入要接收測試郵件的 Email 地址</div>
-            </div>
-            <div class="alert alert-info">
-              <strong>💡 提示：</strong>測試郵件將從 <code>linyuxuan586@gmail.com</code> 發送
-            </div>
-          </form>
-        </div>
-        <div class="modal-footer">
-          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
-          <button type="button" class="btn btn-success" id="btnSendTestEmail">
-            <span class="spinner-border spinner-border-sm d-none" id="testEmailSpinner" role="status"></span>
-            發送測試郵件
-          </button>
-        </div>
-      </div>
-    </div>
-  </div>
-
   <!-- 快速錄取通知 Modal -->
   <div class="modal fade" id="quickAdmissionModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
@@ -442,7 +409,7 @@
                      placeholder="例如：王老師">
             </div>
             <div class="alert alert-info">
-              <strong>💡 提示：</strong>錄取通知將從 <code>linyuxuan586@gmail.com</code> 發送
+              <strong>💡 提示：</strong>錄取通知將從 <code>si.pingtai@gmail.com</code> 發送
             </div>
           </form>
         </div>
@@ -930,6 +897,31 @@
       loadEmailLogs();
     }
 
+    // 快速錄取通知 Modal 開啟時重置狀態
+    const quickAdmissionModal = document.getElementById('quickAdmissionModal');
+    if (quickAdmissionModal) {
+      quickAdmissionModal.addEventListener('shown.bs.modal', function() {
+        const btn = document.getElementById('btnQuickAdmission');
+        const spinner = document.getElementById('quickAdmissionSpinner');
+        if (btn) {
+          btn.disabled = false;
+          btn.innerHTML = '<span class="spinner-border spinner-border-sm d-none" id="quickAdmissionSpinner" role="status"></span>發送錄取通知';
+        }
+        if (spinner) {
+          spinner.classList.add('d-none');
+        }
+        // 重置表單
+        const form = document.getElementById('quickAdmissionForm');
+        if (form) {
+          form.reset();
+        }
+        const companyInput = document.getElementById('quickCompanyName');
+        if (companyInput) {
+          companyInput.value = '智慧科技股份有限公司';
+        }
+      });
+    }
+
     // 快速錄取通知功能
     document.getElementById('btnQuickAdmission').addEventListener('click', async function() {
       const studentEmail = document.getElementById('quickStudentEmail').value.trim();
@@ -957,8 +949,18 @@
       
       // 顯示載入狀態
       btn.disabled = true;
-      spinner.classList.remove('d-none');
-      btn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status"></span> 發送中...';
+      if (spinner) {
+        spinner.classList.remove('d-none');
+      }
+      // 保存並更新按鈕文字（保留 spinner 元素）
+      const originalText = btn.textContent.trim();
+      btn.dataset.originalText = originalText;
+      // 找到文字節點並更新
+      Array.from(btn.childNodes).forEach(node => {
+        if (node.nodeType === Node.TEXT_NODE && node.textContent.trim()) {
+          node.textContent = ' 發送中...';
+        }
+      });
       
       try {
         const response = await fetch('/vendor/api/send_notification', {
@@ -984,7 +986,9 @@
           document.getElementById('quickAdmissionForm').reset();
           document.getElementById('quickCompanyName').value = '智慧科技股份有限公司';
           const modal = bootstrap.Modal.getInstance(document.getElementById('quickAdmissionModal'));
-          modal.hide();
+          if (modal) {
+            modal.hide();
+          }
           // 重新載入 Email 記錄
           loadEmailLogs();
         } else {
@@ -996,65 +1000,18 @@
       } finally {
         // 恢復按鈕狀態
         btn.disabled = false;
-        spinner.classList.add('d-none');
-        btn.innerHTML = '發送錄取通知';
+        if (spinner) {
+          spinner.classList.add('d-none');
+        }
+        // 恢復按鈕文字
+        Array.from(btn.childNodes).forEach(node => {
+          if (node.nodeType === Node.TEXT_NODE && node.textContent.trim()) {
+            node.textContent = ' ' + (btn.dataset.originalText || '發送錄取通知');
+          }
+        });
       }
     });
 
-    // 測試 Email 功能
-    document.getElementById('btnSendTestEmail').addEventListener('click', async function() {
-      const recipientEmail = document.getElementById('testRecipientEmail').value.trim();
-      const btn = this;
-      const spinner = document.getElementById('testEmailSpinner');
-      
-      if (!recipientEmail) {
-        alert('請輸入收件人 Email');
-        return;
-      }
-      
-      if (!recipientEmail.includes('@')) {
-        alert('Email 格式不正確');
-        return;
-      }
-      
-      // 顯示載入狀態
-      btn.disabled = true;
-      spinner.classList.remove('d-none');
-      btn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status"></span> 發送中...';
-      
-      try {
-        const response = await fetch('/vendor/api/test_email', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            recipient_email: recipientEmail
-          })
-        });
-        
-        const data = await response.json();
-        
-        if (data.success) {
-          alert('✅ ' + data.message);
-          document.getElementById('testEmailForm').reset();
-          const modal = bootstrap.Modal.getInstance(document.getElementById('testEmailModal'));
-          modal.hide();
-          // 重新載入 Email 記錄
-          loadEmailLogs();
-        } else {
-          alert('❌ ' + data.message);
-        }
-      } catch (error) {
-        console.error('發送測試郵件失敗:', error);
-        alert('❌ 發送失敗：' + error.message);
-      } finally {
-        // 恢復按鈕狀態
-        btn.disabled = false;
-        spinner.classList.add('d-none');
-        btn.innerHTML = '發送測試郵件';
-      }
-    });
 
     // 載入 Email 記錄
     function loadEmailLogs() {
