@@ -30,6 +30,35 @@
       padding: 0;
     }
 
+    /* 三條線選單按鈕樣式 */
+    .top-bar-left {
+      position: fixed;
+      top: 1rem;
+      left: 1rem;
+      z-index: 1100;
+    }
+
+    .top-bar-left #menu-btn {
+      width: 30px;
+      height: 22px;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      background: none;
+      border: none;
+      padding: 0;
+    }
+
+    .top-bar-left #menu-btn span {
+      display: block;
+      width: 100%;
+      height: 3px;
+      background-color: white;
+      border-radius: 2px;
+      transition: all 0.3s ease;
+    }
+
     /* 側邊選單樣式 */
     #side-menu {
       position: fixed;
@@ -197,6 +226,11 @@
 
 <body>
   <header>查詢統計資料</header>
+  <div class="top-bar-left">
+    <div id="menu-btn" title="選單" role="button" tabindex="0">
+      <span></span><span></span><span></span>
+    </div>
+  </div>
     <div class="container my-5 pt-1">
       <div class="card shadow-sm p-4">
         <div class="d-flex justify-content-between align-items-center mb-3">
@@ -263,8 +297,46 @@
     </div>
   </div>
 
+  <!-- 側邊選單 -->
+  <nav id="side-menu" aria-hidden="true" role="navigation" aria-label="功能選單">
+    <button id="close-btn" aria-label="關閉功能選單">×</button>
+    <h2>功能選單</h2>
+    <a href="/director_home">首頁</a>
+    <a href="/profile">個人資料</a>
+    <a href="/approve_company">審核實習單位</a>
+    <a href="/review_resume?mode=director">審核實習履歷</a>
+    <a href="/notifications">管理公告</a>
+    <a href="/admin_statistics">統計資料</a>
+    <a href="/login">登出</a>
+  </nav>
 
   <script>
+    // 選單開關邏輯
+    const menuBtn = document.getElementById("menu-btn");
+    const sideMenu = document.getElementById("side-menu");
+    const closeBtn = document.getElementById("close-btn");
+
+    menuBtn.addEventListener("click", () => {
+      sideMenu.classList.add("open");
+      sideMenu.setAttribute("aria-hidden", "false");
+    });
+
+    closeBtn.addEventListener("click", () => {
+      sideMenu.classList.remove("open");
+      sideMenu.setAttribute("aria-hidden", "true");
+    });
+
+    // 如果點擊 menu 以外的地方就關閉選單
+    document.addEventListener("click", (e) => {
+      if (
+        !sideMenu.contains(e.target) &&
+        !menuBtn.contains(e.target)
+      ) {
+        sideMenu.classList.remove("open");
+        sideMenu.setAttribute("aria-hidden", "true");
+      }
+    });
+
     // 圖表實例
     let resumeChart = null;
     let preferenceChart = null;
