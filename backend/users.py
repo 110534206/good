@@ -399,31 +399,12 @@ def change_username():
         if existing:
             return jsonify({"success": False, "message": "此帳號已被使用"}), 400
 
-        # 檢查 user_changed 欄位是否存在，並檢查是否已修改過
-        cursor.execute("SHOW COLUMNS FROM users LIKE 'user_changed'")
-        has_user_changed = cursor.fetchone() is not None
-        
-        if has_user_changed:
-            # 檢查是否已經修改過帳號
-            cursor.execute("SELECT user_changed FROM users WHERE id = %s", (user_id,))
-            user_data = cursor.fetchone()
-            if user_data and user_data.get('user_changed') == 1:
-                return jsonify({"success": False, "message": "帳號只能修改一次，您已經修改過帳號"}), 400
-            
-            # 更新帳號並將 user_changed 設為 1
-            cursor.execute("""
-                UPDATE users 
-                SET username = %s, user_changed = 1
-                WHERE id = %s
-            """, (new_username, user_id))
-        else:
-            # 如果沒有 user_changed 欄位，只更新帳號（向後兼容）
-            cursor.execute("""
-                UPDATE users 
-                SET username = %s
-                WHERE id = %s
-            """, (new_username, user_id))
-        
+        # 更新帳號
+        cursor.execute("""
+            UPDATE users 
+            SET username = %s
+            WHERE id = %s
+        """, (new_username, user_id))
         conn.commit()
 
         # 更新 session 中的 username
