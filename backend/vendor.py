@@ -944,6 +944,24 @@ def get_vendor_resumes():
                 elif company_id != company_filter:
                     continue
                 
+            # 獲取廠商留言（從 vendor_preference_history）
+            vendor_comment = None
+            if preference_id:
+                try:
+                    _ensure_history_table(cursor)
+                    cursor.execute("""
+                        SELECT comment 
+                        FROM vendor_preference_history 
+                        WHERE preference_id = %s 
+                        ORDER BY created_at DESC 
+                        LIMIT 1
+                    """, (preference_id,))
+                    vendor_comment_row = cursor.fetchone()
+                    if vendor_comment_row and vendor_comment_row.get('comment'):
+                        vendor_comment = vendor_comment_row.get('comment')
+                except Exception:
+                    pass  # 如果歷史表不存在或查詢失敗，忽略
+            
             # 構建結果
             resume = {
                 "id": row.get("id"),
@@ -955,7 +973,8 @@ def get_vendor_resumes():
                 "original_filename": row.get("original_filename"),
                 "filepath": row.get("filepath"),
                 "status": display_status,  # 顯示基於 student_preferences 的狀態，如果沒有則為 pending
-                "comment": row.get("comment") or "", # 老師的履歷備註 (非廠商的志願備註)
+                "comment": vendor_comment or "", # 廠商的留言（優先），如果沒有則為空
+                "vendor_comment": vendor_comment or "", # 明確標記為廠商留言
                 "note": row.get("note") or "",
                 "upload_time": _format_datetime(row.get("created_at")),
                 "reviewed_at": _format_datetime(row.get("reviewed_at")),
