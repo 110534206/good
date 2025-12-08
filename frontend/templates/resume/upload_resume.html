@@ -1892,26 +1892,35 @@
               const oneDay = 24 * 60 * 60 * 1000;
               if (Date.now() - importData.timestamp < oneDay && importData.autobiography) {
                 // 優先使用導入的新自傳，覆蓋資料庫中的舊自傳
-                // 只有在還沒有導入過的情況下才導入
-                if (!window.aiAutobiographyImported) {
-                  // 直接使用新的自傳，不保留舊的
-                  autobiographyTextarea.value = importData.autobiography;
-                  importedAutobiography = true;
-                  console.log('✅ 已從 AI 修改履歷頁面導入新的美化後自傳（在 loadResumeData 中），覆蓋舊的自傳');
-                  // 標記已導入，避免重複處理
-                  window.aiAutobiographyImported = true;
-                  // 導入成功後，清除數據（避免重複導入）
-                  localStorage.removeItem('ai_polished_autobiography');
-                } else {
-                  // 已經導入過，但如果有新的標記，仍然使用新的
-                  if (importData.isNew) {
-                    autobiographyTextarea.value = importData.autobiography;
+                // 確保導入完整的內容
+                const importedText = importData.autobiography || '';
+                
+                if (importedText.length > 0) {
+                  // 只有在還沒有導入過的情況下才導入
+                  if (!window.aiAutobiographyImported) {
+                    // 直接使用新的自傳，不保留舊的
+                    autobiographyTextarea.value = importedText;
                     importedAutobiography = true;
+                    console.log('✅ 已從 AI 修改履歷頁面導入新的美化後自傳（在 loadResumeData 中），覆蓋舊的自傳，長度:', importedText.length, '字元');
+                    // 標記已導入，避免重複處理
+                    window.aiAutobiographyImported = true;
+                    // 導入成功後，清除數據（避免重複導入）
                     localStorage.removeItem('ai_polished_autobiography');
                   } else {
-                    // 使用資料庫中的自傳
-                    autobiographyTextarea.value = studentInfo.autobiography || '';
+                    // 已經導入過，但如果有新的標記，仍然使用新的
+                    if (importData.isNew) {
+                      autobiographyTextarea.value = importedText;
+                      importedAutobiography = true;
+                      console.log('✅ 已重新導入新的美化後自傳，長度:', importedText.length, '字元');
+                      localStorage.removeItem('ai_polished_autobiography');
+                    } else {
+                      // 使用資料庫中的自傳
+                      autobiographyTextarea.value = studentInfo.autobiography || '';
+                    }
                   }
+                } else {
+                  console.warn('⚠️ 導入的自傳內容為空');
+                  autobiographyTextarea.value = studentInfo.autobiography || '';
                 }
               } else {
                 // 數據過期，清除並使用資料庫中的自傳
