@@ -69,40 +69,35 @@
             overflow-y: auto;
         }
 
-        /* 角色文字顏色（純文字，無背景） */
+        /* 角色徽章顏色 */
         .role-student {
-            color: #0d6efd;
-            font-weight: 500;
+            background-color: #0d6efd;
         }
 
         /* 藍色 */
         .role-teacher {
-            color: #6f42c1;
-            font-weight: 500;
+            background-color: #6f42c1;
         }
 
         /* 紫色 */
         .role-director {
-            color: #ffc107;
-            font-weight: 500;
+            background-color: #ffc107;
+            color: #343a40;
         }
 
         /* 黃色 */
         .role-ta {
-            color: #6c757d;
-            font-weight: 500;
+            background-color: #6c757d;
         }
 
         /* 灰色 */
         .role-admin {
-            color: #dc3545;
-            font-weight: 500;
+            background-color: #dc3545;
         }
 
         /* 紅色 */
         .role-vendor {
-            color: #fd7e14;
-            font-weight: 500;
+            background-color: #fd7e14;
         }
 
         /* 橙色 */
@@ -572,7 +567,7 @@
                         <td class="text-truncate" title="${escapeHtml(user.username)}">${escapeHtml(user.username)}</td>
                         <td>${escapeHtml(user.name || '-')}</td>
                         <td class="text-truncate" title="${escapeHtml(user.email || '-')}">${escapeHtml(displayEmail)}</td>
-                        <td><span class="${roleClass}">${roleDisplay}</span></td>
+                        <td><span class="badge ${roleClass}">${roleDisplay}</span></td>
                         <td>${statusDisplay !== '-' ? `<span class="${statusBadgeClass}">${statusDisplay}</span>` : statusDisplay}</td>
                         <td class="action-btns">
                           <div class="d-flex gap-1 justify-content-start">

@@ -3,7 +3,6 @@ from werkzeug.security import generate_password_hash
 from config import get_db
 from datetime import datetime
 import traceback
-from email_service import send_account_creation_email
 
 admin_bp = Blueprint("admin_bp", __name__, url_prefix='/admin')
 
@@ -286,102 +285,17 @@ def create_user():
         if role not in ["teacher", "director","ta"] and not email:
             return jsonify({"success": False, "message": "學生需填寫 email"}), 400
 
-        # 🧩 檢查帳號和角色的組合是否已存在（確保唯一性）
-        cursor.execute("""
-            SELECT id FROM users 
-            WHERE username = %s AND role = %s
-        """, (username, role))
-        existing_user = cursor.fetchone()
-        if existing_user:
-            role_map = {'ta': '科助', 'teacher': '教師', 'student': '學生', 'director': '主任', 'admin': '管理員', 'vendor': '廠商'}
-            role_display = role_map.get(role, role)
-            return jsonify({
-                "success": False, 
-                "message": f"帳號「{username}」在角色「{role_display}」中已存在，請使用不同的帳號或角色"
-            }), 400
-
         hashed = generate_password_hash(password)
 
-        # 後台註冊的用戶，狀態設為 'approved'（已啟用），user_changed 設為 0（允許修改帳號）
-        # 檢查 users 表是否有 user_changed 欄位
-        cursor.execute("SHOW COLUMNS FROM users LIKE 'user_changed'")
-        has_user_changed = cursor.fetchone() is not None
-        
-        if has_user_changed:
-            query = """
-                INSERT INTO users (username, name, email, role, class_id, password, status, user_changed)
-                VALUES (%s, %s, %s, %s, %s, %s, 'approved', 0)
-            """
-        else:
-            query = """
-                INSERT INTO users (username, name, email, role, class_id, password, status)
-                VALUES (%s, %s, %s, %s, %s, %s, 'approved')
-            """
-        
-        try:
-            cursor.execute(query, (username, name, email, role, class_id, hashed))
-            user_id = cursor.lastrowid
-            conn.commit()
-        except Exception as db_error:
-            conn.rollback()
-            error_msg = str(db_error)
-            # 處理重複鍵錯誤
-            if "Duplicate entry" in error_msg and "unique_username_role" in error_msg:
-                role_map = {'ta': '科助', 'teacher': '教師', 'student': '學生', 'director': '主任', 'admin': '管理員', 'vendor': '廠商'}
-                role_display = role_map.get(role, role)
-                return jsonify({
-                    "success": False, 
-                    "message": f"帳號「{username}」在角色「{role_display}」中已存在，請使用不同的帳號或角色"
-                }), 400
-            else:
-                # 其他資料庫錯誤
-                print(f"建立使用者資料庫錯誤: {db_error}")
-                return jsonify({"success": False, "message": f"建立失敗：{error_msg}"}), 500
+        # 後台註冊的用戶，狀態設為 'approved'（已啟用）
+        query = """
+            INSERT INTO users (username, name, email, role, class_id, password, status)
+            VALUES (%s, %s, %s, %s, %s, %s, 'approved')
+        """
+        cursor.execute(query, (username, name, email, role, class_id, hashed))
+        conn.commit()
 
-        # 發送帳號建立通知郵件（如果有 email）
-        email_sent = False
-        email_error = None
-        if email and email.strip():
-            print(f"📧 準備發送帳號建立通知郵件...")
-            print(f"   收件人: {email}")
-            print(f"   姓名: {name}")
-            print(f"   帳號: {username}")
-            try:
-                success, message, log_id = send_account_creation_email(
-                    recipient_email=email,
-                    recipient_name=name,
-                    username=username,
-                    password=password
-                )
-                if success:
-                    email_sent = True
-                    print(f"✅ 帳號建立通知郵件已發送: {email} (Log ID: {log_id})")
-                else:
-                    email_error = message
-                    print(f"⚠️ 帳號建立通知郵件發送失敗: {message} (Log ID: {log_id})")
-            except Exception as e:
-                email_error = str(e)
-                print(f"❌ 發送帳號建立通知郵件時發生錯誤: {e}")
-                traceback.print_exc()
-        else:
-            print(f"⚠️ 用戶 {username} 沒有 email，跳過郵件發送")
-
-        # 返回結果（包含郵件發送狀態）
-        if email_sent:
-            return jsonify({
-                "success": True, 
-                "message": "使用者建立成功，已發送帳號密碼通知郵件"
-            })
-        elif email_error:
-            return jsonify({
-                "success": True, 
-                "message": f"使用者建立成功，但郵件發送失敗：{email_error}"
-            })
-        else:
-            return jsonify({
-                "success": True, 
-                "message": "使用者建立成功"
-            })
+        return jsonify({"success": True, "message": "使用者建立成功"})
     except Exception as e:
         print(f"建立使用者錯誤: {e}")
         return jsonify({"success": False, "message": "建立失敗"}), 500
