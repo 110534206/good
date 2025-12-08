@@ -640,6 +640,17 @@
                       }
                     }
                     applyFilters();
+                  } else {
+                    // 其他角色（老師等），沒有 company_id 參數，顯示所有資料
+                    if (statusParam) {
+                      const statusFilter = document.getElementById('statusFilter');
+                      if (statusFilter) {
+                        const mappedStatus = (statusParam === 'submitted' || statusParam === 'uploaded') ? 'pending' : statusParam;
+                        statusFilter.value = mappedStatus;
+                      }
+                    }
+                    // 確保顯示所有資料
+                    applyFilters();
                   }
                 } else {
                   alert("載入資料失敗：" + (resumeData.message || "未知錯誤"));
@@ -941,13 +952,19 @@
           </td>
           <td style="padding: 14px 16px; vertical-align: middle; white-space: nowrap;">
             ${isViewOnly ? 
-              // 僅查看模式：只顯示留言狀態，不可編輯
-              `<span style="padding: 6px 12px; border-radius: 6px; border: 1px solid #e2e8f0; background: #f5f5f5; color: ${r.comment ? '#16a34a' : '#64748b'}; font-size: 0.875rem;">
-                ${r.comment ? '已填寫' : '未填寫'}
-              </span>` :
+              // 僅查看模式：顯示留言狀態，可以點擊查看內容
+              r.comment ? 
+                `<button class="btn btn-sm btn-outline-secondary text-success"
+                  onclick="openCommentModal(${r.id}, '${escapeHtml(r.comment || '')}', null)"
+                  style="padding: 6px 12px; border-radius: 6px; border: 1px solid #e2e8f0; background: #fff; cursor: pointer; font-size: 0.875rem; color: #16a34a;">
+                  已填寫
+                </button>` :
+                `<span style="padding: 6px 12px; border-radius: 6px; border: 1px solid #e2e8f0; background: #f5f5f5; color: #64748b; font-size: 0.875rem;">
+                  未填寫
+                </span>` :
               // 正常模式：可以編輯留言
               `<button class="btn btn-sm btn-outline-secondary ${r.comment ? 'text-success' : ''}"
-                onclick="openCommentModal(${r.id}, '${escapeHtml(r.comment || '')}')"
+                onclick="openCommentModal(${r.id}, '${escapeHtml(r.comment || '')}', ${r.preference_id ? r.preference_id : 'null'})"
                 style="padding: 6px 12px; border-radius: 6px; border: 1px solid #e2e8f0; background: #fff; cursor: pointer; font-size: 0.875rem;">
                 ${r.comment ? '已填寫' : '未填寫'}
               </button>`
@@ -1007,12 +1024,39 @@
       // ------------------------------------
 
       // 這是給老師單純編輯 'comment' 用的，不改變狀態
-      function openCommentModal(id, comment) {
+      // 如果是廠商，也可以填寫廠商留言
+      // 如果是僅查看模式（isViewOnly），則只顯示留言內容，不可編輯
+      function openCommentModal(id, comment, preferenceId = null) {
         currentResumeId = id;
-        document.getElementById("commentInput").value = comment;
-        // 確保將 Modal 的標題和按鈕設為 '編輯留言'
-        document.getElementById("commentModalLabel").textContent = "編輯留言";
-        document.getElementById("saveCommentBtn").textContent = "儲存留言";
+        currentPreferenceId = preferenceId; // 設置 preference_id（如果是廠商）
+        document.getElementById("commentInput").value = comment || '';
+        
+        // 檢查是否為僅查看模式
+        const urlParams = new URLSearchParams(window.location.search);
+        const companyIdParam = urlParams.get('company_id');
+        const isViewOnly = !!companyIdParam;
+        
+        // 如果是僅查看模式，禁用輸入框和保存按鈕
+        const commentInput = document.getElementById("commentInput");
+        const saveBtn = document.getElementById("saveCommentBtn");
+        if (isViewOnly) {
+          commentInput.readOnly = true;
+          commentInput.style.backgroundColor = '#f5f5f5';
+          saveBtn.style.display = 'none';
+          document.getElementById("commentModalLabel").textContent = "查看廠商留言";
+        } else {
+          commentInput.readOnly = false;
+          commentInput.style.backgroundColor = '#fff';
+          saveBtn.style.display = 'block';
+          // 根據角色設置 Modal 標題
+          if (userRole === 'vendor') {
+            document.getElementById("commentModalLabel").textContent = "填寫廠商留言";
+            document.getElementById("saveCommentBtn").textContent = "儲存留言";
+          } else {
+            document.getElementById("commentModalLabel").textContent = "編輯留言";
+            document.getElementById("saveCommentBtn").textContent = "儲存留言";
+          }
+        }
         new bootstrap.Modal(document.getElementById("commentModal")).show();
       }
 
@@ -1033,7 +1077,13 @@
               // 後端返回格式：{"item": detail} 或 {"error": "..."}
               if (data.item) {
                 bootstrap.Modal.getInstance(document.getElementById("commentModal")).hide();
-                alert("退件原因已更新");
+                alert("廠商留言已更新");
+                // 更新本地數據中的留言
+                const resume = allResumes.find(r => r.preference_id === currentPreferenceId);
+                if (resume) {
+                  resume.comment = newVal;
+                  resume.vendor_comment = newVal;
+                }
                 currentPreferenceId = null; // 清除
                 // 重新應用篩選並渲染表格（不重新載入頁面）
                 applyFilters();

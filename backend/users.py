@@ -905,8 +905,9 @@ def get_vendor_reviewed_students(company_id):
 
         # 查詢所有選擇該公司的學生履歷（包括已審核和未審核的）
         # 返回廠商審核狀態和留言（如果有的話）
+        # 只顯示有廠商審核記錄的學生，每個學生只顯示一筆（最新的審核記錄）
         cursor.execute("""
-            SELECT DISTINCT
+            SELECT 
                 u.id AS student_id,
                 u.name AS student_name,
                 u.username AS student_number,
@@ -945,10 +946,28 @@ def get_vendor_reviewed_students(company_id):
             LEFT JOIN resumes r ON r.user_id = u.id
             LEFT JOIN internship_jobs ij ON sp.job_id = ij.id
             WHERE sp.company_id = %s
-            ORDER BY u.name
+            AND EXISTS (
+                -- 只顯示有廠商審核記錄的學生
+                SELECT 1 FROM vendor_preference_history vph 
+                WHERE vph.preference_id = sp.id 
+                AND (vph.action = 'approve' OR vph.action = 'reject')
+            )
+            ORDER BY u.id, vendor_reviewed_at DESC
         """, (company_id,))
         
         students = cursor.fetchall() or []
+        
+        # 去重：每個學生只保留一筆記錄（最新的審核記錄）
+        # 因為 ORDER BY u.id, vendor_reviewed_at DESC，所以每個學生的第一筆就是最新的
+        seen_students = {}
+        unique_students = []
+        for s in students:
+            student_id = s.get('student_id')
+            if student_id not in seen_students:
+                seen_students[student_id] = True
+                unique_students.append(s)
+        
+        students = unique_students
         
         # 格式化日期
         from datetime import datetime

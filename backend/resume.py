@@ -3737,6 +3737,7 @@ def get_class_resumes():
                 sql_query = """
                     SELECT DISTINCT
                         r.id,
+                        u.id AS user_id,
                         u.name AS student_name,
                         u.username AS student_number,
                         c.name AS class_name,
@@ -3749,7 +3750,13 @@ def get_class_resumes():
                         r.created_at,
                         ic3.company_name AS company_name,
                         ij3.title AS job_title,
-                        sp3.preference_order
+                        sp3.id AS preference_id,
+                        sp3.preference_order,
+                        (SELECT vph.comment 
+                         FROM vendor_preference_history vph 
+                         WHERE vph.preference_id = sp3.id 
+                         ORDER BY vph.created_at DESC 
+                         LIMIT 1) AS vendor_comment
                     FROM resumes r
                     JOIN users u ON r.user_id = u.id
                     LEFT JOIN classes c ON u.class_id = c.id
