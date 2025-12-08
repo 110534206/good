@@ -384,7 +384,7 @@
       max-width: 80vw;
       background-color: rgba(10, 10, 10, 0.95);
       backdrop-filter: blur(6px);
-      box-shadow: 3px 0 12px rgb(0 0 0 / 0.7);
+      box-shadow: 3px 0 12px rgba(0, 0, 0, 0.6);
       padding: 2rem 1.5rem;
       transform: translateX(-100%);
       transition: transform 0.3s ease-in-out;
@@ -392,7 +392,7 @@
       display: flex;
       flex-direction: column;
       align-items: flex-start;
-      color: white;
+      color: #fff;
       user-select: none;
     }
 
@@ -400,45 +400,55 @@
       transform: translateX(0);
     }
 
-    #side-menu .menu-header {
+    #side-menu h2 {
+      margin: 0 0 1.5rem 0;
+      font-weight: 700;
+      font-size: 1.6rem;
+      color: #fff;
+      padding: 0;
+      line-height: 2.4rem;
+      height: 2.4rem;
       display: flex;
-      justify-content: space-between;
       align-items: center;
-      margin-bottom: 1.5rem;
-      width: 100%;
     }
 
     #close-btn {
+      position: absolute;
+      top: 2rem;
+      right: 1.6rem;
       font-size: 2.2rem;
       background: none;
       border: none;
-      color: white;
+      color: #fff;
       cursor: pointer;
-      padding: 0;
-      line-height: 1;
+      line-height: 2.4rem;
+      height: 2.4rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 10;
     }
 
-    #side-menu h2 {
-      margin: 0;
-      font-weight: 700;
-      font-size: 1.5rem;
-      color: white;
+    #menu-content {
+      width: 100%;
+      display: flex;
+      flex-direction: column;
     }
 
     #side-menu a {
       display: block;
       width: 100%;
-      padding: 0.5rem 0;
+      padding: 0.6rem 0;
       font-size: 1.1rem;
-      color: #ddd;
+      color: #e2e8f0;
       text-decoration: none;
       border-radius: 4px;
       transition: background-color 0.2s ease;
     }
 
     #side-menu a:hover {
-      background-color: rgba(255, 255, 255, 0.15);
-      color: white;
+      background-color: rgba(255, 255, 255, 0.18);
+      color: #fff;
     }
   </style>
 </head>
@@ -509,19 +519,9 @@
 
   <!-- 側邊選單 -->
   <nav id="side-menu" aria-hidden="true" role="navigation" aria-label="功能選單">
-    <div class="menu-header">
-      <h2>功能選單</h2>
-      <button id="close-btn" aria-label="關閉功能選單">×</button>
-    </div>
-    <a href="/assistant_home">首頁</a>
-    <a href="/profile">個人資料</a>
-    <a href="/announcement/manage_announcements">公告管理</a>
-    <a href="/ta/statistics/manage_companies">實習廠商管理</a>
-    <a href="/final_results">志願序結果</a>
-    <a href="/notifications">通知</a>
-    <a href="/admin/absence_default_range">缺勤預設學期範圍設定</a>
-    <a href="/ta/upload_standard_courses">專業核心科目管理</a>
-    <a href="/login">登出</a>
+    <button id="close-btn" aria-label="關閉功能選單">×</button>
+    <h2>功能選單</h2>
+    <div id="menu-content"></div>
   </nav>
 
   <div class="modal fade" id="notifModal" tabindex="-1" aria-hidden="true">
@@ -924,10 +924,131 @@
 
     // 【移除】close drawer when clicking outside 相關事件
 
+    // ---------- 動態生成選單 ----------
+    function renderMenu() {
+      const menuContent = document.getElementById('menu-content');
+      if (!menuContent) return;
+
+      // 獲取用戶角色
+      fetch('/api/profile')
+        .then(res => res.json())
+        .then(profileData => {
+          const userRole = profileData.success && profileData.user ? profileData.user.role : null;
+          const displayRole = profileData.success && profileData.user ? profileData.user.display_role : null;
+          const isHomeroom = profileData.success && profileData.user ? (profileData.user.is_homeroom === true) : false;
+
+          let menuItems = [];
+
+          if (userRole === 'student') {
+            // 學生選單
+            menuItems = [
+              { href: '/student_home', text: '首頁' },
+              { href: '/profile', text: '個人資料' },
+              { href: '/upload_resume', text: '上傳履歷' },
+              { href: '/fill_preferences', text: '填寫志願序' },
+              { href: '/notifications', text: '通知' },
+              { href: '/login', text: '登出' }
+            ];
+          } else if (userRole === 'vendor') {
+            // 廠商選單
+            menuItems = [
+              { href: '/vendor_home', text: '首頁' },
+              { href: '/profile', text: '個人資料' },
+              { href: '/vendor/resume-review', text: '學生履歷審核' },
+              { href: '/manage_positions', text: '職位需求管理' },
+              { href: '/confirm_matching', text: '媒合結果' },
+              { href: '/publish_announcements', text: '發布公告' },
+              { href: '/reviews_resumes_notifications', text: '查看履歷與通知' },
+              { href: '/notifications', text: '通知' },
+              { href: '/login', text: '登出' }
+            ];
+          } else if (displayRole === '班導師') {
+            // 班導師選單（班導有自己的主頁 /class_teacher_home）
+            // 使用 display_role 判斷當前是否以班導身份登入
+            menuItems = [
+              { href: '/class_teacher_home', text: '首頁' },
+              { href: '/profile', text: '個人資料' },
+              { href: '/review_resume', text: '查看學生履歷' },
+              { href: '/review_preferences', text: '審核志願序' },
+              { href: '/admission/results', text: '查詢學生錄取結果' },
+              { href: '/notifications', text: '通知' },
+              { href: '/login', text: '登出' }
+            ];
+          } else if (userRole === 'director') {
+            // 主任選單（主任有自己的主頁 /director_home）
+            menuItems = [
+              { href: '/director_home', text: '首頁' },
+              { href: '/profile', text: '個人資料' },
+              { href: '/review_resume', text: '學生履歷審核' },
+              { href: '/upload_company', text: '建立實習機會' },
+              { href: '/admission_results', text: '查看錄取結果' },
+              { href: '/manage_vendor', text: '實習廠商管理' },
+              { href: '/notifications', text: '通知' },
+              { href: '/login', text: '登出' }
+            ];
+          } else if (userRole === 'teacher') {
+            // 指導老師選單（指導老師有自己的主頁 /teacher_home）
+            menuItems = [
+              { href: '/teacher_home', text: '首頁' },
+              { href: '/profile', text: '個人資料' },
+              { href: '/upload_company', text: '建立實習機會' },
+              { href: '/admission_results', text: '查看錄取結果' },
+              { href: '/manage_vendor', text: '實習廠商管理' },
+              { href: '/notifications', text: '查看公告' },
+              { href: '/review_resume', text: '學生履歷審核' },
+              { href: '/login', text: '登出' }
+            ];
+          } else if (userRole === 'ta') {
+            // 科助選單
+            menuItems = [
+              { href: '/ta_home', text: '首頁' },
+              { href: '/profile', text: '個人資料' },
+              { href: '/announcement/manage_announcements', text: '公告管理' },
+              { href: '/ta/statistics/manage_companies', text: '實習廠商管理' },
+              { href: '/final_results', text: '志願序結果' },
+              { href: '/notifications', text: '通知' },
+              { href: '/admin/absence_default_range', text: '缺勤預設學期範圍設定' },
+              { href: '/ta/upload_standard_courses', text: '專業核心科目管理' },
+              { href: '/login', text: '登出' }
+            ];
+          } else if (userRole === 'admin') {
+            // 管理員選單
+            menuItems = [
+              { href: '/admin_home', text: '首頁' },
+              { href: '/profile', text: '個人資料' },
+              { href: '/announcement/manage_announcements', text: '公告管理' },
+              { href: '/ta/statistics/manage_companies', text: '實習廠商管理' },
+              { href: '/final_results', text: '志願序結果' },
+              { href: '/notifications', text: '通知' },
+              { href: '/admin/absence_default_range', text: '缺勤預設學期範圍設定' },
+              { href: '/ta/upload_standard_courses', text: '專業核心科目管理' },
+              { href: '/login', text: '登出' }
+            ];
+          } else {
+            // 預設選單（其他角色或未登入）
+            menuItems = [
+              { href: '/login', text: '登入' }
+            ];
+          }
+
+          menuContent.innerHTML = menuItems.map(item => 
+            `<a href="${item.href}">${item.text}</a>`
+          ).join('');
+        })
+        .catch(err => {
+          console.error('獲取用戶資料失敗:', err);
+          // 如果獲取失敗，顯示預設選單
+          menuContent.innerHTML = '<a href="/login">登入</a>';
+        });
+    }
+
     // init
     (async function init() {
       await loadNotifications();
       // 【移除】refreshTagList();
+
+      // 動態生成選單
+      renderMenu();
 
       // 側邊選單控制
       const menuBtn = document.getElementById('menu-btn');

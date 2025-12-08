@@ -53,9 +53,18 @@ def teacher_home():
 # -------------------------
 @users_bp.route("/class_teacher_home")
 def class_teacher_home():
-    # 確保只有老師或主任身份可以進入
-    if "username" not in session or session.get("role") not in ["teacher", "director"]:
+    # 確保只有老師或主任身份可以進入（包括 class_teacher）
+    current_role = session.get("role")
+    if "username" not in session or current_role not in ["teacher", "director", "class_teacher"]:
         return redirect(url_for("auth_bp.login_page"))
+
+    # 如果當前是 class_teacher，需要恢復為原始角色進行檢查
+    if current_role == "class_teacher":
+        original_role = session.get("original_role")
+        if original_role == "director":
+            session["role"] = "director"
+        else:
+            session["role"] = "teacher"
 
     # 若沒有班導師身分，導回原本主頁
     if not session.get("is_homeroom"):
