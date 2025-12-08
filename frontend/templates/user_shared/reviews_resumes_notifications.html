@@ -533,6 +533,24 @@
       // 綁定發送通知按鈕
       document.getElementById("sendNotificationBtn").addEventListener("click", sendNotification);
       
+      // 綁定通知類型改變事件，更新 Modal 標題和提示
+      const notificationTypeSelect = document.getElementById("notificationType");
+      const notificationContentTextarea = document.getElementById("notificationContent");
+      if (notificationTypeSelect) {
+        notificationTypeSelect.addEventListener("change", function() {
+          const modalTitle = document.getElementById("notificationModalLabel");
+          if (modalTitle) {
+            modalTitle.textContent = this.value === 'admission' ? '發送錄取通知' : '發送面試通知';
+          }
+          // 更新提示文字
+          if (notificationContentTextarea) {
+            notificationContentTextarea.placeholder = this.value === 'admission' 
+              ? '請輸入通知內容（選填，如需額外資訊可在此補充）...' 
+              : '請輸入通知內容（面試通知必填）...';
+          }
+        });
+      }
+      
       // 側邊選單
       const sideMenu = document.getElementById('side-menu');
       const menuBtn = document.getElementById('menu-btn');
@@ -567,20 +585,47 @@
         fetch('/vendor/api/positions').then(res => res.json())
       ])
         .then(([resumeData, positionData]) => {
-          console.log("API 返回資料:", resumeData); // 調試用
+          console.log("📋 API 返回資料:", resumeData); // 調試用
+          console.log("📋 職缺 API 返回資料:", positionData); // 調試用
           
           if (resumeData.success) {
             allResumes = resumeData.resumes || [];
-            console.log("履歷數量:", allResumes.length); // 調試用
+            console.log("✅ 履歷數量:", allResumes.length); // 調試用
             
-            // 填充職缺篩選器
+            if (allResumes.length === 0) {
+              console.warn("⚠️ 沒有找到任何履歷");
+              console.warn("可能的原因：");
+              console.warn("1. 尚未有學生提交履歷");
+              console.warn("2. 履歷尚未通過老師審核（status != 'approved'）");
+              console.warn("3. 廠商有關聯公司，但沒有學生選擇這些公司");
+              console.warn("4. 資料庫查詢有問題");
+              console.log("完整 API 回應:", JSON.stringify(resumeData, null, 2));
+            } else {
+              console.log("✅ 找到履歷，範例:", allResumes[0]);
+            }
+            
+            // 填充職缺篩選器（實際上是職缺/公司篩選器）
             const companySelect = document.getElementById("companyFilter");
             companySelect.innerHTML = '<option value="">所有職缺</option>';
             
-            let hasJobs = false;
+            let hasOptions = false;
             
-            // 從職缺 API 獲取職缺列表
-            if (positionData.success && positionData.items && Array.isArray(positionData.items) && positionData.items.length > 0) {
+            // 方案1：從履歷 API 返回的公司列表填充
+            if (resumeData.companies && Array.isArray(resumeData.companies) && resumeData.companies.length > 0) {
+              console.log("從履歷 API 返回的公司列表填充，數量:", resumeData.companies.length);
+              resumeData.companies.forEach(company => {
+                if (company.name && company.name.trim()) {
+                  const option = document.createElement("option");
+                  option.value = company.id || company.name; // 如果有 ID 用 ID，否則用名稱
+                  option.textContent = company.name;
+                  companySelect.appendChild(option);
+                  hasOptions = true;
+                }
+              });
+            }
+            
+            // 方案2：從職缺 API 獲取職缺列表
+            if (!hasOptions && positionData.success && positionData.items && Array.isArray(positionData.items) && positionData.items.length > 0) {
               console.log("從職缺 API 填充，數量:", positionData.items.length);
               positionData.items.forEach(job => {
                 if (job.title && job.title.trim()) {
@@ -588,30 +633,51 @@
                   option.value = job.id;
                   option.textContent = job.title;
                   companySelect.appendChild(option);
-                  hasJobs = true;
+                  hasOptions = true;
                 }
               });
             }
             
-            // 備用方案：從履歷資料中提取職缺資訊
-            if (!hasJobs && allResumes.length > 0) {
-              console.log("從履歷資料中提取職缺名稱");
+            // 方案3：從履歷資料中提取職缺和公司資訊
+            if (!hasOptions && allResumes.length > 0) {
+              console.log("從履歷資料中提取職缺和公司資訊");
               const jobSet = new Set();
+              const companySet = new Set();
+              
               allResumes.forEach(r => {
+                // 提取職缺
                 const jobTitle = r.job_title || r.jobTitle;
                 if (jobTitle && jobTitle.trim()) {
                   jobSet.add(jobTitle.trim());
                 }
+                // 提取公司名稱
+                const companyName = r.company_name;
+                if (companyName && companyName.trim()) {
+                  companySet.add(companyName.trim());
+                }
               });
               
-              if (jobSet.size > 0) {
+              // 優先顯示公司名稱
+              if (companySet.size > 0) {
+                console.log("從履歷中找到的公司:", Array.from(companySet));
+                Array.from(companySet).sort().forEach(companyName => {
+                  const option = document.createElement("option");
+                  option.value = companyName;
+                  option.textContent = companyName;
+                  companySelect.appendChild(option);
+                  hasOptions = true;
+                });
+              }
+              
+              // 如果沒有公司但有職缺，顯示職缺
+              if (!hasOptions && jobSet.size > 0) {
                 console.log("從履歷中找到的職缺:", Array.from(jobSet));
                 Array.from(jobSet).sort().forEach(jobTitle => {
                   const option = document.createElement("option");
                   option.value = jobTitle;
                   option.textContent = jobTitle;
                   companySelect.appendChild(option);
-                  hasJobs = true;
+                  hasOptions = true;
                 });
               }
             }
@@ -654,17 +720,23 @@
       const searchText = document.getElementById("searchBox").value.toLowerCase();
 
       let filtered = allResumes.filter(r => {
-        // 職缺篩選：根據職缺 ID 或職缺名稱匹配
+        // 職缺/公司篩選：根據職缺 ID、職缺名稱或公司名稱匹配
         let matchJob = true;
         if (jobFilter) {
           const jobTitle = r.job_title || r.jobTitle || '';
           const jobId = r.job_id || r.jobId;
-          // 如果篩選值是數字，則匹配 job_id；否則匹配 job_title
+          const companyName = r.company_name || '';
+          const companyId = r.company_id;
+          
+          // 如果篩選值是數字，則匹配 job_id 或 company_id
           const filterIsNumeric = /^\d+$/.test(jobFilter);
           if (filterIsNumeric) {
-            matchJob = jobId && String(jobId) === jobFilter;
+            matchJob = (jobId && String(jobId) === jobFilter) || 
+                       (companyId && String(companyId) === jobFilter);
           } else {
-            matchJob = jobTitle && jobTitle.trim() === jobFilter.trim();
+            // 否則匹配 job_title 或 company_name
+            matchJob = (jobTitle && jobTitle.trim() === jobFilter.trim()) ||
+                       (companyName && companyName.trim() === jobFilter.trim());
           }
         }
         
@@ -687,7 +759,12 @@
       const pageData = data.slice(start, end);
 
       if (pageData.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="7" style="padding: 14px 16px; text-align: center; color: var(--color-muted); border-bottom: 1px solid var(--color-border);">沒有符合條件的資料</td></tr>';
+        // 檢查是沒有資料還是篩選結果為空
+        const hasData = allResumes.length > 0;
+        const message = hasData 
+          ? '沒有符合篩選條件的資料，請嘗試調整篩選條件' 
+          : '目前沒有任何履歷資料，請確認：<br>1. 已有學生提交履歷<br>2. 履歷已通過老師審核';
+        tbody.innerHTML = `<tr><td colspan="7" style="padding: 14px 16px; text-align: center; color: var(--color-muted); border-bottom: 1px solid var(--color-border);">${message}</td></tr>`;
         document.getElementById("pagination").innerHTML = '';
         return;
       }
@@ -700,7 +777,10 @@
           <tr style="border-bottom: 1px solid var(--color-border);">
             <td style="padding: 14px 16px; vertical-align: middle;">${r.username || '—'}</td>
             <td style="padding: 14px 16px; vertical-align: middle;">${r.name || '—'}</td>
-            <td style="padding: 14px 16px; vertical-align: middle;">${(r.job_title || r.jobTitle || '—')}</td>
+            <td style="padding: 14px 16px; vertical-align: middle;">
+              ${r.company_name ? `<div style="font-weight: 500; margin-bottom: 4px;">${r.company_name}</div>` : ''}
+              ${(r.job_title || r.jobTitle) ? `<div style="color: var(--color-muted); font-size: 0.875rem;">${r.job_title || r.jobTitle}</div>` : '<span style="color: var(--color-muted);">—</span>'}
+            </td>
             <td style="padding: 14px 16px; vertical-align: middle;">${r.upload_time || '—'}</td>
             <td style="padding: 14px 16px; vertical-align: middle;">
               ${r.filepath ? `<a href="/api/download_resume/${r.id}" target="_blank" style="padding: 6px 12px; border-radius: 6px; border: 1px solid var(--color-primary); background: #fff; color: var(--color-primary); text-decoration: none; font-size: 0.875rem; display: inline-block;">查看履歷</a>` : '—'}
@@ -709,7 +789,10 @@
               <span class="badge bg-${statusColorClass} status-badge">${statusLabel}</span>
             </td>
             <td style="padding: 14px 16px; vertical-align: middle;">
-              <button class="btn" style="background: var(--color-success); color: #fff; padding: 6px 12px; border-radius: 6px; border: none; font-size: 0.875rem; cursor: pointer;" onclick="openNotificationModal(${r.student_id}, '${(r.name || '').replace(/'/g, "\\'")}', '')">發送通知</button>
+              <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+                <button class="btn" style="background: #17a2b8; color: #fff; padding: 6px 12px; border-radius: 6px; border: none; font-size: 0.875rem; cursor: pointer; white-space: nowrap;" onclick="openNotificationModal(${r.student_id}, '${(r.name || '').replace(/'/g, "\\'")}', '', 'interview')">發送面試通知</button>
+                <button class="btn" style="background: var(--color-success); color: #fff; padding: 6px 12px; border-radius: 6px; border: none; font-size: 0.875rem; cursor: pointer; white-space: nowrap;" onclick="openNotificationModal(${r.student_id}, '${(r.name || '').replace(/'/g, "\\'")}', '', 'admission')">發送錄取通知</button>
+              </div>
             </td>
           </tr>
         `;
@@ -795,7 +878,7 @@
     }
 
     // 開啟發送通知 Modal
-    function openNotificationModal(studentId, studentName, studentEmail) {
+    function openNotificationModal(studentId, studentName, studentEmail, notificationType = 'interview') {
       currentStudentId = studentId;
       currentStudentName = studentName;
       
@@ -810,7 +893,19 @@
             document.getElementById("studentNameInput").value = item.name || studentName || '';
             document.getElementById("studentEmailInput").value = currentStudentEmail;
             document.getElementById("notificationContent").value = '';
-            document.getElementById("notificationType").value = 'interview';
+            document.getElementById("notificationType").value = notificationType || 'interview';
+            
+            // 根據通知類型設定 Modal 標題和提示
+            const modalTitle = document.getElementById("notificationModalLabel");
+            const contentTextarea = document.getElementById("notificationContent");
+            if (modalTitle) {
+              modalTitle.textContent = notificationType === 'admission' ? '發送錄取通知' : '發送面試通知';
+            }
+            if (contentTextarea) {
+              contentTextarea.placeholder = notificationType === 'admission' 
+                ? '請輸入通知內容（選填，如需額外資訊可在此補充）...' 
+                : '請輸入通知內容（面試通知必填）...';
+            }
             
             new bootstrap.Modal(document.getElementById("notificationModal")).show();
           } else {
@@ -819,7 +914,19 @@
             document.getElementById("studentNameInput").value = studentName || '';
             document.getElementById("studentEmailInput").value = currentStudentEmail;
             document.getElementById("notificationContent").value = '';
-            document.getElementById("notificationType").value = 'interview';
+            document.getElementById("notificationType").value = notificationType || 'interview';
+            
+            // 根據通知類型設定 Modal 標題和提示
+            const modalTitle = document.getElementById("notificationModalLabel");
+            const contentTextarea = document.getElementById("notificationContent");
+            if (modalTitle) {
+              modalTitle.textContent = notificationType === 'admission' ? '發送錄取通知' : '發送面試通知';
+            }
+            if (contentTextarea) {
+              contentTextarea.placeholder = notificationType === 'admission' 
+                ? '請輸入通知內容（選填，如需額外資訊可在此補充）...' 
+                : '請輸入通知內容（面試通知必填）...';
+            }
             
             new bootstrap.Modal(document.getElementById("notificationModal")).show();
           }
