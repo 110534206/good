@@ -200,8 +200,10 @@
 
         <div id="revisedResume">AI 修改後的內容將顯示在這裡...</div>
         
-        <div id="saveSection" style="display: none; margin-top: 20px;">
-            <button onclick="saveRevisedAutobiography()" style="background: linear-gradient(90deg, #28a745, #20c997);">💾 將美化後的自傳更新至資料庫</button>
+        <div style="margin-top: 20px;">
+            <button onclick="importToResumeForm()" style="background: linear-gradient(90deg, #007BFF, #0069ff); width: 100%; padding: 14px 25px; cursor: pointer; color: white; border: none; border-radius: 12px; font-size: 16px; font-weight: bold; transition: all 0.3s ease;">
+                📥 導入至履歷上傳頁面
+            </button>
         </div>
     </div>
 
@@ -277,6 +279,7 @@
                 const reader = response.body.getReader();
                 const decoder = new TextDecoder("utf-8");
                 let done = false;
+                let fullText = '';
 
                 while (!done) {
                     const { value, done: readerDone } = await reader.read();
@@ -284,16 +287,37 @@
 
                     if (value) {
                         const chunk = decoder.decode(value, { stream: true });
-                        revisedResumeDiv.innerHTML += chunk;
+                        fullText += chunk;
+                        revisedResumeDiv.innerHTML = fullText;
                     }
                 }
-                revisedResumeDiv.innerHTML += decoder.decode();
+                fullText += decoder.decode();
                 
-                // 🌟 [新功能] 顯示保存按鈕
-                const saveSection = document.getElementById('saveSection');
-                if (saveSection) {
-                    saveSection.style.display = 'block';
+                // 🌟 [新功能] 過濾掉可能的解釋性文字
+                // 移除常見的解釋性前綴
+                const prefixesToRemove = [
+                    /^沒問題[！!]?[，,]?這是為您改寫的[：:]/i,
+                    /^這是為您改寫的[：:]/i,
+                    /^以下是[：:]/i,
+                    /^以下是為您改寫的[：:]/i,
+                    /^這是[：:]/i,
+                    /^以下是改寫後的版本[：:]/i,
+                    /^改寫後的版本[：:]/i,
+                    /^以下是改寫內容[：:]/i,
+                    /^改寫內容[：:]/i
+                ];
+                
+                let cleanedText = fullText.trim();
+                for (const prefix of prefixesToRemove) {
+                    cleanedText = cleanedText.replace(prefix, '').trim();
                 }
+                
+                // 如果過濾後內容為空，使用原始內容
+                if (!cleanedText) {
+                    cleanedText = fullText.trim();
+                }
+                
+                revisedResumeDiv.innerHTML = cleanedText;
 
             } catch (error) {
                 // ========================================================
@@ -308,43 +332,65 @@
             }
         }
 
-        // 🌟 [新功能] 將美化後的自傳更新至資料庫
-        async function saveRevisedAutobiography() {
+        // 🌟 [新功能] 將美化後的自傳導入至履歷上傳頁面
+        function importToResumeForm() {
             const revisedResumeDiv = document.getElementById('revisedResume');
-            const revisedText = revisedResumeDiv.textContent || revisedResumeDiv.innerText || '';
-            
-            if (!revisedText.trim()) {
-                alert('沒有可保存的內容！');
-                return;
-            }
-
-            if (!confirm('確定要將美化後的自傳更新至資料庫嗎？這將會覆蓋您原有的自傳內容。')) {
-                return;
-            }
-
-            try {
-                const response = await fetch('/api/update_autobiography', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        autobiography: revisedText.trim()
-                    })
-                });
-
-                const result = await response.json();
+            // 嘗試多種方式獲取文本內容（只獲取新的美化後內容）
+            let revisedText = '';
+            if (revisedResumeDiv) {
+                // 檢查是否包含提示文字，如果有則表示還沒有美化結果
+                const placeholderText = 'AI 修改後的內容將顯示在這裡...';
+                const currentContent = revisedResumeDiv.textContent || revisedResumeDiv.innerText || '';
                 
-                if (result.success) {
-                    alert('✅ 自傳已成功更新至資料庫！');
-                    // 同時更新輸入框
-                    document.getElementById('resumeInput').value = revisedText.trim();
+                if (currentContent.trim() === placeholderText || currentContent.trim() === '') {
+                    alert('❌ 請先使用 AI 美化自傳，然後再導入！');
+                    return;
+                }
+                
+                revisedText = currentContent;
+                // 如果包含 HTML 標籤，嘗試提取純文本
+                if (revisedResumeDiv.innerHTML && revisedResumeDiv.innerHTML.includes('<')) {
+                    const tempDiv = document.createElement('div');
+                    tempDiv.innerHTML = revisedResumeDiv.innerHTML;
+                    revisedText = tempDiv.textContent || tempDiv.innerText || '';
+                }
+            }
+            
+            const trimmedText = revisedText.trim();
+            
+            if (!trimmedText || trimmedText === 'AI 修改後的內容將顯示在這裡...') {
+                alert('❌ 沒有可導入的內容！請先使用 AI 美化自傳。');
+                return;
+            }
+
+            // 將美化後的新自傳保存到 LocalStorage，供履歷上傳頁面使用
+            const importData = {
+                autobiography: trimmedText,
+                timestamp: Date.now(),
+                source: 'ai_edit_resume',
+                isNew: true  // 標記為新的自傳
+            };
+            
+            try {
+                localStorage.setItem('ai_polished_autobiography', JSON.stringify(importData));
+                console.log('✅ 新的自傳已保存到 LocalStorage，長度:', trimmedText.length);
+                
+                // 驗證保存是否成功
+                const savedData = localStorage.getItem('ai_polished_autobiography');
+                if (!savedData) {
+                    throw new Error('LocalStorage 保存失敗');
+                }
+                
+                // 詢問用戶是否要跳轉到履歷上傳頁面
+                if (confirm('✅ 新的自傳已準備導入！\n\n是否要跳轉到履歷上傳頁面？')) {
+                    // 添加 URL 參數標記，確保頁面知道要導入新的自傳
+                    window.location.href = '/upload_resume?import_autobiography=true';
                 } else {
-                    alert('❌ 更新失敗：' + (result.message || '未知錯誤'));
+                    alert('✅ 新的自傳已保存，您可以在履歷上傳頁面查看導入的自傳內容。\n\n提示：刷新履歷上傳頁面即可自動導入。');
                 }
             } catch (error) {
-                console.error('保存自傳失敗:', error);
-                alert('❌ 保存失敗：' + error.message);
+                console.error('保存導入數據失敗:', error);
+                alert('❌ 保存失敗：' + error.message + '\n\n請檢查瀏覽器的 LocalStorage 是否可用。');
             }
         }
     </script>

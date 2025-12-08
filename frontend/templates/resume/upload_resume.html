@@ -1880,7 +1880,61 @@
         }
         
         const autobiographyTextarea = form.querySelector('textarea[name="autobiography"]');
-        if (autobiographyTextarea) autobiographyTextarea.value = studentInfo.autobiography || '';
+        if (autobiographyTextarea) {
+          // 🌟 [新功能] 優先檢查是否有從 AI 修改履歷頁面導入的新自傳
+          const aiPolishedData = localStorage.getItem('ai_polished_autobiography');
+          let importedAutobiography = false;
+          
+          if (aiPolishedData) {
+            try {
+              const importData = JSON.parse(aiPolishedData);
+              // 檢查數據是否在 24 小時內（延長有效期，避免過早清除）
+              const oneDay = 24 * 60 * 60 * 1000;
+              if (Date.now() - importData.timestamp < oneDay && importData.autobiography) {
+                // 優先使用導入的新自傳，覆蓋資料庫中的舊自傳
+                // 只有在還沒有導入過的情況下才導入
+                if (!window.aiAutobiographyImported) {
+                  // 直接使用新的自傳，不保留舊的
+                  autobiographyTextarea.value = importData.autobiography;
+                  importedAutobiography = true;
+                  console.log('✅ 已從 AI 修改履歷頁面導入新的美化後自傳（在 loadResumeData 中），覆蓋舊的自傳');
+                  // 標記已導入，避免重複處理
+                  window.aiAutobiographyImported = true;
+                  // 導入成功後，清除數據（避免重複導入）
+                  localStorage.removeItem('ai_polished_autobiography');
+                } else {
+                  // 已經導入過，但如果有新的標記，仍然使用新的
+                  if (importData.isNew) {
+                    autobiographyTextarea.value = importData.autobiography;
+                    importedAutobiography = true;
+                    localStorage.removeItem('ai_polished_autobiography');
+                  } else {
+                    // 使用資料庫中的自傳
+                    autobiographyTextarea.value = studentInfo.autobiography || '';
+                  }
+                }
+              } else {
+                // 數據過期，清除並使用資料庫中的自傳
+                localStorage.removeItem('ai_polished_autobiography');
+                autobiographyTextarea.value = studentInfo.autobiography || '';
+              }
+            } catch (e) {
+              console.error('解析導入數據失敗:', e);
+              localStorage.removeItem('ai_polished_autobiography');
+              autobiographyTextarea.value = studentInfo.autobiography || '';
+            }
+          } else {
+            // 沒有導入數據，使用資料庫中的自傳
+            autobiographyTextarea.value = studentInfo.autobiography || '';
+          }
+          
+          // 如果成功導入，顯示提示訊息（延遲顯示，確保頁面已載入）
+          if (importedAutobiography) {
+            setTimeout(() => {
+              alert('✨ 已自動導入新的 AI 美化後自傳內容！');
+            }, 800);
+          }
+        }
         
         // 1.5 填充照片路徑（顯示提示，因為文件上傳欄位無法直接設置值）
         if (studentInfo.photo_path) {
@@ -2960,6 +3014,57 @@
       // 初始化缺勤記錄加載標記（確保變量存在）
       window.absenceDataLoadedFromResume = false;
       
+      // 🌟 [新功能] 檢查是否有從 AI 修改履歷頁面導入的新自傳（優先於資料庫載入）
+      // 初始化標記
+      window.aiAutobiographyImported = false;
+      
+      // 檢查 URL 參數，如果有 import_autobiography=true，強制檢查導入
+      const urlParams = new URLSearchParams(window.location.search);
+      const shouldImport = urlParams.get('import_autobiography') === 'true';
+      
+      const aiPolishedData = localStorage.getItem('ai_polished_autobiography');
+      if (aiPolishedData) {
+        try {
+          const importData = JSON.parse(aiPolishedData);
+          // 檢查數據是否在 24 小時內（延長有效期）
+          const oneDay = 24 * 60 * 60 * 1000;
+          const isExpired = Date.now() - importData.timestamp >= oneDay;
+          
+          if (!isExpired && importData.autobiography) {
+            const autobiographyTextarea = form.querySelector('textarea[name="autobiography"]');
+            if (autobiographyTextarea) {
+              // 如果 URL 參數要求導入，或者 textarea 為空，則導入新的自傳
+              // 優先使用新的自傳，覆蓋舊的
+              const shouldForceImport = shouldImport || (!window.aiAutobiographyImported && (!autobiographyTextarea.value.trim() || !autobiographyTextarea.value));
+              
+              if (shouldForceImport) {
+                // 直接使用新的自傳，覆蓋舊的
+                autobiographyTextarea.value = importData.autobiography;
+                window.aiAutobiographyImported = true;
+                console.log('✅ 已從 AI 修改履歷頁面導入新的美化後自傳（在 DOMContentLoaded 中），覆蓋舊的自傳');
+                // 顯示提示訊息
+                setTimeout(() => {
+                  alert('✨ 已自動導入新的 AI 美化後自傳內容！');
+                  // 導入成功後，清除數據（避免重複導入）
+                  localStorage.removeItem('ai_polished_autobiography');
+                  // 清除 URL 參數
+                  if (shouldImport) {
+                    window.history.replaceState({}, document.title, window.location.pathname);
+                  }
+                }, 500);
+              }
+            }
+          } else {
+            // 數據過期，清除
+            console.log('⚠️ 導入的自傳數據已過期，已清除');
+            localStorage.removeItem('ai_polished_autobiography');
+          }
+        } catch (e) {
+          console.error('解析導入數據失敗:', e);
+          localStorage.removeItem('ai_polished_autobiography');
+        }
+      }
+
       // 先檢查是否有已提交的履歷
       const hasResume = await checkLatestResume();
       
@@ -3392,7 +3497,32 @@
           }
         }
         fullText += decoder.decode();
-        revisedContent.innerHTML = fullText;
+        
+        // 🌟 [新功能] 過濾掉可能的解釋性文字
+        // 移除常見的解釋性前綴
+        const prefixesToRemove = [
+          /^沒問題[！!]?[，,]?這是為您改寫的[：:]/i,
+          /^這是為您改寫的[：:]/i,
+          /^以下是[：:]/i,
+          /^以下是為您改寫的[：:]/i,
+          /^這是[：:]/i,
+          /^以下是改寫後的版本[：:]/i,
+          /^改寫後的版本[：:]/i,
+          /^以下是改寫內容[：:]/i,
+          /^改寫內容[：:]/i
+        ];
+        
+        let cleanedText = fullText.trim();
+        for (const prefix of prefixesToRemove) {
+          cleanedText = cleanedText.replace(prefix, '').trim();
+        }
+        
+        // 如果過濾後內容為空，使用原始內容
+        if (!cleanedText) {
+          cleanedText = fullText.trim();
+        }
+        
+        revisedContent.innerHTML = cleanedText;
         revisedContent.style.display = 'block';
         applyBtn.style.display = 'block';
 
