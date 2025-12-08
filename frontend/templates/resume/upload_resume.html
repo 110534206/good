@@ -133,8 +133,8 @@
                 <input type="number" name="conduct_score_numeric" class="form-control" min="0" max="100" required>
               </div>
               <div class="col-md-6 mt-3">
-                <label for="photo" class="form-label">個人大頭照 (JPG/PNG)</label>
-                <input class="form-control" type="file" id="photo" name="photo" accept="image/*" />
+                <label for="photo" class="form-label">個人大頭照 (JPG/PNG) <span class="text-danger">*</span></label>
+                <input class="form-control" type="file" id="photo" name="photo" accept="image/jpeg,image/jpg,image/png" required />
               </div>
             </div>
 
@@ -246,9 +246,8 @@
               <h5 class="text-secondary">成績單上傳</h5>
               <div class="row g-3">
                 <div class="col-12">
-                  <label class="form-label">上傳學期成績單 (JPG/PNG)</label>
-                  <input type="file" name="transcript_file" class="form-control" accept="image/jpeg, image/png"
-                    required />
+                  <label class="form-label">上傳學期成績單 (JPG/PNG) <span class="text-danger">*</span></label>
+                  <input type="file" name="transcript_file" class="form-control" accept="image/jpeg,image/jpg,image/png" required />
                 </div>
               </div>
             </div>
@@ -330,8 +329,8 @@
 
                 <!-- 缺勤記錄佐證圖上傳 -->
                 <div class="mb-3">
-                  <label for="proof_image" class="form-label">缺勤記錄佐證圖上傳</label>
-                  <input class="form-control" type="file" id="proof_image" name="proof_image" accept="image/*">
+                  <label for="proof_image" class="form-label">缺勤記錄佐證圖上傳 <span class="text-danger">*</span></label>
+                  <input class="form-control" type="file" id="proof_image" name="proof_image" accept="image/jpeg,image/jpg,image/png" required>
                   <div class="form-text">💡 提示：接受圖片檔案 (PNG, JPG, JPEG)。</div>
                 </div>
               </div>
@@ -3008,6 +3007,173 @@
       e.preventDefault();
       const submitBtn = e.submitter;
       const originalText = submitBtn.textContent;
+
+      // ========== 表單驗證 ==========
+      const errors = [];
+
+      // 1. 驗證個人大頭照 (必填)
+      const photoInput = document.getElementById('photo');
+      if (!photoInput || !photoInput.files || !photoInput.files[0]) {
+        errors.push('請上傳個人大頭照 (JPG/PNG)');
+      } else {
+        const photoFile = photoInput.files[0];
+        const photoType = photoFile.type.toLowerCase();
+        if (!photoType.includes('jpeg') && !photoType.includes('jpg') && !photoType.includes('png')) {
+          errors.push('個人大頭照必須是 JPG 或 PNG 格式');
+        }
+      }
+
+      // 2. 驗證上傳學期成績單 (必填)
+      const transcriptInput = document.querySelector('input[name="transcript_file"]');
+      if (!transcriptInput || !transcriptInput.files || !transcriptInput.files[0]) {
+        errors.push('請上傳學期成績單 (JPG/PNG)');
+      } else {
+        const transcriptFile = transcriptInput.files[0];
+        const transcriptType = transcriptFile.type.toLowerCase();
+        if (!transcriptType.includes('jpeg') && !transcriptType.includes('jpg') && !transcriptType.includes('png')) {
+          errors.push('學期成績單必須是 JPG 或 PNG 格式');
+        }
+      }
+
+      // 3. 驗證缺勤記錄佐證圖 (必填)
+      const proofImageInputValidate = document.getElementById('proof_image');
+      const recordImageInputsValidate = document.querySelectorAll('.absence-proof-image');
+      let hasAbsenceProof = false;
+      
+      // 檢查整體佐證圖片
+      if (proofImageInputValidate && proofImageInputValidate.files && proofImageInputValidate.files[0]) {
+        hasAbsenceProof = true;
+      }
+      
+      // 檢查個別缺勤記錄的佐證圖片
+      if (!hasAbsenceProof) {
+        recordImageInputsValidate.forEach(input => {
+          if (input.files && input.files[0]) {
+            hasAbsenceProof = true;
+          }
+        });
+      }
+      
+      if (!hasAbsenceProof) {
+        errors.push('請上傳缺勤記錄佐證圖');
+      }
+
+      // 4. 驗證所有必填欄位
+      const requiredFields = [
+        { name: 'name', label: '姓名' },
+        { name: 'birth_date', label: '出生日期' },
+        { name: 'gender', label: '性別' },
+        { name: 'phone', label: '電話' },
+        { name: 'email', label: '電子郵件' },
+        { name: 'address', label: '地址' },
+        { name: 'conduct_score_numeric', label: '操行成績' },
+        { name: 'autobiography', label: '自傳' }
+      ];
+
+      requiredFields.forEach(field => {
+        const input = document.querySelector(`[name="${field.name}"]`);
+        if (!input || !input.value || !input.value.trim()) {
+          errors.push(`請填寫${field.label}`);
+        }
+      });
+
+      // 5. 驗證證照欄位（除了特定情況下的發證人欄位）
+      const certEntries = document.querySelectorAll('.cert-entry');
+      certEntries.forEach((entry, index) => {
+        const certCodeSelect = entry.querySelector('select[name="cert_code[]"]');
+        const certCode = certCodeSelect ? certCodeSelect.value : '';
+        const authoritySelect = entry.querySelector('select[name="cert_authority[]"]');
+        const authorityId = authoritySelect ? authoritySelect.value : '';
+        const jobCategorySelect = entry.querySelector('select[name="cert_job_category[]"]');
+        const levelSelect = entry.querySelector('select[name="cert_level[]"]');
+        const customNameInput = entry.querySelector('input[name="cert_name[]"]');
+        const otherJobCategoryInput = entry.querySelector('input[name="cert_other_job_category[]"]');
+        const otherLevelInput = entry.querySelector('input[name="cert_other_level[]"]');
+        const authorityNameInput = entry.querySelector('input[name="cert_authority_name[]"]');
+        const acquisitionDateInput = entry.querySelector('input[name="cert_acquisition_date[]"]');
+
+        // 如果證照代碼為空，跳過驗證（可能是空的證照欄位）
+        if (!certCode || certCode.trim() === '') {
+          return;
+        }
+
+        // 驗證證照代碼
+        if (!certCode || certCode.trim() === '') {
+          errors.push(`證照 ${index + 1}：請選擇證照代碼`);
+        }
+
+        // 驗證取得日期
+        if (!acquisitionDateInput || !acquisitionDateInput.value || !acquisitionDateInput.value.trim()) {
+          errors.push(`證照 ${index + 1}：請填寫取得日期`);
+        }
+
+        // 根據證照代碼類型驗證
+        if (certCode.toUpperCase() === 'OTHER') {
+          // OTHER 類型：需要填寫其他類別、其他等級、證照名稱
+          if (!otherJobCategoryInput || !otherJobCategoryInput.value || !otherJobCategoryInput.value.trim()) {
+            errors.push(`證照 ${index + 1}：請填寫其他類別`);
+          }
+          if (!otherLevelInput || !otherLevelInput.value || !otherLevelInput.value.trim()) {
+            errors.push(`證照 ${index + 1}：請填寫其他等級`);
+          }
+          if (!customNameInput || !customNameInput.value || !customNameInput.value.trim()) {
+            errors.push(`證照 ${index + 1}：請填寫證照名稱`);
+          }
+          // OTHER 類型：發證人（authority_name）是必填的
+          if (!authorityNameInput || !authorityNameInput.value || !authorityNameInput.value.trim()) {
+            errors.push(`證照 ${index + 1}：請填寫發證人`);
+          }
+        } else {
+          // 標準證照代碼：需要選擇類別和等級
+          if (!jobCategorySelect || !jobCategorySelect.value || jobCategorySelect.value.trim() === '') {
+            errors.push(`證照 ${index + 1}：請選擇類別`);
+          }
+          if (!levelSelect || !levelSelect.value || levelSelect.value.trim() === '') {
+            errors.push(`證照 ${index + 1}：請選擇等級`);
+          }
+          
+          // 標準證照代碼：如果發證中心選擇了"其他"，則發證人欄位必填
+          // 否則發證人欄位是選填的
+          if (authorityId === 'OTHER' || authorityId === 'other') {
+            if (!authorityNameInput || !authorityNameInput.value || !authorityNameInput.value.trim()) {
+              errors.push(`證照 ${index + 1}：發證中心選擇「其他」時，請填寫發證人`);
+            }
+          }
+          // 如果發證中心不是"其他"，發證人欄位是選填的，不需要驗證
+        }
+      });
+
+      // 6. 驗證課程資料（如果有課程）
+      const courseRowsValidate = document.querySelectorAll("#courseTableBody tr");
+      courseRowsValidate.forEach((row, index) => {
+        const nameInput = row.querySelector('input[name="course_name[]"]');
+        const creditsInput = row.querySelector('input[name="course_credits[]"]');
+        const gradeInput = row.querySelector('input[name="course_grade[]"]');
+        const isNotTaken = row.dataset.isNotTaken === 'true';
+
+        // 如果標記為"未修課"，跳過驗證
+        if (isNotTaken) {
+          return;
+        }
+
+        if (nameInput && nameInput.value && nameInput.value.trim()) {
+          // 如果有課程名稱，則學分和成績都應該填寫
+          if (!creditsInput || !creditsInput.value || creditsInput.value.trim() === '') {
+            errors.push(`課程 ${index + 1}：請填寫學分數`);
+          }
+          if (!gradeInput || !gradeInput.value || gradeInput.value.trim() === '') {
+            errors.push(`課程 ${index + 1}：請填寫成績`);
+          }
+        }
+      });
+
+      // 如果有驗證錯誤，顯示並阻止提交
+      if (errors.length > 0) {
+        alert('❌ 表單驗證失敗：\n\n' + errors.join('\n'));
+        submitBtn.disabled = false;
+        submitBtn.textContent = originalText;
+        return;
+      }
 
       submitBtn.disabled = true;
       submitBtn.textContent = '生成中...';

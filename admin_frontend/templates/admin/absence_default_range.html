@@ -12,7 +12,7 @@
             background: #f7f9fc;
         }
         .container {
-            max-width: 800px;
+            max-width: 1200px;
             margin: 2rem auto;
             background: white;
             padding: 2rem;
@@ -23,13 +23,21 @@
             border: none;
             box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
         }
+        .table-responsive {
+            max-height: 600px;
+            overflow-y: auto;
+        }
+        .badge-custom {
+            font-size: 0.9rem;
+            padding: 0.4rem 0.8rem;
+        }
     </style>
 </head>
 <body>
     <div class="container">
         <h2 class="mb-4"><i class="bi bi-calendar-range"></i> 缺勤預設學期範圍設定</h2>
         <p class="text-muted mb-4">
-            設定學生新增缺勤資訊時的預設學期範圍。學生進入缺勤資訊頁面時，會自動帶入此範圍進行查詢。
+            為不同入學年度的學生設定缺勤資訊的預設學期範圍。學生進入缺勤資訊頁面時，會根據其入學年度自動帶入對應的範圍進行查詢。
         </p>
 
         <div id="alertMessage" class="alert alert-dismissible fade show d-none" role="alert">
@@ -37,18 +45,33 @@
             <span id="alertText"></span>
         </div>
 
-        <div class="card">
+        <!-- 新增/編輯表單 -->
+        <div class="card mb-4">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0">
+                    <i class="bi bi-plus-circle"></i> 
+                    <span id="formTitle">新增入學年度設定</span>
+                </h5>
+            </div>
             <div class="card-body">
                 <form id="defaultRangeForm">
+                    <input type="hidden" id="rangeId" name="rangeId" value="">
                     <div class="row mb-3">
-                        <div class="col-md-6">
-                            <label for="startSemester" class="form-label">預設開始學期</label>
+                        <div class="col-md-4">
+                            <label for="admissionYear" class="form-label">入學年度 <span class="text-danger">*</span></label>
+                            <select class="form-select" id="admissionYear" name="admissionYear" required>
+                                <option value="">請選擇入學年度</option>
+                            </select>
+                            <div class="form-text">例如：110、111、112</div>
+                        </div>
+                        <div class="col-md-4">
+                            <label for="startSemester" class="form-label">預設開始學期 <span class="text-danger">*</span></label>
                             <select class="form-select" id="startSemester" name="startSemester" required>
                                 <option value="">載入中...</option>
                             </select>
                         </div>
-                        <div class="col-md-6">
-                            <label for="endSemester" class="form-label">預設結束學期</label>
+                        <div class="col-md-4">
+                            <label for="endSemester" class="form-label">預設結束學期 <span class="text-danger">*</span></label>
                             <select class="form-select" id="endSemester" name="endSemester" required>
                                 <option value="">載入中...</option>
                             </select>
@@ -58,11 +81,47 @@
                         <button type="submit" class="btn btn-primary">
                             <i class="bi bi-save"></i> 保存設定
                         </button>
-                        <button type="button" class="btn btn-secondary" onclick="loadCurrentSettings()">
+                        <button type="button" class="btn btn-secondary" id="cancelBtn" onclick="resetForm()" style="display: none;">
+                            <i class="bi bi-x-circle"></i> 取消編輯
+                        </button>
+                        <button type="button" class="btn btn-info" onclick="loadAllRanges()">
                             <i class="bi bi-arrow-clockwise"></i> 重新載入
                         </button>
                     </div>
+                    <div class="mt-3">
+                        <small class="text-muted">
+                            <i class="bi bi-info-circle"></i> 
+                            <strong>提示：</strong>110年度入學的學生通常設定為 1122~1131，111年度入學的學生通常設定為 1132~1141
+                        </small>
+                    </div>
                 </form>
+            </div>
+        </div>
+
+        <!-- 現有設定列表 -->
+        <div class="card">
+            <div class="card-header bg-secondary text-white">
+                <h5 class="mb-0"><i class="bi bi-list-ul"></i> 已設定的入學年度範圍</h5>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle">
+                        <thead class="table-light">
+                            <tr>
+                                <th>入學年度</th>
+                                <th>開始學期</th>
+                                <th>結束學期</th>
+                                <th>學期範圍</th>
+                                <th>操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="rangesTableBody">
+                            <tr>
+                                <td colspan="5" class="text-center text-muted">載入中...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
             </div>
         </div>
 
@@ -70,8 +129,10 @@
             <div class="card-body">
                 <h5 class="card-title">說明</h5>
                 <ul class="mb-0">
-                    <li>此設定會影響所有學生在新增缺勤資訊時看到的預設學期範圍</li>
-                    <li>例如：設定為「1122」到「1131」，學生進入頁面時會自動查詢此範圍內的缺勤記錄</li>
+                    <li>可以為不同入學年度的學生設定不同的預設學期範圍</li>
+                    <li>例如：110年度入學 → 1122~1131，111年度入學 → 1132~1141</li>
+                    <li>學生進入缺勤資訊頁面時，系統會根據其入學年度自動帶入對應的範圍</li>
+                    <li>如果某個入學年度沒有設定，學生將看不到預設範圍（需要手動選擇）</li>
                     <li>學生仍可手動調整學期範圍進行查詢</li>
                 </ul>
             </div>
@@ -81,6 +142,8 @@
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
         let allSemesters = [];
+        let allRanges = [];
+        let admissionYears = [];
 
         // 載入學期列表
         async function loadSemesters() {
@@ -108,9 +171,6 @@
                         option2.textContent = semester.code;
                         endSelect.appendChild(option2);
                     });
-
-                    // 載入當前設定
-                    await loadCurrentSettings();
                 }
             } catch (error) {
                 console.error('載入學期列表失敗:', error);
@@ -118,34 +178,158 @@
             }
         }
 
-        // 載入當前預設範圍設定
-        async function loadCurrentSettings() {
+        // 載入入學年度列表
+        async function loadAdmissionYears() {
+            try {
+                const res = await fetch('/api/absence/admission_years');
+                const result = await res.json();
+
+                const admissionYearSelect = document.getElementById('admissionYear');
+                admissionYearSelect.innerHTML = '<option value="">請選擇入學年度</option>';
+
+                if (result.success && result.admission_years) {
+                    admissionYears = result.admission_years;
+                    admissionYears.forEach(year => {
+                        const option = document.createElement('option');
+                        option.value = year;
+                        option.textContent = `${year}年度`;
+                        admissionYearSelect.appendChild(option);
+                    });
+                }
+            } catch (error) {
+                console.error('載入入學年度列表失敗:', error);
+                showAlert('載入入學年度列表失敗', 'danger');
+            }
+        }
+
+        // 載入所有設定
+        async function loadAllRanges() {
             try {
                 const res = await fetch('/api/absence/default_range');
                 const result = await res.json();
 
+                const tbody = document.getElementById('rangesTableBody');
+                
                 if (result.success) {
-                    if (result.defaultStart) {
-                        document.getElementById('startSemester').value = result.defaultStart;
+                    if (result.ranges && result.ranges.length > 0) {
+                        allRanges = result.ranges;
+                        tbody.innerHTML = '';
+                        
+                        result.ranges.forEach(range => {
+                            const admissionYear = range.admission_year || '未設定';
+                            const startCode = range.start_semester_code || '';
+                            const endCode = range.end_semester_code || '';
+                            const rangeText = startCode && endCode ? `${startCode} ~ ${endCode}` : '未設定';
+                            
+                            const tr = document.createElement('tr');
+                            tr.innerHTML = `
+                                <td><span class="badge bg-primary badge-custom">${admissionYear}年度</span></td>
+                                <td>${startCode || '-'}</td>
+                                <td>${endCode || '-'}</td>
+                                <td><strong>${rangeText}</strong></td>
+                                <td>
+                                    <button class="btn btn-sm btn-warning me-2" onclick="editRange(${range.id}, ${admissionYear}, '${startCode}', '${endCode}')">
+                                        <i class="bi bi-pencil"></i> 編輯
+                                    </button>
+                                    <button class="btn btn-sm btn-danger" onclick="deleteRange(${range.id}, ${admissionYear})">
+                                        <i class="bi bi-trash"></i> 刪除
+                                    </button>
+                                </td>
+                            `;
+                            tbody.appendChild(tr);
+                        });
+                    } else {
+                        // 向後兼容：如果返回的是單一設定
+                        if (result.defaultStart && result.defaultEnd) {
+                            tbody.innerHTML = `
+                                <tr>
+                                    <td><span class="badge bg-secondary badge-custom">通用設定</span></td>
+                                    <td>${result.defaultStart}</td>
+                                    <td>${result.defaultEnd}</td>
+                                    <td><strong>${result.defaultStart} ~ ${result.defaultEnd}</strong></td>
+                                    <td>
+                                        <button class="btn btn-sm btn-warning" onclick="editRange(null, null, '${result.defaultStart}', '${result.defaultEnd}')">
+                                            <i class="bi bi-pencil"></i> 編輯
+                                        </button>
+                                    </td>
+                                </tr>
+                            `;
+                        } else {
+                            tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">尚無設定，請新增入學年度設定</td></tr>';
+                        }
                     }
-                    if (result.defaultEnd) {
-                        document.getElementById('endSemester').value = result.defaultEnd;
-                    }
+                } else {
+                    tbody.innerHTML = '<tr><td colspan="5" class="text-center text-danger">載入失敗</td></tr>';
                 }
             } catch (error) {
-                console.error('載入當前設定失敗:', error);
+                console.error('載入設定列表失敗:', error);
+                showAlert('載入設定列表失敗', 'danger');
             }
+        }
+
+        // 編輯設定
+        function editRange(rangeId, admissionYear, startCode, endCode) {
+            document.getElementById('formTitle').textContent = '編輯入學年度設定';
+            document.getElementById('rangeId').value = rangeId || '';
+            document.getElementById('admissionYear').value = admissionYear || '';
+            document.getElementById('startSemester').value = startCode || '';
+            document.getElementById('endSemester').value = endCode || '';
+            document.getElementById('cancelBtn').style.display = 'inline-block';
+            
+            // 如果入學年度欄位被禁用（因為已存在），啟用它
+            const admissionYearSelect = document.getElementById('admissionYear');
+            admissionYearSelect.disabled = false;
+            
+            // 滾動到表單
+            document.getElementById('defaultRangeForm').scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+
+        // 刪除設定
+        async function deleteRange(rangeId, admissionYear) {
+            if (!confirm(`確定要刪除 ${admissionYear}年度 的預設學期範圍設定嗎？`)) {
+                return;
+            }
+
+            try {
+                const res = await fetch(`/api/absence/default_range/${rangeId}`, {
+                    method: 'DELETE'
+                });
+
+                const result = await res.json();
+
+                if (result.success) {
+                    showAlert(`已刪除 ${admissionYear}年度 的設定`, 'success');
+                    loadAllRanges();
+                } else {
+                    showAlert(result.message || '刪除失敗', 'danger');
+                }
+            } catch (error) {
+                console.error('刪除設定失敗:', error);
+                showAlert('刪除設定失敗', 'danger');
+            }
+        }
+
+        // 重置表單
+        function resetForm() {
+            document.getElementById('defaultRangeForm').reset();
+            document.getElementById('rangeId').value = '';
+            document.getElementById('formTitle').textContent = '新增入學年度設定';
+            document.getElementById('cancelBtn').style.display = 'none';
+            const admissionYearSelect = document.getElementById('admissionYear');
+            admissionYearSelect.disabled = false;
         }
 
         // 保存設定
         document.getElementById('defaultRangeForm').addEventListener('submit', async (e) => {
             e.preventDefault();
 
+            const rangeId = document.getElementById('rangeId').value;
+            const admissionYear = document.getElementById('admissionYear').value;
             const startCode = document.getElementById('startSemester').value;
             const endCode = document.getElementById('endSemester').value;
 
-            if (!startCode || !endCode) {
-                showAlert('請選擇開始和結束學期', 'warning');
+            if (!admissionYear || !startCode || !endCode) {
+                showAlert('請填寫所有必填欄位', 'warning');
                 return;
             }
 
@@ -158,6 +342,16 @@
                 return;
             }
 
+            // 檢查是否已存在該入學年度的設定（如果是新增）
+            if (!rangeId) {
+                const existingRange = allRanges.find(r => r.admission_year == admissionYear);
+                if (existingRange) {
+                    if (!confirm(`${admissionYear}年度 已有設定，是否要覆蓋現有設定？`)) {
+                        return;
+                    }
+                }
+            }
+
             try {
                 const res = await fetch('/api/absence/default_range', {
                     method: 'POST',
@@ -165,6 +359,8 @@
                         'Content-Type': 'application/json'
                     },
                     body: JSON.stringify({
+                        id: rangeId || null,
+                        admission_year: parseInt(admissionYear),
                         start: startCode,
                         end: endCode
                     })
@@ -173,9 +369,11 @@
                 const result = await res.json();
 
                 if (result.success) {
-                    showAlert('預設學期範圍已更新', 'success');
+                    showAlert(rangeId ? '設定已更新' : '設定已新增', 'success');
+                    resetForm();
+                    loadAllRanges();
                 } else {
-                    showAlert(result.message || '更新失敗', 'danger');
+                    showAlert(result.message || '保存失敗', 'danger');
                 }
             } catch (error) {
                 console.error('保存設定失敗:', error);
@@ -198,8 +396,10 @@
         }
 
         // 頁面載入時初始化
-        document.addEventListener('DOMContentLoaded', () => {
-            loadSemesters();
+        document.addEventListener('DOMContentLoaded', async () => {
+            await loadSemesters();
+            await loadAdmissionYears();
+            await loadAllRanges();
         });
     </script>
 </body>
