@@ -35,6 +35,103 @@
             position: fixed;
             top: 0;
             left: 0;
+            z-index: 1000;
+        }
+
+        /* 三條線選單按鈕樣式 */
+        .top-bar-left {
+            position: fixed;
+            top: 1rem;
+            left: 1rem;
+            z-index: 1100;
+        }
+
+        .top-bar-left #menu-btn {
+            width: 30px;
+            height: 22px;
+            cursor: pointer;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            background: none;
+            border: none;
+            padding: 0;
+        }
+
+        .top-bar-left #menu-btn span {
+            display: block;
+            width: 100%;
+            height: 3px;
+            background-color: white;
+            border-radius: 2px;
+            transition: all 0.3s ease;
+        }
+
+        /* 側邊選單樣式 */
+        #side-menu {
+            position: fixed;
+            top: 0;
+            left: 0;
+            height: 100vh;
+            width: 320px;
+            max-width: 80vw;
+            background-color: rgba(10, 10, 10, 0.95);
+            backdrop-filter: blur(6px);
+            box-shadow: 3px 0 12px rgb(0 0 0 / 0.7);
+            padding: 2rem 1.5rem;
+            transform: translateX(-100%);
+            transition: transform 0.3s ease-in-out;
+            z-index: 1200;
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            color: white;
+            user-select: none;
+        }
+
+        #side-menu.open {
+            transform: translateX(0);
+        }
+
+        #close-btn {
+            position: absolute;
+            top: 2rem;
+            right: 1.6rem;
+            font-size: 2.2rem;
+            background: none;
+            border: none;
+            color: white;
+            cursor: pointer;
+            line-height: 1;
+            width: 2.5rem;
+            height: 2.5rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        #side-menu h2 {
+            width: 100%;
+            margin-bottom: 1.5rem;
+            font-weight: 700;
+            font-size: 1.5rem;
+            text-align: left;
+        }
+
+        #side-menu a {
+            display: block;
+            width: 100%;
+            padding: 0.5rem 0;
+            font-size: 1.1rem;
+            color: #ddd;
+            text-decoration: none;
+            border-radius: 4px;
+            transition: background-color 0.2s ease;
+        }
+
+        #side-menu a:hover {
+            background-color: rgba(255, 255, 255, 0.15);
+            color: white;
         }
 
         .ai-container {
@@ -171,6 +268,11 @@
 
 <body>
     <header class="main-header">AI 履歷修改服務</header>
+    <div class="top-bar-left">
+        <div id="menu-btn" title="選單" role="button" tabindex="0">
+            <span></span><span></span><span></span>
+        </div>
+    </div>
     <div class="ai-container">
         <div class="section-title">輸入您的履歷草稿：</div>
         <textarea id="resumeInput" placeholder="系統將自動載入您已上傳履歷中的自傳內容，您也可以手動編輯..."></textarea>
@@ -429,7 +531,51 @@
                 }
             }
         }
+
+        // 選單開關邏輯
+        document.addEventListener("DOMContentLoaded", () => {
+            const menuBtn = document.getElementById("menu-btn");
+            const sideMenu = document.getElementById("side-menu");
+            const closeBtn = document.getElementById("close-btn");
+
+            if (menuBtn && sideMenu && closeBtn) {
+                menuBtn.addEventListener("click", () => {
+                    sideMenu.classList.add("open");
+                    sideMenu.setAttribute("aria-hidden", "false");
+                });
+
+                closeBtn.addEventListener("click", () => {
+                    sideMenu.classList.remove("open");
+                    sideMenu.setAttribute("aria-hidden", "true");
+                });
+
+                // 如果點擊 menu 以外的地方就關閉選單
+                document.addEventListener("click", (e) => {
+                    if (
+                        !sideMenu.contains(e.target) &&
+                        !menuBtn.contains(e.target)
+                    ) {
+                        sideMenu.classList.remove("open");
+                        sideMenu.setAttribute("aria-hidden", "true");
+                    }
+                });
+            }
+        });
     </script>
+
+    <!-- 側邊選單 -->
+    <nav id="side-menu" aria-hidden="true" role="navigation" aria-label="功能選單">
+        <button id="close-btn" aria-label="關閉功能選單">×</button>
+        <h2>功能選單</h2>
+        <a href="/student_home">首頁</a>
+        <a href="/profile">個人資料</a>
+        <a href="/upload_resume">上傳履歷</a>
+        <a href="/ai_edit_resume">AI修改履歷</a>
+        <a href="/fill_preferences">填寫志願序</a>
+        <a href="/notifications">通知</a>
+        <a href="/intern_achievement">實習成果</a>
+        <a href="/intern_experience">實習心得</a>
+    </nav>
 
 </body>
 
