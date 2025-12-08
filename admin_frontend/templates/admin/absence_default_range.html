@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="zh-Hant">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -11,6 +12,7 @@
             font-family: "Noto Sans TC", sans-serif;
             background: #f7f9fc;
         }
+
         .container {
             max-width: 800px;
             margin: 2rem auto;
@@ -19,12 +21,14 @@
             border-radius: 12px;
             box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
         }
+
         .card {
             border: none;
             box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
         }
     </style>
 </head>
+
 <body>
     <div class="container">
         <h2 class="mb-4"><i class="bi bi-calendar-range"></i> 缺勤預設學期範圍設定</h2>
@@ -96,7 +100,7 @@
 
                 if (result.success && result.semesters) {
                     allSemesters = result.semesters.sort((a, b) => a.code.localeCompare(b.code));
-                    
+
                     allSemesters.forEach(semester => {
                         const option1 = document.createElement('option');
                         option1.value = semester.code;
@@ -165,8 +169,8 @@
                         'Content-Type': 'application/json'
                     },
                     body: JSON.stringify({
-                        start: startCode,
-                        end: endCode
+                        defaultStart: startCode, 
+                        defaultEnd: endCode      
                     })
                 });
 
@@ -187,7 +191,7 @@
         function showAlert(message, type) {
             const alertEl = document.getElementById('alertMessage');
             const alertText = document.getElementById('alertText');
-            
+
             alertText.textContent = message;
             alertEl.className = `alert alert-${type} alert-dismissible fade show`;
             alertEl.classList.remove('d-none');
@@ -203,4 +207,5 @@
         });
     </script>
 </body>
+
 </html>
