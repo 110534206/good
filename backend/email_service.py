@@ -4,16 +4,9 @@ import traceback
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
-
-# 嘗試導入 Gmail API（可選）
-try:
-    from google.oauth2.credentials import Credentials
-    from google_auth_oauthlib.flow import InstalledAppFlow
-    from googleapiclient.discovery import build
-    GMAIL_API_AVAILABLE = True
-except ImportError:
-    GMAIL_API_AVAILABLE = False
-    print("⚠️ Gmail API 套件未安裝，將使用 SMTP 方式發送郵件")
+from google.oauth2.credentials import Credentials
+from google_auth_oauthlib.flow import InstalledAppFlow
+from googleapiclient.discovery import build
 
 from config import get_db
 
@@ -35,117 +28,175 @@ SCOPES = ['https://www.googleapis.com/auth/gmail.send']
 SMTP_FROM_NAME = os.getenv("SMTP_FROM_NAME", "智慧實習平台")
 SMTP_FROM_EMAIL = os.getenv("SMTP_USER", "")  # Gmail 信箱
 
-# SMTP 設定（用於實際發送郵件）
-SMTP_HOST = os.getenv("SMTP_HOST", "smtp.gmail.com")
-SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
-SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")  # Gmail 應用程式密碼
-USE_SMTP = os.getenv("USE_SMTP", "true").lower() == "true"  # 是否使用 SMTP（預設為 true）
+# SMTP 設定（使用應用密碼方式，更簡單）
+SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "").replace(" ", "")  # Gmail 應用密碼（16位數字，自動去除空格）
+SMTP_HOST = os.getenv("SMTP_HOST", "smtp.gmail.com")  # Gmail SMTP 伺服器
+SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))  # Gmail SMTP 端口（587 for TLS）
+
+# 郵件發送方式：'smtp' 或 'gmail_api'
+EMAIL_METHOD = os.getenv("EMAIL_METHOD", "smtp").lower()  # 預設使用 SMTP
+
+# 調試：打印郵件配置狀態（僅在模組載入時打印一次）
+def _print_email_config():
+    """打印郵件配置狀態（用於調試）"""
+    print("=" * 50)
+    print("📧 郵件服務配置檢查：")
+    print(f"  EMAIL_ENABLED: {EMAIL_ENABLED}")
+    print(f"  EMAIL_METHOD: {EMAIL_METHOD}")
+    print(f"  SMTP_FROM_EMAIL: {SMTP_FROM_EMAIL}")
+    print(f"  SMTP_FROM_NAME: {SMTP_FROM_NAME}")
+    if EMAIL_METHOD == "smtp":
+        print(f"  SMTP_PASSWORD: {'已設定' if SMTP_PASSWORD else '未設定'}")
+        print(f"  SMTP_HOST: {SMTP_HOST}")
+        print(f"  SMTP_PORT: {SMTP_PORT}")
+    else:
+        print(f"  CREDENTIALS_PATH: {CREDENTIALS_PATH} (存在: {os.path.exists(CREDENTIALS_PATH)})")
+        print(f"  TOKEN_PATH: {TOKEN_PATH} (存在: {os.path.exists(TOKEN_PATH)})")
+    print("=" * 50)
+
+# 在模組載入時打印配置（僅在開發環境或需要調試時）
+# 可以通過環境變數控制是否打印
+if os.getenv("DEBUG_EMAIL_CONFIG", "false").lower() == "true":
+    _print_email_config()
 
 # =========================================================
 # 建立 Gmail API Service
 # =========================================================
 
 def get_gmail_service():
-    """建立 Gmail API Service（需要 credentials.json）"""
-    if not GMAIL_API_AVAILABLE:
-        raise ImportError("Gmail API 套件未安裝")
+    """建立 Gmail API Service，如果 credentials.json 不存在則拋出明確的錯誤"""
+    # 取得當前檔案所在目錄
+    current_dir = os.path.dirname(os.path.abspath(__file__))
     
-    if not os.path.exists(CREDENTIALS_PATH):
-        raise FileNotFoundError(
-            f"找不到 Gmail 認證檔案：{CREDENTIALS_PATH}。"
-            f"請確認檔案存在於後端目錄中，或檢查 EMAIL.env 中的 GMAIL_CREDENTIALS_PATH 設定。"
+    # 檢查檔案路徑是否為絕對路徑或相對路徑
+    credentials_full_path = CREDENTIALS_PATH
+    if not os.path.isabs(CREDENTIALS_PATH):
+        # 如果是相對路徑，相對於 email_service.py 所在目錄
+        credentials_full_path = os.path.join(current_dir, CREDENTIALS_PATH)
+    
+    if not os.path.exists(credentials_full_path):
+        error_msg = (
+            f"找不到 Gmail 認證檔案：{credentials_full_path}\n"
+            f"請按照以下步驟設定 Gmail API：\n"
+            f"1. 前往 Google Cloud Console (https://console.cloud.google.com/)\n"
+            f"2. 建立或選擇專案\n"
+            f"3. 啟用 Gmail API\n"
+            f"4. 建立 OAuth 2.0 客戶端 ID（應用程式類型：桌面應用程式）\n"
+            f"5. 下載憑證檔案並重新命名為 'credentials.json'\n"
+            f"6. 將 credentials.json 放置在：{current_dir}\n"
+            f"7. 第一次執行時，系統會自動開啟瀏覽器進行授權，並產生 token.json\n"
+            f"\n詳細說明請參考：{current_dir}/GMAIL_API_SETUP.md"
         )
+        raise FileNotFoundError(error_msg)
+    
+    # 使用完整路徑
+    token_full_path = TOKEN_PATH
+    if not os.path.isabs(TOKEN_PATH):
+        token_full_path = os.path.join(current_dir, TOKEN_PATH)
     
     creds = None
-    if os.path.exists(TOKEN_PATH):
+    if os.path.exists(token_full_path):
         try:
-            creds = Credentials.from_authorized_user_file(TOKEN_PATH, SCOPES)
+            creds = Credentials.from_authorized_user_file(token_full_path, SCOPES)
         except Exception as e:
             print(f"⚠️ 讀取 token 檔案失敗: {e}")
             creds = None
     
     if not creds or not creds.valid:
-        if not os.path.exists(CREDENTIALS_PATH):
+        if not os.path.exists(credentials_full_path):
             raise FileNotFoundError(
-                f"找不到 Gmail 認證檔案：{CREDENTIALS_PATH}。"
+                f"找不到 Gmail 認證檔案：{credentials_full_path}。"
                 f"請確認檔案存在於後端目錄中。"
             )
-        flow = InstalledAppFlow.from_client_secrets_file(CREDENTIALS_PATH, SCOPES)
+        flow = InstalledAppFlow.from_client_secrets_file(credentials_full_path, SCOPES)
         creds = flow.run_local_server(port=0)
         # 儲存 token
-        with open(TOKEN_PATH, 'w') as token_file:
+        with open(token_full_path, 'w') as token_file:
             token_file.write(creds.to_json())
+        print(f"✅ Gmail API token 已儲存至：{token_full_path}")
     service = build('gmail', 'v1', credentials=creds)
     return service
 
+# =========================================================
+# 發送郵件 (SMTP 方式 - 使用應用密碼)
+# =========================================================
+
 def send_email_smtp(recipient_email, subject, content):
-    """使用 SMTP 發送郵件（實際發送）"""
-    if not SMTP_FROM_EMAIL:
-        raise ValueError("寄件人信箱未設定")
-    
-    if not SMTP_PASSWORD:
-        raise ValueError("SMTP 密碼未設定。請在 EMAIL.env 中設定 SMTP_PASSWORD（Gmail 應用程式密碼）")
-    
-    # 自動去掉密碼中的空格（Gmail 應用程式密碼可能包含空格）
-    password = SMTP_PASSWORD.replace(" ", "").strip()
-    
-    # 建立郵件
-    msg = MIMEMultipart()
-    msg['From'] = f"{SMTP_FROM_NAME} <{SMTP_FROM_EMAIL}>"
-    msg['To'] = recipient_email
-    msg['Subject'] = subject
-    
-    # 添加郵件內容
-    msg.attach(MIMEText(content, 'plain', 'utf-8'))
-    
-    # 發送郵件
-    try:
-        # 設定連線超時時間（30秒）
-        import socket
-        # 設定更長的超時時間（60 秒）
-        socket.setdefaulttimeout(60)
-        
-        # 建立 SMTP 連線，設定超時時間
-        server = smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=60)
-        server.set_debuglevel(0)  # 關閉除錯模式
-        
-        # 啟用 TLS
-        server.starttls()
-        
-        # 登入
-        server.login(SMTP_FROM_EMAIL, password)
-        
-        # 發送郵件
-        server.send_message(msg)
-        
-        # 關閉連線
-        server.quit()
-        
-        return True, "郵件發送成功（SMTP）"
-    except socket.timeout:
-        return False, "SMTP 連線超時：無法連線到郵件伺服器。\n\n可能原因：\n1. 防火牆阻擋了 SMTP 連線（埠 587）\n2. 網路連線不穩定\n3. Gmail SMTP 伺服器暫時無法回應\n\n解決方法：\n1. 以系統管理員身分執行 PowerShell，執行：\n   netsh advfirewall firewall add rule name=\"Allow SMTP Outbound\" dir=out action=allow protocol=TCP localport=587\n2. 檢查網路連線是否正常\n3. 稍後再試"
-    except socket.gaierror as e:
-        return False, f"SMTP 連線失敗：無法解析主機名稱 '{SMTP_HOST}'。請檢查網路連線。錯誤：{str(e)}"
-    except ConnectionRefusedError:
-        return False, f"SMTP 連線被拒絕：無法連線到 {SMTP_HOST}:{SMTP_PORT}。請檢查防火牆設定。"
-    except OSError as e:
-        if "10060" in str(e) or "timed out" in str(e).lower():
-            return False, f"SMTP 連線超時：無法連線到郵件伺服器。可能原因：1) 防火牆阻擋 2) 網路連線問題 3) SMTP 伺服器無法回應。錯誤：{str(e)}"
-        return False, f"SMTP 連線錯誤：{str(e)}"
-    except smtplib.SMTPAuthenticationError as e:
-        return False, f"SMTP 認證失敗：請確認應用程式密碼是否正確。錯誤：{str(e)}"
-    except smtplib.SMTPException as e:
-        return False, f"SMTP 錯誤：{str(e)}"
-    except Exception as e:
-        return False, f"SMTP 發送失敗：{str(e)}"
-
-# =========================================================
-# 發送郵件 (Gmail API)
-# =========================================================
-
-def send_email(recipient_email, subject, content, related_user_id=None):
     """
-    使用 Gmail API 發送郵件
+    使用 SMTP 發送郵件（使用應用密碼方式）
+    
+    參數:
+        recipient_email: 收件人信箱
+        subject: 郵件主旨
+        content: 郵件內容 (純文字)
+    
+    回傳:
+        (success: bool, message: str)
+    """
+    try:
+        # 建立郵件
+        msg = MIMEMultipart()
+        msg['From'] = f"{SMTP_FROM_NAME} <{SMTP_FROM_EMAIL}>"
+        msg['To'] = recipient_email
+        msg['Subject'] = subject
+        
+        # 添加郵件內容
+        msg.attach(MIMEText(content, 'plain', 'utf-8'))
+        
+        print(f"📧 正在連接到 SMTP 伺服器: {SMTP_HOST}:{SMTP_PORT}")
+        
+        # 連接到 SMTP 伺服器並發送（添加超時設定）
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=30) as server:
+            print(f"✅ 已連接到 SMTP 伺服器")
+            server.starttls()  # 啟用 TLS
+            print(f"✅ TLS 已啟用")
+            print(f"📧 正在登入...")
+            server.login(SMTP_FROM_EMAIL, SMTP_PASSWORD)
+            print(f"✅ 登入成功")
+            print(f"📧 正在發送郵件...")
+            server.send_message(msg)
+            print(f"✅ 郵件已送出")
+        
+        print(f"✅ 郵件發送成功 (SMTP): {recipient_email} - {subject}")
+        return (True, "郵件發送成功")
+    except smtplib.SMTPException as e:
+        err = str(e)
+        print(f"❌ SMTP 錯誤: {err}")
+        traceback.print_exc()
+        return (False, f"SMTP 錯誤: {err}")
+    except OSError as e:
+        err = str(e)
+        error_code = getattr(e, 'winerror', None) or getattr(e, 'errno', None)
+        if error_code == 11001 or 'getaddrinfo failed' in err:
+            friendly_err = (
+                f"無法連接到 SMTP 伺服器 {SMTP_HOST}:{SMTP_PORT}。\n"
+                f"可能的原因：\n"
+                f"1. 網路連線問題（請檢查網路連線）\n"
+                f"2. 防火牆阻止連接（請檢查防火牆設定）\n"
+                f"3. DNS 解析失敗（請檢查 DNS 設定）\n"
+                f"4. 需要使用代理伺服器\n"
+                f"請確認網路連線正常，並檢查防火牆設定。"
+            )
+            print(f"❌ {friendly_err}")
+            traceback.print_exc()
+            return (False, friendly_err)
+        else:
+            print(f"❌ 網路錯誤: {err}")
+            traceback.print_exc()
+            return (False, f"網路錯誤: {err}")
+    except Exception as e:
+        err = str(e)
+        print(f"❌ SMTP 郵件發送失敗: {err}")
+        traceback.print_exc()
+        return (False, f"SMTP 發送失敗: {err}")
+
+# =========================================================
+# 發送郵件 (Gmail API 方式 - OAuth 2.0)
+# =========================================================
+
+def send_email_gmail_api(recipient_email, subject, content, related_user_id=None):
+    """
+    使用 Gmail API 發送郵件（OAuth 2.0 方式）
 
     參數:
         recipient_email: 收件人信箱
@@ -156,17 +207,6 @@ def send_email(recipient_email, subject, content, related_user_id=None):
     回傳:
         (success: bool, message: str, log_id: int 或 None)
     """
-    if not EMAIL_ENABLED:
-        print("⚠️ 郵件功能未啟用 (EMAIL_ENABLED=false)")
-        return (False, "郵件功能未啟用", None)
-
-    if not SMTP_FROM_EMAIL:
-        print("⚠️ 寄件人信箱 (SMTP_FROM_EMAIL) 未設定")
-        return (False, "寄件人信箱未設定", None)
-
-    if not recipient_email:
-        return (False, "收件人信箱為空", None)
-
     conn = None
     cursor = None
     log_id = None
@@ -190,64 +230,38 @@ def send_email(recipient_email, subject, content, related_user_id=None):
         log_id = cursor.lastrowid
         conn.commit()
 
-        # 選擇發送方式：SMTP（推薦）或 Gmail API
-        if USE_SMTP:
-            # 使用 SMTP 發送（推薦，更簡單）
-            print("📧 使用 SMTP 方式發送郵件")
-            
-            if not SMTP_PASSWORD:
-                raise ValueError("SMTP 密碼未設定。請在 EMAIL.env 中設定 SMTP_PASSWORD（Gmail 應用程式密碼）")
-            
-            email_success, email_message = send_email_smtp(recipient_email, subject, content)
-            
-            if email_success:
-                # 更新 email_logs 成功
-                cursor.execute("""
-                    UPDATE email_logs
-                    SET status = 'sent', sent_at = NOW()
-                    WHERE id = %s
-                """, (log_id,))
-                conn.commit()
-                print(f"✅ 郵件發送成功: {recipient_email} - {subject} (SMTP)")
-                return (True, "郵件發送成功", log_id)
-            else:
-                raise Exception(email_message)
-        else:
-            # 使用 Gmail API 發送（需要 credentials.json）
-            if not GMAIL_API_AVAILABLE or not os.path.exists(CREDENTIALS_PATH):
-                raise FileNotFoundError(
-                    "Gmail API 未設定或憑證文件不存在。請設定 USE_SMTP=true 使用 SMTP 方式，"
-                    "或在 EMAIL.env 中設定 USE_SMTP=false 並提供 credentials.json 文件"
-                )
-            
-            print("📧 使用 Gmail API 方式發送郵件")
-            service = get_gmail_service()
+        # 建立 Gmail service
+        print(f"📧 正在建立 Gmail API 服務...")
+        print(f"   CREDENTIALS_PATH: {CREDENTIALS_PATH}")
+        print(f"   TOKEN_PATH: {TOKEN_PATH}")
+        service = get_gmail_service()
+        print(f"✅ Gmail API 服務建立成功")
 
-            # 建立郵件內容
-            message = MIMEText(content, 'plain', 'utf-8')
-            message['to'] = recipient_email
-            message['from'] = f"{SMTP_FROM_NAME} <{SMTP_FROM_EMAIL}>"
-            message['subject'] = subject
+        # 建立郵件內容
+        message = MIMEText(content, 'plain', 'utf-8')
+        message['to'] = recipient_email
+        message['from'] = f"{SMTP_FROM_NAME} <{SMTP_FROM_EMAIL}>"
+        message['subject'] = subject
 
-            raw_bytes = message.as_bytes()
-            raw_b64 = base64.urlsafe_b64encode(raw_bytes).decode()
+        raw_bytes = message.as_bytes()
+        raw_b64 = base64.urlsafe_b64encode(raw_bytes).decode()
 
-            # 呼叫 Gmail API 寄信
-            send_result = service.users().messages().send(
-                userId='me',
-                body={'raw': raw_b64}
-            ).execute()
+        # 呼叫 Gmail API 寄信
+        send_result = service.users().messages().send(
+            userId='me',
+            body={'raw': raw_b64}
+        ).execute()
 
-            # 更新 email_logs 成功
-            cursor.execute("""
-                UPDATE email_logs
-                SET status = 'sent', sent_at = NOW()
-                WHERE id = %s
-            """, (log_id,))
-            conn.commit()
+        # 更新 email_logs 成功
+        cursor.execute("""
+            UPDATE email_logs
+            SET status = 'sent', sent_at = NOW()
+            WHERE id = %s
+        """, (log_id,))
+        conn.commit()
 
-            print(f"✅ 郵件發送成功: {recipient_email} - {subject} (Gmail API)")
-            return (True, "郵件發送成功", log_id)
+        print(f"✅ 郵件發送成功: {recipient_email} - {subject} (Gmail API)")
+        return (True, "郵件發送成功", log_id)
 
     except Exception as e:
         err = str(e)
@@ -290,6 +304,125 @@ def send_email(recipient_email, subject, content, related_user_id=None):
             cursor.close()
         if conn:
             conn.close()
+
+# =========================================================
+# 發送郵件 (主函數 - 自動選擇方式)
+# =========================================================
+
+def send_email(recipient_email, subject, content, related_user_id=None):
+    """
+    發送郵件（自動選擇 SMTP 或 Gmail API 方式）
+
+    參數:
+        recipient_email: 收件人信箱
+        subject: 郵件主旨
+        content: 郵件內容 (純文字)
+        related_user_id: 可選，用來記錄 email_logs
+
+    回傳:
+        (success: bool, message: str, log_id: int 或 None)
+    """
+    # 調試：打印當前配置狀態
+    print(f"📧 嘗試發送郵件到: {recipient_email}")
+    print(f"   主旨: {subject}")
+    print(f"   發送方式: {EMAIL_METHOD}")
+    print(f"   EMAIL_ENABLED: {EMAIL_ENABLED}")
+    print(f"   SMTP_FROM_EMAIL: {SMTP_FROM_EMAIL}")
+    
+    if not EMAIL_ENABLED:
+        print("⚠️ 郵件功能未啟用 (EMAIL_ENABLED=false)")
+        print(f"   環境變數 EMAIL_ENABLED 的值: {os.getenv('EMAIL_ENABLED', '未設定')}")
+        return (False, "郵件功能未啟用", None)
+
+    if not SMTP_FROM_EMAIL:
+        print("⚠️ 寄件人信箱 (SMTP_FROM_EMAIL) 未設定")
+        print(f"   環境變數 SMTP_USER 的值: {os.getenv('SMTP_USER', '未設定')}")
+        return (False, "寄件人信箱未設定", None)
+
+    if not recipient_email:
+        print("⚠️ 收件人信箱為空")
+        return (False, "收件人信箱為空", None)
+    
+    # 根據 EMAIL_METHOD 選擇發送方式
+    if EMAIL_METHOD == "smtp":
+        # 使用 SMTP 方式（需要應用密碼）
+        if not SMTP_PASSWORD:
+            error_msg = (
+                "SMTP 應用密碼未設定。\n"
+                "請按照以下步驟設定：\n"
+                "1. 前往 Google 帳戶安全設定：https://myaccount.google.com/security\n"
+                "2. 啟用兩步驟驗證（如果尚未啟用）\n"
+                "3. 前往「應用程式密碼」頁面：https://myaccount.google.com/apppasswords\n"
+                "4. 建立新的應用程式密碼（選擇「郵件」和「其他（自訂名稱）」）\n"
+                "5. 複製 16 位數字的應用程式密碼\n"
+                "6. 在 EMAIL.env 中設定：SMTP_PASSWORD=\"你的16位應用密碼\""
+            )
+            print(f"⚠️ {error_msg}")
+            return (False, "SMTP 應用密碼未設定", None)
+        
+        # 使用 SMTP 發送
+        conn = None
+        cursor = None
+        log_id = None
+        
+        try:
+            # 寫入 email_logs (pending)
+            conn = get_db()
+            cursor = conn.cursor(dictionary=True)
+            try:
+                cursor.execute("""
+                    INSERT INTO email_logs (recipient_email, subject, content, related_user_id, status, sent_at)
+                    VALUES (%s, %s, %s, %s, 'pending', NOW())
+                """, (recipient_email, subject, content, related_user_id))
+            except Exception:
+                cursor.execute("""
+                    INSERT INTO email_logs (recipient, subject, content, related_user_id, status, sent_at)
+                    VALUES (%s, %s, %s, %s, 'pending', NOW())
+                """, (recipient_email, subject, content, related_user_id))
+            log_id = cursor.lastrowid
+            conn.commit()
+            
+            # 發送郵件
+            success, message = send_email_smtp(recipient_email, subject, content)
+            
+            # 更新 email_logs
+            if success:
+                cursor.execute("""
+                    UPDATE email_logs
+                    SET status = 'sent', sent_at = NOW()
+                    WHERE id = %s
+                """, (log_id,))
+            else:
+                try:
+                    cursor.execute("""
+                        UPDATE email_logs
+                        SET status = 'failed', error_message = %s
+                        WHERE id = %s
+                    """, (message, log_id))
+                except Exception:
+                    cursor.execute("""
+                        UPDATE email_logs
+                        SET status = 'failed'
+                        WHERE id = %s
+                    """, (log_id,))
+            conn.commit()
+            
+            return (success, message, log_id)
+        except Exception as e:
+            if conn:
+                conn.rollback()
+            print(f"❌ 資料庫操作失敗: {e}")
+            traceback.print_exc()
+            return (False, f"資料庫操作失敗: {str(e)}", log_id)
+        finally:
+            if cursor:
+                cursor.close()
+            if conn:
+                conn.close()
+    
+    else:
+        # 使用 Gmail API 方式（需要 credentials.json）
+        return send_email_gmail_api(recipient_email, subject, content, related_user_id)
 
 # =========================================================
 # 審核履歷通過/退件、實習錄取通知郵件
@@ -442,5 +575,45 @@ def send_interview_email(student_email, student_name, company_name, vendor_name=
     
     return send_email(student_email, subject, content)
 
+def send_account_creation_email(recipient_email, recipient_name, username, password):
+    """
+    發送帳號建立通知郵件（包含預設帳號密碼）
+    
+    參數:
+        recipient_email: 收件人信箱
+        recipient_name: 收件人姓名
+        username: 預設帳號
+        password: 預設密碼
+    
+    回傳:
+        (success: bool, message: str, log_id: int 或 None)
+    """
+    subject = "【智慧實習平台】帳號建立通知"
+    content = f"""
+親愛的 {recipient_name}：
+
+您好！
+
+您的智慧實習平台帳號已建立完成。
+
+【登入資訊】
+帳號：{username}
+密碼：{password}
+
+【重要提醒】
+1. 請使用上述帳號密碼登入系統
+2. 登入後，您可以修改帳號和密碼（帳號只能修改一次）
+3. 為了帳號安全，建議您盡快修改密碼
+
+登入網址：請聯絡系統管理員取得
+
+如有任何疑問，請聯絡系統管理員。
+
+此為系統自動發送，請勿直接回覆此郵件。
+
+--
+智慧實習平台
+"""
+    return send_email(recipient_email, subject, content)
 
 
