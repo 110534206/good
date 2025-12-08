@@ -1,4 +1,4 @@
-from flask import Blueprint, request, jsonify, session, send_file, render_template, redirect
+from flask import Blueprint, request, jsonify, session, send_file, render_template, redirect, current_app
 from werkzeug.utils import secure_filename
 from config import get_db
 from semester import get_current_semester_id
@@ -2432,6 +2432,185 @@ def get_absence_stats():
         conn.close()
 
 # -------------------------
+# API：取得缺勤可用的學期列表
+# -------------------------
+@resume_bp.route('/api/absence/available_semesters', methods=['GET'])
+def get_absence_available_semesters():
+    """取得缺勤可用的學期列表（根據預設範圍過濾）"""
+    if 'user_id' not in session:
+        return jsonify({"success": False, "message": "請先登入"}), 401
+    
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+    
+    try:
+        # 獲取學生入學年度（從username前3碼）
+        user_id = session['user_id']
+        cursor.execute("SELECT username FROM users WHERE id = %s", (user_id,))
+        user_result = cursor.fetchone()
+        
+        admission_year = None
+        if user_result and user_result.get('username'):
+            username = user_result['username']
+            if len(username) >= 3:
+                try:
+                    admission_year = int(username[:3])
+                except ValueError:
+                    pass
+        
+        # 檢查並獲取預設學期範圍
+        cursor.execute("SHOW TABLES LIKE 'absence_default_semester_range'")
+        table_exists = cursor.fetchone() is not None
+        
+        start_semester_code = None
+        end_semester_code = None
+        
+        if table_exists:
+            # 檢查表是否有 admission_year 欄位
+            cursor.execute("SHOW COLUMNS FROM absence_default_semester_range LIKE 'admission_year'")
+            has_admission_year = cursor.fetchone() is not None
+            
+            if has_admission_year and admission_year:
+                cursor.execute("""
+                    SELECT start_semester_code, end_semester_code
+                    FROM absence_default_semester_range
+                    WHERE admission_year = %s
+                    ORDER BY id DESC
+                    LIMIT 1
+                """, (admission_year,))
+            else:
+                cursor.execute("""
+                    SELECT start_semester_code, end_semester_code
+                    FROM absence_default_semester_range
+                    ORDER BY id DESC
+                    LIMIT 1
+                """)
+            
+            range_result = cursor.fetchone()
+            if range_result:
+                start_semester_code = range_result.get('start_semester_code')
+                end_semester_code = range_result.get('end_semester_code')
+        
+        # 查詢學期列表
+        if start_semester_code and end_semester_code:
+            # 根據預設範圍過濾學期
+            cursor.execute("""
+                SELECT id, code, start_date, end_date, is_active
+                FROM semesters
+                WHERE code >= %s AND code <= %s
+                ORDER BY code ASC
+            """, (start_semester_code, end_semester_code))
+        else:
+            # 如果沒有預設範圍，返回所有學期
+            cursor.execute("""
+                SELECT id, code, start_date, end_date, is_active
+                FROM semesters
+                ORDER BY code DESC
+            """)
+        
+        semesters = cursor.fetchall()
+        
+        # 格式化日期
+        for s in semesters:
+            if isinstance(s.get('start_date'), datetime):
+                s['start_date'] = s['start_date'].strftime("%Y-%m-%d")
+            if isinstance(s.get('end_date'), datetime):
+                s['end_date'] = s['end_date'].strftime("%Y-%m-%d")
+            if isinstance(s.get('created_at'), datetime):
+                s['created_at'] = s['created_at'].strftime("%Y-%m-%d %H:%M:%S")
+        
+        return jsonify({
+            "success": True,
+            "semesters": semesters
+        })
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"success": False, "message": f"取得學期列表失敗: {str(e)}"}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+# -------------------------
+# API：取得缺勤預設學期範圍
+# -------------------------
+@resume_bp.route('/api/absence/default_range', methods=['GET'])
+def get_absence_default_range():
+    """取得缺勤預設學期範圍"""
+    if 'user_id' not in session:
+        return jsonify({"success": False, "message": "請先登入"}), 401
+    
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+    
+    try:
+        # 檢查表是否存在
+        cursor.execute("SHOW TABLES LIKE 'absence_default_semester_range'")
+        table_exists = cursor.fetchone() is not None
+        
+        if not table_exists:
+            return jsonify({
+                "success": True,
+                "defaultStart": "",
+                "defaultEnd": ""
+            })
+        
+        # 獲取學生入學年度（從username前3碼）
+        user_id = session['user_id']
+        cursor.execute("SELECT username FROM users WHERE id = %s", (user_id,))
+        user_result = cursor.fetchone()
+        
+        admission_year = None
+        if user_result and user_result.get('username'):
+            username = user_result['username']
+            if len(username) >= 3:
+                try:
+                    admission_year = int(username[:3])
+                except ValueError:
+                    pass
+        
+        # 先檢查表是否有 admission_year 欄位
+        cursor.execute("SHOW COLUMNS FROM absence_default_semester_range LIKE 'admission_year'")
+        has_admission_year = cursor.fetchone() is not None
+        
+        if has_admission_year and admission_year:
+            cursor.execute("""
+                SELECT start_semester_code, end_semester_code
+                FROM absence_default_semester_range
+                WHERE admission_year = %s
+                ORDER BY id DESC
+                LIMIT 1
+            """, (admission_year,))
+        else:
+            # 如果沒有 admission_year 欄位或沒有入學年度，使用舊邏輯
+            cursor.execute("""
+                SELECT start_semester_code, end_semester_code
+                FROM absence_default_semester_range
+                ORDER BY id DESC
+                LIMIT 1
+            """)
+        
+        result = cursor.fetchone()
+        
+        if result:
+            return jsonify({
+                "success": True,
+                "defaultStart": result.get('start_semester_code', ''),
+                "defaultEnd": result.get('end_semester_code', '')
+            })
+        else:
+            return jsonify({
+                "success": True,
+                "defaultStart": "",
+                "defaultEnd": ""
+            })
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"success": False, "message": f"取得預設學期範圍失敗: {str(e)}"}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+# -------------------------
 #  獲取學生學期出勤記錄（詳細列表）
 # -------------------------
 @resume_bp.route('/api/get_semester_absence_records', methods=['GET'])
@@ -4321,25 +4500,63 @@ def upload_standard_courses():
             return jsonify({"success": False, "message": "Excel文件中沒有找到課程資料"}), 400
         
         # 保存上傳的Excel文件
-        # 創建上傳目錄
-        upload_dir = os.path.join('uploads', 'standard_courses')
-        os.makedirs(upload_dir, exist_ok=True)
+        # 獲取項目根目錄（backend的父目錄）
+        project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        upload_base_dir = os.path.join(project_root, 'uploads', 'standard_courses')
+        os.makedirs(upload_base_dir, exist_ok=True)
+        
+        print(f"📁 項目根目錄: {project_root}")
+        print(f"📁 上傳目錄: {upload_base_dir}")
         
         # 生成安全的文件名
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        safe_filename = secure_filename(file.filename)
+        
+        # 先從原始文件名提取擴展名
+        original_filename = file.filename if file.filename else 'upload.xlsx'
+        original_ext = os.path.splitext(original_filename)[1].lower()
+        if not original_ext or original_ext not in ['.xlsx', '.xls']:
+            original_ext = '.xlsx'  # 默認使用 .xlsx
+        
+        # 處理文件名：移除擴展名，使用secure_filename處理，然後重新添加擴展名
+        filename_without_ext = os.path.splitext(original_filename)[0]
+        if not filename_without_ext or filename_without_ext.strip() == '':
+            filename_without_ext = 'upload'
+        
+        safe_basename = secure_filename(filename_without_ext)
+        if not safe_basename or safe_basename.strip() == '':
+            safe_basename = 'upload'
+        
+        # 確保最終文件名包含擴展名
+        safe_filename = safe_basename + original_ext
         filename = f"{timestamp}_{safe_filename}"
-        file_path = os.path.join(upload_dir, filename)
+        
+        # 完整的絕對路徑（用於保存文件）
+        abs_file_path = os.path.join(upload_base_dir, filename)
+        
+        # 相對路徑（用於存儲到數據庫）
+        db_file_path = os.path.join('uploads', 'standard_courses', filename).replace('\\', '/')
+        
+        print(f"📝 文件上傳信息:")
+        print(f"  - 原始文件名: {original_filename}")
+        print(f"  - 提取的擴展名: {original_ext}")
+        print(f"  - 安全的文件名: {safe_filename}")
+        print(f"  - 最終文件名: {filename}")
+        print(f"  - 絕對保存路徑: {abs_file_path}")
+        print(f"  - 數據庫路徑: {db_file_path}")
         
         # 保存文件
         file.seek(0)  # 重置文件指針
-        abs_file_path = os.path.abspath(file_path)
         os.makedirs(os.path.dirname(abs_file_path), exist_ok=True)
         with open(abs_file_path, 'wb') as f:
             f.write(file_content)
         
-        # 數據庫中的相對路徑
-        db_file_path = file_path.replace('\\', '/')
+        print(f"✅ 文件已保存到: {abs_file_path}")
+        # 驗證文件是否真的保存成功
+        if os.path.exists(abs_file_path):
+            file_size = os.path.getsize(abs_file_path)
+            print(f"✅ 文件保存成功，大小: {file_size} bytes")
+        else:
+            print(f"❌ 警告：文件保存後無法找到！")
         
         # 檢查並創建 uploaded_course_templates 表（如果不存在）
         cursor.execute("SHOW TABLES LIKE 'uploaded_course_templates'")
@@ -4517,24 +4734,122 @@ def download_standard_course_file(history_id):
         
         file_path = record.get('file_path')
         
-        # 處理相對路徑
+        # 處理相對路徑 - 從項目根目錄開始
         if not os.path.isabs(file_path):
-            abs_file_path = os.path.abspath(file_path)
+            # 獲取項目根目錄（backend的父目錄）
+            project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            abs_file_path = os.path.join(project_root, file_path)
         else:
             abs_file_path = file_path
         
+        # 標準化路徑分隔符
+        abs_file_path = os.path.normpath(abs_file_path)
+        
+        print(f"🔍 嘗試下載文件: {abs_file_path}")
+        
+        # 檢查文件是否存在，如果不存在，嘗試多種方式查找
         if not os.path.exists(abs_file_path):
-            return jsonify({"success": False, "message": "文件不存在"}), 404
+            print(f"⚠️ 文件不存在，嘗試查找相似文件...")
+            
+            # 方法1：嘗試添加 .xlsx 擴展名
+            abs_file_path_xlsx = abs_file_path + '.xlsx'
+            abs_file_path_xls = abs_file_path + '.xls'
+            
+            if os.path.exists(abs_file_path_xlsx):
+                print(f"✅ 找到文件（添加.xlsx後）: {abs_file_path_xlsx}")
+                abs_file_path = abs_file_path_xlsx
+            elif os.path.exists(abs_file_path_xls):
+                print(f"✅ 找到文件（添加.xls後）: {abs_file_path_xls}")
+                abs_file_path = abs_file_path_xls
+            else:
+                # 方法2：在目錄中查找以該文件名開頭的文件
+                file_dir = os.path.dirname(abs_file_path)
+                file_basename = os.path.basename(abs_file_path)
+                
+                if os.path.isdir(file_dir):
+                    print(f"🔍 在目錄中搜索: {file_dir}, 文件名前綴: {file_basename}")
+                    try:
+                        files_in_dir = os.listdir(file_dir)
+                        print(f"📁 目錄中的文件: {files_in_dir}")
+                        
+                        # 查找以該文件名開頭的Excel文件
+                        matching_files = [f for f in files_in_dir 
+                                        if f.startswith(file_basename) 
+                                        and (f.lower().endswith('.xlsx') or f.lower().endswith('.xls'))]
+                        
+                        if matching_files:
+                            # 找到匹配的文件，使用第一個
+                            found_file = matching_files[0]
+                            abs_file_path = os.path.join(file_dir, found_file)
+                            print(f"✅ 找到匹配文件: {abs_file_path}")
+                        else:
+                            # 方法3：查找所有Excel文件，看是否有相似的時間戳
+                            excel_files = [f for f in files_in_dir 
+                                         if f.lower().endswith('.xlsx') or f.lower().endswith('.xls')]
+                            print(f"📊 目錄中的Excel文件: {excel_files}")
+                            
+                            # 嘗試提取時間戳部分進行匹配
+                            if file_basename and '_' in file_basename:
+                                timestamp_part = file_basename.split('_')[0] + '_' + file_basename.split('_')[1] if len(file_basename.split('_')) >= 2 else file_basename
+                                matching_by_timestamp = [f for f in excel_files if timestamp_part in f]
+                                
+                                if matching_by_timestamp:
+                                    abs_file_path = os.path.join(file_dir, matching_by_timestamp[0])
+                                    print(f"✅ 根據時間戳找到文件: {abs_file_path}")
+                                else:
+                                    print(f"❌ 無法找到匹配的文件")
+                                    print(f"❌ 嘗試過: {abs_file_path}")
+                                    print(f"❌ 嘗試過: {abs_file_path_xlsx}")
+                                    print(f"❌ 嘗試過: {abs_file_path_xls}")
+                                    return jsonify({"success": False, "message": f"文件不存在: {os.path.basename(file_path)}"}), 404
+                            else:
+                                print(f"❌ 無法找到匹配的文件")
+                                print(f"❌ 嘗試過: {abs_file_path}")
+                                print(f"❌ 嘗試過: {abs_file_path_xlsx}")
+                                print(f"❌ 嘗試過: {abs_file_path_xls}")
+                                return jsonify({"success": False, "message": f"文件不存在: {os.path.basename(file_path)}"}), 404
+                    except Exception as e:
+                        print(f"❌ 搜索文件時發生錯誤: {e}")
+                        return jsonify({"success": False, "message": f"搜索文件失敗: {str(e)}"}), 500
+                else:
+                    print(f"❌ 目錄不存在: {file_dir}")
+                    return jsonify({"success": False, "message": f"目錄不存在: {file_dir}"}), 404
         
         # 獲取原始文件名（從路徑中提取）
         original_filename = os.path.basename(file_path)
         # 如果文件名包含時間戳，嘗試提取原始文件名
-        if '_' in original_filename:
-            parts = original_filename.split('_', 1)
-            if len(parts) > 1:
-                original_filename = parts[1]
+        if '_' in original_filename and original_filename[0].isdigit():
+            # 檢查是否是時間戳格式 (YYYYMMDD_HHMMSS_)
+            parts = original_filename.split('_', 2)
+            if len(parts) >= 3 and len(parts[0]) == 8 and len(parts[1]) == 6:
+                original_filename = '_'.join(parts[2:])  # 保留後面的部分
         
-        return send_file(abs_file_path, as_attachment=True, download_name=original_filename)
+        # 確保文件名有正確的擴展名（從實際文件路徑獲取）
+        actual_filename = os.path.basename(abs_file_path)
+        if actual_filename.lower().endswith('.xlsx'):
+            ext = '.xlsx'
+        elif actual_filename.lower().endswith('.xls'):
+            ext = '.xls'
+        else:
+            ext = '.xlsx'  # 默認使用 .xlsx
+        
+        # 如果原始文件名沒有擴展名，添加擴展名
+        if not original_filename.lower().endswith(('.xlsx', '.xls')):
+            original_filename = original_filename + ext
+        elif not original_filename.lower().endswith(ext):
+            # 如果擴展名不匹配，使用實際文件的擴展名
+            original_filename = os.path.splitext(original_filename)[0] + ext
+        
+        # 設置正確的MIME類型
+        if original_filename.lower().endswith('.xlsx'):
+            mimetype = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        elif original_filename.lower().endswith('.xls'):
+            mimetype = 'application/vnd.ms-excel'
+        else:
+            mimetype = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        
+        print(f"✅ 下載文件: {abs_file_path}, 文件名: {original_filename}, MIME: {mimetype}")
+        return send_file(abs_file_path, as_attachment=True, download_name=original_filename, mimetype=mimetype)
     except Exception as e:
         print(f"❌ 下載文件錯誤: {e}")
         traceback.print_exc()
