@@ -24,7 +24,7 @@
       left: 0;
       width: 100%;
       height: 60px;
-      background-color: #0454a3;
+      background-color: #0d6efd;
       z-index: 1100;
       display: flex;
       align-items: center;
@@ -393,29 +393,29 @@
       transform: translateX(0);
     }
 
+    #side-menu .menu-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1.5rem;
+      width: 100%;
+    }
+
     #close-btn {
-      position: absolute;
-      top: 2rem;
-      right: 1.6rem;
       font-size: 2.2rem;
       background: none;
       border: none;
       color: white;
       cursor: pointer;
+      padding: 0;
       line-height: 1;
-      width: 2.5rem;
-      height: 2.5rem;
-      display: flex;
-      align-items: center;
-      justify-content: center;
     }
 
     #side-menu h2 {
-      width: 100%;
-      margin-bottom: 1.5rem;
+      margin: 0;
       font-weight: 700;
       font-size: 1.5rem;
-      text-align: left;
+      color: white;
     }
 
     #side-menu a {
@@ -502,15 +502,18 @@
 
   <!-- 側邊選單 -->
   <nav id="side-menu" aria-hidden="true" role="navigation" aria-label="功能選單">
-    <button id="close-btn" aria-label="關閉功能選單">×</button>
-    <h2>功能選單</h2>
-    <a href="/teacher_home">首頁</a>
+    <div class="menu-header">
+      <h2>功能選單</h2>
+      <button id="close-btn" aria-label="關閉功能選單">×</button>
+    </div>
+    <a href="/assistant_home">首頁</a>
     <a href="/profile">個人資料</a>
-    <a href="/upload_company">建立實習機會</a>
-    <a href="/admission_results">查看錄取結果</a>
-    <a href="/manage_vendor">實習廠商管理</a>
-    <a href="/notifications">查看公告</a>
-    <a href="/review_resume">學生履歷審核</a>
+    <a href="/announcement/manage_announcements">公告管理</a>
+    <a href="/ta/statistics/manage_companies">實習廠商管理</a>
+    <a href="/final_results">志願序結果</a>
+    <a href="/notifications">通知</a>
+    <a href="/admin/absence_default_range">缺勤預設學期範圍設定</a>
+    <a href="/ta/upload_standard_courses">專業核心科目管理</a>
     <a href="/login">登出</a>
   </nav>
 
