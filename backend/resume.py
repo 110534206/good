@@ -3737,6 +3737,7 @@ def get_class_resumes():
                 sql_query = """
                     SELECT DISTINCT
                         r.id,
+                        u.id AS user_id,
                         u.name AS student_name,
                         u.username AS student_number,
                         c.name AS class_name,
@@ -3749,7 +3750,13 @@ def get_class_resumes():
                         r.created_at,
                         ic3.company_name AS company_name,
                         ij3.title AS job_title,
-                        sp3.preference_order
+                        sp3.id AS preference_id,
+                        sp3.preference_order,
+                        (SELECT vph.comment 
+                         FROM vendor_preference_history vph 
+                         WHERE vph.preference_id = sp3.id 
+                         ORDER BY vph.created_at DESC 
+                         LIMIT 1) AS vendor_comment
                     FROM resumes r
                     JOIN users u ON r.user_id = u.id
                     LEFT JOIN classes c ON u.class_id = c.id
@@ -3776,34 +3783,35 @@ def get_class_resumes():
                         r.note,
                         r.created_at,
                         COALESCE(
-                            (SELECT ic3.company_name 
+                            (SELECT GROUP_CONCAT(
+                                DISTINCT ic3.company_name
+                                SEPARATOR ' | '
+                            )
                              FROM student_preferences sp3
                              JOIN internship_companies ic3 ON sp3.company_id = ic3.id
                              WHERE sp3.student_id = u.id 
-                             AND ic3.advisor_user_id = %s
-                             ORDER BY sp3.preference_order ASC
-                             LIMIT 1),
+                             AND ic3.advisor_user_id = %s),
                             ''
                         ) AS company_name,
                         COALESCE(
-                            (SELECT ij3.title
+                            (SELECT GROUP_CONCAT(
+                                CONCAT(ic3.company_name, ' - ', COALESCE(ij3.title, '未指定職缺'))
+                                ORDER BY sp3.preference_order ASC
+                                SEPARATOR ' | '
+                            )
                              FROM student_preferences sp3
                              JOIN internship_companies ic3 ON sp3.company_id = ic3.id
                              LEFT JOIN internship_jobs ij3 ON sp3.job_id = ij3.id
                              WHERE sp3.student_id = u.id 
-                             AND ic3.advisor_user_id = %s
-                             ORDER BY sp3.preference_order ASC
-                             LIMIT 1),
+                             AND ic3.advisor_user_id = %s),
                             ''
                         ) AS job_title,
                         COALESCE(
-                            (SELECT sp3.preference_order
+                            (SELECT MIN(sp3.preference_order)
                              FROM student_preferences sp3
                              JOIN internship_companies ic3 ON sp3.company_id = ic3.id
                              WHERE sp3.student_id = u.id 
-                             AND ic3.advisor_user_id = %s
-                             ORDER BY sp3.preference_order ASC
-                             LIMIT 1),
+                             AND ic3.advisor_user_id = %s),
                             NULL
                         ) AS preference_order
                     FROM resumes r
@@ -4113,6 +4121,18 @@ def review_resume(resume_id):
                     message=notification_content,
                     category="resume"
                 )
+                
+                # 🔄 如果是老師審核通過，更新 student_preferences 狀態為 'approved'，讓廠商可以看到
+                if user_role in ['teacher', 'class_teacher']:
+                    # 更新該學生所有志願序的狀態為 'approved'，讓廠商可以審核
+                    cursor.execute("""
+                        UPDATE student_preferences 
+                        SET status = 'approved'
+                        WHERE student_id = %s
+                        AND (status IS NULL OR status = 'pending')
+                    """, (student_user_id,))
+                    updated_count = cursor.rowcount
+                    print(f"✅ 已更新 {updated_count} 筆學生志願序狀態為 'approved'，廠商現在可以審核")
 
         conn.commit()
 
