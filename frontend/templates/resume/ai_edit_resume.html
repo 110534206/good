@@ -173,7 +173,7 @@
     <header class="main-header">AI 履歷修改服務</header>
     <div class="ai-container">
         <div class="section-title">輸入您的履歷草稿：</div>
-        <textarea id="resumeInput" placeholder="請貼上您的履歷內容..."></textarea>
+        <textarea id="resumeInput" placeholder="系統將自動載入您已上傳履歷中的自傳內容，您也可以手動編輯..."></textarea>
 
         <div class="section-title">請選擇修改選項：</div>
 
@@ -199,9 +199,40 @@
         <div id="loadingSpinner" class="loader"></div>
 
         <div id="revisedResume">AI 修改後的內容將顯示在這裡...</div>
+        
+        <div id="saveSection" style="display: none; margin-top: 20px;">
+            <button onclick="saveRevisedAutobiography()" style="background: linear-gradient(90deg, #28a745, #20c997);">💾 將美化後的自傳更新至資料庫</button>
+        </div>
     </div>
 
     <script>
+        // 🌟 [新功能] 頁面載入時自動從資料庫獲取自傳內容
+        async function loadAutobiography() {
+            try {
+                const res = await fetch('/api/get_resume_data');
+                const result = await res.json();
+                
+                if (result.success && result.data && result.data.studentInfo) {
+                    const autobiography = result.data.studentInfo.autobiography || '';
+                    const resumeInput = document.getElementById('resumeInput');
+                    
+                    if (autobiography && resumeInput) {
+                        resumeInput.value = autobiography;
+                        console.log('✅ 已自動載入資料庫中的自傳內容');
+                    } else if (!autobiography) {
+                        console.log('ℹ️ 資料庫中暫無自傳內容，請手動輸入或先上傳履歷');
+                    }
+                } else {
+                    console.log('ℹ️ 尚未上傳履歷，請先完成履歷上傳');
+                }
+            } catch (error) {
+                console.error('❌ 載入自傳內容失敗:', error);
+            }
+        }
+
+        // 頁面載入時執行
+        window.addEventListener('DOMContentLoaded', loadAutobiography);
+
         async function reviseResume() {
             const resumeInput = document.getElementById('resumeInput').value;
             const revisedResumeDiv = document.getElementById('revisedResume');
@@ -211,9 +242,10 @@
             const editStyle = document.getElementById('editStyle').value;
             const toneStyle = document.getElementById('toneStyle').value;
 
+            // 🌟 [新功能] 如果 textarea 為空，仍然允許發送請求（後端會自動從資料庫讀取自傳）
+            // 如果用戶手動清空了 textarea，後端會自動從資料庫讀取自傳
             if (resumeInput.trim() === "") {
-                alert("請先貼上您的履歷內容！");
-                return;
+                console.log("ℹ️ 輸入框為空，後端將自動從資料庫讀取自傳內容");
             }
 
             revisedResumeDiv.innerHTML = "";
@@ -256,6 +288,12 @@
                     }
                 }
                 revisedResumeDiv.innerHTML += decoder.decode();
+                
+                // 🌟 [新功能] 顯示保存按鈕
+                const saveSection = document.getElementById('saveSection');
+                if (saveSection) {
+                    saveSection.style.display = 'block';
+                }
 
             } catch (error) {
                 // ========================================================
@@ -267,6 +305,46 @@
                 revisedResumeDiv.style.color = 'red';
             } finally {
                 loadingSpinner.style.display = 'none';
+            }
+        }
+
+        // 🌟 [新功能] 將美化後的自傳更新至資料庫
+        async function saveRevisedAutobiography() {
+            const revisedResumeDiv = document.getElementById('revisedResume');
+            const revisedText = revisedResumeDiv.textContent || revisedResumeDiv.innerText || '';
+            
+            if (!revisedText.trim()) {
+                alert('沒有可保存的內容！');
+                return;
+            }
+
+            if (!confirm('確定要將美化後的自傳更新至資料庫嗎？這將會覆蓋您原有的自傳內容。')) {
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/update_autobiography', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        autobiography: revisedText.trim()
+                    })
+                });
+
+                const result = await response.json();
+                
+                if (result.success) {
+                    alert('✅ 自傳已成功更新至資料庫！');
+                    // 同時更新輸入框
+                    document.getElementById('resumeInput').value = revisedText.trim();
+                } else {
+                    alert('❌ 更新失敗：' + (result.message || '未知錯誤'));
+                }
+            } catch (error) {
+                console.error('保存自傳失敗:', error);
+                alert('❌ 保存失敗：' + error.message);
             }
         }
     </script>

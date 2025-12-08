@@ -54,7 +54,45 @@ def revise_resume():
         edit_style = data.get('style', 'polish')
         tone_style = data.get('tone', 'professional')
 
-        if not user_resume_text:
+        # 🌟 [新功能] 如果用戶沒有提供 resumeText，自動從資料庫讀取自傳
+        if not user_resume_text or not user_resume_text.strip():
+            # 檢查用戶是否已登入
+            if 'user_id' not in session or session.get('role') != 'student':
+                return jsonify({"error": "請先登入並提供履歷文本，或先上傳履歷。"}), 400
+            
+            user_id = session['user_id']
+            conn = get_db()
+            cursor = conn.cursor(dictionary=True)
+            
+            try:
+                # 獲取學號
+                cursor.execute("SELECT username FROM users WHERE id=%s", (user_id,))
+                user_result = cursor.fetchone()
+                if not user_result:
+                    return jsonify({"error": "找不到使用者資訊。"}), 404
+                
+                student_id = user_result["username"]
+                
+                # 從資料庫讀取自傳
+                cursor.execute("SELECT Autobiography FROM Student_Info WHERE StuID=%s", (student_id,))
+                student_info = cursor.fetchone()
+                
+                if student_info and student_info.get('Autobiography'):
+                    user_resume_text = str(student_info.get('Autobiography', '')).strip()
+                    print(f"✅ 自動從資料庫讀取自傳內容，長度: {len(user_resume_text)}")
+                else:
+                    return jsonify({"error": "資料庫中沒有自傳內容，請先上傳履歷或手動輸入。"}), 400
+                    
+            except Exception as e:
+                print(f"從資料庫讀取自傳失敗: {e}")
+                return jsonify({"error": "無法從資料庫讀取自傳，請手動輸入。"}), 500
+            finally:
+                if cursor:
+                    cursor.close()
+                if conn:
+                    conn.close()
+
+        if not user_resume_text or not user_resume_text.strip():
             return jsonify({"error": "請提供履歷文本。"}), 400
 
     except Exception as e:
@@ -893,6 +931,66 @@ def recommend_preferences():
     except Exception as e:
         traceback.print_exc()
         return jsonify({"success": False, "error": f"AI 服務處理失敗: {str(e)}"}), 500
+    finally:
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
+
+
+# ==========================================================
+# API：更新自傳內容
+# ==========================================================
+@ai_bp.route('/api/update_autobiography', methods=['POST'])
+def update_autobiography():
+    """
+    將 AI 美化後的自傳更新至資料庫
+    """
+    # 權限檢查
+    if 'user_id' not in session or session.get('role') != 'student':
+        return jsonify({"success": False, "message": "只有學生可以使用此功能。"}), 403
+    
+    user_id = session['user_id']
+    conn = None
+    cursor = None
+    
+    try:
+        data = request.get_json()
+        autobiography = data.get('autobiography', '').strip()
+        
+        if not autobiography:
+            return jsonify({"success": False, "message": "自傳內容不能為空。"}), 400
+        
+        conn = get_db()
+        cursor = conn.cursor(dictionary=True)
+        
+        # 獲取學號
+        cursor.execute("SELECT username FROM users WHERE id=%s", (user_id,))
+        user_result = cursor.fetchone()
+        if not user_result:
+            return jsonify({"success": False, "message": "找不到使用者資訊。"}), 404
+        
+        student_id = user_result["username"]
+        
+        # 更新自傳（使用 ON DUPLICATE KEY UPDATE 確保如果記錄不存在則創建）
+        cursor.execute("""
+            INSERT INTO Student_Info (StuID, Autobiography, UpdatedAt)
+            VALUES (%s, %s, NOW())
+            ON DUPLICATE KEY UPDATE
+                Autobiography = VALUES(Autobiography),
+                UpdatedAt = NOW()
+        """, (student_id, autobiography))
+        
+        conn.commit()
+        
+        print(f"✅ 自傳已更新 - 學生ID: {student_id}, 長度: {len(autobiography)}")
+        return jsonify({"success": True, "message": "自傳已成功更新。"})
+        
+    except Exception as e:
+        traceback.print_exc()
+        if conn:
+            conn.rollback()
+        return jsonify({"success": False, "message": f"更新失敗: {str(e)}"}), 500
     finally:
         if cursor:
             cursor.close()

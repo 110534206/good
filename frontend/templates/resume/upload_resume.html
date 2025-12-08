@@ -237,8 +237,13 @@
             <div class="mb-4"></div>
 
             <div class="card p-4 mb-3">
-              <h5 class="mb-3">自傳</h5>
-              <textarea name="autobiography" rows="6" class="form-control" placeholder="請描述家庭生活、求學經過、個人專長、未來規劃等..."
+              <div class="d-flex justify-content-between align-items-center mb-3">
+                <h5 class="mb-0">自傳</h5>
+                <button type="button" class="btn btn-sm btn-primary" onclick="openAIPolishModal()" style="background: linear-gradient(90deg, #007BFF, #0069ff);">
+                  ✨ AI 美化自傳
+                </button>
+              </div>
+              <textarea name="autobiography" id="autobiographyTextarea" rows="6" class="form-control" placeholder="請描述家庭生活、求學經過、個人專長、未來規劃等..."
                 required></textarea>
             </div>
 
@@ -3314,7 +3319,174 @@
       }
     });
 
+    // 🌟 [新功能] 開啟 AI 美化自傳 Modal
+    function openAIPolishModal() {
+      const textarea = document.getElementById('autobiographyTextarea');
+      const currentText = textarea ? textarea.value.trim() : '';
+      
+      if (!currentText) {
+        alert('請先在自傳輸入框中輸入內容！');
+        return;
+      }
+      
+      // 重置 Modal 狀態
+      document.getElementById('aiRevisedContent').style.display = 'none';
+      document.getElementById('aiRevisedContent').innerHTML = '';
+      document.getElementById('applyAIPolishBtn').style.display = 'none';
+      document.getElementById('aiLoadingSpinner').style.display = 'none';
+      
+      // 顯示 Modal
+      const modal = new bootstrap.Modal(document.getElementById('aiPolishModal'));
+      modal.show();
+    }
+
+    // 🌟 [新功能] 使用 AI 美化自傳
+    async function polishAutobiography() {
+      const textarea = document.getElementById('autobiographyTextarea');
+      const currentText = textarea ? textarea.value.trim() : '';
+      
+      if (!currentText) {
+        alert('請先在自傳輸入框中輸入內容！');
+        return;
+      }
+
+      const editStyle = document.getElementById('aiEditStyle').value;
+      const toneStyle = document.getElementById('aiToneStyle').value;
+      const loadingSpinner = document.getElementById('aiLoadingSpinner');
+      const revisedContent = document.getElementById('aiRevisedContent');
+      const applyBtn = document.getElementById('applyAIPolishBtn');
+
+      // 顯示載入動畫
+      loadingSpinner.style.display = 'block';
+      revisedContent.style.display = 'none';
+      applyBtn.style.display = 'none';
+      revisedContent.innerHTML = '';
+
+      try {
+        const response = await fetch('/api/revise-resume', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            resumeText: currentText,
+            style: editStyle,
+            tone: toneStyle
+          })
+        });
+
+        if (!response.body) {
+          throw new Error("伺服器沒有返回可讀取的串流。");
+        }
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder("utf-8");
+        let done = false;
+        let fullText = '';
+
+        while (!done) {
+          const { value, done: readerDone } = await reader.read();
+          done = readerDone;
+
+          if (value) {
+            const chunk = decoder.decode(value, { stream: true });
+            fullText += chunk;
+            revisedContent.innerHTML = fullText;
+            revisedContent.style.display = 'block';
+          }
+        }
+        fullText += decoder.decode();
+        revisedContent.innerHTML = fullText;
+        revisedContent.style.display = 'block';
+        applyBtn.style.display = 'block';
+
+      } catch (error) {
+        console.error('AI 美化失敗:', error);
+        revisedContent.innerHTML = `AI 服務連線失敗：${error.message}`;
+        revisedContent.style.color = 'red';
+        revisedContent.style.display = 'block';
+      } finally {
+        loadingSpinner.style.display = 'none';
+      }
+    }
+
+    // 🌟 [新功能] 套用美化後的自傳
+    function applyAIPolish() {
+      const revisedContent = document.getElementById('aiRevisedContent');
+      const textarea = document.getElementById('autobiographyTextarea');
+      const revisedText = revisedContent.textContent || revisedContent.innerText || '';
+      
+      if (!revisedText.trim()) {
+        alert('沒有可套用的內容！');
+        return;
+      }
+
+      if (textarea) {
+        textarea.value = revisedText.trim();
+        // 觸發 input 事件以觸發自動保存（如果有）
+        textarea.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+
+      // 關閉 Modal
+      const modal = bootstrap.Modal.getInstance(document.getElementById('aiPolishModal'));
+      if (modal) {
+        modal.hide();
+      }
+
+      alert('✅ 已將美化後的自傳套用至輸入框！');
+    }
+
   </script>
+
+  <!-- AI 美化自傳 Modal -->
+  <div class="modal fade" id="aiPolishModal" tabindex="-1" aria-labelledby="aiPolishModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="aiPolishModalLabel">✨ AI 美化自傳</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <div class="mb-3">
+            <label class="form-label">請選擇修改選項：</label>
+            <div class="row g-2 mb-3">
+              <div class="col-md-6">
+                <select id="aiEditStyle" class="form-select">
+                  <option value="polish">任務：履歷美化</option>
+                  <option value="concise">任務：文案精簡</option>
+                  <option value="keyword_focus">任務：關鍵字導向</option>
+                </select>
+              </div>
+              <div class="col-md-6">
+                <select id="aiToneStyle" class="form-select">
+                  <option value="professional">語氣：專業正式</option>
+                  <option value="friendly">語氣：親切隨和</option>
+                  <option value="cautious">語氣：謹慎的</option>
+                  <option value="academic">語氣：學術的</option>
+                </select>
+              </div>
+            </div>
+            <button type="button" class="btn btn-primary w-100" onclick="polishAutobiography()">
+              ⚡ 使用 AI 美化自傳
+            </button>
+          </div>
+          <div id="aiLoadingSpinner" class="text-center" style="display: none;">
+            <div class="spinner-border text-primary" role="status">
+              <span class="visually-hidden">處理中...</span>
+            </div>
+            <p class="mt-2">AI 正在美化您的自傳，請稍候...</p>
+          </div>
+          <div id="aiRevisedContent" class="border rounded p-3" style="display: none; background-color: #f5f5f5; min-height: 100px; white-space: pre-wrap;"></div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+          <button type="button" class="btn btn-success" id="applyAIPolishBtn" onclick="applyAIPolish()" style="display: none;">
+            ✅ 套用美化後的自傳
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
 </body>
 
 </html>
