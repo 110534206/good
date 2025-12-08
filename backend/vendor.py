@@ -1694,6 +1694,178 @@ def _record_admission_and_bind_relation(cursor, student_id, company_id, job_id=N
                 WHERE student_id = %s AND preference_order = 1 AND status != 'approved'
             """, (student_id,))
         
+        # 9. 寫入 internship_offers 表（錄取通知記錄）
+        # 獲取 preference_id（志願序ID）
+        preference_id = None
+        if preference_order:
+            cursor.execute("""
+                SELECT id FROM student_preferences
+                WHERE student_id = %s AND company_id = %s AND preference_order = %s
+                ORDER BY submitted_at DESC
+                LIMIT 1
+            """, (student_id, company_id, preference_order))
+            pref_row = cursor.fetchone()
+            if pref_row:
+                preference_id = pref_row.get('id')
+        elif job_id:
+            # 如果沒有 preference_order，嘗試通過 job_id 查找
+            cursor.execute("""
+                SELECT id, preference_order FROM student_preferences
+                WHERE student_id = %s AND company_id = %s AND job_id = %s
+                ORDER BY preference_order ASC, submitted_at DESC
+                LIMIT 1
+            """, (student_id, company_id, job_id))
+            pref_row = cursor.fetchone()
+            if pref_row:
+                preference_id = pref_row.get('id')
+                preference_order = pref_row.get('preference_order')
+        
+        # 獲取廠商ID（從 session 或通過公司關聯查找）
+        vendor_id = None
+        try:
+            # 嘗試從 session 獲取（如果是在錄取操作中調用）
+            # 注意：這個函數可能在不同上下文中調用，需要檢查 session 是否可用
+            try:
+                from flask import has_request_context
+                if has_request_context() and 'user_id' in session and session.get('role') == 'vendor':
+                    vendor_id = session['user_id']
+            except:
+                pass  # 如果無法訪問 session，繼續嘗試其他方式
+            
+            # 如果沒有從 session 獲取到，嘗試從公司關聯的廠商中查找（通過 teacher_name 關聯）
+            if not vendor_id:
+                cursor.execute("""
+                    SELECT u.id FROM users u
+                    WHERE u.teacher_name = (
+                        SELECT name FROM users WHERE id = %s
+                    ) AND u.role = 'vendor'
+                    LIMIT 1
+                """, (advisor_user_id,))
+                vendor_row = cursor.fetchone()
+                if vendor_row:
+                    vendor_id = vendor_row.get('id')
+        except Exception as e:
+            print(f"⚠️ 獲取廠商ID時發生錯誤: {e}")
+            pass  # 如果獲取廠商ID失敗，繼續執行
+        
+        # 9. 寫入 internship_offers 表（錄取通知記錄）
+        # 根據實際表結構：id, student_id, job_id, status, offered_at, responded_at
+        print(f"🔍 [DEBUG] 準備寫入 internship_offers 表")
+        print(f"   參數：student_id={student_id}, company_id={company_id}, job_id={job_id}, preference_order={preference_order}")
+        
+        try:
+            # 檢查表是否存在
+            cursor.execute("""
+                SELECT COUNT(*) as count
+                FROM information_schema.tables
+                WHERE table_schema = DATABASE()
+                AND table_name = 'internship_offers'
+            """)
+            table_check = cursor.fetchone()
+            table_exists = table_check.get('count', 0) > 0 if table_check else False
+            
+            print(f"🔍 [DEBUG] internship_offers 表存在檢查結果: {table_exists}")
+            
+            if not table_exists:
+                print("❌ internship_offers 表不存在！")
+                print("💡 請先執行以下 SQL 創建表：")
+                print("""
+CREATE TABLE IF NOT EXISTS internship_offers (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    student_id INT NOT NULL,
+    job_id INT NULL,
+    status VARCHAR(20) DEFAULT 'offered',
+    offered_at DATETIME NOT NULL,
+    responded_at DATETIME NULL,
+    INDEX idx_student (student_id),
+    INDEX idx_job (job_id),
+    FOREIGN KEY (student_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (job_id) REFERENCES internship_jobs(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+                """)
+            else:
+                # 檢查是否已存在該錄取記錄（根據 student_id 和 job_id）
+                if job_id:
+                    cursor.execute("""
+                        SELECT id FROM internship_offers
+                        WHERE student_id = %s AND job_id = %s
+                    """, (student_id, job_id))
+                else:
+                    # 如果沒有 job_id，檢查是否有該學生的其他錄取記錄
+                    cursor.execute("""
+                        SELECT id FROM internship_offers
+                        WHERE student_id = %s AND job_id IS NULL
+                    """, (student_id,))
+                
+                existing_offer = cursor.fetchone()
+                print(f"🔍 [DEBUG] 檢查現有記錄結果: {existing_offer}")
+                
+                if not existing_offer:
+                    # 插入新的錄取記錄（只使用表結構中存在的欄位）
+                    print(f"🔍 [DEBUG] 準備插入新記錄：student_id={student_id}, job_id={job_id}")
+                    try:
+                        # 確保參數正確
+                        insert_params = (student_id, job_id)
+                        print(f"🔍 [DEBUG] INSERT 參數: {insert_params}")
+                        
+                        cursor.execute("""
+                            INSERT INTO internship_offers
+                            (student_id, job_id, status, offered_at)
+                            VALUES (%s, %s, 'offered', NOW())
+                        """, insert_params)
+                        
+                        inserted_id = cursor.lastrowid
+                        affected_rows = cursor.rowcount
+                        
+                        print(f"✅ 成功寫入 internship_offers 表！")
+                        print(f"   插入的記錄 ID: {inserted_id}")
+                        print(f"   影響的行數: {affected_rows}")
+                        print(f"   student_id={student_id}, job_id={job_id}, status='offered'")
+                        
+                        # 驗證插入是否成功
+                        cursor.execute("""
+                            SELECT id, student_id, job_id, status, offered_at 
+                            FROM internship_offers 
+                            WHERE id = %s
+                        """, (inserted_id,))
+                        verify_row = cursor.fetchone()
+                        if verify_row:
+                            print(f"✅ 驗證成功：記錄已存在於資料庫中")
+                            print(f"   驗證結果: {verify_row}")
+                        else:
+                            print(f"⚠️ 警告：插入後無法找到記錄（可能尚未提交事務）")
+                    except Exception as insert_error:
+                        print(f"❌ INSERT 語句執行失敗: {insert_error}")
+                        print(f"   錯誤類型: {type(insert_error).__name__}")
+                        traceback.print_exc()
+                        raise  # 重新拋出異常以便外層處理
+                else:
+                    # 更新現有記錄
+                    print(f"🔍 [DEBUG] 準備更新現有記錄：id={existing_offer['id']}")
+                    cursor.execute("""
+                        UPDATE internship_offers
+                        SET job_id = %s, status = 'offered', offered_at = NOW()
+                        WHERE id = %s
+                    """, (job_id, existing_offer['id']))
+                    print(f"✅ 成功更新 internship_offers 表！")
+                    print(f"   更新的記錄 ID: {existing_offer['id']}")
+        except Exception as e:
+            # 如果寫入失敗，記錄詳細錯誤但不影響主要流程
+            print(f"❌ 寫入 internship_offers 表時發生錯誤: {e}")
+            print(f"   錯誤類型: {type(e).__name__}")
+            print(f"   錯誤詳情：student_id={student_id}, company_id={company_id}, job_id={job_id}")
+            print(f"   這是一個嚴重錯誤，請檢查資料庫連接和表結構！")
+            traceback.print_exc()
+            
+            # 嘗試直接查詢表結構以確認問題
+            try:
+                cursor.execute("DESCRIBE internship_offers")
+                table_structure = cursor.fetchall()
+                print(f"🔍 [DEBUG] internship_offers 表結構: {table_structure}")
+            except Exception as desc_error:
+                print(f"❌ 無法查詢表結構: {desc_error}")
+                print(f"   這表示表可能不存在或無法訪問！")
+        
         return {
             "success": True,
             "message": f"錄取結果已記錄，已自動綁定指導老師 {advisor['name']} 與學生 {student['name']}",
@@ -1768,6 +1940,7 @@ def _handle_status_update(application_id, action):
             
             # 如果是錄取操作，自動記錄錄取結果並綁定關係
             if action == "approve":
+                print(f"🔍 開始錄取操作：student_id={access['student_id']}, company_id={company_id}, job_id={job_id}, preference_order={preference_order}")
                 admission_result = _record_admission_and_bind_relation(
                     cursor,
                     access["student_id"],
@@ -1778,6 +1951,8 @@ def _handle_status_update(application_id, action):
                 if not admission_result.get("success"):
                     # 記錄警告但不阻止錄取操作
                     print(f"⚠️ 錄取結果記錄失敗: {admission_result.get('message')}")
+                else:
+                    print(f"✅ 錄取結果記錄成功: {admission_result.get('message')}")
             
             # 發送通知
             title = "履歷審核結果"
@@ -1793,7 +1968,10 @@ def _handle_status_update(application_id, action):
 
         # 記錄歷史
         _record_history(cursor, application_id, vendor_id, action, comment or None)
+        
+        # 提交事務（這會提交所有更改，包括 internship_offers 表的寫入）
         conn.commit()
+        print(f"✅ 事務已提交，所有更改已保存到資料庫")
 
         # 返回最新資料
         detail = _fetch_application_detail(cursor, application_id)
