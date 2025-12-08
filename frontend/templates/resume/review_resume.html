@@ -424,7 +424,14 @@
               // 老師/其他角色：使用原有的 API
               const urlParams = new URLSearchParams(window.location.search);
               const mode = urlParams.get('mode');
-              apiUrl = mode ? `/api/get_class_resumes?mode=${encodeURIComponent(mode)}` : `/api/get_class_resumes`;
+              const companyId = urlParams.get('company_id');
+              // 構建 API URL，包含 mode 和 company_id 參數
+              const params = [];
+              if (mode) params.push(`mode=${encodeURIComponent(mode)}`);
+              if (companyId) params.push(`company_id=${encodeURIComponent(companyId)}`);
+              apiUrl = params.length > 0 
+                ? `/api/get_class_resumes?${params.join('&')}` 
+                : `/api/get_class_resumes`;
             }
             
             // 載入履歷資料

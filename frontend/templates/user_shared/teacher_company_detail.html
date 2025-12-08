@@ -562,25 +562,25 @@
           </div>
           <div class="info-grid" style="margin-top: 16px;">
             <div class="info-card" style="cursor: pointer;">
-              <a href="/review_resume?status=submitted" style="display: block; text-decoration: none; color: inherit;">
+              <a href="/review_resume?status=submitted&company_id=${COMPANY_ID}" style="display: block; text-decoration: none; color: inherit;">
                 <span class="info-label">履歷狀態</span>
                 <span class="info-value" style="color: var(--color-primary);">待審核<span id="pendingCount" style="margin-left: 4px;">${state.resumeStats.pending}</span></span>
               </a>
             </div>
             <div class="info-card" style="cursor: pointer;">
-              <a href="/review_resume?status=approved" style="display: block; text-decoration: none; color: inherit;">
+              <a href="/review_resume?status=approved&company_id=${COMPANY_ID}" style="display: block; text-decoration: none; color: inherit;">
                 <span class="info-label">履歷狀態</span>
                 <span class="info-value" style="color: var(--color-success);">已通過<span id="approvedCount" style="margin-left: 4px;">${state.resumeStats.approved}</span></span>
               </a>
             </div>
             <div class="info-card" style="cursor: pointer;">
-              <a href="/review_resume?status=uploaded" style="display: block; text-decoration: none; color: inherit;">
+              <a href="/review_resume?status=uploaded&company_id=${COMPANY_ID}" style="display: block; text-decoration: none; color: inherit;">
                 <span class="info-label">履歷狀態</span>
                 <span class="info-value" style="color: var(--color-muted);">未通過<span id="uploadedCount" style="margin-left: 4px;">${state.resumeStats.uploaded}</span></span>
               </a>
             </div>
             <div class="info-card" style="cursor: pointer;">
-              <a href="/review_resume?status=rejected" style="display: block; text-decoration: none; color: inherit;">
+              <a href="/review_resume?status=rejected&company_id=${COMPANY_ID}" style="display: block; text-decoration: none; color: inherit;">
                 <span class="info-label">履歷狀態</span>
                 <span class="info-value" style="color: var(--color-danger);">退件<span id="rejectedCount" style="margin-left: 4px;">${state.resumeStats.rejected}</span></span>
               </a>
@@ -724,7 +724,8 @@
 
       async function loadResumeStats() {
         try {
-          const response = await fetch('/api/get_class_resumes', {
+          // 傳遞 company_id 參數，只獲取選擇了該公司職位的學生履歷
+          const response = await fetch(`/api/get_class_resumes?company_id=${COMPANY_ID}`, {
             headers: { 'Accept': 'application/json' },
             credentials: 'include'
           });
