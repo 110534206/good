@@ -1362,7 +1362,7 @@
         ];
 
         if (userRole === 'vendor') {
-          // 廠商選單（維持既有）
+          // 廠商選單（與通知頁一致的順序與文案）
           menuItems = [
             { href: '/vendor_home', text: '首頁' },
             { href: '/profile', text: '個人資料' },
@@ -1371,7 +1371,7 @@
             { href: '/confirm_matching', text: '媒合結果' },
             { href: '/publish_announcements', text: '發布公告' },
             { href: '/reviews_resumes_notifications', text: '查看履歷與通知' },
-            { href: '/login', text: '登出' }
+            { href: '/logout', text: '登出' }
           ];
         } else if (userRole === 'teacher' || userRole === 'director' || (isHomeroom && (userRole === 'teacher' || userRole === 'director'))) {
           // 老師/主任/班導師：統一與其他頁相同的功能選單文字與連結
