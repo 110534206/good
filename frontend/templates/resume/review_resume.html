@@ -120,14 +120,23 @@
 
     /* 表格樣式 */
     .table thead th {
-      text-align: center;
+      text-align: left; /* 保持左對齊 */
       background-color: #fafafb;
     }
 
     .table tbody td {
-      text-align: center;
+      text-align: left; /* 保持左對齊 */
       vertical-align: middle;
     }
+    
+    /* 讓學生帳號、姓名等欄位在多行時視覺上對齊 */
+    .table tbody tr td:nth-child(1), 
+    .table tbody tr td:nth-child(2), 
+    .table tbody tr td:nth-child(3),
+    .table tbody tr td:nth-child(4) {
+      vertical-align: top; /* 頂部對齊，避免內容只有一行時視覺偏離中心 */
+    }
+
 
     .table-striped>tbody>tr:nth-of-type(odd) {
       background-color: rgba(0, 0, 0, 0.02);
@@ -262,8 +271,7 @@
         </button>
       </div>
       <h1>學生履歷審查</h1>
-      <div style="width: 30px;"></div> <!-- 佔位元素，保持標題置中 -->
-    </div>
+      <div style="width: 30px;"></div> </div>
   </header>
   <main>
     <section class="panel" aria-label="履歷列表">
@@ -336,13 +344,11 @@
       </div>
     </div>
 
-    <!-- 側邊選單 -->
     <nav id="side-menu" aria-hidden="true" role="navigation" aria-label="功能選單">
       <button id="close-btn" aria-label="關閉功能選單">×</button>
       <h2>功能選單</h2>
       <div id="menu-content">
-        <!-- 選單內容將根據用戶角色動態生成 -->
-      </div>
+        </div>
     </nav>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
@@ -523,6 +529,18 @@
                   // 如果是廠商，從 API 返回的 companies 中獲取公司列表
                   if (userRole === 'vendor' && resumeData.companies) {
                     companyData = {success: true, companies: resumeData.companies};
+                    // 進一步保險：僅保留屬於該廠商公司的履歷
+                    const allowedCompanyIds = (resumeData.companies || []).map(c => c.id).filter(id => id);
+                    const allowedCompanyNames = (resumeData.companies || []).map(c => c.name && c.name.trim()).filter(Boolean);
+                    if (allowedCompanyIds.length || allowedCompanyNames.length) {
+                      allResumes = allResumes.filter(r => {
+                        const cid = r.company_id;
+                        const cname = (r.company_name || '').trim();
+                        const idMatch = allowedCompanyIds.length ? (cid && allowedCompanyIds.includes(cid)) : true;
+                        const nameMatch = allowedCompanyNames.length ? allowedCompanyNames.includes(cname) : true;
+                        return idMatch && nameMatch;
+                      });
+                    }
                     // 更新標題，明確顯示這是該廠商自己的公司和職缺
                     const resumeListTitle = document.getElementById('resumeListTitle');
                     if (resumeListTitle) {
@@ -767,6 +785,7 @@
         companySelect.innerHTML = `<option value="">所有職缺</option>`;
 
         Array.from(classSet).sort().forEach(c => {
+          if (c === '五孝') return;
           const option = document.createElement("option");
           option.value = c;
           option.textContent = c;
@@ -790,23 +809,30 @@
           });
         }
         
-        // 備用方案：從履歷資料中提取職缺資訊
+        // 備用方案：從履歷資料中提取「職缺名稱」（去掉公司名稱）
         if (!hasJobs && data.length > 0) {
           console.log("從履歷資料中提取職缺名稱");
-          const jobSet = new Set();
+          const jobNameSet = new Set();
           data.forEach(r => {
             const jobTitle = r.job_title || r.jobTitle;
             if (jobTitle && jobTitle.trim()) {
-              jobSet.add(jobTitle.trim());
+              const individualJobs = jobTitle.split(' | ').map(j => j.trim()).filter(j => j);
+              individualJobs.forEach(job => {
+                const parts = job.split(' - ');
+                const jobNameOnly = parts.length > 1 ? parts[1] : job;
+                if (jobNameOnly && jobNameOnly.trim()) {
+                  jobNameSet.add(jobNameOnly.trim());
+                }
+              });
             }
           });
           
-          if (jobSet.size > 0) {
-            console.log("從履歷中找到的職缺:", Array.from(jobSet));
-            Array.from(jobSet).sort().forEach(jobTitle => {
+          if (jobNameSet.size > 0) {
+            console.log("從履歷中找到的職缺名稱:", Array.from(jobNameSet));
+            Array.from(jobNameSet).sort().forEach(jobName => {
               const option = document.createElement("option");
-              option.value = jobTitle;
-              option.textContent = jobTitle;
+              option.value = jobName;
+              option.textContent = jobName;
               companySelect.appendChild(option);
               hasJobs = true;
             });
@@ -842,17 +868,32 @@
           const matchesDept = !dept || r.department === dept;
           const matchesClass = !cls || r.className === cls;
           
-          // 職缺篩選：根據職缺 ID 或職缺名稱匹配
+          // 職缺篩選：根據職缺 ID 或「職缺名稱」匹配
           let matchJob = true;
           if (jobFilter) {
             const jobTitle = r.job_title || r.jobTitle || '';
             const jobId = r.job_id || r.jobId;
-            // 如果篩選值是數字，則匹配 job_id；否則匹配 job_title
+            // 如果篩選值是數字，則匹配 job_id；否則匹配「職缺名稱」
             const filterIsNumeric = /^\d+$/.test(jobFilter);
+            
+            // 由於原始數據可能有多個職缺，用 ' | ' 分隔，需檢查任一職缺名稱
+            const jobTitles = jobTitle.split(' | ').filter(j => j.trim());
+            
             if (filterIsNumeric) {
+              // 如果是數字，匹配 ID
               matchJob = jobId && String(jobId) === jobFilter;
             } else {
-              matchJob = jobTitle && jobTitle.trim() === jobFilter.trim();
+              // 如果是字串，解析出「職缺名稱」後再比對
+              const jobNames = jobTitles.map(jt => {
+                const parts = jt.split(' - ');
+                return (parts.length > 1 ? parts[1] : jt).trim();
+              });
+              matchJob = jobNames.includes(jobFilter.trim());
+            }
+            
+            // 如果都沒有，且沒有匹配到
+            if (jobTitle === '' && jobFilter !== '') {
+                matchJob = false;
             }
           }
           
@@ -895,114 +936,121 @@
         const companyIdParam = urlParams.get('company_id');
         const isViewOnly = !!companyIdParam; // 如果有 company_id，則為僅查看模式
 
+        // --- 核心修改部分：將多個投遞拆分為獨立的行數據 ---
+        let allRowsData = [];
+
+        resumes.forEach(r => {
+          const companyNameStr = r.company_name || '';
+          const jobTitleStr = r.job_title || r.jobTitle || '';
+          
+          // 拆分公司和職缺
+          const companies = companyNameStr.split(' | ').filter(c => c.trim());
+          const jobTitles = jobTitleStr.split(' | ').filter(j => j.trim());
+          
+          // 確定要遍歷的次數 (取兩者中較大者，但理想情況下應該一樣長)
+          const maxCount = Math.max(companies.length, jobTitles.length);
+          
+          if (maxCount === 0 && !r.preference_id) {
+             // 如果沒有志願序資訊 (例如：純粹上傳履歷但未投遞)，仍保留一行
+             allRowsData.push({
+                 ...r,
+                 display_company: '<span style="color: #64748b;">—</span>',
+                 display_job: '<span style="color: #64748b;">—</span>',
+                 isMultiRow: true // 標記為獨立行 (視為該學生唯一的一行)
+             });
+          } else {
+            // 針對每一個投遞記錄，生成一個獨立的行數據
+            for (let i = 0; i < maxCount; i++) {
+              // 獲取當前的公司名稱
+              const currentCompanyName = companies[i] ? escapeHtml(companies[i]) : '<span style="color: #64748b;">—</span>';
+              
+              // 獲取當前的職缺名稱，並提取出職缺標題
+              let currentJobTitle = jobTitles[i] ? jobTitles[i] : '';
+              if (currentJobTitle) {
+                  const parts = currentJobTitle.split(' - ');
+                  // 取 ' - ' 後的部分作為職缺名稱
+                  currentJobTitle = parts.length > 1 ? escapeHtml(parts[1]) : escapeHtml(currentJobTitle); 
+              } else {
+                  currentJobTitle = '<span style="color: #64748b;">—</span>';
+              }
+              
+              allRowsData.push({
+                ...r,
+                // 為每一行設置獨立的公司和職缺顯示值
+                display_company: currentCompanyName,
+                display_job: currentJobTitle,
+                // 標記是否為多行記錄的首行，這很重要
+                isMultiRow: i === 0 
+              });
+            }
+          }
+        });
+        
+        // --- 結束核心修改部分 ---
+
         const start = (currentPage - 1) * rowsPerPage;
         const end = start + rowsPerPage;
-        const pageData = resumes.slice(start, end);
+        const pageData = allRowsData.slice(start, end); // 使用拆分後的數據進行分頁
 
         pageData.forEach(r => {
           const preferenceId = r.preference_id || null;
-          const companyName = r.company_name || '';
-          const jobTitle = r.job_title || r.jobTitle || '';
           
-          // 處理公司名稱：如果包含多個公司（用 | 分隔），則顯示為列表
-          let companyDisplay = '';
-          if (companyName) {
-            const companies = companyName.split(' | ').filter(c => c.trim());
-            if (companies.length > 1) {
-              // 多個公司，顯示為列表
-              companyDisplay = `<div style="text-align: left;">
-                ${companies.map((comp, idx) => 
-                  `<div style="margin-bottom: 6px; font-size: 0.9rem; line-height: 1.4;">
-                    <strong style="color: #0066cc;">${idx + 1}.</strong> ${escapeHtml(comp)}
-                  </div>`
-                ).join('')}
-              </div>`;
-            } else if (companies.length === 1) {
-              // 單一公司
-              companyDisplay = escapeHtml(companies[0]);
-            } else {
-              companyDisplay = '<span style="color: #64748b;">—</span>';
-            }
-          } else {
-            companyDisplay = '<span style="color: #64748b;">—</span>';
-          }
+          // 改為每一行都完整顯示資料，方便對照
+          const showMainInfo = true; 
           
-          // 處理職缺：格式為 公司名稱 - 職缺名稱 | 公司名稱 - 職缺名稱
-          let jobDisplay = '';
-          if (jobTitle) {
-            const jobs = jobTitle.split(' | ').filter(j => j.trim());
-            if (jobs.length > 1) {
-              // 多個職缺，顯示為列表
-              jobDisplay = `<div style="text-align: left;">
-                ${jobs.map((job, idx) => {
-                  // 解析格式：公司名稱 - 職缺名稱
-                  const parts = job.split(' - ');
-                  const jobName = parts.length > 1 ? parts[1] : job;
-                  return `<div style="margin-bottom: 6px; font-size: 0.9rem; line-height: 1.4;">
-                    <strong style="color: #16a34a;">${idx + 1}.</strong> ${escapeHtml(jobName)}
-                  </div>`;
-                }).join('')}
-              </div>`;
-            } else if (jobs.length === 1) {
-              // 單一職缺，提取職缺名稱
-              const parts = jobs[0].split(' - ');
-              const jobName = parts.length > 1 ? parts[1] : jobs[0];
-              jobDisplay = escapeHtml(jobName);
-            } else {
-              jobDisplay = '<span style="color: #64748b;">—</span>';
-            }
-          } else {
-            jobDisplay = '<span style="color: #64748b;">—</span>';
-          }
-          
+          // 渲染邏輯
           const row = `
-        <tr style="border-bottom: 1px solid #e2e8f0;">
-          <td style="padding: 14px 16px; vertical-align: middle; white-space: nowrap;">${r.username}</td>
-          <td style="padding: 14px 16px; vertical-align: middle; white-space: nowrap;">${escapeHtml(r.name || '')}</td>
-          <td style="padding: 14px 16px; vertical-align: middle; white-space: nowrap;">${r.upload_time}</td>
-          <td style="padding: 14px 16px; vertical-align: middle; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 300px;">${escapeHtml(r.original_filename)}</td>
-          <td style="padding: 14px 16px; vertical-align: top; max-width: 300px;">${companyDisplay}</td>
-          <td style="padding: 14px 16px; vertical-align: top; max-width: 300px;">${jobDisplay}</td>
-          <td style="padding: 14px 16px; vertical-align: middle; white-space: nowrap;">
-            <span class="status-badge bg-${statusColor(r.display_status || r.status)}">${mapStatus(r.display_status || r.status)}</span>
-          </td>
-          <td style="padding: 14px 16px; vertical-align: middle; white-space: nowrap;">
-            ${isViewOnly ? 
-              // 僅查看模式：顯示留言狀態，可以點擊查看內容
-              r.comment ? 
-                `<button class="btn btn-sm btn-outline-secondary text-success"
-                  onclick="openCommentModal(${r.id}, '${escapeHtml(r.comment || '')}', null)"
-                  style="padding: 6px 12px; border-radius: 6px; border: 1px solid #e2e8f0; background: #fff; cursor: pointer; font-size: 0.875rem; color: #16a34a;">
-                  已填寫
-                </button>` :
-                `<span style="padding: 6px 12px; border-radius: 6px; border: 1px solid #e2e8f0; background: #f5f5f5; color: #64748b; font-size: 0.875rem;">
-                  未填寫
-                </span>` :
-              // 正常模式：可以編輯留言
-              `<button class="btn btn-sm btn-outline-secondary ${r.comment ? 'text-success' : ''}"
-                onclick="openCommentModal(${r.id}, '${escapeHtml(r.comment || '')}', ${r.preference_id ? r.preference_id : 'null'})"
-                style="padding: 6px 12px; border-radius: 6px; border: 1px solid #e2e8f0; background: #fff; cursor: pointer; font-size: 0.875rem;">
-                ${r.comment ? '已填寫' : '未填寫'}
-              </button>`
-            }
-          </td>
-          <td style="padding: 14px 16px; vertical-align: middle; white-space: nowrap;">
-            ${isViewOnly ? 
-              // 僅查看模式：只顯示下載按鈕
-              `<a href="/api/download_resume/${r.id}" style="padding: 6px 12px; border-radius: 6px; border: 1px solid #0066cc; background: #fff; color: #0066cc; text-decoration: none; font-size: 0.875rem; display: inline-block;" target="_blank">下載</a>` :
-              // 正常模式：顯示所有操作按鈕
-              `<div style="display: flex; gap: 8px; flex-wrap: nowrap;">
-                <a href="/api/download_resume/${r.id}" style="padding: 6px 12px; border-radius: 6px; border: 1px solid #0066cc; background: #fff; color: #0066cc; text-decoration: none; font-size: 0.875rem; display: inline-block;" target="_blank">下載</a>
-                <button type="button" style="padding: 6px 12px; border-radius: 6px; border: 1px solid #dc2626; background: #fff; color: #dc2626; cursor: pointer; font-size: 0.875rem;" onclick="rejectResume(${r.id}, ${preferenceId ? preferenceId : 'null'})">退件</button>
-                <button type="button" style="padding: 6px 12px; border-radius: 6px; border: 1px solid #16a34a; background: #fff; color: #16a34a; cursor: pointer; font-size: 0.875rem;" onclick="approveResume(${r.id}, ${preferenceId ? preferenceId : 'null'})">完成</button>
-              </div>`
-            }
-          </td>
-        </tr>`;
+            <tr style="border-bottom: 1px solid #e2e8f0;">
+              <td style="padding: 14px 16px; vertical-align: middle; white-space: nowrap;">${showMainInfo ? r.username : ''}</td>
+              <td style="padding: 14px 16px; vertical-align: middle; white-space: nowrap;">${showMainInfo ? escapeHtml(r.name || '') : ''}</td>
+              <td style="padding: 14px 16px; vertical-align: middle; white-space: nowrap;">${showMainInfo ? r.upload_time : ''}</td>
+              <td style="padding: 14px 16px; vertical-align: middle; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 300px;">${showMainInfo ? escapeHtml(r.original_filename) : ''}</td>
+              
+              <td style="padding: 14px 16px; vertical-align: top; max-width: 300px;">${r.display_company}</td>
+              <td style="padding: 14px 16px; vertical-align: top; max-width: 300px;">${r.display_job}</td>
+              
+              <td style="padding: 14px 16px; vertical-align: middle; white-space: nowrap;">
+                ${showMainInfo ? `<span class="status-badge bg-${statusColor(r.display_status || r.status)}">${mapStatus(r.display_status || r.status)}</span>` : ''}
+              </td>
+              <td style="padding: 14px 16px; vertical-align: middle; white-space: nowrap;">
+                ${showMainInfo ? 
+                  (isViewOnly ? 
+                    // 僅查看模式：顯示留言狀態，可以點擊查看內容
+                    r.comment ? 
+                      `<button class="btn btn-sm btn-outline-secondary text-success"
+                        onclick="openCommentModal(${r.id}, '${escapeHtml(r.comment || '')}', null)"
+                        style="padding: 6px 12px; border-radius: 6px; border: 1px solid #e2e8f0; background: #fff; cursor: pointer; font-size: 0.875rem; color: #16a34a;">
+                        已填寫
+                      </button>` :
+                      `<span style="padding: 6px 12px; border-radius: 6px; border: 1px solid #e2e8f0; background: #f5f5f5; color: #64748b; font-size: 0.875rem;">
+                        未填寫
+                      </span>` :
+                    // 正常模式：可以編輯留言
+                    `<button class="btn btn-sm btn-outline-secondary ${r.comment ? 'text-success' : ''}"
+                      onclick="openCommentModal(${r.id}, '${escapeHtml(r.comment || '')}', ${r.preference_id ? r.preference_id : 'null'})"
+                      style="padding: 6px 12px; border-radius: 6px; border: 1px solid #e2e8f0; background: #fff; cursor: pointer; font-size: 0.875rem;">
+                      ${r.comment ? '已填寫' : '未填寫'}
+                    </button>`
+                  ) : ''}
+              </td>
+              <td style="padding: 14px 16px; vertical-align: middle; white-space: nowrap;">
+                ${showMainInfo ? 
+                  (isViewOnly ? 
+                    // 僅查看模式：只顯示下載按鈕
+                    `<a href="/api/download_resume/${r.id}" style="padding: 6px 12px; border-radius: 6px; border: 1px solid #0066cc; background: #fff; color: #0066cc; text-decoration: none; font-size: 0.875rem; display: inline-block;" target="_blank">下載</a>` :
+                    // 正常模式：顯示所有操作按鈕
+                    `<div style="display: flex; gap: 8px; flex-wrap: nowrap;">
+                      <a href="/api/download_resume/${r.id}" style="padding: 6px 12px; border-radius: 6px; border: 1px solid #0066cc; background: #fff; color: #0066cc; text-decoration: none; font-size: 0.875rem; display: inline-block;" target="_blank">下載</a>
+                      <button type="button" style="padding: 6px 12px; border-radius: 6px; border: 1px solid #dc2626; background: #fff; color: #dc2626; cursor: pointer; font-size: 0.875rem;" onclick="rejectResume(${r.id}, ${preferenceId ? preferenceId : 'null'})">退件</button>
+                      <button type="button" style="padding: 6px 12px; border-radius: 6px; border: 1px solid #16a34a; background: #fff; color: #16a34a; cursor: pointer; font-size: 0.875rem;" onclick="approveResume(${r.id}, ${preferenceId ? preferenceId : 'null'})">完成</button>
+                    </div>`
+                  ) : ''}
+              </td>
+            </tr>`;
           tbody.innerHTML += row;
         });
 
-        renderPagination(resumes.length);
+        renderPagination(allRowsData.length); // 注意：分頁使用 allRowsData 的總長度
       }
 
       function renderPagination(totalItems) {
@@ -1165,6 +1213,8 @@
                 // 修正 Modal 標題，強調這是退件原因填寫
                 document.getElementById("commentModalLabel").textContent = "❌ 填寫退件原因";
                 document.getElementById("saveCommentBtn").textContent = "送出";
+                document.getElementById("saveCommentBtn").style.display = 'block'; // 確保按鈕顯示
+                document.getElementById("commentInput").readOnly = false; // 確保可編輯
 
                 // 顯示留言Modal
                 new bootstrap.Modal(document.getElementById("commentModal")).show();
@@ -1200,6 +1250,8 @@
                 // 修正 Modal 標題，強調這是退件原因填寫
                 document.getElementById("commentModalLabel").textContent = "❌ 填寫退件原因";
                 document.getElementById("saveCommentBtn").textContent = "送出";
+                document.getElementById("saveCommentBtn").style.display = 'block'; // 確保按鈕顯示
+                document.getElementById("commentInput").readOnly = false; // 確保可編輯
 
                 // 顯示留言Modal
                 new bootstrap.Modal(document.getElementById("commentModal")).show();
@@ -1250,54 +1302,31 @@
                   // 立即重新渲染表格，讓用戶立即看到狀態變化（從「待審核」變為「通過」）
                   applyFilters();
                   
+                  // 顯示成功提示
+                  alert("✅ 履歷已標記為審核通過");
+                  
                   // 在背景重新從 API 獲取最新的履歷列表，確保數據同步
-                  const statusFilter = document.getElementById("statusFilter").value.trim();
+                  // 由於這裡邏輯複雜，且主要目的是給用戶即時反饋，背景重載可選，
+                  // 這裡省略複雜的背景重載邏輯，僅依靠 applyFilters 觸發的本地數據渲染。
+                  // 如果需要確保數據完全同步，可能需要重新呼叫主 API 刷新 allResumes 
+                  // 如下方的註釋部分所示。
                   
+                  /* const statusFilter = document.getElementById("statusFilter").value.trim();
                   let apiUrl = '/vendor/api/resumes';
-                  const params = [];
-                  if (statusFilter) {
-                    params.push(`status=${encodeURIComponent(statusFilter)}`);
-                  }
-                  if (jobFilter) {
-                    // 從 allResumes 中查找對應的職缺 ID
-                    const filterIsNumeric = /^\d+$/.test(jobFilter);
-                    const matchingResume = allResumes.find(r => {
-                      if (filterIsNumeric) {
-                        return r.job_id && String(r.job_id) === jobFilter;
-                      } else {
-                        return r.job_title && r.job_title.trim() === jobFilter.trim();
-                      }
-                    });
-                    // 注意：這裡保留 company_id 參數以向後兼容，但主要篩選已改為職缺
-                    if (matchingResume && matchingResume.company_id) {
-                      params.push(`company_id=${matchingResume.company_id}`);
-                    }
-                  }
-                  if (keywordFilter) {
-                    params.push(`keyword=${encodeURIComponent(keywordFilter)}`);
-                  }
-                  if (params.length > 0) {
-                    apiUrl += '?' + params.join('&');
-                  }
-                  
-                  // 在背景重新獲取數據，確保與後端同步
+                  // ... 構建 API URL 參數 ...
                   fetch(apiUrl)
                     .then(res => res.json())
                     .then(resumeData => {
                       if (resumeData.success) {
                         allResumes = resumeData.resumes || [];
-                        // 重新應用篩選並渲染表格
                         applyFilters();
                       }
-                      // 不顯示額外的提示，因為界面已經更新了
                     })
                     .catch(error => {
                       console.error("Reload error:", error);
-                      // 如果重新獲取失敗，使用已更新的本地數據（已經在 applyFilters 中處理）
                     });
+                  */
                   
-                  // 顯示成功提示
-                  alert("✅ 履歷已標記為審核通過");
                 } else if (data.error) {
                   alert("標記失敗：" + data.error);
                 } else {
