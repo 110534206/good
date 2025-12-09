@@ -304,6 +304,12 @@
 
                 const { admission, final_preference } = data;
 
+                // 根據志願序和審核狀態確定最終職缺
+                // final_preference 是後端根據以下邏輯確定的：
+                // 1. 從 student_preferences 表中查找 status = 'approved' 的志願
+                // 2. 按 preference_order ASC 排序（志願序最小的優先）
+                // 3. 選擇第一個（排名最前面的已通過審核的志願）
+
                 if (admission) {
                     companyName.textContent = admission.company_name || fallback;
                     companyAddress.textContent = admission.company_address || "";
@@ -319,7 +325,7 @@
                     statusChip.textContent = "尚未有錄取紀錄";
                 }
 
-                // 顯示實習期間：優先從 final_preference 獲取，如果沒有則顯示空值
+                // 顯示實習期間：優先從 final_preference 獲取（這是根據志願序和審核狀態確定的）
                 if (final_preference && final_preference.internship_period) {
                     // 移除「一學期」或「一個學期」的文字
                     let periodText = final_preference.internship_period;
@@ -329,9 +335,16 @@
                     internPeriod.textContent = fallback;
                 }
 
-                // 顯示職缺資訊（只顯示職缺名稱）
+                // 顯示職缺資訊：根據志願序和審核狀態確定的最終職缺
+                // 優先使用 final_preference 中的職缺資訊（這是後端根據志願序和審核狀態確定的）
                 if (final_preference && final_preference.job_title) {
+                    // final_preference.job_title 是根據以下邏輯確定的：
+                    // - 從所有 status = 'approved' 的志願中
+                    // - 選擇 preference_order 最小的那個志願的職缺
                     jobTitle.textContent = final_preference.job_title;
+                } else if (admission && admission.company_name) {
+                    // 如果沒有 final_preference 但有 admission，可能是舊資料或特殊情況
+                    jobTitle.textContent = fallback;
                 } else {
                     jobTitle.textContent = fallback;
                 }
