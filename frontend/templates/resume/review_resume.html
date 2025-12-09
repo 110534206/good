@@ -28,29 +28,43 @@
       padding: 18px 24px;
       display: flex;
       align-items: center;
-      justify-content: center;
+      justify-content: space-between;
       color: #fff;
       position: relative;
+    }
+
+    .topbar-left {
+      display: flex;
+      align-items: center;
+    }
+
+    .topbar-left #menu-btn {
+      width: 30px;
+      height: 22px;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      background: none;
+      border: none;
+      padding: 0;
+    }
+
+    .topbar-left #menu-btn span {
+      display: block;
+      width: 100%;
+      height: 3px;
+      background-color: white;
+      border-radius: 2px;
+      transition: all 0.3s ease;
     }
 
     .topbar h1 {
       font-size: 1.5rem;
       margin: 0;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 12px;
+      text-align: center;
       color: #fff;
       flex: 1;
-    }
-
-    .topbar h1 .header-title {
-      flex: 1;
-      text-align: center;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 12px;
     }
 
     .topbar h1 i {
@@ -163,28 +177,6 @@
       font-weight: bold;
     }
 
-    /* 選單按鈕樣式 */
-    #menu-btn {
-      width: 30px;
-      height: 22px;
-      cursor: pointer;
-      display: flex;
-      flex-direction: column;
-      justify-content: space-between;
-      background: none;
-      border: none;
-      padding: 0;
-    }
-
-    #menu-btn span {
-      display: block;
-      width: 100%;
-      height: 3px;
-      background-color: white;
-      border-radius: 2px;
-      transition: all 0.3s ease;
-    }
-
     /* 側邊選單樣式 */
     #side-menu {
       position: fixed;
@@ -211,6 +203,18 @@
       transform: translateX(0);
     }
 
+    #side-menu h2 {
+      margin: 0 0 1.5rem 0;
+      font-weight: 700;
+      font-size: 1.6rem;
+      color: #fff;
+      padding: 0;
+      line-height: 2.4rem;
+      height: 2.4rem;
+      display: flex;
+      align-items: center;
+    }
+
     #close-btn {
       position: absolute;
       top: 2rem;
@@ -220,18 +224,12 @@
       border: none;
       color: #fff;
       cursor: pointer;
-      line-height: 1;
-      width: 2.4rem;
+      line-height: 2.4rem;
       height: 2.4rem;
       display: flex;
       align-items: center;
       justify-content: center;
-    }
-
-    #side-menu h2 {
-      margin: 0.5rem 0 1.5rem;
-      font-weight: 700;
-      font-size: 1.6rem;
+      z-index: 10;
     }
 
     #side-menu a {
@@ -249,21 +247,22 @@
       background-color: rgba(255, 255, 255, 0.18);
       color: #fff;
     }
+
   </style>
 </head>
 
 <body>
   <header>
     <div class="topbar">
-      <h1>
+      <div class="topbar-left">
         <button id="menu-btn" title="選單" role="button" tabindex="0" aria-label="開啟側邊選單">
           <span></span>
           <span></span>
           <span></span>
         </button>
-        <div class="header-title">學生履歷審查</div>
-        <div style="width: 30px;"></div> <!-- 佔位元素，保持標題置中 -->
-      </h1>
+      </div>
+      <h1>學生履歷審查</h1>
+      <div style="width: 30px;"></div> <!-- 佔位元素，保持標題置中 -->
     </div>
   </header>
   <main>
@@ -337,6 +336,7 @@
       </div>
     </div>
 
+    <!-- 側邊選單 -->
     <nav id="side-menu" aria-hidden="true" role="navigation" aria-label="功能選單">
       <button id="close-btn" aria-label="關閉功能選單">×</button>
       <h2>功能選單</h2>
@@ -397,11 +397,6 @@
       let currentUserId = null; // 儲存當前用戶 ID
 
       document.addEventListener("DOMContentLoaded", () => {
-        // 先顯示預設選單（老師選單），等獲取到用戶角色後再更新
-        userRole = 'teacher'; // 預設為老師
-        isHomeroom = false; // 預設不是班導師
-        renderMenu();
-        
         // 先獲取用戶角色，根據角色調用不同的 API
         fetch('/api/profile')
           .then(res => res.json())
@@ -663,9 +658,10 @@
           })
           .catch(error => {
             console.error("獲取用戶資料失敗:", error);
-            // 如果獲取用戶資料失敗，預設為老師角色並生成選單
+            // 如果獲取用戶資料失敗，預設為老師角色
             userRole = 'teacher';
             isHomeroom = false;
+            // 根據角色生成選單
             renderMenu();
             // 如果獲取用戶資料失敗，使用預設 API
             const urlParams = new URLSearchParams(window.location.search);
@@ -709,15 +705,30 @@
         document.getElementById("statusFilter").addEventListener("change", applyFilters);
         document.getElementById("searchBox").addEventListener("input", applyFilters);
         document.getElementById("saveCommentBtn").addEventListener("click", saveComment); // 綁定 "儲存留言"
-      });
 
-      // 判斷是否為班導，顯示切換到班導主頁 (此段保留用戶原邏輯)
-      fetch('/api/profile').then(r => r.json()).then(d => {
-        if (d.success && d.user && d.user.is_homeroom) {
-          const link = document.getElementById('toHomeroomLink');
-          if (link) link.style.display = 'block';
-        }
-      }).catch(() => { });
+        // 側邊選單控制
+        document.getElementById('menu-btn').addEventListener('click', () => {
+          document.getElementById('side-menu').classList.add('open');
+          document.getElementById('side-menu').setAttribute('aria-hidden', 'false');
+        });
+
+        document.getElementById('close-btn').addEventListener('click', () => {
+          document.getElementById('side-menu').classList.remove('open');
+          document.getElementById('side-menu').setAttribute('aria-hidden', 'true');
+        });
+
+        // 點擊選單外部關閉選單
+        document.addEventListener('click', (e) => {
+          const sideMenu = document.getElementById('side-menu');
+          const menuBtn = document.getElementById('menu-btn');
+          if (sideMenu && menuBtn) {
+            if (!sideMenu.contains(e.target) && !menuBtn.contains(e.target) && sideMenu.classList.contains('open')) {
+              sideMenu.classList.remove('open');
+              sideMenu.setAttribute('aria-hidden', 'true');
+            }
+          }
+        });
+      });
 
       // ------------------------------------
       // 篩選與渲染函式
@@ -1325,8 +1336,9 @@
         }
       }
 
-
+      // ------------------------------------
       // 根據用戶角色生成選單
+      // ------------------------------------
       function renderMenu() {
         const menuContent = document.getElementById('menu-content');
         if (!menuContent) return;
@@ -1395,28 +1407,6 @@
         ).join('');
       }
 
-      // 側邊選單控制
-      document.getElementById('menu-btn').addEventListener('click', () => {
-        document.getElementById('side-menu').classList.add('open');
-        document.getElementById('side-menu').setAttribute('aria-hidden', 'false');
-      });
-      
-      document.getElementById('close-btn').addEventListener('click', () => {
-        document.getElementById('side-menu').classList.remove('open');
-        document.getElementById('side-menu').setAttribute('aria-hidden', 'true');
-      });
-
-      // 點擊選單外部關閉選單
-      document.addEventListener('click', (e) => {
-        const sideMenu = document.getElementById('side-menu');
-        const menuBtn = document.getElementById('menu-btn');
-        if (sideMenu && menuBtn) {
-          if (!sideMenu.contains(e.target) && !menuBtn.contains(e.target) && sideMenu.classList.contains('open')) {
-            sideMenu.classList.remove('open');
-            sideMenu.setAttribute('aria-hidden', 'true');
-          }
-        }
-      });
     </script>
 </body>
 
