@@ -352,12 +352,14 @@ def get_my_admission():
                     final_preference['internship_time'] = job_info.get('work_time')
                     print(f"✅ [DEBUG] 重新查詢到職缺資訊: {job_info.get('title')}")
             
-            # 嘗試從 student_preferences 獲取志願序資訊（優先選擇 preference_order 最小的）
+            # 嘗試從 student_preferences 獲取志願序資訊
+            # 優先選擇 preference_order 最小且 status = 'approved' 的志願（已通過廠商審核的志願）
             if offer_info.get('job_id'):
+                # 先查找該 job_id 且已通過審核的志願
                 cursor.execute("""
                     SELECT preference_order, submitted_at, company_id
                     FROM student_preferences
-                    WHERE student_id = %s AND job_id = %s
+                    WHERE student_id = %s AND job_id = %s AND status = 'approved'
                     ORDER BY preference_order ASC
                     LIMIT 1
                 """, (student_id, offer_info.get('job_id')))
@@ -366,7 +368,7 @@ def get_my_admission():
                     final_preference['preference_order'] = pref_info.get('preference_order')
                     final_preference['submitted_at'] = pref_info.get('submitted_at')
             else:
-                # 如果沒有 job_id，查找該學生所有錄取的志願，選擇 preference_order 最小的
+                # 如果沒有 job_id，查找該學生所有已通過審核的志願，選擇 preference_order 最小的
                 cursor.execute("""
                     SELECT 
                         sp.preference_order, 
