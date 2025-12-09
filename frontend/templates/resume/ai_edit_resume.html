@@ -374,6 +374,43 @@
                     })
                 });
 
+                // 檢查是否為未授權錯誤（401）- 訪客需要登入
+                if (response.status === 401) {
+                    const errorData = await response.json();
+                    revisedResumeDiv.innerHTML = `❌ ${errorData.error || '請先登入才能使用 AI 修改功能。'}`;
+                    revisedResumeDiv.style.color = '#d32f2f';
+                    revisedResumeDiv.style.fontWeight = 'bold';
+                    loadingSpinner.style.display = 'none';
+                    // 1.5 秒後自動跳轉到登入頁面
+                    setTimeout(() => {
+                        window.location.href = '/login';
+                    }, 1500);
+                    return;
+                }
+
+                // 檢查是否為其他錯誤狀態碼（400, 500 等）
+                if (!response.ok && response.status !== 200) {
+                    try {
+                        const errorData = await response.json();
+                        // 如果錯誤訊息包含「登入」相關字眼，也自動跳轉到登入頁面
+                        const errorMsg = errorData.error || '請求失敗，請稍後再試。';
+                        revisedResumeDiv.innerHTML = `❌ ${errorMsg}`;
+                        revisedResumeDiv.style.color = '#d32f2f';
+                        revisedResumeDiv.style.fontWeight = 'bold';
+                        loadingSpinner.style.display = 'none';
+                        
+                        // 如果錯誤訊息包含登入相關提示，自動跳轉
+                        if (errorMsg.includes('登入') || errorMsg.includes('登錄') || errorMsg.includes('login')) {
+                            setTimeout(() => {
+                                window.location.href = '/login';
+                            }, 1500);
+                        }
+                        return;
+                    } catch (e) {
+                        // 如果無法解析 JSON，繼續處理串流
+                    }
+                }
+
                 if (!response.body) {
                     throw new Error("伺服器沒有返回可讀取的串流。");
                 }
@@ -435,7 +472,29 @@
         }
 
         // 🌟 [新功能] 將美化後的自傳導入至履歷上傳頁面
-        function importToResumeForm() {
+        async function importToResumeForm() {
+            // 檢查登入狀態：只有已登入的用戶才能使用導入功能
+            try {
+                const sessionRes = await fetch('/api/get-session');
+                const sessionData = await sessionRes.json();
+                
+                // 如果未登入或是訪客，跳轉到登入頁面
+                if (!sessionData.success || sessionData.role === 'visitor' || sessionRes.status === 401) {
+                    alert('❌ 請先登入才能使用導入功能。');
+                    setTimeout(() => {
+                        window.location.href = '/login';
+                    }, 1000);
+                    return;
+                }
+            } catch (error) {
+                console.error('檢查登入狀態失敗:', error);
+                alert('❌ 無法驗證登入狀態，請先登入。');
+                setTimeout(() => {
+                    window.location.href = '/login';
+                }, 1000);
+                return;
+            }
+            
             const revisedResumeDiv = document.getElementById('revisedResume');
             // 嘗試多種方式獲取完整的文本內容（只獲取新的美化後內容）
             let revisedText = '';

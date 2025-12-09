@@ -607,7 +607,8 @@ def admin_statistics():
 # 取得 session 資訊
 @users_bp.route('/api/get-session')
 def get_session():
-    if "username" in session and "role" in session:
+    # 檢查是否為有效的登入用戶（排除訪客）
+    if "username" in session and "role" in session and session.get("user_id") != 0 and session.get("role") != "visitor":
         return jsonify({
             "success": True,
             "username": session["username"],
