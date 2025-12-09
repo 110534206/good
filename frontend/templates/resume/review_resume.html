@@ -1379,8 +1379,19 @@
 
         let menuItems = [];
         
+        const teacherMenu = [
+          { href: '/teacher_home', text: '首頁' },
+          { href: '/profile', text: '個人資料' },
+          { href: '/upload_company', text: '建立實習機會' },
+          { href: '/admission_results', text: '查看錄取結果' },
+          { href: '/manage_vendor', text: '實習廠商管理' },
+          { href: '/notifications', text: '查看公告' },
+          { href: '/review_resume', text: '學生履歷審核' },
+          { href: '/login', text: '登出' }
+        ];
+
         if (userRole === 'vendor') {
-          // 廠商選單
+          // 廠商選單（與通知頁一致的順序與文案）
           menuItems = [
             { href: '/vendor_home', text: '首頁' },
             { href: '/profile', text: '個人資料' },
@@ -1389,51 +1400,14 @@
             { href: '/confirm_matching', text: '媒合結果' },
             { href: '/publish_announcements', text: '發布公告' },
             { href: '/reviews_resumes_notifications', text: '查看履歷與通知' },
-            { href: '/login', text: '登出' }
+            { href: '/logout', text: '登出' }
           ];
-        } else if (isHomeroom && (userRole === 'teacher' || userRole === 'director')) {
-          // 班導師選單
-          menuItems = [
-            { href: '/class_teacher_home', text: '首頁' },
-            { href: '/review_resume', text: '查看學生履歷' },
-            { href: '/profile', text: '個人資料' },
-            { href: '/review_preferences', text: '審核志願序' },
-            { href: '/admission/results', text: '查詢學生錄取結果' },
-            { href: '/notifications', text: '通知' },
-            { href: '/login', text: '登出' }
-          ];
-        } else if (userRole === 'teacher') {
-          // 指導老師選單
-          menuItems = [
-            { href: '/review_resume', text: '學生履歷審核' },
-            { href: '/teacher_home', text: '首頁' },
-            { href: '/profile', text: '個人資料' },
-            { href: '/upload_company', text: '建立實習機會' },
-            { href: '/admission_results', text: '查看錄取結果' },
-            { href: '/manage_vendor', text: '實習廠商管理' },
-            { href: '/notifications', text: '查看公告' },
-            { href: '/login', text: '登出' }
-          ];
-        } else if (userRole === 'director') {
-          // 主任選單（與指導老師相同）
-          menuItems = [
-            { href: '/review_resume', text: '學生履歷審核' },
-            { href: '/teacher_home', text: '首頁' },
-            { href: '/profile', text: '個人資料' },
-            { href: '/upload_company', text: '建立實習機會' },
-            { href: '/admission_results', text: '查看錄取結果' },
-            { href: '/manage_vendor', text: '實習廠商管理' },
-            { href: '/notifications', text: '查看公告' },
-            { href: '/login', text: '登出' }
-          ];
+        } else if (userRole === 'teacher' || userRole === 'director' || (isHomeroom && (userRole === 'teacher' || userRole === 'director'))) {
+          // 老師/主任/班導師：統一與其他頁相同的功能選單文字與連結
+          menuItems = teacherMenu;
         } else {
-          // 預設選單（其他角色）
-          menuItems = [
-            { href: '/teacher_home', text: '首頁' },
-            { href: '/profile', text: '個人資料' },
-            { href: '/review_resume', text: '學生履歷審核' },
-            { href: '/login', text: '登出' }
-          ];
+          // 其他角色，沿用老師菜單以保持一致
+          menuItems = teacherMenu;
         }
 
         menuContent.innerHTML = menuItems.map(item => 
