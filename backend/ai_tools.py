@@ -44,9 +44,6 @@ SYSTEM_PROMPT = """
 # ==========================================================
 @ai_bp.route('/api/revise-resume', methods=['POST'])
 def revise_resume():
-    # 檢查登入狀態：只有已登入的有效用戶才能使用 AI 修改功能（排除訪客）
-    if 'user_id' not in session or 'role' not in session or session.get('user_id') == 0 or session.get('role') == 'visitor':
-        return jsonify({"error": "請先登入才能使用 AI 修改功能。"}), 401
     
     # 檢查 API Key 是否在啟動時成功載入
     if not api_key or not model:
@@ -59,11 +56,11 @@ def revise_resume():
         edit_style = data.get('style', 'polish')
         tone_style = data.get('tone', 'professional')
 
-        # 🌟 [新功能] 如果用戶沒有提供 resumeText，自動從資料庫讀取自傳（僅限學生）
+        # 🌟 [新功能] 如果用戶沒有提供 resumeText，自動從資料庫讀取自傳
         if not user_resume_text or not user_resume_text.strip():
-            # 檢查用戶是否已登入為學生（只有學生可以從資料庫讀取自傳）
-            if session.get('role') != 'student':
-                return jsonify({"error": "請在輸入框中輸入您的履歷文本，或先登入學生帳號以自動載入履歷。"}), 400
+            # 檢查用戶是否已登入
+            if 'user_id' not in session or session.get('role') != 'student':
+                return jsonify({"error": "請先登入並提供履歷文本，或先上傳履歷。"}), 400
             
             user_id = session['user_id']
             conn = get_db()
