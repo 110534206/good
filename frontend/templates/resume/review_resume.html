@@ -268,7 +268,7 @@
   <main>
     <section class="panel" aria-label="履歷列表">
       <div class="panel-header">
-        <h2>履歷列表</h2>
+        <h2 id="resumeListTitle">履歷列表</h2>
       </div>
       <div style="display: flex; flex-wrap: wrap; gap: 16px; align-items: center; margin-bottom: 16px;">
         <select id="departmentFilter" style="padding: 10px 12px; border-radius: 8px; border: 1px solid #e2e8f0; background: #fff; font-size: 0.95rem; min-width: 150px;">
@@ -523,6 +523,11 @@
                   // 如果是廠商，從 API 返回的 companies 中獲取公司列表
                   if (userRole === 'vendor' && resumeData.companies) {
                     companyData = {success: true, companies: resumeData.companies};
+                    // 更新標題，明確顯示這是該廠商自己的公司和職缺
+                    const resumeListTitle = document.getElementById('resumeListTitle');
+                    if (resumeListTitle) {
+                      resumeListTitle.textContent = '選擇我公司的學生履歷';
+                    }
                   }
                   
                   // 如果是指導老師，過濾出他們管理的公司

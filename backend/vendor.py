@@ -616,31 +616,16 @@ def get_vendor_resumes():
         if not profile:
             return jsonify({"success": False, "message": "帳號資料不完整"}), 403
 
-        # 如果沒有通過關聯獲取到公司，嘗試獲取所有已審核通過的公司
-        if not companies:
-            cursor.execute("""
-                SELECT id, company_name, contact_email, advisor_user_id
-                FROM internship_companies
-                WHERE status = 'approved'
-                ORDER BY company_name
-            """)
-            companies = cursor.fetchall() or []
-            print(f"⚠️ 廠商未關聯公司，顯示所有已審核通過的公司，共 {len(companies)} 家")
-
-        # 如果沒有通過關聯獲取到公司，嘗試獲取所有已審核通過的公司
-        if not companies:
-            cursor.execute("""
-                SELECT id, company_name, contact_email, advisor_user_id
-                FROM internship_companies
-                WHERE status = 'approved'
-                ORDER BY company_name
-            """)
-            companies = cursor.fetchall() or []
-            print(f"⚠️ 廠商未關聯公司，顯示所有已審核通過的公司，共 {len(companies)} 家")
-
-        company_ids = [c["id"] for c in companies]
+        # 只顯示該廠商自己的公司，不顯示所有公司
+        company_ids = [c["id"] for c in companies] if companies else []
         if not company_ids:
-            print("⚠️ 資料庫中沒有任何已審核通過的公司")
+            print(f"⚠️ 廠商 {vendor_id} 未關聯任何公司，返回空列表")
+            return jsonify({
+                "success": True,
+                "resumes": [],
+                "companies": [],
+                "message": "您尚未關聯任何公司"
+            })
 
         # 步驟 1: 獲取所有老師已通過的最新履歷
         # 這裡不進行公司/志願序的過濾，只找出所有老師通過的最新履歷

@@ -446,7 +446,6 @@
         jobs: [],
         resumeStats: {
           approved: 0,
-          uploaded: 0,
           rejected: 0,
           pending: 0
         },
@@ -562,7 +561,13 @@
           </div>
           <div class="info-grid" style="margin-top: 16px;">
             <div class="info-card" style="cursor: pointer;">
-              <a href="/review_resume?status=submitted&company_id=${COMPANY_ID}" style="display: block; text-decoration: none; color: inherit;">
+              <a href="/review_resume?company_id=${COMPANY_ID}" style="display: block; text-decoration: none; color: inherit;">
+                <span class="info-label">廠商審核狀態</span>
+                <span class="info-value" style="color: var(--color-muted);">總筆數<span id="totalCount" style="margin-left: 4px;">${state.resumeStats.pending + state.resumeStats.approved + state.resumeStats.rejected}</span></span>
+              </a>
+            </div>
+            <div class="info-card" style="cursor: pointer;">
+              <a href="/review_resume?status=pending&company_id=${COMPANY_ID}" style="display: block; text-decoration: none; color: inherit;">
                 <span class="info-label">廠商審核狀態</span>
                 <span class="info-value" style="color: var(--color-primary);">待審核<span id="pendingCount" style="margin-left: 4px;">${state.resumeStats.pending}</span></span>
               </a>
@@ -570,13 +575,7 @@
             <div class="info-card" style="cursor: pointer;">
               <a href="/review_resume?status=approved&company_id=${COMPANY_ID}" style="display: block; text-decoration: none; color: inherit;">
                 <span class="info-label">廠商審核狀態</span>
-                <span class="info-value" style="color: var(--color-success);">已通過<span id="approvedCount" style="margin-left: 4px;">${state.resumeStats.approved}</span></span>
-              </a>
-            </div>
-            <div class="info-card" style="cursor: pointer;">
-              <a href="/review_resume?status=uploaded&company_id=${COMPANY_ID}" style="display: block; text-decoration: none; color: inherit;">
-                <span class="info-label">廠商審核狀態</span>
-                <span class="info-value" style="color: var(--color-muted);">未通過<span id="uploadedCount" style="margin-left: 4px;">${state.resumeStats.uploaded}</span></span>
+                <span class="info-value" style="color: var(--color-success);">通過<span id="approvedCount" style="margin-left: 4px;">${state.resumeStats.approved}</span></span>
               </a>
             </div>
             <div class="info-card" style="cursor: pointer;">
@@ -730,7 +729,6 @@
           // 重置統計
           state.resumeStats = {
             approved: 0,
-            uploaded: 0,
             rejected: 0,
             pending: 0
           };
@@ -782,13 +780,15 @@
 
       function updateResumeCounts() {
         // 更新顯示的數量
+        const totalEl = document.getElementById('totalCount');
         const approvedEl = document.getElementById('approvedCount');
-        const uploadedEl = document.getElementById('uploadedCount');
         const rejectedEl = document.getElementById('rejectedCount');
         const pendingEl = document.getElementById('pendingCount');
         
+        // 計算總筆數
+        const total = state.resumeStats.pending + state.resumeStats.approved + state.resumeStats.rejected;
+        if (totalEl) totalEl.textContent = total;
         if (approvedEl) approvedEl.textContent = state.resumeStats.approved;
-        if (uploadedEl) uploadedEl.textContent = state.resumeStats.uploaded;
         if (rejectedEl) rejectedEl.textContent = state.resumeStats.rejected;
         if (pendingEl) pendingEl.textContent = state.resumeStats.pending;
       }
