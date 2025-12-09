@@ -334,8 +334,55 @@
             }
         }
 
+        // 🌟 [新功能] 根據登入狀態動態生成側邊選單
+        async function loadSideMenu() {
+            try {
+                const res = await fetch('/api/get-session');
+                const result = await res.json();
+                const menuLinks = document.getElementById('menu-links');
+                
+                // 判斷是否為訪客：API 返回 401 或 role 為 visitor 或 success 為 false
+                const isVisitor = !result.success || res.status === 401 || result.role === 'visitor';
+                
+                if (isVisitor) {
+                    // 訪客模式：顯示首頁（指向訪客頁面）、AI修改履歷、通知、登入
+                    menuLinks.innerHTML = `
+                        <a href="/visitor_page">首頁</a>
+                        <a href="/ai_edit_resume">AI修改履歷</a>
+                        <a href="/notifications">通知</a>
+                        <a href="/login">登入</a>
+                    `;
+                } else {
+                    // 已登入用戶：顯示完整選單
+                    menuLinks.innerHTML = `
+                        <a href="/student_home">首頁</a>
+                        <a href="/profile">個人資料</a>
+                        <a href="/upload_resume">上傳履歷</a>
+                        <a href="/ai_edit_resume">AI修改履歷</a>
+                        <a href="/fill_preferences">填寫志願序</a>
+                        <a href="/notifications">通知</a>
+                        <a href="/intern_achievement">實習成果</a>
+                        <a href="/intern_experience">實習心得</a>
+                    `;
+                }
+            } catch (error) {
+                console.error('❌ 載入選單失敗:', error);
+                // 預設顯示訪客選單（確保首頁指向訪客頁面）
+                const menuLinks = document.getElementById('menu-links');
+                menuLinks.innerHTML = `
+                    <a href="/visitor_page">首頁</a>
+                    <a href="/ai_edit_resume">AI修改履歷</a>
+                    <a href="/notifications">通知</a>
+                    <a href="/login">登入</a>
+                `;
+            }
+        }
+
         // 頁面載入時執行
-        window.addEventListener('DOMContentLoaded', loadAutobiography);
+        window.addEventListener('DOMContentLoaded', () => {
+            loadAutobiography();
+            loadSideMenu();
+        });
 
         async function reviseResume() {
             const resumeInput = document.getElementById('resumeInput').value;
@@ -626,14 +673,9 @@
     <nav id="side-menu" aria-hidden="true" role="navigation" aria-label="功能選單">
         <button id="close-btn" aria-label="關閉功能選單">×</button>
         <h2>功能選單</h2>
-        <a href="/student_home">首頁</a>
-        <a href="/profile">個人資料</a>
-        <a href="/upload_resume">上傳履歷</a>
-        <a href="/ai_edit_resume">AI修改履歷</a>
-        <a href="/fill_preferences">填寫志願序</a>
-        <a href="/notifications">通知</a>
-        <a href="/intern_achievement">實習成果</a>
-        <a href="/intern_experience">實習心得</a>
+        <div id="menu-links">
+            <!-- 選單項目將由 JavaScript 動態生成 -->
+        </div>
     </nav>
 
 </body>
