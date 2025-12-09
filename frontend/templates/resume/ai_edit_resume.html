@@ -385,6 +385,24 @@
         });
 
         async function reviseResume() {
+            // 檢查登入狀態：訪客無法使用 AI 修改功能
+            try {
+                const sessionRes = await fetch('/api/get-session');
+                const sessionData = await sessionRes.json();
+                
+                // 如果未登入或是訪客，直接跳轉到登入頁面
+                if (!sessionData.success || sessionRes.status === 401 || sessionData.role === 'visitor') {
+                    alert('❌ 請先登入才能使用 AI 修改功能。');
+                    window.location.href = '/login';
+                    return;
+                }
+            } catch (error) {
+                console.error('檢查登入狀態失敗:', error);
+                alert('❌ 無法驗證登入狀態，請先登入。');
+                window.location.href = '/login';
+                return;
+            }
+            
             const resumeInput = document.getElementById('resumeInput').value;
             const revisedResumeDiv = document.getElementById('revisedResume');
             const loadingSpinner = document.getElementById('loadingSpinner');
@@ -482,7 +500,25 @@
         }
 
         // 🌟 [新功能] 將美化後的自傳導入至履歷上傳頁面
-        function importToResumeForm() {
+        async function importToResumeForm() {
+            // 檢查登入狀態：訪客無法使用導入功能
+            try {
+                const sessionRes = await fetch('/api/get-session');
+                const sessionData = await sessionRes.json();
+                
+                // 如果未登入或是訪客，直接跳轉到登入頁面
+                if (!sessionData.success || sessionRes.status === 401 || sessionData.role === 'visitor') {
+                    alert('❌ 請先登入才能使用導入功能。');
+                    window.location.href = '/login';
+                    return;
+                }
+            } catch (error) {
+                console.error('檢查登入狀態失敗:', error);
+                alert('❌ 無法驗證登入狀態，請先登入。');
+                window.location.href = '/login';
+                return;
+            }
+            
             const revisedResumeDiv = document.getElementById('revisedResume');
             // 嘗試多種方式獲取完整的文本內容（只獲取新的美化後內容）
             let revisedText = '';
