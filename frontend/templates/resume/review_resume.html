@@ -7,256 +7,74 @@
   <title>智慧實習平台 | 學生履歷審查</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
   <style>
-    * {
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0;
-    }
-
+    * { box-sizing: border-box; margin: 0; padding: 0; }
     header {
       background: linear-gradient(135deg, #0055a8 0%, #006acb 50%, #004f94 100%);
-      border-bottom: none;
-      position: sticky;
-      top: 0;
-      z-index: 10;
+      border-bottom: none; position: sticky; top: 0; z-index: 10;
       box-shadow: 0 8px 20px rgba(0, 68, 148, 0.35);
     }
-
     .topbar {
-      max-width: 1800px;
-      margin: 0 auto;
-      padding: 18px 24px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      color: #fff;
-      position: relative;
+      max-width: 1800px; margin: 0 auto; padding: 18px 24px;
+      display: flex; align-items: center; justify-content: space-between; color: #fff;
     }
-
-    .topbar-left {
-      display: flex;
-      align-items: center;
-    }
-
+    .topbar-left { display: flex; align-items: center; }
     .topbar-left #menu-btn {
-      width: 30px;
-      height: 22px;
-      cursor: pointer;
-      display: flex;
-      flex-direction: column;
-      justify-content: space-between;
-      background: none;
-      border: none;
-      padding: 0;
+      width: 30px; height: 22px; cursor: pointer; display: flex; flex-direction: column;
+      justify-content: space-between; background: none; border: none; padding: 0;
     }
-
     .topbar-left #menu-btn span {
-      display: block;
-      width: 100%;
-      height: 3px;
-      background-color: white;
-      border-radius: 2px;
-      transition: all 0.3s ease;
+      display: block; width: 100%; height: 3px; background-color: white; border-radius: 2px; transition: all 0.3s ease;
     }
-
-    .topbar h1 {
-      font-size: 1.5rem;
-      margin: 0;
-      text-align: center;
-      color: #fff;
-      flex: 1;
-    }
-
-    .topbar h1 i {
-      color: #ffe27a;
-    }
-
-    body {
-      font-family: "Noto Sans TC", sans-serif;
-      background: #ffffff;
-      margin: 0;
-      padding: 0;
-    }
-
-    main {
-      max-width: 1800px;
-      margin: 24px auto 60px;
-      padding: 0 24px;
-      display: flex;
-      flex-direction: column;
-      gap: 24px;
-    }
-
+    .topbar h1 { font-size: 1.5rem; margin: 0; text-align: center; color: #fff; flex: 1; }
+    body { font-family: "Noto Sans TC", sans-serif; background: #ffffff; margin: 0; padding: 0; }
+    main { max-width: 1800px; margin: 24px auto 60px; padding: 0 24px; display: flex; flex-direction: column; gap: 24px; }
     .panel {
-      background: #ffffff;
-      border-radius: 16px;
-      padding: 24px;
-      box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
-      border: 1px solid #e2e8f0;
-      margin-bottom: 32px;
+      background: #ffffff; border-radius: 16px; padding: 24px;
+      box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08); border: 1px solid #e2e8f0; margin-bottom: 32px;
     }
-
-    .panel-header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 12px;
-      margin-bottom: 16px;
-    }
-
-    .panel-header h2 {
-      font-size: 1.2rem;
-      margin: 0;
-    }
-
-    .table-wrapper {
-      overflow-x: visible;
-      width: 100%;
-    }
-
-    .table-wrapper table tbody tr:hover {
-      background: rgba(15, 23, 42, 0.02);
-    }
-
-    /* 表格樣式 */
-    .table thead th {
-      text-align: left; /* 保持左對齊 */
-      background-color: #fafafb;
-    }
-
-    .table tbody td {
-      text-align: left; /* 保持左對齊 */
-      vertical-align: middle;
-    }
+    .panel-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
+    .panel-header h2 { font-size: 1.2rem; margin: 0; }
+    .table-wrapper { overflow-x: visible; width: 100%; }
+    .table-wrapper table tbody tr:hover { background: rgba(15, 23, 42, 0.02); }
+    .table thead th { text-align: left; background-color: #fafafb; }
+    .table tbody td { text-align: left; vertical-align: middle; }
+    .table tbody tr td:nth-child(1), .table tbody tr td:nth-child(2), 
+    .table tbody tr td:nth-child(3), .table tbody tr td:nth-child(4) { vertical-align: top; }
     
-    /* 讓學生帳號、姓名等欄位在多行時視覺上對齊 */
-    .table tbody tr td:nth-child(1), 
-    .table tbody tr td:nth-child(2), 
-    .table tbody tr td:nth-child(3),
-    .table tbody tr td:nth-child(4) {
-      vertical-align: top; /* 頂部對齊，避免內容只有一行時視覺偏離中心 */
-    }
-
-
-    .table-striped>tbody>tr:nth-of-type(odd) {
-      background-color: rgba(0, 0, 0, 0.02);
-    }
-
-    /* 狀態標籤 */
-    .status-badge {
-      font-size: 0.9em;
-      padding: 0.3em 0.6em;
-      border-radius: 0.5rem;
-      display: inline-block;
-      font-weight: 600;
-    }
-
-    .status-badge.bg-success {
-      color: #fff;
-    }
-
-    .status-badge.bg-danger {
-      color: #fff;
-    }
-
-    .status-badge.bg-info {
-      color: #fff;
-    }
-
-    .status-badge.bg-secondary {
-      color: #fff;
-    }
-
-    .status-badge.bg-warning {
-      /* 確保黃色 badge 的文字可讀 */
-      color: #212529;
-    }
-
-    #commentInput {
-      width: 100%;
-      height: 180px;
-      resize: vertical;
-      padding: 0.5rem;
-      font-size: 1rem;
-      line-height: 1.4;
-    }
-
-    .card h4.text-center {
-      color: #0066cc;
-      font-weight: bold;
-    }
-
-    /* 側邊選單樣式 */
+    /* --- 狀態標籤樣式設定 --- */
+    .status-badge { font-size: 0.9em; padding: 0.3em 0.6em; border-radius: 0.5rem; display: inline-block; font-weight: 600; }
+    
+    /* 通過：綠底白字 */
+    .status-badge.bg-success { color: #fff; background-color: #198754; }
+    
+    /* 退件：紅底白字 */
+    .status-badge.bg-danger { color: #fff; background-color: #dc3545; }
+    
+    /* 待審核：藍底白字 */
+    .status-badge.bg-info { color: #fff; background-color: #0dcaf0; }
+    
+    .status-badge.bg-secondary { color: #fff; background-color: #6c757d; }
+    
+    #commentInput { width: 100%; height: 180px; resize: vertical; padding: 0.5rem; font-size: 1rem; line-height: 1.4; }
+    
     #side-menu {
-      position: fixed;
-      top: 0;
-      left: 0;
-      height: 100vh;
-      width: 320px;
-      max-width: 80vw;
-      background-color: rgba(10, 10, 10, 0.95);
-      backdrop-filter: blur(6px);
-      box-shadow: 3px 0 12px rgba(0, 0, 0, 0.6);
-      padding: 2rem 1.5rem;
-      transform: translateX(-100%);
-      transition: transform 0.3s ease-in-out;
-      z-index: 1300;
-      display: flex;
-      flex-direction: column;
-      align-items: flex-start;
-      color: #fff;
-      user-select: none;
+      position: fixed; top: 0; left: 0; height: 100vh; width: 320px; max-width: 80vw;
+      background-color: rgba(10, 10, 10, 0.95); backdrop-filter: blur(6px);
+      box-shadow: 3px 0 12px rgba(0, 0, 0, 0.6); padding: 2rem 1.5rem;
+      transform: translateX(-100%); transition: transform 0.3s ease-in-out; z-index: 1300;
+      display: flex; flex-direction: column; align-items: flex-start; color: #fff; user-select: none;
     }
-
-    #side-menu.open {
-      transform: translateX(0);
-    }
-
-    #side-menu h2 {
-      margin: 0 0 1.5rem 0;
-      font-weight: 700;
-      font-size: 1.6rem;
-      color: #fff;
-      padding: 0;
-      line-height: 2.4rem;
-      height: 2.4rem;
-      display: flex;
-      align-items: center;
-    }
-
+    #side-menu.open { transform: translateX(0); }
+    #side-menu h2 { margin: 0 0 1.5rem 0; font-weight: 700; font-size: 1.6rem; color: #fff; }
     #close-btn {
-      position: absolute;
-      top: 2rem;
-      right: 1.6rem;
-      font-size: 2.2rem;
-      background: none;
-      border: none;
-      color: #fff;
-      cursor: pointer;
-      line-height: 2.4rem;
-      height: 2.4rem;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      z-index: 10;
+      position: absolute; top: 2rem; right: 1.6rem; font-size: 2.2rem; background: none;
+      border: none; color: #fff; cursor: pointer;
     }
-
     #side-menu a {
-      display: block;
-      width: 100%;
-      padding: 0.6rem 0;
-      font-size: 1.1rem;
-      color: #e2e8f0;
-      text-decoration: none;
-      border-radius: 4px;
-      transition: background-color 0.2s ease;
+      display: block; width: 100%; padding: 0.6rem 0; font-size: 1.1rem; color: #e2e8f0;
+      text-decoration: none; border-radius: 4px; transition: background-color 0.2s ease;
     }
-
-    #side-menu a:hover {
-      background-color: rgba(255, 255, 255, 0.18);
-      color: #fff;
-    }
-
+    #side-menu a:hover { background-color: rgba(255, 255, 255, 0.18); color: #fff; }
   </style>
 </head>
 
@@ -265,13 +83,12 @@
     <div class="topbar">
       <div class="topbar-left">
         <button id="menu-btn" title="選單" role="button" tabindex="0" aria-label="開啟側邊選單">
-          <span></span>
-          <span></span>
-          <span></span>
+          <span></span><span></span><span></span>
         </button>
       </div>
       <h1>學生履歷審查</h1>
-      <div style="width: 30px;"></div> </div>
+      <div style="width: 30px;"></div>
+    </div>
   </header>
   <main>
     <section class="panel" aria-label="履歷列表">
@@ -279,1106 +96,478 @@
         <h2 id="resumeListTitle">履歷列表</h2>
       </div>
       <div style="display: flex; flex-wrap: wrap; gap: 16px; align-items: center; margin-bottom: 16px;">
-        <select id="departmentFilter" style="padding: 10px 12px; border-radius: 8px; border: 1px solid #e2e8f0; background: #fff; font-size: 0.95rem; min-width: 150px;">
+        <select id="departmentFilter" style="padding: 10px 12px; border-radius: 8px; border: 1px solid #e2e8f0; min-width: 150px;">
           <option value="">所有學年</option>
         </select>
-        <select id="classFilter" style="padding: 10px 12px; border-radius: 8px; border: 1px solid #e2e8f0; background: #fff; font-size: 0.95rem; min-width: 150px;">
+        <select id="classFilter" style="padding: 10px 12px; border-radius: 8px; border: 1px solid #e2e8f0; min-width: 150px;">
           <option value="">所有班級</option>
         </select>
-        <select id="companyFilter" style="padding: 10px 12px; border-radius: 8px; border: 1px solid #e2e8f0; background: #fff; font-size: 0.95rem; min-width: 150px;">
+        <select id="companyFilter" style="padding: 10px 12px; border-radius: 8px; border: 1px solid #e2e8f0; min-width: 150px;">
           <option value="">所有職缺</option>
         </select>
-        <select id="statusFilter" style="padding: 10px 12px; border-radius: 8px; border: 1px solid #e2e8f0; background: #fff; font-size: 0.95rem; min-width: 150px;">
+        <select id="statusFilter" style="padding: 10px 12px; border-radius: 8px; border: 1px solid #e2e8f0; min-width: 150px;">
           <option value="">所有狀態</option>
           <option value="pending">待審核</option>
           <option value="approved">通過</option>
           <option value="rejected">退件</option>
         </select>
-        <input type="text" id="searchBox" style="padding: 10px 12px; border-radius: 8px; border: 1px solid #e2e8f0; background: #fff; font-size: 0.95rem; min-width: 200px; flex: 1;" placeholder="搜尋帳號/檔案" />
+        <input type="text" id="searchBox" style="padding: 10px 12px; border-radius: 8px; border: 1px solid #e2e8f0; min-width: 200px; flex: 1;" placeholder="搜尋帳號/檔案" />
       </div>
 
       <div class="table-wrapper">
         <table style="width: 100%; border-collapse: collapse;">
           <thead style="background: #f1f5f9;">
             <tr>
-              <th style="padding: 14px 16px; text-align: left; border-bottom: 1px solid #e2e8f0; font-weight: 600;">學生帳號</th>
-              <th style="padding: 14px 16px; text-align: left; border-bottom: 1px solid #e2e8f0; font-weight: 600;">姓名</th>
-              <th style="padding: 14px 16px; text-align: left; border-bottom: 1px solid #e2e8f0; font-weight: 600;">上傳時間</th>
-              <th style="padding: 14px 16px; text-align: left; border-bottom: 1px solid #e2e8f0; font-weight: 600;">檔案名稱</th>
-              <th style="padding: 14px 16px; text-align: left; border-bottom: 1px solid #e2e8f0; font-weight: 600;">選擇公司</th>
-              <th style="padding: 14px 16px; text-align: left; border-bottom: 1px solid #e2e8f0; font-weight: 600;">職缺</th>
-              <th style="padding: 14px 16px; text-align: left; border-bottom: 1px solid #e2e8f0; font-weight: 600;">狀態</th>
-              <th style="padding: 14px 16px; text-align: left; border-bottom: 1px solid #e2e8f0; font-weight: 600;" id="commentHeader">留言</th>
-              <th style="padding: 14px 16px; text-align: left; border-bottom: 1px solid #e2e8f0; font-weight: 600;">操作</th>
+              <th style="padding: 14px 16px; font-weight: 600;">學生帳號</th>
+              <th style="padding: 14px 16px; font-weight: 600;">姓名</th>
+              <th style="padding: 14px 16px; font-weight: 600;">上傳時間</th>
+              <th style="padding: 14px 16px; font-weight: 600;">檔案名稱</th>
+              <th style="padding: 14px 16px; font-weight: 600;">選擇公司</th>
+              <th style="padding: 14px 16px; font-weight: 600;">職缺</th>
+              <th style="padding: 14px 16px; font-weight: 600;">狀態</th>
+              <th style="padding: 14px 16px; font-weight: 600;" id="commentHeader">留言</th>
+              <th style="padding: 14px 16px; font-weight: 600;">操作</th>
             </tr>
           </thead>
           <tbody id="resumeTableBody">
-              <tr>
-                <td colspan="9" style="padding: 14px 16px; text-align: center; color: #64748b; border-bottom: 1px solid #e2e8f0;">載入中...</td>
-              </tr>
+            <tr><td colspan="9" style="padding: 14px 16px; text-align: center; color: #64748b;">載入中...</td></tr>
           </tbody>
         </table>
       </div>
-
-        <nav>
-          <ul class="pagination justify-content-center mt-3" id="pagination"></ul>
-        </nav>
+      <nav><ul class="pagination justify-content-center mt-3" id="pagination"></ul></nav>
     </section>
   </main>
 
-    <div class="modal fade" id="commentModal" tabindex="-1" aria-hidden="true">
-      <div class="modal-dialog modal-lg modal-dialog-centered">
-        <div class="modal-content">
-          <div class="modal-header">
-            <h5 class="modal-title" id="commentModalLabel">編輯留言</h5>
-            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-          </div>
-          <div class="modal-body">
-            <textarea id="commentInput"></textarea>
-          </div>
-          <div class="modal-footer">
-            <button class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
-            <button class="btn btn-primary" id="saveCommentBtn">送出</button>
-          </div>
+  <div class="modal fade" id="commentModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="commentModalLabel">編輯留言</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body"><textarea id="commentInput"></textarea></div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+          <button class="btn btn-primary" id="saveCommentBtn">送出</button>
         </div>
       </div>
     </div>
+  </div>
 
-    <nav id="side-menu" aria-hidden="true" role="navigation" aria-label="功能選單">
-      <button id="close-btn" aria-label="關閉功能選單">×</button>
-      <h2>功能選單</h2>
-      <div id="menu-content">
-        </div>
-    </nav>
+  <nav id="side-menu" aria-hidden="true">
+    <button id="close-btn">×</button>
+    <h2>功能選單</h2>
+    <div id="menu-content"></div>
+  </nav>
 
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    <script>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script>
+    let allResumes = [];
+    let currentResumeId = null;
+    let currentPreferenceId = null; 
+    let currentPage = 1;
+    const rowsPerPage = 10;
+    let userRole = null;
+    let isHomeroom = false;
+    let currentUserId = null;
 
-      let allResumes = [];
-      let currentResumeId = null;
-      let currentPreferenceId = null; // 儲存當前的 preference_id（用於廠商審核）
-      let currentPage = 1;
-      const rowsPerPage = 10;
-      let userRole = null; // 儲存用戶角色
-      let isHomeroom = false; // 儲存是否為班導師
+    // 定義狀態顏色，approved 對應 success (綠色)
+    function statusColor(status) {
+      return { 'pending': 'info', 'approved': 'success', 'rejected': 'danger', 'submitted': 'info', 'uploaded': 'info' }[status] || 'secondary';
+    }
 
-      // ------------------------------------
-      // 狀態轉換函式 (已修正：統一使用 pending 作為待審核狀態)
-      // ------------------------------------
+    // 定義狀態文字，approved 對應 "通過"
+    function mapStatus(status) {
+      return { 'pending': '待審核', 'approved': '通過', 'rejected': '退件', 'submitted': '待審核', 'uploaded': '待審核' }[status] || '待審核';
+    }
 
-      /**
-       * 根據履歷狀態返回對應的 Bootstrap 顏色類別。
-       * status: 'pending', 'approved', 'rejected'
-       */
-      function statusColor(status) {
-        return {
-          'pending': 'info',       // 待審核 (藍色)
-          'approved': 'success',     // 通過 (綠色)
-          'rejected': 'danger',      // 退件 (紅色)
-          // 兼容舊狀態
-          'submitted': 'info',
-          'uploaded': 'info'
-        }[status] || 'secondary'; // 未知使用灰色
-      }
+    function escapeHtml(text) {
+      if (text === null || text === undefined) return '';
+      return String(text).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+    }
 
-      /**
-       * 將履歷狀態碼轉換為中文顯示名稱。
-       * status: 'pending', 'approved', 'rejected'
-       */
-      function mapStatus(status) {
-        return {
-          'pending': '待審核',      // 廠商視角：待審核
-          'approved': '通過',
-          'rejected': '退件',
-          // 兼容舊狀態
-          'submitted': '待審核',
-          'uploaded': '待審核'
-        }[status] || '未知';
-      }
+    document.addEventListener("DOMContentLoaded", () => {
+      const urlParams = new URLSearchParams(window.location.search);
+      const targetCompanyId = urlParams.get('company_id');
+      const targetStatus = urlParams.get('status');
 
-      // ------------------------------------
-      // DOMContentLoaded 載入與事件綁定
-      // ------------------------------------
+      fetch('/api/profile')
+        .then(res => res.json())
+        .then(profileData => {
+          userRole = profileData.success && profileData.user ? profileData.user.role : 'teacher';
+          currentUserId = profileData.success && profileData.user ? profileData.user.id : null;
+          isHomeroom = profileData.success && profileData.user ? profileData.user.is_homeroom : false;
+          renderMenu();
 
-      let currentUserId = null; // 儲存當前用戶 ID
-
-      document.addEventListener("DOMContentLoaded", () => {
-        // 先獲取用戶角色，根據角色調用不同的 API
-        fetch('/api/profile')
-          .then(res => res.json())
-          .then(profileData => {
-            userRole = profileData.success && profileData.user ? profileData.user.role : null;
-            currentUserId = profileData.success && profileData.user ? profileData.user.id : null;
-            isHomeroom = profileData.success && profileData.user ? (profileData.user.is_homeroom === true) : false;
-            
-            // 根據角色生成選單
-            renderMenu();
-            
-            let apiUrl;
-            let companyApiUrl = '/api/get_reviewed_companies';
-            
-            // 根據角色選擇不同的 API
-            if (userRole === 'vendor') {
-              // 廠商：調用廠商專用的履歷 API
-              apiUrl = '/vendor/api/resumes';
-            } else {
-              // 老師/其他角色：使用原有的 API
-              const urlParams = new URLSearchParams(window.location.search);
-              const mode = urlParams.get('mode');
-              const companyId = urlParams.get('company_id');
-              // 構建 API URL，包含 mode 和 company_id 參數
-              const params = [];
-              if (mode) params.push(`mode=${encodeURIComponent(mode)}`);
-              if (companyId) params.push(`company_id=${encodeURIComponent(companyId)}`);
-              apiUrl = params.length > 0 
-                ? `/api/get_class_resumes?${params.join('&')}` 
-                : `/api/get_class_resumes`;
-            }
-            
-            // 檢查是否有 company_id 參數，如果有則獲取該公司的職缺
-            const urlParamsForJobs = new URLSearchParams(window.location.search);
-            const companyIdParam = urlParamsForJobs.get('company_id');
-            
-            // 載入履歷資料
-            Promise.all([
-              fetch(apiUrl).then(async res => {
-                if (!res.ok) {
-                  const errorText = await res.text();
-                  let errorMessage = "伺服器錯誤";
-                  try {
-                    const errorJson = JSON.parse(errorText);
-                    errorMessage = errorJson.message || errorMessage;
-                  } catch (e) {
-                    errorMessage = `HTTP ${res.status}: ${errorText.substring(0, 100)}`;
-                  }
-                  return {success: false, message: errorMessage};
-                }
-                return res.json();
-              }),
-              userRole === 'vendor' ? Promise.resolve({success: true, companies: []}) : fetch(companyApiUrl).then(async res => {
-                if (!res.ok) {
-                  return {success: true, companies: []};
-                }
-                return res.json();
-              }),
-              // 如果有 company_id 參數，獲取該公司的職缺；否則使用原有邏輯
-              userRole === 'vendor' ? fetch('/vendor/api/positions').then(async res => {
-                if (!res.ok) {
-                  return {success: true, items: []};
-                }
-                return res.json();
-              }) : (companyIdParam ? fetch(`/api/public/company/${companyIdParam}`).then(async res => {
-                if (!res.ok) {
-                  return {success: true, items: []};
-                }
-                const result = await res.json();
-                // 將職缺資料轉換為與 vendor API 相同的格式
-                if (result.success && result.jobs) {
-                  return {
-                    success: true,
-                    items: result.jobs.map(job => ({
-                      id: job.id,
-                      title: job.title
-                    }))
-                  };
-                }
-                return {success: true, items: []};
-              }) : Promise.resolve({success: true, items: []}))
-            ])
-              .then(([resumeData, companyData, positionData]) => {
-                if (resumeData.success) {
-                  allResumes = resumeData.resumes || [];
-                  
-                  // 如果是廠商，處理狀態：確保未審核的履歷顯示為「待審核」
-                  if (userRole === 'vendor') {
-                    // 更新表格標題為「廠商留言」
-                    const commentHeader = document.getElementById('commentHeader');
-                    if (commentHeader) {
-                      commentHeader.textContent = '廠商留言';
-                    }
-                    
-                    allResumes = allResumes.map(resume => {
-                      // 對於廠商來說，如果 preference_id 存在（表示有志願序），需要檢查狀態
-                      if (resume.preference_id) {
-                        // 如果狀態是 'approved'，檢查是否有審核標記
-                        // 如果沒有 reviewed_at 且沒有 comment（廠商審核備註），視為未審核
-                        if (resume.status === 'approved') {
-                          const hasVendorReview = resume.reviewed_at || resume.comment;
-                          if (!hasVendorReview) {
-                            console.log(`⚠️ 履歷 ${resume.id} (學生: ${resume.name}) 狀態為 'approved' 但沒有廠商審核標記，強制改為 'pending'`);
-                            resume.status = 'pending';
-                          }
-                        }
-                        // 如果狀態不是 'approved' 或 'rejected'，確保是 'pending'
-                        if (resume.status !== 'approved' && resume.status !== 'rejected') {
-                          resume.status = 'pending';
-                        }
-                      } else {
-                        // 如果沒有 preference_id，狀態應該是 'pending'（待審核）
-                        resume.status = 'pending';
-                      }
-                      // 確保狀態有效，無效狀態改為 'pending'
-                      if (!resume.status || !['pending', 'approved', 'rejected'].includes(resume.status)) {
-                        resume.status = 'pending';
-                      }
-                      // 廠商角色時，comment 已經是廠商留言（從後端 API 返回）
-                      return resume;
-                    });
-                  }
-                  
-                  // 如果是廠商，從 API 返回的 companies 中獲取公司列表
-                  if (userRole === 'vendor' && resumeData.companies) {
-                    companyData = {success: true, companies: resumeData.companies};
-                    // 進一步保險：僅保留屬於該廠商公司的履歷
-                    const allowedCompanyIds = (resumeData.companies || []).map(c => c.id).filter(id => id);
-                    const allowedCompanyNames = (resumeData.companies || []).map(c => c.name && c.name.trim()).filter(Boolean);
-                    if (allowedCompanyIds.length || allowedCompanyNames.length) {
-                      allResumes = allResumes.filter(r => {
-                        const cid = r.company_id;
-                        const cname = (r.company_name || '').trim();
-                        const idMatch = allowedCompanyIds.length ? (cid && allowedCompanyIds.includes(cid)) : true;
-                        const nameMatch = allowedCompanyNames.length ? allowedCompanyNames.includes(cname) : true;
-                        return idMatch && nameMatch;
-                      });
-                    }
-                    // 更新標題，明確顯示這是該廠商自己的公司和職缺
-                    const resumeListTitle = document.getElementById('resumeListTitle');
-                    if (resumeListTitle) {
-                      resumeListTitle.textContent = '選擇我公司的學生履歷';
-                    }
-                  }
-                  
-                  // 如果是指導老師，過濾出他們管理的公司
-                  if ((userRole === 'teacher' || userRole === 'class_teacher') && companyData && companyData.success && companyData.companies && currentUserId) {
-                    companyData.companies = companyData.companies.filter(company => {
-                      // 檢查 advisor_user_id 是否匹配當前指導老師
-                      return company.advisor_user_id === currentUserId;
-                    });
-                  }
-                  
-                  populateFilters(allResumes, companyData, positionData);
-                  // 從 URL 參數讀取狀態並設置篩選器
-                  const urlParams = new URLSearchParams(window.location.search);
-                  const statusParam = urlParams.get('status');
-                  const companyIdParam = urlParams.get('company_id');
-                  
-                  // 如果有 company_id 參數，需要根據廠商的審核狀態來更新履歷狀態
-                  if (companyIdParam) {
-                    // 更新表格標題為「廠商留言」
-                    const commentHeader = document.getElementById('commentHeader');
-                    if (commentHeader) {
-                      commentHeader.textContent = '廠商留言';
-                    }
-                    
-                    // 獲取廠商已審核的學生列表
-                    fetch(`/api/public/company/${companyIdParam}/vendor-reviewed-students`)
-                      .then(res => res.json())
-                      .then(vendorResult => {
-                        // 建立廠商審核狀態和留言映射
-                        const vendorReviewStatusMap = new Map();
-                        const vendorCommentMap = new Map();
-                        if (vendorResult.success && vendorResult.students) {
-                          vendorResult.students.forEach(s => {
-                            vendorReviewStatusMap.set(s.student_id, s.vendor_review_status);
-                            if (s.vendor_comment) {
-                              vendorCommentMap.set(s.student_id, s.vendor_comment);
-                            }
-                          });
-                        }
-                        
-                        // 更新履歷的顯示狀態為廠商審核狀態
-                        // 只保留指導老師已通過的履歷（只有這些會送到廠商）
-                        allResumes = allResumes.filter(r => {
-                          // 只顯示指導老師已通過的履歷
-                          if (r.status !== 'approved') {
-                            return false; // 過濾掉指導老師還沒通過的履歷
-                          }
-                          
-                          const studentId = r.user_id || r.student_id;
-                          const vendorStatus = vendorReviewStatusMap.get(studentId);
-                          const vendorComment = vendorCommentMap.get(studentId);
-                          
-                          // 設置廠商留言
-                          if (vendorComment) {
-                            r.vendor_comment = vendorComment;
-                            r.comment = vendorComment; // 用於顯示
-                          } else {
-                            r.vendor_comment = null;
-                            r.comment = null; // 清除老師留言，因為這裡顯示的是廠商留言
-                          }
-                          
-                          if (vendorStatus) {
-                            // 如果廠商已審核，使用廠商的審核狀態
-                            r.vendor_review_status = vendorStatus;
-                            r.display_status = vendorStatus; // 用於顯示的狀態
-                          } else {
-                            // 如果廠商尚未審核，但指導老師已通過，則為「待審核」
-                            r.vendor_review_status = 'pending';
-                            r.display_status = 'pending';
-                          }
-                          
-                          return true; // 保留此履歷
-                        });
-                        
-                        // 設置狀態篩選器
-                        if (statusParam) {
-                          const statusFilter = document.getElementById('statusFilter');
-                          if (statusFilter) {
-                            // 將 submitted/uploaded 映射到 pending（待廠商審核）
-                            const mappedStatus = (statusParam === 'submitted' || statusParam === 'uploaded') ? 'pending' : statusParam;
-                            statusFilter.value = mappedStatus;
-                          }
-                        }
-                        applyFilters();
-                      })
-                      .catch(err => {
-                        console.error('獲取廠商審核結果失敗:', err);
-                        // 如果獲取失敗，使用原有邏輯
-                        if (statusParam) {
-                          const statusFilter = document.getElementById('statusFilter');
-                          if (statusFilter) {
-                            const mappedStatus = (statusParam === 'submitted' || statusParam === 'uploaded') ? 'pending' : statusParam;
-                            statusFilter.value = mappedStatus;
-                          }
-                        }
-                        applyFilters();
-                      });
-                  } else if (userRole === 'vendor') {
-                    // 如果是廠商角色，也顯示「廠商留言」
-                    const commentHeader = document.getElementById('commentHeader');
-                    if (commentHeader) {
-                      commentHeader.textContent = '廠商留言';
-                    }
-                    // 沒有 company_id 參數，使用原有邏輯
-                    if (statusParam) {
-                      const statusFilter = document.getElementById('statusFilter');
-                      if (statusFilter) {
-                        const mappedStatus = (statusParam === 'submitted' || statusParam === 'uploaded') ? 'pending' : statusParam;
-                        statusFilter.value = mappedStatus;
-                      }
-                    }
-                    applyFilters();
-                  } else {
-                    // 其他角色（老師等），沒有 company_id 參數，顯示所有資料
-                    if (statusParam) {
-                      const statusFilter = document.getElementById('statusFilter');
-                      if (statusFilter) {
-                        const mappedStatus = (statusParam === 'submitted' || statusParam === 'uploaded') ? 'pending' : statusParam;
-                        statusFilter.value = mappedStatus;
-                      }
-                    }
-                    // 確保顯示所有資料
-                    applyFilters();
-                  }
-                } else {
-                  alert("載入資料失敗：" + (resumeData.message || "未知錯誤"));
-                }
-              })
-              .catch(error => {
-                console.error("API調用錯誤:", error);
-                alert("載入資料失敗，請檢查網路連線");
-              });
-          })
-          .catch(error => {
-            console.error("獲取用戶資料失敗:", error);
-            // 如果獲取用戶資料失敗，預設為老師角色
-            userRole = 'teacher';
-            isHomeroom = false;
-            // 根據角色生成選單
-            renderMenu();
-            // 如果獲取用戶資料失敗，使用預設 API
-            const urlParams = new URLSearchParams(window.location.search);
-            const mode = urlParams.get('mode');
-            const apiUrl = mode ? `/api/get_class_resumes?mode=${encodeURIComponent(mode)}` : `/api/get_class_resumes`;
-            
-            Promise.all([
-              fetch(apiUrl).then(res => res.json()),
-              fetch('/api/get_reviewed_companies').then(res => res.json()),
-              Promise.resolve({success: true, items: []}) // 備用方案：空的職缺資料
-            ])
-              .then(([resumeData, companyData, positionData]) => {
-                if (resumeData.success) {
-                  allResumes = resumeData.resumes;
-                  populateFilters(allResumes, companyData, positionData);
-                  // 從 URL 參數讀取狀態並設置篩選器
-                  const urlParams = new URLSearchParams(window.location.search);
-                  const statusParam = urlParams.get('status');
-                  if (statusParam) {
-                    const statusFilter = document.getElementById('statusFilter');
-                    if (statusFilter) {
-                      const mappedStatus = (statusParam === 'submitted' || statusParam === 'uploaded') ? 'pending' : statusParam;
-                      statusFilter.value = mappedStatus;
-                    }
-                  }
-                  applyFilters();
-                } else {
-                  alert("載入資料失敗：" + (resumeData.message || "未知錯誤"));
-                }
-              })
-              .catch(err => {
-                console.error("API調用錯誤:", err);
-                alert("載入資料失敗，請檢查網路連線");
-              });
-          });
-
-        // 綁定篩選事件
-        document.getElementById("departmentFilter").addEventListener("change", applyFilters);
-        document.getElementById("classFilter").addEventListener("change", applyFilters);
-        document.getElementById("companyFilter").addEventListener("change", applyFilters);
-        document.getElementById("statusFilter").addEventListener("change", applyFilters);
-        document.getElementById("searchBox").addEventListener("input", applyFilters);
-        document.getElementById("saveCommentBtn").addEventListener("click", saveComment); // 綁定 "儲存留言"
-
-        // 側邊選單控制
-        document.getElementById('menu-btn').addEventListener('click', () => {
-          document.getElementById('side-menu').classList.add('open');
-          document.getElementById('side-menu').setAttribute('aria-hidden', 'false');
-        });
-
-        document.getElementById('close-btn').addEventListener('click', () => {
-          document.getElementById('side-menu').classList.remove('open');
-          document.getElementById('side-menu').setAttribute('aria-hidden', 'true');
-        });
-
-        // 點擊選單外部關閉選單
-        document.addEventListener('click', (e) => {
-          const sideMenu = document.getElementById('side-menu');
-          const menuBtn = document.getElementById('menu-btn');
-          if (sideMenu && menuBtn) {
-            if (!sideMenu.contains(e.target) && !menuBtn.contains(e.target) && sideMenu.classList.contains('open')) {
-              sideMenu.classList.remove('open');
-              sideMenu.setAttribute('aria-hidden', 'true');
-            }
+          let apiUrl;
+          if (userRole === 'vendor') {
+            apiUrl = '/vendor/api/resumes';
+            const commentHeader = document.getElementById('commentHeader');
+            if (commentHeader) commentHeader.textContent = '廠商留言';
+          } else {
+             const params = [];
+             if (targetCompanyId) params.push(`company_id=${targetCompanyId}`);
+             apiUrl = params.length > 0 ? `/api/get_class_resumes?${params.join('&')}` : `/api/get_class_resumes`;
           }
+
+          Promise.all([
+            fetch(apiUrl).then(res => res.ok ? res.json() : {success:false}),
+            userRole === 'vendor' ? Promise.resolve({success:true, companies:[]}) : fetch('/api/get_reviewed_companies').then(res => res.ok ? res.json() : {success:true, companies:[]}),
+            userRole === 'vendor' ? fetch('/vendor/api/positions').then(res => res.ok ? res.json() : {success:true, items:[]}) : (targetCompanyId ? fetch(`/api/public/company/${targetCompanyId}`).then(async res => {
+               if(!res.ok) return {success:true, items:[]};
+               const r = await res.json();
+               return {success:true, items: (r.jobs||[]).map(j=>({id:j.id, title:j.title}))};
+            }) : Promise.resolve({success:true, items:[]}))
+          ]).then(([resumeData, companyData, positionData]) => {
+            if (resumeData.success) {
+              allResumes = resumeData.resumes || [];
+              populateFilters(allResumes, companyData, positionData);
+
+              if (targetStatus) {
+                 const statusSelect = document.getElementById('statusFilter');
+                 const mapped = (targetStatus === 'submitted' || targetStatus === 'uploaded') ? 'pending' : targetStatus;
+                 if(statusSelect) statusSelect.value = mapped;
+              }
+
+              applyFilters();
+            } else {
+              allResumes = [];
+              renderTable([]);
+            }
+          });
         });
+
+      document.getElementById("departmentFilter").addEventListener("change", applyFilters);
+      document.getElementById("classFilter").addEventListener("change", applyFilters);
+      document.getElementById("companyFilter").addEventListener("change", applyFilters);
+      document.getElementById("statusFilter").addEventListener("change", applyFilters);
+      document.getElementById("searchBox").addEventListener("input", applyFilters);
+      document.getElementById("saveCommentBtn").addEventListener("click", saveComment);
+      
+      const sideMenu = document.getElementById('side-menu');
+      document.getElementById('menu-btn').onclick = () => { sideMenu.classList.add('open'); sideMenu.setAttribute('aria-hidden', 'false'); };
+      document.getElementById('close-btn').onclick = () => { sideMenu.classList.remove('open'); sideMenu.setAttribute('aria-hidden', 'true'); };
+    });
+
+    function populateFilters(data, companyData, positionData) {
+      const deptSelect = document.getElementById("departmentFilter");
+      deptSelect.innerHTML = `<option value="">所有學年</option><option value="1132">1132</option><option value="1142">1142</option>`;
+      
+      const classSelect = document.getElementById("classFilter");
+      classSelect.innerHTML = `<option value="">所有班級</option>`;
+      const classSet = new Set();
+      data.forEach(r => { if(r.className) classSet.add(r.className); });
+      classSet.add("忠班"); classSet.add("孝班");
+      Array.from(classSet).sort().forEach(c => {
+         if(c !== '五孝') classSelect.innerHTML += `<option value="${c}">${c}</option>`;
       });
 
-      // ------------------------------------
-      // 篩選與渲染函式
-      // ------------------------------------
-
-      function populateFilters(data, companyData, positionData) {
-        const classSet = new Set();
-
-        data.forEach(r => {
-          if (r.className) classSet.add(r.className);
-        });
-        
-        classSet.add("忠班");
-        classSet.add("孝班");
-
-        const deptSelect = document.getElementById("departmentFilter");
-        const classSelect = document.getElementById("classFilter");
-        const companySelect = document.getElementById("companyFilter");
-
-        // 固定顯示 1132 和 1142 作為學年選項
-        deptSelect.innerHTML = `<option value="">所有學年</option>`;
-        const semesters = ['1132', '1142'];
-        semesters.forEach(semester => {
-          const option = document.createElement("option");
-          option.value = semester;
-          option.textContent = semester;
-          deptSelect.appendChild(option);
-        });
-
-        classSelect.innerHTML = `<option value="">所有班級</option>`;
-        companySelect.innerHTML = `<option value="">所有職缺</option>`;
-
-        Array.from(classSet).sort().forEach(c => {
-          if (c === '五孝') return;
-          const option = document.createElement("option");
-          option.value = c;
-          option.textContent = c;
-          classSelect.appendChild(option);
-        });
-
-        // 填充職缺篩選器
-        let hasJobs = false;
-        
-        // 從職缺 API 獲取職缺列表（如果是廠商）
-        if (positionData && positionData.success && positionData.items && Array.isArray(positionData.items) && positionData.items.length > 0) {
-          console.log("從職缺 API 填充，數量:", positionData.items.length);
+      const companySelect = document.getElementById("companyFilter");
+      companySelect.innerHTML = `<option value="">所有職缺</option>`;
+      
+      if (positionData && positionData.items && positionData.items.length > 0) {
           positionData.items.forEach(job => {
-            if (job.title && job.title.trim()) {
-              const option = document.createElement("option");
-              option.value = job.id;
-              option.textContent = job.title;
-              companySelect.appendChild(option);
-              hasJobs = true;
-            }
+              companySelect.innerHTML += `<option value="${job.id}">${escapeHtml(job.title)}</option>`;
           });
-        }
-        
-        // 備用方案：從履歷資料中提取「職缺名稱」（去掉公司名稱）
-        if (!hasJobs && data.length > 0) {
-          console.log("從履歷資料中提取職缺名稱");
-          const jobNameSet = new Set();
+      } else {
+          const jobSet = new Set();
           data.forEach(r => {
-            const jobTitle = r.job_title || r.jobTitle;
-            if (jobTitle && jobTitle.trim()) {
-              const individualJobs = jobTitle.split(' | ').map(j => j.trim()).filter(j => j);
-              individualJobs.forEach(job => {
-                const parts = job.split(' - ');
-                const jobNameOnly = parts.length > 1 ? parts[1] : job;
-                if (jobNameOnly && jobNameOnly.trim()) {
-                  jobNameSet.add(jobNameOnly.trim());
-                }
-              });
-            }
-          });
-          
-          if (jobNameSet.size > 0) {
-            console.log("從履歷中找到的職缺名稱:", Array.from(jobNameSet));
-            Array.from(jobNameSet).sort().forEach(jobName => {
-              const option = document.createElement("option");
-              option.value = jobName;
-              option.textContent = jobName;
-              companySelect.appendChild(option);
-              hasJobs = true;
-            });
-          }
-        }
-        
-        // 如果還是沒有職缺，顯示提示
-        if (!hasJobs) {
-          console.warn("⚠️ 沒有找到職缺資料");
-          console.warn("可能的原因：");
-          console.warn("1. 尚未建立任何職缺");
-          console.warn("2. 沒有學生填寫志願序");
-          console.warn("3. 履歷資料中沒有職缺資訊");
-          
-          // 在控制台顯示更多調試信息
-          if (data.length > 0) {
-            console.log("履歷範例:", data[0]);
-          } else {
-            console.warn("⚠️ 也沒有找到任何履歷資料");
-          }
-        }
-      }
-
-      function applyFilters() {
-        currentPage = 1;
-        const dept = document.getElementById("departmentFilter").value.trim();
-        const cls = document.getElementById("classFilter").value.trim();
-        const jobFilter = document.getElementById("companyFilter").value.trim(); // 使用職缺篩選
-        const status = document.getElementById("statusFilter").value.trim();
-        const keyword = document.getElementById("searchBox").value.trim().toLowerCase();
-
-        const filtered = allResumes.filter(r => {
-          const matchesDept = !dept || r.department === dept;
-          const matchesClass = !cls || r.className === cls;
-          
-          // 職缺篩選：根據職缺 ID 或「職缺名稱」匹配
-          let matchJob = true;
-          if (jobFilter) {
-            const jobTitle = r.job_title || r.jobTitle || '';
-            const jobId = r.job_id || r.jobId;
-            // 如果篩選值是數字，則匹配 job_id；否則匹配「職缺名稱」
-            const filterIsNumeric = /^\d+$/.test(jobFilter);
-            
-            // 由於原始數據可能有多個職缺，用 ' | ' 分隔，需檢查任一職缺名稱
-            const jobTitles = jobTitle.split(' | ').filter(j => j.trim());
-            
-            if (filterIsNumeric) {
-              // 如果是數字，匹配 ID
-              matchJob = jobId && String(jobId) === jobFilter;
-            } else {
-              // 如果是字串，解析出「職缺名稱」後再比對
-              const jobNames = jobTitles.map(jt => {
-                const parts = jt.split(' - ');
-                return (parts.length > 1 ? parts[1] : jt).trim();
-              });
-              matchJob = jobNames.includes(jobFilter.trim());
-            }
-            
-            // 如果都沒有，且沒有匹配到
-            if (jobTitle === '' && jobFilter !== '') {
-                matchJob = false;
-            }
-          }
-          
-          // 狀態匹配：如果有 company_id，使用廠商審核狀態；否則使用履歷狀態
-          let matchesStatus = true;
-          if (status) {
-            // 如果有 company_id 參數，使用廠商的審核狀態（display_status）
-            const urlParams = new URLSearchParams(window.location.search);
-            const companyIdParam = urlParams.get('company_id');
-            if (companyIdParam && r.display_status !== undefined) {
-              matchesStatus = r.display_status === status;
-            } else {
-              // 沒有 company_id 或沒有 display_status，使用原有邏輯
-              matchesStatus = r.status === status;
-            }
-          }
-          
-          const matchesKeyword =
-            (r.username && r.username.toLowerCase().includes(keyword)) ||
-            (r.original_filename && r.original_filename.toLowerCase().includes(keyword));
-
-          return matchesDept && matchesClass && matchJob && matchesStatus && matchesKeyword;
-        });
-
-        renderTable(filtered);
-      }
-
-      function renderTable(resumes) {
-        const tbody = document.getElementById("resumeTableBody");
-        tbody.innerHTML = "";
-
-        if (resumes.length === 0) {
-          tbody.innerHTML = `<tr><td colspan="9" style="padding: 14px 16px; text-align: center; color: #64748b;">目前沒有資料</td></tr>`;
-          document.getElementById("pagination").innerHTML = "";
-          return;
-        }
-
-        // 檢查是否有 company_id 參數，如果有則隱藏操作按鈕（僅供查看）
-        const urlParams = new URLSearchParams(window.location.search);
-        const companyIdParam = urlParams.get('company_id');
-        const isViewOnly = !!companyIdParam; // 如果有 company_id，則為僅查看模式
-
-        // --- 核心修改部分：將多個投遞拆分為獨立的行數據 ---
-        let allRowsData = [];
-
-        resumes.forEach(r => {
-          const companyNameStr = r.company_name || '';
-          const jobTitleStr = r.job_title || r.jobTitle || '';
-          
-          // 拆分公司和職缺
-          const companies = companyNameStr.split(' | ').filter(c => c.trim());
-          const jobTitles = jobTitleStr.split(' | ').filter(j => j.trim());
-          
-          // 確定要遍歷的次數 (取兩者中較大者，但理想情況下應該一樣長)
-          const maxCount = Math.max(companies.length, jobTitles.length);
-          
-          if (maxCount === 0 && !r.preference_id) {
-             // 如果沒有志願序資訊 (例如：純粹上傳履歷但未投遞)，仍保留一行
-             allRowsData.push({
-                 ...r,
-                 display_company: '<span style="color: #64748b;">—</span>',
-                 display_job: '<span style="color: #64748b;">—</span>',
-                 isMultiRow: true // 標記為獨立行 (視為該學生唯一的一行)
+             const titles = (r.job_title || r.jobTitle || '').split(' | ');
+             titles.forEach(t => { 
+                 const parts = t.split(' - ');
+                 if(parts.length > 1) jobSet.add(parts[1].trim());
+                 else if(t.trim()) jobSet.add(t.trim());
              });
-          } else {
-            // 針對每一個投遞記錄，生成一個獨立的行數據
-            for (let i = 0; i < maxCount; i++) {
-              // 獲取當前的公司名稱
-              const currentCompanyName = companies[i] ? escapeHtml(companies[i]) : '<span style="color: #64748b;">—</span>';
-              
-              // 獲取當前的職缺名稱，並提取出職缺標題
-              let currentJobTitle = jobTitles[i] ? jobTitles[i] : '';
-              if (currentJobTitle) {
-                  const parts = currentJobTitle.split(' - ');
-                  // 取 ' - ' 後的部分作為職缺名稱
-                  currentJobTitle = parts.length > 1 ? escapeHtml(parts[1]) : escapeHtml(currentJobTitle); 
-              } else {
-                  currentJobTitle = '<span style="color: #64748b;">—</span>';
-              }
-              
-              allRowsData.push({
-                ...r,
-                // 為每一行設置獨立的公司和職缺顯示值
-                display_company: currentCompanyName,
-                display_job: currentJobTitle,
-                // 標記是否為多行記錄的首行，這很重要
-                isMultiRow: i === 0 
-              });
-            }
-          }
-        });
-        
-        // --- 結束核心修改部分 ---
-
-        const start = (currentPage - 1) * rowsPerPage;
-        const end = start + rowsPerPage;
-        const pageData = allRowsData.slice(start, end); // 使用拆分後的數據進行分頁
-
-        pageData.forEach(r => {
-          const preferenceId = r.preference_id || null;
-          
-          // 改為每一行都完整顯示資料，方便對照
-          const showMainInfo = true; 
-          
-          // 渲染邏輯
-          const row = `
-            <tr style="border-bottom: 1px solid #e2e8f0;">
-              <td style="padding: 14px 16px; vertical-align: middle; white-space: nowrap;">${showMainInfo ? r.username : ''}</td>
-              <td style="padding: 14px 16px; vertical-align: middle; white-space: nowrap;">${showMainInfo ? escapeHtml(r.name || '') : ''}</td>
-              <td style="padding: 14px 16px; vertical-align: middle; white-space: nowrap;">${showMainInfo ? r.upload_time : ''}</td>
-              <td style="padding: 14px 16px; vertical-align: middle; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 300px;">${showMainInfo ? escapeHtml(r.original_filename) : ''}</td>
-              
-              <td style="padding: 14px 16px; vertical-align: top; max-width: 300px;">${r.display_company}</td>
-              <td style="padding: 14px 16px; vertical-align: top; max-width: 300px;">${r.display_job}</td>
-              
-              <td style="padding: 14px 16px; vertical-align: middle; white-space: nowrap;">
-                ${showMainInfo ? `<span class="status-badge bg-${statusColor(r.display_status || r.status)}">${mapStatus(r.display_status || r.status)}</span>` : ''}
-              </td>
-              <td style="padding: 14px 16px; vertical-align: middle; white-space: nowrap;">
-                ${showMainInfo ? 
-                  (isViewOnly ? 
-                    // 僅查看模式：顯示留言狀態，可以點擊查看內容
-                    r.comment ? 
-                      `<button class="btn btn-sm btn-outline-secondary text-success"
-                        onclick="openCommentModal(${r.id}, '${escapeHtml(r.comment || '')}', null)"
-                        style="padding: 6px 12px; border-radius: 6px; border: 1px solid #e2e8f0; background: #fff; cursor: pointer; font-size: 0.875rem; color: #16a34a;">
-                        已填寫
-                      </button>` :
-                      `<span style="padding: 6px 12px; border-radius: 6px; border: 1px solid #e2e8f0; background: #f5f5f5; color: #64748b; font-size: 0.875rem;">
-                        未填寫
-                      </span>` :
-                    // 正常模式：可以編輯留言
-                    `<button class="btn btn-sm btn-outline-secondary ${r.comment ? 'text-success' : ''}"
-                      onclick="openCommentModal(${r.id}, '${escapeHtml(r.comment || '')}', ${r.preference_id ? r.preference_id : 'null'})"
-                      style="padding: 6px 12px; border-radius: 6px; border: 1px solid #e2e8f0; background: #fff; cursor: pointer; font-size: 0.875rem;">
-                      ${r.comment ? '已填寫' : '未填寫'}
-                    </button>`
-                  ) : ''}
-              </td>
-              <td style="padding: 14px 16px; vertical-align: middle; white-space: nowrap;">
-                ${showMainInfo ? 
-                  (isViewOnly ? 
-                    // 僅查看模式：只顯示下載按鈕
-                    `<a href="/api/download_resume/${r.id}" style="padding: 6px 12px; border-radius: 6px; border: 1px solid #0066cc; background: #fff; color: #0066cc; text-decoration: none; font-size: 0.875rem; display: inline-block;" target="_blank">下載</a>` :
-                    // 正常模式：顯示所有操作按鈕
-                    `<div style="display: flex; gap: 8px; flex-wrap: nowrap;">
-                      <a href="/api/download_resume/${r.id}" style="padding: 6px 12px; border-radius: 6px; border: 1px solid #0066cc; background: #fff; color: #0066cc; text-decoration: none; font-size: 0.875rem; display: inline-block;" target="_blank">下載</a>
-                      <button type="button" style="padding: 6px 12px; border-radius: 6px; border: 1px solid #dc2626; background: #fff; color: #dc2626; cursor: pointer; font-size: 0.875rem;" onclick="rejectResume(${r.id}, ${preferenceId ? preferenceId : 'null'})">退件</button>
-                      <button type="button" style="padding: 6px 12px; border-radius: 6px; border: 1px solid #16a34a; background: #fff; color: #16a34a; cursor: pointer; font-size: 0.875rem;" onclick="approveResume(${r.id}, ${preferenceId ? preferenceId : 'null'})">完成</button>
-                    </div>`
-                  ) : ''}
-              </td>
-            </tr>`;
-          tbody.innerHTML += row;
-        });
-
-        renderPagination(allRowsData.length); // 注意：分頁使用 allRowsData 的總長度
-      }
-
-      function renderPagination(totalItems) {
-        const totalPages = Math.ceil(totalItems / rowsPerPage);
-        const pagination = document.getElementById("pagination");
-        pagination.innerHTML = "";
-
-        if (totalPages <= 1) return;
-
-        for (let i = 1; i <= totalPages; i++) {
-          const li = document.createElement("li");
-          li.className = `page-item ${i === currentPage ? "active" : ""}`;
-          li.innerHTML = `<a class="page-link" href="#">${i}</a>`;
-          li.addEventListener("click", (e) => {
-            e.preventDefault();
-            currentPage = i;
-            applyFilters();
           });
-          pagination.appendChild(li);
+          Array.from(jobSet).sort().forEach(j => companySelect.innerHTML += `<option value="${j}">${j}</option>`);
+      }
+    }
+
+    function applyFilters() {
+      currentPage = 1;
+      const dept = document.getElementById("departmentFilter").value.trim();
+      const cls = document.getElementById("classFilter").value.trim();
+      const jobFilter = document.getElementById("companyFilter").value.trim();
+      const status = document.getElementById("statusFilter").value.trim();
+      const keyword = document.getElementById("searchBox").value.trim().toLowerCase();
+      
+      const urlParams = new URLSearchParams(window.location.search);
+      const isCompanyView = !!urlParams.get('company_id');
+
+      const filtered = allResumes.filter(r => {
+        const matchesDept = !dept || r.department === dept;
+        const matchesClass = !cls || r.className === cls;
+        const matchesKeyword = (r.username && r.username.toLowerCase().includes(keyword)) ||
+                               (r.original_filename && r.original_filename.toLowerCase().includes(keyword));
+        
+        let matchesJob = true;
+        if (jobFilter) {
+            const jobs = (r.job_title || r.jobTitle || '').toLowerCase();
+            matchesJob = jobs.includes(jobFilter.toLowerCase()) || (r.job_id && String(r.job_id) === jobFilter);
         }
+
+        let matchesStatus = true;
+        if (status) {
+           const statusStr = isCompanyView ? (r.display_status || '') : (r.application_statuses || r.status || '');
+           matchesStatus = statusStr.includes(status);
+        }
+
+        return matchesDept && matchesClass && matchesJob && matchesStatus && matchesKeyword;
+      });
+
+      renderTable(filtered);
+    }
+
+    function renderTable(resumes) {
+      const tbody = document.getElementById("resumeTableBody");
+      tbody.innerHTML = "";
+      if (resumes.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="9" style="text-align: center; color: #64748b; padding: 16px;">目前沒有資料</td></tr>`;
+        document.getElementById("pagination").innerHTML = "";
+        return;
       }
 
-      function escapeHtml(text) {
-        if (text === null || text === undefined) return '';
-        return String(text)
-          .replace(/&/g, "&amp;")
-          .replace(/</g, "&lt;")
-          .replace(/>/g, "&gt;")
-          .replace(/"/g, "&quot;")
-          .replace(/'/g, "&#039;");
-      }
+      const urlParams = new URLSearchParams(window.location.search);
+      const isViewOnly = !!urlParams.get('company_id'); 
+      const filterStatus = document.getElementById("statusFilter").value.trim(); 
+      const filterJob = document.getElementById("companyFilter").value.trim(); 
 
-      // ------------------------------------
-      // 審核操作函式
-      // ------------------------------------
+      let allRowsData = [];
 
-      // 這是給老師單純編輯 'comment' 用的，不改變狀態
-      // 如果是廠商，也可以填寫廠商留言
-      // 如果是僅查看模式（isViewOnly），則只顯示留言內容，不可編輯
-      function openCommentModal(id, comment, preferenceId = null) {
-        currentResumeId = id;
-        currentPreferenceId = preferenceId; // 設置 preference_id（如果是廠商）
-        document.getElementById("commentInput").value = comment || '';
-        
-        // 檢查是否為僅查看模式
-        const urlParams = new URLSearchParams(window.location.search);
-        const companyIdParam = urlParams.get('company_id');
-        const isViewOnly = !!companyIdParam;
-        
-        // 如果是僅查看模式，禁用輸入框和保存按鈕
-        const commentInput = document.getElementById("commentInput");
-        const saveBtn = document.getElementById("saveCommentBtn");
-        if (isViewOnly) {
-          commentInput.readOnly = true;
-          commentInput.style.backgroundColor = '#f5f5f5';
-          saveBtn.style.display = 'none';
-          document.getElementById("commentModalLabel").textContent = "查看廠商留言";
+      resumes.forEach(r => {
+        const companyStr = r.company_name || '';
+        const jobStr = r.job_title || r.jobTitle || '';
+        const prefIdStr = r.preference_ids || (r.preference_id ? String(r.preference_id) : '');
+        const statusStr = r.application_statuses || (r.display_status || r.status || '');
+        const commentStr = r.comments || (r.comment || ''); 
+
+        const companies = companyStr.split(' | ').map(s=>s.trim());
+        const jobs = jobStr.split(' | ').map(s=>s.trim());
+        const prefIds = prefIdStr.split(' | ').map(s=>s.trim());
+        const statuses = statusStr.split(' | ').map(s=>s.trim());
+        const comments = commentStr.split(' | ').map(s=>s.trim());
+
+        const maxCount = Math.max(companies.length, jobs.length);
+
+        if (maxCount === 0 && !r.preference_id) {
+            allRowsData.push({ ...r, display_company: '—', display_job: '—', display_status: r.status, isMultiRow: true });
         } else {
-          commentInput.readOnly = false;
-          commentInput.style.backgroundColor = '#fff';
-          saveBtn.style.display = 'block';
-          // 根據角色設置 Modal 標題
-          if (userRole === 'vendor') {
-            document.getElementById("commentModalLabel").textContent = "填寫廠商留言";
-            document.getElementById("saveCommentBtn").textContent = "儲存留言";
+            for (let i = 0; i < maxCount; i++) {
+                let comp = companies[i] || (companies.length===1?companies[0]:companies[companies.length-1]) || '—';
+                let job = jobs[i] || '—';
+                if(job.includes(' - ')) job = job.split(' - ')[1];
+
+                const pid = prefIds[i] || (prefIds.length===1?prefIds[0]:null); 
+                
+                let st = statuses[i];
+                if (!st) {
+                    st = (maxCount === 1) ? statuses[0] : 'pending';
+                }
+
+                const cm = comments[i] || (comments.length===1?comments[0]:'');
+
+                if (filterStatus && st !== filterStatus) continue;
+                if (filterJob && !job.includes(filterJob) && filterJob !== (r.job_id?String(r.job_id):'')) continue;
+
+                allRowsData.push({
+                    ...r,
+                    display_company: comp,
+                    display_job: job,
+                    preference_id: pid, 
+                    display_status: st, 
+                    comment: cm,
+                    isMultiRow: i === 0 
+                });
+            }
+        }
+      });
+
+      const start = (currentPage - 1) * rowsPerPage;
+      const end = start + rowsPerPage;
+      const pageData = allRowsData.slice(start, end);
+
+      pageData.forEach(row => {
+        const pid = row.preference_id || null;
+        
+        // 渲染每一行，statusColor(row.display_status) 會決定背景色，mapStatus 決定文字
+        const tr = document.createElement('tr');
+        tr.style.borderBottom = '1px solid #e2e8f0';
+        tr.innerHTML = `
+           <td style="padding: 14px 16px;">${row.username}</td>
+           <td style="padding: 14px 16px;">${escapeHtml(row.name)}</td>
+           <td style="padding: 14px 16px;">${row.upload_time}</td>
+           <td style="padding: 14px 16px; max-width: 200px; overflow: hidden; text-overflow: ellipsis;">${escapeHtml(row.original_filename)}</td>
+           <td style="padding: 14px 16px;">${escapeHtml(row.display_company)}</td>
+           <td style="padding: 14px 16px;">${escapeHtml(row.display_job)}</td>
+           <td style="padding: 14px 16px;">
+             <span class="status-badge bg-${statusColor(row.display_status)}">${mapStatus(row.display_status)}</span>
+           </td>
+           <td style="padding: 14px 16px;">
+             ${ renderCommentBtn(row, isViewOnly, pid) }
+           </td>
+           <td style="padding: 14px 16px;">
+             ${ renderActionBtns(row, isViewOnly, pid) }
+           </td>
+        `;
+        tbody.appendChild(tr);
+      });
+
+      renderPagination(allRowsData.length);
+    }
+
+    function renderCommentBtn(row, isViewOnly, pid) {
+        const hasComment = row.comment && row.comment.trim() !== '';
+        const btnClass = hasComment ? 'text-success' : '';
+        const btnText = hasComment ? '已填寫' : '未填寫';
+        
+        if (isViewOnly) {
+            if (hasComment) {
+                return `<button class="btn btn-sm btn-outline-secondary text-success" onclick="openCommentModal(${row.id}, '${escapeHtml(row.comment)}', ${pid}, true)">已填寫</button>`;
+            } else {
+                return `<span style="color:#aaa; font-size:0.9em;">未填寫</span>`;
+            }
+        }
+        return `<button class="btn btn-sm btn-outline-secondary ${btnClass}" onclick="openCommentModal(${row.id}, '${escapeHtml(row.comment)}', ${pid}, false)">${btnText}</button>`;
+    }
+
+    function renderActionBtns(row, isViewOnly, pid) {
+        const dlBtn = `<a href="/api/download_resume/${row.id}" class="btn btn-sm btn-outline-primary" target="_blank" style="margin-right:4px;">下載</a>`;
+        if (isViewOnly) return dlBtn; 
+
+        const approveClick = `approveResume(${row.id}, ${pid ? `'${pid}'` : 'null'})`;
+        const rejectClick = `rejectResume(${row.id}, ${pid ? `'${pid}'` : 'null'})`;
+
+        // 無論狀態為何，保留按鈕
+        let btns = `<div style="display:flex; align-items:center;">${dlBtn}`;
+        btns += `<button class="btn btn-sm btn-outline-danger" style="margin-right:4px;" onclick="${rejectClick}">退件</button>`;
+        btns += `<button class="btn btn-sm btn-outline-success" onclick="${approveClick}">完成</button>`;
+        btns += `</div>`;
+        return btns;
+    }
+
+    function renderPagination(totalItems) {
+      const totalPages = Math.ceil(totalItems / rowsPerPage);
+      const pagination = document.getElementById("pagination");
+      pagination.innerHTML = "";
+      if (totalPages <= 1) return;
+      for (let i = 1; i <= totalPages; i++) {
+        const li = document.createElement("li");
+        li.className = `page-item ${i === currentPage ? "active" : ""}`;
+        li.innerHTML = `<a class="page-link" href="#">${i}</a>`;
+        li.onclick = (e) => { e.preventDefault(); currentPage = i; applyFilters(); }; 
+        pagination.appendChild(li);
+      }
+    }
+
+    // 更新狀態函式
+    function approveResume(resumeId, preferenceId) {
+      if (!confirm("確定要將此職缺申請標記為通過嗎？")) return;
+      
+      const body = { status: 'approved' };
+      if (preferenceId) body.preference_id = preferenceId;
+
+      fetch(`/api/review_resume/${resumeId}`, { 
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify(body)
+      }).then(res => res.json()).then(data => {
+          if (data.success) {
+              alert("✅ 狀態更新成功");
+              // 重新載入資料
+              const urlParams = new URLSearchParams(window.location.search);
+              const targetCompanyId = urlParams.get('company_id');
+              const params = targetCompanyId ? `?company_id=${targetCompanyId}` : '';
+              fetch(`/api/get_class_resumes${params}`).then(r=>r.json()).then(d=>{
+                  if(d.success) { allResumes=d.resumes; applyFilters(); }
+              });
           } else {
-            document.getElementById("commentModalLabel").textContent = "編輯留言";
-            document.getElementById("saveCommentBtn").textContent = "儲存留言";
+              alert("失敗：" + data.message);
           }
+      });
+    }
+
+    function rejectResume(resumeId, preferenceId) {
+       if (!confirm("確定要退件此申請？")) return;
+       currentResumeId = resumeId;
+       currentPreferenceId = preferenceId;
+       
+       document.getElementById("commentInput").value = "";
+       document.getElementById("commentModalLabel").textContent = "❌ 填寫退件原因";
+       document.getElementById("saveCommentBtn").textContent = "確認退件";
+       const modal = new bootstrap.Modal(document.getElementById("commentModal"));
+       modal.show();
+       
+       const saveBtn = document.getElementById("saveCommentBtn");
+       saveBtn.onclick = () => {
+           const reason = document.getElementById("commentInput").value.trim();
+           if(!reason) { alert("請填寫退件原因"); return; }
+           
+           const body = { status: 'rejected', comment: reason };
+           if (currentPreferenceId) body.preference_id = currentPreferenceId;
+
+           fetch(`/api/review_resume/${currentResumeId}`, {
+               method: 'POST',
+               headers: {'Content-Type': 'application/json'},
+               body: JSON.stringify(body)
+           }).then(res => res.json()).then(data => {
+               if(data.success) {
+                   alert("✅ 已退件");
+                   modal.hide();
+                   const urlParams = new URLSearchParams(window.location.search);
+                   const targetCompanyId = urlParams.get('company_id');
+                   const params = targetCompanyId ? `?company_id=${targetCompanyId}` : '';
+                   fetch(`/api/get_class_resumes${params}`).then(r=>r.json()).then(d=>{
+                       if(d.success) { allResumes=d.resumes; applyFilters(); }
+                   });
+               } else {
+                   alert("失敗：" + data.message);
+               }
+           });
+       };
+    }
+
+    function openCommentModal(id, comment, pid, readonly) {
+        document.getElementById("commentInput").value = comment;
+        document.getElementById("commentInput").readOnly = readonly;
+        document.getElementById("commentModalLabel").textContent = readonly ? "查看留言" : "編輯留言";
+        const saveBtn = document.getElementById("saveCommentBtn");
+        saveBtn.style.display = readonly ? 'none' : 'block';
+        saveBtn.textContent = "儲存";
+        
+        if (!readonly) {
+            currentResumeId = id;
+            currentPreferenceId = pid;
+            saveBtn.onclick = saveComment; 
         }
         new bootstrap.Modal(document.getElementById("commentModal")).show();
-      }
+    }
 
-      // 這是給老師單純編輯 'comment' 用的，不改變狀態
-      // 如果是廠商退件後填寫原因，則更新志願申請的 comment
-      function saveComment() {
-        const newVal = document.getElementById("commentInput").value.trim();
-        
-        // 如果是廠商且有 preference_id，使用志願申請的 comment API
-        if (userRole === 'vendor' && currentPreferenceId) {
-          fetch(`/vendor/api/applications/${currentPreferenceId}/comment`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ comment: newVal })
-          })
-            .then(res => res.json())
-            .then(data => {
-              // 後端返回格式：{"item": detail} 或 {"error": "..."}
-              if (data.item) {
-                bootstrap.Modal.getInstance(document.getElementById("commentModal")).hide();
-                alert("廠商留言已更新");
-                // 更新本地數據中的留言
-                const resume = allResumes.find(r => r.preference_id === currentPreferenceId);
-                if (resume) {
-                  resume.comment = newVal;
-                  resume.vendor_comment = newVal;
-                }
-                currentPreferenceId = null; // 清除
-                // 重新應用篩選並渲染表格（不重新載入頁面）
-                applyFilters();
-              } else if (data.error) {
-                alert("更新失敗：" + data.error);
-              } else {
-                alert("更新失敗：未知錯誤");
-              }
-            })
-            .catch(error => {
-              console.error("Comment error:", error);
-              alert("更新失敗，網路錯誤或 API 錯誤。");
-            });
-        } else {
-          // 老師或其他角色，使用履歷的 comment API
-          fetch("/api/update_resume_field", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ resume_id: currentResumeId, field: "comment", value: newVal })
-          })
-            .then(res => res.json())
-            .then(data => {
-              if (data.success) {
-                bootstrap.Modal.getInstance(document.getElementById("commentModal")).hide();
-                alert("留言更新成功");
-                location.reload(); // 重新載入以更新表格顯示
-              } else {
-                alert("留言更新失敗");
-              }
-            });
-        }
-      }
+    function saveComment() {
+        const val = document.getElementById("commentInput").value.trim();
+        const body = { field: 'comment', value: val, resume_id: currentResumeId };
+        if(currentPreferenceId) body.preference_id = currentPreferenceId;
 
-      // 處理退件：先嘗試退件API，若成功則強制彈出留言Modal讓老師填寫原因
-      function rejectResume(resumeId, preferenceId) {
-        if (!confirm("確定要將此履歷標記為退件？退件後，請務必填寫退件原因。")) return;
+        fetch("/api/update_resume_field", {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body)
+        }).then(res => res.json()).then(data => {
+             if(data.success) {
+                 alert("留言已更新");
+                 bootstrap.Modal.getInstance(document.getElementById("commentModal")).hide();
+                 const urlParams = new URLSearchParams(window.location.search);
+                 const targetCompanyId = urlParams.get('company_id');
+                 const params = targetCompanyId ? `?company_id=${targetCompanyId}` : '';
+                 fetch(`/api/get_class_resumes${params}`).then(r=>r.json()).then(d=>{
+                     if(d.success) { allResumes=d.resumes; applyFilters(); }
+                 });
+             } else {
+                 alert("失敗");
+             }
+        });
+    }
 
-        // 如果是廠商
-        if (userRole === 'vendor') {
-          // 如果有 preference_id，使用志願申請的退件 API
-          if (preferenceId) {
-          fetch(`/vendor/api/applications/${preferenceId}/reject`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ comment: "" }) // 初始呼叫不傳 comment，稍後在 Modal 中填寫
-          })
-            .then(res => res.json())
-            .then(data => {
-              // 後端返回格式：{"item": detail} 或 {"error": "..."}
-              if (data.item) {
-                // 更新本地資料中的狀態
-                const resume = allResumes.find(r => r.id === resumeId);
-                if (resume) {
-                  resume.status = 'rejected';
-                }
-                
-                alert("已成功標記為退件狀態。請填寫退件原因。");
-
-                currentResumeId = resumeId;
-                currentPreferenceId = preferenceId; // 儲存 preference_id 用於後續更新 comment
-                document.getElementById("commentInput").value = "";
-
-                // 修正 Modal 標題，強調這是退件原因填寫
-                document.getElementById("commentModalLabel").textContent = "❌ 填寫退件原因";
-                document.getElementById("saveCommentBtn").textContent = "送出";
-                document.getElementById("saveCommentBtn").style.display = 'block'; // 確保按鈕顯示
-                document.getElementById("commentInput").readOnly = false; // 確保可編輯
-
-                // 顯示留言Modal
-                new bootstrap.Modal(document.getElementById("commentModal")).show();
-              } else if (data.error) {
-                alert("退件失敗：" + data.error);
-              } else {
-                alert("退件失敗：未知錯誤");
-              }
-            })
-            .catch(error => {
-              console.error("Reject error:", error);
-              alert("退件失敗，網路錯誤或 API 錯誤。");
-            });
-          } else {
-            // 沒有 preference_id，提示用戶
-            alert("此學生尚未填寫志願序，無法進行退件。請等待學生填寫志願序後再進行操作。");
-          }
-        } else {
-          // 老師或其他角色，使用履歷審核 API
-          fetch(`/api/review_resume/${resumeId}`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ status: "rejected" }) // 初始呼叫不傳 comment
-          })
-            .then(res => res.json())
-            .then(data => {
-              if (data.success) {
-                alert("已成功標記為退件狀態。請填寫退件原因。");
-
-                currentResumeId = resumeId;
-                document.getElementById("commentInput").value = "";
-
-                // 修正 Modal 標題，強調這是退件原因填寫
-                document.getElementById("commentModalLabel").textContent = "❌ 填寫退件原因";
-                document.getElementById("saveCommentBtn").textContent = "送出";
-                document.getElementById("saveCommentBtn").style.display = 'block'; // 確保按鈕顯示
-                document.getElementById("commentInput").readOnly = false; // 確保可編輯
-
-                // 顯示留言Modal
-                new bootstrap.Modal(document.getElementById("commentModal")).show();
-              } else {
-                alert("退件失敗：" + data.message);
-              }
-            })
-            .catch(error => {
-              console.error("Reject error:", error);
-              alert("退件失敗，網路錯誤或 API 錯誤。");
-            });
-        }
-      }
-
-
-      function approveResume(resumeId, preferenceId) {
-        if (!confirm("確定要將此履歷標記為審核通過嗎？")) return;
-        
-        // 如果是廠商
-        if (userRole === 'vendor') {
-          // 如果有 preference_id，使用志願申請的通過 API
-          if (preferenceId) {
-            fetch(`/vendor/api/applications/${preferenceId}/approve`, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({})
-            })
-              .then(res => res.json())
-              .then(data => {
-                // 後端返回格式：{"item": detail} 或 {"error": "..."}
-                if (data.item) {
-                  // 立即更新本地數據中的狀態，確保界面即時反映變化
-                  const resume = allResumes.find(r => r.preference_id === preferenceId);
-                  if (resume) {
-                    resume.status = 'approved';
-                  }
-                  
-                  // 獲取當前篩選條件
-                  const currentStatusFilter = document.getElementById("statusFilter").value.trim();
-                  const jobFilter = document.getElementById("companyFilter").value.trim();
-                  const keywordFilter = document.getElementById("searchBox").value.trim();
-                  
-                  // 如果當前篩選的是「待審核」，自動切換到「通過」狀態，讓用戶看到更新後的結果
-                  if (currentStatusFilter === 'pending') {
-                    document.getElementById("statusFilter").value = 'approved';
-                  }
-                  
-                  // 立即重新渲染表格，讓用戶立即看到狀態變化（從「待審核」變為「通過」）
-                  applyFilters();
-                  
-                  // 顯示成功提示
-                  alert("✅ 履歷已標記為審核通過");
-                  
-                  // 在背景重新從 API 獲取最新的履歷列表，確保數據同步
-                  // 由於這裡邏輯複雜，且主要目的是給用戶即時反饋，背景重載可選，
-                  // 這裡省略複雜的背景重載邏輯，僅依靠 applyFilters 觸發的本地數據渲染。
-                  // 如果需要確保數據完全同步，可能需要重新呼叫主 API 刷新 allResumes 
-                  // 如下方的註釋部分所示。
-                  
-                  /* const statusFilter = document.getElementById("statusFilter").value.trim();
-                  let apiUrl = '/vendor/api/resumes';
-                  // ... 構建 API URL 參數 ...
-                  fetch(apiUrl)
-                    .then(res => res.json())
-                    .then(resumeData => {
-                      if (resumeData.success) {
-                        allResumes = resumeData.resumes || [];
-                        applyFilters();
-                      }
-                    })
-                    .catch(error => {
-                      console.error("Reload error:", error);
-                    });
-                  */
-                  
-                } else if (data.error) {
-                  alert("標記失敗：" + data.error);
-                } else {
-                  alert("標記失敗：未知錯誤");
-                }
-              })
-              .catch(error => {
-                console.error("Approve error:", error);
-                alert("通過失敗，網路錯誤或 API 錯誤。");
-              });
-          } else {
-            // 沒有 preference_id，提示用戶
-            alert("此學生尚未填寫志願序，無法進行審核。請等待學生填寫志願序後再進行審核。");
-          }
-        } else {
-          // 老師或其他角色，使用履歷審核 API
-          fetch(`/api/review_resume/${resumeId}`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ status: "approved" })
-          })
-            .then(res => res.json())
-            .then(data => {
-              if (data.success) {
-                // 更新本地資料中的狀態
-                const resume = allResumes.find(r => r.id === resumeId);
-                if (resume) {
-                  resume.status = 'approved';
-                }
-                // 重新應用篩選並渲染表格（不重新載入頁面）
-                applyFilters();
-                alert("✅ 履歷已標記為審核通過");
-              } else {
-                alert("標記失敗：" + data.message);
-              }
-            })
-            .catch(error => {
-              console.error("Approve error:", error);
-              alert("通過失敗，網路錯誤或 API 錯誤。");
-            });
-        }
-      }
-
-      // ------------------------------------
-      // 根據用戶角色生成選單
-      // ------------------------------------
-      function renderMenu() {
+    function renderMenu() {
         const menuContent = document.getElementById('menu-content');
-        if (!menuContent) return;
-
-        let menuItems = [];
-        
         const teacherMenu = [
           { href: '/teacher_home', text: '首頁' },
           { href: '/profile', text: '個人資料' },
@@ -1389,33 +578,10 @@
           { href: '/review_resume', text: '學生履歷審核' },
           { href: '/login', text: '登出' }
         ];
-
-        if (userRole === 'vendor') {
-          // 廠商選單（與通知頁一致的順序與文案）
-          menuItems = [
-            { href: '/vendor_home', text: '首頁' },
-            { href: '/profile', text: '個人資料' },
-            { href: '/vendor/resume-review', text: '學生履歷審核' },
-            { href: '/manage_positions', text: '職位需求管理' },
-            { href: '/confirm_matching', text: '媒合結果' },
-            { href: '/publish_announcements', text: '發布公告' },
-            { href: '/reviews_resumes_notifications', text: '查看履歷與通知' },
-            { href: '/logout', text: '登出' }
-          ];
-        } else if (userRole === 'teacher' || userRole === 'director' || (isHomeroom && (userRole === 'teacher' || userRole === 'director'))) {
-          // 老師/主任/班導師：統一與其他頁相同的功能選單文字與連結
-          menuItems = teacherMenu;
-        } else {
-          // 其他角色，沿用老師菜單以保持一致
-          menuItems = teacherMenu;
-        }
-
-        menuContent.innerHTML = menuItems.map(item => 
-          `<a href="${item.href}">${item.text}</a>`
-        ).join('');
-      }
-
-    </script>
+        const vendorMenu = [ /* 廠商選單 */ ];
+        const items = userRole === 'vendor' ? vendorMenu : teacherMenu;
+        menuContent.innerHTML = items.map(item => `<a href="${item.href}">${item.text}</a>`).join('');
+    }
+  </script>
 </body>
-
 </html>
