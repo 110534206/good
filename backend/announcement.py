@@ -1,6 +1,6 @@
 from flask import Blueprint, request, jsonify, render_template, session
 from config import get_db
-from datetime import datetime
+from datetime import datetime, timedelta
 import traceback
 
 announcement_bp = Blueprint("announcement_bp", __name__)
@@ -25,6 +25,13 @@ def list_announcements():
     try:
         conn = get_db()
         cursor = conn.cursor(dictionary=True)
+
+        # 在查詢前嘗試推送即將到期的公告提醒（不影響主要流程）
+        try:
+            maybe_push_deadline_reminders(conn, hours_before=24)
+        except Exception:
+            traceback.print_exc()
+
         cursor.execute("""
             SELECT id, title, content, start_time, end_time, created_at
             FROM announcement
@@ -186,3 +193,54 @@ def push_announcement_notifications(conn, title, content, ann_id):
         cursor.close()
 
     conn.commit()
+
+
+# ============================================================
+# ✅ Helper：即將到期提醒
+# ============================================================
+def maybe_push_deadline_reminders(conn, hours_before=24):
+    """
+    對於距離 end_time 小於指定小時且尚未提醒過的公告，推送一次提醒通知給全體使用者。
+    利用 notifications.title 做簡易去重，避免重複提醒。
+    """
+    cutoff_start = datetime.utcnow()
+    cutoff_end = cutoff_start + timedelta(hours=hours_before)
+
+    cursor = conn.cursor(dictionary=True)
+
+    cursor.execute("""
+        SELECT id, title, end_time
+        FROM announcement
+        WHERE is_published = 1
+          AND end_time IS NOT NULL
+          AND end_time BETWEEN %s AND %s
+    """, (cutoff_start, cutoff_end))
+    rows = cursor.fetchall() or []
+
+    for row in rows:
+        reminder_title = f"作業截止提醒：{row['title']}"
+
+        # 已提醒就跳過
+        cursor.execute("SELECT 1 FROM notifications WHERE title = %s LIMIT 1", (reminder_title,))
+        if cursor.fetchone():
+            continue
+
+        # 取全體使用者
+        cursor.execute("SELECT id FROM users")
+        users = cursor.fetchall() or []
+
+        link = f"/view_announcement/{row['id']}"
+        for u in users:
+            cursor.execute("""
+                INSERT INTO notifications (user_id, title, message, category, link_url, is_read, created_at)
+                VALUES (%s, %s, %s, %s, %s, 0, NOW())
+            """, (
+                u[0],
+                reminder_title,
+                f"作業將於 {row['end_time']} 截止，請盡速完成。",
+                "announcement",
+                link
+            ))
+
+    conn.commit()
+    cursor.close()
