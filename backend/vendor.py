@@ -1656,41 +1656,7 @@ def _record_admission_and_bind_relation(cursor, student_id, company_id, job_id=N
                 VALUES (%s, %s, %s, '指導老師', CURDATE())
             """, (advisor_user_id, student_id, semester_code))
         
-        # 7. 在 internship_experiences 表中記錄錄取結果（廠商確認的錄取結果）
-        if job_id:
-            # 檢查是否已存在該記錄
-            cursor.execute("""
-                SELECT id FROM internship_experiences
-                WHERE user_id = %s AND company_id = %s AND job_id = %s
-            """, (student_id, company_id, job_id))
-            existing_exp = cursor.fetchone()
-            
-            if not existing_exp:
-                # 獲取當前年度（民國年）
-                current_year = datetime.now().year - 1911
-                cursor.execute("""
-                    INSERT INTO internship_experiences
-                    (user_id, company_id, job_id, year, content, is_public, created_at)
-                    VALUES (%s, %s, %s, %s, '已錄取', 0, NOW())
-                """, (student_id, company_id, job_id, current_year))
-        else:
-            # 即使沒有 job_id，也記錄公司錄取結果（使用 NULL job_id）
-            cursor.execute("""
-                SELECT id FROM internship_experiences
-                WHERE user_id = %s AND company_id = %s AND job_id IS NULL
-            """, (student_id, company_id))
-            existing_exp = cursor.fetchone()
-            
-            if not existing_exp:
-                # 獲取當前年度（民國年）
-                current_year = datetime.now().year - 1911
-                cursor.execute("""
-                    INSERT INTO internship_experiences
-                    (user_id, company_id, job_id, year, content, is_public, created_at)
-                    VALUES (%s, %s, NULL, %s, '已錄取', 0, NOW())
-                """, (student_id, company_id, current_year))
-        
-        # 8. 更新學生的第一志願狀態為 approved（如果 preference_order = 1 且尚未被錄取）
+        # 7. 更新學生的第一志願狀態為 approved（如果 preference_order = 1 且尚未被錄取）
         if preference_order == 1:
             cursor.execute("""
                 UPDATE student_preferences
