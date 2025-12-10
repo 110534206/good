@@ -25,11 +25,15 @@
     }
 
     header {
+      position: sticky;
+      top: 0;
+      z-index: 1100;
       background: #0454a3;
       color: white;
       padding: 1rem 2rem;
       text-align: center;
       font-size: 1.5rem;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
     }
 
     /* 三條線選單按鈕樣式 */
@@ -37,7 +41,7 @@
       position: fixed;
       top: 1rem;
       left: 1rem;
-      z-index: 1100;
+      z-index: 1300;
     }
 
     .top-bar-left #menu-btn {
@@ -74,7 +78,7 @@
       padding: 2rem 1.5rem;
       transform: translateX(-100%);
       transition: transform 0.3s ease-in-out;
-      z-index: 1200;
+      z-index: 1400;
       display: flex;
       flex-direction: column;
       align-items: flex-start;
@@ -251,8 +255,8 @@
                   <thead>
                     <tr>
                       <th style="text-align: center; background-color: #fafafb; border: 1px solid #dee2e6;">公司名稱</th>
+                      <th style="text-align: center; background-color: #fafafb; border: 1px solid #dee2e6;">職缺</th>
                       <th style="text-align: center; background-color: #fafafb; border: 1px solid #dee2e6;">上傳教師</th>
-                      <th style="text-align: center; background-color: #fafafb; border: 1px solid #dee2e6;">審核狀態</th>
                       <th style="text-align: center; background-color: #fafafb; border: 1px solid #dee2e6;">審核時間</th>
                       <th style="text-align: center; background-color: #fafafb; border: 1px solid #dee2e6;">本學期開放</th>
                       <th style="text-align: center; background-color: #fafafb; border: 1px solid #dee2e6;">狀態</th>
@@ -301,6 +305,16 @@
       }
     });
 
+    function escapeHtml(text) {
+      if (text === null || text === undefined) return '';
+      return String(text)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+    }
+
     let currentSemesterCode = null;
     let allTeachers = []; // 儲存所有指導老師列表
 
@@ -342,18 +356,6 @@
         }
 
         tbody.innerHTML = data.companies.map(company => {
-          // 審核狀態顯示為按鈕樣式（已核准使用與匯出 Excel 相同的 btn-success 類別）
-          // 明確檢查 status 值，確保 'rejected' 狀態正確顯示
-          let statusBadge;
-          if (company.status === 'approved') {
-            statusBadge = '<button class="btn btn-sm btn-success status-badge" style="cursor: default;" disabled>已核准</button>';
-          } else if (company.status === 'rejected') {
-            statusBadge = '<button class="btn btn-sm btn-danger status-badge" style="cursor: default;" disabled>已退回</button>';
-          } else {
-            // 處理其他未知狀態
-            statusBadge = `<button class="btn btn-sm btn-secondary status-badge" style="cursor: default;" disabled>${company.status || '未知'}</button>`;
-          }
-          
           // 開放狀態顯示為按鈕樣式（開放中使用與匯出 Excel 相同的 btn-success 類別）
           const openStatusBadge = company.is_open_current_semester
             ? '<button class="btn btn-sm btn-success status-badge" style="cursor: default;" disabled>開放中</button>'
@@ -361,6 +363,11 @@
 
           const checkboxDisabled = company.status !== 'approved' ? 'disabled' : '';
           const checkboxChecked = company.is_open_current_semester ? 'checked' : '';
+
+          const jobTitles = Array.isArray(company.jobs) ? company.jobs.filter(title => title && String(title).trim()) : [];
+          const jobDisplay = jobTitles.length
+            ? jobTitles.map(title => escapeHtml(title)).join('<br>')
+            : '<span class="text-muted">-</span>';
 
           // 建立指導老師下拉選單
           // 優先根據 advisor_teacher_name 匹配，如果沒有則根據 advisor_user_id 匹配
@@ -391,8 +398,8 @@
           return `
             <tr>
               <td>${company.company_name || '-'}</td>
+              <td>${jobDisplay}</td>
               <td>${company.upload_teacher_name || '-'}</td>
-              <td>${statusBadge}</td>
               <td>${company.reviewed_at || '-'}</td>
               <td>
                 <div class="form-check form-switch d-inline-block">

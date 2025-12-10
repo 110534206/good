@@ -871,6 +871,26 @@ def api_get_reviewed_companies():
             """)
 
         companies = cursor.fetchall()
+
+        # 取得各公司的職缺列表（僅抓啟用中的職缺）
+        job_map = {}
+        if companies:
+            company_ids = [c["id"] for c in companies]
+            placeholders = ",".join(["%s"] * len(company_ids))
+            cursor.execute(
+                f"""
+                SELECT company_id, title
+                FROM internship_jobs
+                WHERE company_id IN ({placeholders})
+                  AND is_active = TRUE
+                """,
+                company_ids,
+            )
+            job_rows = cursor.fetchall()
+            for job in job_rows:
+                cid = job.get("company_id")
+                title = job.get("title") or ""
+                job_map.setdefault(cid, []).append(title)
         
         # 調試：記錄返回的公司狀態分布
         status_count = {}
@@ -896,6 +916,8 @@ def api_get_reviewed_companies():
             
             # 確保 is_open_current_semester 是布林值
             company['is_open_current_semester'] = bool(company.get('is_open_current_semester', False))
+            # 附加職缺清單（前端顯示用）
+            company['jobs'] = job_map.get(company['id'], [])
         
         return jsonify({"success": True, "companies": companies, "current_semester": current_semester_code})
 
