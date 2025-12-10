@@ -192,12 +192,12 @@
             });
 
           // 2. 載入學生履歷列表
-          const fetchClassResumes = fetch('/api/get_class_resumes')
+          const fetchClassResumes = fetch('/api/get_class_resumes') // <-- 這裡
             .then(res => res.ok ? res.json() : {success:false})
             .then(resumeData => resumeData.success ? (resumeData.resumes || []) : [])
             .catch(err => { 
-                console.error("Error fetching class resumes:", err); 
-                return []; 
+              console.error("Error fetching class resumes:", err); 
+              return []; 
             });
 
           // 等待兩個 API 請求都完成
