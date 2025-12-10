@@ -275,6 +275,29 @@
         renderTable();
       }
 
+      // 格式化日期時間 (yyyy-mm-dd HH:MM:SS)
+      function toMinguoDate(dateString) {
+        if (!dateString) return '';
+        
+        // 如果已經是正確格式，直接返回
+        if (/\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/.test(dateString)) {
+          return dateString;
+        }
+        
+        // 處理 ISO 格式或其他格式的日期
+        const date = new Date(dateString);
+        if (isNaN(date.getTime())) return dateString; // 無效日期直接返回原字串
+        
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        const hours = String(date.getHours()).padStart(2, '0');
+        const minutes = String(date.getMinutes()).padStart(2, '0');
+        const seconds = String(date.getSeconds()).padStart(2, '0');
+        
+        return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
+      }
+
       // ✅ 渲染表格
       function renderTable() {
         const now = new Date();
@@ -294,10 +317,10 @@
             <tr>
               <td>${a.id}</td>
               <td>${a.title}</td>
-              <td>${(a.start_time || '').replace('T', ' ').slice(0, 16)}<br>${(a.end_time || '').replace('T', ' ').slice(0, 16)}</td>
+              <td>${toMinguoDate(a.start_time)}<br>${toMinguoDate(a.end_time)}</td>
               <td><span class="badge bg-${color} status-badge">${status}</span></td>
               <td>${a.is_published ? '✔️' : '❌'}</td>
-              <td>${a.created_at.replace('T', ' ').slice(0, 16)}</td>
+              <td>${toMinguoDate(a.created_at)}</td>
               <td>
                 <button class="btn btn-sm btn-warning me-1" onclick="editAnnouncement(${a.id})">編輯</button>
                 <button class="btn btn-sm btn-danger" onclick="deleteAnnouncement(${a.id})">刪除</button>
@@ -320,30 +343,51 @@
 
       // ✅ 儲存公告（新增或更新）
       btnSave.addEventListener("click", async () => {
+        const now = new Date();
+        const formattedDate = now.toISOString().slice(0, 19).replace('T', ' ');
+        
         const data = {
           title: titleInput.value.trim(),
           content: contentInput.value.trim(),
           start_time: startInput.value || null,
           end_time: endInput.value || null,
-          is_published: publishCheckbox.checked
+          is_published: publishCheckbox.checked,
+          created_at: editId ? undefined : formattedDate  // 只有新增時才設定建立時間
         };
         if (!data.title || !data.content) return alert("標題與內容不可空白");
 
         btnSave.disabled = true;
-        const url = editId
-          ? `/announcement/api/update/${editId}`
-          : `/announcement/api/create`;
+        try {
+          const url = editId
+            ? `/announcement/api/update/${editId}`
+            : `/announcement/api/create`;
 
-        const res = await fetch(url, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(data)
-        });
-        const result = await res.json();
-        btnSave.disabled = false;
-        alert(result.message);
-        annModal.hide();
-        loadAnnouncements();
+          const res = await fetch(url, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(data)
+          });
+          const result = await res.json();
+          console.log('Save result:', result);
+          
+          if (result.success) {
+            // 關閉彈出視窗
+            annModal.hide();
+            
+            // 重新載入公告列表
+            await loadAnnouncements();
+            
+            // 顯示成功訊息
+            alert(result.message || "公告已儲存");
+          } else {
+            alert(result.message || "儲存失敗，請稍後再試");
+          }
+        } catch (error) {
+          console.error("儲存公告時發生錯誤:", error);
+          alert("儲存失敗，請稍後再試");
+        } finally {
+          btnSave.disabled = false;
+        }
       });
 
       // ✅ 編輯公告
@@ -362,10 +406,20 @@
       // ✅ 刪除公告
       window.deleteAnnouncement = async function (id) {
         if (!confirm("確定要刪除這則公告嗎？")) return;
-        const res = await fetch(`/announcement/api/delete/${id}`, { method: "DELETE" });
-        const result = await res.json();
-        alert(result.message);
-        loadAnnouncements();
+        try {
+          const res = await fetch(`/announcement/api/delete/${id}`, { method: "DELETE" });
+          const result = await res.json();
+          if (result.success) {
+            alert(result.message);
+            // 重新載入公告列表
+            await loadAnnouncements();
+          } else {
+            alert(result.message || "刪除失敗");
+          }
+        } catch (error) {
+          console.error("刪除公告時發生錯誤:", error);
+          alert("刪除失敗，請稍後再試");
+        }
       };
 
       loadAnnouncements();
