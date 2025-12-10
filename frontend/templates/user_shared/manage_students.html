@@ -247,9 +247,6 @@
     <div class="modal-dialog modal-xl modal-dialog-scrollable">
       <div class="modal-content" style="font-size: 1.1rem;">
         <div class="modal-header">
-          <button type="button" class="btn btn-outline-secondary me-3" data-bs-dismiss="modal" style="font-size: 1.1rem; padding: 0.5rem 1rem;">
-            ← 返回
-          </button>
           <h4 class="modal-title flex-grow-1" id="studentDetailModalLabel" style="font-size: 1.5rem; font-weight: bold;">學生詳情</h4>
           <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
         </div>
@@ -279,9 +276,6 @@
           </div>
         </div>
         <div class="modal-footer">
-          <button type="button" class="btn btn-outline-secondary btn-lg me-auto" data-bs-dismiss="modal" style="font-size: 1.1rem;">
-            ← 返回
-          </button>
           <button type="button" class="btn btn-secondary btn-lg" data-bs-dismiss="modal" style="font-size: 1.1rem;">關閉</button>
         </div>
       </div>
@@ -698,11 +692,14 @@
             // 履歷詳細資訊
             const resumeDetails = s.resumes && s.resumes.length > 0 ? s.resumes.map(r => `
               <div class="mb-2 p-2 border rounded">
-                <strong>履歷 #${r.id}</strong><br>
+                <strong>履歷</strong><br>
                 <small>狀態: <span class="badge ${r.status === 'approved' ? 'bg-success' : r.status === 'rejected' ? 'bg-danger' : 'bg-warning'}">${r.status === 'approved' ? '已審核' : r.status === 'rejected' ? '已退件' : '待審核'}</span></small><br>
                 <small>上傳時間: ${r.created_at || 'N/A'}</small><br>
                 ${r.reviewed_at ? `<small>審核時間: ${r.reviewed_at}</small><br>` : ''}
-                ${r.reject_reason ? `<small class="text-danger">退件原因: ${r.reject_reason}</small>` : ''}
+                ${r.reject_reason ? `<small class="text-danger">退件原因: ${r.reject_reason}</small><br>` : ''}
+                <a href="/api/download_resume/${r.id}" class="btn btn-primary btn-sm mt-2" download style="font-size: 0.875rem;">
+                  <i class="fas fa-download"></i> 下載履歷
+                </a>
               </div>
             `).join('') : '<p class="text-muted mb-0">無履歷資料</p>';
             
@@ -712,7 +709,6 @@
                 <strong>志願 #${p.preference_order}</strong><br>
                 <small>公司: ${p.company_name || 'N/A'}</small><br>
                 <small>職位: ${p.job_title || p.job_title_full || 'N/A'}</small><br>
-                <small>狀態: <span class="badge ${p.status === 'approved' ? 'bg-success' : p.status === 'rejected' ? 'bg-danger' : 'bg-warning'}">${p.status === 'approved' ? '已通過' : p.status === 'rejected' ? '已退件' : '待審核'}</span></small><br>
                 <small>提交時間: ${p.submitted_at || 'N/A'}</small>
               </div>
             `).join('') : '<p class="text-muted mb-0">無志願序資料</p>';
@@ -1128,7 +1124,7 @@
         student.resumes.map(r => `
           <div class="mb-3 p-4 border rounded bg-light" style="font-size: 1.05rem;">
             <div class="d-flex justify-content-between align-items-start mb-3">
-              <strong class="text-primary" style="font-size: 1.2rem;">履歷 #${r.id}</strong>
+              <strong class="text-primary" style="font-size: 1.2rem;">履歷</strong>
               <span class="badge ${r.status === 'approved' ? 'bg-success' : r.status === 'rejected' ? 'bg-danger' : 'bg-warning'}" style="font-size: 1rem; padding: 0.5rem 0.75rem;">
                 ${r.status === 'approved' ? '已審核' : r.status === 'rejected' ? '已退件' : '待審核'}
               </span>
@@ -1137,6 +1133,11 @@
               <div class="mb-2">⏰ <strong>上傳時間:</strong> ${r.created_at || 'N/A'}</div>
               ${r.reviewed_at ? `<div class="mb-2">✅ <strong>審核時間:</strong> ${r.reviewed_at}</div>` : ''}
               ${r.reject_reason ? `<div class="mb-2 text-danger">⚠️ <strong>退件原因:</strong> ${r.reject_reason}</div>` : ''}
+            </div>
+            <div class="mt-3">
+              <a href="/api/download_resume/${r.id}" class="btn btn-primary btn-sm" download>
+                <i class="fas fa-download"></i> 下載履歷
+              </a>
             </div>
           </div>
         `).join('') : 
@@ -1151,9 +1152,6 @@
           <div class="mb-3 p-4 border rounded bg-light" style="font-size: 1.05rem;">
             <div class="d-flex justify-content-between align-items-start mb-3">
               <strong class="text-primary" style="font-size: 1.2rem;">志願 #${p.preference_order}</strong>
-              <span class="badge ${p.status === 'approved' ? 'bg-success' : p.status === 'rejected' ? 'bg-danger' : 'bg-warning'}" style="font-size: 1rem; padding: 0.5rem 0.75rem;">
-                ${p.status === 'approved' ? '已通過' : p.status === 'rejected' ? '已退件' : '待審核'}
-              </span>
             </div>
             <div style="font-size: 1.05rem;">
               <div class="mb-2"><strong>公司:</strong> ${p.company_name || 'N/A'}</div>
