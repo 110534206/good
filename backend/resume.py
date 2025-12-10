@@ -662,144 +662,62 @@ def get_student_info_for_doc(cursor, student_id, semester_id=None):
 
     # 證照 - 使用新的查詢方式
     cursor.execute("""
-        SELECT
-            -- 1. 證照名稱：優先使用代碼表(cc)，若無則使用資料表(sc)的手填欄位
-            CASE 
-                WHEN cc.code IS NOT NULL THEN CONCAT(COALESCE(cc.job_category, ''), COALESCE(cc.level, ''))
-                ELSE CONCAT(COALESCE(sc.job_category, ''), COALESCE(sc.level, ''))
-            END AS cert_name,
-            
-            -- 2. 類別：若無則歸類為 other
-            COALESCE(cc.category, 'other') AS cert_category,
-            
-            -- 3. 完整顯示名稱 (含發證中心)
-            CASE 
-                WHEN cc.code IS NOT NULL THEN CONCAT(COALESCE(cc.job_category, ''), COALESCE(cc.level, ''), ' (', COALESCE(ca.name, ''), ')')
-                ELSE CONCAT(COALESCE(sc.job_category, ''), COALESCE(sc.level, ''), ' (', COALESCE(IFNULL(ca_sc.name, sc.authority_name), '自填'), ')')
-            END AS full_name,
-            
-            sc.CertPath AS cert_path,
-            sc.AcquisitionDate AS acquire_date,
-            sc.cert_code AS cert_code
+        SELECT 
+            sc.id, sc.StuID, sc.cert_code, sc.CertName, sc.AcquisitionDate, sc.CertPath,
+            sc.issuer, sc.IssuingBody, sc.CertType, 
+            cc.job_category, cc.level, cc.authority_id, cc.category AS CertCategory,
+            ca.name AS authority_name
         FROM student_certifications sc
-        -- 關聯1: 嘗試透過代碼關聯標準代碼表
         LEFT JOIN certificate_codes cc 
             ON sc.cert_code COLLATE utf8mb4_unicode_ci = cc.code COLLATE utf8mb4_unicode_ci
-        -- 關聯2: 透過代碼表找到發證中心 (正常情況)
         LEFT JOIN cert_authorities ca 
             ON cc.authority_id = ca.id
-        -- 關聯3: 若代碼關聯失敗，嘗試直接透過 sc.authority_id 關聯發證中心 (補救情況)
-        LEFT JOIN cert_authorities ca_sc 
-            ON sc.authority_id = ca_sc.id
         WHERE sc.StuID = %s
         ORDER BY sc.AcquisitionDate DESC, sc.id ASC
     """, (student_id,))
-    
-    cert_rows = cursor.fetchall() or []
-    
-  # 轉換為統一格式
-    certifications = []
-    for row in cert_rows:
-        cert_code = row.get('cert_code', '')
-        cert_name_from_join = row.get('cert_name', '')
-        cert_category_from_join = row.get('cert_category', '')
-        
-        # 預設分類
-        category = cert_category_from_join if cert_category_from_join else 'other'
+    data['certifications'] = cursor.fetchall() or []
 
-        # =========================================================================
-        # 🔥 新增補救邏輯：若分類為 'other'，嘗試用「證照名稱」去資料庫反查正確分類
-        # 解決手動輸入正確名稱 (如: 電腦軟體設計乙級) 卻被歸類在「其他」的問題
-        # =========================================================================
-        if category == 'other':
-            # 決定要用來查詢的名稱 (優先使用 SQL 組合出來的名稱，若無則用舊欄位)
-            search_name = cert_name_from_join or row.get('CertName', '')
-            
-            if search_name:
-                try:
-                    # 使用 CONCAT 模擬資料庫中的名稱格式進行比對
-                    cursor.execute("""
-                        SELECT category 
-                        FROM certificate_codes 
-                        WHERE CONCAT(COALESCE(job_category, ''), COALESCE(level, '')) = %s
-                        LIMIT 1
-                    """, (search_name,))
-                    match_row = cursor.fetchone()
-                    
-                    if match_row and match_row.get('category'):
-                        category = match_row['category']
-                        print(f"✅ (DOC補救) 成功透過名稱 '{search_name}' 修正分類為: {category}")
-                except Exception as e:
-                    print(f"⚠️ (DOC補救) 名稱反查失敗: {e}")
-        # =========================================================================
-
-        # 組合資料並加入列表
-        if cert_name_from_join:
-            # 來自新的 SQL 邏輯
-            certifications.append({
-                "cert_name": cert_name_from_join,
-                "category": category, # 使用修正後的 category
-                "full_name": row.get('full_name', ''),
-                "cert_path": row.get('cert_path', ''),
-                "acquire_date": row.get('acquire_date', ''),
-            })
-            print(f"✅ 證照 JOIN 成功: code={cert_code}, name={cert_name_from_join}, category={category}")
-        else:
-            # 舊資料兼容邏輯 (若 SQL JOIN 沒產出名稱)
-            certifications.append({
-                "cert_name": row.get('CertName', ''),
-                "category": category, # 使用修正後的 category
-                "full_name": row.get('CertName', ''),
-                "cert_path": row.get('CertPhotoPath', '') or row.get('cert_path', ''),
-                "acquire_date": row.get('AcquisitionDate', '') or row.get('acquire_date', ''),
-            })
-            print(f"⚠️ 證照 JOIN 失敗，使用回退邏輯: code={cert_code}, category={category}")
-    
-    data['certifications'] = certifications
-
-    # 語文能力（student_languageskills 表）
-    cursor.execute("SELECT Language, Level FROM student_languageskills WHERE StuID=%s", (student_id,))
+    # 語言能力
+    cursor.execute(""" 
+        SELECT Language AS language, Level AS level 
+        FROM student_languageskills 
+        WHERE StuID=%s 
+        ORDER BY Language
+    """, (student_id,))
     data['languages'] = cursor.fetchall() or []
 
-    # 缺勤佐證圖片：從 absence_records 表獲取最新的 image_path
-    # 需要先獲取 user_id（通過 StuID 從 users 表查找）
+    # 缺勤記錄佐證圖片（僅返回最新的）
+    absence_proof_path = ''
     try:
         cursor.execute("SELECT id FROM users WHERE username=%s", (student_id,))
         user_row = cursor.fetchone()
         if user_row:
             user_id = user_row.get('id')
-            print(f"🔍 查找缺勤佐證圖片: student_id={student_id}, user_id={user_id}")
-            # 嘗試使用 created_at 排序，如果沒有該欄位則使用 id
+            # 嘗試使用 created_at 排序
             try:
                 cursor.execute("""
-                    SELECT image_path, created_at
-                    FROM absence_records
-                    WHERE user_id = %s AND image_path IS NOT NULL AND image_path != ''
-                    ORDER BY created_at DESC
+                    SELECT image_path 
+                    FROM absence_records 
+                    WHERE user_id = %s AND image_path IS NOT NULL AND image_path != '' 
+                    ORDER BY created_at DESC 
                     LIMIT 1
                 """, (user_id,))
             except:
                 # 如果 created_at 欄位不存在，使用 id 排序
                 cursor.execute("""
-                    SELECT image_path
-                    FROM absence_records
-                    WHERE user_id = %s AND image_path IS NOT NULL AND image_path != ''
-                    ORDER BY id DESC
+                    SELECT image_path 
+                    FROM absence_records 
+                    WHERE user_id = %s AND image_path IS NOT NULL AND image_path != '' 
+                    ORDER BY id DESC 
                     LIMIT 1
                 """, (user_id,))
             absence_row = cursor.fetchone()
             if absence_row:
-                image_path = absence_row.get('image_path')
-                data['Absence_Proof_Path'] = image_path
-                print(f"✅ 找到缺勤佐證圖片路徑: {image_path}")
-            else:
-                print(f"⚠️ 未找到缺勤佐證圖片路徑 (user_id={user_id})")
-        else:
-            print(f"⚠️ 找不到用戶: student_id={student_id}")
+                absence_proof_path = absence_row.get('image_path', '')
     except Exception as e:
-        print(f"⚠️ 獲取缺勤佐證圖片路徑失敗: {e}")
+        print(f"⚠️ 查詢缺勤佐證圖片失敗: {e}")
         traceback.print_exc()
-        # 不影響其他數據的返回
+    data['absence_proof_path'] = absence_proof_path
 
     return data
 
@@ -928,798 +846,292 @@ def save_resume_data():
         cursor.close()
         conn.close()
 
-
 # -------------------------
-# API: 取得所有發證中心列表
-# -------------------------
-@resume_bp.route('/api/get_cert_authorities', methods=['GET'])
-def get_cert_authorities():
-    conn = None
-    cursor = None
-    try:
-        conn = get_db()
-        cursor = conn.cursor(dictionary=True)
-        
-        cursor.execute("SELECT id, name FROM cert_authorities ORDER BY name")
-        authorities = cursor.fetchall()
-        
-        return jsonify({
-            "success": True,
-            "authorities": authorities
-        })
-    except Exception as e:
-        traceback.print_exc()
-        return jsonify({"success": False, "message": f"伺服器錯誤: {str(e)}"}), 500
-    finally:
-        if cursor:
-            cursor.close()
-        if conn:
-            conn.close()
-
-# -------------------------
-# API: 根據發證中心ID取得該中心的證照列表
-# -------------------------
-@resume_bp.route('/api/get_certificates_by_authority', methods=['GET'])
-def get_certificates_by_authority():
-    conn = None
-    cursor = None
-    try:
-        authority_id = request.args.get('authority_id')
-        if not authority_id:
-            return jsonify({"success": False, "message": "缺少 authority_id 參數"}), 400
-        
-        try:
-            authority_id = int(authority_id)
-        except ValueError:
-            return jsonify({"success": False, "message": "authority_id 必須是數字"}), 400
-
-        conn = get_db()
-        cursor = conn.cursor(dictionary=True)
-        
-        # 檢查是否有 name 欄位（向後兼容）
-        cursor.execute("SHOW COLUMNS FROM certificate_codes LIKE 'name'")
-        has_name_column = cursor.fetchone() is not None
-        
-        if has_name_column:
-            name_select = "name"
-            order_by = "name"
-        else:
-            # 如果沒有 name 欄位，使用 job_category 和 level 組合
-            name_select = "CONCAT(COALESCE(job_category, ''), COALESCE(level, '')) AS name"
-            order_by = "COALESCE(job_category, ''), COALESCE(level, '')"
-        
-        cursor.execute(f"""
-            SELECT code, {name_select}, category 
-            FROM certificate_codes 
-            WHERE authority_id = %s 
-            ORDER BY {order_by}
-        """, (authority_id,))
-        certificates = cursor.fetchall()
-        
-        return jsonify({
-            "success": True,
-            "certificates": certificates
-        })
-    except Exception as e:
-        traceback.print_exc()
-        return jsonify({"success": False, "message": f"伺服器錯誤: {str(e)}"}), 500
-    finally:
-        if cursor:
-            cursor.close()
-        if conn:
-            conn.close()
-
-# -------------------------
-# API：取得缺勤可用的學期列表
-# -------------------------
-@resume_bp.route('/api/absence/available_semesters', methods=['GET'])
-def get_absence_available_semesters():
-    """取得缺勤可用的學期列表（根據預設範圍過濾）"""
-    if 'user_id' not in session:
-        return jsonify({"success": False, "message": "請先登入"}), 401
-    
-    conn = get_db()
-    cursor = conn.cursor(dictionary=True)
-    
-    try:
-        # 獲取學生入學年度（從username前3碼）
-        user_id = session['user_id']
-        cursor.execute("SELECT username FROM users WHERE id = %s", (user_id,))
-        user_result = cursor.fetchone()
-        
-        admission_year = None
-        if user_result and user_result.get('username'):
-            username = user_result['username']
-            if len(username) >= 3:
-                try:
-                    admission_year = int(username[:3])
-                except ValueError:
-                    pass
-        
-        # 檢查並獲取預設學期範圍
-        cursor.execute("SHOW TABLES LIKE 'absence_default_semester_range'")
-        table_exists = cursor.fetchone() is not None
-        
-        start_semester_code = None
-        end_semester_code = None
-        
-        if table_exists:
-            # 檢查表是否有 admission_year 欄位
-            cursor.execute("SHOW COLUMNS FROM absence_default_semester_range LIKE 'admission_year'")
-            has_admission_year = cursor.fetchone() is not None
-            
-            if has_admission_year and admission_year:
-                cursor.execute("""
-                    SELECT start_semester_code, end_semester_code
-                    FROM absence_default_semester_range
-                    WHERE admission_year = %s
-                    ORDER BY id DESC
-                    LIMIT 1
-                """, (admission_year,))
-            else:
-                cursor.execute("""
-                    SELECT start_semester_code, end_semester_code
-                    FROM absence_default_semester_range
-                    ORDER BY id DESC
-                    LIMIT 1
-                """)
-            
-            range_result = cursor.fetchone()
-            if range_result:
-                start_semester_code = range_result.get('start_semester_code')
-                end_semester_code = range_result.get('end_semester_code')
-        
-        # 查詢學期列表
-        if start_semester_code and end_semester_code:
-            # 根據預設範圍過濾學期
-            cursor.execute("""
-                SELECT id, code, start_date, end_date, is_active
-                FROM semesters
-                WHERE code >= %s AND code <= %s
-                ORDER BY code ASC
-            """, (start_semester_code, end_semester_code))
-        else:
-            # 如果沒有預設範圍，返回所有學期
-            cursor.execute("""
-                SELECT id, code, start_date, end_date, is_active
-                FROM semesters
-                ORDER BY code DESC
-            """)
-        
-        semesters = cursor.fetchall()
-        
-        # 格式化日期
-        for s in semesters:
-            if isinstance(s.get('start_date'), datetime):
-                s['start_date'] = s['start_date'].strftime("%Y-%m-%d")
-            if isinstance(s.get('end_date'), datetime):
-                s['end_date'] = s['end_date'].strftime("%Y-%m-%d")
-            if isinstance(s.get('created_at'), datetime):
-                s['created_at'] = s['created_at'].strftime("%Y-%m-%d %H:%M:%S")
-        
-        return jsonify({
-            "success": True,
-            "semesters": semesters
-        })
-    except Exception as e:
-        traceback.print_exc()
-        return jsonify({"success": False, "message": f"取得學期列表失敗: {str(e)}"}), 500
-    finally:
-        cursor.close()
-        conn.close()
-
-# 放到 resume_bp.py
-@resume_bp.route('/api/get_absence_default_range', methods=['GET'])
-def get_absence_default_range_for_student():
-    if 'user_id' not in session or session.get('role') != 'student':
-        return jsonify({"success": False, "message": "未授權"}), 403
-
-    student_id = session['user_id']
-    conn = get_db()
-    cursor = conn.cursor(dictionary=True)
-    try:
-        cursor.execute("SELECT username FROM users WHERE id = %s LIMIT 1", (student_id,))
-        user = cursor.fetchone()
-        if not user or not user.get('username'):
-            return jsonify({"success": False, "message": "找不到使用者帳號"}), 404
-
-        admission_year = str(user['username'])[:3]  # 例如 '110'
-        cursor.execute("""
-            SELECT start_semester_code, end_semester_code
-            FROM absence_default_semester_range
-            WHERE admission_year = %s
-            LIMIT 1
-        """, (admission_year,))
-        row = cursor.fetchone()
-        if not row:
-            return jsonify({"success": False, "message": "無預設設定"}), 404
-        return jsonify({"success": True, "start": row['start_semester_code'], "end": row['end_semester_code']})
-    except Exception as e:
-        traceback.print_exc()
-        return jsonify({"success": False, "message": str(e)}), 500
-    finally:
-        cursor.close()
-        conn.close()
-
-# -------------------------
-# 查詢學生履歷列表
-# -------------------------
-@resume_bp.route('/api/get_my_resumes', methods=['GET'])
-def get_my_resumes():
-    if 'user_id' not in session or session.get('role') != 'student':
-        return jsonify({"success": False, "message": "未授權"}), 403
-
-    conn = get_db()
-    cursor = conn.cursor(dictionary=True)
-    try:
-        cursor.execute("""
-            SELECT r.id, r.original_filename, r.status, r.comment, r.note, r.created_at AS upload_time
-            FROM resumes r
-            WHERE r.user_id = %s
-            ORDER BY r.created_at DESC
-        """, (session['user_id'],))
-        resumes = cursor.fetchall()
-        for r in resumes:
-            if isinstance(r.get('upload_time'), datetime):
-                r['upload_time'] = r['upload_time'].strftime("%Y-%m-%d %H:%M:%S")
-        return jsonify({"success": True, "resumes": resumes})
-    finally:
-        cursor.close()
-        conn.close()
-
-# -------------------------
-# API: 根據證照代碼查詢名稱和類別
-# -------------------------
-@resume_bp.route('/api/get_certificate_info', methods=['GET'])
-def get_certificate_info():
-    conn = None
-    cursor = None
-    try:
-        cert_code = request.args.get('code')
-        if not cert_code:
-            return jsonify({"success": False, "message": "缺少證照代碼 (code) 參數"}), 400
-
-        cert_code = cert_code.strip().upper()
-
-        conn = get_db()
-        cursor = conn.cursor(dictionary=True) 
-
-        # ❗ 查詢所有匹配的記錄
-        # 使用 job_category 和 level 組合生成 name，如果沒有則使用 name 字段（向後兼容）
-        sql_query = """
-            SELECT 
-                COALESCE(CONCAT(job_category, level), name) AS name, 
-                category 
-            FROM certificate_codes 
-            WHERE code = %s
-        """
-        cursor.execute(sql_query, (cert_code,))
-        
-        # ❗ 使用 fetchall() 獲取所有結果
-        results = cursor.fetchall()
-
-        if results:
-            # 找到資料，返回一個結果列表
-            return jsonify({
-                "success": True,
-                # ❗ 返回的 info 是一個包含多個 {name, category} 的列表
-                "info": results,
-                "count": len(results)
-            })
-        else:
-            # 查無此代碼
-            return jsonify({
-                "success": False,
-                "message": f"查無代碼: {cert_code}"
-            })
-
-    except Exception as e:
-        traceback.print_exc()
-        return jsonify({"success": False, "message": f"伺服器錯誤: {str(e)}"}), 500
-
-    finally:
-        if cursor:
-            cursor.close()
-        if conn:
-            conn.close()
-
-# -------------------------
-# API: 根據發證中心ID取得該中心的職類和級別列表
-# -------------------------
-@resume_bp.route('/api/get_job_categories_and_levels', methods=['GET'])
-def get_job_categories_and_levels():
-    conn = None
-    cursor = None
-    try:
-        authority_id = request.args.get('authority_id')
-        if not authority_id:
-            return jsonify({"success": False, "message": "缺少 authority_id 參數"}), 400
-        
-        try:
-            authority_id = int(authority_id)
-        except ValueError:
-            return jsonify({"success": False, "message": "authority_id 必須是數字"}), 400
-
-        conn = get_db()
-        cursor = conn.cursor(dictionary=True)
-        
-        # 取得該發證中心的所有證照
-        # 使用 certificate_codes 表的 job_category 和 level 字段組合生成 name
-        # 檢查是否有 name 欄位（向後兼容）
-        cursor.execute("SHOW COLUMNS FROM certificate_codes LIKE 'name'")
-        has_name_column = cursor.fetchone() is not None
-        
-        if has_name_column:
-            # 如果還有 name 欄位，使用 COALESCE 向後兼容
-            name_select = "COALESCE(CONCAT(job_category, level), name) AS name"
-            order_by = "COALESCE(job_category, name), COALESCE(level, '')"
-        else:
-            # 如果沒有 name 欄位，直接使用 CONCAT
-            name_select = "CONCAT(COALESCE(job_category, ''), COALESCE(level, '')) AS name"
-            order_by = "COALESCE(job_category, ''), COALESCE(level, '')"
-        
-        cursor.execute(f"""
-            SELECT code, 
-                   {name_select},
-                   COALESCE(job_category, '') AS job_category,
-                   COALESCE(level, '') AS level
-            FROM certificate_codes 
-            WHERE authority_id = %s 
-            ORDER BY {order_by}
-        """, (authority_id,))
-        certificates = cursor.fetchall()
-        
-        # 解析職類和級別
-        import re
-        job_categories = set()  # 使用 set 避免重複
-        job_category_levels = {}  # {職類: [級別列表]}
-        
-        level_pattern = re.compile(r'(甲級|乙級|丙級|丁級|甲|乙|丙|丁)')
-        
-        print(f"🔍 查詢發證中心 {authority_id} 的證照，共 {len(certificates)} 筆")
-        
-        for cert in certificates:
-            # 優先使用 certificate_codes 表的 job_category 和 level 字段
-            job_category = cert.get('job_category', '').strip()
-            level = cert.get('level', '').strip()
-            cert_name = cert.get('name', '').strip()
-            
-            # 情況1: job_category 和 level 都有值，直接使用
-            if job_category and level:
-                job_categories.add(job_category)
-                if job_category not in job_category_levels:
-                    job_category_levels[job_category] = set()
-                job_category_levels[job_category].add(level)
-                print(f"  ✅ 使用欄位值: 職類={job_category}, 級別={level}")
-            # 情況2: 只有 job_category 有值（即使沒有 level 也顯示職類）
-            elif job_category:
-                job_categories.add(job_category)
-                if job_category not in job_category_levels:
-                    job_category_levels[job_category] = set()
-                # 嘗試從 name 解析 level（如果有的話）
-                if not level and cert_name:
-                    match = level_pattern.search(cert_name)
-                    if match:
-                        parsed_level = match.group(1)
-                        level_map = {'甲': '甲級', '乙': '乙級', '丙': '丙級', '丁': '丁級'}
-                        full_level = level_map.get(parsed_level, parsed_level)
-                        job_category_levels[job_category].add(full_level)
-                        print(f"  ✅ 職類有值，從名稱解析級別: 職類={job_category}, 級別={full_level}")
-                    else:
-                        print(f"  ✅ 職類有值，無級別: 職類={job_category}")
-                elif level:
-                    job_category_levels[job_category].add(level)
-                    print(f"  ✅ 職類和級別都有值: 職類={job_category}, 級別={level}")
-                else:
-                    print(f"  ✅ 職類有值，無級別: 職類={job_category}")
-            # 情況3: 只有 level 有值，嘗試從 name 解析 job_category
-            elif level and not job_category and cert_name:
-                # 從名稱中移除級別，剩下的作為職類
-                parsed_job_category = level_pattern.sub('', cert_name).strip()
-                if parsed_job_category:
-                    job_categories.add(parsed_job_category)
-                    if parsed_job_category not in job_category_levels:
-                        job_category_levels[parsed_job_category] = set()
-                    job_category_levels[parsed_job_category].add(level)
-                    print(f"  ✅ 級別有值，從名稱解析職類: 職類={parsed_job_category}, 級別={level}")
-            # 情況4: 都沒有值，從 name 字段解析職類和級別（向後兼容）
-            elif cert_name:
-                match = level_pattern.search(cert_name)
-                if match:
-                    parsed_level = match.group(1)
-                    level_map = {'甲': '甲級', '乙': '乙級', '丙': '丙級', '丁': '丁級'}
-                    full_level = level_map.get(parsed_level, parsed_level)
-                    
-                    # 提取職類（移除級別後的部分）
-                    parsed_job_category = level_pattern.sub('', cert_name).strip()
-                    
-                    if parsed_job_category:
-                        job_categories.add(parsed_job_category)
-                        if parsed_job_category not in job_category_levels:
-                            job_category_levels[parsed_job_category] = set()
-                        job_category_levels[parsed_job_category].add(full_level)
-                        print(f"  ✅ 從名稱解析: 職類={parsed_job_category}, 級別={full_level}")
-                else:
-                    # 如果無法解析級別，但名稱不為空，將整個名稱作為職類（無級別）
-                    job_categories.add(cert_name)
-                    if cert_name not in job_category_levels:
-                        job_category_levels[cert_name] = set()
-                    print(f"  ✅ 從名稱解析（無級別）: 職類={cert_name}")
-            else:
-                print(f"  ⚠️ 跳過無效證照記錄: code={cert.get('code')}, name={cert_name}")
-        
-        # 轉換為列表並排序
-        job_categories_list = sorted(list(job_categories))
-        # 將級別集合轉換為排序列表
-        for job_category in job_category_levels:
-            job_category_levels[job_category] = sorted(list(job_category_levels[job_category]))
-        
-        return jsonify({
-            "success": True,
-            "job_categories": job_categories_list,
-            "job_category_levels": job_category_levels  # {職類: [級別列表]}
-        })
-    except Exception as e:
-        traceback.print_exc()
-        return jsonify({"success": False, "message": f"伺服器錯誤: {str(e)}"}), 500
-    finally:
-        if cursor:
-            cursor.close()
-        if conn:
-            conn.close()
-
-# -------------------------
-# API：取得已提交履歷的完整資料（用於頁面刷新後恢復表單）
+# API：取得履歷資料
 # -------------------------
 @resume_bp.route('/api/get_resume_data', methods=['GET'])
 def get_resume_data():
-    if 'user_id' not in session or session.get('role') != 'student':
-        return jsonify({"success": False, "message": "未授權"}), 403
+    if 'user_id' not in session:
+        return redirect('/login')
 
-    user_id = session['user_id']
+    session_user_id = session['user_id']
+    session_role = session['role']
+    target_student_id = request.args.get('student_id')
+
+    if session_role == 'student':
+        target_student_id = session['username']
+    elif not target_student_id:
+        return jsonify({"success": False, "message": "缺少學生 ID"}), 400
+
     conn = get_db()
     cursor = conn.cursor(dictionary=True)
-
+    
     try:
-        # ===== 1. 檢查是否有已提交履歷 =====
-        cursor.execute("""
-            SELECT id FROM resumes 
-            WHERE user_id = %s 
-            ORDER BY created_at DESC 
-            LIMIT 1
-        """, (user_id,))
-        resume = cursor.fetchone()
+        # 透過 student_id 找到 user_id
+        cursor.execute("SELECT id FROM users WHERE username = %s", (target_student_id,))
+        target_user_row = cursor.fetchone()
+        if not target_user_row:
+            return jsonify({"success": False, "message": "學生不存在"}), 404
+        target_user_id = target_user_row['id']
 
-        if not resume:
-            return jsonify({"success": False, "message": "沒有已提交的履歷"}), 404
+        # 權限檢查
+        if not can_access_target_resume(cursor, session_user_id, session_role, target_user_id):
+            return jsonify({"success": False, "message": "無權限查看此學生的履歷"}), 403
 
-        # ===== 2. 抓 StudentID（學號）=====
-        cursor.execute("SELECT username FROM users WHERE id=%s", (user_id,))
-        user_result = cursor.fetchone()
-        if not user_result:
-            return jsonify({"success": False, "message": "找不到使用者"}), 404
+        # 取得目前的學期 ID (如果系統使用學期分流)
+        semester_id = get_current_semester_id(cursor)
 
-        student_id = user_result["username"]
+        # 取得資料
+        data = get_student_info_for_doc(cursor, target_student_id, semester_id)
 
-        # ===== 3. 基本資料 =====
-        cursor.execute("SELECT * FROM Student_Info WHERE StuID=%s", (student_id,))
-        student_info = cursor.fetchone() or {}
+        student_info = data['info']
+        courses = data['grades']
+        all_certifications = data['certifications']
+        languages = data['languages']
+        transcript_path = data['transcript_path']
+        absence_proof_path = data['absence_proof_path']
 
-        # ===== 4. 課程資料 =====
-        # 檢查是否有 ProofImage 欄位
-        cursor.execute("SHOW COLUMNS FROM course_grades LIKE 'ProofImage'")
-        has_proof_image = cursor.fetchone() is not None
-        
-        if has_proof_image:
-            cursor.execute("""
-                SELECT CourseName AS name, Credits AS credits, Grade AS grade, ProofImage AS transcript_path
-                FROM course_grades
-                WHERE StuID=%s
-                ORDER BY CourseName
-            """, (student_id,))
-        else:
-            cursor.execute("""
-                SELECT CourseName AS name, Credits AS credits, Grade AS grade
-                FROM course_grades
-                WHERE StuID=%s
-                ORDER BY CourseName
-            """, (student_id,))
-        courses = cursor.fetchall() or []
-        
-        # 提取成績單路徑（從 ProofImage 欄位）
-        transcript_path = ''
-        for course in courses:
-            tp = course.get('transcript_path')
-            if tp:
-                transcript_path = tp
-                break
-
-        # ===== 5. 證照資料 — 單一 SQL，不再三段重複 =====
-
-        sql_cert = """
-            SELECT
-                sc.id,
-                sc.CertPath,
-                sc.AcquisitionDate,
-                sc.cert_code,
-                sc.issuer,
-                sc.authority_name,
-                sc.job_category AS sc_job_category,
-                sc.CreatedAt,
-                
-                -- 發證中心ID：優先使用 sc.authority_id（如果存在），否則從 certificate_codes 獲取
-                COALESCE(
-                    sc.authority_id,
-                    CASE 
-                        WHEN sc.cert_code IS NOT NULL 
-                             AND BINARY sc.cert_code != BINARY 'OTHER'
-                             AND sc.cert_code != ''
-                        THEN cc.authority_id
-                        ELSE NULL
-                    END
-                ) AS authority_id,
-
-                -- 職類：若 cert_code 有值且不是 OTHER → 取 certificate_codes
-                CASE 
-                    WHEN sc.cert_code IS NOT NULL 
-                         AND BINARY sc.cert_code != BINARY 'OTHER'
-                         AND sc.cert_code != ''
-                    THEN COALESCE(cc.job_category, '')
-                    ELSE COALESCE(sc.job_category, '')
-                END AS job_category,
-
-                -- 等級
-                CASE 
-                    WHEN sc.cert_code IS NOT NULL 
-                         AND BINARY sc.cert_code != BINARY 'OTHER'
-                         AND sc.cert_code != ''
-                    THEN COALESCE(cc.level, '')
-                    ELSE COALESCE(sc.level, '')
-                END AS level,
-
-                -- 組合證照名稱
-                CASE 
-                    WHEN (
-                        CASE 
-                            WHEN sc.cert_code IS NOT NULL 
-                                 AND BINARY sc.cert_code != BINARY 'OTHER'
-                                 AND sc.cert_code != ''
-                            THEN cc.job_category
-                            ELSE sc.job_category
-                        END
-                    ) IS NOT NULL
-                    AND (
-                        CASE 
-                            WHEN sc.cert_code IS NOT NULL 
-                                 AND BINARY sc.cert_code != BINARY 'OTHER'
-                                 AND sc.cert_code != ''
-                            THEN cc.level
-                            ELSE sc.level
-                        END
-                    ) IS NOT NULL
-                    AND (
-                        CASE 
-                            WHEN sc.cert_code IS NOT NULL 
-                                 AND BINARY sc.cert_code != BINARY 'OTHER'
-                                 AND sc.cert_code != ''
-                            THEN cc.job_category
-                            ELSE sc.job_category
-                        END
-                    ) != ''
-                    AND (
-                        CASE 
-                            WHEN sc.cert_code IS NOT NULL 
-                                 AND BINARY sc.cert_code != BINARY 'OTHER'
-                                 AND sc.cert_code != ''
-                            THEN cc.level
-                            ELSE sc.level
-                        END
-                    ) != ''
-                THEN CONCAT(
-                    CASE 
-                        WHEN sc.cert_code IS NOT NULL 
-                             AND BINARY sc.cert_code != BINARY 'OTHER'
-                             AND sc.cert_code != ''
-                        THEN cc.job_category
-                        ELSE sc.job_category
-                    END,
-                    CASE 
-                        WHEN sc.cert_code IS NOT NULL 
-                             AND BINARY sc.cert_code != BINARY 'OTHER'
-                             AND sc.cert_code != ''
-                        THEN cc.level
-                        ELSE sc.level
-                    END
-                )
-                ELSE ''
-                END AS CertName,
-
-                -- 發證中心名稱：優先使用 sc.authority_id 關聯的 cert_authorities，否則使用從 certificate_codes 獲取的 authority_id，最後使用 authority_name
-                COALESCE(
-                    ca_from_sc.name,
-                    ca.name, 
-                    sc.authority_name, 
-                    'N/A'
-                ) AS IssuingBody,
-                COALESCE(cc.category, 'other') AS CertType
-            FROM student_certifications sc
-            LEFT JOIN certificate_codes cc 
-                ON sc.cert_code COLLATE utf8mb4_unicode_ci = cc.code COLLATE utf8mb4_unicode_ci
-            LEFT JOIN cert_authorities ca 
-                ON cc.authority_id = ca.id
-            LEFT JOIN cert_authorities ca_from_sc 
-                ON sc.authority_id = ca_from_sc.id
-            WHERE sc.StuID = %s
-            ORDER BY sc.id DESC
-        """
-
-        cursor.execute(sql_cert, (student_id,))
-        all_certifications = cursor.fetchall() or []
-        
-        # 調試：打印查詢結果，確認 level 字段
-        print(f"🔍 查詢證照資料: 共 {len(all_certifications)} 筆")
-        for idx, cert in enumerate(all_certifications[:3]):  # 只打印前3筆
-            print(f"  證照 {idx+1}: id={cert.get('id')}, cert_code={cert.get('cert_code')}, job_category={cert.get('job_category')}, level={cert.get('level')}, authority_id={cert.get('authority_id')}")
-
-        # ===== 6. 取最新一批證照 =====
-
-        certifications = []
-        if all_certifications:
-            latest_created_at = all_certifications[0]["CreatedAt"]
-            latest_id = all_certifications[0]["id"]
-
-            if latest_created_at:
-                certifications = [
-                    c for c in all_certifications
-                    if c["CreatedAt"] == latest_created_at
-                ]
-            else:
-                max_id = latest_id
-                certifications = [
-                    c for c in all_certifications
-                    if c["id"] >= (max_id - 50)
-                ]
-
-            # 過濾空白資料
-            certifications = [
-                c for c in certifications
-                if (
-                    (c["job_category"] and c["level"]) or
-                    (c["CertName"]) or
-                    (c["cert_code"] and c["cert_code"] != "OTHER")
-                )
-            ]
-
-        # ===== 7. 語言能力 =====
-
-        cursor.execute("""
-            SELECT Language AS language, Level AS level
-            FROM student_languageskills
-            WHERE StuID=%s
-            ORDER BY Language
-        """, (student_id,))
-        languages = cursor.fetchall() or []
-        
-        # ===== 7.5 缺勤記錄佐證圖片 =====
-        # 從 absence_records 表獲取最新的 image_path
-        absence_proof_path = ''
-        try:
-            cursor.execute("SELECT id FROM users WHERE username=%s", (student_id,))
-            user_row = cursor.fetchone()
-            if user_row:
-                user_id = user_row.get('id')
-                # 嘗試使用 created_at 排序，如果沒有該欄位則使用 id
-                try:
-                    cursor.execute("""
-                        SELECT image_path, created_at
-                        FROM absence_records
-                        WHERE user_id = %s AND image_path IS NOT NULL AND image_path != ''
-                        ORDER BY created_at DESC
-                        LIMIT 1
-                    """, (user_id,))
-                except:
-                    # 如果 created_at 欄位不存在，使用 id 排序
-                    cursor.execute("""
-                        SELECT image_path
-                        FROM absence_records
-                        WHERE user_id = %s AND image_path IS NOT NULL AND image_path != ''
-                        ORDER BY id DESC
-                        LIMIT 1
-                    """, (user_id,))
-                absence_row = cursor.fetchone()
-                if absence_row:
-                    absence_proof_path = absence_row.get('image_path', '')
-                    print(f"🔍 找到缺勤佐證圖片: {absence_proof_path}")
-        except Exception as e:
-            print(f"⚠️ 查詢缺勤佐證圖片失敗: {e}")
-            traceback.print_exc()
-
-        # ===== 8. 日期格式轉換 =====
+        # 日期格式轉換
         birth_date = student_info.get("BirthDate")
         if birth_date:
             if isinstance(birth_date, datetime):
                 birth_date = birth_date.strftime("%Y-%m-%d")
             else:
                 try:
-                    birth_date = datetime.strptime(birth_date, "%Y-%m-%d").strftime("%Y-%m-%d")
+                    birth_date = datetime.strptime(str(birth_date).split(' ')[0], "%Y-%m-%d").strftime("%Y-%m-%d")
                 except:
                     pass
 
-        # ===== 9. 格式化證照輸出 =====
+        # 格式化證照輸出
         formatted_certs = []
-        for cert in certifications:
+        for cert in all_certifications:
             acquire_date = cert.get("AcquisitionDate")
             formatted_acquire_date = ""
-            acquisition_date_str = None  # 用於 JSON 序列化的字符串格式
-            
+            acquisition_date_str = None # 用於 JSON 序列化的字符串格式
             if acquire_date is not None:
-                if isinstance(acquire_date, datetime):
-                    formatted_acquire_date = acquire_date.strftime("%Y-%m-%d")
-                    acquisition_date_str = formatted_acquire_date
-                elif isinstance(acquire_date, date):
+                if isinstance(acquire_date, (datetime, date)):
                     formatted_acquire_date = acquire_date.strftime("%Y-%m-%d")
                     acquisition_date_str = formatted_acquire_date
                 elif acquire_date:
                     try:
                         # 嘗試解析字符串格式的日期
                         if isinstance(acquire_date, str):
-                            formatted_acquire_date = datetime.strptime(acquire_date, "%Y-%m-%d").strftime("%Y-%m-%d")
+                            formatted_acquire_date = datetime.strptime(acquire_date.split(' ')[0], "%Y-%m-%d").strftime("%Y-%m-%d")
                             acquisition_date_str = formatted_acquire_date
                         else:
                             formatted_acquire_date = str(acquire_date)
                             acquisition_date_str = formatted_acquire_date
                     except Exception as e:
-                        print(f"⚠️ 日期格式化失敗: {acquire_date}, 錯誤: {e}")
                         formatted_acquire_date = str(acquire_date) if acquire_date else ""
                         acquisition_date_str = formatted_acquire_date
-            
-            # 獲取級別字段（SQL 返回的字段名是 level）
+
+            # 獲取級別字段
             cert_level = cert.get("level", "")
-            print(f"🔍 證照資料處理: id={cert.get('id')}, AcquisitionDate={acquire_date}, formatted={formatted_acquire_date}, level={cert_level}, job_category={cert.get('job_category', '')}")
             
             # 獲取證照圖片路徑，並將 Windows 路徑格式（反斜杠）轉換為 Web 路徑格式（正斜杠）
             cert_path_raw = cert.get("CertPath", "")
             cert_path = cert_path_raw.replace("\\", "/") if cert_path_raw else ""
-            
+
+            # 證照名稱：優先使用 cc.job_category + cc.level，其次使用 sc.CertName
+            cert_name = ""
+            if cert.get('job_category') and cert.get('level'):
+                cert_name = f"{cert.get('job_category')}{cert.get('level')}"
+            elif cert.get('CertName'):
+                cert_name = cert.get('CertName')
+
             formatted_certs.append({
                 "id": cert["id"],
                 "cert_code": cert.get("cert_code", ""),
                 "cert_path": cert_path,
-                "name": cert.get("CertName", ""),
+                "name": cert_name,
                 "job_category": cert.get("job_category", ""),
-                "level": cert_level,  # 修正：SQL 返回的字段名是 level，不是 CertLevel
+                "level": cert_level,
                 "authority_name": cert.get("authority_name", ""),
                 "issuer": cert.get("issuer", ""),
                 "authority_id": cert.get("authority_id") if "authority_id" in cert else None,
                 "IssuingBody": cert.get("IssuingBody", ""),
                 "CertType": cert.get("CertType", "other"),
                 "acquire_date": formatted_acquire_date,
-                "AcquisitionDate": acquisition_date_str  # 轉換為字符串格式，確保 JSON 序列化正常
+                "AcquisitionDate": acquisition_date_str # 轉換為字符串格式，確保 JSON 序列化正常
             })
 
-        # ===== 10. 回傳結果 =====
+        # 獲取缺勤記錄資料（如果用戶是學生）
+        absence_data = None
+        if session_role == 'student':
+            try:
+                # 檢查是否有預設學期範圍
+                cursor.execute("SHOW TABLES LIKE 'absence_default_semester_range'")
+                table_exists = cursor.fetchone() is not None
+                
+                start_semester_id = None
+                end_semester_id = None
+                
+                if table_exists:
+                    cursor.execute("SELECT username FROM users WHERE id = %s", (session_user_id,))
+                    user_result = cursor.fetchone()
+                    admission_year = None
+                    if user_result and user_result.get('username'):
+                        username = user_result['username']
+                        if len(username) >= 3:
+                            try:
+                                admission_year = int(username[:3])
+                            except ValueError:
+                                pass
+                    
+                    cursor.execute("SHOW COLUMNS FROM absence_default_semester_range LIKE 'admission_year'")
+                    has_admission_year = cursor.fetchone() is not None
+                    
+                    if has_admission_year and admission_year:
+                        cursor.execute("""
+                            SELECT start_semester_code, end_semester_code
+                            FROM absence_default_semester_range
+                            WHERE admission_year = %s
+                            ORDER BY id DESC
+                            LIMIT 1
+                        """, (admission_year,))
+                    else:
+                        cursor.execute("""
+                            SELECT start_semester_code, end_semester_code
+                            FROM absence_default_semester_range
+                            ORDER BY id DESC
+                            LIMIT 1
+                        """)
+                    
+                    range_result = cursor.fetchone()
+                    if range_result:
+                        start_semester_code = range_result.get('start_semester_code')
+                        end_semester_code = range_result.get('end_semester_code')
+                        
+                        if start_semester_code and end_semester_code:
+                            cursor.execute("""
+                                SELECT id FROM semesters 
+                                WHERE code = %s OR code = %s
+                            """, (start_semester_code, end_semester_code))
+                            semester_rows = cursor.fetchall()
+                            if len(semester_rows) == 2:
+                                start_semester_id = semester_rows[0]['id'] if semester_rows[0]['code'] == start_semester_code else semester_rows[1]['id']
+                                end_semester_id = semester_rows[0]['id'] if semester_rows[0]['code'] == end_semester_code else semester_rows[1]['id']
+                
+                # 查詢缺勤記錄
+                cursor.execute("SHOW COLUMNS FROM absence_records LIKE 'semester_id'")
+                has_semester_id = cursor.fetchone() is not None
+                
+                where_conditions = ["ar.user_id = %s"]
+                query_params = [target_user_id]
+                
+                if has_semester_id and start_semester_id and end_semester_id:
+                    cursor.execute("""
+                        SELECT id FROM semesters 
+                        WHERE code >= (SELECT code FROM semesters WHERE id = %s)
+                        AND code <= (SELECT code FROM semesters WHERE id = %s)
+                        ORDER BY code
+                    """, (start_semester_id, end_semester_id))
+                    semester_ids_in_range = [row['id'] for row in cursor.fetchall()]
+                    if semester_ids_in_range:
+                        placeholders = ','.join(['%s'] * len(semester_ids_in_range))
+                        where_conditions.append(f"ar.semester_id IN ({placeholders})")
+                        query_params.extend(semester_ids_in_range)
+                
+                where_clause = " AND ".join(where_conditions)
+                
+                if has_semester_id:
+                    query = f"""
+                        SELECT 
+                            ar.id,
+                            ar.absence_date,
+                            ar.absence_type,
+                            ar.duration_units,
+                            ar.reason,
+                            ar.image_path,
+                            ar.created_at,
+                            s.code AS semester_code,
+                            s.id AS semester_id
+                        FROM absence_records ar
+                        LEFT JOIN semesters s ON ar.semester_id = s.id
+                        WHERE {where_clause}
+                        ORDER BY ar.absence_date DESC, ar.created_at DESC
+                    """
+                    cursor.execute(query, tuple(query_params))
+                else:
+                    query = f"""
+                        SELECT 
+                            ar.id,
+                            ar.absence_date,
+                            ar.absence_type,
+                            ar.duration_units,
+                            ar.reason,
+                            ar.image_path,
+                            ar.created_at,
+                            NULL AS semester_code,
+                            NULL AS semester_id
+                        FROM absence_records ar
+                        WHERE {where_clause}
+                        ORDER BY ar.absence_date DESC, ar.created_at DESC
+                    """
+                    cursor.execute(query, tuple(query_params))
+                
+                absence_records = cursor.fetchall()
+                
+                # 格式化日期
+                for record in absence_records:
+                    if record.get('absence_date'):
+                        absence_date = record['absence_date']
+                        if isinstance(absence_date, datetime):
+                            record['absence_date'] = absence_date.strftime("%Y-%m-%d")
+                        elif isinstance(absence_date, str):
+                            date_match = re.search(r'(\d{4})-(\d{2})-(\d{2})', absence_date)
+                            if date_match:
+                                record['absence_date'] = date_match.group(0)
+                            elif 'T' in absence_date:
+                                record['absence_date'] = absence_date.split('T')[0]
+                
+                # 計算統計
+                stats = {}
+                for record in absence_records:
+                    absence_type = record.get('absence_type')
+                    duration_units = record.get('duration_units', 0)
+                    if absence_type:
+                        stats[absence_type] = stats.get(absence_type, 0) + int(duration_units)
+                
+                absence_data = {
+                    "start_semester_id": start_semester_id,
+                    "end_semester_id": end_semester_id,
+                    "records": absence_records,
+                    "stats": stats
+                }
+            except Exception as e:
+                print(f"⚠️ 查詢缺勤記錄失敗: {e}")
+                traceback.print_exc()
+                absence_data = None
+
+        # 回傳結果
+        result_data = {
+            "student_info": {
+                "name": student_info.get("StuName", ""),
+                "birth_date": birth_date or "",
+                "gender": student_info.get("Gender", ""),
+                "phone": student_info.get("Phone", ""),
+                "email": student_info.get("Email", ""),
+                "address": student_info.get("Address", ""),
+                "conduct_score": student_info.get("ConductScore", ""),
+                "autobiography": student_info.get("Autobiography", ""),
+                "photo_path": student_info.get("PhotoPath", "")
+            },
+            "courses": courses,
+            "certifications": formatted_certs,
+            "languages": languages,
+            "transcript_path": transcript_path,
+            "absence_proof_path": absence_proof_path
+        }
+        
+        # 如果有缺勤資料，添加到返回結果中
+        if absence_data:
+            result_data["absence_data"] = absence_data
+        
         return jsonify({
             "success": True,
-            "data": {
-                "student_info": {
-                    "name": student_info.get("StuName", ""),
-                    "birth_date": birth_date or "",
-                    "gender": student_info.get("Gender", ""),
-                    "phone": student_info.get("Phone", ""),
-                    "email": student_info.get("Email", ""),
-                    "address": student_info.get("Address", ""),
-                    "conduct_score": student_info.get("ConductScore", ""),
-                    "autobiography": student_info.get("Autobiography", ""),
-                    "photo_path": student_info.get("PhotoPath", "")
-                },
-                "courses": courses,
-                "certifications": formatted_certs,
-                "languages": languages,
-                "transcript_path": transcript_path,
-                "absence_proof_path": absence_proof_path
-            }
+            "data": result_data
         })
-
     except Exception as e:
         print("❌ 取得履歷資料錯誤:", e)
         traceback.print_exc()
@@ -2409,8 +1821,146 @@ def get_director_department(cursor, user_id):
         print(f"Error fetching director department: {e}")
         return None
 
+
+@resume_bp.route('/api/teacher_review_resumes', methods=['GET'])
+def get_teacher_review_resumes():
+    # 確保有權限 (teacher, director, class_teacher, admin) 才能進入
+    if 'user_id' not in session or session.get('role') not in ['teacher', 'director', 'class_teacher', 'admin']:
+        return jsonify({"success": False, "message": "無權限"}), 403
+
+    session_user_id = session['user_id']
+    session_role = session['role']
+    
+    conn = get_db() 
+    # 使用 dictionary=True 讓查詢結果為字典格式
+    cursor = conn.cursor(dictionary=True) 
+    
+    try:
+        # 建立基本查詢：每個志願序都顯示一行履歷
+        sql = """
+            SELECT 
+                u.id AS user_id,
+                u.username AS student_id,
+                u.name,
+                c.name AS class_name,
+                c.department,
+                r.id AS resume_id,
+                r.created_at AS upload_time,
+                r.original_filename,
+                r.status AS display_status,
+                sp.id AS preference_id,
+                sp.preference_order,
+                ic.company_name,
+                COALESCE(sp.job_title, ij.title) AS job_title
+            FROM users u
+            LEFT JOIN classes c ON u.class_id = c.id
+            LEFT JOIN resumes r ON u.id = r.user_id 
+            JOIN student_preferences sp ON sp.student_id = u.id
+            JOIN internship_companies ic ON sp.company_id = ic.id
+            LEFT JOIN internship_jobs ij ON sp.job_id = ij.id
+            WHERE u.role = 'student' 
+        """
+        params = []
+        
+        # 根據角色過濾資料
+        if session_role in ['teacher', 'class_teacher']:
+            # 老師/班導師：只看自己班級的學生 (假設 classes_teacher 表格關聯了老師和班級)
+            sql += """
+                AND u.class_id IN (
+                    SELECT class_id FROM classes_teacher WHERE teacher_id = %s
+                )
+            """
+            params.append(session_user_id)
+        elif session_role == 'director':
+            # 主任：只看自己部門的學生
+            director_dept = get_director_department(cursor, session_user_id)
+            if not director_dept:
+                # 主任沒有設定部門，則返回空列表
+                return jsonify({"success": True, "data": [], "message": "主任未設定所屬部門，無法查詢"}), 200
+            
+            # classes 表中使用 department 欄位
+            sql += " AND c.department = %s" 
+            params.append(director_dept)
+        
+        # 排序：按照班級、姓名、志願順序、上傳時間（最新在上）
+        sql += " ORDER BY c.name, u.username, sp.preference_order ASC, COALESCE(r.created_at, '1970-01-01') DESC"
+
+        cursor.execute(sql, tuple(params))
+        rows = cursor.fetchall()
+        
+        # 整理結果：每個志願序都顯示一行履歷記錄
+        result_data = []
+        processed_combinations = set()  # 追蹤已處理的 (student_id, preference_id) 組合
+        
+        for row in rows:
+            student_id = row['student_id']
+            preference_id = row.get('preference_id')
+            preference_order = row.get('preference_order', 0)
+            
+            # 創建唯一標識符，避免重複添加相同的志願序
+            combo_key = (student_id, preference_id) if preference_id else (student_id, None)
+            
+            # 處理未上傳履歷的學生（每個志願序都顯示一行）
+            if not row['resume_id']:
+                if combo_key not in processed_combinations:
+                    processed_combinations.add(combo_key)
+                    result_data.append({
+                        'user_id': row['user_id'],
+                        'username': student_id,
+                        'name': row['name'],
+                        'className': row['class_name'] or '—',
+                        'upload_time': 'N/A',
+                        'original_filename': 'N/A',
+                        'company_name': row.get('company_name') or '—',
+                        'job_title': row.get('job_title') or '—',
+                        'preference_order': preference_order,
+                        'display_company': row.get('company_name') or '—',
+                        'display_job': row.get('job_title') or '—',
+                        'display_status': 'not_uploaded' # 未上傳狀態
+                    })
+                continue
+
+            # 為每個志願序添加履歷記錄
+            # 創建唯一標識符 (resume_id, preference_id) 避免重複
+            resume_pref_key = (row['resume_id'], preference_id) if preference_id else (row['resume_id'], None)
+            
+            if resume_pref_key not in processed_combinations:
+                processed_combinations.add(resume_pref_key)
+                status = row.get('display_status') if row.get('display_status') else 'pending'
+                # 將 uploaded 狀態映射為 pending 供前端顯示
+                if status == 'uploaded':
+                    status = 'pending'
+                
+                result_data.append({
+                    # 前端下載連結 /api/download_resume/${row.id} 需要的是履歷 ID
+                    'id': row['resume_id'], 
+                    'username': student_id,
+                    'name': row['name'],
+                    'className': row['class_name'] or '—',
+                    'upload_time': row['upload_time'].strftime('%Y/%m/%d %H:%M') if isinstance(row['upload_time'], datetime) else (row['upload_time'] if row['upload_time'] else 'N/A'),
+                    'original_filename': row['original_filename'] or 'N/A',
+                    'company_name': row.get('company_name') or '—',
+                    'job_title': row.get('job_title') or '—',
+                    'preference_order': preference_order,
+                    'display_company': row.get('company_name') or '—',
+                    'display_job': row.get('job_title') or '—',
+                    'display_status': status,
+                })
+        
+        return jsonify({"success": True, "data": result_data})
+
+    except Exception as e:
+        # 請確保您已在 resume.py 頂部導入 import traceback
+        traceback.print_exc()
+        print("❌ 取得待審核履歷列表錯誤:", e)
+        return jsonify({"success": False, "message": f"伺服器錯誤: {str(e)}"}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+
 # -------------------------
-# 審核履歷 (退件/完成)
+# API - 審核履歷 (退件/通過)
 # -------------------------
 @resume_bp.route('/api/review_resume/<int:resume_id>', methods=['POST'])
 def review_resume(resume_id):
@@ -2424,7 +1974,7 @@ def review_resume(resume_id):
 
     data = request.get_json()
     status = data.get('status')
-    comment = data.get('comment') # 老師留言
+    comment = data.get('comment', '')  # 老師留言
 
     if status not in ['approved', 'rejected']:
         return jsonify({"success": False, "message": "無效的狀態碼"}), 400
@@ -2452,16 +2002,13 @@ def review_resume(resume_id):
         student_name = resume_data['student_name']  
         old_status = resume_data['old_status']
 
-
-        # 3. 更新履歷狀態 (使用您確認的 reviewed_by 和 reviewed_at)
+        # 3. 更新履歷狀態
         cursor.execute("""
             UPDATE resumes SET 
                 status=%s, 
-                comment=%s, 
-                reviewed_by=%s,    
-                reviewed_at=NOW()  
+                comment=%s
             WHERE id=%s
-        """, (status, comment, user_id, resume_id))
+        """, (status, comment, resume_id))
         
         # 4. 取得審核者姓名
         cursor.execute("SELECT name, role FROM users WHERE id = %s", (user_id,))
@@ -2475,16 +2022,20 @@ def review_resume(resume_id):
             reviewer_name = "審核者"
 
         # 5. 處理 Email 寄送與通知 (僅在狀態改變時處理)
-        from email_service import send_resume_rejection_email, send_resume_approval_email
         if old_status != status:
             # =============== 退件 ===============
             if status == 'rejected':
-                email_success, email_message, log_id = send_resume_rejection_email(
-                    student_email, student_name, reviewer_name, comment or "無"
-                )
-                print(f"📧 履歷退件 Email: {email_success}, {email_message}, Log ID: {log_id}")
+                # 嘗試發送郵件（如果 email_service 存在）
+                try:
+                    from email_service import send_resume_rejection_email
+                    email_success, email_message, log_id = send_resume_rejection_email(
+                        student_email, student_name, reviewer_name, comment or "無"
+                    )
+                    print(f"📧 履歷退件 Email: {email_success}, {email_message}, Log ID: {log_id}")
+                except ImportError:
+                    print("⚠️ email_service 模組不存在，跳過郵件發送")
 
-                # 🎯 建立退件通知（改成 create_notification）
+                # 🎯 建立退件通知
                 notification_content = (
                     f"您的履歷已被 {reviewer_name} 老師退件。\n\n"
                     f"退件原因：{comment if comment else '請查看老師留言'}\n\n"
@@ -2497,9 +2048,9 @@ def review_resume(resume_id):
                     message=notification_content,
                     category="resume"
                 )
-             # 🔄 如果是老師退件，將 student_preferences 狀態重置為 'pending'，避免同步到廠商審核頁面
+                
+                # 🔄 如果是老師退件，將 student_preferences 狀態重置為 'pending'
                 if user_role in ['teacher', 'class_teacher']:
-                    # 將該學生所有志願序的狀態重置為 'pending'，這樣就不會顯示在廠商審核頁面
                     cursor.execute("""
                         UPDATE student_preferences 
                         SET status = 'pending'
@@ -2512,12 +2063,17 @@ def review_resume(resume_id):
 
             # =============== 通過 ===============
             elif status == 'approved':
-                email_success, email_message, log_id = send_resume_approval_email(
-                    student_email, student_name, reviewer_name
-                )
-                print(f"📧 履歷通過 Email: {email_success}, {email_message}, Log ID: {log_id}")
+                # 嘗試發送郵件（如果 email_service 存在）
+                try:
+                    from email_service import send_resume_approval_email
+                    email_success, email_message, log_id = send_resume_approval_email(
+                        student_email, student_name, reviewer_name
+                    )
+                    print(f"📧 履歷通過 Email: {email_success}, {email_message}, Log ID: {log_id}")
+                except ImportError:
+                    print("⚠️ email_service 模組不存在，跳過郵件發送")
 
-                # 🎯 建立通過通知（改成 create_notification）
+                # 🎯 建立通過通知
                 notification_content = (
                     f"恭喜您！您的履歷已由 {reviewer_name} 老師審核通過。\n"
                     f"您可以繼續後續的實習申請流程。"
@@ -2529,6 +2085,18 @@ def review_resume(resume_id):
                     message=notification_content,
                     category="resume"
                 )
+                
+                # 🎯 新增邏輯：如果班導通過履歷，將該學生所有志願序狀態從 'pending' 更新為 'approved'
+                if user_role in ['teacher', 'class_teacher']:
+                    cursor.execute("""
+                        UPDATE student_preferences 
+                        SET status = 'approved'
+                        WHERE student_id = %s
+                        AND status = 'pending'
+                    """, (student_user_id,))
+                    updated_count = cursor.rowcount
+                    if updated_count > 0:
+                        print(f"✅ 班導通過履歷，已將 {updated_count} 筆學生志願序狀態更新為 'approved'，將同步到指導老師審核頁面")
 
         conn.commit()
 
@@ -2545,502 +2113,387 @@ def review_resume(resume_id):
 
 
 # -------------------------
-# API - 更新履歷欄位（comment, note）（含權限檢查）
+# 頁面路由
 # -------------------------
-@resume_bp.route('/api/update_resume_field', methods=['POST'])
-def update_resume_field():
-    try:
-        if not require_login():
-            return jsonify({"success": False, "message": "未授權"}), 403
+@resume_bp.route('/review_resume')
+def review_resume_page():
+    # 檢查登入狀態
+    if not require_login():
+        return redirect('/login')
+    
+    # 統一使用整合後的審核頁面
+    return render_template('resume/review_resume.html')
 
-        data = request.get_json() or {}
-        resume_id = data.get('resume_id')
-        field = data.get('field')
-        value = (data.get('value') or '').strip()
+@resume_bp.route('/class_review_resume')
+def class_review_resume_page():
+    # 檢查登入狀態
+    if not require_login():
+        return redirect('/login')
+    
+    # 班導審核履歷頁面
+    return render_template('resume/class_review_resume.html')
 
-        allowed_fields = {
-            "comment": "comment",
-            "note": "note"
-        }
-
-        try:
-            resume_id = int(resume_id)
-        except (TypeError, ValueError):
-            return jsonify({"success": False, "message": "resume_id 必須是數字"}), 400
-
-        if field not in allowed_fields:
-            return jsonify({"success": False, "message": "參數錯誤"}), 400
-
-        conn = get_db()
-        cursor = conn.cursor(dictionary=True)
-
-        # 先找出 resume 的 owner
-        cursor.execute("SELECT user_id FROM resumes WHERE id = %s", (resume_id,))
-        r = cursor.fetchone()
-        if not r:
-            cursor.close()
-            conn.close()
-            return jsonify({"success": False, "message": "找不到該履歷"}), 404
-
-        owner_id = r['user_id']
-
-        # 取得使用者角色與 id
-        role = session.get('role')
-        user_id = session['user_id']
-
-        if role == "class_teacher":
-            if not teacher_manages_class(cursor, user_id, get_user_by_id(cursor, owner_id)['class_id']):
-                cursor.close()
-                conn.close()
-                return jsonify({"success": False, "message": "沒有權限修改該履歷"}), 403
-
-        elif role == "director":
-            director_dept = get_director_department(cursor, user_id)
-            cursor.execute("SELECT c.department FROM classes c JOIN users u ON u.class_id = c.id WHERE u.id = %s", (owner_id,))
-            target_dept_row = cursor.fetchone()
-            if not director_dept or not target_dept_row or director_dept != target_dept_row.get('department'):
-                cursor.close()
-                conn.close()
-                return jsonify({"success": False, "message": "沒有權限修改該履歷"}), 403
-
-        elif role == "admin":
-            pass  # admin 可以
-
-        elif role == "student":
-            # 學生只能修改自己的履歷，且只能修改 note 欄位
-            if user_id != owner_id:
-                cursor.close()
-                conn.close()
-                return jsonify({"success": False, "message": "學生只能修改自己的履歷"}), 403
-            if field != "note":
-                cursor.close()
-                conn.close()
-                return jsonify({"success": False, "message": "學生只能修改備註欄位"}), 403
-
-        else:
-            # ta 或其他角色不可修改
-            cursor.close()
-            conn.close()
-            return jsonify({"success": False, "message": "角色無權限修改"}), 403
-
-        # 更新欄位
-        sql = f"UPDATE resumes SET {allowed_fields[field]} = %s, updated_at = NOW() WHERE id = %s"
-        cursor.execute(sql, (value, resume_id))
-        conn.commit()
-        cursor.close()
-        conn.close()
-        return jsonify({"success": True, "field": field, "resume_id": resume_id})
-
-    except Exception as e:
-        traceback.print_exc()
-        return jsonify({"success": False, "message": f"伺服器錯誤: {str(e)}"}), 500
 
 # -------------------------
-# API - 查詢履歷狀態
+# API - 取得班導 / 主任 履歷 (支援多班級 & 全系)（讀取）
 # -------------------------
-@resume_bp.route('/api/resume_status', methods=['GET'])
-def resume_status():
-    resume_id = request.args.get('resume_id')
-    if not resume_id:
-        return jsonify({"success": False, "message": "缺少 resume_id"}), 400
-
-    try:
-        conn = get_db()
-        cursor = conn.cursor(dictionary=True)
-        cursor.execute("SELECT status FROM resumes WHERE id = %s", (resume_id,))
-        resume = cursor.fetchone()
-        cursor.close()
-        conn.close()
-
-        if not resume:
-            return jsonify({"success": False, "message": "找不到該履歷"}), 404
-
-        return jsonify({"success": True, "status": resume['status']})
-
-    except Exception as e:
-        traceback.print_exc()
-        return jsonify({"success": False, "message": f"伺服器錯誤: {str(e)}"}), 500
-
-# -------------------------
-# API - 查詢所有學生履歷（根據 username，含讀取權限檢查）
-# -------------------------
-@resume_bp.route('/api/get_student_resumes', methods=['GET'])
-def get_student_resumes():
+@resume_bp.route("/api/get_class_resumes", methods=["GET"])
+def get_class_resumes():
+    # 驗證登入
     if not require_login():
         return jsonify({"success": False, "message": "未授權"}), 403
 
-    username = request.args.get('username')
-    if not username:
-        return jsonify({"success": False, "message": "缺少 username"}), 400
-
     user_id = session['user_id']
     role = session['role']
+    mode = request.args.get('mode', '').strip().lower()
+    target_company_id = request.args.get('company_id', type=int)
 
     conn = get_db()
     cursor = conn.cursor(dictionary=True)
 
     try:
-        cursor.execute("""
-            SELECT u.id AS student_id, u.class_id, c.department
-            FROM users u
-            LEFT JOIN classes c ON u.class_id = c.id
-            WHERE u.username = %s
-        """, (username,))
-        student = cursor.fetchone()
-        if not student:
-            return jsonify({"success": False, "message": "找不到學生"}), 404
+        resumes = []  # 初始化結果列表
+        sql_query = ""
+        sql_params = tuple()
 
-        # 權限判斷（讀取）
-        if role == "teacher":
-            if not teacher_manages_class(cursor, user_id, student['class_id']):
-                return jsonify({"success": False, "message": "沒有權限查看該學生履歷"}), 403
+        print(f"🔍 [DEBUG] get_class_resumes called - user_id: {user_id}, role: {role}, company_id: {target_company_id}")
 
+        # ------------------------------------------------------------------
+        # 1. 班導 / 教師 (role == "teacher" or "class_teacher")
+        # ------------------------------------------------------------------
+        if role in ["teacher", "class_teacher"]:
+            # 對於指導老師（teacher），只顯示選擇了該老師管理的公司的學生履歷
+            # 對於班導（class_teacher），顯示班導的學生履歷
+            if role == "teacher":
+                sql_query = """
+                    SELECT DISTINCT
+                        r.id,
+                        u.id AS user_id,
+                        u.name AS student_name,
+                        u.username AS student_number,
+                        c.name AS class_name,
+                        c.department,
+                        r.original_filename,
+                        r.filepath,
+                        r.status,
+                        r.comment,
+                        r.note,
+                        r.created_at,
+                        latest_pref.company_name AS company_name,
+                        latest_pref.job_title AS job_title,
+                        latest_pref.preference_id,
+                        latest_pref.preference_order,
+                        latest_pref.preference_status,
+                        latest_pref.vendor_comment
+                    FROM resumes r
+                    JOIN users u ON r.user_id = u.id
+                    LEFT JOIN classes c ON u.class_id = c.id
+                    INNER JOIN (
+                        SELECT 
+                            sp.student_id,
+                            sp.id AS preference_id,
+                            sp.preference_order,
+                            'pending' AS preference_status,
+                            ic.company_name,
+                            ij.title AS job_title,
+                            ij.id AS job_id,
+                            (SELECT vph.comment 
+                             FROM vendor_preference_history vph 
+                             WHERE vph.preference_id = sp.id 
+                             ORDER BY vph.created_at DESC 
+                             LIMIT 1) AS vendor_comment
+                        FROM student_preferences sp
+                        JOIN internship_companies ic ON sp.company_id = ic.id
+                        LEFT JOIN internship_jobs ij ON sp.job_id = ij.id
+                        WHERE ic.advisor_user_id = %s
+                        AND sp.status = 'approved'
+                        AND sp.id = (
+                            SELECT sp2.id
+                            FROM student_preferences sp2
+                            JOIN internship_companies ic2 ON sp2.company_id = ic2.id
+                            WHERE sp2.student_id = sp.student_id
+                            AND ic2.advisor_user_id = %s
+                            AND sp2.status = 'approved'
+                            ORDER BY sp2.preference_order ASC
+                            LIMIT 1
+                        )
+                    ) latest_pref ON latest_pref.student_id = u.id
+                    WHERE r.status = 'approved'
+                    -- 只顯示選擇了該指導老師管理的公司的學生履歷
+                    AND EXISTS (
+                        SELECT 1
+                        FROM student_preferences sp
+                        JOIN internship_companies ic2 ON sp.company_id = ic2.id
+                        WHERE sp.student_id = u.id 
+                            AND ic2.advisor_user_id = %s
+                            AND sp.status = 'approved'
+                    )
+                """
+                sql_params = (user_id, user_id, user_id)
+            else:
+                # class_teacher 角色：顯示班導的學生履歷
+                sql_query = """
+                    SELECT DISTINCT
+                        r.id,
+                        u.id AS user_id,
+                        u.name AS student_name,
+                        u.username AS student_number,
+                        c.name AS class_name,
+                        c.department,
+                        r.original_filename,
+                        r.filepath,
+                        r.status,
+                        r.comment,
+                        r.note,
+                        r.created_at,
+                        latest_pref.company_name AS company_name,
+                        latest_pref.job_title AS job_title,
+                        latest_pref.preference_id,
+                        latest_pref.preference_order,
+                        latest_pref.preference_status,
+                        latest_pref.vendor_comment
+                    FROM resumes r
+                    JOIN users u ON r.user_id = u.id
+                    LEFT JOIN classes c ON u.class_id = c.id
+                    LEFT JOIN (
+                        SELECT 
+                            sp.student_id,
+                            sp.id AS preference_id,
+                            sp.preference_order,
+                            'pending' AS preference_status,
+                            ic.company_name,
+                            ij.title AS job_title,
+                            ij.id AS job_id,
+                            (SELECT vph.comment 
+                             FROM vendor_preference_history vph 
+                             WHERE vph.preference_id = sp.id 
+                             ORDER BY vph.created_at DESC 
+                             LIMIT 1) AS vendor_comment
+                        FROM student_preferences sp
+                        JOIN internship_companies ic ON sp.company_id = ic.id
+                        LEFT JOIN internship_jobs ij ON sp.job_id = ij.id
+                        WHERE sp.status = 'approved'
+                    ) latest_pref ON latest_pref.student_id = u.id
+                    WHERE r.status = 'approved'
+                    AND EXISTS (
+                        SELECT 1
+                        FROM classes c2
+                        JOIN classes_teacher ct ON ct.class_id = c2.id
+                        WHERE c2.id = u.class_id AND ct.teacher_id = %s
+                    )
+                """
+                sql_params = (user_id,)
+            
+            # 如果指定了 company_id，添加額外的篩選條件
+            if target_company_id:
+                sql_query += " AND latest_pref.preference_id IN (SELECT id FROM student_preferences WHERE company_id = %s)"
+                sql_params = sql_params + (target_company_id,)
+
+            cursor.execute(sql_query, sql_params)
+            resumes = cursor.fetchall()
+
+            if resumes:
+                print(f"✅ [DEBUG] Teacher/class_teacher user {user_id} found {len(resumes)} resumes")
+            else:
+                print(f"⚠️ [DEBUG] Teacher/class_teacher user {user_id} has no assigned classes or advisor students.")
+
+        # ------------------------------------------------------------------
+        # 2. 主任 (role == "director")
+        # ------------------------------------------------------------------
         elif role == "director":
-            director_dept = get_director_department(cursor, user_id)
-            if not director_dept or director_dept != student.get('department'):
-                return jsonify({"success": False, "message": "沒有權限查看該學生履歷"}), 403
+            if mode == "director":
+                department = get_director_department(cursor, user_id)
+                if not department:
+                    resumes = []
+                else:
+                    sql_query = """
+                        SELECT 
+                            r.id,
+                            u.name AS student_name,
+                            u.username AS student_number,
+                            c.name AS class_name,
+                            c.department,
+                            r.original_filename,
+                            r.filepath,
+                            r.status,
+                            r.comment,
+                            r.note,
+                            r.created_at
+                        FROM resumes r
+                        JOIN users u ON r.user_id = u.id
+                        JOIN classes c ON u.class_id = c.id
+                        WHERE c.department = %s
+                        ORDER BY c.name, u.name
+                    """
+                    sql_params = (department,)
+                    cursor.execute(sql_query, sql_params)
+                    resumes = cursor.fetchall()
+            else:
+                sql_query = """
+                    SELECT 
+                        r.id,
+                        u.name AS student_name,
+                        u.username AS student_number,
+                        c.name AS class_name,
+                        c.department,
+                        r.original_filename,
+                        r.filepath,
+                        r.status,
+                        r.comment,
+                        r.note,
+                        r.created_at
+                    FROM resumes r
+                    JOIN users u ON r.user_id = u.id
+                    LEFT JOIN classes c ON u.class_id = c.id
+                    JOIN classes_teacher ct ON ct.class_id = c.id
+                    WHERE ct.teacher_id = %s
+                    ORDER BY c.name, u.name
+                """
+                sql_params = (user_id,)
+                cursor.execute(sql_query, sql_params)
+                resumes = cursor.fetchall()
 
-        elif role == "ta":
-            pass  # TA 可讀全部（如需限制可在此修改）
+        # ------------------------------------------------------------------
+        # 3. TA 或 Admin (role == "ta" or "admin")
+        # ------------------------------------------------------------------
+        elif role in ["ta", "admin"]:
+            sql_query = """
+                SELECT 
+                    r.id,
+                    u.name AS student_name,
+                    u.username AS student_number,
+                    c.name AS class_name,
+                    c.department,
+                    r.original_filename,
+                    r.filepath,
+                    r.status,
+                    r.comment,
+                    r.note,
+                    r.created_at
+                FROM resumes r
+                JOIN users u ON r.user_id = u.id
+                LEFT JOIN classes c ON u.class_id = c.id
+                ORDER BY c.name, u.name
+            """
+            cursor.execute(sql_query, tuple())
+            resumes = cursor.fetchall()
 
-        elif role == "admin":
-            pass
+        # ------------------------------------------------------------------
+        # 4. Vendor (role == "vendor")
+        # ------------------------------------------------------------------
+        elif role == "vendor":
+            sql_query = """
+                SELECT DISTINCT
+                    r.id,
+                    u.name AS student_name,
+                    u.username AS student_number,
+                    c.name AS class_name,
+                    c.department,
+                    r.original_filename,
+                    r.filepath,
+                    r.status,
+                    r.comment,
+                    r.note,
+                    r.created_at
+                FROM resumes r
+                JOIN users u ON r.user_id = u.id
+                LEFT JOIN classes c ON u.class_id = c.id
+                WHERE EXISTS (
+                    SELECT 1 FROM student_preferences sp
+                    JOIN internship_companies ic ON sp.company_id = ic.id
+                    WHERE sp.student_id = u.id
+                    AND ic.uploaded_by_user_id = %s
+                ) OR EXISTS (
+                    SELECT 1 FROM internship_experiences ie
+                    JOIN internship_companies ic ON ie.company_id = ic.id
+                    WHERE ie.user_id = u.id
+                    AND ic.uploaded_by_user_id = %s
+                )
+                ORDER BY c.name, u.name
+            """
+            cursor.execute(sql_query, (user_id, user_id))
+            resumes = cursor.fetchall()
 
         else:
-            return jsonify({"success": False, "message": "角色無權限"}), 403
+            return jsonify({"success": False, "message": "無效的角色或權限"}), 403
 
-        # 取得該學生履歷
+        # 格式化日期時間並統一字段名稱
+        for r in resumes:
+            if isinstance(r.get('created_at'), datetime):
+                r['created_at'] = r['created_at'].strftime("%Y/%m/%d %H:%M")
+            # 統一字段名稱，確保前端能正確訪問
+            if 'student_name' in r:
+                r['name'] = r['student_name']
+            if 'student_number' in r:
+                r['username'] = r['student_number']
+            if 'class_name' in r:
+                r['className'] = r['class_name']
+            if 'created_at' in r:
+                r['upload_time'] = r['created_at']
+            # 處理志願序狀態：對於指導老師（teacher），從班導同步過來的履歷應該顯示為待審核
+            if role == 'teacher':
+                # 如果這是從班導同步過來的履歷（有 preference_id 且履歷狀態為 approved），顯示為 pending
+                if 'preference_id' in r and r.get('preference_id') and r.get('status') == 'approved':
+                    r['application_statuses'] = 'pending'
+                    r['display_status'] = 'pending'
+                elif 'preference_status' in r and r.get('preference_status'):
+                    r['application_statuses'] = r['preference_status']
+                    r['display_status'] = r['preference_status']
+                else:
+                    r['application_statuses'] = r.get('status', 'pending')
+                    r['display_status'] = r.get('status', 'pending')
+            else:
+                # 其他角色（class_teacher, director, ta, admin, vendor）使用原有邏輯
+                if 'preference_status' in r and r.get('preference_status'):
+                    r['application_statuses'] = r['preference_status']
+                    r['display_status'] = r['preference_status']
+                else:
+                    r['application_statuses'] = r.get('status', 'pending')
+                    r['display_status'] = r.get('status', 'pending')
+            # 處理留言：如果有 vendor_comment，使用它；否則使用履歷的 comment
+            if 'vendor_comment' in r and r.get('vendor_comment'):
+                r['comment'] = r['vendor_comment']
+
+        print(f"✅ [DEBUG] Returning {len(resumes)} resumes for role {role}")
+        return jsonify({"success": True, "resumes": resumes})
+
+    except Exception as e:
+        print("❌ 取得班級履歷資料錯誤：", traceback.print_exc())
+        return jsonify({"success": False, "message": "伺服器錯誤"}), 500
+
+    finally:
+        cursor.close()
+        conn.close()
+
+
+# -------------------------
+# API：查詢學生履歷列表
+# -------------------------
+@resume_bp.route('/api/get_my_resumes', methods=['GET'])
+def get_my_resumes():
+    if 'user_id' not in session or session.get('role') != 'student':
+        return jsonify({"success": False, "message": "未授權"}), 403
+
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+    try:
         cursor.execute("""
             SELECT r.id, r.original_filename, r.status, r.comment, r.note, r.created_at AS upload_time
             FROM resumes r
             WHERE r.user_id = %s
             ORDER BY r.created_at DESC
-        """, (student['student_id'],))
+        """, (session['user_id'],))
         resumes = cursor.fetchall()
-
         for r in resumes:
             if isinstance(r.get('upload_time'), datetime):
                 r['upload_time'] = r['upload_time'].strftime("%Y-%m-%d %H:%M:%S")
-
         return jsonify({"success": True, "resumes": resumes})
-
-    except Exception as e:
-        traceback.print_exc()
-        return jsonify({"success": False, "message": f"伺服器錯誤: {str(e)}"}), 500
-
-    finally:
-        cursor.close()
-        conn.close()
-
-
-@resume_bp.route('/api/teacher_review_resumes', methods=['GET'])
-def get_teacher_review_resumes():
-    # 確保有權限 (teacher, director, class_teacher, admin) 才能進入
-    if 'user_id' not in session or session.get('role') not in ['teacher', 'director', 'class_teacher', 'admin']:
-        return jsonify({"success": False, "message": "無權限"}), 403
-
-    session_user_id = session['user_id']
-    session_role = session['role']
-    
-    conn = get_db() 
-    # 使用 dictionary=True 讓查詢結果為字典格式
-    cursor = conn.cursor(dictionary=True) 
-    
-    try:
-        # 建立基本查詢：所有學生的最新履歷資料
-        sql = """
-            SELECT 
-                u.id AS user_id,
-                u.username AS student_id,
-                u.name,
-                c.class_name,
-                c.department_id,  -- 假設 classes 表中有 department_id 欄位
-                r.id AS resume_id,
-                r.upload_time,
-                r.original_filename,
-                r.display_company,
-                r.display_job,
-                r.display_status
-            FROM users u
-            JOIN classes c ON u.class_id = c.id
-            LEFT JOIN resumes r ON u.id = r.user_id 
-            WHERE u.role = 'student' 
-        """
-        params = []
-        
-        # 根據角色過濾資料
-        if session_role in ['teacher', 'class_teacher']:
-            # 老師/班導師：只看自己班級的學生 (假設 classes_teacher 表格關聯了老師和班級)
-            sql += """
-                AND u.class_id IN (
-                    SELECT class_id FROM classes_teacher WHERE teacher_id = %s
-                )
-            """
-            params.append(session_user_id)
-        elif session_role == 'director':
-            # 主任：只看自己部門的學生
-            director_dept_id = get_director_department(cursor, session_user_id)
-            if not director_dept_id:
-                # 主任沒有設定部門，則返回空列表
-                return jsonify({"success": True, "data": [], "message": "主任未設定所屬部門，無法查詢"}), 200
-            
-            # 假設 classes 表中有 department_id 欄位
-            sql += " AND c.department_id = %s" 
-            params.append(director_dept_id)
-        
-        # 排序：按照班級、姓名、上傳時間（最新在上）
-        sql += " ORDER BY c.class_name, u.username, r.upload_time DESC"
-
-        cursor.execute(sql, tuple(params))
-        rows = cursor.fetchall()
-        
-        # 整理結果：確保每個學生只顯示最新的履歷記錄
-        latest_resumes = {}
-        for row in rows:
-            student_id = row['student_id']
-            
-            # 處理未上傳履歷的學生
-            if not row['resume_id']:
-                if student_id not in latest_resumes:
-                    latest_resumes[student_id] = {
-                        'user_id': row['user_id'],
-                        'username': student_id,
-                        'name': row['name'],
-                        'class_name': row['class_name'],
-                        'upload_time': 'N/A',
-                        'original_filename': 'N/A',
-                        'display_company': 'N/A',
-                        'display_job': 'N/A',
-                        'display_status': 'not_uploaded' # 未上傳狀態
-                    }
-                continue
-
-            # 只保留該學生的最新一筆履歷記錄 (根據 resume_id，因為 SQL 排序了)
-            if student_id not in latest_resumes or row['resume_id'] > latest_resumes[student_id].get('resume_id', 0):
-                status = row.get('display_status') if row.get('display_status') else 'pending'
-                
-                latest_resumes[student_id] = {
-                    # 前端下載連結 /api/download_resume/${row.id} 需要的是履歷 ID
-                    'id': row['resume_id'], 
-                    'username': student_id,
-                    'name': row['name'],
-                    'class_name': row['class_name'],
-                    'upload_time': row['upload_time'].strftime('%Y-%m-%d %H:%M:%S') if row['upload_time'] else 'N/A',
-                    'original_filename': row['original_filename'],
-                    'display_company': row['display_company'] or '—',
-                    'display_job': row['display_job'] or '—',
-                    'display_status': status,
-                }
-        
-        # 將字典的值轉換為列表
-        result_data = list(latest_resumes.values())
-        
-        return jsonify({"success": True, "data": result_data})
-
-    except Exception as e:
-        # 請確保您已在 resume.py 頂部導入 import traceback
-        # traceback.print_exc()
-        print("❌ 取得待審核履歷列表錯誤:", e)
-        return jsonify({"success": False, "message": f"伺服器錯誤: {str(e)}"}), 500
-    finally:
-        cursor.close()
-        conn.close()
-
-
-# -------------------------
-#  獲取學生學期出勤記錄（詳細列表）
-# -------------------------
-@resume_bp.route('/api/get_semester_absence_records', methods=['GET'])
-def get_semester_absence_records():
-    """獲取學生的學期出勤記錄，用於自動填充表單"""
-    if 'user_id' not in session:
-        return jsonify({"success": False, "message": "請先登入"}), 401
-
-    user_id = session['user_id']
-    semester_id = request.args.get('semester_id', None)  # 可選：指定單一學期ID（向後兼容）
-    start_semester_id = request.args.get('start_semester_id', None)  # 可選：開始學期ID
-    end_semester_id = request.args.get('end_semester_id', None)  # 可選：結束學期ID
-    start_date = request.args.get('start_date', None)  # 可選：開始日期（向後兼容）
-    end_date = request.args.get('end_date', None)  # 可選：結束日期（向後兼容）
-    
-    conn = get_db()
-    cursor = conn.cursor(dictionary=True)
-
-    try:
-        # 檢查 absence_records 表是否有 semester_id 欄位
-        cursor.execute("SHOW COLUMNS FROM absence_records LIKE 'semester_id'")
-        has_semester_id = cursor.fetchone() is not None
-        
-        # 構建 WHERE 條件和參數
-        where_conditions = ["ar.user_id = %s"]
-        query_params = [user_id]
-        
-        # 優先使用學期範圍篩選
-        if has_semester_id:
-            if start_semester_id and end_semester_id:
-                # 學期範圍篩選：需要獲取學期代碼來比較
-                cursor.execute("SELECT code FROM semesters WHERE id IN (%s, %s)", (start_semester_id, end_semester_id))
-                semester_codes = {row['code']: None for row in cursor.fetchall()}
-                if len(semester_codes) == 2:
-                    # 獲取所有在範圍內的學期ID
-                    cursor.execute("""
-                        SELECT id FROM semesters 
-                        WHERE code >= (SELECT code FROM semesters WHERE id = %s)
-                        AND code <= (SELECT code FROM semesters WHERE id = %s)
-                        ORDER BY code
-                    """, (start_semester_id, end_semester_id))
-                    semester_ids_in_range = [row['id'] for row in cursor.fetchall()]
-                    if semester_ids_in_range:
-                        placeholders = ','.join(['%s'] * len(semester_ids_in_range))
-                        where_conditions.append(f"ar.semester_id IN ({placeholders})")
-                        query_params.extend(semester_ids_in_range)
-            elif semester_id:
-                # 單一學期篩選（向後兼容）
-                where_conditions.append("ar.semester_id = %s")
-                query_params.append(semester_id)
-        
-        # 添加日期範圍篩選（向後兼容，但優先使用學期範圍）
-        if not (start_semester_id and end_semester_id):
-            if start_date:
-                where_conditions.append("ar.absence_date >= %s")
-                query_params.append(start_date)
-            if end_date:
-                where_conditions.append("ar.absence_date <= %s")
-                query_params.append(end_date)
-        
-        where_clause = " AND ".join(where_conditions)
-        
-        # 查詢缺勤記錄
-        if has_semester_id:
-            # 如果有 semester_id 欄位，使用 JOIN 查詢
-            query = f"""
-                SELECT 
-                    ar.id,
-                    ar.absence_date,
-                    ar.absence_type,
-                    ar.duration_units,
-                    ar.reason,
-                    ar.image_path,
-                    ar.created_at,
-                    s.code AS semester_code,
-                    s.id AS semester_id,
-                    u.username AS student_id,
-                    u.name AS student_name
-                FROM absence_records ar
-                LEFT JOIN semesters s ON ar.semester_id = s.id
-                LEFT JOIN users u ON ar.user_id = u.id
-                WHERE {where_clause}
-                ORDER BY ar.absence_date DESC, ar.created_at DESC
-            """
-            cursor.execute(query, tuple(query_params))
-        else:
-            # 沒有 semester_id 欄位，不使用 JOIN
-            query = f"""
-                SELECT 
-                    ar.id,
-                    ar.absence_date,
-                    ar.absence_type,
-                    ar.duration_units,
-                    ar.reason,
-                    ar.image_path,
-                    ar.created_at,
-                    NULL AS semester_code,
-                    NULL AS semester_id,
-                    u.username AS student_id,
-                    u.name AS student_name
-                FROM absence_records ar
-                LEFT JOIN users u ON ar.user_id = u.id
-                WHERE {where_clause}
-                ORDER BY ar.absence_date DESC, ar.created_at DESC
-            """
-            cursor.execute(query, tuple(query_params))
-        
-        records = cursor.fetchall()
-        
-        # 格式化日期
-        for record in records:
-            if record.get('absence_date'):
-                absence_date = record['absence_date']
-                if isinstance(absence_date, datetime):
-                    record['absence_date'] = absence_date.strftime("%Y-%m-%d")
-                elif isinstance(absence_date, str):
-                    # 如果是字符串，嘗試解析並格式化
-                    try:
-                        # 先嘗試提取 YYYY-MM-DD 格式
-                        date_match = re.search(r'(\d{4})-(\d{2})-(\d{2})', absence_date)
-                        if date_match:
-                            # 如果找到 YYYY-MM-DD 格式，直接使用
-                            record['absence_date'] = date_match.group(0)
-                        else:
-                            # 嘗試解析各種日期格式
-                            if 'T' in absence_date:
-                                # ISO 格式: 2024-03-27T00:00:00
-                                date_str = absence_date.split('T')[0]
-                                record['absence_date'] = date_str
-                            elif 'GMT' in absence_date or 'UTC' in absence_date:
-                                # GMT 格式: Sat, 29 Nov 2025 00:00:00 GMT
-                                # 使用正則表達式提取日期部分
-                                date_match = re.search(r'(\w{3}),\s+(\d{1,2})\s+(\w{3})\s+(\d{4})', absence_date)
-                                if date_match:
-                                    # 轉換月份名稱
-                                    month_map = {
-                                        'Jan': '01', 'Feb': '02', 'Mar': '03', 'Apr': '04',
-                                        'May': '05', 'Jun': '06', 'Jul': '07', 'Aug': '08',
-                                        'Sep': '09', 'Oct': '10', 'Nov': '11', 'Dec': '12'
-                                    }
-                                    day = date_match.group(2).zfill(2)
-                                    month = month_map.get(date_match.group(3), '01')
-                                    year = date_match.group(4)
-                                    record['absence_date'] = f"{year}-{month}-{day}"
-                                else:
-                                    # 嘗試使用 datetime 解析
-                                    try:
-                                        date_obj = datetime.strptime(absence_date.split(',')[1].strip().split()[0], "%d %b %Y")
-                                        record['absence_date'] = date_obj.strftime("%Y-%m-%d")
-                                    except:
-                                        print(f"⚠️ 無法解析日期格式: {absence_date}")
-                            else:
-                                # 嘗試標準格式
-                                date_obj = datetime.strptime(absence_date.split()[0], "%Y-%m-%d")
-                                record['absence_date'] = date_obj.strftime("%Y-%m-%d")
-                    except (ValueError, AttributeError, IndexError) as e:
-                        print(f"⚠️ 無法解析日期格式: {absence_date}, 錯誤: {e}")
-            if record.get('created_at'):
-                if isinstance(record['created_at'], datetime):
-                    record['created_at'] = record['created_at'].strftime("%Y-%m-%d %H:%M:%S")
-                elif isinstance(record['created_at'], str):
-                    try:
-                        if 'T' in record['created_at']:
-                            date_obj = datetime.fromisoformat(record['created_at'].replace('Z', '+00:00'))
-                            record['created_at'] = date_obj.strftime("%Y-%m-%d %H:%M:%S")
-                    except (ValueError, AttributeError):
-                        pass
-        
-        # 計算統計數據
-        stats = {}
-        for record in records:
-            absence_type = record.get('absence_type')
-            duration_units = record.get('duration_units', 0)
-            if absence_type:
-                stats[absence_type] = stats.get(absence_type, 0) + int(duration_units)
-        
-        return jsonify({
-            "success": True, 
-            "records": records,
-            "stats": stats,
-            "semester_id": semester_id
-        })
-
-    except Exception as e:
-        traceback.print_exc()
-        return jsonify({"success": False, "message": f"伺服器錯誤: {str(e)}"}), 500
-
     finally:
         cursor.close()
         conn.close()
 
 # -------------------------
-#  缺勤統計查詢（按學期）
+# API：取得缺勤統計
 # -------------------------
 @resume_bp.route('/api/get_absence_stats', methods=['GET'])
 def get_absence_stats():
@@ -3048,23 +2501,19 @@ def get_absence_stats():
         return jsonify({"success": False, "message": "請先登入"}), 401
 
     user_id = session['user_id']
-    semester_id = request.args.get('semester_id', None)  # 可選：指定單一學期ID（向後兼容）
-    start_semester_id = request.args.get('start_semester_id', None)  # 可選：開始學期ID
-    end_semester_id = request.args.get('end_semester_id', None)  # 可選：結束學期ID
+    semester_id = request.args.get('semester_id', None)
+    start_semester_id = request.args.get('start_semester_id', None)
+    end_semester_id = request.args.get('end_semester_id', None)
     
     conn = get_db()
     cursor = conn.cursor(dictionary=True)
 
     try:
-        # 檢查 absence_records 表是否有 semester_id 欄位
         cursor.execute("SHOW COLUMNS FROM absence_records LIKE 'semester_id'")
         has_semester_id = cursor.fetchone() is not None
         
-        # 查詢並計算各類別缺勤總節數（按學期分組）
         if has_semester_id:
-            # 優先使用學期範圍篩選
             if start_semester_id and end_semester_id:
-                # 學期範圍篩選：獲取所有在範圍內的學期ID
                 cursor.execute("""
                     SELECT id FROM semesters 
                     WHERE code >= (SELECT code FROM semesters WHERE id = %s)
@@ -3093,48 +2542,38 @@ def get_absence_stats():
                         GROUP BY ar.absence_type
                     """, (user_id,))
             elif semester_id:
-                # 單一學期查詢（向後兼容）
                 cursor.execute("""
                     SELECT 
                         ar.absence_type, 
-                        SUM(ar.duration_units) AS total_units,
-                        s.code AS semester_code,
-                        s.id AS semester_id
+                        SUM(ar.duration_units) AS total_units
                     FROM absence_records ar
                     LEFT JOIN semesters s ON ar.semester_id = s.id
                     WHERE ar.user_id = %s AND ar.semester_id = %s
-                    GROUP BY ar.absence_type, s.code, s.id
+                    GROUP BY ar.absence_type
                 """, (user_id, semester_id))
-        elif has_semester_id:
-            # 如果有 semester_id 欄位但未指定學期，查詢當前學期
-            current_semester_id = get_current_semester_id(cursor)
-            if current_semester_id:
-                cursor.execute("""
-                    SELECT 
-                        ar.absence_type, 
-                        SUM(ar.duration_units) AS total_units,
-                        s.code AS semester_code,
-                        s.id AS semester_id
-                    FROM absence_records ar
-                    LEFT JOIN semesters s ON ar.semester_id = s.id
-                    WHERE ar.user_id = %s AND ar.semester_id = %s
-                    GROUP BY ar.absence_type, s.code, s.id
-                """, (user_id, current_semester_id))
             else:
-                # 沒有當前學期，查詢所有學期
-                cursor.execute("""
-                    SELECT 
-                        ar.absence_type, 
-                        SUM(ar.duration_units) AS total_units,
-                        s.code AS semester_code,
-                        s.id AS semester_id
-                    FROM absence_records ar
-                    LEFT JOIN semesters s ON ar.semester_id = s.id
-                    WHERE ar.user_id = %s
-                    GROUP BY ar.absence_type, s.code, s.id
-                """, (user_id,))
+                current_semester_id = get_current_semester_id(cursor)
+                if current_semester_id:
+                    cursor.execute("""
+                        SELECT 
+                            ar.absence_type, 
+                            SUM(ar.duration_units) AS total_units
+                        FROM absence_records ar
+                        LEFT JOIN semesters s ON ar.semester_id = s.id
+                        WHERE ar.user_id = %s AND ar.semester_id = %s
+                        GROUP BY ar.absence_type
+                    """, (user_id, current_semester_id))
+                else:
+                    cursor.execute("""
+                        SELECT 
+                            ar.absence_type, 
+                            SUM(ar.duration_units) AS total_units
+                        FROM absence_records ar
+                        LEFT JOIN semesters s ON ar.semester_id = s.id
+                        WHERE ar.user_id = %s
+                        GROUP BY ar.absence_type
+                    """, (user_id,))
         else:
-            # 沒有 semester_id 欄位，查詢所有缺勤記錄
             cursor.execute("""
                 SELECT 
                     absence_type, 
@@ -3145,11 +2584,8 @@ def get_absence_stats():
             """, (user_id,))
         
         results = cursor.fetchall()
-        
-        # 將結果轉換為前端需要的字典格式 (例如: {"曠課": 5, "事假": 10, ...})
         stats = {}
         for row in results:
-            # 確保 total_units 轉換為整數
             stats[row['absence_type']] = int(row['total_units'])
 
         return jsonify({"success": True, "stats": stats})
@@ -3163,606 +2599,433 @@ def get_absence_stats():
         conn.close()
 
 # -------------------------
-# 科助上傳標準課程Excel（預覽）
+# API：取得缺勤可用的學期列表
 # -------------------------
-@resume_bp.route('/api/ta/preview_standard_courses', methods=['POST'])
-def preview_standard_courses():
-    """科助預覽標準課程Excel文件"""
-    if 'user_id' not in session or session.get('role') != 'ta':
-        return jsonify({"success": False, "message": "未授權"}), 403
-    
-    if 'file' not in request.files:
-        return jsonify({"success": False, "message": "未找到上傳文件"}), 400
-    
-    file = request.files['file']
-    if file.filename == '':
-        return jsonify({"success": False, "message": "文件名稱不能為空"}), 400
-    
-    if not file.filename.endswith(('.xlsx', '.xls')):
-        return jsonify({"success": False, "message": "只支援Excel文件(.xlsx, .xls)"}), 400
-    
-    try:
-        file_content = file.read()
-        wb = load_workbook(io.BytesIO(file_content), data_only=False)
-        ws = wb.active
-        
-        def get_cell_value(cell):
-            """獲取單元格值，處理日期格式問題"""
-            if cell is None or cell.value is None:
-                return None
-            value = cell.value
-            if isinstance(value, datetime):
-                month = value.month
-                day = value.day
-                return f"{month}/{day}"
-            return value
-        
-        courses = []
-        for row_idx in range(2, ws.max_row + 1):
-            cell_name = ws.cell(row=row_idx, column=1)
-            cell_credits = ws.cell(row=row_idx, column=2)
-            
-            course_name = get_cell_value(cell_name)
-            credits_raw = cell_credits.value
-            
-            if not course_name or str(course_name).strip() == '':
-                continue
-            
-            course_name = str(course_name).strip()
-            
-            # 處理學分數
-            credits_str = ''
-            if credits_raw is not None:
-                if isinstance(credits_raw, datetime):
-                    month = credits_raw.month
-                    day = credits_raw.day
-                    credits_str = f"{month}/{day}"
-                elif isinstance(credits_raw, str):
-                    credits_str = credits_raw.strip()
-                    if ('2025-' in credits_str or '2024-' in credits_str or '2026-' in credits_str) and ('-' in credits_str):
-                        try:
-                            date_part = credits_str.split()[0] if ' ' in credits_str else credits_str
-                            date_obj = datetime.strptime(date_part, '%Y-%m-%d')
-                            month = date_obj.month
-                            day = date_obj.day
-                            credits_str = f"{month}/{day}"
-                        except:
-                            # 解析失敗，使用format_credits格式化
-                            credits_str = format_credits(credits_str)
-                    else:
-                        # 不是日期格式，使用format_credits格式化
-                        credits_str = format_credits(credits_str)
-                else:
-                    credits_str = format_credits(credits_raw)
-            
-            courses.append({
-                'name': course_name,
-                'credits': credits_str
-            })
-        
-        return jsonify({
-            "success": True,
-            "courses": courses,
-            "message": f"成功解析 {len(courses)} 門課程"
-        })
-    except Exception as e:
-        print("❌ 預覽Excel錯誤:", e)
-        traceback.print_exc()
-        return jsonify({"success": False, "message": f"解析Excel失敗: {str(e)}"}), 500
-
-# -------------------------
-# 科助上傳標準課程Excel（寫入資料庫）
-# -------------------------
-@resume_bp.route('/api/ta/upload_standard_courses', methods=['POST'])
-def upload_standard_courses():
-    """科助上傳標準課程Excel並寫入standard_courses表"""
-    if 'user_id' not in session or session.get('role') != 'ta':
-        return jsonify({"success": False, "message": "未授權"}), 403
-    
-    if 'file' not in request.files:
-        return jsonify({"success": False, "message": "未找到上傳文件"}), 400
-    
-    file = request.files['file']
-    if file.filename == '':
-        return jsonify({"success": False, "message": "文件名稱不能為空"}), 400
-    
-    if not file.filename.endswith(('.xlsx', '.xls')):
-        return jsonify({"success": False, "message": "只支援Excel文件(.xlsx, .xls)"}), 400
+@resume_bp.route('/api/absence/available_semesters', methods=['GET'])
+def get_absence_available_semesters():
+    """取得缺勤可用的學期列表（根據預設範圍過濾）"""
+    if 'user_id' not in session:
+        return jsonify({"success": False, "message": "請先登入"}), 401
     
     conn = get_db()
     cursor = conn.cursor(dictionary=True)
     
     try:
-        file_content = file.read()
-        wb = load_workbook(io.BytesIO(file_content), data_only=False)
-        ws = wb.active
+        user_id = session['user_id']
+        cursor.execute("SELECT username FROM users WHERE id = %s", (user_id,))
+        user_result = cursor.fetchone()
         
-        def get_cell_value(cell):
-            if cell is None or cell.value is None:
-                return None
-            value = cell.value
-            if isinstance(value, datetime):
-                month = value.month
-                day = value.day
-                return f"{month}/{day}"
-            return value
+        admission_year = None
+        if user_result and user_result.get('username'):
+            username = user_result['username']
+            if len(username) >= 3:
+                try:
+                    admission_year = int(username[:3])
+                except ValueError:
+                    pass
         
-        courses = []
-        for row_idx in range(2, ws.max_row + 1):
-            cell_name = ws.cell(row=row_idx, column=1)
-            cell_credits = ws.cell(row=row_idx, column=2)
+        cursor.execute("SHOW TABLES LIKE 'absence_default_semester_range'")
+        table_exists = cursor.fetchone() is not None
+        
+        start_semester_code = None
+        end_semester_code = None
+        
+        if table_exists:
+            cursor.execute("SHOW COLUMNS FROM absence_default_semester_range LIKE 'admission_year'")
+            has_admission_year = cursor.fetchone() is not None
             
-            course_name = get_cell_value(cell_name)
-            credits_raw = cell_credits.value
-            
-            if not course_name or str(course_name).strip() == '':
-                continue
-            
-            course_name = str(course_name).strip()
-            
-            # 處理學分數
-            credits_str = ''
-            if credits_raw is not None:
-                if isinstance(credits_raw, datetime):
-                    month = credits_raw.month
-                    day = credits_raw.day
-                    credits_str = f"{month}/{day}"
-                elif isinstance(credits_raw, str):
-                    credits_str = credits_raw.strip()
-                    if ('2025-' in credits_str or '2024-' in credits_str or '2026-' in credits_str) and ('-' in credits_str):
-                        try:
-                            date_part = credits_str.split()[0] if ' ' in credits_str else credits_str
-                            date_obj = datetime.strptime(date_part, '%Y-%m-%d')
-                            month = date_obj.month
-                            day = date_obj.day
-                            credits_str = f"{month}/{day}"
-                        except:
-                            # 解析失敗，使用format_credits格式化
-                            credits_str = format_credits(credits_str)
-                    else:
-                        # 不是日期格式，使用format_credits格式化
-                        credits_str = format_credits(credits_str)
-                else:
-                    credits_str = format_credits(credits_raw)
-            
-            courses.append({
-                'name': course_name,
-                'credits': credits_str
-            })
-        
-        if len(courses) == 0:
-            return jsonify({"success": False, "message": "Excel文件中沒有找到課程資料"}), 400
-        
-        # 保存上傳的Excel文件
-        # 獲取項目根目錄（backend的父目錄）
-        project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        upload_base_dir = os.path.join(project_root, 'uploads', 'standard_courses')
-        os.makedirs(upload_base_dir, exist_ok=True)
-        
-        print(f"📁 項目根目錄: {project_root}")
-        print(f"📁 上傳目錄: {upload_base_dir}")
-        
-        # 生成安全的文件名
-        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        
-        # 先從原始文件名提取擴展名
-        original_filename = file.filename if file.filename else 'upload.xlsx'
-        original_ext = os.path.splitext(original_filename)[1].lower()
-        if not original_ext or original_ext not in ['.xlsx', '.xls']:
-            original_ext = '.xlsx'  # 默認使用 .xlsx
-        
-        # 處理文件名：移除擴展名，使用secure_filename處理，然後重新添加擴展名
-        filename_without_ext = os.path.splitext(original_filename)[0]
-        if not filename_without_ext or filename_without_ext.strip() == '':
-            filename_without_ext = 'upload'
-        
-        safe_basename = secure_filename(filename_without_ext)
-        if not safe_basename or safe_basename.strip() == '':
-            safe_basename = 'upload'
-        
-        # 確保最終文件名包含擴展名
-        safe_filename = safe_basename + original_ext
-        filename = f"{timestamp}_{safe_filename}"
-        
-        # 完整的絕對路徑（用於保存文件）
-        abs_file_path = os.path.join(upload_base_dir, filename)
-        
-        # 相對路徑（用於存儲到數據庫）
-        db_file_path = os.path.join('uploads', 'standard_courses', filename).replace('\\', '/')
-        
-        print(f"📝 文件上傳信息:")
-        print(f"  - 原始文件名: {original_filename}")
-        print(f"  - 提取的擴展名: {original_ext}")
-        print(f"  - 安全的文件名: {safe_filename}")
-        print(f"  - 最終文件名: {filename}")
-        print(f"  - 絕對保存路徑: {abs_file_path}")
-        print(f"  - 數據庫路徑: {db_file_path}")
-        
-        # 保存文件
-        file.seek(0)  # 重置文件指針
-        os.makedirs(os.path.dirname(abs_file_path), exist_ok=True)
-        with open(abs_file_path, 'wb') as f:
-            f.write(file_content)
-        
-        print(f"✅ 文件已保存到: {abs_file_path}")
-        # 驗證文件是否真的保存成功
-        if os.path.exists(abs_file_path):
-            file_size = os.path.getsize(abs_file_path)
-            print(f"✅ 文件保存成功，大小: {file_size} bytes")
-        else:
-            print(f"❌ 警告：文件保存後無法找到！")
-        
-        # 檢查並創建 uploaded_course_templates 表（如果不存在）
-        cursor.execute("SHOW TABLES LIKE 'uploaded_course_templates'")
-        has_template_table = cursor.fetchone() is not None
-        
-        if not has_template_table:
-            # 創建 uploaded_course_templates 表
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS uploaded_course_templates (
-                    id INT AUTO_INCREMENT PRIMARY KEY,
-                    file_path VARCHAR(500) NOT NULL,
-                    uploaded_by INT NULL,
-                    uploaded_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                    INDEX idx_uploaded_at (uploaded_at),
-                    INDEX idx_file_path (file_path)
-                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-            """)
-            print("✅ 已創建 uploaded_course_templates 表")
-        
-        # 先將舊資料標記為非活躍（不直接刪除，保留歷史）
-        cursor.execute("UPDATE standard_courses SET is_active = 0")
-        
-        # 重新插入Excel中的課程（不包含文件路徑）
-        insert_count = 0
-        for idx, course in enumerate(courses, 1):
-            try:
+            if has_admission_year and admission_year:
                 cursor.execute("""
-                    INSERT INTO standard_courses (course_name, credits, order_index, is_active, created_at)
-                    VALUES (%s, %s, %s, 1, NOW())
-                """, (course['name'], course['credits'], idx))
-                insert_count += 1
-            except Exception as e:
-                print(f"⚠️ 插入課程失敗: {course['name']}, 錯誤: {e}")
-                # 繼續插入其他課程，不中斷
-                continue
+                    SELECT start_semester_code, end_semester_code
+                    FROM absence_default_semester_range
+                    WHERE admission_year = %s
+                    ORDER BY id DESC
+                    LIMIT 1
+                """, (admission_year,))
+            else:
+                cursor.execute("""
+                    SELECT start_semester_code, end_semester_code
+                    FROM absence_default_semester_range
+                    ORDER BY id DESC
+                    LIMIT 1
+                """)
+            
+            range_result = cursor.fetchone()
+            if range_result:
+                start_semester_code = range_result.get('start_semester_code')
+                end_semester_code = range_result.get('end_semester_code')
         
-        # 將文件路徑保存到 uploaded_course_templates 表
-        template_id = None
-        try:
+        if start_semester_code and end_semester_code:
             cursor.execute("""
-                INSERT INTO uploaded_course_templates (file_path, uploaded_by, uploaded_at)
-                VALUES (%s, %s, NOW())
-            """, (db_file_path, session['user_id']))
-            cursor.execute("SELECT LAST_INSERT_ID() as id")
-            result = cursor.fetchone()
-            if result:
-                template_id = result['id']
-            print(f"✅ 已保存文件路徑到 uploaded_course_templates 表，ID: {template_id}, 文件路徑: {db_file_path}, 課程數: {insert_count}")
-        except Exception as e:
-            print(f"⚠️ 保存文件路徑失敗: {e}")
-            traceback.print_exc()
+                SELECT id, code, start_date, end_date, is_active
+                FROM semesters
+                WHERE code >= %s AND code <= %s
+                ORDER BY code ASC
+            """, (start_semester_code, end_semester_code))
+        else:
+            cursor.execute("""
+                SELECT id, code, start_date, end_date, is_active
+                FROM semesters
+                ORDER BY code DESC
+            """)
         
-        print(f"✅ 已插入 {insert_count} 門課程到 standard_courses 表")
+        semesters = cursor.fetchall()
         
-        # 確保事務提交
-        try:
-            conn.commit()
-            print(f"✅ 成功更新 standard_courses 表，插入 {insert_count} 門課程")
-            print(f"✅ 文件已保存到: {abs_file_path}")
-            
-            # 驗證更新是否成功
-            cursor.execute("SELECT COUNT(*) as count FROM standard_courses WHERE is_active = 1")
-            verify_result = cursor.fetchone()
-            active_count = verify_result['count'] if verify_result else 0
-            print(f"✅ 驗證：standard_courses 表中 is_active=1 的記錄數: {active_count}")
-            
-            # 驗證文件路徑是否正確保存到 uploaded_course_templates 表
-            if template_id:
-                cursor.execute("SELECT * FROM uploaded_course_templates WHERE id = %s", (template_id,))
-                verify_template = cursor.fetchone()
-                if verify_template:
-                    print(f"✅ 驗證：文件路徑已保存到 uploaded_course_templates 表，ID: {template_id}, 文件路徑: {verify_template.get('file_path', 'N/A')}")
-                else:
-                    print(f"⚠️ 警告：uploaded_course_templates 表記錄ID {template_id} 未找到")
-            
+        for s in semesters:
+            if isinstance(s.get('start_date'), datetime):
+                s['start_date'] = s['start_date'].strftime("%Y-%m-%d")
+            if isinstance(s.get('end_date'), datetime):
+                s['end_date'] = s['end_date'].strftime("%Y-%m-%d")
+        
+        return jsonify({
+            "success": True,
+            "semesters": semesters
+        })
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"success": False, "message": f"取得學期列表失敗: {str(e)}"}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+# -------------------------
+# API：取得缺勤預設學期範圍
+# -------------------------
+@resume_bp.route('/api/get_absence_default_range', methods=['GET'])
+def get_absence_default_range():
+    """取得缺勤預設學期範圍"""
+    if 'user_id' not in session:
+        return jsonify({"success": False, "message": "請先登入"}), 401
+    
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+    
+    try:
+        cursor.execute("SHOW TABLES LIKE 'absence_default_semester_range'")
+        table_exists = cursor.fetchone() is not None
+        
+        if not table_exists:
             return jsonify({
                 "success": True,
-                "count": insert_count,
-                "message": f"成功上傳 {insert_count} 門課程",
-                "file_path": db_file_path
+                "defaultStart": "",
+                "defaultEnd": ""
             })
-        except Exception as commit_error:
-            conn.rollback()
-            print(f"❌ 提交事務失敗: {commit_error}")
-            traceback.print_exc()
-            raise commit_error
+        
+        user_id = session['user_id']
+        cursor.execute("SELECT username FROM users WHERE id = %s", (user_id,))
+        user_result = cursor.fetchone()
+        
+        admission_year = None
+        if user_result and user_result.get('username'):
+            username = user_result['username']
+            if len(username) >= 3:
+                try:
+                    admission_year = int(username[:3])
+                except ValueError:
+                    pass
+        
+        cursor.execute("SHOW COLUMNS FROM absence_default_semester_range LIKE 'admission_year'")
+        has_admission_year = cursor.fetchone() is not None
+        
+        if has_admission_year and admission_year:
+            cursor.execute("""
+                SELECT start_semester_code, end_semester_code
+                FROM absence_default_semester_range
+                WHERE admission_year = %s
+                ORDER BY id DESC
+                LIMIT 1
+            """, (admission_year,))
+        else:
+            cursor.execute("""
+                SELECT start_semester_code, end_semester_code
+                FROM absence_default_semester_range
+                ORDER BY id DESC
+                LIMIT 1
+            """)
+        
+        result = cursor.fetchone()
+        
+        if result:
+            return jsonify({
+                "success": True,
+                "defaultStart": result.get('start_semester_code', ''),
+                "defaultEnd": result.get('end_semester_code', '')
+            })
+        else:
+            return jsonify({
+                "success": True,
+                "defaultStart": "",
+                "defaultEnd": ""
+            })
     except Exception as e:
-        conn.rollback()
-        print("❌ 上傳標準課程錯誤:", e)
         traceback.print_exc()
-        return jsonify({"success": False, "message": f"上傳失敗: {str(e)}"}), 500
+        return jsonify({"success": False, "message": f"取得預設學期範圍失敗: {str(e)}"}), 500
     finally:
         cursor.close()
         conn.close()
 
 # -------------------------
-# 科助取得標準課程上傳歷史
+# API：獲取學生學期出勤記錄（詳細列表）
 # -------------------------
-@resume_bp.route('/api/ta/get_standard_courses_history', methods=['GET'])
-def get_standard_courses_history():
-    """取得標準課程上傳歷史記錄"""
-    if 'user_id' not in session or session.get('role') != 'ta':
-        return jsonify({"success": False, "message": "未授權"}), 403
+@resume_bp.route('/api/get_semester_absence_records', methods=['GET'])
+def get_semester_absence_records():
+    """獲取學生的學期出勤記錄，用於自動填充表單"""
+    if 'user_id' not in session:
+        return jsonify({"success": False, "message": "請先登入"}), 401
+
+    user_id = session['user_id']
+    semester_id = request.args.get('semester_id', None)
+    start_semester_id = request.args.get('start_semester_id', None)
+    end_semester_id = request.args.get('end_semester_id', None)
+    start_date = request.args.get('start_date', None)
+    end_date = request.args.get('end_date', None)
     
     conn = get_db()
     cursor = conn.cursor(dictionary=True)
-    
+
     try:
-        # 檢查 uploaded_course_templates 表是否存在
-        cursor.execute("SHOW TABLES LIKE 'uploaded_course_templates'")
-        has_template_table = cursor.fetchone() is not None
+        cursor.execute("SHOW COLUMNS FROM absence_records LIKE 'semester_id'")
+        has_semester_id = cursor.fetchone() is not None
         
-        if has_template_table:
-            # 從 uploaded_course_templates 表獲取歷史記錄
-            # 並從 standard_courses 表計算每次上傳的課程數量（根據上傳日期匹配）
+        where_conditions = ["ar.user_id = %s"]
+        query_params = [user_id]
+        
+        if has_semester_id:
+            if start_semester_id and end_semester_id:
+                cursor.execute("""
+                    SELECT id FROM semesters 
+                    WHERE code >= (SELECT code FROM semesters WHERE id = %s)
+                    AND code <= (SELECT code FROM semesters WHERE id = %s)
+                    ORDER BY code
+                """, (start_semester_id, end_semester_id))
+                semester_ids_in_range = [row['id'] for row in cursor.fetchall()]
+                if semester_ids_in_range:
+                    placeholders = ','.join(['%s'] * len(semester_ids_in_range))
+                    where_conditions.append(f"ar.semester_id IN ({placeholders})")
+                    query_params.extend(semester_ids_in_range)
+            elif semester_id:
+                where_conditions.append("ar.semester_id = %s")
+                query_params.append(semester_id)
+        
+        if not (start_semester_id and end_semester_id):
+            if start_date:
+                where_conditions.append("ar.absence_date >= %s")
+                query_params.append(start_date)
+            if end_date:
+                where_conditions.append("ar.absence_date <= %s")
+                query_params.append(end_date)
+        
+        where_clause = " AND ".join(where_conditions)
+        
+        if has_semester_id:
+            query = f"""
+                SELECT 
+                    ar.id,
+                    ar.absence_date,
+                    ar.absence_type,
+                    ar.duration_units,
+                    ar.reason,
+                    ar.image_path,
+                    ar.created_at,
+                    s.code AS semester_code,
+                    s.id AS semester_id,
+                    u.username AS student_id,
+                    u.name AS student_name
+                FROM absence_records ar
+                LEFT JOIN semesters s ON ar.semester_id = s.id
+                LEFT JOIN users u ON ar.user_id = u.id
+                WHERE {where_clause}
+                ORDER BY ar.absence_date DESC, ar.created_at DESC
+            """
+            cursor.execute(query, tuple(query_params))
+        else:
+            query = f"""
+                SELECT 
+                    ar.id,
+                    ar.absence_date,
+                    ar.absence_type,
+                    ar.duration_units,
+                    ar.reason,
+                    ar.image_path,
+                    ar.created_at,
+                    NULL AS semester_code,
+                    NULL AS semester_id,
+                    u.username AS student_id,
+                    u.name AS student_name
+                FROM absence_records ar
+                LEFT JOIN users u ON ar.user_id = u.id
+                WHERE {where_clause}
+                ORDER BY ar.absence_date DESC, ar.created_at DESC
+            """
+            cursor.execute(query, tuple(query_params))
+        
+        records = cursor.fetchall()
+        
+        for record in records:
+            if record.get('absence_date'):
+                absence_date = record['absence_date']
+                if isinstance(absence_date, datetime):
+                    record['absence_date'] = absence_date.strftime("%Y-%m-%d")
+                elif isinstance(absence_date, str):
+                    date_match = re.search(r'(\d{4})-(\d{2})-(\d{2})', absence_date)
+                    if date_match:
+                        record['absence_date'] = date_match.group(0)
+                    elif 'T' in absence_date:
+                        record['absence_date'] = absence_date.split('T')[0]
+        
+        return jsonify({"success": True, "records": records})
+
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"success": False, "message": f"取得缺勤記錄失敗: {str(e)}"}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+# -------------------------
+# API：取得缺勤記錄列表（用於歷史紀錄頁籤）
+# -------------------------
+@resume_bp.route('/api/get_absence_records', methods=['GET'])
+def get_absence_records():
+    if 'user_id' not in session:
+        return jsonify({"success": False, "message": "請先登入"}), 401
+
+    user_id = session['user_id']
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+
+    try:
+        cursor.execute("SHOW COLUMNS FROM absence_records LIKE 'semester_id'")
+        has_semester_id = cursor.fetchone() is not None
+
+        if has_semester_id:
             cursor.execute("""
                 SELECT 
-                    t.id,
-                    t.file_path,
-                    t.uploaded_by,
-                    t.uploaded_at,
-                    COALESCE(COUNT(DISTINCT s.id), 0) as course_count
-                FROM uploaded_course_templates t
-                LEFT JOIN standard_courses s ON DATE(s.created_at) = DATE(t.uploaded_at)
-                    AND s.is_active = 1
-                GROUP BY t.id, t.file_path, t.uploaded_by, t.uploaded_at
-                ORDER BY t.uploaded_at DESC
-                LIMIT 20
-            """)
-            history = cursor.fetchall()
-            # 調試：打印查詢結果
-            print(f"🔍 從 uploaded_course_templates 表查詢到 {len(history)} 筆歷史記錄")
-            for record in history:
-                print(f"  - ID: {record.get('id')}, 文件路徑: {record.get('file_path', 'NULL')}, 課程數: {record.get('course_count', 0)}")
+                    ar.id,
+                    ar.absence_date,
+                    ar.absence_type,
+                    ar.duration_units,
+                    ar.reason,
+                    ar.image_path,
+                    ar.created_at,
+                    s.code AS semester_code,
+                    s.id AS semester_id
+                FROM absence_records ar
+                LEFT JOIN semesters s ON ar.semester_id = s.id
+                WHERE ar.user_id = %s
+                ORDER BY ar.absence_date DESC, ar.created_at DESC
+            """, (user_id,))
         else:
-            # 如果表不存在，返回空列表
-            print("⚠️ uploaded_course_templates 表不存在")
-            history = []
-        
-        return jsonify({
-            "success": True,
-            "history": history
-        })
+            cursor.execute("""
+                SELECT 
+                    ar.id,
+                    ar.absence_date,
+                    ar.absence_type,
+                    ar.duration_units,
+                    ar.reason,
+                    ar.image_path,
+                    ar.created_at,
+                    NULL AS semester_code,
+                    NULL AS semester_id
+                FROM absence_records ar
+                WHERE ar.user_id = %s
+                ORDER BY ar.absence_date DESC, ar.created_at DESC
+            """, (user_id,))
+
+        records = cursor.fetchall()
+
+        # 格式化日期
+        for record in records:
+            if record.get('absence_date'):
+                absence_date = record['absence_date']
+                if isinstance(absence_date, datetime):
+                    record['absence_date'] = absence_date.strftime("%Y-%m-%d")
+                elif isinstance(absence_date, str):
+                    date_match = re.search(r'(\d{4})-(\d{2})-(\d{2})', absence_date)
+                    if date_match:
+                        record['absence_date'] = date_match.group(0)
+                    elif 'T' in absence_date:
+                        record['absence_date'] = absence_date.split('T')[0]
+
+        return jsonify({"success": True, "records": records})
+
     except Exception as e:
-        print("❌ 取得上傳歷史錯誤:", e)
         traceback.print_exc()
-        return jsonify({"success": False, "message": f"取得歷史記錄失敗: {str(e)}"}), 500
+        return jsonify({"success": False, "message": f"取得缺勤記錄失敗: {str(e)}"}), 500
     finally:
         cursor.close()
         conn.close()
 
 # -------------------------
-# 科助下載標準課程Excel文件
+# API：提交缺勤記錄
 # -------------------------
-@resume_bp.route('/api/ta/download_standard_course_file/<int:history_id>', methods=['GET'])
-def download_standard_course_file(history_id):
-    """下載上傳的Excel文件（從uploaded_course_templates表）"""
-    if 'user_id' not in session or session.get('role') != 'ta':
-        return jsonify({"success": False, "message": "未授權"}), 403
-    
-    conn = get_db()
-    cursor = conn.cursor(dictionary=True)
-    
-    try:
-        # 從 uploaded_course_templates 表獲取文件路徑
-        cursor.execute("""
-            SELECT file_path 
-            FROM uploaded_course_templates 
-            WHERE id = %s
-        """, (history_id,))
-        record = cursor.fetchone()
-        
-        if not record or not record.get('file_path'):
-            return jsonify({"success": False, "message": "找不到文件"}), 404
-        
-        file_path = record.get('file_path')
-        
-        # 處理相對路徑 - 從項目根目錄開始
-        if not os.path.isabs(file_path):
-            # 獲取項目根目錄（backend的父目錄）
-            project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-            abs_file_path = os.path.join(project_root, file_path)
-        else:
-            abs_file_path = file_path
-        
-        # 標準化路徑分隔符
-        # abs_file_path = os.path.normpath(abs_file_path)
-        
-        print(f"🔍 嘗試下載文件: {abs_file_path}")
-        
-        # 檢查文件是否存在，如果不存在，嘗試多種方式查找
-        if not os.path.exists(abs_file_path):
-            print(f"⚠️ 文件不存在，嘗試查找相似文件...")
-            
-            # 方法1：嘗試添加 .xlsx 擴展名
-            abs_file_path_xlsx = abs_file_path + '.xlsx'
-            abs_file_path_xls = abs_file_path + '.xls'
-            
-            if os.path.exists(abs_file_path_xlsx):
-                print(f"✅ 找到文件（添加.xlsx後）: {abs_file_path_xlsx}")
-                abs_file_path = abs_file_path_xlsx
-            elif os.path.exists(abs_file_path_xls):
-                print(f"✅ 找到文件（添加.xls後）: {abs_file_path_xls}")
-                abs_file_path = abs_file_path_xls
-            else:
-                # 方法2：在目錄中查找以該文件名開頭的文件
-                file_dir = os.path.dirname(abs_file_path)
-                file_basename = os.path.basename(abs_file_path)
-                
-                if os.path.isdir(file_dir):
-                    print(f"🔍 在目錄中搜索: {file_dir}, 文件名前綴: {file_basename}")
-                    try:
-                        files_in_dir = os.listdir(file_dir)
-                        print(f"📁 目錄中的文件: {files_in_dir}")
-                        
-                        # 查找以該文件名開頭的Excel文件
-                        matching_files = [f for f in files_in_dir 
-                                        if f.startswith(file_basename) 
-                                        and (f.lower().endswith('.xlsx') or f.lower().endswith('.xls'))]
-                        
-                        if matching_files:
-                            # 找到匹配的文件，使用第一個
-                            found_file = matching_files[0]
-                            abs_file_path = os.path.join(file_dir, found_file)
-                            print(f"✅ 找到匹配文件: {abs_file_path}")
-                        else:
-                            # 方法3：查找所有Excel文件，看是否有相似的時間戳
-                            excel_files = [f for f in files_in_dir 
-                                         if f.lower().endswith('.xlsx') or f.lower().endswith('.xls')]
-                            print(f"📊 目錄中的Excel文件: {excel_files}")
-                            
-                            # 嘗試提取時間戳部分進行匹配
-                            if file_basename and '_' in file_basename:
-                                timestamp_part = file_basename.split('_')[0] + '_' + file_basename.split('_')[1] if len(file_basename.split('_')) >= 2 else file_basename
-                                matching_by_timestamp = [f for f in excel_files if timestamp_part in f]
-                                
-                                if matching_by_timestamp:
-                                    abs_file_path = os.path.join(file_dir, matching_by_timestamp[0])
-                                    print(f"✅ 根據時間戳找到文件: {abs_file_path}")
-                                else:
-                                    print(f"❌ 無法找到匹配的文件")
-                                    print(f"❌ 嘗試過: {abs_file_path}")
-                                    print(f"❌ 嘗試過: {abs_file_path_xlsx}")
-                                    print(f"❌ 嘗試過: {abs_file_path_xls}")
-                                    return jsonify({"success": False, "message": f"文件不存在: {os.path.basename(file_path)}"}), 404
-                            else:
-                                print(f"❌ 無法找到匹配的文件")
-                                print(f"❌ 嘗試過: {abs_file_path}")
-                                print(f"❌ 嘗試過: {abs_file_path_xlsx}")
-                                print(f"❌ 嘗試過: {abs_file_path_xls}")
-                                return jsonify({"success": False, "message": f"文件不存在: {os.path.basename(file_path)}"}), 404
-                    except Exception as e:
-                        print(f"❌ 搜索文件時發生錯誤: {e}")
-                        return jsonify({"success": False, "message": f"搜索文件失敗: {str(e)}"}), 500
-                else:
-                    print(f"❌ 目錄不存在: {file_dir}")
-                    return jsonify({"success": False, "message": f"目錄不存在: {file_dir}"}), 404
-        
-        # 獲取原始文件名（從路徑中提取）
-        original_filename = os.path.basename(file_path)
-        # 如果文件名包含時間戳，嘗試提取原始文件名
-        if '_' in original_filename and original_filename[0].isdigit():
-            # 檢查是否是時間戳格式 (YYYYMMDD_HHMMSS_)
-            parts = original_filename.split('_', 2)
-            if len(parts) >= 3 and len(parts[0]) == 8 and len(parts[1]) == 6:
-                original_filename = '_'.join(parts[2:])  # 保留後面的部分
-        
-        # 確保文件名有正確的擴展名（從實際文件路徑獲取）
-        actual_filename = os.path.basename(abs_file_path)
-        if actual_filename.lower().endswith('.xlsx'):
-            ext = '.xlsx'
-        elif actual_filename.lower().endswith('.xls'):
-            ext = '.xls'
-        else:
-            ext = '.xlsx'  # 默認使用 .xlsx
-        
-        # 如果原始文件名沒有擴展名，添加擴展名
-        if not original_filename.lower().endswith(('.xlsx', '.xls')):
-            original_filename = original_filename + ext
-        elif not original_filename.lower().endswith(ext):
-            # 如果擴展名不匹配，使用實際文件的擴展名
-            original_filename = os.path.splitext(original_filename)[0] + ext
-        
-        # 設置正確的MIME類型
-        if original_filename.lower().endswith('.xlsx'):
-            mimetype = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-        elif original_filename.lower().endswith('.xls'):
-            mimetype = 'application/vnd.ms-excel'
-        else:
-            mimetype = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-        
-        print(f"✅ 下載文件: {abs_file_path}, 文件名: {original_filename}, MIME: {mimetype}")
-        return send_file(abs_file_path, as_attachment=True, download_name=original_filename, mimetype=mimetype)
-    except Exception as e:
-        print(f"❌ 下載文件錯誤: {e}")
-        traceback.print_exc()
-        return jsonify({"success": False, "message": f"下載失敗: {str(e)}"}), 500
-    finally:
-        cursor.close()
-        conn.close()
+@resume_bp.route('/api/submit_absence_record', methods=['POST'])
+def submit_absence_record():
+    if 'user_id' not in session:
+        return jsonify({"success": False, "message": "請先登入"}), 401
 
-# -------------------------
-# 科助刪除標準課程上傳記錄
-# -------------------------
-@resume_bp.route('/api/ta/delete_standard_course_history/<int:history_id>', methods=['DELETE'])
-def delete_standard_course_history(history_id):
-    """刪除上傳歷史記錄及對應的文件（從uploaded_course_templates表）"""
-    if 'user_id' not in session or session.get('role') != 'ta':
-        return jsonify({"success": False, "message": "未授權"}), 403
-    
+    user_id = session['user_id']
     conn = get_db()
     cursor = conn.cursor(dictionary=True)
-    
+
     try:
-        # 從 uploaded_course_templates 表獲取文件路徑
-        cursor.execute("""
-            SELECT file_path
-            FROM uploaded_course_templates 
-            WHERE id = %s
-        """, (history_id,))
-        record = cursor.fetchone()
-        
-        if not record:
-            return jsonify({"success": False, "message": "找不到記錄"}), 404
-        
-        file_path = record.get('file_path')
-        
-        # 刪除文件（如果存在）
-        if file_path:
-            abs_file_path = os.path.abspath(file_path)
-            if os.path.exists(abs_file_path):
-                try:
-                    os.remove(abs_file_path)
-                    print(f"✅ 已刪除文件: {abs_file_path}")
-                except Exception as e:
-                    print(f"⚠️ 刪除文件失敗: {e}")
-        
-        # 刪除 uploaded_course_templates 表中的記錄
-        cursor.execute("DELETE FROM uploaded_course_templates WHERE id = %s", (history_id,))
+        absence_date = request.form.get('absence_date')
+        absence_type = request.form.get('absence_type')
+        duration_units = request.form.get('duration_units')
+        reason = request.form.get('reason')
+        proof_image = request.files.get('proof_image')
+
+        if not all([absence_date, absence_type, duration_units, reason]):
+            return jsonify({"success": False, "message": "請填寫所有必填欄位"}), 400
+
+        duration_units_int = int(duration_units)
+        if duration_units_int <= 0:
+            return jsonify({"success": False, "message": "節數必須為正整數"}), 400
+
+        # 獲取當前學期ID
+        semester_id = get_current_semester_id(cursor)
+
+        # 處理佐證圖片
+        image_path = None
+        if proof_image and proof_image.filename:
+            filename = secure_filename(proof_image.filename)
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"{user_id}_{timestamp}_{filename}"
+            filepath = os.path.join(current_app.config['UPLOAD_FOLDER'], filename)
+            proof_image.save(filepath)
+            image_path = f"/uploads/{filename}"
+
+        # 檢查是否有 semester_id 欄位
+        cursor.execute("SHOW COLUMNS FROM absence_records LIKE 'semester_id'")
+        has_semester_id = cursor.fetchone() is not None
+
+        if has_semester_id and semester_id:
+            cursor.execute("""
+                INSERT INTO absence_records 
+                (user_id, absence_date, absence_type, duration_units, reason, image_path, semester_id)
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
+            """, (user_id, absence_date, absence_type, duration_units_int, reason, image_path, semester_id))
+        else:
+            cursor.execute("""
+                INSERT INTO absence_records 
+                (user_id, absence_date, absence_type, duration_units, reason, image_path)
+                VALUES (%s, %s, %s, %s, %s, %s)
+            """, (user_id, absence_date, absence_type, duration_units_int, reason, image_path))
+
         conn.commit()
-        
-        print(f"✅ 已刪除 uploaded_course_templates 表記錄，ID: {history_id}")
-        
-        return jsonify({
-            "success": True,
-            "message": "已成功刪除記錄"
-        })
+        return jsonify({"success": True, "message": "缺勤記錄已保存"})
+
     except Exception as e:
         conn.rollback()
-        print(f"❌ 刪除記錄錯誤: {e}")
         traceback.print_exc()
-        return jsonify({"success": False, "message": f"刪除失敗: {str(e)}"}), 500
+        return jsonify({"success": False, "message": f"保存失敗: {str(e)}"}), 500
     finally:
         cursor.close()
-        conn.close()     
+        conn.close()
 
 # -------------------------
 # 頁面路由
 # -------------------------
 @resume_bp.route('/upload_resume')
 def upload_resume_page():
-    return render_template('resume/upload_resume.html')   
-
-@resume_bp.route('/review_resume')
-def review_resume_page():
-    # 檢查登入狀態
-    if not require_login():
-        return redirect('/login')
-    
-     # 統一使用整合後的審核頁面
-    return render_template('resume/review_resume.html')
-
-@resume_bp.route('/ai_edit_resume')
-def ai_edit_resume_page():
-    return render_template('resume/ai_edit_resume.html')
+    return render_template('resume/upload_resume.html')
