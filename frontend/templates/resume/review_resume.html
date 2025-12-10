@@ -266,23 +266,21 @@
          if(c !== '五孝') classSelect.innerHTML += `<option value="${c}">${c}</option>`;
       });
 
-      // 填充公司名稱下拉選單（優先從履歷資料中提取所有公司）
+      // 填充公司名稱下拉選單（只顯示該指導老師管理的公司）
       const companyNameSelect = document.getElementById("companyNameFilter");
       companyNameSelect.innerHTML = `<option value="">所有公司</option>`;
       const companySet = new Set();
       
-      // 優先從履歷資料中提取所有公司名稱
-      data.forEach(r => {
-          if(r.company_name && r.company_name.trim()) {
-              companySet.add(r.company_name.trim());
-          }
-      });
-      
-      // 如果 API 有提供公司資料，也加入（作為補充）
-      if (companyData && companyData.companies && companyData.companies.length > 0) {
+      // 只從已審核公司 API 中提取該指導老師管理的公司
+      if (companyData && companyData.companies && companyData.companies.length > 0 && currentUserId) {
           companyData.companies.forEach(company => {
               const companyName = company.company_name || company.name || '';
-              if (companyName && companyName.trim()) {
+              // 只顯示該指導老師管理的公司（advisor_user_id 等於當前用戶ID）
+              if (companyName && companyName.trim() && 
+                  company.advisor_user_id && 
+                  String(company.advisor_user_id) === String(currentUserId) &&
+                  company.status === 'approved' && 
+                  company.is_open_current_semester) {
                   companySet.add(companyName.trim());
               }
           });
@@ -364,7 +362,7 @@
         let matchesStatus = true;
         if (status) {
            const statusStr = isCompanyView ? (r.display_status || '') : (r.application_statuses || r.status || '');
-           matchesStatus = statusStr.includes(status);
+           matchesStatus = statusStr === status;  // 使用嚴格相等，確保精確匹配
         }
 
         return matchesDept && matchesClass && matchesCompanyName && matchesJob && matchesStatus && matchesKeyword;
