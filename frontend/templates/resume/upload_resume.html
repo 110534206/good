@@ -2496,7 +2496,7 @@
     // 🧩 載入預設學期範圍並自動設置
     async function loadDefaultSemesterRange() {
       try {
-        const res = await fetch('/api/absence/default_range');
+        const res = await fetch('/api/get_absence_default_range');
         const result = await res.json();
         
         if (result.success && result.defaultStart && result.defaultEnd) {

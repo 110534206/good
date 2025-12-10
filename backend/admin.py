@@ -411,6 +411,95 @@ def get_classes():
         cursor.close()
         conn.close()
     
+
+# --------------------------------
+# 缺勤預設學期範圍設定 API
+# --------------------------------
+@admin_bp.route('/api/absence_default_range/list', methods=['GET'])
+def get_absence_default_range_list():
+    if 'user_id' not in session or session.get('role') not in ['admin', 'ta']:
+        return jsonify({"success": False, "message": "未授權"}), 403
+
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute("""
+            SELECT id, admission_year, start_semester_code, end_semester_code, updated_at
+            FROM absence_default_semester_range
+            ORDER BY admission_year ASC
+        """)
+        data = cursor.fetchall()
+        return jsonify({"success": True, "data": data})
+    except Exception as e:
+        print("取得預設學期範圍錯誤:", e)
+        return jsonify({"success": False}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+# 刪除（可選）
+@admin_bp.route('/api/absence_default_range/save', methods=['POST'])
+def save_absence_default_range():
+    if 'user_id' not in session or session.get('role') not in ['admin', 'ta']:
+        return jsonify({"success": False, "message": "未授權"}), 403
+
+    data = request.get_json()
+    admission_year = data.get("admission_year")
+    start_code = data.get("start_semester_code")
+    end_code = data.get("end_semester_code")
+
+    if not all([admission_year, start_code, end_code]):
+        return jsonify({"success": False, "message": "資料不完整"}), 400
+
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        # 如果該屆已有設定 → 更新
+        cursor.execute("""
+            SELECT id FROM absence_default_semester_range 
+            WHERE admission_year = %s
+        """, (admission_year,))
+        record = cursor.fetchone()
+
+        if record:
+            cursor.execute("""
+                UPDATE absence_default_semester_range
+                SET start_semester_code=%s, end_semester_code=%s
+                WHERE admission_year=%s
+            """, (start_code, end_code, admission_year))
+        else:
+            cursor.execute("""
+                INSERT INTO absence_default_semester_range
+                (admission_year, start_semester_code, end_semester_code)
+                VALUES (%s, %s, %s)
+            """, (admission_year, start_code, end_code))
+
+        conn.commit()
+        return jsonify({"success": True})
+    except Exception as e:
+        conn.rollback()
+        print("儲存預設範圍錯誤:", e)
+        return jsonify({"success": False}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+# 取得學期清單（供下拉使用）
+@admin_bp.route('/api/semesters/list', methods=['GET'])
+def admin_get_semesters_list():
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute("SELECT id, code, start_date, end_date FROM semesters ORDER BY code ASC")
+        semesters = cursor.fetchall() or []
+        return jsonify({"success": True, "semesters": semesters})
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"success": False, "message": str(e)}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
 # --------------------------------
 # 用戶管理頁面
 # --------------------------------
