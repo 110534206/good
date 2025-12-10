@@ -266,56 +266,69 @@
          if(c !== '五孝') classSelect.innerHTML += `<option value="${c}">${c}</option>`;
       });
 
-      // 填充公司名稱下拉選單（只顯示該指導老師管理的公司）
+      // 填充公司名稱下拉選單（優先從履歷資料中提取所有公司）
       const companyNameSelect = document.getElementById("companyNameFilter");
       companyNameSelect.innerHTML = `<option value="">所有公司</option>`;
-      if (companyData && companyData.companies && companyData.companies.length > 0 && currentUserId) {
-          // 過濾出該指導老師管理的公司（advisor_user_id 等於當前用戶ID）
-          const teacherCompanies = companyData.companies.filter(c => {
-              const advisorId = c.advisor_user_id;
-              // 確保類型一致（都轉換為數字或字符串進行比較）
-              return advisorId != null && String(advisorId) === String(currentUserId);
-          });
-          teacherCompanies.forEach(company => {
+      const companySet = new Set();
+      
+      // 優先從履歷資料中提取所有公司名稱
+      data.forEach(r => {
+          if(r.company_name && r.company_name.trim()) {
+              companySet.add(r.company_name.trim());
+          }
+      });
+      
+      // 如果 API 有提供公司資料，也加入（作為補充）
+      if (companyData && companyData.companies && companyData.companies.length > 0) {
+          companyData.companies.forEach(company => {
               const companyName = company.company_name || company.name || '';
-              if (companyName) {
-                  companyNameSelect.innerHTML += `<option value="${escapeHtml(companyName)}">${escapeHtml(companyName)}</option>`;
+              if (companyName && companyName.trim()) {
+                  companySet.add(companyName.trim());
               }
-          });
-      } else {
-          // 如果沒有從API獲取到公司資料，從履歷資料中提取
-          const companySet = new Set();
-          data.forEach(r => {
-              if(r.company_name && r.company_name.trim()) {
-                  companySet.add(r.company_name.trim());
-              }
-          });
-          Array.from(companySet).sort().forEach(companyName => {
-              companyNameSelect.innerHTML += `<option value="${escapeHtml(companyName)}">${escapeHtml(companyName)}</option>`;
           });
       }
+      
+      // 將所有公司名稱排序後加入選單
+      Array.from(companySet).sort().forEach(companyName => {
+          companyNameSelect.innerHTML += `<option value="${escapeHtml(companyName)}">${escapeHtml(companyName)}</option>`;
+      });
 
       const companySelect = document.getElementById("companyFilter");
       companySelect.innerHTML = `<option value="">所有職缺</option>`;
+      const jobSet = new Set();
       
+      // 優先從履歷資料中提取所有職缺
+      data.forEach(r => {
+          const jobTitle = r.job_title || r.jobTitle || '';
+          if (jobTitle && jobTitle.trim()) {
+              // 處理多個職缺（用 | 分隔）
+              const titles = jobTitle.split(' | ');
+              titles.forEach(t => {
+                  // 處理 "公司名稱 - 職缺名稱" 格式
+                  const parts = t.split(' - ');
+                  if(parts.length > 1) {
+                      jobSet.add(parts[1].trim());
+                  } else if(t.trim()) {
+                      jobSet.add(t.trim());
+                  }
+              });
+          }
+      });
+      
+      // 如果 API 有提供職缺資料，也加入（作為補充）
       if (positionData && positionData.items && positionData.items.length > 0) {
-          // 從 API 獲取的職缺資料（該指導老師管理的公司的職缺）
           positionData.items.forEach(job => {
-              companySelect.innerHTML += `<option value="${job.id}">${escapeHtml(job.title)}</option>`;
+              const jobTitle = job.title || job.job_title || '';
+              if (jobTitle) {
+                  jobSet.add(jobTitle.trim());
+              }
           });
-      } else {
-          // 如果沒有從 API 獲取到職缺資料，從履歷資料中提取
-          const jobSet = new Set();
-          data.forEach(r => {
-             const titles = (r.job_title || r.jobTitle || '').split(' | ');
-             titles.forEach(t => { 
-                 const parts = t.split(' - ');
-                 if(parts.length > 1) jobSet.add(parts[1].trim());
-                 else if(t.trim()) jobSet.add(t.trim());
-             });
-          });
-          Array.from(jobSet).sort().forEach(j => companySelect.innerHTML += `<option value="${j}">${j}</option>`);
       }
+      
+      // 將所有職缺排序後加入選單
+      Array.from(jobSet).sort().forEach(j => {
+          companySelect.innerHTML += `<option value="${escapeHtml(j)}">${escapeHtml(j)}</option>`;
+      });
     }
 
     function applyFilters() {

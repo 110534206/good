@@ -2530,6 +2530,19 @@ def review_resume(resume_id):
                     category="resume"
                 )
 
+                # 🔄 當班導通過履歷時，將學生的志願序狀態更新為 'approved'，以便同步到指導老師的審核頁面
+                if user_role in ['teacher', 'class_teacher']:
+                    # 將該學生所有狀態為 'pending' 的志願序更新為 'approved'
+                    cursor.execute("""
+                        UPDATE student_preferences 
+                        SET status = 'approved'
+                        WHERE student_id = %s
+                        AND status = 'pending'
+                    """, (student_user_id,))
+                    updated_preferences_count = cursor.rowcount
+                    if updated_preferences_count > 0:
+                        print(f"✅ 已將 {updated_preferences_count} 筆學生志願序狀態更新為 'approved'，履歷將同步到指導老師審核頁面")
+
         conn.commit()
 
         return jsonify({"success": True, "message": "履歷審核狀態更新成功"})
@@ -2753,14 +2766,11 @@ def get_teacher_review_resumes():
                 u.id AS user_id,
                 u.username AS student_id,
                 u.name,
-                c.class_name,
-                c.department_id,  -- 假設 classes 表中有 department_id 欄位
+                c.name AS class_name,
                 r.id AS resume_id,
-                r.upload_time,
+                r.created_at AS upload_time,
                 r.original_filename,
-                r.display_company,
-                r.display_job,
-                r.display_status
+                r.status AS display_status
             FROM users u
             JOIN classes c ON u.class_id = c.id
             LEFT JOIN resumes r ON u.id = r.user_id 
@@ -2779,17 +2789,18 @@ def get_teacher_review_resumes():
             params.append(session_user_id)
         elif session_role == 'director':
             # 主任：只看自己部門的學生
-            director_dept_id = get_director_department(cursor, session_user_id)
-            if not director_dept_id:
+            director_dept = get_director_department(cursor, session_user_id)
+            if not director_dept:
                 # 主任沒有設定部門，則返回空列表
                 return jsonify({"success": True, "data": [], "message": "主任未設定所屬部門，無法查詢"}), 200
             
-            # 假設 classes 表中有 department_id 欄位
-            sql += " AND c.department_id = %s" 
-            params.append(director_dept_id)
+            # classes 表使用 department 欄位（不是 department_id）
+            sql += " AND c.department = %s"
+            params.append(director_dept)
         
         # 排序：按照班級、姓名、上傳時間（最新在上）
-        sql += " ORDER BY c.class_name, u.username, r.upload_time DESC"
+        # 使用 COALESCE 處理 NULL 值，將 NULL 排在最後
+        sql += " ORDER BY c.name, u.username, COALESCE(r.created_at, '1970-01-01') DESC"
 
         cursor.execute(sql, tuple(params))
         rows = cursor.fetchall()
@@ -2807,17 +2818,22 @@ def get_teacher_review_resumes():
                         'username': student_id,
                         'name': row['name'],
                         'class_name': row['class_name'],
+                        'className': row['class_name'],  # 添加駝峰命名以兼容前端
                         'upload_time': 'N/A',
                         'original_filename': 'N/A',
                         'display_company': 'N/A',
                         'display_job': 'N/A',
-                        'display_status': 'not_uploaded' # 未上傳狀態
+                        'display_status': 'not_uploaded',  # 未上傳狀態
+                        'status': 'not_uploaded'
                     }
                 continue
 
             # 只保留該學生的最新一筆履歷記錄 (根據 resume_id，因為 SQL 排序了)
             if student_id not in latest_resumes or row['resume_id'] > latest_resumes[student_id].get('resume_id', 0):
-                status = row.get('display_status') if row.get('display_status') else 'pending'
+                # 狀態映射：後端狀態為 uploaded, approved, rejected，前端需要 pending, approved, rejected
+                backend_status = row.get('display_status') if row.get('display_status') else 'uploaded'
+                # 將 uploaded 映射為 pending 以便前端正確顯示
+                status = 'pending' if backend_status == 'uploaded' else backend_status
                 
                 latest_resumes[student_id] = {
                     # 前端下載連結 /api/download_resume/${row.id} 需要的是履歷 ID
@@ -2825,11 +2841,13 @@ def get_teacher_review_resumes():
                     'username': student_id,
                     'name': row['name'],
                     'class_name': row['class_name'],
+                    'className': row['class_name'],  # 添加駝峰命名以兼容前端
                     'upload_time': row['upload_time'].strftime('%Y-%m-%d %H:%M:%S') if row['upload_time'] else 'N/A',
                     'original_filename': row['original_filename'],
-                    'display_company': row['display_company'] or '—',
-                    'display_job': row['display_job'] or '—',
-                    'display_status': status,
+                    'display_company': '—',  # resumes 表中沒有公司欄位，顯示為 —
+                    'display_job': '—',  # resumes 表中沒有職缺欄位，顯示為 —
+                    'display_status': status,  # 映射後的狀態：pending, approved, rejected
+                    'status': status,  # 同時提供 status 欄位
                 }
         
         # 將字典的值轉換為列表
@@ -2839,7 +2857,7 @@ def get_teacher_review_resumes():
 
     except Exception as e:
         # 請確保您已在 resume.py 頂部導入 import traceback
-        # traceback.print_exc()
+        traceback.print_exc()
         print("❌ 取得待審核履歷列表錯誤:", e)
         return jsonify({"success": False, "message": f"伺服器錯誤: {str(e)}"}), 500
     finally:
