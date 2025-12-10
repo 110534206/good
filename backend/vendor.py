@@ -5,6 +5,7 @@ import traceback
 from flask import Blueprint, jsonify, render_template, request, session
 
 from config import get_db
+from semester import get_current_semester_id
 
 vendor_bp = Blueprint('vendor', __name__)
 
@@ -1903,16 +1904,33 @@ def publish_announcement():
     data = request.get_json(silent=True) or {}
     title = data.get("title", "").strip()
     content = data.get("content", "").strip()
-    company_id = data.get("company_id")  # 可選，指定特定公司
+    job_id = data.get("job_id")  # 可選，指定特定職缺
+    company_id = data.get("company_id")  # 可選，指定特定公司（向後兼容）
+    
+    # 調試日誌
+    print(f"📢 發布公告請求 - vendor_id: {session.get('user_id')}, title: {title[:50]}, job_id: {job_id}, company_id: {company_id}")
+    
+    # 處理 job_id
+    if job_id:
+        try:
+            job_id = int(job_id)
+        except (ValueError, TypeError):
+            print(f"⚠️ job_id 轉換失敗: {job_id}")
+            job_id = None
+    
+    # 處理 company_id（向後兼容）
     if company_id:
         try:
             company_id = int(company_id)
         except (ValueError, TypeError):
+            print(f"⚠️ company_id 轉換失敗: {company_id}")
             company_id = None
 
     if not title:
+        print("❌ 錯誤：標題為空")
         return jsonify({"success": False, "message": "標題不可為空"}), 400
     if not content:
+        print("❌ 錯誤：內容為空")
         return jsonify({"success": False, "message": "內容不可為空"}), 400
 
     vendor_id = session["user_id"]
@@ -1926,46 +1944,140 @@ def publish_announcement():
             return jsonify({"success": False, "message": "帳號資料不完整"}), 403
 
         if not companies:
+            print("❌ 錯誤：廠商未關聯任何公司")
             return jsonify({"success": False, "message": "您尚未關聯任何公司，無法發布公告"}), 400
 
-        # 如果指定了 company_id，檢查是否有權限
-        target_company_ids = []
-        if company_id:
-            company_ids = [c["id"] for c in companies]
+        company_ids = [c["id"] for c in companies]
+        print(f"📋 廠商關聯的公司 ID: {company_ids}")
+
+        # 如果指定了 job_id，查詢選擇了該職缺的學生
+        if job_id:
+            print(f"🔍 查詢職缺 {job_id} 的學生...")
+            # 驗證職缺是否屬於廠商關聯的公司
+            placeholders = ", ".join(["%s"] * len(company_ids))
+            cursor.execute(f"""
+                SELECT ij.id, ij.company_id, ij.title, ic.company_name
+                FROM internship_jobs ij
+                JOIN internship_companies ic ON ij.company_id = ic.id
+                WHERE ij.id = %s AND ij.company_id IN ({placeholders})
+            """, (job_id, *company_ids))
+            job_info = cursor.fetchone()
+            
+            if not job_info:
+                return jsonify({"success": False, "message": "無權限向該職缺發布公告"}), 403
+            
+            # 查詢選擇了該職缺的學生（優先查詢當前學期，如果沒有則查詢所有）
+            current_semester_id = get_current_semester_id(cursor)
+            if current_semester_id:
+                cursor.execute("""
+                    SELECT DISTINCT u.id AS student_id
+                    FROM student_preferences sp
+                    JOIN users u ON sp.student_id = u.id
+                    WHERE sp.job_id = %s
+                      AND u.role = 'student'
+                      AND (sp.semester_id = %s OR sp.semester_id IS NULL)
+                """, (job_id, current_semester_id))
+            else:
+                cursor.execute("""
+                    SELECT DISTINCT u.id AS student_id
+                    FROM student_preferences sp
+                    JOIN users u ON sp.student_id = u.id
+                    WHERE sp.job_id = %s
+                      AND u.role = 'student'
+                """, (job_id,))
+            
+            students = cursor.fetchall()
+            student_ids = [s["student_id"] for s in students]
+            print(f"✅ 找到 {len(student_ids)} 位選擇了職缺 {job_id} 的學生")
+            company_name = job_info["company_name"]
+            job_title = job_info["title"]
+            
+        # 如果指定了 company_id（向後兼容），查詢選擇了該公司的學生
+        elif company_id:
+            print(f"🔍 查詢公司 {company_id} 的學生...")
             if company_id not in company_ids:
                 return jsonify({"success": False, "message": "無權限向該公司發布公告"}), 403
-            target_company_ids = [company_id]
-        else:
-            # 向所有關聯公司的學生發布
-            target_company_ids = [c["id"] for c in companies]
-
-        # 查詢選擇了這些公司的學生
-        placeholders = ", ".join(["%s"] * len(target_company_ids))
-        cursor.execute(f"""
-            SELECT DISTINCT u.id AS student_id
-            FROM student_preferences sp
-            JOIN users u ON sp.student_id = u.id
-            WHERE sp.company_id IN ({placeholders})
-              AND u.role = 'student'
-        """, tuple(target_company_ids))
-
-        students = cursor.fetchall()
-        student_ids = [s["student_id"] for s in students]
-
-        if not student_ids:
-            return jsonify({"success": False, "message": "沒有學生選擇您的公司，無法發布公告"}), 400
-
-        # 獲取公司名稱用於通知標題
-        company_name = companies[0]["company_name"] if companies else "公司"
-        if company_id:
+            
+            # 查詢選擇了該公司的學生（優先查詢當前學期，如果沒有則查詢所有）
+            current_semester_id = get_current_semester_id(cursor)
+            if current_semester_id:
+                cursor.execute("""
+                    SELECT DISTINCT u.id AS student_id
+                    FROM student_preferences sp
+                    JOIN users u ON sp.student_id = u.id
+                    WHERE sp.company_id = %s
+                      AND u.role = 'student'
+                      AND (sp.semester_id = %s OR sp.semester_id IS NULL)
+                """, (company_id, current_semester_id))
+            else:
+                cursor.execute("""
+                    SELECT DISTINCT u.id AS student_id
+                    FROM student_preferences sp
+                    JOIN users u ON sp.student_id = u.id
+                    WHERE sp.company_id = %s
+                      AND u.role = 'student'
+                """, (company_id,))
+            
+            students = cursor.fetchall()
+            student_ids = [s["student_id"] for s in students]
+            print(f"✅ 找到 {len(student_ids)} 位選擇了公司 {company_id} 的學生")
+            
+            # 獲取公司名稱
             for c in companies:
                 if c["id"] == company_id:
                     company_name = c["company_name"]
                     break
+            else:
+                company_name = "公司"
+            job_title = None
+        else:
+            # 向所有關聯公司的學生發布（優先查詢當前學期，如果沒有則查詢所有）
+            print(f"🔍 查詢所有關聯公司的學生...")
+            current_semester_id = get_current_semester_id(cursor)
+            placeholders = ", ".join(["%s"] * len(company_ids))
+            if current_semester_id:
+                cursor.execute(f"""
+                    SELECT DISTINCT u.id AS student_id
+                    FROM student_preferences sp
+                    JOIN users u ON sp.student_id = u.id
+                    WHERE sp.company_id IN ({placeholders})
+                      AND u.role = 'student'
+                      AND (sp.semester_id = %s OR sp.semester_id IS NULL)
+                """, (*company_ids, current_semester_id))
+            else:
+                cursor.execute(f"""
+                    SELECT DISTINCT u.id AS student_id
+                    FROM student_preferences sp
+                    JOIN users u ON sp.student_id = u.id
+                    WHERE sp.company_id IN ({placeholders})
+                      AND u.role = 'student'
+                """, tuple(company_ids))
+            
+            students = cursor.fetchall()
+            student_ids = [s["student_id"] for s in students]
+            print(f"✅ 找到 {len(student_ids)} 位選擇了所有關聯公司的學生")
+            company_name = companies[0]["company_name"] if companies else "公司"
+            job_title = None
+
+        if not student_ids:
+            print(f"❌ 錯誤：沒有找到任何學生")
+            current_semester_id = get_current_semester_id(cursor)
+            semester_info = f"（當前學期ID: {current_semester_id}）" if current_semester_id else "（未設定當前學期）"
+            
+            if job_id:
+                error_msg = f"目前沒有學生選擇該職缺，無法發布公告。{semester_info} 請確認是否有學生已填寫志願序。"
+            else:
+                error_msg = f"目前沒有學生選擇您的公司，無法發布公告。{semester_info} 請確認是否有學生已填寫志願序。"
+            
+            return jsonify({"success": False, "message": error_msg}), 400
+
+        # 構建通知標題
+        if job_id and job_title:
+            notification_title = f"【{company_name} - {job_title}】公告：{title}"
+        else:
+            notification_title = f"【{company_name}】公告：{title}"
 
         # 向所有相關學生發送通知
-        # 標題格式：【公司名稱】公告：標題，以便在查詢時區分公告和通知
-        notification_title = f"【{company_name}】公告：{title}"
         notification_message = content
         link_url = "/notifications"  # 連結到通知中心，學生可以在那裡查看所有公告
         category = "announcement"  # 使用 "announcement" 類別，讓學生可以在通知中心通過「公告」類別篩選看到

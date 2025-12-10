@@ -179,18 +179,37 @@
           userRole = profileData.success && profileData.user ? profileData.user.role : 'class_teacher';
           currentUserId = profileData.success && profileData.user ? profileData.user.id : null;
 
-          fetch('/api/get_class_resumes')
-            .then(res => res.ok ? res.json() : {success:false})
-            .then(resumeData => {
-              if (resumeData.success) {
-                allResumes = resumeData.resumes || [];
-                populateFilters(allResumes);
-                applyFilters();
-              } else {
-                allResumes = [];
-                renderTable([]);
-              }
+          // --- [修改開始]：同時載入已審核公司和學生履歷 ---
+
+          // 1. 載入已審核公司列表 (從科助後台使用的 API 獲取)
+          const fetchReviewedCompanies = fetch('/api/get_reviewed_companies')
+            .then(res => res.json())
+            // 只在成功時返回公司列表，失敗則返回空陣列
+            .then(data => data.success ? (data.companies || []) : [])
+            .catch(err => { 
+                console.error("Error fetching reviewed companies:", err); 
+                return []; 
             });
+
+          // 2. 載入學生履歷列表
+          const fetchClassResumes = fetch('/api/get_class_resumes')
+            .then(res => res.ok ? res.json() : {success:false})
+            .then(resumeData => resumeData.success ? (resumeData.resumes || []) : [])
+            .catch(err => { 
+                console.error("Error fetching class resumes:", err); 
+                return []; 
+            });
+
+          // 等待兩個 API 請求都完成
+          Promise.all([fetchReviewedCompanies, fetchClassResumes])
+            .then(([reviewedCompanies, resumes]) => {
+              allResumes = resumes;
+              // 將已審核公司資料傳入，用於填充篩選器
+              populateFilters(allResumes, reviewedCompanies);
+              applyFilters();
+            });
+
+          // --- [修改結束] ---
         });
 
       document.getElementById("departmentFilter").addEventListener("change", applyFilters);
@@ -205,8 +224,10 @@
       document.getElementById('close-btn').onclick = () => { sideMenu.classList.remove('open'); sideMenu.setAttribute('aria-hidden', 'true'); };
     });
 
-    function populateFilters(data) {
+    // --- [修改開始]：populateFilters 函式接受 reviewedCompanies 參數 ---
+    function populateFilters(data, reviewedCompanies = []) {
       const deptSelect = document.getElementById("departmentFilter");
+      // 學生所屬學年列表 (目前寫死)
       deptSelect.innerHTML = `<option value="">所有學年</option><option value="1132">1132</option><option value="1142">1142</option>`;
       
       const classSelect = document.getElementById("classFilter");
@@ -217,32 +238,40 @@
          classSelect.innerHTML += `<option value="${c}">${c}</option>`;
       });
 
-      // 填充公司名稱下拉選單
+      // 填充公司名稱下拉選單 (使用已審核公司列表)
       const companyNameSelect = document.getElementById("companyNameFilter");
       companyNameSelect.innerHTML = `<option value="">所有公司</option>`;
       const companySet = new Set();
-      data.forEach(r => {
-          if(r.company_name && r.company_name.trim()) {
-              companySet.add(r.company_name.trim());
+      
+      // 使用從科助 API 抓取的已審核公司列表
+      reviewedCompanies.forEach(c => {
+          // 篩選條件：已核准 (approved) 且本學期開放 (is_open_current_semester)
+          if (c.company_name && c.company_name.trim() && c.status === 'approved' && c.is_open_current_semester) {
+              companySet.add(c.company_name.trim());
           }
       });
+      
       Array.from(companySet).sort().forEach(companyName => {
           companyNameSelect.innerHTML += `<option value="${escapeHtml(companyName)}">${escapeHtml(companyName)}</option>`;
       });
 
+      // 填充職缺下拉選單 (目前仍從學生履歷資料抓取)
       const companySelect = document.getElementById("companyFilter");
       companySelect.innerHTML = `<option value="">所有職缺</option>`;
       const jobSet = new Set();
       data.forEach(r => {
+         // 這裡假設 job_title 格式為 "公司名稱 | 職缺名稱 - 職缺代碼" 或類似
          const titles = (r.job_title || r.jobTitle || '').split(' | ');
          titles.forEach(t => { 
              const parts = t.split(' - ');
+             // 嘗試提取職缺名稱
              if(parts.length > 1) jobSet.add(parts[1].trim());
              else if(t.trim()) jobSet.add(t.trim());
          });
       });
       Array.from(jobSet).sort().forEach(j => companySelect.innerHTML += `<option value="${j}">${j}</option>`);
     }
+    // --- [修改結束]：populateFilters 函式 ---
 
     function applyFilters() {
       currentPage = 1;
@@ -262,6 +291,7 @@
         let matchesCompanyName = true;
         if (companyName) {
             const companyNameStr = (r.company_name || '').trim();
+            // 由於篩選器是從已審核公司列表中填充，這裡直接比對名稱
             matchesCompanyName = companyNameStr === companyName;
         }
         

@@ -3781,6 +3781,7 @@ def get_class_resumes():
             sql_query = """
                 SELECT DISTINCT
                     r.id,
+                    u.id AS user_id,
                     u.name AS student_name,
                     u.username AS student_number,
                     c.name AS class_name,
@@ -3791,41 +3792,46 @@ def get_class_resumes():
                     r.comment,
                     r.note,
                     r.created_at,
-                    COALESCE(
-                        (SELECT ic3.company_name 
-                         FROM student_preferences sp3
-                         JOIN internship_companies ic3 ON sp3.company_id = ic3.id
-                         WHERE sp3.student_id = u.id 
-                         AND ic3.advisor_user_id = %s
-                         ORDER BY sp3.preference_order ASC
-                         LIMIT 1),
-                        ''
-                    ) AS company_name,
-                    COALESCE(
-                        (SELECT ij3.title
-                         FROM student_preferences sp3
-                         JOIN internship_companies ic3 ON sp3.company_id = ic3.id
-                         LEFT JOIN internship_jobs ij3 ON sp3.job_id = ij3.id
-                         WHERE sp3.student_id = u.id 
-                         AND ic3.advisor_user_id = %s
-                         ORDER BY sp3.preference_order ASC
-                         LIMIT 1),
-                        ''
-                    ) AS job_title,
-                    COALESCE(
-                        (SELECT sp3.preference_order
-                         FROM student_preferences sp3
-                         JOIN internship_companies ic3 ON sp3.company_id = ic3.id
-                         WHERE sp3.student_id = u.id 
-                         AND ic3.advisor_user_id = %s
-                         ORDER BY sp3.preference_order ASC
-                         LIMIT 1),
-                        NULL
-                    ) AS preference_order
+                    latest_pref.company_name AS company_name,
+                    latest_pref.job_title AS job_title,
+                    latest_pref.preference_id,
+                    latest_pref.preference_order,
+                    latest_pref.preference_status,
+                    latest_pref.vendor_comment
                 FROM resumes r
                 JOIN users u ON r.user_id = u.id
                 LEFT JOIN classes c ON u.class_id = c.id
-                WHERE EXISTS (
+                               SELECT 
+                            sp.student_id,
+                            sp.id AS preference_id,
+                            sp.preference_order,
+                            'pending' AS preference_status,  -- 指導老師看到的初始狀態為待審核
+                            ic.company_name,
+                            ij.title AS job_title,
+                            (SELECT vph.comment 
+                             FROM vendor_preference_history vph 
+                             WHERE vph.preference_id = sp.id 
+                             ORDER BY vph.created_at DESC 
+                             LIMIT 1) AS vendor_comment
+                        FROM student_preferences sp
+                        JOIN internship_companies ic ON sp.company_id = ic.id
+                        LEFT JOIN internship_jobs ij ON sp.job_id = ij.id
+                        WHERE ic.advisor_user_id = %s
+                        AND sp.status = 'approved'  -- 只顯示班導已審核通過的志願序
+                        AND sp.id = (
+                            -- 獲取該學生選擇該老師管理的公司中，preference_order 最小的志願序
+                            SELECT sp2.id
+                            FROM student_preferences sp2
+                            JOIN internship_companies ic2 ON sp2.company_id = ic2.id
+                            WHERE sp2.student_id = sp.student_id
+                            AND ic2.advisor_user_id = %s
+                            AND sp2.status = 'approved'  -- 只考慮班導已審核通過的志願序
+                            ORDER BY sp2.preference_order ASC
+                            LIMIT 1
+                        )
+                    ) latest_pref ON latest_pref.student_id = u.id
+                    WHERE r.status = 'approved'  -- 只顯示班導已審核通過的履歷
+                    AND (EXISTS (
                     -- 情況1：班導的學生
                     SELECT 1
                     FROM classes c2
@@ -3839,15 +3845,18 @@ def get_class_resumes():
                 ) OR EXISTS (
                     -- 情況3：選擇了該老師作為指導老師的公司的學生
                     -- 重點：學生的履歷會根據填寫的志願序，傳給選擇公司的指導老師
+                    -- 只有班導已審核通過的志願序和履歷，指導老師才能看到
+
                     SELECT 1
                     FROM student_preferences sp
                     JOIN internship_companies ic2 ON sp.company_id = ic2.id
-                    WHERE sp.student_id = u.id AND ic2.advisor_user_id = %s
-                )
+                    WHERE sp.student_id = u.id 
+                        AND ic2.advisor_user_id = %s
+                        AND sp.status = 'approved'  -- 只顯示班導已審核通過的志願序
+                    ))
                 ORDER BY c.name, u.name
             """
-            sql_params = (user_id, user_id, user_id, user_id, user_id, user_id)
-
+            sql_params = (user_id, user_id, user_id, user_id, user_id)
 
             cursor.execute(sql_query, sql_params)
             resumes = cursor.fetchall()
@@ -3858,6 +3867,16 @@ def get_class_resumes():
                 # 統計有多少履歷是通過「選擇了該老師管理的公司」這個條件出現的
                 company_based_count = sum(1 for r in resumes if r.get('company_name'))
                 print(f"📊 [DEBUG] {company_based_count} resumes are from students who selected companies managed by this teacher")
+                        # 統計顯示的公司和職缺
+                companies_shown = set()
+                jobs_shown = set()
+                for r in resumes:
+                    if r.get('company_name'):
+                        companies_shown.add(r.get('company_name'))
+                    if r.get('job_title'):
+                        jobs_shown.add(r.get('job_title'))
+                print(f"📊 [DEBUG] Companies shown: {len(companies_shown)} - {sorted(companies_shown)}")
+                print(f"📊 [DEBUG] Jobs shown: {len(jobs_shown)} - {sorted(jobs_shown)}")
             else:
                 print(f"⚠️ [DEBUG] Teacher/class_teacher user {user_id} has no assigned classes or advisor students.")
                 resumes = []
@@ -4009,6 +4028,13 @@ def get_class_resumes():
                 r['className'] = r['class_name']
             if 'created_at' in r:
                 r['upload_time'] = r['created_at']
+           # 處理志願序狀態：如果有 preference_status，使用它；否則使用履歷狀態
+            if 'preference_status' in r and r.get('preference_status'):
+                r['application_statuses'] = r['preference_status']
+                r['display_status'] = r['preference_status']
+            # 處理留言：如果有 vendor_comment，使用它；否則使用履歷的 comment
+            if 'vendor_comment' in r and r.get('vendor_comment'):
+                r['comment'] = r['vendor_comment']      
 
         print(f"✅ [DEBUG] Returning {len(resumes)} resumes for role {role}")
         return jsonify({"success": True, "resumes": resumes})
@@ -4109,6 +4135,18 @@ def review_resume(resume_id):
                     message=notification_content,
                     category="resume"
                 )
+             # 🔄 如果是老師退件，將 student_preferences 狀態重置為 'pending'，避免同步到廠商審核頁面
+                if user_role in ['teacher', 'class_teacher']:
+                    # 將該學生所有志願序的狀態重置為 'pending'，這樣就不會顯示在廠商審核頁面
+                    cursor.execute("""
+                        UPDATE student_preferences 
+                        SET status = 'pending'
+                        WHERE student_id = %s
+                        AND status = 'approved'
+                    """, (student_user_id,))
+                    updated_count = cursor.rowcount
+                    if updated_count > 0:
+                        print(f"✅ 已將 {updated_count} 筆學生志願序狀態重置為 'pending'，該履歷不會同步到廠商審核頁面")
 
             # =============== 通過 ===============
             elif status == 'approved':
