@@ -1561,6 +1561,9 @@ def delete_position_for_vendor(job_id):
         if not job_row:
             return jsonify({"success": False, "message": "找不到職缺或無權限刪除"}), 404
 
+        # 先移除學生志願序中引用該職缺的紀錄，避免 FK 阻擋刪除
+        cursor.execute("DELETE FROM student_preferences WHERE job_id = %s", (job_id,))
+
         cursor.execute("DELETE FROM internship_jobs WHERE id = %s", (job_id,))
         conn.commit()
         return jsonify({"success": True, "message": "職缺已刪除"})

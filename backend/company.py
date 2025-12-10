@@ -722,6 +722,20 @@ def delete_company(company_id):
             if os.path.exists(abs_path):
                 os.remove(abs_path)
 
+        # 先刪除志願序中引用到該公司/職缺的資料以免觸發 FK
+        cursor.execute("SELECT id FROM internship_jobs WHERE company_id=%s", (company_id,))
+        job_rows = cursor.fetchall() or []
+        job_ids = [row["id"] for row in job_rows]
+
+        # 刪除指定公司下的志願序（包含未指定職缺與指定職缺）
+        cursor.execute("DELETE FROM student_preferences WHERE company_id=%s", (company_id,))
+        if job_ids:
+            placeholders = ", ".join(["%s"] * len(job_ids))
+            cursor.execute(f"DELETE FROM student_preferences WHERE job_id IN ({placeholders})", tuple(job_ids))
+
+        # 刪除公司開放設定，避免 company_openings → internship_companies FK 擋住
+        cursor.execute("DELETE FROM company_openings WHERE company_id=%s", (company_id,))
+
         # 刪除相關職缺資料
         cursor.execute("DELETE FROM internship_jobs WHERE company_id=%s", (company_id,))
 
