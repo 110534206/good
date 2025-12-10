@@ -5006,3 +5006,47 @@ def upload_standard_courses_page():
     if 'user_id' not in session or session.get('role') != 'ta':
         return redirect('/login')
     return render_template('ta/upload_standard_courses.html')
+
+@resume_bp.route('/api/company_positions', methods=['GET'])
+def get_company_positions():
+    try:
+        company_name = request.args.get('company_name', '')
+        if not company_name:
+            return jsonify({"success": False, "message": "請提供公司名稱"}), 400
+            
+        conn = get_db()
+        cursor = conn.cursor(dictionary=True)
+        
+        # 查詢該公司的所有職缺
+        cursor.execute("""
+            SELECT 
+                id,
+                title,
+                description,
+                salary,
+                period,
+                work_time,
+                slots
+            FROM internship_jobs
+            WHERE company_id IN (
+                SELECT id FROM companies WHERE name = %s AND status = 'approved'
+            )
+            AND is_active = 1
+            ORDER BY title
+        """, (company_name,))
+        
+        positions = cursor.fetchall()
+        cursor.close()
+        conn.close()
+        
+        return jsonify({
+            "success": True,
+            "positions": positions
+        })
+        
+    except Exception as e:
+        print(f"Error fetching company positions: {str(e)}")
+        return jsonify({
+            "success": False,
+            "message": "獲取職缺資料時發生錯誤"
+        }), 500
