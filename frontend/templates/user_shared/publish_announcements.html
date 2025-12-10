@@ -325,11 +325,11 @@
           <input type="text" id="announcementTitle" placeholder="請輸入公告標題" required />
         </div>
         <div>
-          <label for="announcementCompany" class="form-label">發布對象</label>
-          <select id="announcementCompany">
-            <option value="">所有關聯公司的學生</option>
+          <label for="announcementPosition" class="form-label">發布對象</label>
+          <select id="announcementPosition">
+            <option value="">所有職缺的學生</option>
           </select>
-          <small style="display: block; margin-top: 6px; color: var(--color-muted); font-size: 0.875rem;">選擇特定公司或向所有關聯公司的學生發布</small>
+          <small style="display: block; margin-top: 6px; color: var(--color-muted); font-size: 0.875rem;">選擇特定職缺或向所有職缺的學生發布</small>
         </div>
         <div>
           <label for="announcementContent" class="form-label">公告內容 <span style="color: var(--color-danger);">*</span></label>
@@ -368,11 +368,11 @@
 
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
   <script>
-    let companies = [];
+    let positions = []; // 儲存職缺列表，每個職缺包含 id, company_id, title 等
 
     // DOMContentLoaded
     document.addEventListener("DOMContentLoaded", () => {
-      loadCompanies();
+      loadPositions();
       loadAnnouncementHistory();
       
       // 綁定表單提交
@@ -405,28 +405,60 @@
       });
     });
 
-    // 載入公司列表
-    function loadCompanies() {
-      fetch('/vendor/api/resumes')
+    // 載入職缺列表（只顯示該廠商實際關聯的職缺）
+    function loadPositions() {
+      fetch('/vendor/api/positions', {
+        headers: { 'Accept': 'application/json' },
+        credentials: 'include'
+      })
         .then(res => res.json())
         .then(data => {
-          if (data.success && data.companies) {
-            companies = data.companies;
-            const companySelect = document.getElementById("announcementCompany");
-            
-            companies.forEach(company => {
-              const companyName = company.name || company.company_name;
-              if (companyName && companyName !== "暫無公司資料") {
-                const option = document.createElement("option");
-                option.value = company.id || company.company_id;
-                option.textContent = companyName;
-                companySelect.appendChild(option);
-              }
+          const positionSelect = document.getElementById("announcementPosition");
+          
+          if (data.success && data.items && data.items.length > 0) {
+            // 儲存職缺列表
+            positions = data.items.filter(position => {
+              return position && position.id && position.company_id;
             });
+            
+            // 只顯示啟用的職缺
+            const activePositions = positions.filter(position => position.is_active);
+            
+            activePositions.forEach(position => {
+              const positionTitle = position.title || '未命名職缺';
+              
+              const option = document.createElement("option");
+              option.value = position.id; // 使用職缺 ID 作為值
+              option.textContent = positionTitle; // 只顯示職缺名稱
+              option.dataset.companyId = position.company_id; // 儲存公司 ID 供提交時使用
+              positionSelect.appendChild(option);
+            });
+            
+            // 如果沒有職缺，顯示提示訊息
+            if (activePositions.length === 0) {
+                const option = document.createElement("option");
+              option.value = "";
+              option.textContent = "您尚未建立任何職缺";
+              option.disabled = true;
+              positionSelect.appendChild(option);
+            }
+          } else {
+            // 如果沒有職缺，顯示提示訊息
+            const option = document.createElement("option");
+            option.value = "";
+            option.textContent = "您尚未建立任何職缺";
+            option.disabled = true;
+            positionSelect.appendChild(option);
           }
         })
         .catch(error => {
-          console.error("載入公司列表失敗:", error);
+          console.error("載入職缺列表失敗:", error);
+          const positionSelect = document.getElementById("announcementPosition");
+          const option = document.createElement("option");
+          option.value = "";
+          option.textContent = "載入失敗，請重新整理頁面";
+          option.disabled = true;
+          positionSelect.appendChild(option);
         });
     }
 
@@ -436,7 +468,8 @@
       
       const title = document.getElementById("announcementTitle").value.trim();
       const content = document.getElementById("announcementContent").value.trim();
-      const companyId = document.getElementById("announcementCompany").value;
+      const positionSelect = document.getElementById("announcementPosition");
+      const selectedPositionId = positionSelect.value;
 
       if (!title || !content) {
         alert("請填寫標題和內容");
@@ -452,9 +485,21 @@
         content: content
       };
 
-      if (companyId) {
-        payload.company_id = parseInt(companyId);
+      // 如果選擇了特定職缺，傳送職缺 ID
+      if (selectedPositionId && selectedPositionId !== "") {
+        const jobIdNum = parseInt(selectedPositionId);
+        if (!isNaN(jobIdNum)) {
+          payload.job_id = jobIdNum;
+        } else {
+          console.error("無效的職缺 ID:", selectedPositionId);
+          alert("錯誤：無效的職缺 ID，請重新選擇");
+          publishBtn.disabled = false;
+          publishBtn.textContent = "發布公告";
+          return;
+        }
       }
+
+      console.log("📤 發送發布公告請求:", payload);
 
       fetch('/vendor/api/publish_announcement', {
         method: 'POST',
@@ -463,19 +508,25 @@
         },
         body: JSON.stringify(payload)
       })
-        .then(res => res.json())
+        .then(async res => {
+          const data = await res.json();
+          
+          // 檢查 HTTP 狀態碼和響應數據
+          if (!res.ok || !data.success) {
+            const errorMsg = data.message || `HTTP ${res.status}: ${res.statusText}`;
+            throw new Error(errorMsg);
+          }
+          
+          return data;
+        })
         .then(data => {
-          if (data.success) {
             alert(`公告發布成功！已發送給 ${data.notification_count} 位學生`);
             resetForm();
             loadAnnouncementHistory();
-          } else {
-            alert("發布失敗：" + (data.message || "未知錯誤"));
-          }
         })
         .catch(error => {
           console.error("發布公告失敗:", error);
-          alert("發布公告失敗，請檢查網路連線");
+          alert("發布失敗：" + (error.message || "請檢查網路連線或稍後再試"));
         })
         .finally(() => {
           publishBtn.disabled = false;
