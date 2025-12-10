@@ -82,6 +82,39 @@ def class_teacher_home():
                            original_role=session.get("original_role"))
 
 # -------------------------
+# 班導查看學生履歷
+# -------------------------
+@users_bp.route("/class_review_resume")
+def class_review_resume():
+    # 確保只有老師或主任身份可以進入（包括 class_teacher）
+    current_role = session.get("role")
+    if "username" not in session or current_role not in ["teacher", "director", "class_teacher"]:
+        return redirect(url_for("auth_bp.login_page"))
+
+    # 如果當前是 class_teacher，需要恢復為原始角色進行檢查
+    if current_role == "class_teacher":
+        original_role = session.get("original_role")
+        if original_role == "director":
+            session["role"] = "director"
+        else:
+            session["role"] = "teacher"
+
+    # 若沒有班導師身分，導回原本主頁
+    if not session.get("is_homeroom"):
+        current_role = session.get("role")
+        if current_role == 'director':
+            return redirect(url_for("users_bp.director_home"))
+        else:
+            return redirect(url_for("users_bp.teacher_home"))
+
+    # 進入班導頁時，暫時設定為 "class_teacher"
+    session["role"] = "class_teacher"
+
+    return render_template("user_shared/class_review_resume.html",
+                           username=session.get("username"),
+                           original_role=session.get("original_role"))
+
+# -------------------------
 # Helper - 取得所有學期代碼
 # -------------------------
 def get_all_semesters(cursor):
