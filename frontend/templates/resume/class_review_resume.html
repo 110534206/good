@@ -192,9 +192,11 @@
             });
 
           // 2. 載入學生履歷列表
-          const fetchClassResumes = fetch('/api/get_class_resumes') // <-- 這裡
+          // 【功能修正 1】將 API 路由名稱從 /api/get_class_resumes 修正為 /api/teacher_review_resumes
+          const fetchClassResumes = fetch('/api/teacher_review_resumes') 
             .then(res => res.ok ? res.json() : {success:false})
-            .then(resumeData => resumeData.success ? (resumeData.resumes || []) : [])
+            // 【功能修正 2】修正資料讀取欄位，從預設的 resumes 改為後端應回傳的 data
+            .then(resumeData => resumeData.success ? (resumeData.data || []) : [])
             .catch(err => { 
               console.error("Error fetching class resumes:", err); 
               return []; 
