@@ -216,6 +216,10 @@
             margin-top: 6px;
         }
 
+        #contactBlock {
+            white-space: nowrap;
+        }
+
         @media (max-width: 640px) {
             section {
                 padding: 22px;
@@ -325,8 +329,46 @@
                     statusChip.textContent = "尚未有錄取紀錄";
                 }
 
-                // 顯示實習期間：優先從 final_preference 獲取（這是根據志願序和審核狀態確定的）
-                if (final_preference && final_preference.internship_period) {
+                // 顯示實習期間：優先從學期資料表獲取時間（根據學期代碼）
+                if (admission.semester_start_date && admission.semester_end_date) {
+                    // 格式化日期：將各種日期格式轉換為 YYYY年MM月 格式
+                    const formatDateForDisplay = (dateValue) => {
+                        if (!dateValue) return '';
+                        
+                        // 如果是字串，嘗試解析
+                        let date;
+                        if (typeof dateValue === 'string') {
+                            // 處理 YYYY-MM-DD 格式
+                            if (dateValue.includes('-')) {
+                                const parts = dateValue.split('-');
+                                if (parts.length >= 2) {
+                                    const year = parts[0];
+                                    const month = parseInt(parts[1], 10);
+                                    return `${year}年${month}月`;
+                                }
+                            }
+                            // 嘗試解析為日期對象
+                            date = new Date(dateValue);
+                        } else if (dateValue instanceof Date) {
+                            date = dateValue;
+                        } else {
+                            return String(dateValue);
+                        }
+                        
+                        // 如果成功解析為日期對象
+                        if (date && !isNaN(date.getTime())) {
+                            const year = date.getFullYear();
+                            const month = date.getMonth() + 1; // getMonth() 返回 0-11
+                            return `${year}年${month}月`;
+                        }
+                        
+                        return String(dateValue);
+                    };
+                    const startDate = formatDateForDisplay(admission.semester_start_date);
+                    const endDate = formatDateForDisplay(admission.semester_end_date);
+                    internPeriod.textContent = `${startDate} - ${endDate}`;
+                } else if (final_preference && final_preference.internship_period) {
+                    // 如果沒有從學期資料表獲取到，則使用 final_preference 的資料
                     // 移除「一學期」或「一個學期」的文字
                     let periodText = final_preference.internship_period;
                     periodText = periodText.replace(/\(一學期\)/g, '').replace(/\(一個學期\)/g, '').trim();
