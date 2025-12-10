@@ -110,7 +110,7 @@ def class_review_resume():
     # 進入班導頁時，暫時設定為 "class_teacher"
     session["role"] = "class_teacher"
 
-    return render_template("user_shared/class_review_resume.html",
+    return render_template("resume/class_review_resume.html",
                            username=session.get("username"),
                            original_role=session.get("original_role"))
 
