@@ -240,56 +240,6 @@
       background-color: rgba(255, 255, 255, 0.15);
       color: white;
     }
-
-    /* 公告輪播樣式 */
-    #announcement-carousel {
-      max-width: 1200px;
-      margin: 0 auto 2rem auto;
-      position: relative;
-      padding: 1rem 3rem;
-      background-color: #f0f8ff;
-      font-weight: 600;
-      font-size: 1.2rem;
-      display: flex;
-      align-items: center;
-      color: #004080;
-      justify-content: center;
-      min-height: 60px;
-      user-select: none;
-    }
-
-    #announcement-carousel button {
-      position: absolute;
-      top: 50%;
-      transform: translateY(-50%);
-      background: none;
-      border: none;
-      font-size: 2rem;
-      font-weight: bold;
-      color: #0066cc;
-      cursor: pointer;
-      user-select: none;
-      padding: 0;
-      width: 40px;
-      height: 40px;
-      line-height: 40px;
-      text-align: center;
-      border-radius: 50%;
-      transition: background-color 0.3s ease;
-    }
-
-    #announcement-carousel button:hover {
-      background-color: #0066cc;
-      color: white;
-    }
-
-    #announcement-prev {
-      left: 10px;
-    }
-
-    #announcement-next {
-      right: 10px;
-    }
   </style>
 </head>
 <body>
@@ -361,59 +311,6 @@
     document.getElementById('close-btn').addEventListener('click', () => {
       document.getElementById('side-menu').classList.remove('open');
     });
-
-    // 公告輪播內容
-    let notification = [];
-    let currentAnnouncementIndex = 0;
-    const announcementContent = document.getElementById('announcement-content');
-    const prevBtn = document.getElementById('announcement-prev');
-    const nextBtn = document.getElementById('announcement-next');
-
-    function showAnnouncement(index) {
-      if (notification.length > 0) {
-        announcementContent.textContent = notification[index];
-      } else {
-        announcementContent.textContent = "目前沒有公告";
-      }
-    }
-
-    // 取得廠商公告資料 (假設 API 路徑為 /api/visitor/notification)
-    fetch("/api/visitor/notification")
-      .then(response => response.json())
-      .then(data => {
-        // 假設回傳是一個公告內容的陣列
-        notification = data; 
-        currentAnnouncementIndex = 0;
-        showAnnouncement(currentAnnouncementIndex);
-      })
-      .catch(err => {
-        console.error("廠商公告載入失敗:", err);
-        announcementContent.textContent = "廠商公告載入失敗";
-      });
-
-    // 左右切換
-    prevBtn.addEventListener('click', () => {
-       if (notification.length > 0) {
-        currentAnnouncementIndex = (currentAnnouncementIndex - 1 + notification.length) % notification.length;
-        showAnnouncement(currentAnnouncementIndex);
-      }
-    });
-
-    nextBtn.addEventListener('click', () => {
-      if (notification.length > 0) {
-        currentAnnouncementIndex = (currentAnnouncementIndex + 1) % notification.length;
-        showAnnouncement(currentAnnouncementIndex);
-      }
-    });
-
-    // 自動輪播
-    setInterval(() => {
-      if (notification.length > 0) {
-        currentAnnouncementIndex = (currentAnnouncementIndex + 1) % notification.length;
-        showAnnouncement(currentAnnouncementIndex);
-      }
-    }, 5000);
-
 
     // 帳號下拉
     document.addEventListener("DOMContentLoaded", function () {
