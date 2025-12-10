@@ -17,35 +17,20 @@
       padding: 0;
     }
 
-    /* 頂部欄樣式 */
-    .top-bar {
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 60px;
-      background-color: #0d6efd;
-      z-index: 1100;
-      display: flex;
-      align-items: center;
-      box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
+    header {
+      background: #0454a3;
+      color: white;
+      padding: 1rem 2rem;
+      text-align: center;
+      font-size: 1.5rem;
     }
 
-    .top-bar-content {
-      max-width: 1000px;
-      width: 100%;
-      margin: 0 auto;
-      padding: 0 24px;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      height: 100%;
-    }
-
+    /* 三條線選單按鈕樣式 */
     .top-bar-left {
-      display: flex;
-      align-items: center;
-      justify-content: center;
+      position: fixed;
+      top: 1rem;
+      left: 1rem;
+      z-index: 1100;
     }
 
     .top-bar-left #menu-btn {
@@ -55,7 +40,6 @@
       display: flex;
       flex-direction: column;
       justify-content: space-between;
-      align-items: center;
       background: none;
       border: none;
       padding: 0;
@@ -70,19 +54,11 @@
       transition: all 0.3s ease;
     }
 
-    .top-bar-title {
-      color: white;
-      font-size: 1.5rem;
-      font-weight: 600;
-      flex: 1;
-      text-align: center;
-    }
-
     :root {
       --bg: #f8fafc;
       --card: #ffffff;
       --muted: #6b7280;
-      --primary: #0d6efd;
+      --primary: #0454a3;
       --glass: rgba(255, 255, 255, 0.85);
       --accent: #0b5ed7;
     }
@@ -92,13 +68,14 @@
       background: linear-gradient(180deg, #f0f4f8, #e8f0f8 120px);
       margin: 0;
       padding: 0;
-      padding-top: 60px;
+      padding-top: 0;
       min-height: 100vh;
     }
 
     .container {
       max-width: 1000px;
       margin: 2rem auto;
+      margin-top: 2rem;
       border-radius: 12px;
     }
 
@@ -388,7 +365,7 @@
       padding: 2rem 1.5rem;
       transform: translateX(-100%);
       transition: transform 0.3s ease-in-out;
-      z-index: 1300;
+      z-index: 1200;
       display: flex;
       flex-direction: column;
       align-items: flex-start;
@@ -401,15 +378,11 @@
     }
 
     #side-menu h2 {
-      margin: 0 0 1.5rem 0;
+      width: 100%;
+      margin-bottom: 1.5rem;
       font-weight: 700;
-      font-size: 1.6rem;
-      color: #fff;
-      padding: 0;
-      line-height: 2.4rem;
-      height: 2.4rem;
-      display: flex;
-      align-items: center;
+      font-size: 1.5rem;
+      text-align: left;
     }
 
     #close-btn {
@@ -419,14 +392,14 @@
       font-size: 2.2rem;
       background: none;
       border: none;
-      color: #fff;
+      color: white;
       cursor: pointer;
-      line-height: 2.4rem;
-      height: 2.4rem;
+      line-height: 1;
+      width: 2.5rem;
+      height: 2.5rem;
       display: flex;
       align-items: center;
       justify-content: center;
-      z-index: 10;
     }
 
     #menu-content {
@@ -454,19 +427,13 @@
 </head>
 
 <body>
-  <!-- 頂部欄 -->
-  <div class="top-bar">
-    <div class="top-bar-content">
-      <div class="top-bar-left">
-        <button id="menu-btn" title="選單" role="button" tabindex="0" aria-label="開啟側邊選單">
-          <span></span>
-          <span></span>
-          <span></span>
-        </button>
-      </div>
-      <div class="top-bar-title">智慧實習平台 | 通知中心</div>
-      <div style="width: 30px;"></div> <!-- 佔位元素，保持標題置中 -->
-    </div>
+  <header>通知中心</header>
+  <div class="top-bar-left">
+    <button id="menu-btn" title="選單" role="button" tabindex="0" aria-label="開啟側邊選單">
+      <span></span>
+      <span></span>
+      <span></span>
+    </button>
   </div>
   <div class="container">
 
@@ -746,7 +713,21 @@
 
           const left = document.createElement('div'); left.className = 'notif-left';
           const avatar = document.createElement('div'); avatar.className = 'avatar';
-          avatar.innerText = (n.title || '').slice(0, 1);
+          // 根據標題內容決定顯示的字：錄取通知顯示「錄」，履歷相關顯示「履」，面試通知顯示「面」
+          let avatarText = '';
+          const title = n.title || '';
+          if (title.includes('錄取')) {
+            avatarText = '錄';
+          } else if (title.includes('履歷')) {
+            avatarText = '履';
+          } else if (title.includes('面試')) {
+            avatarText = '面';
+          } else {
+            // 其他情況取第一個非符號的字
+            const firstChar = title.replace(/^[【\[\]()（）\s]+/, '').slice(0, 1);
+            avatarText = firstChar || title.slice(0, 1) || '';
+          }
+          avatar.innerText = avatarText;
           left.appendChild(avatar);
 
           const body = document.createElement('div'); body.className = 'notif-body';
