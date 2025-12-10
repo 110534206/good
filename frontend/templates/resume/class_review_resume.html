@@ -231,11 +231,23 @@
       deptSelect.innerHTML = `<option value="">所有學年</option><option value="1132">1132</option><option value="1142">1142</option>`;
       
       const classSelect = document.getElementById("classFilter");
-      classSelect.innerHTML = `<option value="">所有班級</option>`;
+      classSelect.innerHTML = `
+        <option value="">所有班級</option>
+        <option value="忠班">忠班</option>
+        <option value="孝班">孝班</option>
+      `;
+      
+      // 動態添加其他班級（如果有的話）
       const classSet = new Set();
-      data.forEach(r => { if(r.className) classSet.add(r.className); });
+      data.forEach(r => { 
+        if(r.className && r.className !== "忠班" && r.className !== "孝班") {
+          classSet.add(r.className);
+        }
+      });
+      
+      // 將其他班級按字母順序排序後加入選單
       Array.from(classSet).sort().forEach(c => {
-         classSelect.innerHTML += `<option value="${c}">${c}</option>`;
+        classSelect.innerHTML += `<option value="${c}">${c}</option>`;
       });
 
       // 填充公司名稱下拉選單 (使用已審核公司列表)
