@@ -102,6 +102,9 @@
         <select id="classFilter" style="padding: 10px 12px; border-radius: 8px; border: 1px solid #e2e8f0; min-width: 150px;">
           <option value="">所有班級</option>
         </select>
+        <select id="companyNameFilter" style="padding: 10px 12px; border-radius: 8px; border: 1px solid #e2e8f0; min-width: 150px;">
+          <option value="">所有公司</option>
+        </select>
         <select id="companyFilter" style="padding: 10px 12px; border-radius: 8px; border: 1px solid #e2e8f0; min-width: 150px;">
           <option value="">所有職缺</option>
         </select>
@@ -217,7 +220,7 @@
                if(!res.ok) return {success:true, items:[]};
                const r = await res.json();
                return {success:true, items: (r.jobs||[]).map(j=>({id:j.id, title:j.title}))};
-            }) : Promise.resolve({success:true, items:[]}))
+            }) : fetch('/api/public/positions').then(res => res.ok ? res.json() : {success:true, items:[]}))
           ]).then(([resumeData, companyData, positionData]) => {
             if (resumeData.success) {
               allResumes = resumeData.resumes || [];
@@ -239,6 +242,7 @@
 
       document.getElementById("departmentFilter").addEventListener("change", applyFilters);
       document.getElementById("classFilter").addEventListener("change", applyFilters);
+      document.getElementById("companyNameFilter").addEventListener("change", applyFilters);
       document.getElementById("companyFilter").addEventListener("change", applyFilters);
       document.getElementById("statusFilter").addEventListener("change", applyFilters);
       document.getElementById("searchBox").addEventListener("input", applyFilters);
@@ -262,14 +266,45 @@
          if(c !== '五孝') classSelect.innerHTML += `<option value="${c}">${c}</option>`;
       });
 
+      // 填充公司名稱下拉選單（只顯示該指導老師管理的公司）
+      const companyNameSelect = document.getElementById("companyNameFilter");
+      companyNameSelect.innerHTML = `<option value="">所有公司</option>`;
+      if (companyData && companyData.companies && companyData.companies.length > 0 && currentUserId) {
+          // 過濾出該指導老師管理的公司（advisor_user_id 等於當前用戶ID）
+          const teacherCompanies = companyData.companies.filter(c => {
+              const advisorId = c.advisor_user_id;
+              // 確保類型一致（都轉換為數字或字符串進行比較）
+              return advisorId != null && String(advisorId) === String(currentUserId);
+          });
+          teacherCompanies.forEach(company => {
+              const companyName = company.company_name || company.name || '';
+              if (companyName) {
+                  companyNameSelect.innerHTML += `<option value="${escapeHtml(companyName)}">${escapeHtml(companyName)}</option>`;
+              }
+          });
+      } else {
+          // 如果沒有從API獲取到公司資料，從履歷資料中提取
+          const companySet = new Set();
+          data.forEach(r => {
+              if(r.company_name && r.company_name.trim()) {
+                  companySet.add(r.company_name.trim());
+              }
+          });
+          Array.from(companySet).sort().forEach(companyName => {
+              companyNameSelect.innerHTML += `<option value="${escapeHtml(companyName)}">${escapeHtml(companyName)}</option>`;
+          });
+      }
+
       const companySelect = document.getElementById("companyFilter");
       companySelect.innerHTML = `<option value="">所有職缺</option>`;
       
       if (positionData && positionData.items && positionData.items.length > 0) {
+          // 從 API 獲取的職缺資料（該指導老師管理的公司的職缺）
           positionData.items.forEach(job => {
               companySelect.innerHTML += `<option value="${job.id}">${escapeHtml(job.title)}</option>`;
           });
       } else {
+          // 如果沒有從 API 獲取到職缺資料，從履歷資料中提取
           const jobSet = new Set();
           data.forEach(r => {
              const titles = (r.job_title || r.jobTitle || '').split(' | ');
@@ -287,6 +322,7 @@
       currentPage = 1;
       const dept = document.getElementById("departmentFilter").value.trim();
       const cls = document.getElementById("classFilter").value.trim();
+      const companyName = document.getElementById("companyNameFilter").value.trim();
       const jobFilter = document.getElementById("companyFilter").value.trim();
       const status = document.getElementById("statusFilter").value.trim();
       const keyword = document.getElementById("searchBox").value.trim().toLowerCase();
@@ -300,6 +336,12 @@
         const matchesKeyword = (r.username && r.username.toLowerCase().includes(keyword)) ||
                                (r.original_filename && r.original_filename.toLowerCase().includes(keyword));
         
+        let matchesCompanyName = true;
+        if (companyName) {
+            const companyNameStr = (r.company_name || '').trim();
+            matchesCompanyName = companyNameStr === companyName;
+        }
+        
         let matchesJob = true;
         if (jobFilter) {
             const jobs = (r.job_title || r.jobTitle || '').toLowerCase();
@@ -312,7 +354,7 @@
            matchesStatus = statusStr.includes(status);
         }
 
-        return matchesDept && matchesClass && matchesJob && matchesStatus && matchesKeyword;
+        return matchesDept && matchesClass && matchesCompanyName && matchesJob && matchesStatus && matchesKeyword;
       });
 
       renderTable(filtered);
@@ -335,51 +377,28 @@
       let allRowsData = [];
 
       resumes.forEach(r => {
-        const companyStr = r.company_name || '';
-        const jobStr = r.job_title || r.jobTitle || '';
-        const prefIdStr = r.preference_ids || (r.preference_id ? String(r.preference_id) : '');
-        const statusStr = r.application_statuses || (r.display_status || r.status || '');
-        const commentStr = r.comments || (r.comment || ''); 
+        // 直接使用最新的志願序資料（後端已處理）
+        const comp = r.company_name || '—';
+        const job = r.job_title || r.jobTitle || '—';
+        const pid = r.preference_id || null;
+        const st = r.application_statuses || r.display_status || r.status || 'pending';
+        const cm = r.comment || '';
 
-        const companies = companyStr.split(' | ').map(s=>s.trim());
-        const jobs = jobStr.split(' | ').map(s=>s.trim());
-        const prefIds = prefIdStr.split(' | ').map(s=>s.trim());
-        const statuses = statusStr.split(' | ').map(s=>s.trim());
-        const comments = commentStr.split(' | ').map(s=>s.trim());
+        // 狀態篩選
+        if (filterStatus && st !== filterStatus) return;
+        
+        // 職缺篩選
+        if (filterJob && !job.includes(filterJob) && filterJob !== (r.job_id ? String(r.job_id) : '')) return;
 
-        const maxCount = Math.max(companies.length, jobs.length);
-
-        if (maxCount === 0 && !r.preference_id) {
-            allRowsData.push({ ...r, display_company: '—', display_job: '—', display_status: r.status, isMultiRow: true });
-        } else {
-            for (let i = 0; i < maxCount; i++) {
-                let comp = companies[i] || (companies.length===1?companies[0]:companies[companies.length-1]) || '—';
-                let job = jobs[i] || '—';
-                if(job.includes(' - ')) job = job.split(' - ')[1];
-
-                const pid = prefIds[i] || (prefIds.length===1?prefIds[0]:null); 
-                
-                let st = statuses[i];
-                if (!st) {
-                    st = (maxCount === 1) ? statuses[0] : 'pending';
-                }
-
-                const cm = comments[i] || (comments.length===1?comments[0]:'');
-
-                if (filterStatus && st !== filterStatus) continue;
-                if (filterJob && !job.includes(filterJob) && filterJob !== (r.job_id?String(r.job_id):'')) continue;
-
-                allRowsData.push({
-                    ...r,
-                    display_company: comp,
-                    display_job: job,
-                    preference_id: pid, 
-                    display_status: st, 
-                    comment: cm,
-                    isMultiRow: i === 0 
-                });
-            }
-        }
+        allRowsData.push({
+            ...r,
+            display_company: comp,
+            display_job: job,
+            preference_id: pid,
+            display_status: st,
+            comment: cm,
+            isMultiRow: true
+        });
       });
 
       const start = (currentPage - 1) * rowsPerPage;

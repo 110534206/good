@@ -130,6 +130,9 @@ def get_experience_list():
         """
         params = []
 
+        # 過濾掉「已錄取」的自動記錄（實習錄取不應顯示在實習心得中）
+        query += " AND (ie.content IS NULL OR ie.content != '已錄取')"
+
         # 如果要求只顯示自己的心得
         if my_experiences.lower() == 'true' and current_user_id:
             # 顯示自己的所有心得（包括未公開的）

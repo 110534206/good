@@ -132,38 +132,7 @@ def record_admission():
             inserted_id = cursor.lastrowid
             print(f"✅ [DEBUG] 插入新 internship_offers 記錄: id={inserted_id}, student_id={student_id}, job_id={job_id}")
             
-        # 7. 在 internship_experiences 表中記錄錄取結果
-        # (原程式碼的邏輯，用於在學生實習成果頁面顯示或舊邏輯兼容)
-        if job_id:
-            cursor.execute("""
-                SELECT id FROM internship_experiences
-                WHERE user_id = %s AND company_id = %s AND job_id = %s
-            """, (student_id, company_id, job_id))
-            existing_exp = cursor.fetchone()
-            
-            if not existing_exp:
-                current_year = datetime.now().year - 1911
-                cursor.execute("""
-                    INSERT INTO internship_experiences
-                    (user_id, company_id, job_id, year, content, is_public, created_at)
-                    VALUES (%s, %s, %s, %s, '已錄取', 0, NOW())
-                """, (student_id, company_id, job_id, current_year))
-        else:
-            cursor.execute("""
-                SELECT id FROM internship_experiences
-                WHERE user_id = %s AND company_id = %s AND job_id IS NULL
-            """, (student_id, company_id))
-            existing_exp = cursor.fetchone()
-            
-            if not existing_exp:
-                current_year = datetime.now().year - 1911
-                cursor.execute("""
-                    INSERT INTO internship_experiences
-                    (user_id, company_id, job_id, year, content, is_public, created_at)
-                    VALUES (%s, %s, NULL, %s, '已錄取', 0, NOW())
-                """, (student_id, company_id, current_year))
-        
-        # 8. 更新學生的志願序狀態
+        # 7. 更新學生的志願序狀態
         if preference_order:
             cursor.execute("""
                 UPDATE student_preferences
@@ -313,6 +282,43 @@ def get_my_admission():
                     teacher_name = teacher_info.get('name')
                     teacher_email = teacher_info.get('email')
             
+            # 獲取學期代碼（從 teacher_student_relations 表）
+            semester_code = None
+            cursor.execute("""
+                SELECT semester
+                FROM teacher_student_relations
+                WHERE student_id = %s
+                ORDER BY created_at DESC
+                LIMIT 1
+            """, (student_id,))
+            tsr_result = cursor.fetchone()
+            if tsr_result and tsr_result.get('semester'):
+                semester_code = tsr_result.get('semester')
+            
+            # 如果沒有從 teacher_student_relations 獲取到，嘗試使用當前學期
+            if not semester_code:
+                semester_code = get_current_semester_code(cursor)
+            
+            # 從 semesters 表獲取學期的開始和結束日期
+            semester_start_date = None
+            semester_end_date = None
+            if semester_code:
+                cursor.execute("""
+                    SELECT start_date, end_date
+                    FROM semesters
+                    WHERE code = %s
+                    LIMIT 1
+                """, (semester_code,))
+                semester_info = cursor.fetchone()
+                if semester_info:
+                    semester_start_date = semester_info.get('start_date')
+                    semester_end_date = semester_info.get('end_date')
+                    # 格式化日期
+                    if isinstance(semester_start_date, datetime):
+                        semester_start_date = semester_start_date.strftime("%Y-%m-%d")
+                    if isinstance(semester_end_date, datetime):
+                        semester_end_date = semester_end_date.strftime("%Y-%m-%d")
+            
             # 構建 admission 物件
             admission = {
                 'company_id': offer_info.get('company_id'),
@@ -325,7 +331,9 @@ def get_my_admission():
                 'teacher_id': teacher_id,
                 'teacher_name': teacher_name,
                 'teacher_email': teacher_email,
-                'semester': None  # 可以從其他地方獲取
+                'semester': semester_code,
+                'semester_start_date': semester_start_date,
+                'semester_end_date': semester_end_date
             }
             
             # 構建 final_preference 物件
@@ -460,6 +468,35 @@ def get_my_admission():
                 LIMIT 1
             """, (student_id,))
             admission = cursor.fetchone()
+            
+            # 從 semesters 表獲取學期的開始和結束日期
+            semester_code = admission.get('semester') if admission else None
+            if not semester_code:
+                semester_code = get_current_semester_code(cursor)
+            
+            semester_start_date = None
+            semester_end_date = None
+            if semester_code:
+                cursor.execute("""
+                    SELECT start_date, end_date
+                    FROM semesters
+                    WHERE code = %s
+                    LIMIT 1
+                """, (semester_code,))
+                semester_info = cursor.fetchone()
+                if semester_info:
+                    semester_start_date = semester_info.get('start_date')
+                    semester_end_date = semester_info.get('end_date')
+                    # 格式化日期
+                    if isinstance(semester_start_date, datetime):
+                        semester_start_date = semester_start_date.strftime("%Y-%m-%d")
+                    if isinstance(semester_end_date, datetime):
+                        semester_end_date = semester_end_date.strftime("%Y-%m-%d")
+            
+            # 將學期日期資訊添加到 admission 物件
+            if admission:
+                admission['semester_start_date'] = semester_start_date
+                admission['semester_end_date'] = semester_end_date
             
             if not admission:
                 return jsonify({
