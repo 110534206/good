@@ -1108,129 +1108,35 @@ def get_absence_available_semesters():
         cursor.close()
         conn.close()
 
-# -------------------------
-# API：取得缺勤預設學期範圍
-# -------------------------
-@resume_bp.route('/api/absence/default_range', methods=['GET'])
-def get_absence_default_range():
-    """取得缺勤預設學期範圍"""
-    if 'user_id' not in session:
-        return jsonify({"success": False, "message": "請先登入"}), 401
-    
+# 放到 resume_bp.py
+@resume_bp.route('/api/get_absence_default_range', methods=['GET'])
+def get_absence_default_range_for_student():
+    if 'user_id' not in session or session.get('role') != 'student':
+        return jsonify({"success": False, "message": "未授權"}), 403
+
+    student_id = session['user_id']
     conn = get_db()
     cursor = conn.cursor(dictionary=True)
-    
     try:
-        # 檢查表是否存在
-        cursor.execute("SHOW TABLES LIKE 'absence_default_semester_range'")
-        table_exists = cursor.fetchone() is not None
-        
-        if not table_exists:
-            return jsonify({
-                "success": True,
-                "defaultStart": "",
-                "defaultEnd": ""
-            })
-        
-        # 獲取學生入學年度（從username前3碼）
-        user_id = session['user_id']
-        cursor.execute("SELECT username FROM users WHERE id = %s", (user_id,))
-        user_result = cursor.fetchone()
-        
-        admission_year = None
-        if user_result and user_result.get('username'):
-            username = user_result['username']
-            if len(username) >= 3:
-                try:
-                    admission_year = int(username[:3])
-                except ValueError:
-                    pass
-        
-        # 先檢查表是否有 admission_year 欄位
-        cursor.execute("SHOW COLUMNS FROM absence_default_semester_range LIKE 'admission_year'")
-        has_admission_year = cursor.fetchone() is not None
-        
-        if has_admission_year and admission_year:
-            cursor.execute("""
-                SELECT start_semester_code, end_semester_code
-                FROM absence_default_semester_range
-                WHERE admission_year = %s
-                ORDER BY id DESC
-                LIMIT 1
-            """, (admission_year,))
-        else:
-            # 如果沒有 admission_year 欄位或沒有入學年度，使用舊邏輯
-            cursor.execute("""
-                SELECT start_semester_code, end_semester_code
-                FROM absence_default_semester_range
-                ORDER BY id DESC
-                LIMIT 1
-            """)
-        
-        result = cursor.fetchone()
-        
-        if result:
-            return jsonify({
-                "success": True,
-                "defaultStart": result.get('start_semester_code', ''),
-                "defaultEnd": result.get('end_semester_code', '')
-            })
-        else:
-            return jsonify({
-                "success": True,
-                "defaultStart": "",
-                "defaultEnd": ""
-            })
-    except Exception as e:
-        traceback.print_exc()
-        return jsonify({"success": False, "message": f"取得預設學期範圍失敗: {str(e)}"}), 500
-    finally:
-        cursor.close()
-        conn.close()
+        cursor.execute("SELECT username FROM users WHERE id = %s LIMIT 1", (student_id,))
+        user = cursor.fetchone()
+        if not user or not user.get('username'):
+            return jsonify({"success": False, "message": "找不到使用者帳號"}), 404
 
-# -------------------------
-# API：設定/保存缺勤預設學期範圍 (新增 POST 請求)
-# -------------------------
-@resume_bp.route('/api/absence/default_range', methods=['POST'])
-def set_absence_default_range():
-    """設定/保存缺勤預設學期範圍"""
-    if 'user_id' not in session:
-        return jsonify({"success": False, "message": "請先登入"}), 401
-    
-    # 1. 從前端獲取 JSON 資料
-    data = request.get_json()
-    if not data or 'defaultStart' not in data or 'defaultEnd' not in data:
-        return jsonify({"success": False, "message": "缺少必要的參數"}), 400
-
-    start_semester_code = data['defaultStart']
-    end_semester_code = data['defaultEnd']
-    
-    # 2. 獲取 admission_year 邏輯（可選，如果你的 POST 請求也需要這個）
-    # 為了簡化，我們先假設 POST 只需要保存設定。
-    # 更好的做法是，如果 POST 請求中傳遞了 admission_year，就用它。
-    
-    # 這裡你需要寫入資料庫的邏輯：
-    conn = get_db()
-    cursor = conn.cursor()
-    
-    try:
-        # 3. 執行 SQL 寫入/更新資料庫
-        # 假設你的表設計是，每次設定都是新增一筆記錄（如果沒有 admission_year 欄位）
-        # 如果你有 admission_year 欄位，你需要執行 UPDATE 或 INSERT ... ON DUPLICATE KEY UPDATE
-        
-        # 這裡以簡化的 INSERT 為例：
+        admission_year = str(user['username'])[:3]  # 例如 '110'
         cursor.execute("""
-            INSERT INTO absence_default_semester_range 
-            (start_semester_code, end_semester_code) 
-            VALUES (%s, %s)
-        """, (start_semester_code, end_semester_code))
-        
-        conn.commit()
-        return jsonify({"success": True, "message": "預設學期範圍已保存"}), 200
-
+            SELECT start_semester_code, end_semester_code
+            FROM absence_default_semester_range
+            WHERE admission_year = %s
+            LIMIT 1
+        """, (admission_year,))
+        row = cursor.fetchone()
+        if not row:
+            return jsonify({"success": False, "message": "無預設設定"}), 404
+        return jsonify({"success": True, "start": row['start_semester_code'], "end": row['end_semester_code']})
     except Exception as e:
         traceback.print_exc()
-        return jsonify({"success": False, "message": f"保存預設學期範圍失敗: {str(e)}"}), 500
+        return jsonify({"success": False, "message": str(e)}), 500
     finally:
         cursor.close()
         conn.close()
@@ -2503,6 +2409,329 @@ def get_director_department(cursor, user_id):
         print(f"Error fetching director department: {e}")
         return None
 
+# -------------------------
+# 審核履歷 (退件/完成)
+# -------------------------
+@resume_bp.route('/api/review_resume/<int:resume_id>', methods=['POST'])
+def review_resume(resume_id):
+    user_id = session.get('user_id')
+    user_role = session.get('role')
+
+    # 1. 權限檢查
+    ALLOWED_ROLES = ['teacher', 'admin', 'class_teacher', 'vendor']
+    if not user_id or user_role not in ALLOWED_ROLES:
+        return jsonify({"success": False, "message": "未授權或無權限"}), 403
+
+    data = request.get_json()
+    status = data.get('status')
+    comment = data.get('comment') # 老師留言
+
+    if status not in ['approved', 'rejected']:
+        return jsonify({"success": False, "message": "無效的狀態碼"}), 400
+
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+
+    try:
+        # 2. 查詢履歷並取得學生Email和姓名
+        cursor.execute("""
+            SELECT 
+                r.user_id, r.original_filename, r.status AS old_status, r.comment,
+                u.email AS student_email, u.name AS student_name
+            FROM resumes r
+            JOIN users u ON r.user_id = u.id
+            WHERE r.id=%s
+        """, (resume_id,))
+        resume_data = cursor.fetchone()
+
+        if not resume_data:
+            return jsonify({"success": False, "message": "找不到履歷"}), 404
+
+        student_user_id = resume_data['user_id']
+        student_email = resume_data['student_email'] 
+        student_name = resume_data['student_name']  
+        old_status = resume_data['old_status']
+
+
+        # 3. 更新履歷狀態 (使用您確認的 reviewed_by 和 reviewed_at)
+        cursor.execute("""
+            UPDATE resumes SET 
+                status=%s, 
+                comment=%s, 
+                reviewed_by=%s,    
+                reviewed_at=NOW()  
+            WHERE id=%s
+        """, (status, comment, user_id, resume_id))
+        
+        # 4. 取得審核者姓名
+        cursor.execute("SELECT name, role FROM users WHERE id = %s", (user_id,))
+        reviewer = cursor.fetchone()
+        if reviewer:
+            if reviewer.get('role') == 'vendor':
+                reviewer_name = reviewer['name'] if reviewer['name'] else "審核廠商"
+            else:
+                reviewer_name = reviewer['name'] if reviewer['name'] else "審核老師"
+        else:
+            reviewer_name = "審核者"
+
+        # 5. 處理 Email 寄送與通知 (僅在狀態改變時處理)
+        from email_service import send_resume_rejection_email, send_resume_approval_email
+        if old_status != status:
+            # =============== 退件 ===============
+            if status == 'rejected':
+                email_success, email_message, log_id = send_resume_rejection_email(
+                    student_email, student_name, reviewer_name, comment or "無"
+                )
+                print(f"📧 履歷退件 Email: {email_success}, {email_message}, Log ID: {log_id}")
+
+                # 🎯 建立退件通知（改成 create_notification）
+                notification_content = (
+                    f"您的履歷已被 {reviewer_name} 老師退件。\n\n"
+                    f"退件原因：{comment if comment else '請查看老師留言'}\n\n"
+                    f"請根據老師的建議修改後重新上傳。"
+                )
+
+                create_notification(
+                    user_id=student_user_id,
+                    title="履歷退件通知",
+                    message=notification_content,
+                    category="resume"
+                )
+             # 🔄 如果是老師退件，將 student_preferences 狀態重置為 'pending'，避免同步到廠商審核頁面
+                if user_role in ['teacher', 'class_teacher']:
+                    # 將該學生所有志願序的狀態重置為 'pending'，這樣就不會顯示在廠商審核頁面
+                    cursor.execute("""
+                        UPDATE student_preferences 
+                        SET status = 'pending'
+                        WHERE student_id = %s
+                        AND status = 'approved'
+                    """, (student_user_id,))
+                    updated_count = cursor.rowcount
+                    if updated_count > 0:
+                        print(f"✅ 已將 {updated_count} 筆學生志願序狀態重置為 'pending'，該履歷不會同步到廠商審核頁面")
+
+            # =============== 通過 ===============
+            elif status == 'approved':
+                email_success, email_message, log_id = send_resume_approval_email(
+                    student_email, student_name, reviewer_name
+                )
+                print(f"📧 履歷通過 Email: {email_success}, {email_message}, Log ID: {log_id}")
+
+                # 🎯 建立通過通知（改成 create_notification）
+                notification_content = (
+                    f"恭喜您！您的履歷已由 {reviewer_name} 老師審核通過。\n"
+                    f"您可以繼續後續的實習申請流程。"
+                )
+
+                create_notification(
+                    user_id=student_user_id,
+                    title="履歷審核通過通知",
+                    message=notification_content,
+                    category="resume"
+                )
+
+        conn.commit()
+
+        return jsonify({"success": True, "message": "履歷審核狀態更新成功"})
+
+    except Exception as e:
+        conn.rollback()
+        traceback.print_exc() 
+        return jsonify({"success": False, "message": f"伺服器錯誤: {str(e)}，請檢查後台日誌"}), 500
+
+    finally:
+        cursor.close()
+        conn.close()
+
+
+# -------------------------
+# API - 更新履歷欄位（comment, note）（含權限檢查）
+# -------------------------
+@resume_bp.route('/api/update_resume_field', methods=['POST'])
+def update_resume_field():
+    try:
+        if not require_login():
+            return jsonify({"success": False, "message": "未授權"}), 403
+
+        data = request.get_json() or {}
+        resume_id = data.get('resume_id')
+        field = data.get('field')
+        value = (data.get('value') or '').strip()
+
+        allowed_fields = {
+            "comment": "comment",
+            "note": "note"
+        }
+
+        try:
+            resume_id = int(resume_id)
+        except (TypeError, ValueError):
+            return jsonify({"success": False, "message": "resume_id 必須是數字"}), 400
+
+        if field not in allowed_fields:
+            return jsonify({"success": False, "message": "參數錯誤"}), 400
+
+        conn = get_db()
+        cursor = conn.cursor(dictionary=True)
+
+        # 先找出 resume 的 owner
+        cursor.execute("SELECT user_id FROM resumes WHERE id = %s", (resume_id,))
+        r = cursor.fetchone()
+        if not r:
+            cursor.close()
+            conn.close()
+            return jsonify({"success": False, "message": "找不到該履歷"}), 404
+
+        owner_id = r['user_id']
+
+        # 取得使用者角色與 id
+        role = session.get('role')
+        user_id = session['user_id']
+
+        if role == "class_teacher":
+            if not teacher_manages_class(cursor, user_id, get_user_by_id(cursor, owner_id)['class_id']):
+                cursor.close()
+                conn.close()
+                return jsonify({"success": False, "message": "沒有權限修改該履歷"}), 403
+
+        elif role == "director":
+            director_dept = get_director_department(cursor, user_id)
+            cursor.execute("SELECT c.department FROM classes c JOIN users u ON u.class_id = c.id WHERE u.id = %s", (owner_id,))
+            target_dept_row = cursor.fetchone()
+            if not director_dept or not target_dept_row or director_dept != target_dept_row.get('department'):
+                cursor.close()
+                conn.close()
+                return jsonify({"success": False, "message": "沒有權限修改該履歷"}), 403
+
+        elif role == "admin":
+            pass  # admin 可以
+
+        elif role == "student":
+            # 學生只能修改自己的履歷，且只能修改 note 欄位
+            if user_id != owner_id:
+                cursor.close()
+                conn.close()
+                return jsonify({"success": False, "message": "學生只能修改自己的履歷"}), 403
+            if field != "note":
+                cursor.close()
+                conn.close()
+                return jsonify({"success": False, "message": "學生只能修改備註欄位"}), 403
+
+        else:
+            # ta 或其他角色不可修改
+            cursor.close()
+            conn.close()
+            return jsonify({"success": False, "message": "角色無權限修改"}), 403
+
+        # 更新欄位
+        sql = f"UPDATE resumes SET {allowed_fields[field]} = %s, updated_at = NOW() WHERE id = %s"
+        cursor.execute(sql, (value, resume_id))
+        conn.commit()
+        cursor.close()
+        conn.close()
+        return jsonify({"success": True, "field": field, "resume_id": resume_id})
+
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"success": False, "message": f"伺服器錯誤: {str(e)}"}), 500
+
+# -------------------------
+# API - 查詢履歷狀態
+# -------------------------
+@resume_bp.route('/api/resume_status', methods=['GET'])
+def resume_status():
+    resume_id = request.args.get('resume_id')
+    if not resume_id:
+        return jsonify({"success": False, "message": "缺少 resume_id"}), 400
+
+    try:
+        conn = get_db()
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute("SELECT status FROM resumes WHERE id = %s", (resume_id,))
+        resume = cursor.fetchone()
+        cursor.close()
+        conn.close()
+
+        if not resume:
+            return jsonify({"success": False, "message": "找不到該履歷"}), 404
+
+        return jsonify({"success": True, "status": resume['status']})
+
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"success": False, "message": f"伺服器錯誤: {str(e)}"}), 500
+
+# -------------------------
+# API - 查詢所有學生履歷（根據 username，含讀取權限檢查）
+# -------------------------
+@resume_bp.route('/api/get_student_resumes', methods=['GET'])
+def get_student_resumes():
+    if not require_login():
+        return jsonify({"success": False, "message": "未授權"}), 403
+
+    username = request.args.get('username')
+    if not username:
+        return jsonify({"success": False, "message": "缺少 username"}), 400
+
+    user_id = session['user_id']
+    role = session['role']
+
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+
+    try:
+        cursor.execute("""
+            SELECT u.id AS student_id, u.class_id, c.department
+            FROM users u
+            LEFT JOIN classes c ON u.class_id = c.id
+            WHERE u.username = %s
+        """, (username,))
+        student = cursor.fetchone()
+        if not student:
+            return jsonify({"success": False, "message": "找不到學生"}), 404
+
+        # 權限判斷（讀取）
+        if role == "teacher":
+            if not teacher_manages_class(cursor, user_id, student['class_id']):
+                return jsonify({"success": False, "message": "沒有權限查看該學生履歷"}), 403
+
+        elif role == "director":
+            director_dept = get_director_department(cursor, user_id)
+            if not director_dept or director_dept != student.get('department'):
+                return jsonify({"success": False, "message": "沒有權限查看該學生履歷"}), 403
+
+        elif role == "ta":
+            pass  # TA 可讀全部（如需限制可在此修改）
+
+        elif role == "admin":
+            pass
+
+        else:
+            return jsonify({"success": False, "message": "角色無權限"}), 403
+
+        # 取得該學生履歷
+        cursor.execute("""
+            SELECT r.id, r.original_filename, r.status, r.comment, r.note, r.created_at AS upload_time
+            FROM resumes r
+            WHERE r.user_id = %s
+            ORDER BY r.created_at DESC
+        """, (student['student_id'],))
+        resumes = cursor.fetchall()
+
+        for r in resumes:
+            if isinstance(r.get('upload_time'), datetime):
+                r['upload_time'] = r['upload_time'].strftime("%Y-%m-%d %H:%M:%S")
+
+        return jsonify({"success": True, "resumes": resumes})
+
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"success": False, "message": f"伺服器錯誤: {str(e)}"}), 500
+
+    finally:
+        cursor.close()
+        conn.close()
+
 
 @resume_bp.route('/api/teacher_review_resumes', methods=['GET'])
 def get_teacher_review_resumes():
@@ -3524,6 +3753,15 @@ def delete_standard_course_history(history_id):
 @resume_bp.route('/upload_resume')
 def upload_resume_page():
     return render_template('resume/upload_resume.html')   
+
+@resume_bp.route('/review_resume')
+def review_resume_page():
+    # 檢查登入狀態
+    if not require_login():
+        return redirect('/login')
+    
+     # 統一使用整合後的審核頁面
+    return render_template('resume/review_resume.html')
 
 @resume_bp.route('/ai_edit_resume')
 def ai_edit_resume_page():

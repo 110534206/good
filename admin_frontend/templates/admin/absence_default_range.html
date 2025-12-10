@@ -162,9 +162,9 @@
     </nav>
 
     <div class="container">
-        <h2 class="mb-4"><i class="bi bi-calendar-range"></i> 缺勤預設學期範圍設定</h2>
+        <h2 class="mb-4"><i class="bi bi-calendar-range"></i> 缺勤預設學期範圍設定（每入學屆）</h2>
         <p class="text-muted mb-4">
-            設定學生新增缺勤資訊時的預設學期範圍。學生進入缺勤資訊頁面時，會自動帶入此範圍進行查詢。
+            為每個入學屆（例如 110、111）設定預設的開始/結束學期。學生上傳履歷或檢視缺勤時會自動帶入該屆設定。
         </p>
 
         <div id="alertMessage" class="alert alert-dismissible fade show d-none" role="alert">
@@ -174,197 +174,220 @@
 
         <div class="card">
             <div class="card-body">
-                <form id="defaultRangeForm">
-                    <div class="row mb-3">
-                        <div class="col-md-6">
-                            <label for="startSemester" class="form-label">預設開始學期</label>
-                            <select class="form-select" id="startSemester" name="startSemester" required>
-                                <option value="">載入中...</option>
-                            </select>
-                        </div>
-                        <div class="col-md-6">
-                            <label for="endSemester" class="form-label">預設結束學期</label>
-                            <select class="form-select" id="endSemester" name="endSemester" required>
-                                <option value="">載入中...</option>
-                            </select>
-                        </div>
+                <div class="d-flex justify-content-between mb-3">
+                    <div>
+                        <button id="addRowBtn" class="btn btn-sm btn-success"><i class="bi bi-plus"></i> 新增入學屆</button>
                     </div>
-                    <div class="d-flex gap-2">
-                        <button type="submit" class="btn btn-primary">
-                            <i class="bi bi-save"></i> 保存設定
-                        </button>
-                        <button type="button" class="btn btn-secondary" onclick="loadCurrentSettings()">
-                            <i class="bi bi-arrow-clockwise"></i> 重新載入
-                        </button>
+                    <div>
+                        <button id="reloadBtn" class="btn btn-sm btn-secondary"><i class="bi bi-arrow-clockwise"></i>
+                            重新載入</button>
                     </div>
-                </form>
-            </div>
-        </div>
+                </div>
 
-        <div class="card mt-4">
-            <div class="card-body">
-                <h5 class="card-title">說明</h5>
-                <ul class="mb-0">
-                    <li>此設定會影響所有學生在新增缺勤資訊時看到的預設學期範圍</li>
-                    <li>例如：設定為「1122」到「1131」，學生進入頁面時會自動查詢此範圍內的缺勤記錄</li>
-                    <li>學生仍可手動調整學期範圍進行查詢</li>
-                </ul>
+                <div class="table-responsive">
+                    <table class="table table-sm align-middle" id="rangesTable">
+                        <thead>
+                            <tr>
+                                <th>入學屆 (例: 110)</th>
+                                <th>開始學期</th>
+                                <th>結束學期</th>
+                                <th>最後更新</th>
+                                <th>動作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="rangesTbody">
+                            <!-- 動態產生 -->
+                        </tbody>
+                    </table>
+                </div>
+                <div class="text-muted small">
+                    說明：儲存後的設定會依 admission_year（入學屆）存到資料庫。學生端會以 username 前 3 碼做對應。
+                </div>
             </div>
         </div>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
-        let allSemesters = [];
+        let semesters = []; // {id, code}
+        let ranges = [];    // 後端回來的 rows
 
-        // 載入學期列表
-        async function loadSemesters() {
-            try {
-                const res = await fetch('/semester/api/list');
-                const result = await res.json();
-
-                const startSelect = document.getElementById('startSemester');
-                const endSelect = document.getElementById('endSemester');
-
-                startSelect.innerHTML = '<option value="">請選擇開始學期</option>';
-                endSelect.innerHTML = '<option value="">請選擇結束學期</option>';
-
-                if (result.success && result.semesters) {
-                    allSemesters = result.semesters.sort((a, b) => a.code.localeCompare(b.code));
-
-                    allSemesters.forEach(semester => {
-                        const option1 = document.createElement('option');
-                        option1.value = semester.code;
-                        option1.textContent = semester.code;
-                        startSelect.appendChild(option1);
-
-                        const option2 = document.createElement('option');
-                        option2.value = semester.code;
-                        option2.textContent = semester.code;
-                        endSelect.appendChild(option2);
-                    });
-
-                    // 載入當前設定
-                    await loadCurrentSettings();
-                }
-            } catch (error) {
-                console.error('載入學期列表失敗:', error);
-                showAlert('載入學期列表失敗', 'danger');
-            }
-        }
-
-        // 載入當前預設範圍設定
-        async function loadCurrentSettings() {
-            try {
-                const res = await fetch('/api/absence/default_range');
-                const result = await res.json();
-
-                if (result.success) {
-                    if (result.defaultStart) {
-                        document.getElementById('startSemester').value = result.defaultStart;
-                    }
-                    if (result.defaultEnd) {
-                        document.getElementById('endSemester').value = result.defaultEnd;
-                    }
-                }
-            } catch (error) {
-                console.error('載入當前設定失敗:', error);
-            }
-        }
-
-        // 保存設定
-        document.getElementById('defaultRangeForm').addEventListener('submit', async (e) => {
-            e.preventDefault();
-
-            const startCode = document.getElementById('startSemester').value;
-            const endCode = document.getElementById('endSemester').value;
-
-            if (!startCode || !endCode) {
-                showAlert('請選擇開始和結束學期', 'warning');
-                return;
-            }
-
-            // 檢查學期順序
-            const startSemester = allSemesters.find(s => s.code === startCode);
-            const endSemester = allSemesters.find(s => s.code === endCode);
-
-            if (startSemester && endSemester && startSemester.code > endSemester.code) {
-                showAlert('開始學期不能晚於結束學期', 'warning');
-                return;
-            }
-
-            try {
-                const res = await fetch('/api/absence/default_range', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        defaultStart: startCode, 
-                        defaultEnd: endCode      
-                    })
-                });
-
-                const result = await res.json();
-
-                if (result.success) {
-                    showAlert('預設學期範圍已更新', 'success');
-                } else {
-                    showAlert(result.message || '更新失敗', 'danger');
-                }
-            } catch (error) {
-                console.error('保存設定失敗:', error);
-                showAlert('保存設定失敗', 'danger');
-            }
-        });
-
-        // 顯示提示訊息
-        function showAlert(message, type) {
+        function showAlert(message, type = 'info') {
             const alertEl = document.getElementById('alertMessage');
             const alertText = document.getElementById('alertText');
-
             alertText.textContent = message;
             alertEl.className = `alert alert-${type} alert-dismissible fade show`;
             alertEl.classList.remove('d-none');
-
-            setTimeout(() => {
-                alertEl.classList.add('d-none');
-            }, 3000);
+            setTimeout(() => alertEl.classList.add('d-none'), 3500);
         }
 
-        // 選單開關邏輯
-        const menuBtn = document.getElementById("menu-btn");
-        const sideMenu = document.getElementById("side-menu");
-        const closeBtn = document.getElementById("close-btn");
-
-        if (menuBtn && sideMenu && closeBtn) {
-            menuBtn.addEventListener("click", () => {
-                sideMenu.classList.add("open");
-                sideMenu.setAttribute("aria-hidden", "false");
-            });
-
-            closeBtn.addEventListener("click", () => {
-                sideMenu.classList.remove("open");
-                sideMenu.setAttribute("aria-hidden", "true");
-            });
-
-            // 如果點擊 menu 以外的地方就關閉選單
-            document.addEventListener("click", (e) => {
-                if (
-                    !sideMenu.contains(e.target) &&
-                    !menuBtn.contains(e.target)
-                ) {
-                    sideMenu.classList.remove("open");
-                    sideMenu.setAttribute("aria-hidden", "true");
+        async function fetchSemesters() {
+            try {
+                const res = await fetch('/admin/api/semesters/list');
+                const data = await res.json();
+                if (data.success) {
+                    semesters = data.semesters || [];
+                } else {
+                    showAlert('取得學期清單失敗', 'danger');
                 }
+            } catch (e) {
+                console.error(e);
+                showAlert('取得學期清單錯誤', 'danger');
+            }
+        }
+
+        function semesterOptionsHtml(selected = null) {
+            let html = '<option value="">請選擇</option>';
+            semesters.forEach(s => {
+                const sel = (s.code === selected) ? 'selected' : '';
+                html += `<option value="${s.code}" ${sel}>${s.code}</option>`;
+            });
+            return html;
+        }
+
+        function renderTable() {
+            const tbody = document.getElementById('rangesTbody');
+            tbody.innerHTML = '';
+            // 先用現有 ranges 排序
+            ranges.sort((a, b) => (a.admission_year || '').toString().localeCompare((b.admission_year || '').toString(), undefined, { numeric: true }));
+            ranges.forEach(row => {
+                const tr = document.createElement('tr');
+                tr.dataset.id = row.id || '';
+                tr.innerHTML = `
+                <td><input class="form-control form-control-sm admission-input" value="${row.admission_year || ''}" /></td>
+                <td>
+                    <select class="form-select form-select-sm start-select">
+                        ${semesterOptionsHtml(row.start_semester_code || '')}
+                    </select>
+                </td>
+                <td>
+                    <select class="form-select form-select-sm end-select">
+                        ${semesterOptionsHtml(row.end_semester_code || '')}
+                    </select>
+                </td>
+                <td>${row.updated_at || row.created_at || ''}</td>
+                <td>
+                    <button class="btn btn-sm btn-primary save-btn"><i class="bi bi-save"></i> 儲存</button>
+                    <button class="btn btn-sm btn-danger delete-btn"><i class="bi bi-trash"></i> 刪除</button>
+                </td>
+            `;
+                // 事件綁定
+                tr.querySelector('.save-btn').addEventListener('click', () => saveRow(tr));
+                tr.querySelector('.delete-btn').addEventListener('click', () => deleteRow(tr));
+                tbody.appendChild(tr);
             });
         }
 
-        // 頁面載入時初始化
-        document.addEventListener('DOMContentLoaded', () => {
-            loadSemesters();
+        async function loadRanges() {
+            try {
+                const res = await fetch('/admin/api/absence_default_range/list');
+                const data = await res.json();
+                if (data.success) {
+                    ranges = data.data || [];
+                    renderTable();
+                } else {
+                    showAlert('載入設定紀錄失敗', 'danger');
+                }
+            } catch (e) {
+                console.error(e);
+                showAlert('載入設定紀錄發生錯誤', 'danger');
+            }
+        }
+
+        // 新增空白列（前端暫存）
+        function addEmptyRow() {
+            ranges.push({ id: null, admission_year: '', start_semester_code: '', end_semester_code: '', created_at: '', updated_at: '' });
+            renderTable();
+            // focus 新增列的 admission input
+            const tbody = document.getElementById('rangesTbody');
+            const lastRow = tbody.lastElementChild;
+            if (lastRow) lastRow.querySelector('.admission-input').focus();
+        }
+
+        // 儲存單列
+        async function saveRow(tr) {
+            const id = tr.dataset.id || null;
+            const admissionInput = tr.querySelector('.admission-input').value.trim();
+            const start = tr.querySelector('.start-select').value;
+            const end = tr.querySelector('.end-select').value;
+
+            if (!admissionInput || !/^\d{3,4}$/.test(admissionInput)) {
+                showAlert('請輸入正確的入學屆（例如 110）', 'warning');
+                return;
+            }
+            if (!start || !end) {
+                showAlert('請選擇開始與結束學期', 'warning');
+                return;
+            }
+            if (start > end) {
+                showAlert('開始學期不能大於結束學期', 'warning');
+                return;
+            }
+
+            const payload = {
+                id: id ? parseInt(id) : null,
+                admission_year: admissionInput,
+                start_semester_code: start,
+                end_semester_code: end
+            };
+
+            try {
+                const res = await fetch('/admin/api/absence_default_range/save', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const data = await res.json();
+                if (data.success) {
+                    showAlert('儲存成功', 'success');
+                    await reloadAll();
+                } else {
+                    showAlert(data.message || '儲存失敗', 'danger');
+                }
+            } catch (e) {
+                console.error(e);
+                showAlert('儲存時發生錯誤', 'danger');
+            }
+        }
+
+        // 刪除
+        async function deleteRow(tr) {
+            const id = tr.dataset.id;
+            if (!id) {
+                // 還沒存在 DB，直接從前端移除
+                ranges = ranges.filter(r => r.id !== null || r.admission_year !== tr.querySelector('.admission-input').value.trim());
+                renderTable();
+                return;
+            }
+
+            if (!confirm('確定要刪除這筆設定嗎？')) return;
+
+            try {
+                const res = await fetch(`/admin/api/absence_default_range/delete/${id}`, { method: 'DELETE' });
+                const data = await res.json();
+                if (data.success) {
+                    showAlert('刪除成功', 'success');
+                    await reloadAll();
+                } else {
+                    showAlert(data.message || '刪除失敗', 'danger');
+                }
+            } catch (e) {
+                console.error(e);
+                showAlert('刪除時發生錯誤', 'danger');
+            }
+        }
+
+        async function reloadAll() {
+            await fetchSemesters();
+            await loadRanges();
+        }
+
+        document.addEventListener('DOMContentLoaded', async () => {
+            document.getElementById('addRowBtn').addEventListener('click', addEmptyRow);
+            document.getElementById('reloadBtn').addEventListener('click', reloadAll);
+            await reloadAll();
         });
     </script>
+
 </body>
 
 </html>
