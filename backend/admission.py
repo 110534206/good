@@ -132,38 +132,7 @@ def record_admission():
             inserted_id = cursor.lastrowid
             print(f"✅ [DEBUG] 插入新 internship_offers 記錄: id={inserted_id}, student_id={student_id}, job_id={job_id}")
             
-        # 7. 在 internship_experiences 表中記錄錄取結果
-        # (原程式碼的邏輯，用於在學生實習成果頁面顯示或舊邏輯兼容)
-        if job_id:
-            cursor.execute("""
-                SELECT id FROM internship_experiences
-                WHERE user_id = %s AND company_id = %s AND job_id = %s
-            """, (student_id, company_id, job_id))
-            existing_exp = cursor.fetchone()
-            
-            if not existing_exp:
-                current_year = datetime.now().year - 1911
-                cursor.execute("""
-                    INSERT INTO internship_experiences
-                    (user_id, company_id, job_id, year, content, is_public, created_at)
-                    VALUES (%s, %s, %s, %s, '已錄取', 0, NOW())
-                """, (student_id, company_id, job_id, current_year))
-        else:
-            cursor.execute("""
-                SELECT id FROM internship_experiences
-                WHERE user_id = %s AND company_id = %s AND job_id IS NULL
-            """, (student_id, company_id))
-            existing_exp = cursor.fetchone()
-            
-            if not existing_exp:
-                current_year = datetime.now().year - 1911
-                cursor.execute("""
-                    INSERT INTO internship_experiences
-                    (user_id, company_id, job_id, year, content, is_public, created_at)
-                    VALUES (%s, %s, NULL, %s, '已錄取', 0, NOW())
-                """, (student_id, company_id, current_year))
-        
-        # 8. 更新學生的志願序狀態
+        # 7. 更新學生的志願序狀態
         if preference_order:
             cursor.execute("""
                 UPDATE student_preferences
