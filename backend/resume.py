@@ -2611,6 +2611,53 @@ def get_absence_default_range():
         conn.close()
 
 # -------------------------
+# API：設定/保存缺勤預設學期範圍 (新增 POST 請求)
+# -------------------------
+@resume_bp.route('/api/absence/default_range', methods=['POST'])
+def set_absence_default_range():
+    """設定/保存缺勤預設學期範圍"""
+    if 'user_id' not in session:
+        return jsonify({"success": False, "message": "請先登入"}), 401
+    
+    # 1. 從前端獲取 JSON 資料
+    data = request.get_json()
+    if not data or 'defaultStart' not in data or 'defaultEnd' not in data:
+        return jsonify({"success": False, "message": "缺少必要的參數"}), 400
+
+    start_semester_code = data['defaultStart']
+    end_semester_code = data['defaultEnd']
+    
+    # 2. 獲取 admission_year 邏輯（可選，如果你的 POST 請求也需要這個）
+    # 為了簡化，我們先假設 POST 只需要保存設定。
+    # 更好的做法是，如果 POST 請求中傳遞了 admission_year，就用它。
+    
+    # 這裡你需要寫入資料庫的邏輯：
+    conn = get_db()
+    cursor = conn.cursor()
+    
+    try:
+        # 3. 執行 SQL 寫入/更新資料庫
+        # 假設你的表設計是，每次設定都是新增一筆記錄（如果沒有 admission_year 欄位）
+        # 如果你有 admission_year 欄位，你需要執行 UPDATE 或 INSERT ... ON DUPLICATE KEY UPDATE
+        
+        # 這裡以簡化的 INSERT 為例：
+        cursor.execute("""
+            INSERT INTO absence_default_semester_range 
+            (start_semester_code, end_semester_code) 
+            VALUES (%s, %s)
+        """, (start_semester_code, end_semester_code))
+        
+        conn.commit()
+        return jsonify({"success": True, "message": "預設學期範圍已保存"}), 200
+
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"success": False, "message": f"保存預設學期範圍失敗: {str(e)}"}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+# -------------------------
 #  獲取學生學期出勤記錄（詳細列表）
 # -------------------------
 @resume_bp.route('/api/get_semester_absence_records', methods=['GET'])
@@ -3710,7 +3757,6 @@ def get_class_resumes():
     user_id = session['user_id']
     role = session['role']
     mode = request.args.get('mode', '').strip().lower()
-    company_id = request.args.get('company_id', type=int)  # 可選的公司 ID 參數
 
     conn = get_db()
     cursor = conn.cursor(dictionary=True)
@@ -3720,7 +3766,7 @@ def get_class_resumes():
         sql_query = ""
         sql_params = tuple()
 
-        print(f"🔍 [DEBUG] get_class_resumes called - user_id: {user_id}, role: {role}, company_id: {company_id}")
+        print(f"🔍 [DEBUG] get_class_resumes called - user_id: {user_id}, role: {role}")
 
         # ------------------------------------------------------------------
         # 1. 班導 / 教師 (role == "teacher" or "class_teacher")
@@ -3732,68 +3778,30 @@ def get_class_resumes():
             # 3. 選擇了該老師作為指導老師的公司的學生（通過 student_preferences 和 internship_companies）
             #    重點：學生的履歷會根據填寫的志願序，傳給選擇公司的指導老師
         if role in ["teacher", "class_teacher"]:
-            # 如果提供了 company_id，只顯示選擇了該公司職位的學生
-            if company_id:
-                sql_query = """
-                    SELECT DISTINCT
-                        r.id,
-                        u.id AS user_id,
-                        u.name AS student_name,
-                        u.username AS student_number,
-                        c.name AS class_name,
-                        c.department,
-                        r.original_filename,
-                        r.filepath,
-                        r.status,
-                        r.comment,
-                        r.note,
-                        r.created_at,
-                        ic3.company_name AS company_name,
-                        ij3.title AS job_title,
-                        sp3.id AS preference_id,
-                        sp3.preference_order,
-                        (SELECT vph.comment 
-                         FROM vendor_preference_history vph 
-                         WHERE vph.preference_id = sp3.id 
-                         ORDER BY vph.created_at DESC 
-                         LIMIT 1) AS vendor_comment
-                    FROM resumes r
-                    JOIN users u ON r.user_id = u.id
-                    LEFT JOIN classes c ON u.class_id = c.id
-                    JOIN student_preferences sp3 ON sp3.student_id = u.id
-                    JOIN internship_companies ic3 ON sp3.company_id = ic3.id
-                    LEFT JOIN internship_jobs ij3 ON sp3.job_id = ij3.id
-                    WHERE sp3.company_id = %s
-                    AND ic3.advisor_user_id = %s
-                    ORDER BY c.name, u.name
-                """
-                sql_params = (company_id, user_id)
-            else:
-                sql_query = """
-                    SELECT DISTINCT
-                        r.id,
-                        u.id AS user_id,
-                        u.name AS student_name,
-                        u.username AS student_number,
-                        c.name AS class_name,
-                        c.department,
-                        r.original_filename,
-                        r.filepath,
-                        r.status,
-                        r.comment,
-                        r.note,
-                        r.created_at,
-                        latest_pref.company_name AS company_name,
-                        latest_pref.job_title AS job_title,
-                        latest_pref.preference_id,
-                        latest_pref.preference_order,
-                        latest_pref.preference_status,
-                        latest_pref.vendor_comment
-                    FROM resumes r
-                    JOIN users u ON r.user_id = u.id
-                    LEFT JOIN classes c ON u.class_id = c.id
-                    LEFT JOIN (
-                        SELECT 
+            sql_query = """
+                SELECT DISTINCT
+                    r.id,
+                    u.id AS user_id,
+                    u.name AS student_name,
+                    u.username AS student_number,
+                    c.name AS class_name,
+                    c.department,
+                    r.original_filename,
+                    r.filepath,
+                    r.status,
+                    r.comment,
+                    r.note,
+                    r.created_at,
+                    latest_pref.company_name AS company_name,
+                    latest_pref.job_title AS job_title,
+                    latest_pref.preference_id,
+                    latest_pref.preference_order,
+                    latest_pref.preference_status,
+                    latest_pref.vendor_comment
+                FROM resumes r
+                JOIN users u ON r.user_id = u.id
+                LEFT JOIN classes c ON u.class_id = c.id
+                               SELECT 
                             sp.student_id,
                             sp.id AS preference_id,
                             sp.preference_order,
@@ -3824,31 +3832,31 @@ def get_class_resumes():
                     ) latest_pref ON latest_pref.student_id = u.id
                     WHERE r.status = 'approved'  -- 只顯示班導已審核通過的履歷
                     AND (EXISTS (
-                        -- 情況1：班導的學生
-                        SELECT 1
-                        FROM classes c2
-                        JOIN classes_teacher ct ON ct.class_id = c2.id
-                        WHERE c2.id = u.class_id AND ct.teacher_id = %s
-                    ) OR EXISTS (
-                        -- 情況2：指導老師綁定的學生（從 teacher_student_relations）
-                        SELECT 1
-                        FROM teacher_student_relations tsr
-                        WHERE tsr.student_id = u.id AND tsr.teacher_id = %s
-                    ) OR EXISTS (
-                        -- 情況3：選擇了該老師作為指導老師的公司的學生
-                        -- 重點：學生的履歷會根據填寫的志願序，傳給選擇公司的指導老師
-                        -- 只有班導已審核通過的志願序和履歷，指導老師才能看到
-                        SELECT 1
-                        FROM student_preferences sp
-                        JOIN internship_companies ic2 ON sp.company_id = ic2.id
-                        WHERE sp.student_id = u.id 
+                    -- 情況1：班導的學生
+                    SELECT 1
+                    FROM classes c2
+                    JOIN classes_teacher ct ON ct.class_id = c2.id
+                    WHERE c2.id = u.class_id AND ct.teacher_id = %s
+                ) OR EXISTS (
+                    -- 情況2：指導老師綁定的學生（從 teacher_student_relations）
+                    SELECT 1
+                    FROM teacher_student_relations tsr
+                    WHERE tsr.student_id = u.id AND tsr.teacher_id = %s
+                ) OR EXISTS (
+                    -- 情況3：選擇了該老師作為指導老師的公司的學生
+                    -- 重點：學生的履歷會根據填寫的志願序，傳給選擇公司的指導老師
+                    -- 只有班導已審核通過的志願序和履歷，指導老師才能看到
+
+                    SELECT 1
+                    FROM student_preferences sp
+                    JOIN internship_companies ic2 ON sp.company_id = ic2.id
+                    WHERE sp.student_id = u.id 
                         AND ic2.advisor_user_id = %s
                         AND sp.status = 'approved'  -- 只顯示班導已審核通過的志願序
                     ))
-                    ORDER BY c.name, u.name
-                """
-                sql_params = (user_id, user_id, user_id, user_id, user_id)
-
+                ORDER BY c.name, u.name
+            """
+            sql_params = (user_id, user_id, user_id, user_id, user_id)
 
             cursor.execute(sql_query, sql_params)
             resumes = cursor.fetchall()
@@ -3859,7 +3867,7 @@ def get_class_resumes():
                 # 統計有多少履歷是通過「選擇了該老師管理的公司」這個條件出現的
                 company_based_count = sum(1 for r in resumes if r.get('company_name'))
                 print(f"📊 [DEBUG] {company_based_count} resumes are from students who selected companies managed by this teacher")
-                # 統計顯示的公司和職缺
+                        # 統計顯示的公司和職缺
                 companies_shown = set()
                 jobs_shown = set()
                 for r in resumes:
@@ -4020,13 +4028,13 @@ def get_class_resumes():
                 r['className'] = r['class_name']
             if 'created_at' in r:
                 r['upload_time'] = r['created_at']
-            # 處理志願序狀態：如果有 preference_status，使用它；否則使用履歷狀態
+           # 處理志願序狀態：如果有 preference_status，使用它；否則使用履歷狀態
             if 'preference_status' in r and r.get('preference_status'):
                 r['application_statuses'] = r['preference_status']
                 r['display_status'] = r['preference_status']
             # 處理留言：如果有 vendor_comment，使用它；否則使用履歷的 comment
             if 'vendor_comment' in r and r.get('vendor_comment'):
-                r['comment'] = r['vendor_comment']
+                r['comment'] = r['vendor_comment']      
 
         print(f"✅ [DEBUG] Returning {len(resumes)} resumes for role {role}")
         return jsonify({"success": True, "resumes": resumes})
@@ -4127,8 +4135,7 @@ def review_resume(resume_id):
                     message=notification_content,
                     category="resume"
                 )
-                
-                # 🔄 如果是老師退件，將 student_preferences 狀態重置為 'pending'，避免同步到廠商審核頁面
+             # 🔄 如果是老師退件，將 student_preferences 狀態重置為 'pending'，避免同步到廠商審核頁面
                 if user_role in ['teacher', 'class_teacher']:
                     # 將該學生所有志願序的狀態重置為 'pending'，這樣就不會顯示在廠商審核頁面
                     cursor.execute("""
@@ -4160,18 +4167,6 @@ def review_resume(resume_id):
                     message=notification_content,
                     category="resume"
                 )
-                
-                # 🔄 如果是老師審核通過，更新 student_preferences 狀態為 'approved'，讓廠商可以看到
-                if user_role in ['teacher', 'class_teacher']:
-                    # 更新該學生所有志願序的狀態為 'approved'，讓廠商可以審核
-                    cursor.execute("""
-                        UPDATE student_preferences 
-                        SET status = 'approved'
-                        WHERE student_id = %s
-                        AND (status IS NULL OR status = 'pending')
-                    """, (student_user_id,))
-                    updated_count = cursor.rowcount
-                    print(f"✅ 已更新 {updated_count} 筆學生志願序狀態為 'approved'，廠商現在可以審核")
 
         conn.commit()
 
