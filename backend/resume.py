@@ -605,6 +605,87 @@ def save_structured_data(cursor, student_id, data, semester_id=None):
 
 
 # -------------------------
+# API: 取得所有發證中心列表
+# -------------------------
+@resume_bp.route('/api/get_cert_authorities', methods=['GET'])
+def get_cert_authorities():
+    conn = None
+    cursor = None
+    try:
+        conn = get_db()
+        cursor = conn.cursor(dictionary=True)
+        
+        cursor.execute("SELECT id, name FROM cert_authorities ORDER BY name")
+        authorities = cursor.fetchall()
+        
+        return jsonify({
+            "success": True,
+            "authorities": authorities
+        })
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"success": False, "message": f"伺服器錯誤: {str(e)}"}), 500
+    finally:
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
+
+# -------------------------
+# API: 根據發證中心ID取得該中心的證照列表
+# -------------------------
+@resume_bp.route('/api/get_certificates_by_authority', methods=['GET'])
+def get_certificates_by_authority():
+    conn = None
+    cursor = None
+    try:
+        authority_id = request.args.get('authority_id')
+        if not authority_id:
+            return jsonify({"success": False, "message": "缺少 authority_id 參數"}), 400
+        
+        try:
+            authority_id = int(authority_id)
+        except ValueError:
+            return jsonify({"success": False, "message": "authority_id 必須是數字"}), 400
+
+        conn = get_db()
+        cursor = conn.cursor(dictionary=True)
+        
+        # 檢查是否有 name 欄位（向後兼容）
+        cursor.execute("SHOW COLUMNS FROM certificate_codes LIKE 'name'")
+        has_name_column = cursor.fetchone() is not None
+        
+        if has_name_column:
+            name_select = "name"
+            order_by = "name"
+        else:
+            # 如果沒有 name 欄位，使用 job_category 和 level 組合
+            name_select = "CONCAT(COALESCE(job_category, ''), COALESCE(level, '')) AS name"
+            order_by = "COALESCE(job_category, ''), COALESCE(level, '')"
+        
+        cursor.execute(f"""
+            SELECT code, {name_select}, category 
+            FROM certificate_codes 
+            WHERE authority_id = %s 
+            ORDER BY {order_by}
+        """, (authority_id,))
+        certificates = cursor.fetchall()
+        
+        return jsonify({
+            "success": True,
+            "certificates": certificates
+        })
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"success": False, "message": f"伺服器錯誤: {str(e)}"}), 500
+    finally:
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
+
+
+# -------------------------
 # 取回學生資料 (for 生成履歷)
 # -------------------------
 def get_student_info_for_doc(cursor, student_id, semester_id=None):
@@ -1216,6 +1297,151 @@ def get_resume_data():
         cursor.close()
         conn.close()
         
+# -------------------------
+# API: 根據發證中心ID取得該中心的職類和級別列表
+# -------------------------
+@resume_bp.route('/api/get_job_categories_and_levels', methods=['GET'])
+def get_job_categories_and_levels():
+    conn = None
+    cursor = None
+    try:
+        authority_id = request.args.get('authority_id')
+        if not authority_id:
+            return jsonify({"success": False, "message": "缺少 authority_id 參數"}), 400
+        
+        try:
+            authority_id = int(authority_id)
+        except ValueError:
+            return jsonify({"success": False, "message": "authority_id 必須是數字"}), 400
+
+        conn = get_db()
+        cursor = conn.cursor(dictionary=True)
+        
+        # 取得該發證中心的所有證照
+        # 使用 certificate_codes 表的 job_category 和 level 字段組合生成 name
+        # 檢查是否有 name 欄位（向後兼容）
+        cursor.execute("SHOW COLUMNS FROM certificate_codes LIKE 'name'")
+        has_name_column = cursor.fetchone() is not None
+        
+        if has_name_column:
+            # 如果還有 name 欄位，使用 COALESCE 向後兼容
+            name_select = "COALESCE(CONCAT(job_category, level), name) AS name"
+            order_by = "COALESCE(job_category, name), COALESCE(level, '')"
+        else:
+            # 如果沒有 name 欄位，直接使用 CONCAT
+            name_select = "CONCAT(COALESCE(job_category, ''), COALESCE(level, '')) AS name"
+            order_by = "COALESCE(job_category, ''), COALESCE(level, '')"
+        
+        cursor.execute(f"""
+            SELECT code, 
+                   {name_select},
+                   COALESCE(job_category, '') AS job_category,
+                   COALESCE(level, '') AS level
+            FROM certificate_codes 
+            WHERE authority_id = %s 
+            ORDER BY {order_by}
+        """, (authority_id,))
+        certificates = cursor.fetchall()
+        
+        # 解析職類和級別
+        import re
+        job_categories = set()  # 使用 set 避免重複
+        job_category_levels = {}  # {職類: [級別列表]}
+        
+        level_pattern = re.compile(r'(甲級|乙級|丙級|丁級|甲|乙|丙|丁)')
+        
+        print(f"🔍 查詢發證中心 {authority_id} 的證照，共 {len(certificates)} 筆")
+        
+        for cert in certificates:
+            # 優先使用 certificate_codes 表的 job_category 和 level 字段
+            job_category = cert.get('job_category', '').strip()
+            level = cert.get('level', '').strip()
+            cert_name = cert.get('name', '').strip()
+            
+            # 情況1: job_category 和 level 都有值，直接使用
+            if job_category and level:
+                job_categories.add(job_category)
+                if job_category not in job_category_levels:
+                    job_category_levels[job_category] = set()
+                job_category_levels[job_category].add(level)
+                print(f"  ✅ 使用欄位值: 職類={job_category}, 級別={level}")
+            # 情況2: 只有 job_category 有值（即使沒有 level 也顯示職類）
+            elif job_category:
+                job_categories.add(job_category)
+                if job_category not in job_category_levels:
+                    job_category_levels[job_category] = set()
+                # 嘗試從 name 解析 level（如果有的話）
+                if not level and cert_name:
+                    match = level_pattern.search(cert_name)
+                    if match:
+                        parsed_level = match.group(1)
+                        level_map = {'甲': '甲級', '乙': '乙級', '丙': '丙級', '丁': '丁級'}
+                        full_level = level_map.get(parsed_level, parsed_level)
+                        job_category_levels[job_category].add(full_level)
+                        print(f"  ✅ 職類有值，從名稱解析級別: 職類={job_category}, 級別={full_level}")
+                    else:
+                        print(f"  ✅ 職類有值，無級別: 職類={job_category}")
+                elif level:
+                    job_category_levels[job_category].add(level)
+                    print(f"  ✅ 職類和級別都有值: 職類={job_category}, 級別={level}")
+                else:
+                    print(f"  ✅ 職類有值，無級別: 職類={job_category}")
+            # 情況3: 只有 level 有值，嘗試從 name 解析 job_category
+            elif level and not job_category and cert_name:
+                # 從名稱中移除級別，剩下的作為職類
+                parsed_job_category = level_pattern.sub('', cert_name).strip()
+                if parsed_job_category:
+                    job_categories.add(parsed_job_category)
+                    if parsed_job_category not in job_category_levels:
+                        job_category_levels[parsed_job_category] = set()
+                    job_category_levels[parsed_job_category].add(level)
+                    print(f"  ✅ 級別有值，從名稱解析職類: 職類={parsed_job_category}, 級別={level}")
+            # 情況4: 都沒有值，從 name 字段解析職類和級別（向後兼容）
+            elif cert_name:
+                match = level_pattern.search(cert_name)
+                if match:
+                    parsed_level = match.group(1)
+                    level_map = {'甲': '甲級', '乙': '乙級', '丙': '丙級', '丁': '丁級'}
+                    full_level = level_map.get(parsed_level, parsed_level)
+                    
+                    # 提取職類（移除級別後的部分）
+                    parsed_job_category = level_pattern.sub('', cert_name).strip()
+                    
+                    if parsed_job_category:
+                        job_categories.add(parsed_job_category)
+                        if parsed_job_category not in job_category_levels:
+                            job_category_levels[parsed_job_category] = set()
+                        job_category_levels[parsed_job_category].add(full_level)
+                        print(f"  ✅ 從名稱解析: 職類={parsed_job_category}, 級別={full_level}")
+                else:
+                    # 如果無法解析級別，但名稱不為空，將整個名稱作為職類（無級別）
+                    job_categories.add(cert_name)
+                    if cert_name not in job_category_levels:
+                        job_category_levels[cert_name] = set()
+                    print(f"  ✅ 從名稱解析（無級別）: 職類={cert_name}")
+            else:
+                print(f"  ⚠️ 跳過無效證照記錄: code={cert.get('code')}, name={cert_name}")
+        
+        # 轉換為列表並排序
+        job_categories_list = sorted(list(job_categories))
+        # 將級別集合轉換為排序列表
+        for job_category in job_category_levels:
+            job_category_levels[job_category] = sorted(list(job_category_levels[job_category]))
+        
+        return jsonify({
+            "success": True,
+            "job_categories": job_categories_list,
+            "job_category_levels": job_category_levels  # {職類: [級別列表]}
+        })
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"success": False, "message": f"伺服器錯誤: {str(e)}"}), 500
+    finally:
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
+
 # -------------------------
 # API：下載履歷 Word
 # -------------------------
