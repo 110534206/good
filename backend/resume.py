@@ -1445,6 +1445,9 @@ def get_job_categories_and_levels():
 # -------------------------
 # API：提交並生成履歷
 # -------------------------
+# -------------------------
+# API：提交並生成履歷
+# -------------------------
 @resume_bp.route('/api/submit_and_generate', methods=['POST'])
 def submit_and_generate_api():
     context = {}
@@ -1656,7 +1659,7 @@ def submit_and_generate_api():
             except Exception as e:
                 print("⚠️ 嘗試讀取 absence_records_json 失敗:", e)
 
-                if not absence_image_path:
+        if not absence_image_path:
             try:
                 cursor.execute("""
                     SELECT image_path
@@ -1779,7 +1782,8 @@ def submit_and_generate_api():
                 "code": code.strip().upper() if code else "",  # 新增：證照代碼
                 "issuer": issuer.strip() if issuer else ""  # 新增：發證人
         })
-          # 解析語言能力資料
+
+        # 解析語言能力資料
         structured_languages = []
         # 前端使用 lang_en_level, lang_tw_level, lang_jp_level, lang_hk_level
         lang_mapping = {
@@ -1883,7 +1887,8 @@ def submit_and_generate_api():
             except Exception as e:
                 print("⚠️ 更新 course_grades.ProofImage 失敗:", e)
                 traceback.print_exc()
-                   # 生成 Word 文件
+
+        # 生成 Word 文件
         student_data_for_doc = get_student_info_for_doc(cursor, student_id, semester_id=semester_id)
         # PhotoPath & ConductScoreNumeric
         student_data_for_doc["info"]["PhotoPath"] = photo_path
@@ -1938,6 +1943,329 @@ def submit_and_generate_api():
             cursor.close()
         if conn:
             conn.close()
+
+# -------------------------
+# Word 生成邏輯
+# -------------------------
+def generate_application_form_docx(student_data, output_path):
+    try:
+        base_dir = os.path.dirname(__file__)
+        template_path = os.path.abspath(os.path.join(base_dir, "..", "frontend", "static", "examples", "實習履歷(空白).docx"))
+        if not os.path.exists(template_path):
+            print("❌ 找不到模板：", template_path)
+            return False
+
+        doc = DocxTemplate(template_path)
+        info = student_data.get("info", {})
+        grades = student_data.get("grades", [])
+        certs = student_data.get("certifications", [])
+
+        # 格式化出生日期
+        def fmt_date(val):
+            if hasattr(val, 'strftime'):
+                return val.strftime("%Y-%m-%d")
+            if isinstance(val, str) and len(val) >= 10:
+                return val.split("T")[0]
+            return ""
+
+        bdate = fmt_date(info.get("BirthDate"))
+        year, month, day = ("", "", "")
+        if bdate:
+            try:
+                year, month, day = bdate.split("-")
+            except:
+                pass
+
+        # 照片
+        image_obj = None
+        photo_path = info.get("PhotoPath")
+        if photo_path and os.path.exists(photo_path):
+            try:
+                image_obj = InlineImage(doc, os.path.abspath(photo_path), width=Inches(1.2))
+            except Exception as e:
+                print(f"⚠️ 圖片載入錯誤: {e}")
+
+        # 處理課程資料（保留原邏輯）
+        MAX_COURSES = 30
+        padded_grades = grades[:MAX_COURSES]
+        padded_grades += [{'CourseName': '', 'Credits': ''}] * (MAX_COURSES - len(padded_grades))
+
+        context_courses = {}
+        NUM_ROWS = 10
+        NUM_COLS = 3
+        for i in range(NUM_ROWS):
+            for j in range(NUM_COLS):
+                index = i * NUM_COLS + j
+                if index < MAX_COURSES:
+                    course = padded_grades[index]
+                    row_num = i + 1
+                    col_num = j + 1
+                    context_courses[f'CourseName_{row_num}_{col_num}'] = course.get('CourseName', '')
+                    context_courses[f'Credits_{row_num}_{col_num}'] = course.get('Credits', '')
+
+        # 插入成績單圖片：嘗試從 student_data['transcript_path']（由 get_student_info_for_doc 提供）
+        transcript_obj = None
+        transcript_path = student_data.get("transcript_path") or info.get("TranscriptPath") or ''
+        if transcript_path and os.path.exists(transcript_path):
+            try:
+                transcript_obj = InlineImage(doc, os.path.abspath(transcript_path), width=Inches(6.0))
+            except Exception as e:
+                print(f"⚠️ 成績單圖片載入錯誤: {e}")
+
+        # 缺勤佐證圖片
+        absence_proof_obj = None
+        absence_proof_path = student_data.get("Absence_Proof_Path")
+        image_size = Inches(6.0)
+        if absence_proof_path and os.path.exists(absence_proof_path):
+            try:
+                absence_proof_obj = InlineImage(doc, os.path.abspath(absence_proof_path), width=image_size)
+            except Exception as e:
+                print(f"⚠️ 缺勤佐證圖片載入錯誤: {e}")
+
+        # 操行等級
+        conduct_score = info.get('ConductScore', '')
+        conduct_marks = {k: '□' for k in ['C_You', 'C_Jia', 'C_Yi', 'C_Bing', 'C_Ding']}
+        mapping = {'優': 'C_You', '甲': 'C_Jia', '乙': 'C_Yi', '丙': 'C_Bing', '丁': 'C_Ding'}
+        if conduct_score in mapping:
+            conduct_marks[mapping[conduct_score]] = '■'
+
+        # 證照分類 - 使用新的分類邏輯
+        # certs 已經從 get_student_info_for_doc 返回，格式統一
+        # 優先使用前端提交的證照名稱（如果有的話）
+        # 這樣可以確保只顯示用戶實際選擇的證照，而不是數據庫中所有相關記錄
+        cert_names_from_form = student_data.get("cert_names", [])
+        cert_photo_paths_from_form = student_data.get("cert_photo_paths", [])
+        
+        # 如果有前端提交的證照名稱，使用它們來覆蓋數據庫查詢結果
+        if cert_names_from_form:
+            # 重新構建證照列表，使用前端提交的名稱
+            certs_with_form_names = []
+            for idx, (name, path) in enumerate(zip(cert_names_from_form, cert_photo_paths_from_form)):
+                if name and name.strip():
+                    # 從原始 certs 中找到對應的證照（通過索引或路徑匹配）
+                    matching_cert = None
+                    if idx < len(certs):
+                        matching_cert = certs[idx]
+                    elif path:
+                        # 通過路徑匹配
+                        for c in certs:
+                            if c.get("cert_path") == path:
+                                matching_cert = c
+                                break
+                    
+                    # 使用前端提交的名稱，但保留其他信息（類別、路徑等）
+                    cert_item = {
+                        "cert_name": name.strip(),  # 使用前端提交的名稱
+                        "category": matching_cert.get("category", "other") if matching_cert else "other",
+                        "cert_path": path if path else (matching_cert.get("cert_path", "") if matching_cert else ""),
+                        "acquire_date": matching_cert.get("acquire_date", "") if matching_cert else "",
+                    }
+                    certs_with_form_names.append(cert_item)
+            
+            # 如果有匹配的證照，使用新的列表；否則使用原始列表
+            if certs_with_form_names:
+                certs = certs_with_form_names
+        
+        # 分類證照
+        labor_list, intl_list, local_list, other_list = categorize_certifications(certs)
+
+        def pad_list(lst, length=5):
+            lst = lst[:length]
+            lst += [''] * (length - len(lst))
+            return lst
+
+        # 建 context
+        # 處理自傳：移除多餘的換行符，避免產生空白行
+        autobiography = info.get('Autobiography', '').strip()
+        if autobiography:
+            # 將多個連續換行符替換為單個換行符，移除開頭和結尾的換行符
+            autobiography = re.sub(r'\n{3,}', '\n\n', autobiography)
+            autobiography = autobiography.strip('\n')
+        
+        context = {
+            'StuID': info.get('StuID', ''),
+            'StuName': info.get('StuName', ''),
+            'BirthYear': year, 'BirthMonth': month, 'BirthDay': day,
+            'Gender': info.get('Gender', ''),
+            'Phone': info.get('Phone', ''),
+            'Email': info.get('Email', ''),
+            'Address': info.get('Address', ''),
+            'ConductScoreNumeric': info.get('ConductScoreNumeric', ''),
+            'ConductScore': conduct_score,
+            'Autobiography': autobiography,  # 使用處理過的自傳
+            'Image_1': image_obj,
+            'transcript_path': transcript_obj,
+            'Absence_Proof_Image': absence_proof_obj if absence_proof_obj else "（查無佐證圖片）"
+        }
+        
+        # 清空可能出現在"缺勤記錄"標題上方的空變數
+        # 如果模板中有這些變數但值為空，設為 None 以避免顯示空白行
+        # 常見的可能變數名
+        empty_vars_to_clear = [
+            'empty_line_1', 'empty_line_2', 'empty_line_3',
+            'blank_line_1', 'blank_line_2', 'blank_line_3',
+            'spacer_1', 'spacer_2', 'spacer_3',
+            'extra_line_1', 'extra_line_2', 'extra_line_3',
+            'blank_1', 'blank_2', 'blank_3',
+        ]
+        for var in empty_vars_to_clear:
+            context[var] = None  # 設為 None 而不是空字符串，Jinja2 會跳過 None 值
+
+        # 加入缺勤統計
+        # 只填充這8個標準字段，確保沒有多餘的空白行
+        absence_fields = ['曠課', '遲到', '事假', '病假', '生理假', '公假', '喪假', '總計']
+        for t in absence_fields:
+            key = f"absence_{t}_units"
+            # 從 student_data 中獲取缺勤統計數據
+            value = student_data.get(key, "0 節")
+            context[key] = value
+            # 調試輸出
+            if value == "0 節" and t != "總計":
+                print(f"⚠️ 缺勤統計 {key} 未找到，使用預設值: {value}")
+            else:
+                print(f"✅ 缺勤統計 {key} = {value}")
+        
+        # 如果模板中有額外的行（例如第9、10、11行），將它們設為空字符串
+        # 常見的額外變數名可能是：absence_row_9, absence_row_10, absence_row_11 等
+        # 或者：absence_9_units, absence_10_units, absence_11_units 等
+        # 清空可能的額外行變數
+        for i in range(9, 12):  # 第9、10、11行
+            # 嘗試多種可能的變數名格式
+            possible_keys = [
+                f"absence_row_{i}",
+                f"absence_{i}_units",
+                f"absence_row_{i}_units",
+                f"absence_item_{i}",
+                f"absence_type_{i}",
+            ]
+            for key in possible_keys:
+                context[key] = ""
+        
+        # 清空可能存在的其他缺勤類型變數（防止模板中有額外的空白行）
+        # 例如：absence_其他_units, absence_其他1_units 等
+        # 只保留標準的8個字段，其他都設為空字符串
+        standard_keys = [f"absence_{t}_units" for t in absence_fields]
+        for key in list(context.keys()):
+            if key.startswith("absence_") and key.endswith("_units"):
+                if key not in standard_keys:
+                    context[key] = ""  # 清空非標準字段
+
+        # 加入操行等級勾選
+        context.update(conduct_marks)
+
+        # 加入課程資料
+        context.update(context_courses)
+
+        # 加入證照文字清單 - 使用新的填充函數
+        fill_certificates_to_doc(context, "LaborCerts_", labor_list, 5)
+        fill_certificates_to_doc(context, "IntlCerts_", intl_list, 5)
+        fill_certificates_to_doc(context, "LocalCerts_", local_list, 5)
+        fill_certificates_to_doc(context, "OtherCerts_", other_list, 5)
+
+        # 證照圖片（不分類，依順序塞）- 使用新的填充函數
+        # 將四類組裝成一個大 list（圖片不分類）
+        flat_list = labor_list + intl_list + local_list + other_list
+        
+        # 分頁顯示證照圖片：每頁8張，最多32張（4頁）
+        # 使用區塊變數控制頁面顯示/隱藏
+        certs_per_page = 8
+        max_total = 32  # 最多32張（4頁）
+        
+        # 只處理實際有圖片的證照（最多32張）
+        certs_with_photos = [c for c in flat_list if c.get("photo_path") and os.path.exists(c.get("photo_path", ""))]
+        certs_to_display = certs_with_photos[:max_total]
+        total_certs = len(certs_to_display)
+        
+        # 初始化所有證照圖片和名稱為空
+        for idx in range(1, 33):
+            context[f"CertPhotoImages_{idx}"] = ""
+            context[f"CertPhotoName_{idx}"] = ""
+        
+        # 初始化所有頁面區塊為 False（不顯示）
+        # 使用布林值控制頁面顯示，模板中使用 {% if cert_page_2_block %} ... {% endif %}
+        context["cert_page_2_block"] = False
+        context["cert_page_3_block"] = False
+        context["cert_page_4_block"] = False
+        
+        if total_certs > 0:
+            # 第一頁（1-8）：總是填充（如果有證照）
+            first_page_certs = certs_to_display[:min(8, total_certs)]
+            if first_page_certs:
+                fill_certificate_photos(context, doc, first_page_certs, start_index=1, max_count=8)
+            
+            # 第二頁（9-16）：如果 total_certs > 8 則顯示
+            if total_certs > 8:
+                context["cert_page_2_block"] = True  # 設置為 True 以顯示區塊
+                second_page_certs = certs_to_display[8:min(16, total_certs)]
+                if second_page_certs:
+                    fill_certificate_photos(context, doc, second_page_certs, start_index=9, max_count=8)
+            
+            # 第三頁（17-24）：如果 total_certs > 16 則顯示
+            if total_certs > 16:
+                context["cert_page_3_block"] = True  # 設置為 True 以顯示區塊
+                third_page_certs = certs_to_display[16:min(24, total_certs)]
+                if third_page_certs:
+                    fill_certificate_photos(context, doc, third_page_certs, start_index=17, max_count=8)
+            
+            # 第四頁（25-32）：如果 total_certs > 24 則顯示
+            if total_certs > 24:
+                context["cert_page_4_block"] = True  # 設置為 True 以顯示區塊
+                fourth_page_certs = certs_to_display[24:min(32, total_certs)]
+                if fourth_page_certs:
+                    fill_certificate_photos(context, doc, fourth_page_certs, start_index=25, max_count=8)
+
+        # 語文能力
+        lang_context = {}
+        lang_codes = ['En', 'Jp', 'Tw', 'Hk']
+        level_codes = ['Jing', 'Zhong', 'Lue']
+        for code in lang_codes:
+            for level_code in level_codes:
+                lang_context[f'{code}_{level_code}'] = '□'
+
+        lang_code_map = {'英語': 'En', '日語': 'Jp', '台語': 'Tw', '客語': 'Hk'}
+        level_code_map = {'精通': 'Jing', '中等': 'Zhong', '略懂': 'Lue'}
+
+        for lang_skill in student_data.get('languages', []):
+            lang = lang_skill.get('Language')
+            level = lang_skill.get('Level')
+            lang_code = lang_code_map.get(lang)
+            level_code = level_code_map.get(level)
+            if lang_code and level_code:
+                key = f'{lang_code}_{level_code}'
+                if key in lang_context:
+                    lang_context[key] = '■'
+
+        context.update(lang_context)
+        
+        # 在渲染前，清理所有可能導致空白行的空變數
+        # 將所有空字符串變數設為 None，這樣 Jinja2 在模板中會跳過它們
+        # 但保留重要的變數（如數字、圖片等）
+        for key in list(context.keys()):
+            value = context[key]
+            # 如果是空字符串，設為 None（但保留重要的變數）
+            if isinstance(value, str) and value.strip() == '':
+                # 檢查是否為重要變數（不應設為 None）
+                important_vars = ['StuID', 'StuName', 'Gender', 'Phone', 'Email', 'Address', 
+                                 'ConductScore', 'ConductScoreNumeric', 'BirthYear', 'BirthMonth', 'BirthDay']
+                if key not in important_vars:
+                    # 對於可能出現在"缺勤記錄"標題上方的變數，設為 None
+                    # 這樣模板中如果使用 {% if variable %} 就不會顯示空白行
+                    if any(key.startswith(prefix) for prefix in ['empty_', 'blank_', 'spacer_', 'extra_']):
+                        context[key] = None
+                    # 或者，如果變數名包含 "line" 或 "row"，也可能是空白行變數
+                    elif 'line' in key.lower() or 'row' in key.lower():
+                        context[key] = None
+
+        # 渲染與儲存
+        doc.render(context)
+        doc.save(output_path)
+        print(f"✅ 履歷文件已生成: {output_path}")
+        return True
+
+    except Exception as e:
+        print("❌ 生成 Word 檔錯誤:", e)
+        traceback.print_exc()
+        return False
 
 # -------------------------
 # API：下載履歷 Word
