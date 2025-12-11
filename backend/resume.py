@@ -754,7 +754,7 @@ def get_student_info_for_doc(cursor, student_id, semester_id=None):
     # 證照 - 使用新的查詢方式
     cursor.execute("""
         SELECT 
-            sc.id, sc.StuID, sc.cert_code, sc.AcquisitionDate, sc.CertPath,
+            sc.id, sc.StuID, sc.cert_code, cc.job_category AS CertName, sc.AcquisitionDate, sc.CertPath,
             sc.issuer, 
             cc.job_category, cc.level, cc.authority_id, cc.category AS CertCategory,
             ca.name AS authority_name
@@ -1260,6 +1260,7 @@ def get_resume_data():
                 "authority_name": cert.get("authority_name", ""),
                 "issuer": cert.get("issuer", ""),
                 "authority_id": cert.get("authority_id") if "authority_id" in cert else None,
+                "IssuingBody": cert.get("IssuingBody", ""),
                 "CertType": cert.get("CertType", "other"),
                 "acquire_date": formatted_acquire_date,
                 "AcquisitionDate": acquisition_date_str  # 轉換為字符串格式，確保 JSON 序列化正常
@@ -1441,9 +1442,6 @@ def get_job_categories_and_levels():
         if conn:
             conn.close()
 
-# -------------------------
-# API：提交並生成履歷
-# -------------------------
 # -------------------------
 # API：提交並生成履歷
 # -------------------------
