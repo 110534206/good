@@ -587,8 +587,11 @@ def _get_application_access(cursor, preference_id, vendor_id):
 
 @vendor_bp.route("/vendor_review_resume")
 def vendor_resume_review():
-    """廠商履歷審核頁面路由"""
-    if "user_id" not in session or session.get("role") != "vendor":
+    """廠商履歷審核頁面路由（允許廠商和老師訪問）"""
+    if "user_id" not in session:
+        return render_template("auth/login.html")
+    # 允許 vendor 和 teacher 角色訪問
+    if session.get("role") not in ["vendor", "teacher", "ta"]:
         return render_template("auth/login.html")
     return render_template("resume/vendor_review_resume.html")
 
@@ -601,17 +604,47 @@ def get_vendor_resumes():
     1. 老師已通過 (resumes.status = 'approved')。
     2. 履歷會自動進入廠商的學生履歷審核流程。
     3. 廠商介面狀態取決於 student_preferences.status（如果存在），否則為 pending。
+    
+    允許 vendor 和 teacher 角色訪問（老師可以查看廠商審核結果）。
     """
-    if "user_id" not in session or session.get("role") != "vendor":
+    if "user_id" not in session:
+        return jsonify({"success": False, "message": "未授權"}), 403
+    
+    user_role = session.get("role")
+    if user_role not in ["vendor", "teacher", "ta"]:
         return jsonify({"success": False, "message": "未授權"}), 403
 
-    vendor_id = session["user_id"]
     status_filter = request.args.get("status", "").strip()
     company_filter = request.args.get("company_id", type=int)
     keyword_filter = request.args.get("keyword", "").strip()
 
     conn = get_db()
     cursor = conn.cursor(dictionary=True)
+    
+    # 如果是老師，需要根據 company_id 找到對應的廠商
+    if user_role in ["teacher", "ta"]:
+        if not company_filter:
+            cursor.close()
+            conn.close()
+            return jsonify({"success": False, "message": "需要提供 company_id 參數"}), 400
+        
+        # 查找該公司對應的廠商 ID
+        cursor.execute("""
+            SELECT DISTINCT v.user_id
+            FROM vendors v
+            JOIN vendor_companies vc ON v.id = vc.vendor_id
+            WHERE vc.company_id = %s
+            LIMIT 1
+        """, (company_filter,))
+        vendor_result = cursor.fetchone()
+        if not vendor_result:
+            cursor.close()
+            conn.close()
+            return jsonify({"success": False, "message": "找不到該公司對應的廠商"}), 404
+        vendor_id = vendor_result["user_id"]
+    else:
+        # 廠商直接使用自己的 ID
+        vendor_id = session["user_id"]
     try:
         profile, companies, _ = _get_vendor_scope(cursor, vendor_id)
         if not profile:

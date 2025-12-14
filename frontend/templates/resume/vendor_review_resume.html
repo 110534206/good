@@ -206,36 +206,57 @@
       return String(text).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
     }
 
+    // 獲取包含 company_id 的 API URL
+    function getResumeApiUrl() {
+      const urlParams = new URLSearchParams(window.location.search);
+      const targetCompanyId = urlParams.get('company_id');
+      let apiUrl = '/vendor/api/resumes';
+      if (targetCompanyId) {
+        apiUrl += `?company_id=${targetCompanyId}`;
+      }
+      return apiUrl;
+    }
+
+    let userRole = null;
+
     document.addEventListener("DOMContentLoaded", () => {
       const urlParams = new URLSearchParams(window.location.search);
       const targetStatus = urlParams.get('status');
 
       initMenu();
 
-      // 廠商專用 API
-      const apiUrl = '/vendor/api/resumes';
+      // 先獲取用戶角色，然後載入資料
+      fetch('/api/profile')
+        .then(res => res.json())
+        .then(profileData => {
+          userRole = profileData.success && profileData.user ? profileData.user.role : 'vendor';
+          
+          // 廠商專用 API（老師也可以訪問）
+          const apiUrl = getResumeApiUrl();
 
-      Promise.all([
-        fetch(apiUrl).then(res => res.ok ? res.json() : {success:false}),
-        Promise.resolve({success:true, companies:[]}),
-        fetch('/vendor/api/positions').then(res => res.ok ? res.json() : {success:true, items:[]})
-      ]).then(([resumeData, companyData, positionData]) => {
-        if (resumeData.success) {
-          allResumes = resumeData.resumes || [];
-          populateFilters(allResumes, companyData, positionData);
+          return Promise.all([
+            fetch(apiUrl).then(res => res.ok ? res.json() : {success:false}),
+            Promise.resolve({success:true, companies:[]}),
+            fetch('/vendor/api/positions').then(res => res.ok ? res.json() : {success:true, items:[]})
+          ]);
+        })
+        .then(([resumeData, companyData, positionData]) => {
+          if (resumeData.success) {
+            allResumes = resumeData.resumes || [];
+            populateFilters(allResumes, companyData, positionData);
 
-          if (targetStatus) {
-             const statusSelect = document.getElementById('statusFilter');
-             const mapped = (targetStatus === 'submitted' || targetStatus === 'uploaded') ? 'pending' : targetStatus;
-             if(statusSelect) statusSelect.value = mapped;
+            if (targetStatus) {
+               const statusSelect = document.getElementById('statusFilter');
+               const mapped = (targetStatus === 'submitted' || targetStatus === 'uploaded') ? 'pending' : targetStatus;
+               if(statusSelect) statusSelect.value = mapped;
+            }
+
+            applyFilters();
+          } else {
+            allResumes = [];
+            renderTable([]);
           }
-
-          applyFilters();
-        } else {
-          allResumes = [];
-          renderTable([]);
-        }
-      });
+        });
 
       document.getElementById("departmentFilter").addEventListener("change", applyFilters);
       document.getElementById("classFilter").addEventListener("change", applyFilters);
@@ -413,11 +434,29 @@
         const hasComment = row.comment && row.comment.trim() !== '';
         const btnClass = hasComment ? 'text-success' : '';
         const btnText = hasComment ? '已填寫' : '未填寫';
+        
+        // 如果是老師，只顯示查看模式（只讀）
+        const isReadOnly = userRole && userRole !== 'vendor';
+        if (isReadOnly) {
+            if (hasComment) {
+                return `<button class="btn btn-sm btn-outline-secondary text-success" onclick="openCommentModal(${row.id}, '${escapeHtml(row.comment || '')}', ${pid ? pid : 'null'}, true)">已填寫</button>`;
+            } else {
+                return `<span style="color:#aaa; font-size:0.9em;">未填寫</span>`;
+            }
+        }
+        
         return `<button class="btn btn-sm btn-outline-secondary ${btnClass}" onclick="openCommentModal(${row.id}, '${escapeHtml(row.comment || '')}', ${pid ? pid : 'null'}, false)">${btnText}</button>`;
     }
 
     function renderActionBtns(row, pid) {
         const dlBtn = `<a href="/api/download_resume/${row.id}" class="btn btn-sm btn-outline-primary" target="_blank" style="margin-right:4px;">下載</a>`;
+        
+        // 如果是老師，只顯示下載按鈕（只讀模式）
+        if (userRole && userRole !== 'vendor') {
+            return dlBtn;
+        }
+        
+        // 廠商可以進行審核操作
         const approveClick = `approveResume(${row.id}, ${pid ? `'${pid}'` : 'null'})`;
         const rejectClick = `rejectResume(${row.id}, ${pid ? `'${pid}'` : 'null'})`;
 
@@ -458,7 +497,7 @@
           if (data.success) {
               alert("✅ 狀態更新成功");
               // 重新載入資料
-              fetch('/vendor/api/resumes').then(r=>r.json()).then(d=>{
+              fetch(getResumeApiUrl()).then(r=>r.json()).then(d=>{
                   if(d.success) { allResumes=d.resumes; applyFilters(); }
               });
           } else {
@@ -494,7 +533,7 @@
                if(data.success) {
                    alert("✅ 已退件");
                    modal.hide();
-                   fetch('/vendor/api/resumes').then(r=>r.json()).then(d=>{
+                   fetch(getResumeApiUrl()).then(r=>r.json()).then(d=>{
                        if(d.success) { allResumes=d.resumes; applyFilters(); }
                    });
                } else {
@@ -532,7 +571,7 @@
              if(data.success) {
                  alert("留言已更新");
                  bootstrap.Modal.getInstance(document.getElementById("commentModal")).hide();
-                 fetch('/vendor/api/resumes').then(r=>r.json()).then(d=>{
+                 fetch(getResumeApiUrl()).then(r=>r.json()).then(d=>{
                      if(d.success) { allResumes=d.resumes; applyFilters(); }
                  });
              } else {
