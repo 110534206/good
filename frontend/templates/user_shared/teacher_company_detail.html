@@ -561,25 +561,25 @@
           </div>
           <div class="info-grid" style="margin-top: 16px;">
             <div class="info-card" style="cursor: pointer;">
-              <a href="/review_resume?company_id=${COMPANY_ID}" style="display: block; text-decoration: none; color: inherit;">
+              <a href="/vendor_review_resume?company_id=${COMPANY_ID}" style="display: block; text-decoration: none; color: inherit;">
                 <span class="info-label">廠商審核狀態</span>
                 <span class="info-value" style="color: var(--color-muted);">總筆數<span id="totalCount" style="margin-left: 4px;">${state.resumeStats.pending + state.resumeStats.approved + state.resumeStats.rejected}</span></span>
               </a>
             </div>
             <div class="info-card" style="cursor: pointer;">
-              <a href="/review_resume?status=pending&company_id=${COMPANY_ID}" style="display: block; text-decoration: none; color: inherit;">
+              <a href="/vendor_review_resume?status=pending&company_id=${COMPANY_ID}" style="display: block; text-decoration: none; color: inherit;">
                 <span class="info-label">廠商審核狀態</span>
                 <span class="info-value" style="color: var(--color-primary);">待審核<span id="pendingCount" style="margin-left: 4px;">${state.resumeStats.pending}</span></span>
               </a>
             </div>
             <div class="info-card" style="cursor: pointer;">
-              <a href="/review_resume?status=approved&company_id=${COMPANY_ID}" style="display: block; text-decoration: none; color: inherit;">
+              <a href="/vendor_review_resume?status=approved&company_id=${COMPANY_ID}" style="display: block; text-decoration: none; color: inherit;">
                 <span class="info-label">廠商審核狀態</span>
                 <span class="info-value" style="color: var(--color-success);">通過<span id="approvedCount" style="margin-left: 4px;">${state.resumeStats.approved}</span></span>
               </a>
             </div>
             <div class="info-card" style="cursor: pointer;">
-              <a href="/review_resume?status=rejected&company_id=${COMPANY_ID}" style="display: block; text-decoration: none; color: inherit;">
+              <a href="/vendor_review_resume?status=rejected&company_id=${COMPANY_ID}" style="display: block; text-decoration: none; color: inherit;">
                 <span class="info-label">廠商審核狀態</span>
                 <span class="info-value" style="color: var(--color-danger);">退件<span id="rejectedCount" style="margin-left: 4px;">${state.resumeStats.rejected}</span></span>
               </a>

@@ -288,7 +288,7 @@ def _record_history(cursor, preference_id, reviewer_id, action, comment):
     )
 
 
-def _notify_student(cursor, student_id, title, message, link_url="/vendor/resume-review", category="resume"):
+def _notify_student(cursor, student_id, title, message, link_url="/vendor_review_resume", category="resume"):
     """發送通知給學生"""
     cursor.execute(
         """
@@ -585,12 +585,12 @@ def _get_application_access(cursor, preference_id, vendor_id):
 
 # --- 路由定義 ---
 
-@vendor_bp.route("/vendor/resume-review")
+@vendor_bp.route("/vendor_review_resume")
 def vendor_resume_review():
     """廠商履歷審核頁面路由"""
     if "user_id" not in session or session.get("role") != "vendor":
         return render_template("auth/login.html")
-    return render_template("resume/review_resume.html")
+    return render_template("resume/vendor_review_resume.html")
 
 
 @vendor_bp.route("/vendor/api/resumes", methods=["GET"])
@@ -860,6 +860,11 @@ def get_vendor_resumes():
             else:
                 # 如果沒有公司篩選，看學生對 *任何* 相關公司的志願
                 filtered_preferences = student_preferences
+            
+            # 如果廠商有關聯公司，必須有選擇該廠商公司的志願序才能顯示
+            if company_ids and not filtered_preferences:
+                # 如果學生沒有選擇該廠商的任何公司，跳過此履歷
+                continue
             
             # 如果存在志願序，則使用志願序的狀態和公司資訊。
             if filtered_preferences:
@@ -2276,7 +2281,7 @@ def send_notification():
                     student_id, 
                     f"【{company_name}】{'面試通知' if notification_type == 'interview' else '錄取通知'}",
                     content if content else f"您已收到來自 {company_name} 的{'面試通知' if notification_type == 'interview' else '錄取通知'}",
-                    "/vendor/resume-review",
+                    "/vendor_review_resume",
                     "company"
                 )
                 conn.commit()

@@ -3240,7 +3240,16 @@ def review_resume_page():
     if not require_login():
         return redirect('/login')
     
-    # 統一使用整合後的審核頁面
+    # 如果是廠商，重定向到廠商專用的履歷審核頁面
+    if session.get("role") == "vendor":
+        # 保留查詢參數（如 company_id, status 等）
+        query_string = request.query_string.decode('utf-8')
+        redirect_url = '/vendor_review_resume'
+        if query_string:
+            redirect_url += '?' + query_string
+        return redirect(redirect_url)
+    
+    # 統一使用整合後的審核頁面（給指導老師使用）
     return render_template('resume/review_resume.html')
 
 @resume_bp.route('/class_review_resume')
