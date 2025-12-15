@@ -146,7 +146,7 @@
             </tr>
           </thead>
           <tbody id="resumeTableBody">
-            <tr><td colspan="8" style="padding: 14px 16px; text-align: center; color: #64748b;">載入中...</td></tr>
+            <tr><td colspan="7" style="padding: 14px 16px; text-align: center; color: #64748b;">載入中...</td></tr>
           </tbody>
         </table>
       </div>
@@ -385,7 +385,7 @@
       const tbody = document.getElementById("resumeTableBody");
       tbody.innerHTML = "";
       if (resumes.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; color: #64748b; padding: 16px;">目前沒有資料</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; color: #64748b; padding: 16px;">目前沒有資料</td></tr>`;
         document.getElementById("pagination").innerHTML = "";
         return;
       }
@@ -435,7 +435,6 @@
            <td style="padding: 14px 16px;">${escapeHtml(row.name || row.student_name || '—')}</td>
            <td style="padding: 14px 16px;">${row.upload_time || '—'}</td>
            <td style="padding: 14px 16px; max-width: 200px; overflow: hidden; text-overflow: ellipsis;">${escapeHtml(row.original_filename || '—')}</td>
-           <td style="padding: 14px 16px;">${escapeHtml(row.display_company)}</td>
            <td style="padding: 14px 16px;">${escapeHtml(row.display_job)}</td>
            <td style="padding: 14px 16px;">
              <span class="status-badge bg-${statusColor(row.display_status)}">${mapStatus(row.display_status)}</span>
