@@ -628,20 +628,55 @@ def get_vendor_resumes():
             conn.close()
             return jsonify({"success": False, "message": "需要提供 company_id 參數"}), 400
         
-        # 查找該公司對應的廠商 ID
+        # 先驗證該公司是否屬於當前老師管理
         cursor.execute("""
-            SELECT DISTINCT v.user_id
-            FROM vendors v
-            JOIN vendor_companies vc ON v.id = vc.vendor_id
-            WHERE vc.company_id = %s
-            LIMIT 1
+            SELECT advisor_user_id 
+            FROM internship_companies 
+            WHERE id = %s AND status = 'approved'
         """, (company_filter,))
+        company_result = cursor.fetchone()
+        if not company_result:
+            cursor.close()
+            conn.close()
+            return jsonify({"success": False, "message": "找不到該公司或公司未審核通過"}), 404
+        
+        advisor_user_id = company_result.get("advisor_user_id")
+        # 如果公司沒有指導老師，或者指導老師不是當前用戶，拒絕訪問
+        if advisor_user_id is None:
+            cursor.close()
+            conn.close()
+            return jsonify({"success": False, "message": "該公司尚未指派指導老師，無法查看"}), 403
+        if advisor_user_id != session["user_id"]:
+            cursor.close()
+            conn.close()
+            return jsonify({"success": False, "message": f"無權限查看此公司（公司指導老師 ID: {advisor_user_id}, 當前用戶 ID: {session['user_id']}）"}), 403
+        
+        # 查找該老師對應的廠商（通過 teacher_name 匹配）
+        cursor.execute("""
+            SELECT u.name as teacher_name 
+            FROM users u 
+            WHERE u.id = %s
+        """, (advisor_user_id,))
+        teacher_result = cursor.fetchone()
+        if not teacher_result:
+            cursor.close()
+            conn.close()
+            return jsonify({"success": False, "message": "找不到指導老師資料"}), 404
+        
+        teacher_name = teacher_result.get("teacher_name")
+        # 找到所有該老師的廠商（選擇第一個）
+        cursor.execute("""
+            SELECT id 
+            FROM users 
+            WHERE role = 'vendor' AND teacher_name = %s 
+            LIMIT 1
+        """, (teacher_name,))
         vendor_result = cursor.fetchone()
         if not vendor_result:
             cursor.close()
             conn.close()
             return jsonify({"success": False, "message": "找不到該公司對應的廠商"}), 404
-        vendor_id = vendor_result["user_id"]
+        vendor_id = vendor_result["id"]
     else:
         # 廠商直接使用自己的 ID
         vendor_id = session["user_id"]

@@ -221,6 +221,7 @@
 
     document.addEventListener("DOMContentLoaded", () => {
       const urlParams = new URLSearchParams(window.location.search);
+      const targetCompanyId = urlParams.get('company_id');
       const targetStatus = urlParams.get('status');
 
       initMenu();
@@ -234,10 +235,32 @@
           // 廠商專用 API（老師也可以訪問）
           const apiUrl = getResumeApiUrl();
 
+          // 根據角色決定如何獲取職缺列表
+          let positionsPromise;
+          if (userRole === 'vendor') {
+            // 廠商調用 vendor API
+            positionsPromise = fetch('/vendor/api/positions').then(res => res.ok ? res.json() : {success:true, items:[]});
+          } else if (userRole === 'teacher' || userRole === 'ta') {
+            // 老師調用 public API
+            if (targetCompanyId) {
+              // 如果有 company_id，獲取該公司的職缺
+              positionsPromise = fetch(`/api/public/company/${targetCompanyId}`).then(async res => {
+                if (!res.ok) return {success:true, items:[]};
+                const r = await res.json();
+                return {success:true, items: (r.jobs||[]).map(j=>({id:j.id, title:j.title}))};
+              });
+            } else {
+              // 否則獲取所有職缺
+              positionsPromise = fetch('/api/public/positions').then(res => res.ok ? res.json() : {success:true, items:[]});
+            }
+          } else {
+            positionsPromise = Promise.resolve({success:true, items:[]});
+          }
+          
           return Promise.all([
             fetch(apiUrl).then(res => res.ok ? res.json() : {success:false}),
             Promise.resolve({success:true, companies:[]}),
-            fetch('/vendor/api/positions').then(res => res.ok ? res.json() : {success:true, items:[]})
+            positionsPromise
           ]);
         })
         .then(([resumeData, companyData, positionData]) => {
