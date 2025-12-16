@@ -754,7 +754,7 @@ def get_student_info_for_doc(cursor, student_id, semester_id=None):
     # 證照 - 使用新的查詢方式
     cursor.execute("""
         SELECT 
-            sc.id, sc.StuID, sc.cert_code, sc.AcquisitionDate, sc.CertPath,
+            sc.id, sc.StuID, sc.cert_code, cc.job_category AS CertName, sc.AcquisitionDate, sc.CertPath,
             sc.issuer, 
             cc.job_category, cc.level, cc.authority_id, cc.category AS CertCategory,
             ca.name AS authority_name
@@ -1260,6 +1260,7 @@ def get_resume_data():
                 "authority_name": cert.get("authority_name", ""),
                 "issuer": cert.get("issuer", ""),
                 "authority_id": cert.get("authority_id") if "authority_id" in cert else None,
+                "IssuingBody": cert.get("IssuingBody", ""),
                 "CertType": cert.get("CertType", "other"),
                 "acquire_date": formatted_acquire_date,
                 "AcquisitionDate": acquisition_date_str  # 轉換為字符串格式，確保 JSON 序列化正常
@@ -1441,9 +1442,6 @@ def get_job_categories_and_levels():
         if conn:
             conn.close()
 
-# -------------------------
-# API：提交並生成履歷
-# -------------------------
 # -------------------------
 # API：提交並生成履歷
 # -------------------------
@@ -3242,7 +3240,16 @@ def review_resume_page():
     if not require_login():
         return redirect('/login')
     
-    # 統一使用整合後的審核頁面
+    # 如果是廠商，重定向到廠商專用的履歷審核頁面
+    if session.get("role") == "vendor":
+        # 保留查詢參數（如 company_id, status 等）
+        query_string = request.query_string.decode('utf-8')
+        redirect_url = '/vendor_review_resume'
+        if query_string:
+            redirect_url += '?' + query_string
+        return redirect(redirect_url)
+    
+    # 統一使用整合後的審核頁面（給指導老師使用）
     return render_template('resume/review_resume.html')
 
 @resume_bp.route('/class_review_resume')

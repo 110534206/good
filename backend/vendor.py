@@ -288,7 +288,7 @@ def _record_history(cursor, preference_id, reviewer_id, action, comment):
     )
 
 
-def _notify_student(cursor, student_id, title, message, link_url="/vendor/resume-review", category="resume"):
+def _notify_student(cursor, student_id, title, message, link_url="/vendor_review_resume", category="resume"):
     """發送通知給學生"""
     cursor.execute(
         """
@@ -585,12 +585,15 @@ def _get_application_access(cursor, preference_id, vendor_id):
 
 # --- 路由定義 ---
 
-@vendor_bp.route("/vendor/resume-review")
+@vendor_bp.route("/vendor_review_resume")
 def vendor_resume_review():
-    """廠商履歷審核頁面路由"""
-    if "user_id" not in session or session.get("role") != "vendor":
+    """廠商履歷審核頁面路由（允許廠商和老師訪問）"""
+    if "user_id" not in session:
         return render_template("auth/login.html")
-    return render_template("resume/review_resume.html")
+    # 允許 vendor 和 teacher 角色訪問
+    if session.get("role") not in ["vendor", "teacher", "ta"]:
+        return render_template("auth/login.html")
+    return render_template("resume/vendor_review_resume.html")
 
 
 @vendor_bp.route("/vendor/api/resumes", methods=["GET"])
@@ -601,17 +604,82 @@ def get_vendor_resumes():
     1. 老師已通過 (resumes.status = 'approved')。
     2. 履歷會自動進入廠商的學生履歷審核流程。
     3. 廠商介面狀態取決於 student_preferences.status（如果存在），否則為 pending。
+    
+    允許 vendor 和 teacher 角色訪問（老師可以查看廠商審核結果）。
     """
-    if "user_id" not in session or session.get("role") != "vendor":
+    if "user_id" not in session:
+        return jsonify({"success": False, "message": "未授權"}), 403
+    
+    user_role = session.get("role")
+    if user_role not in ["vendor", "teacher", "ta"]:
         return jsonify({"success": False, "message": "未授權"}), 403
 
-    vendor_id = session["user_id"]
     status_filter = request.args.get("status", "").strip()
     company_filter = request.args.get("company_id", type=int)
     keyword_filter = request.args.get("keyword", "").strip()
 
     conn = get_db()
     cursor = conn.cursor(dictionary=True)
+    
+    # 如果是老師，需要根據 company_id 找到對應的廠商
+    if user_role in ["teacher", "ta"]:
+        if not company_filter:
+            cursor.close()
+            conn.close()
+            return jsonify({"success": False, "message": "需要提供 company_id 參數"}), 400
+        
+        # 先驗證該公司是否屬於當前老師管理
+        cursor.execute("""
+            SELECT advisor_user_id 
+            FROM internship_companies 
+            WHERE id = %s AND status = 'approved'
+        """, (company_filter,))
+        company_result = cursor.fetchone()
+        if not company_result:
+            cursor.close()
+            conn.close()
+            return jsonify({"success": False, "message": "找不到該公司或公司未審核通過"}), 404
+        
+        advisor_user_id = company_result.get("advisor_user_id")
+        # 如果公司沒有指導老師，或者指導老師不是當前用戶，拒絕訪問
+        if advisor_user_id is None:
+            cursor.close()
+            conn.close()
+            return jsonify({"success": False, "message": "該公司尚未指派指導老師，無法查看"}), 403
+        if advisor_user_id != session["user_id"]:
+            cursor.close()
+            conn.close()
+            return jsonify({"success": False, "message": f"無權限查看此公司（公司指導老師 ID: {advisor_user_id}, 當前用戶 ID: {session['user_id']}）"}), 403
+        
+        # 查找該老師對應的廠商（通過 teacher_name 匹配）
+        cursor.execute("""
+            SELECT u.name as teacher_name 
+            FROM users u 
+            WHERE u.id = %s
+        """, (advisor_user_id,))
+        teacher_result = cursor.fetchone()
+        if not teacher_result:
+            cursor.close()
+            conn.close()
+            return jsonify({"success": False, "message": "找不到指導老師資料"}), 404
+        
+        teacher_name = teacher_result.get("teacher_name")
+        # 找到所有該老師的廠商（選擇第一個）
+        cursor.execute("""
+            SELECT id 
+            FROM users 
+            WHERE role = 'vendor' AND teacher_name = %s 
+            LIMIT 1
+        """, (teacher_name,))
+        vendor_result = cursor.fetchone()
+        if not vendor_result:
+            cursor.close()
+            conn.close()
+            return jsonify({"success": False, "message": "找不到該公司對應的廠商"}), 404
+        vendor_id = vendor_result["id"]
+    else:
+        # 廠商直接使用自己的 ID
+        vendor_id = session["user_id"]
     try:
         profile, companies, _ = _get_vendor_scope(cursor, vendor_id)
         if not profile:
@@ -860,6 +928,11 @@ def get_vendor_resumes():
             else:
                 # 如果沒有公司篩選，看學生對 *任何* 相關公司的志願
                 filtered_preferences = student_preferences
+            
+            # 如果廠商有關聯公司，必須有選擇該廠商公司的志願序才能顯示
+            if company_ids and not filtered_preferences:
+                # 如果學生沒有選擇該廠商的任何公司，跳過此履歷
+                continue
             
             # 如果存在志願序，則使用志願序的狀態和公司資訊。
             if filtered_preferences:
@@ -2276,7 +2349,7 @@ def send_notification():
                     student_id, 
                     f"【{company_name}】{'面試通知' if notification_type == 'interview' else '錄取通知'}",
                     content if content else f"您已收到來自 {company_name} 的{'面試通知' if notification_type == 'interview' else '錄取通知'}",
-                    "/vendor/resume-review",
+                    "/vendor_review_resume",
                     "company"
                 )
                 conn.commit()

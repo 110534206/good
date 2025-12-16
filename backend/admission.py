@@ -974,8 +974,8 @@ def get_all_admissions():
         params = []
         
         # 根據角色限制查詢範圍
-        if user_role == 'class_teacher' or user_role == 'teacher':
-            # 班導或老師只能看到自己管理的班級
+        if user_role == 'class_teacher':
+            # 班導只能看到自己管理的班級的學生（所有公司）
             cursor.execute("""
                 SELECT class_id FROM classes_teacher 
                 WHERE teacher_id = %s
@@ -988,6 +988,30 @@ def get_all_admissions():
                 params.extend(class_ids)
             else:
                 # 如果沒有管理的班級，返回空結果
+                return jsonify({
+                    "success": True,
+                    "students": [],
+                    "count": 0
+                })
+        elif user_role == 'teacher':
+            # 指導老師只能看到自己指導的學生（通過 teacher_student_relations）
+            # 並且這些學生錄取的必須是自己管理的公司
+            cursor.execute("""
+                SELECT id FROM internship_companies 
+                WHERE advisor_user_id = %s AND status = 'approved'
+            """, (user_id,))
+            teacher_companies = cursor.fetchall()
+            if teacher_companies:
+                company_ids = [tc['id'] for tc in teacher_companies]
+                # 限制：1. teacher_student_relations 中的 teacher_id 必須是當前老師
+                #       2. 學生選擇的公司必須是該老師管理的公司
+                base_query += " AND tsr.teacher_id = %s"
+                params.append(user_id)
+                placeholders = ','.join(['%s'] * len(company_ids))
+                base_query += f" AND sp.company_id IN ({placeholders})"
+                params.extend(company_ids)
+            else:
+                # 如果沒有管理的公司，返回空結果
                 return jsonify({
                     "success": True,
                     "students": [],
