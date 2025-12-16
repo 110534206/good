@@ -7,147 +7,42 @@
   <title>智慧實習平台 | 公告管理</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
   <style>
-    * {
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0;
-    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { padding: 0; font-family: "Noto Sans TC", sans-serif; background: #ffffff; overflow-x: hidden; }
+    header { background: #0454a3; color: white; padding: 1rem 2rem; text-align: center; font-size: 1.5rem; }
 
-    body {
-      padding: 0;
-      font-family: "Noto Sans TC", sans-serif;
-      margin: 0;
-      background: #ffffff;
-      overflow-x: hidden;
-    }
+    /* 選單按鈕 */
+    .top-bar-left { position: fixed; top: 1rem; left: 1rem; z-index: 1100; }
+    .top-bar-left #menu-btn { width: 30px; height: 22px; cursor: pointer; display: flex; flex-direction: column; justify-content: space-between; background: none; border: none; padding: 0; }
+    .top-bar-left #menu-btn span { display: block; width: 100%; height: 3px; background-color: white; border-radius: 2px; transition: all 0.3s ease; }
 
-    header {
-      background: #0454a3;
-      color: white;
-      padding: 1rem 2rem;
-      text-align: center;
-      font-size: 1.5rem;
-    }
-
-    /* 三條線選單按鈕樣式 */
-    .top-bar-left {
-      position: fixed;
-      top: 1rem;
-      left: 1rem;
-      z-index: 1100;
-    }
-
-    .top-bar-left #menu-btn {
-      width: 30px;
-      height: 22px;
-      cursor: pointer;
-      display: flex;
-      flex-direction: column;
-      justify-content: space-between;
-      background: none;
-      border: none;
-      padding: 0;
-    }
-
-    .top-bar-left #menu-btn span {
-      display: block;
-      width: 100%;
-      height: 3px;
-      background-color: white;
-      border-radius: 2px;
-      transition: all 0.3s ease;
-    }
-
-
+    /* 側邊選單 */
     #side-menu {
-      position: fixed;
-      top: 0;
-      left: 0;
-      height: 100vh;
-      width: 320px;
-      max-width: 80vw;
-      background-color: rgba(10, 10, 10, 0.95);
-      backdrop-filter: blur(6px);
-      box-shadow: 3px 0 12px rgb(0 0 0 / 0.7);
-      padding: 2rem 1.5rem;
-      transform: translateX(-100%);
-      transition: transform 0.3s ease-in-out;
-      z-index: 1200;
-      display: flex;
-      flex-direction: column;
-      align-items: flex-start;
-      color: white;
-      user-select: none;
+      position: fixed; top: 0; left: 0; height: 100vh; width: 320px; max-width: 80vw;
+      background-color: rgba(10, 10, 10, 0.95); backdrop-filter: blur(6px);
+      box-shadow: 3px 0 12px rgb(0 0 0 / 0.7); padding: 2rem 1.5rem;
+      transform: translateX(-100%); transition: transform 0.3s ease-in-out;
+      z-index: 1200; display: flex; flex-direction: column; align-items: flex-start;
+      color: white; user-select: none;
     }
+    #side-menu.open { transform: translateX(0); }
+    #close-btn { position: absolute; top: 2rem; right: 1.6rem; font-size: 2.2rem; background: none; border: none; color: white; cursor: pointer; width: 2.5rem; height: 2.5rem; display: flex; align-items: center; justify-content: center; }
+    #side-menu h2 { width: 100%; margin-bottom: 1.5rem; font-weight: 700; font-size: 1.5rem; text-align: left; }
+    #side-menu a { display: block; width: 100%; padding: 0.5rem 0; font-size: 1.1rem; color: #ddd; text-decoration: none; border-radius: 4px; transition: background-color 0.2s ease; }
+    #side-menu a:hover { background-color: rgba(255, 255, 255, 0.15); color: white; }
 
-    #side-menu.open {
-      transform: translateX(0);
-    }
-
-    #close-btn {
-      position: absolute;
-      top: 2rem;
-      right: 1.6rem;
-      font-size: 2.2rem;
-      background: none;
-      border: none;
-      color: white;
-      cursor: pointer;
-      line-height: 1;
-      width: 2.5rem;
-      height: 2.5rem;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
-
-    #side-menu h2 {
-      width: 100%;
-      margin-bottom: 1.5rem;
-      font-weight: 700;
-      font-size: 1.5rem;
-      text-align: left;
-    }
-
-    #side-menu a {
-      display: block;
-      width: 100%;
-      padding: 0.5rem 0;
-      font-size: 1.1rem;
-      color: #ddd;
-      text-decoration: none;
-      border-radius: 4px;
-      transition: background-color 0.2s ease;
-    }
-
-    #side-menu a:hover {
-      background-color: rgba(255, 255, 255, 0.15);
-      color: white;
-    }
-
-    .container {
-      padding: 2rem;
-      margin-top: 2rem;
-    }
-
-    .status-badge {
-      font-size: 0.85rem;
-      padding: 0.2rem 0.5rem;
-      border-radius: 0.4rem;
-    }
-
+    .container { padding: 2rem; margin-top: 2rem; }
+    .status-badge { font-size: 0.85rem; padding: 0.2rem 0.5rem; border-radius: 0.4rem; }
+    th, td { text-align: center; vertical-align: middle; }
   </style>
 </head>
 
 <body>
   <header>公告管理</header>
   <div class="top-bar-left">
-    <div id="menu-btn" title="選單" role="button" tabindex="0">
-      <span></span><span></span><span></span>
-    </div>
+    <div id="menu-btn" title="選單" role="button" tabindex="0"><span></span><span></span><span></span></div>
   </div>
 
-  <!-- 側邊選單 -->
   <nav id="side-menu">
     <h2>功能選單</h2>
     <button id="close-btn">×</button>
@@ -163,7 +58,6 @@
   </nav>
 
   <div class="container">
-
     <div class="mb-3 text-end">
       <button id="btn-new" class="btn btn-primary">➕ 新增公告</button>
     </div>
@@ -176,7 +70,7 @@
           <th>期間</th>
           <th>狀態</th>
           <th>發布</th>
-          <th>建立時間</th>
+          <th>發布時間</th>
           <th>操作</th>
         </tr>
       </thead>
@@ -184,7 +78,6 @@
     </table>
   </div>
 
-  <!-- 公告 Modal -->
   <div class="modal fade" id="annModal" tabindex="-1">
     <div class="modal-dialog">
       <div class="modal-content">
@@ -222,32 +115,17 @@
     </div>
   </div>
 
-  <!-- JS -->
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
   <script>
-    // 選單開關邏輯
+    // 選單控制
     const menuBtn = document.getElementById("menu-btn");
     const sideMenu = document.getElementById("side-menu");
     const closeBtn = document.getElementById("close-btn");
-
-    menuBtn.addEventListener("click", () => {
-      sideMenu.classList.add("open");
-      sideMenu.setAttribute("aria-hidden", "false");
-    });
-
-    closeBtn.addEventListener("click", () => {
-      sideMenu.classList.remove("open");
-      sideMenu.setAttribute("aria-hidden", "true");
-    });
-
-    // 如果點擊 menu 以外的地方就關閉選單
+    menuBtn.addEventListener("click", () => { sideMenu.classList.add("open"); sideMenu.setAttribute("aria-hidden", "false"); });
+    closeBtn.addEventListener("click", () => { sideMenu.classList.remove("open"); sideMenu.setAttribute("aria-hidden", "true"); });
     document.addEventListener("click", (e) => {
-      if (
-        !sideMenu.contains(e.target) &&
-        !menuBtn.contains(e.target)
-      ) {
-        sideMenu.classList.remove("open");
-        sideMenu.setAttribute("aria-hidden", "true");
+      if (!sideMenu.contains(e.target) && !menuBtn.contains(e.target)) {
+        sideMenu.classList.remove("open"); sideMenu.setAttribute("aria-hidden", "true");
       }
     });
 
@@ -266,39 +144,28 @@
       let editId = null;
       let annList = [];
 
-      // ✅ 取得公告列表
       async function loadAnnouncements() {
-        const res = await fetch("/announcement/api/list");
+        const res = await fetch(`/announcement/api/list?t=${new Date().getTime()}`);
         const data = await res.json();
-        if (!data.success) return alert(data.message);
+       if (!data.success) return alert(data.message);
         annList = data.data;
         renderTable();
-      }
+       }
 
-      // 格式化日期時間 (yyyy-mm-dd HH:MM:SS)
       function toMinguoDate(dateString) {
         if (!dateString) return '';
-        
-        // 如果已經是正確格式，直接返回
-        if (/\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/.test(dateString)) {
-          return dateString;
-        }
-        
-        // 處理 ISO 格式或其他格式的日期
+        if (/\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/.test(dateString)) return dateString;
         const date = new Date(dateString);
-        if (isNaN(date.getTime())) return dateString; // 無效日期直接返回原字串
-        
+        if (isNaN(date.getTime())) return dateString;
         const year = date.getFullYear();
         const month = String(date.getMonth() + 1).padStart(2, '0');
         const day = String(date.getDate()).padStart(2, '0');
         const hours = String(date.getHours()).padStart(2, '0');
         const minutes = String(date.getMinutes()).padStart(2, '0');
         const seconds = String(date.getSeconds()).padStart(2, '0');
-        
         return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
       }
 
-      // ✅ 渲染表格
       function renderTable() {
         const now = new Date();
         tableBody.innerHTML = annList.map(a => {
@@ -312,15 +179,23 @@
             else if (now > end) { status = "已結束"; color = "danger"; }
             else { status = "進行中"; color = "success"; }
           }
+          
+          // 顯示邏輯：如果有發布，顯示發布時間；否則顯示灰色「未發布」
+          // 相容性寫法：若後端沒回傳 published_at 但 is_published=true，暫時顯示 created_at
+          let displayTime = '<span class="text-secondary small">未發布</span>';
+          if (a.is_published) {
+             const timeVal = a.published_at || a.created_at;
+             displayTime = toMinguoDate(timeVal);
+          }
 
           return `
             <tr>
               <td>${a.id}</td>
-              <td>${a.title}</td>
+              <td class="text-start">${a.title}</td>
               <td>${toMinguoDate(a.start_time)}<br>${toMinguoDate(a.end_time)}</td>
               <td><span class="badge bg-${color} status-badge">${status}</span></td>
-              <td>${a.is_published ? '✔️' : '❌'}</td>
-              <td>${toMinguoDate(a.created_at)}</td>
+              <td>${a.is_published ? '<span class="text-success">✔</span>' : '<span class="text-danger">✘</span>'}</td>
+              <td>${displayTime}</td>
               <td>
                 <button class="btn btn-sm btn-warning me-1" onclick="editAnnouncement(${a.id})">編輯</button>
                 <button class="btn btn-sm btn-danger" onclick="deleteAnnouncement(${a.id})">刪除</button>
@@ -330,7 +205,6 @@
         }).join("");
       }
 
-      // ✅ 新增公告
       btnNew.addEventListener("click", () => {
         editId = null;
         titleInput.value = "";
@@ -341,7 +215,7 @@
         annModal.show();
       });
 
-      // ✅ 儲存公告（新增或更新）
+      // 儲存邏輯
       btnSave.addEventListener("click", async () => {
         const now = new Date();
         const formattedDate = now.toISOString().slice(0, 19).replace('T', ' ');
@@ -352,45 +226,42 @@
           start_time: startInput.value || null,
           end_time: endInput.value || null,
           is_published: publishCheckbox.checked,
-          created_at: editId ? undefined : formattedDate  // 只有新增時才設定建立時間
+          created_at: editId ? undefined : formattedDate,
+          // 如果勾選發布，帶入當下時間給後端
+          published_at: publishCheckbox.checked ? formattedDate : null
         };
+
         if (!data.title || !data.content) return alert("標題與內容不可空白");
 
         btnSave.disabled = true;
         try {
-          const url = editId
-            ? `/announcement/api/update/${editId}`
-            : `/announcement/api/create`;
-
+          const url = editId ? `/announcement/api/update/${editId}` : `/announcement/api/create`;
           const res = await fetch(url, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(data)
           });
           const result = await res.json();
-          console.log('Save result:', result);
           
           if (result.success) {
-            // 關閉彈出視窗
-            annModal.hide();
+            annModal.hide(); // 1. 關閉視窗
             
-            // 重新載入公告列表
-            await loadAnnouncements();
-            
-            // 顯示成功訊息
+            // 2. 顯示成功訊息 (使用者按下確定後，程式才會繼續往下執行)
             alert(result.message || "公告已儲存");
+
+            // 3. 重新載入列表 (此時使用者已確認，列表更新)
+            await loadAnnouncements();
           } else {
-            alert(result.message || "儲存失敗，請稍後再試");
+            alert(result.message || "儲存失敗");
           }
         } catch (error) {
-          console.error("儲存公告時發生錯誤:", error);
-          alert("儲存失敗，請稍後再試");
+          console.error("Error:", error);
+          alert("儲存失敗");
         } finally {
           btnSave.disabled = false;
         }
       });
 
-      // ✅ 編輯公告
       window.editAnnouncement = function (id) {
         const ann = annList.find(a => a.id === id);
         if (!ann) return;
@@ -403,7 +274,6 @@
         annModal.show();
       };
 
-      // ✅ 刪除公告
       window.deleteAnnouncement = async function (id) {
         if (!confirm("確定要刪除這則公告嗎？")) return;
         try {
@@ -411,14 +281,13 @@
           const result = await res.json();
           if (result.success) {
             alert(result.message);
-            // 重新載入公告列表
             await loadAnnouncements();
           } else {
             alert(result.message || "刪除失敗");
           }
         } catch (error) {
-          console.error("刪除公告時發生錯誤:", error);
-          alert("刪除失敗，請稍後再試");
+          console.error("Error:", error);
+          alert("刪除失敗");
         }
       };
 
@@ -426,5 +295,4 @@
     });
   </script>
 </body>
-
 </html>
