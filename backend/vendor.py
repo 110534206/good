@@ -696,9 +696,9 @@ def get_vendor_resumes():
                 "message": "您尚未關聯任何公司"
             })
 
-        # 步驟 1: 獲取所有老師已通過的最新履歷
-        # 這裡不進行公司/志願序的過濾，只找出所有老師通過的最新履歷
-        # 如果廠商有關聯公司，可以進一步篩選；如果沒有，顯示所有已通過的履歷
+        # 步驟 1: 獲取所有已通過指導老師審核的最新履歷
+        # 只顯示已經被指導老師（role='teacher'）審核通過的履歷
+        # 如果廠商有關聯公司，可以進一步篩選；如果沒有，顯示所有已通過指導老師審核的履歷
         base_query = """
             SELECT
                 r.id, r.user_id AS student_id, u.name AS student_name, u.username AS student_number,
@@ -716,8 +716,14 @@ def get_vendor_resumes():
                 GROUP BY user_id
             ) latest ON latest.user_id = r.user_id AND latest.max_created_at = r.created_at
             
-            -- 這裡只篩選老師已通過的履歷 (r.status='approved')
+            -- 只顯示已經被指導老師（role='teacher'）審核通過的履歷
             WHERE r.status = 'approved'
+            AND r.reviewed_by IS NOT NULL
+            AND EXISTS (
+                SELECT 1 FROM users reviewer
+                WHERE reviewer.id = r.reviewed_by
+                AND reviewer.role = 'teacher'
+            )
         """
         
         # 如果廠商有關聯公司，可以選擇只顯示對這些公司填寫志願序的學生
@@ -790,6 +796,16 @@ def get_vendor_resumes():
                     JOIN internship_companies ic ON sp.company_id = ic.id
                     LEFT JOIN internship_jobs ij ON sp.job_id = ij.id
                     WHERE sp.company_id IN ({preference_placeholders})
+                    -- 只顯示已經被指導老師審核通過的志願序
+                    -- 檢查該學生的履歷是否已經被指導老師（role='teacher'）審核通過
+                    AND EXISTS (
+                        SELECT 1 FROM resumes r
+                        JOIN users reviewer ON r.reviewed_by = reviewer.id
+                        WHERE r.user_id = sp.student_id
+                        AND r.status = 'approved'
+                        AND reviewer.role = 'teacher'
+                        AND r.reviewed_by IS NOT NULL
+                    )
                 """, tuple(company_ids))
             else:
                 # 如果歷史表不存在，使用簡化的查詢
@@ -807,6 +823,16 @@ def get_vendor_resumes():
                     JOIN internship_companies ic ON sp.company_id = ic.id
                     LEFT JOIN internship_jobs ij ON sp.job_id = ij.id
                     WHERE sp.company_id IN ({preference_placeholders})
+                    -- 只顯示已經被指導老師審核通過的志願序
+                    -- 檢查該學生的履歷是否已經被指導老師（role='teacher'）審核通過
+                    AND EXISTS (
+                        SELECT 1 FROM resumes r
+                        JOIN users reviewer ON r.reviewed_by = reviewer.id
+                        WHERE r.user_id = sp.student_id
+                        AND r.status = 'approved'
+                        AND reviewer.role = 'teacher'
+                        AND r.reviewed_by IS NOT NULL
+                    )
                 """, tuple(company_ids))
             
             # 使用字典儲存學生的志願申請，鍵為 student_id
@@ -863,6 +889,16 @@ def get_vendor_resumes():
                     FROM student_preferences sp
                     JOIN internship_companies ic ON sp.company_id = ic.id
                     LEFT JOIN internship_jobs ij ON sp.job_id = ij.id
+                    -- 只顯示已經被指導老師審核通過的志願序
+                    -- 檢查該學生的履歷是否已經被指導老師（role='teacher'）審核通過
+                    WHERE EXISTS (
+                        SELECT 1 FROM resumes r
+                        JOIN users reviewer ON r.reviewed_by = reviewer.id
+                        WHERE r.user_id = sp.student_id
+                        AND r.status = 'approved'
+                        AND reviewer.role = 'teacher'
+                        AND r.reviewed_by IS NOT NULL
+                    )
                 """)
             else:
                 # 如果歷史表不存在，使用簡化的查詢
@@ -879,6 +915,16 @@ def get_vendor_resumes():
                     FROM student_preferences sp
                     JOIN internship_companies ic ON sp.company_id = ic.id
                     LEFT JOIN internship_jobs ij ON sp.job_id = ij.id
+                    -- 只顯示已經被指導老師審核通過的志願序
+                    -- 檢查該學生的履歷是否已經被指導老師（role='teacher'）審核通過
+                    WHERE EXISTS (
+                        SELECT 1 FROM resumes r
+                        JOIN users reviewer ON r.reviewed_by = reviewer.id
+                        WHERE r.user_id = sp.student_id
+                        AND r.status = 'approved'
+                        AND reviewer.role = 'teacher'
+                        AND r.reviewed_by IS NOT NULL
+                    )
                 """)
             for pref in cursor.fetchall() or []:
                 student_id = pref['student_id']

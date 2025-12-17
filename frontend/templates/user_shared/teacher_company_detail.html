@@ -733,45 +733,27 @@
             pending: 0
           };
           
-          // 從廠商審核結果 API 獲取數據，統計廠商的審核狀態
-          const response = await fetch(`/api/public/company/${COMPANY_ID}/vendor-reviewed-students`, {
+          // 使用和 vendor_review_resume 頁面相同的 API 來獲取數據
+          // 這樣可以確保統計數據的一致性
+          const response = await fetch(`/vendor/api/resumes?company_id=${COMPANY_ID}`, {
             headers: { 'Accept': 'application/json' },
             credentials: 'include'
           });
           const result = await response.json();
           
-          // 獲取廠商已審核的學生 ID 集合
-          const vendorReviewedStudentIds = new Set();
-          if (response.ok && result.success && result.students) {
-            // 根據廠商的審核狀態統計
-            result.students.forEach(s => {
-              vendorReviewedStudentIds.add(s.student_id);
-              const status = s.vendor_review_status;
+          if (response.ok && result.success && result.resumes) {
+            // 根據廠商審核狀態統計
+            result.resumes.forEach(r => {
+              const status = r.status || r.application_statuses || r.display_status || 'pending';
               if (status === 'approved') {
                 state.resumeStats.approved++;
               } else if (status === 'rejected') {
                 state.resumeStats.rejected++;
+              } else {
+                // pending 或其他狀態都算作待審核
+                state.resumeStats.pending++;
               }
             });
-          }
-          
-          // 獲取所有選擇該公司的學生履歷，但只計算指導老師已審核通過的
-          const allResumesResponse = await fetch(`/api/get_class_resumes?company_id=${COMPANY_ID}`, {
-            headers: { 'Accept': 'application/json' },
-            credentials: 'include'
-          });
-          const allResumesResult = await allResumesResponse.json();
-          
-          if (allResumesResponse.ok && allResumesResult.success && allResumesResult.resumes) {
-            // 只計算：指導老師已審核通過（status = 'approved'）且廠商尚未審核的數量
-            const pendingResumes = allResumesResult.resumes.filter(r => {
-              // 必須是指導老師已審核通過的履歷
-              const isTeacherApproved = r.status === 'approved';
-              // 且廠商尚未審核（不在 vendor-reviewed-students 中）
-              const isNotVendorReviewed = !vendorReviewedStudentIds.has(r.user_id || r.student_id);
-              return isTeacherApproved && isNotVendorReviewed;
-            });
-            state.resumeStats.pending = pendingResumes.length;
           }
         } catch (error) {
           console.error('載入履歷統計失敗:', error);
