@@ -484,8 +484,8 @@
 
         // 無論狀態為何，保留按鈕
         let btns = `<div style="display:flex; align-items:center;">${dlBtn}`;
-        btns += `<button class="btn btn-sm btn-outline-danger" style="margin-right:4px;" onclick="${rejectClick}">退件</button>`;
-        btns += `<button class="btn btn-sm btn-outline-success" onclick="${approveClick}">完成</button>`;
+        btns += `<button class="btn btn-sm btn-outline-danger" style="margin-right:4px;" onclick="${rejectClick}">未通過</button>`;
+        btns += `<button class="btn btn-sm btn-outline-success" onclick="${approveClick}">通過</button>`;
         btns += `</div>`;
         return btns;
     }
