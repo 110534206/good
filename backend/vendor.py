@@ -6,6 +6,7 @@ from flask import Blueprint, jsonify, render_template, request, session
 
 from config import get_db
 from semester import get_current_semester_id
+from notification import create_notification
 
 vendor_bp = Blueprint('vendor', __name__)
 
@@ -2320,6 +2321,7 @@ def send_notification():
     notification_type = data.get("notification_type", "interview")
     content = data.get("content", "")
     company_name = data.get("company_name", "")  # 快速通知可能直接提供公司名稱
+    company_id = data.get("company_id")  # 用於通知指導老師
 
     # 允許快速通知模式：如果提供了 student_email 和 student_name，可以不需要 student_id
     if not student_id and not (student_email and student_name):
@@ -2390,6 +2392,7 @@ def send_notification():
         # 發送系統通知（如果有 student_id）
         if student_id:
             try:
+                # 通知學生
                 _notify_student(
                     cursor, 
                     student_id, 
@@ -2398,6 +2401,33 @@ def send_notification():
                     "/vendor_review_resume",
                     "company"
                 )
+
+                # 如果有 company_id，嘗試通知該公司的指導老師
+                if company_id and notification_type == "interview":
+                    cursor.execute(
+                        """
+                        SELECT advisor_user_id, company_name
+                        FROM internship_companies
+                        WHERE id = %s
+                        """,
+                        (company_id,),
+                    )
+                    comp_row = cursor.fetchone()
+                    if comp_row and comp_row.get("advisor_user_id"):
+                        teacher_id = comp_row["advisor_user_id"]
+                        teacher_company_name = comp_row.get("company_name") or company_name
+                        # 使用通知模組建立指導老師通知（獨立連線，不影響目前交易）
+                        try:
+                            create_notification(
+                                user_id=teacher_id,
+                                title=f"學生面試通知 - {teacher_company_name}",
+                                message=f"您的學生 {student_name} 已收到 {teacher_company_name} 的面試邀請。",
+                                category="resume",
+                                link_url="/vendor_review_resume",
+                            )
+                        except Exception as teacher_notify_err:
+                            print(f"⚠️ 通知指導老師失敗（不影響主要流程）：{teacher_notify_err}")
+
                 conn.commit()
             except Exception as notify_error:
                 # 系統通知失敗不影響 Email 發送
