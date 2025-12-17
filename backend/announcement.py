@@ -231,11 +231,12 @@ def maybe_push_deadline_reminders(conn, hours_before=24):
 
         link = f"/view_announcement/{row['id']}"
         for u in users:
+            user_id = u['id'] if isinstance(u, dict) else u[0]
             cursor.execute("""
                 INSERT INTO notifications (user_id, title, message, category, link_url, is_read, created_at)
                 VALUES (%s, %s, %s, %s, %s, 0, NOW())
             """, (
-                u[0],
+                user_id,
                 reminder_title,
                 f"作業將於 {row['end_time']} 截止，請盡速完成。",
                 "announcement",

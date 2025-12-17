@@ -31,9 +31,17 @@
     #side-menu a { display: block; width: 100%; padding: 0.5rem 0; font-size: 1.1rem; color: #ddd; text-decoration: none; border-radius: 4px; transition: background-color 0.2s ease; }
     #side-menu a:hover { background-color: rgba(255, 255, 255, 0.15); color: white; }
 
-    .container { padding: 2rem; margin-top: 2rem; }
-    .status-badge { font-size: 0.85rem; padding: 0.2rem 0.5rem; border-radius: 0.4rem; }
-    th, td { text-align: center; vertical-align: middle; }
+    .container { padding: 2rem; margin-top: 2rem; max-width: 100%; overflow-x: auto; }
+    .status-badge { font-size: 0.8rem; padding: 0.25rem 0.5rem; border-radius: 4px; font-weight: 500; }
+    th { font-weight: 600; color: #495057; background-color: #f8f9fa !important; }
+    td { vertical-align: middle; }
+    .table-hover > tbody > tr:hover {
+      background-color: rgba(13, 110, 253, 0.05);
+    }
+    .btn-sm {
+      padding: 0.25rem 0.5rem;
+      font-size: 0.8rem;
+    }
   </style>
 </head>
 
@@ -59,23 +67,25 @@
 
   <div class="container">
     <div class="mb-3 text-end">
-      <button id="btn-new" class="btn btn-primary">➕ 新增公告</button>
+      <button id="btn-new" class="btn btn-primary me-2">➕ 新增公告</button>
+      <button id="btn-new-assignment" class="btn btn-success">📝 新增作業截止時間</button>
     </div>
 
-    <table class="table table-striped align-middle" id="ann-table">
-      <thead class="table-primary">
-        <tr>
-          <th>ID</th>
-          <th>標題</th>
-          <th>期間</th>
-          <th>狀態</th>
-          <th>發布</th>
-          <th>發布時間</th>
-          <th>操作</th>
-        </tr>
-      </thead>
-      <tbody></tbody>
-    </table>
+    <div class="table-responsive">
+      <table class="table table-hover align-middle" id="ann-table" style="min-width: 1200px;">
+        <thead class="table-light">
+          <tr>
+            <th style="width: 25%;">標題</th>
+            <th style="width: 15%;">開始時間</th>
+            <th style="width: 15%;">結束時間</th>
+            <th style="width: 15%;">狀態</th>
+            <th style="width: 15%;">發布狀態</th>
+            <th style="width: 15%;">操作</th>
+          </tr>
+        </thead>
+        <tbody class="table-group-divider"></tbody>
+      </table>
+    </div>
   </div>
 
   <div class="modal fade" id="annModal" tabindex="-1">
@@ -115,6 +125,58 @@
     </div>
   </div>
 
+  <!-- 作業設定 Modal -->
+  <div class="modal fade" id="assignmentModal" tabindex="-1">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">設定作業截止時間</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div class="mb-3">
+            <label class="form-label">作業名稱 <span class="text-danger">*</span></label>
+            <input id="assignment-title" class="form-control" placeholder="例如：期中報告、期末專題">
+          </div>
+          <div class="mb-3">
+            <label class="form-label">作業說明</label>
+            <textarea id="assignment-description" class="form-control" rows="3" placeholder="請詳細說明作業要求"></textarea>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">繳交方式</label>
+            <select id="assignment-type" class="form-select">
+              <option value="file_upload">檔案上傳</option>
+              <option value="text_submission">文字提交</option>
+              <option value="both">兩者皆可</option>
+            </select>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">截止時間 <span class="text-danger">*</span></label>
+            <input id="assignment-deadline" type="datetime-local" class="form-control">
+          </div>
+          <div class="mb-3">
+            <label class="form-label">提醒時間</label>
+            <select id="assignment-reminder" class="form-select">
+              <option value="1">截止前1小時</option>
+              <option value="6">截止前6小時</option>
+              <option value="24" selected>截止前1天</option>
+              <option value="72">截止前3天</option>
+              <option value="168">截止前1週</option>
+            </select>
+          </div>
+          <div class="form-check mb-3">
+            <input id="assignment-publish" class="form-check-input" type="checkbox" checked>
+            <label class="form-check-label">立即發布</label>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+          <button id="btn-save-assignment" type="button" class="btn btn-success">儲存</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
   <script>
     // 選單控制
@@ -133,7 +195,9 @@
       const tableBody = document.querySelector("#ann-table tbody");
       const annModal = new bootstrap.Modal(document.getElementById("annModal"));
       const btnNew = document.getElementById("btn-new");
+      const btnNewAssignment = document.getElementById("btn-new-assignment");
       const btnSave = document.getElementById("btn-save");
+      const btnSaveAssignment = document.getElementById("btn-save-assignment");
 
       const titleInput = document.getElementById("ann-title");
       const contentInput = document.getElementById("ann-content");
@@ -145,12 +209,34 @@
       let annList = [];
 
       async function loadAnnouncements() {
-        const res = await fetch(`/announcement/api/list?t=${new Date().getTime()}`);
-        const data = await res.json();
-       if (!data.success) return alert(data.message);
-        annList = data.data;
-        renderTable();
-       }
+        try {
+          const res = await fetch(`/announcement/api/list?t=${new Date().getTime()}`);
+          const data = await res.json();
+          if (!data.success) throw new Error(data.message);
+
+          // 檢查是否有即將到期的作業
+          const now = new Date();
+          const upcomingAssignments = data.data.filter(item => {
+            if (item.type !== 'assignment' || !item.end_time) return false;
+            const endTime = new Date(item.end_time);
+            const timeDiff = (endTime - now) / (1000 * 60 * 60); // 轉換為小時
+            return timeDiff > 0 && timeDiff <= 24; // 24小時內到期的作業
+          });
+
+          // 如果有即將到期的作業，顯示提醒
+          if (upcomingAssignments.length > 0 && !sessionStorage.getItem('assignmentReminderShown')) {
+            const assignmentTitles = upcomingAssignments.map(a => a.title.replace('[作業] ', '')).join('、');
+            alert(`提醒：以下作業即將截止：${assignmentTitles}`);
+            sessionStorage.setItem('assignmentReminderShown', 'true');
+          }
+
+          annList = data.data;
+          renderTable();
+        } catch (error) {
+          console.error('載入公告失敗:', error);
+          alert('載入公告失敗: ' + error.message);
+        }
+      }
 
       function toMinguoDate(dateString) {
         if (!dateString) return '';
@@ -174,14 +260,18 @@
           let status = "—";
           let color = "secondary";
 
-          if (start && end) {
-            if (now < start) { status = "未開始"; color = "secondary"; }
+          // === 狀態判斷邏輯 ===
+          // 1. 如果資料庫裡的 is_published 是 0 或 false，顯示未發布
+          if (!a.is_published) {
+            status = "未發布";
+            color = "secondary"; 
+          } else if (start && end) {
+            // 2. 如果已發布，再判斷時間
+            if (now < start) { status = "未開始"; color = "secondary"; } 
             else if (now > end) { status = "已結束"; color = "danger"; }
             else { status = "進行中"; color = "success"; }
           }
-          
-          // 顯示邏輯：如果有發布，顯示發布時間；否則顯示灰色「未發布」
-          // 相容性寫法：若後端沒回傳 published_at 但 is_published=true，暫時顯示 created_at
+
           let displayTime = '<span class="text-secondary small">未發布</span>';
           if (a.is_published) {
              const timeVal = a.published_at || a.created_at;
@@ -190,19 +280,107 @@
 
           return `
             <tr>
-              <td>${a.id}</td>
-              <td class="text-start">${a.title}</td>
-              <td>${toMinguoDate(a.start_time)}<br>${toMinguoDate(a.end_time)}</td>
-              <td><span class="badge bg-${color} status-badge">${status}</span></td>
-              <td>${a.is_published ? '<span class="text-success">✔</span>' : '<span class="text-danger">✘</span>'}</td>
+              <td class="text-start">
+                <div class="d-flex align-items-center">
+                  ${a.type === 'assignment' ? '<span class="me-2">📝</span>' : ''}
+                  <div class="d-flex flex-column">
+                    <span class="fw-medium">${a.title}</span>
+                    ${a.content ? `<small class="text-muted text-truncate" style="max-width: 250px;">${a.content.substring(0, 40)}${a.content.length > 40 ? '...' : ''}</small>` : ''}
+                  </div>
+                </div>
+              </td>
+              <td>${a.start_time ? toMinguoDate(a.start_time) : '-'}</td>
+              <td>${a.end_time ? toMinguoDate(a.end_time) : '-'}</td>
+              <td><span class="badge bg-${color}">${status}</span></td>
+              <td>${a.is_published ? '<span class="badge bg-success">已發布</span>' : '<span class="badge bg-secondary">未發布</span>'}</td>
               <td>${displayTime}</td>
               <td>
-                <button class="btn btn-sm btn-warning me-1" onclick="editAnnouncement(${a.id})">編輯</button>
-                <button class="btn btn-sm btn-danger" onclick="deleteAnnouncement(${a.id})">刪除</button>
+                <div class="btn-group btn-group-sm" role="group">
+                  <button class="btn btn-outline-primary" onclick="editAnnouncement(${a.id})" title="編輯">
+                    <i class="bi bi-pencil">✏️</i>
+                  </button>
+                  <button class="btn btn-outline-danger" onclick="deleteAnnouncement(${a.id})" title="刪除">
+                    <i class="bi bi-trash">🗑️</i>
+                  </button>
+                </div>
               </td>
             </tr>
           `;
-        }).join("");
+        }).join('');
+      }
+
+      // 新增作業截止時間按鈕點擊事件
+      btnNewAssignment.addEventListener("click", () => {
+        const assignmentModal = new bootstrap.Modal(document.getElementById('assignmentModal'));
+        // 設置預設截止時間為明天此時
+        const now = new Date();
+        now.setDate(now.getDate() + 1);
+        const tomorrow = now.toISOString().slice(0, 16);
+        document.getElementById('assignment-deadline').value = tomorrow;
+        assignmentModal.show();
+      });
+
+      // 儲存作業截止時間
+      btnSaveAssignment.addEventListener("click", async () => {
+        const title = document.getElementById('assignment-title').value;
+        const description = document.getElementById('assignment-description').value;
+        const type = document.getElementById('assignment-type').value;
+        const deadline = document.getElementById('assignment-deadline').value;
+        const reminderHours = document.getElementById('assignment-reminder').value;
+        const isPublished = document.getElementById('assignment-publish').checked;
+
+        if (!title || !deadline) {
+          alert('請填寫所有必填欄位');
+          return;
+        }
+
+        const assignmentData = {
+          title: `[作業] ${title}`,
+          content: `作業說明：${description}\n\n繳交方式：${getAssignmentTypeText(type)}\n\n請於 ${formatDateTime(deadline)} 前完成繳交`,
+          start_time: new Date().toISOString(),
+          end_time: deadline,
+          is_published: isPublished ? 1 : 0,
+          type: 'assignment',
+          reminder_hours: parseInt(reminderHours)
+        };
+
+        try {
+          const response = await fetch('/announcement/api/create', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(assignmentData)
+          });
+          
+          const result = await response.json();
+          if (result.success) {
+            // 關閉 modal 並重新載入公告列表
+            const modal = bootstrap.Modal.getInstance(document.getElementById('assignmentModal'));
+            modal.hide();
+            loadAnnouncements();
+            
+            // 顯示成功訊息
+            alert('作業截止時間已設定，系統將自動發送提醒！');
+          } else {
+            throw new Error(result.message || '設定失敗');
+          }
+        } catch (error) {
+          console.error('Error:', error);
+          alert('設定失敗: ' + error.message);
+        }
+      });
+
+      function getAssignmentTypeText(type) {
+        const types = {
+          'file_upload': '檔案上傳',
+          'text_submission': '文字提交',
+          'both': '檔案上傳或文字提交'
+        };
+        return types[type] || type;
+      }
+
+      function formatDateTime(dateTimeString) {
+        const date = new Date(dateTimeString);
+        return `${date.getFullYear()}/${(date.getMonth() + 1).toString().padStart(2, '0')}/${date.getDate().toString().padStart(2, '0')} ${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
       }
 
       btnNew.addEventListener("click", () => {
@@ -217,18 +395,12 @@
 
       // 儲存邏輯
       btnSave.addEventListener("click", async () => {
-        const now = new Date();
-        const formattedDate = now.toISOString().slice(0, 19).replace('T', ' ');
-        
         const data = {
           title: titleInput.value.trim(),
           content: contentInput.value.trim(),
           start_time: startInput.value || null,
           end_time: endInput.value || null,
-          is_published: publishCheckbox.checked,
-          created_at: editId ? undefined : formattedDate,
-          // 如果勾選發布，帶入當下時間給後端
-          published_at: publishCheckbox.checked ? formattedDate : null
+          is_published: publishCheckbox.checked ? 1 : 0
         };
 
         if (!data.title || !data.content) return alert("標題與內容不可空白");
@@ -244,12 +416,8 @@
           const result = await res.json();
           
           if (result.success) {
-            annModal.hide(); // 1. 關閉視窗
-            
-            // 2. 顯示成功訊息 (使用者按下確定後，程式才會繼續往下執行)
+            annModal.hide(); 
             alert(result.message || "公告已儲存");
-
-            // 3. 重新載入列表 (此時使用者已確認，列表更新)
             await loadAnnouncements();
           } else {
             alert(result.message || "儲存失敗");
@@ -270,7 +438,10 @@
         contentInput.value = ann.content;
         startInput.value = ann.start_time ? ann.start_time.slice(0, 16) : "";
         endInput.value = ann.end_time ? ann.end_time.slice(0, 16) : "";
-        publishCheckbox.checked = ann.is_published === 1 || ann.is_published === true;
+        
+        // 確保勾選狀態正確（相容數字 1 或 布林 true）
+        publishCheckbox.checked = (ann.is_published === 1 || ann.is_published === true || ann.is_published === "1");
+        
         annModal.show();
       };
 
