@@ -3122,12 +3122,23 @@ def review_resume(resume_id):
         old_status = resume_data['old_status']
 
         # 3. 更新履歷狀態
-        cursor.execute("""
-            UPDATE resumes SET 
-                status=%s, 
-                comment=%s
-            WHERE id=%s
-        """, (status, comment, resume_id))
+        # 如果是指導老師（teacher）審核，需要更新 reviewed_by 欄位
+        if user_role == 'teacher':
+            cursor.execute("""
+                UPDATE resumes SET 
+                    status=%s, 
+                    comment=%s,
+                    reviewed_by=%s,
+                    reviewed_at=NOW()
+                WHERE id=%s
+            """, (status, comment, user_id, resume_id))
+        else:
+            cursor.execute("""
+                UPDATE resumes SET 
+                    status=%s, 
+                    comment=%s
+                WHERE id=%s
+            """, (status, comment, resume_id))
         
         # 4. 取得審核者姓名
         cursor.execute("SELECT name, role FROM users WHERE id = %s", (user_id,))
