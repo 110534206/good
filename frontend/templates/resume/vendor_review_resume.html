@@ -190,6 +190,8 @@
     let currentPreferenceId = null; 
     let currentPage = 1;
     const rowsPerPage = 10;
+    // 紀錄已經按下「面試」的申請（以 preferenceId 或 resumeId 作為 key）
+    const interviewedSet = new Set();
 
     // 定義狀態顏色，approved 對應 success (綠色)
     function statusColor(status) {
@@ -430,15 +432,24 @@
         // 渲染每一行，statusColor(row.display_status) 會決定背景色，mapStatus 決定文字
         const tr = document.createElement('tr');
         tr.style.borderBottom = '1px solid #e2e8f0';
+        const key = (row.preference_id || row.preferenceId || row.id);
+        const hasInterviewed = interviewedSet.has(String(key));
         tr.innerHTML = `
            <td style="padding: 14px 16px;">${row.username || row.student_number || '—'}</td>
            <td style="padding: 14px 16px;">${escapeHtml(row.name || row.student_name || '—')}</td>
            <td style="padding: 14px 16px;">${row.upload_time || '—'}</td>
            <td style="padding: 14px 16px; max-width: 200px; overflow: hidden; text-overflow: ellipsis;">${escapeHtml(row.original_filename || '—')}</td>
-           <td style="padding: 14px 16px;">${escapeHtml(row.display_job)}</td>
-           <td style="padding: 14px 16px;">
-             <span class="status-badge bg-${statusColor(row.display_status)}">${mapStatus(row.display_status)}</span>
-           </td>
+          <td style="padding: 14px 16px;">${escapeHtml(row.display_job)}</td>
+          <td style="padding: 14px 16px;">
+            <div style="display:flex; gap:6px; flex-wrap:wrap; align-items:center;">
+              <span class="status-badge bg-${statusColor(row.display_status)}">${mapStatus(row.display_status)}</span>
+              ${
+                row.display_status === 'pending' && hasInterviewed
+                  ? `<span class="status-badge bg-secondary">面試</span>`
+                  : ''
+              }
+            </div>
+          </td>
            <td style="padding: 14px 16px;">
              ${ renderCommentBtn(row, pid) }
            </td>
@@ -478,16 +489,66 @@
             return dlBtn;
         }
         
+        const key = (pid || row.preference_id || row.preferenceId || row.id);
+        const hasInterviewed = interviewedSet.has(String(key));
+
         // 廠商可以進行審核操作
         const approveClick = `approveResume(${row.id}, ${pid ? `'${pid}'` : 'null'})`;
         const rejectClick = `rejectResume(${row.id}, ${pid ? `'${pid}'` : 'null'})`;
+        const interviewClick = `sendInterview(${row.student_id || 'null'}, ${row.company_id || 'null'}, ${row.id}, ${pid ? `'${pid}'` : 'null'})`;
 
         // 無論狀態為何，保留按鈕
         let btns = `<div style="display:flex; align-items:center;">${dlBtn}`;
+        btns += `<button class="btn btn-sm btn-outline-warning" style="margin-right:4px;" onclick="${interviewClick}">${hasInterviewed ? '已邀面試' : '面試'}</button>`;
         btns += `<button class="btn btn-sm btn-outline-danger" style="margin-right:4px;" onclick="${rejectClick}">退件</button>`;
-        btns += `<button class="btn btn-sm btn-outline-success" onclick="${approveClick}">通過</button>`;
+        if (hasInterviewed) {
+            btns += `<button class="btn btn-sm btn-outline-success" onclick="${approveClick}">通過</button>`;
+        } else {
+            btns += `<button class="btn btn-sm btn-outline-success disabled" disabled title="請先送出面試通知">通過</button>`;
+        }
         btns += `</div>`;
         return btns;
+    }
+
+    // 廠商送出面試通知
+    function sendInterview(studentId, companyId, resumeId, preferenceId) {
+      if (!studentId) {
+        alert("找不到學生資料，無法發送面試通知");
+        return;
+      }
+      const contentRaw = prompt("請輸入要給學生的面試通知內容（可留空，按「取消」則不送出）：");
+      if (contentRaw === null) {
+        // 使用者按下取消，不送出通知
+        return;
+      }
+      const content = contentRaw.trim();
+      const payload = {
+        student_id: studentId,
+        company_id: companyId || null,
+        notification_type: "interview",
+        content: content
+      };
+
+      fetch("/vendor/api/send_notification", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      })
+      .then(res => res.json())
+      .then(data => {
+        if (data.success) {
+          alert("✅ 面試通知已發送給學生和指導老師");
+          const key = String(preferenceId || resumeId);
+          interviewedSet.add(key);
+          applyFilters(); // 重新渲染列表，更新按鈕與狀態顯示
+        } else {
+          alert("發送失敗：" + (data.message || "未知錯誤"));
+        }
+      })
+      .catch(err => {
+        console.error("sendInterview error:", err);
+        alert("發送失敗，請稍後再試");
+      });
     }
 
     function renderPagination(totalItems) {

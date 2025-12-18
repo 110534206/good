@@ -6,7 +6,6 @@ from flask import Blueprint, jsonify, render_template, request, session
 
 from config import get_db
 from semester import get_current_semester_id
-from notification import create_notification
 
 vendor_bp = Blueprint('vendor', __name__)
 
@@ -2320,8 +2319,8 @@ def send_notification():
     student_name = data.get("student_name", "")
     notification_type = data.get("notification_type", "interview")
     content = data.get("content", "")
+    company_id = data.get("company_id")  # 公司 ID
     company_name = data.get("company_name", "")  # 快速通知可能直接提供公司名稱
-    company_id = data.get("company_id")  # 用於通知指導老師
 
     # 允許快速通知模式：如果提供了 student_email 和 student_name，可以不需要 student_id
     if not student_id and not (student_email and student_name):
@@ -2371,8 +2370,18 @@ def send_notification():
             return jsonify({"success": False, "message": "帳號資料不完整"}), 403
         
         vendor_name = profile.get("name", "廠商")
+        # 如果前端提供了 company_id，優先從資料庫獲取公司資訊
+        if company_id:
+            cursor.execute("""
+                SELECT company_name, advisor_user_id 
+                FROM internship_companies 
+                WHERE id = %s
+            """, (company_id,))
+            company_info = cursor.fetchone()
+            if company_info:
+                company_name = company_info.get("company_name", company_name)
         # 如果前端提供了公司名稱，優先使用；否則從資料庫獲取
-        if not company_name:
+        elif not company_name:
             company_name = companies[0].get("company_name", "公司") if companies else "公司"
         
         # 根據通知類型發送不同的郵件
@@ -2392,7 +2401,9 @@ def send_notification():
         # 發送系統通知（如果有 student_id）
         if student_id:
             try:
-                # 通知學生
+                from notification import create_notification
+                
+                # 發送通知給學生
                 _notify_student(
                     cursor, 
                     student_id, 
@@ -2401,37 +2412,38 @@ def send_notification():
                     "/vendor_review_resume",
                     "company"
                 )
-
-                # 如果有 company_id，嘗試通知該公司的指導老師
-                if company_id and notification_type == "interview":
-                    cursor.execute(
-                        """
-                        SELECT advisor_user_id, company_name
-                        FROM internship_companies
-                        WHERE id = %s
-                        """,
-                        (company_id,),
-                    )
-                    comp_row = cursor.fetchone()
-                    if comp_row and comp_row.get("advisor_user_id"):
-                        teacher_id = comp_row["advisor_user_id"]
-                        teacher_company_name = comp_row.get("company_name") or company_name
-                        # 使用通知模組建立指導老師通知（獨立連線，不影響目前交易）
-                        try:
-                            create_notification(
-                                user_id=teacher_id,
-                                title=f"學生面試通知 - {teacher_company_name}",
-                                message=f"您的學生 {student_name} 已收到 {teacher_company_name} 的面試邀請。",
-                                category="resume",
-                                link_url="/vendor_review_resume",
-                            )
-                        except Exception as teacher_notify_err:
-                            print(f"⚠️ 通知指導老師失敗（不影響主要流程）：{teacher_notify_err}")
-
+                
+                # 如果是指定公司的面試通知，也發送通知給該公司的指導老師
+                if notification_type == "interview" and company_id:
+                    cursor.execute("""
+                        SELECT advisor_user_id 
+                        FROM internship_companies 
+                        WHERE id = %s AND advisor_user_id IS NOT NULL
+                    """, (company_id,))
+                    company_info = cursor.fetchone()
+                    
+                    if company_info and company_info.get('advisor_user_id'):
+                        advisor_user_id = company_info['advisor_user_id']
+                        # 獲取學生姓名
+                        cursor.execute("SELECT name FROM users WHERE id = %s", (student_id,))
+                        student_info = cursor.fetchone()
+                        student_name = student_info.get('name', '學生') if student_info else '學生'
+                        
+                        # 發送通知給指導老師
+                        create_notification(
+                            user_id=advisor_user_id,
+                            title=f"【{company_name}】面試通知",
+                            message=f"{student_name} 已收到來自 {company_name} 的面試通知。",
+                            category="company",
+                            link_url="/review_resume"
+                        )
+                        print(f"✅ 已發送面試通知給指導老師 (advisor_user_id: {advisor_user_id})")
+                
                 conn.commit()
             except Exception as notify_error:
                 # 系統通知失敗不影響 Email 發送
                 print(f"⚠️ 系統通知發送失敗（不影響 Email）：{notify_error}")
+                traceback.print_exc()
         
         cursor.close()
         conn.close()
