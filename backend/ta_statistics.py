@@ -1,9 +1,12 @@
-from flask import Blueprint, request, jsonify, session,render_template, send_file
+from flask import Blueprint, request, jsonify, session,render_template,redirect, send_file
 from config import get_db
 from datetime import datetime
 from semester import get_current_semester_code
+from werkzeug.utils import secure_filename
+from openpyxl import Workbook, load_workbook
 import traceback
 import io 
+import os
 
 ta_statistics_bp = Blueprint("ta_statistics_bp", __name__, )
 
@@ -1209,6 +1212,734 @@ def export_statistics():
             cursor.close()
         if 'conn' in locals():
             conn.close()
+
+# -------------------------
+# TA 頁面：上傳核心科目
+# -------------------------
+@ta_statistics_bp.route('/ta/upload_standard_courses')
+def upload_standard_courses_page():
+    if 'user_id' not in session or session.get('role') != 'ta':
+        return redirect('/login')
+    return render_template('ta/upload_standard_courses.html')
+
+# -------------------------
+# 匯入核心科目 (Excel)
+# -------------------------
+@ta_statistics_bp.route('/api/import_standard_courses', methods=['POST'])
+def import_standard_courses():
+    if 'user_id' not in session or session.get('role') != 'ta':
+        return jsonify({"success": False, "message": "未授權"}), 403
+
+    if 'file' not in request.files:
+        return jsonify({"success": False, "message": "缺少文件"}), 400
+
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({"success": False, "message": "未選擇文件"}), 400
+
+    allowed_extensions = {'xlsx', 'xls'}
+    if '.' not in file.filename or file.filename.rsplit('.', 1)[1].lower() not in allowed_extensions:
+        return jsonify({"success": False, "message": "不支援的文件類型"}), 400
+    
+    file_stream = io.BytesIO(file.read())
+    conn = get_db()
+    cursor = conn.cursor()
+    
+    try:
+        workbook = load_workbook(file_stream)
+        sheet = workbook.active
+        
+        headers = [cell.value for cell in sheet[1]]
+        
+        course_name_col = None
+        credits_col = None
+        
+        for i, header in enumerate(headers):
+            if header and ('課程名稱' in str(header) or '科目名稱' in str(header)):
+                course_name_col = i + 1
+            elif header and '學分' in str(header):
+                credits_col = i + 1
+
+        if not course_name_col or not credits_col:
+            return jsonify({"success": False, "message": "Excel 檔案缺少必要的欄位（課程名稱/科目名稱、學分）"}), 400
+
+        # 清空現有核心科目（避免重複或過時資料）
+        cursor.execute("UPDATE standard_courses SET is_active = 0")
+
+        imported_count = 0
+        for row_index in range(2, sheet.max_row + 1):
+            try:
+                course_name = str(sheet.cell(row=row_index, column=course_name_col).value or '').strip()
+                credits_value = str(sheet.cell(row=row_index, column=credits_col).value or '').strip()
+
+                if not course_name or not credits_value:
+                    continue
+
+                # 嘗試將學分轉換為數字
+                try:
+                    credits = float(credits_value)
+                except ValueError:
+                    credits = 0.0 # 無效學分設為 0
+
+                # 檢查是否已存在，如果存在則更新 is_active 和 credits
+                cursor.execute("""
+                    SELECT id FROM standard_courses WHERE course_name = %s LIMIT 1
+                """, (course_name,))
+                existing_course = cursor.fetchone()
+                
+                if existing_course:
+                    cursor.execute("""
+                        UPDATE standard_courses 
+                        SET credits = %s, is_active = 1, updated_at = NOW() 
+                        WHERE id = %s
+                    """, (credits, existing_course['id']))
+                else:
+                    cursor.execute("""
+                        INSERT INTO standard_courses 
+                            (course_name, credits, is_active, uploaded_by, uploaded_at)
+                        VALUES (%s, %s, 1, %s, NOW())
+                    """, (course_name, credits, session['username']))
+                
+                imported_count += 1
+                
+            except Exception as row_e:
+                print(f"⚠️ 處理 Excel 第 {row_index} 行錯誤: {row_e}")
+                continue
+
+        conn.commit()
+        return jsonify({"success": True, "message": f"成功匯入 {imported_count} 筆核心科目資料"})
+        
+    except Exception as e:
+        conn.rollback()
+        print("❌ 匯入核心科目 Excel 錯誤:", e)
+        traceback.print_exc()
+        return jsonify({"success": False, "message": f"伺服器錯誤: {str(e)}"}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+# -------------------------
+# 科助上傳標準課程Excel（預覽）
+# -------------------------
+@ta_statistics_bp.route('/api/ta/preview_standard_courses', methods=['POST'])
+def preview_standard_courses():
+    """科助預覽標準課程Excel文件"""
+    if 'user_id' not in session or session.get('role') != 'ta':
+        return jsonify({"success": False, "message": "未授權"}), 403
+    
+    if 'file' not in request.files:
+        return jsonify({"success": False, "message": "未找到上傳文件"}), 400
+    
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({"success": False, "message": "文件名稱不能為空"}), 400
+    
+    if not file.filename.endswith(('.xlsx', '.xls')):
+        return jsonify({"success": False, "message": "只支援Excel文件(.xlsx, .xls)"}), 400
+    
+    try:
+        file_content = file.read()
+        wb = load_workbook(io.BytesIO(file_content), data_only=False)
+        ws = wb.active
+        
+        def get_cell_value(cell):
+            """獲取單元格值，處理日期格式問題"""
+            if cell is None or cell.value is None:
+                return None
+            value = cell.value
+            if isinstance(value, datetime):
+                month = value.month
+                day = value.day
+                return f"{month}/{day}"
+            return value
+        
+        courses = []
+        for row_idx in range(2, ws.max_row + 1):
+            cell_name = ws.cell(row=row_idx, column=1)
+            cell_credits = ws.cell(row=row_idx, column=2)
+            
+            course_name = get_cell_value(cell_name)
+            credits_raw = cell_credits.value
+            
+            if not course_name or str(course_name).strip() == '':
+                continue
+            
+            course_name = str(course_name).strip()
+            
+            # 處理學分數
+            credits_str = ''
+            if credits_raw is not None:
+                if isinstance(credits_raw, datetime):
+                    month = credits_raw.month
+                    day = credits_raw.day
+                    credits_str = f"{month}/{day}"
+                elif isinstance(credits_raw, str):
+                    credits_str = credits_raw.strip()
+                    if ('2025-' in credits_str or '2024-' in credits_str or '2026-' in credits_str) and ('-' in credits_str):
+                        try:
+                            date_part = credits_str.split()[0] if ' ' in credits_str else credits_str
+                            date_obj = datetime.strptime(date_part, '%Y-%m-%d')
+                            month = date_obj.month
+                            day = date_obj.day
+                            credits_str = f"{month}/{day}"
+                        except:
+                            # 解析失敗，使用format_credits格式化
+                            credits_str = format_credits(credits_str)
+                    else:
+                        # 不是日期格式，使用format_credits格式化
+                        credits_str = format_credits(credits_str)
+                else:
+                    credits_str = format_credits(credits_raw)
+            
+            courses.append({
+                'name': course_name,
+                'credits': credits_str
+            })
+        
+        return jsonify({
+            "success": True,
+            "courses": courses,
+            "message": f"成功解析 {len(courses)} 門課程"
+        })
+    except Exception as e:
+        print("❌ 預覽Excel錯誤:", e)
+        traceback.print_exc()
+        return jsonify({"success": False, "message": f"解析Excel失敗: {str(e)}"}), 500
+
+# -------------------------
+# 輔助函數：格式化學分數（整數顯示為整數，如2而不是2.0）
+# -------------------------
+def format_credits(credits_value):
+    """格式化學分數，整數顯示為整數格式"""
+    if credits_value is None:
+        return ''
+    
+    # 如果是字符串，嘗試解析
+    if isinstance(credits_value, str):
+        credits_value = credits_value.strip()
+        # 如果包含分數符號（如"2/2"），直接返回
+        if '/' in credits_value:
+            return credits_value
+        # 嘗試轉換為數字
+        try:
+            num_value = float(credits_value)
+            # 如果是整數，返回整數格式
+            if num_value.is_integer():
+                return str(int(num_value))
+            return str(num_value)
+        except (ValueError, TypeError):
+            # 無法轉換為數字，返回原字符串
+            return credits_value
+    
+    # 如果是數字類型
+    if isinstance(credits_value, (int, float)):
+        # 如果是整數，返回整數格式
+        if isinstance(credits_value, float) and credits_value.is_integer():
+            return str(int(credits_value))
+        elif isinstance(credits_value, int):
+            return str(credits_value)
+        else:
+            return str(credits_value)
+    
+    # 其他類型，轉換為字符串
+    return str(credits_value)
+
+# -------------------------
+# 科助上傳標準課程Excel（寫入資料庫）
+# -------------------------
+@ta_statistics_bp.route('/api/ta/upload_standard_courses', methods=['POST'])
+def upload_standard_courses():
+    """科助上傳標準課程Excel並寫入standard_courses表"""
+    if 'user_id' not in session or session.get('role') != 'ta':
+        return jsonify({"success": False, "message": "未授權"}), 403
+    
+    if 'file' not in request.files:
+        return jsonify({"success": False, "message": "未找到上傳文件"}), 400
+    
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({"success": False, "message": "文件名稱不能為空"}), 400
+    
+    if not file.filename.endswith(('.xlsx', '.xls')):
+        return jsonify({"success": False, "message": "只支援Excel文件(.xlsx, .xls)"}), 400
+    
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+    
+    try:
+        file_content = file.read()
+        wb = load_workbook(io.BytesIO(file_content), data_only=False)
+        ws = wb.active
+        
+        def get_cell_value(cell):
+            if cell is None or cell.value is None:
+                return None
+            value = cell.value
+            if isinstance(value, datetime):
+                month = value.month
+                day = value.day
+                return f"{month}/{day}"
+            return value
+        
+        courses = []
+        for row_idx in range(2, ws.max_row + 1):
+            cell_name = ws.cell(row=row_idx, column=1)
+            cell_credits = ws.cell(row=row_idx, column=2)
+            
+            course_name = get_cell_value(cell_name)
+            credits_raw = cell_credits.value
+            
+            if not course_name or str(course_name).strip() == '':
+                continue
+            
+            course_name = str(course_name).strip()
+            
+            # 處理學分數
+            credits_str = ''
+            if credits_raw is not None:
+                if isinstance(credits_raw, datetime):
+                    month = credits_raw.month
+                    day = credits_raw.day
+                    credits_str = f"{month}/{day}"
+                elif isinstance(credits_raw, str):
+                    credits_str = credits_raw.strip()
+                    if ('2025-' in credits_str or '2024-' in credits_str or '2026-' in credits_str) and ('-' in credits_str):
+                        try:
+                            date_part = credits_str.split()[0] if ' ' in credits_str else credits_str
+                            date_obj = datetime.strptime(date_part, '%Y-%m-%d')
+                            month = date_obj.month
+                            day = date_obj.day
+                            credits_str = f"{month}/{day}"
+                        except:
+                            # 解析失敗，使用format_credits格式化
+                            credits_str = format_credits(credits_str)
+                    else:
+                        # 不是日期格式，使用format_credits格式化
+                        credits_str = format_credits(credits_str)
+                else:
+                    credits_str = format_credits(credits_raw)
+            
+            courses.append({
+                'name': course_name,
+                'credits': credits_str
+            })
+        
+        if len(courses) == 0:
+            return jsonify({"success": False, "message": "Excel文件中沒有找到課程資料"}), 400
+        
+        # 保存上傳的Excel文件
+        # 獲取項目根目錄（backend的父目錄）
+        project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        upload_base_dir = os.path.join(project_root, 'uploads', 'standard_courses')
+        os.makedirs(upload_base_dir, exist_ok=True)
+        
+        print(f"📁 項目根目錄: {project_root}")
+        print(f"📁 上傳目錄: {upload_base_dir}")
+        
+        # 生成安全的文件名
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        
+        # 先從原始文件名提取擴展名
+        original_filename = file.filename if file.filename else 'upload.xlsx'
+        original_ext = os.path.splitext(original_filename)[1].lower()
+        if not original_ext or original_ext not in ['.xlsx', '.xls']:
+            original_ext = '.xlsx'  # 默認使用 .xlsx
+        
+        # 處理文件名：移除擴展名，使用secure_filename處理，然後重新添加擴展名
+        filename_without_ext = os.path.splitext(original_filename)[0]
+        if not filename_without_ext or filename_without_ext.strip() == '':
+            filename_without_ext = 'upload'
+        
+        safe_basename = secure_filename(filename_without_ext)
+        if not safe_basename or safe_basename.strip() == '':
+            safe_basename = 'upload'
+        
+        # 確保最終文件名包含擴展名
+        safe_filename = safe_basename + original_ext
+        filename = f"{timestamp}_{safe_filename}"
+        
+        # 完整的絕對路徑（用於保存文件）
+        abs_file_path = os.path.join(upload_base_dir, filename)
+        
+        # 相對路徑（用於存儲到數據庫）
+        db_file_path = os.path.join('uploads', 'standard_courses', filename).replace('\\', '/')
+        
+        print(f"📝 文件上傳信息:")
+        print(f"  - 原始文件名: {original_filename}")
+        print(f"  - 提取的擴展名: {original_ext}")
+        print(f"  - 安全的文件名: {safe_filename}")
+        print(f"  - 最終文件名: {filename}")
+        print(f"  - 絕對保存路徑: {abs_file_path}")
+        print(f"  - 數據庫路徑: {db_file_path}")
+        
+        # 保存文件
+        file.seek(0)  # 重置文件指針
+        os.makedirs(os.path.dirname(abs_file_path), exist_ok=True)
+        with open(abs_file_path, 'wb') as f:
+            f.write(file_content)
+        
+        print(f"✅ 文件已保存到: {abs_file_path}")
+        # 驗證文件是否真的保存成功
+        if os.path.exists(abs_file_path):
+            file_size = os.path.getsize(abs_file_path)
+            print(f"✅ 文件保存成功，大小: {file_size} bytes")
+        else:
+            print(f"❌ 警告：文件保存後無法找到！")
+        
+        # 檢查並創建 uploaded_course_templates 表（如果不存在）
+        cursor.execute("SHOW TABLES LIKE 'uploaded_course_templates'")
+        has_template_table = cursor.fetchone() is not None
+        
+        if not has_template_table:
+            # 創建 uploaded_course_templates 表
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS uploaded_course_templates (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    file_path VARCHAR(500) NOT NULL,
+                    uploaded_by INT NULL,
+                    uploaded_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    INDEX idx_uploaded_at (uploaded_at),
+                    INDEX idx_file_path (file_path)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+            """)
+            print("✅ 已創建 uploaded_course_templates 表")
+        
+        # 先將舊資料標記為非活躍（不直接刪除，保留歷史）
+        cursor.execute("UPDATE standard_courses SET is_active = 0")
+        
+        # 重新插入Excel中的課程（不包含文件路徑）
+        insert_count = 0
+        for idx, course in enumerate(courses, 1):
+            try:
+                cursor.execute("""
+                    INSERT INTO standard_courses (course_name, credits, order_index, is_active, created_at)
+                    VALUES (%s, %s, %s, 1, NOW())
+                """, (course['name'], course['credits'], idx))
+                insert_count += 1
+            except Exception as e:
+                print(f"⚠️ 插入課程失敗: {course['name']}, 錯誤: {e}")
+                # 繼續插入其他課程，不中斷
+                continue
+        
+        # 將文件路徑保存到 uploaded_course_templates 表
+        template_id = None
+        try:
+            cursor.execute("""
+                INSERT INTO uploaded_course_templates (file_path, uploaded_by, uploaded_at)
+                VALUES (%s, %s, NOW())
+            """, (db_file_path, session['user_id']))
+            cursor.execute("SELECT LAST_INSERT_ID() as id")
+            result = cursor.fetchone()
+            if result:
+                template_id = result['id']
+            print(f"✅ 已保存文件路徑到 uploaded_course_templates 表，ID: {template_id}, 文件路徑: {db_file_path}, 課程數: {insert_count}")
+        except Exception as e:
+            print(f"⚠️ 保存文件路徑失敗: {e}")
+            traceback.print_exc()
+        
+        print(f"✅ 已插入 {insert_count} 門課程到 standard_courses 表")
+        
+        # 確保事務提交
+        try:
+            conn.commit()
+            print(f"✅ 成功更新 standard_courses 表，插入 {insert_count} 門課程")
+            print(f"✅ 文件已保存到: {abs_file_path}")
+            
+            # 驗證更新是否成功
+            cursor.execute("SELECT COUNT(*) as count FROM standard_courses WHERE is_active = 1")
+            verify_result = cursor.fetchone()
+            active_count = verify_result['count'] if verify_result else 0
+            print(f"✅ 驗證：standard_courses 表中 is_active=1 的記錄數: {active_count}")
+            
+            # 驗證文件路徑是否正確保存到 uploaded_course_templates 表
+            if template_id:
+                cursor.execute("SELECT * FROM uploaded_course_templates WHERE id = %s", (template_id,))
+                verify_template = cursor.fetchone()
+                if verify_template:
+                    print(f"✅ 驗證：文件路徑已保存到 uploaded_course_templates 表，ID: {template_id}, 文件路徑: {verify_template.get('file_path', 'N/A')}")
+                else:
+                    print(f"⚠️ 警告：uploaded_course_templates 表記錄ID {template_id} 未找到")
+            
+            return jsonify({
+                "success": True,
+                "count": insert_count,
+                "message": f"成功上傳 {insert_count} 門課程",
+                "file_path": db_file_path
+            })
+        except Exception as commit_error:
+            conn.rollback()
+            print(f"❌ 提交事務失敗: {commit_error}")
+            traceback.print_exc()
+            raise commit_error
+    except Exception as e:
+        conn.rollback()
+        print("❌ 上傳標準課程錯誤:", e)
+        traceback.print_exc()
+        return jsonify({"success": False, "message": f"上傳失敗: {str(e)}"}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+# -------------------------
+# 科助取得標準課程上傳歷史
+# -------------------------
+@ta_statistics_bp.route('/api/ta/get_standard_courses_history', methods=['GET'])
+def get_standard_courses_history():
+    """取得標準課程上傳歷史記錄"""
+    if 'user_id' not in session or session.get('role') != 'ta':
+        return jsonify({"success": False, "message": "未授權"}), 403
+    
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+    
+    try:
+        # 檢查 uploaded_course_templates 表是否存在
+        cursor.execute("SHOW TABLES LIKE 'uploaded_course_templates'")
+        has_template_table = cursor.fetchone() is not None
+        
+        if has_template_table:
+            # 從 uploaded_course_templates 表獲取歷史記錄
+            # 並從 standard_courses 表計算每次上傳的課程數量（根據上傳日期匹配）
+            cursor.execute("""
+                SELECT 
+                    t.id,
+                    t.file_path,
+                    t.uploaded_by,
+                    t.uploaded_at,
+                    COALESCE(COUNT(DISTINCT s.id), 0) as course_count
+                FROM uploaded_course_templates t
+                LEFT JOIN standard_courses s ON DATE(s.created_at) = DATE(t.uploaded_at)
+                    AND s.is_active = 1
+                GROUP BY t.id, t.file_path, t.uploaded_by, t.uploaded_at
+                ORDER BY t.uploaded_at DESC
+                LIMIT 20
+            """)
+            history = cursor.fetchall()
+            # 調試：打印查詢結果
+            print(f"🔍 從 uploaded_course_templates 表查詢到 {len(history)} 筆歷史記錄")
+            for record in history:
+                print(f"  - ID: {record.get('id')}, 文件路徑: {record.get('file_path', 'NULL')}, 課程數: {record.get('course_count', 0)}")
+        else:
+            # 如果表不存在，返回空列表
+            print("⚠️ uploaded_course_templates 表不存在")
+            history = []
+        
+        return jsonify({
+            "success": True,
+            "history": history
+        })
+    except Exception as e:
+        print("❌ 取得上傳歷史錯誤:", e)
+        traceback.print_exc()
+        return jsonify({"success": False, "message": f"取得歷史記錄失敗: {str(e)}"}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+# -------------------------
+# 科助下載標準課程Excel文件
+# -------------------------
+@ta_statistics_bp.route('/api/ta/download_standard_course_file/<int:history_id>', methods=['GET'])
+def download_standard_course_file(history_id):
+    """下載上傳的Excel文件（從uploaded_course_templates表）"""
+    if 'user_id' not in session or session.get('role') != 'ta':
+        return jsonify({"success": False, "message": "未授權"}), 403
+    
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+    
+    try:
+        # 從 uploaded_course_templates 表獲取文件路徑
+        cursor.execute("""
+            SELECT file_path 
+            FROM uploaded_course_templates 
+            WHERE id = %s
+        """, (history_id,))
+        record = cursor.fetchone()
+        
+        if not record or not record.get('file_path'):
+            return jsonify({"success": False, "message": "找不到文件"}), 404
+        
+        file_path = record.get('file_path')
+        
+        # 處理相對路徑 - 從項目根目錄開始
+        if not os.path.isabs(file_path):
+            # 獲取項目根目錄（backend的父目錄）
+            project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            abs_file_path = os.path.join(project_root, file_path)
+        else:
+            abs_file_path = file_path
+        
+        # 標準化路徑分隔符
+        # abs_file_path = os.path.normpath(abs_file_path)
+        
+        print(f"🔍 嘗試下載文件: {abs_file_path}")
+        
+        # 檢查文件是否存在，如果不存在，嘗試多種方式查找
+        if not os.path.exists(abs_file_path):
+            print(f"⚠️ 文件不存在，嘗試查找相似文件...")
+            
+            # 方法1：嘗試添加 .xlsx 擴展名
+            abs_file_path_xlsx = abs_file_path + '.xlsx'
+            abs_file_path_xls = abs_file_path + '.xls'
+            
+            if os.path.exists(abs_file_path_xlsx):
+                print(f"✅ 找到文件（添加.xlsx後）: {abs_file_path_xlsx}")
+                abs_file_path = abs_file_path_xlsx
+            elif os.path.exists(abs_file_path_xls):
+                print(f"✅ 找到文件（添加.xls後）: {abs_file_path_xls}")
+                abs_file_path = abs_file_path_xls
+            else:
+                # 方法2：在目錄中查找以該文件名開頭的文件
+                file_dir = os.path.dirname(abs_file_path)
+                file_basename = os.path.basename(abs_file_path)
+                
+                if os.path.isdir(file_dir):
+                    print(f"🔍 在目錄中搜索: {file_dir}, 文件名前綴: {file_basename}")
+                    try:
+                        files_in_dir = os.listdir(file_dir)
+                        print(f"📁 目錄中的文件: {files_in_dir}")
+                        
+                        # 查找以該文件名開頭的Excel文件
+                        matching_files = [f for f in files_in_dir 
+                                        if f.startswith(file_basename) 
+                                        and (f.lower().endswith('.xlsx') or f.lower().endswith('.xls'))]
+                        
+                        if matching_files:
+                            # 找到匹配的文件，使用第一個
+                            found_file = matching_files[0]
+                            abs_file_path = os.path.join(file_dir, found_file)
+                            print(f"✅ 找到匹配文件: {abs_file_path}")
+                        else:
+                            # 方法3：查找所有Excel文件，看是否有相似的時間戳
+                            excel_files = [f for f in files_in_dir 
+                                         if f.lower().endswith('.xlsx') or f.lower().endswith('.xls')]
+                            print(f"📊 目錄中的Excel文件: {excel_files}")
+                            
+                            # 嘗試提取時間戳部分進行匹配
+                            if file_basename and '_' in file_basename:
+                                timestamp_part = file_basename.split('_')[0] + '_' + file_basename.split('_')[1] if len(file_basename.split('_')) >= 2 else file_basename
+                                matching_by_timestamp = [f for f in excel_files if timestamp_part in f]
+                                
+                                if matching_by_timestamp:
+                                    abs_file_path = os.path.join(file_dir, matching_by_timestamp[0])
+                                    print(f"✅ 根據時間戳找到文件: {abs_file_path}")
+                                else:
+                                    print(f"❌ 無法找到匹配的文件")
+                                    print(f"❌ 嘗試過: {abs_file_path}")
+                                    print(f"❌ 嘗試過: {abs_file_path_xlsx}")
+                                    print(f"❌ 嘗試過: {abs_file_path_xls}")
+                                    return jsonify({"success": False, "message": f"文件不存在: {os.path.basename(file_path)}"}), 404
+                            else:
+                                print(f"❌ 無法找到匹配的文件")
+                                print(f"❌ 嘗試過: {abs_file_path}")
+                                print(f"❌ 嘗試過: {abs_file_path_xlsx}")
+                                print(f"❌ 嘗試過: {abs_file_path_xls}")
+                                return jsonify({"success": False, "message": f"文件不存在: {os.path.basename(file_path)}"}), 404
+                    except Exception as e:
+                        print(f"❌ 搜索文件時發生錯誤: {e}")
+                        return jsonify({"success": False, "message": f"搜索文件失敗: {str(e)}"}), 500
+                else:
+                    print(f"❌ 目錄不存在: {file_dir}")
+                    return jsonify({"success": False, "message": f"目錄不存在: {file_dir}"}), 404
+        
+        # 獲取原始文件名（從路徑中提取）
+        original_filename = os.path.basename(file_path)
+        # 如果文件名包含時間戳，嘗試提取原始文件名
+        if '_' in original_filename and original_filename[0].isdigit():
+            # 檢查是否是時間戳格式 (YYYYMMDD_HHMMSS_)
+            parts = original_filename.split('_', 2)
+            if len(parts) >= 3 and len(parts[0]) == 8 and len(parts[1]) == 6:
+                original_filename = '_'.join(parts[2:])  # 保留後面的部分
+        
+        # 確保文件名有正確的擴展名（從實際文件路徑獲取）
+        actual_filename = os.path.basename(abs_file_path)
+        if actual_filename.lower().endswith('.xlsx'):
+            ext = '.xlsx'
+        elif actual_filename.lower().endswith('.xls'):
+            ext = '.xls'
+        else:
+            ext = '.xlsx'  # 默認使用 .xlsx
+        
+        # 如果原始文件名沒有擴展名，添加擴展名
+        if not original_filename.lower().endswith(('.xlsx', '.xls')):
+            original_filename = original_filename + ext
+        elif not original_filename.lower().endswith(ext):
+            # 如果擴展名不匹配，使用實際文件的擴展名
+            original_filename = os.path.splitext(original_filename)[0] + ext
+        
+        # 設置正確的MIME類型
+        if original_filename.lower().endswith('.xlsx'):
+            mimetype = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        elif original_filename.lower().endswith('.xls'):
+            mimetype = 'application/vnd.ms-excel'
+        else:
+            mimetype = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        
+        print(f"✅ 下載文件: {abs_file_path}, 文件名: {original_filename}, MIME: {mimetype}")
+        return send_file(abs_file_path, as_attachment=True, download_name=original_filename, mimetype=mimetype)
+    except Exception as e:
+        print(f"❌ 下載文件錯誤: {e}")
+        traceback.print_exc()
+        return jsonify({"success": False, "message": f"下載失敗: {str(e)}"}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+# -------------------------
+# 科助刪除標準課程上傳記錄
+# -------------------------
+@ta_statistics_bp.route('/api/ta/delete_standard_course_history/<int:history_id>', methods=['DELETE'])
+def delete_standard_course_history(history_id):
+    """刪除上傳歷史記錄及對應的文件（從uploaded_course_templates表）"""
+    if 'user_id' not in session or session.get('role') != 'ta':
+        return jsonify({"success": False, "message": "未授權"}), 403
+    
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+    
+    try:
+        # 從 uploaded_course_templates 表獲取文件路徑
+        cursor.execute("""
+            SELECT file_path
+            FROM uploaded_course_templates 
+            WHERE id = %s
+        """, (history_id,))
+        record = cursor.fetchone()
+        
+        if not record:
+            return jsonify({"success": False, "message": "找不到記錄"}), 404
+        
+        file_path = record.get('file_path')
+        
+        # 刪除文件（如果存在）
+        if file_path:
+            abs_file_path = os.path.abspath(file_path)
+            if os.path.exists(abs_file_path):
+                try:
+                    os.remove(abs_file_path)
+                    print(f"✅ 已刪除文件: {abs_file_path}")
+                except Exception as e:
+                    print(f"⚠️ 刪除文件失敗: {e}")
+        
+        # 刪除 uploaded_course_templates 表中的記錄
+        cursor.execute("DELETE FROM uploaded_course_templates WHERE id = %s", (history_id,))
+        conn.commit()
+        
+        print(f"✅ 已刪除 uploaded_course_templates 表記錄，ID: {history_id}")
+        
+        return jsonify({
+            "success": True,
+            "message": "已成功刪除記錄"
+        })
+    except Exception as e:
+        conn.rollback()
+        print(f"❌ 刪除記錄錯誤: {e}")
+        traceback.print_exc()
+        return jsonify({"success": False, "message": f"刪除失敗: {str(e)}"}), 500
+    finally:
+        cursor.close()
+        conn.close()    
 
 # --------------------------------
 # 實習廠商管理頁面

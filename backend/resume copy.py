@@ -15,6 +15,7 @@ from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
 from openpyxl.utils import get_column_letter
 import io
 
+resume_bp = Blueprint("resume_bp", __name__)
 
 # --- 檔案路徑設定 ---
 BASE_UPLOAD_DIR = r"C:\Featured\good\backend"
@@ -89,9 +90,6 @@ def safe_create_inline_image(doc, file_path, width, description=""):
         print(f"⚠️ {description}圖片載入錯誤 (路徑: {file_path}): {e}")
         traceback.print_exc()
         return None
-
-
-resume_bp = Blueprint("resume_bp", __name__)
 
 # -------------------------
 # 輔助函數：格式化學分數（整數顯示為整數，如2而不是2.0）
@@ -754,8 +752,8 @@ def get_student_info_for_doc(cursor, student_id, semester_id=None):
     # 證照 - 使用新的查詢方式
     cursor.execute("""
         SELECT 
-            sc.id, sc.StuID, sc.cert_code, sc.CertName, sc.AcquisitionDate, sc.CertPath,
-            sc.issuer, sc.IssuingBody, sc.CertType, 
+            sc.id, sc.StuID, sc.cert_code, cc.job_category AS CertName, sc.AcquisitionDate, sc.CertPath,
+            sc.issuer, 
             cc.job_category, cc.level, cc.authority_id, cc.category AS CertCategory,
             ca.name AS authority_name
         FROM student_certifications sc
@@ -2771,111 +2769,6 @@ def upload_course_grade_excel():
         conn.close()
 
 # -------------------------
-# 匯入核心科目 (Excel)
-# -------------------------
-@resume_bp.route('/api/import_standard_courses', methods=['POST'])
-def import_standard_courses():
-    if 'user_id' not in session or session.get('role') != 'ta':
-        return jsonify({"success": False, "message": "未授權"}), 403
-
-    if 'file' not in request.files:
-        return jsonify({"success": False, "message": "缺少文件"}), 400
-
-    file = request.files['file']
-    if file.filename == '':
-        return jsonify({"success": False, "message": "未選擇文件"}), 400
-
-    allowed_extensions = {'xlsx', 'xls'}
-    if '.' not in file.filename or file.filename.rsplit('.', 1)[1].lower() not in allowed_extensions:
-        return jsonify({"success": False, "message": "不支援的文件類型"}), 400
-    
-    file_stream = io.BytesIO(file.read())
-    conn = get_db()
-    cursor = conn.cursor()
-    
-    try:
-        workbook = load_workbook(file_stream)
-        sheet = workbook.active
-        
-        headers = [cell.value for cell in sheet[1]]
-        
-        course_name_col = None
-        credits_col = None
-        
-        for i, header in enumerate(headers):
-            if header and ('課程名稱' in str(header) or '科目名稱' in str(header)):
-                course_name_col = i + 1
-            elif header and '學分' in str(header):
-                credits_col = i + 1
-
-        if not course_name_col or not credits_col:
-            return jsonify({"success": False, "message": "Excel 檔案缺少必要的欄位（課程名稱/科目名稱、學分）"}), 400
-
-        # 清空現有核心科目（避免重複或過時資料）
-        cursor.execute("UPDATE standard_courses SET is_active = 0")
-
-        imported_count = 0
-        for row_index in range(2, sheet.max_row + 1):
-            try:
-                course_name = str(sheet.cell(row=row_index, column=course_name_col).value or '').strip()
-                credits_value = str(sheet.cell(row=row_index, column=credits_col).value or '').strip()
-
-                if not course_name or not credits_value:
-                    continue
-
-                # 嘗試將學分轉換為數字
-                try:
-                    credits = float(credits_value)
-                except ValueError:
-                    credits = 0.0 # 無效學分設為 0
-
-                # 檢查是否已存在，如果存在則更新 is_active 和 credits
-                cursor.execute("""
-                    SELECT id FROM standard_courses WHERE course_name = %s LIMIT 1
-                """, (course_name,))
-                existing_course = cursor.fetchone()
-                
-                if existing_course:
-                    cursor.execute("""
-                        UPDATE standard_courses 
-                        SET credits = %s, is_active = 1, updated_at = NOW() 
-                        WHERE id = %s
-                    """, (credits, existing_course['id']))
-                else:
-                    cursor.execute("""
-                        INSERT INTO standard_courses 
-                            (course_name, credits, is_active, uploaded_by, uploaded_at)
-                        VALUES (%s, %s, 1, %s, NOW())
-                    """, (course_name, credits, session['username']))
-                
-                imported_count += 1
-                
-            except Exception as row_e:
-                print(f"⚠️ 處理 Excel 第 {row_index} 行錯誤: {row_e}")
-                continue
-
-        conn.commit()
-        return jsonify({"success": True, "message": f"成功匯入 {imported_count} 筆核心科目資料"})
-        
-    except Exception as e:
-        conn.rollback()
-        print("❌ 匯入核心科目 Excel 錯誤:", e)
-        traceback.print_exc()
-        return jsonify({"success": False, "message": f"伺服器錯誤: {str(e)}"}), 500
-    finally:
-        cursor.close()
-        conn.close()
-
-# -------------------------
-# TA 頁面：上傳核心科目
-# -------------------------
-@resume_bp.route('/ta/upload_standard_courses')
-def upload_standard_courses_page():
-    if 'user_id' not in session or session.get('role') != 'ta':
-        return redirect('/login')
-    return render_template('ta/upload_standard_courses.html')
-
-# -------------------------
 # API：取得公司職缺列表 (for 履歷填寫頁面)
 # -------------------------
 @resume_bp.route('/api/company_positions', methods=['GET'])
@@ -2921,7 +2814,7 @@ def get_company_positions():
         return jsonify({"success": False, "message": "無法取得公司職缺列表"}), 500
 
 # ----------------------------------------------------
-# 【功能修正】新增 API：取得待審核履歷列表 (for 老師/主任/班導師)
+# 取得待審核履歷列表 (for 老師/主任/班導師)
 # ----------------------------------------------------
 
 # 輔助函數：獲取主任所屬部門的 ID (請根據您的資料庫結構調整)
@@ -2940,7 +2833,9 @@ def get_director_department(cursor, user_id):
         print(f"Error fetching director department: {e}")
         return None
 
-
+# ----------------------------------------------------
+# 取得待審核履歷列表 (for 指導老師)
+# ----------------------------------------------------
 @resume_bp.route('/api/teacher_review_resumes', methods=['GET'])
 def get_teacher_review_resumes():
     # 確保有權限 (teacher, director, class_teacher, admin) 才能進入
@@ -3077,6 +2972,123 @@ def get_teacher_review_resumes():
         cursor.close()
         conn.close()
 
+
+# -------------------------
+# API - 更新履歷欄位（comment, note）（含權限檢查）
+# -------------------------
+@resume_bp.route('/api/update_resume_field', methods=['POST'])
+def update_resume_field():
+    try:
+        if not require_login():
+            return jsonify({"success": False, "message": "未授權"}), 403
+
+        data = request.get_json() or {}
+        resume_id = data.get('resume_id')
+        field = data.get('field')
+        value = (data.get('value') or '').strip()
+
+        allowed_fields = {
+            "comment": "comment",
+            "note": "note"
+        }
+
+        try:
+            resume_id = int(resume_id)
+        except (TypeError, ValueError):
+            return jsonify({"success": False, "message": "resume_id 必須是數字"}), 400
+
+        if field not in allowed_fields:
+            return jsonify({"success": False, "message": "參數錯誤"}), 400
+
+        conn = get_db()
+        cursor = conn.cursor(dictionary=True)
+
+        # 先找出 resume 的 owner
+        cursor.execute("SELECT user_id FROM resumes WHERE id = %s", (resume_id,))
+        r = cursor.fetchone()
+        if not r:
+            cursor.close()
+            conn.close()
+            return jsonify({"success": False, "message": "找不到該履歷"}), 404
+
+        owner_id = r['user_id']
+
+        # 取得使用者角色與 id
+        role = session.get('role')
+        user_id = session['user_id']
+
+        if role == "class_teacher":
+            if not teacher_manages_class(cursor, user_id, get_user_by_id(cursor, owner_id)['class_id']):
+                cursor.close()
+                conn.close()
+                return jsonify({"success": False, "message": "沒有權限修改該履歷"}), 403
+
+        elif role == "director":
+            director_dept = get_director_department(cursor, user_id)
+            cursor.execute("SELECT c.department FROM classes c JOIN users u ON u.class_id = c.id WHERE u.id = %s", (owner_id,))
+            target_dept_row = cursor.fetchone()
+            if not director_dept or not target_dept_row or director_dept != target_dept_row.get('department'):
+                cursor.close()
+                conn.close()
+                return jsonify({"success": False, "message": "沒有權限修改該履歷"}), 403
+
+        elif role == "admin":
+            pass  # admin 可以
+
+        elif role == "student":
+            # 學生只能修改自己的履歷，且只能修改 note 欄位
+            if user_id != owner_id:
+                cursor.close()
+                conn.close()
+                return jsonify({"success": False, "message": "學生只能修改自己的履歷"}), 403
+            if field != "note":
+                cursor.close()
+                conn.close()
+                return jsonify({"success": False, "message": "學生只能修改備註欄位"}), 403
+
+        else:
+            # ta 或其他角色不可修改
+            cursor.close()
+            conn.close()
+            return jsonify({"success": False, "message": "角色無權限修改"}), 403
+
+        # 更新欄位
+        sql = f"UPDATE resumes SET {allowed_fields[field]} = %s, updated_at = NOW() WHERE id = %s"
+        cursor.execute(sql, (value, resume_id))
+        conn.commit()
+        cursor.close()
+        conn.close()
+        return jsonify({"success": True, "field": field, "resume_id": resume_id})
+
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"success": False, "message": f"伺服器錯誤: {str(e)}"}), 500
+
+# -------------------------
+# API - 查詢履歷狀態
+# -------------------------
+@resume_bp.route('/api/resume_status', methods=['GET'])
+def resume_status():
+    resume_id = request.args.get('resume_id')
+    if not resume_id:
+        return jsonify({"success": False, "message": "缺少 resume_id"}), 400
+
+    try:
+        conn = get_db()
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute("SELECT status FROM resumes WHERE id = %s", (resume_id,))
+        resume = cursor.fetchone()
+        cursor.close()
+        conn.close()
+
+        if not resume:
+            return jsonify({"success": False, "message": "找不到該履歷"}), 404
+
+        return jsonify({"success": True, "status": resume['status']})
+
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"success": False, "message": f"伺服器錯誤: {str(e)}"}), 500
 
 # -------------------------
 # API - 審核履歷 (退件/通過)
@@ -3229,7 +3241,6 @@ def review_resume(resume_id):
     finally:
         cursor.close()
         conn.close()
-
 
 # -------------------------
 # 頁面路由
