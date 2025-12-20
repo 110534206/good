@@ -21,6 +21,8 @@ ACTION_TEXT = {
     "reject": "審核退回",
     "reopen": "重新開啟審核",
     "comment": "新增備註",
+    "interview": "面試通知",
+    "interview_completed": "已完成面試",
 }
 
 DEFAULT_AVATAR = "/static/images/avatar-default.png"
@@ -1051,9 +1053,12 @@ def get_vendor_resumes():
                 
             # 獲取廠商留言（從 vendor_preference_history）
             vendor_comment = None
+            has_interview = False  # 是否有面試記錄
+            interview_completed = False  # 是否已完成面試
             if preference_id:
                 try:
                     _ensure_history_table(cursor)
+                    # 查詢留言
                     cursor.execute("""
                         SELECT comment 
                         FROM vendor_preference_history 
@@ -1064,6 +1069,26 @@ def get_vendor_resumes():
                     vendor_comment_row = cursor.fetchone()
                     if vendor_comment_row and vendor_comment_row.get('comment'):
                         vendor_comment = vendor_comment_row.get('comment')
+                    
+                    # 查詢是否有面試記錄
+                    cursor.execute("""
+                        SELECT COUNT(*) as count
+                        FROM vendor_preference_history 
+                        WHERE preference_id = %s AND action = 'interview'
+                    """, (preference_id,))
+                    interview_result = cursor.fetchone()
+                    if interview_result and interview_result.get('count', 0) > 0:
+                        has_interview = True
+                    
+                    # 查詢是否已完成面試
+                    cursor.execute("""
+                        SELECT COUNT(*) as count
+                        FROM vendor_preference_history 
+                        WHERE preference_id = %s AND action = 'interview_completed'
+                    """, (preference_id,))
+                    completed_result = cursor.fetchone()
+                    if completed_result and completed_result.get('count', 0) > 0:
+                        interview_completed = True
                 except Exception:
                     pass  # 如果歷史表不存在或查詢失敗，忽略
             
@@ -1088,6 +1113,8 @@ def get_vendor_resumes():
                 "job_id": job_id,
                 "job_title": job_title,
                 "preference_id": preference_id, # 用於廠商審核操作，如果沒有填寫志願序則為 None
+                "has_interview": has_interview, # 是否有面試記錄
+                "interview_completed": interview_completed, # 是否已完成面試
             }
             resumes.append(resume)
 
@@ -2398,6 +2425,18 @@ def send_notification():
             conn.close()
             return jsonify({"success": False, "message": "無效的通知類型"}), 400
         
+        # 記錄面試通知到 vendor_preference_history（如果有 preference_id）
+        preference_id = data.get("preference_id")
+        if notification_type == "interview" and preference_id:
+            try:
+                _ensure_history_table(cursor)
+                _record_history(cursor, preference_id, vendor_id, "interview", content or "面試通知已發送")
+                print(f"✅ 已記錄面試通知到 vendor_preference_history (preference_id: {preference_id})")
+            except Exception as history_error:
+                # 歷史記錄失敗不影響通知發送
+                print(f"⚠️ 記錄面試歷史失敗（不影響通知發送）：{history_error}")
+                traceback.print_exc()
+        
         # 發送系統通知（如果有 student_id）
         if student_id:
             try:
@@ -2470,6 +2509,75 @@ def send_notification():
             except:
                 pass
         return jsonify({"success": False, "message": f"發送失敗：{exc}"}), 500
+
+
+@vendor_bp.route("/vendor/api/mark_interview_completed", methods=["POST"])
+def mark_interview_completed():
+    """廠商標記面試已完成"""
+    if "user_id" not in session or session.get("role") != "vendor":
+        return jsonify({"success": False, "message": "未授權"}), 403
+
+    data = request.get_json(silent=True) or {}
+    preference_id = data.get("preference_id")
+    
+    if not preference_id:
+        return jsonify({"success": False, "message": "請提供 preference_id"}), 400
+
+    vendor_id = session["user_id"]
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+    
+    try:
+        # 驗證 preference_id 是否屬於該廠商可以審核的範圍
+        cursor.execute("""
+            SELECT sp.id, sp.student_id, sp.company_id
+            FROM student_preferences sp
+            JOIN internship_companies ic ON sp.company_id = ic.id
+            WHERE sp.id = %s
+        """, (preference_id,))
+        preference = cursor.fetchone()
+        
+        if not preference:
+            cursor.close()
+            conn.close()
+            return jsonify({"success": False, "message": "找不到該志願序"}), 404
+        
+        # 檢查廠商是否有權限審核該公司
+        profile, companies, _ = _get_vendor_scope(cursor, vendor_id)
+        if not profile:
+            cursor.close()
+            conn.close()
+            return jsonify({"success": False, "message": "帳號資料不完整"}), 403
+        
+        company_ids = [c["id"] for c in companies] if companies else []
+        if preference["company_id"] not in company_ids:
+            cursor.close()
+            conn.close()
+            return jsonify({"success": False, "message": "無權限操作此志願序"}), 403
+        
+        # 記錄面試完成
+        _ensure_history_table(cursor)
+        _record_history(cursor, preference_id, vendor_id, "interview_completed", "面試已完成")
+        conn.commit()
+        
+        cursor.close()
+        conn.close()
+        
+        return jsonify({
+            "success": True,
+            "message": "已標記為面試完成"
+        })
+        
+    except Exception as exc:
+        traceback.print_exc()
+        if 'conn' in locals():
+            try:
+                conn.rollback()
+                cursor.close()
+                conn.close()
+            except:
+                pass
+        return jsonify({"success": False, "message": f"操作失敗：{str(exc)}"}), 500
 
 
 @vendor_bp.route("/vendor/api/email_logs", methods=["GET"])

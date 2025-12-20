@@ -268,6 +268,16 @@
         .then(([resumeData, companyData, positionData]) => {
           if (resumeData.success) {
             allResumes = resumeData.resumes || [];
+            
+            // 根據後端返回的資料初始化 interviewedSet
+            interviewedSet.clear();
+            allResumes.forEach(r => {
+              if (r.has_interview || r.interview_completed) {
+                const key = String(r.preference_id || r.preferenceId || r.id);
+                interviewedSet.add(key);
+              }
+            });
+            
             populateFilters(allResumes, companyData, positionData);
 
             if (targetStatus) {
@@ -433,7 +443,8 @@
         const tr = document.createElement('tr');
         tr.style.borderBottom = '1px solid #e2e8f0';
         const key = (row.preference_id || row.preferenceId || row.id);
-        const hasInterviewed = interviewedSet.has(String(key));
+        const hasInterviewed = interviewedSet.has(String(key)) || row.has_interview || false;
+        const isInterviewCompleted = row.interview_completed || false;
         tr.innerHTML = `
            <td style="padding: 14px 16px;">${row.username || row.student_number || '—'}</td>
            <td style="padding: 14px 16px;">${escapeHtml(row.name || row.student_name || '—')}</td>
@@ -444,9 +455,11 @@
             <div style="display:flex; gap:6px; flex-wrap:wrap; align-items:center;">
               <span class="status-badge bg-${statusColor(row.display_status)}">${mapStatus(row.display_status)}</span>
               ${
-                row.display_status === 'pending' && hasInterviewed
-                  ? `<span class="status-badge bg-secondary">面試</span>`
-                  : ''
+                isInterviewCompleted
+                  ? `<span class="status-badge bg-info">已面試</span>`
+                  : (hasInterviewed || row.has_interview)
+                    ? `<span class="status-badge bg-secondary">面試中</span>`
+                    : ''
               }
             </div>
           </td>
@@ -490,16 +503,23 @@
         }
         
         const key = (pid || row.preference_id || row.preferenceId || row.id);
-        const hasInterviewed = interviewedSet.has(String(key));
+        const hasInterviewed = interviewedSet.has(String(key)) || row.has_interview || false;
+        const isInterviewCompleted = row.interview_completed || false;
 
         // 廠商可以進行審核操作
         const approveClick = `approveResume(${row.id}, ${pid ? `'${pid}'` : 'null'})`;
         const rejectClick = `rejectResume(${row.id}, ${pid ? `'${pid}'` : 'null'})`;
         const interviewClick = `sendInterview(${row.student_id || 'null'}, ${row.company_id || 'null'}, ${row.id}, ${pid ? `'${pid}'` : 'null'})`;
+        const markCompletedClick = `markInterviewCompleted(${row.id}, ${pid ? `'${pid}'` : 'null'})`;
 
         // 無論狀態為何，保留按鈕
-        let btns = `<div style="display:flex; align-items:center;">${dlBtn}`;
-        btns += `<button class="btn btn-sm btn-outline-warning" style="margin-right:4px;" onclick="${interviewClick}">${hasInterviewed ? '已邀面試' : '面試'}</button>`;
+        let btns = `<div style="display:flex; align-items:center; flex-wrap:wrap; gap:4px;">${dlBtn}`;
+        btns += `<button class="btn btn-sm btn-outline-warning" style="margin-right:4px;" onclick="${interviewClick}">面試</button>`;
+        if (hasInterviewed && !isInterviewCompleted) {
+            btns += `<button class="btn btn-sm btn-outline-info" style="margin-right:4px;" onclick="${markCompletedClick}">已面試</button>`;
+        } else if (isInterviewCompleted) {
+            btns += `<button class="btn btn-sm btn-outline-info" style="margin-right:4px;" disabled title="已完成面試">已面試</button>`;
+        }
         btns += `<button class="btn btn-sm btn-outline-danger" style="margin-right:4px;" onclick="${rejectClick}">退件</button>`;
         if (hasInterviewed) {
             btns += `<button class="btn btn-sm btn-outline-success" onclick="${approveClick}">通過</button>`;
@@ -526,7 +546,8 @@
         student_id: studentId,
         company_id: companyId || null,
         notification_type: "interview",
-        content: content
+        content: content,
+        preference_id: preferenceId || null
       };
 
       fetch("/vendor/api/send_notification", {
@@ -538,9 +559,21 @@
       .then(data => {
         if (data.success) {
           alert("✅ 面試通知已發送給學生和指導老師");
-          const key = String(preferenceId || resumeId);
-          interviewedSet.add(key);
-          applyFilters(); // 重新渲染列表，更新按鈕與狀態顯示
+          // 重新載入資料
+          fetch(getResumeApiUrl()).then(r=>r.json()).then(d=>{
+            if(d.success) { 
+              allResumes=d.resumes;
+              // 根據後端返回的資料更新 interviewedSet
+              interviewedSet.clear();
+              allResumes.forEach(r => {
+                if (r.has_interview || r.interview_completed) {
+                  const key = String(r.preference_id || r.preferenceId || r.id);
+                  interviewedSet.add(key);
+                }
+              });
+              applyFilters(); 
+            }
+          });
         } else {
           alert("發送失敗：" + (data.message || "未知錯誤"));
         }
@@ -548,6 +581,53 @@
       .catch(err => {
         console.error("sendInterview error:", err);
         alert("發送失敗，請稍後再試");
+      });
+    }
+
+    // 標記面試已完成
+    function markInterviewCompleted(resumeId, preferenceId) {
+      if (!preferenceId || preferenceId === 'null') {
+        alert("找不到志願序資料，無法標記面試完成");
+        return;
+      }
+      
+      if (!confirm("確定要標記為已面試嗎？")) {
+        return;
+      }
+
+      fetch("/vendor/api/mark_interview_completed", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          preference_id: preferenceId
+        })
+      })
+      .then(res => res.json())
+      .then(data => {
+        if (data.success) {
+          alert("✅ 已標記為面試完成");
+          // 重新載入資料
+          fetch(getResumeApiUrl()).then(r=>r.json()).then(d=>{
+            if(d.success) { 
+              allResumes=d.resumes;
+              // 根據後端返回的資料更新 interviewedSet
+              interviewedSet.clear();
+              allResumes.forEach(r => {
+                if (r.has_interview || r.interview_completed) {
+                  const key = String(r.preference_id || r.preferenceId || r.id);
+                  interviewedSet.add(key);
+                }
+              });
+              applyFilters(); 
+            }
+          });
+        } else {
+          alert("操作失敗：" + (data.message || "未知錯誤"));
+        }
+      })
+      .catch(err => {
+        console.error("markInterviewCompleted error:", err);
+        alert("操作失敗，請稍後再試");
       });
     }
 
@@ -581,7 +661,18 @@
               alert("✅ 狀態更新成功");
               // 重新載入資料
               fetch(getResumeApiUrl()).then(r=>r.json()).then(d=>{
-                  if(d.success) { allResumes=d.resumes; applyFilters(); }
+                  if(d.success) { 
+                    allResumes=d.resumes;
+                    // 根據後端返回的資料更新 interviewedSet
+                    interviewedSet.clear();
+                    allResumes.forEach(r => {
+                      if (r.has_interview || r.interview_completed) {
+                        const key = String(r.preference_id || r.preferenceId || r.id);
+                        interviewedSet.add(key);
+                      }
+                    });
+                    applyFilters(); 
+                  }
               });
           } else {
               alert("失敗：" + data.message);
@@ -617,7 +708,18 @@
                    alert("✅ 已退件");
                    modal.hide();
                    fetch(getResumeApiUrl()).then(r=>r.json()).then(d=>{
-                       if(d.success) { allResumes=d.resumes; applyFilters(); }
+                       if(d.success) { 
+                         allResumes=d.resumes;
+                         // 根據後端返回的資料更新 interviewedSet
+                         interviewedSet.clear();
+                         allResumes.forEach(r => {
+                           if (r.has_interview) {
+                             const key = String(r.preference_id || r.preferenceId || r.id);
+                             interviewedSet.add(key);
+                           }
+                         });
+                         applyFilters(); 
+                       }
                    });
                } else {
                    alert("失敗：" + data.message);
@@ -655,7 +757,18 @@
                  alert("留言已更新");
                  bootstrap.Modal.getInstance(document.getElementById("commentModal")).hide();
                  fetch(getResumeApiUrl()).then(r=>r.json()).then(d=>{
-                     if(d.success) { allResumes=d.resumes; applyFilters(); }
+                     if(d.success) { 
+                       allResumes=d.resumes;
+                       // 根據後端返回的資料更新 interviewedSet
+                       interviewedSet.clear();
+                       allResumes.forEach(r => {
+                         if (r.has_interview) {
+                           const key = String(r.preference_id || r.preferenceId || r.id);
+                           interviewedSet.add(key);
+                         }
+                       });
+                       applyFilters(); 
+                     }
                  });
              } else {
                  alert("失敗");
