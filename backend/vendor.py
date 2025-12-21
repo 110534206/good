@@ -1387,13 +1387,11 @@ def list_positions_for_vendor():
         if company_filter and company_filter not in company_ids:
             return jsonify({"success": False, "message": "無權限查看此公司"}), 403
 
-        # 基礎權限判斷：屬於廠商公司範圍 AND (廠商建立 OR 老師建立)
+        # 基礎權限判斷：屬於廠商公司範圍的職缺都可以查看（不限制建立者）
         where_clauses = [
-            f"ij.company_id IN ({', '.join(['%s'] * len(company_ids))})",
-            "(ij.created_by_vendor_id = %s OR ij.created_by_vendor_id IS NULL)"
+            f"ij.company_id IN ({', '.join(['%s'] * len(company_ids))})"
         ]
         params = company_ids[:]
-        params.append(vendor_id)
 
         # 篩選條件
         if company_filter:
