@@ -345,10 +345,10 @@
       companySelect.innerHTML = `<option value="">所有職缺</option>`;
       const jobSet = new Set();
       
-      // 只從廠商職缺 API 中提取職缺（該 API 已經只返回該廠商的職缺）
-      if (positionData && positionData.items && positionData.items.length > 0) {
-          positionData.items.forEach(job => {
-              const jobTitle = job.title || job.job_title || '';
+      // 從履歷資料表中提取職缺（只包含實際有學生申請的職缺）
+      if (data && data.length > 0) {
+          data.forEach(resume => {
+              const jobTitle = resume.job_title || resume.jobTitle || '';
               if (jobTitle && jobTitle.trim()) {
                   jobSet.add(jobTitle.trim());
               }
