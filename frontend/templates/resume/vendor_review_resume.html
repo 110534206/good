@@ -345,10 +345,12 @@
       companySelect.innerHTML = `<option value="">所有職缺</option>`;
       const jobSet = new Set();
       
-      // 從履歷資料表中提取職缺（只包含實際有學生申請的職缺）
-      if (data && data.length > 0) {
-          data.forEach(resume => {
-              const jobTitle = resume.job_title || resume.jobTitle || '';
+      // 從 internship_jobs 資料表根據 company_id 抓取的職缺資料
+      // positionData.items 是從 /vendor/api/positions API 返回的，已經根據 company_id 過濾
+      // 相同的 company_id 的職缺會在同一個 items 陣列中
+      if (positionData && positionData.items && positionData.items.length > 0) {
+          positionData.items.forEach(job => {
+              const jobTitle = job.title || job.job_title || '';
               if (jobTitle && jobTitle.trim()) {
                   jobSet.add(jobTitle.trim());
               }

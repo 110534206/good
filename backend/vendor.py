@@ -146,26 +146,34 @@ def _get_vendor_companies(cursor, vendor_id):
     """
     獲取廠商對應的公司列表。
     邏輯：廠商通過指導老師（teacher_name）關聯到公司。
+    分組規則：
+    - vendor、vendorA 的指導老師是 teacherA，只能看到 advisor_user_id = teacherA_id 的公司
+    - vendorB、vendorD 的指導老師是 directorB，只能看到 advisor_user_id = directorB_id 的公司
     """
     # 1. 獲取廠商的 teacher_name
     cursor.execute("SELECT teacher_name FROM users WHERE id = %s", (vendor_id,))
     vendor_row = cursor.fetchone()
     if not vendor_row or not vendor_row.get("teacher_name"):
+        print(f"⚠️ 廠商 {vendor_id} 沒有設定 teacher_name")
         return []
     
     teacher_name = vendor_row.get("teacher_name").strip()
     if not teacher_name:
+        print(f"⚠️ 廠商 {vendor_id} 的 teacher_name 為空")
         return []
     
     # 2. 找到指導老師的 ID
     cursor.execute("SELECT id FROM users WHERE name = %s AND role IN ('teacher', 'director')", (teacher_name,))
     teacher_row = cursor.fetchone()
     if not teacher_row:
+        print(f"⚠️ 找不到指導老師 '{teacher_name}' (廠商 {vendor_id})")
         return []
     
     teacher_id = teacher_row["id"]
+    print(f"✅ 廠商 {vendor_id} 的指導老師: {teacher_name} (ID: {teacher_id})")
     
     # 3. 找到該指導老師對接的公司（只回傳已審核通過的公司）
+    # 根據 advisor_user_id 來過濾，確保只有該指導老師的公司才會被返回
     query = """
         SELECT id, company_name, contact_email, advisor_user_id
         FROM internship_companies
@@ -175,7 +183,10 @@ def _get_vendor_companies(cursor, vendor_id):
     params = [teacher_id]
     
     cursor.execute(query, tuple(params))
-    return cursor.fetchall() or []
+    companies = cursor.fetchall() or []
+    print(f"📋 廠商 {vendor_id} 找到 {len(companies)} 家公司 (指導老師 ID: {teacher_id})")
+    
+    return companies
 
 
 def _get_vendor_scope(cursor, vendor_id):
