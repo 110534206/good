@@ -345,9 +345,8 @@
       companySelect.innerHTML = `<option value="">所有職缺</option>`;
       const jobSet = new Set();
       
-      // 從 internship_jobs 資料表根據 company_id 抓取的職缺資料
-      // positionData.items 是從 /vendor/api/positions API 返回的，已經根據 company_id 過濾
-      // 相同的 company_id 的職缺會在同一個 items 陣列中
+      // 從 API 返回的職缺資料中提取職缺（直接從 internship_companies 和 internship_jobs 資料表抓取）
+      // positionData.items 已經過濾了該廠商的公司，所以只會出現自己的職缺
       if (positionData && positionData.items && positionData.items.length > 0) {
           positionData.items.forEach(job => {
               const jobTitle = job.title || job.job_title || '';
