@@ -1058,34 +1058,34 @@ def get_vendor_resumes():
             if preference_id:
                 try:
                     _ensure_history_table(cursor)
-                    # 查詢留言
+                    # 查詢留言（只查詢當前廠商的留言，action = 'comment'）
                     cursor.execute("""
                         SELECT comment 
                         FROM vendor_preference_history 
-                        WHERE preference_id = %s 
+                        WHERE preference_id = %s AND reviewer_id = %s AND action = 'comment'
                         ORDER BY created_at DESC 
                         LIMIT 1
-                    """, (preference_id,))
+                    """, (preference_id, vendor_id))
                     vendor_comment_row = cursor.fetchone()
                     if vendor_comment_row and vendor_comment_row.get('comment'):
                         vendor_comment = vendor_comment_row.get('comment')
                     
-                    # 查詢是否有面試記錄
+                    # 查詢是否有面試記錄（只查詢當前廠商的面試記錄）
                     cursor.execute("""
                         SELECT COUNT(*) as count
                         FROM vendor_preference_history 
-                        WHERE preference_id = %s AND action = 'interview'
-                    """, (preference_id,))
+                        WHERE preference_id = %s AND reviewer_id = %s AND action = 'interview'
+                    """, (preference_id, vendor_id))
                     interview_result = cursor.fetchone()
                     if interview_result and interview_result.get('count', 0) > 0:
                         has_interview = True
                     
-                    # 查詢是否已完成面試
+                    # 查詢是否已完成面試（只查詢當前廠商的面試完成記錄）
                     cursor.execute("""
                         SELECT COUNT(*) as count
                         FROM vendor_preference_history 
-                        WHERE preference_id = %s AND action = 'interview_completed'
-                    """, (preference_id,))
+                        WHERE preference_id = %s AND reviewer_id = %s AND action = 'interview_completed'
+                    """, (preference_id, vendor_id))
                     completed_result = cursor.fetchone()
                     if completed_result and completed_result.get('count', 0) > 0:
                         interview_completed = True
