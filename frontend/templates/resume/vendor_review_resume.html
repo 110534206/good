@@ -119,6 +119,9 @@
         <select id="classFilter" style="padding: 10px 12px; border-radius: 8px; border: 1px solid #e2e8f0; min-width: 150px;">
           <option value="">所有班級</option>
         </select>
+        <select id="companyNameFilter" style="padding: 10px 12px; border-radius: 8px; border: 1px solid #e2e8f0; min-width: 150px;">
+          <option value="">所有公司</option>
+        </select>
         <select id="companyFilter" style="padding: 10px 12px; border-radius: 8px; border: 1px solid #e2e8f0; min-width: 150px;">
           <option value="">所有職缺</option>
         </select>
@@ -295,6 +298,7 @@
 
       document.getElementById("departmentFilter").addEventListener("change", applyFilters);
       document.getElementById("classFilter").addEventListener("change", applyFilters);
+      document.getElementById("companyNameFilter").addEventListener("change", applyFilters);
       document.getElementById("companyFilter").addEventListener("change", applyFilters);
       document.getElementById("statusFilter").addEventListener("change", applyFilters);
       document.getElementById("searchBox").addEventListener("input", applyFilters);
@@ -341,6 +345,18 @@
          if(c !== '五孝') classSelect.innerHTML += `<option value="${c}">${c}</option>`;
       });
 
+      const companyNameSelect = document.getElementById("companyNameFilter");
+      companyNameSelect.innerHTML = `<option value="">所有公司</option>`;
+      const companySet = new Set();
+      data.forEach(r => { 
+        if(r.company_name && r.company_name.trim()) {
+          companySet.add(r.company_name.trim());
+        }
+      });
+      Array.from(companySet).sort().forEach(company => {
+        companyNameSelect.innerHTML += `<option value="${escapeHtml(company)}">${escapeHtml(company)}</option>`;
+      });
+
       const companySelect = document.getElementById("companyFilter");
       companySelect.innerHTML = `<option value="">所有職缺</option>`;
       const jobSet = new Set();
@@ -366,6 +382,7 @@
       currentPage = 1;
       const dept = document.getElementById("departmentFilter").value.trim();
       const cls = document.getElementById("classFilter").value.trim();
+      const companyNameFilter = document.getElementById("companyNameFilter").value.trim();
       const jobFilter = document.getElementById("companyFilter").value.trim();
       const status = document.getElementById("statusFilter").value.trim();
       const keyword = document.getElementById("searchBox").value.trim().toLowerCase();
@@ -375,6 +392,12 @@
         const matchesClass = !cls || r.className === cls;
         const matchesKeyword = (r.username && r.username.toLowerCase().includes(keyword)) ||
                                (r.original_filename && r.original_filename.toLowerCase().includes(keyword));
+        
+        let matchesCompanyName = true;
+        if (companyNameFilter) {
+          const companyName = (r.company_name || '').trim();
+          matchesCompanyName = companyName === companyNameFilter;
+        }
         
         let matchesJob = true;
         if (jobFilter) {
@@ -388,7 +411,7 @@
            matchesStatus = statusStr === status;  // 使用嚴格相等，確保精確匹配
         }
 
-        return matchesDept && matchesClass && matchesJob && matchesStatus && matchesKeyword;
+        return matchesDept && matchesClass && matchesCompanyName && matchesJob && matchesStatus && matchesKeyword;
       });
 
       renderTable(filtered);
