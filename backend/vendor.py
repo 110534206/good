@@ -809,6 +809,8 @@ def get_vendor_resumes():
                     JOIN internship_companies ic ON sp.company_id = ic.id
                     LEFT JOIN internship_jobs ij ON sp.job_id = ij.id
                     WHERE sp.company_id IN ({preference_placeholders})
+                    -- 只顯示該廠商建立的職缺或老師建立的職缺對應的志願序
+                    AND (ij.created_by_vendor_id = %s OR ij.created_by_vendor_id IS NULL)
                     -- 只顯示已經被指導老師審核通過的志願序
                     -- 檢查該學生的履歷是否已經被指導老師（role='teacher'）審核通過
                     AND EXISTS (
@@ -819,7 +821,7 @@ def get_vendor_resumes():
                         AND reviewer.role = 'teacher'
                         AND r.reviewed_by IS NOT NULL
                     )
-                """, tuple(company_ids))
+                """, tuple(company_ids) + (vendor_id,))
             else:
                 # 如果歷史表不存在，使用簡化的查詢
                 cursor.execute(f"""
@@ -836,6 +838,8 @@ def get_vendor_resumes():
                     JOIN internship_companies ic ON sp.company_id = ic.id
                     LEFT JOIN internship_jobs ij ON sp.job_id = ij.id
                     WHERE sp.company_id IN ({preference_placeholders})
+                    -- 只顯示該廠商建立的職缺或老師建立的職缺對應的志願序
+                    AND (ij.created_by_vendor_id = %s OR ij.created_by_vendor_id IS NULL)
                     -- 只顯示已經被指導老師審核通過的志願序
                     -- 檢查該學生的履歷是否已經被指導老師（role='teacher'）審核通過
                     AND EXISTS (
@@ -846,7 +850,7 @@ def get_vendor_resumes():
                         AND reviewer.role = 'teacher'
                         AND r.reviewed_by IS NOT NULL
                     )
-                """, tuple(company_ids))
+                """, tuple(company_ids) + (vendor_id,))
             
             # 使用字典儲存學生的志願申請，鍵為 student_id
             for pref in cursor.fetchall() or []:
@@ -902,9 +906,11 @@ def get_vendor_resumes():
                     FROM student_preferences sp
                     JOIN internship_companies ic ON sp.company_id = ic.id
                     LEFT JOIN internship_jobs ij ON sp.job_id = ij.id
+                    -- 只顯示該廠商建立的職缺或老師建立的職缺對應的志願序
+                    WHERE (ij.created_by_vendor_id = %s OR ij.created_by_vendor_id IS NULL)
                     -- 只顯示已經被指導老師審核通過的志願序
                     -- 檢查該學生的履歷是否已經被指導老師（role='teacher'）審核通過
-                    WHERE EXISTS (
+                    AND EXISTS (
                         SELECT 1 FROM resumes r
                         JOIN users reviewer ON r.reviewed_by = reviewer.id
                         WHERE r.user_id = sp.student_id
@@ -912,7 +918,7 @@ def get_vendor_resumes():
                         AND reviewer.role = 'teacher'
                         AND r.reviewed_by IS NOT NULL
                     )
-                """)
+                """, (vendor_id,))
             else:
                 # 如果歷史表不存在，使用簡化的查詢
                 cursor.execute("""
@@ -928,9 +934,11 @@ def get_vendor_resumes():
                     FROM student_preferences sp
                     JOIN internship_companies ic ON sp.company_id = ic.id
                     LEFT JOIN internship_jobs ij ON sp.job_id = ij.id
+                    -- 只顯示該廠商建立的職缺或老師建立的職缺對應的志願序
+                    WHERE (ij.created_by_vendor_id = %s OR ij.created_by_vendor_id IS NULL)
                     -- 只顯示已經被指導老師審核通過的志願序
                     -- 檢查該學生的履歷是否已經被指導老師（role='teacher'）審核通過
-                    WHERE EXISTS (
+                    AND EXISTS (
                         SELECT 1 FROM resumes r
                         JOIN users reviewer ON r.reviewed_by = reviewer.id
                         WHERE r.user_id = sp.student_id
@@ -938,7 +946,7 @@ def get_vendor_resumes():
                         AND reviewer.role = 'teacher'
                         AND r.reviewed_by IS NOT NULL
                     )
-                """)
+                """, (vendor_id,))
             for pref in cursor.fetchall() or []:
                 student_id = pref['student_id']
                 if student_id not in preferences_map:
@@ -1398,11 +1406,13 @@ def list_positions_for_vendor():
         if company_filter and company_filter not in company_ids:
             return jsonify({"success": False, "message": "無權限查看此公司"}), 403
 
-        # 基礎權限判斷：屬於廠商公司範圍的職缺都可以查看（不限制建立者）
+        # 基礎權限判斷：只顯示該廠商建立的職缺或老師建立的職缺
+        # 不顯示其他廠商建立的職缺
         where_clauses = [
-            f"ij.company_id IN ({', '.join(['%s'] * len(company_ids))})"
+            f"ij.company_id IN ({', '.join(['%s'] * len(company_ids))})",
+            "(ij.created_by_vendor_id = %s OR ij.created_by_vendor_id IS NULL)"
         ]
-        params = company_ids[:]
+        params = company_ids[:] + [vendor_id]
 
         # 篩選條件
         if company_filter:
