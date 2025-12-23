@@ -178,21 +178,36 @@
         tableBody.innerHTML = annList.map(a => {
           const fmtStart = formatDateTimeCustom(a.start_time);
           const fmtEnd = formatDateTimeCustom(a.end_time);
+          
           let status = "未發布", color = "secondary";
+          let displayPublishStatus = a.is_published ? '已發布' : '未發布';
+
           if (a.is_published) {
             const start = new Date(fmtStart.replace(/\//g, '-'));
             const end = new Date(fmtEnd.replace(/\//g, '-'));
-            if (now < start) status = "未開始";
-            else if (now > end) { status = "已結束"; color = "danger"; }
-            else { status = "進行中"; color = "success"; }
+            
+            if (now < start) {
+              status = "未開始";
+              color = "secondary";
+              displayPublishStatus = "未發布"; // 需求：未開始 -> 未發布
+            } else if (now > end) {
+              status = "已結束";
+              color = "danger";
+              displayPublishStatus = "已結束"; // 需求：已結束 -> 已結束
+            } else {
+              status = "進行中";
+              color = "success";
+              displayPublishStatus = "已發布";
+            }
           }
+
           return `
             <tr>
               <td class="fw-bold">${a.title}</td>
               <td class="text-center">${fmtStart}</td>
               <td class="text-center">${fmtEnd}</td>
               <td class="text-center"><span class="badge bg-${color}">${status}</span></td>
-              <td class="text-center">${a.is_published ? '已發布' : '未發布'}</td>
+              <td class="text-center">${displayPublishStatus}</td>
               <td class="text-center text-muted" style="font-size: 0.9rem;">${formatDateTimeCustom(a.published_at || a.created_at)}</td>
               <td class="text-center">
                 <button class="btn btn-sm btn-outline-primary me-1" onclick="editAnnouncement(${a.id})">編輯</button>
