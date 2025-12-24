@@ -677,19 +677,34 @@ def get_vendor_resumes():
             return jsonify({"success": False, "message": "找不到指導老師資料"}), 404
         
         teacher_name = teacher_result.get("teacher_name")
-        # 找到所有該老師的廠商（選擇第一個）
+        # 找到所有該老師的廠商
         cursor.execute("""
             SELECT id 
             FROM users 
-            WHERE role = 'vendor' AND teacher_name = %s 
-            LIMIT 1
+            WHERE role = 'vendor' AND teacher_name = %s
         """, (teacher_name,))
-        vendor_result = cursor.fetchone()
-        if not vendor_result:
+        vendor_results = cursor.fetchall()
+        
+        if not vendor_results:
             cursor.close()
             conn.close()
             return jsonify({"success": False, "message": "找不到該公司對應的廠商"}), 404
-        vendor_id = vendor_result["id"]
+        
+        # 檢查哪個廠商有關聯到這個公司
+        vendor_id = None
+        for vendor_row in vendor_results:
+            test_vendor_id = vendor_row["id"]
+            test_companies = _get_vendor_companies(cursor, test_vendor_id)
+            # 檢查這個公司是否在該廠商的公司列表中
+            if any(c["id"] == company_filter for c in test_companies):
+                vendor_id = test_vendor_id
+                print(f"✅ 找到對應的廠商 ID: {vendor_id} (公司 ID: {company_filter})")
+                break
+        
+        if not vendor_id:
+            # 如果找不到，使用第一個廠商（向後兼容）
+            vendor_id = vendor_results[0]["id"]
+            print(f"⚠️ 找不到完全匹配的廠商，使用第一個廠商 ID: {vendor_id}")
     else:
         # 廠商直接使用自己的 ID
         vendor_id = session["user_id"]
@@ -700,6 +715,15 @@ def get_vendor_resumes():
 
         # 只顯示該廠商自己的公司，不顯示所有公司
         company_ids = [c["id"] for c in companies] if companies else []
+        
+        # 如果是老師訪問且有指定 company_filter，確保該公司包含在 company_ids 中
+        if user_role in ["teacher", "ta"] and company_filter:
+            if company_filter not in company_ids:
+                # 驗證該公司是否屬於當前老師管理（之前已經驗證過）
+                # 直接將 company_filter 加入 company_ids
+                company_ids.append(company_filter)
+                print(f"✅ 老師訪問：將公司 {company_filter} 加入 company_ids")
+        
         if not company_ids:
             print(f"⚠️ 廠商 {vendor_id} 未關聯任何公司，返回空列表")
             return jsonify({

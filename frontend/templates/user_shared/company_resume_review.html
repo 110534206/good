@@ -1,0 +1,509 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>智慧實習平台 | 公司履歷審查</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    header {
+      background: linear-gradient(135deg, #0055a8 0%, #006acb 50%, #004f94 100%);
+      border-bottom: none; position: sticky; top: 0; z-index: 10;
+      box-shadow: 0 8px 20px rgba(0, 68, 148, 0.35);
+    }
+    .topbar {
+      max-width: 1800px; margin: 0 auto; padding: 18px 24px;
+      display: flex; align-items: center; justify-content: space-between; color: #fff;
+    }
+    .topbar-left { display: flex; align-items: center; }
+    .topbar-left #menu-btn {
+      width: 30px; height: 22px; cursor: pointer; display: flex; flex-direction: column;
+      justify-content: space-between; background: none; border: none; padding: 0;
+    }
+    .topbar-left #menu-btn span {
+      display: block; width: 100%; height: 3px; background-color: white; border-radius: 2px; transition: all 0.3s ease;
+    }
+    .topbar h1 { font-size: 1.5rem; margin: 0; text-align: center; color: #fff; flex: 1; }
+    body { font-family: "Noto Sans TC", sans-serif; background: #ffffff; margin: 0; padding: 0; }
+    main { max-width: 1800px; margin: 24px auto 60px; padding: 0 24px; display: flex; flex-direction: column; gap: 24px; }
+    .panel {
+      background: #ffffff; border-radius: 16px; padding: 24px;
+      box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08); border: 1px solid #e2e8f0; margin-bottom: 32px;
+    }
+    .panel-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
+    .panel-header h2 { font-size: 1.2rem; margin: 0; }
+    .table-wrapper { overflow-x: visible; width: 100%; }
+    .table-wrapper table tbody tr:hover { background: rgba(15, 23, 42, 0.02); }
+    .table thead th { text-align: left; background-color: #fafafb; }
+    .table tbody td { text-align: left; vertical-align: middle; }
+    .table tbody tr td:nth-child(1), .table tbody tr td:nth-child(2), 
+    .table tbody tr td:nth-child(3), .table tbody tr td:nth-child(4) { vertical-align: top; }
+    
+    /* --- 狀態標籤樣式設定 --- */
+    .status-badge { font-size: 0.9em; padding: 0.3em 0.6em; border-radius: 0.5rem; display: inline-block; font-weight: 600; }
+    
+    /* 通過：綠底白字 */
+    .status-badge.bg-success { color: #fff; background-color: #198754; }
+    
+    /* 退件：紅底白字 */
+    .status-badge.bg-danger { color: #fff; background-color: #dc3545; }
+    
+    /* 待審核：藍底白字 */
+    .status-badge.bg-info { color: #fff; background-color: #0dcaf0; }
+    
+    .status-badge.bg-secondary { color: #fff; background-color: #6c757d; }
+    
+    .back-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-weight: 600;
+      color: #ffffff;
+      background-color: rgba(255, 255, 255, 0.2);
+      padding: 8px 16px;
+      border-radius: 8px;
+      text-decoration: none;
+      transition: background-color 0.2s ease;
+      border: 1px solid rgba(255, 255, 255, 0.3);
+      font-size: 0.9rem;
+    }
+    .back-link:hover {
+      background-color: rgba(255, 255, 255, 0.3);
+      color: #ffffff;
+    }
+    
+    #side-menu {
+      position: fixed; top: 0; left: 0; height: 100vh; width: 320px; max-width: 80vw;
+      background-color: rgba(10, 10, 10, 0.95); backdrop-filter: blur(6px);
+      box-shadow: 3px 0 12px rgba(0, 0, 0, 0.6); padding: 2rem 1.5rem;
+      transform: translateX(-100%); transition: transform 0.3s ease-in-out; z-index: 1300;
+      display: flex; flex-direction: column; align-items: flex-start; color: #fff; user-select: none;
+    }
+    #side-menu.open { transform: translateX(0); }
+    #side-menu h2 {
+      margin: 0.5rem 0 1.5rem;
+      font-weight: 700;
+      font-size: 1.6rem;
+    }
+
+    #close-btn {
+      position: absolute;
+      top: 2rem;
+      right: 1.6rem;
+      font-size: 2.2rem;
+      background: none;
+      border: none;
+      color: #fff;
+      cursor: pointer;
+      line-height: 1;
+      width: 2.4rem;
+      height: 2.4rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    #side-menu a {
+      display: block; width: 100%; padding: 0.6rem 0; font-size: 1.1rem; color: #e2e8f0;
+      text-decoration: none; border-radius: 4px; transition: background-color 0.2s ease;
+    }
+    #side-menu a:hover { background-color: rgba(255, 255, 255, 0.18); color: #fff; }
+  </style>
+</head>
+
+<body>
+  <header>
+    <div class="topbar">
+      <div class="topbar-left">
+        <button id="menu-btn" title="選單" role="button" tabindex="0" aria-label="開啟側邊選單">
+          <span></span><span></span><span></span>
+        </button>
+      </div>
+      <h1 id="pageTitle">公司履歷審查</h1>
+      <div style="width: 30px;"></div>
+    </div>
+  </header>
+  <main>
+    <section class="panel" aria-label="履歷列表">
+      <div class="panel-header">
+      </div>
+      <div style="display: flex; flex-wrap: wrap; gap: 16px; align-items: center; margin-bottom: 16px;">
+        <select id="departmentFilter" style="padding: 10px 12px; border-radius: 8px; border: 1px solid #e2e8f0; min-width: 150px;">
+          <option value="">所有學年</option>
+        </select>
+        <select id="classFilter" style="padding: 10px 12px; border-radius: 8px; border: 1px solid #e2e8f0; min-width: 150px;">
+          <option value="">所有班級</option>
+        </select>
+        <select id="companyNameFilter" style="padding: 10px 12px; border-radius: 8px; border: 1px solid #e2e8f0; min-width: 150px;">
+          <option value="">所有公司</option>
+        </select>
+        <select id="companyFilter" style="padding: 10px 12px; border-radius: 8px; border: 1px solid #e2e8f0; min-width: 150px;">
+          <option value="">所有職缺</option>
+        </select>
+        <select id="statusFilter" style="padding: 10px 12px; border-radius: 8px; border: 1px solid #e2e8f0; min-width: 150px;">
+          <option value="">所有狀態</option>
+          <option value="pending">待審核</option>
+          <option value="approved">通過</option>
+          <option value="rejected">退件</option>
+        </select>
+        <input type="text" id="searchBox" style="padding: 10px 12px; border-radius: 8px; border: 1px solid #e2e8f0; min-width: 200px; flex: 1;" placeholder="搜尋帳號/檔案" />
+      </div>
+
+      <div class="table-wrapper">
+        <table style="width: 100%; border-collapse: collapse;">
+          <thead style="background: #f1f5f9;">
+            <tr>
+              <th style="padding: 14px 16px; font-weight: 600;">學生帳號</th>
+              <th style="padding: 14px 16px; font-weight: 600;">姓名</th>
+              <th style="padding: 14px 16px; font-weight: 600;">上傳時間</th>
+              <th style="padding: 14px 16px; font-weight: 600;">檔案名稱</th>
+              <th style="padding: 14px 16px; font-weight: 600;">職缺</th>
+              <th style="padding: 14px 16px; font-weight: 600;">狀態</th>
+              <th style="padding: 14px 16px; font-weight: 600;">廠商留言</th>
+              <th style="padding: 14px 16px; font-weight: 600;">操作</th>
+            </tr>
+          </thead>
+          <tbody id="resumeTableBody">
+            <tr><td colspan="8" style="padding: 14px 16px; text-align: center; color: #64748b;">載入中...</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <nav><ul class="pagination justify-content-center mt-3" id="pagination"></ul></nav>
+    </section>
+  </main>
+
+  <nav id="side-menu" aria-hidden="true" role="navigation" aria-label="功能選單">
+    <button id="close-btn" aria-label="關閉功能選單">×</button>
+    <h2>功能選單</h2>
+    <a href="/teacher_home">首頁</a>
+    <a href="/profile">個人資料</a>
+    <a href="/upload_company">建立實習機會</a>
+    <a href="/admission_results">查看錄取結果</a>
+    <a href="/manage_vendor">實習廠商管理</a>
+    <a href="/notifications">查看公告</a>
+    <a href="/review_resume">學生履歷審核</a>
+    <a href="/logout">登出</a>
+  </nav>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script>
+    // 從 URL 獲取 company_id
+    const pathParts = window.location.pathname.split('/');
+    const COMPANY_ID = parseInt(pathParts[pathParts.length - 2]);
+    
+    let allResumes = [];
+    let currentPage = 1;
+    const rowsPerPage = 10;
+    let companyInfo = null;
+
+    // 定義狀態顏色
+    function statusColor(status) {
+      return { 'pending': 'info', 'approved': 'success', 'rejected': 'danger', 'submitted': 'info', 'uploaded': 'info' }[status] || 'secondary';
+    }
+
+    // 定義狀態文字
+    function mapStatus(status) {
+      return { 'pending': '待審核', 'approved': '通過', 'rejected': '退件', 'submitted': '待審核', 'uploaded': '待審核' }[status] || '待審核';
+    }
+
+    function escapeHtml(text) {
+      if (text === null || text === undefined) return '';
+      return String(text).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+    }
+
+    // 獲取 API URL
+    function getResumeApiUrl() {
+      return `/vendor/api/resumes?company_id=${COMPANY_ID}`;
+    }
+
+    document.addEventListener("DOMContentLoaded", () => {
+      const urlParams = new URLSearchParams(window.location.search);
+      const targetStatus = urlParams.get('status');
+
+      // 設置返回連結
+      const backLink = document.getElementById('backLink');
+      if (backLink) {
+        backLink.href = `/teacher/company/${COMPANY_ID}`;
+      }
+
+      initMenu();
+
+      // 獲取履歷資料、公司資訊和職缺列表
+      Promise.all([
+        fetch(getResumeApiUrl()).then(res => res.ok ? res.json() : {success: false}),
+        fetch(`/api/public/company/${COMPANY_ID}`).then(async res => {
+          if (!res.ok) return {success: false, company: null};
+          const r = await res.json();
+          return r;
+        })
+      ])
+        .then(([resumeData, companyApiData]) => {
+          // 設置公司資訊
+          if (companyApiData.success && companyApiData.company) {
+            companyInfo = companyApiData.company;
+            const pageTitle = document.getElementById('pageTitle');
+            if (pageTitle) {
+              pageTitle.textContent = `${companyApiData.company.name || '公司'} - 履歷審查`;
+            }
+          }
+          
+          // 提取職缺列表（從 API 返回的 jobs 陣列中提取）
+          const positionData = {
+            success: true,
+            items: (companyApiData.jobs || []).map(j => ({id: j.id, title: j.title}))
+          };
+          
+          console.log('職缺資料:', positionData.items);
+          
+          if (resumeData.success) {
+            allResumes = resumeData.resumes || [];
+            // 確保 companyInfo 已經設置後再填充選單
+            populateFilters(allResumes, positionData);
+
+            if (targetStatus) {
+              const statusSelect = document.getElementById('statusFilter');
+              const mapped = (targetStatus === 'submitted' || targetStatus === 'uploaded') ? 'pending' : targetStatus;
+              if (statusSelect) statusSelect.value = mapped;
+            }
+
+            applyFilters();
+          } else {
+            allResumes = [];
+            renderTable([]);
+          }
+        });
+
+      document.getElementById("departmentFilter").addEventListener("change", applyFilters);
+      document.getElementById("classFilter").addEventListener("change", applyFilters);
+      document.getElementById("companyNameFilter").addEventListener("change", applyFilters);
+      document.getElementById("companyFilter").addEventListener("change", applyFilters);
+      document.getElementById("statusFilter").addEventListener("change", applyFilters);
+      document.getElementById("searchBox").addEventListener("input", applyFilters);
+    });
+
+    function initMenu() {
+      const sideMenu = document.getElementById('side-menu');
+      const menuBtn = document.getElementById('menu-btn');
+      const closeBtn = document.getElementById('close-btn');
+      
+      if (menuBtn) {
+        menuBtn.addEventListener('click', () => {
+          sideMenu.classList.add('open');
+          sideMenu.setAttribute('aria-hidden', 'false');
+        });
+      }
+      
+      if (closeBtn) {
+        closeBtn.addEventListener('click', () => {
+          sideMenu.classList.remove('open');
+          sideMenu.setAttribute('aria-hidden', 'true');
+        });
+      }
+      
+      document.addEventListener('click', (event) => {
+        if (sideMenu && !sideMenu.contains(event.target) && menuBtn && !menuBtn.contains(event.target)) {
+          sideMenu.classList.remove('open');
+          sideMenu.setAttribute('aria-hidden', 'true');
+        }
+      });
+    }
+
+    function populateFilters(data, positionData) {
+      const deptSelect = document.getElementById("departmentFilter");
+      deptSelect.innerHTML = `<option value="">所有學年</option><option value="1132">1132</option><option value="1142">1142</option>`;
+      
+      const classSelect = document.getElementById("classFilter");
+      classSelect.innerHTML = `<option value="">所有班級</option>`;
+      const classSet = new Set();
+      data.forEach(r => { if(r.className) classSet.add(r.className); });
+      classSet.add("忠班"); classSet.add("孝班");
+      Array.from(classSet).sort().forEach(c => {
+         if(c !== '五孝') classSelect.innerHTML += `<option value="${c}">${c}</option>`;
+      });
+
+      // 填充公司名稱選單（只顯示當前公司的名稱）
+      const companyNameSelect = document.getElementById("companyNameFilter");
+      companyNameSelect.innerHTML = `<option value="">所有公司</option>`;
+      
+      // 優先使用 companyInfo（從 API 獲取的公司資訊）
+      // API 返回的欄位是 name，不是 company_name
+      if (companyInfo && companyInfo.name) {
+        const companyName = companyInfo.name.trim();
+        if (companyName) {
+          companyNameSelect.innerHTML += `<option value="${escapeHtml(companyName)}">${escapeHtml(companyName)}</option>`;
+        }
+      } else {
+        // 如果 companyInfo 還沒載入，從履歷數據中提取當前公司的名稱
+        const companySet = new Set();
+        data.forEach(r => { 
+          if(r.company_name && r.company_name.trim()) {
+            companySet.add(r.company_name.trim());
+          }
+        });
+        // 只顯示第一個找到的公司名稱（因為這個頁面只針對一個公司）
+        if (companySet.size > 0) {
+          const firstCompany = Array.from(companySet).sort()[0];
+          companyNameSelect.innerHTML += `<option value="${escapeHtml(firstCompany)}">${escapeHtml(firstCompany)}</option>`;
+        }
+      }
+
+      const companySelect = document.getElementById("companyFilter");
+      companySelect.innerHTML = `<option value="">所有職缺</option>`;
+      const jobSet = new Set();
+      
+      // 從 API 返回的職缺資料中提取職缺（直接從 internship_jobs 資料表抓取）
+      if (positionData && positionData.items && positionData.items.length > 0) {
+        positionData.items.forEach(job => {
+          const jobTitle = job.title || job.job_title || '';
+          if (jobTitle && jobTitle.trim()) {
+            jobSet.add(jobTitle.trim());
+          }
+        });
+      }
+      
+      // 也從履歷數據中提取職缺（作為備用，確保所有出現的職缺都被包含）
+      data.forEach(r => {
+        const jobTitle = r.job_title || r.jobTitle || '';
+        if (jobTitle && jobTitle.trim()) {
+          jobSet.add(jobTitle.trim());
+        }
+      });
+      
+      console.log('職缺選單資料:', Array.from(jobSet));
+      
+      // 將所有職缺排序後加入選單
+      Array.from(jobSet).sort().forEach(j => {
+        companySelect.innerHTML += `<option value="${escapeHtml(j)}">${escapeHtml(j)}</option>`;
+      });
+    }
+
+    function applyFilters() {
+      currentPage = 1;
+      const dept = document.getElementById("departmentFilter").value.trim();
+      const cls = document.getElementById("classFilter").value.trim();
+      const companyNameFilter = document.getElementById("companyNameFilter").value.trim();
+      const jobFilter = document.getElementById("companyFilter").value.trim();
+      const status = document.getElementById("statusFilter").value.trim();
+      const keyword = document.getElementById("searchBox").value.trim().toLowerCase();
+
+      const filtered = allResumes.filter(r => {
+        const matchesDept = !dept || r.department === dept;
+        const matchesClass = !cls || r.className === cls;
+        const matchesKeyword = (r.username && r.username.toLowerCase().includes(keyword)) ||
+                               (r.original_filename && r.original_filename.toLowerCase().includes(keyword));
+        
+        let matchesCompanyName = true;
+        if (companyNameFilter) {
+          const companyName = (r.company_name || '').trim();
+          matchesCompanyName = companyName === companyNameFilter;
+        }
+        
+        let matchesJob = true;
+        if (jobFilter) {
+          const jobs = (r.job_title || r.jobTitle || '').toLowerCase();
+          matchesJob = jobs.includes(jobFilter.toLowerCase()) || (r.job_id && String(r.job_id) === jobFilter);
+        }
+
+        let matchesStatus = true;
+        if (status) {
+          const statusStr = r.application_statuses || r.display_status || r.status || '';
+          matchesStatus = statusStr === status;
+        }
+
+        return matchesDept && matchesClass && matchesCompanyName && matchesJob && matchesStatus && matchesKeyword;
+      });
+
+      renderTable(filtered);
+    }
+
+    function renderTable(resumes) {
+      const tbody = document.getElementById("resumeTableBody");
+      tbody.innerHTML = "";
+      if (resumes.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; color: #64748b; padding: 16px;">目前沒有資料</td></tr>`;
+        document.getElementById("pagination").innerHTML = "";
+        return;
+      }
+
+      const filterStatus = document.getElementById("statusFilter").value.trim(); 
+      const filterJob = document.getElementById("companyFilter").value.trim(); 
+
+      let allRowsData = [];
+
+      resumes.forEach(r => {
+        const job = r.job_title || r.jobTitle || '—';
+        const st = r.application_statuses || r.display_status || r.status || 'pending';
+        const cm = r.comment || '';
+
+        if (filterStatus && st !== filterStatus) return;
+        if (filterJob && !job.includes(filterJob) && filterJob !== (r.job_id ? String(r.job_id) : '')) return;
+
+        allRowsData.push({
+          ...r,
+          display_job: job,
+          display_status: st,
+          comment: cm
+        });
+      });
+
+      const start = (currentPage - 1) * rowsPerPage;
+      const end = start + rowsPerPage;
+      const pageData = allRowsData.slice(start, end);
+
+      pageData.forEach(row => {
+        const tr = document.createElement('tr');
+        tr.style.borderBottom = '1px solid #e2e8f0';
+        const hasInterviewed = row.has_interview || false;
+        const isInterviewCompleted = row.interview_completed || false;
+        
+        tr.innerHTML = `
+          <td style="padding: 14px 16px;">${row.username || row.student_number || '—'}</td>
+          <td style="padding: 14px 16px;">${escapeHtml(row.name || row.student_name || '—')}</td>
+          <td style="padding: 14px 16px;">${row.upload_time || '—'}</td>
+          <td style="padding: 14px 16px; max-width: 200px; overflow: hidden; text-overflow: ellipsis;">${escapeHtml(row.original_filename || '—')}</td>
+          <td style="padding: 14px 16px;">${escapeHtml(row.display_job)}</td>
+          <td style="padding: 14px 16px;">
+            <div style="display:flex; gap:6px; flex-wrap:wrap; align-items:center;">
+              <span class="status-badge bg-${statusColor(row.display_status)}">${mapStatus(row.display_status)}</span>
+              ${
+                isInterviewCompleted
+                  ? `<span class="status-badge bg-info">已面試</span>`
+                  : hasInterviewed
+                    ? `<span class="status-badge bg-secondary">面試中</span>`
+                    : ''
+              }
+            </div>
+          </td>
+          <td style="padding: 14px 16px;">
+            ${row.comment && row.comment.trim() !== '' 
+              ? `<span style="color: var(--color-success); font-size: 0.9em;">已填寫</span>` 
+              : `<span style="color: #aaa; font-size: 0.9em;">未填寫</span>`}
+          </td>
+          <td style="padding: 14px 16px;">
+            <a href="/api/download_resume/${row.id}" class="btn btn-sm btn-outline-primary" target="_blank">下載</a>
+          </td>
+        `;
+        tbody.appendChild(tr);
+      });
+
+      renderPagination(allRowsData.length);
+    }
+
+    function renderPagination(totalItems) {
+      const totalPages = Math.ceil(totalItems / rowsPerPage);
+      const pagination = document.getElementById("pagination");
+      pagination.innerHTML = "";
+      if (totalPages <= 1) return;
+      for (let i = 1; i <= totalPages; i++) {
+        const li = document.createElement("li");
+        li.className = `page-item ${i === currentPage ? "active" : ""}`;
+        li.innerHTML = `<a class="page-link" href="#">${i}</a>`;
+        li.onclick = (e) => { e.preventDefault(); currentPage = i; applyFilters(); }; 
+        pagination.appendChild(li);
+      }
+    }
+  </script>
+</body>
+</html>
+
