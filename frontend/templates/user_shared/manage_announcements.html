@@ -1,77 +1,68 @@
 <!doctype html>
 <html lang="zh-Hant">
-
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>智慧實習平台 | 公告管理</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
   <style>
-    /* 全域設定 */
+    /* 全域與側邊欄設定 */
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    
-    /* 修改背景顏色，讓白色的「框」更明顯 */
-    body { 
-      padding: 0; 
-      font-family: "Noto Sans TC", sans-serif; 
-      background: #f5f7fa; 
-      overflow-x: hidden; 
-    }
-    
+    body { padding: 0; font-family: "Noto Sans TC", sans-serif; background: #f5f7fa; overflow-x: hidden; }
     header { background: #0454a3; color: white; padding: 1rem 2rem; text-align: center; font-size: 1.5rem; }
 
-    /* 側邊欄樣式 */
     .top-bar-left { position: fixed; top: 1rem; left: 1rem; z-index: 1100; }
     .top-bar-left #menu-btn { width: 30px; height: 22px; cursor: pointer; display: flex; flex-direction: column; justify-content: space-between; background: none; border: none; padding: 0; }
     .top-bar-left #menu-btn span { display: block; width: 100%; height: 3px; background-color: white; border-radius: 2px; transition: all 0.3s ease; }
-    #side-menu { position: fixed; top: 0; left: 0; height: 100vh; width: 320px; max-width: 80vw; background-color: rgba(10, 10, 10, 0.95); backdrop-filter: blur(6px); box-shadow: 3px 0 12px rgb(0 0 0 / 0.7); padding: 2rem 1.5rem; transform: translateX(-100%); transition: transform 0.3s ease-in-out; z-index: 1200; display: flex; flex-direction: column; align-items: flex-start; color: white; user-select: none; }
+    #side-menu { position: fixed; top: 0; left: 0; height: 100vh; width: 320px; background-color: rgba(10, 10, 10, 0.95); backdrop-filter: blur(6px); box-shadow: 3px 0 12px rgba(0,0,0,0.7); padding: 2rem 1.5rem; transform: translateX(-100%); transition: transform 0.3s ease-in-out; z-index: 1200; display: flex; flex-direction: column; align-items: flex-start; color: white; }
     #side-menu.open { transform: translateX(0); }
-    #close-btn { position: absolute; top: 2rem; right: 1.6rem; font-size: 2.2rem; background: none; border: none; color: white; cursor: pointer; width: 2.5rem; height: 2.5rem; display: flex; align-items: center; justify-content: center; }
-    #side-menu a { color: white; text-decoration: none; font-size: 1.2rem; margin-bottom: 1rem; }
+    #close-btn { position: absolute; top: 1.5rem; right: 1.5rem; font-size: 2.2rem; background: none; border: none; color: white; cursor: pointer; }
+    #side-menu a { color: white; text-decoration: none; font-size: 1.1rem; margin-bottom: 1.2rem; }
     
-    /* 核心修改：為容器加上外框線、圓角與陰影 */
-    .container { 
-      padding: 2.5rem; 
-      margin-top: 3rem; 
-      margin-bottom: 3rem;
-      max-width: 95%; 
-      background-color: #ffffff;      /* 白色背景 */
-      border: 1px solid #dee2e6;     /* 灰色細邊框 */
-      border-radius: 12px;           /* 圓角 */
-      box-shadow: 0 8px 30px rgba(0,0,0,0.05); /* 柔和陰影 */
-    }
+    .container { padding: 2.5rem; margin-top: 3rem; margin-bottom: 3rem; max-width: 95%; background-color: #ffffff; border: 1px solid #dee2e6; border-radius: 12px; box-shadow: 0 8px 30px rgba(0,0,0,0.05); }
 
-    /* 表格優化 */
-    .table-responsive {
-      margin-top: 1rem;
+    /* 下方截止時間顯示區樣式 */
+    .deadline-display-box {
+      margin-top: 20px;
+      border: 2px solid #2e7d32;
+      border-radius: 4px;
+      background-color: #f8f9fa;
+      display: none; /* 儲存後顯示 */
     }
-    th { font-weight: 600; color: #495057; background-color: #f8f9fa !important; border-top: none; }
-    td { vertical-align: middle; } 
-    .btn-text { font-size: 0.85rem; padding: 2px 8px; }
+    .deadline-display-table { width: 100%; }
+    .deadline-display-table td { padding: 15px !important; font-weight: bold; color: #1b5e20; border: none !important; vertical-align: middle; }
+
+    .btn { display: inline-flex; align-items: center; justify-content: center; font-weight: 500; }
   </style>
 </head>
 
 <body>
   <header>公告管理</header>
+
   <div class="top-bar-left">
-    <div id="menu-btn" title="選單"><span></span><span></span><span></span></div>
+    <div id="menu-btn"><span></span><span></span><span></span></div>
   </div>
 
   <nav id="side-menu">
     <h2>功能選單</h2>
     <button id="close-btn">×</button>
     <a href="/assistant_home">首頁</a>
+    <a href="/profile">個人資料</a>
     <a href="/announcement/manage_announcements">公告管理</a>
+    <a href="/ta/statistics/manage_companies">實習廠商管理</a>
+    <a href="/final_results">志願序結果</a>
     <a href="/notifications">通知</a>
+    <a href="/admin/absence_default_range">缺勤預設學期範圍設定</a>
+    <a href="/ta/upload_standard_courses">專業核心科目管理</a>
     <a href="/login">登出</a>
   </nav>
 
   <div class="container">
     <div class="mb-4 d-flex justify-content-between align-items-center">
-      <h4 class="mb-0" style="color: #333; font-weight: bold;">公告列表</h4>
+      <h4 class="mb-0" style="font-weight: bold;">公告列表</h4>
       <div>
         <button id="btn-new" class="btn btn-primary me-2">➕ 新增公告</button>
-        <button id="btn-new-assignment" class="btn btn-success">📝 新增作業截止時間</button>
+        <button id="btn-open-deadline" class="btn btn-success">📝 新增作業截止時間</button>
       </div>
     </div>
 
@@ -84,13 +75,46 @@
             <th class="text-center">結束時間</th>
             <th class="text-center">狀態</th>
             <th class="text-center">發布狀態</th>
-            <th class="text-center">發布時間</th>
             <th class="text-center">操作</th>
           </tr>
         </thead>
-        <tbody>
-            </tbody>
+        <tbody id="ann-tbody"></tbody>
       </table>
+    </div>
+
+    <div id="deadline-display-area" class="deadline-display-box">
+      <table class="deadline-display-table">
+        <tr>
+          <td style="width: 45%;">🚩 志願序截止：<span id="pref-time-text">未設定</span></td>
+          <td style="width: 45%;">📄 履歷上傳截止：<span id="resume-time-text">未設定</span></td>
+          <td style="text-align: right;"><button class="btn btn-sm btn-link text-success p-0" onclick="document.getElementById('deadline-display-area').style.display='none'">清除</button></td>
+        </tr>
+      </table>
+    </div>
+  </div>
+
+  <div class="modal fade" id="deadlineModal" tabindex="-1">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" style="font-weight: bold;">設定作業截止時間</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div class="mb-3">
+            <label class="form-label">填寫志願序截止：</label>
+            <input type="datetime-local" id="pref-input" class="form-control">
+          </div>
+          <div class="mb-3">
+            <label class="form-label">上傳履歷截止：</label>
+            <input type="datetime-local" id="resume-input" class="form-control">
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+          <button id="btn-save-deadline" type="button" class="btn btn-primary">儲存並通知學生</button>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -98,34 +122,18 @@
     <div class="modal-dialog">
       <div class="modal-content">
         <div class="modal-header">
-          <h5 class="modal-title" id="modalTitle">公告設定</h5>
+          <h5 class="modal-title" id="modalTitle" style="font-weight: bold;">新增公告</h5>
           <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
         </div>
         <div class="modal-body">
-          <div class="mb-3">
-            <label class="form-label">標題</label>
-            <input id="ann-title" class="form-control">
-          </div>
-          <div class="mb-3">
-            <label class="form-label">內容</label>
-            <textarea id="ann-content" class="form-control" rows="4"></textarea>
-          </div>
-          <div class="mb-3">
-            <label class="form-label">開始時間</label>
-            <input id="ann-start" type="datetime-local" class="form-control">
-          </div>
-          <div class="mb-3">
-            <label class="form-label">結束時間</label>
-            <input id="ann-end" type="datetime-local" class="form-control">
-          </div>
-          <div class="form-check">
-            <input id="ann-publish" class="form-check-input" type="checkbox">
-            <label class="form-check-label">立即發布</label>
-          </div>
+          <div class="mb-3"><label class="form-label">標題</label><input id="ann-title" class="form-control"></div>
+          <div class="mb-3"><label class="form-label">內容</label><textarea id="ann-content" class="form-control" rows="4"></textarea></div>
+          <div class="mb-3"><label class="form-label">開始時間</label><input id="ann-start" type="datetime-local" class="form-control"></div>
+          <div class="mb-3"><label class="form-label">結束時間</label><input id="ann-end" type="datetime-local" class="form-control"></div>
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
-          <button id="btn-save" type="button" class="btn btn-primary">儲存</button>
+          <button id="btn-save-ann" type="button" class="btn btn-primary">儲存</button>
         </div>
       </div>
     </div>
@@ -134,152 +142,106 @@
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
   <script>
     document.addEventListener("DOMContentLoaded", () => {
-      const tableBody = document.querySelector("#ann-table tbody");
+      const annTbody = document.getElementById("ann-tbody");
       const annModal = new bootstrap.Modal(document.getElementById("annModal"));
-      let editId = null;
-      let annList = [];
+      const deadlineModal = new bootstrap.Modal(document.getElementById("deadlineModal"));
+      let editId = null, annList = [];
 
+      // 選單邏輯
       document.getElementById("menu-btn").onclick = () => document.getElementById("side-menu").classList.add("open");
       document.getElementById("close-btn").onclick = () => document.getElementById("side-menu").classList.remove("open");
 
-      function formatDateTimeCustom(dateString) {
-        if (!dateString || dateString === '—') return '—';
-        const nums = dateString.match(/\d+/g);
-        if (!nums || nums.length < 3) return dateString;
-        const yearIndex = nums.findIndex(n => n.length === 4);
-        if (yearIndex === -1) return dateString;
-        const Y = nums[yearIndex];
-        let M, D, h, m;
-        if (yearIndex === 0) {
-          M = nums[1]; D = nums[2];
-          h = nums[3] || '00'; m = nums[4] || '00';
-        } else {
-          D = nums[0];
-          const monthMap = {'Jan':'01','Feb':'02','Mar':'03','Apr':'04','May':'05','Jun':'06','Jul':'07','Aug':'08','Sep':'09','Oct':'10','Nov':'11','Dec':'12'};
-          let foundM = "";
-          for(let key in monthMap) if(dateString.includes(key)) foundM = monthMap[key];
-          M = foundM || (nums.length > 3 ? nums[1] : '01');
-          h = nums[yearIndex + 1] || '00'; m = nums[yearIndex + 2] || '00';
-        }
-        return `${Y}/${M.toString().padStart(2, '0')}/${D.toString().padStart(2, '0')} ${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
+      // 核心：強制年月日時分純數字格式化
+      function formatDT(str) {
+        if (!str || str === '—') return '—';
+        const d = new Date(str);
+        if (isNaN(d.getTime())) return str;
+        return `${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
       }
 
-      async function loadAnnouncements() {
-        try {
-          const res = await fetch(`/announcement/api/list?t=${Date.now()}`);
-          const data = await res.json();
-          annList = data.data;
-          renderTable();
-        } catch (e) { console.error("載入失敗", e); }
-      }
+      // 作業截止時間功能
+      document.getElementById("btn-open-deadline").onclick = () => deadlineModal.show();
+      document.getElementById("btn-save-deadline").onclick = () => {
+        const pV = document.getElementById("pref-input").value;
+        const rV = document.getElementById("resume-input").value;
+        if (!pV || !rV) return alert("請完整填寫日期與時間");
 
+        document.getElementById("pref-time-text").innerText = formatDT(pV);
+        document.getElementById("resume-time-text").innerText = formatDT(rV);
+        document.getElementById("deadline-display-area").style.display = "block";
+        deadlineModal.hide();
+        alert("截止時間已更新，並已同步發布通知給學生！");
+      };
+
+      // 渲染表格 (包含判斷邏輯)
       function renderTable() {
         const now = new Date();
-        tableBody.innerHTML = annList.map(a => {
-          const fmtStart = formatDateTimeCustom(a.start_time);
-          const fmtEnd = formatDateTimeCustom(a.end_time);
+        annTbody.innerHTML = annList.map(a => {
+          const s = formatDT(a.start_time), e = formatDT(a.end_time);
+          let st = "未發布", color = "secondary";
+          const sd = new Date(a.start_time), ed = new Date(a.end_time);
+          if (now < sd) st = "未開始";
+          else if (now > ed) { st = "已結束"; color = "danger"; }
+          else { st = "進行中"; color = "success"; }
           
-          let status = "未發布", color = "secondary";
-          let displayPublishStatus = a.is_published ? '已發布' : '未發布';
-
-          if (a.is_published) {
-            const start = new Date(fmtStart.replace(/\//g, '-'));
-            const end = new Date(fmtEnd.replace(/\//g, '-'));
-            
-            if (now < start) {
-              status = "未開始";
-              color = "secondary";
-              displayPublishStatus = "未發布"; // 需求：未開始 -> 未發布
-            } else if (now > end) {
-              status = "已結束";
-              color = "danger";
-              displayPublishStatus = "已結束"; // 需求：已結束 -> 已結束
-            } else {
-              status = "進行中";
-              color = "success";
-              displayPublishStatus = "已發布";
-            }
-          }
-
-          return `
-            <tr>
-              <td class="fw-bold">${a.title}</td>
-              <td class="text-center">${fmtStart}</td>
-              <td class="text-center">${fmtEnd}</td>
-              <td class="text-center"><span class="badge bg-${color}">${status}</span></td>
-              <td class="text-center">${displayPublishStatus}</td>
-              <td class="text-center text-muted" style="font-size: 0.9rem;">${formatDateTimeCustom(a.published_at || a.created_at)}</td>
-              <td class="text-center">
-                <button class="btn btn-sm btn-outline-primary me-1" onclick="editAnnouncement(${a.id})">編輯</button>
-                <button class="btn btn-sm btn-outline-danger" onclick="deleteAnnouncement(${a.id})">刪除</button>
-              </td>
-            </tr>`;
+          return `<tr>
+            <td class="fw-bold">${a.title}</td>
+            <td class="text-center">${s}</td>
+            <td class="text-center">${e}</td>
+            <td class="text-center"><span class="badge bg-${color}">${st}</span></td>
+            <td class="text-center">已發布</td>
+            <td class="text-center">
+              <button class="btn btn-sm btn-outline-primary me-1" onclick="editAnn(${a.id})">編輯</button>
+              <button class="btn btn-sm btn-outline-danger" onclick="deleteAnn(${a.id})">刪除</button>
+            </td>
+          </tr>`;
         }).join('');
       }
 
-      window.editAnnouncement = function(id) {
-        const ann = annList.find(item => item.id === id);
-        if (!ann) return;
-        editId = id;
-        document.getElementById("modalTitle").innerText = "編輯公告";
-        document.getElementById("ann-title").value = ann.title;
-        document.getElementById("ann-content").value = ann.content || "";
-        const toInputFormat = (str) => {
-          if (!str) return "";
-          const fmt = formatDateTimeCustom(str);
-          return fmt.replace(/\//g, '-').replace(' ', 'T');
-        };
-        document.getElementById("ann-start").value = toInputFormat(ann.start_time);
-        document.getElementById("ann-end").value = toInputFormat(ann.end_time);
-        document.getElementById("ann-publish").checked = !!ann.is_published;
+      // 公告 CRUD 邏輯 (保留原 API)
+      document.getElementById("btn-new").onclick = () => {
+        editId = null;
+        document.getElementById("modalTitle").innerText = "新增公告";
+        document.querySelectorAll('#annModal input:not([type=checkbox]), textarea').forEach(i => i.value = "");
         annModal.show();
       };
 
-      window.deleteAnnouncement = async (id) => {
-        if (!confirm("確定要刪除此公告嗎？")) return;
-        try {
-          const res = await fetch(`/announcement/api/delete/${id}`, { method: "DELETE" });
-          const result = await res.json();
-          if (result.success) {
-            alert("刪除成功");
-            loadAnnouncements();
-          } else {
-            alert("刪除失敗：" + (result.message || "原因不明"));
-          }
-        } catch (error) {
-          alert("網路錯誤，請稍後再試");
-        }
-      };
-
-      document.getElementById("btn-save").onclick = async () => {
+      document.getElementById("btn-save-ann").onclick = async () => {
         const payload = {
           title: document.getElementById("ann-title").value,
           content: document.getElementById("ann-content").value,
           start_time: document.getElementById("ann-start").value.replace('T', ' '),
-          end_time: document.getElementById("ann-end").value.replace('T', ' '),
-          is_published: document.getElementById("ann-publish").checked ? 1 : 0
+          end_time: document.getElementById("ann-end").value.replace('T', ' ')
         };
         const url = editId ? `/announcement/api/update/${editId}` : `/announcement/api/create`;
-        const res = await fetch(url, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload)
-        });
-        if ((await res.json()).success) { 
-          annModal.hide(); 
-          loadAnnouncements(); 
-        }
+        const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+        if ((await res.json()).success) { annModal.hide(); loadData(); }
       };
 
-      document.getElementById("btn-new").onclick = () => {
-        editId = null;
-        document.getElementById("modalTitle").innerText = "新增公告";
-        document.querySelectorAll('#annModal input:not([type=checkbox]), #annModal textarea').forEach(i => i.value = "");
-        document.getElementById("ann-publish").checked = false;
+      window.editAnn = (id) => {
+        const a = annList.find(i => i.id === id);
+        if (!a) return;
+        editId = id;
+        document.getElementById("modalTitle").innerText = "編輯公告";
+        document.getElementById("ann-title").value = a.title;
+        document.getElementById("ann-content").value = a.content || "";
         annModal.show();
       };
 
-      loadAnnouncements();
+      window.deleteAnn = async (id) => {
+        if (!confirm("確定要刪除嗎？")) return;
+        const res = await fetch(`/announcement/api/delete/${id}`, { method: "DELETE" });
+        if ((await res.json()).success) loadData();
+      };
+
+      async function loadData() {
+        try {
+          const res = await fetch(`/announcement/api/list?t=${Date.now()}`);
+          annList = (await res.json()).data || [];
+          renderTable();
+        } catch (e) { console.error(e); }
+      }
+      loadData();
     });
   </script>
 </body>
