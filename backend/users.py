@@ -702,7 +702,7 @@ def teacher_company_resumes_page(company_id):
     allowed_roles = ['teacher', 'ta']
     if session.get('role') not in allowed_roles:
         return redirect(url_for('auth_bp.login_page'))
-    return render_template('user_shared/company_resume_review.html', company_id=company_id)
+    return render_template('resume/company_resume_review.html', company_id=company_id)
 
 # -------------------------
 # API - 獲取所有公開的職缺（給指導老師、科助查看）
