@@ -833,8 +833,8 @@ def get_vendor_resumes():
                     JOIN internship_companies ic ON sp.company_id = ic.id
                     LEFT JOIN internship_jobs ij ON sp.job_id = ij.id
                     WHERE sp.company_id IN ({preference_placeholders})
-                    -- 只顯示該廠商建立的職缺或老師建立的職缺對應的志願序
-                    AND (ij.created_by_vendor_id = %s OR ij.created_by_vendor_id IS NULL)
+                    -- 如果是老師訪問，顯示所有職缺；如果是廠商訪問，只顯示該廠商建立的職缺或老師建立的職缺
+                    AND (%s IN ('teacher', 'ta') OR ij.created_by_vendor_id = %s OR ij.created_by_vendor_id IS NULL)
                     -- 只顯示已經被指導老師審核通過的志願序
                     -- 檢查該學生的履歷是否已經被指導老師（role='teacher'）審核通過
                     AND EXISTS (
@@ -845,7 +845,7 @@ def get_vendor_resumes():
                         AND reviewer.role = 'teacher'
                         AND r.reviewed_by IS NOT NULL
                     )
-                """, tuple(company_ids) + (vendor_id,))
+                """, tuple(company_ids) + (user_role, vendor_id))
             else:
                 # 如果歷史表不存在，使用簡化的查詢
                 cursor.execute(f"""
@@ -862,8 +862,8 @@ def get_vendor_resumes():
                     JOIN internship_companies ic ON sp.company_id = ic.id
                     LEFT JOIN internship_jobs ij ON sp.job_id = ij.id
                     WHERE sp.company_id IN ({preference_placeholders})
-                    -- 只顯示該廠商建立的職缺或老師建立的職缺對應的志願序
-                    AND (ij.created_by_vendor_id = %s OR ij.created_by_vendor_id IS NULL)
+                    -- 如果是老師訪問，顯示所有職缺；如果是廠商訪問，只顯示該廠商建立的職缺或老師建立的職缺
+                    AND (%s IN ('teacher', 'ta') OR ij.created_by_vendor_id = %s OR ij.created_by_vendor_id IS NULL)
                     -- 只顯示已經被指導老師審核通過的志願序
                     -- 檢查該學生的履歷是否已經被指導老師（role='teacher'）審核通過
                     AND EXISTS (
@@ -874,7 +874,7 @@ def get_vendor_resumes():
                         AND reviewer.role = 'teacher'
                         AND r.reviewed_by IS NOT NULL
                     )
-                """, tuple(company_ids) + (vendor_id,))
+                """, tuple(company_ids) + (user_role, vendor_id))
             
             # 使用字典儲存學生的志願申請，鍵為 student_id
             for pref in cursor.fetchall() or []:
@@ -930,8 +930,8 @@ def get_vendor_resumes():
                     FROM student_preferences sp
                     JOIN internship_companies ic ON sp.company_id = ic.id
                     LEFT JOIN internship_jobs ij ON sp.job_id = ij.id
-                    -- 只顯示該廠商建立的職缺或老師建立的職缺對應的志願序
-                    WHERE (ij.created_by_vendor_id = %s OR ij.created_by_vendor_id IS NULL)
+                    -- 如果是老師訪問，顯示所有職缺；如果是廠商訪問，只顯示該廠商建立的職缺或老師建立的職缺
+                    WHERE (%s IN ('teacher', 'ta') OR ij.created_by_vendor_id = %s OR ij.created_by_vendor_id IS NULL)
                     -- 只顯示已經被指導老師審核通過的志願序
                     -- 檢查該學生的履歷是否已經被指導老師（role='teacher'）審核通過
                     AND EXISTS (
@@ -942,7 +942,7 @@ def get_vendor_resumes():
                         AND reviewer.role = 'teacher'
                         AND r.reviewed_by IS NOT NULL
                     )
-                """, (vendor_id,))
+                """, (user_role, vendor_id))
             else:
                 # 如果歷史表不存在，使用簡化的查詢
                 cursor.execute("""
@@ -958,8 +958,8 @@ def get_vendor_resumes():
                     FROM student_preferences sp
                     JOIN internship_companies ic ON sp.company_id = ic.id
                     LEFT JOIN internship_jobs ij ON sp.job_id = ij.id
-                    -- 只顯示該廠商建立的職缺或老師建立的職缺對應的志願序
-                    WHERE (ij.created_by_vendor_id = %s OR ij.created_by_vendor_id IS NULL)
+                    -- 如果是老師訪問，顯示所有職缺；如果是廠商訪問，只顯示該廠商建立的職缺或老師建立的職缺
+                    WHERE (%s IN ('teacher', 'ta') OR ij.created_by_vendor_id = %s OR ij.created_by_vendor_id IS NULL)
                     -- 只顯示已經被指導老師審核通過的志願序
                     -- 檢查該學生的履歷是否已經被指導老師（role='teacher'）審核通過
                     AND EXISTS (
@@ -970,7 +970,7 @@ def get_vendor_resumes():
                         AND reviewer.role = 'teacher'
                         AND r.reviewed_by IS NOT NULL
                     )
-                """, (vendor_id,))
+                """, (user_role, vendor_id))
             for pref in cursor.fetchall() or []:
                 student_id = pref['student_id']
                 if student_id not in preferences_map:
