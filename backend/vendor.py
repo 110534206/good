@@ -609,6 +609,71 @@ def vendor_resume_review():
     return render_template("resume/vendor_review_resume.html")
 
 
+@vendor_bp.route("/vendor/api/companies/locations", methods=["GET"])
+def get_company_locations():
+    """獲取公司的地址列表（從 internship_companies 表的 location 欄位）"""
+    conn = None
+    cursor = None
+    try:
+        if "user_id" not in session:
+            return jsonify({"success": False, "message": "請先登入"}), 403
+        
+        user_role = session.get("role")
+        if user_role not in ["vendor", "teacher", "ta"]:
+            return jsonify({"success": False, "message": "未授權"}), 403
+        
+        conn = get_db()
+        cursor = conn.cursor(dictionary=True)
+        
+        # 如果是廠商，只獲取該廠商關聯的公司地址
+        # 如果是老師/TA，獲取所有已審核通過的公司地址
+        if user_role == "vendor":
+            user_id = session.get("user_id")
+            # 找到該廠商關聯的公司
+            cursor.execute("""
+                SELECT DISTINCT ic.location
+                FROM internship_companies ic
+                JOIN users u ON u.teacher_name = (
+                    SELECT name FROM users WHERE id = ic.advisor_user_id AND role = 'teacher'
+                )
+                WHERE u.id = %s 
+                AND ic.status = 'approved'
+                AND ic.location IS NOT NULL
+                AND ic.location != ''
+                ORDER BY ic.location
+            """, (user_id,))
+        else:
+            # 老師/TA 可以查看所有已審核通過的公司地址
+            cursor.execute("""
+                SELECT DISTINCT location
+                FROM internship_companies
+                WHERE status = 'approved'
+                AND location IS NOT NULL
+                AND location != ''
+                ORDER BY location
+            """)
+        
+        locations = cursor.fetchall()
+        
+        # 轉換為簡單的列表格式
+        location_list = [{"value": loc["location"], "label": loc["location"]} for loc in locations]
+        
+        return jsonify({
+            "success": True,
+            "locations": location_list
+        })
+        
+    except Exception as e:
+        print(f"❌ 獲取公司地址失敗：{e}")
+        traceback.print_exc()
+        return jsonify({"success": False, "message": f"載入失敗：{str(e)}"}), 500
+    finally:
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
+
+
 @vendor_bp.route("/vendor/api/resumes", methods=["GET"])
 def get_vendor_resumes():
     """

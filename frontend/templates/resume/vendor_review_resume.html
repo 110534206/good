@@ -92,6 +92,29 @@
       text-decoration: none; border-radius: 4px; transition: background-color 0.2s ease;
     }
     #side-menu a:hover { background-color: rgba(255, 255, 255, 0.18); color: #fff; }
+    
+    /* 模態框背景遮罩樣式 - 灰黑色 */
+    .modal-backdrop {
+      background-color: rgba(0, 0, 0, 0.6) !important;
+      opacity: 1 !important;
+    }
+    
+    .modal-backdrop.show {
+      opacity: 1 !important;
+      background-color: rgba(0, 0, 0, 0.6) !important;
+    }
+    
+    /* 確保模態框顯示時背景變暗 */
+    body.modal-open {
+      overflow: hidden;
+    }
+    
+    /* 當面試表單模態框打開時，確保背景遮罩正確顯示 */
+    #interviewFormModal.show ~ .modal-backdrop,
+    #interviewFormModal.show + .modal-backdrop {
+      background-color: rgba(0, 0, 0, 0.6) !important;
+      opacity: 1 !important;
+    }
   </style>
 </head>
 
@@ -138,6 +161,12 @@
         </select>
         <input type="text" id="searchBox" style="padding: 10px 12px; border-radius: 8px; border: 1px solid #e2e8f0; min-width: 200px; flex: 1;" placeholder="搜尋帳號/檔案" />
       </div>
+      
+      <div style="margin-bottom: 16px;">
+        <button id="interviewScheduleBtn" class="btn btn-primary" style="padding: 10px 20px; border-radius: 8px; font-weight: 600;">
+          面試排程
+        </button>
+      </div>
 
       <div class="table-wrapper">
         <table style="width: 100%; border-collapse: collapse;">
@@ -178,6 +207,68 @@
     </div>
   </div>
 
+  <div class="modal fade" id="interviewScheduleModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">面試排程</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div id="calendarContainer" style="padding: 20px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+              <button id="prevMonthBtn" class="btn btn-outline-secondary" style="padding: 8px 16px;">‹ 上個月</button>
+              <h4 id="currentMonthYear" style="margin: 0; font-weight: 600;"></h4>
+              <button id="nextMonthBtn" class="btn btn-outline-secondary" style="padding: 8px 16px;">下個月 ›</button>
+            </div>
+            <div id="calendar" style="display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px;"></div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" data-bs-dismiss="modal">關閉</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal fade" id="interviewFormModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">新增面試排程</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <form id="interviewForm">
+            <div class="mb-3">
+              <label for="interviewDate" class="form-label" style="font-weight: 600;">面試日期</label>
+              <input type="text" class="form-control" id="interviewDate" readonly style="background-color: #f9fafb;">
+            </div>
+            <div class="mb-3">
+              <label for="interviewTime" class="form-label" style="font-weight: 600;">面試時間</label>
+              <input type="time" class="form-control" id="interviewTime" required>
+            </div>
+            <div class="mb-3">
+              <label for="interviewLocation" class="form-label" style="font-weight: 600;">面試地點</label>
+              <select class="form-control" id="interviewLocation" required>
+                <option value="">請選擇面試地點</option>
+                <option value="康寧大學科辦">康寧大學科辦</option>
+              </select>
+            </div>
+            <div class="mb-3">
+              <label for="interviewNotes" class="form-label" style="font-weight: 600;">面試須知</label>
+              <textarea class="form-control" id="interviewNotes" rows="5" placeholder="請輸入面試須知，例如：攜帶文件、注意事項等..." style="resize: vertical;"></textarea>
+            </div>
+          </form>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+          <button type="button" class="btn btn-primary" id="saveInterviewBtn">儲存</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <nav id="side-menu" aria-hidden="true" role="navigation" aria-label="功能選單">
     <button id="close-btn" aria-label="關閉功能選單">×</button>
     <h2>功能選單</h2>
@@ -200,6 +291,8 @@
     const rowsPerPage = 10;
     // 紀錄已經按下「面試」的申請（以 preferenceId 或 resumeId 作為 key）
     const interviewedSet = new Set();
+    // 面試地點下拉選單用的公司名稱列表（從履歷資料收集）
+    let interviewCompanyNames = [];
 
     // 定義狀態顏色，approved 對應 success (綠色)
     function statusColor(status) {
@@ -285,6 +378,15 @@
                 interviewedSet.add(key);
               }
             });
+
+            // 從履歷資料蒐集公司名稱（用於面試地點下拉選單）
+            const companyNameSet = new Set();
+            allResumes.forEach(r => {
+              if (r.company_name && r.company_name.trim()) {
+                companyNameSet.add(r.company_name.trim());
+              }
+            });
+            interviewCompanyNames = Array.from(companyNameSet);
             
             populateFilters(allResumes, companyData, positionData);
 
@@ -309,6 +411,10 @@
       document.getElementById("interviewStatusFilter").addEventListener("change", applyFilters);
       document.getElementById("searchBox").addEventListener("input", applyFilters);
       document.getElementById("saveCommentBtn").addEventListener("click", saveComment);
+      document.getElementById("interviewScheduleBtn").addEventListener("click", openInterviewSchedule);
+      document.getElementById("prevMonthBtn").addEventListener("click", () => changeMonth(-1));
+      document.getElementById("nextMonthBtn").addEventListener("click", () => changeMonth(1));
+      document.getElementById("saveInterviewBtn").addEventListener("click", saveInterviewSchedule);
     });
 
     function initMenu() {
@@ -824,6 +930,304 @@
                  alert("失敗");
              }
         });
+    }
+
+    // 月曆相關變數
+    let currentCalendarDate = new Date();
+    let selectedInterviewDate = null;
+    // 存儲面試排程（格式：'YYYY-MM-DD' => {time: 'HH:MM', location: '...', notes: '...'}）
+    const interviewSchedules = new Map();
+    
+    // 從本地存儲載入面試排程
+    function loadInterviewSchedules() {
+      const saved = localStorage.getItem('interviewSchedules');
+      if (saved) {
+        try {
+          const schedules = JSON.parse(saved);
+          Object.keys(schedules).forEach(date => {
+            interviewSchedules.set(date, schedules[date]);
+          });
+        } catch (e) {
+          console.error('載入面試排程失敗:', e);
+        }
+      }
+    }
+    
+    // 保存面試排程到本地存儲
+    function saveInterviewSchedulesToStorage() {
+      const schedules = {};
+      interviewSchedules.forEach((value, key) => {
+        schedules[key] = value;
+      });
+      localStorage.setItem('interviewSchedules', JSON.stringify(schedules));
+    }
+    
+    // 初始化時載入
+    loadInterviewSchedules();
+
+    // 填充面試地點下拉選單（包含固定地點與公司名稱）
+    function populateLocationDropdown() {
+      const locationSelect = document.getElementById('interviewLocation');
+      if (!locationSelect) return;
+      
+      // 清空現有選項（保留第一個「請選擇」選項）
+      locationSelect.innerHTML = '<option value=\"\">請選擇面試地點</option>';
+      
+      // 固定加入「康寧大學科辦」
+      const schoolOption = document.createElement('option');
+      schoolOption.value = '康寧大學科辦';
+      schoolOption.textContent = '康寧大學科辦';
+      locationSelect.appendChild(schoolOption);
+      
+      // 使用 Set 避免重複公司名稱
+      const added = new Set(['康寧大學科辦']);
+      interviewCompanyNames.forEach(name => {
+        if (name && !added.has(name)) {
+          const opt = document.createElement('option');
+          opt.value = name;
+          opt.textContent = name;
+          locationSelect.appendChild(opt);
+          added.add(name);
+        }
+      });
+    }
+    
+    // 開啟面試排程月曆
+    function openInterviewSchedule() {
+      currentCalendarDate = new Date();
+      renderCalendar();
+      const modal = new bootstrap.Modal(document.getElementById("interviewScheduleModal"));
+      modal.show();
+    }
+
+    // 改變月份
+    function changeMonth(direction) {
+      currentCalendarDate.setMonth(currentCalendarDate.getMonth() + direction);
+      renderCalendar();
+    }
+    
+    // 開啟面試表單
+    function openInterviewForm(date) {
+      selectedInterviewDate = date;
+      const dateStr = formatDate(date);
+      const dateDisplay = formatDateDisplay(date);
+      
+      document.getElementById('interviewDate').value = dateDisplay;
+      document.getElementById('interviewTime').value = '';
+      document.getElementById('interviewLocation').value = '';
+      document.getElementById('interviewNotes').value = '';
+      
+      // 依照目前履歷資料重建地點下拉選單（包含公司名稱）
+      populateLocationDropdown();
+      
+      // 如果已有排程，載入現有資料
+      if (interviewSchedules.has(dateStr)) {
+        const schedule = interviewSchedules.get(dateStr);
+        document.getElementById('interviewTime').value = schedule.time || '';
+        document.getElementById('interviewLocation').value = schedule.location || '';
+        document.getElementById('interviewNotes').value = schedule.notes || '';
+      }
+      
+      // 先關閉月曆模態框
+      const scheduleModal = bootstrap.Modal.getInstance(document.getElementById("interviewScheduleModal"));
+      if (scheduleModal) {
+        scheduleModal.hide();
+      }
+      
+      // 等待月曆模態框完全關閉後再打開表單模態框
+      setTimeout(() => {
+        const formModal = new bootstrap.Modal(document.getElementById("interviewFormModal"));
+        formModal.show();
+        
+        // 確保背景遮罩正確顯示
+        setTimeout(() => {
+          const backdrop = document.querySelector('.modal-backdrop');
+          if (backdrop) {
+            backdrop.style.backgroundColor = 'rgba(0, 0, 0, 0.6)';
+            backdrop.style.opacity = '1';
+          }
+        }, 100);
+      }, 300);
+    }
+    
+    // 格式化日期為 YYYY-MM-DD
+    function formatDate(date) {
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    }
+    
+    // 格式化日期顯示
+    function formatDateDisplay(date) {
+      const year = date.getFullYear();
+      const month = date.getMonth() + 1;
+      const day = date.getDate();
+      const weekDays = ["日", "一", "二", "三", "四", "五", "六"];
+      const weekDay = weekDays[date.getDay()];
+      return `${year}年${month}月${day}日（${weekDay}）`;
+    }
+    
+    // 保存面試排程
+    function saveInterviewSchedule() {
+      if (!selectedInterviewDate) {
+        alert('請選擇日期');
+        return;
+      }
+      
+      const time = document.getElementById('interviewTime').value.trim();
+      if (!time) {
+        alert('請輸入面試時間');
+        document.getElementById('interviewTime').focus();
+        return;
+      }
+      
+      const location = document.getElementById('interviewLocation').value.trim();
+      if (!location) {
+        alert('請選擇面試地點');
+        document.getElementById('interviewLocation').focus();
+        return;
+      }
+      
+      const notes = document.getElementById('interviewNotes').value.trim();
+      const dateStr = formatDate(selectedInterviewDate);
+      
+      // 保存到 Map
+      interviewSchedules.set(dateStr, {
+        time: time,
+        location: location,
+        notes: notes
+      });
+      
+      // 保存到本地存儲
+      saveInterviewSchedulesToStorage();
+      
+      // 關閉表單模態框
+      const formModal = bootstrap.Modal.getInstance(document.getElementById("interviewFormModal"));
+      formModal.hide();
+      
+      // 重新渲染月曆以顯示新標記
+      renderCalendar();
+      
+      alert('✅ 面試排程已儲存');
+    }
+
+    // 渲染月曆
+    function renderCalendar() {
+      const calendar = document.getElementById("calendar");
+      const monthYear = document.getElementById("currentMonthYear");
+      
+      const year = currentCalendarDate.getFullYear();
+      const month = currentCalendarDate.getMonth();
+      
+      // 設置月份年份標題
+      const monthNames = ["一月", "二月", "三月", "四月", "五月", "六月", 
+                          "七月", "八月", "九月", "十月", "十一月", "十二月"];
+      monthYear.textContent = `${year}年 ${monthNames[month]}`;
+      
+      // 獲取當月第一天和最後一天
+      const firstDay = new Date(year, month, 1);
+      const lastDay = new Date(year, month + 1, 0);
+      const daysInMonth = lastDay.getDate();
+      const startingDayOfWeek = firstDay.getDay(); // 0 = 星期日, 1 = 星期一, ...
+      
+      // 清空月曆
+      calendar.innerHTML = "";
+      
+      // 添加星期標題
+      const weekDays = ["日", "一", "二", "三", "四", "五", "六"];
+      weekDays.forEach(day => {
+        const dayHeader = document.createElement("div");
+        dayHeader.style.cssText = "padding: 12px; text-align: center; font-weight: 600; background-color: #f1f5f9; border-radius: 8px;";
+        dayHeader.textContent = day;
+        calendar.appendChild(dayHeader);
+      });
+      
+      // 添加空白格子（月初）
+      for (let i = 0; i < startingDayOfWeek; i++) {
+        const emptyCell = document.createElement("div");
+        emptyCell.style.cssText = "padding: 12px; min-height: 80px; border: 1px solid #e2e8f0; border-radius: 8px; background-color: #f9fafb;";
+        calendar.appendChild(emptyCell);
+      }
+      
+      // 添加日期格子
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      
+      for (let day = 1; day <= daysInMonth; day++) {
+        const dateCell = document.createElement("div");
+        const cellDate = new Date(year, month, day);
+        cellDate.setHours(0, 0, 0, 0);
+        
+        const isToday = cellDate.getTime() === today.getTime();
+        const isPast = cellDate < today;
+        
+        dateCell.style.cssText = `
+          padding: 12px;
+          min-height: 80px;
+          border: 1px solid #e2e8f0;
+          border-radius: 8px;
+          background-color: ${isToday ? '#e3f2fd' : isPast ? '#f9fafb' : '#ffffff'};
+          cursor: ${isPast ? 'not-allowed' : 'pointer'};
+          transition: background-color 0.2s;
+        `;
+        
+        // 日期數字
+        const dayNumber = document.createElement("div");
+        dayNumber.style.cssText = `
+          font-weight: ${isToday ? '700' : '600'};
+          font-size: 1rem;
+          color: ${isToday ? '#0055a8' : isPast ? '#94a3b8' : '#1e293b'};
+          margin-bottom: 4px;
+        `;
+        dayNumber.textContent = day;
+        dateCell.appendChild(dayNumber);
+        
+        // 檢查是否有面試安排（從本地存儲或後端獲取）
+        const dateKey = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+        const hasInterview = interviewSchedules.has(dateKey);
+        
+        if (hasInterview) {
+          const interviewBadge = document.createElement("div");
+          interviewBadge.style.cssText = `
+            font-size: 0.75rem;
+            color: #fff;
+            background-color: #0dcaf0;
+            padding: 2px 6px;
+            border-radius: 4px;
+            margin-top: 4px;
+            display: inline-block;
+          `;
+          interviewBadge.textContent = "面試";
+          dateCell.appendChild(interviewBadge);
+        }
+        
+        // 添加點選事件（非過去的日期）
+        if (!isPast) {
+          dateCell.addEventListener('click', () => {
+            openInterviewForm(cellDate);
+          });
+          dateCell.addEventListener('mouseenter', () => {
+            dateCell.style.backgroundColor = '#f0f9ff';
+          });
+          dateCell.addEventListener('mouseleave', () => {
+            dateCell.style.backgroundColor = isToday ? '#e3f2fd' : '#ffffff';
+          });
+        } else {
+          dateCell.style.opacity = '0.6';
+        }
+        
+        calendar.appendChild(dateCell);
+      }
+      
+      // 添加空白格子（月末）
+      const totalCells = calendar.children.length - 7; // 減去星期標題
+      const remainingCells = 42 - totalCells; // 6行 x 7列 = 42格
+      for (let i = 0; i < remainingCells; i++) {
+        const emptyCell = document.createElement("div");
+        emptyCell.style.cssText = "padding: 12px; min-height: 80px; border: 1px solid #e2e8f0; border-radius: 8px; background-color: #f9fafb;";
+        calendar.appendChild(emptyCell);
+      }
     }
 
   </script>
