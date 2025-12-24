@@ -1101,34 +1101,52 @@ def get_vendor_resumes():
             if preference_id:
                 try:
                     _ensure_history_table(cursor)
-                    # 查詢留言（只查詢當前廠商的留言，action = 'comment'）
-                    cursor.execute("""
+                    # 查詢留言 (老師訪問時查詢所有廠商的留言，廠商訪問時只查詢自己的留言)
+                    comment_reviewer_condition = ""
+                    comment_params = [preference_id]
+                    if user_role == 'vendor':
+                        comment_reviewer_condition = "AND reviewer_id = %s"
+                        comment_params.append(vendor_id)
+                    
+                    cursor.execute(f"""
                         SELECT comment 
                         FROM vendor_preference_history 
-                        WHERE preference_id = %s AND reviewer_id = %s AND action = 'comment'
+                        WHERE preference_id = %s {comment_reviewer_condition} AND action = 'comment'
                         ORDER BY created_at DESC 
                         LIMIT 1
-                    """, (preference_id, vendor_id))
+                    """, tuple(comment_params))
                     vendor_comment_row = cursor.fetchone()
                     if vendor_comment_row and vendor_comment_row.get('comment'):
                         vendor_comment = vendor_comment_row.get('comment')
                     
-                    # 查詢是否有面試記錄（只查詢當前廠商的面試記錄）
-                    cursor.execute("""
+                    # 查詢是否有面試記錄 (老師訪問時查詢所有廠商的面試記錄，廠商訪問時只查詢自己的面試記錄)
+                    interview_reviewer_condition = ""
+                    interview_params = [preference_id]
+                    if user_role == 'vendor':
+                        interview_reviewer_condition = "AND reviewer_id = %s"
+                        interview_params.append(vendor_id)
+                    
+                    cursor.execute(f"""
                         SELECT COUNT(*) as count
                         FROM vendor_preference_history 
-                        WHERE preference_id = %s AND reviewer_id = %s AND action = 'interview'
-                    """, (preference_id, vendor_id))
+                        WHERE preference_id = %s {interview_reviewer_condition} AND action = 'interview'
+                    """, tuple(interview_params))
                     interview_result = cursor.fetchone()
                     if interview_result and interview_result.get('count', 0) > 0:
                         has_interview = True
                     
-                    # 查詢是否已完成面試（只查詢當前廠商的面試完成記錄）
-                    cursor.execute("""
+                    # 查詢是否已完成面試 (老師訪問時查詢所有廠商的面試完成記錄，廠商訪問時只查詢自己的面試完成記錄)
+                    completed_reviewer_condition = ""
+                    completed_params = [preference_id]
+                    if user_role == 'vendor':
+                        completed_reviewer_condition = "AND reviewer_id = %s"
+                        completed_params.append(vendor_id)
+                    
+                    cursor.execute(f"""
                         SELECT COUNT(*) as count
                         FROM vendor_preference_history 
-                        WHERE preference_id = %s AND reviewer_id = %s AND action = 'interview_completed'
-                    """, (preference_id, vendor_id))
+                        WHERE preference_id = %s {completed_reviewer_condition} AND action = 'interview_completed'
+                    """, tuple(completed_params))
                     completed_result = cursor.fetchone()
                     if completed_result and completed_result.get('count', 0) > 0:
                         interview_completed = True

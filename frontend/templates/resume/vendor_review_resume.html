@@ -110,7 +110,6 @@
   <main>
     <section class="panel" aria-label="履歷列表">
       <div class="panel-header">
-        <h2 id="resumeListTitle">履歷列表</h2>
       </div>
       <div style="display: flex; flex-wrap: wrap; gap: 16px; align-items: center; margin-bottom: 16px;">
         <select id="departmentFilter" style="padding: 10px 12px; border-radius: 8px; border: 1px solid #e2e8f0; min-width: 150px;">
@@ -130,6 +129,12 @@
           <option value="pending">待審核</option>
           <option value="approved">通過</option>
           <option value="rejected">退件</option>
+        </select>
+        <select id="interviewStatusFilter" style="padding: 10px 12px; border-radius: 8px; border: 1px solid #e2e8f0; min-width: 150px;">
+          <option value="">所有面試狀態</option>
+          <option value="none">未面試</option>
+          <option value="interviewing">面試中</option>
+          <option value="completed">已面試</option>
         </select>
         <input type="text" id="searchBox" style="padding: 10px 12px; border-radius: 8px; border: 1px solid #e2e8f0; min-width: 200px; flex: 1;" placeholder="搜尋帳號/檔案" />
       </div>
@@ -301,6 +306,7 @@
       document.getElementById("companyNameFilter").addEventListener("change", applyFilters);
       document.getElementById("companyFilter").addEventListener("change", applyFilters);
       document.getElementById("statusFilter").addEventListener("change", applyFilters);
+      document.getElementById("interviewStatusFilter").addEventListener("change", applyFilters);
       document.getElementById("searchBox").addEventListener("input", applyFilters);
       document.getElementById("saveCommentBtn").addEventListener("click", saveComment);
     });
@@ -385,6 +391,7 @@
       const companyNameFilter = document.getElementById("companyNameFilter").value.trim();
       const jobFilter = document.getElementById("companyFilter").value.trim();
       const status = document.getElementById("statusFilter").value.trim();
+      const interviewStatus = document.getElementById("interviewStatusFilter").value.trim();
       const keyword = document.getElementById("searchBox").value.trim().toLowerCase();
 
       const filtered = allResumes.filter(r => {
@@ -411,7 +418,26 @@
            matchesStatus = statusStr === status;  // 使用嚴格相等，確保精確匹配
         }
 
-        return matchesDept && matchesClass && matchesCompanyName && matchesJob && matchesStatus && matchesKeyword;
+        // 面試狀態篩選
+        let matchesInterviewStatus = true;
+        if (interviewStatus) {
+          const key = (r.preference_id || r.preferenceId || r.id);
+          const hasInterviewed = interviewedSet.has(String(key)) || r.has_interview || false;
+          const isInterviewCompleted = r.interview_completed || false;
+          
+          if (interviewStatus === 'none') {
+            // 未面試：沒有面試記錄
+            matchesInterviewStatus = !hasInterviewed && !isInterviewCompleted;
+          } else if (interviewStatus === 'interviewing') {
+            // 面試中：有面試記錄但未完成
+            matchesInterviewStatus = hasInterviewed && !isInterviewCompleted;
+          } else if (interviewStatus === 'completed') {
+            // 已面試：已完成面試
+            matchesInterviewStatus = isInterviewCompleted;
+          }
+        }
+
+        return matchesDept && matchesClass && matchesCompanyName && matchesJob && matchesStatus && matchesInterviewStatus && matchesKeyword;
       });
 
       renderTable(filtered);
