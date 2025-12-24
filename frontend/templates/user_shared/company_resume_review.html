@@ -147,12 +147,6 @@
           <option value="approved">通過</option>
           <option value="rejected">退件</option>
         </select>
-        <select id="interviewStatusFilter" style="padding: 10px 12px; border-radius: 8px; border: 1px solid #e2e8f0; min-width: 150px;">
-          <option value="">所有面試狀態</option>
-          <option value="none">未面試</option>
-          <option value="interviewing">面試中</option>
-          <option value="completed">已面試</option>
-        </select>
         <input type="text" id="searchBox" style="padding: 10px 12px; border-radius: 8px; border: 1px solid #e2e8f0; min-width: 200px; flex: 1;" placeholder="搜尋帳號/檔案" />
       </div>
 
@@ -285,7 +279,6 @@
       document.getElementById("companyNameFilter").addEventListener("change", applyFilters);
       document.getElementById("companyFilter").addEventListener("change", applyFilters);
       document.getElementById("statusFilter").addEventListener("change", applyFilters);
-      document.getElementById("interviewStatusFilter").addEventListener("change", applyFilters);
       document.getElementById("searchBox").addEventListener("input", applyFilters);
     });
 
@@ -392,7 +385,6 @@
       const companyNameFilter = document.getElementById("companyNameFilter").value.trim();
       const jobFilter = document.getElementById("companyFilter").value.trim();
       const status = document.getElementById("statusFilter").value.trim();
-      const interviewStatus = document.getElementById("interviewStatusFilter").value.trim();
       const keyword = document.getElementById("searchBox").value.trim().toLowerCase();
 
       const filtered = allResumes.filter(r => {
@@ -419,25 +411,7 @@
           matchesStatus = statusStr === status;
         }
 
-        // 面試狀態篩選（與 vendor_review_resume.html 同步）
-        let matchesInterviewStatus = true;
-        if (interviewStatus) {
-          const hasInterviewed = r.has_interview || false;
-          const isInterviewCompleted = r.interview_completed || false;
-          
-          if (interviewStatus === 'none') {
-            // 未面試：沒有面試記錄
-            matchesInterviewStatus = !hasInterviewed && !isInterviewCompleted;
-          } else if (interviewStatus === 'interviewing') {
-            // 面試中：有面試記錄但未完成
-            matchesInterviewStatus = hasInterviewed && !isInterviewCompleted;
-          } else if (interviewStatus === 'completed') {
-            // 已面試：已完成面試
-            matchesInterviewStatus = isInterviewCompleted;
-          }
-        }
-
-        return matchesDept && matchesClass && matchesCompanyName && matchesJob && matchesStatus && matchesInterviewStatus && matchesKeyword;
+        return matchesDept && matchesClass && matchesCompanyName && matchesJob && matchesStatus && matchesKeyword;
       });
 
       renderTable(filtered);
@@ -495,7 +469,7 @@
               ${
                 isInterviewCompleted
                   ? `<span class="status-badge bg-info">已面試</span>`
-                  : (hasInterviewed || row.has_interview)
+                  : hasInterviewed
                     ? `<span class="status-badge bg-secondary">面試中</span>`
                     : ''
               }
