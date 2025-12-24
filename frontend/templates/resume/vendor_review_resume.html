@@ -245,8 +245,17 @@
               <input type="text" class="form-control" id="interviewDate" readonly style="background-color: #f9fafb;">
             </div>
             <div class="mb-3">
-              <label for="interviewTime" class="form-label" style="font-weight: 600;">面試時間</label>
-              <input type="time" class="form-control" id="interviewTime" required>
+              <label class="form-label" style="font-weight: 600;">面試時間</label>
+              <div style="display: flex; gap: 12px; align-items: center;">
+                <div style="flex: 1;">
+                  <label for="interviewTimeStart" class="form-label" style="font-weight: 500; font-size: 0.9rem; margin-bottom: 4px;">開始時間</label>
+                  <input type="time" class="form-control" id="interviewTimeStart" required>
+                </div>
+                <div style="flex: 1;">
+                  <label for="interviewTimeEnd" class="form-label" style="font-weight: 500; font-size: 0.9rem; margin-bottom: 4px;">結束時間</label>
+                  <input type="time" class="form-control" id="interviewTimeEnd" required>
+                </div>
+              </div>
             </div>
             <div class="mb-3">
               <label for="interviewLocation" class="form-label" style="font-weight: 600;">面試地點</label>
@@ -935,7 +944,7 @@
     // 月曆相關變數
     let currentCalendarDate = new Date();
     let selectedInterviewDate = null;
-    // 存儲面試排程（格式：'YYYY-MM-DD' => {time: 'HH:MM', location: '...', notes: '...'}）
+    // 存儲面試排程（格式：'YYYY-MM-DD' => {timeStart: 'HH:MM', timeEnd: 'HH:MM', location: '...', notes: '...'}）
     const interviewSchedules = new Map();
     
     // 從本地存儲載入面試排程
@@ -1013,7 +1022,8 @@
       const dateDisplay = formatDateDisplay(date);
       
       document.getElementById('interviewDate').value = dateDisplay;
-      document.getElementById('interviewTime').value = '';
+      document.getElementById('interviewTimeStart').value = '';
+      document.getElementById('interviewTimeEnd').value = '';
       document.getElementById('interviewLocation').value = '';
       document.getElementById('interviewNotes').value = '';
       
@@ -1023,7 +1033,14 @@
       // 如果已有排程，載入現有資料
       if (interviewSchedules.has(dateStr)) {
         const schedule = interviewSchedules.get(dateStr);
-        document.getElementById('interviewTime').value = schedule.time || '';
+        // 處理舊格式（單一時間）和新格式（開始/結束時間）
+        if (schedule.timeStart && schedule.timeEnd) {
+          document.getElementById('interviewTimeStart').value = schedule.timeStart || '';
+          document.getElementById('interviewTimeEnd').value = schedule.timeEnd || '';
+        } else if (schedule.time) {
+          // 兼容舊格式：如果只有單一時間，設為開始時間
+          document.getElementById('interviewTimeStart').value = schedule.time || '';
+        }
         document.getElementById('interviewLocation').value = schedule.location || '';
         document.getElementById('interviewNotes').value = schedule.notes || '';
       }
@@ -1075,10 +1092,25 @@
         return;
       }
       
-      const time = document.getElementById('interviewTime').value.trim();
-      if (!time) {
-        alert('請輸入面試時間');
-        document.getElementById('interviewTime').focus();
+      const timeStart = document.getElementById('interviewTimeStart').value.trim();
+      const timeEnd = document.getElementById('interviewTimeEnd').value.trim();
+      
+      if (!timeStart) {
+        alert('請輸入開始時間');
+        document.getElementById('interviewTimeStart').focus();
+        return;
+      }
+      
+      if (!timeEnd) {
+        alert('請輸入結束時間');
+        document.getElementById('interviewTimeEnd').focus();
+        return;
+      }
+      
+      // 驗證結束時間必須晚於開始時間
+      if (timeEnd <= timeStart) {
+        alert('結束時間必須晚於開始時間');
+        document.getElementById('interviewTimeEnd').focus();
         return;
       }
       
@@ -1094,7 +1126,8 @@
       
       // 保存到 Map
       interviewSchedules.set(dateStr, {
-        time: time,
+        timeStart: timeStart,
+        timeEnd: timeEnd,
         location: location,
         notes: notes
       });
