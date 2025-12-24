@@ -74,6 +74,25 @@ def list_announcements():
         cursor = conn.cursor(dictionary=True)
         cursor.execute("SELECT * FROM announcement ORDER BY created_at DESC")
         rows = cursor.fetchall() or []
+        
+        # 格式化時間，確保不進行時區轉換（直接使用資料庫中的時間）
+        for row in rows:
+            if row.get('start_time'):
+                if isinstance(row['start_time'], datetime):
+                    row['start_time'] = row['start_time'].strftime('%Y-%m-%d %H:%M:%S')
+                else:
+                    row['start_time'] = str(row['start_time'])
+            if row.get('end_time'):
+                if isinstance(row['end_time'], datetime):
+                    row['end_time'] = row['end_time'].strftime('%Y-%m-%d %H:%M:%S')
+                else:
+                    row['end_time'] = str(row['end_time'])
+            if row.get('created_at'):
+                if isinstance(row['created_at'], datetime):
+                    row['created_at'] = row['created_at'].strftime('%Y-%m-%d %H:%M:%S')
+                else:
+                    row['created_at'] = str(row['created_at'])
+        
         cursor.close()
         conn.close()
         return jsonify({"success": True, "data": rows})
@@ -221,6 +240,104 @@ def check_and_push_scheduled_announcements(conn):
     for ann in pending:
         push_announcement_notifications(conn, ann['title'], ann['content'], ann['id'])
     cursor.close()
+
+# --- API：儲存作業截止時間 ---
+@announcement_bp.route("/api/save_deadlines", methods=["POST"])
+def save_deadlines():
+    """儲存作業截止時間到 announcement 資料表"""
+    try:
+        if "user_id" not in session:
+            return jsonify({"success": False, "message": "請先登入"}), 403
+        
+        role = session.get("role")
+        if role not in ("director", "ta", "admin"):
+            return jsonify({"success": False, "message": "未授權"}), 403
+        
+        data = request.json
+        pref_deadline = data.get("pref_deadline")  # 志願序截止時間
+        resume_deadline = data.get("resume_deadline")  # 履歷上傳截止時間
+        
+        if not pref_deadline or not resume_deadline:
+            return jsonify({"success": False, "message": "請完整填寫兩個截止時間"}), 400
+        
+        conn = get_db()
+        cursor = conn.cursor()
+        now = get_taiwan_time()
+        created_by = session.get("username") or session.get("name") or "系統"
+        
+        # 轉換時間格式（從 datetime-local 格式轉換為資料庫格式）
+        # datetime-local 輸入的時間是本地時間（台灣時間），直接使用，不做時區轉換
+        def convert_datetime(dt_str):
+            if not dt_str:
+                return None
+            # datetime-local 格式: "2025-12-31T14:30" -> "2025-12-31 14:30:00"
+            # 直接轉換，不進行時區轉換，因為輸入的就是台灣時間
+            dt_formatted = dt_str.replace('T', ' ') + ':00'
+            return dt_formatted
+        
+        pref_dt = convert_datetime(pref_deadline)
+        resume_dt = convert_datetime(resume_deadline)
+        
+        # 驗證時間格式並確保是有效的台灣時間
+        try:
+            # 解析時間以確保格式正確
+            datetime.strptime(pref_dt, '%Y-%m-%d %H:%M:%S')
+            datetime.strptime(resume_dt, '%Y-%m-%d %H:%M:%S')
+        except ValueError as e:
+            return jsonify({"success": False, "message": f"時間格式錯誤：{str(e)}"}), 400
+        
+        # 格式化時間顯示（只移除秒數，保留時分）
+        def format_datetime_display(dt_str):
+            """格式化時間顯示：2025-12-25 00:00:00 -> 2025-12-25 00:00"""
+            if not dt_str:
+                return ""
+            # 只移除最後的秒數部分（":00"），保留時分
+            if dt_str.endswith(':00'):
+                return dt_str[:-3]  # 移除最後的 ':00'
+            return dt_str
+        
+        pref_dt_display = format_datetime_display(pref_dt)
+        resume_dt_display = format_datetime_display(resume_dt)
+        
+        # 建立志願序截止公告
+        pref_title = "[作業] 填寫志願序截止時間"
+        pref_content = f"請注意！填寫志願序的截止時間為：{pref_dt_display}，請務必在截止時間前完成志願序填寫。"
+        
+        cursor.execute("""
+            INSERT INTO announcement (title, content, start_time, end_time, is_published, created_by, created_at)
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
+        """, (pref_title, pref_content, now, pref_dt, 1, created_by, now))
+        pref_ann_id = cursor.lastrowid
+        
+        # 建立履歷上傳截止公告
+        resume_title = "[作業] 上傳履歷截止時間"
+        resume_content = f"請注意！上傳履歷的截止時間為：{resume_dt_display}，請務必在截止時間前完成履歷上傳。"
+        
+        cursor.execute("""
+            INSERT INTO announcement (title, content, start_time, end_time, is_published, created_by, created_at)
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
+        """, (resume_title, resume_content, now, resume_dt, 1, created_by, now))
+        resume_ann_id = cursor.lastrowid
+        
+        conn.commit()
+        
+        # 發送通知給所有學生
+        push_announcement_notifications(conn, pref_title, pref_content, pref_ann_id)
+        push_announcement_notifications(conn, resume_title, resume_content, resume_ann_id)
+        
+        cursor.close()
+        conn.close()
+        
+        return jsonify({
+            "success": True,
+            "message": "截止時間已儲存並通知學生",
+            "pref_ann_id": pref_ann_id,
+            "resume_ann_id": resume_ann_id
+        })
+        
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"success": False, "message": f"儲存失敗：{str(e)}"}), 500
 
 # --- 自動化功能：截止提醒 (統一為公告標題) ---
 def maybe_push_deadline_reminders(conn, hours_before=24):

@@ -132,9 +132,31 @@ def get_my_notifications():
         
         rows = cursor.fetchall()
         
-        # 為每個通知動態計算分類
+        # 為每個通知動態計算分類並格式化時間
         for row in rows:
             row["category"] = _detect_category(row.get("title"), row.get("message"))
+            
+            # 格式化 created_at 時間（確保正確顯示）
+            created_at = row.get("created_at")
+            if isinstance(created_at, datetime):
+                # 直接格式化為字串，不進行時區轉換（假設資料庫已儲存為正確時間）
+                row["created_at"] = created_at.strftime("%Y-%m-%d %H:%M:%S")
+            elif created_at:
+                # 如果是字串，嘗試解析並格式化
+                try:
+                    if isinstance(created_at, str):
+                        # 嘗試解析各種可能的時間格式
+                        if 'T' in created_at:
+                            parsed = datetime.fromisoformat(created_at.replace('Z', '+00:00'))
+                        else:
+                            parsed = datetime.strptime(created_at, '%Y-%m-%d %H:%M:%S')
+                        row["created_at"] = parsed.strftime("%Y-%m-%d %H:%M:%S")
+                    else:
+                        row["created_at"] = str(created_at)
+                except:
+                    row["created_at"] = str(created_at)
+            else:
+                row["created_at"] = ""
         
         return jsonify({"success": True, "notifications": rows})
     except Exception:
