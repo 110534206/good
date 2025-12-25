@@ -705,7 +705,7 @@
       btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 處理中...';
       btn.disabled = true;
 
-      fetch('/api/review_preferences', {
+      fetch('/api/recommend-preferences', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
