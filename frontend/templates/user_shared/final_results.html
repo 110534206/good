@@ -83,10 +83,23 @@
       transform: translateX(0);
     }
 
+    #side-menu .menu-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      width: 100%;
+      margin-bottom: 1.5rem;
+    }
+
+    #side-menu h2 {
+      margin: 0;
+      font-weight: 700;
+      font-size: 1.5rem;
+      text-align: left;
+      flex: 1;
+    }
+
     #close-btn {
-      position: absolute;
-      top: 2rem;
-      right: 1.6rem;
       font-size: 2.2rem;
       background: none;
       border: none;
@@ -98,14 +111,8 @@
       display: flex;
       align-items: center;
       justify-content: center;
-    }
-
-    #side-menu h2 {
-      width: 100%;
-      margin-bottom: 1.5rem;
-      font-weight: 700;
-      font-size: 1.5rem;
-      text-align: left;
+      padding: 0;
+      margin: 0;
     }
 
     #side-menu a {
@@ -131,7 +138,7 @@
 
     h2 {
       margin: 30px 0 20px;
-      color: #0066cc;
+      color: #e1e3e5;
       font-weight: 700;
       text-align: center;
     }
@@ -194,9 +201,11 @@
 
   <!-- 側邊選單 -->
   <nav id="side-menu">
-    <h2>功能選單</h2>
-    <button id="close-btn">×</button>
-    <a href="/assistant_home">首頁</a>
+    <div class="menu-header">
+      <h2>功能選單</h2>
+      <button id="close-btn">×</button>
+    </div>
+    <a href="/ta_home">首頁</a>
     <a href="/profile">個人資料</a>
     <a href="/announcement/manage_announcements">公告管理</a>
     <a href="/ta/statistics/manage_companies">實習廠商管理</a>
