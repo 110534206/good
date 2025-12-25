@@ -1,0 +1,782 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>智慧實習平台 | 廠商媒合結果</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <style>
+    :root {
+      --brand-blue: #0066cc;
+      --brand-blue-dark: #024689;
+      --bg-light: #f5f8ff;
+      --border-light: #dbe4f4;
+      --text-dark: #1f2937;
+      --text-muted: #6b7280;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: "Noto Sans TC", "Segoe UI", sans-serif;
+      background: #f5f8ff;
+      color: var(--text-dark);
+      min-height: 100vh;
+    }
+
+    header {
+      background: #0454a3;
+      color: white;
+      padding: 1rem 2rem;
+      text-align: center;
+      font-size: 1.5rem;
+    }
+
+    /* 三條線選單按鈕樣式 */
+    .top-bar-left {
+      position: fixed;
+      top: 1rem;
+      left: 1rem;
+      z-index: 1100;
+    }
+
+    .top-bar-left #menu-btn {
+      width: 30px;
+      height: 22px;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      background: none;
+      border: none;
+      padding: 0;
+    }
+
+    .top-bar-left #menu-btn span {
+      display: block;
+      width: 100%;
+      height: 3px;
+      background-color: white;
+      border-radius: 2px;
+      transition: all 0.3s ease;
+    }
+
+    #side-menu {
+      position: fixed;
+      top: 0;
+      left: 0;
+      height: 100vh;
+      width: 320px;
+      max-width: 80vw;
+      background-color: rgba(10, 10, 10, 0.95);
+      backdrop-filter: blur(6px);
+      box-shadow: 3px 0 12px rgb(0 0 0 / 0.7);
+      padding: 2rem 1.5rem;
+      transform: translateX(-100%);
+      transition: transform 0.3s ease-in-out;
+      z-index: 1200;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      color: white;
+      user-select: none;
+    }
+
+    #side-menu.open {
+      transform: translateX(0);
+    }
+
+    #side-menu .menu-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      width: 100%;
+      margin-bottom: 1.5rem;
+    }
+
+    #side-menu h2 {
+      margin: 0;
+      font-weight: 700;
+      font-size: 1.5rem;
+      text-align: left;
+      flex: 1;
+      color: white;
+    }
+
+    #close-btn {
+      font-size: 2.2rem;
+      background: none;
+      border: none;
+      color: white;
+      cursor: pointer;
+      line-height: 1;
+      width: 2.5rem;
+      height: 2.5rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0;
+      margin: 0;
+    }
+
+    #side-menu a {
+      display: block;
+      width: 100%;
+      padding: 0.5rem 0;
+      font-size: 1.1rem;
+      color: #ddd;
+      text-decoration: none;
+      border-radius: 4px;
+      transition: background-color 0.2s ease;
+    }
+
+    #side-menu a:hover {
+      background-color: rgba(255, 255, 255, 0.15);
+      color: white;
+    }
+
+    main {
+      max-width: 1200px;
+      margin: 24px auto 60px;
+      padding: 0 24px;
+    }
+
+    .page-header {
+      text-align: center;
+      margin-bottom: 2rem;
+    }
+
+    .page-header h2 {
+      color: var(--brand-blue-dark);
+      font-size: 1.8rem;
+      margin-bottom: 0.5rem;
+    }
+
+    .page-header p {
+      color: var(--text-muted);
+      font-size: 1rem;
+    }
+
+    .companies-container {
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+    }
+
+    .company-card {
+      background: #ffffff;
+      border-radius: 16px;
+      padding: 24px;
+      box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
+      border: 2px solid var(--border-light);
+      transition: transform 0.3s ease, box-shadow 0.3s ease;
+    }
+
+    .company-card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 12px 32px rgba(15, 23, 42, 0.12);
+    }
+
+    .company-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 20px;
+      padding-bottom: 16px;
+      border-bottom: 2px solid var(--bg-light);
+    }
+
+    .company-header h3 {
+      font-size: 1.4rem;
+      color: var(--brand-blue-dark);
+      margin: 0;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .company-header h3 i {
+      color: var(--brand-blue);
+    }
+
+    .student-count {
+      background: var(--bg-light);
+      padding: 6px 16px;
+      border-radius: 20px;
+      font-size: 0.9rem;
+      color: var(--brand-blue-dark);
+      font-weight: 600;
+    }
+
+    .jobs-section {
+      margin-bottom: 20px;
+    }
+
+    .jobs-section-title {
+      font-size: 1.1rem;
+      font-weight: 600;
+      color: var(--brand-blue-dark);
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .jobs-list {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .job-card {
+      background: #f9fafb;
+      border-radius: 8px;
+      padding: 16px 20px;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      border: 1px solid var(--border-light);
+    }
+
+    .job-card:hover {
+      background: #f0f4ff;
+      border-color: var(--brand-blue);
+    }
+
+    .job-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .job-info {
+      flex: 1;
+    }
+
+    .job-name {
+      font-size: 1.1rem;
+      font-weight: 600;
+      color: var(--text-dark);
+      margin-bottom: 4px;
+    }
+
+    .job-id {
+      font-size: 0.9rem;
+      color: var(--text-muted);
+    }
+
+    .job-arrow {
+      color: var(--brand-blue);
+      font-size: 1.2rem;
+      transition: transform 0.3s ease;
+    }
+
+    .job-card.expanded .job-arrow {
+      transform: rotate(90deg);
+    }
+
+    .job-students-container {
+      max-height: 0;
+      overflow: hidden;
+      transition: max-height 0.3s ease;
+      margin-top: 16px;
+      padding-top: 16px;
+      border-top: 1px solid var(--border-light);
+    }
+
+    .job-card.expanded .job-students-container {
+      max-height: 5000px;
+    }
+
+    .students-list {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .student-item {
+      display: flex;
+      align-items: center;
+      padding: 16px;
+      background: var(--bg-light);
+      border-radius: 12px;
+      border-left: 4px solid var(--brand-blue);
+      transition: background-color 0.2s ease;
+    }
+
+    .student-item:hover {
+      background: #e8f0ff;
+    }
+
+    .rank-badge {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 40px;
+      height: 40px;
+      background: var(--brand-blue);
+      color: white;
+      border-radius: 50%;
+      font-weight: 700;
+      font-size: 1.1rem;
+      margin-right: 16px;
+      flex-shrink: 0;
+    }
+
+    .student-info {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .student-name {
+      font-size: 1.1rem;
+      font-weight: 600;
+      color: var(--text-dark);
+    }
+
+    .student-details {
+      display: flex;
+      gap: 16px;
+      font-size: 0.9rem;
+      color: var(--text-muted);
+    }
+
+    .student-details span {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .job-title {
+      margin-left: auto;
+      padding: 6px 12px;
+      background: rgba(0, 102, 204, 0.1);
+      color: var(--brand-blue-dark);
+      border-radius: 8px;
+      font-size: 0.9rem;
+      font-weight: 500;
+    }
+
+    .empty-state {
+      text-align: center;
+      padding: 48px 24px;
+      color: var(--text-muted);
+    }
+
+    .empty-state i {
+      font-size: 3rem;
+      margin-bottom: 16px;
+      color: rgba(0, 102, 204, 0.3);
+    }
+
+    .loading {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      padding: 48px;
+      color: var(--text-muted);
+    }
+
+    .loading .spinner {
+      width: 24px;
+      height: 24px;
+      border: 3px solid rgba(0, 102, 204, 0.2);
+      border-top-color: var(--brand-blue);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin {
+      to {
+        transform: rotate(360deg);
+      }
+    }
+
+    @media (max-width: 768px) {
+      main {
+        padding: 0 16px;
+      }
+
+      .company-card {
+        padding: 16px;
+      }
+
+      .company-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 12px;
+      }
+
+      .student-item {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+
+      .job-title {
+        margin-left: 0;
+        margin-top: 8px;
+      }
+
+      .student-details {
+        flex-direction: column;
+        gap: 4px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header>廠商媒合結果</header>
+  <div class="top-bar-left">
+    <div id="menu-btn" title="選單" role="button" tabindex="0">
+      <span></span><span></span><span></span>
+    </div>
+  </div>
+
+  <!-- 側邊選單 -->
+  <nav id="side-menu" aria-hidden="true" role="navigation" aria-label="功能選單">
+    <div class="menu-header">
+      <h2>功能選單</h2>
+      <button id="close-btn" aria-label="關閉功能選單">×</button>
+    </div>
+    <a href="/ta_home">首頁</a>
+    <a href="/profile">個人資料</a>
+    <a href="/announcement/manage_announcements">公告管理</a>
+    <a href="/ta/statistics/manage_companies">實習廠商管理</a>
+    <a href="/final_results">志願序結果</a>
+    <a href="/notifications">通知</a>
+    <a href="/admin/absence_default_range">缺勤預設學期範圍設定</a>
+    <a href="/ta/upload_standard_courses">專業核心科目管理</a>
+    <a href="/ta/match_results">媒合結果確認</a>
+    <a href="/login">登出</a>
+  </nav>
+
+  <main>
+    <div class="page-header"></div>
+    <div id="loadingState" class="loading">
+      <span class="spinner"></span>
+      <span>載入中...</span>
+    </div>
+
+    <div id="companiesContainer" class="companies-container" style="display: none;">
+      <!-- 廠商卡片將動態生成 -->
+    </div>
+
+    <div id="emptyState" class="empty-state" style="display: none;">
+      <i class="fa-solid fa-inbox"></i>
+      <div>目前沒有廠商排序結果</div>
+    </div>
+  </main>
+
+  <script>
+    // 側邊選單控制
+    const sideMenu = document.getElementById('side-menu');
+    const menuBtn = document.getElementById('menu-btn');
+    const closeBtn = document.getElementById('close-btn');
+    
+    if (menuBtn) {
+      menuBtn.onclick = () => {
+        sideMenu.classList.add('open');
+        sideMenu.setAttribute('aria-hidden', 'false');
+      };
+    }
+    
+    if (closeBtn) {
+      closeBtn.onclick = () => {
+        sideMenu.classList.remove('open');
+        sideMenu.setAttribute('aria-hidden', 'true');
+      };
+    }
+    
+    document.addEventListener('click', (event) => {
+      if (sideMenu && !sideMenu.contains(event.target) && menuBtn && !menuBtn.contains(event.target)) {
+        sideMenu.classList.remove('open');
+        sideMenu.setAttribute('aria-hidden', 'true');
+      }
+    });
+
+    // 載入廠商排序結果
+    async function loadMatchingResults() {
+      const loadingState = document.getElementById('loadingState');
+      const companiesContainer = document.getElementById('companiesContainer');
+      const emptyState = document.getElementById('emptyState');
+
+      try {
+        // 1. 獲取所有已審核的公司
+        const companiesRes = await fetch('/api/get_reviewed_companies', {
+          headers: { 'Accept': 'application/json' },
+          credentials: 'include'
+        });
+
+        if (!companiesRes.ok) {
+          throw new Error('無法載入公司列表');
+        }
+
+        const companiesData = await companiesRes.json();
+        if (!companiesData.success || !companiesData.companies || companiesData.companies.length === 0) {
+          loadingState.style.display = 'none';
+          emptyState.style.display = 'block';
+          return;
+        }
+
+        const companies = companiesData.companies;
+
+        // 2. 對於每個公司，獲取他們審核通過的學生（按審核時間排序）
+        const companiesWithStudents = [];
+
+        for (const company of companies) {
+          let approvedStudents = [];
+          let jobs = [];
+          
+          // 獲取職缺列表
+          try {
+            const jobsRes = await fetch(`/intern_experience/api/jobs/${company.id}`, {
+              headers: { 'Accept': 'application/json' },
+              credentials: 'include'
+            });
+
+            if (jobsRes.ok) {
+              const jobsData = await jobsRes.json();
+              if (jobsData.success && jobsData.data) {
+                jobs = jobsData.data;
+              }
+            }
+          } catch (error) {
+            console.error(`載入公司 ${company.company_name} 的職缺失敗:`, error);
+          }
+          
+          // 獲取審核通過的學生
+          try {
+            const studentsRes = await fetch(`/api/public/company/${company.id}/vendor-reviewed-students`, {
+              headers: { 'Accept': 'application/json' },
+              credentials: 'include'
+            });
+
+            if (studentsRes.ok) {
+              const studentsData = await studentsRes.json();
+              if (studentsData.success && studentsData.students && studentsData.students.length > 0) {
+                // 只保留審核通過的學生
+                approvedStudents = studentsData.students.filter(s => s.vendor_review_status === 'approved');
+                
+                // 按審核時間排序（最新的在前，表示廠商優先考慮的學生）
+                approvedStudents.sort((a, b) => {
+                  const timeA = new Date(a.vendor_reviewed_at || 0);
+                  const timeB = new Date(b.vendor_reviewed_at || 0);
+                  return timeB - timeA; // 降序：最新的在前
+                });
+              }
+            }
+          } catch (error) {
+            console.error(`載入公司 ${company.company_name} 的學生失敗:`, error);
+          }
+
+          // 無論是否有學生或職缺，都將廠商加入列表
+          companiesWithStudents.push({
+            ...company,
+            students: approvedStudents,
+            jobs: jobs
+          });
+        }
+
+        // 3. 渲染結果
+        loadingState.style.display = 'none';
+
+        if (companiesWithStudents.length === 0) {
+          emptyState.style.display = 'block';
+          return;
+        }
+
+        companiesContainer.style.display = 'flex';
+        companiesContainer.innerHTML = companiesWithStudents.map((company, companyIndex) => {
+          // 按職缺分組學生
+          const jobStudentsMap = {};
+          const unassignedStudents = [];
+          
+          if (company.students && company.students.length > 0) {
+            company.students.forEach((student, index) => {
+              const jobTitle = student.job_title || '其他';
+              if (!jobStudentsMap[jobTitle]) {
+                jobStudentsMap[jobTitle] = [];
+              }
+              jobStudentsMap[jobTitle].push({...student, rank: index + 1});
+            });
+          }
+
+          // 職缺列表 HTML - 每個職缺都是可點擊的卡片
+          const jobsHtml = company.jobs && company.jobs.length > 0
+            ? company.jobs.map((job, jobIndex) => {
+                const jobId = `job-${companyIndex}-${jobIndex}`;
+                const jobTitle = job.title || '-';
+                const jobStudents = jobStudentsMap[jobTitle] || [];
+                
+                // 從 map 中移除已分配的學生
+                if (jobStudentsMap[jobTitle]) {
+                  delete jobStudentsMap[jobTitle];
+                }
+
+                const studentsHtml = jobStudents.length > 0
+                  ? jobStudents.map(student => `
+                      <div class="student-item">
+                        <div class="rank-badge">${student.rank}</div>
+                        <div class="student-info">
+                          <div class="student-name">${student.student_name || '-'}</div>
+                          <div class="student-details">
+                            <span><i class="fa-solid fa-id-card"></i> ${student.student_number || '-'}</span>
+                            <span><i class="fa-solid fa-users"></i> ${student.class_name || '-'}</span>
+                            ${student.vendor_reviewed_at ? `<span><i class="fa-solid fa-clock"></i> ${student.vendor_reviewed_at}</span>` : ''}
+                          </div>
+                        </div>
+                      </div>
+                    `).join('')
+                  : '<div style="padding: 16px; text-align: center; color: var(--text-muted);"><i class="fa-solid fa-inbox"></i><div style="margin-top: 8px;">目前沒有審核通過的學生</div></div>';
+
+                return `
+                  <div class="job-card" id="${jobId}" onclick="toggleJob('${jobId}')">
+                    <div class="job-header">
+                      <div class="job-info">
+                        <div class="job-name">${jobTitle}</div>
+                      </div>
+                      <i class="fa-solid fa-chevron-right job-arrow"></i>
+                    </div>
+                    <div class="job-students-container">
+                      <div class="students-list">
+                        ${studentsHtml}
+                      </div>
+                    </div>
+                  </div>
+                `;
+              }).join('')
+            : '<div style="color: var(--text-muted); font-size: 0.9rem; padding: 16px;">目前沒有職缺</div>';
+
+          // 處理未分配到職缺的學生（其他）
+          const otherStudents = Object.values(jobStudentsMap).flat();
+          if (otherStudents.length > 0 || (company.jobs && company.jobs.length === 0 && company.students && company.students.length > 0)) {
+            const otherJobId = `job-${companyIndex}-other`;
+            const otherStudentsHtml = otherStudents.length > 0
+              ? otherStudents.map(student => `
+                  <div class="student-item">
+                    <div class="rank-badge">${student.rank}</div>
+                    <div class="student-info">
+                      <div class="student-name">${student.student_name || '-'}</div>
+                      <div class="student-details">
+                        <span><i class="fa-solid fa-id-card"></i> ${student.student_number || '-'}</span>
+                        <span><i class="fa-solid fa-users"></i> ${student.class_name || '-'}</span>
+                        ${student.vendor_reviewed_at ? `<span><i class="fa-solid fa-clock"></i> ${student.vendor_reviewed_at}</span>` : ''}
+                      </div>
+                    </div>
+                  </div>
+                `).join('')
+              : company.students.map((student, index) => `
+                  <div class="student-item">
+                    <div class="rank-badge">${index + 1}</div>
+                    <div class="student-info">
+                      <div class="student-name">${student.student_name || '-'}</div>
+                      <div class="student-details">
+                        <span><i class="fa-solid fa-id-card"></i> ${student.student_number || '-'}</span>
+                        <span><i class="fa-solid fa-users"></i> ${student.class_name || '-'}</span>
+                        ${student.vendor_reviewed_at ? `<span><i class="fa-solid fa-clock"></i> ${student.vendor_reviewed_at}</span>` : ''}
+                      </div>
+                    </div>
+                  </div>
+                `).join('');
+
+            const otherJobHtml = `
+              <div class="job-card" id="${otherJobId}" onclick="toggleJob('${otherJobId}')">
+                <div class="job-header">
+                  <div class="job-info">
+                    <div class="job-name">其他</div>
+                    <div class="job-id">未指定職缺的學生</div>
+                  </div>
+                  <i class="fa-solid fa-chevron-right job-arrow"></i>
+                </div>
+                <div class="job-students-container">
+                  <div class="students-list">
+                    ${otherStudentsHtml}
+                  </div>
+                </div>
+              </div>
+            `;
+            
+            return `
+              <div class="company-card">
+                <div class="company-header">
+                  <h3>
+                    <i class="fa-solid fa-building"></i>
+                    ${company.company_name}
+                  </h3>
+                  <div class="student-count">
+                    <i class="fa-solid fa-users"></i>
+                    ${company.students ? company.students.length : 0} 位學生
+                  </div>
+                </div>
+                <div class="jobs-section">
+                  <div class="jobs-section-title">
+                    <i class="fa-solid fa-briefcase"></i>
+                    職缺列表
+                  </div>
+                  <div class="jobs-list">
+                    ${jobsHtml}
+                    ${otherJobHtml}
+                  </div>
+                </div>
+              </div>
+            `;
+          }
+
+          return `
+            <div class="company-card">
+              <div class="company-header">
+                <h3>
+                  <i class="fa-solid fa-building"></i>
+                  ${company.company_name}
+                </h3>
+                <div class="student-count">
+                  <i class="fa-solid fa-users"></i>
+                  ${company.students ? company.students.length : 0} 位學生
+                </div>
+              </div>
+              <div class="jobs-section">
+                <div class="jobs-section-title">
+                  <i class="fa-solid fa-briefcase"></i>
+                  職缺列表
+                </div>
+                <div class="jobs-list">
+                  ${jobsHtml}
+                </div>
+              </div>
+            </div>
+          `;
+        }).join('');
+
+      } catch (error) {
+        console.error('載入媒合結果失敗:', error);
+        loadingState.style.display = 'none';
+        emptyState.style.display = 'block';
+        emptyState.innerHTML = `
+          <i class="fa-solid fa-triangle-exclamation"></i>
+          <div>載入失敗：${error.message}</div>
+        `;
+      }
+    }
+
+    // 切換職缺展開/收起
+    function toggleJob(jobId) {
+      const jobCard = document.getElementById(jobId);
+      if (jobCard) {
+        jobCard.classList.toggle('expanded');
+      }
+    }
+
+    // 頁面載入時執行
+    document.addEventListener('DOMContentLoaded', () => {
+      loadMatchingResults();
+    });
+  </script>
+</body>
+</html>
+
