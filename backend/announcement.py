@@ -339,6 +339,73 @@ def save_deadlines():
         traceback.print_exc()
         return jsonify({"success": False, "message": f"儲存失敗：{str(e)}"}), 500
 
+# --- API：檢查作業截止時間狀態 ---
+@announcement_bp.route("/api/check_deadline", methods=["GET"])
+def check_deadline():
+    """檢查指定作業的截止時間狀態"""
+    try:
+        assignment_type = request.args.get("type")  # "resume" 或 "preference"
+        
+        if assignment_type not in ["resume", "preference"]:
+            return jsonify({"success": False, "message": "無效的作業類型"}), 400
+        
+        # 根據類型確定標題
+        if assignment_type == "resume":
+            title_pattern = "[作業] 上傳履歷截止時間"
+        else:  # preference
+            title_pattern = "[作業] 填寫志願序截止時間"
+        
+        conn = get_db()
+        cursor = conn.cursor(dictionary=True)
+        now = get_taiwan_time()
+        
+        # 查詢最新的截止時間公告（按創建時間降序）
+        cursor.execute("""
+            SELECT id, title, end_time, created_at 
+            FROM announcement 
+            WHERE title = %s AND is_published = 1
+            ORDER BY created_at DESC 
+            LIMIT 1
+        """, (title_pattern,))
+        
+        result = cursor.fetchone()
+        cursor.close()
+        conn.close()
+        
+        if not result:
+            # 沒有設定截止時間，允許操作
+            return jsonify({
+                "success": True,
+                "has_deadline": False,
+                "is_expired": False,
+                "deadline": None,
+                "message": "尚未設定截止時間"
+            })
+        
+        deadline = result['end_time']
+        if isinstance(deadline, datetime):
+            deadline_dt = deadline
+        else:
+            # 如果是字符串，轉換為 datetime
+            try:
+                deadline_dt = datetime.strptime(str(deadline), '%Y-%m-%d %H:%M:%S')
+            except:
+                deadline_dt = datetime.strptime(str(deadline), '%Y-%m-%d %H:%M')
+        
+        is_expired = now > deadline_dt
+        
+        return jsonify({
+            "success": True,
+            "has_deadline": True,
+            "is_expired": is_expired,
+            "deadline": deadline_dt.strftime('%Y-%m-%d %H:%M:%S') if isinstance(deadline_dt, datetime) else str(deadline),
+            "message": "已過期" if is_expired else "尚未過期"
+        })
+        
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"success": False, "message": f"檢查失敗：{str(e)}"}), 500
+
 # --- 自動化功能：截止提醒 (統一為公告標題) ---
 def maybe_push_deadline_reminders(conn, hours_before=24):
     now = get_taiwan_time()

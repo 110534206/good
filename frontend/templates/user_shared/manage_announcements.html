@@ -14,23 +14,27 @@
     .top-bar-left { position: fixed; top: 1rem; left: 1rem; z-index: 1100; }
     .top-bar-left #menu-btn { width: 30px; height: 22px; cursor: pointer; display: flex; flex-direction: column; justify-content: space-between; background: none; border: none; padding: 0; }
     .top-bar-left #menu-btn span { display: block; width: 100%; height: 3px; background-color: white; border-radius: 2px; transition: all 0.3s ease; }
-    #side-menu { position: fixed; top: 0; left: 0; height: 100vh; width: 320px; background-color: rgba(10, 10, 10, 0.95); backdrop-filter: blur(6px); box-shadow: 3px 0 12px rgba(0,0,0,0.7); padding: 2rem 1.5rem; transform: translateX(-100%); transition: transform 0.3s ease-in-out; z-index: 1200; display: flex; flex-direction: column; align-items: flex-start; color: white; }
+    #side-menu { position: fixed; top: 0; left: 0; height: 100vh; width: 320px; max-width: 80vw; background-color: rgba(10, 10, 10, 0.95); backdrop-filter: blur(6px); box-shadow: 3px 0 12px rgba(0, 0, 0, 0.7); padding: 2rem 1.5rem; transform: translateX(-100%); transition: transform 0.3s ease-in-out; z-index: 1200; display: flex; flex-direction: column; align-items: flex-start; color: white; user-select: none; }
     #side-menu.open { transform: translateX(0); }
-    #close-btn { position: absolute; top: 1.5rem; right: 1.5rem; font-size: 2.2rem; background: none; border: none; color: white; cursor: pointer; }
-    #side-menu a { color: white; text-decoration: none; font-size: 1.1rem; margin-bottom: 1.2rem; }
+    #side-menu .menu-header { display: flex; align-items: center; justify-content: space-between; width: 100%; margin-bottom: 1.5rem; }
+    #side-menu h2 { margin: 0; font-weight: 700; font-size: 1.5rem; text-align: left; flex: 1; color: white; }
+    #close-btn { font-size: 2.2rem; background: none; border: none; color: white; cursor: pointer; line-height: 1; width: 2.5rem; height: 2.5rem; display: flex; align-items: center; justify-content: center; padding: 0; margin: 0; }
+    #side-menu a { 
+      display: block; 
+      width: 100%; 
+      padding: 0.5rem 0; 
+      font-size: 1.1rem; 
+      color: #ddd; 
+      text-decoration: none; 
+      border-radius: 4px; 
+      transition: background-color 0.2s ease;
+    }
+    #side-menu a:hover {
+      background-color: rgba(255, 255, 255, 0.15);
+      color: white;
+    }
     
     .container { padding: 2.5rem; margin-top: 3rem; margin-bottom: 3rem; max-width: 95%; background-color: #ffffff; border: 1px solid #dee2e6; border-radius: 12px; box-shadow: 0 8px 30px rgba(0,0,0,0.05); }
-
-    /* 下方截止時間顯示區樣式 */
-    .deadline-display-box {
-      margin-top: 20px;
-      border: 2px solid #2e7d32;
-      border-radius: 4px;
-      background-color: #f8f9fa;
-      display: none; /* 儲存後顯示 */
-    }
-    .deadline-display-table { width: 100%; }
-    .deadline-display-table td { padding: 15px !important; font-weight: bold; color: #1b5e20; border: none !important; vertical-align: middle; }
 
     .btn { display: inline-flex; align-items: center; justify-content: center; font-weight: 500; }
   </style>
@@ -43,10 +47,13 @@
     <div id="menu-btn"><span></span><span></span><span></span></div>
   </div>
 
+ <!-- 側邊選單 -->
   <nav id="side-menu">
-    <h2>功能選單</h2>
-    <button id="close-btn">×</button>
-    <a href="/assistant_home">首頁</a>
+    <div class="menu-header">
+      <h2>功能選單</h2>
+      <button id="close-btn">×</button>
+    </div>
+    <a href="/ta_home">首頁</a>
     <a href="/profile">個人資料</a>
     <a href="/announcement/manage_announcements">公告管理</a>
     <a href="/ta/statistics/manage_companies">實習廠商管理</a>
@@ -79,16 +86,6 @@
           </tr>
         </thead>
         <tbody id="ann-tbody"></tbody>
-      </table>
-    </div>
-
-    <div id="deadline-display-area" class="deadline-display-box">
-      <table class="deadline-display-table">
-        <tr>
-          <td style="width: 45%;">🚩 志願序截止：<span id="pref-time-text">未設定</span></td>
-          <td style="width: 45%;">📄 履歷上傳截止：<span id="resume-time-text">未設定</span></td>
-          <td style="text-align: right;"><button class="btn btn-sm btn-link text-success p-0" onclick="document.getElementById('deadline-display-area').style.display='none'">清除</button></td>
-        </tr>
       </table>
     </div>
   </div>
@@ -150,6 +147,14 @@
       // 選單邏輯
       document.getElementById("menu-btn").onclick = () => document.getElementById("side-menu").classList.add("open");
       document.getElementById("close-btn").onclick = () => document.getElementById("side-menu").classList.remove("open");
+      
+      // 標記當前頁面的選單項目
+      const currentPath = window.location.pathname;
+      document.querySelectorAll('#side-menu a').forEach(link => {
+        if (link.getAttribute('href') === currentPath) {
+          link.classList.add('active');
+        }
+      });
 
       // 核心：強制年月日時分純數字格式化
       // 處理 datetime-local 輸入格式，避免時區轉換問題
@@ -194,9 +199,6 @@
           const result = await res.json();
           
           if (result.success) {
-            document.getElementById("pref-time-text").innerText = formatDT(pV);
-            document.getElementById("resume-time-text").innerText = formatDT(rV);
-            document.getElementById("deadline-display-area").style.display = "block";
             deadlineModal.hide();
             
             // 重新載入公告列表
@@ -223,12 +225,17 @@
           else if (now > ed) { st = "已結束"; color = "danger"; }
           else { st = "進行中"; color = "success"; }
           
+          // 發布狀態：根據狀態決定
+          let publishStatus = "已發布";
+          if (st === "未開始") publishStatus = "未發布";
+          else if (st === "已結束") publishStatus = "已結束";
+          
           return `<tr>
             <td class="fw-bold">${a.title}</td>
             <td class="text-center">${s}</td>
             <td class="text-center">${e}</td>
             <td class="text-center"><span class="badge bg-${color}">${st}</span></td>
-            <td class="text-center">已發布</td>
+            <td class="text-center">${publishStatus}</td>
             <td class="text-center">
               <button class="btn btn-sm btn-outline-primary me-1" onclick="editAnn(${a.id})">編輯</button>
               <button class="btn btn-sm btn-outline-danger" onclick="deleteAnn(${a.id})">刪除</button>
