@@ -613,6 +613,14 @@ def director_home():
 @users_bp.route('/ta_home')
 def ta_home():
     return render_template('user_shared/ta_home.html')
+
+# 廠商媒合結果頁面
+@users_bp.route('/ta/match_results')
+def ta_match_results():
+    """TA查看廠商排序學生的結果頁面"""
+    if 'user_id' not in session or session.get('role') not in ['ta', 'admin']:
+        return redirect(url_for('auth_bp.login_page'))
+    return render_template('user_shared/match_results.html')
     
 
 # 志願序最終結果
