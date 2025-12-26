@@ -1882,15 +1882,6 @@
         
         calendar.appendChild(dateCell);
       }
-      
-      // 添加空白格子（月末）
-      const totalCells = calendar.children.length - 7; // 減去星期標題
-      const remainingCells = 42 - totalCells; // 6行 x 7列 = 42格
-      for (let i = 0; i < remainingCells; i++) {
-        const emptyCell = document.createElement("div");
-        emptyCell.style.cssText = "padding: 12px; min-height: 80px; border: 1px solid #e2e8f0; border-radius: 8px; background-color: #f9fafb;";
-        calendar.appendChild(emptyCell);
-      }
     }
 
   </script>
