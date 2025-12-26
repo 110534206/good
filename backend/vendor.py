@@ -912,6 +912,7 @@ def get_vendor_resumes():
                         sp.company_id, 
                         sp.job_id,
                         sp.job_title,
+                        sp.preference_order,
                         ic.company_name,
                         COALESCE(ij.title, sp.job_title) AS job_title_display,
                         CASE 
@@ -955,6 +956,7 @@ def get_vendor_resumes():
                         sp.company_id, 
                         sp.job_id,
                         sp.job_title,
+                        sp.preference_order,
                         ic.company_name,
                         COALESCE(ij.title, sp.job_title) AS job_title_display,
                         COALESCE(sp.status, 'pending') AS vendor_review_status
@@ -1010,6 +1012,7 @@ def get_vendor_resumes():
                         sp.company_id, 
                         sp.job_id,
                         sp.job_title,
+                        sp.preference_order,
                         ic.company_name,
                         COALESCE(ij.title, sp.job_title) AS job_title_display,
                         CASE 
@@ -1052,6 +1055,7 @@ def get_vendor_resumes():
                         sp.company_id, 
                         sp.job_id,
                         sp.job_title,
+                        sp.preference_order,
                         ic.company_name,
                         COALESCE(ij.title, sp.job_title) AS job_title_display,
                         COALESCE(sp.status, 'pending') AS vendor_review_status
@@ -1126,11 +1130,13 @@ def get_vendor_resumes():
                 continue
             
             # 如果存在志願序，則使用志願序的狀態和公司資訊。
+            preference_order = None
             if filtered_preferences:
                 # 簡單地取第一個志願序的狀態作為展示狀態。
                 pref_to_show = filtered_preferences[0]
                 sp_status = pref_to_show.get('vendor_review_status')
                 preference_id = pref_to_show.get("preference_id")
+                preference_order = pref_to_show.get("preference_order")
                 
                 # 調試信息：記錄原始狀態
                 print(f"🔍 學生 {student_id} 的志願序狀態: {sp_status} (preference_id: {preference_id})")
@@ -1292,6 +1298,7 @@ def get_vendor_resumes():
                 "job_id": job_id,
                 "job_title": job_title,
                 "preference_id": preference_id, # 用於廠商審核操作，如果沒有填寫志願序則為 None
+                "preference_order": preference_order, # 志願序（1=第一志願, 2=第二志願...）
                 "has_interview": has_interview, # 是否有面試記錄
                 "interview_completed": interview_completed, # 是否已完成面試
             }

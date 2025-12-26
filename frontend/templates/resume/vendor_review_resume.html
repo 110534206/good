@@ -201,7 +201,9 @@
         <select id="interviewScheduleMenu" class="form-select" style="padding: 10px 12px; border-radius: 8px; border: 1px solid #e2e8f0; min-width: 150px;">
           <option value="">所有功能</option>
           <option value="schedule">面試排程</option>
+          <option value="completed">已面試</option>
           <option value="download">下載</option>
+          <option value="matching_sort">媒合排序</option>
         </select>
       </div>
 
@@ -265,6 +267,33 @@
           </div>
         </div>
         <div class="modal-footer">
+          <button class="btn btn-secondary" data-bs-dismiss="modal">關閉</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal fade" id="matchingSortModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">媒合排序</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div style="padding: 20px;">
+            <!-- 每個字母和對應的下拉選單 -->
+            <div id="matchingSortLetters" style="display: flex; flex-direction: column; gap: 16px;">
+              <!-- 字母按鈕和下拉選單將由 JavaScript 動態生成 -->
+            </div>
+            <!-- 學生詳細資訊顯示區域 -->
+            <div id="matchingSortContent" style="margin-top: 20px; max-height: 400px; overflow-y: auto;">
+              <!-- 排序結果將在此處顯示 -->
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-primary" id="saveMatchingSortBtn">儲存</button>
           <button class="btn btn-secondary" data-bs-dismiss="modal">關閉</button>
         </div>
       </div>
@@ -485,8 +514,20 @@
           setTimeout(() => {
             e.target.value = "";
           }, 100);
+        } else if (e.target.value === "completed") {
+          markSelectedAsCompleted();
+          // 重置選單值為預設值
+          setTimeout(() => {
+            e.target.value = "";
+          }, 100);
         } else if (e.target.value === "download") {
           downloadSelectedResumes();
+          // 重置選單值為預設值
+          setTimeout(() => {
+            e.target.value = "";
+          }, 100);
+        } else if (e.target.value === "matching_sort") {
+          sortByMatchingOrder();
           // 重置選單值為預設值
           setTimeout(() => {
             e.target.value = "";
@@ -1261,6 +1302,274 @@
           }
         }
       }
+    }
+    
+    // 批量標記選中的履歷為已面試
+    function markSelectedAsCompleted() {
+      const checkedBoxes = document.querySelectorAll('.row-checkbox:checked');
+      
+      if (checkedBoxes.length === 0) {
+        alert('請先勾選要標記為已面試的履歷');
+        return;
+      }
+      
+      if (!confirm(`確定要將選中的 ${checkedBoxes.length} 份履歷標記為已面試嗎？`)) {
+        return;
+      }
+      
+      // 收集所有 preference_id
+      const preferenceIds = [];
+      checkedBoxes.forEach(checkbox => {
+        const preferenceId = checkbox.getAttribute('data-preference-id');
+        if (preferenceId && preferenceId !== '' && preferenceId !== 'null') {
+          preferenceIds.push(preferenceId);
+        }
+      });
+      
+      if (preferenceIds.length === 0) {
+        alert('選中的履歷中沒有有效的志願序資料，無法標記為已面試');
+        return;
+      }
+      
+      // 批量標記為已面試
+      let successCount = 0;
+      let failCount = 0;
+      
+      const promises = preferenceIds.map(preferenceId => {
+        return fetch("/vendor/api/mark_interview_completed", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            preference_id: preferenceId
+          })
+        })
+        .then(res => res.json())
+        .then(data => {
+          if (data.success) {
+            successCount++;
+          } else {
+            failCount++;
+          }
+        })
+        .catch(err => {
+          console.error("標記已面試失敗:", err);
+          failCount++;
+        });
+      });
+      
+      Promise.all(promises).then(() => {
+        if (successCount > 0) {
+          alert(`✅ 已成功標記 ${successCount} 份履歷為已面試${failCount > 0 ? `，${failCount} 份失敗` : ''}`);
+          
+          // 重新載入資料
+          fetch(getResumeApiUrl()).then(r=>r.json()).then(d=>{
+            if(d.success) { 
+              allResumes = d.resumes;
+              // 根據後端返回的資料更新 interviewedSet
+              interviewedSet.clear();
+              allResumes.forEach(r => {
+                if (r.has_interview || r.interview_completed) {
+                  const key = String(r.preference_id || r.preferenceId || r.id);
+                  interviewedSet.add(key);
+                }
+              });
+              applyFilters(); 
+            }
+          });
+        } else {
+          alert(`❌ 標記失敗，請稍後再試`);
+        }
+      });
+    }
+    
+    // 按媒合順序排序並顯示
+    function sortByMatchingOrder() {
+      // 篩選出廠商通過的學生（status = 'approved'）
+      const approvedResumes = allResumes.filter(resume => {
+        const status = resume.status || resume.application_statuses || resume.display_status || 'pending';
+        return status === 'approved';
+      });
+      
+      // 按學生姓名排序
+      approvedResumes.sort((a, b) => {
+        const nameA = (a.name || a.student_name || '').toLowerCase();
+        const nameB = (b.name || b.student_name || '').toLowerCase();
+        return nameA.localeCompare(nameB, 'zh-TW');
+      });
+      
+      // 生成字母和對應的下拉選單（A~E 五列）
+      const lettersContainer = document.getElementById('matchingSortLetters');
+      const content = document.getElementById('matchingSortContent');
+      
+      if (!lettersContainer || !content) return;
+      
+      // 清空容器
+      lettersContainer.innerHTML = '';
+      content.innerHTML = '';
+      
+      // 左側顯示 A~E 五個按鈕，每個旁邊都有下拉選單
+      const letters = ['A', 'B', 'C', 'D', 'E'];
+      letters.forEach((letter, letterIndex) => {
+        // 創建每一行的容器
+        const rowDiv = document.createElement('div');
+        rowDiv.style.cssText = 'display: flex; align-items: center; gap: 12px;';
+        
+        // 字母按鈕
+        const letterBtn = document.createElement('button');
+        letterBtn.textContent = letter;
+        letterBtn.className = 'btn btn-outline-primary';
+        letterBtn.style.cssText = 'width: 50px; height: 50px; font-size: 1.2rem; font-weight: 600; border-radius: 8px; flex-shrink: 0;';
+        letterBtn.dataset.letter = letter;
+        rowDiv.appendChild(letterBtn);
+        
+        // 下拉選單
+        const dropdown = document.createElement('select');
+        dropdown.className = 'form-select';
+        dropdown.style.cssText = 'padding: 10px 12px; border-radius: 8px; border: 1px solid #e2e8f0; flex: 1;';
+        dropdown.innerHTML = '<option value="">請選擇學生</option>';
+        dropdown.dataset.letter = letter;
+        
+        // 在下拉選單中顯示所有通過的學生姓名
+        approvedResumes.forEach((resume, index) => {
+          const studentName = resume.name || resume.student_name || '未知';
+          const studentNumber = resume.username || resume.student_number || '';
+          const displayText = studentNumber ? `${studentName} (${studentNumber})` : studentName;
+          
+          const option = document.createElement('option');
+          option.value = index;
+          option.textContent = displayText;
+          option.dataset.resumeIndex = index;
+          dropdown.appendChild(option);
+        });
+        
+        // 下拉選單變更事件
+        dropdown.addEventListener('change', (e) => {
+          const selectedIndex = e.target.value;
+          if (!selectedIndex || selectedIndex === '') {
+            // 如果所有下拉選單都為空，清空內容區域
+            const allDropdowns = lettersContainer.querySelectorAll('select');
+            const hasSelection = Array.from(allDropdowns).some(dd => dd.value !== '');
+            if (!hasSelection) {
+              content.innerHTML = '';
+            }
+            return;
+          }
+          
+          const resume = approvedResumes[parseInt(selectedIndex)];
+          if (!resume) return;
+          
+          // 顯示選中學生的詳細資訊
+          displayStudentDetail(resume);
+        });
+        
+        rowDiv.appendChild(dropdown);
+        lettersContainer.appendChild(rowDiv);
+      });
+      
+      // 儲存按鈕事件
+      const saveBtn = document.getElementById('saveMatchingSortBtn');
+      if (saveBtn) {
+        // 移除舊的事件監聽器（如果有的話）
+        const newSaveBtn = saveBtn.cloneNode(true);
+        saveBtn.parentNode.replaceChild(newSaveBtn, saveBtn);
+        
+        newSaveBtn.addEventListener('click', () => {
+          // 收集所有選中的學生資料
+          const selectedStudents = [];
+          const allDropdowns = lettersContainer.querySelectorAll('select');
+          
+          allDropdowns.forEach((dropdown, index) => {
+            if (dropdown.value && dropdown.value !== '') {
+              const resume = approvedResumes[parseInt(dropdown.value)];
+              if (resume) {
+                selectedStudents.push({
+                  letter: letters[index],
+                  student_id: resume.student_id || resume.id,
+                  student_name: resume.name || resume.student_name,
+                  student_number: resume.username || resume.student_number,
+                  company_name: resume.company_name,
+                  job_title: resume.job_title || resume.jobTitle,
+                  preference_id: resume.preference_id,
+                  preference_order: resume.preference_order || resume.preferenceOrder
+                });
+              }
+            }
+          });
+          
+          if (selectedStudents.length === 0) {
+            alert('請至少選擇一個學生');
+            return;
+          }
+          
+          // 將選中的學生資料存儲到 sessionStorage
+          sessionStorage.setItem('matchingSortData', JSON.stringify(selectedStudents));
+          
+          // 關閉模態框
+          const modal = bootstrap.Modal.getInstance(document.getElementById('matchingSortModal'));
+          if (modal) {
+            modal.hide();
+          }
+          
+          // 跳轉到 /ta/match_results
+          window.location.href = '/ta/match_results';
+        });
+      }
+      
+      // 顯示模態框
+      const modal = new bootstrap.Modal(document.getElementById('matchingSortModal'));
+      modal.show();
+    }
+    
+    // 顯示選中學生的詳細資訊
+    function displayStudentDetail(resume) {
+      const content = document.getElementById('matchingSortContent');
+      if (!content) return;
+      
+      const studentName = resume.name || resume.student_name || '未知';
+      const studentNumber = resume.username || resume.student_number || '';
+      const companyName = resume.company_name || '—';
+      const jobTitle = resume.job_title || resume.jobTitle || '—';
+      const status = resume.application_statuses || resume.display_status || resume.status || 'pending';
+      const statusLabel = mapStatus(status);
+      const statusColorClass = statusColor(status);
+      const className = resume.className || '';
+      const department = resume.department || '';
+      
+      let html = `
+        <div style="background: white; padding: 20px; border-radius: 8px; border: 1px solid #e2e8f0;">
+          <h6 style="font-weight: 600; color: #0066cc; margin-bottom: 16px; font-size: 1.2rem;">
+            學生詳細資訊
+          </h6>
+          <div style="display: grid; gap: 12px;">
+            <div>
+              <strong>學生姓名：</strong>
+              <span>${escapeHtml(studentName)}</span>
+            </div>
+            <div>
+              <strong>學號：</strong>
+              <span>${escapeHtml(studentNumber)}</span>
+            </div>
+            ${className ? `<div><strong>班級：</strong><span>${escapeHtml(className)}</span></div>` : ''}
+            ${department ? `<div><strong>學年：</strong><span>${escapeHtml(department)}</span></div>` : ''}
+            <div>
+              <strong>公司名稱：</strong>
+              <span>${escapeHtml(companyName)}</span>
+            </div>
+            <div>
+              <strong>職缺：</strong>
+              <span>${escapeHtml(jobTitle)}</span>
+            </div>
+            <div>
+              <strong>狀態：</strong>
+              <span class="status-badge bg-${statusColorClass}" style="font-size: 0.9rem; padding: 4px 8px;">
+                ${statusLabel}
+              </span>
+            </div>
+          </div>
+        </div>
+      `;
+      
+      content.innerHTML = html;
     }
     
     // 下載選中的履歷
