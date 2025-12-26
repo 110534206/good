@@ -161,6 +161,78 @@
       font-size: 1rem;
     }
 
+    .filters-container {
+      display: flex;
+      gap: 16px;
+      margin-bottom: 24px;
+      padding: 20px;
+      background: #ffffff;
+      border-radius: 12px;
+      box-shadow: 0 2px 8px rgba(15, 23, 42, 0.06);
+      align-items: flex-end;
+      flex-wrap: wrap;
+    }
+
+    .filter-group {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      flex: 1;
+      min-width: 200px;
+    }
+
+    .filter-group label {
+      font-size: 0.95rem;
+      font-weight: 500;
+      color: var(--text-dark);
+    }
+
+    .filter-group select,
+    .filter-group input {
+      width: 100%;
+      padding: 10px 16px;
+      border: 1px solid var(--border-light);
+      border-radius: 8px;
+      font-size: 0.95rem;
+      color: var(--text-dark);
+      background: #ffffff;
+      transition: border-color 0.2s ease, box-shadow 0.2s ease;
+      appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23333' d='M6 9L1 4h10z'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 12px center;
+      background-size: 12px;
+      padding-right: 36px;
+    }
+
+    .filter-group input {
+      background-image: none;
+      padding-right: 16px;
+    }
+
+    .filter-group select:focus,
+    .filter-group input:focus {
+      outline: none;
+      border-color: var(--brand-blue);
+      box-shadow: 0 0 0 3px rgba(0, 102, 204, 0.1);
+    }
+
+    .filter-group select::placeholder,
+    .filter-group input::placeholder {
+      color: #9ca3af;
+    }
+
+    @media (max-width: 768px) {
+      .filters-container {
+        flex-direction: column;
+        align-items: stretch;
+      }
+
+      .filter-group {
+        min-width: 100%;
+      }
+    }
+
     .companies-container {
       display: flex;
       flex-direction: column;
@@ -458,6 +530,26 @@
 
   <main>
     <div class="page-header"></div>
+    
+    <div class="filters-container" id="filtersContainer" style="display: none;">
+      <div class="filter-group">
+        <label for="companyFilter">選擇公司</label>
+        <select id="companyFilter">
+          <option value="">選擇公司</option>
+        </select>
+      </div>
+      <div class="filter-group">
+        <label for="jobFilter">選擇職缺</label>
+        <select id="jobFilter">
+          <option value="">選擇職缺</option>
+        </select>
+      </div>
+      <div class="filter-group">
+        <label for="studentNameFilter">搜尋學生姓名</label>
+        <input type="text" id="studentNameFilter" placeholder="輸入學生姓名">
+      </div>
+    </div>
+
     <div id="loadingState" class="loading">
       <span class="spinner"></span>
       <span>載入中...</span>
@@ -499,6 +591,10 @@
         sideMenu.setAttribute('aria-hidden', 'true');
       }
     });
+
+    // 全局變數：保存原始數據和過濾後的數據
+    let allCompaniesData = [];
+    let filteredCompaniesData = [];
 
     // 載入廠商排序結果
     async function loadMatchingResults() {
@@ -583,16 +679,207 @@
           });
         }
 
-        // 3. 渲染結果
-        loadingState.style.display = 'none';
+        // 3. 保存原始數據
+        allCompaniesData = companiesWithStudents;
+        filteredCompaniesData = companiesWithStudents;
 
-        if (companiesWithStudents.length === 0) {
-          emptyState.style.display = 'block';
-          return;
+        // 4. 填充公司選項
+        populateCompanyOptions(companiesWithStudents);
+
+        // 5. 填充職缺選項
+        populateJobOptions(companiesWithStudents);
+
+        // 6. 渲染結果
+        renderCompanies(filteredCompaniesData);
+
+      } catch (error) {
+        console.error('載入媒合結果失敗:', error);
+        loadingState.style.display = 'none';
+        emptyState.style.display = 'block';
+        emptyState.innerHTML = `
+          <i class="fa-solid fa-triangle-exclamation"></i>
+          <div>載入失敗：${error.message}</div>
+        `;
+      }
+    }
+
+    // 填充公司選項
+    function populateCompanyOptions(companies) {
+      const companyFilter = document.getElementById('companyFilter');
+      const filtersContainer = document.getElementById('filtersContainer');
+      
+      // 清空現有選項（保留第一個「選擇公司」選項）
+      companyFilter.innerHTML = '<option value="">選擇公司</option>';
+      
+      // 添加公司選項
+      companies.forEach(company => {
+        if (company.company_name) {
+          const option = document.createElement('option');
+          option.value = company.id || company.company_name;
+          option.textContent = company.company_name;
+          option.setAttribute('data-company-id', company.id);
+          companyFilter.appendChild(option);
+        }
+      });
+
+      // 如果有公司，顯示過濾器
+      if (companies.length > 0) {
+        filtersContainer.style.display = 'flex';
+      }
+    }
+
+    // 填充職缺選項
+    function populateJobOptions(companies, selectedCompanyId = null) {
+      const jobFilter = document.getElementById('jobFilter');
+      
+      // 收集所有唯一的職缺名稱
+      const jobTitles = new Set();
+      
+      // 如果選擇了公司，只收集該公司的職缺
+      const companiesToProcess = selectedCompanyId 
+        ? companies.filter(c => (c.id || c.company_name) == selectedCompanyId)
+        : companies;
+      
+      companiesToProcess.forEach(company => {
+        if (company.jobs && company.jobs.length > 0) {
+          company.jobs.forEach(job => {
+            if (job.title) {
+              jobTitles.add(job.title);
+            }
+          });
+        }
+        // 也收集學生中的職缺名稱
+        if (company.students && company.students.length > 0) {
+          company.students.forEach(student => {
+            if (student.job_title) {
+              jobTitles.add(student.job_title);
+            }
+          });
+        }
+      });
+
+      // 清空現有選項（保留第一個「選擇職缺」選項）
+      jobFilter.innerHTML = '<option value="">選擇職缺</option>';
+      
+      // 添加職缺選項
+      Array.from(jobTitles).sort().forEach(jobTitle => {
+        const option = document.createElement('option');
+        option.value = jobTitle;
+        option.textContent = jobTitle;
+        jobFilter.appendChild(option);
+      });
+    }
+
+    // 過濾公司數據
+    function filterCompanies() {
+      const selectedCompany = document.getElementById('companyFilter').value;
+      const selectedJob = document.getElementById('jobFilter').value;
+      const studentName = document.getElementById('studentNameFilter').value.trim().toLowerCase();
+
+      filteredCompaniesData = allCompaniesData.map(company => {
+        // 按公司過濾
+        if (selectedCompany) {
+          const companyId = company.id || company.company_name;
+          if (companyId != selectedCompany) {
+            return null; // 標記為過濾掉
+          }
+        }
+        // 深拷貝公司數據
+        const filteredCompany = {
+          ...company,
+          students: company.students ? [...company.students] : [],
+          jobs: company.jobs ? [...company.jobs] : []
+        };
+
+        // 過濾學生
+        if (filteredCompany.students && filteredCompany.students.length > 0) {
+          filteredCompany.students = filteredCompany.students.filter(student => {
+            // 按職缺過濾
+            if (selectedJob) {
+              const studentJobTitle = student.job_title || '其他';
+              if (studentJobTitle !== selectedJob) {
+                return false;
+              }
+            }
+
+            // 按學生姓名過濾
+            if (studentName) {
+              const studentNameLower = (student.student_name || '').toLowerCase();
+              if (!studentNameLower.includes(studentName)) {
+                return false;
+              }
+            }
+
+            return true;
+          });
         }
 
-        companiesContainer.style.display = 'flex';
-        companiesContainer.innerHTML = companiesWithStudents.map((company, companyIndex) => {
+        // 過濾職缺（如果選擇了特定職缺，只顯示該職缺）
+        if (selectedJob && filteredCompany.jobs && filteredCompany.jobs.length > 0) {
+          // 檢查該職缺是否有符合條件的學生
+          const hasMatchingStudents = filteredCompany.students && filteredCompany.students.some(student => {
+            const studentJobTitle = student.job_title || '其他';
+            return studentJobTitle === selectedJob;
+          });
+          
+          if (hasMatchingStudents) {
+            // 只顯示選中的職缺
+            filteredCompany.jobs = filteredCompany.jobs.filter(job => job.title === selectedJob);
+          } else {
+            // 如果沒有符合條件的學生，但職缺存在，仍然顯示該職缺（但學生列表為空）
+            filteredCompany.jobs = filteredCompany.jobs.filter(job => job.title === selectedJob);
+          }
+        }
+
+        return filteredCompany;
+      }).filter(company => {
+        // 過濾掉null值（不匹配的公司）
+        if (!company) {
+          return false;
+        }
+        
+        // 只保留有符合條件的學生或職缺的公司
+        // 如果選擇了職缺，必須有該職缺或符合條件的學生
+        if (selectedJob) {
+          const hasMatchingJob = company.jobs && company.jobs.some(job => job.title === selectedJob);
+          const hasMatchingStudents = company.students && company.students.length > 0;
+          return hasMatchingJob || hasMatchingStudents;
+        }
+        
+        // 如果只搜尋學生姓名，只要有符合的學生就顯示
+        if (studentName) {
+          return company.students && company.students.length > 0;
+        }
+        
+        // 如果只選擇了公司，顯示該公司（即使沒有學生或職缺）
+        if (selectedCompany) {
+          return true;
+        }
+        
+        // 沒有過濾條件時，顯示所有公司
+        return true;
+      });
+
+      // 重新渲染
+      renderCompanies(filteredCompaniesData);
+    }
+
+    // 渲染公司列表
+    function renderCompanies(companies) {
+      const loadingState = document.getElementById('loadingState');
+      const companiesContainer = document.getElementById('companiesContainer');
+      const emptyState = document.getElementById('emptyState');
+
+      loadingState.style.display = 'none';
+
+      if (companies.length === 0) {
+        companiesContainer.style.display = 'none';
+        emptyState.style.display = 'block';
+        return;
+      }
+
+      companiesContainer.style.display = 'flex';
+      companiesContainer.innerHTML = companies.map((company, companyIndex) => {
           // 按職缺分組學生
           const jobStudentsMap = {};
           const unassignedStudents = [];
@@ -752,16 +1039,6 @@
             </div>
           `;
         }).join('');
-
-      } catch (error) {
-        console.error('載入媒合結果失敗:', error);
-        loadingState.style.display = 'none';
-        emptyState.style.display = 'block';
-        emptyState.innerHTML = `
-          <i class="fa-solid fa-triangle-exclamation"></i>
-          <div>載入失敗：${error.message}</div>
-        `;
-      }
     }
 
     // 切換職缺展開/收起
@@ -772,9 +1049,42 @@
       }
     }
 
+    // 處理公司選擇改變
+    function handleCompanyChange() {
+      const companyFilter = document.getElementById('companyFilter');
+      const selectedCompanyId = companyFilter.value;
+      
+      // 更新職缺選單
+      populateJobOptions(allCompaniesData, selectedCompanyId);
+      
+      // 重置職缺選擇
+      const jobFilter = document.getElementById('jobFilter');
+      jobFilter.value = '';
+      
+      // 觸發過濾
+      filterCompanies();
+    }
+
     // 頁面載入時執行
     document.addEventListener('DOMContentLoaded', () => {
       loadMatchingResults();
+
+      // 綁定過濾器事件
+      const companyFilter = document.getElementById('companyFilter');
+      const jobFilter = document.getElementById('jobFilter');
+      const studentNameFilter = document.getElementById('studentNameFilter');
+
+      if (companyFilter) {
+        companyFilter.addEventListener('change', handleCompanyChange);
+      }
+
+      if (jobFilter) {
+        jobFilter.addEventListener('change', filterCompanies);
+      }
+
+      if (studentNameFilter) {
+        studentNameFilter.addEventListener('input', filterCompanies);
+      }
     });
   </script>
 </body>
