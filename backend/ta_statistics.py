@@ -1963,4 +1963,145 @@ def manage_students():
         return redirect(url_for('auth_bp.login_page'))
     return render_template('user_shared/manage_students.html')               
 
+# --------------------------------
+# 面試排程頁面
+# --------------------------------
+@ta_statistics_bp.route('/interview_schedule')
+def interview_schedule():
+    # 權限檢查：允許 ta, admin 訪問
+    if 'user_id' not in session or session.get('role') not in ['ta', 'admin']:
+        from flask import redirect, url_for
+        return redirect(url_for('auth_bp.login_page'))
+    return render_template('user_shared/interview_schedule.html')
+
+# --------------------------------
+# API: 獲取所有面試排程（從 vendor_preference_history）
+# --------------------------------
+@ta_statistics_bp.route('/api/interview_schedules', methods=['GET'])
+def get_interview_schedules():
+    """獲取所有廠商的面試排程（用於 TA 查看所有面試排程）"""
+    if 'user_id' not in session or session.get('role') not in ['ta', 'admin']:
+        return jsonify({"success": False, "message": "未授權"}), 403
+    
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+    
+    try:
+        # 檢查 vendor_preference_history 表是否存在
+        cursor.execute("""
+            SELECT COUNT(*) as count
+            FROM information_schema.tables
+            WHERE table_schema = DATABASE()
+            AND table_name = 'vendor_preference_history'
+        """)
+        table_exists = cursor.fetchone().get('count', 0) > 0
+        
+        if not table_exists:
+            return jsonify({
+                "success": True,
+                "schedules": []
+            })
+        
+        # 查詢所有廠商的面試排程（從 vendor_preference_history 表中）
+        # 只查詢 action = 'interview' 的記錄
+        cursor.execute("""
+            SELECT DISTINCT
+                vph.id,
+                vph.reviewer_id,
+                vph.student_id,
+                vph.preference_id,
+                vph.comment,
+                vph.created_at,
+                u.name AS vendor_name,
+                ic.company_name,
+                ic.id AS company_id,
+                sp.student_id AS pref_student_id,
+                su.name AS student_name
+            FROM vendor_preference_history vph
+            JOIN users u ON vph.reviewer_id = u.id
+            LEFT JOIN student_preferences sp ON vph.preference_id = sp.id
+            LEFT JOIN internship_companies ic ON sp.company_id = ic.id
+            LEFT JOIN users su ON COALESCE(vph.student_id, sp.student_id) = su.id
+            WHERE vph.action = 'interview'
+            AND vph.comment LIKE '%面試日期：%'
+            ORDER BY vph.created_at DESC
+        """)
+        
+        all_schedules = cursor.fetchall()
+        
+        # 解析面試資訊
+        import re
+        parsed_schedules = []
+        
+        for schedule in all_schedules:
+            comment = schedule.get('comment', '')
+            reviewer_id = schedule.get('reviewer_id')
+            vendor_name = schedule.get('vendor_name', '未知廠商')
+            company_id = schedule.get('company_id')
+            student_id = schedule.get('student_id') or schedule.get('pref_student_id')
+            student_name = schedule.get('student_name', '未知學生')
+            
+            # 從 vendor 的 name 欄位提取公司名稱
+            # vendor name 格式通常是 "公司名稱 聯絡人姓名"，例如 "人人人 周建羽"
+            # 取第一個詞作為公司名稱
+            company_name = '未知公司'
+            if vendor_name:
+                # 如果包含空格，取第一個詞（公司名稱）
+                if ' ' in vendor_name:
+                    company_name = vendor_name.split()[0]
+                else:
+                    # 如果沒有空格，整個作為公司名稱
+                    company_name = vendor_name
+            
+            # 提取日期
+            date_match = re.search(r'面試日期：(\d{4}-\d{2}-\d{2})', comment)
+            if not date_match:
+                continue
+            
+            interview_date = date_match.group(1)
+            
+            # 提取時間
+            time_match = re.search(r'時間：(\d{2}:\d{2})\s*-\s*(\d{2}:\d{2})', comment)
+            time_start = None
+            time_end = None
+            if time_match:
+                time_start = time_match.group(1)
+                time_end = time_match.group(2)
+            else:
+                # 兼容只有開始時間的情況
+                time_match = re.search(r'時間：(\d{2}:\d{2})', comment)
+                if time_match:
+                    time_start = time_match.group(1)
+            
+            # 提取地點
+            location_match = re.search(r'地點：([^，\n]+)', comment)
+            location = location_match.group(1).strip() if location_match else ''
+            
+            parsed_schedules.append({
+                'id': schedule.get('id'),
+                'date': interview_date,
+                'time_start': time_start,
+                'time_end': time_end,
+                'location': location,
+                'vendor_id': reviewer_id,
+                'vendor_name': vendor_name,
+                'company_id': company_id,
+                'company_name': company_name,
+                'student_id': student_id,
+                'student_name': student_name,
+                'created_at': schedule.get('created_at').strftime('%Y-%m-%d %H:%M:%S') if schedule.get('created_at') else None
+            })
+        
+        return jsonify({
+            "success": True,
+            "schedules": parsed_schedules
+        })
+        
+    except Exception as exc:
+        traceback.print_exc()
+        return jsonify({"success": False, "message": f"獲取面試排程失敗：{exc}"}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
 
