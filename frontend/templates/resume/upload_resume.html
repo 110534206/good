@@ -226,7 +226,7 @@
             </div>
 
             <div class="mb-4"></div>
-            
+
             <table class="table table-bordered align-middle">
 
               <!-- 表格上方功能區 -->
@@ -454,6 +454,26 @@
               </div>
             </div>
 
+            <!-- 投遞實習公司設定 -->
+            <div class="card border-info mb-3">
+              <div class="card-header bg-info text-white d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">
+                  <i class="bi bi-send-fill"></i> 投遞設定
+                </h5>
+                <button type="button" class="btn btn-sm btn-light" id="toggleSelectAll">
+                  ✔ 全選
+                </button>
+              </div>
+
+              <div class="card-body">
+                <div id="jobCheckboxContainer" class="ms-2">
+                  <p class="text-muted">載入中...</p>
+                </div>
+              </div>
+            </div>
+
+            <!-- 隱藏欄位：送出用 -->
+            <input type="hidden" name="selected_jobs_json" id="selected_jobs_json">
 
             <!-- 隱藏欄位：儲存缺勤紀錄和統計的 JSON -->
             <input type="hidden" id="all_absence_details_json" name="all_absence_details_json" value="[]">
@@ -1315,7 +1335,6 @@
       }
     }
 
-    // 🧩 根據發證中心載入證照列表
     // 🧩 根據發證中心載入職類和級別列表
     async function loadJobCategoriesAndLevels(authorityId, jobCategorySelect, levelSelect, codeInput, nameInput, categoryInput, prefillJobCategory = null, prefillLevel = null) {
       try {
@@ -3000,7 +3019,7 @@
       try {
         const res = await fetch("/announcement/api/check_deadline?type=resume");
         const result = await res.json();
-        
+
         if (result.success && result.has_deadline && result.is_expired) {
           // 截止時間已過，禁用表單
           const form = document.getElementById("resumeForm");
@@ -3011,20 +3030,20 @@
                 element.disabled = true;
               }
             });
-            
+
             // 禁用提交按鈕
             const submitBtn = document.getElementById("submitResumeBtn");
             if (submitBtn) {
               submitBtn.disabled = true;
               submitBtn.textContent = '已超過截止時間';
             }
-            
+
             // 禁用修改按鈕
             const editBtn = document.getElementById("editResumeBtn");
             if (editBtn) {
               editBtn.disabled = true;
             }
-            
+
             // 顯示提示訊息
             const container = document.querySelector(".container");
             if (container) {
@@ -3039,7 +3058,7 @@
               `;
               container.insertBefore(alertDiv, container.firstChild);
             }
-            
+
             // 設置全局標記，防止後續操作
             window.deadlineExpired = true;
             isEditing = false; // 強制設為非編輯模式
@@ -3056,12 +3075,12 @@
     document.addEventListener("DOMContentLoaded", async () => {
       // 首先檢查截止時間
       await checkDeadlineAndDisableForm();
-      
+
       // 如果已過期，直接返回，不進行後續初始化
       if (window.deadlineExpired) {
         return;
       }
-      
+
       const form = document.getElementById("resumeForm");
 
       // 針對非動態生成的欄位，設定監聽器
@@ -3240,7 +3259,7 @@
           alert("⚠️ 已超過截止時間，無法再修改履歷");
           return;
         }
-        
+
         try {
           const deadlineCheck = await fetch("/announcement/api/check_deadline?type=resume");
           const deadlineResult = await deadlineCheck.json();
@@ -3251,7 +3270,7 @@
         } catch (error) {
           console.error("檢查截止時間失敗:", error);
         }
-        
+
         // 切換編輯狀態
         isEditing = !isEditing;
 
@@ -3326,13 +3345,13 @@
     // 🧩 表單送出 (提交成功後清除 LocalStorage 並切換頁籤)
     document.getElementById("resumeForm").addEventListener("submit", async e => {
       e.preventDefault();
-      
+
       // 再次檢查截止時間（防止用戶繞過前端檢查）
       if (window.deadlineExpired) {
         alert("⚠️ 已超過截止時間，無法提交履歷");
         return;
       }
-      
+
       try {
         const deadlineCheck = await fetch("/announcement/api/check_deadline?type=resume");
         const deadlineResult = await deadlineCheck.json();
@@ -3343,7 +3362,7 @@
       } catch (error) {
         console.error("檢查截止時間失敗:", error);
       }
-      
+
       const submitBtn = e.submitter;
       const originalText = submitBtn.textContent;
 
@@ -3515,6 +3534,96 @@
         });
       }
     });
+
+    // =========================================================================
+    // 動態載入公司與職缺多選框
+    // =========================================================================
+    let isAllSelected = false;
+
+    async function loadJobCheckboxes() {
+      const container = document.getElementById("jobCheckboxContainer");
+
+      try {
+        const res = await fetch("/api/get_companies_for_resume_delivery");
+        const result = await res.json();
+
+        if (!result.success) {
+          container.innerHTML = "<p class='text-danger'>載入失敗</p>";
+          return;
+        }
+
+        container.innerHTML = "";
+
+        if (result.use_preferences) {
+          container.insertAdjacentHTML("afterbegin", `
+           <div class="alert alert-info py-2">
+           💡 已依您填寫的「志願序」顯示可投遞的公司
+           </div>
+        `);
+        } else {
+          container.insertAdjacentHTML("afterbegin", `
+           <div class="alert alert-secondary py-2">
+          💡 尚未填寫志願序，目前顯示所有可投遞公司
+           </div>
+      `);
+        }
+
+        result.companies.forEach(company => {
+          const companyDiv = document.createElement("div");
+          companyDiv.classList.add("mb-2");
+
+          companyDiv.innerHTML = `
+        <strong>${company.company_name}</strong>
+        <div class="ms-3 mt-1"></div>
+      `;
+
+          const jobListDiv = companyDiv.querySelector("div");
+
+          company.jobs.forEach(job => {
+            const id = `job_${job.job_id}`;
+            jobListDiv.insertAdjacentHTML("beforeend", `
+          <div class="form-check">
+            <input class="form-check-input job-checkbox"
+                   type="checkbox"
+                   value="${job.job_id}"
+                   id="${id}">
+            <label class="form-check-label" for="${id}">
+              ${job.job_title}
+            </label>
+          </div>
+        `);
+          });
+
+          container.appendChild(companyDiv);
+        });
+
+      } catch (e) {
+        console.error(e);
+        container.innerHTML = "<p class='text-danger'>系統錯誤</p>";
+      }
+    }
+
+    // 全選 / 全不選
+    document.getElementById("toggleSelectAll").addEventListener("click", () => {
+      const checkboxes = document.querySelectorAll(".job-checkbox");
+      isAllSelected = !isAllSelected;
+
+      checkboxes.forEach(cb => cb.checked = isAllSelected);
+      document.getElementById("toggleSelectAll").textContent =
+        isAllSelected ? "✖ 全不選" : "✔ 全選";
+    });
+
+    // 表單送出前整理資料
+    document.getElementById("resumeForm").addEventListener("submit", () => {
+      const selected = [];
+      document.querySelectorAll(".job-checkbox:checked").forEach(cb => {
+        selected.push(parseInt(cb.value));
+      });
+      document.getElementById("selected_jobs_json").value = JSON.stringify(selected);
+    });
+
+    // 初始化
+    document.addEventListener("DOMContentLoaded", loadJobCheckboxes);
 
   </script>
 
