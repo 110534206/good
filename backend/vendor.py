@@ -94,14 +94,38 @@ def _ensure_history_table(cursor):
                 CREATE TABLE vendor_preference_history (
                     id INT AUTO_INCREMENT PRIMARY KEY,
                     preference_id INT NOT NULL,
+                    student_id INT,
                     reviewer_id INT NOT NULL,
                     action VARCHAR(20) NOT NULL,
                     comment TEXT,
                     created_at DATETIME NOT NULL,
                     INDEX idx_vph_preference (preference_id),
+                    INDEX idx_vph_student (student_id),
                     INDEX idx_vph_reviewer (reviewer_id)
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
             """)
+        else:
+            # 如果表已存在，檢查是否有 student_id 欄位，如果沒有則添加
+            try:
+                cursor.execute("""
+                    SELECT COUNT(*) as count
+                    FROM information_schema.columns
+                    WHERE table_schema = DATABASE()
+                    AND table_name = 'vendor_preference_history'
+                    AND column_name = 'student_id'
+                """)
+                has_student_id = cursor.fetchone().get('count', 0) > 0
+                
+                if not has_student_id:
+                    print("📝 為 vendor_preference_history 表添加 student_id 欄位...")
+                    cursor.execute("""
+                        ALTER TABLE vendor_preference_history
+                        ADD COLUMN student_id INT AFTER preference_id,
+                        ADD INDEX idx_vph_student (student_id)
+                    """)
+                    print("✅ 已成功添加 student_id 欄位")
+            except Exception as alter_error:
+                print(f"⚠️ 添加 student_id 欄位失敗（可能已存在）: {alter_error}")
             
             # 嘗試添加外鍵約束（如果失敗，不影響表的使用）
             try:
@@ -286,18 +310,29 @@ def _fetch_job_for_vendor(cursor, job_id, vendor_id, allow_teacher_created=False
     return row
 
 
-def _record_history(cursor, preference_id, reviewer_id, action, comment):
+def _record_history(cursor, preference_id, reviewer_id, action, comment, student_id=None):
     """記錄廠商對志願申請的審核或備註歷史"""
     if action not in ACTION_TEXT:
         return
     _ensure_history_table(cursor)
+    
+    # 如果沒有提供 student_id，嘗試從 preference_id 獲取
+    if student_id is None and preference_id:
+        try:
+            cursor.execute("SELECT student_id FROM student_preferences WHERE id = %s", (preference_id,))
+            pref_row = cursor.fetchone()
+            if pref_row:
+                student_id = pref_row.get("student_id")
+        except Exception:
+            pass  # 如果獲取失敗，student_id 保持為 None
+    
     cursor.execute(
         """
         INSERT INTO vendor_preference_history
-            (preference_id, reviewer_id, action, comment, created_at)
-        VALUES (%s, %s, %s, %s, NOW())
+            (preference_id, student_id, reviewer_id, action, comment, created_at)
+        VALUES (%s, %s, %s, %s, %s, NOW())
         """,
-        (preference_id, reviewer_id, action, comment),
+        (preference_id, student_id, reviewer_id, action, comment),
     )
 
 
@@ -1185,8 +1220,9 @@ def get_vendor_resumes():
                         vendor_comment = vendor_comment_row.get('comment')
                     
                     # 查詢是否有面試記錄 (老師訪問時查詢所有廠商的面試記錄，廠商訪問時只查詢自己的面試記錄)
+                    # 同時基於 preference_id 和 student_id 查詢，確保能正確匹配
                     interview_reviewer_condition = ""
-                    interview_params = [preference_id]
+                    interview_params = [preference_id, student_id]
                     if user_role == 'vendor':
                         interview_reviewer_condition = "AND reviewer_id = %s"
                         interview_params.append(vendor_id)
@@ -1194,11 +1230,28 @@ def get_vendor_resumes():
                     cursor.execute(f"""
                         SELECT COUNT(*) as count
                         FROM vendor_preference_history 
-                        WHERE preference_id = %s {interview_reviewer_condition} AND action = 'interview'
+                        WHERE preference_id = %s AND student_id = %s {interview_reviewer_condition} AND action = 'interview'
                     """, tuple(interview_params))
                     interview_result = cursor.fetchone()
                     if interview_result and interview_result.get('count', 0) > 0:
                         has_interview = True
+                    else:
+                        # 如果基於 preference_id 和 student_id 沒找到，再嘗試只基於 student_id 查詢（兼容舊資料）
+                        student_only_params = [student_id]
+                        if user_role == 'vendor':
+                            student_only_params.append(vendor_id)
+                            student_only_condition = "AND reviewer_id = %s"
+                        else:
+                            student_only_condition = ""
+                        
+                        cursor.execute(f"""
+                            SELECT COUNT(*) as count
+                            FROM vendor_preference_history 
+                            WHERE student_id = %s {student_only_condition} AND action = 'interview'
+                        """, tuple(student_only_params))
+                        student_interview_result = cursor.fetchone()
+                        if student_interview_result and student_interview_result.get('count', 0) > 0:
+                            has_interview = True
                     
                     # 查詢是否已完成面試 (老師訪問時查詢所有廠商的面試完成記錄，廠商訪問時只查詢自己的面試完成記錄)
                     completed_reviewer_condition = ""
@@ -2635,6 +2688,197 @@ def send_notification():
             except:
                 pass
         return jsonify({"success": False, "message": f"發送失敗：{exc}"}), 500
+
+
+@vendor_bp.route("/vendor/api/schedule_interviews", methods=["POST"])
+def schedule_interviews():
+    """批量記錄面試排程到 vendor_preference_history"""
+    from notification import create_notification  # 導入通知函數
+    
+    if "user_id" not in session or session.get("role") != "vendor":
+        return jsonify({"success": False, "message": "未授權"}), 403
+
+    data = request.get_json(silent=True) or {}
+    student_ids = data.get("student_ids", [])
+    interview_date = data.get("interview_date")
+    interview_time_start = data.get("interview_time_start")
+    interview_time_end = data.get("interview_time_end")
+    interview_location = data.get("interview_location")
+    interview_notes = data.get("interview_notes", "")
+    
+    if not student_ids or not isinstance(student_ids, list):
+        return jsonify({"success": False, "message": "請提供學生ID列表"}), 400
+    
+    if not interview_date:
+        return jsonify({"success": False, "message": "請提供面試日期"}), 400
+    
+    vendor_id = session["user_id"]
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+    
+    try:
+        _ensure_history_table(cursor)
+        
+        # 構建面試資訊描述
+        time_info = ""
+        if interview_time_start and interview_time_end:
+            time_info = f"{interview_time_start} - {interview_time_end}"
+        elif interview_time_start:
+            time_info = interview_time_start
+        
+        location_info = interview_location or ""
+        notes_info = interview_notes or ""
+        
+        # 構建面試描述，包含狀態資訊
+        interview_description = f"狀態：面試中，面試日期：{interview_date}"
+        if time_info:
+            interview_description += f"，時間：{time_info}"
+        if location_info:
+            interview_description += f"，地點：{location_info}"
+        if notes_info:
+            interview_description += f"，備註：{notes_info}"
+        
+        success_count = 0
+        failed_students = []
+        
+        # 獲取廠商的公司列表
+        profile, companies, _ = _get_vendor_scope(cursor, vendor_id)
+        if not profile:
+            cursor.close()
+            conn.close()
+            return jsonify({"success": False, "message": "帳號資料不完整"}), 403
+        
+        company_ids = [c["id"] for c in companies] if companies else []
+        if not company_ids:
+            cursor.close()
+            conn.close()
+            return jsonify({"success": False, "message": "找不到該廠商關聯的公司"}), 404
+        
+        # 獲取廠商名稱
+        vendor_name = profile.get("name", "廠商")
+        company_name = companies[0].get("company_name", "公司") if companies else "公司"
+        
+        for student_id in student_ids:
+            try:
+                # 查找該學生對應的 preference_id（找到該廠商相關公司的志願序）
+                cursor.execute("""
+                    SELECT sp.id AS preference_id
+                    FROM student_preferences sp
+                    WHERE sp.student_id = %s
+                    AND sp.company_id IN ({})
+                    ORDER BY sp.id DESC
+                    LIMIT 1
+                """.format(','.join(['%s'] * len(company_ids))), [student_id] + company_ids)
+                
+                preference_row = cursor.fetchone()
+                
+                if preference_row:
+                    preference_id = preference_row.get("preference_id")
+                    # 記錄到 vendor_preference_history（包含 student_id）
+                    _record_history(cursor, preference_id, vendor_id, "interview", interview_description, student_id)
+                    
+                    # 獲取學生資訊
+                    cursor.execute("""
+                        SELECT id, name, email, class_id
+                        FROM users
+                        WHERE id = %s AND role = 'student'
+                    """, (student_id,))
+                    student_info = cursor.fetchone()
+                    
+                    if student_info:
+                        student_name = student_info.get("name", "同學")
+                        
+                        # 構建通知內容
+                        notification_title = f"{company_name} 面試通知"
+                        notification_message = f"您已收到來自 {company_name} 的面試通知。\n\n"
+                        notification_message += f"面試日期：{interview_date}\n"
+                        if time_info:
+                            notification_message += f"面試時間：{time_info}\n"
+                        if location_info:
+                            notification_message += f"面試地點：{location_info}\n"
+                        if notes_info:
+                            notification_message += f"面試須知：{notes_info}\n"
+                        
+                        # 發送通知給學生
+                        try:
+                            notification_success = create_notification(
+                                user_id=student_id,
+                                title=notification_title,
+                                message=notification_message,
+                                category="company",  # 實習公司分類
+                                link_url="/notifications"
+                            )
+                            if notification_success:
+                                print(f"✅ 已發送面試通知給學生 {student_name} (ID: {student_id})")
+                            else:
+                                print(f"⚠️ 發送面試通知給學生 {student_name} (ID: {student_id}) 失敗")
+                        except Exception as notify_error:
+                            print(f"⚠️ 發送通知時發生錯誤（學生 ID: {student_id}）：{notify_error}")
+                            traceback.print_exc()
+                        
+                        # 發送通知給學生的指導老師（如果有的話）
+                        class_id = student_info.get("class_id")
+                        if class_id:
+                            try:
+                                # 查找該班級的指導老師
+                                cursor.execute("""
+                                    SELECT ct.teacher_id
+                                    FROM classes_teacher ct
+                                    WHERE ct.class_id = %s
+                                    LIMIT 1
+                                """, (class_id,))
+                                teacher_row = cursor.fetchone()
+                                
+                                if teacher_row and teacher_row.get("teacher_id"):
+                                    teacher_id = teacher_row.get("teacher_id")
+                                    teacher_notification_title = f"{company_name} 學生面試通知"
+                                    teacher_notification_message = f"您的學生 {student_name} 已收到來自 {company_name} 的面試通知。\n\n"
+                                    teacher_notification_message += f"面試日期：{interview_date}\n"
+                                    if time_info:
+                                        teacher_notification_message += f"面試時間：{time_info}\n"
+                                    if location_info:
+                                        teacher_notification_message += f"面試地點：{location_info}\n"
+                                    
+                                    teacher_notification_success = create_notification(
+                                        user_id=teacher_id,
+                                        title=teacher_notification_title,
+                                        message=teacher_notification_message,
+                                        category="company",
+                                        link_url="/notifications"
+                                    )
+                                    if teacher_notification_success:
+                                        print(f"✅ 已發送面試通知給指導老師 (ID: {teacher_id})")
+                                    else:
+                                        print(f"⚠️ 發送面試通知給指導老師 (ID: {teacher_id}) 失敗")
+                            except Exception as teacher_notify_error:
+                                print(f"⚠️ 發送通知給指導老師時發生錯誤：{teacher_notify_error}")
+                                # 不影響主流程，只記錄錯誤
+                    
+                    success_count += 1
+                else:
+                    failed_students.append(str(student_id))
+            except Exception as e:
+                print(f"⚠️ 記錄學生 {student_id} 的面試排程失敗：{e}")
+                traceback.print_exc()
+                failed_students.append(str(student_id))
+        
+        conn.commit()
+        
+        if success_count > 0:
+            message = f"已成功記錄 {success_count} 位學生的面試排程"
+            if failed_students:
+                message += f"，{len(failed_students)} 位學生記錄失敗（可能找不到對應的志願序）"
+            return jsonify({"success": True, "message": message, "success_count": success_count, "failed_count": len(failed_students)})
+        else:
+            return jsonify({"success": False, "message": "無法找到任何學生的志願序記錄"}), 404
+            
+    except Exception as exc:
+        conn.rollback()
+        traceback.print_exc()
+        return jsonify({"success": False, "message": f"記錄面試排程失敗：{exc}"}), 500
+    finally:
+        cursor.close()
+        conn.close()
 
 
 @vendor_bp.route("/vendor/api/mark_interview_completed", methods=["POST"])

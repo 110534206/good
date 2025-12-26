@@ -55,7 +55,42 @@
     
     .status-badge.bg-secondary { color: #fff; background-color: #6c757d; }
     
+    /* 面試中：中橙色底白字 */
+    .status-badge.bg-interviewing { color: #fff; background-color: #ff8c42; }
+    
+    /* 已面試：中藍色底白字 */
+    .status-badge.bg-completed { color: #fff; background-color: #4a9eff; }
+    
     #commentInput { width: 100%; height: 180px; resize: vertical; padding: 0.5rem; font-size: 1rem; line-height: 1.4; }
+    
+    /* 學生選單樣式 */
+    #interviewStudents {
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+    }
+    .student-checkbox-item {
+      display: flex;
+      align-items: center;
+      padding: 8px 12px;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: background-color 0.2s;
+    }
+    .student-checkbox-item:hover {
+      background-color: #f0f9ff;
+    }
+    .student-checkbox-item input[type="checkbox"] {
+      margin-right: 10px;
+      cursor: pointer;
+      width: 18px;
+      height: 18px;
+    }
+    .student-checkbox-item label {
+      margin: 0;
+      cursor: pointer;
+      flex: 1;
+      user-select: none;
+    }
     
     #side-menu {
       position: fixed; top: 0; left: 0; height: 100vh; width: 320px; max-width: 80vw;
@@ -172,6 +207,9 @@
         <table style="width: 100%; border-collapse: collapse;">
           <thead style="background: #f1f5f9;">
             <tr>
+              <th style="padding: 14px 16px; font-weight: 600; width: 50px;">
+                <input type="checkbox" id="selectAllCheckbox" title="全選/取消全選" style="cursor: pointer; width: 18px; height: 18px;">
+              </th>
               <th style="padding: 14px 16px; font-weight: 600;">學生帳號</th>
               <th style="padding: 14px 16px; font-weight: 600;">姓名</th>
               <th style="padding: 14px 16px; font-weight: 600;">上傳時間</th>
@@ -183,7 +221,7 @@
             </tr>
           </thead>
           <tbody id="resumeTableBody">
-            <tr><td colspan="7" style="padding: 14px 16px; text-align: center; color: #64748b;">載入中...</td></tr>
+            <tr><td colspan="9" style="padding: 14px 16px; text-align: center; color: #64748b;">載入中...</td></tr>
           </tbody>
         </table>
       </div>
@@ -258,11 +296,25 @@
               </div>
             </div>
             <div class="mb-3">
+              <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+                <label for="interviewStudents" class="form-label" style="font-weight: 600; margin: 0;">面試學生</label>
+                <button type="button" class="btn btn-sm btn-outline-secondary" id="selectAllStudentsBtn" style="font-size: 0.85rem; padding: 4px 12px;">全選</button>
+              </div>
+              <div id="interviewStudents" style="border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px; max-height: 200px; overflow-y: auto; background-color: #fff;">
+                <!-- 學生選項將由 JavaScript 動態填充 -->
+              </div>
+              <small class="form-text text-muted" style="font-size: 0.85rem; margin-top: 4px; display: block;">
+                已選擇 <span id="selectedStudentsCount">0</span> 位學生
+              </small>
+            </div>
+            <div class="mb-3">
               <label for="interviewLocation" class="form-label" style="font-weight: 600;">面試地點</label>
               <select class="form-control" id="interviewLocation" required>
                 <option value="">請選擇面試地點</option>
                 <option value="康寧大學科辦">康寧大學科辦</option>
+                <option value="other">其他</option>
               </select>
+              <input type="text" class="form-control mt-2" id="interviewLocationOther" placeholder="請輸入其他面試地點" style="display: none;">
             </div>
             <div class="mb-3">
               <label for="interviewNotes" class="form-label" style="font-weight: 600;">面試須知</label>
@@ -424,6 +476,47 @@
       document.getElementById("prevMonthBtn").addEventListener("click", () => changeMonth(-1));
       document.getElementById("nextMonthBtn").addEventListener("click", () => changeMonth(1));
       document.getElementById("saveInterviewBtn").addEventListener("click", saveInterviewSchedule);
+      
+      // 全選/取消全選功能
+      const selectAllCheckbox = document.getElementById("selectAllCheckbox");
+      if (selectAllCheckbox) {
+        selectAllCheckbox.addEventListener("change", function() {
+          const rowCheckboxes = document.querySelectorAll(".row-checkbox");
+          rowCheckboxes.forEach(checkbox => {
+            checkbox.checked = this.checked;
+          });
+        });
+      }
+      
+      // 當個別 checkbox 改變時，更新全選 checkbox 狀態
+      document.addEventListener("change", function(e) {
+        if (e.target.classList.contains("row-checkbox")) {
+          const rowCheckboxes = document.querySelectorAll(".row-checkbox");
+          const checkedCount = document.querySelectorAll(".row-checkbox:checked").length;
+          if (selectAllCheckbox) {
+            selectAllCheckbox.checked = checkedCount === rowCheckboxes.length && rowCheckboxes.length > 0;
+            selectAllCheckbox.indeterminate = checkedCount > 0 && checkedCount < rowCheckboxes.length;
+          }
+        }
+      });
+      
+      // 全選/取消全選學生功能
+      const selectAllStudentsBtn = document.getElementById("selectAllStudentsBtn");
+      if (selectAllStudentsBtn) {
+        selectAllStudentsBtn.addEventListener("click", function() {
+          const studentsContainer = document.getElementById("interviewStudents");
+          if (studentsContainer) {
+            const checkboxes = studentsContainer.querySelectorAll('.student-checkbox');
+            const allChecked = Array.from(checkboxes).every(cb => cb.checked);
+            
+            // 如果全部已選中，則取消全選；否則全選
+            checkboxes.forEach(checkbox => {
+              checkbox.checked = !allChecked;
+            });
+            updateSelectedStudentsCount();
+          }
+        });
+      }
     });
 
     function initMenu() {
@@ -562,7 +655,7 @@
       const tbody = document.getElementById("resumeTableBody");
       tbody.innerHTML = "";
       if (resumes.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; color: #64748b; padding: 16px;">目前沒有資料</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="9" style="text-align: center; color: #64748b; padding: 16px;">目前沒有資料</td></tr>`;
         document.getElementById("pagination").innerHTML = "";
         return;
       }
@@ -610,7 +703,11 @@
         const key = (row.preference_id || row.preferenceId || row.id);
         const hasInterviewed = interviewedSet.has(String(key)) || row.has_interview || false;
         const isInterviewCompleted = row.interview_completed || false;
+        const rowId = `checkbox-${row.id}-${pid || 'no-pid'}`;
         tr.innerHTML = `
+           <td style="padding: 14px 16px; text-align: center;">
+             <input type="checkbox" class="row-checkbox" id="${rowId}" data-resume-id="${row.id}" data-preference-id="${pid || ''}" style="cursor: pointer; width: 18px; height: 18px;">
+           </td>
            <td style="padding: 14px 16px;">${row.username || row.student_number || '—'}</td>
            <td style="padding: 14px 16px;">${escapeHtml(row.name || row.student_name || '—')}</td>
            <td style="padding: 14px 16px;">${row.upload_time || '—'}</td>
@@ -621,10 +718,10 @@
               <span class="status-badge bg-${statusColor(row.display_status)}">${mapStatus(row.display_status)}</span>
               ${
                 isInterviewCompleted
-                  ? `<span class="status-badge bg-info">已面試</span>`
+                  ? `<span class="status-badge bg-completed">已面試</span>`
                   : (hasInterviewed || row.has_interview)
-                    ? `<span class="status-badge bg-secondary">面試中</span>`
-                    : ''
+                    ? `<span class="status-badge bg-interviewing">面試中</span>`
+                    : `<span class="status-badge bg-secondary" style="background-color: #94a3b8;">未面試</span>`
               }
             </div>
           </td>
@@ -679,18 +776,8 @@
 
         // 無論狀態為何，保留按鈕
         let btns = `<div style="display:flex; align-items:center; flex-wrap:wrap; gap:4px;">${dlBtn}`;
-        btns += `<button class="btn btn-sm btn-outline-warning" style="margin-right:4px;" onclick="${interviewClick}">面試</button>`;
-        if (hasInterviewed && !isInterviewCompleted) {
-            btns += `<button class="btn btn-sm btn-outline-info" style="margin-right:4px;" onclick="${markCompletedClick}">已面試</button>`;
-        } else if (isInterviewCompleted) {
-            btns += `<button class="btn btn-sm btn-outline-info" style="margin-right:4px;" disabled title="已完成面試">已面試</button>`;
-        }
         btns += `<button class="btn btn-sm btn-outline-danger" style="margin-right:4px;" onclick="${rejectClick}">退件</button>`;
-        if (hasInterviewed) {
-            btns += `<button class="btn btn-sm btn-outline-success" onclick="${approveClick}">通過</button>`;
-        } else {
-            btns += `<button class="btn btn-sm btn-outline-success disabled" disabled title="請先送出面試通知">通過</button>`;
-        }
+        btns += `<button class="btn btn-sm btn-outline-success" onclick="${approveClick}">通過</button>`;
         btns += `</div>`;
         return btns;
     }
@@ -999,6 +1086,116 @@
           added.add(name);
         }
       });
+      
+      // 添加「其他」選項
+      const otherOption = document.createElement('option');
+      otherOption.value = 'other';
+      otherOption.textContent = '其他';
+      locationSelect.appendChild(otherOption);
+      
+      // 監聽地點選擇變化，顯示/隱藏「其他」輸入框
+      locationSelect.addEventListener('change', function() {
+        const otherInput = document.getElementById('interviewLocationOther');
+        if (otherInput) {
+          if (this.value === 'other') {
+            otherInput.style.display = 'block';
+            otherInput.required = true;
+          } else {
+            otherInput.style.display = 'none';
+            otherInput.required = false;
+            otherInput.value = '';
+          }
+        }
+      });
+    }
+    
+    // 填充學生下拉選單（可複選）
+    function populateStudentsDropdown() {
+      const studentsContainer = document.getElementById('interviewStudents');
+      if (!studentsContainer) return;
+      
+      // 清空現有選項
+      studentsContainer.innerHTML = '';
+      
+      // 從 allResumes 中提取學生資料（去重）
+      const studentMap = new Map();
+      allResumes.forEach(r => {
+        const studentId = r.student_id || r.id;
+        const studentName = r.name || r.student_name || '未知';
+        const studentUsername = r.username || r.student_number || '';
+        const key = String(studentId);
+        
+        // 如果該學生尚未加入，則加入
+        if (!studentMap.has(key) && studentId) {
+          studentMap.set(key, {
+            id: studentId,
+            name: studentName,
+            username: studentUsername,
+            displayText: `${studentName} (${studentUsername})`
+          });
+        }
+      });
+      
+      // 按姓名排序後加入選單
+      const sortedStudents = Array.from(studentMap.values()).sort((a, b) => {
+        return a.name.localeCompare(b.name, 'zh-Hant');
+      });
+      
+      sortedStudents.forEach(student => {
+        const itemDiv = document.createElement('div');
+        itemDiv.className = 'student-checkbox-item';
+        
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.id = `student-checkbox-${student.id}`;
+        checkbox.value = String(student.id);
+        checkbox.className = 'student-checkbox';
+        
+        const label = document.createElement('label');
+        label.htmlFor = `student-checkbox-${student.id}`;
+        label.textContent = student.displayText;
+        
+        itemDiv.appendChild(checkbox);
+        itemDiv.appendChild(label);
+        
+        // 點擊整個項目也可以切換 checkbox
+        itemDiv.addEventListener('click', function(e) {
+          if (e.target !== checkbox && e.target !== label) {
+            checkbox.checked = !checkbox.checked;
+            updateSelectedStudentsCount();
+          }
+        });
+        
+        // checkbox 改變時更新計數
+        checkbox.addEventListener('change', updateSelectedStudentsCount);
+        
+        studentsContainer.appendChild(itemDiv);
+      });
+      
+      // 更新選中學生計數
+      updateSelectedStudentsCount();
+    }
+    
+    // 更新選中學生計數
+    function updateSelectedStudentsCount() {
+      const studentsContainer = document.getElementById('interviewStudents');
+      const countSpan = document.getElementById('selectedStudentsCount');
+      if (studentsContainer && countSpan) {
+        const checkboxes = studentsContainer.querySelectorAll('.student-checkbox:checked');
+        const selectedCount = checkboxes.length;
+        countSpan.textContent = selectedCount;
+        
+        // 更新全選按鈕文字
+        const selectAllBtn = document.getElementById('selectAllStudentsBtn');
+        if (selectAllBtn) {
+          const allCheckboxes = studentsContainer.querySelectorAll('.student-checkbox');
+          if (selectedCount === allCheckboxes.length && allCheckboxes.length > 0) {
+            selectAllBtn.textContent = '取消全選';
+          } else {
+            selectAllBtn.textContent = '全選';
+          }
+        }
+      }
     }
     
     // 開啟面試排程月曆
@@ -1025,10 +1222,19 @@
       document.getElementById('interviewTimeStart').value = '';
       document.getElementById('interviewTimeEnd').value = '';
       document.getElementById('interviewLocation').value = '';
+      const locationOtherInput = document.getElementById('interviewLocationOther');
+      if (locationOtherInput) {
+        locationOtherInput.value = '';
+        locationOtherInput.style.display = 'none';
+        locationOtherInput.required = false;
+      }
       document.getElementById('interviewNotes').value = '';
       
       // 依照目前履歷資料重建地點下拉選單（包含公司名稱）
       populateLocationDropdown();
+      
+      // 填充學生選單
+      populateStudentsDropdown();
       
       // 如果已有排程，載入現有資料
       if (interviewSchedules.has(dateStr)) {
@@ -1041,8 +1247,63 @@
           // 兼容舊格式：如果只有單一時間，設為開始時間
           document.getElementById('interviewTimeStart').value = schedule.time || '';
         }
-        document.getElementById('interviewLocation').value = schedule.location || '';
+        
+        // 處理地點：檢查是否為預設選項或「其他」
+        const locationSelect = document.getElementById('interviewLocation');
+        const locationOtherInput = document.getElementById('interviewLocationOther');
+        const savedLocation = schedule.location || '';
+        
+        if (savedLocation) {
+          // 檢查保存的地點是否在選單中
+          const locationOption = Array.from(locationSelect.options).find(opt => opt.value === savedLocation);
+          if (locationOption) {
+            // 如果是預設選項，直接設置
+            locationSelect.value = savedLocation;
+            if (locationOtherInput) {
+              locationOtherInput.style.display = 'none';
+              locationOtherInput.value = '';
+            }
+          } else {
+            // 如果不在選單中，設置為「其他」並填入輸入框
+            locationSelect.value = 'other';
+            if (locationOtherInput) {
+              locationOtherInput.style.display = 'block';
+              locationOtherInput.value = savedLocation;
+              locationOtherInput.required = true;
+            }
+          }
+        }
+        
         document.getElementById('interviewNotes').value = schedule.notes || '';
+        
+        // 恢復選中的學生
+        const studentsContainer = document.getElementById('interviewStudents');
+        if (studentsContainer && schedule.students && Array.isArray(schedule.students)) {
+          // 清除所有選中狀態
+          const checkboxes = studentsContainer.querySelectorAll('.student-checkbox');
+          checkboxes.forEach(checkbox => {
+            checkbox.checked = false;
+          });
+          
+          // 恢復選中的學生
+          schedule.students.forEach(studentId => {
+            const checkbox = studentsContainer.querySelector(`.student-checkbox[value="${studentId}"]`);
+            if (checkbox) {
+              checkbox.checked = true;
+            }
+          });
+          updateSelectedStudentsCount();
+        }
+      } else {
+        // 如果沒有排程，清除所有選中狀態
+        const studentsContainer = document.getElementById('interviewStudents');
+        if (studentsContainer) {
+          const checkboxes = studentsContainer.querySelectorAll('.student-checkbox');
+          checkboxes.forEach(checkbox => {
+            checkbox.checked = false;
+          });
+          updateSelectedStudentsCount();
+        }
       }
       
       // 先關閉月曆模態框
@@ -1114,26 +1375,138 @@
         return;
       }
       
-      const location = document.getElementById('interviewLocation').value.trim();
-      if (!location) {
-        alert('請選擇面試地點');
-        document.getElementById('interviewLocation').focus();
-        return;
+      const locationSelect = document.getElementById('interviewLocation');
+      const locationOtherInput = document.getElementById('interviewLocationOther');
+      let location = '';
+      
+      if (locationSelect.value === 'other') {
+        // 如果選擇「其他」，使用輸入框的值
+        location = locationOtherInput ? locationOtherInput.value.trim() : '';
+        if (!location) {
+          alert('請輸入其他面試地點');
+          if (locationOtherInput) {
+            locationOtherInput.focus();
+          }
+          return;
+        }
+      } else {
+        // 使用選單中的值
+        location = locationSelect.value.trim();
+        if (!location) {
+          alert('請選擇面試地點');
+          locationSelect.focus();
+          return;
+        }
       }
       
       const notes = document.getElementById('interviewNotes').value.trim();
       const dateStr = formatDate(selectedInterviewDate);
       
-      // 保存到 Map
+      // 獲取選中的學生 ID
+      const studentsContainer = document.getElementById('interviewStudents');
+      const selectedStudents = [];
+      if (studentsContainer) {
+        const checkboxes = studentsContainer.querySelectorAll('.student-checkbox:checked');
+        checkboxes.forEach(checkbox => {
+          selectedStudents.push(checkbox.value);
+        });
+      }
+      
+      // 保存到 Map（本地存儲）
       interviewSchedules.set(dateStr, {
         timeStart: timeStart,
         timeEnd: timeEnd,
         location: location,
-        notes: notes
+        notes: notes,
+        students: selectedStudents
       });
       
       // 保存到本地存儲
       saveInterviewSchedulesToStorage();
+      
+      // 如果有選中學生，調用後端 API 記錄到 vendor_preference_history 資料表
+      if (selectedStudents.length > 0) {
+        const interviewData = {
+          student_ids: selectedStudents,
+          interview_date: dateStr,
+          interview_time_start: timeStart,
+          interview_time_end: timeEnd,
+          interview_location: location,
+          interview_notes: notes
+        };
+        
+        fetch("/vendor/api/schedule_interviews", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(interviewData)
+        })
+        .then(res => res.json())
+        .then(data => {
+          if (data.success) {
+            // 立即更新前端狀態顯示
+            selectedStudents.forEach(studentId => {
+              allResumes.forEach(resume => {
+                const resumeStudentId = String(resume.student_id || resume.id || '');
+                if (resumeStudentId === String(studentId)) {
+                  resume.has_interview = true;
+                  const key = String(resume.preference_id || resume.preferenceId || resume.id);
+                  interviewedSet.add(key);
+                }
+              });
+            });
+            
+            // 立即重新渲染表格以顯示「面試中」狀態
+            applyFilters();
+            
+            // 重新載入資料以確保狀態同步
+            fetch(getResumeApiUrl()).then(r=>r.json()).then(d=>{
+              if(d.success) { 
+                allResumes = d.resumes;
+                interviewedSet.clear();
+                allResumes.forEach(r => {
+                  if (r.has_interview || r.interview_completed) {
+                    const key = String(r.preference_id || r.preferenceId || r.id);
+                    interviewedSet.add(key);
+                  }
+                });
+                applyFilters();
+              }
+            });
+          } else {
+            console.error("記錄面試排程到資料庫失敗:", data.message);
+            // 即使後端記錄失敗，也更新前端狀態
+            selectedStudents.forEach(studentId => {
+              allResumes.forEach(resume => {
+                const resumeStudentId = String(resume.student_id || resume.id || '');
+                if (resumeStudentId === String(studentId)) {
+                  resume.has_interview = true;
+                  const key = String(resume.preference_id || resume.preferenceId || resume.id);
+                  interviewedSet.add(key);
+                }
+              });
+            });
+            applyFilters();
+          }
+        })
+        .catch(err => {
+          console.error("調用面試排程 API 失敗:", err);
+          // 即使 API 調用失敗，也更新前端狀態
+          selectedStudents.forEach(studentId => {
+            allResumes.forEach(resume => {
+              const resumeStudentId = String(resume.student_id || resume.id || '');
+              if (resumeStudentId === String(studentId)) {
+                resume.has_interview = true;
+                const key = String(resume.preference_id || resume.preferenceId || resume.id);
+                interviewedSet.add(key);
+              }
+            });
+          });
+          applyFilters();
+        });
+      } else {
+        // 如果沒有選中學生，仍然需要重新渲染以確保狀態正確
+        applyFilters();
+      }
       
       // 關閉表單模態框
       const formModal = bootstrap.Modal.getInstance(document.getElementById("interviewFormModal"));
@@ -1142,7 +1515,10 @@
       // 重新渲染月曆以顯示新標記
       renderCalendar();
       
-      alert('✅ 面試排程已儲存');
+      // 確保狀態更新後再顯示提示
+      setTimeout(() => {
+        alert('✅ 面試排程已儲存');
+      }, 100);
     }
 
     // 渲染月曆
@@ -1221,6 +1597,22 @@
         const hasInterview = interviewSchedules.has(dateKey);
         
         if (hasInterview) {
+          const schedule = interviewSchedules.get(dateKey);
+          const timeStart = schedule.timeStart || '';
+          const timeEnd = schedule.timeEnd || '';
+          
+          // 格式化時間顯示（只顯示時分，去掉秒）
+          let timeDisplay = '';
+          if (timeStart && timeEnd) {
+            const startTime = timeStart.substring(0, 5); // 取 HH:MM
+            const endTime = timeEnd.substring(0, 5); // 取 HH:MM
+            timeDisplay = ` ${startTime}-${endTime}`;
+          } else if (timeStart) {
+            // 兼容舊格式
+            const startTime = timeStart.substring(0, 5);
+            timeDisplay = ` ${startTime}`;
+          }
+          
           const interviewBadge = document.createElement("div");
           interviewBadge.style.cssText = `
             font-size: 0.75rem;
@@ -1230,8 +1622,9 @@
             border-radius: 4px;
             margin-top: 4px;
             display: inline-block;
+            white-space: nowrap;
           `;
-          interviewBadge.textContent = "面試";
+          interviewBadge.textContent = `面試${timeDisplay}`;
           dateCell.appendChild(interviewBadge);
         }
         
