@@ -545,8 +545,8 @@
         </select>
       </div>
       <div class="filter-group">
-        <label for="studentNameFilter">搜尋學生姓名</label>
-        <input type="text" id="studentNameFilter" placeholder="輸入學生姓名">
+        <label for="studentNameFilter">搜尋學生姓名或學號</label>
+        <input type="text" id="studentNameFilter" placeholder="輸入學生姓名或學號">
       </div>
     </div>
 
@@ -802,10 +802,12 @@
               }
             }
 
-            // 按學生姓名過濾
+            // 按學生姓名或學號過濾
             if (studentName) {
               const studentNameLower = (student.student_name || '').toLowerCase();
-              if (!studentNameLower.includes(studentName)) {
+              const studentNumberLower = (student.student_number || '').toLowerCase();
+              // 如果姓名或學號包含搜尋關鍵字，則符合條件
+              if (!studentNameLower.includes(studentName) && !studentNumberLower.includes(studentName)) {
                 return false;
               }
             }
