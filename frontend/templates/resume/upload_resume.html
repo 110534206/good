@@ -3005,11 +3005,9 @@
           // 截止時間已過，禁用表單
           const form = document.getElementById("resumeForm");
           if (form) {
-            // 禁用所有輸入欄位
+            // 禁用所有輸入欄位和按鈕
             form.querySelectorAll('input, select, textarea, button').forEach(element => {
-              if (element.type !== 'button' || element.id === 'submitResumeBtn') {
-                element.disabled = true;
-              }
+              element.disabled = true;
             });
             
             // 禁用提交按鈕
@@ -3024,6 +3022,13 @@
             if (editBtn) {
               editBtn.disabled = true;
             }
+            
+            // 禁用所有動態生成的按鈕（如證照相關按鈕）
+            document.querySelectorAll('.btn, button').forEach(btn => {
+              if (!btn.closest('.alert')) { // 保留 alert 中的關閉按鈕
+                btn.disabled = true;
+              }
+            });
             
             // 顯示提示訊息
             const container = document.querySelector(".container");
