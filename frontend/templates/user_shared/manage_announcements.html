@@ -69,7 +69,8 @@
       <h4 class="mb-0" style="font-weight: bold;">公告列表</h4>
       <div>
         <button id="btn-new" class="btn btn-primary me-2">➕ 新增公告</button>
-        <button id="btn-open-deadline" class="btn btn-success">📝 新增作業截止時間</button>
+        <button id="btn-open-pref-deadline" class="btn btn-success me-2">📝 填寫志願序截止時間</button>
+        <button id="btn-open-resume-deadline" class="btn btn-success">📝 上傳履歷截止時間</button>
       </div>
     </div>
 
@@ -90,26 +91,43 @@
     </div>
   </div>
 
-  <div class="modal fade" id="deadlineModal" tabindex="-1">
+  <div class="modal fade" id="prefDeadlineModal" tabindex="-1">
     <div class="modal-dialog">
       <div class="modal-content">
         <div class="modal-header">
-          <h5 class="modal-title" style="font-weight: bold;">設定作業截止時間</h5>
+          <h5 class="modal-title" style="font-weight: bold;">新增作業截止時間</h5>
           <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
         </div>
         <div class="modal-body">
-          <div class="mb-3">
-            <label class="form-label">填寫志願序截止：</label>
-            <input type="datetime-local" id="pref-input" class="form-control">
-          </div>
-          <div class="mb-3">
-            <label class="form-label">上傳履歷截止：</label>
-            <input type="datetime-local" id="resume-input" class="form-control">
-          </div>
+          <div class="mb-3"><label class="form-label">標題</label><input id="pref-title" class="form-control"></div>
+          <div class="mb-3"><label class="form-label">內容</label><textarea id="pref-content" class="form-control" rows="4"></textarea></div>
+          <div class="mb-3"><label class="form-label">開始時間</label><input id="pref-start" type="datetime-local" class="form-control"></div>
+          <div class="mb-3"><label class="form-label">結束時間</label><input id="pref-end" type="datetime-local" class="form-control"></div>
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
-          <button id="btn-save-deadline" type="button" class="btn btn-primary">儲存並通知學生</button>
+          <button id="btn-save-pref-deadline" type="button" class="btn btn-primary">儲存</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal fade" id="resumeDeadlineModal" tabindex="-1">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" style="font-weight: bold;">新增作業截止時間</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div class="mb-3"><label class="form-label">標題</label><input id="resume-title" class="form-control"></div>
+          <div class="mb-3"><label class="form-label">內容</label><textarea id="resume-content" class="form-control" rows="4"></textarea></div>
+          <div class="mb-3"><label class="form-label">開始時間</label><input id="resume-start" type="datetime-local" class="form-control"></div>
+          <div class="mb-3"><label class="form-label">結束時間</label><input id="resume-end" type="datetime-local" class="form-control"></div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+          <button id="btn-save-resume-deadline" type="button" class="btn btn-primary">儲存</button>
         </div>
       </div>
     </div>
@@ -141,7 +159,8 @@
     document.addEventListener("DOMContentLoaded", () => {
       const annTbody = document.getElementById("ann-tbody");
       const annModal = new bootstrap.Modal(document.getElementById("annModal"));
-      const deadlineModal = new bootstrap.Modal(document.getElementById("deadlineModal"));
+      const prefDeadlineModal = new bootstrap.Modal(document.getElementById("prefDeadlineModal"));
+      const resumeDeadlineModal = new bootstrap.Modal(document.getElementById("resumeDeadlineModal"));
       let editId = null, annList = [];
 
       // 選單邏輯
@@ -176,12 +195,51 @@
       }
 
       // 作業截止時間功能
-      document.getElementById("btn-open-deadline").onclick = () => deadlineModal.show();
-      document.getElementById("btn-save-deadline").onclick = async () => {
-        const pV = document.getElementById("pref-input").value;
-        const rV = document.getElementById("resume-input").value;
-        if (!pV || !rV) {
-          alert("請完整填寫日期與時間");
+      document.getElementById("btn-open-pref-deadline").onclick = () => {
+        document.getElementById("pref-title").value = "[作業]填寫志願序截止時間";
+        document.getElementById("pref-content").value = "請注意!填寫志願序的截止時間為:請選擇結束時間,請務必在截止時間前完成志願序填寫。";
+        document.getElementById("pref-start").value = "";
+        document.getElementById("pref-end").value = "";
+        prefDeadlineModal.show();
+      };
+      
+      document.getElementById("btn-open-resume-deadline").onclick = () => {
+        document.getElementById("resume-title").value = "[作業]上傳履歷截止時間";
+        document.getElementById("resume-content").value = "請注意!上傳履歷的截止時間為:請選擇結束時間,請務必在截止時間前完成履歷上傳。";
+        document.getElementById("resume-start").value = "";
+        document.getElementById("resume-end").value = "";
+        resumeDeadlineModal.show();
+      };
+
+      // 當結束時間改變時，自動更新內容中的截止時間
+      document.getElementById("pref-end").addEventListener("change", function() {
+        const endTime = this.value;
+        if (endTime) {
+          // 將 datetime-local 格式 (YYYY-MM-DDTHH:mm) 轉換為 YYYY-MM-DD HH:mm
+          const formattedTime = endTime.replace('T', ' ');
+          const content = document.getElementById("pref-content");
+          content.value = `請注意!填寫志願序的截止時間為:${formattedTime},請務必在截止時間前完成志願序填寫。`;
+        }
+      });
+
+      document.getElementById("resume-end").addEventListener("change", function() {
+        const endTime = this.value;
+        if (endTime) {
+          // 將 datetime-local 格式 (YYYY-MM-DDTHH:mm) 轉換為 YYYY-MM-DD HH:mm
+          const formattedTime = endTime.replace('T', ' ');
+          const content = document.getElementById("resume-content");
+          content.value = `請注意!上傳履歷的截止時間為:${formattedTime},請務必在截止時間前完成履歷上傳。`;
+        }
+      });
+
+      document.getElementById("btn-save-pref-deadline").onclick = async () => {
+        const title = document.getElementById("pref-title").value;
+        const content = document.getElementById("pref-content").value;
+        const startTime = document.getElementById("pref-start").value;
+        const endTime = document.getElementById("pref-end").value;
+        
+        if (!title || !startTime || !endTime) {
+          alert("請完整填寫標題、開始時間與結束時間");
           return;
         }
 
@@ -191,20 +249,62 @@
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-              pref_deadline: pV,
-              resume_deadline: rV
+              pref_deadline: endTime,
+              title: title,
+              content: content,
+              start_time: startTime.replace('T', ' '),
+              end_time: endTime.replace('T', ' ')
             })
           });
 
           const result = await res.json();
           
           if (result.success) {
-            deadlineModal.hide();
+            prefDeadlineModal.hide();
             
             // 重新載入公告列表
             loadData();
+          } else {
+            alert("儲存失敗：" + (result.message || "未知錯誤"));
+          }
+        } catch (error) {
+          console.error("儲存截止時間失敗:", error);
+          alert("儲存失敗，請稍後再試");
+        }
+      };
+
+      document.getElementById("btn-save-resume-deadline").onclick = async () => {
+        const title = document.getElementById("resume-title").value;
+        const content = document.getElementById("resume-content").value;
+        const startTime = document.getElementById("resume-start").value;
+        const endTime = document.getElementById("resume-end").value;
+        
+        if (!title || !startTime || !endTime) {
+          alert("請完整填寫標題、開始時間與結束時間");
+          return;
+        }
+
+        try {
+          // 發送 API 請求儲存到資料表
+          const res = await fetch("/announcement/api/save_deadlines", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              resume_deadline: endTime,
+              title: title,
+              content: content,
+              start_time: startTime.replace('T', ' '),
+              end_time: endTime.replace('T', ' ')
+            })
+          });
+
+          const result = await res.json();
+          
+          if (result.success) {
+            resumeDeadlineModal.hide();
             
-            alert("截止時間已儲存到資料表，並已同步發布通知給學生！");
+            // 重新載入公告列表
+            loadData();
           } else {
             alert("儲存失敗：" + (result.message || "未知錯誤"));
           }
