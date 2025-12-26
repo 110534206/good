@@ -753,56 +753,89 @@ def delete_company(company_id):
         if conn: conn.close()
 
 # =========================================================
-# API - 取得待審核公司清單
+# API - 取得所有已開放職缺的公司清單
 # =========================================================
-@company_bp.route("/api/get_pending_companies", methods=["GET"])
-def api_get_pending_companies():
-    conn = None
-    cursor = None
+@company_bp.route("/api/get_companies_for_resume_delivery", methods=["GET"])
+def get_companies_for_resume_delivery():
+    # 必須登入
+    if "user_id" not in session or session.get("role") != "student":
+        return jsonify({"success": False, "message": "未授權"}), 403
+
+    student_id = session["user_id"]
+
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+
     try:
-        conn = get_db()
-        cursor = conn.cursor(dictionary=True)
-
+        # 1️⃣ 檢查學生是否有填寫志願序
         cursor.execute("""
-            SELECT 
-                ic.id,
-                u.name AS upload_teacher_name,
-                ic.company_name,
-                ic.contact_person AS contact_name,
-                ic.contact_email,
-                ic.submitted_at,
-                ic.status
-            FROM internship_companies ic
-            LEFT JOIN users u ON ic.uploaded_by_user_id = u.id
-            WHERE ic.status = 'pending'
-            ORDER BY ic.submitted_at DESC
-        """)
+            SELECT DISTINCT company_id
+            FROM student_preferences
+            WHERE student_id = %s
+        """, (student_id,))
+        pref_companies = cursor.fetchall()
 
-        companies = cursor.fetchall()
+        use_preferences = len(pref_companies) > 0
 
-        # === 🕒 台灣時區轉換 & 格式化 ===
-        from datetime import timezone, timedelta, datetime
-        taiwan_tz = timezone(timedelta(hours=8))
+        # 2️⃣ 根據是否有志願序，決定 SQL 條件
+        if use_preferences:
+            company_ids = [c["company_id"] for c in pref_companies]
+            format_strings = ",".join(["%s"] * len(company_ids))
 
-        for r in companies:
-            dt = r.get("submitted_at")
-            if isinstance(dt, datetime):
-                r["submitted_at"] = dt.astimezone(taiwan_tz).strftime("%Y-%m-%d %H:%M")
-            else:
-                r["submitted_at"] = "-"
+            cursor.execute(f"""
+                SELECT
+                    c.id AS company_id,
+                    c.company_name,
+                    j.id AS job_id,
+                    j.title AS job_title
+                FROM internship_companies c
+                JOIN internship_jobs j ON j.company_id = c.id
+                WHERE c.status = 'approved'
+                  AND j.is_active = TRUE
+                  AND c.id IN ({format_strings})
+                ORDER BY c.company_name, j.id
+            """, tuple(company_ids))
+        else:
+            # 尚未填志願序 → 顯示全部
+            cursor.execute("""
+                SELECT
+                    c.id AS company_id,
+                    c.company_name,
+                    j.id AS job_id,
+                    j.title AS job_title
+                FROM internship_companies c
+                JOIN internship_jobs j ON j.company_id = c.id
+                WHERE c.status = 'approved'
+                  AND j.is_active = TRUE
+                ORDER BY c.company_name, j.id
+            """)
+
+        rows = cursor.fetchall()
+
+        # 3️⃣ 整理成 company -> jobs
+        companies = {}
+        for r in rows:
+            cid = r["company_id"]
+            if cid not in companies:
+                companies[cid] = {
+                    "company_id": cid,
+                    "company_name": r["company_name"],
+                    "jobs": []
+                }
+            companies[cid]["jobs"].append({
+                "job_id": r["job_id"],
+                "job_title": r["job_title"]
+            })
 
         return jsonify({
             "success": True,
-            "companies": companies
+            "use_preferences": use_preferences, 
+            "companies": list(companies.values())
         })
 
-    except Exception:
-        import traceback
-        print("❌ 取得待審核公司清單錯誤：", traceback.format_exc())
-        return jsonify({"success": False, "message": "伺服器錯誤"}), 500
     finally:
-        if cursor: cursor.close()
-        if conn: conn.close()
+        cursor.close()
+        conn.close()
 
 # =========================================================
 # API - 取得已審核公司（歷史紀錄）
