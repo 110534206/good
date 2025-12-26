@@ -198,9 +198,11 @@
       </div>
       
       <div style="margin-bottom: 16px;">
-        <button id="interviewScheduleBtn" class="btn btn-primary" style="padding: 10px 20px; border-radius: 8px; font-weight: 600;">
-          面試排程
-        </button>
+        <select id="interviewScheduleMenu" class="form-select" style="padding: 10px 12px; border-radius: 8px; border: 1px solid #e2e8f0; min-width: 150px;">
+          <option value="">所有功能</option>
+          <option value="schedule">面試排程</option>
+          <option value="download">下載</option>
+        </select>
       </div>
 
       <div class="table-wrapper">
@@ -284,6 +286,10 @@
             </div>
             <div class="mb-3">
               <label class="form-label" style="font-weight: 600;">面試時間</label>
+              <div id="bookedTimeSlotsWarning" style="display: none; margin-bottom: 12px; padding: 10px; background-color: #fff3cd; border: 1px solid #ffc107; border-radius: 6px; color: #856404;">
+                <strong>⚠️ 該日期以下時間段已被其他廠商預約，請選擇其他時間：</strong>
+                <div id="bookedTimeSlotsList" style="margin-top: 6px; font-size: 0.9rem;"></div>
+              </div>
               <div style="display: flex; gap: 12px; align-items: center;">
                 <div style="flex: 1;">
                   <label for="interviewTimeStart" class="form-label" style="font-weight: 500; font-size: 0.9rem; margin-bottom: 4px;">開始時間</label>
@@ -472,7 +478,21 @@
       document.getElementById("interviewStatusFilter").addEventListener("change", applyFilters);
       document.getElementById("searchBox").addEventListener("input", applyFilters);
       document.getElementById("saveCommentBtn").addEventListener("click", saveComment);
-      document.getElementById("interviewScheduleBtn").addEventListener("click", openInterviewSchedule);
+      document.getElementById("interviewScheduleMenu").addEventListener("change", function(e) {
+        if (e.target.value === "schedule") {
+          openInterviewSchedule();
+          // 重置選單值為預設值
+          setTimeout(() => {
+            e.target.value = "";
+          }, 100);
+        } else if (e.target.value === "download") {
+          downloadSelectedResumes();
+          // 重置選單值為預設值
+          setTimeout(() => {
+            e.target.value = "";
+          }, 100);
+        }
+      });
       document.getElementById("prevMonthBtn").addEventListener("click", () => changeMonth(-1));
       document.getElementById("nextMonthBtn").addEventListener("click", () => changeMonth(1));
       document.getElementById("saveInterviewBtn").addEventListener("click", saveInterviewSchedule);
@@ -1031,8 +1051,10 @@
     // 月曆相關變數
     let currentCalendarDate = new Date();
     let selectedInterviewDate = null;
-    // 存儲面試排程（格式：'YYYY-MM-DD' => {timeStart: 'HH:MM', timeEnd: 'HH:MM', location: '...', notes: '...'}）
+    // 存儲面試排程（格式：'YYYY-MM-DD' => {timeStart: 'HH:MM', timeEnd: 'HH:MM', location: '...', notes: '...', isOwn: true/false}）
     const interviewSchedules = new Map();
+    // 存儲所有廠商的面試排程（用於顯示其他廠商已預約的時間）
+    const allVendorSchedules = new Map();
     
     // 從本地存儲載入面試排程
     function loadInterviewSchedules() {
@@ -1049,6 +1071,48 @@
       }
     }
     
+    // 從後端載入所有廠商的面試排程
+    async function loadAllVendorSchedules() {
+      try {
+        const res = await fetch('/vendor/api/all_interview_schedules');
+        const data = await res.json();
+        
+        if (data.success && data.schedules) {
+          // 清空現有資料
+          allVendorSchedules.clear();
+          
+          // 按日期分組，同時將自己的排程也加入到 interviewSchedules
+          data.schedules.forEach(schedule => {
+            const date = schedule.date;
+            if (!allVendorSchedules.has(date)) {
+              allVendorSchedules.set(date, []);
+            }
+            allVendorSchedules.get(date).push(schedule);
+            
+            // 如果是自己的排程，也加入到 interviewSchedules（確保顯示在日曆上）
+            if (schedule.is_own) {
+              if (!interviewSchedules.has(date)) {
+                interviewSchedules.set(date, {
+                  timeStart: schedule.time_start || '',
+                  timeEnd: schedule.time_end || '',
+                  location: schedule.location || '',
+                  notes: '',
+                  students: []
+                });
+              }
+            }
+          });
+          
+          // 保存到本地存儲
+          saveInterviewSchedulesToStorage();
+          
+          console.log('✅ 已載入所有廠商的面試排程:', allVendorSchedules);
+        }
+      } catch (err) {
+        console.error('載入所有廠商面試排程失敗:', err);
+      }
+    }
+    
     // 保存面試排程到本地存儲
     function saveInterviewSchedulesToStorage() {
       const schedules = {};
@@ -1060,6 +1124,7 @@
     
     // 初始化時載入
     loadInterviewSchedules();
+    loadAllVendorSchedules(); // 載入所有廠商的面試排程
 
     // 填充面試地點下拉選單（包含固定地點與公司名稱）
     function populateLocationDropdown() {
@@ -1198,9 +1263,40 @@
       }
     }
     
+    // 下載選中的履歷
+    function downloadSelectedResumes() {
+      const checkedBoxes = document.querySelectorAll('.row-checkbox:checked');
+      
+      if (checkedBoxes.length === 0) {
+        alert('請先勾選要下載的履歷');
+        return;
+      }
+      
+      // 下載所有選中的履歷
+      checkedBoxes.forEach((checkbox, index) => {
+        const resumeId = checkbox.getAttribute('data-resume-id');
+        if (resumeId) {
+          // 延遲下載，避免瀏覽器阻止多個下載
+          setTimeout(() => {
+            const downloadLink = document.createElement('a');
+            downloadLink.href = `/api/download_resume/${resumeId}`;
+            downloadLink.target = '_blank';
+            downloadLink.download = '';
+            document.body.appendChild(downloadLink);
+            downloadLink.click();
+            document.body.removeChild(downloadLink);
+          }, index * 200); // 每個下載間隔200ms
+        }
+      });
+      
+      alert(`已開始下載 ${checkedBoxes.length} 份履歷`);
+    }
+    
     // 開啟面試排程月曆
-    function openInterviewSchedule() {
+    async function openInterviewSchedule() {
       currentCalendarDate = new Date();
+      // 重新載入所有廠商的面試排程
+      await loadAllVendorSchedules();
       renderCalendar();
       const modal = new bootstrap.Modal(document.getElementById("interviewScheduleModal"));
       modal.show();
@@ -1229,6 +1325,9 @@
         locationOtherInput.required = false;
       }
       document.getElementById('interviewNotes').value = '';
+      
+      // 檢查該日期是否有其他廠商已預約的時間段
+      checkBookedTimeSlots(dateStr);
       
       // 依照目前履歷資料重建地點下拉選單（包含公司名稱）
       populateLocationDropdown();
@@ -1346,8 +1445,95 @@
       return `${year}年${month}月${day}日（${weekDay}）`;
     }
     
+    // 檢查該日期是否有其他廠商已預約的時間段
+    function checkBookedTimeSlots(dateStr) {
+      const warningDiv = document.getElementById('bookedTimeSlotsWarning');
+      const timeSlotsList = document.getElementById('bookedTimeSlotsList');
+      const timeStartInput = document.getElementById('interviewTimeStart');
+      const timeEndInput = document.getElementById('interviewTimeEnd');
+      
+      if (!warningDiv || !timeSlotsList || !timeStartInput || !timeEndInput) return;
+      
+      // 檢查是否有其他廠商已預約的時間段
+      if (allVendorSchedules.has(dateStr)) {
+        const schedules = allVendorSchedules.get(dateStr);
+        // 過濾掉自己的排程
+        const otherVendorSchedules = schedules.filter(s => !s.is_own);
+        
+        if (otherVendorSchedules.length > 0) {
+          // 收集所有其他廠商的時間段
+          const timeSlots = [];
+          otherVendorSchedules.forEach(schedule => {
+            if (schedule.time_start && schedule.time_end) {
+              const startTime = schedule.time_start.substring(0, 5);
+              const endTime = schedule.time_end.substring(0, 5);
+              timeSlots.push(`${startTime}-${endTime}`);
+            } else if (schedule.time_start) {
+              const startTime = schedule.time_start.substring(0, 5);
+              timeSlots.push(startTime);
+            }
+          });
+          
+          if (timeSlots.length > 0) {
+            // 去重並排序
+            const uniqueTimeSlots = [...new Set(timeSlots)].sort();
+            
+            // 顯示警告
+            timeSlotsList.innerHTML = uniqueTimeSlots.map(slot => `<div>• ${slot}</div>`).join('');
+            warningDiv.style.display = 'block';
+            
+            // 添加時間驗證事件
+            const validateTime = () => {
+              const selectedStart = timeStartInput.value;
+              const selectedEnd = timeEndInput.value;
+              
+              if (!selectedStart || !selectedEnd) return;
+              
+              // 檢查是否與已預約的時間段重疊
+              const isConflict = uniqueTimeSlots.some(slot => {
+                if (slot.includes('-')) {
+                  const [slotStart, slotEnd] = slot.split('-');
+                  // 時間重疊的條件：新開始時間 < 舊結束時間 且 新結束時間 > 舊開始時間
+                  return selectedStart < slotEnd && selectedEnd > slotStart;
+                } else {
+                  // 只有開始時間的情況，檢查是否在該時間點
+                  return selectedStart <= slot && selectedEnd > slot;
+                }
+              });
+              
+              if (isConflict) {
+                timeStartInput.setCustomValidity('該時間段已被其他廠商預約，請選擇其他時間');
+                timeEndInput.setCustomValidity('該時間段已被其他廠商預約，請選擇其他時間');
+                timeStartInput.style.borderColor = '#dc3545';
+                timeEndInput.style.borderColor = '#dc3545';
+              } else {
+                timeStartInput.setCustomValidity('');
+                timeEndInput.setCustomValidity('');
+                timeStartInput.style.borderColor = '';
+                timeEndInput.style.borderColor = '';
+              }
+            };
+            
+            // 移除舊的事件監聽器（如果有的話）
+            timeStartInput.removeEventListener('change', validateTime);
+            timeEndInput.removeEventListener('change', validateTime);
+            
+            // 添加新的事件監聽器
+            timeStartInput.addEventListener('change', validateTime);
+            timeEndInput.addEventListener('change', validateTime);
+          } else {
+            warningDiv.style.display = 'none';
+          }
+        } else {
+          warningDiv.style.display = 'none';
+        }
+      } else {
+        warningDiv.style.display = 'none';
+      }
+    }
+    
     // 保存面試排程
-    function saveInterviewSchedule() {
+    async function saveInterviewSchedule() {
       if (!selectedInterviewDate) {
         alert('請選擇日期');
         return;
@@ -1459,7 +1645,7 @@
             applyFilters();
             
             // 重新載入資料以確保狀態同步
-            fetch(getResumeApiUrl()).then(r=>r.json()).then(d=>{
+            fetch(getResumeApiUrl()).then(r=>r.json()).then(async d=>{
               if(d.success) { 
                 allResumes = d.resumes;
                 interviewedSet.clear();
@@ -1470,6 +1656,11 @@
                   }
                 });
                 applyFilters();
+                
+                // 重新載入所有廠商的面試排程
+                await loadAllVendorSchedules();
+                // 重新渲染日曆以顯示自己的排程
+                renderCalendar();
               }
             });
           } else {
@@ -1512,7 +1703,9 @@
       const formModal = bootstrap.Modal.getInstance(document.getElementById("interviewFormModal"));
       formModal.hide();
       
-      // 重新渲染月曆以顯示新標記
+      // 重新載入所有廠商的面試排程（包括自己的）
+      await loadAllVendorSchedules();
+      // 重新渲染月曆以顯示自己的排程
       renderCalendar();
       
       // 確保狀態更新後再顯示提示
@@ -1594,9 +1787,11 @@
         
         // 檢查是否有面試安排（從本地存儲或後端獲取）
         const dateKey = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-        const hasInterview = interviewSchedules.has(dateKey);
+        const hasOwnInterview = interviewSchedules.has(dateKey);
+        const hasOtherVendorInterviews = allVendorSchedules.has(dateKey);
         
-        if (hasInterview) {
+        // 顯示自己的面試排程
+        if (hasOwnInterview) {
           const schedule = interviewSchedules.get(dateKey);
           const timeStart = schedule.timeStart || '';
           const timeEnd = schedule.timeEnd || '';
@@ -1626,6 +1821,48 @@
           `;
           interviewBadge.textContent = `面試${timeDisplay}`;
           dateCell.appendChild(interviewBadge);
+        }
+        
+        // 顯示其他廠商已預約的時間段
+        if (hasOtherVendorInterviews) {
+          const otherSchedules = allVendorSchedules.get(dateKey);
+          // 過濾掉自己的排程
+          const otherVendorSchedules = otherSchedules.filter(s => !s.is_own);
+          
+          if (otherVendorSchedules.length > 0) {
+            // 收集所有其他廠商的時間段
+            const timeSlots = [];
+            otherVendorSchedules.forEach(schedule => {
+              if (schedule.time_start && schedule.time_end) {
+                const startTime = schedule.time_start.substring(0, 5);
+                const endTime = schedule.time_end.substring(0, 5);
+                timeSlots.push(`${startTime}-${endTime}`);
+              } else if (schedule.time_start) {
+                const startTime = schedule.time_start.substring(0, 5);
+                timeSlots.push(startTime);
+              }
+            });
+            
+            if (timeSlots.length > 0) {
+              // 去重並排序
+              const uniqueTimeSlots = [...new Set(timeSlots)].sort();
+              
+              const otherVendorBadge = document.createElement("div");
+                otherVendorBadge.style.cssText = `
+                  font-size: 0.7rem;
+                  color: #fff;
+                  background-color: #dc3545;
+                  padding: 2px 6px;
+                  border-radius: 4px;
+                  margin-top: 4px;
+                  display: inline-block;
+                  white-space: nowrap;
+                `;
+              otherVendorBadge.textContent = `已排面試 ${uniqueTimeSlots.join(', ')}`;
+              otherVendorBadge.title = `其他廠商已預約：${uniqueTimeSlots.join(', ')}`;
+              dateCell.appendChild(otherVendorBadge);
+            }
+          }
         }
         
         // 添加點選事件（非過去的日期）

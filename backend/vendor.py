@@ -2690,6 +2690,97 @@ def send_notification():
         return jsonify({"success": False, "message": f"發送失敗：{exc}"}), 500
 
 
+@vendor_bp.route("/vendor/api/all_interview_schedules", methods=["GET"])
+def get_all_interview_schedules():
+    """獲取所有廠商的面試排程（用於顯示其他廠商已預約的時間）"""
+    if "user_id" not in session or session.get("role") != "vendor":
+        return jsonify({"success": False, "message": "未授權"}), 403
+    
+    vendor_id = session["user_id"]
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+    
+    try:
+        _ensure_history_table(cursor)
+        
+        # 查詢所有廠商的面試排程（從 vendor_preference_history 表中）
+        # 只查詢 action = 'interview' 的記錄
+        cursor.execute("""
+            SELECT DISTINCT
+                vph.reviewer_id,
+                vph.comment,
+                u.name AS vendor_name,
+                ic.company_name,
+                vph.created_at
+            FROM vendor_preference_history vph
+            JOIN users u ON vph.reviewer_id = u.id
+            LEFT JOIN student_preferences sp ON vph.preference_id = sp.id
+            LEFT JOIN internship_companies ic ON sp.company_id = ic.id
+            WHERE vph.action = 'interview'
+            AND vph.comment LIKE '%面試日期：%'
+            ORDER BY vph.created_at DESC
+        """)
+        
+        all_schedules = cursor.fetchall()
+        
+        # 解析面試資訊
+        import re
+        parsed_schedules = []
+        
+        for schedule in all_schedules:
+            comment = schedule.get('comment', '')
+            reviewer_id = schedule.get('reviewer_id')
+            vendor_name = schedule.get('vendor_name', '未知廠商')
+            company_name = schedule.get('company_name', '未知公司')
+            
+            # 提取日期
+            date_match = re.search(r'面試日期：(\d{4}-\d{2}-\d{2})', comment)
+            if not date_match:
+                continue
+            
+            interview_date = date_match.group(1)
+            
+            # 提取時間
+            time_match = re.search(r'時間：(\d{2}:\d{2})\s*-\s*(\d{2}:\d{2})', comment)
+            time_start = None
+            time_end = None
+            if time_match:
+                time_start = time_match.group(1)
+                time_end = time_match.group(2)
+            else:
+                # 兼容只有開始時間的情況
+                time_match = re.search(r'時間：(\d{2}:\d{2})', comment)
+                if time_match:
+                    time_start = time_match.group(1)
+            
+            # 提取地點
+            location_match = re.search(r'地點：([^，]+)', comment)
+            location = location_match.group(1) if location_match else ''
+            
+            parsed_schedules.append({
+                'date': interview_date,
+                'time_start': time_start,
+                'time_end': time_end,
+                'location': location,
+                'vendor_id': reviewer_id,
+                'vendor_name': vendor_name,
+                'company_name': company_name,
+                'is_own': reviewer_id == vendor_id  # 標記是否為當前廠商的排程
+            })
+        
+        return jsonify({
+            "success": True,
+            "schedules": parsed_schedules
+        })
+        
+    except Exception as exc:
+        traceback.print_exc()
+        return jsonify({"success": False, "message": f"獲取面試排程失敗：{exc}"}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+
 @vendor_bp.route("/vendor/api/schedule_interviews", methods=["POST"])
 def schedule_interviews():
     """批量記錄面試排程到 vendor_preference_history"""
