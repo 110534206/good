@@ -3092,8 +3092,15 @@ def review_resume(resume_id):
         return jsonify({"success": False, "message": "未授權或無權限"}), 403
 
     data = request.get_json()
+    if not data:
+        return jsonify({"success": False, "message": "請求資料格式錯誤"}), 400
+    
     status = data.get('status')
     comment = data.get('comment', '')  # 老師留言
+
+    # 班導只能退件，不能通過
+    if user_role == 'class_teacher' and status == 'approved':
+        return jsonify({"success": False, "message": "班導只能退件，無法通過履歷"}), 403
 
     if status not in ['approved', 'rejected']:
         return jsonify({"success": False, "message": "無效的狀態碼"}), 400
@@ -3121,7 +3128,7 @@ def review_resume(resume_id):
         student_name = resume_data['student_name']  
         old_status = resume_data['old_status']
 
-        # 3. 更新履歷狀態
+        # 3. 更新履歷狀態或刪除履歷
         # 如果是指導老師（teacher）審核，需要更新 reviewed_by 欄位
         if user_role == 'teacher':
             cursor.execute("""
@@ -3132,6 +3139,9 @@ def review_resume(resume_id):
                     reviewed_at=NOW()
                 WHERE id=%s
             """, (status, comment, user_id, resume_id))
+        elif user_role == 'class_teacher' and status == 'rejected':
+            # 班導退件時，不更新狀態，稍後會刪除履歷記錄
+            pass
         else:
             cursor.execute("""
                 UPDATE resumes SET 
@@ -3190,6 +3200,16 @@ def review_resume(resume_id):
                     updated_count = cursor.rowcount
                     if updated_count > 0:
                         print(f"✅ 已將 {updated_count} 筆學生志願序狀態重置為 'pending'，該履歷不會同步到廠商審核頁面")
+                
+                # 🗑️ 如果是班導退件，刪除履歷記錄
+                if user_role == 'class_teacher':
+                    cursor.execute("""
+                        DELETE FROM resumes 
+                        WHERE id = %s
+                    """, (resume_id,))
+                    deleted_count = cursor.rowcount
+                    if deleted_count > 0:
+                        print(f"✅ 班導退件，已刪除履歷記錄 (ID: {resume_id})")
 
             # =============== 通過 ===============
             elif status == 'approved':
@@ -3230,6 +3250,10 @@ def review_resume(resume_id):
 
         conn.commit()
 
+        # 如果是班導退件，返回刪除成功的訊息
+        if user_role == 'class_teacher' and status == 'rejected':
+            return jsonify({"success": True, "message": "履歷已退件並刪除"})
+        
         return jsonify({"success": True, "message": "履歷審核狀態更新成功"})
 
     except Exception as e:
@@ -3349,7 +3373,7 @@ def get_class_resumes():
                         WHERE ic.advisor_user_id = %s
                         AND sp.status = 'approved'
                     ) pref ON pref.student_id = u.id
-                    WHERE r.status = 'approved'
+                    WHERE r.status IN ('uploaded', 'pending', 'approved')
                     -- 只顯示選擇了該指導老師管理的公司的學生履歷
                     AND EXISTS (
                         SELECT 1
@@ -3406,7 +3430,7 @@ def get_class_resumes():
                         LEFT JOIN internship_jobs ij ON sp.job_id = ij.id
                         WHERE sp.status = 'approved'
                     ) pref ON pref.student_id = u.id
-                    WHERE r.status = 'approved'
+                    WHERE r.status IN ('uploaded', 'pending', 'approved')
                     AND EXISTS (
                         SELECT 1
                         FROM classes c2

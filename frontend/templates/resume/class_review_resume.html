@@ -106,12 +106,6 @@
         <select id="companyFilter" style="padding: 10px 12px; border-radius: 8px; border: 1px solid #e2e8f0; min-width: 150px;">
           <option value="">所有職缺</option>
         </select>
-        <select id="statusFilter" style="padding: 10px 12px; border-radius: 8px; border: 1px solid #e2e8f0; min-width: 150px;">
-          <option value="">所有狀態</option>
-          <option value="pending">待審核</option>
-          <option value="approved">通過</option>
-          <option value="rejected">退件</option>
-        </select>
         <input type="text" id="searchBox" style="padding: 10px 12px; border-radius: 8px; border: 1px solid #e2e8f0; min-width: 200px; flex: 1;" placeholder="搜尋帳號/檔案" />
       </div>
 
@@ -125,12 +119,11 @@
               <th style="padding: 14px 16px; font-weight: 600;">檔案名稱</th>
               <th style="padding: 14px 16px; font-weight: 600;">選擇公司</th>
               <th style="padding: 14px 16px; font-weight: 600;">職缺</th>
-              <th style="padding: 14px 16px; font-weight: 600;">狀態</th>
               <th style="padding: 14px 16px; font-weight: 600;">操作</th>
             </tr>
           </thead>
           <tbody id="resumeTableBody">
-            <tr><td colspan="8" style="padding: 14px 16px; text-align: center; color: #64748b;">載入中...</td></tr>
+            <tr><td colspan="7" style="padding: 14px 16px; text-align: center; color: #64748b;">載入中...</td></tr>
           </tbody>
         </table>
       </div>
@@ -246,7 +239,6 @@
       document.getElementById("classFilter").addEventListener("change", applyFilters);
       document.getElementById("companyNameFilter").addEventListener("change", applyFilters);
       document.getElementById("companyFilter").addEventListener("change", applyFilters);
-      document.getElementById("statusFilter").addEventListener("change", applyFilters);
       document.getElementById("searchBox").addEventListener("input", applyFilters);
       
       const sideMenu = document.getElementById('side-menu');
@@ -326,7 +318,6 @@
       const cls = document.getElementById("classFilter").value.trim();
       const companyName = document.getElementById("companyNameFilter").value.trim();
       const jobFilter = document.getElementById("companyFilter").value.trim();
-      const status = document.getElementById("statusFilter").value.trim();
       const keyword = document.getElementById("searchBox").value.trim().toLowerCase();
 
       const filtered = allResumes.filter(r => {
@@ -348,14 +339,7 @@
             matchesJob = jobs.includes(jobFilter.toLowerCase()) || (r.job_id && String(r.job_id) === jobFilter);
         }
 
-        let matchesStatus = true;
-        if (status) {
-           const statusStr = r.application_statuses || r.display_status || r.status || '';
-           // 完全匹配狀態（因為後端已經將 uploaded 映射為 pending）
-           matchesStatus = statusStr === status;
-        }
-
-        return matchesDept && matchesClass && matchesCompanyName && matchesJob && matchesStatus && matchesKeyword;
+        return matchesDept && matchesClass && matchesCompanyName && matchesJob && matchesKeyword;
       });
 
       renderTable(filtered);
@@ -365,12 +349,11 @@
       const tbody = document.getElementById("resumeTableBody");
       tbody.innerHTML = "";
       if (resumes.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; color: #64748b; padding: 16px;">目前沒有資料</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; color: #64748b; padding: 16px;">目前沒有資料</td></tr>`;
         document.getElementById("pagination").innerHTML = "";
         return;
       }
 
-      const filterStatus = document.getElementById("statusFilter").value.trim(); 
       const filterJob = document.getElementById("companyFilter").value.trim(); 
 
       let allRowsData = [];
@@ -380,9 +363,6 @@
         const job = r.job_title || r.jobTitle || '—';
         const st = r.application_statuses || r.display_status || r.status || 'pending';
 
-        // 狀態篩選
-        if (filterStatus && st !== filterStatus) return;
-        
         // 職缺篩選
         if (filterJob && !job.includes(filterJob) && filterJob !== (r.job_id ? String(r.job_id) : '')) return;
 
@@ -406,13 +386,9 @@
            <td style="padding: 14px 16px;">${escapeHtml(row.display_company)}</td>
            <td style="padding: 14px 16px;">${escapeHtml(row.display_job)}</td>
            <td style="padding: 14px 16px;">
-             <span class="status-badge bg-${statusColor(row.display_status)}">${mapStatus(row.display_status)}</span>
-           </td>
-           <td style="padding: 14px 16px;">
              <div style="display: flex; gap: 4px; flex-wrap: wrap;">
                <a href="/api/download_resume/${row.id}" class="btn btn-sm btn-outline-primary" target="_blank">下載</a>
                ${(row.display_status === 'pending' || row.display_status === 'uploaded') && row.display_status !== 'not_uploaded' ? `
-                 <button class="btn btn-sm btn-success" onclick="approveResume(${row.id})">通過</button>
                  <button class="btn btn-sm btn-danger" onclick="rejectResume(${row.id})">退件</button>
                ` : ''}
              </div>
@@ -486,7 +462,14 @@
           comment: comment
         })
       })
-      .then(res => res.json())
+      .then(res => {
+        if (!res.ok) {
+          return res.json().then(data => {
+            throw new Error(data.message || '操作失敗');
+          });
+        }
+        return res.json();
+      })
       .then(data => {
         if (data.success) {
           alert('履歷已退件');
@@ -501,7 +484,7 @@
       })
       .catch(err => {
         console.error('退件履歷錯誤:', err);
-        alert('操作失敗，請稍後再試');
+        alert('操作失敗：' + (err.message || '請稍後再試'));
       });
     }
   </script>
