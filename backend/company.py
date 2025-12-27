@@ -1589,6 +1589,69 @@ def api_export_company_reviews():
 # =========================================================
 # 🖥️ 審核公司頁面
 # =========================================================
+# =========================================================
+# API - 取得待審核公司列表
+# =========================================================
+@company_bp.route("/api/get_pending_companies", methods=["GET"])
+def api_get_pending_companies():
+    """取得狀態為 pending 的待審核公司列表"""
+    conn = None
+    cursor = None
+    try:
+        # 權限檢查：只有主任、科助、管理員可以查看
+        if 'user_id' not in session:
+            return jsonify({"success": False, "message": "請先登入"}), 403
+        
+        user_role = session.get('role')
+        if user_role not in ['director', 'ta', 'admin']:
+            return jsonify({"success": False, "message": "無權限"}), 403
+
+        conn = get_db()
+        cursor = conn.cursor(dictionary=True)
+
+        cursor.execute("""
+            SELECT 
+                ic.id,
+                ic.company_name,
+                u.name AS upload_teacher_name,
+                ic.submitted_at
+            FROM internship_companies ic
+            LEFT JOIN users u ON ic.uploaded_by_user_id = u.id
+            WHERE ic.status = 'pending'
+            ORDER BY ic.submitted_at ASC
+        """)
+
+        companies = cursor.fetchall()
+
+        # 格式化日期時間
+        from datetime import datetime, timezone, timedelta
+        taiwan_tz = timezone(timedelta(hours=8))
+        
+        for company in companies:
+            if isinstance(company.get('submitted_at'), datetime):
+                # 將 UTC 轉為台灣時間
+                company['submitted_at'] = company['submitted_at'].astimezone(taiwan_tz).strftime("%Y-%m-%d %H:%M")
+            else:
+                company['submitted_at'] = company.get('submitted_at', '') or ''
+
+        return jsonify({
+            "success": True,
+            "companies": companies
+        })
+
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({
+            "success": False,
+            "message": f"載入失敗: {str(e)}"
+        }), 500
+
+    finally:
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
+
 @company_bp.route('/approve_company', methods=['GET'])
 def approve_company_form_page():
     return render_template('company/approve_company.html')
