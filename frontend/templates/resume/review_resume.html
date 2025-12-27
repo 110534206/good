@@ -127,13 +127,13 @@
               <th style="padding: 14px 16px; font-weight: 600;">檔案名稱</th>
               <th style="padding: 14px 16px; font-weight: 600;">選擇公司</th>
               <th style="padding: 14px 16px; font-weight: 600;">職缺</th>
-              <th style="padding: 14px 16px; font-weight: 600;">狀態</th>
+              <th id="statusHeader" style="padding: 14px 16px; font-weight: 600; display: none;">狀態</th>
               <th style="padding: 14px 16px; font-weight: 600;" id="commentHeader">留言</th>
               <th style="padding: 14px 16px; font-weight: 600;">操作</th>
             </tr>
           </thead>
           <tbody id="resumeTableBody">
-            <tr><td colspan="9" style="padding: 14px 16px; text-align: center; color: #64748b;">載入中...</td></tr>
+            <tr><td colspan="8" style="padding: 14px 16px; text-align: center; color: #64748b;">載入中...</td></tr>
           </tbody>
         </table>
       </div>
@@ -193,6 +193,19 @@
       const urlParams = new URLSearchParams(window.location.search);
       const targetCompanyId = urlParams.get('company_id');
       const targetStatus = urlParams.get('status');
+      const isDirectorMode = urlParams.get('mode') === 'director';
+
+      // 如果是主任模式，隱藏狀態篩選器和狀態欄位
+      if (isDirectorMode) {
+        const statusFilter = document.getElementById('statusFilter');
+        if (statusFilter) {
+          statusFilter.style.display = 'none';
+        }
+        const statusHeader = document.getElementById('statusHeader');
+        if (statusHeader) {
+          statusHeader.style.display = 'none';
+        }
+      }
 
       fetch('/api/profile')
         .then(res => res.json())
@@ -374,16 +387,25 @@
     function renderTable(resumes) {
       const tbody = document.getElementById("resumeTableBody");
       tbody.innerHTML = "";
-      if (resumes.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="9" style="text-align: center; color: #64748b; padding: 16px;">目前沒有資料</td></tr>`;
-        document.getElementById("pagination").innerHTML = "";
-        return;
-      }
-
+      
       const urlParams = new URLSearchParams(window.location.search);
+      const isDirectorMode = urlParams.get('mode') === 'director';
       const isViewOnly = !!urlParams.get('company_id'); 
       const filterStatus = document.getElementById("statusFilter").value.trim(); 
-      const filterJob = document.getElementById("companyFilter").value.trim(); 
+      const filterJob = document.getElementById("companyFilter").value.trim();
+      
+      // 如果是主任模式，隱藏狀態欄位
+      const statusHeader = document.getElementById("statusHeader");
+      if (statusHeader) {
+        statusHeader.style.display = isDirectorMode ? 'none' : '';
+      }
+      
+      if (resumes.length === 0) {
+        const colspan = isDirectorMode ? 8 : 9;
+        tbody.innerHTML = `<tr><td colspan="${colspan}" style="text-align: center; color: #64748b; padding: 16px;">目前沒有資料</td></tr>`;
+        document.getElementById("pagination").innerHTML = "";
+        return;
+      } 
 
       let allRowsData = [];
 
@@ -422,6 +444,10 @@
         // 渲染每一行，statusColor(row.display_status) 會決定背景色，mapStatus 決定文字
         const tr = document.createElement('tr');
         tr.style.borderBottom = '1px solid #e2e8f0';
+        const statusCell = isDirectorMode ? '' : `
+           <td style="padding: 14px 16px;">
+             <span class="status-badge bg-${statusColor(row.display_status)}">${mapStatus(row.display_status)}</span>
+           </td>`;
         tr.innerHTML = `
            <td style="padding: 14px 16px;">${row.username}</td>
            <td style="padding: 14px 16px;">${escapeHtml(row.name)}</td>
@@ -429,14 +455,12 @@
            <td style="padding: 14px 16px; max-width: 200px; overflow: hidden; text-overflow: ellipsis;">${escapeHtml(row.original_filename)}</td>
            <td style="padding: 14px 16px;">${escapeHtml(row.display_company)}</td>
            <td style="padding: 14px 16px;">${escapeHtml(row.display_job)}</td>
-           <td style="padding: 14px 16px;">
-             <span class="status-badge bg-${statusColor(row.display_status)}">${mapStatus(row.display_status)}</span>
-           </td>
+           ${statusCell}
            <td style="padding: 14px 16px;">
              ${ renderCommentBtn(row, isViewOnly, pid) }
            </td>
            <td style="padding: 14px 16px;">
-             ${ renderActionBtns(row, isViewOnly, pid) }
+             ${ renderActionBtns(row, isViewOnly, pid, isDirectorMode) }
            </td>
         `;
         tbody.appendChild(tr);
@@ -460,17 +484,19 @@
         return `<button class="btn btn-sm btn-outline-secondary ${btnClass}" onclick="openCommentModal(${row.id}, '${escapeHtml(row.comment)}', ${pid}, false)">${btnText}</button>`;
     }
 
-    function renderActionBtns(row, isViewOnly, pid) {
+    function renderActionBtns(row, isViewOnly, pid, isDirectorMode = false) {
         const dlBtn = `<a href="/api/download_resume/${row.id}" class="btn btn-sm btn-outline-primary" target="_blank" style="margin-right:4px;">下載</a>`;
         if (isViewOnly) return dlBtn; 
 
         const approveClick = `approveResume(${row.id}, ${pid ? `'${pid}'` : 'null'})`;
         const rejectClick = `rejectResume(${row.id}, ${pid ? `'${pid}'` : 'null'})`;
 
-        // 無論狀態為何，保留按鈕
+        // 主任模式只顯示退件按鈕，不顯示通過按鈕
         let btns = `<div style="display:flex; align-items:center;">${dlBtn}`;
         btns += `<button class="btn btn-sm btn-outline-danger" style="margin-right:4px;" onclick="${rejectClick}">退件</button>`;
-        btns += `<button class="btn btn-sm btn-outline-success" onclick="${approveClick}">完成</button>`;
+        if (!isDirectorMode) {
+            btns += `<button class="btn btn-sm btn-outline-success" onclick="${approveClick}">完成</button>`;
+        }
         btns += `</div>`;
         return btns;
     }

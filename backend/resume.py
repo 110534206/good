@@ -3098,9 +3098,10 @@ def review_resume(resume_id):
     status = data.get('status')
     comment = data.get('comment', '')  # 老師留言
 
-    # 班導只能退件，不能通過
-    if user_role == 'class_teacher' and status == 'approved':
-        return jsonify({"success": False, "message": "班導只能退件，無法通過履歷"}), 403
+    # 班導和主任只能退件，不能通過
+    if user_role in ['class_teacher', 'director'] and status == 'approved':
+        role_name = '班導' if user_role == 'class_teacher' else '主任'
+        return jsonify({"success": False, "message": f"{role_name}只能退件，無法通過履歷"}), 403
 
     if status not in ['approved', 'rejected']:
         return jsonify({"success": False, "message": "無效的狀態碼"}), 400
@@ -3128,7 +3129,7 @@ def review_resume(resume_id):
         student_name = resume_data['student_name']  
         old_status = resume_data['old_status']
 
-        # 3. 更新履歷狀態或刪除履歷
+        # 3. 更新履歷狀態
         # 如果是指導老師（teacher）審核，需要更新 reviewed_by 欄位
         if user_role == 'teacher':
             cursor.execute("""
@@ -3139,10 +3140,8 @@ def review_resume(resume_id):
                     reviewed_at=NOW()
                 WHERE id=%s
             """, (status, comment, user_id, resume_id))
-        elif user_role == 'class_teacher' and status == 'rejected':
-            # 班導退件時，不更新狀態，稍後會刪除履歷記錄
-            pass
         else:
+            # 班導、主任等其他角色更新狀態
             cursor.execute("""
                 UPDATE resumes SET 
                     status=%s, 
@@ -3189,8 +3188,8 @@ def review_resume(resume_id):
                     category="resume"
                 )
                 
-                # 🔄 如果是老師退件，將 student_preferences 狀態重置為 'pending'
-                if user_role in ['teacher', 'class_teacher']:
+                # 🔄 如果是老師、班導或主任退件，將 student_preferences 狀態重置為 'pending'
+                if user_role in ['teacher', 'class_teacher', 'director']:
                     cursor.execute("""
                         UPDATE student_preferences 
                         SET status = 'pending'
@@ -3199,17 +3198,8 @@ def review_resume(resume_id):
                     """, (student_user_id,))
                     updated_count = cursor.rowcount
                     if updated_count > 0:
-                        print(f"✅ 已將 {updated_count} 筆學生志願序狀態重置為 'pending'，該履歷不會同步到廠商審核頁面")
-                
-                # 🗑️ 如果是班導退件，刪除履歷記錄
-                if user_role == 'class_teacher':
-                    cursor.execute("""
-                        DELETE FROM resumes 
-                        WHERE id = %s
-                    """, (resume_id,))
-                    deleted_count = cursor.rowcount
-                    if deleted_count > 0:
-                        print(f"✅ 班導退件，已刪除履歷記錄 (ID: {resume_id})")
+                        role_name = '老師' if user_role == 'teacher' else ('班導' if user_role == 'class_teacher' else '主任')
+                        print(f"✅ {role_name}退件，已將 {updated_count} 筆學生志願序狀態重置為 'pending'，該履歷不會同步到廠商審核頁面")
 
             # =============== 通過 ===============
             elif status == 'approved':
@@ -3250,10 +3240,6 @@ def review_resume(resume_id):
 
         conn.commit()
 
-        # 如果是班導退件，返回刪除成功的訊息
-        if user_role == 'class_teacher' and status == 'rejected':
-            return jsonify({"success": True, "message": "履歷已退件並刪除"})
-        
         return jsonify({"success": True, "message": "履歷審核狀態更新成功"})
 
     except Exception as e:
@@ -3431,6 +3417,7 @@ def get_class_resumes():
                         WHERE sp.status = 'approved'
                     ) pref ON pref.student_id = u.id
                     WHERE r.status IN ('uploaded', 'pending', 'approved')
+                    AND r.status != 'rejected'
                     AND EXISTS (
                         SELECT 1
                         FROM classes c2
@@ -3484,6 +3471,7 @@ def get_class_resumes():
                         JOIN users u ON r.user_id = u.id
                         JOIN classes c ON u.class_id = c.id
                         WHERE c.department = %s
+                        AND r.status != 'rejected'
                         ORDER BY c.name, u.name
                     """
                     sql_params = (department,)
