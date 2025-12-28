@@ -759,26 +759,122 @@
 
     async function loadMatchingResults() {
       try {
-        const res = await fetch('/admission/api/vendor_matching_results');
-        if (!res.ok) {
-          throw new Error('伺服器回應失敗');
+        // 使用與科助 /ta/match_results 相同的資料來源
+        // 1. 獲取所有已審核的公司
+        const companiesRes = await fetch('/api/get_reviewed_companies', {
+          headers: { 'Accept': 'application/json' },
+          credentials: 'include'
+        });
+
+        if (!companiesRes.ok) {
+          throw new Error('無法載入公司列表');
         }
 
-        const data = await res.json();
-        if (!data.success) {
-          throw new Error(data.message || '查詢失敗');
-        }
-
-        const { matches, summary, message } = data;
-
-        cachedMatches = matches || [];
-        renderSummary(summary || { total_jobs: 0, total_students: 0, by_company: [] });
-
-        if (message && !(matches && matches.length)) {
+        const companiesData = await companiesRes.json();
+        if (!companiesData.success || !companiesData.companies || companiesData.companies.length === 0) {
           tableContainer.innerHTML = `
             <div class="empty-state">
               <i class="fa-solid fa-circle-info"></i>
-              <div>${message}</div>
+              <div>目前沒有已審核的公司</div>
+            </div>
+          `;
+          renderSummary({ total_jobs: 0, total_students: 0, by_company: [] });
+          return;
+        }
+
+        const companies = companiesData.companies;
+        const allMatches = [];
+        const companyBreakdown = [];
+
+        // 2. 對於每個公司，獲取他們審核通過的學生和職缺
+        for (const company of companies) {
+          let approvedStudents = [];
+          let jobs = [];
+          
+          // 獲取職缺列表
+          try {
+            const jobsRes = await fetch(`/intern_experience/api/jobs/${company.id}`, {
+              headers: { 'Accept': 'application/json' },
+              credentials: 'include'
+            });
+
+            if (jobsRes.ok) {
+              const jobsData = await jobsRes.json();
+              if (jobsData.success && jobsData.data) {
+                jobs = jobsData.data;
+              }
+            }
+          } catch (error) {
+            console.error(`載入公司 ${company.company_name} 的職缺失敗:`, error);
+          }
+          
+          // 獲取審核通過的學生
+          try {
+            const studentsRes = await fetch(`/api/public/company/${company.id}/vendor-reviewed-students`, {
+              headers: { 'Accept': 'application/json' },
+              credentials: 'include'
+            });
+
+            if (studentsRes.ok) {
+              const studentsData = await studentsRes.json();
+              if (studentsData.success && studentsData.students && studentsData.students.length > 0) {
+                // 只保留審核通過的學生
+                approvedStudents = studentsData.students.filter(s => s.vendor_review_status === 'approved');
+                
+                // 按審核時間排序（最新的在前，表示廠商優先考慮的學生）
+                approvedStudents.sort((a, b) => {
+                  const timeA = new Date(a.vendor_reviewed_at || 0);
+                  const timeB = new Date(b.vendor_reviewed_at || 0);
+                  return timeB - timeA; // 降序：最新的在前
+                });
+              }
+            }
+          } catch (error) {
+            console.error(`載入公司 ${company.company_name} 的學生失敗:`, error);
+          }
+
+          // 將學生資料轉換成 matches 格式
+          approvedStudents.forEach(student => {
+            allMatches.push({
+              student_id: student.student_id,
+              student_name: student.student_name,
+              student_number: student.student_number,
+              student_email: student.student_email || '',
+              class_name: student.class_name || '',
+              class_department: student.class_department || '',
+              company_id: company.id,
+              company_name: company.company_name,
+              job_id: student.job_id || null,
+              job_title: student.job_title || '未指定職缺',
+              preference_order: student.preference_order || null,
+              admitted_at: student.vendor_reviewed_at || null,
+              semester: '1132' // 預設學期
+            });
+          });
+
+          // 建立公司摘要
+          if (approvedStudents.length > 0) {
+            companyBreakdown.push({
+              company_name: company.company_name,
+              matched_students: approvedStudents.length
+            });
+          }
+        }
+
+        // 3. 更新快取和摘要
+        cachedMatches = allMatches;
+        const summary = {
+          total_jobs: totalJobCount || 0,
+          total_students: allMatches.length,
+          by_company: companyBreakdown
+        };
+        renderSummary(summary);
+
+        if (allMatches.length === 0) {
+          tableContainer.innerHTML = `
+            <div class="empty-state">
+              <i class="fa-solid fa-circle-info"></i>
+              <div>目前沒有審核通過的學生</div>
             </div>
           `;
           return;
