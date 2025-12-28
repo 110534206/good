@@ -769,32 +769,54 @@ def get_companies_for_resume_delivery():
     try:
         # 1️⃣ 檢查學生是否有填寫志願序
         cursor.execute("""
-            SELECT DISTINCT company_id
+            SELECT DISTINCT company_id, job_id
             FROM student_preferences
             WHERE student_id = %s
         """, (student_id,))
-        pref_companies = cursor.fetchall()
+        pref_records = cursor.fetchall()
 
-        use_preferences = len(pref_companies) > 0
+        use_preferences = len(pref_records) > 0
 
         # 2️⃣ 根據是否有志願序，決定 SQL 條件
         if use_preferences:
-            company_ids = [c["company_id"] for c in pref_companies]
+            # 如果有志願序，只顯示學生在志願序中選擇的公司和職缺
+            company_ids = list(set([r["company_id"] for r in pref_records if r["company_id"]]))
+            job_ids = [r["job_id"] for r in pref_records if r["job_id"] is not None]
+            
             format_strings = ",".join(["%s"] * len(company_ids))
-
-            cursor.execute(f"""
-                SELECT
-                    c.id AS company_id,
-                    c.company_name,
-                    j.id AS job_id,
-                    j.title AS job_title
-                FROM internship_companies c
-                JOIN internship_jobs j ON j.company_id = c.id
-                WHERE c.status = 'approved'
-                  AND j.is_active = TRUE
-                  AND c.id IN ({format_strings})
-                ORDER BY c.company_name, j.id
-            """, tuple(company_ids))
+            
+            if job_ids:
+                # 如果有明確的 job_id，只顯示這些職缺
+                job_format_strings = ",".join(["%s"] * len(job_ids))
+                cursor.execute(f"""
+                    SELECT
+                        c.id AS company_id,
+                        c.company_name,
+                        j.id AS job_id,
+                        j.title AS job_title
+                    FROM internship_companies c
+                    JOIN internship_jobs j ON j.company_id = c.id
+                    WHERE c.status = 'approved'
+                      AND j.is_active = TRUE
+                      AND c.id IN ({format_strings})
+                      AND j.id IN ({job_format_strings})
+                    ORDER BY c.company_name, j.id
+                """, tuple(company_ids + job_ids))
+            else:
+                # 如果志願序中沒有 job_id（舊資料），顯示該公司下的所有職缺
+                cursor.execute(f"""
+                    SELECT
+                        c.id AS company_id,
+                        c.company_name,
+                        j.id AS job_id,
+                        j.title AS job_title
+                    FROM internship_companies c
+                    JOIN internship_jobs j ON j.company_id = c.id
+                    WHERE c.status = 'approved'
+                      AND j.is_active = TRUE
+                      AND c.id IN ({format_strings})
+                    ORDER BY c.company_name, j.id
+                """, tuple(company_ids))
         else:
             # 尚未填志願序 → 顯示全部
             cursor.execute("""
