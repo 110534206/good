@@ -1908,15 +1908,18 @@ def submit_and_generate_api():
             return jsonify({"success": False, "message": "文件生成失敗"}), 500
 
         # 寫入 resumes
+        # status: 班導/主任審核狀態，預設為 'uploaded'
+        # teacher_review_status: 指導老師審核狀態，預設為 'uploaded'（待指導老師審核）
         cursor.execute("""
             INSERT INTO resumes
-            (user_id, filepath, original_filename, status, semester_id, created_at)
-            VALUES (%s, %s, %s, %s, %s, NOW())
+            (user_id, filepath, original_filename, status, teacher_review_status, semester_id, created_at)
+            VALUES (%s, %s, %s, %s, %s, %s, NOW())
         """, (
             user_id,
             save_path,
             filename,
-            'uploaded',  # 使用資料庫 enum 定義的狀態值
+            'uploaded',  # 班導/主任審核狀態
+            'uploaded',  # 指導老師審核狀態（待審核）
             semester_id
         ))
 
@@ -3599,15 +3602,18 @@ def get_class_resumes():
             # 處理志願序狀態：根據角色使用不同的狀態欄位
             if role == 'teacher':
                 # 指導老師：使用 teacher_review_status 欄位
-                # 如果 teacher_review_status 為 NULL 或 'uploaded'，表示待審核，顯示為 'pending'
+                # teacher_review_status 為 'uploaded' 表示待審核，顯示為 'pending'
+                # teacher_review_status 為 'approved' 表示已通過
+                # teacher_review_status 為 'rejected' 表示已退件
                 teacher_status = r.get('teacher_review_status')
-                if teacher_status and teacher_status != 'uploaded':
-                    r['application_statuses'] = teacher_status
-                    r['display_status'] = teacher_status
-                else:
-                    # 如果 teacher_review_status 為 NULL 或 'uploaded'，表示尚未經過指導老師審核，顯示為 'pending'
+                if teacher_status == 'uploaded' or not teacher_status:
+                    # 如果 teacher_review_status 為 'uploaded' 或不存在，表示尚未經過指導老師審核，顯示為 'pending'
                     r['application_statuses'] = 'pending'
                     r['display_status'] = 'pending'
+                else:
+                    # 使用 teacher_review_status 的值（'approved' 或 'rejected'）
+                    r['application_statuses'] = teacher_status
+                    r['display_status'] = teacher_status
             else:
                 # 其他角色（class_teacher, director, ta, admin, vendor）：使用 status 欄位（班導/主任的審核狀態）
                 if 'preference_status' in r and r.get('preference_status'):
