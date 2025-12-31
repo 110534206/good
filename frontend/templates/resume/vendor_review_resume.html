@@ -381,6 +381,7 @@
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
   <script>
     let allResumes = [];
+    let allPositions = []; // 儲存所有職缺資料（包含名額）
     let currentResumeId = null;
     let currentPreferenceId = null; 
     let currentPage = 1;
@@ -465,6 +466,20 @@
         .then(([resumeData, companyData, positionData]) => {
           if (resumeData.success) {
             allResumes = resumeData.resumes || [];
+            
+            // 儲存職缺資料（包含名額）
+            if (positionData && positionData.items && Array.isArray(positionData.items)) {
+              allPositions = positionData.items;
+              console.log('📋 載入職缺資料：', allPositions.length, '個職缺');
+              allPositions.forEach(pos => {
+                console.log('  - 職缺：', pos.title || pos.job_title, 'ID：', pos.id, '名額：', pos.slots);
+              });
+            } else if (positionData && positionData.success && positionData.positions && Array.isArray(positionData.positions)) {
+              allPositions = positionData.positions;
+            } else {
+              allPositions = [];
+              console.warn('⚠️ 無法載入職缺資料，positionData：', positionData);
+            }
             
             // 根據後端返回的資料初始化 interviewedSet
             interviewedSet.clear();
@@ -1384,87 +1399,222 @@
     
     // 按媒合順序排序並顯示
     function sortByMatchingOrder() {
-      // 篩選出廠商通過的學生（status = 'approved'）
-      const approvedResumes = allResumes.filter(resume => {
-        const status = resume.status || resume.application_statuses || resume.display_status || 'pending';
-        return status === 'approved';
+      console.log('📊 開始媒合排序');
+      console.log('📋 職缺資料數量：', allPositions.length);
+      console.log('📋 履歷資料數量：', allResumes.length);
+      
+      // 1. 從職缺資料（allPositions）建立職缺映射表，使用廠商設定的名額
+      const jobsMap = new Map(); // key: job_id, value: { job_title, slots, students: [] }
+      
+      // 先從職缺資料建立職缺結構（使用廠商設定的名額）
+      if (allPositions.length === 0) {
+        alert('⚠️ 目前沒有職缺資料，請先建立職缺');
+        return;
+      }
+      
+      allPositions.forEach(position => {
+        const jobId = position.id || position.job_id || null;
+        const jobTitle = position.title || position.job_title || '未指定職缺';
+        const jobSlots = position.slots || 0;
+        
+        console.log(`📦 處理職缺：${jobTitle}，ID：${jobId}，名額：${jobSlots}`);
+        
+        if (jobId) {
+          const key = String(jobId);
+          jobsMap.set(key, {
+            job_id: jobId,
+            job_title: jobTitle,
+            slots: Math.max(1, jobSlots), // 至少1個名額
+            students: []
+          });
+        }
       });
       
-      // 按學生姓名排序
-      approvedResumes.sort((a, b) => {
-        const nameA = (a.name || a.student_name || '').toLowerCase();
-        const nameB = (b.name || b.student_name || '').toLowerCase();
-        return nameA.localeCompare(nameB, 'zh-TW');
+      console.log('📊 職缺映射表數量：', jobsMap.size);
+      
+      // 2. 將狀態為「通過」的學生按職缺分組
+      allResumes.forEach(resume => {
+        // 檢查履歷狀態是否為「通過」
+        const status = resume.application_statuses || resume.display_status || resume.status || 'pending';
+        if (status !== 'approved') {
+          const studentName = resume.name || resume.student_name || '未知';
+          console.log(`  ⏭️ 學生 ${studentName} 狀態為「${status}」，跳過`);
+          return; // 跳過非「通過」狀態的學生
+        }
+        
+        const jobId = resume.job_id || resume.jobId || null;
+        const studentName = resume.name || resume.student_name || '未知';
+        
+        if (jobId) {
+          const key = String(jobId);
+          if (jobsMap.has(key)) {
+            jobsMap.get(key).students.push(resume);
+            console.log(`  ✅ 學生 ${studentName}（狀態：通過）加入職缺 ${jobsMap.get(key).job_title}`);
+          } else {
+            // 如果職缺不在職缺列表中，使用履歷中的職缺資訊
+            const jobTitle = resume.job_title || resume.jobTitle || '未指定職缺';
+            const jobSlots = resume.job_slots || resume.slots || 1;
+            jobsMap.set(key, {
+              job_id: jobId,
+              job_title: jobTitle,
+              slots: Math.max(1, jobSlots),
+              students: [resume]
+            });
+            console.log(`  ⚠️ 職缺 ${jobTitle} 不在職缺列表中，使用履歷中的資訊`);
+          }
+        } else {
+          // 如果沒有 job_id，使用職缺名稱作為 key
+          const jobTitle = resume.job_title || resume.jobTitle || '未指定職缺';
+          const jobSlots = resume.job_slots || resume.slots || 1;
+          const key = `no_id_${jobTitle}`;
+          if (!jobsMap.has(key)) {
+            jobsMap.set(key, {
+              job_id: null,
+              job_title: jobTitle,
+              slots: Math.max(1, jobSlots),
+              students: []
+            });
+          }
+          jobsMap.get(key).students.push(resume);
+          console.log(`  ⚠️ 學生 ${studentName}（狀態：通過）沒有 job_id，使用職缺名稱：${jobTitle}`);
+        }
       });
       
-      // 生成字母和對應的下拉選單（A~E 五列）
+      // 3. 對每個職缺的學生按姓名排序
+      jobsMap.forEach((jobData, key) => {
+        jobData.students.sort((a, b) => {
+          const nameA = (a.name || a.student_name || '').toLowerCase();
+          const nameB = (b.name || b.student_name || '').toLowerCase();
+          return nameA.localeCompare(nameB, 'zh-TW');
+        });
+        console.log(`📦 職缺「${jobData.job_title}」：${jobData.students.length} 位學生，名額：${jobData.slots}`);
+      });
+      
+      if (jobsMap.size === 0) {
+        alert('⚠️ 目前沒有職缺資料');
+        return;
+      }
+      
       const lettersContainer = document.getElementById('matchingSortLetters');
       const content = document.getElementById('matchingSortContent');
       
-      if (!lettersContainer || !content) return;
+      if (!lettersContainer || !content) {
+        console.error('❌ 找不到容器元素');
+        return;
+      }
       
       // 清空容器
       lettersContainer.innerHTML = '';
       content.innerHTML = '';
       
-      // 左側顯示 A~E 五個按鈕，每個旁邊都有下拉選單
-      const letters = ['A', 'B', 'C', 'D', 'E'];
-      letters.forEach((letter, letterIndex) => {
-        // 創建每一行的容器
-        const rowDiv = document.createElement('div');
-        rowDiv.style.cssText = 'display: flex; align-items: center; gap: 12px;';
+      // 為每個職缺創建對應名額數量的下拉選單
+      let globalIndex = 0;
+      jobsMap.forEach((jobData, jobKey) => {
+        const jobTitle = jobData.job_title;
+        const slots = Math.max(1, jobData.slots || 1); // 至少1個名額
+        const students = jobData.students;
         
-        // 字母按鈕
-        const letterBtn = document.createElement('button');
-        letterBtn.textContent = letter;
-        letterBtn.className = 'btn btn-outline-primary';
-        letterBtn.style.cssText = 'width: 50px; height: 50px; font-size: 1.2rem; font-weight: 600; border-radius: 8px; flex-shrink: 0;';
-        letterBtn.dataset.letter = letter;
-        rowDiv.appendChild(letterBtn);
+        console.log(`🔧 創建職缺「${jobTitle}」的下拉選單，名額：${slots}，學生數：${students.length}`);
         
-        // 下拉選單
-        const dropdown = document.createElement('select');
-        dropdown.className = 'form-select';
-        dropdown.style.cssText = 'padding: 10px 12px; border-radius: 8px; border: 1px solid #e2e8f0; flex: 1;';
-        dropdown.innerHTML = '<option value="">請選擇學生</option>';
-        dropdown.dataset.letter = letter;
+        // 為該職缺創建標題（顯示已選擇人數和總名額）
+        const jobTitleDiv = document.createElement('div');
+        jobTitleDiv.style.cssText = 'margin-top: 20px; margin-bottom: 12px; padding: 12px; background-color: #f1f5f9; border-radius: 8px;';
+        const selectedCountId = `selected-count-${jobKey}`;
+        jobTitleDiv.innerHTML = `<strong style="font-size: 1.1rem; color: #0055a8;">${escapeHtml(jobTitle)}</strong> <span style="color: #64748b; font-size: 0.9rem;">（已選擇：<span id="${selectedCountId}">0</span> / 總名額：${slots}）</span>`;
+        lettersContainer.appendChild(jobTitleDiv);
         
-        // 在下拉選單中顯示所有通過的學生姓名
-        approvedResumes.forEach((resume, index) => {
-          const studentName = resume.name || resume.student_name || '未知';
-          const studentNumber = resume.username || resume.student_number || '';
-          const displayText = studentNumber ? `${studentName} (${studentNumber})` : studentName;
+        // 為該職缺創建對應名額數量的下拉選單
+        for (let i = 0; i < slots; i++) {
+          const rowDiv = document.createElement('div');
+          rowDiv.style.cssText = 'display: flex; align-items: center; gap: 12px; margin-bottom: 12px;';
           
-          const option = document.createElement('option');
-          option.value = index;
-          option.textContent = displayText;
-          option.dataset.resumeIndex = index;
-          dropdown.appendChild(option);
-        });
-        
-        // 下拉選單變更事件
-        dropdown.addEventListener('change', (e) => {
-          const selectedIndex = e.target.value;
-          if (!selectedIndex || selectedIndex === '') {
-            // 如果所有下拉選單都為空，清空內容區域
-            const allDropdowns = lettersContainer.querySelectorAll('select');
-            const hasSelection = Array.from(allDropdowns).some(dd => dd.value !== '');
-            if (!hasSelection) {
-              content.innerHTML = '';
+          // 序號標籤
+          const label = document.createElement('label');
+          label.style.cssText = 'min-width: 60px; font-weight: 600; color: #475569;';
+          label.textContent = `正取${i + 1}`;
+          rowDiv.appendChild(label);
+          
+          // 下拉選單
+          const dropdown = document.createElement('select');
+          dropdown.className = 'form-select';
+          dropdown.style.cssText = 'padding: 10px 12px; border-radius: 8px; border: 1px solid #e2e8f0; flex: 1;';
+          dropdown.innerHTML = '<option value="">請選擇學生</option>';
+          dropdown.dataset.jobId = jobKey;
+          dropdown.dataset.slotIndex = i;
+          dropdown.dataset.globalIndex = globalIndex++;
+          
+          // 在下拉選單中顯示該職缺的所有學生
+          students.forEach((resume, index) => {
+            const studentName = resume.name || resume.student_name || '未知';
+            const studentNumber = resume.username || resume.student_number || '';
+            const displayText = studentNumber ? `${studentName} (${studentNumber})` : studentName;
+            
+            const option = document.createElement('option');
+            option.value = `${jobKey}_${index}`;
+            option.textContent = displayText;
+            option.dataset.resumeIndex = index;
+            dropdown.appendChild(option);
+          });
+          
+          // 下拉選單變更事件
+          dropdown.addEventListener('change', (e) => {
+            const selectedValue = e.target.value;
+            const currentJobKey = e.target.dataset.jobId;
+            
+            // 更新所有職缺的已選擇人數和選項狀態
+            updateAllJobDropdowns(jobKey, lettersContainer, jobsMap);
+            
+            if (!selectedValue || selectedValue === '') {
+              // 如果所有下拉選單都為空，清空內容區域
+              const allDropdowns = lettersContainer.querySelectorAll('select');
+              const hasSelection = Array.from(allDropdowns).some(dd => dd.value !== '');
+              if (!hasSelection) {
+                content.innerHTML = '';
+              }
+              return;
             }
-            return;
-          }
+            
+            const [jobKeySelected, resumeIndex] = selectedValue.split('_');
+            const jobDataSelected = jobsMap.get(jobKeySelected);
+            if (!jobDataSelected || !jobDataSelected.students[parseInt(resumeIndex)]) return;
+            
+            const resume = jobDataSelected.students[parseInt(resumeIndex)];
+            
+            // 顯示選中學生的詳細資訊
+            displayStudentDetail(resume);
+          });
           
-          const resume = approvedResumes[parseInt(selectedIndex)];
-          if (!resume) return;
-          
-          // 顯示選中學生的詳細資訊
-          displayStudentDetail(resume);
-        });
+          rowDiv.appendChild(dropdown);
+          lettersContainer.appendChild(rowDiv);
+        }
         
-        rowDiv.appendChild(dropdown);
-        lettersContainer.appendChild(rowDiv);
+        // 為該職缺創建候補學生區塊
+        const reserveContainer = document.createElement('div');
+        reserveContainer.id = `reserve-container-${jobKey}`;
+        reserveContainer.style.cssText = 'margin-top: 16px; padding: 16px; background-color: #f8fafc; border-radius: 8px; border: 1px solid #e2e8f0;';
+        
+        // 候補標題和新增按鈕
+        const reserveHeader = document.createElement('div');
+        reserveHeader.style.cssText = 'display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;';
+        reserveHeader.innerHTML = `
+          <strong style="font-size: 0.95rem; color: #64748b;">候補學生</strong>
+          <button type="button" class="btn btn-sm btn-outline-primary" onclick="addReserveStudent('${jobKey}')">
+            <span style="font-size: 0.9rem;">+ 新增候補</span>
+          </button>
+        `;
+        reserveContainer.appendChild(reserveHeader);
+        
+        // 候補學生列表容器
+        const reserveList = document.createElement('div');
+        reserveList.id = `reserve-list-${jobKey}`;
+        reserveList.style.cssText = 'display: flex; flex-direction: column; gap: 8px;';
+        reserveContainer.appendChild(reserveList);
+        
+        lettersContainer.appendChild(reserveContainer);
       });
+      
+      // 將 jobsMap 存儲到全域變數，以便在 addReserveStudent 函數中使用
+      window.matchingSortJobsMap = jobsMap;
       
       // 儲存按鈕事件
       const saveBtn = document.getElementById('saveMatchingSortBtn');
@@ -1474,23 +1624,54 @@
         saveBtn.parentNode.replaceChild(newSaveBtn, saveBtn);
         
         newSaveBtn.addEventListener('click', () => {
-          // 收集所有選中的學生資料
+          // 收集所有選中的學生資料（正取名額）
           const selectedStudents = [];
-          const allDropdowns = lettersContainer.querySelectorAll('select');
+          const allDropdowns = lettersContainer.querySelectorAll('select:not([data-reserve])');
           
-          allDropdowns.forEach((dropdown, index) => {
+          allDropdowns.forEach((dropdown) => {
             if (dropdown.value && dropdown.value !== '') {
-              const resume = approvedResumes[parseInt(dropdown.value)];
-              if (resume) {
+              const [jobKey, resumeIndex] = dropdown.value.split('_');
+              const jobData = jobsMap.get(jobKey);
+              if (jobData && jobData.students[parseInt(resumeIndex)]) {
+                const resume = jobData.students[parseInt(resumeIndex)];
+                const slotIndex = parseInt(dropdown.dataset.slotIndex || '0');
                 selectedStudents.push({
-                  letter: letters[index],
+                  slot_index: slotIndex + 1,
+                  job_title: jobData.job_title,
+                  job_id: jobData.job_id,
                   student_id: resume.student_id || resume.id,
                   student_name: resume.name || resume.student_name,
                   student_number: resume.username || resume.student_number,
                   company_name: resume.company_name,
-                  job_title: resume.job_title || resume.jobTitle,
+                  job_title_display: resume.job_title || resume.jobTitle,
                   preference_id: resume.preference_id,
-                  preference_order: resume.preference_order || resume.preferenceOrder
+                  preference_order: resume.preference_order || resume.preferenceOrder,
+                  is_reserve: false
+                });
+              }
+            }
+          });
+          
+          // 收集候補學生資料
+          const reserveDropdowns = lettersContainer.querySelectorAll('select[data-reserve="true"]');
+          reserveDropdowns.forEach((dropdown) => {
+            if (dropdown.value && dropdown.value !== '') {
+              const [jobKey, resumeIndex] = dropdown.value.split('_');
+              const jobData = jobsMap.get(jobKey);
+              if (jobData && jobData.students[parseInt(resumeIndex)]) {
+                const resume = jobData.students[parseInt(resumeIndex)];
+                selectedStudents.push({
+                  slot_index: null,
+                  job_title: jobData.job_title,
+                  job_id: jobData.job_id,
+                  student_id: resume.student_id || resume.id,
+                  student_name: resume.name || resume.student_name,
+                  student_number: resume.username || resume.student_number,
+                  company_name: resume.company_name,
+                  job_title_display: resume.job_title || resume.jobTitle,
+                  preference_id: resume.preference_id,
+                  preference_order: resume.preference_order || resume.preferenceOrder,
+                  is_reserve: true
                 });
               }
             }
@@ -1518,6 +1699,140 @@
       // 顯示模態框
       const modal = new bootstrap.Modal(document.getElementById('matchingSortModal'));
       modal.show();
+    }
+    
+    // 新增候補學生下拉選單
+    function addReserveStudent(jobKey) {
+      const reserveList = document.getElementById(`reserve-list-${jobKey}`);
+      if (!reserveList) return;
+      
+      const jobsMap = window.matchingSortJobsMap;
+      if (!jobsMap) {
+        console.error('找不到 jobsMap');
+        return;
+      }
+      
+      const jobData = jobsMap.get(jobKey);
+      if (!jobData) return;
+      
+      const students = jobData.students;
+      const reserveIndex = reserveList.children.length;
+      
+      // 創建候補學生行
+      const reserveRow = document.createElement('div');
+      reserveRow.style.cssText = 'display: flex; align-items: center; gap: 12px;';
+      reserveRow.id = `reserve-row-${jobKey}-${reserveIndex}`;
+      
+      // 候補標籤
+      const label = document.createElement('label');
+      label.style.cssText = 'min-width: 80px; font-weight: 600; color: #64748b; font-size: 0.9rem;';
+      label.textContent = `候補 ${reserveIndex + 1}`;
+      reserveRow.appendChild(label);
+      
+      // 候補下拉選單
+      const dropdown = document.createElement('select');
+      dropdown.className = 'form-select';
+      dropdown.style.cssText = 'padding: 10px 12px; border-radius: 8px; border: 1px solid #e2e8f0; flex: 1;';
+      dropdown.innerHTML = '<option value="">請選擇學生</option>';
+      dropdown.dataset.jobId = jobKey;
+      dropdown.dataset.reserve = 'true';
+      dropdown.dataset.reserveIndex = reserveIndex;
+      
+      // 在下拉選單中顯示該職缺的所有學生
+      students.forEach((resume, index) => {
+        const studentName = resume.name || resume.student_name || '未知';
+        const studentNumber = resume.username || resume.student_number || '';
+        const displayText = studentNumber ? `${studentName} (${studentNumber})` : studentName;
+        
+        const option = document.createElement('option');
+        option.value = `${jobKey}_${index}`;
+        option.textContent = displayText;
+        option.dataset.resumeIndex = index;
+        dropdown.appendChild(option);
+      });
+      
+      // 下拉選單變更事件
+      dropdown.addEventListener('change', (e) => {
+        const selectedValue = e.target.value;
+        const lettersContainer = document.getElementById('matchingSortLetters');
+        updateAllJobDropdowns(jobKey, lettersContainer, jobsMap);
+        
+        if (selectedValue && selectedValue !== '') {
+          const [jobKeySelected, resumeIndex] = selectedValue.split('_');
+          const jobDataSelected = jobsMap.get(jobKeySelected);
+          if (jobDataSelected && jobDataSelected.students[parseInt(resumeIndex)]) {
+            const resume = jobDataSelected.students[parseInt(resumeIndex)];
+            displayStudentDetail(resume);
+          }
+        }
+      });
+      
+      reserveRow.appendChild(dropdown);
+      
+      // 刪除按鈕
+      const deleteBtn = document.createElement('button');
+      deleteBtn.type = 'button';
+      deleteBtn.className = 'btn btn-sm btn-outline-danger';
+      deleteBtn.innerHTML = '×';
+      deleteBtn.style.cssText = 'min-width: 32px; height: 32px; padding: 0; font-size: 1.2rem; line-height: 1;';
+      deleteBtn.onclick = () => {
+        reserveRow.remove();
+        const lettersContainer = document.getElementById('matchingSortLetters');
+        updateAllJobDropdowns(jobKey, lettersContainer, jobsMap);
+      };
+      reserveRow.appendChild(deleteBtn);
+      
+      reserveList.appendChild(reserveRow);
+      
+      // 更新所有下拉選單狀態
+      const lettersContainer = document.getElementById('matchingSortLetters');
+      updateAllJobDropdowns(jobKey, lettersContainer, jobsMap);
+    }
+    
+    // 更新所有職缺的下拉選單狀態（禁用已選擇的學生，更新已選擇人數）
+    function updateAllJobDropdowns(currentJobKey, container, jobsMap) {
+      // 收集所有已選擇的學生（跨職缺）
+      const allSelectedStudents = new Set();
+      const allDropdowns = container.querySelectorAll('select');
+      
+      allDropdowns.forEach(dropdown => {
+        if (dropdown.value && dropdown.value !== '') {
+          allSelectedStudents.add(dropdown.value);
+        }
+      });
+      
+      // 更新每個職缺的下拉選單
+      jobsMap.forEach((jobData, jobKey) => {
+        // 更新已選擇人數（只計算正取名額，不包括候補）
+        const countElement = document.getElementById(`selected-count-${jobKey}`);
+        if (countElement) {
+          const jobDropdowns = container.querySelectorAll(`select[data-job-id="${jobKey}"]:not([data-reserve="true"])`);
+          let selectedCount = 0;
+          jobDropdowns.forEach(dropdown => {
+            if (dropdown.value && dropdown.value !== '') {
+              selectedCount++;
+            }
+          });
+          countElement.textContent = selectedCount;
+        }
+        
+        // 更新該職缺所有下拉選單的選項狀態
+        const jobDropdowns = container.querySelectorAll(`select[data-job-id="${jobKey}"]`);
+        jobDropdowns.forEach(dropdown => {
+          const currentValue = dropdown.value;
+          
+          // 遍歷所有選項
+          Array.from(dropdown.options).forEach(option => {
+            if (option.value === '' || option.value === currentValue) {
+              // 空選項或當前選中的選項保持可用
+              option.disabled = false;
+            } else {
+              // 如果該學生已被其他下拉選單選中，則禁用
+              option.disabled = allSelectedStudents.has(option.value);
+            }
+          });
+        });
+      });
     }
     
     // 顯示選中學生的詳細資訊

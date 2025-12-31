@@ -127,6 +127,28 @@ def _ensure_history_table(cursor):
             except Exception as alter_error:
                 print(f"⚠️ 添加 student_id 欄位失敗（可能已存在）: {alter_error}")
             
+            # 檢查是否有 interview_status 欄位，如果沒有則添加
+            try:
+                cursor.execute("""
+                    SELECT COUNT(*) as count
+                    FROM information_schema.columns
+                    WHERE table_schema = DATABASE()
+                    AND table_name = 'vendor_preference_history'
+                    AND column_name = 'interview_status'
+                """)
+                has_interview_status = cursor.fetchone().get('count', 0) > 0
+                
+                if not has_interview_status:
+                    print("📝 為 vendor_preference_history 表添加 interview_status 欄位...")
+                    cursor.execute("""
+                        ALTER TABLE vendor_preference_history
+                        ADD COLUMN interview_status ENUM('not yet', 'in interview', 'done') NOT NULL DEFAULT 'not yet' 
+                        COMMENT '面試狀態：未面試、面試中、已面試' AFTER action
+                    """)
+                    print("✅ 已成功添加 interview_status 欄位")
+            except Exception as alter_error:
+                print(f"⚠️ 添加 interview_status 欄位失敗（可能已存在）: {alter_error}")
+            
             # 嘗試添加外鍵約束（如果失敗，不影響表的使用）
             try:
                 cursor.execute("""
@@ -310,7 +332,7 @@ def _fetch_job_for_vendor(cursor, job_id, vendor_id, allow_teacher_created=False
     return row
 
 
-def _record_history(cursor, preference_id, reviewer_id, action, comment, student_id=None):
+def _record_history(cursor, preference_id, reviewer_id, action, comment, student_id=None, interview_status=None):
     """記錄廠商對志願申請的審核或備註歷史"""
     if action not in ACTION_TEXT:
         return
@@ -326,13 +348,22 @@ def _record_history(cursor, preference_id, reviewer_id, action, comment, student
         except Exception:
             pass  # 如果獲取失敗，student_id 保持為 None
     
+    # 根據 action 自動設置 interview_status（如果沒有明確提供）
+    if interview_status is None:
+        if action == 'interview':
+            interview_status = 'in interview'
+        elif action == 'interview_completed':
+            interview_status = 'done'
+        else:
+            interview_status = 'not yet'
+    
     cursor.execute(
         """
         INSERT INTO vendor_preference_history
-            (preference_id, student_id, reviewer_id, action, comment, created_at)
-        VALUES (%s, %s, %s, %s, %s, NOW())
+            (preference_id, student_id, reviewer_id, action, interview_status, comment, created_at)
+        VALUES (%s, %s, %s, %s, %s, %s, NOW())
         """,
-        (preference_id, student_id, reviewer_id, action, comment),
+        (preference_id, student_id, reviewer_id, action, interview_status, comment),
     )
 
 
@@ -915,6 +946,7 @@ def get_vendor_resumes():
                         sp.preference_order,
                         ic.company_name,
                         COALESCE(ij.title, sp.job_title) AS job_title_display,
+                        COALESCE(ij.slots, 0) AS job_slots,
                         CASE 
                             WHEN sp.status = 'approved' AND NOT EXISTS (
                                 SELECT 1 FROM vendor_preference_history vph 
@@ -1015,6 +1047,7 @@ def get_vendor_resumes():
                         sp.preference_order,
                         ic.company_name,
                         COALESCE(ij.title, sp.job_title) AS job_title_display,
+                        COALESCE(ij.slots, 0) AS job_slots,
                         CASE 
                             WHEN sp.status = 'approved' AND NOT EXISTS (
                                 SELECT 1 FROM vendor_preference_history vph 
@@ -1058,6 +1091,7 @@ def get_vendor_resumes():
                         sp.preference_order,
                         ic.company_name,
                         COALESCE(ij.title, sp.job_title) AS job_title_display,
+                        COALESCE(ij.slots, 0) AS job_slots,
                         COALESCE(sp.status, 'pending') AS vendor_review_status
                     FROM student_preferences sp
                     JOIN internship_companies ic ON sp.company_id = ic.id
@@ -1175,6 +1209,7 @@ def get_vendor_resumes():
                 company_name = pref_to_show.get("company_name") or ""
                 job_id = pref_to_show.get("job_id")
                 job_title = pref_to_show.get("job_title_display") or pref_to_show.get("job_title") or ""
+                job_slots = pref_to_show.get("job_slots") or 0
             elif company_ids:
                 # 如果沒有志願序，但廠商有關聯的公司，顯示第一個公司名稱
                 # 這種情況不應該出現（因為上面已經過濾掉了），但保留作為備用
@@ -1297,6 +1332,7 @@ def get_vendor_resumes():
                 "company_id": company_id,
                 "job_id": job_id,
                 "job_title": job_title,
+                "job_slots": job_slots, # 職缺名額
                 "preference_id": preference_id, # 用於廠商審核操作，如果沒有填寫志願序則為 None
                 "preference_order": preference_order, # 志願序（1=第一志願, 2=第二志願...）
                 "has_interview": has_interview, # 是否有面試記錄
@@ -2872,8 +2908,21 @@ def schedule_interviews():
                 
                 if preference_row:
                     preference_id = preference_row.get("preference_id")
-                    # 記錄到 vendor_preference_history（包含 student_id）
-                    _record_history(cursor, preference_id, vendor_id, "interview", interview_description, student_id)
+                    # 記錄到 vendor_preference_history（包含 student_id，interview_status 會自動設置為 'in interview'）
+                    _record_history(cursor, preference_id, vendor_id, "interview", interview_description, student_id, interview_status='in interview')
+                    
+                    # 更新該學生所有相關記錄的 interview_status 為 'in interview'
+                    # 確保該學生的所有面試記錄狀態一致
+                    try:
+                        cursor.execute("""
+                            UPDATE vendor_preference_history
+                            SET interview_status = 'in interview'
+                            WHERE preference_id = %s
+                            AND interview_status != 'done'
+                        """, (preference_id,))
+                    except Exception as update_error:
+                        # 如果更新失敗（可能是欄位不存在），不影響主流程
+                        print(f"⚠️ 更新 interview_status 失敗（可能欄位不存在）：{update_error}")
                     
                     # 獲取學生資訊
                     cursor.execute("""
