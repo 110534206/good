@@ -140,10 +140,11 @@
 | original_filename | VARCHAR | 原始檔名 | |
 | filepath | VARCHAR | 檔案路徑 | |
 | filesize | INT | 檔案大小（位元組） | |
-| status | ENUM | 審核狀態 | 'uploaded', 'approved', 'rejected' |
-| comment | TEXT | 審核意見 | 班導填寫 |
+| status | ENUM | 審核狀態 | 'uploaded', 'approved', 'rejected'（班導/主任審核狀態） |
+| teacher_review_status | ENUM | 指導老師審核狀態 | 'uploaded', 'approved', 'rejected'（指導老師審核狀態） |
+| comment | TEXT | 審核意見 | 班導/指導老師填寫 |
 | note | TEXT | 備註 | 學生可填寫 |
-| reviewed_by | INT (FK) | 審核者ID | 參考 users.id（班導） |
+| reviewed_by | INT (FK) | 審核者ID | 參考 users.id（指導老師） |
 | created_at | DATETIME | 建立時間 | |
 | updated_at | DATETIME | 更新時間 | |
 
@@ -152,6 +153,7 @@
 - INDEX (user_id)
 - INDEX (semester_id)
 - INDEX (status)
+- INDEX (teacher_review_status)
 - INDEX (reviewed_by)
 
 **流程關聯：**
@@ -159,7 +161,8 @@
 - 系統自動標註學期（從 students.current_semester_code 或 semesters.is_active）
 - 系統自動標註班級（從 users.class_id）
 - 系統自動標註學號（從 users.username）
-- 班導審核履歷
+- 班導/主任審核履歷（更新 `status` 欄位）
+- 指導老師審核履歷（更新 `teacher_review_status` 欄位）
 - 履歷退件時自動發送通知
 
 ---
