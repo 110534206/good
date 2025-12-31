@@ -127,28 +127,6 @@ def _ensure_history_table(cursor):
             except Exception as alter_error:
                 print(f"⚠️ 添加 student_id 欄位失敗（可能已存在）: {alter_error}")
             
-            # 檢查是否有 interview_status 欄位，如果沒有則添加
-            try:
-                cursor.execute("""
-                    SELECT COUNT(*) as count
-                    FROM information_schema.columns
-                    WHERE table_schema = DATABASE()
-                    AND table_name = 'vendor_preference_history'
-                    AND column_name = 'interview_status'
-                """)
-                has_interview_status = cursor.fetchone().get('count', 0) > 0
-                
-                if not has_interview_status:
-                    print("📝 為 vendor_preference_history 表添加 interview_status 欄位...")
-                    cursor.execute("""
-                        ALTER TABLE vendor_preference_history
-                        ADD COLUMN interview_status ENUM('not yet', 'in interview', 'done') NOT NULL DEFAULT 'not yet' 
-                        COMMENT '面試狀態：未面試、面試中、已面試' AFTER action
-                    """)
-                    print("✅ 已成功添加 interview_status 欄位")
-            except Exception as alter_error:
-                print(f"⚠️ 添加 interview_status 欄位失敗（可能已存在）: {alter_error}")
-            
             # 嘗試添加外鍵約束（如果失敗，不影響表的使用）
             try:
                 cursor.execute("""
@@ -332,7 +310,7 @@ def _fetch_job_for_vendor(cursor, job_id, vendor_id, allow_teacher_created=False
     return row
 
 
-def _record_history(cursor, preference_id, reviewer_id, action, comment, student_id=None, interview_status=None):
+def _record_history(cursor, preference_id, reviewer_id, action, comment, student_id=None):
     """記錄廠商對志願申請的審核或備註歷史"""
     if action not in ACTION_TEXT:
         return
@@ -348,22 +326,13 @@ def _record_history(cursor, preference_id, reviewer_id, action, comment, student
         except Exception:
             pass  # 如果獲取失敗，student_id 保持為 None
     
-    # 根據 action 自動設置 interview_status（如果沒有明確提供）
-    if interview_status is None:
-        if action == 'interview':
-            interview_status = 'in interview'
-        elif action == 'interview_completed':
-            interview_status = 'done'
-        else:
-            interview_status = 'not yet'
-    
     cursor.execute(
         """
         INSERT INTO vendor_preference_history
-            (preference_id, student_id, reviewer_id, action, interview_status, comment, created_at)
-        VALUES (%s, %s, %s, %s, %s, %s, NOW())
+            (preference_id, student_id, reviewer_id, action, comment, created_at)
+        VALUES (%s, %s, %s, %s, %s, NOW())
         """,
-        (preference_id, student_id, reviewer_id, action, interview_status, comment),
+        (preference_id, student_id, reviewer_id, action, comment),
     )
 
 
@@ -2908,21 +2877,8 @@ def schedule_interviews():
                 
                 if preference_row:
                     preference_id = preference_row.get("preference_id")
-                    # 記錄到 vendor_preference_history（包含 student_id，interview_status 會自動設置為 'in interview'）
-                    _record_history(cursor, preference_id, vendor_id, "interview", interview_description, student_id, interview_status='in interview')
-                    
-                    # 更新該學生所有相關記錄的 interview_status 為 'in interview'
-                    # 確保該學生的所有面試記錄狀態一致
-                    try:
-                        cursor.execute("""
-                            UPDATE vendor_preference_history
-                            SET interview_status = 'in interview'
-                            WHERE preference_id = %s
-                            AND interview_status != 'done'
-                        """, (preference_id,))
-                    except Exception as update_error:
-                        # 如果更新失敗（可能是欄位不存在），不影響主流程
-                        print(f"⚠️ 更新 interview_status 失敗（可能欄位不存在）：{update_error}")
+                    # 記錄到 vendor_preference_history（包含 student_id）
+                    _record_history(cursor, preference_id, vendor_id, "interview", interview_description, student_id)
                     
                     # 獲取學生資訊
                     cursor.execute("""
