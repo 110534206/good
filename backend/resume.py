@@ -3113,7 +3113,9 @@ def review_resume(resume_id):
         # 2. 查詢履歷並取得學生Email和姓名
         cursor.execute("""
             SELECT 
-                r.user_id, r.original_filename, r.status AS old_status, r.comment,
+                r.user_id, r.original_filename, r.status AS old_status, 
+                r.teacher_review_status AS old_teacher_review_status,
+                r.comment,
                 u.email AS student_email, u.name AS student_name
             FROM resumes r
             JOIN users u ON r.user_id = u.id
@@ -3128,24 +3130,30 @@ def review_resume(resume_id):
         student_email = resume_data['student_email'] 
         student_name = resume_data['student_name']  
         old_status = resume_data['old_status']
+        old_teacher_review_status = resume_data.get('old_teacher_review_status')
 
         # 3. 更新履歷狀態
-        # 如果是指導老師（teacher）審核，需要更新 reviewed_by 欄位
+        # 區分班導/主任審核和指導老師審核
         if user_role == 'teacher':
+            # 指導老師審核：更新 teacher_review_status 欄位
+            old_status_for_check = old_teacher_review_status
+            cursor.execute("""
+                UPDATE resumes SET 
+                    teacher_review_status=%s, 
+                    comment=%s,
+                    reviewed_by=%s,
+                    reviewed_at=NOW(),
+                    updated_at=NOW()
+                WHERE id=%s
+            """, (status, comment, user_id, resume_id))
+        else:
+            # 班導、主任等其他角色：更新 status 欄位（班導/主任的審核狀態）
+            old_status_for_check = old_status
             cursor.execute("""
                 UPDATE resumes SET 
                     status=%s, 
                     comment=%s,
-                    reviewed_by=%s,
-                    reviewed_at=NOW()
-                WHERE id=%s
-            """, (status, comment, user_id, resume_id))
-        else:
-            # 班導、主任等其他角色更新狀態
-            cursor.execute("""
-                UPDATE resumes SET 
-                    status=%s, 
-                    comment=%s
+                    updated_at=NOW()
                 WHERE id=%s
             """, (status, comment, resume_id))
         
@@ -3161,7 +3169,9 @@ def review_resume(resume_id):
             reviewer_name = "審核者"
 
         # 5. 處理 Email 寄送與通知 (僅在狀態改變時處理)
-        if old_status != status:
+        # 使用對應角色的舊狀態進行比較
+        status_changed = (old_status_for_check != status) if old_status_for_check is not None else True
+        if status_changed:
             # =============== 退件 ===============
             if status == 'rejected':
                 # 嘗試發送郵件（如果 email_service 存在）
@@ -3226,8 +3236,10 @@ def review_resume(resume_id):
                     category="resume"
                 )
                 
-                # 🎯 新增邏輯：如果班導通過履歷，將該學生所有志願序狀態從 'pending' 更新為 'approved'
-                if user_role in ['teacher', 'class_teacher']:
+                # 🎯 新增邏輯：根據角色處理志願序狀態
+                if user_role == 'class_teacher':
+                    # 班導通過履歷：將該學生所有志願序狀態從 'pending' 更新為 'approved'
+                    # 這樣履歷會同步到指導老師審核頁面
                     cursor.execute("""
                         UPDATE student_preferences 
                         SET status = 'approved'
@@ -3237,6 +3249,9 @@ def review_resume(resume_id):
                     updated_count = cursor.rowcount
                     if updated_count > 0:
                         print(f"✅ 班導通過履歷，已將 {updated_count} 筆學生志願序狀態更新為 'approved'，將同步到指導老師審核頁面")
+                elif user_role == 'teacher':
+                    # 指導老師通過履歷：該履歷會同步到廠商審核頁面
+                    print(f"✅ 指導老師通過履歷，該履歷將同步到廠商審核頁面")
 
         conn.commit()
 
@@ -3327,6 +3342,7 @@ def get_class_resumes():
                         r.original_filename,
                         r.filepath,
                         r.status,
+                        r.teacher_review_status,
                         r.comment,
                         r.note,
                         r.created_at,
@@ -3359,7 +3375,8 @@ def get_class_resumes():
                         WHERE ic.advisor_user_id = %s
                         AND sp.status = 'approved'
                     ) pref ON pref.student_id = u.id
-                    WHERE r.status IN ('uploaded', 'pending', 'approved')
+                    WHERE r.status = 'approved'
+                    -- 只顯示班導已通過（status='approved'）的履歷，供指導老師審核
                     -- 只顯示選擇了該指導老師管理的公司的學生履歷
                     AND EXISTS (
                         SELECT 1
@@ -3579,20 +3596,20 @@ def get_class_resumes():
                 r['className'] = r['class_name']
             if 'created_at' in r:
                 r['upload_time'] = r['created_at']
-            # 處理志願序狀態：對於指導老師（teacher），從班導同步過來的履歷應該顯示為待審核
+            # 處理志願序狀態：根據角色使用不同的狀態欄位
             if role == 'teacher':
-                # 如果這是從班導同步過來的履歷（有 preference_id 且履歷狀態為 approved），顯示為 pending
-                if 'preference_id' in r and r.get('preference_id') and r.get('status') == 'approved':
+                # 指導老師：使用 teacher_review_status 欄位
+                # 如果 teacher_review_status 為 NULL 或 'uploaded'，表示待審核，顯示為 'pending'
+                teacher_status = r.get('teacher_review_status')
+                if teacher_status and teacher_status != 'uploaded':
+                    r['application_statuses'] = teacher_status
+                    r['display_status'] = teacher_status
+                else:
+                    # 如果 teacher_review_status 為 NULL 或 'uploaded'，表示尚未經過指導老師審核，顯示為 'pending'
                     r['application_statuses'] = 'pending'
                     r['display_status'] = 'pending'
-                elif 'preference_status' in r and r.get('preference_status'):
-                    r['application_statuses'] = r['preference_status']
-                    r['display_status'] = r['preference_status']
-                else:
-                    r['application_statuses'] = r.get('status', 'pending')
-                    r['display_status'] = r.get('status', 'pending')
             else:
-                # 其他角色（class_teacher, director, ta, admin, vendor）使用原有邏輯
+                # 其他角色（class_teacher, director, ta, admin, vendor）：使用 status 欄位（班導/主任的審核狀態）
                 if 'preference_status' in r and r.get('preference_status'):
                     r['application_statuses'] = r['preference_status']
                     r['display_status'] = r['preference_status']
