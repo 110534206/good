@@ -229,6 +229,61 @@
       top: 18px;
       right: 18px;
     }
+
+    /* 自定義匯出按鈕樣式 */
+    .btn-export-pdf {
+      background-color: #dc3545;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      padding: 10px 20px;
+      font-size: 1rem;
+      font-weight: 600;
+      transition: all 0.3s ease;
+    }
+
+    .btn-export-pdf:hover {
+      background-color: #c82333;
+      color: white;
+      transform: translateY(-2px);
+      box-shadow: 0 4px 8px rgba(220, 53, 69, 0.3);
+    }
+
+    .btn-export-word {
+      background-color: #ffc107;
+      color: #000;
+      border: none;
+      border-radius: 8px;
+      padding: 10px 20px;
+      font-size: 1rem;
+      font-weight: 600;
+      transition: all 0.3s ease;
+    }
+
+    .btn-export-word:hover {
+      background-color: #e0a800;
+      color: #000;
+      transform: translateY(-2px);
+      box-shadow: 0 4px 8px rgba(255, 193, 7, 0.3);
+    }
+
+    .btn-export-excel {
+      background-color: #17a2b8;
+      color: #000;
+      border: none;
+      border-radius: 8px;
+      padding: 10px 20px;
+      font-size: 1rem;
+      font-weight: 600;
+      transition: all 0.3s ease;
+    }
+
+    .btn-export-excel:hover {
+      background-color: #138496;
+      color: #000;
+      transform: translateY(-2px);
+      box-shadow: 0 4px 8px rgba(23, 162, 184, 0.3);
+    }
   </style>
 </head>
 
@@ -333,15 +388,15 @@
         </button>
       </div>
       <button id="generateChartBtn" class="btn btn-primary">生成圖表</button>
-      <div class="btn-group ms-2" role="group">
-        <button id="exportExcelBtn" class="btn btn-success">
-          <i class="fas fa-file-excel"></i> 導出 Excel
+      <div class="d-flex gap-2 ms-2">
+        <button id="exportPdfBtn" class="btn-export-pdf">
+          <i class="fas fa-file-pdf"></i> PDF
         </button>
-        <button id="exportWordBtn" class="btn btn-info">
-          <i class="fas fa-file-word"></i> 導出 Word
+        <button id="exportWordBtn" class="btn-export-word">
+          <i class="fas fa-file-word"></i> Word
         </button>
-        <button id="exportPdfBtn" class="btn btn-danger">
-          <i class="fas fa-file-pdf"></i> 導出 PDF
+        <button id="exportExcelBtn" class="btn-export-excel">
+          <i class="fas fa-file-excel"></i> Excel
         </button>
       </div>
     </div>
@@ -356,9 +411,6 @@
       <div class="d-flex justify-content-between align-items-center mb-3">
         <h3>{{ student_name }}</h3>
         <div class="btn-group">
-          <button type="button" class="btn btn-success btn-sm approve-btn" data-student-id="{{ student_info.student_id }}" data-student-name="{{ student_name }}">
-            <i class="fas fa-check"></i> 通過
-          </button>
           <button type="button" class="btn btn-danger btn-sm reject-btn" data-student-id="{{ student_info.student_id }}" data-student-name="{{ student_name }}">
             <i class="fas fa-times"></i> 退件
           </button>
