@@ -849,12 +849,12 @@ def get_vendor_resumes():
             JOIN (
                 SELECT user_id, MAX(created_at) AS max_created_at
                 FROM resumes
-                WHERE status = 'approved'
+                WHERE teacher_review_status = 'approved'
                 GROUP BY user_id
             ) latest ON latest.user_id = r.user_id AND latest.max_created_at = r.created_at
             
             -- 只顯示已經被指導老師（role='teacher'）審核通過的履歷
-            WHERE r.status = 'approved'
+            WHERE r.teacher_review_status = 'approved'
             AND r.reviewed_by IS NOT NULL
             AND EXISTS (
                 SELECT 1 FROM users reviewer
@@ -943,7 +943,7 @@ def get_vendor_resumes():
                         SELECT 1 FROM resumes r
                         JOIN users reviewer ON r.reviewed_by = reviewer.id
                         WHERE r.user_id = sp.student_id
-                        AND r.status = 'approved'
+                        AND r.teacher_review_status = 'approved'
                         AND reviewer.role = 'teacher'
                         AND r.reviewed_by IS NOT NULL
                     )
@@ -973,7 +973,7 @@ def get_vendor_resumes():
                         SELECT 1 FROM resumes r
                         JOIN users reviewer ON r.reviewed_by = reviewer.id
                         WHERE r.user_id = sp.student_id
-                        AND r.status = 'approved'
+                        AND r.teacher_review_status = 'approved'
                         AND reviewer.role = 'teacher'
                         AND r.reviewed_by IS NOT NULL
                     )
@@ -1043,7 +1043,7 @@ def get_vendor_resumes():
                         SELECT 1 FROM resumes r
                         JOIN users reviewer ON r.reviewed_by = reviewer.id
                         WHERE r.user_id = sp.student_id
-                        AND r.status = 'approved'
+                        AND r.teacher_review_status = 'approved'
                         AND reviewer.role = 'teacher'
                         AND r.reviewed_by IS NOT NULL
                     )
@@ -1073,7 +1073,7 @@ def get_vendor_resumes():
                         SELECT 1 FROM resumes r
                         JOIN users reviewer ON r.reviewed_by = reviewer.id
                         WHERE r.user_id = sp.student_id
-                        AND r.status = 'approved'
+                        AND r.teacher_review_status = 'approved'
                         AND reviewer.role = 'teacher'
                         AND r.reviewed_by IS NOT NULL
                     )
