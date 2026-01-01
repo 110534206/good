@@ -2003,7 +2003,7 @@ def get_interview_schedules():
             })
         
         # 查詢所有廠商的面試排程（從 vendor_preference_history 表中）
-        # 只查詢 action = 'interview' 的記錄
+        # 只查詢 interview_status = 'in interview' 的記錄（廠商新增面試排程時會記錄到此狀態）
         cursor.execute("""
             SELECT DISTINCT
                 vph.id,
@@ -2022,7 +2022,7 @@ def get_interview_schedules():
             LEFT JOIN student_preferences sp ON vph.preference_id = sp.id
             LEFT JOIN internship_companies ic ON sp.company_id = ic.id
             LEFT JOIN users su ON COALESCE(vph.student_id, sp.student_id) = su.id
-            WHERE vph.action = 'interview'
+            WHERE vph.interview_status = 'in interview'
             AND vph.comment LIKE '%面試日期：%'
             ORDER BY vph.created_at DESC
         """)
