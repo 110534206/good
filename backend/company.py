@@ -34,15 +34,28 @@ def allowed_file(filename):
 # =========================================================
 # 📄 生成實習單位基本資料表 Word 檔
 # =========================================================
+from docx import Document
+from docx.shared import Pt, Inches
+from docx.oxml import OxmlElement
+from docx.oxml.ns import qn
+from docx.enum.text import WD_ALIGN_PARAGRAPH
+from docx.enum.table import WD_CELL_VERTICAL_ALIGNMENT
+
 def generate_company_word_document(data):
     doc = Document()
 
     # --- 內部輔助：設定格式、字型、以及對齊方式 ---
-    def set_cell_format(cell, text, bold=False, alignment=WD_ALIGN_PARAGRAPH.CENTER):
+    def set_cell_format(cell, text, bold=False, alignment=WD_ALIGN_PARAGRAPH.CENTER, distribute=False):
         cell.vertical_alignment = WD_CELL_VERTICAL_ALIGNMENT.CENTER
         cell.text = ""
         p = cell.paragraphs[0]
-        p.alignment = alignment
+        
+        # 實作分散對齊效果
+        if distribute:
+            p.alignment = WD_ALIGN_PARAGRAPH.DISTRIBUTE
+        else:
+            p.alignment = alignment
+            
         p.paragraph_format.space_before = Pt(0)
         p.paragraph_format.space_after = Pt(0)
         p.paragraph_format.line_spacing = 1.0
@@ -52,19 +65,18 @@ def generate_company_word_document(data):
             run.font.name = '標楷體'
             run.font.size = Pt(12)
             run.bold = bold
+            # 確保中文字體正確套用
             rFonts = run._element.rPr.rFonts
             rFonts.set(qn('w:eastAsia'), '標楷體')
             rFonts.set(qn('w:ascii'), '標楷體')
             rFonts.set(qn('w:hAnsi'), '標楷體')
 
     def apply_table_style(table, col_widths, min_row_height=480):
-        # 1. 強制固定佈局
         tblPr = table._tbl.tblPr
         layout = OxmlElement('w:tblLayout')
         layout.set(qn('w:type'), 'fixed')
         tblPr.append(layout)
         
-        # 2. 設定邊框
         borders = OxmlElement('w:tblBorders')
         for b in ['top', 'left', 'bottom', 'right', 'insideH', 'insideV']:
             node = OxmlElement(f'w:{b}')
@@ -74,11 +86,10 @@ def generate_company_word_document(data):
             borders.append(node)
         tblPr.append(borders)
         
-        # 3. 設定每一欄的精確寬度
         for i, w in enumerate(col_widths):
-            table.columns[i].width = Inches(w)
+            if i < len(table.columns):
+                table.columns[i].width = Inches(w)
             
-        # 4. 設定每一列的最小高度 (拉高一點)
         for row in table.rows:
             tr = row._tr
             trPr = tr.get_or_add_trPr()
@@ -87,13 +98,18 @@ def generate_company_word_document(data):
             trHeight.set(qn('w:hRule'), 'atLeast') 
             trPr.append(trHeight)
 
-    # --- 頁面邊距微調 (確保 8.0 吋寬度不被切掉) ---
+    # --- 頁面設定 ---
     section = doc.sections[0]
     section.left_margin = Inches(0.25)
     section.right_margin = Inches(0.25)
 
     # --- 標題區 ---
-    for text, size, is_bold in [('康寧學校財團法人康寧大學資訊管理科', 12, False), ('實習單位基本資料表', 16, True), ('實習期間：115年2月23日至115年6月26日止', 12, False)]:
+    titles = [
+        ('康寧學校財團法人康寧大學資訊管理科', 12, False),
+        ('實習單位基本資料表', 16, True),
+        ('實習期間：115年2月23日至115年6月26日止', 12, False)
+    ]
+    for text, size, is_bold in titles:
         p = doc.add_paragraph()
         p.alignment = WD_ALIGN_PARAGRAPH.CENTER
         run = p.add_run(text)
@@ -102,20 +118,17 @@ def generate_company_word_document(data):
         run.bold = is_bold
         run._element.rPr.rFonts.set(qn('w:eastAsia'), '標楷體')
 
-    # --- 寬度設定 (總寬 8.0 英吋) ---
-    # 標籤格固定為 1.0，剩下的空間全給內容格 (3.0)
-    # [標籤 1.0, 內容 3.0, 標籤 1.0, 內容 3.0]
     STD_WIDTHS = [1.0, 3.0, 1.0, 3.0] 
 
     # --- 1. 基本資訊表格 ---
     table_rows = [
-        ('編號', data.get('serial_number', ''), '', '', True),
-        ('單位名稱', data.get('company_name', ''), '', '', True),
-        ('負責人', data.get('owner', ''), '統一編號', data.get('tax_id', ''), False),
-        ('聯絡人', data.get('contact_person', ''), '職稱', data.get('contact_title', ''), False),
-        ('聯絡電話', data.get('contact_phone', ''), '傳真', data.get('fax', ''), False),
-        ('地址', data.get('address', ''), '', '', True),
-        ('交通說明', data.get('traffic_guide', ''), '', '', True),
+        ('編 號', data.get('serial_number', ''), '', '', True),
+        ('單 位 名 稱', data.get('company_name', ''), '', '', True),
+        ('負 責 人', data.get('owner', ''), '統一編號', data.get('tax_id', ''), False),
+        ('聯 絡 人', data.get('contact_person', ''), '職 稱', data.get('contact_title', ''), False),
+        ('聯 絡 電 話', data.get('contact_phone', ''), '傳 真', data.get('fax', ''), False),
+        ('地 址', data.get('address', ''), '', '', True),
+        ('交 通 說 明', data.get('traffic_guide', ''), '', '', True),
         ('E-mail', data.get('email', ''), '', '', True),
     ]
 
@@ -124,25 +137,27 @@ def generate_company_word_document(data):
 
     for i, (l_lab, l_val, r_lab, r_val, merge) in enumerate(table_rows):
         cells = basic_table.rows[i].cells
-        set_cell_format(cells[0], l_lab, alignment=WD_ALIGN_PARAGRAPH.CENTER) # 標籤置中
+        # 標籤欄位：啟用 distribute=True
+        set_cell_format(cells[0], l_lab, distribute=True) 
+        
         if merge:
             cells[1].merge(cells[2]); cells[1].merge(cells[3])
-            set_cell_format(cells[1], l_val, alignment=WD_ALIGN_PARAGRAPH.LEFT) # 內容靠左
+            set_cell_format(cells[1], l_val, alignment=WD_ALIGN_PARAGRAPH.LEFT)
         else:
             set_cell_format(cells[1], l_val, alignment=WD_ALIGN_PARAGRAPH.LEFT)
-            set_cell_format(cells[2], r_lab, alignment=WD_ALIGN_PARAGRAPH.CENTER)
+            set_cell_format(cells[2], r_lab, distribute=True)
             set_cell_format(cells[3], r_val, alignment=WD_ALIGN_PARAGRAPH.LEFT)
 
     # --- 2. 單位簡介、營業項目、企業規模 ---
-    for lab, key in [('單位簡介', 'company_intro'), ('營業項目', 'business_scope'), ('企業規模', 'company_scale')]:
-        h = 1000 if lab == '單位簡介' else 480
+    for lab, key in [('單 位 簡 介', 'company_intro'), ('營 業 項 目', 'business_scope'), ('企 業 規 模', 'company_scale')]:
+        h = 1000 if '簡介' in lab else 480
         t = doc.add_table(rows=1, cols=4)
         apply_table_style(t, STD_WIDTHS, min_row_height=h)
         cells = t.rows[0].cells
-        set_cell_format(cells[0], lab, alignment=WD_ALIGN_PARAGRAPH.CENTER)
+        set_cell_format(cells[0], lab, distribute=True) # 標籤分散對齊
         cells[1].merge(cells[2]); cells[1].merge(cells[3])
         
-        if lab == '企業規模':
+        if '規模' in lab:
             opts = ['1000人以上', '500-999人', '100-499人', '10-99人', '10以下']
             val = data.get(key, '')
             text = ''.join([f'{"☑" if o == val else "☐"} {o}   ' for o in opts])
@@ -154,11 +169,12 @@ def generate_company_word_document(data):
     jobs = data.get('jobs', [])
     if jobs:
         jobs_table = doc.add_table(rows=len(jobs) + 1, cols=4)
-        # 分配比例：[1.0, 2.0, 4.0, 1.0] 總寬 8.0
         apply_table_style(jobs_table, [1.0, 2.0, 4.0, 1.0])
-        headers = ['工作編號', '工作項目', '需求條件/工作內容', '名額']
+        headers = ['工 作 編 號', '工 作 項 目', '需求條件/工作內容', '名 額']
         for i, h in enumerate(headers):
-            set_cell_format(jobs_table.rows[0].cells[i], h, alignment=WD_ALIGN_PARAGRAPH.CENTER)
+            # 表頭標題通常也建議分散或置中
+            set_cell_format(jobs_table.rows[0].cells[i], h, distribute=True)
+            
         for idx, job in enumerate(jobs, 1):
             row = jobs_table.rows[idx].cells
             set_cell_format(row[0], str(idx), alignment=WD_ALIGN_PARAGRAPH.CENTER)
@@ -170,23 +186,19 @@ def generate_company_word_document(data):
     final_table = doc.add_table(rows=2, cols=4)
     apply_table_style(final_table, STD_WIDTHS)
     
-    # 待遇
-    cells_comp = final_table.rows[0].cells
-    set_cell_format(cells_comp[0], '待遇', alignment=WD_ALIGN_PARAGRAPH.CENTER)
-    cells_comp[1].merge(cells_comp[2]); cells_comp[1].merge(cells_comp[3])
-    comp_selected = data.get('compensation', [])
-    comp_text = ''.join([f'{"☑" if o in comp_selected else "☐"} {o}   ' for o in ['月薪', '時薪', '獎金(津貼)', '無']])
-    set_cell_format(cells_comp[1], comp_text, alignment=WD_ALIGN_PARAGRAPH.LEFT)
-
-    # 來源
-    cells_src = final_table.rows[1].cells
-    set_cell_format(cells_src[0], '來源', alignment=WD_ALIGN_PARAGRAPH.CENTER)
-    cells_src[1].merge(cells_src[2]); cells_src[1].merge(cells_src[3])
-    src_selected = data.get('source', [])
-    src_text = ''.join([f'{"☑" if o in src_selected else "☐"} {o}   ' for o in ['廠商申請', '老師推薦', '學生申請', '其它']])
-    if '其它' in src_selected and data.get('source_other_text'):
-        src_text += f'（{data.get("source_other_text")}）'
-    set_cell_format(cells_src[1], src_text, alignment=WD_ALIGN_PARAGRAPH.LEFT)
+    for row_idx, (lab, key_list, opts) in enumerate([
+        ('待 遇', 'compensation', ['月薪', '時薪', '獎金(津貼)', '無']),
+        ('來 源', 'source', ['廠商申請', '老師推薦', '學生申請', '其它'])
+    ]):
+        cells = final_table.rows[row_idx].cells
+        set_cell_format(cells[0], lab, distribute=True)
+        cells[1].merge(cells[2]); cells[1].merge(cells[3])
+        
+        selected = data.get(key_list, [])
+        text = ''.join([f'{"☑" if o in selected else "☐"} {o}   ' for o in opts])
+        if lab == '來 源' and '其它' in selected and data.get('source_other_text'):
+            text += f'（{data.get("source_other_text")}）'
+        set_cell_format(cells[1], text, alignment=WD_ALIGN_PARAGRAPH.LEFT)
 
     return doc
 # =========================================================
