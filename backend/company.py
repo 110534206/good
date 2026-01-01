@@ -53,8 +53,12 @@ def generate_company_word_document(data):
         # 實作分散對齊效果
         if distribute:
             p.alignment = WD_ALIGN_PARAGRAPH.DISTRIBUTE
+            # 標籤格微調左右邊距
+            p.paragraph_format.left_indent = Pt(5)
+            p.paragraph_format.right_indent = Pt(5)
         else:
             p.alignment = alignment
+            p.paragraph_format.left_indent = Pt(6)
             
         p.paragraph_format.space_before = Pt(0)
         p.paragraph_format.space_after = Pt(0)
@@ -65,7 +69,6 @@ def generate_company_word_document(data):
             run.font.name = '標楷體'
             run.font.size = Pt(12)
             run.bold = bold
-            # 確保中文字體正確套用
             rFonts = run._element.rPr.rFonts
             rFonts.set(qn('w:eastAsia'), '標楷體')
             rFonts.set(qn('w:ascii'), '標楷體')
@@ -100,8 +103,8 @@ def generate_company_word_document(data):
 
     # --- 頁面設定 ---
     section = doc.sections[0]
-    section.left_margin = Inches(0.25)
-    section.right_margin = Inches(0.25)
+    section.left_margin = Inches(0.45) # 稍微縮減邊距以容納 7.6 吋表格
+    section.right_margin = Inches(0.45)
 
     # --- 標題區 ---
     titles = [
@@ -118,7 +121,8 @@ def generate_company_word_document(data):
         run.bold = is_bold
         run._element.rPr.rFonts.set(qn('w:eastAsia'), '標楷體')
 
-    STD_WIDTHS = [1.0, 3.0, 1.0, 3.0] 
+    # 總寬度 7.6 吋分配：1.1 + 2.7 + 1.1 + 2.7 = 7.6
+    STD_WIDTHS = [1.1, 2.7, 1.1, 2.7] 
 
     # --- 1. 基本資訊表格 ---
     table_rows = [
@@ -137,7 +141,6 @@ def generate_company_word_document(data):
 
     for i, (l_lab, l_val, r_lab, r_val, merge) in enumerate(table_rows):
         cells = basic_table.rows[i].cells
-        # 標籤欄位：啟用 distribute=True
         set_cell_format(cells[0], l_lab, distribute=True) 
         
         if merge:
@@ -154,7 +157,7 @@ def generate_company_word_document(data):
         t = doc.add_table(rows=1, cols=4)
         apply_table_style(t, STD_WIDTHS, min_row_height=h)
         cells = t.rows[0].cells
-        set_cell_format(cells[0], lab, distribute=True) # 標籤分散對齊
+        set_cell_format(cells[0], lab, distribute=True)
         cells[1].merge(cells[2]); cells[1].merge(cells[3])
         
         if '規模' in lab:
@@ -169,10 +172,10 @@ def generate_company_word_document(data):
     jobs = data.get('jobs', [])
     if jobs:
         jobs_table = doc.add_table(rows=len(jobs) + 1, cols=4)
-        apply_table_style(jobs_table, [1.0, 2.0, 4.0, 1.0])
+        # 7.6 吋重新分配：1.1, 1.8, 3.6, 1.1
+        apply_table_style(jobs_table, [1.1, 1.8, 3.6, 1.1])
         headers = ['工 作 編 號', '工 作 項 目', '需求條件/工作內容', '名 額']
         for i, h in enumerate(headers):
-            # 表頭標題通常也建議分散或置中
             set_cell_format(jobs_table.rows[0].cells[i], h, distribute=True)
             
         for idx, job in enumerate(jobs, 1):
@@ -199,7 +202,7 @@ def generate_company_word_document(data):
         if lab == '來 源' and '其它' in selected and data.get('source_other_text'):
             text += f'（{data.get("source_other_text")}）'
         set_cell_format(cells[1], text, alignment=WD_ALIGN_PARAGRAPH.LEFT)
-
+ 
     return doc
 # =========================================================
 # 📥 下載公司上傳範本
