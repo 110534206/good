@@ -3140,15 +3140,28 @@ def review_resume(resume_id):
         if user_role == 'teacher':
             # 指導老師審核：更新 teacher_review_status 欄位
             old_status_for_check = old_teacher_review_status
-            cursor.execute("""
-                UPDATE resumes SET 
-                    teacher_review_status=%s, 
-                    comment=%s,
-                    reviewed_by=%s,
-                    reviewed_at=NOW(),
-                    updated_at=NOW()
-                WHERE id=%s
-            """, (status, comment, user_id, resume_id))
+            # 當指導老師通過時，同時更新 status 為 'approved'，確保廠商 API 能正確顯示
+            if status == 'approved':
+                cursor.execute("""
+                    UPDATE resumes SET 
+                        teacher_review_status=%s,
+                        status=%s,
+                        comment=%s,
+                        reviewed_by=%s,
+                        reviewed_at=NOW(),
+                        updated_at=NOW()
+                    WHERE id=%s
+                """, (status, 'approved', comment, user_id, resume_id))
+            else:
+                cursor.execute("""
+                    UPDATE resumes SET 
+                        teacher_review_status=%s, 
+                        comment=%s,
+                        reviewed_by=%s,
+                        reviewed_at=NOW(),
+                        updated_at=NOW()
+                    WHERE id=%s
+                """, (status, comment, user_id, resume_id))
         else:
             # 班導、主任等其他角色：更新 status 欄位（班導/主任的審核狀態）
             old_status_for_check = old_status
@@ -3255,6 +3268,79 @@ def review_resume(resume_id):
                 elif user_role == 'teacher':
                     # 指導老師通過履歷：該履歷會同步到廠商審核頁面
                     print(f"✅ 指導老師通過履歷，該履歷將同步到廠商審核頁面")
+                    
+                    # 🎯 記錄到 vendor_preference_history 表
+                    # 查找該學生相關的所有志願序（preference_id）
+                    preference_id_param = data.get('preference_id')
+                    
+                    if preference_id_param:
+                        # 如果提供了 preference_id，只記錄該志願序
+                        preference_ids = [preference_id_param]
+                    else:
+                        # 如果沒有提供 preference_id，查找該學生所有已通過的志願序
+                        cursor.execute("""
+                            SELECT id FROM student_preferences 
+                            WHERE student_id = %s 
+                            AND status = 'approved'
+                        """, (student_user_id,))
+                        preference_rows = cursor.fetchall()
+                        preference_ids = [row['id'] for row in preference_rows]
+                    
+                    # 確保 vendor_preference_history 表存在
+                    try:
+                        cursor.execute("""
+                            SELECT COUNT(*) as count
+                            FROM information_schema.tables
+                            WHERE table_schema = DATABASE()
+                            AND table_name = 'vendor_preference_history'
+                        """)
+                        table_exists = cursor.fetchone().get('count', 0) > 0
+                        
+                        if not table_exists:
+                            # 如果表不存在，創建表（簡化版本，不包含所有欄位）
+                            cursor.execute("""
+                                CREATE TABLE IF NOT EXISTS vendor_preference_history (
+                                    id INT AUTO_INCREMENT PRIMARY KEY,
+                                    preference_id INT NOT NULL,
+                                    student_id INT,
+                                    reviewer_id INT NOT NULL,
+                                    interview_status ENUM('not yet', 'in interview', 'done') NOT NULL DEFAULT 'not yet',
+                                    comment TEXT,
+                                    created_at DATETIME NOT NULL,
+                                    INDEX idx_vph_preference (preference_id),
+                                    INDEX idx_vph_student (student_id),
+                                    INDEX idx_vph_reviewer (reviewer_id)
+                                )
+                            """)
+                            print("✅ 已創建 vendor_preference_history 表")
+                    except Exception as e:
+                        print(f"⚠️ 檢查/創建 vendor_preference_history 表時發生錯誤: {e}")
+                    
+                    # 為每個 preference_id 記錄審核歷史
+                    for pref_id in preference_ids:
+                        try:
+                            # 獲取該志願序的 student_id（如果沒有從參數中獲取）
+                            cursor.execute("SELECT student_id FROM student_preferences WHERE id = %s", (pref_id,))
+                            pref_row = cursor.fetchone()
+                            pref_student_id = pref_row['student_id'] if pref_row else student_user_id
+                            
+                            # 記錄到 vendor_preference_history
+                            # 使用 'not yet' 作為 interview_status（因為這是審核操作，不是面試操作）
+                            # 在 comment 中記錄審核信息
+                            review_comment = f"指導老師 {reviewer_name} 已通過審核"
+                            if comment:
+                                review_comment += f"：{comment}"
+                            
+                            cursor.execute("""
+                                INSERT INTO vendor_preference_history
+                                    (preference_id, student_id, reviewer_id, interview_status, comment, created_at)
+                                VALUES (%s, %s, %s, 'not yet', %s, NOW())
+                            """, (pref_id, pref_student_id, user_id, review_comment))
+                            
+                            print(f"✅ 已記錄指導老師審核通過到 vendor_preference_history (preference_id: {pref_id}, reviewer_id: {user_id})")
+                        except Exception as e:
+                            print(f"⚠️ 記錄到 vendor_preference_history 失敗 (preference_id: {pref_id}): {e}")
+                            # 繼續處理其他 preference_id，不中斷流程
 
         conn.commit()
 
