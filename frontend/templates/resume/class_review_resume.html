@@ -119,6 +119,7 @@
               <th style="padding: 14px 16px; font-weight: 600;">檔案名稱</th>
               <th style="padding: 14px 16px; font-weight: 600;">選擇公司</th>
               <th style="padding: 14px 16px; font-weight: 600;">職缺</th>
+              <th style="padding: 14px 16px; font-weight: 600;">狀態</th>
               <th style="padding: 14px 16px; font-weight: 600;">操作</th>
             </tr>
           </thead>
@@ -349,7 +350,7 @@
       const tbody = document.getElementById("resumeTableBody");
       tbody.innerHTML = "";
       if (resumes.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; color: #64748b; padding: 16px;">目前沒有資料</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; color: #64748b; padding: 16px;">目前沒有資料</td></tr>`;
         document.getElementById("pagination").innerHTML = "";
         return;
       }
@@ -385,6 +386,9 @@
            <td style="padding: 14px 16px; max-width: 200px; overflow: hidden; text-overflow: ellipsis;">${escapeHtml(row.original_filename)}</td>
            <td style="padding: 14px 16px;">${escapeHtml(row.display_company)}</td>
            <td style="padding: 14px 16px;">${escapeHtml(row.display_job)}</td>
+           <td style="padding: 14px 16px;">
+             <span class="status-badge bg-${statusColor(row.display_status)}">${mapStatus(row.display_status)}</span>
+           </td>
            <td style="padding: 14px 16px;">
              <div style="display: flex; gap: 4px; flex-wrap: wrap;">
                <a href="/api/download_resume/${row.id}" class="btn btn-sm btn-outline-primary" target="_blank">下載</a>
