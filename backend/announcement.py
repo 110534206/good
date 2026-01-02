@@ -60,6 +60,45 @@ def manage_announcements():
         return "未授權", 403
     return render_template("user_shared/manage_announcements.html")
 
+# --- API：獲取單個公告詳情 ---
+@announcement_bp.route("/api/get/<int:ann_id>", methods=["GET"])
+def get_announcement(ann_id):
+    """獲取單個公告的詳細信息"""
+    try:
+        conn = get_db()
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute("SELECT * FROM announcement WHERE id = %s", (ann_id,))
+        row = cursor.fetchone()
+        
+        if not row:
+            cursor.close()
+            conn.close()
+            return jsonify({"success": False, "message": "找不到該公告"}), 404
+        
+        # 格式化時間
+        if row.get('start_time'):
+            if isinstance(row['start_time'], datetime):
+                row['start_time'] = row['start_time'].strftime('%Y-%m-%d %H:%M:%S')
+            else:
+                row['start_time'] = str(row['start_time'])
+        if row.get('end_time'):
+            if isinstance(row['end_time'], datetime):
+                row['end_time'] = row['end_time'].strftime('%Y-%m-%d %H:%M:%S')
+            else:
+                row['end_time'] = str(row['end_time'])
+        if row.get('created_at'):
+            if isinstance(row['created_at'], datetime):
+                row['created_at'] = row['created_at'].strftime('%Y-%m-%d %H:%M:%S')
+            else:
+                row['created_at'] = str(row['created_at'])
+        
+        cursor.close()
+        conn.close()
+        return jsonify({"success": True, "data": row})
+    except Exception:
+        traceback.print_exc()
+        return jsonify({"success": False, "message": "載入失敗"}), 500
+
 # --- API：列出公告並自動檢查預約發布 ---
 @announcement_bp.route("/api/list", methods=["GET"])
 def list_announcements():
@@ -117,12 +156,11 @@ def create_announcement():
         """, (title, content, start_time, end_time, is_published, get_taiwan_time()))
         
         ann_id = cursor.lastrowid
-        conn.commit()
+        conn.commit()  # 先提交公告，確保公告已存在
 
-        # 【同步通知】儲存後若符合發布條件，立即發布到通知頁面
-        now_tw = get_taiwan_time()
-        start_dt = datetime.strptime(start_time, '%Y-%m-%d %H:%M') if start_time else now_tw
-        if is_published and now_tw >= start_dt:
+        # 【同步通知】如果已發布，立即同步到通知頁面（不等待時間）
+        # 這樣可以確保公告創建後立即出現在通知列表中
+        if is_published:
             push_announcement_notifications(conn, title, content, ann_id)
 
         cursor.close()
@@ -155,15 +193,8 @@ def update_announcement(ann_id):
         
         conn.commit()
 
-        # 如果更新後狀態為「已發布」且時間已到，同樣觸發推送通知邏輯
-        now_tw = get_taiwan_time()
-        # 轉換時間格式以進行比較
-        try:
-            start_dt = datetime.strptime(start_time, '%Y-%m-%d %H:%M') if start_time else now_tw
-        except:
-            start_dt = now_tw # 防錯處理
-
-        if is_published and now_tw >= start_dt:
+        # 【同步通知】如果更新後狀態為「已發布」，立即同步到通知頁面
+        if is_published:
             push_announcement_notifications(conn, title, content, ann_id)
 
         cursor.close()
@@ -198,26 +229,33 @@ def delete_announcement(ann_id):
         return jsonify({"success": False, "message": "刪除失敗"}), 500
 # --- 核心函式：發布通知到通知頁面 ---
 def push_announcement_notifications(conn, title, content, ann_id):
-    """將公告推送到 notifications 資料表"""
+    """將公告推送到 notifications 資料表（確保所有用戶都有對應的通知記錄）"""
     try:
         cursor = conn.cursor(dictionary=True)
         link_url = f"/view_announcement/{ann_id}"
-        
-        # 避免重複發送
-        cursor.execute("SELECT 1 FROM notifications WHERE link_url = %s AND category = 'announcement' LIMIT 1", (link_url,))
-        if cursor.fetchone():
-            return
-
-        cursor.execute("SELECT id FROM users")
-        users = cursor.fetchall() or []
         now = get_taiwan_time()
         
+        # 獲取所有用戶
+        cursor.execute("SELECT id FROM users")
+        users = cursor.fetchall() or []
+        
+        # 為每個用戶創建通知記錄（如果還不存在）
         for u in users:
             uid = u['id'] if isinstance(u, dict) else u[0]
+            
+            # 檢查該用戶是否已有此公告的通知記錄
             cursor.execute("""
-                INSERT INTO notifications (user_id, title, message, category, link_url, is_read, created_at)
-                VALUES (%s, %s, %s, %s, %s, 0, %s)
-            """, (uid, f"公告：{title}", content[:50], "announcement", link_url, now))
+                SELECT id FROM notifications 
+                WHERE user_id = %s AND link_url = %s
+            """, (uid, link_url))
+            
+            if not cursor.fetchone():
+                # 如果不存在，創建新通知
+                cursor.execute("""
+                    INSERT INTO notifications (user_id, title, message, category, link_url, is_read, created_at)
+                    VALUES (%s, %s, %s, %s, %s, 0, %s)
+                """, (uid, f"公告：{title}", content[:200] if content else "", "announcement", link_url, now))
+        
         conn.commit()
     except Exception:
         traceback.print_exc()
@@ -314,8 +352,9 @@ def save_deadlines():
                 VALUES (%s, %s, %s, %s, %s, %s, %s)
             """, (title, content, start_dt, end_dt, 1, created_by, now))
             ann_id = cursor.lastrowid
+            conn.commit()  # 先提交公告，確保公告已存在
             
-            # 發送通知給所有學生
+            # 發送通知給所有學生（會為所有用戶創建通知記錄）
             push_announcement_notifications(conn, title, content, ann_id)
         
         # 處理履歷上傳截止時間
@@ -344,11 +383,10 @@ def save_deadlines():
                 VALUES (%s, %s, %s, %s, %s, %s, %s)
             """, (title, content, start_dt, end_dt, 1, created_by, now))
             ann_id = cursor.lastrowid
+            conn.commit()  # 先提交公告，確保公告已存在
             
-            # 發送通知給所有學生
+            # 發送通知給所有學生（會為所有用戶創建通知記錄）
             push_announcement_notifications(conn, title, content, ann_id)
-        
-        conn.commit()
         cursor.close()
         conn.close()
         

@@ -114,38 +114,96 @@ def get_my_notifications():
         conn = get_db()
         cursor = conn.cursor(dictionary=True)
         
-        # 根據是否有 category 篩選來構建查詢
+        # 1. 讀取 notifications 表的通知（公告已經自動同步到這裡）
+        # 同時獲取公告的 start_time（如果是公告類別）
         if category_filter and category_filter != "all":
             cursor.execute("""
-                SELECT id, title, message, category, link_url, is_read, created_at
-                FROM notifications
-                WHERE user_id = %s AND category = %s
-                ORDER BY created_at DESC
+                SELECT n.id, n.title, n.message, n.category, n.link_url, n.is_read, n.created_at,
+                       a.start_time
+                FROM notifications n
+                LEFT JOIN announcement a ON n.link_url = CONCAT('/view_announcement/', a.id)
+                WHERE n.user_id = %s AND n.category = %s
+                ORDER BY n.created_at DESC
             """, (user_id, category_filter))
         else:
             cursor.execute("""
-                SELECT id, title, message, category, link_url, is_read, created_at
-                FROM notifications
-                WHERE user_id = %s
-                ORDER BY created_at DESC
+                SELECT n.id, n.title, n.message, n.category, n.link_url, n.is_read, n.created_at,
+                       a.start_time
+                FROM notifications n
+                LEFT JOIN announcement a ON n.link_url = CONCAT('/view_announcement/', a.id)
+                WHERE n.user_id = %s
+                ORDER BY n.created_at DESC
             """, (user_id,))
         
-        rows = cursor.fetchall()
+        notification_rows = cursor.fetchall()
         
-        # 為每個通知動態計算分類並格式化時間
-        for row in rows:
-            row["category"] = _detect_category(row.get("title"), row.get("message"))
+        # 2. 檢查是否有遺漏的公告（已發布但還沒同步到 notifications 表）
+        # 包括未開始的公告（用於「狀態」類別顯示）
+        # 注意：這裡不限制 start_time，因為未開始的公告也需要顯示在「狀態」類別中
+        now = datetime.now()
+        cursor.execute("""
+            SELECT a.id, a.title, a.content, a.start_time, a.created_at
+            FROM announcement a
+            WHERE a.is_published = 1
+            AND (a.end_time IS NULL OR a.end_time >= %s)
+            AND NOT EXISTS (
+                SELECT 1 FROM notifications n 
+                WHERE n.user_id = %s 
+                AND n.link_url = CONCAT('/view_announcement/', a.id)
+            )
+            ORDER BY a.created_at DESC
+        """, (now, user_id))
+        
+        missing_announcements = cursor.fetchall()
+        
+        # 3. 將遺漏的公告轉換為通知格式（補充）
+        announcement_notifications = []
+        for ann in missing_announcements:
+            link_url = f"/view_announcement/{ann['id']}"
+            
+            # 格式化時間
+            created_at = ann.get('created_at')
+            if isinstance(created_at, datetime):
+                created_at_str = created_at.strftime("%Y-%m-%d %H:%M:%S")
+            else:
+                created_at_str = str(created_at) if created_at else ""
+            
+            # 格式化 start_time
+            start_time = ann.get('start_time')
+            if isinstance(start_time, datetime):
+                start_time_str = start_time.strftime("%Y-%m-%d %H:%M:%S")
+            elif start_time:
+                start_time_str = str(start_time)
+            else:
+                start_time_str = None
+            
+            announcement_notifications.append({
+                "id": f"ann_{ann['id']}",  # 使用特殊前綴避免與 notifications 表的 id 衝突
+                "title": f"公告：{ann['title']}",
+                "message": ann.get('content', '')[:200],  # 限制長度
+                "category": "announcement",
+                "link_url": link_url,
+                "is_read": False,  # 遺漏的公告預設為未讀
+                "created_at": created_at_str,
+                "start_time": start_time_str  # 添加 start_time
+            })
+        
+        # 4. 合併兩個列表（主要從 notifications 表，補充遺漏的公告）
+        all_rows = list(notification_rows) + announcement_notifications
+        
+        # 6. 為每個通知動態計算分類並格式化時間
+        for row in all_rows:
+            # 如果沒有 category，則自動檢測
+            if not row.get("category"):
+                row["category"] = _detect_category(row.get("title"), row.get("message"))
             
             # 格式化 created_at 時間（確保正確顯示）
             created_at = row.get("created_at")
             if isinstance(created_at, datetime):
-                # 直接格式化為字串，不進行時區轉換（假設資料庫已儲存為正確時間）
                 row["created_at"] = created_at.strftime("%Y-%m-%d %H:%M:%S")
             elif created_at:
-                # 如果是字串，嘗試解析並格式化
                 try:
                     if isinstance(created_at, str):
-                        # 嘗試解析各種可能的時間格式
                         if 'T' in created_at:
                             parsed = datetime.fromisoformat(created_at.replace('Z', '+00:00'))
                         else:
@@ -157,8 +215,34 @@ def get_my_notifications():
                     row["created_at"] = str(created_at)
             else:
                 row["created_at"] = ""
+            
+            # 格式化 start_time（如果是公告）
+            start_time = row.get("start_time")
+            if isinstance(start_time, datetime):
+                row["start_time"] = start_time.strftime("%Y-%m-%d %H:%M:%S")
+            elif start_time:
+                try:
+                    if isinstance(start_time, str):
+                        if 'T' in start_time:
+                            parsed = datetime.fromisoformat(start_time.replace('Z', '+00:00'))
+                        else:
+                            parsed = datetime.strptime(start_time, '%Y-%m-%d %H:%M:%S')
+                        row["start_time"] = parsed.strftime("%Y-%m-%d %H:%M:%S")
+                    else:
+                        row["start_time"] = str(start_time)
+                except:
+                    row["start_time"] = str(start_time) if start_time else None
+            else:
+                row["start_time"] = None
         
-        return jsonify({"success": True, "notifications": rows})
+        # 7. 按時間排序（最新的在前）
+        all_rows.sort(key=lambda x: x.get("created_at", ""), reverse=True)
+        
+        # 8. 如果有類別篩選，再次過濾
+        if category_filter and category_filter != "all":
+            all_rows = [row for row in all_rows if row.get("category") == category_filter]
+        
+        return jsonify({"success": True, "notifications": all_rows})
     except Exception:
         traceback.print_exc()
         return jsonify({"success": False, "message": "讀取通知失敗"}), 500
@@ -166,7 +250,7 @@ def get_my_notifications():
         cursor.close()
         conn.close()
 
-@notification_bp.route("/api/mark_read/<int:nid>", methods=["POST"])
+@notification_bp.route("/api/mark_read/<nid>", methods=["POST"])
 def mark_read(nid):
     user_id = session.get("user_id")
     if not user_id:
@@ -174,12 +258,51 @@ def mark_read(nid):
     try:
         conn = get_db()
         cursor = conn.cursor()
-        cursor.execute("UPDATE notifications SET is_read=1 WHERE id=%s AND user_id=%s", (nid, user_id))
-        conn.commit()
+        
+        # 處理從 announcement 表轉換來的通知（格式：ann_xxx）
+        if str(nid).startswith("ann_"):
+            ann_id = str(nid).replace("ann_", "")
+            link_url = f"/view_announcement/{ann_id}"
+            
+            # 查找該用戶是否已有對應的通知記錄
+            cursor.execute("""
+                SELECT id FROM notifications 
+                WHERE user_id = %s AND link_url = %s
+            """, (user_id, link_url))
+            existing = cursor.fetchone()
+            
+            if existing:
+                # 如果存在，更新為已讀
+                cursor.execute("UPDATE notifications SET is_read=1 WHERE id=%s AND user_id=%s", 
+                             (existing[0], user_id))
+            else:
+                # 如果不存在，創建新的通知記錄並標記為已讀
+                cursor.execute("""
+                    SELECT title, content FROM announcement WHERE id = %s
+                """, (ann_id,))
+                ann_data = cursor.fetchone()
+                if ann_data:
+                    title = f"公告：{ann_data[0]}"
+                    message = ann_data[1][:200] if ann_data[1] else ""
+                    cursor.execute("""
+                        INSERT INTO notifications (user_id, title, message, category, link_url, is_read, created_at)
+                        VALUES (%s, %s, %s, %s, %s, 1, NOW())
+                    """, (user_id, title, message, "announcement", link_url))
+            conn.commit()
+        else:
+            # 處理正常的通知 ID
+            try:
+                nid_int = int(nid)
+                cursor.execute("UPDATE notifications SET is_read=1 WHERE id=%s AND user_id=%s", 
+                             (nid_int, user_id))
+                conn.commit()
+            except ValueError:
+                return jsonify({"success": False, "message": "無效的通知ID"}), 400
+        
         return jsonify({"success": True, "message": "已標記為已讀"})
-    except Exception:
+    except Exception as e:
         traceback.print_exc()
-        return jsonify({"success": False, "message": "更新失敗"}), 500
+        return jsonify({"success": False, "message": f"更新失敗：{str(e)}"}), 500
     finally:
         cursor.close()
         conn.close()
