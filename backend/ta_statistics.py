@@ -1964,17 +1964,6 @@ def manage_students():
     return render_template('user_shared/manage_students.html')               
 
 # --------------------------------
-# 面試排程頁面
-# --------------------------------
-@ta_statistics_bp.route('/interview_schedule')
-def interview_schedule():
-    # 權限檢查：允許 ta, admin 訪問
-    if 'user_id' not in session or session.get('role') not in ['ta', 'admin']:
-        from flask import redirect, url_for
-        return redirect(url_for('auth_bp.login_page'))
-    return render_template('user_shared/interview_schedule.html')
-
-# --------------------------------
 # API: 獲取所有面試排程（從 vendor_preference_history）
 # --------------------------------
 @ta_statistics_bp.route('/api/interview_schedules', methods=['GET'])
@@ -2100,6 +2089,86 @@ def get_interview_schedules():
     except Exception as exc:
         traceback.print_exc()
         return jsonify({"success": False, "message": f"獲取面試排程失敗：{exc}"}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+# --------------------------------
+# API: 獲取志願序和履歷截止時間
+# --------------------------------
+@ta_statistics_bp.route('/api/deadlines', methods=['GET'])
+def get_deadlines():
+    """獲取志願序和履歷的截止時間（用於面試排程頁面顯示）"""
+    if 'user_id' not in session or session.get('role') not in ['ta', 'admin']:
+        return jsonify({"success": False, "message": "未授權"}), 403
+    
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+    
+    try:
+        # 查詢志願序截止時間（最新的公告）
+        cursor.execute("""
+            SELECT end_time 
+            FROM announcement 
+            WHERE title LIKE '[作業]%填寫志願序截止時間' AND is_published = 1
+            ORDER BY created_at DESC 
+            LIMIT 1
+        """)
+        preference_result = cursor.fetchone()
+        
+        # 查詢履歷截止時間（最新的公告）
+        cursor.execute("""
+            SELECT end_time 
+            FROM announcement 
+            WHERE title LIKE '[作業]%上傳履歷截止時間' AND is_published = 1
+            ORDER BY created_at DESC 
+            LIMIT 1
+        """)
+        resume_result = cursor.fetchone()
+        
+        # 格式化日期和時間
+        preference_deadline_date = None
+        preference_deadline_time = None
+        resume_deadline_date = None
+        resume_deadline_time = None
+        
+        if preference_result and preference_result.get('end_time'):
+            deadline = preference_result['end_time']
+            if isinstance(deadline, datetime):
+                deadline_dt = deadline
+            else:
+                # 如果是字符串，解析
+                try:
+                    deadline_dt = datetime.strptime(str(deadline), '%Y-%m-%d %H:%M:%S')
+                except:
+                    deadline_dt = datetime.strptime(str(deadline), '%Y-%m-%d %H:%M')
+            preference_deadline_date = deadline_dt.strftime('%Y-%m-%d')
+            preference_deadline_time = deadline_dt.strftime('%H:%M')
+        
+        if resume_result and resume_result.get('end_time'):
+            deadline = resume_result['end_time']
+            if isinstance(deadline, datetime):
+                deadline_dt = deadline
+            else:
+                # 如果是字符串，解析
+                try:
+                    deadline_dt = datetime.strptime(str(deadline), '%Y-%m-%d %H:%M:%S')
+                except:
+                    deadline_dt = datetime.strptime(str(deadline), '%Y-%m-%d %H:%M')
+            resume_deadline_date = deadline_dt.strftime('%Y-%m-%d')
+            resume_deadline_time = deadline_dt.strftime('%H:%M')
+        
+        return jsonify({
+            "success": True,
+            "preference_deadline_date": preference_deadline_date,
+            "preference_deadline_time": preference_deadline_time,
+            "resume_deadline_date": resume_deadline_date,
+            "resume_deadline_time": resume_deadline_time
+        })
+    
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"success": False, "message": f"獲取截止時間失敗：{str(e)}"}), 500
     finally:
         cursor.close()
         conn.close()

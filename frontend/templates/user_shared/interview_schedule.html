@@ -232,7 +232,7 @@
 </head>
 
 <body class="p-0">
-  <header>面試排程</header>
+  <header>行事曆</header>
   <div class="top-bar-left">
     <div id="menu-btn" title="選單" role="button" tabindex="0">
       <span></span><span></span><span></span>
@@ -249,7 +249,8 @@
     <a href="/profile">個人資料</a>
     <a href="/announcement/manage_announcements">公告管理</a>
     <a href="/ta/statistics/manage_companies">實習廠商管理</a>
-    <a href="/final_results">志願序結果</a>
+    <a href="/ta/interview_schedule">行事曆</a>
+    <a href="/final_results">媒合結果確認</a>
     <a href="/notifications">通知</a>
     <a href="/admin/absence_default_range">缺勤預設學期範圍設定</a>
     <a href="/ta/upload_standard_courses">專業核心科目管理</a>
@@ -259,15 +260,7 @@
   <div class="container-fluid p-0">
     <div class="main-content">
       <div class="p-4">
-        <div class="mb-4">
-          <div class="d-flex gap-2 justify-content-center">
-            <a href="/approve_company" class="btn btn-danger">審核公司</a>
-            <a href="/ta/statistics/manage_students" class="btn btn-warning">學生管理</a>
-            <a href="/ta/statistics/interview_schedule" class="btn btn-info">面試排程</a>
-          </div>
-        </div>
-
-        <!-- 面試排程內容區域 -->
+        <!-- 行事曆內容區域 -->
         <div class="mb-4">
           <div class="card shadow-sm">
             <div class="card-body p-4">
@@ -341,6 +334,11 @@
     const interviewSchedules = new Map();
     // 存儲所有廠商的面試排程（用於顯示其他廠商已預約的時間）
     const allVendorSchedules = new Map();
+    // 存儲截止時間
+    let preferenceDeadlineDate = null;  // 填寫志願序截止日期
+    let preferenceDeadlineTime = null;  // 填寫志願序截止時間
+    let resumeDeadlineDate = null;  // 上傳履歷截止日期
+    let resumeDeadlineTime = null;  // 上傳履歷截止時間
 
     // 從後端載入所有廠商的面試排程
     async function loadAllVendorSchedules() {
@@ -375,6 +373,28 @@
         }
       } catch (err) {
         console.error('載入所有廠商面試排程失敗:', err);
+      }
+    }
+
+    // 載入截止時間
+    async function loadDeadlines() {
+      try {
+        const res = await fetch('/ta/statistics/api/deadlines');
+        const data = await res.json();
+        if (data.success) {
+          preferenceDeadlineDate = data.preference_deadline_date;
+          preferenceDeadlineTime = data.preference_deadline_time;
+          resumeDeadlineDate = data.resume_deadline_date;
+          resumeDeadlineTime = data.resume_deadline_time;
+          console.log('✅ 已載入截止時間:', { 
+            preferenceDeadlineDate, 
+            preferenceDeadlineTime,
+            resumeDeadlineDate, 
+            resumeDeadlineTime 
+          });
+        }
+      } catch (err) {
+        console.error('載入截止時間失敗:', err);
       }
     }
 
@@ -459,6 +479,45 @@
         const dateKey = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
         const hasOwnInterview = interviewSchedules.has(dateKey);
         const hasOtherVendorInterviews = allVendorSchedules.has(dateKey);
+        
+        // 檢查是否為截止時間
+        const isPreferenceDeadline = preferenceDeadlineDate === dateKey;
+        const isResumeDeadline = resumeDeadlineDate === dateKey;
+        
+        // 顯示截止時間標記
+        if (isPreferenceDeadline || isResumeDeadline) {
+          const deadlineBadge = document.createElement("div");
+          deadlineBadge.style.cssText = `
+            font-size: 0.7rem;
+            color: #fff;
+            background-color: #dc3545;
+            padding: 2px 6px;
+            border-radius: 4px;
+            margin-top: 4px;
+            display: inline-block;
+            width: 100%;
+            margin-bottom: 2px;
+            font-weight: 600;
+          `;
+          if (isPreferenceDeadline && isResumeDeadline) {
+            // 兩個截止時間都在同一天
+            const timeText = preferenceDeadlineTime && resumeDeadlineTime 
+              ? `${preferenceDeadlineTime}/${resumeDeadlineTime}`
+              : preferenceDeadlineTime || resumeDeadlineTime || '';
+            deadlineBadge.textContent = timeText 
+              ? `志願序/履歷截止 ${timeText}`
+              : '志願序/履歷截止';
+          } else if (isPreferenceDeadline) {
+            deadlineBadge.textContent = preferenceDeadlineTime 
+              ? `志願序截止 ${preferenceDeadlineTime}`
+              : '志願序截止';
+          } else if (isResumeDeadline) {
+            deadlineBadge.textContent = resumeDeadlineTime 
+              ? `履歷截止 ${resumeDeadlineTime}`
+              : '履歷截止';
+          }
+          dateCell.appendChild(deadlineBadge);
+        }
         
         // 顯示所有面試排程（從資料庫載入的資料）
         if (hasOtherVendorInterviews) {
@@ -618,6 +677,8 @@
 
     // 初始化行事曆
     document.addEventListener('DOMContentLoaded', async function() {
+      // 載入截止時間
+      await loadDeadlines();
       // 載入所有廠商的面試排程
       await loadAllVendorSchedules();
       // 渲染行事曆
