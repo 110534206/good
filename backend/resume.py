@@ -2943,20 +2943,16 @@ def get_director_department(cursor, user_id):
         print(f"Error fetching director department: {e}")
         return None
 
-
-@resume_bp.route('/api/teacher_review_resumes', methods=['GET'])
-def get_teacher_review_resumes():
-    # 確保有權限 (teacher, director, class_teacher, admin) 才能進入
-    if 'user_id' not in session or session.get('role') not in ['teacher', 'director', 'class_teacher', 'admin']:
-        return jsonify({"success": False, "message": "無權限"}), 403
-
-    session_user_id = session['user_id']
-    session_role = session['role']
+# 輔助函數：處理履歷上傳截止時間後的狀態自動更新
+def update_resume_status_after_deadline(cursor, conn):
+    """
+    履歷上傳截止時間後，自動更新狀態：
+    1. 將所有 uploaded 狀態的履歷自動改為 approved（班導審核通過）
+    2. 將所有班導已通過（status='approved'）且 teacher_review_status 為 NULL 或空的履歷
+       將 teacher_review_status 設為 'uploaded'，表示傳給指導老師審核
     
-    conn = get_db() 
-    # 使用 dictionary=True 讓查詢結果為字典格式
-    cursor = conn.cursor(dictionary=True) 
-    
+    返回: (is_deadline_passed: bool, updated_count: dict)
+    """
     try:
         # 檢查履歷上傳截止時間
         now = datetime.now()
@@ -2985,8 +2981,7 @@ def get_teacher_review_resumes():
             
             is_resume_deadline_passed = now > resume_deadline
         
-        # 如果已經過了截止時間，將所有 uploaded 狀態的履歷自動改為 approved
-        # 並將所有班導已通過的履歷傳給指導老師（設置 teacher_review_status 為 'uploaded'）
+        # 如果已經過了截止時間，執行狀態更新
         if is_resume_deadline_passed:
             # 先將所有 uploaded 狀態的履歷自動改為 approved（班導審核通過）
             cursor.execute("""
@@ -3008,12 +3003,42 @@ def get_teacher_review_resumes():
                      OR LENGTH(TRIM(COALESCE(teacher_review_status, ''))) = 0)
             """)
             updated_count = cursor.rowcount
+            
             if uploaded_to_approved_count > 0 or updated_count > 0:
                 conn.commit()
                 if uploaded_to_approved_count > 0:
                     print(f"✅ 履歷上傳截止時間已過，已將 {uploaded_to_approved_count} 筆履歷狀態從 'uploaded' 改為 'approved'（班導審核通過）")
                 if updated_count > 0:
                     print(f"✅ 履歷上傳截止時間已過，已將 {updated_count} 筆班導已通過的履歷傳給指導老師（teacher_review_status 設為 'uploaded'，status 保持 'approved'）")
+            
+            return is_resume_deadline_passed, {
+                'uploaded_to_approved': uploaded_to_approved_count,
+                'teacher_review_status_updated': updated_count
+            }
+        
+        return False, {'uploaded_to_approved': 0, 'teacher_review_status_updated': 0}
+    except Exception as e:
+        print(f"❌ 更新履歷狀態錯誤: {e}")
+        traceback.print_exc()
+        return False, {'uploaded_to_approved': 0, 'teacher_review_status_updated': 0}
+
+
+@resume_bp.route('/api/teacher_review_resumes', methods=['GET'])
+def get_teacher_review_resumes():
+    # 確保有權限 (teacher, director, class_teacher, admin) 才能進入
+    if 'user_id' not in session or session.get('role') not in ['teacher', 'director', 'class_teacher', 'admin']:
+        return jsonify({"success": False, "message": "無權限"}), 403
+
+    session_user_id = session['user_id']
+    session_role = session['role']
+    
+    conn = get_db() 
+    # 使用 dictionary=True 讓查詢結果為字典格式
+    cursor = conn.cursor(dictionary=True) 
+    
+    try:
+        # 檢查履歷上傳截止時間並自動更新狀態
+        is_resume_deadline_passed, update_counts = update_resume_status_after_deadline(cursor, conn)
         
         # 建立基本查詢：每個志願序都顯示一行履歷
         sql = """
@@ -3479,62 +3504,8 @@ def get_class_resumes():
     cursor = conn.cursor(dictionary=True)
 
     try:
-        # 檢查履歷上傳截止時間，如果已過，將班導已通過的履歷傳給指導老師
-        now = datetime.now()
-        resume_deadline = None
-        is_resume_deadline_passed = False
-        
-        # 查詢履歷上傳截止時間
-        cursor.execute("""
-            SELECT end_time 
-            FROM announcement 
-            WHERE title LIKE '[作業]%上傳履歷截止時間' AND is_published = 1
-            ORDER BY created_at DESC 
-            LIMIT 1
-        """)
-        deadline_result = cursor.fetchone()
-        
-        if deadline_result and deadline_result.get('end_time'):
-            deadline = deadline_result['end_time']
-            if isinstance(deadline, datetime):
-                resume_deadline = deadline
-            else:
-                try:
-                    resume_deadline = datetime.strptime(str(deadline), '%Y-%m-%d %H:%M:%S')
-                except:
-                    resume_deadline = datetime.strptime(str(deadline), '%Y-%m-%d %H:%M')
-            
-            is_resume_deadline_passed = now > resume_deadline
-        
-        # 如果已經過了截止時間，將所有班導已通過（status='approved'）且 teacher_review_status 為 NULL 或空的履歷
-        # 將 teacher_review_status 設為 'uploaded'，表示傳給指導老師審核
-        if is_resume_deadline_passed:
-            # 先將所有 uploaded 狀態的履歷自動改為 approved（班導審核通過）
-            cursor.execute("""
-                UPDATE resumes 
-                SET status = 'approved', updated_at = NOW()
-                WHERE status = 'uploaded'
-            """)
-            uploaded_to_approved_count = cursor.rowcount
-            
-            # 然後將所有班導已通過（status='approved'）且 teacher_review_status 為 NULL 或空的履歷
-            # 將 teacher_review_status 設為 'uploaded'，表示傳給指導老師審核
-            # 注意：只更新尚未設置 teacher_review_status 的履歷，避免覆蓋已審核的狀態
-            cursor.execute("""
-                UPDATE resumes 
-                SET teacher_review_status = 'uploaded', updated_at = NOW()
-                WHERE status = 'approved' 
-                AND (teacher_review_status IS NULL 
-                     OR teacher_review_status = '' 
-                     OR LENGTH(TRIM(COALESCE(teacher_review_status, ''))) = 0)
-            """)
-            updated_count = cursor.rowcount
-            if uploaded_to_approved_count > 0 or updated_count > 0:
-                conn.commit()
-                if uploaded_to_approved_count > 0:
-                    print(f"✅ 履歷上傳截止時間已過，已將 {uploaded_to_approved_count} 筆履歷狀態從 'uploaded' 改為 'approved'")
-                if updated_count > 0:
-                    print(f"✅ 履歷上傳截止時間已過，已將 {updated_count} 筆班導已通過的履歷傳給指導老師（teacher_review_status 設為 'uploaded'）")
+        # 檢查履歷上傳截止時間並自動更新狀態
+        is_resume_deadline_passed, update_counts = update_resume_status_after_deadline(cursor, conn)
         
         resumes = []  # 初始化結果列表
         sql_query = ""
