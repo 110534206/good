@@ -388,7 +388,7 @@
            <td style="padding: 14px 16px;">
              <div style="display: flex; gap: 4px; flex-wrap: wrap;">
                <a href="/api/download_resume/${row.id}" class="btn btn-sm btn-outline-primary" target="_blank">下載</a>
-               ${(row.display_status === 'pending' || row.display_status === 'uploaded') && row.display_status !== 'not_uploaded' ? `
+               ${row.display_status !== 'not_uploaded' ? `
                  <button class="btn btn-sm btn-danger" onclick="rejectResume(${row.id})">退件</button>
                ` : ''}
              </div>
