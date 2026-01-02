@@ -20,6 +20,66 @@ from notification import create_notification
 preferences_bp = Blueprint("preferences_bp", __name__)
 
 # -------------------------
+# 輔助函數：處理志願序填寫截止時間後的狀態自動更新
+# -------------------------
+def update_preference_status_after_deadline(cursor, conn):
+    """
+    志願序填寫截止時間後，自動更新狀態：
+    將所有 submitted 狀態的志願序自動改為 approved（班導審核通過）
+    
+    返回: (is_deadline_passed: bool, updated_count: int)
+    """
+    try:
+        # 檢查志願序填寫截止時間
+        now = datetime.now()
+        preference_deadline = None
+        is_preference_deadline_passed = False
+        
+        # 查詢志願序填寫截止時間
+        cursor.execute("""
+            SELECT end_time 
+            FROM announcement 
+            WHERE title LIKE '[作業]%填寫志願序截止時間' AND is_published = 1
+            ORDER BY created_at DESC 
+            LIMIT 1
+        """)
+        deadline_result = cursor.fetchone()
+        
+        if deadline_result and deadline_result.get('end_time'):
+            deadline = deadline_result['end_time']
+            if isinstance(deadline, datetime):
+                preference_deadline = deadline
+            else:
+                try:
+                    preference_deadline = datetime.strptime(str(deadline), '%Y-%m-%d %H:%M:%S')
+                except:
+                    preference_deadline = datetime.strptime(str(deadline), '%Y-%m-%d %H:%M')
+            
+            is_preference_deadline_passed = now > preference_deadline
+        
+        # 如果已經過了截止時間，執行狀態更新
+        if is_preference_deadline_passed:
+            # 將所有 submitted 狀態的志願序自動改為 approved（班導審核通過）
+            cursor.execute("""
+                UPDATE student_preferences 
+                SET status = 'approved', updated_at = NOW()
+                WHERE status = 'submitted'
+            """)
+            updated_count = cursor.rowcount
+            
+            if updated_count > 0:
+                conn.commit()
+                print(f"✅ 志願序填寫截止時間已過，已將 {updated_count} 筆志願序狀態從 'submitted' 改為 'approved'（班導審核通過）")
+            
+            return is_preference_deadline_passed, updated_count
+        
+        return False, 0
+    except Exception as e:
+        print(f"❌ 更新志願序狀態錯誤: {e}")
+        traceback.print_exc()
+        return False, 0
+
+# -------------------------
 # 共用：取得班級學生志願（與欄位）
 # -------------------------
 def get_class_preferences(cursor, class_id):
@@ -247,7 +307,7 @@ def save_preferences():
                     company_id,
                     job_id,
                     job_title,
-                    'pending',  # 預設狀態為「待審核」
+                    'submitted',  # 預設狀態為 'submitted'（已提交，待審核）
                     datetime.now()
                 ))
                 inserted_count += 1
@@ -264,7 +324,7 @@ def save_preferences():
                     company_id,
                     job_id,
                     job_title,
-                    'pending',  # 預設狀態為「待審核」
+                    'submitted',  # 預設狀態為 'submitted'（已提交，待審核）
                     datetime.now()
                 ))
                 inserted_count += 1
@@ -433,6 +493,9 @@ def review_preferences():
         # 取得當前學期ID
         current_semester_id = get_current_semester_id(cursor)
         
+        # 檢查志願序填寫截止時間並自動更新狀態
+        is_preference_deadline_passed, update_count = update_preference_status_after_deadline(cursor, conn)
+        
         print(f"🔍 班導審核志願序 - class_id: {class_id}, current_semester_id: {current_semester_id}")
 
         # 查詢班上學生及其志願（只顯示當前學期已填寫志願序的學生）
@@ -543,7 +606,7 @@ def review_preferences():
             preference_id = row.get('preference_id')
             preference_order = row.get('preference_order')
             company_name = row.get('company_name') or '未知公司'  # 如果為 NULL，使用預設值
-            status = row.get('status') or 'pending'
+            status = row.get('status') or 'submitted'  # student_preferences.status 的預設值是 'submitted'
             submitted_at = row.get('submitted_at', '')
             
             # 調試：顯示每筆資料
@@ -700,7 +763,7 @@ def review_preferences():
                     preference_id = row.get('preference_id')
                     preference_order = row.get('preference_order')
                     company_name = row.get('company_name') or '未知公司'
-                    status = row.get('status') or 'pending'
+                    status = row.get('status') or 'submitted'  # student_preferences.status 的預設值是 'submitted'
                     submitted_at = row.get('submitted_at', '')
                     
                     if student_name and preference_order:
