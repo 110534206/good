@@ -81,22 +81,17 @@
 
     .preferences-table th:nth-child(1),
     .preferences-table td:nth-child(1) {
-      width: 12%;
+      width: 15%;
     }
 
     .preferences-table th:nth-child(2),
     .preferences-table td:nth-child(2) {
-      width: 44%;
+      width: 55%;
     }
 
     .preferences-table th:nth-child(3),
     .preferences-table td:nth-child(3) {
-      width: 12%;
-    }
-
-    .preferences-table th:nth-child(4),
-    .preferences-table td:nth-child(4) {
-      width: 32%;
+      width: 30%;
     }
 
     th,
@@ -108,6 +103,20 @@
 
     th {
       background-color: #f1f4f8;
+    }
+
+    /* 可收合按鈕樣式 */
+    .collapse-toggle-btn {
+      transition: all 0.3s ease;
+    }
+
+    .collapse-toggle-btn[aria-expanded="true"] .fa-chevron-down {
+      transform: rotate(180deg);
+    }
+
+    .collapse-toggle-btn .fa-chevron-down {
+      transition: transform 0.3s ease;
+      display: inline-block;
     }
 
     /* 查詢功能樣式 */
@@ -414,37 +423,32 @@
           <button type="button" class="btn btn-danger btn-sm reject-btn" data-student-id="{{ student_info.student_id }}" data-student-name="{{ student_name }}">
             <i class="fas fa-times"></i> 退件
           </button>
+          <button class="btn btn-outline-primary btn-sm collapse-toggle-btn" type="button" data-bs-toggle="collapse" data-bs-target="#preferences-{{ student_info.student_id }}" aria-expanded="false" aria-controls="preferences-{{ student_info.student_id }}" title="查看志願序">
+            <i class="fas fa-chevron-down"></i>
+          </button>
         </div>
       </div>
-      <div class="table-responsive">
-        <table class="table table-striped table-hover align-middle preferences-table">
-          <thead>
-            <tr>
-              <th>志願序</th>
-              <th>公司名稱</th>
-              <th>狀態</th>
-              <th>送出時間</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for p in student_info.preferences %}
-            <tr>
-              <td>{{ p.order }}</td>
-              <td>{{ p.company }}</td>
-              <td>
-                {% if p.status == 'approved' %}
-                  <span class="badge bg-success">已通過</span>
-                {% elif p.status == 'rejected' %}
-                  <span class="badge bg-danger">已退件</span>
-                {% else %}
-                  <span class="badge bg-warning">待審核</span>
-                {% endif %}
-              </td>
-              <td>{{ p.submitted_at }}</td>
-            </tr>
-            {% endfor %}
-          </tbody>
-        </table>
+      <div class="collapse" id="preferences-{{ student_info.student_id }}">
+        <div class="table-responsive">
+          <table class="table table-striped table-hover align-middle preferences-table">
+            <thead>
+              <tr>
+                <th>志願序</th>
+                <th>公司名稱</th>
+                <th>送出時間</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for p in student_info.preferences %}
+              <tr>
+                <td>{{ p.order }}</td>
+                <td>{{ p.company }}</td>
+                <td>{{ p.submitted_at }}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
     {% endfor %}
@@ -457,6 +461,26 @@
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <script>
+    // 初始化可收合按鈕的圖標旋轉
+    document.addEventListener('DOMContentLoaded', function() {
+      // 為所有 collapse 按鈕添加事件監聽
+      document.querySelectorAll('.collapse-toggle-btn').forEach(btn => {
+        const targetId = btn.getAttribute('data-bs-target');
+        const collapseElement = document.querySelector(targetId);
+        
+        if (collapseElement) {
+          // 監聽 collapse 事件，更新 title 提示
+          collapseElement.addEventListener('shown.bs.collapse', function() {
+            btn.setAttribute('title', '收起志願序');
+          });
+          
+          collapseElement.addEventListener('hidden.bs.collapse', function() {
+            btn.setAttribute('title', '查看志願序');
+          });
+        }
+      });
+    });
+
     // 學生查詢功能
     document.getElementById('searchStudentBtn')?.addEventListener('click', function () {
       const searchInput = document.getElementById('studentSearchInput');
