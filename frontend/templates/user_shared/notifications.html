@@ -139,6 +139,12 @@
       font-weight: 700;
     }
 
+    .unread-badge.inline {
+      position: static;
+      margin-left: auto;
+      flex-shrink: 0;
+    }
+
     /* 搜尋/篩選列 */
     .search-filter-row {
       display: flex;
@@ -305,6 +311,18 @@
       border-left-color: #ffbf00 !important;
     }
 
+    /* 科助「狀態」類別中的公告顏色區分 */
+    .notif-card.announcement-not-started {
+      border-left-color: #0d6efd !important;  /* 藍色：未開始 */
+      background: linear-gradient(90deg, rgba(13, 110, 253, 0.05), #ffffff);
+    }
+
+    .notif-card.announcement-ended {
+      border-left-color: #6c757d !important;  /* 灰色：已結束 */
+      background: linear-gradient(90deg, rgba(108, 117, 125, 0.05), #f5f5f5);
+      opacity: 0.85;
+    }
+
     /* detail small buttons */
     .meta-actions {
       display: flex;
@@ -333,15 +351,7 @@
       align-items: center;
     }
 
-    /* unread counter badge */
-    #unreadCounter {
-      font-weight: 700;
-      background: #ff4d4f;
-      color: white;
-      padding: 6px 9px;
-      border-radius: 999px;
-      box-shadow: 0 6px 18px rgba(255, 77, 79, .14);
-    }
+    /* unread counter badge - 樣式已由 .unread-badge 統一處理 */
 
     /* tiny input style */
     input[type="date"] {
@@ -436,19 +446,18 @@
     /* 科助專用按鈕區域 */
     #ta-actions {
       display: flex;
+      justify-content: flex-end;
       align-items: center;
-      gap: 6px;
-      flex-wrap: nowrap;
-      margin-right: 8px;
-      flex-shrink: 0;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-bottom: 12px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid #eef6ff;
     }
     
     #ta-actions .btn {
       white-space: nowrap;
       flex-shrink: 0;
-      padding: 4px 10px;
-      font-size: 0.875rem;
-      line-height: 1.4;
     }
   </style>
 </head>
@@ -468,17 +477,18 @@
 
       <div class="left-panel">
 
-        <div class="unread-badge" id="unreadBadgeDefault">
-          未讀 <span id="unreadCounter">0</span>
+        <div class="unread-badge" id="unreadBadgeTopRight">
+          未讀 <span id="unreadCounterTopRight">0</span>
+        </div>
+
+        <!-- 科助專用按鈕區域（在搜尋框上方靠右對齊） -->
+        <div id="ta-actions" style="display: none; justify-content: flex-end; gap: 8px; margin-bottom: 8px; flex-wrap: wrap;">
+          <button id="btn-new" class="btn btn-primary">➕ 新增公告</button>
+          <button id="btn-open-pref-deadline" class="btn btn-success">📝 填寫志願序截止時間</button>
+          <button id="btn-open-resume-deadline" class="btn btn-success">📝 上傳履歷截止時間</button>
         </div>
 
         <div class="search-filter-row">
-          <!-- 科助專用按鈕區域 -->
-          <div id="ta-actions" style="display: none;">
-            <button id="btn-new" class="btn btn-primary">➕ 新增公告</button>
-            <button id="btn-open-pref-deadline" class="btn btn-success">📝 填寫志願序截止時間</button>
-            <button id="btn-open-resume-deadline" class="btn btn-success">📝 上傳履歷截止時間</button>
-          </div>
           <input id="searchInput" placeholder="搜尋（標題/內容）" type="text">
 
           <div class="dropdown">
@@ -500,6 +510,10 @@
 
           <button class="btn btn-outline-secondary btn-sm" id="btnRefresh" title="重新整理"><i
               class="bi-arrow-clockwise"></i></button>
+
+          <div class="unread-badge inline" id="unreadBadgeSearchRow">
+            未讀 <span id="unreadCounterSearchRow">0</span>
+          </div>
         </div>
 
         <div class="d-flex gap-2 flex-wrap mb-3 align-items-center" id="categoryFilter">
@@ -629,7 +643,8 @@
     // 元件
     const listContainer = document.getElementById('listContainer');
     const searchInput = document.getElementById('searchInput');
-    const unreadCounter = document.getElementById('unreadCounter');
+    const unreadCounterTopRight = document.getElementById('unreadCounterTopRight');
+    const unreadCounterSearchRow = document.getElementById('unreadCounterSearchRow');
     const currentFilterLabel = document.getElementById('currentFilterLabel');
 
     // modal components
@@ -704,6 +719,7 @@
             url: n.url || n.link || null,
             link_url: n.link_url || n.url || n.link || null,  // 保存 link_url 用於提取公告 ID
             start_time: n.start_time || null,  // 保存公告的開始時間
+            end_time: n.end_time || null,  // 保存公告的結束時間
             meta: n.meta || {}
           };
         });
@@ -730,6 +746,9 @@
 
       // 1. 篩選
       const now = new Date();
+      // 判斷是否為科助
+      const isTA = document.getElementById('ta-actions')?.style.display === 'flex';
+      
       visibleNotifications = allNotifications.filter(n => {
         // 判斷公告是否已開始
         let isStarted = true;  // 預設為已開始
@@ -743,33 +762,54 @@
           }
         }
         
+        // 判斷公告是否已結束
+        let isEnded = false;
+        if (n.end_time) {
+          try {
+            const endTime = new Date(n.end_time);
+            isEnded = endTime < now;
+          } catch (e) {
+            // 如果時間解析失敗，預設為未結束
+            isEnded = false;
+          }
+        }
+        
+        // 判斷是否為公告
+        const isAnnouncement = n.category === 'announcement' || 
+          (n.title.includes('公告') && !n.title.includes('面試通知') && !n.title.includes('錄取通知'));
+        
+        // 其他角色：排除已結束的公告
+        if (!isTA && isAnnouncement && isEnded) {
+          return false;
+        }
+        
         // 類別篩選：如果選擇「公告」，也要包含標題包含「公告」的通知（兼容舊數據）
         if (currentCategoryFilter !== 'all') {
           if (currentCategoryFilter === 'announcement') {
-            // 公告類別：只顯示已開始的公告
-            // category 為 "announcement" 或標題包含「公告」（排除面試通知、錄取通知）
-            const isAnnouncement = n.category === 'announcement' || 
-              (n.title.includes('公告') && !n.title.includes('面試通知') && !n.title.includes('錄取通知'));
+            // 公告類別：只顯示已開始且未結束的公告
             if (!isAnnouncement) return false;
             // 只顯示已開始的公告
             if (!isStarted) return false;
+            // 排除已結束的公告
+            if (isEnded) return false;
           } else if (currentCategoryFilter === 'approval') {
-            // 狀態類別：只顯示未開始的公告
-            const isAnnouncement = n.category === 'announcement' || 
-              (n.title.includes('公告') && !n.title.includes('面試通知') && !n.title.includes('錄取通知'));
+            // 狀態類別（僅科助可見）
             if (!isAnnouncement) return false;
-            // 只顯示未開始的公告（必須有 start_time 且未到開始時間）
-            if (isStarted || !n.start_time) return false;
+            if (isTA) {
+              // 科助：顯示未開始的公告 + 已結束的公告
+              if (isStarted && !isEnded) return false;  // 已開始但未結束的公告不顯示在「狀態」中
+            } else {
+              // 其他角色不應該看到「狀態」類別，但為了安全起見還是過濾
+              return false;
+            }
           } else {
             // 其他類別：嚴格匹配
             if (n.category !== currentCategoryFilter) return false;
           }
         } else {
-          // 「全部通知」：只顯示已開始的公告
-          const isAnnouncement = n.category === 'announcement' || 
-            (n.title.includes('公告') && !n.title.includes('面試通知') && !n.title.includes('錄取通知'));
-          if (isAnnouncement && !isStarted) {
-            // 未開始的公告不在「全部通知」中顯示
+          // 「全部通知」：只顯示已開始且未結束的公告
+          if (isAnnouncement && (!isStarted || isEnded)) {
+            // 未開始或已結束的公告不在「全部通知」中顯示
             return false;
           }
         }
@@ -848,7 +888,45 @@
         // render notifications in this group
         currentGroup.forEach(n => {
           const card = document.createElement('div');
-          card.className = 'notif-card ' + (n.is_read ? 'notif-read' : 'notif-unread') + (n.pinned ? ' pinned' : '');
+          
+          // 判斷公告狀態（僅對科助在「狀態」類別中）
+          let announcementStatus = '';
+          const isTACheck = document.getElementById('ta-actions')?.style.display === 'flex';
+          const isApprovalCategoryCheck = currentCategoryFilter === 'approval';
+          const isAnnouncementCheck = n.category === 'announcement' || 
+            (n.title.includes('公告') && !n.title.includes('面試通知') && !n.title.includes('錄取通知'));
+          
+          if (isTACheck && isApprovalCategoryCheck && isAnnouncementCheck) {
+            const now = new Date();
+            let isStarted = true;
+            let isEnded = false;
+            
+            if (n.start_time) {
+              try {
+                const startTime = new Date(n.start_time);
+                isStarted = startTime <= now;
+              } catch (e) {
+                isStarted = true;
+              }
+            }
+            
+            if (n.end_time) {
+              try {
+                const endTime = new Date(n.end_time);
+                isEnded = endTime < now;
+              } catch (e) {
+                isEnded = false;
+              }
+            }
+            
+            if (!isStarted) {
+              announcementStatus = ' announcement-not-started';
+            } else if (isEnded) {
+              announcementStatus = ' announcement-ended';
+            }
+          }
+          
+          card.className = 'notif-card ' + (n.is_read ? 'notif-read' : 'notif-unread') + (n.pinned ? ' pinned' : '') + announcementStatus;
           card.dataset.id = n.id;
 
           const left = document.createElement('div'); left.className = 'notif-left';
@@ -1006,11 +1084,15 @@
     // unread badge update
     function updateUnreadBadge() {
       const count = allNotifications.filter(n => !n.is_read).length;
-      // 更新預設徽章（所有角色）
-      if (unreadCounter) {
-        unreadCounter.innerText = count;
+      // 更新右上角徽章（其他角色）
+      if (unreadCounterTopRight) {
+        unreadCounterTopRight.innerText = count;
       }
-      // 更新科助專用徽章（如果存在）
+      // 更新搜尋欄旁的徽章（科助）
+      if (unreadCounterSearchRow) {
+        unreadCounterSearchRow.innerText = count;
+      }
+      // 更新類別旁的徽章（如果存在）
       const unreadCounterTA = document.getElementById('unreadCounterTA');
       if (unreadCounterTA) {
         unreadCounterTA.innerText = count;
@@ -1371,23 +1453,28 @@
           // 如果是科助，顯示按鈕並初始化功能
           const taActions = document.getElementById('ta-actions');
           const approvalFilter = document.getElementById('approval-filter');
-          const unreadBadgeDefault = document.getElementById('unreadBadgeDefault');
+          const unreadBadgeTopRight = document.getElementById('unreadBadgeTopRight');
+          const unreadBadgeSearchRow = document.getElementById('unreadBadgeSearchRow');
           const unreadBadgeTA = document.getElementById('unreadBadgeTA');
           
           if (userRole === 'ta') {
             if (taActions) {
               taActions.style.display = 'flex';
+              taActions.style.justifyContent = 'flex-end';
             }
             // 顯示「狀態」類別篩選器
             if (approvalFilter) {
               approvalFilter.style.display = 'block';
             }
-            // 隱藏預設徽章，顯示類別旁的徽章
-            if (unreadBadgeDefault) {
-              unreadBadgeDefault.style.display = 'none';
+            // 科助：隱藏右上角徽章，顯示搜尋欄旁的徽章，隱藏類別旁的徽章
+            if (unreadBadgeTopRight) {
+              unreadBadgeTopRight.style.display = 'none';
+            }
+            if (unreadBadgeSearchRow) {
+              unreadBadgeSearchRow.style.display = 'flex';
             }
             if (unreadBadgeTA) {
-              unreadBadgeTA.style.display = 'flex';
+              unreadBadgeTA.style.display = 'none';
             }
             initTAActions();
           } else {
@@ -1399,9 +1486,12 @@
             if (approvalFilter) {
               approvalFilter.style.display = 'none';
             }
-            // 顯示預設徽章，隱藏類別旁的徽章
-            if (unreadBadgeDefault) {
-              unreadBadgeDefault.style.display = 'block';
+            // 其他角色：顯示右上角徽章，隱藏搜尋欄旁的徽章，隱藏類別旁的徽章
+            if (unreadBadgeTopRight) {
+              unreadBadgeTopRight.style.display = 'block';
+            }
+            if (unreadBadgeSearchRow) {
+              unreadBadgeSearchRow.style.display = 'none';
             }
             if (unreadBadgeTA) {
               unreadBadgeTA.style.display = 'none';
@@ -1484,11 +1574,10 @@
             menuItems = [
               { href: '/ta_home', text: '首頁' },
               { href: '/profile', text: '個人資料' },
-              { href: '/announcement/manage_announcements', text: '公告管理' },
+              { href: '/notifications', text: '通知' },
               { href: '/ta/statistics/manage_companies', text: '實習廠商管理' },
               { href: '/ta/interview_schedule', text: '行事曆' },
               { href: '/final_results', text: '媒合結果確認' },
-              { href: '/notifications', text: '通知' },
               { href: '/admin/absence_default_range', text: '缺勤預設學期範圍設定' },
               { href: '/ta/upload_standard_courses', text: '專業核心科目管理' },
               { href: '/login', text: '登出' }

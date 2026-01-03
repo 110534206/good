@@ -128,7 +128,7 @@ def get_my_notifications():
         else:
             cursor.execute("""
                 SELECT n.id, n.title, n.message, n.category, n.link_url, n.is_read, n.created_at,
-                       a.start_time
+                       a.start_time, a.end_time
                 FROM notifications n
                 LEFT JOIN announcement a ON n.link_url = CONCAT('/view_announcement/', a.id)
                 WHERE n.user_id = %s
@@ -138,21 +138,20 @@ def get_my_notifications():
         notification_rows = cursor.fetchall()
         
         # 2. 檢查是否有遺漏的公告（已發布但還沒同步到 notifications 表）
-        # 包括未開始的公告（用於「狀態」類別顯示）
-        # 注意：這裡不限制 start_time，因為未開始的公告也需要顯示在「狀態」類別中
+        # 包括未開始的公告和已結束的公告（用於科助的「狀態」類別顯示）
+        # 注意：這裡不限制 end_time，因為已結束的公告也需要顯示在科助的「狀態」類別中
         now = datetime.now()
         cursor.execute("""
-            SELECT a.id, a.title, a.content, a.start_time, a.created_at
+            SELECT a.id, a.title, a.content, a.start_time, a.end_time, a.created_at
             FROM announcement a
             WHERE a.is_published = 1
-            AND (a.end_time IS NULL OR a.end_time >= %s)
             AND NOT EXISTS (
                 SELECT 1 FROM notifications n 
                 WHERE n.user_id = %s 
                 AND n.link_url = CONCAT('/view_announcement/', a.id)
             )
             ORDER BY a.created_at DESC
-        """, (now, user_id))
+        """, (user_id,))
         
         missing_announcements = cursor.fetchall()
         
@@ -177,6 +176,15 @@ def get_my_notifications():
             else:
                 start_time_str = None
             
+            # 格式化 end_time
+            end_time = ann.get('end_time')
+            if isinstance(end_time, datetime):
+                end_time_str = end_time.strftime("%Y-%m-%d %H:%M:%S")
+            elif end_time:
+                end_time_str = str(end_time)
+            else:
+                end_time_str = None
+            
             announcement_notifications.append({
                 "id": f"ann_{ann['id']}",  # 使用特殊前綴避免與 notifications 表的 id 衝突
                 "title": f"公告：{ann['title']}",
@@ -185,7 +193,8 @@ def get_my_notifications():
                 "link_url": link_url,
                 "is_read": False,  # 遺漏的公告預設為未讀
                 "created_at": created_at_str,
-                "start_time": start_time_str  # 添加 start_time
+                "start_time": start_time_str,  # 添加 start_time
+                "end_time": end_time_str  # 添加 end_time
             })
         
         # 4. 合併兩個列表（主要從 notifications 表，補充遺漏的公告）
@@ -234,6 +243,25 @@ def get_my_notifications():
                     row["start_time"] = str(start_time) if start_time else None
             else:
                 row["start_time"] = None
+            
+            # 格式化 end_time（如果是公告）
+            end_time = row.get("end_time")
+            if isinstance(end_time, datetime):
+                row["end_time"] = end_time.strftime("%Y-%m-%d %H:%M:%S")
+            elif end_time:
+                try:
+                    if isinstance(end_time, str):
+                        if 'T' in end_time:
+                            parsed = datetime.fromisoformat(end_time.replace('Z', '+00:00'))
+                        else:
+                            parsed = datetime.strptime(end_time, '%Y-%m-%d %H:%M:%S')
+                        row["end_time"] = parsed.strftime("%Y-%m-%d %H:%M:%S")
+                    else:
+                        row["end_time"] = str(end_time)
+                except:
+                    row["end_time"] = str(end_time) if end_time else None
+            else:
+                row["end_time"] = None
         
         # 7. 按時間排序（最新的在前）
         all_rows.sort(key=lambda x: x.get("created_at", ""), reverse=True)
