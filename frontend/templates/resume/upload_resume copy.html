@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>履歷管理平台</title>
+  <title>智慧實習平台 | 上傳履歷</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
   <style>
     header {
@@ -48,14 +48,6 @@
 
     .language-group label {
       font-weight: 600;
-    }
-
-    .course-scroll-container {
-      max-height: 400px;
-      overflow-y: auto;
-      border: 1px solid #dee2e6;
-      border-radius: 6px;
-      padding: 5px;
     }
 
     /* 新增樣式：讓表格在滾動容器內顯示正常 */
@@ -235,50 +227,76 @@
 
             <div class="mb-4"></div>
 
-            <div class="container py-4">
-              <h5 class="mb-3">已修習專業核心科目</h5>
+            <table class="table table-bordered align-middle">
 
-              <div class="mb-3">
-                <button type="button" class="btn btn-outline-info btn-sm" id="download-excel-template-btn">⇩
-                  下載Excel範本</button>
-                <button type="button" class="btn btn-outline-warning btn-sm" id="upload-excel-btn">⇪ 上傳Excel</button>
-                <button type="button" class="btn btn-outline-success btn-sm" id="save-template-btn">儲存</button>
-                <input type="file" id="excel-file-input" accept=".xlsx,.xls" style="display: none;">
-              </div>
+              <!-- 表格上方功能區 -->
+              <thead>
+                <tr>
+                  <th colspan="4">
+                    <h5 class="mb-3">已修習專業核心科目</h5>
 
-              <div class="row mb-3">
-                <div class="col-md-6">
-                  <input type="text" id="course-search" class="form-control form-control-sm" placeholder="🔍 查詢課程名稱">
-                </div>
-                <div class="col-md-6">
-                  <select id="credit-filter" class="form-select form-select-sm">
-                    <option value="">所有學分數</option>
-                    <option value="1">1 學分</option>
-                    <option value="2">2 學分</option>
-                    <option value="3">3 學分</option>
-                  </select>
-                </div>
-              </div>
+                    <div class="mb-3">
+                      <button type="button" class="btn btn-outline-info btn-sm" id="download-excel-template-btn">
+                        ⇩ 下載Excel範本
+                      </button>
+                      <button type="button" class="btn btn-outline-warning btn-sm" id="upload-excel-btn">
+                        ⇪ 匯入Excel資料
+                      </button>
+                      <button type="button" class="btn btn-outline-success btn-sm" id="save-template-btn">
+                        儲存
+                      </button>
+                      <input type="file" id="excel-file-input" accept=".xlsx,.xls" style="display:none;">
+                    </div>
 
-              <div class="course-scroll-container">
-                <table class="table table-bordered align-middle">
-                  <thead>
-                    <tr>
-                      <th style="width: 40%;">課程名稱</th>
-                      <th style="width: 15%;">學分數</th>
-                      <th style="width: 20%;">成績</th>
-                      <th style="width: 25%;">狀態</th>
-                    </tr>
-                  </thead>
-                  <tbody id="courseTableBody">
-                    <tr>
-                      <td colspan="4" class="text-muted text-center">請先下載Excel範本，填寫完成後上傳以顯示課程資料</td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            </div>
+                    <div class="row g-2">
+                      <div class="col-md-6">
+                        <input type="text" id="course-search" class="form-control form-control-sm"
+                          placeholder="🔍 查詢課程名稱">
+                      </div>
+                      <div class="col-md-6">
+                        <select id="credit-filter" class="form-select form-select-sm">
+                          <option value="">所有學分數</option>
+                          <option value="1">1 學分</option>
+                          <option value="2">2 學分</option>
+                          <option value="3">3 學分</option>
+                        </select>
+                      </div>
+                    </div>
+                  </th>
+                </tr>
 
+                <!-- 欄位標題 -->
+                <tr>
+                  <th style="width:40%">課程名稱</th>
+                  <th style="width:15%">學分數</th>
+                  <th style="width:20%">成績</th>
+                  <th style="width:25%">狀態</th>
+                </tr>
+              </thead>
+
+              <!-- 課程資料 -->
+              <tbody id="courseTableBody">
+                <tr>
+                  <td colspan="4" class="text-muted text-center">
+                    請先下載 Excel 範本，填寫完成後上傳以顯示課程資料
+                  </td>
+                </tr>
+              </tbody>
+
+              <!-- 分頁 -->
+              <tfoot>
+                <tr>
+                  <td colspan="4">
+                    <div class="d-flex justify-content-center">
+                      <nav>
+                        <ul class="pagination pagination-sm mb-0" id="course-pagination"></ul>
+                      </nav>
+                    </div>
+                  </td>
+                </tr>
+              </tfoot>
+
+            </table>
 
             <div class="card p-4 mb-3">
               <div class="d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-2 mb-3">
@@ -355,115 +373,140 @@
               <div class="card-header bg-primary text-white">
                 <h5>新增缺勤資訊</h5>
               </div>
-
               <div class="card-body">
                 <div id="absenceSavedMsg" class="alert alert-success d-none">
                   缺勤紀錄已儲存，可於下方統計表查看。
                 </div>
-
-                <!-- 📌 自動學期範圍顯示 -->
                 <div id="absenceRecordContainer">
+                  <!-- 學期範圍篩選器 -->
                   <div class="mb-3">
-                    <label class="form-label">📅 缺勤紀錄查詢範圍（系統自動套用）</label>
-
+                    <label class="form-label">📅 缺勤紀錄篩選（學期範圍）</label>
                     <div class="card-body">
-                      <div class="p-3 bg-light border rounded">
-                        <span class="fw-bold">查詢學期：</span>
-                        <span id="autoSemesterRange" class="text-primary fw-bold">載入中...</span>
+                      <div class="row g-3 align-items-end">
+                        <div class="col-md-5">
+                          <label for="startSemester" class="form-label">開始學期</label>
+                          <select class="form-select" id="startSemester">
+                            <option value="">載入中...</option>
+                          </select>
+                        </div>
+                        <div class="col-md-5">
+                          <label for="endSemester" class="form-label">結束學期</label>
+                          <select class="form-select" id="endSemester">
+                            <option value="">載入中...</option>
+                          </select>
+                        </div>
+                        <div class="col-md-2">
+                          <button type="button" id="filterAbsenceBtn" class="btn btn-info w-100">篩選</button>
+                        </div>
                       </div>
-
-                      <div class="form-text mt-2">
-                        💡 系統已依照您的入學年度，自動套用缺勤查詢學期區間。
-                      </div>
+                      <div class="form-text mt-2">💡 提示：選擇學期範圍以篩選缺勤記錄，例如：從「1122」到「1131」。</div>
                     </div>
+                  </div>
+
+                  <!-- 缺勤記錄列表（從資料庫讀取） -->
+                  <div class="mb-3">
+                    <label class="form-label">缺勤記錄列表</label>
+                    <div class="form-text mb-2">💡 提示：以下為您累積的缺勤記錄（日期、類型、節數、事由）。</div>
+                    <div id="absenceRecordsDisplay" class="border rounded p-3"
+                      style="max-height: 500px; overflow-y: auto;">
+                      <p class="text-muted text-center">請選擇學期以載入缺勤記錄</p>
+                    </div>
+                  </div>
+
+                  <!-- 缺勤統計表格 -->
+                  <div class="mb-3">
+                    <label class="form-label">缺勤紀錄統計 (總節數)</label>
+                  </div>
+                  <table class="table table-bordered table-sm text-center">
+                    <thead class="table-light">
+                      <tr>
+                        <th>曠課</th>
+                        <th>遲到</th>
+                        <th>事假</th>
+                        <th>病假</th>
+                        <th>生理假</th>
+                        <th>公假</th>
+                        <th>喪假</th>
+                      </tr>
+                    </thead>
+                    <tbody id="absenceStatsBody">
+                      <tr>
+                        <td><span id="stat_曠課">0</span> 節</td>
+                        <td><span id="stat_遲到">0</span> 節</td>
+                        <td><span id="stat_事假">0</span> 節</td>
+                        <td><span id="stat_病假">0</span> 節</td>
+                        <td><span id="stat_生理假">0</span> 節</td>
+                        <td><span id="stat_公假">0</span> 節</td>
+                        <td><span id="stat_喪假">0</span> 節</td>
+                      </tr>
+                    </tbody>
+                  </table>
+
+                  <div class="mt-3"></div>
+
+                  <!-- 缺勤記錄佐證圖上傳 -->
+                  <div class="mb-3">
+                    <label for="proof_image" class="form-label">缺勤記錄佐證圖上傳</label>
+                    <input class="form-control" type="file" id="proof_image" name="proof_image" accept="image/*">
+                    <div class="form-text">💡 提示：接受圖片檔案 (PNG, JPG, JPEG)。</div>
                   </div>
                 </div>
               </div>
             </div>
 
-            <!-- 缺勤記錄列表（從資料庫讀取） -->
-            <div class="mb-3">
-              <label class="form-label">缺勤記錄列表</label>
-              <div class="form-text mb-2">💡 提示：以下為您累積的缺勤記錄（日期、類型、節數、事由）。</div>
-              <div id="absenceRecordsDisplay" class="border rounded p-3" style="max-height: 500px; overflow-y: auto;">
-                <p class="text-muted text-center">請選擇學期以載入缺勤記錄</p>
+            <!-- 投遞實習公司設定 -->
+            <div class="card border-info mb-3">
+              <div class="card-header bg-info text-white d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">
+                  <i class="bi bi-send-fill"></i> 投遞設定
+                </h5>
+                <button type="button" class="btn btn-sm btn-light" id="toggleSelectAll">
+                  ✔ 全選
+                </button>
+              </div>
+
+              <div class="card-body">
+                <div id="jobCheckboxContainer" class="ms-2">
+                  <p class="text-muted">載入中...</p>
+                </div>
               </div>
             </div>
 
-            <!-- 缺勤統計表格 -->
-            <div class="mb-3">
-              <label class="form-label">缺勤紀錄統計 (總節數)</label>
+            <!-- 隱藏欄位：送出用 -->
+            <input type="hidden" name="selected_jobs_json" id="selected_jobs_json">
+
+            <!-- 隱藏欄位：儲存缺勤紀錄和統計的 JSON -->
+            <input type="hidden" id="all_absence_details_json" name="all_absence_details_json" value="[]">
+            <input type="hidden" id="absence_stats_json" name="absence_stats_json" value="{}">
+
+            <div class="text-center mt-4">
+              <button type="submit" id="submitResumeBtn" class="btn btn-primary btn-lg">提交並生成履歷</button>
+              <button type="button" id="editResumeBtn" class="btn btn-warning btn-lg d-none">修改履歷</button>
             </div>
-            <table class="table table-bordered table-sm text-center">
+          </form>
+        </div>
+
+        <div class="tab-pane fade" id="records-pane" role="tabpanel" aria-labelledby="records-tab" tabindex="0">
+          <div id="resumeRecords" class="p-3">
+            <table class="table table-striped align-middle text-center">
               <thead class="table-light">
                 <tr>
-                  <th>曠課</th>
-                  <th>遲到</th>
-                  <th>事假</th>
-                  <th>病假</th>
-                  <th>生理假</th>
-                  <th>公假</th>
-                  <th>喪假</th>
+                  <th>生成時間</th>
+                  <th>檔名</th>
+                  <th>審核狀態</th>
+                  <th>下載</th>
                 </tr>
               </thead>
-              <tbody id="absenceStatsBody">
+              <tbody id="recordsBody">
                 <tr>
-                  <td><span id="stat_曠課">0</span> 節</td>
-                  <td><span id="stat_遲到">0</span> 節</td>
-                  <td><span id="stat_事假">0</span> 節</td>
-                  <td><span id="stat_病假">0</span> 節</td>
-                  <td><span id="stat_生理假">0</span> 節</td>
-                  <td><span id="stat_公假">0</span> 節</td>
-                  <td><span id="stat_喪假">0</span> 節</td>
+                  <td colspan="4" class="text-muted">尚無履歷紀錄</td>
                 </tr>
               </tbody>
             </table>
-
-            <div class="mt-3"></div>
-
-            <!-- 缺勤記錄佐證圖上傳 -->
-            <div class="mb-3">
-              <label for="proof_image" class="form-label">缺勤記錄佐證圖上傳</label>
-              <input class="form-control" type="file" id="proof_image" name="proof_image" accept="image/*">
-              <div class="form-text">💡 提示：接受圖片檔案 (PNG, JPG, JPEG)。</div>
-            </div>
+          </div>
         </div>
       </div>
     </div>
-
-
-    <!-- 隱藏欄位：儲存缺勤紀錄和統計的 JSON -->
-    <input type="hidden" id="all_absence_details_json" name="all_absence_details_json" value="[]">
-    <input type="hidden" id="absence_stats_json" name="absence_stats_json" value="{}">
-
-    <div class="text-center mt-4">
-      <button type="submit" id="submitResumeBtn" class="btn btn-primary btn-lg">提交並生成履歷</button>
-      <button type="button" id="editResumeBtn" class="btn btn-warning btn-lg d-none">修改履歷</button>
-    </div>
-    </form>
-  </div>
-
-  <div class="tab-pane fade" id="records-pane" role="tabpanel" aria-labelledby="records-tab" tabindex="0">
-    <div id="resumeRecords" class="p-3">
-      <table class="table table-striped align-middle text-center">
-        <thead class="table-light">
-          <tr>
-            <th>生成時間</th>
-            <th>檔名</th>
-            <th>審核狀態</th>
-            <th>下載</th>
-          </tr>
-        </thead>
-        <tbody id="recordsBody">
-          <tr>
-            <td colspan="4" class="text-muted">尚無履歷紀錄</td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-  </div>
-  </div>
-  </div>
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
@@ -472,6 +515,8 @@
     let disableAutoSave = false;
     let allCoursesData = [];
     let resumeDataLoaded = false; // 標誌：是否已從資料庫載入履歷資料
+    // 儲存所有缺勤記錄（用於前端篩選）
+    let allAbsenceRecords = [];
     // 編輯狀態標誌（參考 fill_preferences 頁面）
     let isEditing = false;
 
@@ -480,7 +525,16 @@
     const CERT_ADD_BTN_ID = 'addCertificateBtn';
     let certEntries = [];
     let certIdSeed = 0;
+    let currentPage = 1;
+    const PAGE_SIZE = 10;
+    let filteredCoursesCache = [];
 
+
+    // 缺勤統計初始值
+    let absenceStats = {
+      "曠課": 0, "遲到": 0, "事假": 0, "病假": 0,
+      "生理假": 0, "公假": 0, "喪假": 0
+    };
 
     // 新增: LocalStorage Key
     const AUTO_SAVE_KEY = 'resumeFormData';
@@ -578,7 +632,10 @@
         sensitivity: 'base'
       }));
 
-      renderCourseTable(filteredCourses);
+      filteredCoursesCache = filteredCourses;
+      currentPage = 1; // 每次搜尋/篩選都回到第一頁
+      renderPagedCourses();
+      renderPagination();
     }
 
     // 🧩 從後端載入學生個人模板
@@ -734,137 +791,35 @@
     document.getElementById("course-search").addEventListener("input", applyFilterAndSearch);
     document.getElementById("credit-filter").addEventListener("change", applyFilterAndSearch);
 
-    // 🧩 下載Excel模板
     async function downloadExcelTemplate() {
       try {
-        const response = await fetch("/api/download_course_template");
-        if (!response.ok) {
-          const error = await response.json();
-          alert("❌ 下載失敗：" + (error.message || "未知錯誤"));
+        // 1. 取得歷史記錄
+        const res = await fetch('/api/ta/get_standard_courses_history');
+        const result = await res.json();
+
+        if (!result.success || !result.history || result.history.length === 0) {
+          alert("❌ 尚未有任何助教上傳的課程範本");
           return;
         }
-        const blob = await response.blob();
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = "已修習專業核心科目範本.xlsx";
-        document.body.appendChild(a);
-        a.click();
-        window.URL.revokeObjectURL(url);
-        document.body.removeChild(a);
-        alert("✅ 模板下載成功！");
+
+        // 2. 最新一筆
+        const latest = result.history[0];  // 後端回傳應該是時間排序好的（若不是再處理）
+
+        if (!latest.id) {
+          alert("❌ 找不到範本 ID");
+          return;
+        }
+
+        // 3. 下載
+        const url = `/api/ta/download_standard_course_file/${latest.id}`;
+        window.location.href = url;
+
+        alert("📥 正在下載最新範本...");
       } catch (err) {
-        console.error("❌ 下載模板錯誤:", err);
+        console.error("❌ 下載範本錯誤:", err);
         alert("❌ 下載失敗：" + err.message);
       }
     }
-
-    // 🧩 上傳並解析Excel
-    async function uploadExcelFile(file) {
-      const formData = new FormData();
-      formData.append('file', file);
-
-      try {
-        const response = await fetch("/api/upload_course_excel", {
-          method: "POST",
-          body: formData
-        });
-
-        const result = await response.json();
-
-        if (!result.success) {
-          alert("❌ 上傳失敗：" + (result.message || "未知錯誤"));
-          return;
-        }
-
-        if (!result.courses || result.courses.length === 0) {
-          alert("⚠️ Excel文件中沒有找到課程資料");
-          return;
-        }
-
-        // 直接使用Excel中的課程數據（如果allCoursesData為空，直接使用；否則合併）
-        if (allCoursesData.length === 0) {
-          // 如果還沒有課程數據，直接使用Excel數據
-          allCoursesData = result.courses.map(course => ({
-            name: course.name,
-            credits: course.credits || '',
-            grade: course.grade || '',
-            isNotTaken: course.isNotTaken || false
-          }));
-        } else {
-          // 將Excel數據合併到現有課程數據中
-          // 以Excel中的課程名稱為準，更新成績和修課狀態
-          const excelCoursesMap = new Map();
-          result.courses.forEach(course => {
-            excelCoursesMap.set(course.name, course);
-          });
-
-          // 更新allCoursesData
-          allCoursesData.forEach(course => {
-            const excelCourse = excelCoursesMap.get(course.name);
-            if (excelCourse) {
-              // 更新成績
-              course.grade = excelCourse.grade || '';
-              // 更新修課狀態（isNotTaken）
-              course.isNotTaken = excelCourse.isNotTaken || false;
-              // 更新學分數（保留原始值，createCourseRow會根據isNotTaken決定顯示值）
-              if (excelCourse.credits) {
-                course.credits = excelCourse.credits;
-              }
-            }
-          });
-
-          // 如果有Excel中的新課程（不在現有列表中的），也加入
-          result.courses.forEach(excelCourse => {
-            const exists = allCoursesData.find(c => c.name === excelCourse.name);
-            if (!exists) {
-              allCoursesData.push({
-                name: excelCourse.name,
-                credits: excelCourse.credits || '',  // 保留原始學分數
-                grade: excelCourse.grade || '',
-                isNotTaken: excelCourse.isNotTaken || false
-              });
-            }
-          });
-        }
-
-        // 重新排序
-        allCoursesData.sort((a, b) => a.name.localeCompare(b.name, 'zh-TW', {
-          sensitivity: 'base'
-        }));
-
-        // 重新渲染表格（顯示課程資料）
-        renderCourseTable(allCoursesData);
-
-        // 保存表單數據
-        saveFormData();
-
-        alert(`✅ 成功匯入 ${result.courses.length} 門課程資料！`);
-      } catch (err) {
-        console.error("❌ 上傳Excel錯誤:", err);
-        alert("❌ 上傳失敗：" + err.message);
-      }
-    }
-
-    // 🧩 綁定按鈕事件
-    document.getElementById("save-template-btn").addEventListener("click", savePersonalTemplate);
-    document.getElementById("download-excel-template-btn").addEventListener("click", downloadExcelTemplate);
-
-    // 上傳Excel按鈕點擊事件
-    document.getElementById("upload-excel-btn").addEventListener("click", () => {
-      document.getElementById("excel-file-input").click();
-    });
-
-    // Excel文件選擇事件
-    document.getElementById("excel-file-input").addEventListener("change", (e) => {
-      const file = e.target.files[0];
-      if (file) {
-        uploadExcelFile(file);
-        // 清空input，以便可以再次選擇同一文件
-        e.target.value = '';
-      }
-    });
-
     // =========================================================================
     // 證照動態管理（代碼 + 名稱 + 類別 + 圖片）
     // =========================================================================
@@ -1380,7 +1335,6 @@
       }
     }
 
-    // 🧩 根據發證中心載入證照列表
     // 🧩 根據發證中心載入職類和級別列表
     async function loadJobCategoriesAndLevels(authorityId, jobCategorySelect, levelSelect, codeInput, nameInput, categoryInput, prefillJobCategory = null, prefillLevel = null) {
       try {
@@ -1991,7 +1945,11 @@
           }));
 
           // 渲染課程表格
-          renderCourseTable(allCoursesData);
+          filteredCoursesCache = [...allCoursesData];
+          currentPage = 1;
+
+          renderPagedCourses();
+          renderPagination();
 
           // 標記已從資料庫載入資料（只有在成功載入課程後才標記）
           resumeDataLoaded = true;
@@ -2003,6 +1961,60 @@
           if (tbody) {
             tbody.innerHTML = '<tr><td colspan="4" class="text-muted text-center">請先下載Excel範本，填寫完成後上傳以顯示課程資料</td></tr>';
           }
+        }
+
+
+        // 1️⃣ 當頁資料切片
+        function renderPagedCourses() {
+          const start = (currentPage - 1) * PAGE_SIZE;
+          const end = start + PAGE_SIZE;
+          const pageCourses = filteredCoursesCache.slice(start, end);
+          renderCourseTable(pageCourses);
+        }
+
+        // 2️⃣ 產生分頁按鈕
+        function renderPagination() {
+          const pagination = document.getElementById("course-pagination");
+          pagination.innerHTML = "";
+
+          const totalPages = Math.ceil(filteredCoursesCache.length / PAGE_SIZE);
+          if (totalPages <= 1) return;
+
+          // 上一頁
+          pagination.appendChild(createPageItem("«", currentPage > 1, () => {
+            currentPage--;
+            renderPagedCourses();
+            renderPagination();
+          }));
+
+          // 頁碼
+          for (let i = 1; i <= totalPages; i++) {
+            const li = document.createElement("li");
+            li.className = `page-item ${i === currentPage ? "active" : ""}`;
+            li.innerHTML = `<button class="page-link">${i}</button>`;
+            li.onclick = () => {
+              currentPage = i;
+              renderPagedCourses();
+              renderPagination();
+            };
+            pagination.appendChild(li);
+          }
+
+          // 下一頁
+          pagination.appendChild(createPageItem("»", currentPage < totalPages, () => {
+            currentPage++;
+            renderPagedCourses();
+            renderPagination();
+          }));
+        }
+
+        // 3️⃣ 小工具：分頁按鈕元件
+        function createPageItem(label, enabled, onClick) {
+          const li = document.createElement("li");
+          li.className = `page-item ${enabled ? "" : "disabled"}`;
+          li.innerHTML = `<button class="page-link">${label}</button>`;
+          if (enabled) li.onclick = onClick;
+          return li;
         }
 
         // 3. 填充證照資料
@@ -2312,21 +2324,7 @@
     // 【缺勤紀錄】相關邏輯
     // =========================================================================
 
-    // ---- 全域變數 ----
-    let allSemesters = [];
-    // 儲存所有缺勤記錄（用於前端篩選）
-    let allAbsenceRecords = [];
-    // 缺勤統計初始值
-    let absenceStats = {
-      "曠課": 0, "遲到": 0, "事假": 0, "病假": 0,
-      "生理假": 0, "公假": 0, "喪假": 0
-    };
-
-    // ============================================================================
-    // 1️⃣ LocalStorage：保存與載入缺勤紀錄表單資料
-    // ============================================================================
-
-    // 保存缺勤資料
+    // 🧩 輔助函式：保存缺勤記錄表單資料到 LocalStorage
     function saveAbsenceFormData() {
       const container = document.getElementById('absenceRecordContainer');
       if (!container) return;
@@ -2338,288 +2336,500 @@
         reason: container.querySelector('#reason')?.value || ''
       };
 
-      let data = JSON.parse(localStorage.getItem(AUTO_SAVE_KEY) || "{}");
-      if (!data.fields) data.fields = {};
+      // 保存到 LocalStorage（與其他表單資料一起）
+      const savedDataString = localStorage.getItem(AUTO_SAVE_KEY);
+      let data = savedDataString ? JSON.parse(savedDataString) : { fields: {}, courses: [], certificates: [] };
 
-      data.fields.absence_date = absenceData.absence_date;
-      data.fields.absence_type = absenceData.absence_type;
-      data.fields.duration_units = absenceData.duration_units;
-      data.fields.reason = absenceData.reason;
+      // 將缺勤記錄資料添加到 fields 中（使用 ID 作為 key，因為這些字段可能沒有 name 屬性）
+      if (!data.fields) data.fields = {};
+      data.fields['absence_date'] = absenceData.absence_date;
+      data.fields['absence_type'] = absenceData.absence_type;
+      data.fields['duration_units'] = absenceData.duration_units;
+      data.fields['reason'] = absenceData.reason;
 
       localStorage.setItem(AUTO_SAVE_KEY, JSON.stringify(data));
+      console.log('💾 缺勤記錄表單資料已保存到 LocalStorage');
     }
 
-    // 載入 LocalStorage
+    // 🧩 輔助函式：從 LocalStorage 恢復缺勤記錄表單資料
     function loadAbsenceFormData() {
       const container = document.getElementById('absenceRecordContainer');
       if (!container) {
+        console.log('⚠️ 找不到缺勤記錄容器，稍後再試');
+        // 如果容器不存在，稍後再試（可能是DOM還沒載入完成）
         setTimeout(loadAbsenceFormData, 200);
         return;
       }
 
-      const savedData = localStorage.getItem(AUTO_SAVE_KEY);
-      if (!savedData) return;
+      const savedDataString = localStorage.getItem(AUTO_SAVE_KEY);
+      if (!savedDataString) {
+        console.log('📭 LocalStorage 中沒有缺勤記錄表單資料');
+        return;
+      }
 
       try {
-        const data = JSON.parse(savedData);
-
+        const data = JSON.parse(savedDataString);
         if (data.fields) {
-          const f = data.fields;
+          // 恢復缺勤記錄表單欄位（使用 ID 查找，因為這些字段可能沒有 name 屬性）
+          const absenceDateInput = container.querySelector('#absence_date');
+          const absenceTypeInput = container.querySelector('#absence_type');
+          const durationUnitsInput = container.querySelector('#duration_units');
+          const reasonInput = container.querySelector('#reason');
 
-          if (container.querySelector('#absence_date') && !container.querySelector('#absence_date').value)
-            container.querySelector('#absence_date').value = f.absence_date || "";
+          // 只恢復非空的值，避免覆蓋用戶正在輸入的數據
+          if (absenceDateInput && data.fields['absence_date']) {
+            // 如果輸入框為空，才恢復
+            if (!absenceDateInput.value) {
+              absenceDateInput.value = data.fields['absence_date'];
+            }
+          }
+          if (absenceTypeInput && data.fields['absence_type']) {
+            // 如果輸入框為空，才恢復
+            if (!absenceTypeInput.value) {
+              absenceTypeInput.value = data.fields['absence_type'];
+            }
+          }
+          if (durationUnitsInput && data.fields['duration_units']) {
+            // 如果輸入框為空，才恢復
+            if (!durationUnitsInput.value) {
+              durationUnitsInput.value = data.fields['duration_units'];
+            }
+          }
+          if (reasonInput && data.fields['reason']) {
+            // 如果輸入框為空，才恢復
+            if (!reasonInput.value) {
+              reasonInput.value = data.fields['reason'];
+            }
+          }
 
-          if (container.querySelector('#absence_type') && !container.querySelector('#absence_type').value)
-            container.querySelector('#absence_type').value = f.absence_type || "曠課";
-
-          if (container.querySelector('#duration_units') && !container.querySelector('#duration_units').value)
-            container.querySelector('#duration_units').value = f.duration_units || "";
-
-          if (container.querySelector('#reason') && !container.querySelector('#reason').value)
-            container.querySelector('#reason').value = f.reason || "";
+          console.log('📥 缺勤記錄表單資料已從 LocalStorage 恢復');
         }
-      } catch (e) {
-        console.error("LocalStorage 恢復錯誤：", e);
+      } catch (error) {
+        console.error('❌ 載入缺勤記錄表單資料失敗:', error);
       }
     }
 
+    // 🧩 輔助函式：清空缺勤紀錄表單欄位 (此函數在您的腳本中沒有被使用，但為了完整性保留)
+    function clearAbsenceForm() {
+      const container = document.getElementById('absenceRecordContainer');
+      if (container) {
+        container.querySelector('#absence_date').value = '';
+        container.querySelector('#absence_type').value = '曠課';
+        container.querySelector('#duration_units').value = '';
+        container.querySelector('#reason').value = ''; // 加上事由
+        const proofImageInput = document.getElementById('proof_image');
+        if (proofImageInput) {
+          proofImageInput.value = '';
+        }
+      }
+    }
 
-    // ============================================================================
-    // 2️⃣ 載入學期（自動，不使用下拉選單）
-    // ============================================================================
+    // 🧩 載入缺勤統計資料
+    // 🧩 載入學期列表
+    // 儲存所有學期資料（用於填充下拉框和驗證）
+    let allSemesters = [];
+
     async function loadSemesters() {
+      const startSemesterSelect = document.getElementById("startSemester");
+      const endSemesterSelect = document.getElementById("endSemester");
+
+      if (!startSemesterSelect || !endSemesterSelect) {
+        console.error('找不到學期選擇器元素');
+        return;
+      }
+
       try {
+        // 使用新的API，獲取根據預設範圍和入學年度過濾後的學期列表
         const res = await fetch("/api/absence/available_semesters");
+
+        if (!res.ok) {
+          throw new Error(`HTTP錯誤: ${res.status} ${res.statusText}`);
+        }
+
         const result = await res.json();
+        console.log('可用學期列表API回應:', result);
+
+        startSemesterSelect.innerHTML = '<option value="">請選擇開始學期</option>';
+        endSemesterSelect.innerHTML = '<option value="">請選擇結束學期</option>';
 
         if (result.success && result.semesters) {
-          allSemesters = result.semesters.sort((a, b) => a.code.localeCompare(b.code));
+          if (result.semesters.length === 0) {
+            startSemesterSelect.innerHTML = '<option value="">暫無可用學期資料（請確認已設定預設學期範圍）</option>';
+            endSemesterSelect.innerHTML = '<option value="">暫無可用學期資料（請確認已設定預設學期範圍）</option>';
+            console.warn('可用學期列表為空');
+            return;
+          }
+
+          // 保存學期資料並按代碼排序
+          allSemesters = result.semesters.sort((a, b) => {
+            // 按學期代碼排序（例如：1122 < 1131）
+            return a.code.localeCompare(b.code);
+          });
+
+          // 填充兩個下拉框（只顯示過濾後的學期）
+          allSemesters.forEach(semester => {
+            const option1 = document.createElement("option");
+            option1.value = semester.id;
+            option1.textContent = `${semester.code}${semester.is_active ? ' ' : ''}`;
+            startSemesterSelect.appendChild(option1);
+
+            const option2 = document.createElement("option");
+            option2.value = semester.id;
+            option2.textContent = `${semester.code}${semester.is_active ? ' ' : ''}`;
+            endSemesterSelect.appendChild(option2);
+          });
+
+          // 載入並設置預設學期範圍
           await loadDefaultSemesterRange();
+        } else {
+          console.error('可用學期列表API返回失敗:', result.message || '未知錯誤');
+          startSemesterSelect.innerHTML = `<option value="">載入失敗: ${result.message || '未知錯誤'}</option>`;
+          endSemesterSelect.innerHTML = `<option value="">載入失敗: ${result.message || '未知錯誤'}</option>`;
         }
-      } catch (err) {
-        console.error("載入學期失敗:", err);
+      } catch (error) {
+        console.error('載入可用學期列表失敗:', error);
+        startSemesterSelect.innerHTML = `<option value="">載入失敗: ${error.message}</option>`;
+        endSemesterSelect.innerHTML = `<option value="">載入失敗: ${error.message}</option>`;
       }
     }
 
-
-    // ============================================================================
-    // 3️⃣ 載入預設學期範圍 + 自動查詢
-    // ============================================================================
+    // 🧩 載入預設學期範圍並自動設置
     async function loadDefaultSemesterRange() {
       try {
-        const res = await fetch("/api/get_absence_default_range");
+        const res = await fetch('/api/get_absence_default_range');
         const result = await res.json();
 
-        if (!result.success) return;
+        if (result.success && result.defaultStart && result.defaultEnd) {
+          const startSemesterSelect = document.getElementById("startSemester");
+          const endSemesterSelect = document.getElementById("endSemester");
 
-        const startCode = result.start;
-        const endCode = result.end;
+          if (!startSemesterSelect || !endSemesterSelect) {
+            console.warn('找不到學期選擇器，無法設置預設範圍');
+            return;
+          }
 
-        const rangeEl = document.getElementById("autoSemesterRange");
-        if (rangeEl) rangeEl.textContent = `${startCode} ～ ${endCode}`;
+          // 根據學期代碼找到對應的學期ID
+          const startSemester = allSemesters.find(s => s.code === result.defaultStart);
+          const endSemester = allSemesters.find(s => s.code === result.defaultEnd);
 
-        const start = allSemesters.find(s => s.code === startCode);
-        const end = allSemesters.find(s => s.code === endCode);
+          if (startSemester && endSemester) {
+            startSemesterSelect.value = startSemester.id;
+            endSemesterSelect.value = endSemester.id;
 
-        if (!start || !end) return;
+            console.log(`✅ 已設置預設學期範圍: ${result.defaultStart} - ${result.defaultEnd}`);
 
-        await loadSemesterRangeAbsenceRecords(start.id, end.id);
-        await loadAbsenceStats();
-
-      } catch (err) {
-        console.error("預設學期範圍載入失敗:", err);
+            // 自動觸發查詢缺勤記錄
+            await loadSemesterRangeAbsenceRecords(startSemester.id, endSemester.id);
+            await loadAbsenceStats();
+          } else {
+            console.warn(`⚠️ 找不到預設學期範圍對應的學期: ${result.defaultStart} - ${result.defaultEnd}`);
+          }
+        }
+      } catch (error) {
+        console.error('❌ 載入預設學期範圍失敗:', error);
       }
     }
 
-
-    // ============================================================================
-    // 4️⃣ 顯示缺勤紀錄列表
-    // ============================================================================
+    // 🧩 更新缺勤記錄列表顯示
     function renderAbsenceList(records) {
       const container = document.getElementById("absenceRecordsDisplay");
       if (!container) return;
 
       if (!records || records.length === 0) {
-        container.innerHTML = `<p class="text-muted text-center">查無缺勤紀錄</p>`;
-        resetStats();   // ← 無資料時清空統計
+        container.innerHTML = '<p class="text-muted text-center">查無缺勤紀錄</p>';
         return;
       }
 
-      let html = `
-    <div class="table-responsive">
-      <table class="table table-sm table-bordered align-middle">
-        <thead class="table-light">
-          <tr><th>日期</th><th>類型</th><th>節數</th><th>事由</th></tr>
-        </thead>
-        <tbody>
-  `;
+      let html = '<div class="table-responsive">';
+      html += '<table class="table table-sm table-bordered align-middle">';
+      html += '<thead class="table-light"><tr><th>日期</th><th>類型</th><th>節數</th><th>事由</th></tr></thead>';
+      html += '<tbody>';
 
-      records.forEach(r => {
-        html += `
-      <tr>
-        <td>${r.absence_date}</td>
-        <td>${r.absence_type}</td>
-        <td>${r.duration_units} 節</td>
-        <td>${r.reason}</td>
-      </tr>
-    `;
+      records.forEach(record => {
+        const date = record.absence_date || '';
+        const type = record.absence_type || '';
+        const units = record.duration_units || 0;
+        const reason = record.reason || '';
+
+        html += `<tr>
+          <td>${date}</td>
+          <td>${type}</td>
+          <td>${units} 節</td>
+          <td>${reason}</td>
+        </tr>`;
       });
 
-      html += `</tbody></table></div>`;
+      html += '</tbody></table>';
+      html += '</div>';
       container.innerHTML = html;
-
-      // ⭐⭐⭐ 最重要：每次重新渲染列表 → 重新計算統計 ⭐⭐⭐
-      updateAbsenceStats();
     }
 
+    // 🧩 更新缺勤統計
+    function updateAbsenceStats(records) {
+      // 重置統計
+      const stats = {
+        "曠課": 0, "遲到": 0, "事假": 0, "病假": 0,
+        "生理假": 0, "公假": 0, "喪假": 0
+      };
 
-    // ============================================================================
-    // 5️⃣ 載入學期範圍的缺勤紀錄
-    // ============================================================================
-    async function loadSemesterRangeAbsenceRecords(startId, endId) {
+      // 計算統計
+      if (records && records.length > 0) {
+        records.forEach(r => {
+          if (stats[r.absence_type] !== undefined) {
+            stats[r.absence_type] += Number(r.duration_units) || 0;
+          }
+        });
+      }
+
+      // 更新畫面
+      Object.keys(stats).forEach(type => {
+        const statElement = document.getElementById(`stat_${type}`);
+        if (statElement) {
+          statElement.textContent = stats[type];
+        }
+      });
+    }
+
+    // 🧩 載入學期範圍的缺勤記錄
+    async function loadSemesterRangeAbsenceRecords(startSemesterId, endSemesterId) {
       const displayDiv = document.getElementById("absenceRecordsDisplay");
-      displayDiv.innerHTML = `<p class="text-muted text-center">載入中...</p>`;
+      if (!displayDiv) return;
+
+      displayDiv.innerHTML = '<p class="text-muted text-center">載入中...</p>';
 
       try {
-        const res = await fetch(`/api/get_semester_absence_records?start_semester_id=${startId}&end_semester_id=${endId}`);
-        const result = await res.json();
+        // 構建查詢參數
+        let url = `/api/get_semester_absence_records`;
+        const params = [];
 
-        if (!result.success || !result.records) {
-          displayDiv.innerHTML = `<p class="text-muted text-center">查無缺勤紀錄</p>`;
-          return resetStats();
+        if (startSemesterId) {
+          params.push(`start_semester_id=${startSemesterId}`);
+        }
+        if (endSemesterId) {
+          params.push(`end_semester_id=${endSemesterId}`);
         }
 
-        // 整理紀錄
-        allAbsenceRecords = result.records.map(r => ({
-          absence_date: normalizeDate(r.absence_date || r.date),
-          absence_type: r.absence_type || r.type,
-          duration_units: r.duration_units || r.units,
-          reason: r.reason || r.remark || "",
-          id: r.id,
-          image_path: r.image_path || r.image || ""
-        }));
+        if (params.length > 0) {
+          url += '?' + params.join('&');
+        }
 
+        const res = await fetch(url);
+        const result = await res.json();
 
-        renderAbsenceList(allAbsenceRecords);
+        if (result.success && result.records) {
+          const records = result.records;
 
-      } catch (err) {
-        displayDiv.innerHTML = `<p class="text-danger text-center">載入失敗</p>`;
+          // 格式化並保存所有記錄到全域變數（用於前端篩選）
+          allAbsenceRecords = records.map(record => {
+            // 格式化日期為 YYYY-MM-DD
+            let date = record.absence_date || '';
+            if (date) {
+              try {
+                // 如果已經是 YYYY-MM-DD 格式，直接使用
+                if (typeof date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(date)) {
+                  // 已經是正確格式，不需要轉換
+                } else if (date instanceof Date) {
+                  // 如果是 Date 對象，轉換為 YYYY-MM-DD
+                  date = date.toISOString().split('T')[0];
+                } else if (typeof date === 'string') {
+                  // 嘗試解析各種日期格式
+                  const dateObj = new Date(date);
+                  if (!isNaN(dateObj.getTime())) {
+                    // 成功解析，轉換為 YYYY-MM-DD
+                    const year = dateObj.getFullYear();
+                    const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+                    const day = String(dateObj.getDate()).padStart(2, '0');
+                    date = `${year}-${month}-${day}`;
+                  }
+                }
+              } catch (e) {
+                console.error('日期格式化錯誤:', e, '原始日期:', date);
+                // 如果解析失敗，嘗試提取日期部分
+                if (typeof date === 'string') {
+                  const match = date.match(/(\d{4})-(\d{2})-(\d{2})/);
+                  if (match) {
+                    date = match[0];
+                  }
+                }
+              }
+            }
+
+            return {
+              absence_date: date,
+              absence_type: record.absence_type || '',
+              duration_units: record.duration_units || 0,
+              reason: record.reason || '',
+              id: record.id || null,
+              image_path: record.image_path || ''
+            };
+          });
+
+          // 初始顯示所有記錄
+          renderAbsenceList(allAbsenceRecords);
+          updateAbsenceStats(allAbsenceRecords);
+
+          // 載入缺勤統計（基於篩選的學期範圍）
+          await loadAbsenceStats();
+
+          // 檢查並設置缺勤記錄佐證圖的瀏覽和下載按鈕（使用最新的記錄）
+          const latestRecordWithImage = records.find(r => r.image_path);
+          if (latestRecordWithImage && latestRecordWithImage.image_path) {
+            const proofImageInput = document.getElementById('proof_image');
+            if (proofImageInput) {
+              proofImageInput.setAttribute('data-image-path', latestRecordWithImage.image_path);
+              const isCurrentlyReadonly = proofImageInput.disabled;
+            }
+          }
+        } else {
+          // 沒有記錄時，清空統計並顯示提示
+          displayDiv.innerHTML = '<p class="text-muted text-center">查無缺勤紀錄</p>';
+          // 重置統計為 0
+          const orderedKeys = ["曠課", "遲到", "事假", "病假", "生理假", "公假", "喪假"];
+          orderedKeys.forEach(key => {
+            const statElement = document.getElementById(`stat_${key}`);
+            if (statElement) {
+              statElement.textContent = 0;
+            }
+          });
+        }
+      } catch (error) {
+        console.error('載入缺勤記錄失敗:', error);
+        displayDiv.innerHTML = '<p class="text-danger text-center">載入失敗</p>';
       }
     }
 
-    // 日期格式轉換
-    function normalizeDate(date) {
-      if (!date) return "";
-      if (date.match(/\d{4}-\d{2}-\d{2}/)) return date;
-      let d = new Date(date);
-      return isNaN(d.getTime()) ? "" : d.toISOString().split("T")[0];
-    }
-
-
-    // ============================================================================
-    // 6️⃣ 缺勤統計
-    // ============================================================================
     async function loadAbsenceStats() {
-      const keys = ["曠課", "遲到", "事假", "病假", "生理假", "公假", "喪假"];
+      const statsBody = document.getElementById("absenceStatsBody");
+
+      const orderedKeys = ["曠課", "遲到", "事假", "病假", "生理假", "公假", "喪假"];
+
+      // 頁面載入時的初始狀態 (如果沒有資料，就顯示 0)
+      orderedKeys.forEach(key => {
+        const statElement = document.getElementById(`stat_${key}`);
+        if (statElement) {
+          statElement.textContent = absenceStats[key] || 0;
+        }
+      });
 
       try {
-        const res = await fetch("/api/get_absence_stats");
+        // 使用學期範圍獲取統計（如果已選擇）
+        const startSemesterId = document.getElementById('startSemester')?.value || '';
+        const endSemesterId = document.getElementById('endSemester')?.value || '';
+        let url = "/api/get_absence_stats";
+        if (startSemesterId && endSemesterId) {
+          url += `?start_semester_id=${startSemesterId}&end_semester_id=${endSemesterId}`;
+        }
+        const res = await fetch(url);
         const result = await res.json();
 
         if (result.success && result.stats) {
-          keys.forEach(k => {
-            absenceStats[k] = result.stats[k] || 0;
-            if (document.getElementById(`stat_${k}`))
-              document.getElementById(`stat_${k}`).textContent = absenceStats[k];
+          const stats = result.stats;
+
+          // 1. 更新全域變數 absenceStats
+          orderedKeys.forEach(key => {
+            // 獲取後端統計的單位數，如果沒有則為 0
+            const totalUnits = stats[key] || 0;
+            absenceStats[key] = totalUnits;
           });
+
+          // 2. 根據更新後的全域變數，更新 HTML 顯示
+          orderedKeys.forEach(key => {
+            const statElement = document.getElementById(`stat_${key}`);
+            if (statElement) {
+              statElement.textContent = absenceStats[key];
+            }
+          });
+
+        } else {
+          // 如果後端返回失敗，我們保持原本的 0/載入中 狀態 (如果 HTML 已經被正確定義)
+          // 為了避免混亂，這裡不修改 HTML 結構，只保留原本的數字 (0)
         }
-      } catch (err) {
-        console.error("統計載入失敗:", err);
+
+      } catch (error) {
+        console.error('載入缺勤統計失敗:', error);
+        // 如果載入失敗，我們保持數字為 0 或原本的 absenceStats[key]
       }
     }
 
-    // 無資料時的統計重置
-    function resetStats() {
-      const keys = ["曠課", "遲到", "事假", "病假", "生理假", "公假", "喪假"];
-      keys.forEach(k => {
-        if (document.getElementById(`stat_${k}`))
-          document.getElementById(`stat_${k}`).textContent = "0";
-      });
-    }
-
-    // 渲染統計到頁面
-    function renderAbsenceStats() {
-      const keys = ["曠課", "遲到", "事假", "病假", "生理假", "公假", "喪假"];
-
-      keys.forEach(k => {
-        const el = document.getElementById(`stat_${k}`);
-        if (el) el.textContent = absenceStats[k] || 0;
-      });
-    }
-
-    function updateAbsenceStats() {
-      const keys = ["曠課", "遲到", "事假", "病假", "生理假", "公假", "喪假"];
-
-      // 重置統計
-      keys.forEach(k => absenceStats[k] = 0);
-
-      // 重新累計
-      allAbsenceRecords.forEach(rec => {
-        if (absenceStats[rec.absence_type] !== undefined) {
-          const unit = parseInt(rec.duration_units || 1);
-          absenceStats[rec.absence_type] += unit;
-        }
-      });
-
-      renderAbsenceStats();
-    }
-
-    // ============================================================================
-    // 7️⃣ 載入歷史缺勤紀錄列表（另一個頁籤）
-    // ============================================================================
+    // 🧩 載入詳細缺勤紀錄列表 (在歷史紀錄頁籤)
     async function loadAbsenceRecordsList() {
       const listBody = document.getElementById("absenceRecordsListBody");
-      if (!listBody) return;
-
-      listBody.innerHTML = `<tr><td colspan="5">載入中...</td></tr>`;
+      if (!listBody) return;  // ⭐ 避免報錯，HTML 沒有就不更新
+      listBody.innerHTML = '<tr><td colspan="5">載入中...</td></tr>';
 
       try {
         const res = await fetch("/api/get_absence_records");
         const result = await res.json();
 
-        listBody.innerHTML = "";
+        listBody.innerHTML = ""; // 清空載入中提示
 
-        if (!result.success || !result.records?.length) {
-          listBody.innerHTML = `<tr><td colspan="5" class="text-muted">尚無詳細缺勤紀錄</td></tr>`;
-          return;
+        if (result.success && result.records?.length) {
+          result.records.forEach(r => {
+            const unitsText = `${r.duration_units || '0'} 節`;
+            // 判斷是否有佐證圖片
+            const imageStatus = r.image_path ?
+              '<span class="text-success">有</span>' :
+              '<span class="text-secondary">無</span>';
+
+            listBody.insertAdjacentHTML("beforeend", `
+                                    <tr>
+                                        <td>${r.absence_date || '-'}</td>
+                                        <td>${r.absence_type || '-'}</td>
+                                        <td>${unitsText}</td>
+                                        <td>${r.reason || '-'}</td>
+                                        <td>${imageStatus}</td>
+                                    </tr>
+                                `);
+          });
+        } else {
+          listBody.innerHTML = '<tr><td colspan="5" class="text-muted">尚無詳細缺勤紀錄</td></tr>';
         }
-
-        result.records.forEach(r => {
-          listBody.insertAdjacentHTML("beforeend", `
-        <tr>
-          <td>${r.absence_date || "-"}</td>
-          <td>${r.absence_type || "-"}</td>
-          <td>${r.duration_units || 0} 節</td>
-          <td>${r.reason || "-"}</td>
-          <td>${r.image_path ? '<span class="text-success">有</span>' : '<span class="text-secondary">無</span>'}</td>
-        </tr>
-      `);
-        });
-
-      } catch (err) {
-        listBody.innerHTML = `<tr><td colspan="5" class="text-danger">列表載入失敗</td></tr>`;
+      } catch (error) {
+        console.error('載入詳細缺勤紀錄失敗:', error);
+        listBody.innerHTML = '<tr><td colspan="5" class="text-danger">列表載入失敗</td></tr>';
       }
     }
-
-
-    // ============================================================================
-    // 8️⃣ 頁面初始化
-    // ============================================================================
-    document.addEventListener("DOMContentLoaded", () => {
+    // 🧩 頁面載入時初始化
+    document.addEventListener('DOMContentLoaded', function () {
+      // 載入學期列表
       loadSemesters();
-      loadAbsenceFormData();
-    });
 
+      // 篩選按鈕點擊事件（學期範圍篩選）
+      const filterBtn = document.getElementById("filterAbsenceBtn");
+      if (filterBtn) {
+        filterBtn.addEventListener("click", async function (e) {
+          e.preventDefault(); // 阻止表單提交
+          e.stopPropagation(); // 阻止事件冒泡
+
+          // 獲取學期範圍
+          const startSemesterId = document.getElementById("startSemester")?.value || '';
+          const endSemesterId = document.getElementById("endSemester")?.value || '';
+
+          // 檢查是否選擇了學期
+          if (!startSemesterId || !endSemesterId) {
+            alert('請選擇開始學期和結束學期');
+            return;
+          }
+
+          // 檢查學期順序（開始學期應該在結束學期之前）
+          const startSemester = allSemesters.find(s => s.id == startSemesterId);
+          const endSemester = allSemesters.find(s => s.id == endSemesterId);
+
+          if (startSemester && endSemester) {
+            if (startSemester.code > endSemester.code) {
+              alert('開始學期不能晚於結束學期，請重新選擇');
+              return;
+            }
+          }
+
+          // 載入學期範圍的缺勤記錄（同時更新列表和統計）
+          await loadSemesterRangeAbsenceRecords(startSemesterId, endSemesterId);
+
+          // 載入缺勤統計（基於篩選的學期範圍）
+          await loadAbsenceStats();
+        });
+      }
+    });
 
     // 🧩 更新缺勤統計（已廢棄，現在從資料庫讀取）
     // 注意：此按鈕已從 HTML 中移除，但保留此代碼以防其他地方引用
@@ -2803,9 +3013,74 @@
 
 
     // =========================================================================
+    // 檢查作業截止時間
+    // =========================================================================
+    async function checkDeadlineAndDisableForm() {
+      try {
+        const res = await fetch("/announcement/api/check_deadline?type=resume");
+        const result = await res.json();
+
+        if (result.success && result.has_deadline && result.is_expired) {
+          // 截止時間已過，禁用表單
+          const form = document.getElementById("resumeForm");
+          if (form) {
+            // 禁用所有輸入欄位
+            form.querySelectorAll('input, select, textarea, button').forEach(element => {
+              if (element.type !== 'button' || element.id === 'submitResumeBtn') {
+                element.disabled = true;
+              }
+            });
+
+            // 禁用提交按鈕
+            const submitBtn = document.getElementById("submitResumeBtn");
+            if (submitBtn) {
+              submitBtn.disabled = true;
+              submitBtn.textContent = '已超過截止時間';
+            }
+
+            // 禁用修改按鈕
+            const editBtn = document.getElementById("editResumeBtn");
+            if (editBtn) {
+              editBtn.disabled = true;
+            }
+
+            // 顯示提示訊息
+            const container = document.querySelector(".container");
+            if (container) {
+              const alertDiv = document.createElement("div");
+              alertDiv.className = "alert alert-danger alert-dismissible fade show";
+              alertDiv.setAttribute("role", "alert");
+              alertDiv.innerHTML = `
+                <strong>⚠️ 已超過截止時間</strong><br>
+                上傳履歷的截止時間為：${result.deadline}<br>
+                目前無法再修改或提交履歷。
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+              `;
+              container.insertBefore(alertDiv, container.firstChild);
+            }
+
+            // 設置全局標記，防止後續操作
+            window.deadlineExpired = true;
+            isEditing = false; // 強制設為非編輯模式
+          }
+        }
+      } catch (error) {
+        console.error("檢查截止時間失敗:", error);
+      }
+    }
+
+    // =========================================================================
     // 事件綁定和初始化
     // =========================================================================
     document.addEventListener("DOMContentLoaded", async () => {
+      // 首先檢查截止時間
+      await checkDeadlineAndDisableForm();
+
+      // 如果已過期，直接返回，不進行後續初始化
+      if (window.deadlineExpired) {
+        return;
+      }
+
       const form = document.getElementById("resumeForm");
 
       // 針對非動態生成的欄位，設定監聽器
@@ -2979,6 +3254,23 @@
     const editResumeBtn = document.getElementById("editResumeBtn");
     if (editResumeBtn) {
       editResumeBtn.addEventListener("click", async function () {
+        // 檢查截止時間
+        if (window.deadlineExpired) {
+          alert("⚠️ 已超過截止時間，無法再修改履歷");
+          return;
+        }
+
+        try {
+          const deadlineCheck = await fetch("/announcement/api/check_deadline?type=resume");
+          const deadlineResult = await deadlineCheck.json();
+          if (deadlineResult.success && deadlineResult.has_deadline && deadlineResult.is_expired) {
+            alert(`⚠️ 已超過截止時間（${deadlineResult.deadline}），無法再修改履歷`);
+            return;
+          }
+        } catch (error) {
+          console.error("檢查截止時間失敗:", error);
+        }
+
         // 切換編輯狀態
         isEditing = !isEditing;
 
@@ -3053,6 +3345,24 @@
     // 🧩 表單送出 (提交成功後清除 LocalStorage 並切換頁籤)
     document.getElementById("resumeForm").addEventListener("submit", async e => {
       e.preventDefault();
+
+      // 再次檢查截止時間（防止用戶繞過前端檢查）
+      if (window.deadlineExpired) {
+        alert("⚠️ 已超過截止時間，無法提交履歷");
+        return;
+      }
+
+      try {
+        const deadlineCheck = await fetch("/announcement/api/check_deadline?type=resume");
+        const deadlineResult = await deadlineCheck.json();
+        if (deadlineResult.success && deadlineResult.has_deadline && deadlineResult.is_expired) {
+          alert(`⚠️ 已超過截止時間（${deadlineResult.deadline}），無法提交履歷`);
+          return;
+        }
+      } catch (error) {
+        console.error("檢查截止時間失敗:", error);
+      }
+
       const submitBtn = e.submitter;
       const originalText = submitBtn.textContent;
 
@@ -3225,6 +3535,96 @@
       }
     });
 
+    // =========================================================================
+    // 動態載入公司與職缺多選框
+    // =========================================================================
+    let isAllSelected = false;
+
+    async function loadJobCheckboxes() {
+      const container = document.getElementById("jobCheckboxContainer");
+
+      try {
+        const res = await fetch("/api/get_companies_for_resume_delivery");
+        const result = await res.json();
+
+        if (!result.success) {
+          container.innerHTML = "<p class='text-danger'>載入失敗</p>";
+          return;
+        }
+
+        container.innerHTML = "";
+
+        if (result.use_preferences) {
+          container.insertAdjacentHTML("afterbegin", `
+           <div class="alert alert-info py-2">
+           💡 已依您填寫的「志願序」顯示可投遞的公司
+           </div>
+        `);
+        } else {
+          container.insertAdjacentHTML("afterbegin", `
+           <div class="alert alert-secondary py-2">
+          💡 尚未填寫志願序，目前顯示所有可投遞公司
+           </div>
+      `);
+        }
+
+        result.companies.forEach(company => {
+          const companyDiv = document.createElement("div");
+          companyDiv.classList.add("mb-2");
+
+          companyDiv.innerHTML = `
+        <strong>${company.company_name}</strong>
+        <div class="ms-3 mt-1"></div>
+      `;
+
+          const jobListDiv = companyDiv.querySelector("div");
+
+          company.jobs.forEach(job => {
+            const id = `job_${job.job_id}`;
+            jobListDiv.insertAdjacentHTML("beforeend", `
+          <div class="form-check">
+            <input class="form-check-input job-checkbox"
+                   type="checkbox"
+                   value="${job.job_id}"
+                   id="${id}">
+            <label class="form-check-label" for="${id}">
+              ${job.job_title}
+            </label>
+          </div>
+        `);
+          });
+
+          container.appendChild(companyDiv);
+        });
+
+      } catch (e) {
+        console.error(e);
+        container.innerHTML = "<p class='text-danger'>系統錯誤</p>";
+      }
+    }
+
+    // 全選 / 全不選
+    document.getElementById("toggleSelectAll").addEventListener("click", () => {
+      const checkboxes = document.querySelectorAll(".job-checkbox");
+      isAllSelected = !isAllSelected;
+
+      checkboxes.forEach(cb => cb.checked = isAllSelected);
+      document.getElementById("toggleSelectAll").textContent =
+        isAllSelected ? "✖ 全不選" : "✔ 全選";
+    });
+
+    // 表單送出前整理資料
+    document.getElementById("resumeForm").addEventListener("submit", () => {
+      const selected = [];
+      document.querySelectorAll(".job-checkbox:checked").forEach(cb => {
+        selected.push(parseInt(cb.value));
+      });
+      document.getElementById("selected_jobs_json").value = JSON.stringify(selected);
+    });
+
+    // 初始化
+    document.addEventListener("DOMContentLoaded", loadJobCheckboxes);
+
   </script>
 
   <!-- 側邊選單 -->
@@ -3233,7 +3633,7 @@
     <h2>功能選單</h2>
     <a href="/student_home">首頁</a>
     <a href="/profile">個人資料</a>
-    <a href="/upload_resume">上傳履歷</a>
+    <a href="/resume_folders">履歷管理</a>
     <a href="/ai_edit_resume">AI修改履歷</a>
     <a href="/fill_preferences">填寫志願序</a>
     <a href="/notifications">通知</a>

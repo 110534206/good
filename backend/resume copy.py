@@ -15,7 +15,6 @@ from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
 from openpyxl.utils import get_column_letter
 import io
 
-resume_bp = Blueprint("resume_bp", __name__)
 
 # --- 檔案路徑設定 ---
 BASE_UPLOAD_DIR = r"C:\Featured\good\backend"
@@ -90,6 +89,9 @@ def safe_create_inline_image(doc, file_path, width, description=""):
         print(f"⚠️ {description}圖片載入錯誤 (路徑: {file_path}): {e}")
         traceback.print_exc()
         return None
+
+
+resume_bp = Blueprint("resume_bp", __name__)
 
 # -------------------------
 # 輔助函數：格式化學分數（整數顯示為整數，如2而不是2.0）
@@ -2769,6 +2771,111 @@ def upload_course_grade_excel():
         conn.close()
 
 # -------------------------
+# 匯入核心科目 (Excel)
+# -------------------------
+@resume_bp.route('/api/import_standard_courses', methods=['POST'])
+def import_standard_courses():
+    if 'user_id' not in session or session.get('role') != 'ta':
+        return jsonify({"success": False, "message": "未授權"}), 403
+
+    if 'file' not in request.files:
+        return jsonify({"success": False, "message": "缺少文件"}), 400
+
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({"success": False, "message": "未選擇文件"}), 400
+
+    allowed_extensions = {'xlsx', 'xls'}
+    if '.' not in file.filename or file.filename.rsplit('.', 1)[1].lower() not in allowed_extensions:
+        return jsonify({"success": False, "message": "不支援的文件類型"}), 400
+    
+    file_stream = io.BytesIO(file.read())
+    conn = get_db()
+    cursor = conn.cursor()
+    
+    try:
+        workbook = load_workbook(file_stream)
+        sheet = workbook.active
+        
+        headers = [cell.value for cell in sheet[1]]
+        
+        course_name_col = None
+        credits_col = None
+        
+        for i, header in enumerate(headers):
+            if header and ('課程名稱' in str(header) or '科目名稱' in str(header)):
+                course_name_col = i + 1
+            elif header and '學分' in str(header):
+                credits_col = i + 1
+
+        if not course_name_col or not credits_col:
+            return jsonify({"success": False, "message": "Excel 檔案缺少必要的欄位（課程名稱/科目名稱、學分）"}), 400
+
+        # 清空現有核心科目（避免重複或過時資料）
+        cursor.execute("UPDATE standard_courses SET is_active = 0")
+
+        imported_count = 0
+        for row_index in range(2, sheet.max_row + 1):
+            try:
+                course_name = str(sheet.cell(row=row_index, column=course_name_col).value or '').strip()
+                credits_value = str(sheet.cell(row=row_index, column=credits_col).value or '').strip()
+
+                if not course_name or not credits_value:
+                    continue
+
+                # 嘗試將學分轉換為數字
+                try:
+                    credits = float(credits_value)
+                except ValueError:
+                    credits = 0.0 # 無效學分設為 0
+
+                # 檢查是否已存在，如果存在則更新 is_active 和 credits
+                cursor.execute("""
+                    SELECT id FROM standard_courses WHERE course_name = %s LIMIT 1
+                """, (course_name,))
+                existing_course = cursor.fetchone()
+                
+                if existing_course:
+                    cursor.execute("""
+                        UPDATE standard_courses 
+                        SET credits = %s, is_active = 1, updated_at = NOW() 
+                        WHERE id = %s
+                    """, (credits, existing_course['id']))
+                else:
+                    cursor.execute("""
+                        INSERT INTO standard_courses 
+                            (course_name, credits, is_active, uploaded_by, uploaded_at)
+                        VALUES (%s, %s, 1, %s, NOW())
+                    """, (course_name, credits, session['username']))
+                
+                imported_count += 1
+                
+            except Exception as row_e:
+                print(f"⚠️ 處理 Excel 第 {row_index} 行錯誤: {row_e}")
+                continue
+
+        conn.commit()
+        return jsonify({"success": True, "message": f"成功匯入 {imported_count} 筆核心科目資料"})
+        
+    except Exception as e:
+        conn.rollback()
+        print("❌ 匯入核心科目 Excel 錯誤:", e)
+        traceback.print_exc()
+        return jsonify({"success": False, "message": f"伺服器錯誤: {str(e)}"}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+# -------------------------
+# TA 頁面：上傳核心科目
+# -------------------------
+@resume_bp.route('/ta/upload_standard_courses')
+def upload_standard_courses_page():
+    if 'user_id' not in session or session.get('role') != 'ta':
+        return redirect('/login')
+    return render_template('ta/upload_standard_courses.html')
+
+# -------------------------
 # API：取得公司職缺列表 (for 履歷填寫頁面)
 # -------------------------
 @resume_bp.route('/api/company_positions', methods=['GET'])
@@ -2814,7 +2921,7 @@ def get_company_positions():
         return jsonify({"success": False, "message": "無法取得公司職缺列表"}), 500
 
 # ----------------------------------------------------
-# 取得待審核履歷列表 (for 老師/主任/班導師)
+# 【功能修正】新增 API：取得待審核履歷列表 (for 老師/主任/班導師)
 # ----------------------------------------------------
 
 # 輔助函數：獲取主任所屬部門的 ID (請根據您的資料庫結構調整)
@@ -2833,9 +2940,7 @@ def get_director_department(cursor, user_id):
         print(f"Error fetching director department: {e}")
         return None
 
-# ----------------------------------------------------
-# 取得待審核履歷列表 (for 指導老師)
-# ----------------------------------------------------
+
 @resume_bp.route('/api/teacher_review_resumes', methods=['GET'])
 def get_teacher_review_resumes():
     # 確保有權限 (teacher, director, class_teacher, admin) 才能進入
@@ -2974,123 +3079,6 @@ def get_teacher_review_resumes():
 
 
 # -------------------------
-# API - 更新履歷欄位（comment, note）（含權限檢查）
-# -------------------------
-@resume_bp.route('/api/update_resume_field', methods=['POST'])
-def update_resume_field():
-    try:
-        if not require_login():
-            return jsonify({"success": False, "message": "未授權"}), 403
-
-        data = request.get_json() or {}
-        resume_id = data.get('resume_id')
-        field = data.get('field')
-        value = (data.get('value') or '').strip()
-
-        allowed_fields = {
-            "comment": "comment",
-            "note": "note"
-        }
-
-        try:
-            resume_id = int(resume_id)
-        except (TypeError, ValueError):
-            return jsonify({"success": False, "message": "resume_id 必須是數字"}), 400
-
-        if field not in allowed_fields:
-            return jsonify({"success": False, "message": "參數錯誤"}), 400
-
-        conn = get_db()
-        cursor = conn.cursor(dictionary=True)
-
-        # 先找出 resume 的 owner
-        cursor.execute("SELECT user_id FROM resumes WHERE id = %s", (resume_id,))
-        r = cursor.fetchone()
-        if not r:
-            cursor.close()
-            conn.close()
-            return jsonify({"success": False, "message": "找不到該履歷"}), 404
-
-        owner_id = r['user_id']
-
-        # 取得使用者角色與 id
-        role = session.get('role')
-        user_id = session['user_id']
-
-        if role == "class_teacher":
-            if not teacher_manages_class(cursor, user_id, get_user_by_id(cursor, owner_id)['class_id']):
-                cursor.close()
-                conn.close()
-                return jsonify({"success": False, "message": "沒有權限修改該履歷"}), 403
-
-        elif role == "director":
-            director_dept = get_director_department(cursor, user_id)
-            cursor.execute("SELECT c.department FROM classes c JOIN users u ON u.class_id = c.id WHERE u.id = %s", (owner_id,))
-            target_dept_row = cursor.fetchone()
-            if not director_dept or not target_dept_row or director_dept != target_dept_row.get('department'):
-                cursor.close()
-                conn.close()
-                return jsonify({"success": False, "message": "沒有權限修改該履歷"}), 403
-
-        elif role == "admin":
-            pass  # admin 可以
-
-        elif role == "student":
-            # 學生只能修改自己的履歷，且只能修改 note 欄位
-            if user_id != owner_id:
-                cursor.close()
-                conn.close()
-                return jsonify({"success": False, "message": "學生只能修改自己的履歷"}), 403
-            if field != "note":
-                cursor.close()
-                conn.close()
-                return jsonify({"success": False, "message": "學生只能修改備註欄位"}), 403
-
-        else:
-            # ta 或其他角色不可修改
-            cursor.close()
-            conn.close()
-            return jsonify({"success": False, "message": "角色無權限修改"}), 403
-
-        # 更新欄位
-        sql = f"UPDATE resumes SET {allowed_fields[field]} = %s, updated_at = NOW() WHERE id = %s"
-        cursor.execute(sql, (value, resume_id))
-        conn.commit()
-        cursor.close()
-        conn.close()
-        return jsonify({"success": True, "field": field, "resume_id": resume_id})
-
-    except Exception as e:
-        traceback.print_exc()
-        return jsonify({"success": False, "message": f"伺服器錯誤: {str(e)}"}), 500
-
-# -------------------------
-# API - 查詢履歷狀態
-# -------------------------
-@resume_bp.route('/api/resume_status', methods=['GET'])
-def resume_status():
-    resume_id = request.args.get('resume_id')
-    if not resume_id:
-        return jsonify({"success": False, "message": "缺少 resume_id"}), 400
-
-    try:
-        conn = get_db()
-        cursor = conn.cursor(dictionary=True)
-        cursor.execute("SELECT status FROM resumes WHERE id = %s", (resume_id,))
-        resume = cursor.fetchone()
-        cursor.close()
-        conn.close()
-
-        if not resume:
-            return jsonify({"success": False, "message": "找不到該履歷"}), 404
-
-        return jsonify({"success": True, "status": resume['status']})
-
-    except Exception as e:
-        traceback.print_exc()
-        return jsonify({"success": False, "message": f"伺服器錯誤: {str(e)}"}), 500
-
-# -------------------------
 # API - 審核履歷 (退件/通過)
 # -------------------------
 @resume_bp.route('/api/review_resume/<int:resume_id>', methods=['POST'])
@@ -3134,12 +3122,23 @@ def review_resume(resume_id):
         old_status = resume_data['old_status']
 
         # 3. 更新履歷狀態
-        cursor.execute("""
-            UPDATE resumes SET 
-                status=%s, 
-                comment=%s
-            WHERE id=%s
-        """, (status, comment, resume_id))
+        # 如果是指導老師（teacher）審核，需要更新 reviewed_by 欄位
+        if user_role == 'teacher':
+            cursor.execute("""
+                UPDATE resumes SET 
+                    status=%s, 
+                    comment=%s,
+                    reviewed_by=%s,
+                    reviewed_at=NOW()
+                WHERE id=%s
+            """, (status, comment, user_id, resume_id))
+        else:
+            cursor.execute("""
+                UPDATE resumes SET 
+                    status=%s, 
+                    comment=%s
+                WHERE id=%s
+            """, (status, comment, resume_id))
         
         # 4. 取得審核者姓名
         cursor.execute("SELECT name, role FROM users WHERE id = %s", (user_id,))
@@ -3243,6 +3242,85 @@ def review_resume(resume_id):
         conn.close()
 
 # -------------------------
+# API - 履歷資料夾管理
+# -------------------------
+@resume_bp.route("/api/resume_folders", methods=["GET"])
+def get_folders():
+    if not require_login(): return jsonify({"success": False, "message": "未登入"}), 401
+    user_id = session['user_id']
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute("SELECT * FROM resume_folders WHERE user_id = %s ORDER BY created_at DESC", (user_id,))
+    folders = cursor.fetchall()
+    cursor.close()
+    conn.close()
+    return jsonify({"success": True, "folders": folders})
+
+# -------------------------
+# API - 建立/更新履歷資料夾
+# -------------------------
+@resume_bp.route("/api/resume_folders", methods=["POST"])
+def create_folder():
+    if not require_login(): return jsonify({"success": False, "message": "未登入"}), 401
+    user_id = session['user_id']
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True) # 改用 dictionary=True 方便抓取資料
+    try:
+        # 1. 執行插入
+        cursor.execute("INSERT INTO resume_folders (user_id, folder_name) VALUES (%s, '未命名履歷')", (user_id,))
+        new_id = cursor.lastrowid
+        conn.commit()
+
+        # 2. 立即查回該筆剛建立的完整資料，包含自動生成的 created_at
+        cursor.execute("SELECT id, folder_name, DATE_FORMAT(created_at, '%Y-%m-%d %H:%i:%s') as created_at FROM resume_folders WHERE id = %s", (new_id,))
+        new_folder = cursor.fetchone()
+
+        # 3. 回傳完整物件，這才符合前端 result.folder 的需求
+        return jsonify({"success": True, "folder": new_folder})
+    except Exception as e:
+        conn.rollback()
+        return jsonify({"success": False, "message": str(e)}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+# -------------------------
+# API - 刪除履歷資料夾
+# -------------------------
+@resume_bp.route("/api/resume_folders/<int:folder_id>", methods=["DELETE"])
+def delete_folder(folder_id):
+    if not require_login(): return jsonify({"success": False, "message": "未登入"}), 401
+    user_id = session['user_id']
+    conn = get_db()
+    cursor = conn.cursor()
+    try:
+        # 增加 user_id 檢查，確保學生只能刪除自己的資料夾
+        cursor.execute("DELETE FROM resume_folders WHERE id = %s AND user_id = %s", (folder_id, user_id))
+        conn.commit()
+        return jsonify({"success": True})
+    except Exception as e:
+        conn.rollback()
+        return jsonify({"success": False, "message": str(e)}), 500
+    finally:
+        cursor.close()
+        conn.close()       
+        
+# -------------------------
+# API - 更新履歷資料夾名稱
+# -------------------------
+@resume_bp.route("/api/resume_folders/<int:folder_id>", methods=["PUT"])
+def update_folder(folder_id):
+    data = request.json
+    new_name = data.get("folder_name")
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("UPDATE resume_folders SET folder_name = %s WHERE id = %s", (new_name, folder_id))
+    conn.commit()
+    cursor.close()
+    conn.close()
+    return jsonify({"success": True})
+
+# -------------------------
 # 頁面路由
 # -------------------------
 @resume_bp.route('/review_resume')
@@ -3251,7 +3329,16 @@ def review_resume_page():
     if not require_login():
         return redirect('/login')
     
-    # 統一使用整合後的審核頁面
+    # 如果是廠商，重定向到廠商專用的履歷審核頁面
+    if session.get("role") == "vendor":
+        # 保留查詢參數（如 company_id, status 等）
+        query_string = request.query_string.decode('utf-8')
+        redirect_url = '/vendor_review_resume'
+        if query_string:
+            redirect_url += '?' + query_string
+        return redirect(redirect_url)
+    
+    # 統一使用整合後的審核頁面（給指導老師使用）
     return render_template('resume/review_resume.html')
 
 @resume_bp.route('/class_review_resume')
@@ -3262,7 +3349,6 @@ def class_review_resume_page():
     
     # 班導審核履歷頁面
     return render_template('resume/class_review_resume.html')
-
 
 # -------------------------
 # API - 取得班導 / 主任 履歷 (支援多班級 & 全系)（讀取）
@@ -3295,6 +3381,8 @@ def get_class_resumes():
             # 對於指導老師（teacher），只顯示選擇了該老師管理的公司的學生履歷
             # 對於班導（class_teacher），顯示班導的學生履歷
             if role == "teacher":
+                # 修改：返回所有志願序，而不是只返回第一個
+                # 這樣每個志願序都會對應一行履歷資料
                 sql_query = """
                     SELECT DISTINCT
                         r.id,
@@ -3309,12 +3397,12 @@ def get_class_resumes():
                         r.comment,
                         r.note,
                         r.created_at,
-                        latest_pref.company_name AS company_name,
-                        latest_pref.job_title AS job_title,
-                        latest_pref.preference_id,
-                        latest_pref.preference_order,
-                        latest_pref.preference_status,
-                        latest_pref.vendor_comment
+                        pref.company_name AS company_name,
+                        pref.job_title AS job_title,
+                        pref.preference_id,
+                        pref.preference_order,
+                        pref.preference_status,
+                        pref.vendor_comment
                     FROM resumes r
                     JOIN users u ON r.user_id = u.id
                     LEFT JOIN classes c ON u.class_id = c.id
@@ -3325,7 +3413,7 @@ def get_class_resumes():
                             sp.preference_order,
                             'pending' AS preference_status,
                             ic.company_name,
-                            ij.title AS job_title,
+                            COALESCE(ij.title, sp.job_title) AS job_title,
                             ij.id AS job_id,
                             (SELECT vph.comment 
                              FROM vendor_preference_history vph 
@@ -3337,17 +3425,7 @@ def get_class_resumes():
                         LEFT JOIN internship_jobs ij ON sp.job_id = ij.id
                         WHERE ic.advisor_user_id = %s
                         AND sp.status = 'approved'
-                        AND sp.id = (
-                            SELECT sp2.id
-                            FROM student_preferences sp2
-                            JOIN internship_companies ic2 ON sp2.company_id = ic2.id
-                            WHERE sp2.student_id = sp.student_id
-                            AND ic2.advisor_user_id = %s
-                            AND sp2.status = 'approved'
-                            ORDER BY sp2.preference_order ASC
-                            LIMIT 1
-                        )
-                    ) latest_pref ON latest_pref.student_id = u.id
+                    ) pref ON pref.student_id = u.id
                     WHERE r.status = 'approved'
                     -- 只顯示選擇了該指導老師管理的公司的學生履歷
                     AND EXISTS (
@@ -3358,10 +3436,11 @@ def get_class_resumes():
                             AND ic2.advisor_user_id = %s
                             AND sp.status = 'approved'
                     )
+                    ORDER BY pref.preference_order ASC
                 """
-                sql_params = (user_id, user_id, user_id)
+                sql_params = (user_id, user_id)
             else:
-                # class_teacher 角色：顯示班導的學生履歷
+                # class_teacher 角色：顯示班導的學生履歷（返回所有志願序）
                 sql_query = """
                     SELECT DISTINCT
                         r.id,
@@ -3376,12 +3455,12 @@ def get_class_resumes():
                         r.comment,
                         r.note,
                         r.created_at,
-                        latest_pref.company_name AS company_name,
-                        latest_pref.job_title AS job_title,
-                        latest_pref.preference_id,
-                        latest_pref.preference_order,
-                        latest_pref.preference_status,
-                        latest_pref.vendor_comment
+                        pref.company_name AS company_name,
+                        pref.job_title AS job_title,
+                        pref.preference_id,
+                        pref.preference_order,
+                        pref.preference_status,
+                        pref.vendor_comment
                     FROM resumes r
                     JOIN users u ON r.user_id = u.id
                     LEFT JOIN classes c ON u.class_id = c.id
@@ -3392,7 +3471,7 @@ def get_class_resumes():
                             sp.preference_order,
                             'pending' AS preference_status,
                             ic.company_name,
-                            ij.title AS job_title,
+                            COALESCE(ij.title, sp.job_title) AS job_title,
                             ij.id AS job_id,
                             (SELECT vph.comment 
                              FROM vendor_preference_history vph 
@@ -3403,7 +3482,7 @@ def get_class_resumes():
                         JOIN internship_companies ic ON sp.company_id = ic.id
                         LEFT JOIN internship_jobs ij ON sp.job_id = ij.id
                         WHERE sp.status = 'approved'
-                    ) latest_pref ON latest_pref.student_id = u.id
+                    ) pref ON pref.student_id = u.id
                     WHERE r.status = 'approved'
                     AND EXISTS (
                         SELECT 1
@@ -3411,12 +3490,17 @@ def get_class_resumes():
                         JOIN classes_teacher ct ON ct.class_id = c2.id
                         WHERE c2.id = u.class_id AND ct.teacher_id = %s
                     )
+                    ORDER BY pref.preference_order ASC
                 """
                 sql_params = (user_id,)
             
             # 如果指定了 company_id，添加額外的篩選條件
             if target_company_id:
-                sql_query += " AND latest_pref.preference_id IN (SELECT id FROM student_preferences WHERE company_id = %s)"
+                # 在 WHERE 子句結束前添加 company_id 篩選
+                sql_query = sql_query.replace(
+                    "ORDER BY pref.preference_order ASC",
+                    "AND pref.preference_id IN (SELECT id FROM student_preferences WHERE company_id = %s) ORDER BY pref.preference_order ASC"
+                )
                 sql_params = sql_params + (target_company_id,)
 
             cursor.execute(sql_query, sql_params)
@@ -3594,7 +3678,6 @@ def get_class_resumes():
     finally:
         cursor.close()
         conn.close()
-
 
 # -------------------------
 # API：查詢學生履歷列表
@@ -4163,3 +4246,9 @@ def upload_resume_page():
 @resume_bp.route('/ai_edit_resume')
 def ai_edit_resume_page():
     return render_template('resume/ai_edit_resume.html')
+
+@resume_bp.route("/resume_folders")
+def resume_folders_page():
+    return render_template("resume/resume_folders.html")
+
+    

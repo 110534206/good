@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+
+<head>
+  <meta charset="UTF-8" />
+  <title>智慧實習平台 | 履歷管理</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
+  <style>
+    header {
+      background: #0454a3;
+      color: white;
+      padding: 1rem 2rem;
+      text-align: center;
+      font-size: 1.5rem;
+      position: relative;
+    }
+
+    body {
+      font-family: "Noto Sans TC", sans-serif;
+      background: #f7f9fc;
+    }
+
+    .container {
+      max-width: 1000px;
+      margin: 2rem auto;
+      background: white;
+      padding: 2rem;
+      border-radius: 12px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    }
+
+    /* 選單按鈕樣式 */
+    .top-bar-left {
+      position: fixed;
+      top: 1rem;
+      left: 1rem;
+      z-index: 1000;
+    }
+
+    #menu-btn {
+      width: 30px;
+      height: 22px;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+
+    #menu-btn span {
+      height: 4px;
+      background-color: white;
+      border-radius: 2px;
+      transition: all 0.3s ease;
+    }
+
+    /* 側邊選單 */
+    #side-menu {
+      position: fixed;
+      top: 0;
+      left: 0;
+      height: 100vh;
+      width: 320px;
+      max-width: 80vw;
+      background-color: rgba(10, 10, 10, 0.95);
+      backdrop-filter: blur(6px);
+      box-shadow: 3px 0 12px rgb(0 0 0 / 0.7);
+      padding: 2rem 1.5rem;
+      transform: translateX(-100%);
+      transition: transform 0.3s ease-in-out;
+      z-index: 1100;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      color: white;
+      user-select: none;
+    }
+
+    #side-menu.open {
+      transform: translateX(0);
+    }
+
+    #close-btn {
+      position: absolute;
+      top: 2rem;
+      right: 1.6rem;
+      font-size: 2.2rem;
+      background: none;
+      border: none;
+      color: white;
+      cursor: pointer;
+      line-height: 1;
+      width: 2.5rem;
+      height: 2.5rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    #side-menu h2 {
+      width: 100%;
+      margin-bottom: 1.5rem;
+      font-weight: 700;
+      font-size: 1.5rem;
+      text-align: left;
+    }
+
+    #side-menu a {
+      display: block;
+      width: 100%;
+      padding: 0.5rem 0;
+      font-size: 1.1rem;
+      color: #ddd;
+      text-decoration: none;
+      border-radius: 4px;
+      transition: background-color 0.2s ease;
+    }
+
+    #side-menu a:hover {
+      background-color: rgba(255, 255, 255, 0.15);
+      color: white;
+    }
+
+    .folder-card {
+      position: relative; /* 為了定位刪除按鈕 */
+      cursor: pointer;
+      transition: all 0.2s ease;
+      border: 1px solid #eee;
+      border-radius: 12px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+    }
+
+    .folder-card:hover {
+      transform: translateY(-5px);
+      box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
+      border-color: #0454a3;
+    }
+
+    .folder-icon {
+      font-size: 3rem;
+      color: #ffca28;
+    }
+
+    .folder-name {
+      font-size: 1.15rem;
+      font-weight: 600;
+      color: #333;
+      cursor: text;
+      padding: 2px 5px;
+      border-radius: 4px;
+      border: 1px solid transparent;
+    }
+
+    .folder-name:hover {
+      background: #e9ecef;
+      border-color: #ddd;
+    }
+
+    /* 刪除按鈕樣式 */
+    .delete-btn {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      color: #dc3545;
+      background: white;
+      border-radius: 50%;
+      width: 32px;
+      height: 32px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border: 1px solid #eee;
+      z-index: 10;
+      transition: all 0.2s;
+      cursor: pointer;
+    }
+
+    .delete-btn:hover {
+      background: #dc3545;
+      color: white;
+      transform: scale(1.1);
+    }
+
+    .btn-add {
+      border-radius: 50px;
+      padding: 10px 25px;
+    }
+  </style>
+</head>
+
+<body>
+  <header>履歷管理</header>
+
+  <div class="top-bar-left">
+    <div id="menu-btn" title="選單" role="button" tabindex="0">
+      <span></span><span></span><span></span>
+    </div>
+  </div>
+
+  <nav id="side-menu" aria-hidden="true" role="navigation" aria-label="功能選單">
+    <button id="close-btn" aria-label="關閉功能選單">×</button>
+    <h2>功能選單</h2>
+    <a href="/student_home">首頁</a>
+    <a href="/profile">個人資料</a>
+    <a href="/resume_folders">履歷管理</a>
+    <a href="/fill_preferences">填寫志願序</a>
+    <a href="/notifications">通知</a>
+    <a href="/intern_achievement">實習成果</a>
+    <a href="/intern_experience">實習心得</a>
+    <a href="/logout">登出</a>
+  </nav>
+
+  <div class="container py-5">
+    <div class="d-flex justify-content-between align-items-center mb-5">
+      <div>
+        <h2 class="fw-bold"><i class="bi bi-folder2-open me-2"></i> 我的履歷</h2>
+        <p class="text-muted mb-0">點擊「新增履歷」建立資料夾，點擊標題可直接修改公司名稱</p>
+      </div>
+      <button id="btnAddFolder" class="btn btn-primary btn-add shadow-sm">
+        <i class="bi bi-plus-lg me-1"></i> 新增履歷
+      </button>
+    </div>
+
+    <div id="folderList" class="row g-4">
+      </div>
+
+    <div id="emptyState" class="text-center py-5 d-none">
+      <img src="https://cdn-icons-png.flaticon.com/512/5082/5082570.png" alt="empty" style="width: 120px; opacity: 0.5;">
+      <h4 class="mt-4 text-muted">目前沒有任何履歷</h4>
+      <p class="text-muted">點擊右上角按鈕開始建立您的第一個履歷資料夾</p>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+  <script>
+    let folders = [];
+
+    document.addEventListener('DOMContentLoaded', () => {
+      loadFolders();
+      initMenu();
+      document.getElementById('btnAddFolder').addEventListener('click', createFolder);
+    });
+
+    // 1. 取得資料夾列表
+    async function loadFolders() {
+      try {
+        const res = await fetch('/api/resume_folders');
+        const result = await res.json();
+        if (result.success) {
+          folders = result.folders;
+          renderFolders();
+        }
+      } catch (err) {
+        console.error('載入失敗:', err);
+      }
+    }
+
+    // 2. 新增資料夾 (已修正：新增後直接更新陣列並渲染)
+    async function createFolder() {
+      const btn = document.getElementById('btnAddFolder');
+      btn.disabled = true;
+      try {
+        const res = await fetch('/api/resume_folders', { method: 'POST' });
+        const result = await res.json();
+        if (result.success && result.folder) {
+          // 即時將新資料放到最前面
+          folders.unshift(result.folder);
+          renderFolders();
+        } else {
+          alert('新增失敗: ' + (result.message || '未知錯誤'));
+        }
+      } catch (err) {
+        alert('連線伺服器失敗');
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    // 3. 刪除資料夾
+    async function deleteFolder(e, folderId) {
+      e.stopPropagation(); // 重要：防止觸發進入履歷頁面
+      if (!confirm('確定要刪除此資料夾嗎？資料夾內的所有履歷設定將被移除。')) return;
+
+      try {
+        const res = await fetch(`/api/resume_folders/${folderId}`, { method: 'DELETE' });
+        const result = await res.json();
+        if (result.success) {
+          // 即時從本地陣列移除
+          folders = folders.filter(f => f.id !== folderId);
+          renderFolders();
+        } else {
+          alert('刪除失敗');
+        }
+      } catch (err) {
+        alert('刪除發生錯誤');
+      }
+    }
+
+    // 4. 更新名稱 (Inline Edit)
+    async function updateFolderName(folderId, newName) {
+      try {
+        await fetch(`/api/resume_folders/${folderId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ folder_name: newName })
+        });
+        // 更新本地數據，避免重整
+        const folder = folders.find(f => f.id === folderId);
+        if (folder) folder.folder_name = newName;
+      } catch (err) {
+        console.error('更新失敗:', err);
+      }
+    }
+
+    // 5. 渲染畫面
+    function renderFolders() {
+      const list = document.getElementById('folderList');
+      const empty = document.getElementById('emptyState');
+      list.innerHTML = '';
+
+      if (folders.length === 0) {
+        empty.classList.remove('d-none');
+        return;
+      }
+      empty.classList.add('d-none');
+
+      folders.forEach(folder => {
+        const col = document.createElement('div');
+        col.className = 'col-md-4 col-sm-6';
+        col.innerHTML = `
+          <div class="card folder-card h-100">
+            <div class="delete-btn" onclick="deleteFolder(event, ${folder.id})" title="刪除資料夾">
+              <i class="bi bi-trash"></i>
+            </div>
+            <div class="card-body text-center p-4">
+              <div class="mb-3">
+                <i class="bi bi-folder-fill folder-icon"></i>
+              </div>
+              <div class="folder-name mb-2" data-id="${folder.id}">${folder.folder_name}</div>
+              <div class="text-muted small mb-4">
+                <i class="bi bi-clock me-1"></i>${folder.created_at}
+              </div>
+              <button class="btn btn-outline-primary w-100 rounded-pill" onclick="enterResume(${folder.id})">
+                進入填寫履歷
+              </button>
+            </div>
+          </div>
+        `;
+        list.appendChild(col);
+      });
+
+      bindNameEdit();
+    }
+
+    // 6. 名稱 Inline 編輯邏輯
+    function bindNameEdit() {
+      document.querySelectorAll('.folder-name').forEach(el => {
+        el.onclick = (e) => {
+          e.stopPropagation();
+          const folderId = parseInt(el.dataset.id);
+          const oldName = el.innerText;
+
+          const input = document.createElement('input');
+          input.type = 'text';
+          input.value = oldName;
+          input.className = 'form-control folder-name-input text-center';
+
+          el.replaceWith(input);
+          input.focus();
+          input.select();
+
+          const save = async () => {
+            const newName = input.value.trim() || '未命名履歷';
+            if (newName !== oldName) {
+              await updateFolderName(folderId, newName);
+            }
+            renderFolders(); // 重新渲染回文字狀態
+          };
+
+          input.onblur = save;
+          input.onkeydown = (ev) => { if (ev.key === 'Enter') input.blur(); };
+        };
+      });
+    }
+
+    function enterResume(folderId) {
+      window.location.href = `/upload_resume?folder_id=${folderId}`;
+    }
+
+    function initMenu() {
+      const menuBtn = document.getElementById('menu-btn');
+      const sideMenu = document.getElementById('side-menu');
+      const closeBtn = document.getElementById('close-btn');
+
+      menuBtn.addEventListener('click', () => {
+        sideMenu.classList.add('open');
+      });
+
+      closeBtn.addEventListener('click', () => {
+        sideMenu.classList.remove('open');
+      });
+
+      document.addEventListener('click', (e) => {
+        if (!sideMenu.contains(e.target) && !menuBtn.contains(e.target)) {
+          sideMenu.classList.remove('open');
+        }
+      });
+    }
+  </script>
+</body>
+
+</html>
