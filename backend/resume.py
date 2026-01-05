@@ -24301,6 +24301,85 @@ def review_resume(resume_id):
         conn.close()
 
 # -------------------------
+# API - 履歷資料夾管理
+# -------------------------
+@resume_bp.route("/api/resume_folders", methods=["GET"])
+def get_folders():
+    if not require_login(): return jsonify({"success": False, "message": "未登入"}), 401
+    user_id = session['user_id']
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute("SELECT * FROM resume_folders WHERE user_id = %s ORDER BY created_at DESC", (user_id,))
+    folders = cursor.fetchall()
+    cursor.close()
+    conn.close()
+    return jsonify({"success": True, "folders": folders})
+
+# -------------------------
+# API - 建立/更新履歷資料夾
+# -------------------------
+@resume_bp.route("/api/resume_folders", methods=["POST"])
+def create_folder():
+    if not require_login(): return jsonify({"success": False, "message": "未登入"}), 401
+    user_id = session['user_id']
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True) # 改用 dictionary=True 方便抓取資料
+    try:
+        # 1. 執行插入
+        cursor.execute("INSERT INTO resume_folders (user_id, folder_name) VALUES (%s, '未命名履歷')", (user_id,))
+        new_id = cursor.lastrowid
+        conn.commit()
+
+        # 2. 立即查回該筆剛建立的完整資料，包含自動生成的 created_at
+        cursor.execute("SELECT id, folder_name, DATE_FORMAT(created_at, '%Y-%m-%d %H:%i:%s') as created_at FROM resume_folders WHERE id = %s", (new_id,))
+        new_folder = cursor.fetchone()
+
+        # 3. 回傳完整物件，這才符合前端 result.folder 的需求
+        return jsonify({"success": True, "folder": new_folder})
+    except Exception as e:
+        conn.rollback()
+        return jsonify({"success": False, "message": str(e)}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+# -------------------------
+# API - 刪除履歷資料夾
+# -------------------------
+@resume_bp.route("/api/resume_folders/<int:folder_id>", methods=["DELETE"])
+def delete_folder(folder_id):
+    if not require_login(): return jsonify({"success": False, "message": "未登入"}), 401
+    user_id = session['user_id']
+    conn = get_db()
+    cursor = conn.cursor()
+    try:
+        # 增加 user_id 檢查，確保學生只能刪除自己的資料夾
+        cursor.execute("DELETE FROM resume_folders WHERE id = %s AND user_id = %s", (folder_id, user_id))
+        conn.commit()
+        return jsonify({"success": True})
+    except Exception as e:
+        conn.rollback()
+        return jsonify({"success": False, "message": str(e)}), 500
+    finally:
+        cursor.close()
+        conn.close()       
+        
+# -------------------------
+# API - 更新履歷資料夾名稱
+# -------------------------
+@resume_bp.route("/api/resume_folders/<int:folder_id>", methods=["PUT"])
+def update_folder(folder_id):
+    data = request.json
+    new_name = data.get("folder_name")
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("UPDATE resume_folders SET folder_name = %s WHERE id = %s", (new_name, folder_id))
+    conn.commit()
+    cursor.close()
+    conn.close()
+    return jsonify({"success": True})
+
+# -------------------------
 # 頁面路由
 # -------------------------
 @resume_bp.route('/review_resume')
@@ -25221,3 +25300,7 @@ def upload_resume_page():
 @resume_bp.route('/ai_edit_resume')
 def ai_edit_resume_page():
     return render_template('resume/ai_edit_resume.html')
+
+@resume_bp.route("/resume_folders")
+def resume_folders_page():
+    return render_template("resume/resume_folders.html")

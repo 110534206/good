@@ -1516,9 +1516,6 @@ def api_export_company_reviews():
         if conn: conn.close()
 
 # =========================================================
-# 🖥️ 審核公司頁面
-# =========================================================
-# =========================================================
 # API - 取得待審核公司列表
 # =========================================================
 @company_bp.route("/api/get_pending_companies", methods=["GET"])
@@ -1581,6 +1578,50 @@ def api_get_pending_companies():
         if conn:
             conn.close()
 
+# -------------------------
+# 學生端：取得所有可投遞實習公司
+# -------------------------
+@company_bp.route('/api/student/companies', methods=['GET'])
+def get_student_companies():
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+
+    try:
+        cursor.execute("""
+            SELECT
+                ic.id,
+                ic.company_name,
+                ic.location,
+                COUNT(ij.id) AS job_count
+            FROM internship_companies ic
+            LEFT JOIN internship_jobs ij
+                ON ic.id = ij.company_id
+                AND ij.is_active = 1
+            WHERE ic.status = 'approved'
+              AND ic.is_active = 1
+            GROUP BY ic.id
+            ORDER BY ic.company_name
+        """)
+
+        return jsonify({
+            'success': True,
+            'companies': cursor.fetchall()
+        })
+
+    finally:
+        cursor.close()
+        conn.close()
+
+# =========================================================
+# 🖥️ 審核公司頁面
+# =========================================================
 @company_bp.route('/approve_company', methods=['GET'])
 def approve_company_form_page():
     return render_template('company/approve_company.html')
+
+# =========================================================
+# 🖥️ 查看公司頁面
+# =========================================================
+@company_bp.route("/look_company")
+def look_company_page():
+    return render_template("company/look_company.html")
