@@ -104,6 +104,16 @@ def admission_results_redirect():
     return render_template('user_shared/admission_results.html')
 
 # -------------------------
+# TA 頁面：上傳核心科目
+# -------------------------
+@app.route("/ta/upload_standard_courses")
+def upload_standard_courses_page():
+    """TA 上傳專業核心科目頁面"""
+    if 'user_id' not in session or session.get('role') != 'ta':
+        return redirect('/login')
+    return render_template('ta/upload_standard_courses.html')
+
+# -------------------------
 # 主程式入口
 # -------------------------
 if __name__ == "__main__":

@@ -1214,15 +1214,6 @@ def export_statistics():
             conn.close()
 
 # -------------------------
-# TA 頁面：上傳核心科目
-# -------------------------
-@ta_statistics_bp.route('/ta/upload_standard_courses')
-def upload_standard_courses_page():
-    if 'user_id' not in session or session.get('role') != 'ta':
-        return redirect('/login')
-    return render_template('ta/upload_standard_courses.html')
-
-# -------------------------
 # 匯入核心科目 (Excel)
 # -------------------------
 @ta_statistics_bp.route('/api/import_standard_courses', methods=['POST'])
