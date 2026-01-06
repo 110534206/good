@@ -17,13 +17,16 @@
       max-width: 1800px; margin: 0 auto; padding: 18px 24px;
       display: flex; align-items: center; justify-content: space-between; color: #fff;
     }
-    .topbar-left { display: flex; align-items: center; }
+    .topbar-left {
+      display: flex; align-items: center; gap: 16px;
+    }
     .topbar-left #menu-btn {
       width: 30px; height: 22px; cursor: pointer; display: flex; flex-direction: column;
       justify-content: space-between; background: none; border: none; padding: 0;
     }
     .topbar-left #menu-btn span {
-      display: block; width: 100%; height: 3px; background-color: white; border-radius: 2px; transition: all 0.3s ease;
+      display: block; width: 100%; height: 3px; background-color: white;
+      border-radius: 2px; transition: all 0.3s ease;
     }
     .topbar h1 { font-size: 1.5rem; margin: 0; text-align: center; color: #fff; flex: 1; }
     body { font-family: "Noto Sans TC", sans-serif; background: #ffffff; margin: 0; padding: 0; }
@@ -57,24 +60,76 @@
     
     #commentInput { width: 100%; height: 180px; resize: vertical; padding: 0.5rem; font-size: 1rem; line-height: 1.4; }
     
+    /* 側邊選單樣式 */
     #side-menu {
-      position: fixed; top: 0; left: 0; height: 100vh; width: 320px; max-width: 80vw;
-      background-color: rgba(10, 10, 10, 0.95); backdrop-filter: blur(6px);
-      box-shadow: 3px 0 12px rgba(0, 0, 0, 0.6); padding: 2rem 1.5rem;
-      transform: translateX(-100%); transition: transform 0.3s ease-in-out; z-index: 1300;
-      display: flex; flex-direction: column; align-items: flex-start; color: #fff; user-select: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      height: 100vh;
+      width: 320px;
+      max-width: 80vw;
+      background-color: rgba(10, 10, 10, 0.95);
+      backdrop-filter: blur(6px);
+      box-shadow: 3px 0 12px rgba(0, 0, 0, 0.6);
+      padding: 2rem 1.5rem;
+      transform: translateX(-100%);
+      transition: transform 0.3s ease-in-out;
+      z-index: 1300;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      color: #fff;
+      user-select: none;
     }
-    #side-menu.open { transform: translateX(0); }
-    #side-menu h2 { margin: 0 0 1.5rem 0; font-weight: 700; font-size: 1.6rem; color: #fff; }
+
+    #side-menu.open {
+      transform: translateX(0);
+    }
+
+    #side-menu h2 {
+      margin: 0 0 1.5rem 0;
+      font-weight: 700;
+      font-size: 1.6rem;
+      color: #fff;
+      padding: 0;
+      line-height: 2.4rem;
+      height: 2.4rem;
+      display: flex;
+      align-items: center;
+    }
+
     #close-btn {
-      position: absolute; top: 2rem; right: 1.6rem; font-size: 2.2rem; background: none;
-      border: none; color: #fff; cursor: pointer;
+      position: absolute;
+      top: 2rem;
+      right: 1.6rem;
+      font-size: 2.2rem;
+      background: none;
+      border: none;
+      color: #fff;
+      cursor: pointer;
+      line-height: 1rem;
+      height: 2.5rem;
+      width: 2.5rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
     }
+
     #side-menu a {
-      display: block; width: 100%; padding: 0.6rem 0; font-size: 1.1rem; color: #e2e8f0;
-      text-decoration: none; border-radius: 4px; transition: background-color 0.2s ease;
+      display: block;
+      width: 100%;
+      padding: 0.6rem 0;
+      font-size: 1.1rem;
+      color: #e2e8f0;
+      text-decoration: none;
+      border-radius: 4px;
+      transition: background-color 0.2s ease;
     }
-    #side-menu a:hover { background-color: rgba(255, 255, 255, 0.18); color: #fff; }
+
+    #side-menu a:hover {
+      background-color: rgba(255, 255, 255, 0.18);
+      color: #fff;
+    }
   </style>
 </head>
 
@@ -157,10 +212,18 @@
     </div>
   </div>
 
-  <nav id="side-menu" aria-hidden="true">
-    <button id="close-btn">×</button>
+  <!-- 側邊選單 -->
+  <nav id="side-menu" aria-hidden="true" role="navigation" aria-label="功能選單">
+    <button id="close-btn" aria-label="關閉功能選單">×</button>
     <h2>功能選單</h2>
-    <div id="menu-content"></div>
+    <a href="/teacher_home">首頁</a>
+    <a href="/profile">個人資料</a>
+    <a href="/upload_company">建立實習機會</a>
+    <a href="/admission_results">查看錄取結果</a>
+    <a href="/manage_vendor">實習廠商管理</a>
+    <a href="/notifications">查看公告</a>
+    <a href="/review_resume">學生履歷審核</a>
+    <a href="/login">登出</a>
   </nav>
 
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
@@ -213,7 +276,6 @@
           userRole = profileData.success && profileData.user ? profileData.user.role : 'teacher';
           currentUserId = profileData.success && profileData.user ? profileData.user.id : null;
           isHomeroom = profileData.success && profileData.user ? profileData.user.is_homeroom : false;
-          renderMenu();
 
           let apiUrl;
           if (userRole === 'vendor') {
@@ -261,9 +323,38 @@
       document.getElementById("searchBox").addEventListener("input", applyFilters);
       document.getElementById("saveCommentBtn").addEventListener("click", saveComment);
       
+      // 側邊選單控制
+      const menuBtn = document.getElementById('menu-btn');
       const sideMenu = document.getElementById('side-menu');
-      document.getElementById('menu-btn').onclick = () => { sideMenu.classList.add('open'); sideMenu.setAttribute('aria-hidden', 'false'); };
-      document.getElementById('close-btn').onclick = () => { sideMenu.classList.remove('open'); sideMenu.setAttribute('aria-hidden', 'true'); };
+      const closeBtn = document.getElementById('close-btn');
+
+      if (menuBtn) {
+        menuBtn.addEventListener('click', () => {
+          if (sideMenu) {
+            sideMenu.classList.add('open');
+            sideMenu.setAttribute('aria-hidden', 'false');
+          }
+        });
+      }
+
+      if (closeBtn) {
+        closeBtn.addEventListener('click', () => {
+          if (sideMenu) {
+            sideMenu.classList.remove('open');
+            sideMenu.setAttribute('aria-hidden', 'true');
+          }
+        });
+      }
+
+      // 點擊選單外部關閉選單
+      document.addEventListener('click', (e) => {
+        if (sideMenu && menuBtn) {
+          if (!sideMenu.contains(e.target) && !menuBtn.contains(e.target) && sideMenu.classList.contains('open')) {
+            sideMenu.classList.remove('open');
+            sideMenu.setAttribute('aria-hidden', 'true');
+          }
+        }
+      });
     });
 
     function populateFilters(data, companyData, positionData) {
@@ -693,22 +784,6 @@
         });
     }
 
-    function renderMenu() {
-        const menuContent = document.getElementById('menu-content');
-        const teacherMenu = [
-          { href: '/teacher_home', text: '首頁' },
-          { href: '/profile', text: '個人資料' },
-          { href: '/upload_company', text: '建立實習機會' },
-          { href: '/admission_results', text: '查看錄取結果' },
-          { href: '/manage_vendor', text: '實習廠商管理' },
-          { href: '/notifications', text: '查看公告' },
-          { href: '/review_resume', text: '學生履歷審核' },
-          { href: '/login', text: '登出' }
-        ];
-        const vendorMenu = [ /* 廠商選單 */ ];
-        const items = userRole === 'vendor' ? vendorMenu : teacherMenu;
-        menuContent.innerHTML = items.map(item => `<a href="${item.href}">${item.text}</a>`).join('');
-    }
   </script>
 </body>
 </html>
