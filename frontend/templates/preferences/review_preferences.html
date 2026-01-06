@@ -20,6 +20,103 @@
       padding: 1rem 2rem;
       text-align: center;
       font-size: 1.5rem;
+      position: relative;
+    }
+
+    /* 選單按鈕樣式 */
+    .top-bar-left {
+      position: fixed;
+      top: 1rem;
+      left: 1rem;
+      z-index: 1000;
+    }
+
+    #menu-btn {
+      width: 30px;
+      height: 22px;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      background: none;
+      border: none;
+      padding: 0;
+    }
+
+    #menu-btn span {
+      display: block;
+      width: 100%;
+      height: 3px;
+      background-color: white;
+      border-radius: 2px;
+      transition: all 0.3s ease;
+    }
+
+    /* 側邊選單 */
+    #side-menu {
+      position: fixed;
+      top: 0;
+      left: 0;
+      height: 100vh;
+      width: 320px;
+      max-width: 80vw;
+      background-color: rgba(10, 10, 10, 0.95);
+      backdrop-filter: blur(6px);
+      box-shadow: 3px 0 12px rgba(0, 0, 0, 0.6);
+      padding: 2rem 1.5rem;
+      transform: translateX(-100%);
+      transition: transform 0.3s ease-in-out;
+      z-index: 1300;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      color: #fff;
+      user-select: none;
+    }
+
+    #side-menu.open {
+      transform: translateX(0);
+    }
+
+    #close-btn {
+      position: absolute;
+      top: 2rem;
+      right: 1.6rem;
+      font-size: 2.2rem;
+      background: none;
+      border: none;
+      color: white;
+      cursor: pointer;
+      line-height: 1;
+      width: 2.5rem;
+      height: 2.5rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    #side-menu h2 {
+      width: 100%;
+      margin: 0.5rem 0 1.5rem 0;
+      font-weight: 700;
+      font-size: 1.5rem;
+      text-align: left;
+    }
+
+    #side-menu a {
+      display: block;
+      width: 100%;
+      padding: 0.5rem 0;
+      font-size: 1.1rem;
+      color: #ddd;
+      text-decoration: none;
+      border-radius: 4px;
+      transition: background-color 0.2s ease;
+    }
+
+    #side-menu a:hover {
+      background-color: rgba(255, 255, 255, 0.15);
+      color: white;
     }
 
     body {
@@ -298,13 +395,24 @@
 
 <body>
   <header>學生志願序審核</header>
-  <!-- 頂部欄 -->
-    <div class="container">
-      <div class="top-bar-left">
-        <div id="menu-btn" title="選單" role="button" tabindex="0">
-          <span></span><span></span><span></span>
-        </div>
-      </div>
+
+  <div class="top-bar-left">
+    <div id="menu-btn" title="選單" role="button" tabindex="0" aria-label="開啟側邊選單">
+      <span></span><span></span><span></span>
+    </div>
+  </div>
+
+  <nav id="side-menu" aria-hidden="true" role="navigation" aria-label="功能選單">
+    <button id="close-btn" aria-label="關閉功能選單">×</button>
+    <h2>功能選單</h2>
+    <a href="/class_teacher_home">首頁</a>
+    <a href="/profile">個人資料</a>
+    <a href="/class_review_resume">查看學生履歷</a>
+    <a href="/review_preferences">審核志願序</a>
+    <a href="/admission/results">查詢學生錄取結果</a>
+    <a href="/notifications">通知</a>
+    <a href="/logout">登出</a>
+  </nav>
 
   <!-- 退件確認模態框 -->
   <div class="modal fade modal-confirm" id="rejectModal" tabindex="-1" aria-labelledby="rejectModalLabel" aria-hidden="true">
@@ -461,8 +569,38 @@
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <script>
+    // 初始化選單功能
+    function initMenu() {
+      const menuBtn = document.getElementById('menu-btn');
+      const sideMenu = document.getElementById('side-menu');
+      const closeBtn = document.getElementById('close-btn');
+
+      if (menuBtn && sideMenu) {
+        menuBtn.addEventListener('click', () => {
+          sideMenu.classList.add('open');
+          sideMenu.setAttribute('aria-hidden', 'false');
+        });
+      }
+
+      if (closeBtn && sideMenu) {
+        closeBtn.addEventListener('click', () => {
+          sideMenu.classList.remove('open');
+          sideMenu.setAttribute('aria-hidden', 'true');
+        });
+      }
+
+      // 點擊外部區域關閉選單
+      document.addEventListener('click', (e) => {
+        if (sideMenu && menuBtn && !sideMenu.contains(e.target) && !menuBtn.contains(e.target)) {
+          sideMenu.classList.remove('open');
+          sideMenu.setAttribute('aria-hidden', 'true');
+        }
+      });
+    }
+
     // 初始化可收合按鈕的圖標旋轉
     document.addEventListener('DOMContentLoaded', function() {
+      initMenu();
       // 為所有 collapse 按鈕添加事件監聽
       document.querySelectorAll('.collapse-toggle-btn').forEach(btn => {
         const targetId = btn.getAttribute('data-bs-target');

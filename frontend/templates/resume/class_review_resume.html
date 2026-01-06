@@ -63,16 +63,21 @@
       display: flex; flex-direction: column; align-items: flex-start; color: #fff; user-select: none;
     }
     #side-menu.open { transform: translateX(0); }
-    #side-menu h2 { margin: 0 0 1.5rem 0; font-weight: 700; font-size: 1.6rem; color: #fff; }
     #close-btn {
       position: absolute; top: 2rem; right: 1.6rem; font-size: 2.2rem; background: none;
-      border: none; color: #fff; cursor: pointer;
+      border: none; color: white; cursor: pointer;
+      line-height: 1; width: 2.5rem; height: 2.5rem;
+      display: flex; align-items: center; justify-content: center;
+    }
+    #side-menu h2 {
+      width: 100%; margin: 0.5rem 0 1.5rem 0; font-weight: 700; font-size: 1.5rem;
+      text-align: left;
     }
     #side-menu a {
-      display: block; width: 100%; padding: 0.6rem 0; font-size: 1.1rem; color: #e2e8f0;
+      display: block; width: 100%; padding: 0.5rem 0; font-size: 1.1rem; color: #ddd;
       text-decoration: none; border-radius: 4px; transition: background-color 0.2s ease;
     }
-    #side-menu a:hover { background-color: rgba(255, 255, 255, 0.18); color: #fff; }
+    #side-menu a:hover { background-color: rgba(255, 255, 255, 0.15); color: #fff; }
   </style>
 </head>
 
@@ -131,8 +136,8 @@
     </section>
   </main>
 
-  <nav id="side-menu" aria-hidden="true">
-    <button id="close-btn">×</button>
+  <nav id="side-menu" aria-hidden="true" role="navigation" aria-label="功能選單">
+    <button id="close-btn" aria-label="關閉功能選單">×</button>
     <h2>功能選單</h2>
     <a href="/class_teacher_home">首頁</a>
     <a href="/profile">個人資料</a>
@@ -140,6 +145,7 @@
     <a href="/review_preferences">審核志願序</a>
     <a href="/admission/results">查詢學生錄取結果</a>
     <a href="/notifications">通知</a>
+    <a href="/logout">登出</a>
   </nav>
 
   <!-- 退件留言 Modal -->
