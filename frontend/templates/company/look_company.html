@@ -74,7 +74,14 @@ let folders = [];
 ================================ */
 async function loadCompanies() {
   const res = await fetch('/api/student/companies');
-  const data = await res.json();
+  const result = await res.json();
+
+  if (!result.success) {
+    alert(result.message || '載入公司資料失敗');
+    return;
+  }
+
+  const data = result.companies || [];
 
   const tbody = document.getElementById('companyTable');
   tbody.innerHTML = '';
@@ -84,7 +91,7 @@ async function loadCompanies() {
       <tr>
         <td>${c.company_name}</td>
         <td>${c.industry || '-'}</td>
-        <td>${c.address || '-'}</td>
+        <td>${c.location || '-'}</td>
         <td class="text-center">
           <button
             class="btn btn-outline-primary btn-sm"

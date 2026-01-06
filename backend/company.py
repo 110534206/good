@@ -1598,7 +1598,6 @@ def get_student_companies():
                 ON ic.id = ij.company_id
                 AND ij.is_active = 1
             WHERE ic.status = 'approved'
-              AND ic.is_active = 1
             GROUP BY ic.id
             ORDER BY ic.company_name
         """)
