@@ -321,6 +321,8 @@ def save_preferences():
             pref_order = int(p.get("order"))
             company_id = int(p.get("company_id"))
             job_id = int(p.get("job_id"))
+            folder_id = p.get("folder_id")  # 可選的 folder_id
+            resume_id = p.get("resume_id")  # 可選的 resume_id
 
             # 檢查 job_id 是否屬於該公司
             cursor.execute("""
@@ -338,12 +340,38 @@ def save_preferences():
                 conn.rollback()
                 return jsonify({"success": False, "message": f"無法取得職缺名稱：job_id={job_id}"}), 400
 
-            # 插入志願序（包含 semester_id）
+            # 驗證 folder_id 和 resume_id（如果提供）
+            if folder_id:
+                # 檢查 folder_id 是否屬於該學生
+                cursor.execute("""
+                    SELECT id FROM resume_folders WHERE id=%s AND user_id=%s
+                """, (folder_id, student_id))
+                folder_row = cursor.fetchone()
+                if not folder_row:
+                    conn.rollback()
+                    return jsonify({"success": False, "message": f"履歷資料夾無效或不存在：folder_id={folder_id}"}), 400
+
+            if resume_id:
+                # 檢查 resume_id 是否屬於該學生，且如果提供了 folder_id，檢查履歷是否屬於該資料夾
+                if folder_id:
+                    cursor.execute("""
+                        SELECT id FROM resumes WHERE id=%s AND user_id=%s AND folder_id=%s
+                    """, (resume_id, student_id, folder_id))
+                else:
+                    cursor.execute("""
+                        SELECT id FROM resumes WHERE id=%s AND user_id=%s
+                    """, (resume_id, student_id))
+                resume_row = cursor.fetchone()
+                if not resume_row:
+                    conn.rollback()
+                    return jsonify({"success": False, "message": f"履歷無效或不存在：resume_id={resume_id}"}), 400
+
+            # 插入志願序（包含 semester_id、folder_id、resume_id）
             if current_semester_id:
                 cursor.execute("""
                     INSERT INTO student_preferences
-                    (student_id, semester_id, preference_order, company_id, job_id, job_title, status, submitted_at)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                    (student_id, semester_id, preference_order, company_id, job_id, job_title, folder_id, resume_id, status, submitted_at)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """, (
                     student_id,
                     current_semester_id,
@@ -351,28 +379,32 @@ def save_preferences():
                     company_id,
                     job_id,
                     job_title,
+                    folder_id if folder_id else None,
+                    resume_id if resume_id else None,
                     'submitted',  # 預設狀態為 'submitted'（已提交，待審核）
                     datetime.now()
                 ))
                 inserted_count += 1
-                print(f"✅ 插入志願序 {pref_order}: company_id={company_id}, job_id={job_id}, semester_id={current_semester_id}")
+                print(f"✅ 插入志願序 {pref_order}: company_id={company_id}, job_id={job_id}, folder_id={folder_id}, resume_id={resume_id}, semester_id={current_semester_id}")
             else:
                 # 如果沒有設定當前學期，仍然可以儲存（不包含 semester_id）
                 cursor.execute("""
                     INSERT INTO student_preferences
-                    (student_id, preference_order, company_id, job_id, job_title, status, submitted_at)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s)
+                    (student_id, preference_order, company_id, job_id, job_title, folder_id, resume_id, status, submitted_at)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """, (
                     student_id,
                     pref_order,
                     company_id,
                     job_id,
                     job_title,
+                    folder_id if folder_id else None,
+                    resume_id if resume_id else None,
                     'submitted',  # 預設狀態為 'submitted'（已提交，待審核）
                     datetime.now()
                 ))
                 inserted_count += 1
-                print(f"✅ 插入志願序 {pref_order}: company_id={company_id}, job_id={job_id} (無學期)")
+                print(f"✅ 插入志願序 {pref_order}: company_id={company_id}, job_id={job_id}, folder_id={folder_id}, resume_id={resume_id} (無學期)")
 
         # 4) 提交 transaction
         conn.commit()

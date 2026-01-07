@@ -3542,7 +3542,7 @@ def get_class_resumes():
                 # 修改：返回所有志願序，而不是只返回第一個
                 # 這樣每個志願序都會對應一行履歷資料
                 sql_query = """
-                    SELECT DISTINCT
+                    SELECT 
                         r.id,
                         u.id AS user_id,
                         u.name AS student_name,
@@ -3604,7 +3604,7 @@ def get_class_resumes():
             else:
                 # class_teacher 角色：顯示班導的學生履歷（返回所有志願序）
                 sql_query = """
-                    SELECT DISTINCT
+                    SELECT 
                         r.id,
                         u.id AS user_id,
                         u.name AS student_name,
@@ -7287,6 +7287,7 @@ def get_teacher_review_resumes():
     
     try:
         # 建立基本查詢：每個志願序都顯示一行履歷
+        # 根據 folder_id 和 resume_id 來關聯履歷
         sql = """
             SELECT 
                 u.id AS user_id,
@@ -7300,14 +7301,20 @@ def get_teacher_review_resumes():
                 r.status AS display_status,
                 sp.id AS preference_id,
                 sp.preference_order,
+                sp.folder_id,
+                sp.resume_id AS preference_resume_id,
                 ic.company_name,
                 COALESCE(sp.job_title, ij.title) AS job_title
-            FROM users u
+            FROM student_preferences sp
+            JOIN users u ON sp.student_id = u.id
             LEFT JOIN classes c ON u.class_id = c.id
-            LEFT JOIN resumes r ON u.id = r.user_id 
-            JOIN student_preferences sp ON sp.student_id = u.id
             JOIN internship_companies ic ON sp.company_id = ic.id
             LEFT JOIN internship_jobs ij ON sp.job_id = ij.id
+            LEFT JOIN resumes r ON (
+                (sp.resume_id IS NOT NULL AND r.id = sp.resume_id) OR
+                (sp.folder_id IS NOT NULL AND r.folder_id = sp.folder_id AND r.user_id = u.id) OR
+                (sp.resume_id IS NULL AND sp.folder_id IS NULL AND r.user_id = u.id)
+            )
             WHERE u.role = 'student' 
         """
         params = []
@@ -7732,7 +7739,7 @@ def get_class_resumes():
             # 對於班導（class_teacher），顯示班導的學生履歷
             if role == "teacher":
                 sql_query = """
-                    SELECT DISTINCT
+                    SELECT 
                         r.id,
                         u.id AS user_id,
                         u.name AS student_name,
@@ -7745,61 +7752,36 @@ def get_class_resumes():
                         r.comment,
                         r.note,
                         r.created_at,
-                        latest_pref.company_name AS company_name,
-                        latest_pref.job_title AS job_title,
-                        latest_pref.preference_id,
-                        latest_pref.preference_order,
-                        latest_pref.preference_status,
-                        latest_pref.vendor_comment
-                    FROM resumes r
-                    JOIN users u ON r.user_id = u.id
+                        sp.id AS preference_id,
+                        sp.preference_order,
+                        'pending' AS preference_status,
+                        ic.company_name,
+                        COALESCE(sp.job_title, ij.title) AS job_title,
+                        ij.id AS job_id,
+                        (SELECT vph.comment 
+                         FROM vendor_preference_history vph 
+                         WHERE vph.preference_id = sp.id 
+                         ORDER BY vph.created_at DESC 
+                         LIMIT 1) AS vendor_comment
+                    FROM student_preferences sp
+                    JOIN users u ON sp.student_id = u.id
                     LEFT JOIN classes c ON u.class_id = c.id
-                    INNER JOIN (
-                        SELECT 
-                            sp.student_id,
-                            sp.id AS preference_id,
-                            sp.preference_order,
-                            'pending' AS preference_status,
-                            ic.company_name,
-                            ij.title AS job_title,
-                            ij.id AS job_id,
-                            (SELECT vph.comment 
-                             FROM vendor_preference_history vph 
-                             WHERE vph.preference_id = sp.id 
-                             ORDER BY vph.created_at DESC 
-                             LIMIT 1) AS vendor_comment
-                        FROM student_preferences sp
-                        JOIN internship_companies ic ON sp.company_id = ic.id
-                        LEFT JOIN internship_jobs ij ON sp.job_id = ij.id
-                        WHERE ic.advisor_user_id = %s
-                        AND sp.status = 'approved'
-                        AND sp.id = (
-                            SELECT sp2.id
-                            FROM student_preferences sp2
-                            JOIN internship_companies ic2 ON sp2.company_id = ic2.id
-                            WHERE sp2.student_id = sp.student_id
-                            AND ic2.advisor_user_id = %s
-                            AND sp2.status = 'approved'
-                            ORDER BY sp2.preference_order ASC
-                            LIMIT 1
-                        )
-                    ) latest_pref ON latest_pref.student_id = u.id
-                    WHERE r.status = 'approved'
-                    -- 只顯示選擇了該指導老師管理的公司的學生履歷
-                    AND EXISTS (
-                        SELECT 1
-                        FROM student_preferences sp
-                        JOIN internship_companies ic2 ON sp.company_id = ic2.id
-                        WHERE sp.student_id = u.id 
-                            AND ic2.advisor_user_id = %s
-                            AND sp.status = 'approved'
+                    JOIN internship_companies ic ON sp.company_id = ic.id
+                    LEFT JOIN internship_jobs ij ON sp.job_id = ij.id
+                    LEFT JOIN resumes r ON (
+                        (sp.resume_id IS NOT NULL AND r.id = sp.resume_id) OR
+                        (sp.folder_id IS NOT NULL AND r.folder_id = sp.folder_id AND r.user_id = u.id) OR
+                        (sp.resume_id IS NULL AND sp.folder_id IS NULL AND r.user_id = u.id)
                     )
+                    WHERE (r.status = 'approved' OR r.id IS NULL)
+                    AND ic.advisor_user_id = %s
+                    AND sp.status = 'approved'
                 """
-                sql_params = (user_id, user_id, user_id)
+                sql_params = (user_id,)
             else:
                 # class_teacher 角色：顯示班導的學生履歷
                 sql_query = """
-                    SELECT DISTINCT
+                    SELECT 
                         r.id,
                         u.id AS user_id,
                         u.name AS student_name,
@@ -7812,35 +7794,29 @@ def get_class_resumes():
                         r.comment,
                         r.note,
                         r.created_at,
-                        latest_pref.company_name AS company_name,
-                        latest_pref.job_title AS job_title,
-                        latest_pref.preference_id,
-                        latest_pref.preference_order,
-                        latest_pref.preference_status,
-                        latest_pref.vendor_comment
-                    FROM resumes r
-                    JOIN users u ON r.user_id = u.id
+                        sp.id AS preference_id,
+                        sp.preference_order,
+                        'pending' AS preference_status,
+                        ic.company_name,
+                        COALESCE(sp.job_title, ij.title) AS job_title,
+                        ij.id AS job_id,
+                        (SELECT vph.comment 
+                         FROM vendor_preference_history vph 
+                         WHERE vph.preference_id = sp.id 
+                         ORDER BY vph.created_at DESC 
+                         LIMIT 1) AS vendor_comment
+                    FROM student_preferences sp
+                    JOIN users u ON sp.student_id = u.id
                     LEFT JOIN classes c ON u.class_id = c.id
-                    LEFT JOIN (
-                        SELECT 
-                            sp.student_id,
-                            sp.id AS preference_id,
-                            sp.preference_order,
-                            'pending' AS preference_status,
-                            ic.company_name,
-                            ij.title AS job_title,
-                            ij.id AS job_id,
-                            (SELECT vph.comment 
-                             FROM vendor_preference_history vph 
-                             WHERE vph.preference_id = sp.id 
-                             ORDER BY vph.created_at DESC 
-                             LIMIT 1) AS vendor_comment
-                        FROM student_preferences sp
-                        JOIN internship_companies ic ON sp.company_id = ic.id
-                        LEFT JOIN internship_jobs ij ON sp.job_id = ij.id
-                        WHERE sp.status = 'approved'
-                    ) latest_pref ON latest_pref.student_id = u.id
-                    WHERE r.status = 'approved'
+                    JOIN internship_companies ic ON sp.company_id = ic.id
+                    LEFT JOIN internship_jobs ij ON sp.job_id = ij.id
+                    LEFT JOIN resumes r ON (
+                        (sp.resume_id IS NOT NULL AND r.id = sp.resume_id) OR
+                        (sp.folder_id IS NOT NULL AND r.folder_id = sp.folder_id AND r.user_id = u.id) OR
+                        (sp.resume_id IS NULL AND sp.folder_id IS NULL AND r.user_id = u.id)
+                    )
+                    WHERE (r.status = 'approved' OR r.id IS NULL)
+                    AND sp.status = 'approved'
                     AND EXISTS (
                         SELECT 1
                         FROM classes c2
@@ -7852,8 +7828,11 @@ def get_class_resumes():
             
             # 如果指定了 company_id，添加額外的篩選條件
             if target_company_id:
-                sql_query += " AND latest_pref.preference_id IN (SELECT id FROM student_preferences WHERE company_id = %s)"
+                sql_query += " AND sp.company_id = %s"
                 sql_params = sql_params + (target_company_id,)
+            
+            # 排序：按照班級、姓名、志願順序
+            sql_query += " ORDER BY c.name, u.username, sp.preference_order ASC"
 
             cursor.execute(sql_query, sql_params)
             resumes = cursor.fetchall()
@@ -11471,6 +11450,7 @@ def get_teacher_review_resumes():
     
     try:
         # 建立基本查詢：每個志願序都顯示一行履歷
+        # 根據 folder_id 和 resume_id 來關聯履歷
         sql = """
             SELECT 
                 u.id AS user_id,
@@ -11484,14 +11464,20 @@ def get_teacher_review_resumes():
                 r.status AS display_status,
                 sp.id AS preference_id,
                 sp.preference_order,
+                sp.folder_id,
+                sp.resume_id AS preference_resume_id,
                 ic.company_name,
                 COALESCE(sp.job_title, ij.title) AS job_title
-            FROM users u
+            FROM student_preferences sp
+            JOIN users u ON sp.student_id = u.id
             LEFT JOIN classes c ON u.class_id = c.id
-            LEFT JOIN resumes r ON u.id = r.user_id 
-            JOIN student_preferences sp ON sp.student_id = u.id
             JOIN internship_companies ic ON sp.company_id = ic.id
             LEFT JOIN internship_jobs ij ON sp.job_id = ij.id
+            LEFT JOIN resumes r ON (
+                (sp.resume_id IS NOT NULL AND r.id = sp.resume_id) OR
+                (sp.folder_id IS NOT NULL AND r.folder_id = sp.folder_id AND r.user_id = u.id) OR
+                (sp.resume_id IS NULL AND sp.folder_id IS NULL AND r.user_id = u.id)
+            )
             WHERE u.role = 'student' 
         """
         params = []
@@ -11916,7 +11902,7 @@ def get_class_resumes():
             # 對於班導（class_teacher），顯示班導的學生履歷
             if role == "teacher":
                 sql_query = """
-                    SELECT DISTINCT
+                    SELECT 
                         r.id,
                         u.id AS user_id,
                         u.name AS student_name,
@@ -11929,61 +11915,36 @@ def get_class_resumes():
                         r.comment,
                         r.note,
                         r.created_at,
-                        latest_pref.company_name AS company_name,
-                        latest_pref.job_title AS job_title,
-                        latest_pref.preference_id,
-                        latest_pref.preference_order,
-                        latest_pref.preference_status,
-                        latest_pref.vendor_comment
-                    FROM resumes r
-                    JOIN users u ON r.user_id = u.id
+                        sp.id AS preference_id,
+                        sp.preference_order,
+                        'pending' AS preference_status,
+                        ic.company_name,
+                        COALESCE(sp.job_title, ij.title) AS job_title,
+                        ij.id AS job_id,
+                        (SELECT vph.comment 
+                         FROM vendor_preference_history vph 
+                         WHERE vph.preference_id = sp.id 
+                         ORDER BY vph.created_at DESC 
+                         LIMIT 1) AS vendor_comment
+                    FROM student_preferences sp
+                    JOIN users u ON sp.student_id = u.id
                     LEFT JOIN classes c ON u.class_id = c.id
-                    INNER JOIN (
-                        SELECT 
-                            sp.student_id,
-                            sp.id AS preference_id,
-                            sp.preference_order,
-                            'pending' AS preference_status,
-                            ic.company_name,
-                            ij.title AS job_title,
-                            ij.id AS job_id,
-                            (SELECT vph.comment 
-                             FROM vendor_preference_history vph 
-                             WHERE vph.preference_id = sp.id 
-                             ORDER BY vph.created_at DESC 
-                             LIMIT 1) AS vendor_comment
-                        FROM student_preferences sp
-                        JOIN internship_companies ic ON sp.company_id = ic.id
-                        LEFT JOIN internship_jobs ij ON sp.job_id = ij.id
-                        WHERE ic.advisor_user_id = %s
-                        AND sp.status = 'approved'
-                        AND sp.id = (
-                            SELECT sp2.id
-                            FROM student_preferences sp2
-                            JOIN internship_companies ic2 ON sp2.company_id = ic2.id
-                            WHERE sp2.student_id = sp.student_id
-                            AND ic2.advisor_user_id = %s
-                            AND sp2.status = 'approved'
-                            ORDER BY sp2.preference_order ASC
-                            LIMIT 1
-                        )
-                    ) latest_pref ON latest_pref.student_id = u.id
-                    WHERE r.status = 'approved'
-                    -- 只顯示選擇了該指導老師管理的公司的學生履歷
-                    AND EXISTS (
-                        SELECT 1
-                        FROM student_preferences sp
-                        JOIN internship_companies ic2 ON sp.company_id = ic2.id
-                        WHERE sp.student_id = u.id 
-                            AND ic2.advisor_user_id = %s
-                            AND sp.status = 'approved'
+                    JOIN internship_companies ic ON sp.company_id = ic.id
+                    LEFT JOIN internship_jobs ij ON sp.job_id = ij.id
+                    LEFT JOIN resumes r ON (
+                        (sp.resume_id IS NOT NULL AND r.id = sp.resume_id) OR
+                        (sp.folder_id IS NOT NULL AND r.folder_id = sp.folder_id AND r.user_id = u.id) OR
+                        (sp.resume_id IS NULL AND sp.folder_id IS NULL AND r.user_id = u.id)
                     )
+                    WHERE (r.status = 'approved' OR r.id IS NULL)
+                    AND ic.advisor_user_id = %s
+                    AND sp.status = 'approved'
                 """
-                sql_params = (user_id, user_id, user_id)
+                sql_params = (user_id,)
             else:
                 # class_teacher 角色：顯示班導的學生履歷
                 sql_query = """
-                    SELECT DISTINCT
+                    SELECT 
                         r.id,
                         u.id AS user_id,
                         u.name AS student_name,
@@ -11996,35 +11957,29 @@ def get_class_resumes():
                         r.comment,
                         r.note,
                         r.created_at,
-                        latest_pref.company_name AS company_name,
-                        latest_pref.job_title AS job_title,
-                        latest_pref.preference_id,
-                        latest_pref.preference_order,
-                        latest_pref.preference_status,
-                        latest_pref.vendor_comment
-                    FROM resumes r
-                    JOIN users u ON r.user_id = u.id
+                        sp.id AS preference_id,
+                        sp.preference_order,
+                        'pending' AS preference_status,
+                        ic.company_name,
+                        COALESCE(sp.job_title, ij.title) AS job_title,
+                        ij.id AS job_id,
+                        (SELECT vph.comment 
+                         FROM vendor_preference_history vph 
+                         WHERE vph.preference_id = sp.id 
+                         ORDER BY vph.created_at DESC 
+                         LIMIT 1) AS vendor_comment
+                    FROM student_preferences sp
+                    JOIN users u ON sp.student_id = u.id
                     LEFT JOIN classes c ON u.class_id = c.id
-                    LEFT JOIN (
-                        SELECT 
-                            sp.student_id,
-                            sp.id AS preference_id,
-                            sp.preference_order,
-                            'pending' AS preference_status,
-                            ic.company_name,
-                            ij.title AS job_title,
-                            ij.id AS job_id,
-                            (SELECT vph.comment 
-                             FROM vendor_preference_history vph 
-                             WHERE vph.preference_id = sp.id 
-                             ORDER BY vph.created_at DESC 
-                             LIMIT 1) AS vendor_comment
-                        FROM student_preferences sp
-                        JOIN internship_companies ic ON sp.company_id = ic.id
-                        LEFT JOIN internship_jobs ij ON sp.job_id = ij.id
-                        WHERE sp.status = 'approved'
-                    ) latest_pref ON latest_pref.student_id = u.id
-                    WHERE r.status = 'approved'
+                    JOIN internship_companies ic ON sp.company_id = ic.id
+                    LEFT JOIN internship_jobs ij ON sp.job_id = ij.id
+                    LEFT JOIN resumes r ON (
+                        (sp.resume_id IS NOT NULL AND r.id = sp.resume_id) OR
+                        (sp.folder_id IS NOT NULL AND r.folder_id = sp.folder_id AND r.user_id = u.id) OR
+                        (sp.resume_id IS NULL AND sp.folder_id IS NULL AND r.user_id = u.id)
+                    )
+                    WHERE (r.status = 'approved' OR r.id IS NULL)
+                    AND sp.status = 'approved'
                     AND EXISTS (
                         SELECT 1
                         FROM classes c2
@@ -12036,8 +11991,11 @@ def get_class_resumes():
             
             # 如果指定了 company_id，添加額外的篩選條件
             if target_company_id:
-                sql_query += " AND latest_pref.preference_id IN (SELECT id FROM student_preferences WHERE company_id = %s)"
+                sql_query += " AND sp.company_id = %s"
                 sql_params = sql_params + (target_company_id,)
+            
+            # 排序：按照班級、姓名、志願順序
+            sql_query += " ORDER BY c.name, u.username, sp.preference_order ASC"
 
             cursor.execute(sql_query, sql_params)
             resumes = cursor.fetchall()
@@ -15655,6 +15613,7 @@ def get_teacher_review_resumes():
     
     try:
         # 建立基本查詢：每個志願序都顯示一行履歷
+        # 根據 folder_id 和 resume_id 來關聯履歷
         sql = """
             SELECT 
                 u.id AS user_id,
@@ -15668,14 +15627,20 @@ def get_teacher_review_resumes():
                 r.status AS display_status,
                 sp.id AS preference_id,
                 sp.preference_order,
+                sp.folder_id,
+                sp.resume_id AS preference_resume_id,
                 ic.company_name,
                 COALESCE(sp.job_title, ij.title) AS job_title
-            FROM users u
+            FROM student_preferences sp
+            JOIN users u ON sp.student_id = u.id
             LEFT JOIN classes c ON u.class_id = c.id
-            LEFT JOIN resumes r ON u.id = r.user_id 
-            JOIN student_preferences sp ON sp.student_id = u.id
             JOIN internship_companies ic ON sp.company_id = ic.id
             LEFT JOIN internship_jobs ij ON sp.job_id = ij.id
+            LEFT JOIN resumes r ON (
+                (sp.resume_id IS NOT NULL AND r.id = sp.resume_id) OR
+                (sp.folder_id IS NOT NULL AND r.folder_id = sp.folder_id AND r.user_id = u.id) OR
+                (sp.resume_id IS NULL AND sp.folder_id IS NULL AND r.user_id = u.id)
+            )
             WHERE u.role = 'student' 
         """
         params = []
@@ -16100,7 +16065,7 @@ def get_class_resumes():
             # 對於班導（class_teacher），顯示班導的學生履歷
             if role == "teacher":
                 sql_query = """
-                    SELECT DISTINCT
+                    SELECT 
                         r.id,
                         u.id AS user_id,
                         u.name AS student_name,
@@ -16113,61 +16078,36 @@ def get_class_resumes():
                         r.comment,
                         r.note,
                         r.created_at,
-                        latest_pref.company_name AS company_name,
-                        latest_pref.job_title AS job_title,
-                        latest_pref.preference_id,
-                        latest_pref.preference_order,
-                        latest_pref.preference_status,
-                        latest_pref.vendor_comment
-                    FROM resumes r
-                    JOIN users u ON r.user_id = u.id
+                        sp.id AS preference_id,
+                        sp.preference_order,
+                        'pending' AS preference_status,
+                        ic.company_name,
+                        COALESCE(sp.job_title, ij.title) AS job_title,
+                        ij.id AS job_id,
+                        (SELECT vph.comment 
+                         FROM vendor_preference_history vph 
+                         WHERE vph.preference_id = sp.id 
+                         ORDER BY vph.created_at DESC 
+                         LIMIT 1) AS vendor_comment
+                    FROM student_preferences sp
+                    JOIN users u ON sp.student_id = u.id
                     LEFT JOIN classes c ON u.class_id = c.id
-                    INNER JOIN (
-                        SELECT 
-                            sp.student_id,
-                            sp.id AS preference_id,
-                            sp.preference_order,
-                            'pending' AS preference_status,
-                            ic.company_name,
-                            ij.title AS job_title,
-                            ij.id AS job_id,
-                            (SELECT vph.comment 
-                             FROM vendor_preference_history vph 
-                             WHERE vph.preference_id = sp.id 
-                             ORDER BY vph.created_at DESC 
-                             LIMIT 1) AS vendor_comment
-                        FROM student_preferences sp
-                        JOIN internship_companies ic ON sp.company_id = ic.id
-                        LEFT JOIN internship_jobs ij ON sp.job_id = ij.id
-                        WHERE ic.advisor_user_id = %s
-                        AND sp.status = 'approved'
-                        AND sp.id = (
-                            SELECT sp2.id
-                            FROM student_preferences sp2
-                            JOIN internship_companies ic2 ON sp2.company_id = ic2.id
-                            WHERE sp2.student_id = sp.student_id
-                            AND ic2.advisor_user_id = %s
-                            AND sp2.status = 'approved'
-                            ORDER BY sp2.preference_order ASC
-                            LIMIT 1
-                        )
-                    ) latest_pref ON latest_pref.student_id = u.id
-                    WHERE r.status = 'approved'
-                    -- 只顯示選擇了該指導老師管理的公司的學生履歷
-                    AND EXISTS (
-                        SELECT 1
-                        FROM student_preferences sp
-                        JOIN internship_companies ic2 ON sp.company_id = ic2.id
-                        WHERE sp.student_id = u.id 
-                            AND ic2.advisor_user_id = %s
-                            AND sp.status = 'approved'
+                    JOIN internship_companies ic ON sp.company_id = ic.id
+                    LEFT JOIN internship_jobs ij ON sp.job_id = ij.id
+                    LEFT JOIN resumes r ON (
+                        (sp.resume_id IS NOT NULL AND r.id = sp.resume_id) OR
+                        (sp.folder_id IS NOT NULL AND r.folder_id = sp.folder_id AND r.user_id = u.id) OR
+                        (sp.resume_id IS NULL AND sp.folder_id IS NULL AND r.user_id = u.id)
                     )
+                    WHERE (r.status = 'approved' OR r.id IS NULL)
+                    AND ic.advisor_user_id = %s
+                    AND sp.status = 'approved'
                 """
-                sql_params = (user_id, user_id, user_id)
+                sql_params = (user_id,)
             else:
                 # class_teacher 角色：顯示班導的學生履歷
                 sql_query = """
-                    SELECT DISTINCT
+                    SELECT 
                         r.id,
                         u.id AS user_id,
                         u.name AS student_name,
@@ -16180,35 +16120,29 @@ def get_class_resumes():
                         r.comment,
                         r.note,
                         r.created_at,
-                        latest_pref.company_name AS company_name,
-                        latest_pref.job_title AS job_title,
-                        latest_pref.preference_id,
-                        latest_pref.preference_order,
-                        latest_pref.preference_status,
-                        latest_pref.vendor_comment
-                    FROM resumes r
-                    JOIN users u ON r.user_id = u.id
+                        sp.id AS preference_id,
+                        sp.preference_order,
+                        'pending' AS preference_status,
+                        ic.company_name,
+                        COALESCE(sp.job_title, ij.title) AS job_title,
+                        ij.id AS job_id,
+                        (SELECT vph.comment 
+                         FROM vendor_preference_history vph 
+                         WHERE vph.preference_id = sp.id 
+                         ORDER BY vph.created_at DESC 
+                         LIMIT 1) AS vendor_comment
+                    FROM student_preferences sp
+                    JOIN users u ON sp.student_id = u.id
                     LEFT JOIN classes c ON u.class_id = c.id
-                    LEFT JOIN (
-                        SELECT 
-                            sp.student_id,
-                            sp.id AS preference_id,
-                            sp.preference_order,
-                            'pending' AS preference_status,
-                            ic.company_name,
-                            ij.title AS job_title,
-                            ij.id AS job_id,
-                            (SELECT vph.comment 
-                             FROM vendor_preference_history vph 
-                             WHERE vph.preference_id = sp.id 
-                             ORDER BY vph.created_at DESC 
-                             LIMIT 1) AS vendor_comment
-                        FROM student_preferences sp
-                        JOIN internship_companies ic ON sp.company_id = ic.id
-                        LEFT JOIN internship_jobs ij ON sp.job_id = ij.id
-                        WHERE sp.status = 'approved'
-                    ) latest_pref ON latest_pref.student_id = u.id
-                    WHERE r.status = 'approved'
+                    JOIN internship_companies ic ON sp.company_id = ic.id
+                    LEFT JOIN internship_jobs ij ON sp.job_id = ij.id
+                    LEFT JOIN resumes r ON (
+                        (sp.resume_id IS NOT NULL AND r.id = sp.resume_id) OR
+                        (sp.folder_id IS NOT NULL AND r.folder_id = sp.folder_id AND r.user_id = u.id) OR
+                        (sp.resume_id IS NULL AND sp.folder_id IS NULL AND r.user_id = u.id)
+                    )
+                    WHERE (r.status = 'approved' OR r.id IS NULL)
+                    AND sp.status = 'approved'
                     AND EXISTS (
                         SELECT 1
                         FROM classes c2
@@ -16220,8 +16154,11 @@ def get_class_resumes():
             
             # 如果指定了 company_id，添加額外的篩選條件
             if target_company_id:
-                sql_query += " AND latest_pref.preference_id IN (SELECT id FROM student_preferences WHERE company_id = %s)"
+                sql_query += " AND sp.company_id = %s"
                 sql_params = sql_params + (target_company_id,)
+            
+            # 排序：按照班級、姓名、志願順序
+            sql_query += " ORDER BY c.name, u.username, sp.preference_order ASC"
 
             cursor.execute(sql_query, sql_params)
             resumes = cursor.fetchall()
@@ -19839,6 +19776,7 @@ def get_teacher_review_resumes():
     
     try:
         # 建立基本查詢：每個志願序都顯示一行履歷
+        # 根據 folder_id 和 resume_id 來關聯履歷
         sql = """
             SELECT 
                 u.id AS user_id,
@@ -19852,14 +19790,20 @@ def get_teacher_review_resumes():
                 r.status AS display_status,
                 sp.id AS preference_id,
                 sp.preference_order,
+                sp.folder_id,
+                sp.resume_id AS preference_resume_id,
                 ic.company_name,
                 COALESCE(sp.job_title, ij.title) AS job_title
-            FROM users u
+            FROM student_preferences sp
+            JOIN users u ON sp.student_id = u.id
             LEFT JOIN classes c ON u.class_id = c.id
-            LEFT JOIN resumes r ON u.id = r.user_id 
-            JOIN student_preferences sp ON sp.student_id = u.id
             JOIN internship_companies ic ON sp.company_id = ic.id
             LEFT JOIN internship_jobs ij ON sp.job_id = ij.id
+            LEFT JOIN resumes r ON (
+                (sp.resume_id IS NOT NULL AND r.id = sp.resume_id) OR
+                (sp.folder_id IS NOT NULL AND r.folder_id = sp.folder_id AND r.user_id = u.id) OR
+                (sp.resume_id IS NULL AND sp.folder_id IS NULL AND r.user_id = u.id)
+            )
             WHERE u.role = 'student' 
         """
         params = []
@@ -20284,7 +20228,7 @@ def get_class_resumes():
             # 對於班導（class_teacher），顯示班導的學生履歷
             if role == "teacher":
                 sql_query = """
-                    SELECT DISTINCT
+                    SELECT 
                         r.id,
                         u.id AS user_id,
                         u.name AS student_name,
@@ -20297,61 +20241,36 @@ def get_class_resumes():
                         r.comment,
                         r.note,
                         r.created_at,
-                        latest_pref.company_name AS company_name,
-                        latest_pref.job_title AS job_title,
-                        latest_pref.preference_id,
-                        latest_pref.preference_order,
-                        latest_pref.preference_status,
-                        latest_pref.vendor_comment
-                    FROM resumes r
-                    JOIN users u ON r.user_id = u.id
+                        sp.id AS preference_id,
+                        sp.preference_order,
+                        'pending' AS preference_status,
+                        ic.company_name,
+                        COALESCE(sp.job_title, ij.title) AS job_title,
+                        ij.id AS job_id,
+                        (SELECT vph.comment 
+                         FROM vendor_preference_history vph 
+                         WHERE vph.preference_id = sp.id 
+                         ORDER BY vph.created_at DESC 
+                         LIMIT 1) AS vendor_comment
+                    FROM student_preferences sp
+                    JOIN users u ON sp.student_id = u.id
                     LEFT JOIN classes c ON u.class_id = c.id
-                    INNER JOIN (
-                        SELECT 
-                            sp.student_id,
-                            sp.id AS preference_id,
-                            sp.preference_order,
-                            'pending' AS preference_status,
-                            ic.company_name,
-                            ij.title AS job_title,
-                            ij.id AS job_id,
-                            (SELECT vph.comment 
-                             FROM vendor_preference_history vph 
-                             WHERE vph.preference_id = sp.id 
-                             ORDER BY vph.created_at DESC 
-                             LIMIT 1) AS vendor_comment
-                        FROM student_preferences sp
-                        JOIN internship_companies ic ON sp.company_id = ic.id
-                        LEFT JOIN internship_jobs ij ON sp.job_id = ij.id
-                        WHERE ic.advisor_user_id = %s
-                        AND sp.status = 'approved'
-                        AND sp.id = (
-                            SELECT sp2.id
-                            FROM student_preferences sp2
-                            JOIN internship_companies ic2 ON sp2.company_id = ic2.id
-                            WHERE sp2.student_id = sp.student_id
-                            AND ic2.advisor_user_id = %s
-                            AND sp2.status = 'approved'
-                            ORDER BY sp2.preference_order ASC
-                            LIMIT 1
-                        )
-                    ) latest_pref ON latest_pref.student_id = u.id
-                    WHERE r.status = 'approved'
-                    -- 只顯示選擇了該指導老師管理的公司的學生履歷
-                    AND EXISTS (
-                        SELECT 1
-                        FROM student_preferences sp
-                        JOIN internship_companies ic2 ON sp.company_id = ic2.id
-                        WHERE sp.student_id = u.id 
-                            AND ic2.advisor_user_id = %s
-                            AND sp.status = 'approved'
+                    JOIN internship_companies ic ON sp.company_id = ic.id
+                    LEFT JOIN internship_jobs ij ON sp.job_id = ij.id
+                    LEFT JOIN resumes r ON (
+                        (sp.resume_id IS NOT NULL AND r.id = sp.resume_id) OR
+                        (sp.folder_id IS NOT NULL AND r.folder_id = sp.folder_id AND r.user_id = u.id) OR
+                        (sp.resume_id IS NULL AND sp.folder_id IS NULL AND r.user_id = u.id)
                     )
+                    WHERE (r.status = 'approved' OR r.id IS NULL)
+                    AND ic.advisor_user_id = %s
+                    AND sp.status = 'approved'
                 """
-                sql_params = (user_id, user_id, user_id)
+                sql_params = (user_id,)
             else:
                 # class_teacher 角色：顯示班導的學生履歷
                 sql_query = """
-                    SELECT DISTINCT
+                    SELECT 
                         r.id,
                         u.id AS user_id,
                         u.name AS student_name,
@@ -20364,35 +20283,29 @@ def get_class_resumes():
                         r.comment,
                         r.note,
                         r.created_at,
-                        latest_pref.company_name AS company_name,
-                        latest_pref.job_title AS job_title,
-                        latest_pref.preference_id,
-                        latest_pref.preference_order,
-                        latest_pref.preference_status,
-                        latest_pref.vendor_comment
-                    FROM resumes r
-                    JOIN users u ON r.user_id = u.id
+                        sp.id AS preference_id,
+                        sp.preference_order,
+                        'pending' AS preference_status,
+                        ic.company_name,
+                        COALESCE(sp.job_title, ij.title) AS job_title,
+                        ij.id AS job_id,
+                        (SELECT vph.comment 
+                         FROM vendor_preference_history vph 
+                         WHERE vph.preference_id = sp.id 
+                         ORDER BY vph.created_at DESC 
+                         LIMIT 1) AS vendor_comment
+                    FROM student_preferences sp
+                    JOIN users u ON sp.student_id = u.id
                     LEFT JOIN classes c ON u.class_id = c.id
-                    LEFT JOIN (
-                        SELECT 
-                            sp.student_id,
-                            sp.id AS preference_id,
-                            sp.preference_order,
-                            'pending' AS preference_status,
-                            ic.company_name,
-                            ij.title AS job_title,
-                            ij.id AS job_id,
-                            (SELECT vph.comment 
-                             FROM vendor_preference_history vph 
-                             WHERE vph.preference_id = sp.id 
-                             ORDER BY vph.created_at DESC 
-                             LIMIT 1) AS vendor_comment
-                        FROM student_preferences sp
-                        JOIN internship_companies ic ON sp.company_id = ic.id
-                        LEFT JOIN internship_jobs ij ON sp.job_id = ij.id
-                        WHERE sp.status = 'approved'
-                    ) latest_pref ON latest_pref.student_id = u.id
-                    WHERE r.status = 'approved'
+                    JOIN internship_companies ic ON sp.company_id = ic.id
+                    LEFT JOIN internship_jobs ij ON sp.job_id = ij.id
+                    LEFT JOIN resumes r ON (
+                        (sp.resume_id IS NOT NULL AND r.id = sp.resume_id) OR
+                        (sp.folder_id IS NOT NULL AND r.folder_id = sp.folder_id AND r.user_id = u.id) OR
+                        (sp.resume_id IS NULL AND sp.folder_id IS NULL AND r.user_id = u.id)
+                    )
+                    WHERE (r.status = 'approved' OR r.id IS NULL)
+                    AND sp.status = 'approved'
                     AND EXISTS (
                         SELECT 1
                         FROM classes c2
@@ -20404,8 +20317,11 @@ def get_class_resumes():
             
             # 如果指定了 company_id，添加額外的篩選條件
             if target_company_id:
-                sql_query += " AND latest_pref.preference_id IN (SELECT id FROM student_preferences WHERE company_id = %s)"
+                sql_query += " AND sp.company_id = %s"
                 sql_params = sql_params + (target_company_id,)
+            
+            # 排序：按照班級、姓名、志願順序
+            sql_query += " ORDER BY c.name, u.username, sp.preference_order ASC"
 
             cursor.execute(sql_query, sql_params)
             resumes = cursor.fetchall()
@@ -24023,6 +23939,7 @@ def get_teacher_review_resumes():
     
     try:
         # 建立基本查詢：每個志願序都顯示一行履歷
+        # 根據 folder_id 和 resume_id 來關聯履歷
         sql = """
             SELECT 
                 u.id AS user_id,
@@ -24036,14 +23953,20 @@ def get_teacher_review_resumes():
                 r.status AS display_status,
                 sp.id AS preference_id,
                 sp.preference_order,
+                sp.folder_id,
+                sp.resume_id AS preference_resume_id,
                 ic.company_name,
                 COALESCE(sp.job_title, ij.title) AS job_title
-            FROM users u
+            FROM student_preferences sp
+            JOIN users u ON sp.student_id = u.id
             LEFT JOIN classes c ON u.class_id = c.id
-            LEFT JOIN resumes r ON u.id = r.user_id 
-            JOIN student_preferences sp ON sp.student_id = u.id
             JOIN internship_companies ic ON sp.company_id = ic.id
             LEFT JOIN internship_jobs ij ON sp.job_id = ij.id
+            LEFT JOIN resumes r ON (
+                (sp.resume_id IS NOT NULL AND r.id = sp.resume_id) OR
+                (sp.folder_id IS NOT NULL AND r.folder_id = sp.folder_id AND r.user_id = u.id) OR
+                (sp.resume_id IS NULL AND sp.folder_id IS NULL AND r.user_id = u.id)
+            )
             WHERE u.role = 'student' 
         """
         params = []
@@ -24611,7 +24534,7 @@ def get_class_resumes():
             # 對於班導（class_teacher），顯示班導的學生履歷
             if role == "teacher":
                 sql_query = """
-                    SELECT DISTINCT
+                    SELECT 
                         r.id,
                         u.id AS user_id,
                         u.name AS student_name,
@@ -24624,61 +24547,36 @@ def get_class_resumes():
                         r.comment,
                         r.note,
                         r.created_at,
-                        latest_pref.company_name AS company_name,
-                        latest_pref.job_title AS job_title,
-                        latest_pref.preference_id,
-                        latest_pref.preference_order,
-                        latest_pref.preference_status,
-                        latest_pref.vendor_comment
-                    FROM resumes r
-                    JOIN users u ON r.user_id = u.id
+                        sp.id AS preference_id,
+                        sp.preference_order,
+                        'pending' AS preference_status,
+                        ic.company_name,
+                        COALESCE(sp.job_title, ij.title) AS job_title,
+                        ij.id AS job_id,
+                        (SELECT vph.comment 
+                         FROM vendor_preference_history vph 
+                         WHERE vph.preference_id = sp.id 
+                         ORDER BY vph.created_at DESC 
+                         LIMIT 1) AS vendor_comment
+                    FROM student_preferences sp
+                    JOIN users u ON sp.student_id = u.id
                     LEFT JOIN classes c ON u.class_id = c.id
-                    INNER JOIN (
-                        SELECT 
-                            sp.student_id,
-                            sp.id AS preference_id,
-                            sp.preference_order,
-                            'pending' AS preference_status,
-                            ic.company_name,
-                            ij.title AS job_title,
-                            ij.id AS job_id,
-                            (SELECT vph.comment 
-                             FROM vendor_preference_history vph 
-                             WHERE vph.preference_id = sp.id 
-                             ORDER BY vph.created_at DESC 
-                             LIMIT 1) AS vendor_comment
-                        FROM student_preferences sp
-                        JOIN internship_companies ic ON sp.company_id = ic.id
-                        LEFT JOIN internship_jobs ij ON sp.job_id = ij.id
-                        WHERE ic.advisor_user_id = %s
-                        AND sp.status = 'approved'
-                        AND sp.id = (
-                            SELECT sp2.id
-                            FROM student_preferences sp2
-                            JOIN internship_companies ic2 ON sp2.company_id = ic2.id
-                            WHERE sp2.student_id = sp.student_id
-                            AND ic2.advisor_user_id = %s
-                            AND sp2.status = 'approved'
-                            ORDER BY sp2.preference_order ASC
-                            LIMIT 1
-                        )
-                    ) latest_pref ON latest_pref.student_id = u.id
-                    WHERE r.status = 'approved'
-                    -- 只顯示選擇了該指導老師管理的公司的學生履歷
-                    AND EXISTS (
-                        SELECT 1
-                        FROM student_preferences sp
-                        JOIN internship_companies ic2 ON sp.company_id = ic2.id
-                        WHERE sp.student_id = u.id 
-                            AND ic2.advisor_user_id = %s
-                            AND sp.status = 'approved'
+                    JOIN internship_companies ic ON sp.company_id = ic.id
+                    LEFT JOIN internship_jobs ij ON sp.job_id = ij.id
+                    LEFT JOIN resumes r ON (
+                        (sp.resume_id IS NOT NULL AND r.id = sp.resume_id) OR
+                        (sp.folder_id IS NOT NULL AND r.folder_id = sp.folder_id AND r.user_id = u.id) OR
+                        (sp.resume_id IS NULL AND sp.folder_id IS NULL AND r.user_id = u.id)
                     )
+                    WHERE (r.status = 'approved' OR r.id IS NULL)
+                    AND ic.advisor_user_id = %s
+                    AND sp.status = 'approved'
                 """
-                sql_params = (user_id, user_id, user_id)
+                sql_params = (user_id,)
             else:
                 # class_teacher 角色：顯示班導的學生履歷
                 sql_query = """
-                    SELECT DISTINCT
+                    SELECT 
                         r.id,
                         u.id AS user_id,
                         u.name AS student_name,
@@ -24691,35 +24589,29 @@ def get_class_resumes():
                         r.comment,
                         r.note,
                         r.created_at,
-                        latest_pref.company_name AS company_name,
-                        latest_pref.job_title AS job_title,
-                        latest_pref.preference_id,
-                        latest_pref.preference_order,
-                        latest_pref.preference_status,
-                        latest_pref.vendor_comment
-                    FROM resumes r
-                    JOIN users u ON r.user_id = u.id
+                        sp.id AS preference_id,
+                        sp.preference_order,
+                        'pending' AS preference_status,
+                        ic.company_name,
+                        COALESCE(sp.job_title, ij.title) AS job_title,
+                        ij.id AS job_id,
+                        (SELECT vph.comment 
+                         FROM vendor_preference_history vph 
+                         WHERE vph.preference_id = sp.id 
+                         ORDER BY vph.created_at DESC 
+                         LIMIT 1) AS vendor_comment
+                    FROM student_preferences sp
+                    JOIN users u ON sp.student_id = u.id
                     LEFT JOIN classes c ON u.class_id = c.id
-                    LEFT JOIN (
-                        SELECT 
-                            sp.student_id,
-                            sp.id AS preference_id,
-                            sp.preference_order,
-                            'pending' AS preference_status,
-                            ic.company_name,
-                            ij.title AS job_title,
-                            ij.id AS job_id,
-                            (SELECT vph.comment 
-                             FROM vendor_preference_history vph 
-                             WHERE vph.preference_id = sp.id 
-                             ORDER BY vph.created_at DESC 
-                             LIMIT 1) AS vendor_comment
-                        FROM student_preferences sp
-                        JOIN internship_companies ic ON sp.company_id = ic.id
-                        LEFT JOIN internship_jobs ij ON sp.job_id = ij.id
-                        WHERE sp.status = 'approved'
-                    ) latest_pref ON latest_pref.student_id = u.id
-                    WHERE r.status = 'approved'
+                    JOIN internship_companies ic ON sp.company_id = ic.id
+                    LEFT JOIN internship_jobs ij ON sp.job_id = ij.id
+                    LEFT JOIN resumes r ON (
+                        (sp.resume_id IS NOT NULL AND r.id = sp.resume_id) OR
+                        (sp.folder_id IS NOT NULL AND r.folder_id = sp.folder_id AND r.user_id = u.id) OR
+                        (sp.resume_id IS NULL AND sp.folder_id IS NULL AND r.user_id = u.id)
+                    )
+                    WHERE (r.status = 'approved' OR r.id IS NULL)
+                    AND sp.status = 'approved'
                     AND EXISTS (
                         SELECT 1
                         FROM classes c2
@@ -24731,8 +24623,11 @@ def get_class_resumes():
             
             # 如果指定了 company_id，添加額外的篩選條件
             if target_company_id:
-                sql_query += " AND latest_pref.preference_id IN (SELECT id FROM student_preferences WHERE company_id = %s)"
+                sql_query += " AND sp.company_id = %s"
                 sql_params = sql_params + (target_company_id,)
+            
+            # 排序：按照班級、姓名、志願順序
+            sql_query += " ORDER BY c.name, u.username, sp.preference_order ASC"
 
             cursor.execute(sql_query, sql_params)
             resumes = cursor.fetchall()
