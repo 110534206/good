@@ -1730,15 +1730,30 @@ def apply_company():
     cursor = conn.cursor(dictionary=True)
     
     try:
-        # 驗證履歷屬於該用戶和資料夾
+        # 驗證履歷屬於該用戶
+        # 注意：允許未審核的履歷（status='uploaded'）也可以投遞，因為投遞後會由指導老師審核
         cursor.execute("""
-            SELECT id FROM resumes 
-            WHERE id = %s AND user_id = %s AND folder_id = %s
-        """, (resume_id, user_id, folder_id))
+            SELECT id, status, folder_id FROM resumes 
+            WHERE id = %s AND user_id = %s
+        """, (resume_id, user_id))
         resume = cursor.fetchone()
         
         if not resume:
             return jsonify({"success": False, "message": "履歷不存在或無權限"}), 403
+        
+        # 驗證履歷屬於指定的資料夾（如果履歷的 folder_id 為 NULL，則允許任何 folder_id）
+        resume_folder_id = resume.get('folder_id')
+        if resume_folder_id is not None and resume_folder_id != folder_id:
+            return jsonify({"success": False, "message": "履歷不屬於指定的資料夾"}), 403
+        
+        # 如果履歷的 folder_id 為 NULL，更新它（確保數據一致性）
+        if resume_folder_id is None and folder_id:
+            cursor.execute("""
+                UPDATE resumes 
+                SET folder_id = %s 
+                WHERE id = %s AND user_id = %s
+            """, (folder_id, resume_id, user_id))
+            # 注意：這裡不 commit，讓後面的 INSERT 一起 commit
         
         # 驗證公司和職缺存在
         cursor.execute("""
@@ -1771,35 +1786,81 @@ def apply_company():
         job_title = job_title_result['title'] if job_title_result else ''
         
         # 插入投遞記錄到 student_preferences
-        # 注意：目前 student_preferences 表沒有 folder_id 和 resume_id 字段
-        # 這裡只存儲基本的投遞信息，履歷版本信息可以通過 resume_id 在 resumes 表中查詢
-        if current_semester_id:
-            cursor.execute("""
-                INSERT INTO student_preferences
-                (student_id, semester_id, company_id, job_id, job_title, status, submitted_at)
-                VALUES (%s, %s, %s, %s, %s, %s, %s)
-            """, (
-                user_id,
-                current_semester_id,
-                company_id,
-                job_id,
-                job_title,
-                'submitted',
-                datetime.now()
-            ))
+        # 檢查 student_preferences 表是否有 folder_id 和 resume_id 字段
+        cursor.execute("""
+            SELECT COLUMN_NAME 
+            FROM INFORMATION_SCHEMA.COLUMNS 
+            WHERE TABLE_SCHEMA = DATABASE() 
+            AND TABLE_NAME = 'student_preferences' 
+            AND COLUMN_NAME IN ('folder_id', 'resume_id')
+        """)
+        columns = [row['COLUMN_NAME'] for row in cursor.fetchall()]
+        has_folder_id = 'folder_id' in columns
+        has_resume_id = 'resume_id' in columns
+        
+        # 根據表結構動態構建 INSERT 語句
+        if has_folder_id and has_resume_id:
+            # 表有 folder_id 和 resume_id 字段
+            if current_semester_id:
+                cursor.execute("""
+                    INSERT INTO student_preferences
+                    (student_id, semester_id, company_id, job_id, folder_id, resume_id, job_title, status, submitted_at)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                """, (
+                    user_id,
+                    current_semester_id,
+                    company_id,
+                    job_id,
+                    folder_id,
+                    resume_id,
+                    job_title,
+                    'submitted',
+                    datetime.now()
+                ))
+            else:
+                cursor.execute("""
+                    INSERT INTO student_preferences
+                    (student_id, company_id, job_id, folder_id, resume_id, job_title, status, submitted_at)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                """, (
+                    user_id,
+                    company_id,
+                    job_id,
+                    folder_id,
+                    resume_id,
+                    job_title,
+                    'submitted',
+                    datetime.now()
+                ))
         else:
-            cursor.execute("""
-                INSERT INTO student_preferences
-                (student_id, company_id, job_id, job_title, status, submitted_at)
-                VALUES (%s, %s, %s, %s, %s, %s)
-            """, (
-                user_id,
-                company_id,
-                job_id,
-                job_title,
-                'submitted',
-                datetime.now()
-            ))
+            # 表沒有 folder_id 和 resume_id 字段（向後兼容）
+            if current_semester_id:
+                cursor.execute("""
+                    INSERT INTO student_preferences
+                    (student_id, semester_id, company_id, job_id, job_title, status, submitted_at)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s)
+                """, (
+                    user_id,
+                    current_semester_id,
+                    company_id,
+                    job_id,
+                    job_title,
+                    'submitted',
+                    datetime.now()
+                ))
+            else:
+                cursor.execute("""
+                    INSERT INTO student_preferences
+                    (student_id, company_id, job_id, job_title, status, submitted_at)
+                    VALUES (%s, %s, %s, %s, %s, %s)
+                """, (
+                    user_id,
+                    company_id,
+                    job_id,
+                    job_title,
+                    'submitted',
+                    datetime.now()
+                ))
         
         conn.commit()
         return jsonify({"success": True, "message": "投遞成功"})

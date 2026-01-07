@@ -585,6 +585,7 @@
           <div class="mb-3"><label class="form-label">發送對象</label>
             <select id="pref-target-roles" class="form-select">
               <option value="">請選擇發送對象</option>
+              <option value="all">全部使用者</option>
               <option value="student">學生</option>
               <option value="teacher">指導老師</option>
               <option value="director">主任</option>
@@ -616,6 +617,7 @@
           <div class="mb-3"><label class="form-label">發送對象</label>
             <select id="resume-target-roles" class="form-select">
               <option value="">請選擇發送對象</option>
+              <option value="all">全部使用者</option>
               <option value="student">學生</option>
               <option value="teacher">指導老師</option>
               <option value="director">主任</option>
@@ -675,6 +677,7 @@
           <div class="mb-3"><label class="form-label">發送對象</label>
             <select id="ann-target-roles" class="form-select">
               <option value="">請選擇發送對象</option>
+              <option value="all">全部使用者</option>
               <option value="student">學生</option>
               <option value="teacher">指導老師</option>
               <option value="director">主任</option>
@@ -1601,13 +1604,20 @@
         const annTargetSelect = document.getElementById('ann-target-roles');
         const targetRole = annTargetSelect ? annTargetSelect.value : '';
         
+        let target_roles = [];
+        if (targetRole === 'all') {
+          target_roles = ['student', 'teacher', 'director', 'class_teacher'];
+        } else if (targetRole) {
+          target_roles = [targetRole];
+        }
+        
         const payload = {
           title: document.getElementById('ann-title').value,
           content: document.getElementById('ann-content').value,
           start_time: document.getElementById('ann-start').value.replace('T', ' '),
           end_time: document.getElementById('ann-end').value.replace('T', ' '),
           is_published: 1,  // 新增/編輯公告時預設為已發布，立即同步到通知列表
-          target_roles: targetRole ? [targetRole] : []
+          target_roles: target_roles
         };
         
         if (!payload.title || !payload.start_time || !payload.end_time) {
