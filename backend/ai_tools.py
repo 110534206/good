@@ -746,6 +746,9 @@ def recommend_preferences():
 
         grades_parts = []
         
+        # 計算專業核心科目平均成績（從 course_grades 表的 Grade 欄位）
+        core_course_total_score = 0.0  # 專業核心科目總分
+        core_course_count = 0  # 專業核心科目數量
 
         # 計算 GPA（如果有成績資料）
 
@@ -765,7 +768,6 @@ def recommend_preferences():
             good_courses = []  # B+和B
 
             all_courses_list = []  # 所有課程（用於完整分析）
-            
 
             for grade in grades:
 
@@ -785,6 +787,19 @@ def recommend_preferences():
                     credits = 0.0 # 萬一還是轉失敗，給個預設值
 
                 grade_str = str(grade.get('Grade', '')).strip().upper()
+                
+                # 計算專業核心科目平均成績（處理數字成績）
+                grade_value = grade.get('Grade', '').strip()
+                if grade_value:
+                    try:
+                        # 嘗試將成績轉換為數字（處理數字成績如 90, 88）
+                        numeric_grade = float(grade_value)
+                        if 0 <= numeric_grade <= 100:  # 確保是有效的成績範圍
+                            core_course_total_score += numeric_grade
+                            core_course_count += 1
+                    except (ValueError, TypeError):
+                        # 如果不是數字成績，可能是等級成績（如 A, B+），跳過數字計算
+                        pass
                 
 
                 if credits > 0 and grade_str in grade_points:
@@ -836,17 +851,13 @@ def recommend_preferences():
                 grades_parts.append(f"\n完整課程列表（從資料庫 course_grades 資料表讀取，對應履歷中的「已修習專業核心科目」）：\n" + "\n".join(all_courses_list[:50]))  # 增加到最多50門課程，確保包含所有專業核心科目
         
 
-        # 加入操行成績（從 Student_Info 資料表的 ConductScore 欄位讀取，對應截圖中的「操行平均成績」）
+        # 加入專業核心科目平均成績（從 course_grades 資料表的 Grade 欄位讀取）
 
-        if student_info and student_info.get('ConductScore'):
+        if core_course_count > 0:
 
-            conduct_score = student_info.get('ConductScore')
+            core_course_avg_score = core_course_total_score / core_course_count
 
-            if conduct_score:
-
-                # 操行成績等級：優、甲、乙、丙、丁
-
-                grades_parts.append(f"操行平均成績（從資料庫 Student_Info.ConductScore 欄位讀取）：{conduct_score}（等級：優/甲/乙/丙/丁）")
+            grades_parts.append(f"專業核心科目平均成績（從資料庫 course_grades 資料表的 Grade 欄位讀取）：{core_course_avg_score:.2f} 分（共 {core_course_count} 門專業核心科目）")
         
 
         # 說明成績單圖片狀態（從資料庫讀取）
@@ -1263,7 +1274,7 @@ def recommend_preferences():
    - **語言能力匹配**：如果職缺有語言要求，明確指出學生的語言能力等級。
    
 
-   - **綜合評估**：結合 GPA、操行成績、整體表現，說明學生的學習態度和能力。
+   - **綜合評估**：結合 GPA、專業核心科目平均成績、整體表現，說明學生的學習態度和能力。
 
 4. **推薦理由撰寫規範**（必須嚴格遵守）：
 
@@ -1733,9 +1744,33 @@ def recommend_preferences():
 
 
     except Exception as e:
-
         traceback.print_exc()
-
+        
+        error_str = str(e)
+        
+        # 檢查是否為配額限制錯誤（429）
+        if "429" in error_str or "quota" in error_str.lower() or "Quota exceeded" in error_str:
+            # 嘗試提取重試時間
+            retry_seconds = None
+            if "retry in" in error_str.lower() or "retry_delay" in error_str.lower():
+                import re
+                retry_match = re.search(r'retry in ([\d.]+)s', error_str, re.IGNORECASE)
+                if retry_match:
+                    retry_seconds = int(float(retry_match.group(1)))
+            
+            error_message = "AI 服務目前使用量已達上限（免費層級每日限制 20 次）"
+            if retry_seconds:
+                error_message += f"，請在 {retry_seconds} 秒後再試"
+            else:
+                error_message += "，請稍後再試或明天再使用此功能"
+            
+            return jsonify({
+                "success": False, 
+                "error": error_message,
+                "error_type": "quota_exceeded",
+                "retry_after": retry_seconds
+            }), 429
+        
         return jsonify({"success": False, "error": f"AI 服務處理失敗: {str(e)}"}), 500
 
     finally:

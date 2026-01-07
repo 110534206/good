@@ -692,6 +692,41 @@
                     const result = await response.json();
 
                     if (!result.success) {
+                        // 檢查是否為配額限制錯誤
+                        if (result.error_type === 'quota_exceeded' || result.error?.includes('使用量已達上限')) {
+                            let errorHtml = `
+                                <div class="text-start">
+                                    <p><strong>${result.error || 'AI 服務目前使用量已達上限'}</strong></p>
+                                    <hr>
+                                    <p class="mb-2"><strong>說明：</strong></p>
+                                    <ul class="text-start mb-3">
+                                        <li>免費層級的 Gemini API 每日限制為 20 次請求</li>
+                                        <li>系統已達到今日使用上限</li>
+                                        <li>請稍後再試或明天再使用此功能</li>
+                                    </ul>
+                            `;
+                            
+                            if (result.retry_after) {
+                                errorHtml += `
+                                    <p class="text-info mb-0">
+                                        <i class="bi bi-clock me-1"></i>
+                                        建議等待約 ${result.retry_after} 秒後再試
+                                    </p>
+                                `;
+                            }
+                            
+                            errorHtml += '</div>';
+                            
+                            return Swal.fire({
+                                icon: 'warning',
+                                title: 'AI 服務使用量已達上限',
+                                html: errorHtml,
+                                width: '600px',
+                                confirmButtonText: '我知道了'
+                            });
+                        }
+                        
+                        // 其他錯誤
                         return Swal.fire({
                             icon: 'error',
                             title: '推薦失敗',
