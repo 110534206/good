@@ -24311,6 +24311,13 @@ def get_folders():
     cursor = conn.cursor(dictionary=True)
     cursor.execute("SELECT * FROM resume_folders WHERE user_id = %s ORDER BY created_at DESC", (user_id,))
     folders = cursor.fetchall()
+    
+    # 格式化日期，保持與 POST 方法一致
+    from datetime import datetime
+    for folder in folders:
+        if folder.get('created_at') and isinstance(folder['created_at'], datetime):
+            folder['created_at'] = folder['created_at'].strftime("%Y-%m-%d %H:%M:%S")
+    
     cursor.close()
     conn.close()
     return jsonify({"success": True, "folders": folders})
@@ -24320,25 +24327,41 @@ def get_folders():
 # -------------------------
 @resume_bp.route("/api/resume_folders", methods=["POST"])
 def create_folder():
-    if not require_login(): return jsonify({"success": False, "message": "未登入"}), 401
+    if not require_login(): 
+        return jsonify({"success": False, "message": "未登入"}), 401
+    
     user_id = session['user_id']
     conn = get_db()
-    cursor = conn.cursor(dictionary=True) # 改用 dictionary=True 方便抓取資料
+    cursor = conn.cursor(dictionary=True) # 使用 dictionary=True 方便前端讀取欄位
+    
     try:
-        # 1. 執行插入
+        # 1. 執行插入資料夾
+        # 這裡使用 %s 作為參數佔位符
         cursor.execute("INSERT INTO resume_folders (user_id, folder_name) VALUES (%s, '未命名履歷')", (user_id,))
         new_id = cursor.lastrowid
         conn.commit()
 
-        # 2. 立即查回該筆剛建立的完整資料，包含自動生成的 created_at
-        cursor.execute("SELECT id, folder_name, DATE_FORMAT(created_at, '%Y-%m-%d %H:%i:%s') as created_at FROM resume_folders WHERE id = %s", (new_id,))
+        # 2. 立即查回該筆資料
+        # 使用簡單的 SELECT 查詢，避免 SQL 中的 DATE_FORMAT 導致參數化查詢問題
+        query = "SELECT id, folder_name, created_at FROM resume_folders WHERE id = %s"
+        cursor.execute(query, (new_id,))
         new_folder = cursor.fetchone()
 
-        # 3. 回傳完整物件，這才符合前端 result.folder 的需求
+        # 3. 在 Python 中格式化日期，避免 SQL 參數化查詢的轉義問題
+        if new_folder and new_folder.get('created_at'):
+            from datetime import datetime
+            if isinstance(new_folder['created_at'], datetime):
+                new_folder['created_at'] = new_folder['created_at'].strftime("%Y-%m-%d %H:%M:%S")
+
+        # 4. 回傳成功狀態與新資料夾物件
         return jsonify({"success": True, "folder": new_folder})
+        
     except Exception as e:
         conn.rollback()
+        # 列印出具體錯誤到後端終端機，方便後續排查
+        print(f"Error in create_folder: {str(e)}") 
         return jsonify({"success": False, "message": str(e)}), 500
+        
     finally:
         cursor.close()
         conn.close()
