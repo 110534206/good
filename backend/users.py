@@ -622,11 +622,11 @@ def interview_schedule():
         return redirect(url_for('auth_bp.login_page'))
     return render_template('user_shared/interview_schedule.html')
 
-# 面試排程頁面（主任和指導老師）
+# 面試排程頁面（主任、指導老師、學生）
 @users_bp.route('/interview_schedule')
 def director_interview_schedule():
-    # 權限檢查：允許 director, teacher, admin 訪問
-    if 'user_id' not in session or session.get('role') not in ['director', 'teacher', 'admin']:
+    # 權限檢查：允許 director, teacher, student, admin 訪問
+    if 'user_id' not in session or session.get('role') not in ['director', 'teacher', 'student', 'admin']:
         return redirect(url_for('auth_bp.login_page'))
     return render_template('user_shared/interview_schedule.html')
 
