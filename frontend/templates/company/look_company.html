@@ -406,10 +406,12 @@
             folderSelect.innerHTML = '<option value="">請選擇資料夾</option>' + folders.map(f =>
                 `<option value="${f.id}">${f.folder_name}</option>`
             ).join('');
+            folderSelect.disabled = false;
             
             // 重置履歷版本選擇
             const resumeSelect = document.getElementById('resumeSelect');
             resumeSelect.innerHTML = '<option value="">請先選擇資料夾</option>';
+            resumeSelect.disabled = true; // 先禁用，直到選擇了資料夾
 
             new bootstrap.Modal(
                 document.getElementById('applyModal')
@@ -417,7 +419,7 @@
         }
 
         /* ===============================
-           載入履歷版本
+           載入履歷版本（顯示所有歷史記錄，與 upload_resume.html 一致）
         ================================ */
         async function loadResumeVersions() {
             const folderId = document.getElementById('folderSelect').value;
@@ -425,32 +427,106 @@
             
             if (!folderId) {
                 resumeSelect.innerHTML = '<option value="">請先選擇資料夾</option>';
+                resumeSelect.disabled = true;
                 return;
             }
             
+            // 顯示載入中狀態
+            resumeSelect.innerHTML = '<option value="">載入中...</option>';
+            resumeSelect.disabled = true;
+            
             try {
-                const res = await fetch(`/api/resume_folders/${folderId}/resumes`);
-                const result = await res.json();
+                console.log('📤 [DEBUG] 載入履歷版本，資料夾ID:', folderId);
                 
-                if (result.success) {
-                    resumeVersions = result.resumes || [];
+                // 優先嘗試使用 /api/resume_folders/{folderId}/resumes 獲取該資料夾下的履歷
+                let versions = [];
+                try {
+                    const apiUrl = `/api/resume_folders/${folderId}/resumes`;
+                    console.log('📤 [DEBUG] 嘗試 API URL:', apiUrl);
                     
-                    if (resumeVersions.length === 0) {
-                        resumeSelect.innerHTML = '<option value="">此資料夾尚無履歷版本</option>';
-                    } else {
-                        resumeSelect.innerHTML = '<option value="">請選擇履歷版本</option>' + 
-                            resumeVersions.map(r => {
-                                const statusText = r.status === 'approved' ? '✓' : r.status === 'rejected' ? '✗' : '';
-                                const date = r.created_at ? r.created_at.split(' ')[0] : '';
-                                return `<option value="${r.id}">${r.original_filename || '未命名'} ${statusText} ${date ? '(' + date + ')' : ''}</option>`;
-                            }).join('');
+                    const res = await fetch(apiUrl);
+                    console.log('📥 [DEBUG] 收到響應:', res.status, res.statusText);
+                    
+                    if (res.ok) {
+                        const result = await res.json();
+                        console.log('📦 [DEBUG] API 返回數據:', result);
+                        
+                        if (result.success && result.resumes) {
+                            versions = result.resumes;
+                            console.log('📋 [DEBUG] 從資料夾API獲取到履歷版本數:', versions.length);
+                        }
                     }
+                } catch (folderApiErr) {
+                    console.warn('⚠️ 資料夾API失敗，將使用所有履歷:', folderApiErr);
+                }
+                
+                // 如果資料夾API返回空或失敗，使用 /api/get_my_resumes 獲取所有履歷
+                // 這樣可以確保顯示所有歷史記錄（與 upload_resume.html 一致）
+                if (versions.length === 0) {
+                    console.log('📤 [DEBUG] 資料夾下無履歷，載入所有履歷版本...');
+                    const allRes = await fetch('/api/get_my_resumes');
+                    const allResult = await allRes.json();
+                    
+                    if (allResult.success && allResult.resumes) {
+                        versions = allResult.resumes;
+                        console.log('📋 [DEBUG] 從所有履歷API獲取到履歷版本數:', versions.length);
+                        console.log('📋 [DEBUG] 履歷版本數據:', versions);
+                    } else {
+                        console.warn('⚠️ 無法獲取履歷列表:', allResult.message);
+                    }
+                }
+                
+                resumeVersions = versions;
+                
+                if (versions.length === 0) {
+                    resumeSelect.innerHTML = '<option value="">尚無履歷版本</option>';
+                    console.log('ℹ️ 沒有找到任何履歷版本');
                 } else {
-                    resumeSelect.innerHTML = '<option value="">載入失敗</option>';
+                    // 生成選項列表（與 upload_resume.html 的格式一致）
+                    const options = versions.map(r => {
+                        // 處理字段名
+                        const id = r.id || r.resume_id || r.version_id;
+                        const filename = r.original_filename || r.filename || r.name || '未命名';
+                        const status = r.status || '';
+                        // 處理日期字段（可能是 created_at 或 upload_time）
+                        const uploadTime = r.created_at || r.upload_time || r.uploaded_at || '';
+                        
+                        // 格式化狀態顯示（與 upload_resume.html 一致）
+                        let statusText = '';
+                        if (status === 'approved' || status === '審核通過') {
+                            statusText = ' ✓';
+                        } else if (status === 'rejected' || status === '退件') {
+                            statusText = ' ✗';
+                        } else if (status === 'uploaded' || status === '已上傳') {
+                            statusText = ' ⏳';
+                        }
+                        
+                        // 格式化日期（只取日期部分，與 upload_resume.html 一致）
+                        let dateText = '';
+                        if (uploadTime) {
+                            try {
+                                // 處理日期格式：可能是 "2024-01-01 12:00:00" 或 "2024-01-01T12:00:00"
+                                const date = uploadTime.split(' ')[0] || uploadTime.split('T')[0];
+                                dateText = date ? ` (${date})` : '';
+                            } catch (e) {
+                                console.warn('日期格式化失敗:', uploadTime, e);
+                            }
+                        }
+                        
+                        const displayText = `${filename}${statusText}${dateText}`;
+                        return `<option value="${id}">${displayText}</option>`;
+                    }).join('');
+                    
+                    resumeSelect.innerHTML = '<option value="">請選擇履歷版本</option>' + options;
+                    console.log(`✅ 成功載入 ${versions.length} 個履歷版本`);
                 }
             } catch (err) {
-                console.error('載入履歷版本失敗:', err);
-                resumeSelect.innerHTML = '<option value="">載入失敗</option>';
+                console.error('❌ 載入履歷版本失敗:', err);
+                console.error('錯誤詳情:', err.message);
+                resumeSelect.innerHTML = '<option value="">載入失敗，請重新選擇資料夾</option>';
+                alert(`載入履歷版本失敗：${err.message}\n\n請確認：\n1. 資料夾ID是否正確\n2. 後端服務正常運行`);
+            } finally {
+                resumeSelect.disabled = false;
             }
         }
 
