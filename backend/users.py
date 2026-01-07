@@ -49,6 +49,18 @@ def teacher_home():
     return render_template('user_shared/teacher_home.html')
 
 # -------------------------
+# 指導老師：審核實習心得頁面
+# -------------------------
+@users_bp.route('/review_experience')
+def review_experience_page():
+    """指導老師檢視學生實習心得列表"""
+    current_role = session.get("role")
+    if 'username' not in session or current_role not in ['teacher', 'director', 'class_teacher']:
+        return redirect(url_for('auth_bp.login_page'))
+
+    return render_template('user_shared/review experience.html')
+
+# -------------------------
 # 班導首頁
 # -------------------------
 @users_bp.route("/class_teacher_home")

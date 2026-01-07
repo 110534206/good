@@ -109,16 +109,18 @@ def get_experience_list():
         year = request.args.get('year', '').strip()  # 前端會傳民國年
         company_id = request.args.get('company_id', '').strip()
         my_experiences = request.args.get('my_experiences', '').strip()  # 'true' 表示只顯示自己的心得
+        include_unapproved = request.args.get('include_unapproved', '').strip()  # 'true'：包含未公開心得（給老師審核用）
         db = get_db()
         cursor = db.cursor(dictionary=True)
         
         # 取得目前登入的使用者 ID（如果有的話）
         current_user_id = session.get('user_id') if 'user_id' in session else None
+        current_role = session.get('role')
 
-        # 顯示所有公開的心得（is_public = 1），確保所有學生都能看到
+        # 顯示心得列表
         # 使用 LEFT JOIN 確保即使使用者或公司資料不存在也能顯示心得
         query = """
-            SELECT ie.id, ie.year, ie.content, ie.rating, ie.created_at,
+            SELECT ie.id, ie.year, ie.content, ie.rating, ie.created_at, ie.is_public,
                    u.id AS author_id, COALESCE(u.name, '未知使用者') AS author, 
                    c.id AS company_id, COALESCE(c.company_name, '未填寫公司') AS company_name,
                    j.id AS job_id, j.title AS job_title, j.salary AS job_salary
@@ -139,8 +141,10 @@ def get_experience_list():
             query += " AND ie.user_id = %s"
             params.append(current_user_id)
         else:
-            # 否則只顯示公開的心得（所有心得）
-            query += " AND ie.is_public = 1"
+            # 一般情況：只顯示已公開心得
+            # 若 include_unapproved=true 且為老師/主任/班導，則顯示所有心得（供審核使用）
+            if not (include_unapproved.lower() == 'true' and current_role in ['teacher', 'director', 'class_teacher']):
+                query += " AND ie.is_public = 1"
 
         if keyword:
             query += " AND c.company_name LIKE %s"
@@ -281,10 +285,11 @@ def add_experience():
         db = get_db()
         cursor = db.cursor()
 
+        # 新增心得時預設為未公開（待指導老師審核後才公開）
         cursor.execute("""
             INSERT INTO internship_experiences
                 (user_id, company_id, job_id, year, content, rating, is_public, created_at)
-            VALUES (%s, %s, %s, %s, %s, %s, 1, NOW())
+            VALUES (%s, %s, %s, %s, %s, %s, 0, NOW())
         """, (user_id, company_id, job_id, year, content, rating))
 
         db.commit()
@@ -318,6 +323,32 @@ def delete_experience(exp_id):
         cursor.execute("DELETE FROM internship_experiences WHERE id = %s", (exp_id,))
         db.commit()
         return jsonify({"success": True, "message": "已刪除"})
+    except Exception as e:
+        print(traceback.format_exc())
+        return jsonify({"success": False, "message": str(e)}), 500
+
+# --------------------
+# API：老師審核通過心得（設定為公開）
+# --------------------
+@intern_exp_bp.route('/api/approve/<int:exp_id>', methods=['POST'])
+def approve_experience(exp_id):
+    try:
+        if not require_login():
+            return jsonify({"success": False, "message": "請先登入"}), 403
+
+        # 僅限指導老師 / 主任 / 班導使用
+        if session.get('role') not in ['teacher', 'director', 'class_teacher']:
+            return jsonify({"success": False, "message": "未授權"}), 403
+
+        db = get_db()
+        cursor = db.cursor()
+        cursor.execute("UPDATE internship_experiences SET is_public = 1 WHERE id = %s", (exp_id,))
+        db.commit()
+
+        if cursor.rowcount == 0:
+            return jsonify({"success": False, "message": "心得不存在"}), 404
+
+        return jsonify({"success": True, "message": "已審核通過，學生心得頁面將顯示此筆心得"})
     except Exception as e:
         print(traceback.format_exc())
         return jsonify({"success": False, "message": str(e)}), 500
