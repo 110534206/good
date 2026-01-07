@@ -18,11 +18,13 @@ def check_is_homeroom(user_id):
     is_homeroom = False
     try:
         # 查詢 classes_teacher 表中是否有該 user_id 且 role 為 '班導師' 的記錄
+        # 使用 COUNT(*) 避免 Unread result found 錯誤（當老師帶多個班級時）
         cursor.execute("""
-            SELECT 1 FROM classes_teacher 
+            SELECT COUNT(*) as count FROM classes_teacher 
             WHERE teacher_id = %s AND role = '班導師'
         """, (user_id,))
-        is_homeroom = bool(cursor.fetchone())
+        result = cursor.fetchone()
+        is_homeroom = result[0] > 0 if result else False
     except Exception as e:
         current_app.logger.error(f"Error checking homeroom status for user {user_id}: {e}")
         # 如果發生錯誤，預設為 False

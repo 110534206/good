@@ -422,10 +422,11 @@
                 <div class="modal-body">
                     <input type="hidden" id="assignTeacherId">
                     <div class="mb-3">
-                        <label for="assignTeacherClassSelect" class="form-label">選擇帶班班級</label>
-                        <select class="form-select" id="assignTeacherClassSelect">
-                            <option value="">請選擇班級</option>
-                        </select>
+                        <label class="form-label">選擇帶班班級 <span class="text-muted">(最多可選2個)</span></label>
+                        <div id="assignTeacherClassCheckboxes" class="border rounded p-3" style="max-height: 300px; overflow-y: auto;">
+                            <div class="text-muted text-center">載入中...</div>
+                        </div>
+                        <small class="text-muted d-block mt-2">已選擇: <span id="selectedClassCount">0</span>/2</small>
                     </div>
                     <div class="mb-3">
                         <label for="assignTeacherRole" class="form-label">指派角色</label>
@@ -1037,26 +1038,112 @@
                 }
             };
 
+            // 載入班級checkbox列表
+            async function loadClassCheckboxes(containerEl, selectedClassIds = []) {
+                try {
+                    containerEl.innerHTML = '<div class="text-muted text-center">載入中...</div>';
+                    const res = await fetch('/admin/api/get_classes');
+                    const data = await res.json();
+                    if (!data.success) {
+                        containerEl.innerHTML = '<div class="text-danger text-center">載入班級失敗</div>';
+                        return;
+                    }
+
+                    containerEl.innerHTML = '';
+                    if (data.classes.length === 0) {
+                        containerEl.innerHTML = '<div class="text-muted text-center">暫無班級資料</div>';
+                        return;
+                    }
+
+                    data.classes.forEach(c => {
+                        const div = document.createElement('div');
+                        div.className = 'form-check mb-2';
+                        const checkbox = document.createElement('input');
+                        checkbox.type = 'checkbox';
+                        checkbox.className = 'form-check-input class-checkbox';
+                        checkbox.value = c.id;
+                        checkbox.id = `class-checkbox-${c.id}`;
+                        if (selectedClassIds.includes(c.id)) {
+                            checkbox.checked = true;
+                        }
+                        checkbox.addEventListener('change', updateSelectedClassCount);
+
+                        const label = document.createElement('label');
+                        label.className = 'form-check-label';
+                        label.htmlFor = `class-checkbox-${c.id}`;
+                        label.textContent = `${c.department || ''} ${c.name}`.trim();
+
+                        div.appendChild(checkbox);
+                        div.appendChild(label);
+                        containerEl.appendChild(div);
+                    });
+
+                    updateSelectedClassCount();
+                } catch (e) {
+                    containerEl.innerHTML = '<div class="text-danger text-center">連線錯誤</div>';
+                    showAlert("❌ 載入班級列表失敗：" + e.message, 'danger');
+                }
+            }
+
+            // 更新已選擇班級數量
+            function updateSelectedClassCount() {
+                const checkboxes = document.querySelectorAll('#assignTeacherClassCheckboxes .class-checkbox:checked');
+                const count = checkboxes.length;
+                document.getElementById('selectedClassCount').textContent = count;
+
+                // 如果已選2個，禁用其他checkbox
+                const allCheckboxes = document.querySelectorAll('#assignTeacherClassCheckboxes .class-checkbox');
+                allCheckboxes.forEach(cb => {
+                    if (!cb.checked && count >= 2) {
+                        cb.disabled = true;
+                    } else {
+                        cb.disabled = false;
+                    }
+                });
+            }
+
             // 開啟設定帶班 Modal
             window.openAssignTeacherClass = async (teacherId) => {
                 document.getElementById('assignTeacherId').value = teacherId;
-                const classSelect = document.getElementById('assignTeacherClassSelect');
-                await loadClasses(classSelect);
+                const containerEl = document.getElementById('assignTeacherClassCheckboxes');
+                
+                // 先載入班級列表
+                await loadClassCheckboxes(containerEl);
+
+                // 載入老師當前已帶的班級
+                try {
+                    const res = await fetch(`/admin/api/get_teacher_classes/${teacherId}`);
+                    const data = await res.json();
+                    if (data.success && data.data && data.data.length > 0) {
+                        const selectedClassIds = data.data.map(item => item.class_id);
+                        // 重新載入並預選
+                        await loadClassCheckboxes(containerEl, selectedClassIds);
+                    }
+                } catch (e) {
+                    console.error('載入老師班級失敗:', e);
+                }
+
                 new bootstrap.Modal(document.getElementById('assignTeacherClassModal')).show();
             };
 
-            // 提交設定帶班 (單一班級，會覆蓋)
+            // 提交設定帶班 (支援多選，最多2個班級)
             window.submitAssignTeacherClass = async () => {
                 const teacherId = document.getElementById('assignTeacherId').value;
                 const role = document.getElementById('assignTeacherRole').value;
-                const classId = document.getElementById('assignTeacherClassSelect').value;
+                const checkboxes = document.querySelectorAll('#assignTeacherClassCheckboxes .class-checkbox:checked');
+                const classIds = Array.from(checkboxes).map(cb => parseInt(cb.value));
 
-                if (!classId) {
-                    showAlert('❌ 請選擇要分配的班級', 'warning');
+                if (classIds.length === 0) {
+                    showAlert('❌ 請至少選擇一個班級', 'warning');
                     return;
                 }
 
-                const payload = { class_ids: [classId], role };
+                if (classIds.length > 2) {
+                    showAlert('❌ 最多只能選擇2個班級', 'warning');
+                    return;
+                }
+
+                const payload = { class_ids: classIds, role };
                 try {
                     const res = await fetch(`/admin/api/assign_teacher_class/${teacherId}`, {
                         method: 'POST',

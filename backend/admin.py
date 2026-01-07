@@ -322,6 +322,10 @@ def assign_teacher_class(teacher_id):
         if not class_ids:
             return jsonify({"success": False, "message": "未提供班級資料"}), 400
 
+        # 驗證最多只能帶2個班級
+        if len(class_ids) > 2:
+            return jsonify({"success": False, "message": "一位老師最多只能帶2個班級"}), 400
+
         # 確認該老師存在，角色為 teacher 或 director
         cursor.execute("""
             SELECT id, role FROM users WHERE id = %s AND role IN ('teacher', 'director')
@@ -451,6 +455,12 @@ def save_absence_default_range():
     if not all([admission_year, start_code, end_code]):
         return jsonify({"success": False, "message": "資料不完整"}), 400
 
+    # 確保 admission_year 是整數
+    try:
+        admission_year = int(admission_year)
+    except (ValueError, TypeError):
+        return jsonify({"success": False, "message": "入學年度必須是數字"}), 400
+
     conn = get_db()
     cursor = conn.cursor(dictionary=True)
     try:
@@ -480,6 +490,33 @@ def save_absence_default_range():
         conn.rollback()
         print("儲存預設範圍錯誤:", e)
         return jsonify({"success": False}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+# 刪除缺勤預設學期範圍
+@admin_bp.route('/api/absence_default_range/delete/<int:range_id>', methods=['DELETE'])
+def delete_absence_default_range(range_id):
+    if 'user_id' not in session or session.get('role') not in ['admin', 'ta']:
+        return jsonify({"success": False, "message": "未授權"}), 403
+    
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute("""
+            DELETE FROM absence_default_semester_range
+            WHERE id = %s
+        """, (range_id,))
+        
+        if cursor.rowcount == 0:
+            return jsonify({"success": False, "message": "找不到該筆記錄"}), 404
+        
+        conn.commit()
+        return jsonify({"success": True})
+    except Exception as e:
+        conn.rollback()
+        print("刪除預設範圍錯誤:", e)
+        return jsonify({"success": False, "message": str(e)}), 500
     finally:
         cursor.close()
         conn.close()

@@ -16,23 +16,26 @@
 
         body {
             font-family: "Noto Sans TC", sans-serif;
-            background: #f9fafb;
+            background: linear-gradient(135deg, #f5f7fa 0%, #e9ecef 100%);
             margin: 0;
             overflow-x: hidden;
+            min-height: 100vh;
+            font-size: 1.05rem;
         }
 
         header {
-            background: #0454a3;
+            background: linear-gradient(135deg, #0454a3 0%, #034080 100%);
             color: white;
-            padding: 1rem 2rem;
+            padding: 1.5rem 2rem;
             text-align: center;
             font-size: 1.5rem;
+            box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15);
         }
 
         /* 三條線選單按鈕樣式 */
         .top-bar-left {
             position: fixed;
-            top: 1rem;
+            top: 2rem;
             left: 1rem;
             z-index: 1100;
         }
@@ -133,15 +136,220 @@
         }
 
         .container {
-            max-width: 800px;
+            max-width: 1200px;
             margin: 2rem auto;
             margin-top: 2rem;
+            padding: 2rem 3rem;
+        }
+
+        .page-header {
+            background: white;
+            border-radius: 12px;
             padding: 2rem;
+            margin-bottom: 2rem;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+        }
+
+        .page-header h2 {
+            color: #0454a3;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .page-header h2 i {
+            font-size: 1.8rem;
+        }
+
+        .page-header p {
+            color: #6c757d;
+            margin-bottom: 0;
+            font-size: 0.95rem;
         }
 
         .card {
             border: none;
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+            overflow: hidden;
+            background: white;
+        }
+
+        .card-body {
+            padding: 2.5rem;
+        }
+
+        .table {
+            margin-bottom: 0;
+        }
+
+        .table-responsive {
+            padding: 0 1.5rem;
+        }
+
+        .table thead {
+            background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+        }
+
+        .table thead th {
+            border: none;
+            padding: 1.25rem 1.5rem;
+            font-weight: 600;
+            color: #495057;
+            text-align: center;
+            vertical-align: middle;
+            font-size: 1rem;
+        }
+
+        .table tbody td {
+            padding: 1.25rem 1.5rem;
+            vertical-align: middle;
+            border-bottom: 1px solid #f0f0f0;
+            font-size: 1rem;
+        }
+
+        .table tbody tr:hover {
+            background-color: #f8f9fa;
+            transition: background-color 0.2s ease;
+        }
+
+        .table tbody tr:last-child td {
+            border-bottom: none;
+        }
+
+        .form-control-sm,
+        .form-select-sm {
+            border-radius: 6px;
+            border: 1px solid #dee2e6;
+            transition: all 0.2s ease;
+            font-size: 1rem;
+            padding: 0.5rem 0.75rem;
+        }
+
+        .form-control-sm:focus,
+        .form-select-sm:focus {
+            border-color: #0454a3;
+            box-shadow: 0 0 0 0.2rem rgba(4, 84, 163, 0.15);
+        }
+
+        .btn {
+            border-radius: 6px;
+            padding: 0.5rem 1rem;
+            font-weight: 500;
+            transition: all 0.2s ease;
+            border: none;
+        }
+
+        .btn-sm {
+            padding: 0.5rem 1rem;
+            font-size: 0.95rem;
+        }
+
+        .btn-success {
+            background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+            box-shadow: 0 2px 8px rgba(40, 167, 69, 0.3);
+        }
+
+        .btn-success:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(40, 167, 69, 0.4);
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #0454a3 0%, #034080 100%);
+            box-shadow: 0 2px 8px rgba(4, 84, 163, 0.3);
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(4, 84, 163, 0.4);
+        }
+
+        .btn-danger {
+            background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);
+            box-shadow: 0 2px 8px rgba(220, 53, 69, 0.3);
+        }
+
+        .btn-danger:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(220, 53, 69, 0.4);
+        }
+
+        .btn-secondary {
+            background: linear-gradient(135deg, #6c757d 0%, #5a6268 100%);
+            box-shadow: 0 2px 8px rgba(108, 117, 125, 0.3);
+        }
+
+        .btn-secondary:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(108, 117, 125, 0.4);
+        }
+
+        .action-buttons {
+            display: flex;
+            gap: 0.5rem;
+            justify-content: center;
+        }
+
+        /* 日期显示样式 */
+        .date-display {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 0.25rem;
+            min-width: 140px;
+        }
+
+        .date-value {
+            font-weight: 600;
+            color: #495057;
+            font-size: 0.95rem;
+        }
+
+        .date-relative {
+            font-size: 0.85rem;
+            color: #6c757d;
+            display: flex;
+            align-items: center;
+            gap: 0.25rem;
+        }
+
+        .date-relative i {
+            font-size: 0.7rem;
+        }
+
+        .date-relative.recent {
+            color: #28a745;
+        }
+
+        .date-relative.medium {
+            color: #ffc107;
+        }
+
+        .date-relative.old {
+            color: #6c757d;
+        }
+
+        .info-box {
+            background: linear-gradient(135deg, #e3f2fd 0%, #f1f8ff 100%);
+            border-left: 4px solid #0454a3;
+            border-radius: 8px;
+            padding: 1rem;
+            margin-top: 1rem;
+        }
+
+        .info-box small {
+            color: #495057;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 1rem;
+        }
+
+        .info-box small i {
+            color: #0454a3;
         }
     </style>
 </head>
@@ -171,38 +379,37 @@
         <a href="/login">登出</a>
     </nav>
 
+    <div id="alertMessage" class="alert alert-dismissible fade show d-none" role="alert" style="max-width: 1200px; margin: 2rem auto; margin-top: 2rem; padding: 1rem 3rem;">
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        <span id="alertText"></span>
+    </div>
+
     <div class="container">
-        <h2 class="mb-4"><i class="bi bi-calendar-range"></i> 缺勤預設學期範圍設定（每入學屆）</h2>
-        <p class="text-muted mb-4">
-            為每個入學屆（例如 110、111）設定預設的開始/結束學期。學生上傳履歷或檢視缺勤時會自動帶入該屆設定。
-        </p>
-
-        <div id="alertMessage" class="alert alert-dismissible fade show d-none" role="alert">
-            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-            <span id="alertText"></span>
-        </div>
-
         <div class="card">
             <div class="card-body">
-                <div class="d-flex justify-content-between mb-3">
-                    <div>
-                        <button id="addRowBtn" class="btn btn-sm btn-success"><i class="bi bi-plus"></i> 新增入學屆</button>
+                <div class="d-flex justify-content-between align-items-start mb-4">
+                    <div class="info-box" style="margin-top: 0; flex: 1; margin-right: 2rem;">
+                        <small>
+                            <i class="bi bi-info-circle"></i>
+                            說明：為每個入學屆（例如 110、111）設定預設的開始/結束學期。學生檢視缺勤記錄時會自動帶入該屆設定。
+                        </small>
                     </div>
                     <div>
-                        <button id="reloadBtn" class="btn btn-sm btn-secondary"><i class="bi bi-arrow-clockwise"></i>
-                            重新載入</button>
+                        <button id="addRowBtn" class="btn btn-success">
+                            <i class="bi bi-plus-circle"></i> 新增入學屆數
+                        </button>
                     </div>
                 </div>
 
                 <div class="table-responsive">
-                    <table class="table table-sm align-middle" id="rangesTable">
+                    <table class="table align-middle" id="rangesTable">
                         <thead>
                             <tr>
-                                <th>入學屆 (例: 110)</th>
-                                <th>開始學期</th>
-                                <th>結束學期</th>
-                                <th>最後更新</th>
-                                <th>動作</th>
+                                <th style="width: 15%;">入學屆</th>
+                                <th style="width: 20%;">開始學期</th>
+                                <th style="width: 20%;">結束學期</th>
+                                <th style="width: 25%;">最後更新</th>
+                                <th style="width: 20%;">操作</th>
                             </tr>
                         </thead>
                         <tbody id="rangesTbody">
@@ -210,9 +417,8 @@
                         </tbody>
                     </table>
                 </div>
-                <div class="text-muted small">
-                    說明：儲存後的設定會依 admission_year（入學屆）存到資料庫。學生端會以 username 前 3 碼做對應。
-                </div>
+                
+               
             </div>
         </div>
     </div>
@@ -224,10 +430,31 @@
         function showAlert(message, type = 'info') {
             const alertEl = document.getElementById('alertMessage');
             const alertText = document.getElementById('alertText');
-            alertText.textContent = message;
+            
+            // 添加图标
+            let icon = '';
+            switch(type) {
+                case 'success':
+                    icon = '<i class="bi bi-check-circle me-2"></i>';
+                    break;
+                case 'danger':
+                    icon = '<i class="bi bi-exclamation-circle me-2"></i>';
+                    break;
+                case 'warning':
+                    icon = '<i class="bi bi-exclamation-triangle me-2"></i>';
+                    break;
+                default:
+                    icon = '<i class="bi bi-info-circle me-2"></i>';
+            }
+            
+            alertText.innerHTML = icon + message;
             alertEl.className = `alert alert-${type} alert-dismissible fade show`;
             alertEl.classList.remove('d-none');
-            setTimeout(() => alertEl.classList.add('d-none'), 3500);
+            
+            // 自动隐藏
+            setTimeout(() => {
+                alertEl.classList.add('d-none');
+            }, 4000);
         }
 
         async function fetchSemesters() {
@@ -254,32 +481,119 @@
             return html;
         }
 
+        // 格式化日期显示
+        function formatDateDisplay(dateString) {
+            if (!dateString) return '';
+            
+            try {
+                const date = new Date(dateString);
+                if (isNaN(date.getTime())) return dateString;
+                
+                // 格式化日期
+                const year = date.getFullYear();
+                const month = String(date.getMonth() + 1).padStart(2, '0');
+                const day = String(date.getDate()).padStart(2, '0');
+                const hours = String(date.getHours()).padStart(2, '0');
+                const minutes = String(date.getMinutes()).padStart(2, '0');
+                
+                const formattedDate = `${year}-${month}-${day} ${hours}:${minutes}`;
+                
+                // 计算相对时间
+                const now = new Date();
+                const diffMs = now - date;
+                const diffMins = Math.floor(diffMs / 60000);
+                const diffHours = Math.floor(diffMs / 3600000);
+                const diffDays = Math.floor(diffMs / 86400000);
+                
+                let relativeTime = '';
+                let timeClass = 'old';
+                
+                if (diffMins < 1) {
+                    relativeTime = '剛剛';
+                    timeClass = 'recent';
+                } else if (diffMins < 60) {
+                    relativeTime = `${diffMins} 分鐘前`;
+                    timeClass = 'recent';
+                } else if (diffHours < 24) {
+                    relativeTime = `${diffHours} 小時前`;
+                    timeClass = diffHours < 3 ? 'recent' : 'medium';
+                } else if (diffDays < 7) {
+                    relativeTime = `${diffDays} 天前`;
+                    timeClass = diffDays < 3 ? 'medium' : 'old';
+                } else if (diffDays < 30) {
+                    const weeks = Math.floor(diffDays / 7);
+                    relativeTime = `${weeks} 週前`;
+                    timeClass = 'old';
+                } else {
+                    relativeTime = '超過一個月';
+                    timeClass = 'old';
+                }
+                
+                return `
+                    <div class="date-display">
+                        <div class="date-value">${formattedDate}</div>
+                        <div class="date-relative ${timeClass}">
+                            <i class="bi bi-clock"></i>
+                            <span>${relativeTime}</span>
+                        </div>
+                    </div>
+                `;
+            } catch (e) {
+                return dateString;
+            }
+        }
+
         function renderTable() {
             const tbody = document.getElementById('rangesTbody');
             tbody.innerHTML = '';
+            
+            if (ranges.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="5" class="text-center text-muted py-5">
+                            <i class="bi bi-inbox" style="font-size: 3rem; opacity: 0.3;"></i>
+                            <p class="mt-3 mb-0" style="font-size: 1.1rem;">尚無設定資料，請點擊「新增入學屆數」開始設定</p>
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+            
             // 先用現有 ranges 排序
             ranges.sort((a, b) => (a.admission_year || '').toString().localeCompare((b.admission_year || '').toString(), undefined, { numeric: true }));
             ranges.forEach(row => {
                 const tr = document.createElement('tr');
                 tr.dataset.id = row.id || '';
+                const dateDisplay = formatDateDisplay(row.updated_at || row.created_at || '');
+                
                 tr.innerHTML = `
-                <td><input class="form-control form-control-sm admission-input" value="${row.admission_year || ''}" /></td>
-                <td>
-                    <select class="form-select form-select-sm start-select">
-                        ${semesterOptionsHtml(row.start_semester_code || '')}
-                    </select>
-                </td>
-                <td>
-                    <select class="form-select form-select-sm end-select">
-                        ${semesterOptionsHtml(row.end_semester_code || '')}
-                    </select>
-                </td>
-                <td>${row.updated_at || row.created_at || ''}</td>
-                <td>
-                    <button class="btn btn-sm btn-primary save-btn"><i class="bi bi-save"></i> 儲存</button>
-                    <button class="btn btn-sm btn-danger delete-btn"><i class="bi bi-trash"></i> 刪除</button>
-                </td>
-            `;
+                    <td>
+                        <input class="form-control form-control-sm admission-input" 
+                               value="${row.admission_year || ''}" 
+                               placeholder="例: 110" />
+                    </td>
+                    <td>
+                        <select class="form-select form-select-sm start-select">
+                            ${semesterOptionsHtml(row.start_semester_code || '')}
+                        </select>
+                    </td>
+                    <td>
+                        <select class="form-select form-select-sm end-select">
+                            ${semesterOptionsHtml(row.end_semester_code || '')}
+                        </select>
+                    </td>
+                    <td>${dateDisplay}</td>
+                    <td>
+                        <div class="action-buttons">
+                            <button class="btn btn-sm btn-primary save-btn" title="儲存">
+                                <i class="bi bi-save"></i> 儲存
+                            </button>
+                            <button class="btn btn-sm btn-danger delete-btn" title="刪除">
+                                <i class="bi bi-trash"></i>
+                            </button>
+                        </div>
+                    </td>
+                `;
                 // 事件綁定
                 tr.querySelector('.save-btn').addEventListener('click', () => saveRow(tr));
                 tr.querySelector('.delete-btn').addEventListener('click', () => deleteRow(tr));
@@ -405,7 +719,6 @@
             });
 
             document.getElementById('addRowBtn').addEventListener('click', addEmptyRow);
-            document.getElementById('reloadBtn').addEventListener('click', reloadAll);
             await reloadAll();
         });
     </script>

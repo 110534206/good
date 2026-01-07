@@ -339,10 +339,11 @@ def save_profile():
         is_homeroom = False
         if role in ("teacher", "director"):
             cursor.execute("""
-                SELECT 1 FROM classes_teacher 
+                SELECT COUNT(*) as count FROM classes_teacher 
                 WHERE teacher_id = %s AND role = '班導師'
             """, (user_id,))
-            is_homeroom = bool(cursor.fetchone())
+            result = cursor.fetchone()
+            is_homeroom = result[0] > 0 if result else False
 
         return jsonify({
             "success": True,
@@ -506,10 +507,11 @@ def change_password():
         if user["role"] in ("teacher", "director"):
             check_cursor = conn.cursor() 
             check_cursor.execute("""
-                SELECT 1 FROM classes_teacher 
+                SELECT COUNT(*) as count FROM classes_teacher 
                 WHERE teacher_id = %s AND role = '班導師'
             """, (user_id,))
-            is_homeroom = bool(check_cursor.fetchone())
+            result = check_cursor.fetchone()
+            is_homeroom = result[0] > 0 if result else False
             check_cursor.close()
             
         hashed_pw = generate_password_hash(new_password)
