@@ -369,7 +369,13 @@
 
         const statusTd = document.createElement('td');
         const statusBadge = document.createElement('span');
-        if (row.is_public) {
+        const isRejected = row.is_rejected || (row.status && row.status.toLowerCase() === 'rejected');
+        if (isRejected) {
+          statusBadge.className = 'status-badge rejected';
+          statusBadge.textContent = '已退件';
+          statusBadge.style.backgroundColor = '#dc3545';
+          statusBadge.style.color = '#ffffff';
+        } else if (row.is_public || (row.status && row.status.toLowerCase() === 'approved')) {
           statusBadge.className = 'status-badge approved';
           statusBadge.textContent = '已通過';
         } else {
@@ -394,8 +400,7 @@
           expDetailModal.show();
         };
         opTd.appendChild(btn);
-
-        if (!row.is_public) {
+        if (!row.is_public && !isRejected) {
           const approveBtn = document.createElement('button');
           approveBtn.className = 'btn btn-sm btn-success ms-2';
           approveBtn.textContent = '通過';
@@ -477,6 +482,9 @@
           content: e.content || e.experience_content || '',
           rating: e.rating,
           is_public: e.is_public === 1 || e.is_public === '1' || e.is_public === true,
+          status: e.status || 'pending',
+          is_rejected: e.is_rejected === true || e.is_rejected === 1 || e.is_rejected === '1' ||
+                       (e.status && e.status.toLowerCase() === 'rejected'),
           created_at: e.created_at
         }));
 

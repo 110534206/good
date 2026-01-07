@@ -99,33 +99,37 @@
       transform: translateX(0);
     }
 
-    #close-btn {
-      position: absolute;
-      top: 2rem;
-      right: 1.6rem;
-      font-size: 2.2rem;
-      background: none;
-      border: none;
-      color: #fff;
-      cursor: pointer;
-      line-height: 1rem;
-      height: 2.5rem;
-      width: 2.5rem;
+    #side-menu .menu-header {
       display: flex;
       align-items: center;
-      justify-content: center;
+      justify-content: space-between;
+      width: 100%;
+      margin-bottom: 1.5rem;
     }
 
     #side-menu h2 {
-      margin: 0 0 1.5rem 0;
+      margin: 0;
       font-weight: 700;
-      font-size: 1.6rem;
-      color: #fff;
-      padding: 0;
-      line-height: 2.4rem;
-      height: 2.4rem;
+      font-size: 1.5rem;
+      text-align: left;
+      flex: 1;
+      color: white;
+    }
+
+    #close-btn {
+      font-size: 1.5rem;
+      background: none;
+      border: none;
+      color: white;
+      cursor: pointer;
+      line-height: 1;
+      width: auto;
+      height: auto;
       display: flex;
       align-items: center;
+      justify-content: center;
+      padding: 0;
+      margin: 0;
     }
 
     #side-menu a {
@@ -180,15 +184,6 @@
 #side-menu {
   border-top-right-radius: 24px;
   border-bottom-right-radius: 24px;
-}
-
-#side-menu a {
-  padding: 10px 14px;
-  border-radius: 10px;
-}
-
-#side-menu a:hover {
-  background: linear-gradient(135deg,#2563eb,#1e40af);
 }
 /* ===== 美化樣式結束 ===== */
 
@@ -267,9 +262,6 @@ body {
 /* 側邊選單像產品後台 */
 #side-menu h2 {
   letter-spacing: 1px;
-}
-#side-menu a {
-  font-weight: 500;
 }
 
 /* ===== 業界等級美化結束 ===== */
@@ -550,11 +542,20 @@ body {
       const rating = item.rating ? item.rating : '--';
       // 判斷審核狀態（僅在「我的心得」分頁顯示）
       const isPublic = item.is_public === 1 || item.is_public === '1' || item.is_public === true;
-      const statusBadge = showDelete ? `
-        <span class="badge ${isPublic ? 'bg-success' : 'bg-warning'}">
-          ${isPublic ? '已通過' : '待審核'}
-        </span>
-      ` : '';
+      // 判斷是否已退件：檢查 status = 'rejected' 或 is_rejected 或 is_public === 2
+      const isRejected = (item.status && item.status.toLowerCase() === 'rejected') ||
+                         item.is_rejected === true || item.is_rejected === 1 || item.is_rejected === '1' || 
+                         item.is_public === 2 || item.is_public === '2';
+      let statusBadge = '';
+      if (showDelete) {
+        if (isRejected) {
+          statusBadge = `<span class="badge bg-danger">已退件</span>`;
+        } else if (isPublic) {
+          statusBadge = `<span class="badge bg-success">已通過</span>`;
+        } else {
+          statusBadge = `<span class="badge bg-warning">待審核</span>`;
+        }
+      }
       // 只在明確傳入 showDelete = true 時才顯示刪除按鈕（僅在「我的心得」分頁）
       const card = document.createElement('div');
       card.className = 'col-md-4';
@@ -646,6 +647,15 @@ body {
 
         if (data.success && data.data && data.data.length > 0) {
           data.data.forEach(item => {
+            // 調試：打印退件狀態
+            if (item.is_public === 2 || item.is_public === '2' || item.is_rejected) {
+              console.log('[退件心得]', {
+                id: item.id,
+                company: item.company_name,
+                is_public: item.is_public,
+                is_rejected: item.is_rejected
+              });
+            }
             renderExperienceCard(item, list, true); // 在「我的心得」分頁中，所有心得都顯示刪除按鈕
           });
         } else {
@@ -941,15 +951,20 @@ body {
 
   <!-- 側邊選單 -->
   <nav id="side-menu" aria-hidden="true" role="navigation" aria-label="功能選單">
-    <button id="close-btn" aria-label="關閉功能選單">×</button>
-    <h2>功能選單</h2>
+    <div class="menu-header">
+      <h2>功能選單</h2>
+      <button id="close-btn" aria-label="關閉功能選單">×</button>
+    </div>
     <a href="/student_home">首頁</a>
     <a href="/profile">個人資料</a>
-    <a href="/upload_resume">上傳履歷</a>
+    <a href="/resume_folders">履歷管理</a>
     <a href="/fill_preferences">填寫志願序</a>
+    <a href="/look_company">投遞履歷</a>
     <a href="/notifications">通知</a>
+    <a href="/interview_schedule">行事曆</a>
     <a href="/intern_achievement">學生媒合結果</a>
     <a href="/intern_experience">實習心得</a>
+    <a href="/logout">登出</a>
   </nav>
 </body>
 

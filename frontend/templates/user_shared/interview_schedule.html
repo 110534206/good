@@ -98,6 +98,8 @@
       align-items: flex-start;
       color: #fff;
       user-select: none;
+      border-top-right-radius: 24px;
+      border-bottom-right-radius: 24px;
     }
 
     #side-menu.open {
@@ -105,32 +107,42 @@
     }
 
     #side-menu h2 {
-      margin: 0 0 1.5rem 0;
+      margin: 0;
       font-weight: 700;
-      font-size: 1.6rem;
-      color: #fff;
-      padding: 0;
-      line-height: 2.4rem;
-      height: 2.4rem;
+      font-size: 1.5rem;
+      text-align: left;
+      flex: 1;
+      color: white;
+    }
+
+    #side-menu .menu-header {
       display: flex;
       align-items: center;
+      justify-content: space-between;
+      width: 100%;
+      margin-bottom: 1.5rem;
     }
 
     #close-btn {
-      position: absolute;
-      top: 2rem;
-      right: 1.6rem;
-      font-size: 2.2rem;
+      font-size: 1.5rem;
       background: none;
       border: none;
-      color: #fff;
+      color: white;
       cursor: pointer;
-      line-height: 1rem;
-      height: 2.5rem;
-      width: 2.5rem;
+      line-height: 1;
+      width: auto;
+      height: auto;
       display: flex;
       align-items: center;
       justify-content: center;
+      padding: 0;
+      margin: 0;
+    }
+
+    #menu-content {
+      width: 100%;
+      display: flex;
+      flex-direction: column;
     }
 
     #side-menu a {
@@ -145,7 +157,7 @@
     }
 
     #side-menu a:hover {
-      background-color: rgba(255, 255, 255, 0.18);
+      background: rgba(255, 255, 255, 0.18);
       color: #fff;
     }
 
@@ -257,10 +269,14 @@
 
   <!-- 側邊選單 -->
   <nav id="side-menu" aria-hidden="true" role="navigation" aria-label="功能選單">
-    <button id="close-btn" aria-label="關閉功能選單">×</button>
-    <h2>功能選單</h2>
-    <div id="menu-links">
-      <!-- 選單連結將根據用戶角色動態載入 -->
+    <div class="menu-header">
+      <h2>功能選單</h2>
+      <button id="close-btn" aria-label="關閉功能選單">×</button>
+    </div>
+    <div id="menu-content">
+      <div id="menu-links">
+        <!-- 選單連結將根據用戶角色動態載入 -->
+      </div>
     </div>
   </nav>
 
@@ -315,7 +331,7 @@
         const res = await fetch('/api/profile');
         const data = await res.json();
         const role = data.user?.role || '';
-        const menuLinks = document.getElementById('menu-links');
+        const menuContent = document.getElementById('menu-content');
         
         let menuItems = '';
         
@@ -349,8 +365,9 @@
           menuItems = `
             <a href="/student_home">首頁</a>
             <a href="/profile">個人資料</a>
-            <a href="/upload_resume">上傳履歷</a>
+            <a href="/resume_folders">履歷管理</a>
             <a href="/fill_preferences">填寫志願序</a>
+            <a href="/look_company">投遞履歷</a>
             <a href="/notifications">通知</a>
             <a href="/interview_schedule">行事曆</a>
             <a href="/intern_achievement">學生媒合結果</a>
@@ -384,11 +401,11 @@
           `;
         }
         
-        menuLinks.innerHTML = menuItems;
+        menuContent.innerHTML = menuItems;
       } catch (err) {
         console.error('載入選單失敗:', err);
         // 如果載入失敗，使用預設的科助選單
-        document.getElementById('menu-links').innerHTML = `
+        document.getElementById('menu-content').innerHTML = `
           <a href="/ta_home">首頁</a>
           <a href="/profile">個人資料</a>
           <a href="/notifications">通知</a>

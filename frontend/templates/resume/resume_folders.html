@@ -81,29 +81,37 @@
       transform: translateX(0);
     }
 
+    #side-menu .menu-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      width: 100%;
+      margin-bottom: 1.5rem;
+    }
+
+    #side-menu h2 {
+      margin: 0;
+      font-weight: 700;
+      font-size: 1.5rem;
+      text-align: left;
+      flex: 1;
+      color: white;
+    }
+
     #close-btn {
-      position: absolute;
-      top: 2rem;
-      right: 1.6rem;
-      font-size: 2.2rem;
+      font-size: 1.5rem;
       background: none;
       border: none;
       color: white;
       cursor: pointer;
       line-height: 1;
-      width: 2.5rem;
-      height: 2.5rem;
+      width: auto;
+      height: auto;
       display: flex;
       align-items: center;
       justify-content: center;
-    }
-
-    #side-menu h2 {
-      width: 100%;
-      margin-bottom: 1.5rem;
-      font-weight: 700;
-      font-size: 1.5rem;
-      text-align: left;
+      padding: 0;
+      margin: 0;
     }
 
     #side-menu a {
@@ -199,14 +207,18 @@
   </div>
 
   <nav id="side-menu" aria-hidden="true" role="navigation" aria-label="功能選單">
-    <button id="close-btn" aria-label="關閉功能選單">×</button>
-    <h2>功能選單</h2>
+    <div class="menu-header">
+      <h2>功能選單</h2>
+      <button id="close-btn" aria-label="關閉功能選單">×</button>
+    </div>
     <a href="/student_home">首頁</a>
     <a href="/profile">個人資料</a>
-    <a href="/look_company">投遞履歷</a>
+    <a href="/resume_folders">履歷管理</a>
     <a href="/fill_preferences">填寫志願序</a>
+    <a href="/look_company">投遞履歷</a>
     <a href="/notifications">通知</a>
-    <a href="/intern_achievement">實習成果</a>
+    <a href="/interview_schedule">行事曆</a>
+    <a href="/intern_achievement">學生媒合結果</a>
     <a href="/intern_experience">實習心得</a>
     <a href="/logout">登出</a>
   </nav>

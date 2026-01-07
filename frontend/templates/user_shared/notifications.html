@@ -406,14 +406,14 @@
     }
 
     #close-btn {
-      font-size: 2.2rem;
+      font-size: 1.5rem;
       background: none;
       border: none;
       color: white;
       cursor: pointer;
       line-height: 1;
-      width: 2.5rem;
-      height: 2.5rem;
+      width: auto;
+      height: auto;
       display: flex;
       align-items: center;
       justify-content: center;
@@ -531,6 +531,7 @@
           <div class="chip outline" data-category="resume">履歷</div>
           <div class="chip outline" data-category="ranking">志願序</div>
           <div class="chip outline" data-category="company">實習公司</div>
+          <div class="chip outline" data-category="experience">實習心得</div>
           <div class="chip outline" data-category="approval" id="approval-filter" style="display: none;">時程</div>
           <div class="unread-badge" id="unreadBadgeTA" style="position: static; margin-left: auto; display: none;">
             未讀 <span id="unreadCounterTA">0</span>
@@ -739,6 +740,8 @@
         'resume': '履歷',
         'ranking': '志願序',
         'company': '實習公司',
+        'experience': '實習心得',
+        'intern_experience': '實習心得',  // 兼容不同的類別名稱
         'approval': '時程',
         'general': '一般',
         'preferences': '志願序'  // 兼容舊的 preferences 類別
@@ -771,9 +774,13 @@
           const title = n.title || '(無標題)';
           const category = n.category || 'general';
           // 如果標題包含「公告」，將類別設為 "announcement"（兼容舊數據）
-          const finalCategory = (title.includes('公告') && !title.includes('面試通知') && !title.includes('錄取通知')) 
+          let finalCategory = (title.includes('公告') && !title.includes('面試通知') && !title.includes('錄取通知')) 
             ? 'announcement' 
             : category;
+          // 如果標題包含「實習心得」，將類別設為 "experience"（兼容舊數據）
+          if (title.includes('實習心得') || title.includes('心得退件') || title.includes('心得審核')) {
+            finalCategory = 'experience';
+          }
           
           return {
             id: n.id,
@@ -845,9 +852,14 @@
         const isAnnouncement = n.category === 'announcement' || 
           (n.title.includes('公告') && !n.title.includes('面試通知') && !n.title.includes('錄取通知'));
         
-        // 類別篩選：如果選擇「公告」，也要包含標題包含「公告」的通知（兼容舊數據）
+        // 類別篩選：如果選擇「公告」或「實習心得」，也要包含標題包含相關關鍵字的通知（兼容舊數據）
         if (currentCategoryFilter !== 'all') {
-          if (currentCategoryFilter === 'announcement') {
+          if (currentCategoryFilter === 'experience') {
+            // 實習心得類別：只顯示實習心得相關的通知
+            const isExperience = n.category === 'experience' || n.category === 'intern_experience' ||
+              n.title.includes('實習心得') || n.title.includes('心得退件') || n.title.includes('心得審核');
+            if (!isExperience) return false;
+          } else if (currentCategoryFilter === 'announcement') {
             // 公告類別：只顯示公告
             if (!isAnnouncement) return false;
             // 科助：根據狀態篩選
@@ -1671,7 +1683,7 @@
       };
     }
 
-    // ---------- 動態生成選單 ----------
+    // ---------- 動態生成選單 ----------image.png
     function renderMenu() {
       const menuContent = document.getElementById('menu-content');
       if (!menuContent) return;
@@ -1759,11 +1771,13 @@
             menuItems = [
               { href: '/student_home', text: '首頁' },
               { href: '/profile', text: '個人資料' },
-              { href: '/upload_resume', text: '上傳履歷' },
+              { href: '/resume_folders', text: '履歷管理' },
               { href: '/fill_preferences', text: '填寫志願序' },
-              { href: '/intern_achievement', text: '學生媒合結果' },
-              { href: '/intern_experience', text: '實習心得' },
+              { href: '/look_company', text: '投遞履歷' },
               { href: '/notifications', text: '通知' },
+              { href: '/interview_schedule', text: '行事曆' },
+              { href: '/intern_achievement', text: '學生媒合結果' },
+              { href: '/intern_experience', text: '實習心得' },   
               { href: '/login', text: '登出' }
             ];
           } else if (userRole === 'vendor') {
@@ -1808,13 +1822,15 @@
             menuItems = [
               { href: '/teacher_home', text: '首頁' },
               { href: '/profile', text: '個人資料' },
+              { href: '/notifications', text: '公告' },
               { href: '/upload_company', text: '建立實習機會' },
-              { href: '/admission_results', text: '查看錄取結果' },
-              { href: '/manage_vendor', text: '實習廠商管理' },
-              { href: '/notifications', text: '查看公告' },
               { href: '/review_resume', text: '學生履歷審核' },
+              { href: '/manage_vendor', text: '實習廠商管理' },
+              { href: '/interview_schedule', text: '行事曆' },
+              { href: '/admission_results', text: '查看錄取結果' },
+              { href: '/review_experience', text: '審核實習心得' },
               { href: '/login', text: '登出' }
-            ];
+            ];      
           } else if (userRole === 'ta') {
             // 科助選單
             menuItems = [

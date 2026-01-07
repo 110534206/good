@@ -37,6 +37,11 @@ def create_notification(user_id, title, message, category="general", link_url=No
                  any(k in msg_lower for k in ["志願序", "ranking"]):
                 category = "ranking"
 
+            # 實習心得
+            elif any(k in title_lower for k in ["實習心得", "心得退件", "心得審核", "experience"]) or \
+                 any(k in msg_lower for k in ["實習心得", "心得退件", "心得審核", "experience"]):
+                category = "experience"
+
             # 實習公司
             elif any(k in title_lower for k in ["公司", "實習", "廠商", "intern"]) or \
                  any(k in msg_lower for k in ["公司", "實習", "廠商", "intern"]):

@@ -126,6 +126,7 @@ def get_experience_list():
         # 使用 LEFT JOIN 確保即使使用者或公司資料不存在也能顯示心得
         query = """
             SELECT ie.id, ie.year, ie.content, ie.rating, ie.created_at, ie.is_public,
+                   COALESCE(ie.status, 'pending') AS status,
                    u.id AS author_id, COALESCE(u.name, '未知使用者') AS author, 
                    c.id AS company_id, COALESCE(c.company_name, '未填寫公司') AS company_name,
                    j.id AS job_id, j.title AS job_title, j.salary AS job_salary
@@ -146,10 +147,11 @@ def get_experience_list():
             query += " AND ie.user_id = %s"
             params.append(current_user_id)
         else:
-            # 一般情況：只顯示已公開心得
-            # 若 include_unapproved=true 且為老師/主任/班導，則顯示所有心得（供審核使用）
+            # 一般情況：只顯示已公開心得（排除已退件的）
+            # 若 include_unapproved=true 且為老師/主任/班導，則顯示所有心得（供審核使用，包括已退件的）
             if not (include_unapproved.lower() == 'true' and current_role in ['teacher', 'director', 'class_teacher']):
-                query += " AND ie.is_public = 1"
+                # 排除已退件的心得（status = 'rejected' 或 is_public = 2）
+                query += " AND (ie.is_public = 1 AND (ie.status IS NULL OR ie.status != 'rejected') AND (ie.is_public != 2 OR ie.is_public IS NULL))"
             else:
                 # 審核模式：只顯示該指導老師負責的廠商的心得
                 if include_unapproved.lower() == 'true' and current_role in ['teacher', 'director', 'class_teacher'] and current_user_id:
@@ -192,6 +194,25 @@ def get_experience_list():
                     e['created_at'] = parsed.astimezone(taiwan_tz).strftime("%Y-%m-%d %H:%M")
                 except:
                     e['created_at'] = str(created_at)
+            
+            # 判斷是否為已退件：status = 'rejected' 或 is_public = 2
+            is_public = e.get('is_public')
+            status = e.get('status', '').lower() if e.get('status') else ''
+            
+            # 處理不同數據類型：2, '2', True/False
+            is_public_int = None
+            try:
+                if isinstance(is_public, (int, float)):
+                    is_public_int = int(is_public)
+                elif isinstance(is_public, str) and is_public.strip():
+                    is_public_int = int(is_public.strip())
+                elif is_public is None:
+                    is_public_int = None
+            except (ValueError, TypeError):
+                is_public_int = None
+            
+            # 判斷是否已退件：status = 'rejected' 或 is_public = 2
+            e['is_rejected'] = (status == 'rejected') or (is_public_int == 2)
 
         # 記錄查詢結果數量（用於除錯）
         client_ip = request.remote_addr
@@ -396,8 +417,12 @@ def approve_experience(exp_id):
         student_email = exp_info.get('student_email')
         company_name = exp_info.get('company_name') or '實習公司'
         
-        # 更新心得狀態
-        cursor.execute("UPDATE internship_experiences SET is_public = 1 WHERE id = %s", (exp_id,))
+        # 更新心得狀態：設置為已通過
+        cursor.execute("""
+            UPDATE internship_experiences 
+            SET is_public = 1, status = 'approved' 
+            WHERE id = %s
+        """, (exp_id,))
         db.commit()
 
         if cursor.rowcount == 0:
@@ -524,16 +549,20 @@ def reject_experience(exp_id):
         reviewer_info = cursor.fetchone()
         reviewer_name = reviewer_info.get('name', '指導老師') if reviewer_info else '指導老師'
         
-        # 刪除心得
-        cursor.execute("DELETE FROM internship_experiences WHERE id = %s", (exp_id,))
+        # 標記為已退件（不刪除，使用 status = 'rejected' 和 is_public = 2 來標記已退件）
+        cursor.execute("""
+            UPDATE internship_experiences 
+            SET status = 'rejected', is_public = 2 
+            WHERE id = %s
+        """, (exp_id,))
         db.commit()
 
         # 發送通知給學生
         if student_id:
             notification_title = "實習心得退件通知"
-            notification_message = f"您的實習心得（{company_name}）已被退件，該心得已從系統中移除。請重新提交心得。"
+            notification_message = f"您的實習心得（{company_name}）已被退件。請重新檢查內容並重新提交心得。"
             link_url = "/intern_experience"
-            create_notification(student_id, notification_title, notification_message, category="company", link_url=link_url)
+            create_notification(student_id, notification_title, notification_message, category="experience", link_url=link_url)
         
         # 發送Email給學生
         if student_email:
@@ -543,7 +572,7 @@ def reject_experience(exp_id):
 
 您好！
 
-很抱歉，您的實習心得（{company_name}）已被退件，該心得已從系統中移除。
+很抱歉，您的實習心得（{company_name}）已被退件。
 
 審核老師：{reviewer_name}
 
@@ -558,7 +587,7 @@ def reject_experience(exp_id):
 """
             send_email(student_email, email_subject, email_content, related_user_id=student_id)
 
-        return jsonify({"success": True, "message": "已退件，該心得已從系統中移除"})
+        return jsonify({"success": True, "message": "已退件，學生可以在「我的心得」頁面查看退件狀態"})
     except Exception as e:
         print(traceback.format_exc())
         return jsonify({"success": False, "message": str(e)}), 500
