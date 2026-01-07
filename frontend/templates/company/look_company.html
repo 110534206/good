@@ -1,200 +1,627 @@
 <!DOCTYPE html>
 <html lang="zh-Hant">
+
 <head>
-  <meta charset="UTF-8">
-  <title>查看實習公司</title>
-  <link
-    href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css"
-    rel="stylesheet"
-  >
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>智慧實習平台 | 查看實習公司</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <style>
+        body {
+            font-family: "Noto Sans TC", sans-serif;
+            background: #f7f9fc;
+            margin: 0;
+            padding: 0;
+        }
+
+        header {
+            background: #0454a3;
+            color: white;
+            padding: 1rem 2rem;
+            text-align: center;
+            font-size: 1.5rem;
+        }
+
+        /* 三條線選單按鈕樣式 */
+        .top-bar-left {
+            position: fixed;
+            top: 1rem;
+            left: 1rem;
+            z-index: 1100;
+        }
+
+        .top-bar-left #menu-btn {
+            width: 30px;
+            height: 22px;
+            cursor: pointer;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            background: none;
+            border: none;
+            padding: 0;
+        }
+
+        .top-bar-left #menu-btn span {
+            display: block;
+            width: 100%;
+            height: 3px;
+            background-color: white;
+            border-radius: 2px;
+            transition: all 0.3s ease;
+        }
+
+        /* 側邊選單樣式 */
+        #side-menu {
+            position: fixed;
+            top: 0;
+            left: 0;
+            height: 100vh;
+            width: 320px;
+            max-width: 80vw;
+            background-color: rgba(10, 10, 10, 0.95);
+            backdrop-filter: blur(6px);
+            box-shadow: 3px 0 12px rgb(0 0 0 / 0.7);
+            padding: 2rem 1.5rem;
+            transform: translateX(-100%);
+            transition: transform 0.3s ease-in-out;
+            z-index: 1200;
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            color: white;
+            user-select: none;
+        }
+
+        #side-menu.open {
+            transform: translateX(0);
+        }
+
+        #close-btn {
+            position: absolute;
+            top: 2rem;
+            right: 1.6rem;
+            font-size: 2.2rem;
+            background: none;
+            border: none;
+            color: white;
+            cursor: pointer;
+            line-height: 1;
+            width: 2.5rem;
+            height: 2.5rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        #side-menu h2 {
+            width: 100%;
+            margin-bottom: 1.5rem;
+            font-weight: 700;
+            font-size: 1.5rem;
+            text-align: left;
+            color: white;
+            border-bottom: none;
+        }
+
+        #side-menu a {
+            display: block;
+            width: 100%;
+            padding: 0.5rem 0;
+            font-size: 1.1rem;
+            color: #ddd;
+            text-decoration: none;
+            border-radius: 4px;
+            transition: background-color 0.2s ease;
+        }
+
+        #side-menu a:hover {
+            background-color: rgba(255, 255, 255, 0.15);
+            color: white;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 2rem auto;
+            background: white;
+            padding: 2rem;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        }
+
+        h2 {
+            color: #004d99;
+            margin-bottom: 30px;
+            font-weight: 700;
+            font-size: 2rem;
+            border-bottom: 3px solid #1a73e8;
+            display: inline-block;
+            padding-bottom: 8px;
+        }
+
+        .table {
+            margin-top: 20px;
+        }
+
+        .table thead {
+            background-color: #0454a3;
+            color: white;
+        }
+
+        .table thead th {
+            border: none;
+            padding: 1rem;
+            font-weight: 600;
+        }
+
+        .table tbody tr {
+            transition: background-color 0.2s ease;
+        }
+
+        .table tbody tr:hover {
+            background-color: #f8f9fa;
+        }
+
+        .table tbody td {
+            padding: 1rem;
+            vertical-align: middle;
+        }
+
+        .btn {
+            border-radius: 0.6rem;
+            font-weight: 600;
+            padding: 8px 16px;
+            transition: background-color 0.2s, transform 0.1s;
+        }
+
+        .btn-outline-primary {
+            color: #1a73e8;
+            border-color: #1a73e8;
+            background-color: transparent;
+        }
+
+        .btn-outline-primary:hover:not([disabled]) {
+            color: white;
+            background-color: #1a73e8;
+            transform: translateY(-1px);
+        }
+
+        .btn-outline-primary:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .btn-primary {
+            background-color: #1a73e8;
+            border-color: #1a73e8;
+        }
+
+        .btn-primary:hover {
+            background-color: #1557b0;
+            border-color: #1557b0;
+        }
+
+        .btn-secondary {
+            background-color: #6c757d;
+            border-color: #6c757d;
+        }
+
+        .btn-secondary:hover {
+            background-color: #5a6268;
+            border-color: #5a6268;
+        }
+    </style>
 </head>
-<body class="bg-light">
 
-<div class="container py-5">
-  <h2 class="fw-bold mb-4">查看實習公司</h2>
-
-  <table class="table table-hover align-middle">
-    <thead class="table-light">
-      <tr>
-        <th>公司名稱</th>
-        <th>產業別</th>
-        <th>地點</th>
-        <th class="text-center">操作</th>
-      </tr>
-    </thead>
-    <tbody id="companyTable">
-      <!-- 公司資料 -->
-    </tbody>
-  </table>
-</div>
-
-<!-- 投遞履歷 Modal -->
-<div class="modal fade" id="applyModal" tabindex="-1">
-  <div class="modal-dialog">
-    <div class="modal-content">
-
-      <div class="modal-header">
-        <h5 class="modal-title">投遞履歷</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-      </div>
-
-      <div class="modal-body">
-        <p id="applyCompanyName" class="fw-bold mb-3"></p>
-
-        <!-- 職缺選擇 -->
-        <label class="form-label">選擇職缺</label>
-        <select id="jobSelect" class="form-select mb-3">
-          <option value="">請選擇職缺</option>
-        </select>
-
-        <!-- 履歷資料夾選擇 -->
-        <label class="form-label">選擇履歷資料夾</label>
-        <select id="folderSelect" class="form-select">
-          <!-- 履歷資料夾 -->
-        </select>
-      </div>
-
-      <div class="modal-footer">
-        <button class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
-        <button class="btn btn-primary" onclick="submitApply()">確認投遞</button>
-      </div>
-
+<body>
+    <header>查看實習公司</header>
+    <div class="top-bar-left">
+        <div id="menu-btn" title="選單" role="button" tabindex="0">
+            <span></span><span></span><span></span>
+        </div>
     </div>
-  </div>
-</div>
+    <div class="container">
+        <h2 class="fw-bold mb-4">查看實習公司</h2>
 
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+        <table class="table table-hover align-middle">
+            <thead>
+                <tr>
+                    <th>公司名稱</th>
+                    <th>地點</th>
+                    <th class="text-center">操作</th>
+                </tr>
+            </thead>
+            <tbody id="companyTable">
+                <!-- 公司資料 -->
+            </tbody>
+        </table>
+    </div>
 
-<script>
-let selectedCompanyId = null;
-let folders = [];
+    <!-- 投遞履歷 Modal -->
+    <div class="modal fade" id="applyModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
 
-/* ===============================
-   載入公司資料
-================================ */
-async function loadCompanies() {
-  const res = await fetch('/api/student/companies');
-  const result = await res.json();
+                <div class="modal-header">
+                    <h5 class="modal-title">投遞履歷</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
 
-  if (!result.success) {
-    alert(result.message || '載入公司資料失敗');
-    return;
-  }
+                <div class="modal-body">
+                    <p id="applyCompanyName" class="fw-bold mb-3"></p>
 
-  const data = result.companies || [];
+                    <!-- 職缺選擇 -->
+                    <label class="form-label">選擇職缺</label>
+                    <select id="jobSelect" class="form-select mb-3">
+                        <option value="">請選擇職缺</option>
+                    </select>
 
-  const tbody = document.getElementById('companyTable');
-  tbody.innerHTML = '';
+                    <!-- 履歷資料夾選擇 -->
+                    <label class="form-label">選擇履歷資料夾</label>
+                    <select id="folderSelect" class="form-select mb-3" onchange="loadResumeVersions()">
+                        <option value="">請選擇資料夾</option>
+                    </select>
+                    
+                    <!-- 履歷版本選擇 -->
+                    <label class="form-label">選擇履歷版本</label>
+                    <select id="resumeSelect" class="form-select">
+                        <option value="">請先選擇資料夾</option>
+                    </select>
+                    <small class="form-text text-muted">如果資料夾內有多個履歷版本，請選擇要投遞的版本</small>
+                </div>
 
-  data.forEach(c => {
-    tbody.innerHTML += `
-      <tr>
-        <td>${c.company_name}</td>
-        <td>${c.industry || '-'}</td>
-        <td>${c.location || '-'}</td>
-        <td class="text-center">
-          <button
-            class="btn btn-outline-primary btn-sm"
-            onclick="openApply(${c.id}, '${c.company_name}')"
-          >
-            投遞
-          </button>
-        </td>
-      </tr>
-    `;
-  });
-}
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button class="btn btn-primary" onclick="submitApply()">確認投遞</button>
+                </div>
 
-/* ===============================
-   載入履歷資料夾
-================================ */
-async function loadFolders() {
-  const res = await fetch('/api/resume_folders');
-  const result = await res.json();
-  folders = result.folders || [];
-}
+            </div>
+        </div>
+    </div>
 
-/* ===============================
-   載入公司職缺
-================================ */
-async function loadJobsByCompany(companyId) {
-  const res = await fetch(
-    `/preferences/api/get_jobs_by_company?company_id=${companyId}`
-  );
-  const result = await res.json();
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // 强制清除缓存 - 添加版本号
+        const CACHE_VERSION = '20260107-v2';
+        let selectedCompanyId = null;
+        let folders = [];
+        let resumeVersions = [];
 
-  const jobSelect = document.getElementById('jobSelect');
-  jobSelect.innerHTML = '<option value="">請選擇職缺</option>';
+        /* ===============================
+           載入公司資料
+        ================================ */
+        async function loadCompanies() {
+            const res = await fetch('/api/student/companies');
+            const result = await res.json();
 
-  if (result.success) {
-    result.jobs.forEach(job => {
-      jobSelect.innerHTML += `
-        <option value="${job.id}">${job.title}</option>
-      `;
-    });
-  }
-}
+            if (!result.success) {
+                alert(result.message || '載入公司資料失敗');
+                return;
+            }
 
-/* ===============================
-   開啟投遞視窗
-================================ */
-function openApply(companyId, companyName) {
-  selectedCompanyId = companyId;
+            const data = result.companies || [];
 
-  document.getElementById('applyCompanyName').innerText =
-    `公司：${companyName}`;
+            const tbody = document.getElementById('companyTable');
+            tbody.innerHTML = '';
 
-  // 載入職缺
-  loadJobsByCompany(companyId);
+            data.forEach(c => {
+                // 转义公司名称中的特殊字符，避免在 HTML 中出错
+                const escapedName = (c.company_name || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+                tbody.innerHTML += `
+                    <tr>
+                        <td>${c.company_name}</td>
+                        <td>${c.location || '-'}</td>
+                        <td>
+                            <div class="d-flex flex-column gap-2">
+                                <button
+                                    class="btn btn-outline-primary btn-sm"
+                                    onclick="openApply(${c.id}, '${escapedName}')"
+                                >
+                                    <i class="bi bi-send me-1"></i>投遞
+                                </button>
+                                <button
+                                    type="button"
+                                    class="btn btn-outline-primary btn-sm download-company-btn"
+                                    onclick="downloadCompanyFile(${c.id}, '${escapedName}')"
+                                    title="下載公司資料"
+                                >
+                                    <i class="bi bi-file-earmark-arrow-down-fill me-1"></i>下載公司資料 (DOCX)
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                `;
+            });
+        }
 
-  // 載入履歷資料夾
-  const folderSelect = document.getElementById('folderSelect');
-  folderSelect.innerHTML = folders.map(f =>
-    `<option value="${f.id}">${f.folder_name}</option>`
-  ).join('');
+        /* ===============================
+           載入履歷資料夾
+        ================================ */
+        async function loadFolders() {
+            const res = await fetch('/api/resume_folders');
+            const result = await res.json();
+            folders = result.folders || [];
+        }
 
-  new bootstrap.Modal(
-    document.getElementById('applyModal')
-  ).show();
-}
+        /* ===============================
+           載入公司職缺
+        ================================ */
+        async function loadJobsByCompany(companyId) {
+            console.log('🔍 [DEBUG] 加载公司职缺:', companyId);
+            const jobSelect = document.getElementById('jobSelect');
+            jobSelect.innerHTML = '<option value="">載入中...</option>';
+            
+            try {
+                // 使用正确的 API 路径（与 fill_preferences.html 相同）
+                // 注意：不要使用 /preferences/api/get_jobs_by_company，应该使用 /api/get_jobs_by_company
+                const apiUrl = `/api/get_jobs_by_company?company_id=${companyId}&_v=${CACHE_VERSION}`;
+                console.log('📤 [DEBUG] 请求 URL:', apiUrl);
+                console.log('📤 [DEBUG] 确保使用正确路径: /api/get_jobs_by_company (不是 /preferences/api/get_jobs_by_company)');
+                const res = await fetch(apiUrl);
+                console.log('📥 收到职缺响应:', res.status, res.statusText);
+                
+                if (!res.ok) {
+                    throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+                }
+                
+                const result = await res.json();
+                console.log('📦 职缺数据:', result);
 
-/* ===============================
-   送出投遞
-================================ */
-async function submitApply() {
-  const folderId = document.getElementById('folderSelect').value;
-  const jobId = document.getElementById('jobSelect').value;
+                jobSelect.innerHTML = '<option value="">請選擇職缺</option>';
 
-  if (!jobId) {
-    alert('請選擇職缺');
-    return;
-  }
+                if (result.success && result.jobs && result.jobs.length > 0) {
+                    result.jobs.forEach(job => {
+                        jobSelect.innerHTML += `
+                            <option value="${job.id}">${job.title}</option>
+                        `;
+                    });
+                    console.log(`✅ 成功加载 ${result.jobs.length} 个职缺`);
+                } else {
+                    jobSelect.innerHTML = '<option value="">此公司尚無職缺</option>';
+                    console.warn('⚠️ 该公司没有职缺或加载失败:', result);
+                }
+            } catch (error) {
+                console.error('❌ 加载职缺失败:', error);
+                console.error('错误详情:', error.message);
+                jobSelect.innerHTML = '<option value="">載入職缺失敗</option>';
+                alert(`載入職缺失敗：${error.message}\n\n請確認：\n1. 已刷新頁面清除緩存（Ctrl+F5）\n2. 後端服務正常運行`);
+            }
+        }
 
-  const res = await fetch('/api/student/apply_company', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      company_id: selectedCompanyId,
-      job_id: jobId,
-      folder_id: folderId
-    })
-  });
+        /* ===============================
+           開啟投遞視窗
+        ================================ */
+        function openApply(companyId, companyName) {
+            selectedCompanyId = companyId;
 
-  const result = await res.json();
+            document.getElementById('applyCompanyName').innerText =
+                `公司：${companyName}`;
 
-  if (result.success) {
-    alert('投遞成功');
-    bootstrap.Modal
-      .getInstance(document.getElementById('applyModal'))
-      .hide();
-  } else {
-    alert(result.message || '投遞失敗');
-  }
-}
+            // 載入職缺
+            loadJobsByCompany(companyId);
 
-loadCompanies();
-loadFolders();
-</script>
+            // 載入履歷資料夾
+            const folderSelect = document.getElementById('folderSelect');
+            folderSelect.innerHTML = '<option value="">請選擇資料夾</option>' + folders.map(f =>
+                `<option value="${f.id}">${f.folder_name}</option>`
+            ).join('');
+            
+            // 重置履歷版本選擇
+            const resumeSelect = document.getElementById('resumeSelect');
+            resumeSelect.innerHTML = '<option value="">請先選擇資料夾</option>';
 
+            new bootstrap.Modal(
+                document.getElementById('applyModal')
+            ).show();
+        }
+
+        /* ===============================
+           載入履歷版本
+        ================================ */
+        async function loadResumeVersions() {
+            const folderId = document.getElementById('folderSelect').value;
+            const resumeSelect = document.getElementById('resumeSelect');
+            
+            if (!folderId) {
+                resumeSelect.innerHTML = '<option value="">請先選擇資料夾</option>';
+                return;
+            }
+            
+            try {
+                const res = await fetch(`/api/resume_folders/${folderId}/resumes`);
+                const result = await res.json();
+                
+                if (result.success) {
+                    resumeVersions = result.resumes || [];
+                    
+                    if (resumeVersions.length === 0) {
+                        resumeSelect.innerHTML = '<option value="">此資料夾尚無履歷版本</option>';
+                    } else {
+                        resumeSelect.innerHTML = '<option value="">請選擇履歷版本</option>' + 
+                            resumeVersions.map(r => {
+                                const statusText = r.status === 'approved' ? '✓' : r.status === 'rejected' ? '✗' : '';
+                                const date = r.created_at ? r.created_at.split(' ')[0] : '';
+                                return `<option value="${r.id}">${r.original_filename || '未命名'} ${statusText} ${date ? '(' + date + ')' : ''}</option>`;
+                            }).join('');
+                    }
+                } else {
+                    resumeSelect.innerHTML = '<option value="">載入失敗</option>';
+                }
+            } catch (err) {
+                console.error('載入履歷版本失敗:', err);
+                resumeSelect.innerHTML = '<option value="">載入失敗</option>';
+            }
+        }
+
+        /* ===============================
+           下載公司資料（改進版，帶錯誤處理）
+        ================================ */
+        async function downloadCompanyFile(companyId, companyName) {
+            if (!companyId) {
+                alert('❌ 錯誤：缺少公司 ID');
+                return;
+            }
+            
+            try {
+                console.log('📤 [DEBUG] 下载公司文件，ID:', companyId, '公司名稱:', companyName);
+                const response = await fetch(`/api/download_company_file/${companyId}`);
+                console.log('📥 收到响应:', response.status, response.statusText, response.headers.get('content-type'));
+                
+                if (!response.ok) {
+                    // 如果是 HTML 錯誤頁面，顯示錯誤訊息
+                    const text = await response.text();
+                    if (text.includes('<html>')) {
+                        // 提取錯誤訊息
+                        const errorMatch = text.match(/<h2>錯誤：(.+?)<\/h2>/);
+                        const errorMsg = errorMatch ? errorMatch[1] : '下載失敗';
+                        alert(`❌ ${errorMsg}\n\n公司：${companyName || '未知'}\nID：${companyId}`);
+                        return;
+                    }
+                    // 如果是 JSON 錯誤
+                    try {
+                        const data = await response.json();
+                        alert(`❌ ${data.message || '下載失敗'}\n\n公司：${companyName || '未知'}\nID：${companyId}`);
+                    } catch (e) {
+                        alert(`❌ 下載失敗（HTTP ${response.status}）\n\n公司：${companyName || '未知'}\nID：${companyId}`);
+                    }
+                    return;
+                }
+                
+                // 檢查 Content-Type 是否為文件
+                const contentType = response.headers.get('content-type');
+                if (contentType && contentType.includes('application/json')) {
+                    // 如果是 JSON，表示是錯誤訊息
+                    const data = await response.json();
+                    alert(`❌ ${data.message || '下載失敗'}\n\n公司：${companyName || '未知'}\nID：${companyId}`);
+                    return;
+                }
+                
+                // 從 Content-Disposition 標頭獲取文件名，如果沒有則使用公司名稱
+                let filename = `${companyName || 'company'}_${companyId}.docx`;
+                const contentDisposition = response.headers.get('content-disposition');
+                if (contentDisposition) {
+                    const filenameMatch = contentDisposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
+                    if (filenameMatch && filenameMatch[1]) {
+                        filename = filenameMatch[1].replace(/['"]/g, '');
+                    }
+                }
+                
+                // 下載文件
+                console.log('📦 开始下载文件，文件名:', filename);
+                const blob = await response.blob();
+                console.log('📦 Blob 大小:', blob.size, 'bytes');
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = filename;
+                document.body.appendChild(a);
+                a.click();
+                console.log('✅ 下载链接已点击');
+                window.URL.revokeObjectURL(url);
+                document.body.removeChild(a);
+            } catch (error) {
+                console.error('❌ 下載錯誤:', error);
+                alert(`❌ 下載時發生錯誤：${error.message}\n\n公司：${companyName || '未知'}\nID：${companyId}`);
+            }
+        }
+
+        // 确保函数在全局作用域中
+        window.downloadCompanyFile = downloadCompanyFile;
+
+        /* ===============================
+           送出投遞
+        ================================ */
+        async function submitApply() {
+            const folderId = document.getElementById('folderSelect').value;
+            const resumeId = document.getElementById('resumeSelect').value;
+            const jobId = document.getElementById('jobSelect').value;
+
+            if (!jobId) {
+                alert('請選擇職缺');
+                return;
+            }
+            
+            if (!folderId) {
+                alert('請選擇履歷資料夾');
+                return;
+            }
+            
+            if (!resumeId) {
+                alert('請選擇履歷版本');
+                return;
+            }
+
+            const res = await fetch('/api/student/apply_company', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    company_id: selectedCompanyId,
+                    job_id: jobId,
+                    folder_id: folderId,
+                    resume_id: resumeId
+                })
+            });
+
+            const result = await res.json();
+
+            if (result.success) {
+                alert('投遞成功');
+                bootstrap.Modal
+                    .getInstance(document.getElementById('applyModal'))
+                    .hide();
+            } else {
+                alert(result.message || '投遞失敗');
+            }
+        }
+
+        // 選單開關邏輯
+        document.addEventListener("DOMContentLoaded", () => {
+            const menuBtn = document.getElementById("menu-btn");
+            const sideMenu = document.getElementById("side-menu");
+            const closeBtn = document.getElementById("close-btn");
+
+            if (menuBtn && sideMenu && closeBtn) {
+                menuBtn.addEventListener("click", () => {
+                    sideMenu.classList.add("open");
+                    sideMenu.setAttribute("aria-hidden", "false");
+                });
+
+                closeBtn.addEventListener("click", () => {
+                    sideMenu.classList.remove("open");
+                    sideMenu.setAttribute("aria-hidden", "true");
+                });
+
+                // 如果點擊 menu 以外的地方就關閉選單
+                document.addEventListener("click", (e) => {
+                    if (
+                        !sideMenu.contains(e.target) &&
+                        !menuBtn.contains(e.target)
+                    ) {
+                        sideMenu.classList.remove("open");
+                        sideMenu.setAttribute("aria-hidden", "true");
+                    }
+                });
+            }
+
+            // 載入公司資料和履歷資料夾
+            loadCompanies();
+            loadFolders();
+        });
+    </script>
+
+    <!-- 側邊選單 -->
+    <nav id="side-menu" aria-hidden="true" role="navigation" aria-label="功能選單">
+        <button id="close-btn" aria-label="關閉功能選單">×</button>
+        <h2>功能選單</h2>
+        <a href="/student_home">首頁</a>
+        <a href="/profile">個人資料</a>
+        <a href="/upload_resume">上傳履歷</a>
+        <a href="/fill_preferences">填寫志願序</a>
+        <a href="/notifications">通知</a>
+        <a href="/intern_achievement">學生媒合結果</a>
+        <a href="/intern_experience">實習心得</a>
+    </nav>
 </body>
+
 </html>

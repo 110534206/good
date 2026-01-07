@@ -142,11 +142,18 @@ def list_announcements():
 # --- API：新增公告 ---
 @announcement_bp.route("/api/create", methods=["POST"])
 def create_announcement():
+    """
+    新增公告：
+    - 前端可傳入 target_roles (list[str]) 指定要通知的角色
+      例如：["student", "teacher"]
+    """
     try:
         data = request.json
         title, content = data.get("title"), data.get("content")
         start_time, end_time = data.get("start_time"), data.get("end_time")
         is_published = data.get("is_published", 0)
+        target_roles = data.get("target_roles") or []
+        print("[create_announcement] payload target_roles =", target_roles)
 
         conn = get_db()
         cursor = conn.cursor()
@@ -161,7 +168,7 @@ def create_announcement():
         # 【同步通知】如果已發布，立即同步到通知頁面（不等待時間）
         # 這樣可以確保公告創建後立即出現在通知列表中
         if is_published:
-            push_announcement_notifications(conn, title, content, ann_id)
+            push_announcement_notifications(conn, title, content, ann_id, target_roles=target_roles)
 
         cursor.close()
         conn.close()
@@ -173,6 +180,10 @@ def create_announcement():
 # --- API：更新公告 ---
 @announcement_bp.route("/api/update/<int:ann_id>", methods=["POST"])
 def update_announcement(ann_id):
+    """
+    更新公告：
+    - 如果有傳 target_roles，後續推播將以該角色清單為準
+    """
     try:
         data = request.json
         title = data.get("title")
@@ -180,6 +191,8 @@ def update_announcement(ann_id):
         start_time = data.get("start_time")
         end_time = data.get("end_time")
         is_published = data.get("is_published", 0)
+        target_roles = data.get("target_roles") or []
+        print(f"[update_announcement] ann_id={ann_id}, target_roles={target_roles}")
 
         conn = get_db()
         cursor = conn.cursor()
@@ -195,7 +208,7 @@ def update_announcement(ann_id):
 
         # 【同步通知】如果更新後狀態為「已發布」，立即同步到通知頁面
         if is_published:
-            push_announcement_notifications(conn, title, content, ann_id)
+            push_announcement_notifications(conn, title, content, ann_id, target_roles=target_roles)
 
         cursor.close()
         conn.close()
@@ -228,15 +241,30 @@ def delete_announcement(ann_id):
         traceback.print_exc()
         return jsonify({"success": False, "message": "刪除失敗"}), 500
 # --- 核心函式：發布通知到通知頁面 ---
-def push_announcement_notifications(conn, title, content, ann_id):
-    """將公告推送到 notifications 資料表（確保所有用戶都有對應的通知記錄）"""
+def push_announcement_notifications(conn, title, content, ann_id, target_roles=None):
+    """
+    將公告推送到 notifications 資料表。
+    - target_roles: 可選，若提供則只對這些角色的使用者建立通知
+      例如 ["student", "teacher"]。
+      若為空或 None，則維持原本邏輯：對所有使用者建立通知。
+    """
     try:
         cursor = conn.cursor(dictionary=True)
         link_url = f"/view_announcement/{ann_id}"
         now = get_taiwan_time()
-        
-        # 獲取所有用戶
-        cursor.execute("SELECT id FROM users")
+
+        # 正規化角色清單
+        valid_roles = {"student", "teacher", "director", "ta", "admin", "vendor", "class_teacher"}
+        roles = [r for r in (target_roles or []) if r in valid_roles]
+
+        if roles:
+            # 只取指定角色的使用者
+            placeholders = ", ".join(["%s"] * len(roles))
+            cursor.execute(f"SELECT id FROM users WHERE role IN ({placeholders})", roles)
+        else:
+            # 未指定角色 → 所有人
+            cursor.execute("SELECT id FROM users")
+
         users = cursor.fetchall() or []
         
         # 為每個用戶創建通知記錄（如果還不存在）
@@ -294,6 +322,7 @@ def save_deadlines():
         data = request.json
         pref_deadline = data.get("pref_deadline")  # 志願序截止時間
         resume_deadline = data.get("resume_deadline")  # 履歷上傳截止時間
+        target_roles = data.get("target_roles") or []
         
         # 檢查是否至少有一個截止時間
         if not pref_deadline and not resume_deadline:
@@ -354,8 +383,8 @@ def save_deadlines():
             ann_id = cursor.lastrowid
             conn.commit()  # 先提交公告，確保公告已存在
             
-            # 發送通知給所有學生（會為所有用戶創建通知記錄）
-            push_announcement_notifications(conn, title, content, ann_id)
+            # 發送通知給指定角色（若未指定則維持原本行為：所有使用者）
+            push_announcement_notifications(conn, title, content, ann_id, target_roles=target_roles)
         
         # 處理履歷上傳截止時間
         if resume_deadline:
@@ -385,8 +414,8 @@ def save_deadlines():
             ann_id = cursor.lastrowid
             conn.commit()  # 先提交公告，確保公告已存在
             
-            # 發送通知給所有學生（會為所有用戶創建通知記錄）
-            push_announcement_notifications(conn, title, content, ann_id)
+            # 發送通知給指定角色（若未指定則維持原本行為：所有使用者）
+            push_announcement_notifications(conn, title, content, ann_id, target_roles=target_roles)
         cursor.close()
         conn.close()
         

@@ -3,7 +3,7 @@
 
 <head>
   <meta charset="UTF-8">
-  <title>智慧實習平台 | 科助後台</title>
+  <title>智慧實習平台 | 行事曆</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
   <style>
     * {
@@ -25,26 +25,31 @@
     }
 
     header {
+      background: linear-gradient(135deg, #0055a8 0%, #006acb 50%, #004f94 100%);
+      border-bottom: none;
       position: sticky;
       top: 0;
-      z-index: 1100;
-      background: #0454a3;
-      color: white;
-      padding: 1rem 2rem;
-      text-align: center;
-      font-size: 1.5rem;
-      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
+      z-index: 10;
+      box-shadow: 0 8px 20px rgba(0, 68, 148, 0.35);
     }
 
-    /* 三條線選單按鈕樣式 */
-    .top-bar-left {
-      position: fixed;
-      top: 1rem;
-      left: 1rem;
-      z-index: 1300;
+    .topbar {
+      max-width: 1800px;
+      margin: 0 auto;
+      padding: 18px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      color: #fff;
     }
 
-    .top-bar-left #menu-btn {
+    .topbar-left {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .topbar-left #menu-btn {
       width: 30px;
       height: 22px;
       cursor: pointer;
@@ -56,7 +61,7 @@
       padding: 0;
     }
 
-    .top-bar-left #menu-btn span {
+    .topbar-left #menu-btn span {
       display: block;
       width: 100%;
       height: 3px;
@@ -65,6 +70,15 @@
       transition: all 0.3s ease;
     }
 
+    .topbar h1 {
+      font-size: 1.5rem;
+      margin: 0;
+      text-align: center;
+      color: #fff;
+      flex: 1;
+    }
+
+    /* 側邊選單樣式 */
     #side-menu {
       position: fixed;
       top: 0;
@@ -74,15 +88,15 @@
       max-width: 80vw;
       background-color: rgba(10, 10, 10, 0.95);
       backdrop-filter: blur(6px);
-      box-shadow: 3px 0 12px rgb(0 0 0 / 0.7);
+      box-shadow: 3px 0 12px rgba(0, 0, 0, 0.6);
       padding: 2rem 1.5rem;
       transform: translateX(-100%);
       transition: transform 0.3s ease-in-out;
-      z-index: 1400;
+      z-index: 1300;
       display: flex;
       flex-direction: column;
       align-items: flex-start;
-      color: white;
+      color: #fff;
       user-select: none;
     }
 
@@ -90,54 +104,51 @@
       transform: translateX(0);
     }
 
-    #side-menu .menu-header {
+    #side-menu h2 {
+      margin: 0 0 1.5rem 0;
+      font-weight: 700;
+      font-size: 1.6rem;
+      color: #fff;
+      padding: 0;
+      line-height: 2.4rem;
+      height: 2.4rem;
       display: flex;
       align-items: center;
-      justify-content: space-between;
-      width: 100%;
-      margin-bottom: 1.5rem;
-    }
-
-    #side-menu h2 {
-      margin: 0;
-      font-weight: 700;
-      font-size: 1.5rem;
-      text-align: left;
-      flex: 1;
-      color: white;
     }
 
     #close-btn {
+      position: absolute;
+      top: 2rem;
+      right: 1.6rem;
       font-size: 2.2rem;
       background: none;
       border: none;
-      color: white;
+      color: #fff;
       cursor: pointer;
-      line-height: 1;
-      width: 2.5rem;
+      line-height: 1rem;
       height: 2.5rem;
+      width: 2.5rem;
       display: flex;
       align-items: center;
       justify-content: center;
-      padding: 0;
-      margin: 0;
     }
 
     #side-menu a {
       display: block;
       width: 100%;
-      padding: 0.5rem 0;
+      padding: 0.6rem 0;
       font-size: 1.1rem;
-      color: #ddd;
+      color: #e2e8f0;
       text-decoration: none;
       border-radius: 4px;
       transition: background-color 0.2s ease;
     }
 
     #side-menu a:hover {
-      background-color: rgba(255, 255, 255, 0.15);
-      color: white;
+      background-color: rgba(255, 255, 255, 0.18);
+      color: #fff;
     }
+
 
     .main-content {
       max-width: 1400px;
@@ -232,28 +243,25 @@
 </head>
 
 <body class="p-0">
-  <header>行事曆</header>
-  <div class="top-bar-left">
-    <div id="menu-btn" title="選單" role="button" tabindex="0">
-      <span></span><span></span><span></span>
+  <header>
+    <div class="topbar">
+      <div class="topbar-left">
+        <button id="menu-btn" title="選單" role="button" tabindex="0" aria-label="開啟側邊選單">
+          <span></span><span></span><span></span>
+        </button>
+      </div>
+      <h1>行事曆</h1>
+      <div style="width: 30px;"></div>
     </div>
-  </div>
+  </header>
 
   <!-- 側邊選單 -->
-  <nav id="side-menu">
-    <div class="menu-header">
-      <h2>功能選單</h2>
-      <button id="close-btn">×</button>
+  <nav id="side-menu" aria-hidden="true" role="navigation" aria-label="功能選單">
+    <button id="close-btn" aria-label="關閉功能選單">×</button>
+    <h2>功能選單</h2>
+    <div id="menu-links">
+      <!-- 選單連結將根據用戶角色動態載入 -->
     </div>
-    <a href="/ta_home">首頁</a>
-    <a href="/profile">個人資料</a>
-    <a href="/notifications">通知</a>
-    <a href="/ta/statistics/manage_companies">實習廠商管理</a>
-    <a href="/ta/interview_schedule">行事曆</a>
-    <a href="/final_results">媒合結果確認</a>
-    <a href="/admin/absence_default_range">缺勤預設學期範圍設定</a>
-    <a href="/ta/upload_standard_courses">專業核心科目管理</a>
-    <a href="/login">登出</a>
   </nav>
 
   <div class="container-fluid p-0">
@@ -301,6 +309,61 @@
 
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
   <script>
+    // 根據用戶角色載入側邊選單
+    async function loadMenuByRole() {
+      try {
+        const res = await fetch('/api/profile');
+        const data = await res.json();
+        const role = data.user?.role || '';
+        const menuLinks = document.getElementById('menu-links');
+        
+        let menuItems = '';
+        
+        if (role === 'director') {
+          // 主任的選單
+          menuItems = `
+            <a href="/director_home">首頁</a>
+            <a href="/profile">個人資料</a>
+            <a href="/approve_company">審核實習單位</a>
+            <a href="/review_resume?mode=director">審核實習履歷</a>
+            <a href="/interview_schedule">行事曆</a>
+            <a href="/notifications">管理公告</a>
+            <a href="/admin_statistics">統計資料</a>
+            <a href="/login">登出</a>
+          `;
+        } else {
+          // 科助的選單（預設）
+          menuItems = `
+            <a href="/ta_home">首頁</a>
+            <a href="/profile">個人資料</a>
+            <a href="/notifications">通知</a>
+            <a href="/ta/statistics/manage_companies">實習廠商管理</a>
+            <a href="/ta/interview_schedule">行事曆</a>
+            <a href="/final_results">媒合結果確認</a>
+            <a href="/admin/absence_default_range">缺勤預設學期範圍設定</a>
+            <a href="/ta/upload_standard_courses">專業核心科目管理</a>
+            <a href="/login">登出</a>
+          `;
+        }
+        
+        menuLinks.innerHTML = menuItems;
+      } catch (err) {
+        console.error('載入選單失敗:', err);
+        // 如果載入失敗，使用預設的科助選單
+        document.getElementById('menu-links').innerHTML = `
+          <a href="/ta_home">首頁</a>
+          <a href="/profile">個人資料</a>
+          <a href="/notifications">通知</a>
+          <a href="/ta/statistics/manage_companies">實習廠商管理</a>
+          <a href="/ta/interview_schedule">行事曆</a>
+          <a href="/final_results">媒合結果確認</a>
+          <a href="/admin/absence_default_range">缺勤預設學期範圍設定</a>
+          <a href="/ta/upload_standard_courses">專業核心科目管理</a>
+          <a href="/login">登出</a>
+        `;
+      }
+    }
+
     // 選單開關邏輯
     const menuBtn = document.getElementById("menu-btn");
     const sideMenu = document.getElementById("side-menu");
@@ -676,6 +739,8 @@
 
     // 初始化行事曆
     document.addEventListener('DOMContentLoaded', async function() {
+      // 根據用戶角色載入側邊選單
+      await loadMenuByRole();
       // 載入截止時間
       await loadDeadlines();
       // 載入所有廠商的面試排程

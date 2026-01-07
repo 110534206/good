@@ -614,11 +614,19 @@ def director_home():
 def ta_home():
     return render_template('user_shared/ta_home.html')
 
-# 面試排程頁面
+# 面試排程頁面（科助）
 @users_bp.route('/ta/interview_schedule')
 def interview_schedule():
     # 權限檢查：允許 ta, admin 訪問
     if 'user_id' not in session or session.get('role') not in ['ta', 'admin']:
+        return redirect(url_for('auth_bp.login_page'))
+    return render_template('user_shared/interview_schedule.html')
+
+# 面試排程頁面（主任）
+@users_bp.route('/interview_schedule')
+def director_interview_schedule():
+    # 權限檢查：允許 director, admin 訪問
+    if 'user_id' not in session or session.get('role') not in ['director', 'admin']:
         return redirect(url_for('auth_bp.login_page'))
     return render_template('user_shared/interview_schedule.html')
 

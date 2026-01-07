@@ -285,8 +285,6 @@
         </div>
       </div>
 
-      <div class="mt-4">
-        <a href="/ta_home" class="btn btn-outline-secondary">返回首頁</a>
       </div>
     </div>
   </div>
@@ -316,7 +314,7 @@
     // 載入上傳歷史記錄
     async function loadUploadHistory() {
       try {
-        const response = await fetch('/api/ta/get_standard_courses_history');
+        const response = await fetch('/ta/statistics/api/ta/get_standard_courses_history');
         const result = await response.json();
         
         if (result.success && result.history && result.history.length > 0) {
@@ -327,21 +325,34 @@
             let uploadDate = '';
             if (record.uploaded_at) {
               try {
-                // 處理MySQL datetime格式 (YYYY-MM-DD HH:MM:SS)
-                const dateStr = record.uploaded_at.replace(' ', 'T');
-                const date = new Date(dateStr);
+                // 處理各種日期格式 (MySQL datetime, GMT格式等)
+                let date;
+                const dateStr = String(record.uploaded_at);
+                
+                // 如果是 GMT 格式 (Thu, 11 Dec 2025 10:20:32 GMT)
+                if (dateStr.includes('GMT') || dateStr.includes('UTC')) {
+                  date = new Date(dateStr);
+                } 
+                // 如果是 MySQL datetime 格式 (YYYY-MM-DD HH:MM:SS)
+                else if (dateStr.match(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/)) {
+                  date = new Date(dateStr.replace(' ', 'T'));
+                }
+                // 其他格式直接解析
+                else {
+                  date = new Date(dateStr);
+                }
                 
                 // 檢查日期是否有效
                 if (isNaN(date.getTime())) {
                   uploadDate = record.uploaded_at;
                 } else {
-                  // 使用台灣時區格式化
+                  // 使用台灣時區格式化：YYYY年MM月DD日 HH:MM
                   const year = date.getFullYear();
                   const month = String(date.getMonth() + 1).padStart(2, '0');
                   const day = String(date.getDate()).padStart(2, '0');
                   const hours = String(date.getHours()).padStart(2, '0');
                   const minutes = String(date.getMinutes()).padStart(2, '0');
-                  uploadDate = `${year}/${month}/${day} ${hours}:${minutes}`;
+                  uploadDate = `${year}年${month}月${day}日 ${hours}:${minutes}`;
                 }
               } catch (e) {
                 console.error('日期格式化錯誤:', e, record.uploaded_at);
@@ -393,7 +404,7 @@
 
     // 下載文件
     window.downloadFile = function(historyId) {
-      window.location.href = `/api/ta/download_standard_course_file/${historyId}`;
+      window.location.href = `/ta/statistics/api/ta/download_standard_course_file/${historyId}`;
     };
 
     // 刪除歷史記錄
@@ -402,7 +413,7 @@
         return;
       }
       
-      fetch(`/api/ta/delete_standard_course_history/${historyId}`, {
+      fetch(`/ta/statistics/api/ta/delete_standard_course_history/${historyId}`, {
         method: 'DELETE'
       })
         .then(res => res.json())
@@ -500,7 +511,7 @@
 
       try {
         showAlert('正在解析Excel檔案...', 'info');
-        const response = await fetch('/api/ta/preview_standard_courses', {
+        const response = await fetch('/ta/statistics/api/ta/preview_standard_courses', {
           method: 'POST',
           body: formData
         });
@@ -618,7 +629,7 @@
         const formData = new FormData();
         formData.append('file', fileInput.files[0]);
 
-        const response = await fetch('/api/ta/upload_standard_courses', {
+        const response = await fetch('/ta/statistics/api/ta/upload_standard_courses', {
           method: 'POST',
           body: formData
         });

@@ -114,8 +114,8 @@ def get_my_notifications():
         conn = get_db()
         cursor = conn.cursor(dictionary=True)
         
-        # 1. 讀取 notifications 表的通知（公告已經自動同步到這裡）
-        # 同時獲取公告的 start_time（如果是公告類別）
+        # 1. 直接從 notifications 讀取資料（公告已經在發佈時同步寫入）
+        #    不再另外「補齊」公告，避免把不該收到的公告推給其他角色
         if category_filter and category_filter != "all":
             cursor.execute("""
                 SELECT n.id, n.title, n.message, n.category, n.link_url, n.is_read, n.created_at,
@@ -135,72 +135,9 @@ def get_my_notifications():
                 ORDER BY n.created_at DESC
             """, (user_id,))
         
-        notification_rows = cursor.fetchall()
+        all_rows = cursor.fetchall() or []
         
-        # 2. 檢查是否有遺漏的公告（已發布但還沒同步到 notifications 表）
-        # 包括未開始的公告和已結束的公告（用於科助的「狀態」類別顯示）
-        # 注意：這裡不限制 end_time，因為已結束的公告也需要顯示在科助的「狀態」類別中
-        now = datetime.now()
-        cursor.execute("""
-            SELECT a.id, a.title, a.content, a.start_time, a.end_time, a.created_at
-            FROM announcement a
-            WHERE a.is_published = 1
-            AND NOT EXISTS (
-                SELECT 1 FROM notifications n 
-                WHERE n.user_id = %s 
-                AND n.link_url = CONCAT('/view_announcement/', a.id)
-            )
-            ORDER BY a.created_at DESC
-        """, (user_id,))
-        
-        missing_announcements = cursor.fetchall()
-        
-        # 3. 將遺漏的公告轉換為通知格式（補充）
-        announcement_notifications = []
-        for ann in missing_announcements:
-            link_url = f"/view_announcement/{ann['id']}"
-            
-            # 格式化時間
-            created_at = ann.get('created_at')
-            if isinstance(created_at, datetime):
-                created_at_str = created_at.strftime("%Y-%m-%d %H:%M:%S")
-            else:
-                created_at_str = str(created_at) if created_at else ""
-            
-            # 格式化 start_time
-            start_time = ann.get('start_time')
-            if isinstance(start_time, datetime):
-                start_time_str = start_time.strftime("%Y-%m-%d %H:%M:%S")
-            elif start_time:
-                start_time_str = str(start_time)
-            else:
-                start_time_str = None
-            
-            # 格式化 end_time
-            end_time = ann.get('end_time')
-            if isinstance(end_time, datetime):
-                end_time_str = end_time.strftime("%Y-%m-%d %H:%M:%S")
-            elif end_time:
-                end_time_str = str(end_time)
-            else:
-                end_time_str = None
-            
-            announcement_notifications.append({
-                "id": f"ann_{ann['id']}",  # 使用特殊前綴避免與 notifications 表的 id 衝突
-                "title": f"公告：{ann['title']}",
-                "message": ann.get('content', '')[:200],  # 限制長度
-                "category": "announcement",
-                "link_url": link_url,
-                "is_read": False,  # 遺漏的公告預設為未讀
-                "created_at": created_at_str,
-                "start_time": start_time_str,  # 添加 start_time
-                "end_time": end_time_str  # 添加 end_time
-            })
-        
-        # 4. 合併兩個列表（主要從 notifications 表，補充遺漏的公告）
-        all_rows = list(notification_rows) + announcement_notifications
-        
-        # 6. 為每個通知動態計算分類並格式化時間
+        # 2. 為每個通知動態計算分類並格式化時間
         for row in all_rows:
             # 如果沒有 category，則自動檢測
             if not row.get("category"):
@@ -263,10 +200,10 @@ def get_my_notifications():
             else:
                 row["end_time"] = None
         
-        # 7. 按時間排序（最新的在前）
+        # 3. 按時間排序（最新的在前）
         all_rows.sort(key=lambda x: x.get("created_at", ""), reverse=True)
         
-        # 8. 如果有類別篩選，再次過濾
+        # 4. 如果有類別篩選，再次過濾
         if category_filter and category_filter != "all":
             all_rows = [row for row in all_rows if row.get("category") == category_filter]
         

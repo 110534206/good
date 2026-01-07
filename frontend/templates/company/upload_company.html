@@ -752,7 +752,7 @@
               </span>
             </td>
             <td>
-              <a href="/api/download_company_file/${r.id}" class="btn btn-sm btn-outline-primary">下載</a>
+              <button class="btn btn-sm btn-outline-primary" onclick="downloadCompanyFile(${r.id}, '${escapeHtml(r.company_name || '')}')">下載</button>
               <button class="btn btn-sm btn-outline-danger" onclick="deleteCompany(${r.id})">刪除</button>
             </td>
           </tr>
@@ -807,6 +807,73 @@
       const hh = String(d.getHours()).padStart(2, '0');
       const mi = String(d.getMinutes()).padStart(2, '0');
       return `${yyyy}-${mm}-${dd} ${hh}:${mi}`;
+    }
+
+    // === 下載公司檔案（帶錯誤處理） ===
+    async function downloadCompanyFile(companyId, companyName) {
+      try {
+        const response = await fetch(`/api/download_company_file/${companyId}`);
+        
+        if (!response.ok) {
+          // 如果是 HTML 錯誤頁面，顯示錯誤訊息
+          const text = await response.text();
+          if (text.includes('<html>')) {
+            // 提取錯誤訊息
+            const errorMatch = text.match(/<h2>錯誤：(.+?)<\/h2>/);
+            const errorMsg = errorMatch ? errorMatch[1] : '下載失敗';
+            alert(`❌ ${errorMsg}\n\n公司：${companyName || '未知'}\nID：${companyId}`);
+            return;
+          }
+          // 如果是 JSON 錯誤
+          try {
+            const data = await response.json();
+            alert(`❌ ${data.message || '下載失敗'}\n\n公司：${companyName || '未知'}\nID：${companyId}`);
+          } catch (e) {
+            alert(`❌ 下載失敗（HTTP ${response.status}）\n\n公司：${companyName || '未知'}\nID：${companyId}`);
+          }
+          return;
+        }
+        
+        // 檢查 Content-Type 是否為文件
+        const contentType = response.headers.get('content-type');
+        if (contentType && contentType.includes('application/json')) {
+          // 如果是 JSON，表示是錯誤訊息
+          const data = await response.json();
+          alert(`❌ ${data.message || '下載失敗'}\n\n公司：${companyName || '未知'}\nID：${companyId}`);
+          return;
+        }
+        
+        // 從 Content-Disposition 標頭獲取文件名，如果沒有則使用公司名稱
+        let filename = `${companyName || 'company'}_${companyId}.docx`;
+        const contentDisposition = response.headers.get('content-disposition');
+        if (contentDisposition) {
+          const filenameMatch = contentDisposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
+          if (filenameMatch && filenameMatch[1]) {
+            filename = filenameMatch[1].replace(/['"]/g, '');
+          }
+        }
+        
+        // 下載文件
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+      } catch (error) {
+        console.error('下載錯誤:', error);
+        alert(`❌ 下載時發生錯誤：${error.message}\n\n公司：${companyName || '未知'}\nID：${companyId}`);
+      }
+    }
+
+    function escapeHtml(text) {
+      if (text === null || text === undefined) return '';
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
     }
   </script>
 </body>

@@ -349,6 +349,11 @@ def upload_company():
             safe_name = secure_filename(f"{company_name}_{datetime.now().strftime('%Y%m%d%H%M%S')}.docx")
             save_path = os.path.join(upload_dir, safe_name)
             doc.save(save_path)
+            
+            # 驗證文件是否成功保存
+            if not os.path.exists(save_path):
+                return jsonify({"success": False, "message": "檔案保存失敗，請稍後再試"}), 500
+            
             file_path = os.path.join(UPLOAD_FOLDER, safe_name)
         else:
             # 舊方式：處理上傳的 Word 檔案
@@ -579,19 +584,53 @@ def download_company_file(file_id):
         cursor = conn.cursor(dictionary=True)
         cursor.execute("SELECT company_doc_path FROM internship_companies WHERE id=%s", (file_id,))
         record = cursor.fetchone()
-        if not record or not record["company_doc_path"]:
-            return jsonify({"success": False, "message": "找不到檔案"}), 404
+        
+        if not record:
+            from flask import render_template_string
+            return render_template_string('''
+                <html><body>
+                <h2>錯誤：找不到此公司紀錄</h2>
+                <p>公司 ID: {{ file_id }}</p>
+                <a href="javascript:history.back()">返回</a>
+                </body></html>
+            ''', file_id=file_id), 404
+        
+        if not record.get("company_doc_path"):
+            from flask import render_template_string
+            return render_template_string('''
+                <html><body>
+                <h2>錯誤：此公司沒有上傳檔案</h2>
+                <p>公司 ID: {{ file_id }}</p>
+                <a href="javascript:history.back()">返回</a>
+                </body></html>
+            ''', file_id=file_id), 404
 
         project_root = os.path.dirname(current_app.root_path)
         abs_path = os.path.join(project_root, record["company_doc_path"])
+        
         if not os.path.exists(abs_path):
-            return jsonify({"success": False, "message": "檔案不存在"}), 404
+            from flask import render_template_string
+            return render_template_string('''
+                <html><body>
+                <h2>錯誤：檔案不存在</h2>
+                <p>檔案路徑: {{ file_path }}</p>
+                <p>公司 ID: {{ file_id }}</p>
+                <a href="javascript:history.back()">返回</a>
+                </body></html>
+            ''', file_path=record["company_doc_path"], file_id=file_id), 404
 
         filename = os.path.basename(abs_path)
         return send_file(abs_path, as_attachment=True, download_name=filename)
     except Exception as e:
         traceback.print_exc()
-        return jsonify({"success": False, "message": "下載失敗"}), 500
+        from flask import render_template_string
+        return render_template_string('''
+            <html><body>
+            <h2>錯誤：下載失敗</h2>
+            <p>錯誤訊息: {{ error }}</p>
+            <a href="javascript:history.back()">返回</a>
+            </body></html>
+        ''', error=str(e)), 500
     finally:
         if cursor: cursor.close()
         if conn: conn.close()
@@ -1583,30 +1622,73 @@ def api_get_pending_companies():
 # -------------------------
 @company_bp.route('/api/student/companies', methods=['GET'])
 def get_student_companies():
+    """取得所有已審核通過的實習公司（不限制學期開放狀態）"""
     conn = get_db()
     cursor = conn.cursor(dictionary=True)
 
     try:
-        cursor.execute("""
-            SELECT
-                ic.id,
-                ic.company_name,
-                ic.location,
-                COUNT(ij.id) AS job_count
-            FROM internship_companies ic
-            LEFT JOIN internship_jobs ij
-                ON ic.id = ij.company_id
-                AND ij.is_active = 1
-            WHERE ic.status = 'approved'
-            GROUP BY ic.id
-            ORDER BY ic.company_name
-        """)
+        # 取得當前學期代碼（用於標記哪些公司是當前學期開放的）
+        from semester import get_current_semester_code
+        current_semester_code = get_current_semester_code(cursor)
+        
+        # 查詢所有已審核通過的公司，並標記當前學期是否開放
+        if current_semester_code:
+            cursor.execute("""
+                SELECT
+                    ic.id,
+                    ic.company_name,
+                    ic.location,
+                    NULL AS industry,
+                    COUNT(DISTINCT ij.id) AS job_count,
+                    COALESCE(co.is_open, FALSE) AS is_open_current_semester
+                FROM internship_companies ic
+                LEFT JOIN internship_jobs ij
+                    ON ic.id = ij.company_id
+                    AND ij.is_active = 1
+                LEFT JOIN company_openings co
+                    ON ic.id = co.company_id
+                    AND co.semester = %s
+                WHERE ic.status = 'approved'
+                GROUP BY ic.id, co.is_open
+                ORDER BY ic.company_name
+            """, (current_semester_code,))
+        else:
+            # 如果沒有設定當前學期，只顯示公司基本信息
+            cursor.execute("""
+                SELECT
+                    ic.id,
+                    ic.company_name,
+                    ic.location,
+                    NULL AS industry,
+                    COUNT(DISTINCT ij.id) AS job_count,
+                    FALSE AS is_open_current_semester
+                FROM internship_companies ic
+                LEFT JOIN internship_jobs ij
+                    ON ic.id = ij.company_id
+                    AND ij.is_active = 1
+                WHERE ic.status = 'approved'
+                GROUP BY ic.id
+                ORDER BY ic.company_name
+            """)
+
+        companies = cursor.fetchall()
+        
+        # 確保 is_open_current_semester 是布林值
+        for company in companies:
+            company['is_open_current_semester'] = bool(company.get('is_open_current_semester', False))
+            company['job_count'] = int(company.get('job_count', 0))
 
         return jsonify({
             'success': True,
-            'companies': cursor.fetchall()
+            'companies': companies
         })
 
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({
+            'success': False,
+            'message': f'載入公司資料失敗: {str(e)}'
+        }), 500
     finally:
         cursor.close()
         conn.close()
@@ -1624,3 +1706,108 @@ def approve_company_form_page():
 @company_bp.route("/look_company")
 def look_company_page():
     return render_template("company/look_company.html")
+
+# =========================================================
+# 📤 學生投遞履歷
+# =========================================================
+@company_bp.route('/api/student/apply_company', methods=['POST'])
+def apply_company():
+    """學生投遞履歷到公司"""
+    if 'user_id' not in session or session.get('role') != 'student':
+        return jsonify({"success": False, "message": "未授權"}), 403
+    
+    data = request.get_json()
+    company_id = data.get('company_id')
+    job_id = data.get('job_id')
+    folder_id = data.get('folder_id')
+    resume_id = data.get('resume_id')
+    
+    if not company_id or not job_id or not folder_id or not resume_id:
+        return jsonify({"success": False, "message": "缺少必要參數"}), 400
+    
+    user_id = session['user_id']
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+    
+    try:
+        # 驗證履歷屬於該用戶和資料夾
+        cursor.execute("""
+            SELECT id FROM resumes 
+            WHERE id = %s AND user_id = %s AND folder_id = %s
+        """, (resume_id, user_id, folder_id))
+        resume = cursor.fetchone()
+        
+        if not resume:
+            return jsonify({"success": False, "message": "履歷不存在或無權限"}), 403
+        
+        # 驗證公司和職缺存在
+        cursor.execute("""
+            SELECT ij.id FROM internship_jobs ij
+            INNER JOIN internship_companies ic ON ij.company_id = ic.id
+            WHERE ij.id = %s AND ic.id = %s AND ic.status = 'approved' AND ij.is_active = 1
+        """, (job_id, company_id))
+        job = cursor.fetchone()
+        
+        if not job:
+            return jsonify({"success": False, "message": "職缺不存在或公司未審核通過"}), 400
+        
+        # 檢查是否已經投遞過（避免重複投遞）
+        cursor.execute("""
+            SELECT id FROM student_preferences
+            WHERE student_id = %s AND company_id = %s AND job_id = %s
+        """, (user_id, company_id, job_id))
+        existing = cursor.fetchone()
+        
+        if existing:
+            return jsonify({"success": False, "message": "您已經投遞過此職缺"}), 400
+        
+        # 獲取當前學期
+        from semester import get_current_semester_id
+        current_semester_id = get_current_semester_id(cursor)
+        
+        # 獲取職缺名稱
+        cursor.execute("SELECT title FROM internship_jobs WHERE id = %s", (job_id,))
+        job_title_result = cursor.fetchone()
+        job_title = job_title_result['title'] if job_title_result else ''
+        
+        # 插入投遞記錄到 student_preferences
+        # 注意：目前 student_preferences 表沒有 folder_id 和 resume_id 字段
+        # 這裡只存儲基本的投遞信息，履歷版本信息可以通過 resume_id 在 resumes 表中查詢
+        if current_semester_id:
+            cursor.execute("""
+                INSERT INTO student_preferences
+                (student_id, semester_id, company_id, job_id, job_title, status, submitted_at)
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
+            """, (
+                user_id,
+                current_semester_id,
+                company_id,
+                job_id,
+                job_title,
+                'submitted',
+                datetime.now()
+            ))
+        else:
+            cursor.execute("""
+                INSERT INTO student_preferences
+                (student_id, company_id, job_id, job_title, status, submitted_at)
+                VALUES (%s, %s, %s, %s, %s, %s)
+            """, (
+                user_id,
+                company_id,
+                job_id,
+                job_title,
+                'submitted',
+                datetime.now()
+            ))
+        
+        conn.commit()
+        return jsonify({"success": True, "message": "投遞成功"})
+        
+    except Exception as e:
+        conn.rollback()
+        traceback.print_exc()
+        return jsonify({"success": False, "message": f"投遞失敗: {str(e)}"}), 500
+    finally:
+        cursor.close()
+        conn.close()

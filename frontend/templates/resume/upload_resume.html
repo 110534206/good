@@ -509,6 +509,76 @@
     const PAGE_SIZE = 10;
     let filteredCoursesCache = [];
 
+    // 🧩 分頁相關函數（移到全局作用域，以便其他函數可以訪問）
+    function renderPagedCourses() {
+      // 確保使用正確的數據源：優先使用 filteredCoursesCache，如果為空則使用 allCoursesData
+      const sourceData = filteredCoursesCache.length > 0 ? filteredCoursesCache : allCoursesData;
+      const start = (currentPage - 1) * PAGE_SIZE;
+      const end = start + PAGE_SIZE;
+      const pageCourses = sourceData.slice(start, end);
+      console.log(`📄 渲染分頁: 當前頁=${currentPage}, 顯示課程 ${start + 1}-${Math.min(end, sourceData.length)}/${sourceData.length}, 數據源=${filteredCoursesCache.length > 0 ? 'filteredCoursesCache' : 'allCoursesData'}`);
+      renderCourseTable(pageCourses);
+    }
+
+    // 2️⃣ 產生分頁按鈕
+    function renderPagination() {
+      const pagination = document.getElementById("course-pagination");
+      if (!pagination) {
+        console.warn("⚠️ 找不到分頁元素 #course-pagination");
+        return;
+      }
+      
+      pagination.innerHTML = "";
+
+      // 確保使用正確的數據源
+      const sourceData = filteredCoursesCache.length > 0 ? filteredCoursesCache : allCoursesData;
+      const totalCourses = sourceData.length;
+      const totalPages = Math.ceil(totalCourses / PAGE_SIZE);
+      
+      console.log(`📄 分頁資訊: 總課程數=${totalCourses}, 每頁=${PAGE_SIZE}, 總頁數=${totalPages}, filteredCoursesCache=${filteredCoursesCache.length}, allCoursesData=${allCoursesData.length}`);
+      
+      if (totalPages <= 1) {
+        // 只有1頁時不顯示分頁控件
+        return;
+      }
+
+      // 小工具：分頁按鈕元件
+      function createPageItem(label, enabled, onClick) {
+        const li = document.createElement("li");
+        li.className = `page-item ${enabled ? "" : "disabled"}`;
+        li.innerHTML = `<button class="page-link">${label}</button>`;
+        if (enabled) li.onclick = onClick;
+        return li;
+      }
+
+      // 上一頁
+      pagination.appendChild(createPageItem("«", currentPage > 1, () => {
+        currentPage--;
+        renderPagedCourses();
+        renderPagination();
+      }));
+
+      // 頁碼
+      for (let i = 1; i <= totalPages; i++) {
+        const li = document.createElement("li");
+        li.className = `page-item ${i === currentPage ? "active" : ""}`;
+        li.innerHTML = `<button class="page-link">${i}</button>`;
+        li.onclick = () => {
+          currentPage = i;
+          renderPagedCourses();
+          renderPagination();
+        };
+        pagination.appendChild(li);
+      }
+
+      // 下一頁
+      pagination.appendChild(createPageItem("»", currentPage < totalPages, () => {
+        currentPage++;
+        renderPagedCourses();
+        renderPagination();
+      }));
+    }
+
 
     // 缺勤統計初始值
     let absenceStats = {
@@ -523,10 +593,11 @@
     function createCourseRow(course) {
       // 課程資料備份，用於「未修課」時恢復原始學分
       const creditsDisplay = course.credits || "";
-      const isNotTaken = course.isNotTaken || false;
+      // 預設為已修課（isNotTaken = false），只有明確標記為未修課時才為 true
+      const isNotTaken = course.isNotTaken === true;  // 只有明確為 true 時才是未修課
       const displayCredits = isNotTaken ? "0" : creditsDisplay;
-      const buttonClass = isNotTaken ? "btn-warning" : "btn-outline-warning";
-      const buttonText = isNotTaken ? "已標記未修課" : "未修課";
+      const buttonClass = isNotTaken ? "btn-warning" : "btn-success";
+      const buttonText = isNotTaken ? "未修課" : "已修課";
 
       const tr = document.createElement("tr");
       // 儲存原始學分數在 data-original-credits 屬性中
@@ -660,7 +731,11 @@
             sensitivity: 'base'
           }));
 
-          renderCourseTable(allCoursesData);
+          // 使用分頁方式渲染
+          filteredCoursesCache = [...allCoursesData];
+          currentPage = 1;
+          renderPagedCourses();
+          renderPagination();
         } else {
           console.log("無個人模板，改載入標準課程");
           await loadStandardCourses();
@@ -687,7 +762,11 @@
             sensitivity: 'base'
           }));
 
-          renderCourseTable(allCoursesData);
+          // 使用分頁方式渲染
+          filteredCoursesCache = [...allCoursesData];
+          currentPage = 1;
+          renderPagedCourses();
+          renderPagination();
         } else {
           tbody.innerHTML = '<tr><td colspan="4" class="text-muted text-center">目前無標準課程</td></tr>';
           allCoursesData = [];
@@ -701,6 +780,36 @@
 
     // 🧩 儲存為個人模板
     async function savePersonalTemplate() {
+      // 先從表格中同步最新的狀態到 allCoursesData
+      const courseRows = document.querySelectorAll('#courseTableBody tr');
+      courseRows.forEach(row => {
+        const nameInput = row.querySelector('input[name="course_name[]"]');
+        const creditsInput = row.querySelector('input[name="course_credits[]"]');
+        const gradeInput = row.querySelector('input[name="course_grade[]"]');
+        const isNotTaken = row.dataset.isNotTaken === 'true';
+
+        if (nameInput) {
+          const courseName = nameInput.value.trim();
+          const index = allCoursesData.findIndex(c => c.name === courseName);
+          
+          if (index > -1) {
+            // 更新現有課程的狀態
+            allCoursesData[index].name = courseName;
+            allCoursesData[index].credits = creditsInput ? creditsInput.value.trim() : allCoursesData[index].credits;
+            allCoursesData[index].grade = gradeInput ? gradeInput.value.trim() : allCoursesData[index].grade;
+            allCoursesData[index].isNotTaken = isNotTaken;
+          } else if (courseName) {
+            // 如果是新課程，添加到 allCoursesData
+            allCoursesData.push({
+              name: courseName,
+              credits: creditsInput ? creditsInput.value.trim() : '',
+              grade: gradeInput ? gradeInput.value.trim() : '',
+              isNotTaken: isNotTaken
+            });
+          }
+        }
+      });
+
       // 使用 allCoursesData 確保儲存所有課程，無論篩選狀態
       const courses = allCoursesData.map(course => ({
         name: course.name,
@@ -714,21 +823,28 @@
         return;
       }
 
-      const res = await fetch("/api/save_personal_template", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          display_name: "我的課程模板",
-          courses: courses
-        })
-      });
-      const result = await res.json();
-      if (result.success) {
-        alert("✅ 模板已儲存！");
-      } else {
-        alert("❌ 儲存失敗：" + (result.message || ""));
+      try {
+        const res = await fetch("/api/save_personal_template", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            display_name: "我的課程模板",
+            courses: courses
+          })
+        });
+        const result = await res.json();
+        if (result.success) {
+          alert("✅ 模板已儲存！");
+          // 重新載入個人模板以確保顯示最新狀態
+          await loadPersonalTemplate();
+        } else {
+          alert("❌ 儲存失敗：" + (result.message || ""));
+        }
+      } catch (err) {
+        console.error("❌ 儲存模板錯誤:", err);
+        alert("❌ 儲存失敗：" + err.message);
       }
     }
 
@@ -740,18 +856,18 @@
         let isNotTaken = tr.dataset.isNotTaken === 'true';
 
         if (isNotTaken) {
-          // 恢復原始學分數
+          // 從未修課切換回已修課，恢復原始學分數
           creditsInput.value = tr.dataset.originalCredits;
           e.target.classList.remove("btn-warning");
-          e.target.classList.add("btn-outline-warning");
-          e.target.textContent = "未修課";
+          e.target.classList.add("btn-success");
+          e.target.textContent = "已修課";
           tr.dataset.isNotTaken = false;
         } else {
-          // 標記為未修課，學分數設為 0
+          // 從已修課切換為未修課，學分數設為 0
           creditsInput.value = "0";
-          e.target.classList.remove("btn-outline-warning");
+          e.target.classList.remove("btn-success");
           e.target.classList.add("btn-warning");
-          e.target.textContent = "已標記未修課";
+          e.target.textContent = "未修課";
           tr.dataset.isNotTaken = true;
         }
 
@@ -773,31 +889,86 @@
 
     async function downloadExcelTemplate() {
       try {
-        // 1. 取得歷史記錄
-        const res = await fetch('/api/ta/get_standard_courses_history');
-        const result = await res.json();
-
-        if (!result.success || !result.history || result.history.length === 0) {
-          alert("❌ 尚未有任何助教上傳的課程範本");
-          return;
-        }
-
-        // 2. 最新一筆
-        const latest = result.history[0];  // 後端回傳應該是時間排序好的（若不是再處理）
-
-        if (!latest.id) {
-          alert("❌ 找不到範本 ID");
-          return;
-        }
-
-        // 3. 下載
-        const url = `/api/ta/download_standard_course_file/${latest.id}`;
+        // 直接下載範本文件
+        const url = '/api/download_course_template';
         window.location.href = url;
-
-        alert("📥 正在下載最新範本...");
+        alert("📥 正在下載範本...");
       } catch (err) {
         console.error("❌ 下載範本錯誤:", err);
         alert("❌ 下載失敗：" + err.message);
+      }
+    }
+
+    // 🧩 匯入Excel資料
+    async function uploadExcelData() {
+      const fileInput = document.getElementById('excel-file-input');
+      const file = fileInput.files[0];
+      
+      if (!file) {
+        alert('請先選擇Excel檔案');
+        return;
+      }
+      
+      if (!file.name.endsWith('.xlsx') && !file.name.endsWith('.xls')) {
+        alert('請選擇Excel檔案（.xlsx 或 .xls）');
+        return;
+      }
+      
+      const formData = new FormData();
+      formData.append('file', file);
+      
+      try {
+        const tbody = document.getElementById("courseTableBody");
+        tbody.innerHTML = '<tr><td colspan="4" class="text-muted text-center">正在匯入Excel資料...</td></tr>';
+        
+        const res = await fetch('/api/student/upload_course_excel', {
+          method: 'POST',
+          body: formData
+        });
+        
+        const result = await res.json();
+        
+        if (!result.success) {
+          alert('❌ 匯入失敗：' + (result.message || '未知錯誤'));
+          tbody.innerHTML = '<tr><td colspan="4" class="text-danger text-center">匯入失敗</td></tr>';
+          return;
+        }
+        
+        if (!result.courses || result.courses.length === 0) {
+          alert('⚠️ Excel文件中沒有找到課程資料');
+          tbody.innerHTML = '<tr><td colspan="4" class="text-muted text-center">沒有找到課程資料</td></tr>';
+          return;
+        }
+        
+        // 更新課程資料
+        allCoursesData = result.courses.map(course => ({
+          name: course.name || '',
+          credits: course.credits || '0',
+          grade: course.grade || '',
+          isNotTaken: course.isNotTaken || false
+        }));
+        
+        // 排序
+        allCoursesData.sort((a, b) => a.name.localeCompare(b.name, 'zh-TW', {
+          sensitivity: 'base'
+        }));
+        
+        // 渲染課程表格
+        filteredCoursesCache = [...allCoursesData];
+        currentPage = 1;
+        renderPagedCourses();
+        renderPagination();
+        
+        alert(`✅ 成功匯入 ${result.courses.length} 門課程！`);
+        
+        // 清空文件輸入
+        fileInput.value = '';
+        
+      } catch (err) {
+        console.error("❌ 匯入Excel錯誤:", err);
+        alert("❌ 匯入失敗：" + err.message);
+        const tbody = document.getElementById("courseTableBody");
+        tbody.innerHTML = '<tr><td colspan="4" class="text-danger text-center">匯入失敗</td></tr>';
       }
     }
     // =========================================================================
@@ -1916,7 +2087,7 @@
             name: course.name || '',
             credits: course.credits || '0',
             grade: course.grade || '',
-            isNotTaken: (course.credits === 0 || course.credits === '0')
+            isNotTaken: course.isNotTaken || false  // 使用後端返回的 isNotTaken 狀態
           }));
 
           // 排序
@@ -1924,10 +2095,10 @@
             sensitivity: 'base'
           }));
 
-          // 渲染課程表格
+          // 渲染課程表格（使用分頁）
           filteredCoursesCache = [...allCoursesData];
           currentPage = 1;
-
+          console.log(`📋 從資料庫載入 ${allCoursesData.length} 門課程，準備分頁顯示`);
           renderPagedCourses();
           renderPagination();
 
@@ -1944,58 +2115,7 @@
         }
 
 
-        // 1️⃣ 當頁資料切片
-        function renderPagedCourses() {
-          const start = (currentPage - 1) * PAGE_SIZE;
-          const end = start + PAGE_SIZE;
-          const pageCourses = filteredCoursesCache.slice(start, end);
-          renderCourseTable(pageCourses);
-        }
-
-        // 2️⃣ 產生分頁按鈕
-        function renderPagination() {
-          const pagination = document.getElementById("course-pagination");
-          pagination.innerHTML = "";
-
-          const totalPages = Math.ceil(filteredCoursesCache.length / PAGE_SIZE);
-          if (totalPages <= 1) return;
-
-          // 上一頁
-          pagination.appendChild(createPageItem("«", currentPage > 1, () => {
-            currentPage--;
-            renderPagedCourses();
-            renderPagination();
-          }));
-
-          // 頁碼
-          for (let i = 1; i <= totalPages; i++) {
-            const li = document.createElement("li");
-            li.className = `page-item ${i === currentPage ? "active" : ""}`;
-            li.innerHTML = `<button class="page-link">${i}</button>`;
-            li.onclick = () => {
-              currentPage = i;
-              renderPagedCourses();
-              renderPagination();
-            };
-            pagination.appendChild(li);
-          }
-
-          // 下一頁
-          pagination.appendChild(createPageItem("»", currentPage < totalPages, () => {
-            currentPage++;
-            renderPagedCourses();
-            renderPagination();
-          }));
-        }
-
-        // 3️⃣ 小工具：分頁按鈕元件
-        function createPageItem(label, enabled, onClick) {
-          const li = document.createElement("li");
-          li.className = `page-item ${enabled ? "" : "disabled"}`;
-          li.innerHTML = `<button class="page-link">${label}</button>`;
-          if (enabled) li.onclick = onClick;
-          return li;
-        }
+        // 注意：renderPagedCourses 和 renderPagination 函數已移到全局作用域
 
         // 3. 填充證照資料
         if (data.certifications && Array.isArray(data.certifications)) {
@@ -3066,6 +3186,33 @@
         return;
       }
 
+      // 綁定Excel相關按鈕
+      const downloadTemplateBtn = document.getElementById('download-excel-template-btn');
+      const uploadExcelBtn = document.getElementById('upload-excel-btn');
+      const excelFileInput = document.getElementById('excel-file-input');
+      
+      if (downloadTemplateBtn) {
+        downloadTemplateBtn.addEventListener('click', downloadExcelTemplate);
+      }
+      
+      if (uploadExcelBtn && excelFileInput) {
+        uploadExcelBtn.addEventListener('click', () => {
+          excelFileInput.click();
+        });
+        
+        excelFileInput.addEventListener('change', (e) => {
+          if (e.target.files.length > 0) {
+            uploadExcelData();
+          }
+        });
+      }
+
+      // 綁定儲存按鈕
+      const saveTemplateBtn = document.getElementById('save-template-btn');
+      if (saveTemplateBtn) {
+        saveTemplateBtn.addEventListener('click', savePersonalTemplate);
+      }
+
       const form = document.getElementById("resumeForm");
 
       // 針對非動態生成的欄位，設定監聽器
@@ -3379,9 +3526,8 @@
       });
 
       // 收集動態的課程資料並添加到 FormData
+      // ⚠️ 重要：先從當前頁面的表格中同步最新狀態到 allCoursesData
       const courseRows = document.querySelectorAll("#courseTableBody tr");
-      const courses = [];
-
       courseRows.forEach(row => {
         const nameInput = row.querySelector('input[name="course_name[]"]');
         const creditsInput = row.querySelector('input[name="course_credits[]"]');
@@ -3389,22 +3535,40 @@
         const isNotTaken = row.dataset.isNotTaken === 'true';
 
         if (nameInput && creditsInput) {
-          const name = nameInput.value.trim();
-          // 提交時，無論是否未修課，都使用顯示的值 (0 或實際學分)
-          const credits = creditsInput.value.trim();
-          const grade = gradeInput ? gradeInput.value.trim() : '';
-
-          if (name && credits) {
-            courses.push({
-              name: name,
-              credits: credits,
-              grade: grade,
-              isNotTaken: isNotTaken // 傳遞狀態給後端
-            });
+          const courseName = nameInput.value.trim();
+          if (courseName) {
+            const index = allCoursesData.findIndex(c => c.name === courseName);
+            if (index > -1) {
+              // 更新現有課程的狀態
+              allCoursesData[index].name = courseName;
+              allCoursesData[index].credits = creditsInput.value.trim();
+              allCoursesData[index].grade = gradeInput ? gradeInput.value.trim() : '';
+              allCoursesData[index].isNotTaken = isNotTaken;
+            } else {
+              // 如果是新課程，添加到 allCoursesData
+              allCoursesData.push({
+                name: courseName,
+                credits: creditsInput.value.trim(),
+                grade: gradeInput ? gradeInput.value.trim() : '',
+                isNotTaken: isNotTaken
+              });
+            }
           }
         }
       });
 
+      // ⚠️ 關鍵修正：使用 allCoursesData 收集所有課程，而不是只收集當前頁面的課程
+      // 這樣可以確保所有30門課程都被提交，而不只是當前頁面顯示的10門
+      const courses = allCoursesData
+        .filter(course => course.name && course.name.trim()) // 過濾掉空名稱的課程
+        .map(course => ({
+          name: course.name.trim(),
+          credits: course.credits || '0',
+          grade: course.grade || '',
+          isNotTaken: course.isNotTaken || false
+        }));
+
+      console.log(`📤 準備提交 ${courses.length} 門課程（從 allCoursesData 收集，共 ${allCoursesData.length} 門）`);
       formData.append("courses", JSON.stringify(courses));
 
       // 移除舊的課程相關欄位，因為我們統一用 JSON 傳遞
@@ -3461,6 +3625,50 @@
       });
       formData.append("absence_stats_json", JSON.stringify(absenceStats));
 
+      // 6. 收集證照資料（structured_certifications）
+      const structuredCertifications = certEntries.map(entry => {
+        const authorityId = entry.authoritySelect ? entry.authoritySelect.value : '';
+        const isOther = authorityId === 'OTHER';
+        const codeInput = entry.codeInput ? entry.codeInput.value.trim() : '';
+        const nameInput = entry.nameInput ? entry.nameInput.value.trim() : '';
+        
+        return {
+          cert_code: codeInput || 'OTHER',
+          name: nameInput || (entry.customNameInput ? entry.customNameInput.value.trim() : ''),
+          custom_cert_name: entry.customNameInput ? entry.customNameInput.value.trim() : '',
+          job_category: isOther && entry.otherJobCategoryInput ? entry.otherJobCategoryInput.value.trim() : (entry.jobCategorySelect ? entry.jobCategorySelect.value.trim() : ''),
+          level: isOther && entry.otherLevelInput ? entry.otherLevelInput.value : (entry.levelSelect ? entry.levelSelect.value : ''),
+          category: entry.categoryInput ? entry.categoryInput.value : 'other',
+          acquire_date: entry.acquisitionDateInput ? entry.acquisitionDateInput.value : '',
+          issuer: entry.issuerInput ? entry.issuerInput.value.trim() : '',
+          cert_path: entry.photoInput && entry.photoInput.dataset.imagePath ? entry.photoInput.dataset.imagePath : ''
+        };
+      }).filter(cert => cert.name || cert.cert_code); // 過濾掉空的證照
+
+      console.log(`📤 準備提交 ${structuredCertifications.length} 項證照`);
+      formData.append("structured_certifications", JSON.stringify(structuredCertifications));
+
+      // 7. 收集語文能力資料（structured_languages）
+      const structuredLanguages = [];
+      const languageFields = [
+        { name: 'lang_en_level', language: '英語' },
+        { name: 'lang_tw_level', language: '台語' },
+        { name: 'lang_jp_level', language: '日語' },
+        { name: 'lang_hk_level', language: '客語' }
+      ];
+
+      languageFields.forEach(field => {
+        const selectElement = document.querySelector(`select[name="${field.name}"]`);
+        if (selectElement && selectElement.value) {
+          structuredLanguages.push({
+            language: field.language,
+            level: selectElement.value
+          });
+        }
+      });
+
+      console.log(`📤 準備提交 ${structuredLanguages.length} 項語文能力`);
+      formData.append("structured_languages", JSON.stringify(structuredLanguages));
 
       try {
         const res = await fetch("/api/submit_and_generate", {
