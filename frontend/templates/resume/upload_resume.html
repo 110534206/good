@@ -173,6 +173,10 @@
             role="tab" aria-controls="form-pane" aria-selected="true">表單填寫</button>
         </li>
         <li class="nav-item" role="presentation">
+          <button class="nav-link" id="ai-edit-tab" data-bs-toggle="tab" data-bs-target="#ai-edit-pane" type="button"
+            role="tab" aria-controls="ai-edit-pane" aria-selected="false">AI 履歷修改</button>
+        </li>
+        <li class="nav-item" role="presentation">
           <button class="nav-link" id="records-tab" data-bs-toggle="tab" data-bs-target="#records-pane" type="button"
             role="tab" aria-controls="records-pane" aria-selected="false">歷史紀錄</button>
         </li>
@@ -482,6 +486,67 @@
                 </tr>
               </tbody>
             </table>
+          </div>
+        </div>
+
+        <!-- AI 履歷修改頁籤 -->
+        <div class="tab-pane fade" id="ai-edit-pane" role="tabpanel" aria-labelledby="ai-edit-tab" tabindex="0">
+          <div class="p-4">
+            <h5 class="mb-3">AI 履歷修改服務</h5>
+            
+            <div class="mb-3">
+              <label class="form-label fw-semibold">輸入您的履歷草稿：</label>
+              <textarea id="ai-resume-input" class="form-control" rows="8" 
+                placeholder="系統將自動載入您已上傳履歷中的自傳內容，您也可以手動編輯..." 
+                style="resize: vertical; font-size: 1rem; line-height: 1.6;"></textarea>
+            </div>
+
+            <div class="mb-3">
+              <label class="form-label fw-semibold">請選擇修改選項：</label>
+              <div class="row g-2">
+                <div class="col-md-6">
+                  <select id="ai-edit-style" class="form-select">
+                    <option value="polish">任務：履歷美化</option>
+                    <option value="concise">任務：文案精簡</option>
+                    <option value="keyword_focus">任務：關鍵字導向</option>
+                  </select>
+                </div>
+                <div class="col-md-6">
+                  <select id="ai-tone-style" class="form-select">
+                    <option value="professional">語氣：專業正式</option>
+                    <option value="friendly">語氣：親切隨和</option>
+                    <option value="cautious">語氣：謹慎的</option>
+                    <option value="academic">語氣：學術的</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            <div class="d-grid gap-2 mb-3">
+              <button type="button" class="btn btn-primary btn-lg" onclick="reviseResumeInTab()">
+                ⚡ 使用 AI 修改履歷
+              </button>
+            </div>
+
+            <div class="mb-3">
+              <label class="form-label fw-semibold">修改後的履歷：</label>
+              <div id="ai-loading-spinner" class="text-center py-4" style="display: none;">
+                <div class="spinner-border text-primary" role="status">
+                  <span class="visually-hidden">載入中...</span>
+                </div>
+                <p class="mt-2 text-muted">AI 正在處理中，請稍候...</p>
+              </div>
+              <div id="ai-revised-resume" class="form-control" 
+                style="min-height: 150px; white-space: pre-wrap; background-color: #f8f9fa; line-height: 1.7; font-size: 1rem;">
+                AI 修改後的內容將顯示在這裡...
+              </div>
+            </div>
+
+            <div class="d-grid gap-2">
+              <button type="button" class="btn btn-success btn-lg" onclick="importAIResultToForm()">
+                📥 導入至表單填寫
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -3740,6 +3805,166 @@
       }
     });
 
+    // ========================================
+    // AI 履歷修改功能
+    // ========================================
+    
+    // 當切換到 AI 編輯頁籤時，自動載入自傳內容
+    document.getElementById('ai-edit-tab').addEventListener('click', async function() {
+      const aiResumeInput = document.getElementById('ai-resume-input');
+      const autobiographyTextarea = document.querySelector('textarea[name="autobiography"]');
+      
+      // 優先使用表單中已填寫的自傳內容
+      if (autobiographyTextarea && autobiographyTextarea.value.trim()) {
+        aiResumeInput.value = autobiographyTextarea.value;
+        console.log('✅ 已載入表單中的自傳內容');
+      } else {
+        // 如果表單中沒有內容，嘗試從資料庫載入
+        try {
+          const res = await fetch('/api/get_resume_data');
+          const result = await res.json();
+          
+          if (result.success && result.data && result.data.studentInfo) {
+            const autobiography = result.data.studentInfo.autobiography || '';
+            if (autobiography) {
+              aiResumeInput.value = autobiography;
+              console.log('✅ 已自動載入資料庫中的自傳內容');
+            } else {
+              console.log('ℹ️ 資料庫中暫無自傳內容');
+            }
+          }
+        } catch (error) {
+          console.error('❌ 載入自傳內容失敗:', error);
+        }
+      }
+    });
+
+    // AI 修改履歷函數
+    async function reviseResumeInTab() {
+      const resumeInput = document.getElementById('ai-resume-input').value;
+      const revisedResumeDiv = document.getElementById('ai-revised-resume');
+      const loadingSpinner = document.getElementById('ai-loading-spinner');
+      const editStyle = document.getElementById('ai-edit-style').value;
+      const toneStyle = document.getElementById('ai-tone-style').value;
+
+      // 如果輸入框為空，後端會自動從資料庫讀取自傳
+      if (resumeInput.trim() === "") {
+        console.log("ℹ️ 輸入框為空，後端將自動從資料庫讀取自傳內容");
+      }
+
+      revisedResumeDiv.innerHTML = "";
+      revisedResumeDiv.style.color = '';
+      loadingSpinner.style.display = 'block';
+
+      try {
+        const response = await fetch('/api/revise-resume', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            resumeText: resumeInput,
+            style: editStyle,
+            tone: toneStyle
+          })
+        });
+
+        if (!response.body) {
+          throw new Error("伺服器沒有返回可讀取的串流。");
+        }
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder("utf-8");
+        let done = false;
+        let fullText = '';
+
+        while (!done) {
+          const { value, done: readerDone } = await reader.read();
+          done = readerDone;
+
+          if (value) {
+            const chunk = decoder.decode(value, { stream: true });
+            fullText += chunk;
+            revisedResumeDiv.innerHTML = fullText;
+          }
+        }
+        fullText += decoder.decode();
+        
+        // 過濾掉可能的解釋性文字
+        const prefixesToRemove = [
+          /^沒問題[！!]?[，,]?這是為您改寫的[：:]/i,
+          /^這是為您改寫的[：:]/i,
+          /^以下是[：:]/i,
+          /^以下是為您改寫的[：:]/i,
+          /^這是[：:]/i,
+          /^以下是改寫後的版本[：:]/i,
+          /^改寫後的版本[：:]/i,
+          /^以下是改寫內容[：:]/i,
+          /^改寫內容[：:]/i
+        ];
+        
+        let cleanedText = fullText.trim();
+        for (const prefix of prefixesToRemove) {
+          cleanedText = cleanedText.replace(prefix, '').trim();
+        }
+        
+        if (!cleanedText) {
+          cleanedText = fullText.trim();
+        }
+        
+        revisedResumeDiv.innerHTML = cleanedText;
+        console.log('✅ AI 修改完成');
+
+      } catch (error) {
+        console.error('連線或讀取串流錯誤:', error);
+        revisedResumeDiv.innerHTML = `AI 服務連線失敗：無法連線到後端伺服器。請檢查伺服器狀態並稍後再試。`;
+        revisedResumeDiv.style.color = 'red';
+      } finally {
+        loadingSpinner.style.display = 'none';
+      }
+    }
+
+    // 導入 AI 修改結果到表單填寫頁籤
+    function importAIResultToForm() {
+      const revisedResumeDiv = document.getElementById('ai-revised-resume');
+      const placeholderText = 'AI 修改後的內容將顯示在這裡...';
+      
+      let revisedText = revisedResumeDiv.textContent || revisedResumeDiv.innerText || '';
+      
+      if (revisedText.trim() === placeholderText || revisedText.trim() === '') {
+        alert('❌ 請先使用 AI 美化自傳，然後再導入！');
+        return;
+      }
+      
+      if (revisedText.trim().length < 10) {
+        alert('❌ 導入的內容太短，可能不完整。請確認 AI 美化已完成。');
+        return;
+      }
+
+      // 將 AI 修改後的內容填入表單的自傳欄位
+      const autobiographyTextarea = document.querySelector('textarea[name="autobiography"]');
+      if (autobiographyTextarea) {
+        autobiographyTextarea.value = revisedText.trim();
+        
+        // 切換到表單填寫頁籤
+        const formTab = document.getElementById('form-tab');
+        if (formTab) {
+          formTab.click();
+          
+          // 滾動到自傳欄位
+          setTimeout(() => {
+            autobiographyTextarea.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            autobiographyTextarea.focus();
+          }, 300);
+        }
+        
+        alert('✅ 已成功導入 AI 修改後的自傳到表單填寫頁籤！');
+        console.log('✅ 已導入 AI 修改後的自傳，長度:', revisedText.trim().length, '字元');
+      } else {
+        alert('❌ 無法找到自傳欄位，請確認表單已正確載入。');
+      }
+    }
+
   </script>
 
   <!-- 側邊選單 -->
@@ -3749,7 +3974,6 @@
     <a href="/student_home">首頁</a>
     <a href="/profile">個人資料</a>
     <a href="/resume_folders">履歷管理</a>
-    <a href="/ai_edit_resume">AI修改履歷</a>
     <a href="/fill_preferences">填寫志願序</a>
     <a href="/notifications">通知</a>
     <a href="/intern_achievement">實習成果</a>
