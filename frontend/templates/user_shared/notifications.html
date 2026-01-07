@@ -538,14 +538,6 @@
         </div>
 
         <div id="listContainer"></div>
-
-        <!-- 科助專用：公告列表區塊（顯示所有公告） -->
-        <div id="ta-announcements-section" class="mt-3" style="display: none;">
-          <div class="group-header">
-            <div class="group-title">公告列表（科助檢視）</div>
-          </div>
-          <div id="ta-announcements-list" class="mt-2"></div>
-        </div>
       </div>
 
     </div>
@@ -714,8 +706,6 @@
 
     // 元件
     const listContainer = document.getElementById('listContainer');
-    const taAnnouncementsSection = document.getElementById('ta-announcements-section');
-    const taAnnouncementsList = document.getElementById('ta-announcements-list');
     const searchInput = document.getElementById('searchInput');
     const unreadCounterTopRight = document.getElementById('unreadCounterTopRight');
     const unreadCounterSearchRow = document.getElementById('unreadCounterSearchRow');
@@ -811,65 +801,6 @@
       } catch (err) {
         console.error(err);
         listContainer.innerHTML = `<div class="alert alert-danger">無法載入通知</div>`;
-      }
-    }
-
-    // 科助專用：載入公告列表（不分個人通知，顯示所有公告）
-    async function loadTaAnnouncements() {
-      if (!taAnnouncementsSection || !taAnnouncementsList) return;
-      try {
-        const res = await fetch('/announcement/api/list');
-        const data = await res.json();
-        if (!data.success || !Array.isArray(data.data)) {
-          taAnnouncementsSection.style.display = 'none';
-          return;
-        }
-
-        // 只顯示已發布的公告
-        const rows = data.data.filter(a => a.is_published === 1 || a.is_published === '1');
-        if (!rows.length) {
-          taAnnouncementsSection.style.display = 'none';
-          return;
-        }
-
-        taAnnouncementsList.innerHTML = '';
-        rows.forEach(a => {
-          const item = document.createElement('div');
-          item.className = 'notif-card mb-2';
-
-          const body = document.createElement('div');
-          body.className = 'notif-body';
-
-          const titleDiv = document.createElement('div');
-          titleDiv.className = 'notif-title';
-          titleDiv.textContent = a.title || '';
-
-          const metaDiv = document.createElement('div');
-          metaDiv.className = 'notif-meta small muted';
-          const start = a.start_time ? String(a.start_time) : '';
-          const end = a.end_time ? String(a.end_time) : '';
-          let timeText = '';
-          if (start || end) {
-            timeText = `時間：${start}${end ? ' ~ ' + end : ''}`;
-          }
-          metaDiv.textContent = timeText;
-
-          const contentDiv = document.createElement('div');
-          contentDiv.className = 'small';
-          contentDiv.textContent = (a.content || '').slice(0, 120);
-
-          body.appendChild(titleDiv);
-          if (timeText) body.appendChild(metaDiv);
-          if (contentDiv.textContent) body.appendChild(contentDiv);
-
-          item.appendChild(body);
-          taAnnouncementsList.appendChild(item);
-        });
-
-        taAnnouncementsSection.style.display = 'block';
-      } catch (err) {
-        console.error('載入公告列表失敗:', err);
-        taAnnouncementsSection.style.display = 'none';
       }
     }
 
@@ -1598,7 +1529,6 @@
             currentFilterLabel.innerText = '全部';
             // 重新載入通知列表
             await loadNotifications();
-            await loadTaAnnouncements();
             alert('儲存成功！新通知已出現在列表中。');
           } else {
             alert('儲存失敗：' + (result.message || '未知錯誤'));
@@ -1656,7 +1586,6 @@
             currentFilterLabel.innerText = '全部';
             // 重新載入通知列表
             await loadNotifications();
-            await loadTaAnnouncements();
             alert('儲存成功！新通知已出現在列表中。');
           } else {
             alert('儲存失敗：' + (result.message || '未知錯誤'));
@@ -1721,7 +1650,6 @@
             
             // 重新載入通知列表
             await loadNotifications();
-            await loadTaAnnouncements();
             alert('儲存成功！' + (isEditing ? '公告已更新。' : '新通知已出現在列表中。'));
           } else {
             alert('儲存失敗：' + (result.message || '未知錯誤'));
@@ -1782,8 +1710,6 @@
               unreadBadgeTA.style.display = 'none';
             }
             initTAActions();
-            // 科助：載入公告列表
-            loadTaAnnouncements();
           } else {
             // 其他角色隱藏按鈕和「時程」類別
             if (taActions) {

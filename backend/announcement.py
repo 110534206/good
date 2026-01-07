@@ -257,8 +257,13 @@ def push_announcement_notifications(conn, title, content, ann_id, target_roles=N
         valid_roles = {"student", "teacher", "director", "ta", "admin", "vendor", "class_teacher"}
         roles = [r for r in (target_roles or []) if r in valid_roles]
 
+        # 科助需求：不管發送對象選誰，科助自己也要看到公告
+        # 因此前端雖然不顯示「科助」選項，但後端自動把 ta 加入通知對象
+        if roles and "ta" not in roles:
+            roles.append("ta")
+
         if roles:
-            # 只取指定角色的使用者
+            # 只取指定角色的使用者 + 科助
             placeholders = ", ".join(["%s"] * len(roles))
             cursor.execute(f"SELECT id FROM users WHERE role IN ({placeholders})", roles)
         else:
