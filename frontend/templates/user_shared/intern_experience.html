@@ -6,27 +6,45 @@
   <title>智慧實習平台 | 實習心得分享</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
   <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
     body {
-      background: #f8f9fa;
+      font-family: "Noto Sans TC", sans-serif;
+      background: #f9fafb;
+      margin: 0;
+      overflow-x: hidden;
     }
 
-    .hero-bar {
-      background: #0057b8;
+    header {
+      background: linear-gradient(135deg, #0055a8 0%, #006acb 50%, #004f94 100%);
+      border-bottom: none;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      box-shadow: 0 8px 20px rgba(0, 68, 148, 0.35);
+    }
+
+    .topbar {
+      max-width: 1800px;
+      margin: 0 auto;
+      padding: 18px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
       color: #fff;
-      text-align: center;
-      padding: 18px 15px;
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.16);
     }
 
-    /* 三條線選單按鈕樣式 */
-    .top-bar-left {
-      position: fixed;
-      top: 1rem;
-      left: 1rem;
-      z-index: 1100;
+    .topbar-left {
+      display: flex;
+      align-items: center;
+      gap: 16px;
     }
 
-    .top-bar-left #menu-btn {
+    .topbar-left #menu-btn {
       width: 30px;
       height: 22px;
       cursor: pointer;
@@ -38,13 +56,21 @@
       padding: 0;
     }
 
-    .top-bar-left #menu-btn span {
+    .topbar-left #menu-btn span {
       display: block;
       width: 100%;
       height: 3px;
       background-color: white;
       border-radius: 2px;
       transition: all 0.3s ease;
+    }
+
+    .topbar h1 {
+      font-size: 1.5rem;
+      margin: 0;
+      text-align: center;
+      color: #fff;
+      flex: 1;
     }
 
     /* 側邊選單樣式 */
@@ -57,15 +83,15 @@
       max-width: 80vw;
       background-color: rgba(10, 10, 10, 0.95);
       backdrop-filter: blur(6px);
-      box-shadow: 3px 0 12px rgb(0 0 0 / 0.7);
+      box-shadow: 3px 0 12px rgba(0, 0, 0, 0.6);
       padding: 2rem 1.5rem;
       transform: translateX(-100%);
       transition: transform 0.3s ease-in-out;
-      z-index: 1200;
+      z-index: 1300;
       display: flex;
       flex-direction: column;
       align-items: flex-start;
-      color: white;
+      color: #fff;
       user-select: none;
     }
 
@@ -80,45 +106,42 @@
       font-size: 2.2rem;
       background: none;
       border: none;
-      color: white;
+      color: #fff;
       cursor: pointer;
-      line-height: 1;
-      width: 2.5rem;
+      line-height: 1rem;
       height: 2.5rem;
+      width: 2.5rem;
       display: flex;
       align-items: center;
       justify-content: center;
     }
 
     #side-menu h2 {
-      width: 100%;
-      margin-bottom: 1.5rem;
+      margin: 0 0 1.5rem 0;
       font-weight: 700;
-      font-size: 1.5rem;
-      text-align: left;
+      font-size: 1.6rem;
+      color: #fff;
+      padding: 0;
+      line-height: 2.4rem;
+      height: 2.4rem;
+      display: flex;
+      align-items: center;
     }
 
     #side-menu a {
       display: block;
       width: 100%;
-      padding: 0.5rem 0;
+      padding: 0.6rem 0;
       font-size: 1.1rem;
-      color: #ddd;
+      color: #e2e8f0;
       text-decoration: none;
       border-radius: 4px;
       transition: background-color 0.2s ease;
     }
 
     #side-menu a:hover {
-      background-color: rgba(255, 255, 255, 0.15);
-      color: white;
-    }
-
-    .hero-bar h1 {
-      font-size: 24px;
-      font-weight: 600;
-      letter-spacing: 0.5px;
-      margin: 0;
+      background-color: rgba(255, 255, 255, 0.18);
+      color: #fff;
     }
 
     .card:hover {
@@ -130,21 +153,6 @@
     }
   
 /* ===== 美化樣式開始 ===== */
-body {
-  background: #f4f6fb;
-}
-
-.hero-bar {
-  background: linear-gradient(135deg, #2563eb, #1e40af);
-  padding: 26px 15px;
-  box-shadow: 0 8px 20px rgba(0,0,0,.18);
-}
-
-.hero-bar h1 {
-  font-size: 26px;
-  font-weight: 700;
-  letter-spacing: 1px;
-}
 
 .card {
   border-radius: 18px;
@@ -269,15 +277,18 @@ body {
 </style>
 </head>
 
-<body data-user-id="{{ user_id or 0 }}" data-initial-company-id="{{ initial_company_id or '' }}">
-  <div class="hero-bar">
-    <h1>實習心得分享</h1>
-  </div>
-  <div class="top-bar-left">
-    <div id="menu-btn" title="選單" role="button" tabindex="0">
-      <span></span><span></span><span></span>
+<body class="p-0" data-user-id="{{ user_id or 0 }}" data-initial-company-id="{{ initial_company_id or '' }}">
+  <header>
+    <div class="topbar">
+      <div class="topbar-left">
+        <button id="menu-btn" title="選單" role="button" tabindex="0" aria-label="開啟側邊選單">
+          <span></span><span></span><span></span>
+        </button>
+      </div>
+      <h1>實習心得分享</h1>
+      <div style="width: 30px;"></div>
     </div>
-  </div>
+  </header>
 
   <div class="container mt-4">
     <!-- 分頁標籤 -->
@@ -298,7 +309,7 @@ body {
     <div class="tab-content" id="experienceTabContent">
       <!-- 所有心得分頁 -->
       <div class="tab-pane fade show active" id="all-experiences" role="tabpanel" aria-labelledby="all-tab">
-        <div class="filter-card mb-4"><div class="row g-3">
+        <div class="filter-card mb-5"><div class="row g-3">
           <div class="col-md-3">
             <input id="searchKeyword" class="form-control" placeholder="搜尋公司名稱...">
           </div>
@@ -319,12 +330,12 @@ body {
             <button class="btn btn-success" data-bs-toggle="modal" data-bs-target="#addModal">+ 上傳心得</button>
           </div>
         </div></div>
-        <div id="experienceList" class="row g-3"></div>
+        <div id="experienceList" class="row g-3 mt-4"></div>
       </div>
 
       <!-- 我的心得分頁 -->
       <div class="tab-pane fade" id="my-experiences" role="tabpanel" aria-labelledby="my-tab">
-        <div class="filter-card mb-4"><div class="row g-3">
+        <div class="filter-card mb-5"><div class="row g-3">
           <div class="col-md-3">
             <input id="mySearchKeyword" class="form-control" placeholder="搜尋公司名稱...">
           </div>
@@ -345,7 +356,7 @@ body {
             <button class="btn btn-success" data-bs-toggle="modal" data-bs-target="#addModal">+ 上傳心得</button>
           </div>
         </div>
-        <div id="myExperienceList" class="row g-3"></div>
+        <div id="myExperienceList" class="row g-3 mt-4"></div>
       </div>
     </div>
   </div>
@@ -537,13 +548,20 @@ body {
       const job = item.job_title ? `／${item.job_title}` : '';
       const yearText = item.year ? `${item.year}` : '--';
       const rating = item.rating ? item.rating : '--';
+      // 判斷審核狀態（僅在「我的心得」分頁顯示）
+      const isPublic = item.is_public === 1 || item.is_public === '1' || item.is_public === true;
+      const statusBadge = showDelete ? `
+        <span class="badge ${isPublic ? 'bg-success' : 'bg-warning'} ms-2">
+          ${isPublic ? '已公開' : '待審核'}
+        </span>
+      ` : '';
       // 只在明確傳入 showDelete = true 時才顯示刪除按鈕（僅在「我的心得」分頁）
       const card = document.createElement('div');
       card.className = 'col-md-4';
       card.innerHTML = `
         <div class="card experience-card p-3 position-relative">
           <div class="card-body">
-            <h6>${company} ${job}</h6>
+            <h6>${company} ${job}${statusBadge}</h6>
             <p class="text-muted mb-2">${yearText} 年 ｜ 評分 ${rating} ⭐</p>
             <p class="small text-truncate">${(item.content || '').slice(0, 200)}</p>
             <div class="mt-3 d-flex justify-content-between align-items-center">
@@ -830,7 +848,8 @@ body {
         addModalInstance?.hide();
 
         setTimeout(async () => {
-          await showResultModal('新增心得', '心得上傳成功！');
+          const advisorName = data.advisor_name ? data.advisor_name : '指導老師';
+          await showResultModal('新增心得', `心得上傳成功！您的心得已提交給指導老師${advisorName !== '指導老師' ? '：' + advisorName : ''}。`);
           // 重新載入兩個分頁的心得
           loadExperiences();
           loadMyExperiences();

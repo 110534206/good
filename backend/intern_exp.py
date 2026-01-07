@@ -283,7 +283,7 @@ def add_experience():
                 year = None
 
         db = get_db()
-        cursor = db.cursor()
+        cursor = db.cursor(dictionary=True)
 
         # 新增心得時預設為未公開（待指導老師審核後才公開）
         cursor.execute("""
@@ -292,8 +292,34 @@ def add_experience():
             VALUES (%s, %s, %s, %s, %s, %s, 0, NOW())
         """, (user_id, company_id, job_id, year, content, rating))
 
+        # 獲取該公司的指導老師資訊
+        advisor_id = None
+        advisor_name = None
+        if company_id:
+            cursor.execute("""
+                SELECT advisor_user_id 
+                FROM internship_companies 
+                WHERE id = %s
+            """, (company_id,))
+            company = cursor.fetchone()
+            if company and company.get('advisor_user_id'):
+                advisor_id = company['advisor_user_id']
+                cursor.execute("""
+                    SELECT id, name 
+                    FROM users 
+                    WHERE id = %s AND role IN ('teacher', 'director', 'class_teacher')
+                """, (advisor_id,))
+                advisor = cursor.fetchone()
+                if advisor:
+                    advisor_name = advisor.get('name')
+
         db.commit()
-        return jsonify({"success": True, "message": "心得已新增"})
+        return jsonify({
+            "success": True, 
+            "message": "心得已新增",
+            "advisor_id": advisor_id,
+            "advisor_name": advisor_name
+        })
     except Exception as e:
         print(traceback.format_exc())
         return jsonify({"success": False, "message": str(e)}), 500
@@ -349,6 +375,35 @@ def approve_experience(exp_id):
             return jsonify({"success": False, "message": "心得不存在"}), 404
 
         return jsonify({"success": True, "message": "已審核通過，學生心得頁面將顯示此筆心得"})
+    except Exception as e:
+        print(traceback.format_exc())
+        return jsonify({"success": False, "message": str(e)}), 500
+
+# --------------------
+# API：老師退件心得（刪除心得）
+# --------------------
+@intern_exp_bp.route('/api/reject/<int:exp_id>', methods=['POST'])
+def reject_experience(exp_id):
+    try:
+        if not require_login():
+            return jsonify({"success": False, "message": "請先登入"}), 403
+
+        # 僅限指導老師 / 主任 / 班導使用
+        if session.get('role') not in ['teacher', 'director', 'class_teacher']:
+            return jsonify({"success": False, "message": "未授權"}), 403
+
+        db = get_db()
+        cursor = db.cursor()
+        # 檢查心得是否存在
+        cursor.execute("SELECT id FROM internship_experiences WHERE id = %s", (exp_id,))
+        if not cursor.fetchone():
+            return jsonify({"success": False, "message": "心得不存在"}), 404
+
+        # 刪除心得
+        cursor.execute("DELETE FROM internship_experiences WHERE id = %s", (exp_id,))
+        db.commit()
+
+        return jsonify({"success": True, "message": "已退件，該心得已從系統中移除"})
     except Exception as e:
         print(traceback.format_exc())
         return jsonify({"success": False, "message": str(e)}), 500
