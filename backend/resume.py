@@ -330,13 +330,19 @@ def categorize_certifications(cert_list):
     local = []
     other = []
     for c in cert_list:
+        # 兼容多種字段名稱：cert_name/CertName, cert_path/CertPath, acquire_date/AcquisitionDate
+        cert_name = c.get("cert_name") or c.get("CertName") or f"{c.get('job_category', '')}{c.get('level', '')}"
+        cert_path = c.get("cert_path") or c.get("CertPath", "")
+        acquire_date = c.get("acquire_date") or c.get("AcquisitionDate", "")
+        
         item = {
-            "table_name": c.get("cert_name", ""),     # 表格區顯示名稱（只顯示證照名稱，不含發證中心）
-            "photo_name": c.get("cert_name", ""),     # 圖片下方名稱
-            "photo_path": c.get("cert_path", ""),     # 圖片路徑
-            "date": c.get("acquire_date", ""),        # 日期
+            "table_name": cert_name,     # 表格區顯示名稱（只顯示證照名稱，不含發證中心）
+            "photo_name": cert_name,     # 圖片下方名稱
+            "photo_path": cert_path,     # 圖片路徑
+            "date": acquire_date,        # 日期
         }
-        category = c.get("category", "other")
+        # 檢查多個可能的字段名稱：CertCategory（從SQL查詢）或 category（從其他來源）
+        category = c.get("CertCategory") or c.get("category", "other")
         if category == "labor":
             labor.append(item)
         elif category == "intl":
@@ -888,19 +894,31 @@ def format_data_for_doc(student_data, doc_path=None):
         fill_certificate_photos(context, doc, certs_for_photos[24:], 25, 8)
 
     # 4. 語言能力 (Languages)
-    for i in range(1, 5): # 最多四種語言
-        if i <= len(student_data['languages']):
-            lang = student_data['languages'][i-1]
-            marks = generate_language_marks(lang['level'])
-            context[f'LangName_{i}'] = lang['language']
-            context[f'LangJing_{i}'] = marks['Jing']
-            context[f'LangZhong_{i}'] = marks['Zhong']
-            context[f'LangLue_{i}'] = marks['Lue']
-        else:
-            context[f'LangName_{i}'] = ''
-            context[f'LangJing_{i}'] = '□'
-            context[f'LangZhong_{i}'] = '□'
-            context[f'LangLue_{i}'] = '□'
+    # 根據模板格式，使用語言名稱作為前綴
+    language_map = {
+        '英語': 'En',
+        '日語': 'Jp',
+        '台語': 'Tw',
+        '客語': 'Hk'
+    }
+    
+    # 初始化所有語言為未選（□）
+    for lang_name, prefix in language_map.items():
+        context[f'{prefix}_Jing'] = '□'
+        context[f'{prefix}_Zhong'] = '□'
+        context[f'{prefix}_Lue'] = '□'
+    
+    # 根據實際數據填充
+    for lang in student_data['languages']:
+        lang_name = lang.get('language', '')
+        level = lang.get('level', '')
+        prefix = language_map.get(lang_name)
+        
+        if prefix and level:
+            marks = generate_language_marks(level)
+            context[f'{prefix}_Jing'] = marks['Jing']
+            context[f'{prefix}_Zhong'] = marks['Zhong']
+            context[f'{prefix}_Lue'] = marks['Lue']
     
     return context, doc
 
@@ -2559,7 +2577,8 @@ def save_personal_template():
                 valid_courses.append({
                     'name': course['name'],
                     'credits': format_credits(course['credits']), # 使用格式化函數
-                    'grade': course.get('grade')
+                    'grade': course.get('grade', ''),
+                    'isNotTaken': course.get('isNotTaken', False)  # 保存未修課狀態
                 })
         
         courses_json = json.dumps(valid_courses, ensure_ascii=False)
@@ -4726,13 +4745,19 @@ def categorize_certifications(cert_list):
     local = []
     other = []
     for c in cert_list:
+        # 兼容多種字段名稱：cert_name/CertName, cert_path/CertPath, acquire_date/AcquisitionDate
+        cert_name = c.get("cert_name") or c.get("CertName") or f"{c.get('job_category', '')}{c.get('level', '')}"
+        cert_path = c.get("cert_path") or c.get("CertPath", "")
+        acquire_date = c.get("acquire_date") or c.get("AcquisitionDate", "")
+        
         item = {
-            "table_name": c.get("cert_name", ""),     # 表格區顯示名稱（只顯示證照名稱，不含發證中心）
-            "photo_name": c.get("cert_name", ""),     # 圖片下方名稱
-            "photo_path": c.get("cert_path", ""),     # 圖片路徑
-            "date": c.get("acquire_date", ""),        # 日期
+            "table_name": cert_name,     # 表格區顯示名稱（只顯示證照名稱，不含發證中心）
+            "photo_name": cert_name,     # 圖片下方名稱
+            "photo_path": cert_path,     # 圖片路徑
+            "date": acquire_date,        # 日期
         }
-        category = c.get("category", "other")
+        # 檢查多個可能的字段名稱：CertCategory（從SQL查詢）或 category（從其他來源）
+        category = c.get("CertCategory") or c.get("category", "other")
         if category == "labor":
             labor.append(item)
         elif category == "intl":
@@ -5284,19 +5309,31 @@ def format_data_for_doc(student_data, doc_path=None):
         fill_certificate_photos(context, doc, certs_for_photos[24:], 25, 8)
 
     # 4. 語言能力 (Languages)
-    for i in range(1, 5): # 最多四種語言
-        if i <= len(student_data['languages']):
-            lang = student_data['languages'][i-1]
-            marks = generate_language_marks(lang['level'])
-            context[f'LangName_{i}'] = lang['language']
-            context[f'LangJing_{i}'] = marks['Jing']
-            context[f'LangZhong_{i}'] = marks['Zhong']
-            context[f'LangLue_{i}'] = marks['Lue']
-        else:
-            context[f'LangName_{i}'] = ''
-            context[f'LangJing_{i}'] = '□'
-            context[f'LangZhong_{i}'] = '□'
-            context[f'LangLue_{i}'] = '□'
+    # 根據模板格式，使用語言名稱作為前綴
+    language_map = {
+        '英語': 'En',
+        '日語': 'Jp',
+        '台語': 'Tw',
+        '客語': 'Hk'
+    }
+    
+    # 初始化所有語言為未選（□）
+    for lang_name, prefix in language_map.items():
+        context[f'{prefix}_Jing'] = '□'
+        context[f'{prefix}_Zhong'] = '□'
+        context[f'{prefix}_Lue'] = '□'
+    
+    # 根據實際數據填充
+    for lang in student_data['languages']:
+        lang_name = lang.get('language', '')
+        level = lang.get('level', '')
+        prefix = language_map.get(lang_name)
+        
+        if prefix and level:
+            marks = generate_language_marks(level)
+            context[f'{prefix}_Jing'] = marks['Jing']
+            context[f'{prefix}_Zhong'] = marks['Zhong']
+            context[f'{prefix}_Lue'] = marks['Lue']
     
     return context, doc
 
@@ -6952,7 +6989,8 @@ def save_personal_template():
                 valid_courses.append({
                     'name': course['name'],
                     'credits': format_credits(course['credits']), # 使用格式化函數
-                    'grade': course.get('grade')
+                    'grade': course.get('grade', ''),
+                    'isNotTaken': course.get('isNotTaken', False)  # 保存未修課狀態
                 })
         
         courses_json = json.dumps(valid_courses, ensure_ascii=False)
@@ -8891,13 +8929,19 @@ def categorize_certifications(cert_list):
     local = []
     other = []
     for c in cert_list:
+        # 兼容多種字段名稱：cert_name/CertName, cert_path/CertPath, acquire_date/AcquisitionDate
+        cert_name = c.get("cert_name") or c.get("CertName") or f"{c.get('job_category', '')}{c.get('level', '')}"
+        cert_path = c.get("cert_path") or c.get("CertPath", "")
+        acquire_date = c.get("acquire_date") or c.get("AcquisitionDate", "")
+        
         item = {
-            "table_name": c.get("cert_name", ""),     # 表格區顯示名稱（只顯示證照名稱，不含發證中心）
-            "photo_name": c.get("cert_name", ""),     # 圖片下方名稱
-            "photo_path": c.get("cert_path", ""),     # 圖片路徑
-            "date": c.get("acquire_date", ""),        # 日期
+            "table_name": cert_name,     # 表格區顯示名稱（只顯示證照名稱，不含發證中心）
+            "photo_name": cert_name,     # 圖片下方名稱
+            "photo_path": cert_path,     # 圖片路徑
+            "date": acquire_date,        # 日期
         }
-        category = c.get("category", "other")
+        # 檢查多個可能的字段名稱：CertCategory（從SQL查詢）或 category（從其他來源）
+        category = c.get("CertCategory") or c.get("category", "other")
         if category == "labor":
             labor.append(item)
         elif category == "intl":
@@ -9449,19 +9493,31 @@ def format_data_for_doc(student_data, doc_path=None):
         fill_certificate_photos(context, doc, certs_for_photos[24:], 25, 8)
 
     # 4. 語言能力 (Languages)
-    for i in range(1, 5): # 最多四種語言
-        if i <= len(student_data['languages']):
-            lang = student_data['languages'][i-1]
-            marks = generate_language_marks(lang['level'])
-            context[f'LangName_{i}'] = lang['language']
-            context[f'LangJing_{i}'] = marks['Jing']
-            context[f'LangZhong_{i}'] = marks['Zhong']
-            context[f'LangLue_{i}'] = marks['Lue']
-        else:
-            context[f'LangName_{i}'] = ''
-            context[f'LangJing_{i}'] = '□'
-            context[f'LangZhong_{i}'] = '□'
-            context[f'LangLue_{i}'] = '□'
+    # 根據模板格式，使用語言名稱作為前綴
+    language_map = {
+        '英語': 'En',
+        '日語': 'Jp',
+        '台語': 'Tw',
+        '客語': 'Hk'
+    }
+    
+    # 初始化所有語言為未選（□）
+    for lang_name, prefix in language_map.items():
+        context[f'{prefix}_Jing'] = '□'
+        context[f'{prefix}_Zhong'] = '□'
+        context[f'{prefix}_Lue'] = '□'
+    
+    # 根據實際數據填充
+    for lang in student_data['languages']:
+        lang_name = lang.get('language', '')
+        level = lang.get('level', '')
+        prefix = language_map.get(lang_name)
+        
+        if prefix and level:
+            marks = generate_language_marks(level)
+            context[f'{prefix}_Jing'] = marks['Jing']
+            context[f'{prefix}_Zhong'] = marks['Zhong']
+            context[f'{prefix}_Lue'] = marks['Lue']
     
     return context, doc
 
@@ -11117,7 +11173,8 @@ def save_personal_template():
                 valid_courses.append({
                     'name': course['name'],
                     'credits': format_credits(course['credits']), # 使用格式化函數
-                    'grade': course.get('grade')
+                    'grade': course.get('grade', ''),
+                    'isNotTaken': course.get('isNotTaken', False)  # 保存未修課狀態
                 })
         
         courses_json = json.dumps(valid_courses, ensure_ascii=False)
@@ -13056,13 +13113,19 @@ def categorize_certifications(cert_list):
     local = []
     other = []
     for c in cert_list:
+        # 兼容多種字段名稱：cert_name/CertName, cert_path/CertPath, acquire_date/AcquisitionDate
+        cert_name = c.get("cert_name") or c.get("CertName") or f"{c.get('job_category', '')}{c.get('level', '')}"
+        cert_path = c.get("cert_path") or c.get("CertPath", "")
+        acquire_date = c.get("acquire_date") or c.get("AcquisitionDate", "")
+        
         item = {
-            "table_name": c.get("cert_name", ""),     # 表格區顯示名稱（只顯示證照名稱，不含發證中心）
-            "photo_name": c.get("cert_name", ""),     # 圖片下方名稱
-            "photo_path": c.get("cert_path", ""),     # 圖片路徑
-            "date": c.get("acquire_date", ""),        # 日期
+            "table_name": cert_name,     # 表格區顯示名稱（只顯示證照名稱，不含發證中心）
+            "photo_name": cert_name,     # 圖片下方名稱
+            "photo_path": cert_path,     # 圖片路徑
+            "date": acquire_date,        # 日期
         }
-        category = c.get("category", "other")
+        # 檢查多個可能的字段名稱：CertCategory（從SQL查詢）或 category（從其他來源）
+        category = c.get("CertCategory") or c.get("category", "other")
         if category == "labor":
             labor.append(item)
         elif category == "intl":
@@ -13614,19 +13677,31 @@ def format_data_for_doc(student_data, doc_path=None):
         fill_certificate_photos(context, doc, certs_for_photos[24:], 25, 8)
 
     # 4. 語言能力 (Languages)
-    for i in range(1, 5): # 最多四種語言
-        if i <= len(student_data['languages']):
-            lang = student_data['languages'][i-1]
-            marks = generate_language_marks(lang['level'])
-            context[f'LangName_{i}'] = lang['language']
-            context[f'LangJing_{i}'] = marks['Jing']
-            context[f'LangZhong_{i}'] = marks['Zhong']
-            context[f'LangLue_{i}'] = marks['Lue']
-        else:
-            context[f'LangName_{i}'] = ''
-            context[f'LangJing_{i}'] = '□'
-            context[f'LangZhong_{i}'] = '□'
-            context[f'LangLue_{i}'] = '□'
+    # 根據模板格式，使用語言名稱作為前綴
+    language_map = {
+        '英語': 'En',
+        '日語': 'Jp',
+        '台語': 'Tw',
+        '客語': 'Hk'
+    }
+    
+    # 初始化所有語言為未選（□）
+    for lang_name, prefix in language_map.items():
+        context[f'{prefix}_Jing'] = '□'
+        context[f'{prefix}_Zhong'] = '□'
+        context[f'{prefix}_Lue'] = '□'
+    
+    # 根據實際數據填充
+    for lang in student_data['languages']:
+        lang_name = lang.get('language', '')
+        level = lang.get('level', '')
+        prefix = language_map.get(lang_name)
+        
+        if prefix and level:
+            marks = generate_language_marks(level)
+            context[f'{prefix}_Jing'] = marks['Jing']
+            context[f'{prefix}_Zhong'] = marks['Zhong']
+            context[f'{prefix}_Lue'] = marks['Lue']
     
     return context, doc
 
@@ -15282,7 +15357,8 @@ def save_personal_template():
                 valid_courses.append({
                     'name': course['name'],
                     'credits': format_credits(course['credits']), # 使用格式化函數
-                    'grade': course.get('grade')
+                    'grade': course.get('grade', ''),
+                    'isNotTaken': course.get('isNotTaken', False)  # 保存未修課狀態
                 })
         
         courses_json = json.dumps(valid_courses, ensure_ascii=False)
@@ -17221,13 +17297,19 @@ def categorize_certifications(cert_list):
     local = []
     other = []
     for c in cert_list:
+        # 兼容多種字段名稱：cert_name/CertName, cert_path/CertPath, acquire_date/AcquisitionDate
+        cert_name = c.get("cert_name") or c.get("CertName") or f"{c.get('job_category', '')}{c.get('level', '')}"
+        cert_path = c.get("cert_path") or c.get("CertPath", "")
+        acquire_date = c.get("acquire_date") or c.get("AcquisitionDate", "")
+        
         item = {
-            "table_name": c.get("cert_name", ""),     # 表格區顯示名稱（只顯示證照名稱，不含發證中心）
-            "photo_name": c.get("cert_name", ""),     # 圖片下方名稱
-            "photo_path": c.get("cert_path", ""),     # 圖片路徑
-            "date": c.get("acquire_date", ""),        # 日期
+            "table_name": cert_name,     # 表格區顯示名稱（只顯示證照名稱，不含發證中心）
+            "photo_name": cert_name,     # 圖片下方名稱
+            "photo_path": cert_path,     # 圖片路徑
+            "date": acquire_date,        # 日期
         }
-        category = c.get("category", "other")
+        # 檢查多個可能的字段名稱：CertCategory（從SQL查詢）或 category（從其他來源）
+        category = c.get("CertCategory") or c.get("category", "other")
         if category == "labor":
             labor.append(item)
         elif category == "intl":
@@ -17779,19 +17861,31 @@ def format_data_for_doc(student_data, doc_path=None):
         fill_certificate_photos(context, doc, certs_for_photos[24:], 25, 8)
 
     # 4. 語言能力 (Languages)
-    for i in range(1, 5): # 最多四種語言
-        if i <= len(student_data['languages']):
-            lang = student_data['languages'][i-1]
-            marks = generate_language_marks(lang['level'])
-            context[f'LangName_{i}'] = lang['language']
-            context[f'LangJing_{i}'] = marks['Jing']
-            context[f'LangZhong_{i}'] = marks['Zhong']
-            context[f'LangLue_{i}'] = marks['Lue']
-        else:
-            context[f'LangName_{i}'] = ''
-            context[f'LangJing_{i}'] = '□'
-            context[f'LangZhong_{i}'] = '□'
-            context[f'LangLue_{i}'] = '□'
+    # 根據模板格式，使用語言名稱作為前綴
+    language_map = {
+        '英語': 'En',
+        '日語': 'Jp',
+        '台語': 'Tw',
+        '客語': 'Hk'
+    }
+    
+    # 初始化所有語言為未選（□）
+    for lang_name, prefix in language_map.items():
+        context[f'{prefix}_Jing'] = '□'
+        context[f'{prefix}_Zhong'] = '□'
+        context[f'{prefix}_Lue'] = '□'
+    
+    # 根據實際數據填充
+    for lang in student_data['languages']:
+        lang_name = lang.get('language', '')
+        level = lang.get('level', '')
+        prefix = language_map.get(lang_name)
+        
+        if prefix and level:
+            marks = generate_language_marks(level)
+            context[f'{prefix}_Jing'] = marks['Jing']
+            context[f'{prefix}_Zhong'] = marks['Zhong']
+            context[f'{prefix}_Lue'] = marks['Lue']
     
     return context, doc
 
@@ -19447,7 +19541,8 @@ def save_personal_template():
                 valid_courses.append({
                     'name': course['name'],
                     'credits': format_credits(course['credits']), # 使用格式化函數
-                    'grade': course.get('grade')
+                    'grade': course.get('grade', ''),
+                    'isNotTaken': course.get('isNotTaken', False)  # 保存未修課狀態
                 })
         
         courses_json = json.dumps(valid_courses, ensure_ascii=False)
@@ -21386,13 +21481,19 @@ def categorize_certifications(cert_list):
     local = []
     other = []
     for c in cert_list:
+        # 兼容多種字段名稱：cert_name/CertName, cert_path/CertPath, acquire_date/AcquisitionDate
+        cert_name = c.get("cert_name") or c.get("CertName") or f"{c.get('job_category', '')}{c.get('level', '')}"
+        cert_path = c.get("cert_path") or c.get("CertPath", "")
+        acquire_date = c.get("acquire_date") or c.get("AcquisitionDate", "")
+        
         item = {
-            "table_name": c.get("cert_name", ""),     # 表格區顯示名稱（只顯示證照名稱，不含發證中心）
-            "photo_name": c.get("cert_name", ""),     # 圖片下方名稱
-            "photo_path": c.get("cert_path", ""),     # 圖片路徑
-            "date": c.get("acquire_date", ""),        # 日期
+            "table_name": cert_name,     # 表格區顯示名稱（只顯示證照名稱，不含發證中心）
+            "photo_name": cert_name,     # 圖片下方名稱
+            "photo_path": cert_path,     # 圖片路徑
+            "date": acquire_date,        # 日期
         }
-        category = c.get("category", "other")
+        # 檢查多個可能的字段名稱：CertCategory（從SQL查詢）或 category（從其他來源）
+        category = c.get("CertCategory") or c.get("category", "other")
         if category == "labor":
             labor.append(item)
         elif category == "intl":
@@ -21944,19 +22045,31 @@ def format_data_for_doc(student_data, doc_path=None):
         fill_certificate_photos(context, doc, certs_for_photos[24:], 25, 8)
 
     # 4. 語言能力 (Languages)
-    for i in range(1, 5): # 最多四種語言
-        if i <= len(student_data['languages']):
-            lang = student_data['languages'][i-1]
-            marks = generate_language_marks(lang['level'])
-            context[f'LangName_{i}'] = lang['language']
-            context[f'LangJing_{i}'] = marks['Jing']
-            context[f'LangZhong_{i}'] = marks['Zhong']
-            context[f'LangLue_{i}'] = marks['Lue']
-        else:
-            context[f'LangName_{i}'] = ''
-            context[f'LangJing_{i}'] = '□'
-            context[f'LangZhong_{i}'] = '□'
-            context[f'LangLue_{i}'] = '□'
+    # 根據模板格式，使用語言名稱作為前綴
+    language_map = {
+        '英語': 'En',
+        '日語': 'Jp',
+        '台語': 'Tw',
+        '客語': 'Hk'
+    }
+    
+    # 初始化所有語言為未選（□）
+    for lang_name, prefix in language_map.items():
+        context[f'{prefix}_Jing'] = '□'
+        context[f'{prefix}_Zhong'] = '□'
+        context[f'{prefix}_Lue'] = '□'
+    
+    # 根據實際數據填充
+    for lang in student_data['languages']:
+        lang_name = lang.get('language', '')
+        level = lang.get('level', '')
+        prefix = language_map.get(lang_name)
+        
+        if prefix and level:
+            marks = generate_language_marks(level)
+            context[f'{prefix}_Jing'] = marks['Jing']
+            context[f'{prefix}_Zhong'] = marks['Zhong']
+            context[f'{prefix}_Lue'] = marks['Lue']
     
     return context, doc
 
@@ -23612,7 +23725,8 @@ def save_personal_template():
                 valid_courses.append({
                     'name': course['name'],
                     'credits': format_credits(course['credits']), # 使用格式化函數
-                    'grade': course.get('grade')
+                    'grade': course.get('grade', ''),
+                    'isNotTaken': course.get('isNotTaken', False)  # 保存未修課狀態
                 })
         
         courses_json = json.dumps(valid_courses, ensure_ascii=False)
@@ -24401,6 +24515,47 @@ def update_folder(folder_id):
     cursor.close()
     conn.close()
     return jsonify({"success": True})
+
+# -------------------------
+# API - 取得資料夾下的所有履歷版本
+# -------------------------
+@resume_bp.route("/api/resume_folders/<int:folder_id>/resumes", methods=["GET"])
+def get_resumes_by_folder(folder_id):
+    if not require_login(): 
+        return jsonify({"success": False, "message": "未登入"}), 401
+    
+    user_id = session['user_id']
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+    
+    try:
+        # 驗證資料夾屬於當前用戶
+        cursor.execute("SELECT id FROM resume_folders WHERE id = %s AND user_id = %s", (folder_id, user_id))
+        folder = cursor.fetchone()
+        if not folder:
+            return jsonify({"success": False, "message": "資料夾不存在或無權限"}), 403
+        
+        # 取得該資料夾下的所有履歷
+        cursor.execute("""
+            SELECT id, original_filename, status, created_at, note
+            FROM resumes
+            WHERE folder_id = %s AND user_id = %s
+            ORDER BY created_at DESC
+        """, (folder_id, user_id))
+        resumes = cursor.fetchall()
+        
+        # 格式化日期
+        from datetime import datetime
+        for r in resumes:
+            if isinstance(r.get('created_at'), datetime):
+                r['created_at'] = r['created_at'].strftime("%Y-%m-%d %H:%M:%S")
+        
+        return jsonify({"success": True, "resumes": resumes})
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
+    finally:
+        cursor.close()
+        conn.close()
 
 # -------------------------
 # 頁面路由
@@ -25327,3 +25482,170 @@ def ai_edit_resume_page():
 @resume_bp.route("/resume_folders")
 def resume_folders_page():
     return render_template("resume/resume_folders.html")
+
+# -------------------------
+# API：下載已修習專業核心科目Excel範本
+# -------------------------
+@resume_bp.route('/api/download_course_template', methods=['GET'])
+def download_course_template():
+    """學生下載已修習專業核心科目Excel範本"""
+    if 'user_id' not in session or session.get('role') != 'student':
+        return jsonify({"success": False, "message": "未授權"}), 403
+    
+    try:
+        template_file_name = "已修習專業核心科目範本.xlsx"
+        backend_dir = current_app.root_path
+        project_root = os.path.dirname(backend_dir)
+        file_path = os.path.join(project_root, 'frontend', 'static', 'examples', template_file_name)
+        
+        if not os.path.exists(file_path):
+            return jsonify({"success": False, "message": "找不到範本檔案"}), 404
+        
+        return send_file(
+            file_path,
+            as_attachment=True,
+            download_name=template_file_name,
+            mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        )
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"success": False, "message": "下載範本失敗"}), 500
+
+# -------------------------
+# API：學生上傳已修習專業核心科目Excel（含成績）
+# -------------------------
+@resume_bp.route('/api/student/upload_course_excel', methods=['POST'])
+def student_upload_course_excel():
+    """學生上傳已修習專業核心科目Excel，根據是否有成績自動設置狀態"""
+    if 'user_id' not in session or session.get('role') != 'student':
+        return jsonify({"success": False, "message": "未授權"}), 403
+    
+    if 'file' not in request.files:
+        return jsonify({"success": False, "message": "缺少文件"}), 400
+    
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({"success": False, "message": "未選擇文件"}), 400
+    
+    allowed_extensions = {'xlsx', 'xls'}
+    if '.' not in file.filename or file.filename.rsplit('.', 1)[1].lower() not in allowed_extensions:
+        return jsonify({"success": False, "message": "不支援的文件類型"}), 400
+    
+    file_stream = io.BytesIO(file.read())
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+    
+    try:
+        # 1. 載入工作簿（先讀取原始值，再讀取顯示值）
+        file_stream.seek(0)
+        workbook = load_workbook(file_stream, data_only=False)
+        sheet = workbook.active
+        
+        # 同時讀取顯示值版本（用於獲取被誤解析為日期的分數）
+        file_stream.seek(0)
+        workbook_display = load_workbook(file_stream, data_only=True)
+        sheet_display = workbook_display.active
+        
+        # 2. 獲取標頭（假設第一行是標頭）
+        headers = [cell.value for cell in sheet[1]]
+        
+        # 找出欄位索引
+        course_name_col = None
+        credits_col = None
+        grade_col = None
+        
+        for i, header in enumerate(headers):
+            if header and ('課程名稱' in str(header) or '科目名稱' in str(header)):
+                course_name_col = i + 1
+            elif header and '學分' in str(header):
+                credits_col = i + 1
+            elif header and ('成績' in str(header) or '等第' in str(header)):
+                grade_col = i + 1
+        
+        if not course_name_col or not credits_col:
+            return jsonify({"success": False, "message": "Excel 檔案缺少必要的欄位（課程名稱/科目名稱、學分）"}), 400
+        
+        # 3. 處理數據
+        courses = []
+        for row_index in range(2, sheet.max_row + 1):
+            try:
+                course_name = str(sheet.cell(row=row_index, column=course_name_col).value or '').strip()
+                credits_cell = sheet.cell(row=row_index, column=credits_col)
+                credits_value = credits_cell.value
+                credits_display_value = sheet_display.cell(row=row_index, column=credits_col).value
+                
+                grade_cell = sheet.cell(row=row_index, column=grade_col) if grade_col else None
+                grade_value = grade_cell.value if grade_cell else None
+                
+                if not course_name:
+                    continue
+                
+                # 處理學分數（特殊處理：如果被解析為日期，嘗試恢復為分數格式）
+                credits_str = ''
+                if credits_value is not None:
+                    # 檢查是否為日期類型（可能是 Excel 將 "3/3" 誤解析為日期）
+                    if isinstance(credits_value, datetime) or isinstance(credits_display_value, datetime):
+                        # 如果是日期類型，檢查是否可能是分數格式（如 3/3 被解析為 3月3日）
+                        date_obj = credits_value if isinstance(credits_value, datetime) else credits_display_value
+                        month = date_obj.month
+                        day = date_obj.day
+                        
+                        # 檢查是否可能是分數格式：
+                        # 1. 月份和日期相同（如 3/3）
+                        # 2. 或者月份和日期都在 1-12 範圍內（常見的分數格式）
+                        if month == day and 1 <= month <= 12:
+                            # 很可能是分數格式，轉換為 "3/3" 格式
+                            credits_str = f"{month}/{day}"
+                        elif 1 <= month <= 12 and 1 <= day <= 12:
+                            # 可能是分數格式，轉換為 "月/日" 格式
+                            credits_str = f"{month}/{day}"
+                        else:
+                            # 不太可能是分數，保持日期格式或轉換為字符串
+                            credits_str = f"{month}/{day}"
+                    elif isinstance(credits_value, (int, float)):
+                        # 數字類型
+                        if isinstance(credits_value, float) and credits_value.is_integer():
+                            credits_str = str(int(credits_value))
+                        else:
+                            credits_str = str(credits_value)
+                    else:
+                        # 字符串類型
+                        credits_str = str(credits_value).strip()
+                
+                # 處理成績
+                grade_str = ''
+                if grade_value is not None:
+                    grade_str = str(grade_value).strip()
+                
+                # 預設狀態為"已修課"（isNotTaken = false）
+                # 只有當明確需要標記為未修課時才設為 true
+                # 注意：這裡預設所有課程都是已修課，用戶可以在前端點擊按鈕切換為未修課
+                isNotTaken = False
+                
+                courses.append({
+                    'name': course_name,
+                    'credits': credits_str,
+                    'grade': grade_str,
+                    'isNotTaken': isNotTaken
+                })
+                
+            except Exception as row_e:
+                print(f"⚠️ 處理 Excel 第 {row_index} 行錯誤: {row_e}")
+                continue
+        
+        if not courses:
+            return jsonify({"success": False, "message": "Excel 檔案中未找到有效課程資料"}), 400
+        
+        return jsonify({
+            "success": True,
+            "courses": courses,
+            "message": f"成功解析 {len(courses)} 門課程"
+        })
+        
+    except Exception as e:
+        print("❌ 匯入課程 Excel 錯誤:", e)
+        traceback.print_exc()
+        return jsonify({"success": False, "message": f"伺服器錯誤: {str(e)}"}), 500
+    finally:
+        cursor.close()
+        conn.close()

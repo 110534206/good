@@ -7,6 +7,7 @@
     href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css"
     rel="stylesheet"
   >
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
 </head>
 <body class="bg-light">
 
@@ -49,9 +50,16 @@
 
         <!-- 履歷資料夾選擇 -->
         <label class="form-label">選擇履歷資料夾</label>
-        <select id="folderSelect" class="form-select">
-          <!-- 履歷資料夾 -->
+        <select id="folderSelect" class="form-select mb-3" onchange="loadResumeVersions()">
+          <option value="">請選擇資料夾</option>
         </select>
+        
+        <!-- 履歷版本選擇 -->
+        <label class="form-label">選擇履歷版本</label>
+        <select id="resumeSelect" class="form-select">
+          <option value="">請先選擇資料夾</option>
+        </select>
+        <small class="form-text text-muted">如果資料夾內有多個履歷版本，請選擇要投遞的版本</small>
       </div>
 
       <div class="modal-footer">
@@ -68,6 +76,7 @@
 <script>
 let selectedCompanyId = null;
 let folders = [];
+let resumeVersions = [];
 
 /* ===============================
    載入公司資料
@@ -94,10 +103,17 @@ async function loadCompanies() {
         <td>${c.location || '-'}</td>
         <td class="text-center">
           <button
-            class="btn btn-outline-primary btn-sm"
+            class="btn btn-outline-primary btn-sm me-2"
             onclick="openApply(${c.id}, '${c.company_name}')"
           >
             投遞
+          </button>
+          <button
+            class="btn btn-outline-secondary btn-sm"
+            onclick="downloadCompanyFile(${c.id})"
+            title="下載公司資料"
+          >
+            <i class="bi bi-file-earmark-arrow-down-fill me-1"></i>下載資料
           </button>
         </td>
       </tr>
@@ -149,9 +165,13 @@ function openApply(companyId, companyName) {
 
   // 載入履歷資料夾
   const folderSelect = document.getElementById('folderSelect');
-  folderSelect.innerHTML = folders.map(f =>
+  folderSelect.innerHTML = '<option value="">請選擇資料夾</option>' + folders.map(f =>
     `<option value="${f.id}">${f.folder_name}</option>`
   ).join('');
+  
+  // 重置履歷版本選擇
+  const resumeSelect = document.getElementById('resumeSelect');
+  resumeSelect.innerHTML = '<option value="">請先選擇資料夾</option>';
 
   new bootstrap.Modal(
     document.getElementById('applyModal')
@@ -159,14 +179,70 @@ function openApply(companyId, companyName) {
 }
 
 /* ===============================
+   載入履歷版本
+================================ */
+async function loadResumeVersions() {
+  const folderId = document.getElementById('folderSelect').value;
+  const resumeSelect = document.getElementById('resumeSelect');
+  
+  if (!folderId) {
+    resumeSelect.innerHTML = '<option value="">請先選擇資料夾</option>';
+    return;
+  }
+  
+  try {
+    const res = await fetch(`/api/resume_folders/${folderId}/resumes`);
+    const result = await res.json();
+    
+    if (result.success) {
+      resumeVersions = result.resumes || [];
+      
+      if (resumeVersions.length === 0) {
+        resumeSelect.innerHTML = '<option value="">此資料夾尚無履歷版本</option>';
+      } else {
+        resumeSelect.innerHTML = '<option value="">請選擇履歷版本</option>' + 
+          resumeVersions.map(r => {
+            const statusText = r.status === 'approved' ? '✓' : r.status === 'rejected' ? '✗' : '';
+            const date = r.created_at ? r.created_at.split(' ')[0] : '';
+            return `<option value="${r.id}">${r.original_filename || '未命名'} ${statusText} ${date ? '(' + date + ')' : ''}</option>`;
+          }).join('');
+      }
+    } else {
+      resumeSelect.innerHTML = '<option value="">載入失敗</option>';
+    }
+  } catch (err) {
+    console.error('載入履歷版本失敗:', err);
+    resumeSelect.innerHTML = '<option value="">載入失敗</option>';
+  }
+}
+
+/* ===============================
+   下載公司資料
+================================ */
+function downloadCompanyFile(companyId) {
+  window.location.href = `/api/download_company_file/${companyId}`;
+}
+
+/* ===============================
    送出投遞
 ================================ */
 async function submitApply() {
   const folderId = document.getElementById('folderSelect').value;
+  const resumeId = document.getElementById('resumeSelect').value;
   const jobId = document.getElementById('jobSelect').value;
 
   if (!jobId) {
     alert('請選擇職缺');
+    return;
+  }
+  
+  if (!folderId) {
+    alert('請選擇履歷資料夾');
+    return;
+  }
+  
+  if (!resumeId) {
+    alert('請選擇履歷版本');
     return;
   }
 
@@ -176,7 +252,8 @@ async function submitApply() {
     body: JSON.stringify({
       company_id: selectedCompanyId,
       job_id: jobId,
-      folder_id: folderId
+      folder_id: folderId,
+      resume_id: resumeId
     })
   });
 
