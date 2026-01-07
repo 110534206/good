@@ -75,3 +75,4 @@ EMAIL_METHOD="gmail_api"
 ```
 
 然後按照 `GMAIL_API_SETUP.md` 的說明設定 OAuth 2.0。
+
