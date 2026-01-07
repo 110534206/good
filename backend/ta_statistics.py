@@ -1959,9 +1959,9 @@ def manage_students():
 # --------------------------------
 @ta_statistics_bp.route('/api/interview_schedules', methods=['GET'])
 def get_interview_schedules():
-    """獲取所有廠商的面試排程（用於 TA、主任、指導老師查看面試排程）"""
+    """獲取所有廠商的面試排程（用於 TA、主任、指導老師、班導、學生查看面試排程）"""
     user_role = session.get('role')
-    if 'user_id' not in session or user_role not in ['ta', 'admin', 'director', 'teacher']:
+    if 'user_id' not in session or user_role not in ['ta', 'admin', 'director', 'teacher', 'class_teacher', 'student']:
         return jsonify({"success": False, "message": "未授權"}), 403
     
     conn = get_db()
@@ -2120,6 +2120,11 @@ def get_interview_schedules():
                 'created_at': schedule.get('created_at').strftime('%Y-%m-%d %H:%M:%S') if schedule.get('created_at') else None
             })
         
+        # 如果是學生，只顯示與自己相關的面試排程
+        if user_role == 'student':
+            current_student_id = session.get('user_id')
+            parsed_schedules = [s for s in parsed_schedules if s.get('student_id') == current_student_id]
+        
         return jsonify({
             "success": True,
             "schedules": parsed_schedules
@@ -2139,7 +2144,7 @@ def get_interview_schedules():
 def get_deadlines():
     """獲取志願序和履歷的截止時間（用於面試排程頁面顯示）"""
     user_role = session.get('role')
-    if 'user_id' not in session or user_role not in ['ta', 'admin', 'director', 'teacher']:
+    if 'user_id' not in session or user_role not in ['ta', 'admin', 'director', 'teacher', 'class_teacher', 'student']:
         return jsonify({"success": False, "message": "未授權"}), 403
     
     conn = get_db()
