@@ -185,6 +185,26 @@
       font-size: 0.85rem;
       color: #6b7280;
     }
+
+    .status-badge {
+      display: inline-block;
+      padding: 6px 12px;
+      border-radius: 6px;
+      font-size: 0.9rem;
+      font-weight: 500;
+      border: none;
+      cursor: default;
+    }
+
+    .status-badge.pending {
+      background-color: #0d6efd;
+      color: #ffffff;
+    }
+
+    .status-badge.approved {
+      background-color: #198754;
+      color: #ffffff;
+    }
   </style>
 </head>
 
@@ -348,7 +368,15 @@
         timeTd.textContent = row.created_at || '';
 
         const statusTd = document.createElement('td');
-        statusTd.textContent = row.is_public ? '已公開' : '待審核';
+        const statusBadge = document.createElement('span');
+        if (row.is_public) {
+          statusBadge.className = 'status-badge approved';
+          statusBadge.textContent = '已通過';
+        } else {
+          statusBadge.className = 'status-badge pending';
+          statusBadge.textContent = '待審核';
+        }
+        statusTd.appendChild(statusBadge);
 
         const opTd = document.createElement('td');
         const btn = document.createElement('button');

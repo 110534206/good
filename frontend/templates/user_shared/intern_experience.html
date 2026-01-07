@@ -551,8 +551,8 @@ body {
       // 判斷審核狀態（僅在「我的心得」分頁顯示）
       const isPublic = item.is_public === 1 || item.is_public === '1' || item.is_public === true;
       const statusBadge = showDelete ? `
-        <span class="badge ${isPublic ? 'bg-success' : 'bg-warning'} ms-2">
-          ${isPublic ? '已公開' : '待審核'}
+        <span class="badge ${isPublic ? 'bg-success' : 'bg-warning'}">
+          ${isPublic ? '已通過' : '待審核'}
         </span>
       ` : '';
       // 只在明確傳入 showDelete = true 時才顯示刪除按鈕（僅在「我的心得」分頁）
@@ -561,7 +561,10 @@ body {
       card.innerHTML = `
         <div class="card experience-card p-3 position-relative">
           <div class="card-body">
-            <h6>${company} ${job}${statusBadge}</h6>
+            <div class="d-flex justify-content-between align-items-start mb-2">
+              <h6 class="mb-0">${company} ${job}</h6>
+              ${statusBadge}
+            </div>
             <p class="text-muted mb-2">${yearText} 年 ｜ 評分 ${rating} ⭐</p>
             <p class="small text-truncate">${(item.content || '').slice(0, 200)}</p>
             <div class="mt-3 d-flex justify-content-between align-items-center">

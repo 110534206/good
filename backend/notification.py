@@ -53,19 +53,23 @@ def create_notification(user_id, title, message, category="general", link_url=No
         conn = get_db()
         cursor = conn.cursor()
         cursor.execute("""
-            INSERT INTO notifications (user_id, title, message, link_url, is_read, created_at)
-            VALUES (%s, %s, %s, %s, 0, NOW())
-        """, (user_id, title, message, link_url))
+            INSERT INTO notifications (user_id, title, message, category, link_url, is_read, created_at)
+            VALUES (%s, %s, %s, %s, %s, 0, NOW())
+        """, (user_id, title, message, category, link_url))
         conn.commit()
+        print(f"[通知創建成功] user_id={user_id}, title={title}, category={category}")
         return True
 
-    except Exception:
+    except Exception as e:
+        print(f"[通知創建失敗] user_id={user_id}, title={title}, 錯誤: {str(e)}")
         traceback.print_exc()
         return False
 
     finally:
-        cursor.close()
-        conn.close()
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
 
 # =========================================================
 # 分類輔助函數

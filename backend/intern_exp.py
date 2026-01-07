@@ -3,6 +3,11 @@ from config import get_db
 import traceback
 from datetime import datetime, timezone, timedelta
 from email_service import send_email, send_interview_email, send_admission_email
+from notification import create_notification
+
+def get_taiwan_time():
+    """取得目前的台灣時間 (UTC+8)"""
+    return datetime.utcnow() + timedelta(hours=8)
 
 intern_exp_bp = Blueprint('intern_exp_bp', __name__, url_prefix='/intern_experience')
 
@@ -145,6 +150,11 @@ def get_experience_list():
             # 若 include_unapproved=true 且為老師/主任/班導，則顯示所有心得（供審核使用）
             if not (include_unapproved.lower() == 'true' and current_role in ['teacher', 'director', 'class_teacher']):
                 query += " AND ie.is_public = 1"
+            else:
+                # 審核模式：只顯示該指導老師負責的廠商的心得
+                if include_unapproved.lower() == 'true' and current_role in ['teacher', 'director', 'class_teacher'] and current_user_id:
+                    query += " AND c.advisor_user_id = %s"
+                    params.append(current_user_id)
 
         if keyword:
             query += " AND c.company_name LIKE %s"
@@ -345,7 +355,6 @@ def delete_experience(exp_id):
         owner_id = row[0] if not isinstance(row, dict) else row.get('user_id')
         if owner_id != user_id:
             return jsonify({"success": False, "message": "不能刪除他人的心得"}), 403
-
         cursor.execute("DELETE FROM internship_experiences WHERE id = %s", (exp_id,))
         db.commit()
         return jsonify({"success": True, "message": "已刪除"})
@@ -367,12 +376,108 @@ def approve_experience(exp_id):
             return jsonify({"success": False, "message": "未授權"}), 403
 
         db = get_db()
-        cursor = db.cursor()
+        cursor = db.cursor(dictionary=True)
+        
+        # 先獲取心得和學生資訊（在更新之前）
+        cursor.execute("""
+            SELECT ie.user_id, ie.company_id, c.company_name, u.name AS student_name, u.email AS student_email
+            FROM internship_experiences ie
+            LEFT JOIN users u ON ie.user_id = u.id
+            LEFT JOIN internship_companies c ON ie.company_id = c.id
+            WHERE ie.id = %s
+        """, (exp_id,))
+        exp_info = cursor.fetchone()
+        
+        if not exp_info:
+            return jsonify({"success": False, "message": "心得不存在"}), 404
+        
+        student_id = exp_info.get('user_id')
+        student_name = exp_info.get('student_name') or '同學'
+        student_email = exp_info.get('student_email')
+        company_name = exp_info.get('company_name') or '實習公司'
+        
+        # 更新心得狀態
         cursor.execute("UPDATE internship_experiences SET is_public = 1 WHERE id = %s", (exp_id,))
         db.commit()
 
         if cursor.rowcount == 0:
             return jsonify({"success": False, "message": "心得不存在"}), 404
+
+        # 獲取審核老師資訊
+        reviewer_id = session.get('user_id')
+        cursor.execute("SELECT name FROM users WHERE id = %s", (reviewer_id,))
+        reviewer_info = cursor.fetchone()
+        reviewer_name = reviewer_info.get('name', '指導老師') if reviewer_info else '指導老師'
+        
+        # 創建公告並發送通知給學生
+        if student_id:
+            # 創建公告
+            ann_title = "實習心得審核通過通知"
+            ann_content = f"""
+親愛的 {student_name} 同學：
+
+您好！
+
+您的實習心得（{company_name}）已通過審核，現在已公開顯示在您的「所有心得」頁面中。
+
+審核老師：{reviewer_name}
+
+請登入系統查看您的實習心得。
+
+如有任何疑問，請聯絡您的班導師或系統管理員。
+
+--
+智慧實習平台
+"""
+            now = get_taiwan_time()
+            # 設定公告時間（立即開始，30天後結束）
+            start_time = now.strftime('%Y-%m-%d %H:%M:%S')
+            end_time = (now + timedelta(days=30)).strftime('%Y-%m-%d %H:%M:%S')
+            
+            cursor.execute("""
+                INSERT INTO announcement (title, content, start_time, end_time, is_published, created_at)
+                VALUES (%s, %s, %s, %s, %s, %s)
+            """, (ann_title, ann_content, start_time, end_time, 1, now))
+            ann_id = cursor.lastrowid
+            db.commit()
+            
+            # 為該學生創建通知，指向該公告（使用同一個資料庫連接）
+            link_url = f"/view_announcement/{ann_id}"
+            notification_title = "實習心得審核通過通知"
+            notification_message = ann_content[:200] if len(ann_content) > 200 else ann_content
+            try:
+                cursor.execute("""
+                    INSERT INTO notifications (user_id, title, message, category, link_url, is_read, created_at)
+                    VALUES (%s, %s, %s, %s, %s, 0, NOW())
+                """, (student_id, notification_title, notification_message, "company", link_url))
+                db.commit()
+                print(f"[成功] 為學生 {student_id} 創建通知成功，公告ID: {ann_id}, 通知標題: {notification_title}")
+            except Exception as e:
+                print(f"[錯誤] 創建通知時發生異常: {traceback.format_exc()}")
+                db.rollback()
+        
+        # 發送Email給學生
+        if student_email:
+            email_subject = "【智慧實習平台】實習心得審核通過通知"
+            email_content = f"""
+親愛的 {student_name} 同學：
+
+您好！
+
+您的實習心得（{company_name}）已通過審核，現在已公開顯示在您的「所有心得」頁面中。
+
+審核老師：{reviewer_name}
+
+請登入系統查看您的實習心得。
+
+如有任何疑問，請聯絡您的班導師或系統管理員。
+
+此為系統自動發送，請勿直接回覆此郵件。
+
+--
+智慧實習平台
+"""
+            send_email(student_email, email_subject, email_content, related_user_id=student_id)
 
         return jsonify({"success": True, "message": "已審核通過，學生心得頁面將顯示此筆心得"})
     except Exception as e:
@@ -393,15 +498,65 @@ def reject_experience(exp_id):
             return jsonify({"success": False, "message": "未授權"}), 403
 
         db = get_db()
-        cursor = db.cursor()
-        # 檢查心得是否存在
-        cursor.execute("SELECT id FROM internship_experiences WHERE id = %s", (exp_id,))
-        if not cursor.fetchone():
+        cursor = db.cursor(dictionary=True)
+        
+        # 先獲取心得和學生資訊（在刪除之前）
+        cursor.execute("""
+            SELECT ie.user_id, ie.company_id, c.company_name, u.name AS student_name, u.email AS student_email
+            FROM internship_experiences ie
+            LEFT JOIN users u ON ie.user_id = u.id
+            LEFT JOIN internship_companies c ON ie.company_id = c.id
+            WHERE ie.id = %s
+        """, (exp_id,))
+        exp_info = cursor.fetchone()
+        
+        if not exp_info:
             return jsonify({"success": False, "message": "心得不存在"}), 404
-
+        
+        student_id = exp_info.get('user_id')
+        student_name = exp_info.get('student_name') or '同學'
+        student_email = exp_info.get('student_email')
+        company_name = exp_info.get('company_name') or '實習公司'
+        
+        # 獲取審核老師資訊
+        reviewer_id = session.get('user_id')
+        cursor.execute("SELECT name FROM users WHERE id = %s", (reviewer_id,))
+        reviewer_info = cursor.fetchone()
+        reviewer_name = reviewer_info.get('name', '指導老師') if reviewer_info else '指導老師'
+        
         # 刪除心得
         cursor.execute("DELETE FROM internship_experiences WHERE id = %s", (exp_id,))
         db.commit()
+
+        # 發送通知給學生
+        if student_id:
+            notification_title = "實習心得退件通知"
+            notification_message = f"您的實習心得（{company_name}）已被退件，該心得已從系統中移除。請重新提交心得。"
+            link_url = "/intern_experience"
+            create_notification(student_id, notification_title, notification_message, category="company", link_url=link_url)
+        
+        # 發送Email給學生
+        if student_email:
+            email_subject = "【智慧實習平台】實習心得退件通知"
+            email_content = f"""
+親愛的 {student_name} 同學：
+
+您好！
+
+很抱歉，您的實習心得（{company_name}）已被退件，該心得已從系統中移除。
+
+審核老師：{reviewer_name}
+
+請重新登入系統，檢查您的實習心得內容，並重新提交。
+
+如有任何疑問，請聯絡您的班導師或系統管理員。
+
+此為系統自動發送，請勿直接回覆此郵件。
+
+--
+智慧實習平台
+"""
+            send_email(student_email, email_subject, email_content, related_user_id=student_id)
 
         return jsonify({"success": True, "message": "已退件，該心得已從系統中移除"})
     except Exception as e:
