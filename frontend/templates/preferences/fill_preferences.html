@@ -254,6 +254,13 @@
             cursor: not-allowed;
         }
     </style>
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
+
+<style>
+.preference-card { cursor: grab; }
+.preference-card:active { cursor: grabbing; }
+.sortable-ghost { opacity: 0.4; }
+</style>
 </head>
 
 <body>
@@ -991,6 +998,32 @@
         <a href="/intern_achievement">學生媒合結果</a>
         <a href="/intern_experience">實習心得</a>
     </nav>
+
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+    const form = document.querySelector("#preferencesForm");
+    if (!form) return;
+
+    Sortable.create(form, {
+        animation: 200,
+        draggable: ".preference-card",
+        handle: ".card-header-rank",
+        ghostClass: "sortable-ghost",
+        onEnd: updateRankNumbers
+    });
+
+    function updateRankNumbers() {
+        document.querySelectorAll(".preference-card").forEach((card, index) => {
+            card.dataset.rank = index + 1;
+            const rank = card.querySelector(".rank-number");
+            if (rank) rank.textContent = index + 1;
+            const title = card.querySelector("h5");
+            if (title) title.textContent = `第 ${index + 1} 志願`;
+        });
+    }
+});
+</script>
+
 </body>
 
 </html>
