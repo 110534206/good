@@ -1959,8 +1959,9 @@ def manage_students():
 # --------------------------------
 @ta_statistics_bp.route('/api/interview_schedules', methods=['GET'])
 def get_interview_schedules():
-    """獲取所有廠商的面試排程（用於 TA 查看所有面試排程）"""
-    if 'user_id' not in session or session.get('role') not in ['ta', 'admin']:
+    """獲取所有廠商的面試排程（用於 TA、主任、指導老師查看面試排程）"""
+    user_role = session.get('role')
+    if 'user_id' not in session or user_role not in ['ta', 'admin', 'director', 'teacher']:
         return jsonify({"success": False, "message": "未授權"}), 403
     
     conn = get_db()
@@ -1984,28 +1985,75 @@ def get_interview_schedules():
         
         # 查詢所有廠商的面試排程（從 vendor_preference_history 表中）
         # 只查詢 interview_status = 'in interview' 的記錄（廠商新增面試排程時會記錄到此狀態）
-        cursor.execute("""
-            SELECT DISTINCT
-                vph.id,
-                vph.reviewer_id,
-                vph.student_id,
-                vph.preference_id,
-                vph.comment,
-                vph.created_at,
-                u.name AS vendor_name,
-                ic.company_name,
-                ic.id AS company_id,
-                sp.student_id AS pref_student_id,
-                su.name AS student_name
-            FROM vendor_preference_history vph
-            JOIN users u ON vph.reviewer_id = u.id
-            LEFT JOIN student_preferences sp ON vph.preference_id = sp.id
-            LEFT JOIN internship_companies ic ON sp.company_id = ic.id
-            LEFT JOIN users su ON COALESCE(vph.student_id, sp.student_id) = su.id
-            WHERE vph.interview_status = 'in interview'
-            AND vph.comment LIKE '%面試日期：%'
-            ORDER BY vph.created_at DESC
-        """)
+        user_id = session.get('user_id')
+        
+        # 如果是指導老師，只顯示該老師管理的公司的面試排程
+        if user_role == 'teacher':
+            # 先查詢該老師管理的公司
+            cursor.execute("""
+                SELECT id FROM internship_companies 
+                WHERE advisor_user_id = %s AND status = 'approved'
+            """, (user_id,))
+            teacher_companies = cursor.fetchall()
+            company_ids = [tc['id'] for tc in teacher_companies] if teacher_companies else []
+            
+            if not company_ids:
+                # 如果沒有管理的公司，返回空結果
+                return jsonify({
+                    "success": True,
+                    "schedules": []
+                })
+            
+            # 構建查詢，只包含該老師管理的公司
+            placeholders = ','.join(['%s'] * len(company_ids))
+            query = f"""
+                SELECT DISTINCT
+                    vph.id,
+                    vph.reviewer_id,
+                    vph.student_id,
+                    vph.preference_id,
+                    vph.comment,
+                    vph.created_at,
+                    u.name AS vendor_name,
+                    ic.company_name,
+                    ic.id AS company_id,
+                    sp.student_id AS pref_student_id,
+                    su.name AS student_name
+                FROM vendor_preference_history vph
+                JOIN users u ON vph.reviewer_id = u.id
+                LEFT JOIN student_preferences sp ON vph.preference_id = sp.id
+                LEFT JOIN internship_companies ic ON sp.company_id = ic.id
+                LEFT JOIN users su ON COALESCE(vph.student_id, sp.student_id) = su.id
+                WHERE vph.interview_status = 'in interview'
+                AND vph.comment LIKE '%面試日期：%'
+                AND ic.id IN ({placeholders})
+                ORDER BY vph.created_at DESC
+            """
+            cursor.execute(query, tuple(company_ids))
+        else:
+            # TA、主任、管理員可以看到所有面試排程
+            cursor.execute("""
+                SELECT DISTINCT
+                    vph.id,
+                    vph.reviewer_id,
+                    vph.student_id,
+                    vph.preference_id,
+                    vph.comment,
+                    vph.created_at,
+                    u.name AS vendor_name,
+                    ic.company_name,
+                    ic.id AS company_id,
+                    sp.student_id AS pref_student_id,
+                    su.name AS student_name
+                FROM vendor_preference_history vph
+                JOIN users u ON vph.reviewer_id = u.id
+                LEFT JOIN student_preferences sp ON vph.preference_id = sp.id
+                LEFT JOIN internship_companies ic ON sp.company_id = ic.id
+                LEFT JOIN users su ON COALESCE(vph.student_id, sp.student_id) = su.id
+                WHERE vph.interview_status = 'in interview'
+                AND vph.comment LIKE '%面試日期：%'
+                ORDER BY vph.created_at DESC
+            """)
         
         all_schedules = cursor.fetchall()
         
@@ -2090,7 +2138,8 @@ def get_interview_schedules():
 @ta_statistics_bp.route('/api/deadlines', methods=['GET'])
 def get_deadlines():
     """獲取志願序和履歷的截止時間（用於面試排程頁面顯示）"""
-    if 'user_id' not in session or session.get('role') not in ['ta', 'admin']:
+    user_role = session.get('role')
+    if 'user_id' not in session or user_role not in ['ta', 'admin', 'director', 'teacher']:
         return jsonify({"success": False, "message": "未授權"}), 403
     
     conn = get_db()
