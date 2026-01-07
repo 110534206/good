@@ -311,7 +311,7 @@
       border-left-color: #ffbf00 !important;
     }
 
-    /* 科助「狀態」類別中的公告顏色區分 */
+    /* 科助「時程」類別中的公告顏色區分 */
     .notif-card.announcement-not-started {
       border-left-color: #0d6efd !important;  /* 藍色：未開始 */
       background: linear-gradient(90deg, rgba(13, 110, 253, 0.05), #ffffff);
@@ -483,9 +483,7 @@
 
         <!-- 科助專用按鈕區域（在搜尋框上方靠右對齊） -->
         <div id="ta-actions" style="display: none; justify-content: flex-end; gap: 8px; margin-bottom: 8px; flex-wrap: wrap;">
-          <button id="btn-new" class="btn btn-primary">➕ 新增公告</button>
-          <button id="btn-open-pref-deadline" class="btn btn-success">📝 填寫志願序截止時間</button>
-          <button id="btn-open-resume-deadline" class="btn btn-success">📝 上傳履歷截止時間</button>
+          <button id="btn-publish" class="btn btn-primary">➕ 發布公告與截止時間</button>
         </div>
 
         <div class="search-filter-row">
@@ -533,13 +531,21 @@
           <div class="chip outline" data-category="resume">履歷</div>
           <div class="chip outline" data-category="ranking">志願序</div>
           <div class="chip outline" data-category="company">實習公司</div>
-          <div class="chip outline" data-category="approval" id="approval-filter" style="display: none;">狀態</div>
+          <div class="chip outline" data-category="approval" id="approval-filter" style="display: none;">時程</div>
           <div class="unread-badge" id="unreadBadgeTA" style="position: static; margin-left: auto; display: none;">
             未讀 <span id="unreadCounterTA">0</span>
           </div>
         </div>
 
         <div id="listContainer"></div>
+
+        <!-- 科助專用：公告列表區塊（顯示所有公告） -->
+        <div id="ta-announcements-section" class="mt-3" style="display: none;">
+          <div class="group-header">
+            <div class="group-title">公告列表（科助檢視）</div>
+          </div>
+          <div id="ta-announcements-list" class="mt-2"></div>
+        </div>
       </div>
 
     </div>
@@ -584,6 +590,15 @@
         <div class="modal-body">
           <div class="mb-3"><label class="form-label">標題</label><input id="pref-title" class="form-control"></div>
           <div class="mb-3"><label class="form-label">內容</label><textarea id="pref-content" class="form-control" rows="4"></textarea></div>
+          <div class="mb-3"><label class="form-label">發送對象</label>
+            <select id="pref-target-roles" class="form-select">
+              <option value="">請選擇發送對象</option>
+              <option value="student">學生</option>
+              <option value="teacher">指導老師</option>
+              <option value="director">主任</option>
+              <option value="class_teacher">班導</option>
+            </select>
+          </div>
           <div class="mb-3"><label class="form-label">開始時間</label><input id="pref-start" type="datetime-local" class="form-control"></div>
           <div class="mb-3"><label class="form-label">結束時間</label><input id="pref-end" type="datetime-local" class="form-control"></div>
         </div>
@@ -606,12 +621,49 @@
         <div class="modal-body">
           <div class="mb-3"><label class="form-label">標題</label><input id="resume-title" class="form-control"></div>
           <div class="mb-3"><label class="form-label">內容</label><textarea id="resume-content" class="form-control" rows="4"></textarea></div>
+          <div class="mb-3"><label class="form-label">發送對象</label>
+            <select id="resume-target-roles" class="form-select">
+              <option value="">請選擇發送對象</option>
+              <option value="student">學生</option>
+              <option value="teacher">指導老師</option>
+              <option value="director">主任</option>
+              <option value="class_teacher">班導</option>
+            </select>
+          </div>
           <div class="mb-3"><label class="form-label">開始時間</label><input id="resume-start" type="datetime-local" class="form-control"></div>
           <div class="mb-3"><label class="form-label">結束時間</label><input id="resume-end" type="datetime-local" class="form-control"></div>
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
           <button id="btn-save-resume-deadline" type="button" class="btn btn-primary">儲存</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 科助專用 Modal：選擇發布類型 -->
+  <div class="modal fade" id="publishTypeModal" tabindex="-1">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" style="font-weight: bold;">選擇發布類型</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div class="d-grid gap-2">
+            <button type="button" class="btn btn-outline-primary btn-lg" id="btn-select-announcement">
+              📢 新增公告
+            </button>
+            <button type="button" class="btn btn-outline-success btn-lg" id="btn-select-pref-deadline">
+              📝 填寫志願序截止時間
+            </button>
+            <button type="button" class="btn btn-outline-success btn-lg" id="btn-select-resume-deadline">
+              📝 上傳履歷截止時間
+            </button>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
         </div>
       </div>
     </div>
@@ -628,6 +680,15 @@
         <div class="modal-body">
           <div class="mb-3"><label class="form-label">標題</label><input id="ann-title" class="form-control"></div>
           <div class="mb-3"><label class="form-label">內容</label><textarea id="ann-content" class="form-control" rows="4"></textarea></div>
+          <div class="mb-3"><label class="form-label">發送對象</label>
+            <select id="ann-target-roles" class="form-select">
+              <option value="">請選擇發送對象</option>
+              <option value="student">學生</option>
+              <option value="teacher">指導老師</option>
+              <option value="director">主任</option>
+              <option value="class_teacher">班導</option>
+            </select>
+          </div>
           <div class="mb-3"><label class="form-label">開始時間</label><input id="ann-start" type="datetime-local" class="form-control"></div>
           <div class="mb-3"><label class="form-label">結束時間</label><input id="ann-end" type="datetime-local" class="form-control"></div>
         </div>
@@ -653,6 +714,8 @@
 
     // 元件
     const listContainer = document.getElementById('listContainer');
+    const taAnnouncementsSection = document.getElementById('ta-announcements-section');
+    const taAnnouncementsList = document.getElementById('ta-announcements-list');
     const searchInput = document.getElementById('searchInput');
     const unreadCounterTopRight = document.getElementById('unreadCounterTopRight');
     const unreadCounterSearchRow = document.getElementById('unreadCounterSearchRow');
@@ -683,7 +746,7 @@
         'resume': '履歷',
         'ranking': '志願序',
         'company': '實習公司',
-        'approval': '狀態',
+        'approval': '時程',
         'general': '一般',
         'preferences': '志願序'  // 兼容舊的 preferences 類別
       };
@@ -751,6 +814,65 @@
       }
     }
 
+    // 科助專用：載入公告列表（不分個人通知，顯示所有公告）
+    async function loadTaAnnouncements() {
+      if (!taAnnouncementsSection || !taAnnouncementsList) return;
+      try {
+        const res = await fetch('/announcement/api/list');
+        const data = await res.json();
+        if (!data.success || !Array.isArray(data.data)) {
+          taAnnouncementsSection.style.display = 'none';
+          return;
+        }
+
+        // 只顯示已發布的公告
+        const rows = data.data.filter(a => a.is_published === 1 || a.is_published === '1');
+        if (!rows.length) {
+          taAnnouncementsSection.style.display = 'none';
+          return;
+        }
+
+        taAnnouncementsList.innerHTML = '';
+        rows.forEach(a => {
+          const item = document.createElement('div');
+          item.className = 'notif-card mb-2';
+
+          const body = document.createElement('div');
+          body.className = 'notif-body';
+
+          const titleDiv = document.createElement('div');
+          titleDiv.className = 'notif-title';
+          titleDiv.textContent = a.title || '';
+
+          const metaDiv = document.createElement('div');
+          metaDiv.className = 'notif-meta small muted';
+          const start = a.start_time ? String(a.start_time) : '';
+          const end = a.end_time ? String(a.end_time) : '';
+          let timeText = '';
+          if (start || end) {
+            timeText = `時間：${start}${end ? ' ~ ' + end : ''}`;
+          }
+          metaDiv.textContent = timeText;
+
+          const contentDiv = document.createElement('div');
+          contentDiv.className = 'small';
+          contentDiv.textContent = (a.content || '').slice(0, 120);
+
+          body.appendChild(titleDiv);
+          if (timeText) body.appendChild(metaDiv);
+          if (contentDiv.textContent) body.appendChild(contentDiv);
+
+          item.appendChild(body);
+          taAnnouncementsList.appendChild(item);
+        });
+
+        taAnnouncementsSection.style.display = 'block';
+      } catch (err) {
+        console.error('載入公告列表失敗:', err);
+        taAnnouncementsSection.style.display = 'none';
+      }
+    }
+
     // render list with grouping
     function render() {
       const keyword = (searchInput.value || '').trim().toLowerCase();
@@ -811,13 +933,22 @@
               if (!isStarted || isEnded) return false;
             }
           } else if (currentCategoryFilter === 'approval') {
-            // 狀態類別（僅科助可見）
+            // 時程類別（僅科助可見）
             if (!isAnnouncement) return false;
             if (isTA) {
-              // 科助：顯示未開始的公告 + 已結束的公告
-              if (isStarted && !isEnded) return false;  // 已開始但未結束的公告不顯示在「狀態」中
+              // 科助：根據狀態篩選顯示對應的公告
+              if (currentStatusFilter === 'not-started') {
+                // 選擇「未開始」：只顯示未開始的公告
+                if (isStarted) return false;
+              } else if (currentStatusFilter === 'ended') {
+                // 選擇「已結束」：只顯示已結束的公告
+                if (!isEnded) return false;
+              } else {
+                // 預設：顯示未開始的公告 + 已結束的公告（排除進行中的）
+                if (isStarted && !isEnded) return false;
+              }
             } else {
-              // 其他角色不應該看到「狀態」類別，但為了安全起見還是過濾
+              // 其他角色不應該看到「時程」類別，但為了安全起見還是過濾
               return false;
             }
           } else {
@@ -924,7 +1055,7 @@
         currentGroup.forEach(n => {
           const card = document.createElement('div');
           
-          // 判斷公告狀態（僅對科助在「狀態」類別中）
+          // 判斷公告狀態（僅對科助在「時程」類別中）
           let announcementStatus = '';
           const isTACheck = document.getElementById('ta-actions')?.style.display === 'flex';
           const isApprovalCategoryCheck = currentCategoryFilter === 'approval';
@@ -1011,7 +1142,7 @@
           btnPin.title = '置頂';
           btnPin.onclick = (e) => { e.stopPropagation(); togglePin(n.id); };
 
-          // 如果是「狀態」類別中的公告，且是科助，添加編輯按鈕
+          // 如果是「時程」類別中的公告，且是科助，添加編輯按鈕
           const isApprovalCategory = currentCategoryFilter === 'approval';
           const isAnnouncement = n.category === 'announcement' || 
             (n.title.includes('公告') && !n.title.includes('面試通知') && !n.title.includes('錄取通知'));
@@ -1193,6 +1324,25 @@
                   currentStatusLabel.innerText = e.currentTarget.innerText.trim();
                 }
 
+                // 根據選擇的狀態自動切換到對應的類別頁面
+                if (status === 'ongoing') {
+                  // 選擇「進行中」→ 跳轉到「全部通知」類別
+                  currentCategoryFilter = 'all';
+                  document.querySelectorAll('#categoryFilter .chip').forEach(b => b.classList.remove('active'));
+                  const allChip = document.querySelector('#categoryFilter .chip[data-category="all"]');
+                  if (allChip) {
+                    allChip.classList.add('active');
+                  }
+                } else if (status === 'not-started' || status === 'ended') {
+                  // 選擇「未開始」或「已結束」→ 跳轉到「時程」類別
+                  currentCategoryFilter = 'approval';
+                  document.querySelectorAll('#categoryFilter .chip').forEach(b => b.classList.remove('active'));
+                  const approvalChip = document.querySelector('#categoryFilter .chip[data-category="approval"]');
+                  if (approvalChip) {
+                    approvalChip.classList.add('active');
+                  }
+                }
+
                 // 立即觸發重新渲染
                 render();
               }
@@ -1305,6 +1455,19 @@
           document.getElementById('ann-end').value = '';
         }
         
+        // 載入發送對象（如果後端有返回）
+        const annTargetRoles = document.getElementById('ann-target-roles');
+        if (annTargetRoles) {
+          annTargetRoles.value = '';
+          if (ann.target_roles && Array.isArray(ann.target_roles) && ann.target_roles.length > 0) {
+            const firstRole = ann.target_roles[0];
+            const option = Array.from(annTargetRoles.options).find(opt => opt.value === firstRole);
+            if (option) {
+              annTargetRoles.value = firstRole;
+            }
+          }
+        }
+        
         // 顯示 Modal
         annModal.show();
       } catch (error) {
@@ -1315,34 +1478,58 @@
 
     function initTAActions() {
       // 初始化 Modal
+      const publishTypeModal = new bootstrap.Modal(document.getElementById('publishTypeModal'));
       prefDeadlineModal = new bootstrap.Modal(document.getElementById('prefDeadlineModal'));
       resumeDeadlineModal = new bootstrap.Modal(document.getElementById('resumeDeadlineModal'));
       annModal = new bootstrap.Modal(document.getElementById('annModal'));
 
-      // 新增公告按鈕
-      document.getElementById('btn-new').onclick = () => {
+      // 發布公告與截止時間按鈕
+      document.getElementById('btn-publish').onclick = () => {
+        publishTypeModal.show();
+      };
+
+      // 選擇新增公告
+      document.getElementById('btn-select-announcement').onclick = () => {
+        publishTypeModal.hide();
         editId = null;
         document.getElementById('annModalTitle').innerText = '新增公告';
         document.querySelectorAll('#annModal input:not([type=checkbox]), textarea').forEach(i => i.value = '');
-        annModal.show();
+        // 重置發送對象下拉選單
+        const annTargetRoles = document.getElementById('ann-target-roles');
+        Array.from(annTargetRoles.options).forEach(opt => opt.selected = false);
+        setTimeout(() => {
+          annModal.show();
+        }, 300);
       };
 
-      // 填寫志願序截止時間按鈕
-      document.getElementById('btn-open-pref-deadline').onclick = () => {
+      // 選擇填寫志願序截止時間
+      document.getElementById('btn-select-pref-deadline').onclick = () => {
+        publishTypeModal.hide();
         document.getElementById('pref-title').value = '[作業]填寫志願序截止時間';
         document.getElementById('pref-content').value = '請注意!填寫志願序的截止時間為:請選擇結束時間,請務必在截止時間前完成志願序填寫。';
         document.getElementById('pref-start').value = '';
         document.getElementById('pref-end').value = '';
-        prefDeadlineModal.show();
+        // 重置發送對象下拉選單
+        const prefTargetRoles = document.getElementById('pref-target-roles');
+        if (prefTargetRoles) prefTargetRoles.value = '';
+        setTimeout(() => {
+          prefDeadlineModal.show();
+        }, 300);
       };
 
-      // 上傳履歷截止時間按鈕
-      document.getElementById('btn-open-resume-deadline').onclick = () => {
+      // 選擇上傳履歷截止時間
+      document.getElementById('btn-select-resume-deadline').onclick = () => {
+        publishTypeModal.hide();
         document.getElementById('resume-title').value = '[作業]上傳履歷截止時間';
         document.getElementById('resume-content').value = '請注意!上傳履歷的截止時間為:請選擇結束時間,請務必在截止時間前完成履歷上傳。';
         document.getElementById('resume-start').value = '';
         document.getElementById('resume-end').value = '';
-        resumeDeadlineModal.show();
+        // 重置發送對象下拉選單
+        const resumeTargetRoles = document.getElementById('resume-target-roles');
+        if (resumeTargetRoles) resumeTargetRoles.value = '';
+        setTimeout(() => {
+          resumeDeadlineModal.show();
+        }, 300);
       };
 
       // 當結束時間改變時，自動更新內容中的截止時間
@@ -1370,9 +1557,16 @@
         const content = document.getElementById('pref-content').value;
         const startTime = document.getElementById('pref-start').value;
         const endTime = document.getElementById('pref-end').value;
+        const prefTargetSelect = document.getElementById('pref-target-roles');
+        const targetRole = prefTargetSelect ? prefTargetSelect.value : '';
         
         if (!title || !startTime || !endTime) {
           alert('請完整填寫標題、開始時間與結束時間');
+          return;
+        }
+        
+        if (!targetRole) {
+          alert('請選擇發送對象');
           return;
         }
 
@@ -1385,7 +1579,8 @@
               title: title,
               content: content,
               start_time: startTime.replace('T', ' '),
-              end_time: endTime.replace('T', ' ')
+              end_time: endTime.replace('T', ' '),
+              target_roles: [targetRole]
             })
           });
 
@@ -1403,6 +1598,7 @@
             currentFilterLabel.innerText = '全部';
             // 重新載入通知列表
             await loadNotifications();
+            await loadTaAnnouncements();
             alert('儲存成功！新通知已出現在列表中。');
           } else {
             alert('儲存失敗：' + (result.message || '未知錯誤'));
@@ -1419,9 +1615,16 @@
         const content = document.getElementById('resume-content').value;
         const startTime = document.getElementById('resume-start').value;
         const endTime = document.getElementById('resume-end').value;
+        const resumeTargetSelect = document.getElementById('resume-target-roles');
+        const targetRole = resumeTargetSelect ? resumeTargetSelect.value : '';
         
         if (!title || !startTime || !endTime) {
           alert('請完整填寫標題、開始時間與結束時間');
+          return;
+        }
+        
+        if (!targetRole) {
+          alert('請選擇發送對象');
           return;
         }
 
@@ -1434,7 +1637,8 @@
               title: title,
               content: content,
               start_time: startTime.replace('T', ' '),
-              end_time: endTime.replace('T', ' ')
+              end_time: endTime.replace('T', ' '),
+              target_roles: [targetRole]
             })
           });
 
@@ -1452,6 +1656,7 @@
             currentFilterLabel.innerText = '全部';
             // 重新載入通知列表
             await loadNotifications();
+            await loadTaAnnouncements();
             alert('儲存成功！新通知已出現在列表中。');
           } else {
             alert('儲存失敗：' + (result.message || '未知錯誤'));
@@ -1464,16 +1669,25 @@
 
       // 儲存新增/編輯公告
       document.getElementById('btn-save-ann').onclick = async () => {
+        const annTargetSelect = document.getElementById('ann-target-roles');
+        const targetRole = annTargetSelect ? annTargetSelect.value : '';
+        
         const payload = {
           title: document.getElementById('ann-title').value,
           content: document.getElementById('ann-content').value,
           start_time: document.getElementById('ann-start').value.replace('T', ' '),
           end_time: document.getElementById('ann-end').value.replace('T', ' '),
-          is_published: 1  // 新增/編輯公告時預設為已發布，立即同步到通知列表
+          is_published: 1,  // 新增/編輯公告時預設為已發布，立即同步到通知列表
+          target_roles: targetRole ? [targetRole] : []
         };
         
         if (!payload.title || !payload.start_time || !payload.end_time) {
           alert('請完整填寫標題、開始時間與結束時間');
+          return;
+        }
+        
+        if (!targetRole) {
+          alert('請選擇發送對象');
           return;
         }
 
@@ -1488,11 +1702,11 @@
           const result = await res.json();
           if (result.success) {
             annModal.hide();
-            // 如果是在「狀態」類別中編輯，保存後保持在「狀態」類別
+            // 如果是在「時程」類別中編輯，保存後保持在「時程」類別
             const wasInApprovalCategory = currentCategoryFilter === 'approval';
             
             if (!wasInApprovalCategory) {
-              // 如果不是在「狀態」類別，重置篩選條件
+              // 如果不是在「時程」類別，重置篩選條件
               currentCategoryFilter = 'all';
               currentReadFilter = 'all';
               document.querySelectorAll('#categoryFilter .chip').forEach(b => b.classList.remove('active'));
@@ -1507,6 +1721,7 @@
             
             // 重新載入通知列表
             await loadNotifications();
+            await loadTaAnnouncements();
             alert('儲存成功！' + (isEditing ? '公告已更新。' : '新通知已出現在列表中。'));
           } else {
             alert('儲存失敗：' + (result.message || '未知錯誤'));
@@ -1544,7 +1759,7 @@
               taActions.style.display = 'flex';
               taActions.style.justifyContent = 'flex-end';
             }
-            // 顯示「狀態」類別篩選器
+            // 顯示「時程」類別篩選器
             if (approvalFilter) {
               approvalFilter.style.display = 'block';
             }
@@ -1567,12 +1782,14 @@
               unreadBadgeTA.style.display = 'none';
             }
             initTAActions();
+            // 科助：載入公告列表
+            loadTaAnnouncements();
           } else {
-            // 其他角色隱藏按鈕和「狀態」類別
+            // 其他角色隱藏按鈕和「時程」類別
             if (taActions) {
               taActions.style.display = 'none';
             }
-            // 隱藏「狀態」類別篩選器
+            // 隱藏「時程」類別篩選器
             if (approvalFilter) {
               approvalFilter.style.display = 'none';
             }
@@ -1590,7 +1807,7 @@
             if (unreadBadgeTA) {
               unreadBadgeTA.style.display = 'none';
             }
-            // 如果當前選中「狀態」類別，切換回「全部通知」
+            // 如果當前選中「時程」類別，切換回「全部通知」
             if (currentCategoryFilter === 'approval') {
               currentCategoryFilter = 'all';
               document.querySelectorAll('#categoryFilter .chip').forEach(b => b.classList.remove('active'));
