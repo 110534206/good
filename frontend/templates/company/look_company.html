@@ -211,6 +211,11 @@
             background-color: #5a6268;
             border-color: #5a6268;
         }
+
+        .alert-deadline {
+            margin-top: 1rem;
+            margin-bottom: 1rem;
+        }
     </style>
 </head>
 
@@ -223,6 +228,9 @@
     </div>
     <div class="container">
         <h2 class="fw-bold mb-4">查看實習公司</h2>
+
+        <!-- 截止時間提示 -->
+        <div id="deadlineAlert" class="alert alert-deadline d-none" role="alert"></div>
 
         <table class="table table-hover align-middle">
             <thead>
@@ -287,6 +295,58 @@
         let selectedCompanyId = null;
         let folders = [];
         let resumeVersions = [];
+        let deadlineExpired = false; // 截止時間過期標記
+
+        /* ===============================
+           檢查投遞履歷截止時間
+        ================================ */
+        async function checkDeadlineAndDisableApply() {
+            try {
+                const res = await fetch("/announcement/api/check_deadline?type=resume");
+                const result = await res.json();
+
+                if (result.success && result.has_deadline) {
+                    const deadlineAlert = document.getElementById('deadlineAlert');
+                    
+                    if (result.is_expired) {
+                        // 截止時間已過，禁用投遞功能
+                        deadlineExpired = true;
+                        
+                        // 顯示警告訊息
+                        deadlineAlert.className = 'alert alert-danger alert-deadline';
+                        deadlineAlert.innerHTML = `
+                            <strong>⚠️ 已超過投遞履歷截止時間</strong><br>
+                            投遞履歷的截止時間為：${result.deadline}<br>
+                            目前無法再投遞履歷到公司。
+                        `;
+                        deadlineAlert.classList.remove('d-none');
+                        
+                        // 禁用所有投遞按鈕
+                        document.querySelectorAll('.btn-outline-primary').forEach(btn => {
+                            if (btn.textContent.includes('投遞')) {
+                                btn.disabled = true;
+                                btn.classList.add('disabled');
+                            }
+                        });
+                    } else {
+                        // 尚未過期，顯示提醒
+                        deadlineAlert.className = 'alert alert-info alert-deadline';
+                        deadlineAlert.innerHTML = `
+                            <strong>📅 投遞履歷截止時間提醒</strong><br>
+                            投遞履歷的截止時間為：${result.deadline}<br>
+                            請在截止時間前完成投遞。
+                        `;
+                        deadlineAlert.classList.remove('d-none');
+                    }
+                } else {
+                    // 沒有設定截止時間，隱藏提示
+                    const deadlineAlert = document.getElementById('deadlineAlert');
+                    deadlineAlert.classList.add('d-none');
+                }
+            } catch (error) {
+                console.error("檢查截止時間失敗:", error);
+            }
+        }
 
         /* ===============================
            載入公司資料
@@ -392,7 +452,26 @@
         /* ===============================
            開啟投遞視窗
         ================================ */
-        function openApply(companyId, companyName) {
+        async function openApply(companyId, companyName) {
+            // 檢查截止時間
+            if (deadlineExpired) {
+                alert('⚠️ 已超過投遞履歷截止時間，無法再投遞履歷。');
+                return;
+            }
+
+            // 再次檢查截止時間（防止狀態變化）
+            try {
+                const deadlineCheck = await fetch("/announcement/api/check_deadline?type=resume");
+                const deadlineResult = await deadlineCheck.json();
+                if (deadlineResult.success && deadlineResult.has_deadline && deadlineResult.is_expired) {
+                    alert(`⚠️ 已超過投遞履歷截止時間：${deadlineResult.deadline}，無法再投遞履歷。`);
+                    deadlineExpired = true;
+                    return;
+                }
+            } catch (error) {
+                console.error("檢查截止時間失敗:", error);
+            }
+
             selectedCompanyId = companyId;
 
             document.getElementById('applyCompanyName').innerText =
@@ -609,6 +688,23 @@
            送出投遞
         ================================ */
         async function submitApply() {
+            // 再次檢查截止時間（防止用戶繞過前端檢查）
+            if (deadlineExpired) {
+                alert('⚠️ 已超過投遞履歷截止時間，無法再投遞履歷。');
+                return;
+            }
+
+            try {
+                const deadlineCheck = await fetch("/announcement/api/check_deadline?type=resume");
+                const deadlineResult = await deadlineCheck.json();
+                if (deadlineResult.success && deadlineResult.has_deadline && deadlineResult.is_expired) {
+                    alert(`⚠️ 已超過投遞履歷截止時間：${deadlineResult.deadline}，無法再投遞履歷。`);
+                    return;
+                }
+            } catch (error) {
+                console.error("檢查截止時間失敗:", error);
+            }
+
             const folderId = document.getElementById('folderSelect').value;
             const resumeId = document.getElementById('resumeSelect').value;
             const jobId = document.getElementById('jobSelect').value;
@@ -652,7 +748,7 @@
         }
 
         // 選單開關邏輯
-        document.addEventListener("DOMContentLoaded", () => {
+        document.addEventListener("DOMContentLoaded", async () => {
             const menuBtn = document.getElementById("menu-btn");
             const sideMenu = document.getElementById("side-menu");
             const closeBtn = document.getElementById("close-btn");
@@ -679,6 +775,9 @@
                     }
                 });
             }
+
+            // 首先檢查截止時間
+            await checkDeadlineAndDisableApply();
 
             // 載入公司資料和履歷資料夾
             loadCompanies();
