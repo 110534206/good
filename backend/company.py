@@ -349,6 +349,11 @@ def upload_company():
             safe_name = secure_filename(f"{company_name}_{datetime.now().strftime('%Y%m%d%H%M%S')}.docx")
             save_path = os.path.join(upload_dir, safe_name)
             doc.save(save_path)
+            
+            # 驗證文件是否成功保存
+            if not os.path.exists(save_path):
+                return jsonify({"success": False, "message": "檔案保存失敗，請稍後再試"}), 500
+            
             file_path = os.path.join(UPLOAD_FOLDER, safe_name)
         else:
             # 舊方式：處理上傳的 Word 檔案
@@ -579,19 +584,53 @@ def download_company_file(file_id):
         cursor = conn.cursor(dictionary=True)
         cursor.execute("SELECT company_doc_path FROM internship_companies WHERE id=%s", (file_id,))
         record = cursor.fetchone()
-        if not record or not record["company_doc_path"]:
-            return jsonify({"success": False, "message": "找不到檔案"}), 404
+        
+        if not record:
+            from flask import render_template_string
+            return render_template_string('''
+                <html><body>
+                <h2>錯誤：找不到此公司紀錄</h2>
+                <p>公司 ID: {{ file_id }}</p>
+                <a href="javascript:history.back()">返回</a>
+                </body></html>
+            ''', file_id=file_id), 404
+        
+        if not record.get("company_doc_path"):
+            from flask import render_template_string
+            return render_template_string('''
+                <html><body>
+                <h2>錯誤：此公司沒有上傳檔案</h2>
+                <p>公司 ID: {{ file_id }}</p>
+                <a href="javascript:history.back()">返回</a>
+                </body></html>
+            ''', file_id=file_id), 404
 
         project_root = os.path.dirname(current_app.root_path)
         abs_path = os.path.join(project_root, record["company_doc_path"])
+        
         if not os.path.exists(abs_path):
-            return jsonify({"success": False, "message": "檔案不存在"}), 404
+            from flask import render_template_string
+            return render_template_string('''
+                <html><body>
+                <h2>錯誤：檔案不存在</h2>
+                <p>檔案路徑: {{ file_path }}</p>
+                <p>公司 ID: {{ file_id }}</p>
+                <a href="javascript:history.back()">返回</a>
+                </body></html>
+            ''', file_path=record["company_doc_path"], file_id=file_id), 404
 
         filename = os.path.basename(abs_path)
         return send_file(abs_path, as_attachment=True, download_name=filename)
     except Exception as e:
         traceback.print_exc()
-        return jsonify({"success": False, "message": "下載失敗"}), 500
+        from flask import render_template_string
+        return render_template_string('''
+            <html><body>
+            <h2>錯誤：下載失敗</h2>
+            <p>錯誤訊息: {{ error }}</p>
+            <a href="javascript:history.back()">返回</a>
+            </body></html>
+        ''', error=str(e)), 500
     finally:
         if cursor: cursor.close()
         if conn: conn.close()
