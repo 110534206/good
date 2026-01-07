@@ -221,6 +221,50 @@ def get_jobs_by_company():
         conn.close()
 
 # -------------------------
+# 取得學生自己的志願序
+# -------------------------
+@preferences_bp.route("/api/get_my_preferences", methods=["GET"])
+def get_my_preferences():
+    """學生查看自己的志願序"""
+    if "user_id" not in session or session.get("role") != "student":
+        return jsonify({"success": False, "message": "未授權"}), 403
+
+    student_id = session.get("user_id")
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+
+    try:
+        cursor.execute("""
+            SELECT 
+                sp.preference_order, 
+                sp.company_id, 
+                sp.job_id,
+                sp.status,
+                sp.submitted_at,
+                ic.company_name,
+                ij.title AS job_title
+            FROM student_preferences sp
+            LEFT JOIN internship_companies ic ON sp.company_id = ic.id
+            LEFT JOIN internship_jobs ij ON sp.job_id = ij.id
+            WHERE sp.student_id = %s
+            ORDER BY sp.preference_order
+        """, (student_id,))
+        preferences = cursor.fetchall() or []
+        
+        # 格式化日期
+        for pref in preferences:
+            if isinstance(pref.get('submitted_at'), datetime):
+                pref['submitted_at'] = pref['submitted_at'].strftime("%Y-%m-%d %H:%M:%S")
+        
+        return jsonify({"success": True, "preferences": preferences})
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"success": False, "message": f"查詢失敗: {e}"}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+# -------------------------
 # 儲存學生志願
 # -------------------------
 @preferences_bp.route("/api/save_preferences", methods=["POST"])

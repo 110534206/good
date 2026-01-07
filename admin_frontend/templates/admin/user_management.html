@@ -8,13 +8,6 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons/font/bootstrap-icons.css" rel="stylesheet">
     <style>
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-        }
-
-
         .top-bar {
             position: fixed;
             top: 0;
@@ -35,6 +28,18 @@
             gap: 24px;
             height: 100%;
             padding: 0 16px;
+            position: relative;
+
+        }
+
+        .top-bar-title {
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            transform: translate(-50%, -50%);
+            color: white;
+            font-size: 1.5rem;
+            pointer-events: none;
         }
 
         .top-bar-left {
@@ -64,39 +69,14 @@
             transition: all 0.3s ease;
         }
 
-        header {
-            background: #0454a3;
-            color: white;
-            padding: 1rem 2rem;
-            text-align: center;
-            font-size: 1.5rem;
-        }
-
         body {
             font-family: "Noto Sans TC", sans-serif;
             background: #f7f9fc;
             margin: 0;
             padding: 0;
+            padding-top: 60px;
         }
 
-        /* Hero 區塊 */
-        header.hero {
-            position: relative;
-            width: 100%;
-            aspect-ratio: 3 / 1;
-            background-image: url('/static/images/title.png');
-            background-size: cover;
-            background-repeat: no-repeat;
-            background-position: center;
-            margin-top: 80px;
-            /* 避開固定頂端列 */
-            margin-bottom: 2rem;
-            border-radius: 0;
-            color: white;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
 
         .card {
             border: none;
@@ -239,8 +219,24 @@
         .password-mask {
             -webkit-text-security: disc;
         }
+
+        /* Modal 樣式調整 - 避開頂端列 */
+        .modal {
+            z-index: 1300; /* 高於 top-bar 的 z-index: 1200 */
+        }
+
+        .modal-backdrop {
+            z-index: 1299; /* 低於 modal 但高於其他元素 */
+        }
+
+        /* 為特定 modal 添加上邊距，往下移一點 */
+        #assignTeacherClassModal .modal-dialog,
+        #assignStudentClassModal .modal-dialog {
+            margin-top: 80px; /* 往下移，避開 top-bar (60px) + 一些間距 */
+        }
     </style>
 </head>
+
 <body>
     <div class="top-bar">
         <div class="container">
@@ -249,6 +245,7 @@
                     <span></span><span></span><span></span>
                 </div>
             </div>
+                <div class="top-bar-title">用戶管理</div>
         </div>
     </div>
 
@@ -257,14 +254,10 @@
         <h2>功能選單</h2>
         <a href="/admin_home">首頁</a>
         <a href="/admin/user_management">使用者管理</a>
-        <a href="/admin/system_settings">系統設定</a>
-        <a href="/admin/reports">報表與統計</a>
         <a href="/notifications">通知管理</a>
-        <a href="/admin/absence_default_range">缺勤預設學期範圍設定</a>
         <a href="/logout">登出</a>
     </nav>
 
-      <header>用戶管理</header>
     <div class="container mt-3 pt-3">
         <div class="card p-4">
             <div class="d-flex gap-2 mb-4 flex-wrap align-items-end">
@@ -614,7 +607,7 @@
                 tbody.innerHTML = "";
                 // 清空用戶詳細資料快取
                 usersDetailData = {};
-                
+
                 if (users.length === 0) {
                     tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted"><i class="bi bi-info-circle"></i> 無符合條件的用戶數據</td></tr>';
                     return;
@@ -643,7 +636,7 @@
                     let statusDisplay = '-';
                     let statusBadgeClass = '';
                     const status = user.status || 'approved'; // 默認值為 'approved'
-                    
+
                     if (user.role === 'vendor') {
                         // 廠商狀態顯示
                         if (status === 'pending') {
@@ -949,7 +942,7 @@
                 document.getElementById('detailName').textContent = userDetail.name || '-';
                 document.getElementById('detailEmail').textContent = userDetail.email || '-';
                 document.getElementById('detailRole').textContent = userDetail.role || '-';
-                
+
                 // 顯示狀態（使用徽章）
                 const statusEl = document.getElementById('detailStatus');
                 if (userDetail.statusBadgeClass && userDetail.status !== '-') {
@@ -957,33 +950,33 @@
                 } else {
                     statusEl.textContent = userDetail.status || '-';
                 }
-                
+
                 const originalRole = userDetail.originalRole || '';
-                
+
                 // 科系/班級和屆數：只有學生才顯示，且值不為空或'-'
                 const classDeptRow = document.getElementById('detailClassDeptRow');
                 const admissionYearCol = document.getElementById('detailAdmissionYearCol');
-                
+
                 if (originalRole === 'student') {
                     // 科系/班級：去除空格后检查是否有有效值
-                    const classDeptValue = userDetail.classDeptInfo && 
-                                          userDetail.classDeptInfo.trim() !== '-' && 
-                                          userDetail.classDeptInfo.trim() !== '' ? 
-                                          userDetail.classDeptInfo.trim() : '';
-                    
+                    const classDeptValue = userDetail.classDeptInfo &&
+                        userDetail.classDeptInfo.trim() !== '-' &&
+                        userDetail.classDeptInfo.trim() !== '' ?
+                        userDetail.classDeptInfo.trim() : '';
+
                     // 屆數：检查是否有有效值
-                    const admissionYearValue = userDetail.admissionYear && 
-                                             userDetail.admissionYear !== '-' && 
-                                             userDetail.admissionYear !== '' ? 
-                                             userDetail.admissionYear : '';
-                    
+                    const admissionYearValue = userDetail.admissionYear &&
+                        userDetail.admissionYear !== '-' &&
+                        userDetail.admissionYear !== '' ?
+                        userDetail.admissionYear : '';
+
                     if (classDeptValue) {
                         classDeptRow.style.display = '';
                         document.getElementById('detailClassDept').textContent = classDeptValue;
                     } else {
                         classDeptRow.style.display = 'none';
                     }
-                    
+
                     if (admissionYearValue) {
                         admissionYearCol.style.display = '';
                         document.getElementById('detailAdmissionYear').textContent = admissionYearValue;
@@ -1001,15 +994,15 @@
                 } else {
                     classDeptRow.style.display = 'none';
                 }
-                
+
                 // 帶班列表：只有教師或主任才顯示，且值不為空或'-'
                 const teachingClassesRow = document.getElementById('detailTeachingClassesRow');
                 if (['teacher', 'director'].includes(originalRole)) {
-                    const teachingClassesValue = userDetail.teachingClasses && 
-                                                userDetail.teachingClasses.trim() !== '-' && 
-                                                userDetail.teachingClasses.trim() !== '' ? 
-                                                userDetail.teachingClasses.trim() : null;
-                    
+                    const teachingClassesValue = userDetail.teachingClasses &&
+                        userDetail.teachingClasses.trim() !== '-' &&
+                        userDetail.teachingClasses.trim() !== '' ?
+                        userDetail.teachingClasses.trim() : null;
+
                     if (teachingClassesValue) {
                         teachingClassesRow.style.display = '';
                         document.getElementById('detailTeachingClasses').textContent = teachingClassesValue;
@@ -1020,7 +1013,7 @@
                     // 非教師/主任角色，隱藏帶班列表
                     teachingClassesRow.style.display = 'none';
                 }
-                
+
                 document.getElementById('detailCreatedAt').textContent = userDetail.displayCreatedAt || '-';
 
                 new bootstrap.Modal(document.getElementById('viewUserDetailModal')).show();
