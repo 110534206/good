@@ -70,32 +70,20 @@
       max-width: 80vw;
       background-color: rgba(10, 10, 10, 0.95);
       backdrop-filter: blur(6px);
-      box-shadow: 3px 0 12px rgba(0, 0, 0, 0.6);
+      box-shadow: 3px 0 12px rgb(0 0 0 / 0.7);
       padding: 2rem 1.5rem;
       transform: translateX(-100%);
       transition: transform 0.3s ease-in-out;
-      z-index: 1300;
+      z-index: 1200;
       display: flex;
       flex-direction: column;
       align-items: flex-start;
-      color: #fff;
+      color: white;
       user-select: none;
     }
 
     #side-menu.open {
       transform: translateX(0);
-    }
-
-    #side-menu h2 {
-      margin: 0 0 1.5rem 0;
-      font-weight: 700;
-      font-size: 1.6rem;
-      color: #fff;
-      padding: 0;
-      line-height: 2.4rem;
-      height: 2.4rem;
-      display: flex;
-      align-items: center;
     }
 
     #close-btn {
@@ -105,30 +93,38 @@
       font-size: 2.2rem;
       background: none;
       border: none;
-      color: #fff;
+      color: white;
       cursor: pointer;
-      line-height: 1rem;
-      height: 2.5rem;
+      line-height: 1;
       width: 2.5rem;
+      height: 2.5rem;
       display: flex;
       align-items: center;
       justify-content: center;
     }
 
+    #side-menu h2 {
+      width: 100%;
+      margin-bottom: 1.5rem;
+      font-weight: 700;
+      font-size: 1.5rem;
+      text-align: left;
+    }
+
     #side-menu a {
       display: block;
       width: 100%;
-      padding: 0.6rem 0;
+      padding: 0.5rem 0;
       font-size: 1.1rem;
-      color: #e2e8f0;
+      color: #ddd;
       text-decoration: none;
       border-radius: 4px;
       transition: background-color 0.2s ease;
     }
 
     #side-menu a:hover {
-      background-color: rgba(255, 255, 255, 0.18);
-      color: #fff;
+      background-color: rgba(255, 255, 255, 0.15);
+      color: white;
     }
   </style>
 </head>
@@ -216,13 +212,13 @@
   <nav id="side-menu" aria-hidden="true" role="navigation" aria-label="功能選單">
     <button id="close-btn" aria-label="關閉功能選單">×</button>
     <h2>功能選單</h2>
-    <a href="/teacher_home">首頁</a>
+    <a href="/director_home">首頁</a>
     <a href="/profile">個人資料</a>
-    <a href="/upload_company">建立實習機會</a>
-    <a href="/admission_results">查看錄取結果</a>
-    <a href="/manage_vendor">實習廠商管理</a>
-    <a href="/notifications">查看公告</a>
-    <a href="/review_resume">學生履歷審核</a>
+    <a href="/approve_company">審核實習單位</a>
+    <a href="/review_resume?mode=director">審核實習履歷</a>
+    <a href="/interview_schedule">行事曆</a>
+    <a href="/notifications">管理公告</a>
+    <a href="/admin_statistics">統計資料</a>
     <a href="/login">登出</a>
   </nav>
 
@@ -322,7 +318,7 @@
       document.getElementById("statusFilter").addEventListener("change", applyFilters);
       document.getElementById("searchBox").addEventListener("input", applyFilters);
       document.getElementById("saveCommentBtn").addEventListener("click", saveComment);
-      
+
       // 側邊選單控制
       const menuBtn = document.getElementById('menu-btn');
       const sideMenu = document.getElementById('side-menu');
