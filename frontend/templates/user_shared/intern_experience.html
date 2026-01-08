@@ -207,7 +207,7 @@ body {
   margin-right: 8px;
 }
 .nav-tabs .nav-link.active {
-  background: linear-gradient(135deg,#2563eb,#1e40af);
+  background: #2563eb;
   color: #fff;
   border-radius: 999px;
   padding: 8px 18px;
@@ -246,7 +246,7 @@ body {
   --bs-btn-hover-color:#fff;
 }
 .btn-success {
-  background: linear-gradient(135deg,#22c55e,#16a34a);
+  background: #22c55e;
   border: none;
 }
 
@@ -317,9 +317,6 @@ body {
           </div>
           <div class="col-md-2">
             <button id="btnSearch" class="btn btn-primary w-100">搜尋</button>
-          </div>
-          <div class="col-md-2 text-end">
-            <button class="btn btn-success" data-bs-toggle="modal" data-bs-target="#addModal">+ 上傳心得</button>
           </div>
         </div></div>
         <div id="experienceList" class="row g-3 mt-4"></div>
@@ -406,7 +403,14 @@ body {
 
             <div class="mb-3">
               <label class="form-label">評分 (1~5)</label>
-              <input type="number" class="form-control" id="rating" min="1" max="5" required>
+              <select class="form-select" id="rating" required>
+                <option value="">請選擇評分</option>
+                <option value="1">1</option>
+                <option value="2">2</option>
+                <option value="3">3</option>
+                <option value="4">4</option>
+                <option value="5">5</option>
+              </select>
             </div>
 
             <div class="mb-3">
