@@ -3077,11 +3077,12 @@ def get_teacher_review_resumes():
                 COALESCE(sp.job_title, ij.title) AS job_title
             FROM users u
             LEFT JOIN classes c ON u.class_id = c.id
-            LEFT JOIN resumes r ON u.id = r.user_id 
+            INNER JOIN resumes r ON u.id = r.user_id 
             JOIN student_preferences sp ON sp.student_id = u.id
             JOIN internship_companies ic ON sp.company_id = ic.id
             LEFT JOIN internship_jobs ij ON sp.job_id = ij.id
             WHERE u.role = 'student' 
+              AND r.id IS NOT NULL
         """
         params = []
         
@@ -3115,7 +3116,7 @@ def get_teacher_review_resumes():
             params.append(director_dept)
         
         # 排序：按照班級、姓名、志願順序、上傳時間（最新在上）
-        sql += " ORDER BY c.name, u.username, sp.preference_order ASC, COALESCE(r.created_at, '1970-01-01') DESC"
+        sql += " ORDER BY c.name, u.username, sp.preference_order ASC, r.created_at DESC"
 
         cursor.execute(sql, tuple(params))
         rows = cursor.fetchall()
@@ -7304,11 +7305,12 @@ def get_teacher_review_resumes():
                 COALESCE(sp.job_title, ij.title) AS job_title
             FROM users u
             LEFT JOIN classes c ON u.class_id = c.id
-            LEFT JOIN resumes r ON u.id = r.user_id 
+            INNER JOIN resumes r ON u.id = r.user_id 
             JOIN student_preferences sp ON sp.student_id = u.id
             JOIN internship_companies ic ON sp.company_id = ic.id
             LEFT JOIN internship_jobs ij ON sp.job_id = ij.id
             WHERE u.role = 'student' 
+              AND r.id IS NOT NULL
         """
         params = []
         
@@ -7333,57 +7335,35 @@ def get_teacher_review_resumes():
             params.append(director_dept)
         
         # 排序：按照班級、姓名、志願順序、上傳時間（最新在上）
-        sql += " ORDER BY c.name, u.username, sp.preference_order ASC, COALESCE(r.created_at, '1970-01-01') DESC"
+        sql += " ORDER BY c.name, u.username, sp.preference_order ASC, r.created_at DESC"
 
         cursor.execute(sql, tuple(params))
         rows = cursor.fetchall()
         
-        # 整理結果：每個志願序都顯示一行履歷記錄
-        result_data = []
-        processed_combinations = set()  # 追蹤已處理的 (student_id, preference_id) 組合
+        # 整理結果：確保每份履歷只對應一個職缺
+        # 使用字典儲存，key 為 resume_id，value 為履歷記錄（選擇 preference_order 最小的職缺）
+        resume_dict = {}  # key: resume_id, value: row data
         
         for row in rows:
             student_id = row['student_id']
             preference_id = row.get('preference_id')
             preference_order = row.get('preference_order', 0)
+            resume_id = row.get('resume_id')
             
-            # 創建唯一標識符，避免重複添加相同的志願序
-            combo_key = (student_id, preference_id) if preference_id else (student_id, None)
-            
-            # 處理未上傳履歷的學生（每個志願序都顯示一行）
-            if not row['resume_id']:
-                if combo_key not in processed_combinations:
-                    processed_combinations.add(combo_key)
-                    result_data.append({
-                        'user_id': row['user_id'],
-                        'username': student_id,
-                        'name': row['name'],
-                        'className': row['class_name'] or '—',
-                        'upload_time': 'N/A',
-                        'original_filename': 'N/A',
-                        'company_name': row.get('company_name') or '—',
-                        'job_title': row.get('job_title') or '—',
-                        'preference_order': preference_order,
-                        'display_company': row.get('company_name') or '—',
-                        'display_job': row.get('job_title') or '—',
-                        'display_status': 'not_uploaded' # 未上傳狀態
-                    })
+            # 由於使用了 INNER JOIN resumes，確保 resume_id 一定存在
+            if not resume_id:
                 continue
 
-            # 為每個志願序添加履歷記錄
-            # 創建唯一標識符 (resume_id, preference_id) 避免重複
-            resume_pref_key = (row['resume_id'], preference_id) if preference_id else (row['resume_id'], None)
-            
-            if resume_pref_key not in processed_combinations:
-                processed_combinations.add(resume_pref_key)
+            # 如果這份履歷還沒記錄，或者當前志願順序更小，則更新記錄
+            # 確保每份履歷只對應 preference_order 最小的職缺
+            if resume_id not in resume_dict:
                 status = row.get('display_status') if row.get('display_status') else 'pending'
                 # 將 uploaded 狀態映射為 pending 供前端顯示
                 if status == 'uploaded':
                     status = 'pending'
                 
-                result_data.append({
-                    # 前端下載連結 /api/download_resume/${row.id} 需要的是履歷 ID
-                    'id': row['resume_id'], 
+                resume_dict[resume_id] = {
+                    'id': resume_id,
                     'username': student_id,
                     'name': row['name'],
                     'className': row['class_name'] or '—',
@@ -7392,10 +7372,37 @@ def get_teacher_review_resumes():
                     'company_name': row.get('company_name') or '—',
                     'job_title': row.get('job_title') or '—',
                     'preference_order': preference_order,
+                    'preference_id': preference_id,
                     'display_company': row.get('company_name') or '—',
                     'display_job': row.get('job_title') or '—',
                     'display_status': status,
-                })
+                }
+            else:
+                # 如果已有記錄，比較 preference_order，選擇較小的（優先顯示第一志願）
+                existing_order = resume_dict[resume_id].get('preference_order', 999)
+                if preference_order < existing_order:
+                    status = row.get('display_status') if row.get('display_status') else 'pending'
+                    if status == 'uploaded':
+                        status = 'pending'
+                    
+                    resume_dict[resume_id] = {
+                        'id': resume_id,
+                        'username': student_id,
+                        'name': row['name'],
+                        'className': row['class_name'] or '—',
+                        'upload_time': row['upload_time'].strftime('%Y/%m/%d %H:%M') if isinstance(row['upload_time'], datetime) else (row['upload_time'] if row['upload_time'] else 'N/A'),
+                        'original_filename': row['original_filename'] or 'N/A',
+                        'company_name': row.get('company_name') or '—',
+                        'job_title': row.get('job_title') or '—',
+                        'preference_order': preference_order,
+                        'preference_id': preference_id,
+                        'display_company': row.get('company_name') or '—',
+                        'display_job': row.get('job_title') or '—',
+                        'display_status': status,
+                    }
+        
+        # 只返回有履歷的記錄（已使用 INNER JOIN 確保一定有履歷）
+        result_data = list(resume_dict.values())
         
         return jsonify({"success": True, "data": result_data})
 
@@ -11488,11 +11495,12 @@ def get_teacher_review_resumes():
                 COALESCE(sp.job_title, ij.title) AS job_title
             FROM users u
             LEFT JOIN classes c ON u.class_id = c.id
-            LEFT JOIN resumes r ON u.id = r.user_id 
+            INNER JOIN resumes r ON u.id = r.user_id 
             JOIN student_preferences sp ON sp.student_id = u.id
             JOIN internship_companies ic ON sp.company_id = ic.id
             LEFT JOIN internship_jobs ij ON sp.job_id = ij.id
             WHERE u.role = 'student' 
+              AND r.id IS NOT NULL
         """
         params = []
         
@@ -11517,57 +11525,35 @@ def get_teacher_review_resumes():
             params.append(director_dept)
         
         # 排序：按照班級、姓名、志願順序、上傳時間（最新在上）
-        sql += " ORDER BY c.name, u.username, sp.preference_order ASC, COALESCE(r.created_at, '1970-01-01') DESC"
+        sql += " ORDER BY c.name, u.username, sp.preference_order ASC, r.created_at DESC"
 
         cursor.execute(sql, tuple(params))
         rows = cursor.fetchall()
         
-        # 整理結果：每個志願序都顯示一行履歷記錄
-        result_data = []
-        processed_combinations = set()  # 追蹤已處理的 (student_id, preference_id) 組合
+        # 整理結果：確保每份履歷只對應一個職缺
+        # 使用字典儲存，key 為 resume_id，value 為履歷記錄（選擇 preference_order 最小的職缺）
+        resume_dict = {}  # key: resume_id, value: row data
         
         for row in rows:
             student_id = row['student_id']
             preference_id = row.get('preference_id')
             preference_order = row.get('preference_order', 0)
+            resume_id = row.get('resume_id')
             
-            # 創建唯一標識符，避免重複添加相同的志願序
-            combo_key = (student_id, preference_id) if preference_id else (student_id, None)
-            
-            # 處理未上傳履歷的學生（每個志願序都顯示一行）
-            if not row['resume_id']:
-                if combo_key not in processed_combinations:
-                    processed_combinations.add(combo_key)
-                    result_data.append({
-                        'user_id': row['user_id'],
-                        'username': student_id,
-                        'name': row['name'],
-                        'className': row['class_name'] or '—',
-                        'upload_time': 'N/A',
-                        'original_filename': 'N/A',
-                        'company_name': row.get('company_name') or '—',
-                        'job_title': row.get('job_title') or '—',
-                        'preference_order': preference_order,
-                        'display_company': row.get('company_name') or '—',
-                        'display_job': row.get('job_title') or '—',
-                        'display_status': 'not_uploaded' # 未上傳狀態
-                    })
+            # 由於使用了 INNER JOIN resumes，確保 resume_id 一定存在
+            if not resume_id:
                 continue
 
-            # 為每個志願序添加履歷記錄
-            # 創建唯一標識符 (resume_id, preference_id) 避免重複
-            resume_pref_key = (row['resume_id'], preference_id) if preference_id else (row['resume_id'], None)
-            
-            if resume_pref_key not in processed_combinations:
-                processed_combinations.add(resume_pref_key)
+            # 如果這份履歷還沒記錄，或者當前志願順序更小，則更新記錄
+            # 確保每份履歷只對應 preference_order 最小的職缺
+            if resume_id not in resume_dict:
                 status = row.get('display_status') if row.get('display_status') else 'pending'
                 # 將 uploaded 狀態映射為 pending 供前端顯示
                 if status == 'uploaded':
                     status = 'pending'
                 
-                result_data.append({
-                    # 前端下載連結 /api/download_resume/${row.id} 需要的是履歷 ID
-                    'id': row['resume_id'], 
+                resume_dict[resume_id] = {
+                    'id': resume_id,
                     'username': student_id,
                     'name': row['name'],
                     'className': row['class_name'] or '—',
@@ -11576,10 +11562,37 @@ def get_teacher_review_resumes():
                     'company_name': row.get('company_name') or '—',
                     'job_title': row.get('job_title') or '—',
                     'preference_order': preference_order,
+                    'preference_id': preference_id,
                     'display_company': row.get('company_name') or '—',
                     'display_job': row.get('job_title') or '—',
                     'display_status': status,
-                })
+                }
+            else:
+                # 如果已有記錄，比較 preference_order，選擇較小的（優先顯示第一志願）
+                existing_order = resume_dict[resume_id].get('preference_order', 999)
+                if preference_order < existing_order:
+                    status = row.get('display_status') if row.get('display_status') else 'pending'
+                    if status == 'uploaded':
+                        status = 'pending'
+                    
+                    resume_dict[resume_id] = {
+                        'id': resume_id,
+                        'username': student_id,
+                        'name': row['name'],
+                        'className': row['class_name'] or '—',
+                        'upload_time': row['upload_time'].strftime('%Y/%m/%d %H:%M') if isinstance(row['upload_time'], datetime) else (row['upload_time'] if row['upload_time'] else 'N/A'),
+                        'original_filename': row['original_filename'] or 'N/A',
+                        'company_name': row.get('company_name') or '—',
+                        'job_title': row.get('job_title') or '—',
+                        'preference_order': preference_order,
+                        'preference_id': preference_id,
+                        'display_company': row.get('company_name') or '—',
+                        'display_job': row.get('job_title') or '—',
+                        'display_status': status,
+                    }
+        
+        # 只返回有履歷的記錄（已使用 INNER JOIN 確保一定有履歷）
+        result_data = list(resume_dict.values())
         
         return jsonify({"success": True, "data": result_data})
 
@@ -15672,11 +15685,12 @@ def get_teacher_review_resumes():
                 COALESCE(sp.job_title, ij.title) AS job_title
             FROM users u
             LEFT JOIN classes c ON u.class_id = c.id
-            LEFT JOIN resumes r ON u.id = r.user_id 
+            INNER JOIN resumes r ON u.id = r.user_id 
             JOIN student_preferences sp ON sp.student_id = u.id
             JOIN internship_companies ic ON sp.company_id = ic.id
             LEFT JOIN internship_jobs ij ON sp.job_id = ij.id
             WHERE u.role = 'student' 
+              AND r.id IS NOT NULL
         """
         params = []
         
@@ -15701,57 +15715,35 @@ def get_teacher_review_resumes():
             params.append(director_dept)
         
         # 排序：按照班級、姓名、志願順序、上傳時間（最新在上）
-        sql += " ORDER BY c.name, u.username, sp.preference_order ASC, COALESCE(r.created_at, '1970-01-01') DESC"
+        sql += " ORDER BY c.name, u.username, sp.preference_order ASC, r.created_at DESC"
 
         cursor.execute(sql, tuple(params))
         rows = cursor.fetchall()
         
-        # 整理結果：每個志願序都顯示一行履歷記錄
-        result_data = []
-        processed_combinations = set()  # 追蹤已處理的 (student_id, preference_id) 組合
+        # 整理結果：確保每份履歷只對應一個職缺
+        # 使用字典儲存，key 為 resume_id，value 為履歷記錄（選擇 preference_order 最小的職缺）
+        resume_dict = {}  # key: resume_id, value: row data
         
         for row in rows:
             student_id = row['student_id']
             preference_id = row.get('preference_id')
             preference_order = row.get('preference_order', 0)
+            resume_id = row.get('resume_id')
             
-            # 創建唯一標識符，避免重複添加相同的志願序
-            combo_key = (student_id, preference_id) if preference_id else (student_id, None)
-            
-            # 處理未上傳履歷的學生（每個志願序都顯示一行）
-            if not row['resume_id']:
-                if combo_key not in processed_combinations:
-                    processed_combinations.add(combo_key)
-                    result_data.append({
-                        'user_id': row['user_id'],
-                        'username': student_id,
-                        'name': row['name'],
-                        'className': row['class_name'] or '—',
-                        'upload_time': 'N/A',
-                        'original_filename': 'N/A',
-                        'company_name': row.get('company_name') or '—',
-                        'job_title': row.get('job_title') or '—',
-                        'preference_order': preference_order,
-                        'display_company': row.get('company_name') or '—',
-                        'display_job': row.get('job_title') or '—',
-                        'display_status': 'not_uploaded' # 未上傳狀態
-                    })
+            # 由於使用了 INNER JOIN resumes，確保 resume_id 一定存在
+            if not resume_id:
                 continue
 
-            # 為每個志願序添加履歷記錄
-            # 創建唯一標識符 (resume_id, preference_id) 避免重複
-            resume_pref_key = (row['resume_id'], preference_id) if preference_id else (row['resume_id'], None)
-            
-            if resume_pref_key not in processed_combinations:
-                processed_combinations.add(resume_pref_key)
+            # 如果這份履歷還沒記錄，或者當前志願順序更小，則更新記錄
+            # 確保每份履歷只對應 preference_order 最小的職缺
+            if resume_id not in resume_dict:
                 status = row.get('display_status') if row.get('display_status') else 'pending'
                 # 將 uploaded 狀態映射為 pending 供前端顯示
                 if status == 'uploaded':
                     status = 'pending'
                 
-                result_data.append({
-                    # 前端下載連結 /api/download_resume/${row.id} 需要的是履歷 ID
-                    'id': row['resume_id'], 
+                resume_dict[resume_id] = {
+                    'id': resume_id,
                     'username': student_id,
                     'name': row['name'],
                     'className': row['class_name'] or '—',
@@ -15760,10 +15752,37 @@ def get_teacher_review_resumes():
                     'company_name': row.get('company_name') or '—',
                     'job_title': row.get('job_title') or '—',
                     'preference_order': preference_order,
+                    'preference_id': preference_id,
                     'display_company': row.get('company_name') or '—',
                     'display_job': row.get('job_title') or '—',
                     'display_status': status,
-                })
+                }
+            else:
+                # 如果已有記錄，比較 preference_order，選擇較小的（優先顯示第一志願）
+                existing_order = resume_dict[resume_id].get('preference_order', 999)
+                if preference_order < existing_order:
+                    status = row.get('display_status') if row.get('display_status') else 'pending'
+                    if status == 'uploaded':
+                        status = 'pending'
+                    
+                    resume_dict[resume_id] = {
+                        'id': resume_id,
+                        'username': student_id,
+                        'name': row['name'],
+                        'className': row['class_name'] or '—',
+                        'upload_time': row['upload_time'].strftime('%Y/%m/%d %H:%M') if isinstance(row['upload_time'], datetime) else (row['upload_time'] if row['upload_time'] else 'N/A'),
+                        'original_filename': row['original_filename'] or 'N/A',
+                        'company_name': row.get('company_name') or '—',
+                        'job_title': row.get('job_title') or '—',
+                        'preference_order': preference_order,
+                        'preference_id': preference_id,
+                        'display_company': row.get('company_name') or '—',
+                        'display_job': row.get('job_title') or '—',
+                        'display_status': status,
+                    }
+        
+        # 只返回有履歷的記錄（已使用 INNER JOIN 確保一定有履歷）
+        result_data = list(resume_dict.values())
         
         return jsonify({"success": True, "data": result_data})
 
@@ -19856,11 +19875,12 @@ def get_teacher_review_resumes():
                 COALESCE(sp.job_title, ij.title) AS job_title
             FROM users u
             LEFT JOIN classes c ON u.class_id = c.id
-            LEFT JOIN resumes r ON u.id = r.user_id 
+            INNER JOIN resumes r ON u.id = r.user_id 
             JOIN student_preferences sp ON sp.student_id = u.id
             JOIN internship_companies ic ON sp.company_id = ic.id
             LEFT JOIN internship_jobs ij ON sp.job_id = ij.id
             WHERE u.role = 'student' 
+              AND r.id IS NOT NULL
         """
         params = []
         
@@ -19885,57 +19905,35 @@ def get_teacher_review_resumes():
             params.append(director_dept)
         
         # 排序：按照班級、姓名、志願順序、上傳時間（最新在上）
-        sql += " ORDER BY c.name, u.username, sp.preference_order ASC, COALESCE(r.created_at, '1970-01-01') DESC"
+        sql += " ORDER BY c.name, u.username, sp.preference_order ASC, r.created_at DESC"
 
         cursor.execute(sql, tuple(params))
         rows = cursor.fetchall()
         
-        # 整理結果：每個志願序都顯示一行履歷記錄
-        result_data = []
-        processed_combinations = set()  # 追蹤已處理的 (student_id, preference_id) 組合
+        # 整理結果：確保每份履歷只對應一個職缺
+        # 使用字典儲存，key 為 resume_id，value 為履歷記錄（選擇 preference_order 最小的職缺）
+        resume_dict = {}  # key: resume_id, value: row data
         
         for row in rows:
             student_id = row['student_id']
             preference_id = row.get('preference_id')
             preference_order = row.get('preference_order', 0)
+            resume_id = row.get('resume_id')
             
-            # 創建唯一標識符，避免重複添加相同的志願序
-            combo_key = (student_id, preference_id) if preference_id else (student_id, None)
-            
-            # 處理未上傳履歷的學生（每個志願序都顯示一行）
-            if not row['resume_id']:
-                if combo_key not in processed_combinations:
-                    processed_combinations.add(combo_key)
-                    result_data.append({
-                        'user_id': row['user_id'],
-                        'username': student_id,
-                        'name': row['name'],
-                        'className': row['class_name'] or '—',
-                        'upload_time': 'N/A',
-                        'original_filename': 'N/A',
-                        'company_name': row.get('company_name') or '—',
-                        'job_title': row.get('job_title') or '—',
-                        'preference_order': preference_order,
-                        'display_company': row.get('company_name') or '—',
-                        'display_job': row.get('job_title') or '—',
-                        'display_status': 'not_uploaded' # 未上傳狀態
-                    })
+            # 由於使用了 INNER JOIN resumes，確保 resume_id 一定存在
+            if not resume_id:
                 continue
 
-            # 為每個志願序添加履歷記錄
-            # 創建唯一標識符 (resume_id, preference_id) 避免重複
-            resume_pref_key = (row['resume_id'], preference_id) if preference_id else (row['resume_id'], None)
-            
-            if resume_pref_key not in processed_combinations:
-                processed_combinations.add(resume_pref_key)
+            # 如果這份履歷還沒記錄，或者當前志願順序更小，則更新記錄
+            # 確保每份履歷只對應 preference_order 最小的職缺
+            if resume_id not in resume_dict:
                 status = row.get('display_status') if row.get('display_status') else 'pending'
                 # 將 uploaded 狀態映射為 pending 供前端顯示
                 if status == 'uploaded':
                     status = 'pending'
                 
-                result_data.append({
-                    # 前端下載連結 /api/download_resume/${row.id} 需要的是履歷 ID
-                    'id': row['resume_id'], 
+                resume_dict[resume_id] = {
+                    'id': resume_id,
                     'username': student_id,
                     'name': row['name'],
                     'className': row['class_name'] or '—',
@@ -19944,10 +19942,37 @@ def get_teacher_review_resumes():
                     'company_name': row.get('company_name') or '—',
                     'job_title': row.get('job_title') or '—',
                     'preference_order': preference_order,
+                    'preference_id': preference_id,
                     'display_company': row.get('company_name') or '—',
                     'display_job': row.get('job_title') or '—',
                     'display_status': status,
-                })
+                }
+            else:
+                # 如果已有記錄，比較 preference_order，選擇較小的（優先顯示第一志願）
+                existing_order = resume_dict[resume_id].get('preference_order', 999)
+                if preference_order < existing_order:
+                    status = row.get('display_status') if row.get('display_status') else 'pending'
+                    if status == 'uploaded':
+                        status = 'pending'
+                    
+                    resume_dict[resume_id] = {
+                        'id': resume_id,
+                        'username': student_id,
+                        'name': row['name'],
+                        'className': row['class_name'] or '—',
+                        'upload_time': row['upload_time'].strftime('%Y/%m/%d %H:%M') if isinstance(row['upload_time'], datetime) else (row['upload_time'] if row['upload_time'] else 'N/A'),
+                        'original_filename': row['original_filename'] or 'N/A',
+                        'company_name': row.get('company_name') or '—',
+                        'job_title': row.get('job_title') or '—',
+                        'preference_order': preference_order,
+                        'preference_id': preference_id,
+                        'display_company': row.get('company_name') or '—',
+                        'display_job': row.get('job_title') or '—',
+                        'display_status': status,
+                    }
+        
+        # 只返回有履歷的記錄（已使用 INNER JOIN 確保一定有履歷）
+        result_data = list(resume_dict.values())
         
         return jsonify({"success": True, "data": result_data})
 
@@ -24040,11 +24065,12 @@ def get_teacher_review_resumes():
                 COALESCE(sp.job_title, ij.title) AS job_title
             FROM users u
             LEFT JOIN classes c ON u.class_id = c.id
-            LEFT JOIN resumes r ON u.id = r.user_id 
+            INNER JOIN resumes r ON u.id = r.user_id 
             JOIN student_preferences sp ON sp.student_id = u.id
             JOIN internship_companies ic ON sp.company_id = ic.id
             LEFT JOIN internship_jobs ij ON sp.job_id = ij.id
             WHERE u.role = 'student' 
+              AND r.id IS NOT NULL
         """
         params = []
         
@@ -24069,57 +24095,35 @@ def get_teacher_review_resumes():
             params.append(director_dept)
         
         # 排序：按照班級、姓名、志願順序、上傳時間（最新在上）
-        sql += " ORDER BY c.name, u.username, sp.preference_order ASC, COALESCE(r.created_at, '1970-01-01') DESC"
+        sql += " ORDER BY c.name, u.username, sp.preference_order ASC, r.created_at DESC"
 
         cursor.execute(sql, tuple(params))
         rows = cursor.fetchall()
         
-        # 整理結果：每個志願序都顯示一行履歷記錄
-        result_data = []
-        processed_combinations = set()  # 追蹤已處理的 (student_id, preference_id) 組合
+        # 整理結果：確保每份履歷只對應一個職缺
+        # 使用字典儲存，key 為 resume_id，value 為履歷記錄（選擇 preference_order 最小的職缺）
+        resume_dict = {}  # key: resume_id, value: row data
         
         for row in rows:
             student_id = row['student_id']
             preference_id = row.get('preference_id')
             preference_order = row.get('preference_order', 0)
+            resume_id = row.get('resume_id')
             
-            # 創建唯一標識符，避免重複添加相同的志願序
-            combo_key = (student_id, preference_id) if preference_id else (student_id, None)
-            
-            # 處理未上傳履歷的學生（每個志願序都顯示一行）
-            if not row['resume_id']:
-                if combo_key not in processed_combinations:
-                    processed_combinations.add(combo_key)
-                    result_data.append({
-                        'user_id': row['user_id'],
-                        'username': student_id,
-                        'name': row['name'],
-                        'className': row['class_name'] or '—',
-                        'upload_time': 'N/A',
-                        'original_filename': 'N/A',
-                        'company_name': row.get('company_name') or '—',
-                        'job_title': row.get('job_title') or '—',
-                        'preference_order': preference_order,
-                        'display_company': row.get('company_name') or '—',
-                        'display_job': row.get('job_title') or '—',
-                        'display_status': 'not_uploaded' # 未上傳狀態
-                    })
+            # 由於使用了 INNER JOIN resumes，確保 resume_id 一定存在
+            if not resume_id:
                 continue
 
-            # 為每個志願序添加履歷記錄
-            # 創建唯一標識符 (resume_id, preference_id) 避免重複
-            resume_pref_key = (row['resume_id'], preference_id) if preference_id else (row['resume_id'], None)
-            
-            if resume_pref_key not in processed_combinations:
-                processed_combinations.add(resume_pref_key)
+            # 如果這份履歷還沒記錄，或者當前志願順序更小，則更新記錄
+            # 確保每份履歷只對應 preference_order 最小的職缺
+            if resume_id not in resume_dict:
                 status = row.get('display_status') if row.get('display_status') else 'pending'
                 # 將 uploaded 狀態映射為 pending 供前端顯示
                 if status == 'uploaded':
                     status = 'pending'
                 
-                result_data.append({
-                    # 前端下載連結 /api/download_resume/${row.id} 需要的是履歷 ID
-                    'id': row['resume_id'], 
+                resume_dict[resume_id] = {
+                    'id': resume_id,
                     'username': student_id,
                     'name': row['name'],
                     'className': row['class_name'] or '—',
@@ -24128,10 +24132,37 @@ def get_teacher_review_resumes():
                     'company_name': row.get('company_name') or '—',
                     'job_title': row.get('job_title') or '—',
                     'preference_order': preference_order,
+                    'preference_id': preference_id,
                     'display_company': row.get('company_name') or '—',
                     'display_job': row.get('job_title') or '—',
                     'display_status': status,
-                })
+                }
+            else:
+                # 如果已有記錄，比較 preference_order，選擇較小的（優先顯示第一志願）
+                existing_order = resume_dict[resume_id].get('preference_order', 999)
+                if preference_order < existing_order:
+                    status = row.get('display_status') if row.get('display_status') else 'pending'
+                    if status == 'uploaded':
+                        status = 'pending'
+                    
+                    resume_dict[resume_id] = {
+                        'id': resume_id,
+                        'username': student_id,
+                        'name': row['name'],
+                        'className': row['class_name'] or '—',
+                        'upload_time': row['upload_time'].strftime('%Y/%m/%d %H:%M') if isinstance(row['upload_time'], datetime) else (row['upload_time'] if row['upload_time'] else 'N/A'),
+                        'original_filename': row['original_filename'] or 'N/A',
+                        'company_name': row.get('company_name') or '—',
+                        'job_title': row.get('job_title') or '—',
+                        'preference_order': preference_order,
+                        'preference_id': preference_id,
+                        'display_company': row.get('company_name') or '—',
+                        'display_job': row.get('job_title') or '—',
+                        'display_status': status,
+                    }
+        
+        # 只返回有履歷的記錄（已使用 INNER JOIN 確保一定有履歷）
+        result_data = list(resume_dict.values())
         
         return jsonify({"success": True, "data": result_data})
 

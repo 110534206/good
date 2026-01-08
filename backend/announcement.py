@@ -195,7 +195,7 @@ def update_announcement(ann_id):
         print(f"[update_announcement] ann_id={ann_id}, target_roles={target_roles}")
 
         conn = get_db()
-        cursor = conn.cursor()
+        cursor = conn.cursor(dictionary=True, buffered=True)
         
         # 更新資料庫中的公告資訊
         cursor.execute("""
@@ -205,12 +205,14 @@ def update_announcement(ann_id):
         """, (title, content, start_time, end_time, is_published, ann_id))
         
         conn.commit()
+        
+        # 在調用 push_announcement_notifications 前關閉當前的 cursor，避免未讀結果衝突
+        cursor.close()
 
         # 【同步通知】如果更新後狀態為「已發布」，立即同步到通知頁面
         if is_published:
             push_announcement_notifications(conn, title, content, ann_id, target_roles=target_roles)
 
-        cursor.close()
         conn.close()
         return jsonify({"success": True, "message": "公告更新成功"})
     except Exception:
@@ -248,8 +250,10 @@ def push_announcement_notifications(conn, title, content, ann_id, target_roles=N
       例如 ["student", "teacher"]。
       若為空或 None，則維持原本邏輯：對所有使用者建立通知。
     """
+    cursor = None
     try:
-        cursor = conn.cursor(dictionary=True)
+        # 使用 buffered cursor 避免 "Unread result found" 錯誤
+        cursor = conn.cursor(dictionary=True, buffered=True)
         link_url = f"/view_announcement/{ann_id}"
         now = get_taiwan_time()
 
@@ -282,7 +286,9 @@ def push_announcement_notifications(conn, title, content, ann_id, target_roles=N
                 WHERE user_id = %s AND link_url = %s
             """, (uid, link_url))
             
-            if not cursor.fetchone():
+            existing = cursor.fetchone()
+            # 確保讀取完查詢結果（即使為空也要讀取）
+            if existing is None:
                 # 如果不存在，創建新通知
                 cursor.execute("""
                     INSERT INTO notifications (user_id, title, message, category, link_url, is_read, created_at)
@@ -292,6 +298,11 @@ def push_announcement_notifications(conn, title, content, ann_id, target_roles=N
         conn.commit()
     except Exception:
         traceback.print_exc()
+        if conn:
+            conn.rollback()
+    finally:
+        if cursor:
+            cursor.close()
 
 # --- 自動檢查：預約時間已到的公告 ---
 def check_and_push_scheduled_announcements(conn):
