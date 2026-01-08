@@ -55,6 +55,12 @@
     
     .status-badge.bg-secondary { color: #fff; background-color: #6c757d; }
     
+    .alert-deadline {
+      margin-bottom: 16px;
+      border-radius: 8px;
+      padding: 12px 16px;
+    }
+    
     #side-menu {
       position: fixed; top: 0; left: 0; height: 100vh; width: 320px; max-width: 80vw;
       background-color: rgba(10, 10, 10, 0.95); backdrop-filter: blur(6px);
@@ -95,6 +101,9 @@
   </header>
   <main>
     <section class="panel" aria-label="履歷列表">
+      <!-- 截止時間提示 -->
+      <div id="deadlineAlert" class="alert alert-deadline" style="display: none; margin-bottom: 16px;"></div>
+      
       <div class="panel-header">
         <h2 id="resumeListTitle">履歷列表</h2>
       </div>
@@ -178,6 +187,7 @@
     let allResumes = [];
     let userRole = null;
     let currentUserId = null;
+    let isDeadlinePassed = false; // 截止時間是否已過
 
     // 定義狀態顏色
     function statusColor(status) {
@@ -226,10 +236,40 @@
 
           // 等待兩個 API 請求都完成
           Promise.all([fetchReviewedCompanies, fetchClassResumes])
-            .then(([reviewedCompanies, resumes]) => {
-              console.log('📊 載入的履歷數據:', resumes);
+            .then(([reviewedCompanies, resumeResponse]) => {
+              console.log('📊 載入的履歷響應:', resumeResponse);
               console.log('📊 載入的公司數據:', reviewedCompanies);
+              
+              // 處理履歷數據和截止時間信息
+              const resumes = resumeResponse.success ? (resumeResponse.data || []) : [];
               allResumes = resumes;
+              
+              // 顯示截止時間提示
+              isDeadlinePassed = resumeResponse.is_deadline_passed || false;
+              if (resumeResponse.deadline) {
+                const deadlineAlert = document.getElementById('deadlineAlert');
+                if (deadlineAlert) {
+                  const isExpired = resumeResponse.is_deadline_passed;
+                  if (isExpired) {
+                    deadlineAlert.className = 'alert alert-warning alert-deadline';
+                    deadlineAlert.innerHTML = `
+                      <strong>⚠️ 履歷提交截止時間已過</strong><br>
+                      履歷提交截止時間：${resumeResponse.deadline}<br>
+                      <span style="color: #dc3545;">已超過截止時間，未退件的履歷已自動通過並傳給指導老師審核。</span>
+                    `;
+                    deadlineAlert.style.display = 'block';
+                  } else {
+                    deadlineAlert.className = 'alert alert-info alert-deadline';
+                    deadlineAlert.innerHTML = `
+                      <strong>📅 履歷提交截止時間提醒</strong><br>
+                      履歷提交截止時間：${resumeResponse.deadline}<br>
+                      請在截止時間前完成履歷退件，否則將自動通過並傳給指導老師審核。
+                    `;
+                    deadlineAlert.style.display = 'block';
+                  }
+                }
+              }
+              
               // 將已審核公司資料傳入，用於填充篩選器
               populateFilters(allResumes, reviewedCompanies);
               applyFilters();
@@ -384,6 +424,13 @@
       allRowsData.forEach(row => {
         const tr = document.createElement('tr');
         tr.style.borderBottom = '1px solid #e2e8f0';
+        // 根據截止時間狀態決定是否顯示退件按鈕
+        const canReject = row.display_status !== 'not_uploaded' && !isDeadlinePassed && row.display_status !== 'rejected';
+        const rejectButton = canReject 
+          ? `<button class="btn btn-sm btn-danger" onclick="rejectResume(${row.id})">退件</button>`
+          : (isDeadlinePassed && row.display_status !== 'not_uploaded' && row.display_status !== 'rejected')
+          ? `<button class="btn btn-sm btn-secondary" disabled title="已過截止時間，無法退件">退件</button>`
+          : '';
         tr.innerHTML = `
            <td style="padding: 14px 16px;">${row.username}</td>
            <td style="padding: 14px 16px;">${escapeHtml(row.name)}</td>
@@ -394,9 +441,7 @@
            <td style="padding: 14px 16px;">
              <div style="display: flex; gap: 4px; flex-wrap: wrap;">
                <a href="/api/download_resume/${row.id}" class="btn btn-sm btn-outline-primary" target="_blank">下載</a>
-               ${row.display_status !== 'not_uploaded' ? `
-                 <button class="btn btn-sm btn-danger" onclick="rejectResume(${row.id})">退件</button>
-               ` : ''}
+               ${rejectButton}
              </div>
            </td>
         `;
@@ -442,6 +487,12 @@
 
     // 退件履歷（打開留言 Modal）
     function rejectResume(resumeId) {
+      // 檢查截止時間
+      if (isDeadlinePassed) {
+        alert('⚠️ 已超過履歷提交截止時間，無法再退件履歷。未退件的履歷已自動通過並傳給指導老師審核。');
+        return;
+      }
+      
       document.getElementById('rejectResumeId').value = resumeId;
       document.getElementById('rejectComment').value = '';
       const modal = new bootstrap.Modal(document.getElementById('rejectModal'));

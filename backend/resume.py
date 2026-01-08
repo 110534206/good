@@ -1927,17 +1927,16 @@ def submit_and_generate_api():
 
         # 寫入 resumes
         # status: 班導/主任審核狀態，預設為 'uploaded'
-        # teacher_review_status: 指導老師審核狀態，預設為 'uploaded'（待指導老師審核）
+        # 使用 status 字段表示履歷狀態，初始為 'uploaded'（待班導/主任審核）
         cursor.execute("""
             INSERT INTO resumes
-            (user_id, filepath, original_filename, status, teacher_review_status, semester_id, created_at)
-            VALUES (%s, %s, %s, %s, %s, %s, NOW())
+            (user_id, filepath, original_filename, status, semester_id, created_at)
+            VALUES (%s, %s, %s, %s, %s, NOW())
         """, (
             user_id,
             save_path,
             filename,
-            'uploaded',  # 班導/主任審核狀態
-            'uploaded',  # 指導老師審核狀態（待審核）
+            'uploaded',  # 履歷狀態：待班導/主任審核
             semester_id
         ))
 
@@ -2967,8 +2966,8 @@ def update_resume_status_after_deadline(cursor, conn):
     """
     履歷上傳截止時間後，自動更新狀態：
     1. 將所有 uploaded 狀態的履歷自動改為 approved（班導審核通過）
-    2. 將所有班導已通過（status='approved'）且 teacher_review_status 為 NULL 或空的履歷
-       將 teacher_review_status 設為 'uploaded'，表示傳給指導老師審核
+    2. 將所有班導已通過（status='approved'）的履歷傳給指導老師審核
+       使用 status 和 reviewed_by 來判斷履歷狀態
     
     返回: (is_deadline_passed: bool, updated_count: dict)
     """
@@ -3002,44 +3001,33 @@ def update_resume_status_after_deadline(cursor, conn):
         
         # 如果已經過了截止時間，執行狀態更新
         if is_resume_deadline_passed:
-            # 先將所有 uploaded 狀態的履歷自動改為 approved（班導審核通過）
+            # 將所有未退件的履歷（uploaded 或 pending 狀態）自動改為 approved（班導審核通過）
+            # 不處理 rejected 狀態的履歷，保留退件狀態
             cursor.execute("""
                 UPDATE resumes 
                 SET status = 'approved', updated_at = NOW()
-                WHERE status = 'uploaded'
+                WHERE status IN ('uploaded', 'pending')
             """)
-            uploaded_to_approved_count = cursor.rowcount
+            pending_to_approved_count = cursor.rowcount
             
-            # 然後將所有班導已通過（status='approved'）且 teacher_review_status 為 NULL 或空的履歷
-            # 將 teacher_review_status 設為 'uploaded'，表示傳給指導老師審核
-            # 注意：只更新 teacher_review_status，status 保持為 'approved'（班導的審核狀態不變）
-            cursor.execute("""
-                UPDATE resumes 
-                SET teacher_review_status = 'uploaded', updated_at = NOW()
-                WHERE status = 'approved' 
-                AND (teacher_review_status IS NULL 
-                     OR teacher_review_status = '' 
-                     OR LENGTH(TRIM(COALESCE(teacher_review_status, ''))) = 0)
-            """)
-            updated_count = cursor.rowcount
+            # 截止時間後，所有班導已通過（status='approved'）的履歷會自動傳給指導老師審核
+            # status 保持為 'approved'，表示已通過班導審核，等待指導老師審核
+            # 注意：這裡不需要額外更新，因為 status 已經是 'approved'，指導老師可以查看並審核
             
-            if uploaded_to_approved_count > 0 or updated_count > 0:
+            if pending_to_approved_count > 0:
                 conn.commit()
-                if uploaded_to_approved_count > 0:
-                    print(f"✅ 履歷上傳截止時間已過，已將 {uploaded_to_approved_count} 筆履歷狀態從 'uploaded' 改為 'approved'（班導審核通過）")
-                if updated_count > 0:
-                    print(f"✅ 履歷上傳截止時間已過，已將 {updated_count} 筆班導已通過的履歷傳給指導老師（teacher_review_status 設為 'uploaded'，status 保持 'approved'）")
+                print(f"✅ 履歷提交截止時間已過，已將 {pending_to_approved_count} 筆未退件的履歷狀態改為 'approved'（班導審核通過），等待指導老師審核")
             
             return is_resume_deadline_passed, {
-                'uploaded_to_approved': uploaded_to_approved_count,
-                'teacher_review_status_updated': updated_count
+                'pending_to_approved': pending_to_approved_count,
+                'teacher_review_status_updated': 0  # 不再使用 teacher_review_status
             }
         
-        return False, {'uploaded_to_approved': 0, 'teacher_review_status_updated': 0}
+        return False, {'pending_to_approved': 0, 'teacher_review_status_updated': 0}
     except Exception as e:
         print(f"❌ 更新履歷狀態錯誤: {e}")
         traceback.print_exc()
-        return False, {'uploaded_to_approved': 0, 'teacher_review_status_updated': 0}
+        return False, {'pending_to_approved': 0, 'teacher_review_status_updated': 0}
 
 
 @resume_bp.route('/api/teacher_review_resumes', methods=['GET'])
@@ -3077,11 +3065,12 @@ def get_teacher_review_resumes():
                 COALESCE(sp.job_title, ij.title) AS job_title
             FROM users u
             LEFT JOIN classes c ON u.class_id = c.id
-            INNER JOIN resumes r ON u.id = r.user_id 
-            JOIN student_preferences sp ON sp.student_id = u.id
+            INNER JOIN student_preferences sp ON sp.student_id = u.id
+            LEFT JOIN resumes r ON r.id = sp.resume_id AND r.user_id = u.id
             JOIN internship_companies ic ON sp.company_id = ic.id
             LEFT JOIN internship_jobs ij ON sp.job_id = ij.id
             WHERE u.role = 'student' 
+              AND sp.resume_id IS NOT NULL
               AND r.id IS NOT NULL
         """
         params = []
@@ -3096,8 +3085,9 @@ def get_teacher_review_resumes():
             sql += " AND (r.status IN ('uploaded', 'rejected', 'approved') OR r.id IS NULL)"
         
         # 根據角色過濾資料
+        # 注意：班導應該能看到自己班級學生的履歷，主任應該能看到所有學生投遞的履歷
         if session_role in ['teacher', 'class_teacher']:
-            # 老師/班導師：只看自己班級的學生 (假設 classes_teacher 表格關聯了老師和班級)
+            # 指導老師/班導：只看自己班級的學生 (假設 classes_teacher 表格關聯了老師和班級)
             sql += """
                 AND u.class_id IN (
                     SELECT class_id FROM classes_teacher WHERE teacher_id = %s
@@ -3105,15 +3095,8 @@ def get_teacher_review_resumes():
             """
             params.append(session_user_id)
         elif session_role == 'director':
-            # 主任：只看自己部門的學生
-            director_dept = get_director_department(cursor, session_user_id)
-            if not director_dept:
-                # 主任沒有設定部門，則返回空列表
-                return jsonify({"success": True, "data": [], "message": "主任未設定所屬部門，無法查詢"}), 200
-            
-            # classes 表中使用 department 欄位
-            sql += " AND c.department = %s" 
-            params.append(director_dept)
+            # 主任：不添加過濾條件，可以看到所有投遞的履歷
+            pass
         
         # 排序：按照班級、姓名、志願順序、上傳時間（最新在上）
         sql += " ORDER BY c.name, u.username, sp.preference_order ASC, r.created_at DESC"
@@ -3236,7 +3219,7 @@ def review_resume(resume_id):
         cursor.execute("""
             SELECT 
                 r.user_id, r.original_filename, r.status AS old_status, 
-                r.teacher_review_status AS old_teacher_review_status,
+                r.reviewed_by AS old_reviewed_by,
                 r.comment,
                 u.email AS student_email, u.name AS student_name
             FROM resumes r
@@ -3252,45 +3235,34 @@ def review_resume(resume_id):
         student_email = resume_data['student_email'] 
         student_name = resume_data['student_name']  
         old_status = resume_data['old_status']
-        old_teacher_review_status = resume_data.get('old_teacher_review_status')
+        old_reviewed_by = resume_data.get('old_reviewed_by')
 
         # 3. 更新履歷狀態
-        # 區分班導/主任審核和指導老師審核
+        # 所有角色都使用 status 欄位，並設置 reviewed_by 為審核人的 id
+        old_status_for_check = old_status
+        
         if user_role == 'teacher':
-            # 指導老師審核：更新 teacher_review_status 欄位
-            old_status_for_check = old_teacher_review_status
-            # 當指導老師通過時，同時更新 status 為 'approved'，確保廠商 API 能正確顯示
-            if status == 'approved':
-                cursor.execute("""
-                    UPDATE resumes SET 
-                        teacher_review_status=%s,
-                        status=%s,
-                        comment=%s,
-                        reviewed_by=%s,
-                        reviewed_at=NOW(),
-                        updated_at=NOW()
-                    WHERE id=%s
-                """, (status, 'approved', comment, user_id, resume_id))
-            else:
-                cursor.execute("""
-                    UPDATE resumes SET 
-                        teacher_review_status=%s, 
-                        comment=%s,
-                        reviewed_by=%s,
-                        reviewed_at=NOW(),
-                        updated_at=NOW()
-                    WHERE id=%s
-                """, (status, comment, user_id, resume_id))
+            # 指導老師審核：更新 status 和 reviewed_by
+            cursor.execute("""
+                UPDATE resumes SET 
+                    status=%s,
+                    comment=%s,
+                    reviewed_by=%s,
+                    reviewed_at=NOW(),
+                    updated_at=NOW()
+                WHERE id=%s
+            """, (status, comment, user_id, resume_id))
         else:
-            # 班導、主任等其他角色：更新 status 欄位（班導/主任的審核狀態）
-            old_status_for_check = old_status
+            # 班導、主任等其他角色：更新 status 和 reviewed_by
             cursor.execute("""
                 UPDATE resumes SET 
                     status=%s, 
                     comment=%s,
+                    reviewed_by=%s,
+                    reviewed_at=NOW(),
                     updated_at=NOW()
                 WHERE id=%s
-            """, (status, comment, resume_id))
+            """, (status, comment, user_id, resume_id))
         
         # 4. 取得審核者姓名
         cursor.execute("SELECT name, role FROM users WHERE id = %s", (user_id,))
@@ -3387,6 +3359,18 @@ def review_resume(resume_id):
                 elif user_role == 'teacher':
                     # 指導老師通過履歷：該履歷會同步到廠商審核頁面
                     print(f"✅ 指導老師通過履歷，該履歷將同步到廠商審核頁面")
+                    
+                    # 🎯 確保該學生所有志願序狀態為 'approved'，這樣履歷才能同步到廠商審核頁面
+                    # 因為廠商 API 需要檢查 student_preferences 的狀態
+                    cursor.execute("""
+                        UPDATE student_preferences 
+                        SET status = 'approved'
+                        WHERE student_id = %s
+                        AND status IN ('pending', 'uploaded')
+                    """, (student_user_id,))
+                    updated_preferences_count = cursor.rowcount
+                    if updated_preferences_count > 0:
+                        print(f"✅ 指導老師通過履歷，已將 {updated_preferences_count} 筆學生志願序狀態更新為 'approved'，履歷將同步到廠商審核頁面")
                     
                     # 🎯 記錄到 vendor_preference_history 表
                     # 查找該學生相關的所有志願序（preference_id）
@@ -3553,7 +3537,8 @@ def get_class_resumes():
                         r.original_filename,
                         r.filepath,
                         r.status,
-                        r.teacher_review_status,
+                        r.status,
+                        r.reviewed_by,
                         r.comment,
                         r.note,
                         r.created_at,
@@ -3589,8 +3574,13 @@ def get_class_resumes():
                     WHERE r.status = 'approved'
                     -- 只顯示班導已通過（status='approved'）的履歷，供指導老師審核
                     -- 只顯示選擇了該指導老師管理的公司的學生履歷
-                    -- 只顯示 teacher_review_status 為 'uploaded' 的履歷（已傳給指導老師審核）
-                    AND r.teacher_review_status = 'uploaded'
+                    -- 只顯示尚未被指導老師審核的履歷（reviewed_by 為 NULL 或不是 teacher 角色）
+                    AND (r.reviewed_by IS NULL 
+                         OR NOT EXISTS (
+                             SELECT 1 FROM users reviewer
+                             WHERE reviewer.id = r.reviewed_by
+                             AND reviewer.role = 'teacher'
+                         ))
                     AND EXISTS (
                         SELECT 1
                         FROM student_preferences sp
@@ -3811,19 +3801,18 @@ def get_class_resumes():
                 r['upload_time'] = r['created_at']
             # 處理志願序狀態：根據角色使用不同的狀態欄位
             if role == 'teacher':
-                # 指導老師：使用 teacher_review_status 欄位
-                # teacher_review_status 為 'uploaded' 表示待審核，顯示為 'pending'
-                # teacher_review_status 為 'approved' 表示已通過
-                # teacher_review_status 為 'rejected' 表示已退件
-                teacher_status = r.get('teacher_review_status')
-                if teacher_status == 'uploaded' or not teacher_status:
-                    # 如果 teacher_review_status 為 'uploaded' 或不存在，表示尚未經過指導老師審核，顯示為 'pending'
+                # 指導老師：使用 status 欄位和 reviewed_by 來判斷
+                # 如果 reviewed_by 是當前指導老師，表示已審核，使用 status 的值
+                # 如果 reviewed_by 為 NULL 或不是當前指導老師，表示待審核，顯示為 'pending'
+                reviewed_by = r.get('reviewed_by')
+                if reviewed_by and reviewed_by == user_id:
+                    # 已由當前指導老師審核，使用 status 的值
+                    r['application_statuses'] = r.get('status', 'pending')
+                    r['display_status'] = r.get('status', 'pending')
+                else:
+                    # 尚未經過指導老師審核，顯示為 'pending'
                     r['application_statuses'] = 'pending'
                     r['display_status'] = 'pending'
-                else:
-                    # 使用 teacher_review_status 的值（'approved' 或 'rejected'）
-                    r['application_statuses'] = teacher_status
-                    r['display_status'] = teacher_status
             else:
                 # 其他角色（class_teacher, director, ta, admin, vendor）：使用 status 欄位（班導/主任的審核狀態）
                 if 'preference_status' in r and r.get('preference_status'):
@@ -7287,6 +7276,9 @@ def get_teacher_review_resumes():
     cursor = conn.cursor(dictionary=True) 
     
     try:
+        # 檢查履歷提交截止時間，如果已過期則自動通過未退件的履歷
+        is_resume_deadline_passed, update_counts = update_resume_status_after_deadline(cursor, conn)
+        
         # 建立基本查詢：每個志願序都顯示一行履歷
         sql = """
             SELECT 
@@ -7305,18 +7297,20 @@ def get_teacher_review_resumes():
                 COALESCE(sp.job_title, ij.title) AS job_title
             FROM users u
             LEFT JOIN classes c ON u.class_id = c.id
-            INNER JOIN resumes r ON u.id = r.user_id 
-            JOIN student_preferences sp ON sp.student_id = u.id
+            INNER JOIN student_preferences sp ON sp.student_id = u.id
+            LEFT JOIN resumes r ON r.id = sp.resume_id AND r.user_id = u.id
             JOIN internship_companies ic ON sp.company_id = ic.id
             LEFT JOIN internship_jobs ij ON sp.job_id = ij.id
             WHERE u.role = 'student' 
+              AND sp.resume_id IS NOT NULL
               AND r.id IS NOT NULL
         """
         params = []
         
         # 根據角色過濾資料
+        # 注意：班導應該能看到自己班級學生的履歷，主任應該能看到所有學生投遞的履歷
         if session_role in ['teacher', 'class_teacher']:
-            # 老師/班導師：只看自己班級的學生 (假設 classes_teacher 表格關聯了老師和班級)
+            # 指導老師/班導：只看自己班級的學生 (假設 classes_teacher 表格關聯了老師和班級)
             sql += """
                 AND u.class_id IN (
                     SELECT class_id FROM classes_teacher WHERE teacher_id = %s
@@ -7324,15 +7318,8 @@ def get_teacher_review_resumes():
             """
             params.append(session_user_id)
         elif session_role == 'director':
-            # 主任：只看自己部門的學生
-            director_dept = get_director_department(cursor, session_user_id)
-            if not director_dept:
-                # 主任沒有設定部門，則返回空列表
-                return jsonify({"success": True, "data": [], "message": "主任未設定所屬部門，無法查詢"}), 200
-            
-            # classes 表中使用 department 欄位
-            sql += " AND c.department = %s" 
-            params.append(director_dept)
+            # 主任：不添加過濾條件，可以看到所有投遞的履歷
+            pass
         
         # 排序：按照班級、姓名、志願順序、上傳時間（最新在上）
         sql += " ORDER BY c.name, u.username, sp.preference_order ASC, r.created_at DESC"
@@ -7340,9 +7327,9 @@ def get_teacher_review_resumes():
         cursor.execute(sql, tuple(params))
         rows = cursor.fetchall()
         
-        # 整理結果：確保每份履歷只對應一個職缺
-        # 使用字典儲存，key 為 resume_id，value 為履歷記錄（選擇 preference_order 最小的職缺）
-        resume_dict = {}  # key: resume_id, value: row data
+        # 整理結果：保留所有投遞記錄，每條投遞記錄都顯示一行
+        # 使用 preference_id 作為唯一標識，這樣同一履歷投遞到不同公司會顯示多行記錄
+        preference_dict = {}  # key: preference_id, value: row data
         
         for row in rows:
             student_id = row['student_id']
@@ -7350,19 +7337,18 @@ def get_teacher_review_resumes():
             preference_order = row.get('preference_order', 0)
             resume_id = row.get('resume_id')
             
-            # 由於使用了 INNER JOIN resumes，確保 resume_id 一定存在
-            if not resume_id:
+            # 確保 preference_id 和 resume_id 都存在
+            if not preference_id or not resume_id:
                 continue
 
-            # 如果這份履歷還沒記錄，或者當前志願順序更小，則更新記錄
-            # 確保每份履歷只對應 preference_order 最小的職缺
-            if resume_id not in resume_dict:
+            # 使用 preference_id 作為key，這樣每條投遞記錄都會保留
+            if preference_id not in preference_dict:
                 status = row.get('display_status') if row.get('display_status') else 'pending'
                 # 將 uploaded 狀態映射為 pending 供前端顯示
                 if status == 'uploaded':
                     status = 'pending'
                 
-                resume_dict[resume_id] = {
+                preference_dict[preference_id] = {
                     'id': resume_id,
                     'username': student_id,
                     'name': row['name'],
@@ -7377,34 +7363,42 @@ def get_teacher_review_resumes():
                     'display_job': row.get('job_title') or '—',
                     'display_status': status,
                 }
+        
+        # 返回所有投遞記錄，每條記錄都會顯示（即使使用相同履歷）
+        result_data = list(preference_dict.values())
+        
+        # 獲取履歷提交截止時間信息
+        deadline_info = None
+        cursor.execute("""
+            SELECT end_time 
+            FROM announcement 
+            WHERE title LIKE '[作業]%上傳履歷截止時間' AND is_published = 1
+            ORDER BY created_at DESC 
+            LIMIT 1
+        """)
+        deadline_result = cursor.fetchone()
+        if deadline_result and deadline_result.get('end_time'):
+            deadline = deadline_result['end_time']
+            if isinstance(deadline, datetime):
+                deadline_info = deadline.strftime('%Y-%m-%d %H:%M:%S')
             else:
-                # 如果已有記錄，比較 preference_order，選擇較小的（優先顯示第一志願）
-                existing_order = resume_dict[resume_id].get('preference_order', 999)
-                if preference_order < existing_order:
-                    status = row.get('display_status') if row.get('display_status') else 'pending'
-                    if status == 'uploaded':
-                        status = 'pending'
-                    
-                    resume_dict[resume_id] = {
-                        'id': resume_id,
-                        'username': student_id,
-                        'name': row['name'],
-                        'className': row['class_name'] or '—',
-                        'upload_time': row['upload_time'].strftime('%Y/%m/%d %H:%M') if isinstance(row['upload_time'], datetime) else (row['upload_time'] if row['upload_time'] else 'N/A'),
-                        'original_filename': row['original_filename'] or 'N/A',
-                        'company_name': row.get('company_name') or '—',
-                        'job_title': row.get('job_title') or '—',
-                        'preference_order': preference_order,
-                        'preference_id': preference_id,
-                        'display_company': row.get('company_name') or '—',
-                        'display_job': row.get('job_title') or '—',
-                        'display_status': status,
-                    }
+                deadline_info = str(deadline)
         
-        # 只返回有履歷的記錄（已使用 INNER JOIN 確保一定有履歷）
-        result_data = list(resume_dict.values())
+        # 檢查是否已過期
+        is_deadline_passed = False
+        if deadline_info:
+            try:
+                deadline_dt = datetime.strptime(deadline_info, '%Y-%m-%d %H:%M:%S')
+                is_deadline_passed = datetime.now() > deadline_dt
+            except:
+                pass
         
-        return jsonify({"success": True, "data": result_data})
+        return jsonify({
+            "success": True, 
+            "data": result_data,
+            "deadline": deadline_info,
+            "is_deadline_passed": is_deadline_passed
+        })
 
     except Exception as e:
         # 請確保您已在 resume.py 頂部導入 import traceback
@@ -11477,6 +11471,9 @@ def get_teacher_review_resumes():
     cursor = conn.cursor(dictionary=True) 
     
     try:
+        # 檢查履歷提交截止時間，如果已過期則自動通過未退件的履歷
+        is_resume_deadline_passed, update_counts = update_resume_status_after_deadline(cursor, conn)
+        
         # 建立基本查詢：每個志願序都顯示一行履歷
         sql = """
             SELECT 
@@ -11495,18 +11492,20 @@ def get_teacher_review_resumes():
                 COALESCE(sp.job_title, ij.title) AS job_title
             FROM users u
             LEFT JOIN classes c ON u.class_id = c.id
-            INNER JOIN resumes r ON u.id = r.user_id 
-            JOIN student_preferences sp ON sp.student_id = u.id
+            INNER JOIN student_preferences sp ON sp.student_id = u.id
+            LEFT JOIN resumes r ON r.id = sp.resume_id AND r.user_id = u.id
             JOIN internship_companies ic ON sp.company_id = ic.id
             LEFT JOIN internship_jobs ij ON sp.job_id = ij.id
             WHERE u.role = 'student' 
+              AND sp.resume_id IS NOT NULL
               AND r.id IS NOT NULL
         """
         params = []
         
         # 根據角色過濾資料
+        # 注意：班導應該能看到自己班級學生的履歷，主任應該能看到所有學生投遞的履歷
         if session_role in ['teacher', 'class_teacher']:
-            # 老師/班導師：只看自己班級的學生 (假設 classes_teacher 表格關聯了老師和班級)
+            # 指導老師/班導：只看自己班級的學生 (假設 classes_teacher 表格關聯了老師和班級)
             sql += """
                 AND u.class_id IN (
                     SELECT class_id FROM classes_teacher WHERE teacher_id = %s
@@ -11514,15 +11513,8 @@ def get_teacher_review_resumes():
             """
             params.append(session_user_id)
         elif session_role == 'director':
-            # 主任：只看自己部門的學生
-            director_dept = get_director_department(cursor, session_user_id)
-            if not director_dept:
-                # 主任沒有設定部門，則返回空列表
-                return jsonify({"success": True, "data": [], "message": "主任未設定所屬部門，無法查詢"}), 200
-            
-            # classes 表中使用 department 欄位
-            sql += " AND c.department = %s" 
-            params.append(director_dept)
+            # 主任：不添加過濾條件，可以看到所有投遞的履歷
+            pass
         
         # 排序：按照班級、姓名、志願順序、上傳時間（最新在上）
         sql += " ORDER BY c.name, u.username, sp.preference_order ASC, r.created_at DESC"
@@ -11530,9 +11522,9 @@ def get_teacher_review_resumes():
         cursor.execute(sql, tuple(params))
         rows = cursor.fetchall()
         
-        # 整理結果：確保每份履歷只對應一個職缺
-        # 使用字典儲存，key 為 resume_id，value 為履歷記錄（選擇 preference_order 最小的職缺）
-        resume_dict = {}  # key: resume_id, value: row data
+        # 整理結果：保留所有投遞記錄，每條投遞記錄都顯示一行
+        # 使用 preference_id 作為唯一標識，這樣同一履歷投遞到不同公司會顯示多行記錄
+        preference_dict = {}  # key: preference_id, value: row data
         
         for row in rows:
             student_id = row['student_id']
@@ -11540,19 +11532,18 @@ def get_teacher_review_resumes():
             preference_order = row.get('preference_order', 0)
             resume_id = row.get('resume_id')
             
-            # 由於使用了 INNER JOIN resumes，確保 resume_id 一定存在
-            if not resume_id:
+            # 確保 preference_id 和 resume_id 都存在
+            if not preference_id or not resume_id:
                 continue
 
-            # 如果這份履歷還沒記錄，或者當前志願順序更小，則更新記錄
-            # 確保每份履歷只對應 preference_order 最小的職缺
-            if resume_id not in resume_dict:
+            # 使用 preference_id 作為key，這樣每條投遞記錄都會保留
+            if preference_id not in preference_dict:
                 status = row.get('display_status') if row.get('display_status') else 'pending'
                 # 將 uploaded 狀態映射為 pending 供前端顯示
                 if status == 'uploaded':
                     status = 'pending'
                 
-                resume_dict[resume_id] = {
+                preference_dict[preference_id] = {
                     'id': resume_id,
                     'username': student_id,
                     'name': row['name'],
@@ -11567,34 +11558,42 @@ def get_teacher_review_resumes():
                     'display_job': row.get('job_title') or '—',
                     'display_status': status,
                 }
+        
+        # 返回所有投遞記錄，每條記錄都會顯示（即使使用相同履歷）
+        result_data = list(preference_dict.values())
+        
+        # 獲取履歷提交截止時間信息
+        deadline_info = None
+        cursor.execute("""
+            SELECT end_time 
+            FROM announcement 
+            WHERE title LIKE '[作業]%上傳履歷截止時間' AND is_published = 1
+            ORDER BY created_at DESC 
+            LIMIT 1
+        """)
+        deadline_result = cursor.fetchone()
+        if deadline_result and deadline_result.get('end_time'):
+            deadline = deadline_result['end_time']
+            if isinstance(deadline, datetime):
+                deadline_info = deadline.strftime('%Y-%m-%d %H:%M:%S')
             else:
-                # 如果已有記錄，比較 preference_order，選擇較小的（優先顯示第一志願）
-                existing_order = resume_dict[resume_id].get('preference_order', 999)
-                if preference_order < existing_order:
-                    status = row.get('display_status') if row.get('display_status') else 'pending'
-                    if status == 'uploaded':
-                        status = 'pending'
-                    
-                    resume_dict[resume_id] = {
-                        'id': resume_id,
-                        'username': student_id,
-                        'name': row['name'],
-                        'className': row['class_name'] or '—',
-                        'upload_time': row['upload_time'].strftime('%Y/%m/%d %H:%M') if isinstance(row['upload_time'], datetime) else (row['upload_time'] if row['upload_time'] else 'N/A'),
-                        'original_filename': row['original_filename'] or 'N/A',
-                        'company_name': row.get('company_name') or '—',
-                        'job_title': row.get('job_title') or '—',
-                        'preference_order': preference_order,
-                        'preference_id': preference_id,
-                        'display_company': row.get('company_name') or '—',
-                        'display_job': row.get('job_title') or '—',
-                        'display_status': status,
-                    }
+                deadline_info = str(deadline)
         
-        # 只返回有履歷的記錄（已使用 INNER JOIN 確保一定有履歷）
-        result_data = list(resume_dict.values())
+        # 檢查是否已過期
+        is_deadline_passed = False
+        if deadline_info:
+            try:
+                deadline_dt = datetime.strptime(deadline_info, '%Y-%m-%d %H:%M:%S')
+                is_deadline_passed = datetime.now() > deadline_dt
+            except:
+                pass
         
-        return jsonify({"success": True, "data": result_data})
+        return jsonify({
+            "success": True, 
+            "data": result_data,
+            "deadline": deadline_info,
+            "is_deadline_passed": is_deadline_passed
+        })
 
     except Exception as e:
         # 請確保您已在 resume.py 頂部導入 import traceback
@@ -15667,6 +15666,9 @@ def get_teacher_review_resumes():
     cursor = conn.cursor(dictionary=True) 
     
     try:
+        # 檢查履歷提交截止時間，如果已過期則自動通過未退件的履歷
+        is_resume_deadline_passed, update_counts = update_resume_status_after_deadline(cursor, conn)
+        
         # 建立基本查詢：每個志願序都顯示一行履歷
         sql = """
             SELECT 
@@ -15685,18 +15687,20 @@ def get_teacher_review_resumes():
                 COALESCE(sp.job_title, ij.title) AS job_title
             FROM users u
             LEFT JOIN classes c ON u.class_id = c.id
-            INNER JOIN resumes r ON u.id = r.user_id 
-            JOIN student_preferences sp ON sp.student_id = u.id
+            INNER JOIN student_preferences sp ON sp.student_id = u.id
+            LEFT JOIN resumes r ON r.id = sp.resume_id AND r.user_id = u.id
             JOIN internship_companies ic ON sp.company_id = ic.id
             LEFT JOIN internship_jobs ij ON sp.job_id = ij.id
             WHERE u.role = 'student' 
+              AND sp.resume_id IS NOT NULL
               AND r.id IS NOT NULL
         """
         params = []
         
         # 根據角色過濾資料
+        # 注意：班導應該能看到自己班級學生的履歷，主任應該能看到所有學生投遞的履歷
         if session_role in ['teacher', 'class_teacher']:
-            # 老師/班導師：只看自己班級的學生 (假設 classes_teacher 表格關聯了老師和班級)
+            # 指導老師/班導：只看自己班級的學生 (假設 classes_teacher 表格關聯了老師和班級)
             sql += """
                 AND u.class_id IN (
                     SELECT class_id FROM classes_teacher WHERE teacher_id = %s
@@ -15704,15 +15708,8 @@ def get_teacher_review_resumes():
             """
             params.append(session_user_id)
         elif session_role == 'director':
-            # 主任：只看自己部門的學生
-            director_dept = get_director_department(cursor, session_user_id)
-            if not director_dept:
-                # 主任沒有設定部門，則返回空列表
-                return jsonify({"success": True, "data": [], "message": "主任未設定所屬部門，無法查詢"}), 200
-            
-            # classes 表中使用 department 欄位
-            sql += " AND c.department = %s" 
-            params.append(director_dept)
+            # 主任：不添加過濾條件，可以看到所有投遞的履歷
+            pass
         
         # 排序：按照班級、姓名、志願順序、上傳時間（最新在上）
         sql += " ORDER BY c.name, u.username, sp.preference_order ASC, r.created_at DESC"
@@ -15720,9 +15717,9 @@ def get_teacher_review_resumes():
         cursor.execute(sql, tuple(params))
         rows = cursor.fetchall()
         
-        # 整理結果：確保每份履歷只對應一個職缺
-        # 使用字典儲存，key 為 resume_id，value 為履歷記錄（選擇 preference_order 最小的職缺）
-        resume_dict = {}  # key: resume_id, value: row data
+        # 整理結果：保留所有投遞記錄，每條投遞記錄都顯示一行
+        # 使用 preference_id 作為唯一標識，這樣同一履歷投遞到不同公司會顯示多行記錄
+        preference_dict = {}  # key: preference_id, value: row data
         
         for row in rows:
             student_id = row['student_id']
@@ -15730,19 +15727,18 @@ def get_teacher_review_resumes():
             preference_order = row.get('preference_order', 0)
             resume_id = row.get('resume_id')
             
-            # 由於使用了 INNER JOIN resumes，確保 resume_id 一定存在
-            if not resume_id:
+            # 確保 preference_id 和 resume_id 都存在
+            if not preference_id or not resume_id:
                 continue
 
-            # 如果這份履歷還沒記錄，或者當前志願順序更小，則更新記錄
-            # 確保每份履歷只對應 preference_order 最小的職缺
-            if resume_id not in resume_dict:
+            # 使用 preference_id 作為key，這樣每條投遞記錄都會保留
+            if preference_id not in preference_dict:
                 status = row.get('display_status') if row.get('display_status') else 'pending'
                 # 將 uploaded 狀態映射為 pending 供前端顯示
                 if status == 'uploaded':
                     status = 'pending'
                 
-                resume_dict[resume_id] = {
+                preference_dict[preference_id] = {
                     'id': resume_id,
                     'username': student_id,
                     'name': row['name'],
@@ -15757,34 +15753,42 @@ def get_teacher_review_resumes():
                     'display_job': row.get('job_title') or '—',
                     'display_status': status,
                 }
+        
+        # 返回所有投遞記錄，每條記錄都會顯示（即使使用相同履歷）
+        result_data = list(preference_dict.values())
+        
+        # 獲取履歷提交截止時間信息
+        deadline_info = None
+        cursor.execute("""
+            SELECT end_time 
+            FROM announcement 
+            WHERE title LIKE '[作業]%上傳履歷截止時間' AND is_published = 1
+            ORDER BY created_at DESC 
+            LIMIT 1
+        """)
+        deadline_result = cursor.fetchone()
+        if deadline_result and deadline_result.get('end_time'):
+            deadline = deadline_result['end_time']
+            if isinstance(deadline, datetime):
+                deadline_info = deadline.strftime('%Y-%m-%d %H:%M:%S')
             else:
-                # 如果已有記錄，比較 preference_order，選擇較小的（優先顯示第一志願）
-                existing_order = resume_dict[resume_id].get('preference_order', 999)
-                if preference_order < existing_order:
-                    status = row.get('display_status') if row.get('display_status') else 'pending'
-                    if status == 'uploaded':
-                        status = 'pending'
-                    
-                    resume_dict[resume_id] = {
-                        'id': resume_id,
-                        'username': student_id,
-                        'name': row['name'],
-                        'className': row['class_name'] or '—',
-                        'upload_time': row['upload_time'].strftime('%Y/%m/%d %H:%M') if isinstance(row['upload_time'], datetime) else (row['upload_time'] if row['upload_time'] else 'N/A'),
-                        'original_filename': row['original_filename'] or 'N/A',
-                        'company_name': row.get('company_name') or '—',
-                        'job_title': row.get('job_title') or '—',
-                        'preference_order': preference_order,
-                        'preference_id': preference_id,
-                        'display_company': row.get('company_name') or '—',
-                        'display_job': row.get('job_title') or '—',
-                        'display_status': status,
-                    }
+                deadline_info = str(deadline)
         
-        # 只返回有履歷的記錄（已使用 INNER JOIN 確保一定有履歷）
-        result_data = list(resume_dict.values())
+        # 檢查是否已過期
+        is_deadline_passed = False
+        if deadline_info:
+            try:
+                deadline_dt = datetime.strptime(deadline_info, '%Y-%m-%d %H:%M:%S')
+                is_deadline_passed = datetime.now() > deadline_dt
+            except:
+                pass
         
-        return jsonify({"success": True, "data": result_data})
+        return jsonify({
+            "success": True, 
+            "data": result_data,
+            "deadline": deadline_info,
+            "is_deadline_passed": is_deadline_passed
+        })
 
     except Exception as e:
         # 請確保您已在 resume.py 頂部導入 import traceback
@@ -19857,6 +19861,9 @@ def get_teacher_review_resumes():
     cursor = conn.cursor(dictionary=True) 
     
     try:
+        # 檢查履歷提交截止時間，如果已過期則自動通過未退件的履歷
+        is_resume_deadline_passed, update_counts = update_resume_status_after_deadline(cursor, conn)
+        
         # 建立基本查詢：每個志願序都顯示一行履歷
         sql = """
             SELECT 
@@ -19875,18 +19882,20 @@ def get_teacher_review_resumes():
                 COALESCE(sp.job_title, ij.title) AS job_title
             FROM users u
             LEFT JOIN classes c ON u.class_id = c.id
-            INNER JOIN resumes r ON u.id = r.user_id 
-            JOIN student_preferences sp ON sp.student_id = u.id
+            INNER JOIN student_preferences sp ON sp.student_id = u.id
+            LEFT JOIN resumes r ON r.id = sp.resume_id AND r.user_id = u.id
             JOIN internship_companies ic ON sp.company_id = ic.id
             LEFT JOIN internship_jobs ij ON sp.job_id = ij.id
             WHERE u.role = 'student' 
+              AND sp.resume_id IS NOT NULL
               AND r.id IS NOT NULL
         """
         params = []
         
         # 根據角色過濾資料
+        # 注意：班導應該能看到自己班級學生的履歷，主任應該能看到所有學生投遞的履歷
         if session_role in ['teacher', 'class_teacher']:
-            # 老師/班導師：只看自己班級的學生 (假設 classes_teacher 表格關聯了老師和班級)
+            # 指導老師/班導：只看自己班級的學生 (假設 classes_teacher 表格關聯了老師和班級)
             sql += """
                 AND u.class_id IN (
                     SELECT class_id FROM classes_teacher WHERE teacher_id = %s
@@ -19894,15 +19903,8 @@ def get_teacher_review_resumes():
             """
             params.append(session_user_id)
         elif session_role == 'director':
-            # 主任：只看自己部門的學生
-            director_dept = get_director_department(cursor, session_user_id)
-            if not director_dept:
-                # 主任沒有設定部門，則返回空列表
-                return jsonify({"success": True, "data": [], "message": "主任未設定所屬部門，無法查詢"}), 200
-            
-            # classes 表中使用 department 欄位
-            sql += " AND c.department = %s" 
-            params.append(director_dept)
+            # 主任：不添加過濾條件，可以看到所有投遞的履歷
+            pass
         
         # 排序：按照班級、姓名、志願順序、上傳時間（最新在上）
         sql += " ORDER BY c.name, u.username, sp.preference_order ASC, r.created_at DESC"
@@ -19910,9 +19912,9 @@ def get_teacher_review_resumes():
         cursor.execute(sql, tuple(params))
         rows = cursor.fetchall()
         
-        # 整理結果：確保每份履歷只對應一個職缺
-        # 使用字典儲存，key 為 resume_id，value 為履歷記錄（選擇 preference_order 最小的職缺）
-        resume_dict = {}  # key: resume_id, value: row data
+        # 整理結果：保留所有投遞記錄，每條投遞記錄都顯示一行
+        # 使用 preference_id 作為唯一標識，這樣同一履歷投遞到不同公司會顯示多行記錄
+        preference_dict = {}  # key: preference_id, value: row data
         
         for row in rows:
             student_id = row['student_id']
@@ -19920,19 +19922,18 @@ def get_teacher_review_resumes():
             preference_order = row.get('preference_order', 0)
             resume_id = row.get('resume_id')
             
-            # 由於使用了 INNER JOIN resumes，確保 resume_id 一定存在
-            if not resume_id:
+            # 確保 preference_id 和 resume_id 都存在
+            if not preference_id or not resume_id:
                 continue
 
-            # 如果這份履歷還沒記錄，或者當前志願順序更小，則更新記錄
-            # 確保每份履歷只對應 preference_order 最小的職缺
-            if resume_id not in resume_dict:
+            # 使用 preference_id 作為key，這樣每條投遞記錄都會保留
+            if preference_id not in preference_dict:
                 status = row.get('display_status') if row.get('display_status') else 'pending'
                 # 將 uploaded 狀態映射為 pending 供前端顯示
                 if status == 'uploaded':
                     status = 'pending'
                 
-                resume_dict[resume_id] = {
+                preference_dict[preference_id] = {
                     'id': resume_id,
                     'username': student_id,
                     'name': row['name'],
@@ -19947,34 +19948,42 @@ def get_teacher_review_resumes():
                     'display_job': row.get('job_title') or '—',
                     'display_status': status,
                 }
+        
+        # 返回所有投遞記錄，每條記錄都會顯示（即使使用相同履歷）
+        result_data = list(preference_dict.values())
+        
+        # 獲取履歷提交截止時間信息
+        deadline_info = None
+        cursor.execute("""
+            SELECT end_time 
+            FROM announcement 
+            WHERE title LIKE '[作業]%上傳履歷截止時間' AND is_published = 1
+            ORDER BY created_at DESC 
+            LIMIT 1
+        """)
+        deadline_result = cursor.fetchone()
+        if deadline_result and deadline_result.get('end_time'):
+            deadline = deadline_result['end_time']
+            if isinstance(deadline, datetime):
+                deadline_info = deadline.strftime('%Y-%m-%d %H:%M:%S')
             else:
-                # 如果已有記錄，比較 preference_order，選擇較小的（優先顯示第一志願）
-                existing_order = resume_dict[resume_id].get('preference_order', 999)
-                if preference_order < existing_order:
-                    status = row.get('display_status') if row.get('display_status') else 'pending'
-                    if status == 'uploaded':
-                        status = 'pending'
-                    
-                    resume_dict[resume_id] = {
-                        'id': resume_id,
-                        'username': student_id,
-                        'name': row['name'],
-                        'className': row['class_name'] or '—',
-                        'upload_time': row['upload_time'].strftime('%Y/%m/%d %H:%M') if isinstance(row['upload_time'], datetime) else (row['upload_time'] if row['upload_time'] else 'N/A'),
-                        'original_filename': row['original_filename'] or 'N/A',
-                        'company_name': row.get('company_name') or '—',
-                        'job_title': row.get('job_title') or '—',
-                        'preference_order': preference_order,
-                        'preference_id': preference_id,
-                        'display_company': row.get('company_name') or '—',
-                        'display_job': row.get('job_title') or '—',
-                        'display_status': status,
-                    }
+                deadline_info = str(deadline)
         
-        # 只返回有履歷的記錄（已使用 INNER JOIN 確保一定有履歷）
-        result_data = list(resume_dict.values())
+        # 檢查是否已過期
+        is_deadline_passed = False
+        if deadline_info:
+            try:
+                deadline_dt = datetime.strptime(deadline_info, '%Y-%m-%d %H:%M:%S')
+                is_deadline_passed = datetime.now() > deadline_dt
+            except:
+                pass
         
-        return jsonify({"success": True, "data": result_data})
+        return jsonify({
+            "success": True, 
+            "data": result_data,
+            "deadline": deadline_info,
+            "is_deadline_passed": is_deadline_passed
+        })
 
     except Exception as e:
         # 請確保您已在 resume.py 頂部導入 import traceback
@@ -24047,6 +24056,9 @@ def get_teacher_review_resumes():
     cursor = conn.cursor(dictionary=True) 
     
     try:
+        # 檢查履歷提交截止時間，如果已過期則自動通過未退件的履歷
+        is_resume_deadline_passed, update_counts = update_resume_status_after_deadline(cursor, conn)
+        
         # 建立基本查詢：每個志願序都顯示一行履歷
         sql = """
             SELECT 
@@ -24065,18 +24077,20 @@ def get_teacher_review_resumes():
                 COALESCE(sp.job_title, ij.title) AS job_title
             FROM users u
             LEFT JOIN classes c ON u.class_id = c.id
-            INNER JOIN resumes r ON u.id = r.user_id 
-            JOIN student_preferences sp ON sp.student_id = u.id
+            INNER JOIN student_preferences sp ON sp.student_id = u.id
+            LEFT JOIN resumes r ON r.id = sp.resume_id AND r.user_id = u.id
             JOIN internship_companies ic ON sp.company_id = ic.id
             LEFT JOIN internship_jobs ij ON sp.job_id = ij.id
             WHERE u.role = 'student' 
+              AND sp.resume_id IS NOT NULL
               AND r.id IS NOT NULL
         """
         params = []
         
         # 根據角色過濾資料
+        # 注意：班導應該能看到自己班級學生的履歷，主任應該能看到所有學生投遞的履歷
         if session_role in ['teacher', 'class_teacher']:
-            # 老師/班導師：只看自己班級的學生 (假設 classes_teacher 表格關聯了老師和班級)
+            # 指導老師/班導：只看自己班級的學生 (假設 classes_teacher 表格關聯了老師和班級)
             sql += """
                 AND u.class_id IN (
                     SELECT class_id FROM classes_teacher WHERE teacher_id = %s
@@ -24084,15 +24098,8 @@ def get_teacher_review_resumes():
             """
             params.append(session_user_id)
         elif session_role == 'director':
-            # 主任：只看自己部門的學生
-            director_dept = get_director_department(cursor, session_user_id)
-            if not director_dept:
-                # 主任沒有設定部門，則返回空列表
-                return jsonify({"success": True, "data": [], "message": "主任未設定所屬部門，無法查詢"}), 200
-            
-            # classes 表中使用 department 欄位
-            sql += " AND c.department = %s" 
-            params.append(director_dept)
+            # 主任：不添加過濾條件，可以看到所有投遞的履歷
+            pass
         
         # 排序：按照班級、姓名、志願順序、上傳時間（最新在上）
         sql += " ORDER BY c.name, u.username, sp.preference_order ASC, r.created_at DESC"
@@ -24100,9 +24107,9 @@ def get_teacher_review_resumes():
         cursor.execute(sql, tuple(params))
         rows = cursor.fetchall()
         
-        # 整理結果：確保每份履歷只對應一個職缺
-        # 使用字典儲存，key 為 resume_id，value 為履歷記錄（選擇 preference_order 最小的職缺）
-        resume_dict = {}  # key: resume_id, value: row data
+        # 整理結果：保留所有投遞記錄，每條投遞記錄都顯示一行
+        # 使用 preference_id 作為唯一標識，這樣同一履歷投遞到不同公司會顯示多行記錄
+        preference_dict = {}  # key: preference_id, value: row data
         
         for row in rows:
             student_id = row['student_id']
@@ -24110,19 +24117,18 @@ def get_teacher_review_resumes():
             preference_order = row.get('preference_order', 0)
             resume_id = row.get('resume_id')
             
-            # 由於使用了 INNER JOIN resumes，確保 resume_id 一定存在
-            if not resume_id:
+            # 確保 preference_id 和 resume_id 都存在
+            if not preference_id or not resume_id:
                 continue
 
-            # 如果這份履歷還沒記錄，或者當前志願順序更小，則更新記錄
-            # 確保每份履歷只對應 preference_order 最小的職缺
-            if resume_id not in resume_dict:
+            # 使用 preference_id 作為key，這樣每條投遞記錄都會保留
+            if preference_id not in preference_dict:
                 status = row.get('display_status') if row.get('display_status') else 'pending'
                 # 將 uploaded 狀態映射為 pending 供前端顯示
                 if status == 'uploaded':
                     status = 'pending'
                 
-                resume_dict[resume_id] = {
+                preference_dict[preference_id] = {
                     'id': resume_id,
                     'username': student_id,
                     'name': row['name'],
@@ -24137,34 +24143,42 @@ def get_teacher_review_resumes():
                     'display_job': row.get('job_title') or '—',
                     'display_status': status,
                 }
+        
+        # 返回所有投遞記錄，每條記錄都會顯示（即使使用相同履歷）
+        result_data = list(preference_dict.values())
+        
+        # 獲取履歷提交截止時間信息
+        deadline_info = None
+        cursor.execute("""
+            SELECT end_time 
+            FROM announcement 
+            WHERE title LIKE '[作業]%上傳履歷截止時間' AND is_published = 1
+            ORDER BY created_at DESC 
+            LIMIT 1
+        """)
+        deadline_result = cursor.fetchone()
+        if deadline_result and deadline_result.get('end_time'):
+            deadline = deadline_result['end_time']
+            if isinstance(deadline, datetime):
+                deadline_info = deadline.strftime('%Y-%m-%d %H:%M:%S')
             else:
-                # 如果已有記錄，比較 preference_order，選擇較小的（優先顯示第一志願）
-                existing_order = resume_dict[resume_id].get('preference_order', 999)
-                if preference_order < existing_order:
-                    status = row.get('display_status') if row.get('display_status') else 'pending'
-                    if status == 'uploaded':
-                        status = 'pending'
-                    
-                    resume_dict[resume_id] = {
-                        'id': resume_id,
-                        'username': student_id,
-                        'name': row['name'],
-                        'className': row['class_name'] or '—',
-                        'upload_time': row['upload_time'].strftime('%Y/%m/%d %H:%M') if isinstance(row['upload_time'], datetime) else (row['upload_time'] if row['upload_time'] else 'N/A'),
-                        'original_filename': row['original_filename'] or 'N/A',
-                        'company_name': row.get('company_name') or '—',
-                        'job_title': row.get('job_title') or '—',
-                        'preference_order': preference_order,
-                        'preference_id': preference_id,
-                        'display_company': row.get('company_name') or '—',
-                        'display_job': row.get('job_title') or '—',
-                        'display_status': status,
-                    }
+                deadline_info = str(deadline)
         
-        # 只返回有履歷的記錄（已使用 INNER JOIN 確保一定有履歷）
-        result_data = list(resume_dict.values())
+        # 檢查是否已過期
+        is_deadline_passed = False
+        if deadline_info:
+            try:
+                deadline_dt = datetime.strptime(deadline_info, '%Y-%m-%d %H:%M:%S')
+                is_deadline_passed = datetime.now() > deadline_dt
+            except:
+                pass
         
-        return jsonify({"success": True, "data": result_data})
+        return jsonify({
+            "success": True, 
+            "data": result_data,
+            "deadline": deadline_info,
+            "is_deadline_passed": is_deadline_passed
+        })
 
     except Exception as e:
         # 請確保您已在 resume.py 頂部導入 import traceback

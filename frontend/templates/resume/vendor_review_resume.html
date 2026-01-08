@@ -1635,11 +1635,18 @@
               if (jobData && jobData.students[parseInt(resumeIndex)]) {
                 const resume = jobData.students[parseInt(resumeIndex)];
                 const slotIndex = parseInt(dropdown.dataset.slotIndex || '0');
+                // 確保使用正確的 student_id（不是履歷ID）
+                const studentId = resume.student_id;
+                if (!studentId) {
+                  console.error('❌ 缺少 student_id，resume:', resume);
+                  alert(`錯誤：學生 ${resume.name || resume.student_name} 缺少 student_id`);
+                  return;
+                }
                 selectedStudents.push({
                   slot_index: slotIndex + 1,
                   job_title: jobData.job_title,
                   job_id: jobData.job_id,
-                  student_id: resume.student_id || resume.id,
+                  student_id: studentId,
                   student_name: resume.name || resume.student_name,
                   student_number: resume.username || resume.student_number,
                   company_name: resume.company_name,
@@ -1660,11 +1667,18 @@
               const jobData = jobsMap.get(jobKey);
               if (jobData && jobData.students[parseInt(resumeIndex)]) {
                 const resume = jobData.students[parseInt(resumeIndex)];
+                // 確保使用正確的 student_id（不是履歷ID）
+                const studentId = resume.student_id;
+                if (!studentId) {
+                  console.error('❌ 缺少 student_id，resume:', resume);
+                  alert(`錯誤：學生 ${resume.name || resume.student_name} 缺少 student_id`);
+                  return;
+                }
                 selectedStudents.push({
                   slot_index: null,
                   job_title: jobData.job_title,
                   job_id: jobData.job_id,
-                  student_id: resume.student_id || resume.id,
+                  student_id: studentId,
                   student_name: resume.name || resume.student_name,
                   student_number: resume.username || resume.student_number,
                   company_name: resume.company_name,
@@ -1682,17 +1696,38 @@
             return;
           }
           
-          // 將選中的學生資料存儲到 sessionStorage
-          sessionStorage.setItem('matchingSortData', JSON.stringify(selectedStudents));
+          // 調試：打印要發送的數據
+          console.log('📤 準備發送媒合排序數據：', selectedStudents);
+          selectedStudents.forEach((student, idx) => {
+            console.log(`  [${idx+1}] 學生：${student.student_name}, student_id=${student.student_id}, preference_id=${student.preference_id}, job_id=${student.job_id}`);
+          });
           
-          // 關閉模態框
-          const modal = bootstrap.Modal.getInstance(document.getElementById('matchingSortModal'));
-          if (modal) {
-            modal.hide();
-          }
-          
-          // 跳轉到 /ta/match_results
-          window.location.href = '/ta/match_results';
+          // 保存到後端資料庫
+          fetch('/vendor/api/save_matching_sort', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ students: selectedStudents })
+          })
+          .then(res => res.json())
+          .then(data => {
+            if (data.success) {
+              alert('✅ ' + (data.message || '媒合排序已成功保存'));
+              
+              // 關閉模態框
+              const modal = bootstrap.Modal.getInstance(document.getElementById('matchingSortModal'));
+              if (modal) {
+                modal.hide();
+              }
+              
+              // 留在當前頁面，不跳轉
+            } else {
+              alert('❌ 保存失敗：' + (data.message || '未知錯誤'));
+            }
+          })
+          .catch(err => {
+            console.error('保存媒合排序失敗:', err);
+            alert('❌ 保存失敗，請稍後再試');
+          });
         });
       }
       

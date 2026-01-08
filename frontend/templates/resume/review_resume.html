@@ -58,6 +58,12 @@
     
     .status-badge.bg-secondary { color: #fff; background-color: #6c757d; }
     
+    .alert-deadline {
+      margin-bottom: 16px;
+      border-radius: 8px;
+      padding: 12px 16px;
+    }
+    
     #commentInput { width: 100%; height: 180px; resize: vertical; padding: 0.5rem; font-size: 1rem; line-height: 1.4; }
     
     /* 側邊選單樣式 */
@@ -143,6 +149,9 @@
   </header>
   <main>
     <section class="panel" aria-label="履歷列表">
+      <!-- 截止時間提示 -->
+      <div id="deadlineAlert" class="alert alert-deadline" style="display: none; margin-bottom: 16px;"></div>
+      
       <div class="panel-header">
         <h2 id="resumeListTitle">履歷列表</h2>
       </div>
@@ -234,6 +243,7 @@
     let userRole = null;
     let isHomeroom = false;
     let currentUserId = null;
+    let isDeadlinePassed = false; // 截止時間是否已過
 
     // 定義狀態顏色，approved 對應 success (綠色)
     function statusColor(status) {
@@ -281,9 +291,8 @@
             const commentHeader = document.getElementById('commentHeader');
             if (commentHeader) commentHeader.textContent = '廠商留言';
           } else {
-             const params = [];
-             if (targetCompanyId) params.push(`company_id=${targetCompanyId}`);
-             apiUrl = params.length > 0 ? `/api/get_class_resumes?${params.join('&')}` : `/api/get_class_resumes`;
+            // 使用 /api/teacher_review_resumes API（與 class_review_resume.html 一致）
+            apiUrl = '/api/teacher_review_resumes';
           }
 
           Promise.all([
@@ -294,9 +303,38 @@
                const r = await res.json();
                return {success:true, items: (r.jobs||[]).map(j=>({id:j.id, title:j.title}))};
             }) : fetch('/api/public/positions').then(res => res.ok ? res.json() : {success:true, items:[]}))
-          ]).then(([resumeData, companyData, positionData]) => {
-            if (resumeData.success) {
-              allResumes = resumeData.resumes || [];
+          ]).then(([resumeResponse, companyData, positionData]) => {
+            if (resumeResponse.success) {
+              // 處理履歷數據和截止時間信息（與 class_review_resume.html 一致）
+              const resumes = userRole === 'vendor' ? (resumeResponse.resumes || []) : (resumeResponse.data || []);
+              allResumes = resumes;
+              
+              // 顯示截止時間提示（僅非 vendor 角色）
+              if (userRole !== 'vendor' && resumeResponse.deadline) {
+                isDeadlinePassed = resumeResponse.is_deadline_passed || false;
+                const deadlineAlert = document.getElementById('deadlineAlert');
+                if (deadlineAlert) {
+                  const isExpired = resumeResponse.is_deadline_passed;
+                  if (isExpired) {
+                    deadlineAlert.className = 'alert alert-warning alert-deadline';
+                    deadlineAlert.innerHTML = `
+                      <strong>⚠️ 履歷提交截止時間已過</strong><br>
+                      履歷提交截止時間：${resumeResponse.deadline}<br>
+                      <span style="color: #dc3545;">已超過截止時間，未退件的履歷已自動通過並傳給指導老師審核。</span>
+                    `;
+                    deadlineAlert.style.display = 'block';
+                  } else {
+                    deadlineAlert.className = 'alert alert-info alert-deadline';
+                    deadlineAlert.innerHTML = `
+                      <strong>📅 履歷提交截止時間提醒</strong><br>
+                      履歷提交截止時間：${resumeResponse.deadline}<br>
+                      請在截止時間前完成履歷退件，否則將自動通過並傳給指導老師審核。
+                    `;
+                    deadlineAlert.style.display = 'block';
+                  }
+                }
+              }
+              
               populateFilters(allResumes, companyData, positionData);
 
               if (targetStatus) {
@@ -399,20 +437,19 @@
       companyNameSelect.innerHTML = `<option value="">所有公司</option>`;
       const companySet = new Set();
       
-      // 如果是主任模式，顯示所有已審核公司（與 class_review_resume.html 一樣）
-      // 否則只顯示該指導老師管理的公司
+      // 使用已審核公司列表（與 class_review_resume.html 一致）
       if (companyData && companyData.companies && companyData.companies.length > 0) {
           companyData.companies.forEach(company => {
               const companyName = company.company_name || company.name || '';
               let shouldInclude = false;
               
-              if (isDirectorMode) {
-                  // 主任模式：顯示所有已核准且本學期開放的公司
+              if (isDirectorMode || userRole === 'class_teacher') {
+                  // 主任/班導模式：顯示所有已核准且本學期開放的公司
                   shouldInclude = companyName && companyName.trim() && 
                                   company.status === 'approved' && 
                                   company.is_open_current_semester;
               } else {
-                  // 一般模式：只顯示該指導老師管理的公司
+                  // 一般模式（指導老師）：只顯示該指導老師管理的公司
                   shouldInclude = companyName && companyName.trim() && 
                                   company.advisor_user_id && 
                                   String(company.advisor_user_id) === String(currentUserId) &&
@@ -435,8 +472,8 @@
       companySelect.innerHTML = `<option value="">所有職缺</option>`;
       const jobSet = new Set();
       
-      if (isDirectorMode) {
-          // 主任模式：從已審核公司列表中提取所有職缺（與 class_review_resume.html 一樣）
+      if (isDirectorMode || userRole === 'class_teacher') {
+          // 主任/班導模式：從已審核公司列表中提取所有職缺（與 class_review_resume.html 一樣）
           if (companyData && companyData.companies && companyData.companies.length > 0) {
               companyData.companies.forEach(c => {
                   // 篩選條件：已核准 (approved) 且本學期開放 (is_open_current_semester)
@@ -652,8 +689,25 @@
         const rejectClick = `rejectResume(${row.id}, ${pid ? `'${pid}'` : 'null'})`;
 
         // 主任模式只顯示退件按鈕，不顯示通過按鈕
+        // 根據截止時間狀態決定是否顯示退件按鈕
+        // 注意：截止時間後，班導和主任仍能看到履歷，但退件按鈕會被禁用
+        const isRejected = row.display_status === 'rejected';
+        const canReject = !isDeadlinePassed || userRole === 'vendor';
+        
+        // 退件按鈕顯示邏輯：
+        // 1. 已退件的履歷：不顯示退件按鈕（已退件）
+        // 2. 截止時間前：顯示可用的退件按鈕
+        // 3. 截止時間後（班導/主任）：顯示禁用的退件按鈕，表示無法再退件
+        const rejectBtn = isRejected 
+          ? '' // 已退件的履歷不顯示退件按鈕
+          : canReject 
+          ? `<button class="btn btn-sm btn-outline-danger" style="margin-right:4px;" onclick="${rejectClick}">退件</button>`
+          : (isDeadlinePassed && (userRole === 'class_teacher' || userRole === 'director'))
+          ? `<button class="btn btn-sm btn-outline-secondary" style="margin-right:4px;" disabled title="已過截止時間，無法退件">退件</button>`
+          : '';
+        
         let btns = `<div style="display:flex; align-items:center;">${dlBtn}`;
-        btns += `<button class="btn btn-sm btn-outline-danger" style="margin-right:4px;" onclick="${rejectClick}">退件</button>`;
+        btns += rejectBtn;
         if (!isDirectorMode) {
             btns += `<button class="btn btn-sm btn-outline-success" onclick="${approveClick}">完成</button>`;
         }
@@ -690,12 +744,15 @@
           if (data.success) {
               alert("✅ 狀態更新成功");
               // 重新載入資料
-              const urlParams = new URLSearchParams(window.location.search);
-              const targetCompanyId = urlParams.get('company_id');
-              const params = targetCompanyId ? `?company_id=${targetCompanyId}` : '';
-              fetch(`/api/get_class_resumes${params}`).then(r=>r.json()).then(d=>{
-                  if(d.success) { allResumes=d.resumes; applyFilters(); }
-              });
+              if (userRole === 'vendor') {
+                fetch('/vendor/api/resumes').then(r=>r.json()).then(d=>{
+                  if(d.success) { allResumes=d.resumes || []; applyFilters(); }
+                });
+              } else {
+                fetch('/api/teacher_review_resumes').then(r=>r.json()).then(d=>{
+                  if(d.success) { allResumes=d.data || []; applyFilters(); }
+                });
+              }
           } else {
               alert("失敗：" + data.message);
           }
@@ -703,6 +760,12 @@
     }
 
     function rejectResume(resumeId, preferenceId) {
+       // 檢查截止時間（僅非 vendor 角色）
+       if (userRole !== 'vendor' && isDeadlinePassed) {
+         alert('⚠️ 已超過履歷提交截止時間，無法再退件履歷。未退件的履歷已自動通過並傳給指導老師審核。');
+         return;
+       }
+       
        if (!confirm("確定要退件此申請？")) return;
        currentResumeId = resumeId;
        currentPreferenceId = preferenceId;
@@ -729,12 +792,18 @@
                if(data.success) {
                    alert("✅ 已退件");
                    modal.hide();
+                   // 重新載入數據
                    const urlParams = new URLSearchParams(window.location.search);
                    const targetCompanyId = urlParams.get('company_id');
-                   const params = targetCompanyId ? `?company_id=${targetCompanyId}` : '';
-                   fetch(`/api/get_class_resumes${params}`).then(r=>r.json()).then(d=>{
-                       if(d.success) { allResumes=d.resumes; applyFilters(); }
-                   });
+                   if (userRole === 'vendor') {
+                     fetch('/vendor/api/resumes').then(r=>r.json()).then(d=>{
+                       if(d.success) { allResumes=d.resumes || []; applyFilters(); }
+                     });
+                   } else {
+                     fetch('/api/teacher_review_resumes').then(r=>r.json()).then(d=>{
+                       if(d.success) { allResumes=d.data || []; applyFilters(); }
+                     });
+                   }
                } else {
                    alert("失敗：" + data.message);
                }
@@ -770,12 +839,16 @@
              if(data.success) {
                  alert("留言已更新");
                  bootstrap.Modal.getInstance(document.getElementById("commentModal")).hide();
-                 const urlParams = new URLSearchParams(window.location.search);
-                 const targetCompanyId = urlParams.get('company_id');
-                 const params = targetCompanyId ? `?company_id=${targetCompanyId}` : '';
-                 fetch(`/api/get_class_resumes${params}`).then(r=>r.json()).then(d=>{
-                     if(d.success) { allResumes=d.resumes; applyFilters(); }
-                 });
+                 // 重新載入資料
+                 if (userRole === 'vendor') {
+                   fetch('/vendor/api/resumes').then(r=>r.json()).then(d=>{
+                     if(d.success) { allResumes=d.resumes || []; applyFilters(); }
+                   });
+                 } else {
+                   fetch('/api/teacher_review_resumes').then(r=>r.json()).then(d=>{
+                     if(d.success) { allResumes=d.data || []; applyFilters(); }
+                   });
+                 }
              } else {
                  alert("失敗");
              }

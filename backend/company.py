@@ -1741,13 +1741,12 @@ def apply_company():
         if not resume:
             return jsonify({"success": False, "message": "履歷不存在或無權限"}), 403
         
-        # 驗證履歷屬於指定的資料夾（如果履歷的 folder_id 為 NULL，則允許任何 folder_id）
+        # 允許履歷可以屬於不同資料夾或更新為選擇的資料夾（支援重複投遞）
         resume_folder_id = resume.get('folder_id')
-        if resume_folder_id is not None and resume_folder_id != folder_id:
-            return jsonify({"success": False, "message": "履歷不屬於指定的資料夾"}), 403
         
-        # 如果履歷的 folder_id 為 NULL，更新它（確保數據一致性）
-        if resume_folder_id is None and folder_id:
+        # 如果履歷的 folder_id 與選擇的不同，自動更新它（確保數據一致性）
+        # 這樣允許用戶選擇任何履歷版本，即使它原本屬於其他資料夾
+        if resume_folder_id != folder_id:
             cursor.execute("""
                 UPDATE resumes 
                 SET folder_id = %s 
@@ -1766,15 +1765,7 @@ def apply_company():
         if not job:
             return jsonify({"success": False, "message": "職缺不存在或公司未審核通過"}), 400
         
-        # 檢查是否已經投遞過（避免重複投遞）
-        cursor.execute("""
-            SELECT id FROM student_preferences
-            WHERE student_id = %s AND company_id = %s AND job_id = %s
-        """, (user_id, company_id, job_id))
-        existing = cursor.fetchone()
-        
-        if existing:
-            return jsonify({"success": False, "message": "您已經投遞過此職缺"}), 400
+        # 允許重複投遞：移除重複投遞檢查，允許同一版本的履歷可以重複投遞到同一職缺
         
         # 獲取當前學期
         from semester import get_current_semester_id
@@ -1784,6 +1775,26 @@ def apply_company():
         cursor.execute("SELECT title FROM internship_jobs WHERE id = %s", (job_id,))
         job_title_result = cursor.fetchone()
         job_title = job_title_result['title'] if job_title_result else ''
+        
+        # 獲取 preference_order：找到該學生在該學期中已使用的最大 preference_order，然後加 1
+        # 如果最大 order < 100，則從 100 開始（避免與志願序的 1-5 衝突）
+        if current_semester_id:
+            cursor.execute("""
+                SELECT COALESCE(MAX(preference_order), 0) AS max_order
+                FROM student_preferences
+                WHERE student_id = %s AND semester_id = %s
+            """, (user_id, current_semester_id))
+        else:
+            cursor.execute("""
+                SELECT COALESCE(MAX(preference_order), 0) AS max_order
+                FROM student_preferences
+                WHERE student_id = %s
+            """, (user_id,))
+        max_order_result = cursor.fetchone()
+        max_order = max_order_result['max_order'] if max_order_result else 0
+        # 如果最大 order < 100，則從 100 開始，避免與志願序（通常 1-5）衝突
+        # 否則使用最大 order + 1
+        preference_order = 100 if max_order < 100 else max_order + 1
         
         # 插入投遞記錄到 student_preferences
         # 檢查 student_preferences 表是否有 folder_id 和 resume_id 字段
@@ -1804,11 +1815,12 @@ def apply_company():
             if current_semester_id:
                 cursor.execute("""
                     INSERT INTO student_preferences
-                    (student_id, semester_id, company_id, job_id, folder_id, resume_id, job_title, status, submitted_at)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    (student_id, semester_id, preference_order, company_id, job_id, folder_id, resume_id, job_title, status, submitted_at)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """, (
                     user_id,
                     current_semester_id,
+                    preference_order,
                     company_id,
                     job_id,
                     folder_id,
@@ -1820,10 +1832,11 @@ def apply_company():
             else:
                 cursor.execute("""
                     INSERT INTO student_preferences
-                    (student_id, company_id, job_id, folder_id, resume_id, job_title, status, submitted_at)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                    (student_id, preference_order, company_id, job_id, folder_id, resume_id, job_title, status, submitted_at)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """, (
                     user_id,
+                    preference_order,
                     company_id,
                     job_id,
                     folder_id,
@@ -1837,11 +1850,12 @@ def apply_company():
             if current_semester_id:
                 cursor.execute("""
                     INSERT INTO student_preferences
-                    (student_id, semester_id, company_id, job_id, job_title, status, submitted_at)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s)
+                    (student_id, semester_id, preference_order, company_id, job_id, job_title, status, submitted_at)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                 """, (
                     user_id,
                     current_semester_id,
+                    preference_order,
                     company_id,
                     job_id,
                     job_title,
@@ -1851,10 +1865,11 @@ def apply_company():
             else:
                 cursor.execute("""
                     INSERT INTO student_preferences
-                    (student_id, company_id, job_id, job_title, status, submitted_at)
-                    VALUES (%s, %s, %s, %s, %s, %s)
+                    (student_id, preference_order, company_id, job_id, job_title, status, submitted_at)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s)
                 """, (
                     user_id,
+                    preference_order,
                     company_id,
                     job_id,
                     job_title,
