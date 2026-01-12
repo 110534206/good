@@ -1,7 +1,8 @@
 from flask import Blueprint, request, jsonify, session, render_template
 from config import get_db
-from datetime import datetime
+from datetime import datetime, timedelta
 import traceback
+import time
 
 semester_bp = Blueprint("semester_bp", __name__, url_prefix="/semester")
 
@@ -72,7 +73,7 @@ def list_semesters():
         cursor = conn.cursor(dictionary=True)
         
         cursor.execute("""
-            SELECT id, code, start_date, end_date, is_active, created_at
+            SELECT id, code, start_date, end_date, is_active, created_at, auto_switch_at
             FROM semesters
             ORDER BY code DESC
         """)
@@ -86,6 +87,8 @@ def list_semesters():
                 s['end_date'] = s['end_date'].strftime("%Y-%m-%d")
             if isinstance(s.get('created_at'), datetime):
                 s['created_at'] = s['created_at'].strftime("%Y-%m-%d %H:%M:%S")
+            if isinstance(s.get('auto_switch_at'), datetime):
+                s['auto_switch_at'] = s['auto_switch_at'].strftime("%Y-%m-%d %H:%M:%S")
         
         return jsonify({"success": True, "semesters": semesters})
     except Exception as e:
@@ -108,6 +111,7 @@ def create_semester():
     code = data.get("code", "").strip()  # 如 '1132'
     start_date = data.get("start_date")
     end_date = data.get("end_date")
+    auto_switch_at = data.get("auto_switch_at")
     
     if not code:
         return jsonify({"success": False, "message": "請提供學期代碼"}), 400
@@ -121,11 +125,11 @@ def create_semester():
         if cursor.fetchone():
             return jsonify({"success": False, "message": "該學期代碼已存在"}), 400
         
-        # 插入新學期（包含 created_at）
+        # 插入新學期（包含 created_at, auto_switch_at）
         cursor.execute("""
-            INSERT INTO semesters (code, start_date, end_date, is_active, created_at)
-            VALUES (%s, %s, %s, 0, NOW())
-        """, (code, start_date, end_date))
+            INSERT INTO semesters (code, start_date, end_date, is_active, created_at, auto_switch_at)
+            VALUES (%s, %s, %s, 0, NOW(), %s)
+        """, (code, start_date, end_date, auto_switch_at if auto_switch_at else None))
         
         conn.commit()
         return jsonify({"success": True, "message": "學期建立成功"})
@@ -137,8 +141,50 @@ def create_semester():
         conn.close()
 
 # =========================================================
-# API: 切換當前學期
+# API: 切換當前學期 (內部與外部共用邏輯)
 # =========================================================
+def perform_semester_switch(semester_id):
+    """執行學期切換的底層邏輯"""
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        # 檢查學期是否存在
+        cursor.execute("SELECT id, code FROM semesters WHERE id = %s", (semester_id,))
+        semester = cursor.fetchone()
+        if not semester:
+            return False, "找不到該學期"
+        
+        # 關閉所有學期的 is_active
+        cursor.execute("UPDATE semesters SET is_active = 0")
+        
+        # 啟用目標學期
+        cursor.execute("UPDATE semesters SET is_active = 1 WHERE id = %s", (semester_id,))
+        
+        # 清除該學期的自動切換時間 (避免重複觸發)
+        cursor.execute("UPDATE semesters SET auto_switch_at = NULL WHERE id = %s", (semester_id,))
+        
+        # 關閉上學期的公司開放狀態
+        current_code = semester['code']
+        try:
+            # 嘗試更新 company_openings 表
+            cursor.execute("""
+                UPDATE company_openings 
+                SET is_open = 0 
+                WHERE semester != %s
+            """, (current_code,))
+        except Exception as e:
+            print(f"⚠️ 更新 company_openings 表時發生錯誤: {e}")
+            pass
+        
+        conn.commit()
+        return True, f"已切換至學期 {current_code}"
+    except Exception as e:
+        traceback.print_exc()
+        return False, str(e)
+    finally:
+        cursor.close()
+        conn.close()
+
 @semester_bp.route("/api/switch", methods=["POST"])
 def switch_semester():
     """切換當前學期（管理員/科助）"""
@@ -151,49 +197,11 @@ def switch_semester():
     if not semester_id:
         return jsonify({"success": False, "message": "請提供學期ID"}), 400
     
-    try:
-        conn = get_db()
-        cursor = conn.cursor(dictionary=True)
-        
-        # 檢查學期是否存在
-        cursor.execute("SELECT id, code FROM semesters WHERE id = %s", (semester_id,))
-        semester = cursor.fetchone()
-        if not semester:
-            return jsonify({"success": False, "message": "找不到該學期"}), 404
-        
-        # 關閉所有學期的 is_active
-        cursor.execute("UPDATE semesters SET is_active = 0")
-        
-        # 啟用目標學期
-        cursor.execute("UPDATE semesters SET is_active = 1 WHERE id = %s", (semester_id,))
-        
-        # 關閉上學期的公司開放狀態
-        # 注意：這裡假設 company_openings 表有 semester 欄位
-        current_code = semester['code']
-        try:
-            # 嘗試更新 company_openings 表（如果表存在）
-            cursor.execute("""
-                UPDATE company_openings 
-                SET is_open = 0 
-                WHERE semester != %s
-            """, (current_code,))
-        except Exception as e:
-            # 如果表不存在或欄位不存在，只記錄錯誤但不影響主流程
-            print(f"⚠️ 更新 company_openings 表時發生錯誤: {e}")
-            pass
-        
-        conn.commit()
-        return jsonify({
-            "success": True, 
-            "message": f"已切換至學期 {current_code}",
-            "semester_code": current_code
-        })
-    except Exception as e:
-        traceback.print_exc()
-        return jsonify({"success": False, "message": str(e)}), 500
-    finally:
-        cursor.close()
-        conn.close()
+    success, message = perform_semester_switch(semester_id)
+    if success:
+        return jsonify({"success": True, "message": message})
+    else:
+        return jsonify({"success": False, "message": message}), 500
 
 # =========================================================
 # API: 更新學期資訊
@@ -207,6 +215,7 @@ def update_semester(semester_id):
     data = request.get_json() or {}
     start_date = data.get("start_date")
     end_date = data.get("end_date")
+    auto_switch_at = data.get("auto_switch_at")
     
     try:
         conn = get_db()
@@ -216,12 +225,21 @@ def update_semester(semester_id):
         update_fields = []
         params = []
         
-        if start_date:
+        if start_date is not None:
             update_fields.append("start_date = %s")
             params.append(start_date)
-        if end_date:
+        if end_date is not None:
             update_fields.append("end_date = %s")
             params.append(end_date)
+        
+        # 特別處理 auto_switch_at，允許傳入空字串或 None 來清除設定
+        if "auto_switch_at" in data:
+            val = data["auto_switch_at"]
+            if not val: # 空字串或 None
+                update_fields.append("auto_switch_at = NULL")
+            else:
+                update_fields.append("auto_switch_at = %s")
+                params.append(val)
         
         if not update_fields:
             return jsonify({"success": False, "message": "沒有提供要更新的欄位"}), 400
@@ -238,6 +256,45 @@ def update_semester(semester_id):
     except Exception as e:
         traceback.print_exc()
         return jsonify({"success": False, "message": str(e)}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+# =========================================================
+# Helper: 自動檢查並切換學期 (供排程器呼叫)
+# =========================================================
+def check_auto_switch():
+    """檢查是否有到達自動切換時間的學期"""
+    print(f"[{datetime.now()}] 執行學期自動切換檢查...")
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        # 查詢 auto_switch_at <= NOW() 且 is_active = 0 的學期
+        cursor.execute("""
+            SELECT id, code, auto_switch_at 
+            FROM semesters 
+            WHERE is_active = 0 
+              AND auto_switch_at IS NOT NULL 
+              AND auto_switch_at <= NOW()
+            ORDER BY auto_switch_at ASC
+            LIMIT 1
+        """)
+        target = cursor.fetchone()
+        
+        if target:
+            print(f"🔄 發現待切換學期: {target['code']} (預定: {target['auto_switch_at']})")
+            success, msg = perform_semester_switch(target['id'])
+            if success:
+                print(f"✅ 自動切換成功: {msg}")
+            else:
+                print(f"❌ 自動切換失敗: {msg}")
+        else:
+            # print("無須切換")
+            pass
+            
+    except Exception as e:
+        print(f"❌ 自動切換檢查錯誤: {e}")
+        traceback.print_exc()
     finally:
         cursor.close()
         conn.close()
@@ -280,6 +337,166 @@ def delete_semester(semester_id):
     finally:
         cursor.close()
         conn.close()
+
+# =========================================================
+# Helper: 初始化資料庫欄位（添加 auto_switch_at 欄位）
+# =========================================================
+def ensure_auto_switch_column():
+    """
+    確保 semesters 表有 auto_switch_at 欄位
+    如果欄位不存在，則自動添加
+    返回: (success: bool, message: str)
+    """
+    try:
+        conn = get_db()
+        cursor = conn.cursor()
+        
+        # 檢查欄位是否存在
+        cursor.execute("SHOW COLUMNS FROM semesters LIKE 'auto_switch_at'")
+        result = cursor.fetchone()
+        
+        if result:
+            return True, "欄位 'auto_switch_at' 已存在"
+        else:
+            # 添加欄位
+            cursor.execute("ALTER TABLE semesters ADD COLUMN auto_switch_at DATETIME NULL DEFAULT NULL")
+            conn.commit()
+            return True, "已成功添加 'auto_switch_at' 欄位"
+            
+    except Exception as e:
+        traceback.print_exc()
+        if 'conn' in locals():
+            conn.rollback()
+        return False, f"添加欄位失敗: {str(e)}"
+    finally:
+        if 'cursor' in locals() and cursor:
+            cursor.close()
+        if 'conn' in locals() and conn:
+            conn.close()
+
+# =========================================================
+# API: 初始化資料庫欄位（管理員/科助）
+# =========================================================
+@semester_bp.route("/api/ensure_column", methods=["POST"])
+def ensure_column_api():
+    """確保 semesters 表有 auto_switch_at 欄位（管理員/科助）"""
+    if session.get('role') not in ['admin', 'ta']:
+        return jsonify({"success": False, "message": "未授權"}), 403
+    
+    success, message = ensure_auto_switch_column()
+    if success:
+        return jsonify({"success": True, "message": message})
+    else:
+        return jsonify({"success": False, "message": message}), 500
+
+# =========================================================
+# Helper: 驗證自動切換功能（測試用）
+# =========================================================
+def verify_auto_switch_logic(test_code="TEST_999", wait_seconds=3):
+    """
+    驗證自動切換功能的邏輯
+    創建一個測試學期，設定自動切換時間，然後檢查是否會自動切換
+    
+    參數:
+        test_code: 測試學期代碼
+        wait_seconds: 等待秒數（用於測試）
+    
+    返回: (success: bool, message: str, details: dict)
+    """
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+    
+    try:
+        # 計算切換時間
+        switch_time = (datetime.now() + timedelta(seconds=wait_seconds)).strftime('%Y-%m-%d %H:%M:%S')
+        
+        # 清理之前的測試資料
+        cursor.execute("DELETE FROM semesters WHERE code = %s", (test_code,))
+        conn.commit()
+        
+        # 創建測試學期
+        cursor.execute("""
+            INSERT INTO semesters (code, is_active, auto_switch_at, created_at)
+            VALUES (%s, 0, %s, NOW())
+        """, (test_code, switch_time))
+        conn.commit()
+        
+        semester_id = cursor.lastrowid
+        
+        # 等待指定時間
+        print(f"等待 {wait_seconds} 秒以觸發自動切換...")
+        time.sleep(wait_seconds)
+        
+        # 執行自動切換檢查
+        check_auto_switch()
+        
+        # 驗證結果
+        cursor.execute("SELECT is_active, auto_switch_at FROM semesters WHERE id = %s", (semester_id,))
+        row = cursor.fetchone()
+        
+        details = {
+            "semester_id": semester_id,
+            "test_code": test_code,
+            "switch_time": switch_time,
+            "is_active_after": row['is_active'],
+            "auto_switch_at_cleared": row['auto_switch_at'] is None
+        }
+        
+        if row['is_active'] == 1 and row['auto_switch_at'] is None:
+            # 清理測試資料
+            cursor.execute("DELETE FROM semesters WHERE id = %s", (semester_id,))
+            conn.commit()
+            return True, "自動切換功能驗證成功", details
+        else:
+            # 清理測試資料
+            cursor.execute("DELETE FROM semesters WHERE id = %s", (semester_id,))
+            conn.commit()
+            return False, f"自動切換功能驗證失敗: is_active={row['is_active']}, auto_switch_at={row['auto_switch_at']}", details
+            
+    except Exception as e:
+        traceback.print_exc()
+        # 嘗試清理測試資料
+        try:
+            cursor.execute("DELETE FROM semesters WHERE code = %s", (test_code,))
+            conn.commit()
+        except:
+            pass
+        return False, f"驗證過程發生錯誤: {str(e)}", {}
+    finally:
+        cursor.close()
+        conn.close()
+
+# =========================================================
+# API: 驗證自動切換功能（管理員/科助，測試用）
+# =========================================================
+@semester_bp.route("/api/verify_auto_switch", methods=["POST"])
+def verify_auto_switch_api():
+    """驗證自動切換功能（管理員/科助，測試用）"""
+    if session.get('role') not in ['admin', 'ta']:
+        return jsonify({"success": False, "message": "未授權"}), 403
+    
+    data = request.get_json() or {}
+    test_code = data.get("test_code", "TEST_999")
+    wait_seconds = data.get("wait_seconds", 3)
+    
+    # 限制等待時間，避免過長
+    if wait_seconds > 10:
+        wait_seconds = 10
+    
+    success, message, details = verify_auto_switch_logic(test_code, wait_seconds)
+    
+    if success:
+        return jsonify({
+            "success": True,
+            "message": message,
+            "details": details
+        })
+    else:
+        return jsonify({
+            "success": False,
+            "message": message,
+            "details": details
+        }), 500
 
 # =========================================================
 # 頁面路由：學期管理頁面（科助/管理員）

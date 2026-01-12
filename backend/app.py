@@ -114,10 +114,36 @@ def upload_standard_courses_page():
     return render_template('ta/upload_standard_courses.html')
 
 # -------------------------
+# 排程器設定 (APScheduler)
+# -------------------------
+from flask_apscheduler import APScheduler
+from semester import check_auto_switch
+
+scheduler = APScheduler()
+
+# 設定排程任務
+class SchedulerConfig:
+    JOBS = [
+        {
+            'id': 'auto_switch_semester_job',
+            'func': check_auto_switch,
+            'trigger': 'interval',
+            'minutes': 60  # 每 60 分鐘檢查一次
+        }
+    ]
+    SCHEDULER_API_ENABLED = True
+
+app.config.from_object(SchedulerConfig())
+scheduler.init_app(app)
+scheduler.start()
+
+# -------------------------
 # 主程式入口
 # -------------------------
 if __name__ == "__main__":
     try:
-        app.run(host="0.0.0.0", port=5000, debug=True)
+        # 注意: use_reloader=False 避免排程器在 debug 模式下執行兩次
+        app.run(host="0.0.0.0", port=5000, debug=True, use_reloader=False)
     except (KeyboardInterrupt, SystemExit):
-        pass  # No scheduler to shut down
+        scheduler.shutdown()
+
