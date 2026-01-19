@@ -1719,10 +1719,9 @@ def apply_company():
     data = request.get_json()
     company_id = data.get('company_id')
     job_id = data.get('job_id')
-    folder_id = data.get('folder_id')
     resume_id = data.get('resume_id')
     
-    if not company_id or not job_id or not folder_id or not resume_id:
+    if not company_id or not job_id or not resume_id:
         return jsonify({"success": False, "message": "缺少必要參數"}), 400
     
     user_id = session['user_id']
@@ -1730,10 +1729,9 @@ def apply_company():
     cursor = conn.cursor(dictionary=True)
     
     try:
-        # 驗證履歷屬於該用戶
-        # 注意：允許未審核的履歷（status='uploaded'）也可以投遞，因為投遞後會由指導老師審核
+        # 驗證履歷屬於該用戶，且為正式版本（可以投遞）
         cursor.execute("""
-            SELECT id, status, folder_id FROM resumes 
+            SELECT id, status, category FROM resumes 
             WHERE id = %s AND user_id = %s
         """, (resume_id, user_id))
         resume = cursor.fetchone()
@@ -1741,18 +1739,14 @@ def apply_company():
         if not resume:
             return jsonify({"success": False, "message": "履歷不存在或無權限"}), 403
         
-        # 允許履歷可以屬於不同資料夾或更新為選擇的資料夾（支援重複投遞）
-        resume_folder_id = resume.get('folder_id')
+        # 只允許投遞正式版本的履歷（category='ready'）
+        resume_category = resume.get('category', 'draft')
         
-        # 如果履歷的 folder_id 與選擇的不同，自動更新它（確保數據一致性）
-        # 這樣允許用戶選擇任何履歷版本，即使它原本屬於其他資料夾
-        if resume_folder_id != folder_id:
-            cursor.execute("""
-                UPDATE resumes 
-                SET folder_id = %s 
-                WHERE id = %s AND user_id = %s
-            """, (folder_id, resume_id, user_id))
-            # 注意：這裡不 commit，讓後面的 INSERT 一起 commit
+        if resume_category != 'ready':
+            return jsonify({
+                "success": False, 
+                "message": "請先在履歷管理頁面提交履歷為正式版本後再投遞"
+            }), 400
         
         # 驗證公司和職缺存在
         cursor.execute("""
@@ -1796,34 +1790,42 @@ def apply_company():
         # 否則使用最大 order + 1
         preference_order = 100 if max_order < 100 else max_order + 1
         
+        # 當投遞履歷時，確保 status='uploaded'（審核中）
+        # category 保持 'ready'（正式版本），審核狀態用 status 表示
+        cursor.execute("""
+            UPDATE resumes 
+            SET status = 'uploaded',
+                updated_at = NOW()
+            WHERE id = %s AND user_id = %s
+            AND category = 'ready'
+        """, (resume_id, user_id))
+        
         # 插入投遞記錄到 student_preferences
-        # 檢查 student_preferences 表是否有 folder_id 和 resume_id 字段
+        # 檢查 student_preferences 表是否有 resume_id 字段
         cursor.execute("""
             SELECT COLUMN_NAME 
             FROM INFORMATION_SCHEMA.COLUMNS 
             WHERE TABLE_SCHEMA = DATABASE() 
             AND TABLE_NAME = 'student_preferences' 
-            AND COLUMN_NAME IN ('folder_id', 'resume_id')
+            AND COLUMN_NAME = 'resume_id'
         """)
         columns = [row['COLUMN_NAME'] for row in cursor.fetchall()]
-        has_folder_id = 'folder_id' in columns
         has_resume_id = 'resume_id' in columns
         
         # 根據表結構動態構建 INSERT 語句
-        if has_folder_id and has_resume_id:
-            # 表有 folder_id 和 resume_id 字段
+        if has_resume_id:
+            # 表有 resume_id 字段（不再使用 folder_id）
             if current_semester_id:
                 cursor.execute("""
                     INSERT INTO student_preferences
-                    (student_id, semester_id, preference_order, company_id, job_id, folder_id, resume_id, job_title, status, submitted_at)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    (student_id, semester_id, preference_order, company_id, job_id, resume_id, job_title, status, submitted_at)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """, (
                     user_id,
                     current_semester_id,
                     preference_order,
                     company_id,
                     job_id,
-                    folder_id,
                     resume_id,
                     job_title,
                     'submitted',
@@ -1832,14 +1834,13 @@ def apply_company():
             else:
                 cursor.execute("""
                     INSERT INTO student_preferences
-                    (student_id, preference_order, company_id, job_id, folder_id, resume_id, job_title, status, submitted_at)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    (student_id, preference_order, company_id, job_id, resume_id, job_title, status, submitted_at)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                 """, (
                     user_id,
                     preference_order,
                     company_id,
                     job_id,
-                    folder_id,
                     resume_id,
                     job_title,
                     'submitted',

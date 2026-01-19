@@ -602,39 +602,49 @@
         const isPreferenceDeadline = preferenceDeadlineDate === dateKey;
         const isResumeDeadline = resumeDeadlineDate === dateKey;
         
-        // 顯示截止時間標記
+        // 顯示截止時間標記（分成兩列顯示）
         if (isPreferenceDeadline || isResumeDeadline) {
-          const deadlineBadge = document.createElement("div");
-          deadlineBadge.style.cssText = `
-            font-size: 0.7rem;
-            color: #fff;
-            background-color: #dc3545;
-            padding: 2px 6px;
-            border-radius: 4px;
-            margin-top: 4px;
-            display: inline-block;
-            width: 100%;
-            margin-bottom: 2px;
-            font-weight: 600;
-          `;
-          if (isPreferenceDeadline && isResumeDeadline) {
-            // 兩個截止時間都在同一天
-            const timeText = preferenceDeadlineTime && resumeDeadlineTime 
-              ? `${preferenceDeadlineTime}/${resumeDeadlineTime}`
-              : preferenceDeadlineTime || resumeDeadlineTime || '';
-            deadlineBadge.textContent = timeText 
-              ? `志願序/履歷截止 ${timeText}`
-              : '志願序/履歷截止';
-          } else if (isPreferenceDeadline) {
-            deadlineBadge.textContent = preferenceDeadlineTime 
+          // 志願序截止
+          if (isPreferenceDeadline) {
+            const preferenceBadge = document.createElement("div");
+            preferenceBadge.style.cssText = `
+              font-size: 0.7rem;
+              color: #fff;
+              background-color: #dc3545;
+              padding: 2px 6px;
+              border-radius: 4px;
+              margin-top: 4px;
+              display: block;
+              width: 100%;
+              margin-bottom: 2px;
+              font-weight: 600;
+            `;
+            preferenceBadge.textContent = preferenceDeadlineTime 
               ? `志願序截止 ${preferenceDeadlineTime}`
               : '志願序截止';
-          } else if (isResumeDeadline) {
-            deadlineBadge.textContent = resumeDeadlineTime 
+            dateCell.appendChild(preferenceBadge);
+          }
+          
+          // 履歷截止
+          if (isResumeDeadline) {
+            const resumeBadge = document.createElement("div");
+            resumeBadge.style.cssText = `
+              font-size: 0.7rem;
+              color: #fff;
+              background-color: #dc3545;
+              padding: 2px 6px;
+              border-radius: 4px;
+              margin-top: 4px;
+              display: block;
+              width: 100%;
+              margin-bottom: 2px;
+              font-weight: 600;
+            `;
+            resumeBadge.textContent = resumeDeadlineTime 
               ? `履歷截止 ${resumeDeadlineTime}`
               : '履歷截止';
+            dateCell.appendChild(resumeBadge);
           }
-          dateCell.appendChild(deadlineBadge);
         }
         
         // 顯示所有面試排程（從資料庫載入的資料）

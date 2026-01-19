@@ -607,6 +607,11 @@ def confirm_matching_page():
 def student_home():
     return render_template('user_shared/student_home.html')
 
+# 實習流程常見問題頁面
+@users_bp.route('/intern_faq')
+def intern_faq():
+    return render_template('user_shared/intern_faq.html')
+
 # 使用者首頁 (主任前台)
 @users_bp.route("/director_home")
 def director_home():
@@ -1418,4 +1423,4 @@ def update_company_advisor():
         return jsonify({"success": False, "message": "資料庫錯誤"}), 500
     finally:
         cursor.close()
-        conn.close()
+        conn.close()        
