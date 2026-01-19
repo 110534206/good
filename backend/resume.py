@@ -24378,6 +24378,54 @@ def get_my_resumes():
         conn.close()
 
 # 更新履歷分類（只允許修改草稿狀態的履歷）
+# 更新履歷文件名
+@resume_bp.route("/api/resumes/<int:resume_id>/filename", methods=["PUT"])
+def update_resume_filename(resume_id):
+    if not require_login(): 
+        return jsonify({"success": False, "message": "未登入"}), 401
+    
+    user_id = session['user_id']
+    data = request.get_json()
+    new_filename = data.get('filename', '').strip()
+    
+    if not new_filename:
+        return jsonify({"success": False, "message": "文件名不能為空"}), 400
+    
+    # 驗證文件名長度
+    if len(new_filename) > 255:
+        return jsonify({"success": False, "message": "文件名過長（最多255個字符）"}), 400
+    
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+    
+    try:
+        # 驗證履歷屬於當前用戶
+        cursor.execute("""
+            SELECT id, original_filename FROM resumes 
+            WHERE id = %s AND user_id = %s
+        """, (resume_id, user_id))
+        resume = cursor.fetchone()
+        
+        if not resume:
+            return jsonify({"success": False, "message": "履歷不存在或無權限"}), 403
+        
+        # 更新文件名
+        cursor.execute("""
+            UPDATE resumes 
+            SET original_filename = %s,
+                updated_at = NOW()
+            WHERE id = %s AND user_id = %s
+        """, (new_filename, resume_id, user_id))
+        
+        conn.commit()
+        return jsonify({"success": True, "message": "文件名已更新"})
+    except Exception as e:
+        conn.rollback()
+        return jsonify({"success": False, "message": str(e)}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
 @resume_bp.route("/api/resumes/<int:resume_id>/category", methods=["PUT"])
 def update_resume_category(resume_id):
     if not require_login(): 

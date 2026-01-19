@@ -300,49 +300,74 @@
             gap: 6px;
         }
 
-        /* 表格整體 */
-        .resume-status-table {
-            border-radius: 14px;
-            overflow: hidden;
+        /* 表格樣式 - 與 review_resume.html 一致 */
+        .table-wrapper {
+            overflow-x: visible;
+            width: 100%;
         }
 
-        /* 表頭 */
-        .resume-status-table thead {
-            background: linear-gradient(135deg, #0454a3, #1a73e8);
-            color: #fff;
+        .table-wrapper table tbody tr:hover {
+            background: rgba(15, 23, 42, 0.02);
         }
 
-        /* 表格列 */
-        .resume-status-table tbody tr {
-            transition: all 0.2s ease;
+        .table-wrapper table thead th {
+            text-align: left;
+            background-color: #fafafb;
         }
 
-        .resume-status-table tbody tr:hover {
-            background-color: #f4f9ff;
-            transform: scale(1.002);
+        .table-wrapper table tbody td {
+            text-align: left;
+            vertical-align: middle;
         }
 
-        /* 履歷檔名 */
-        .resume-filename {
+        /* 狀態 badge - 與 review_resume.html 一致 */
+        .status-badge {
+            font-size: 0.9em;
+            padding: 0.3em 0.6em;
+            border-radius: 0.5rem;
+            display: inline-block;
             font-weight: 600;
-            color: #004d99;
         }
 
-        /* 審核意見 */
-        .resume-comment {
-            max-width: 260px;
-            font-size: 0.95rem;
-            line-height: 1.4;
-            color: #555;
+        .status-badge.bg-success {
+            color: #fff;
+            background-color: #198754;
         }
 
-        /* 狀態 badge 放大 */
-        .resume-status-badge {
-            font-size: 0.95rem;
-            padding: 0.45em 0.8em;
-            border-radius: 999px;
+        .status-badge.bg-danger {
+            color: #fff;
+            background-color: #dc3545;
         }
 
+        .status-badge.bg-warning {
+            color: #000;
+            background-color: #ffc107;
+        }
+
+        .status-badge.bg-info {
+            color: #fff;
+            background-color: #0dcaf0;
+        }
+
+        .status-badge.bg-secondary {
+            color: #fff;
+            background-color: #6c757d;
+        }
+
+        /* 留言按鈕樣式 */
+        .comment-btn {
+            font-weight: normal !important;
+            padding: 0.25rem 0.6rem !important;
+            font-size: 0.85rem !important;
+            border-radius: 0.25rem !important;
+        }
+
+        /* 下載按鈕樣式 */
+        .download-resume-btn {
+            padding: 0.25rem 0.6rem !important;
+            font-size: 0.85rem !important;
+            border-radius: 0.25rem !important;
+        }
     </style>
 </head>
 
@@ -411,27 +436,45 @@
             </div>
 
             <!-- 履歷審核狀態表格 -->
-            <div class="table-container">
-                <table class="table table-hover align-middle">
-                    <thead>
+            <div class="table-wrapper">
+                <table style="width: 100%; border-collapse: collapse;">
+                    <thead style="background: #f1f5f9;">
                         <tr>
-                            <th>履歷檔名</th>
-                            <th>投遞公司</th>
-                            <th>職缺</th>
-                            <th>投遞時間</th>
-                            <th>審核狀態</th>
-                            <th>審核意見</th>
-                            <th class="text-center">操作</th>
+                            <th style="padding: 14px 16px; font-weight: 600;">履歷檔名</th>
+                            <th style="padding: 14px 16px; font-weight: 600;">投遞公司</th>
+                            <th style="padding: 14px 16px; font-weight: 600;">職缺</th>
+                            <th style="padding: 14px 16px; font-weight: 600;">投遞時間</th>
+                            <th style="padding: 14px 16px; font-weight: 600;">審核狀態</th>
+                            <th style="padding: 14px 16px; font-weight: 600;">審核意見</th>
+                            <th style="padding: 14px 16px; font-weight: 600;" class="text-center">操作</th>
                         </tr>
                     </thead>
                     <tbody id="resumeStatusTable">
                         <tr>
-                            <td colspan="7" class="text-center text-muted">
+                            <td colspan="7" style="padding: 14px 16px; text-align: center; color: #64748b;">
                                 <i class="bi bi-hourglass-split"></i> 載入中...
                             </td>
                         </tr>
                     </tbody>
                 </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- 查看留言 Modal -->
+    <div class="modal fade" id="commentModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-lg modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="commentModalLabel">查看留言</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <textarea id="commentInput" style="width: 100%; height: 180px;  font-size: 1rem;" readonly></textarea>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" data-bs-dismiss="modal">關閉</button>
+                </div>
             </div>
         </div>
     </div>
@@ -484,6 +527,12 @@
         let allResumeStatuses = []; // 所有履歷審核狀態
         let currentResumeStatus = 'reviewing'; // 當前選中的審核狀態頁籤
         let currentFilter = 'all'; // 當前公司篩選條件
+
+        // HTML 轉義函數 - 與 review_resume.html 一致
+        function escapeHtml(text) {
+            if (text === null || text === undefined) return '';
+            return String(text).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+        }
 
         /* ===============================
            檢查投遞履歷截止時間
@@ -827,11 +876,27 @@
 
             tbody.innerHTML = resumes.map(resume => {
                 const resumeStatus = resume.status || 'uploaded';
-                const statusLabels = {
-                    'uploaded': '<span class="badge bg-warning resume-status-badge">審核中</span>',
-                    'rejected': '<span class="badge bg-danger resume-status-badge">退件</span>',
-                    'approved': '<span class="badge bg-success resume-status-badge">通過</span>'
-                };
+                
+                // 狀態映射 - 與 review_resume.html 一致
+                function statusColor(status) {
+                    return { 'uploaded': 'info', 'approved': 'success', 'rejected': 'danger' }[status] || 'secondary';
+                }
+                
+                function mapStatus(status) {
+                    return { 'uploaded': '審核中', 'approved': '通過', 'rejected': '退件' }[status] || '未知';
+                }
+                
+                function escapeHtml(text) {
+                    if (text === null || text === undefined) return '';
+                    return String(text).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+                }
+                
+                // 留言按鈕 
+                const hasComment = resume.comment && resume.comment.trim() !== '';
+                const btnClass = hasComment ? 'text-success' : '';
+                const btnText = hasComment ? '已填寫' : '未填寫';
+                const commentBtn = `<button class="btn btn-sm btn-outline-secondary comment-btn ${btnClass}" onclick="openCommentModal('${escapeHtml(resume.comment || '')}')">${btnText}</button>`;
+                
                 // 格式化日期
                 let appliedDate = '未知';
                 if (resume.applied_at) {
@@ -850,21 +915,36 @@
                 }
 
                 return `
-                    <tr>
-                        <td>${resume.original_filename || '未命名履歷'}</td>
-                        <td>${resume.company_name || '尚未選擇'}</td>
-                        <td>${resume.job_title || '尚未選擇'}</td>
-                        <td>${appliedDate}</td>
-                        <td>${statusLabels[resumeStatus] || '<span class="badge bg-secondary">未知</span>'}</td>
-                        <td>${resume.comment || '<span class="text-muted">無</span>'}</td>
-                        <td class="text-center">
-                            <a href="/api/download_resume/${resume.id}" class="btn btn-sm btn-outline-primary" target="_blank">
-                                <i class="bi bi-download"></i> 下載
+                    <tr style="border-bottom: 1px solid #e2e8f0;">
+                        <td style="padding: 14px 16px;">${escapeHtml(resume.original_filename || '未命名履歷')}</td>
+                        <td style="padding: 14px 16px;">${escapeHtml(resume.company_name || '尚未選擇')}</td>
+                        <td style="padding: 14px 16px;">${escapeHtml(resume.job_title || '尚未選擇')}</td>
+                        <td style="padding: 14px 16px;">${appliedDate}</td>
+                        <td style="padding: 14px 16px;">
+                            <span class="status-badge bg-${statusColor(resumeStatus)}">${mapStatus(resumeStatus)}</span>
+                        </td>
+                        <td style="padding: 14px 16px;">
+                            ${commentBtn}
+                        </td>
+                        <td style="padding: 14px 16px;" class="text-center">
+                            <a href="/api/download_resume/${resume.id}" class="btn btn-sm btn-outline-primary download-resume-btn" target="_blank" style="margin-right:4px;">
+                                下載
                             </a>
                         </td>
                     </tr>
                 `;
             }).join('');
+        }
+
+        /* ===============================
+           打開留言 Modal 
+        ================================ */
+        function openCommentModal(comment) {
+            const commentText = comment || '';
+            document.getElementById("commentInput").value = commentText;
+            document.getElementById("commentInput").readOnly = true;
+            document.getElementById("commentModalLabel").textContent = "查看留言";
+            new bootstrap.Modal(document.getElementById("commentModal")).show();
         }
 
         /* ===============================

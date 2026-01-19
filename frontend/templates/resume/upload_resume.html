@@ -2000,7 +2000,14 @@
     // 🧩 檢查是否有已提交的履歷（最新一筆）並載入資料
     async function checkLatestResume() {
       try {
-        const res = await fetch("/api/get_my_resumes");
+        const res = await fetch("/api/my_resumes");
+        
+        // 如果 API 返回 404 或其他錯誤，視為沒有履歷記錄
+        if (!res.ok) {
+          console.log("ℹ️ API 返回錯誤狀態:", res.status, "視為沒有履歷記錄");
+          return false;
+        }
+        
         const result = await res.json();
 
         if (result.success && result.resumes && result.resumes.length > 0) {
@@ -2019,6 +2026,7 @@
         return false;
       } catch (error) {
         console.error("❌ 檢查履歷記錄失敗:", error);
+        // API 調用失敗時，視為沒有履歷記錄，允許用戶編輯
         return false;
       }
     }
@@ -2419,7 +2427,7 @@
 
     // 🧩 載入履歷紀錄
     async function loadResumeRecords() {
-      const res = await fetch("/api/get_my_resumes");
+      const res = await fetch("/api/my_resumes");
       const result = await res.json();
       const tbody = document.getElementById("recordsBody");
       tbody.innerHTML = "";
@@ -3288,12 +3296,15 @@
       // 初始化缺勤記錄加載標記（確保變量存在）
       window.absenceDataLoadedFromResume = false;
 
+      // ⚠️ 重要：先設置 isEditing = true，確保用戶輸入能立即保存
+      // 如果之後發現有已提交的履歷，再設置為 false
+      isEditing = true;
+
       // 先檢查是否有已提交的履歷
       const hasResume = await checkLatestResume();
 
       if (!hasResume) {
-        // 如果沒有已提交的履歷，進入編輯模式並載入 LocalStorage 資料
-        isEditing = true;
+        // 如果沒有已提交的履歷，保持編輯模式並載入 LocalStorage 資料
         loadFormData();
         // 在載入 LocalStorage 資料後，再載入其他資料
         // 確保 LocalStorage 的資料不會被後端資料覆蓋
@@ -3720,21 +3731,22 @@
         const result = await res.json();
 
         if (result.success) {
-          alert("✅ 履歷已生成，可於紀錄頁籤下載");
-
           // 提交成功後清除 LocalStorage（參考 fill_preferences 頁面）
           localStorage.removeItem(AUTO_SAVE_KEY);
 
           // 更新編輯狀態為 false
           isEditing = false;
 
-          // 設置表單為只讀模式
-
-          // 重新從資料庫載入資料（確保顯示最新資料）
-          await loadResumeData();
-
-          // 🚨 核心要求：切換到紀錄頁籤
-          // 履歷提交成功，保持在當前頁籤
+          // 顯示成功訊息並跳轉到履歷管理頁面
+          Swal.fire({
+            icon: 'success',
+            title: '履歷已成功生成！',
+            text: '正在跳轉到履歷管理頁面...',
+            timer: 2000,
+            showConfirmButton: false
+          }).then(() => {
+            window.location.href = '/resume_folders';
+          });
 
         } else {
           alert("❌ 提交失敗：" + (result.message || "未知錯誤"));

@@ -204,6 +204,33 @@
       font-weight: 600;
       color: #333;
       margin: 0;
+      cursor: pointer;
+      padding: 0.25rem 0.5rem;
+      border-radius: 4px;
+      transition: all 0.2s ease;
+      display: inline-block;
+    }
+
+    .resume-title:hover {
+      background-color: #f0f7ff;
+      color: #0454a3;
+    }
+
+    .resume-title.editing {
+      background-color: #fff;
+      border: 2px solid #0454a3;
+      padding: 0.25rem 0.5rem;
+    }
+
+    .resume-title-input {
+      font-size: 1.1rem;
+      font-weight: 600;
+      color: #333;
+      border: 2px solid #0454a3;
+      border-radius: 4px;
+      padding: 0.25rem 0.5rem;
+      width: 100%;
+      max-width: 400px;
     }
 
     .resume-actions {
@@ -438,10 +465,16 @@
         const isDraft = category === 'draft';
         const isReady = category === 'ready' || category === 'reviewing' || category === 'approved' || category === 'rejected';
         
+        const filename = resume.original_filename || '未命名履歷';
         return `
           <div class="resume-card">
             <div class="resume-header">
-              <h5 class="resume-title">${resume.original_filename || '未命名履歷'}</h5>
+              <h5 class="resume-title" 
+                  onclick="startEditFilename(${resume.id}, '${filename.replace(/'/g, "\\'")}')"
+                  title="點擊編輯文件名">
+                ${filename}
+                <i class="bi bi-pencil-square ms-2" style="font-size: 0.85rem; opacity: 0.6;"></i>
+              </h5>
               <div class="resume-actions">
                 ${isDraft ? `
                   <select class="form-select form-select-sm category-select" 
@@ -452,7 +485,6 @@
                   </select>
                 ` : isReady ? `
                   <span class="badge bg-info">正式版本</span>
-                  <small class="text-muted">可投遞</small>
                 ` : ''}
                 <button class="btn btn-sm btn-outline-primary" onclick="editResume(${resume.id})">
                   <i class="bi bi-pencil"></i> 編輯
@@ -553,6 +585,110 @@
         alert('刪除失敗，請重新整理頁面');
         loadResumes();
       }
+    }
+
+    // 開始編輯文件名
+    function startEditFilename(resumeId, currentFilename) {
+      const resumeCard = document.querySelector(`[onclick*="startEditFilename(${resumeId}"]`)?.closest('.resume-card');
+      if (!resumeCard) return;
+
+      const titleElement = resumeCard.querySelector('.resume-title');
+      if (!titleElement) return;
+
+      // 創建輸入框
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.className = 'resume-title-input';
+      input.value = currentFilename;
+      input.maxLength = 255;
+
+      // 保存按鈕
+      const saveBtn = document.createElement('button');
+      saveBtn.className = 'btn btn-sm btn-success ms-2';
+      saveBtn.innerHTML = '<i class="bi bi-check"></i> 保存';
+      
+      // 取消按鈕
+      const cancelBtn = document.createElement('button');
+      cancelBtn.className = 'btn btn-sm btn-secondary ms-1';
+      cancelBtn.innerHTML = '<i class="bi bi-x"></i> 取消';
+
+      // 替換標題為輸入框
+      const titleContainer = titleElement.parentElement;
+      titleElement.style.display = 'none';
+      
+      const editContainer = document.createElement('div');
+      editContainer.style.display = 'flex';
+      editContainer.style.alignItems = 'center';
+      editContainer.style.gap = '0.5rem';
+      editContainer.appendChild(input);
+      editContainer.appendChild(saveBtn);
+      editContainer.appendChild(cancelBtn);
+      
+      titleContainer.insertBefore(editContainer, titleElement);
+
+      // 聚焦輸入框
+      input.focus();
+      input.select();
+
+      // 保存文件名
+      const saveFilename = async () => {
+        const newFilename = input.value.trim();
+        if (!newFilename) {
+          alert('文件名不能為空');
+          return;
+        }
+
+        if (newFilename === currentFilename) {
+          // 沒有改變，直接取消編輯
+          cancelEdit();
+          return;
+        }
+
+        try {
+          const res = await fetch(`/api/resumes/${resumeId}/filename`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ filename: newFilename })
+          });
+          const result = await res.json();
+          
+          if (result.success) {
+            // 更新本地數據
+            const resume = allResumes.find(r => r.id === resumeId);
+            if (resume) {
+              resume.original_filename = newFilename;
+            }
+            // 重新渲染
+            renderResumes();
+          } else {
+            alert('更新失敗：' + (result.message || '未知錯誤'));
+            cancelEdit();
+          }
+        } catch (err) {
+          console.error('更新失敗:', err);
+          alert('更新失敗，請重新整理頁面');
+          cancelEdit();
+        }
+      };
+
+      // 取消編輯
+      const cancelEdit = () => {
+        editContainer.remove();
+        titleElement.style.display = '';
+      };
+
+      // 綁定事件
+      saveBtn.addEventListener('click', saveFilename);
+      cancelBtn.addEventListener('click', cancelEdit);
+      input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          saveFilename();
+        } else if (e.key === 'Escape') {
+          e.preventDefault();
+          cancelEdit();
+        }
+      });
     }
 
     function initMenu() {
