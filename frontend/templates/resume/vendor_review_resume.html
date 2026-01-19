@@ -683,9 +683,22 @@
       // positionData.items 已經過濾了該廠商的公司，所以只會出現自己的職缺
       if (positionData && positionData.items && positionData.items.length > 0) {
           positionData.items.forEach(job => {
-              const jobTitle = job.title || job.job_title || '';
-              if (jobTitle && jobTitle.trim()) {
-                  jobSet.add(jobTitle.trim());
+              // 如果是廠商，需要過濾只顯示自己公司的職缺
+              if (userRole === 'vendor' && vendorCompanyName && vendorCompanyName.trim()) {
+                  const jobCompanyName = (job.company_name || job.companyName || '').trim();
+                  // 只添加公司名稱匹配的職缺
+                  if (jobCompanyName === vendorCompanyName.trim()) {
+                      const jobTitle = job.title || job.job_title || '';
+                      if (jobTitle && jobTitle.trim()) {
+                          jobSet.add(jobTitle.trim());
+                      }
+                  }
+              } else {
+                  // 如果不是廠商或沒有公司名稱，顯示所有職缺（向後兼容）
+                  const jobTitle = job.title || job.job_title || '';
+                  if (jobTitle && jobTitle.trim()) {
+                      jobSet.add(jobTitle.trim());
+                  }
               }
           });
       }
