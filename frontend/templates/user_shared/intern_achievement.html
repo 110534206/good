@@ -6,13 +6,16 @@
     <title>智慧實習平台 | 學生媒合結果</title>
     <style>
         :root {
-            --primary-blue: #0454a3;
-            --page-bg: #f7f9fc;
+            --primary-blue: #0a4fbf;
+            --primary-purple: #5b7bff;
+            --page-bg: #f4f7fb;
             --card-bg: #ffffff;
             --text: #0f172a;
             --muted: #5f6c86;
             --accent: #2563eb;
             --border: #dce3ef;
+            --shadow-strong: 0 35px 70px rgba(15, 23, 42, 0.14);
+            --shadow-soft: 0 15px 30px rgba(15, 23, 42, 0.08);
         }
 
         * { box-sizing: border-box; }
@@ -21,28 +24,48 @@
             margin: 0;
             min-height: 100vh;
             font-family: "Noto Sans TC","Segoe UI",sans-serif;
-            background: var(--page-bg);
+            background: radial-gradient(circle at 15% 20%, rgba(91,123,255,0.14), transparent 35%),
+                        radial-gradient(circle at 85% 0%, rgba(4,84,163,0.15), transparent 35%),
+                        linear-gradient(180deg, #f9fbff 0%, #eef3fb 40%, #f6f7fb 100%);
             color: var(--text);
+        }
+
+        .page-bg-pattern {
+            position: fixed;
+            inset: 0;
+            pointer-events: none;
+            background-image:
+                radial-gradient(circle at 20% 30%, rgba(37, 99, 235, 0.08) 0, transparent 25%),
+                radial-gradient(circle at 80% 10%, rgba(10, 79, 191, 0.08) 0, transparent 22%),
+                radial-gradient(circle at 65% 70%, rgba(91, 123, 255, 0.08) 0, transparent 30%);
+            opacity: 0.6;
+            z-index: 0;
         }
 
         header {
             width: 100%;
-            background: var(--primary-blue);
+            background: #024689;
             color: #fff;
             padding: 16px 24px;
             text-align: center;
             font-size: 1.5rem;
             font-weight: 600;
             border-radius: 0;
-            box-shadow: 0 6px 15px rgba(4,84,163,0.35);
+            box-shadow: none;
+            position: relative;
+            overflow: visible;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
 
         /* 三條線選單按鈕樣式 */
         .top-bar-left {
-            position: fixed;
-            top: 1rem;
-            left: 1rem;
-            z-index: 1100;
+            position: absolute;
+            top: 50%;
+            left: 16px;
+            transform: translateY(-50%);
+            z-index: 1;
         }
 
         .top-bar-left #menu-btn {
@@ -142,36 +165,57 @@
         }
 
         header p {
-            margin: 4px 0 0;
+            margin: 6px 0 0;
             font-size: 1rem;
             color: rgba(255,255,255,0.9);
+        }
+
+        .header-title {
+            margin: 0;
+            font-size: 1.5rem;
+            font-weight: 600;
+            letter-spacing: 0;
         }
 
         .shell {
             max-width: 1400px;
             margin: 32px auto 48px;
             padding: 0 16px;
+            position: relative;
+            z-index: 1;
         }
 
         .card-shell {
             background: var(--card-bg);
-            border-radius: 22px;
-            border: 1px solid var(--border);
-            box-shadow: 0 30px 60px rgba(15,23,42,0.12);
-            padding: 32px 36px 36px;
+            border-radius: 24px;
+            border: 1px solid rgba(220, 227, 239, 0.8);
+            box-shadow: var(--shadow-strong);
+            padding: 36px 40px 40px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .card-shell::before {
+            content: "";
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(140deg, rgba(37,99,235,0.08) 0%, rgba(91,123,255,0.05) 50%, transparent 100%);
+            pointer-events: none;
         }
 
         .status {
             display: inline-flex;
             align-items: center;
             gap: 8px;
-            padding: 6px 16px;
+            padding: 8px 16px;
             border-radius: 999px;
-            font-size: 0.9rem;
-            background: rgba(37,99,235,0.15);
-            color: var(--accent);
-            font-weight: 600;
-            margin-bottom: 18px;
+            font-size: 0.95rem;
+            background: linear-gradient(120deg, rgba(37,99,235,0.18), rgba(91,123,255,0.16));
+            color: #0f3d91;
+            font-weight: 700;
+            margin-bottom: 22px;
+            letter-spacing: 0.03em;
+            box-shadow: 0 10px 25px rgba(37,99,235,0.18);
         }
 
         section {
@@ -186,36 +230,46 @@
 
         .info-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-            gap: 12px 8px;
+            grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+            gap: 18px 16px;
             align-items: start;
         }
 
         .info-row {
-            border-bottom: 1px dashed rgba(15,23,42,0.08);
-            padding-bottom: 12px;
+            padding: 16px 18px;
             height: 100%;
             display: flex;
             flex-direction: column;
-        }
-
-        .info-row:last-child {
-            border-bottom: none;
-            padding-bottom: 0;
+            border-radius: 16px;
+            background: rgba(255,255,255,0.85);
+            border: 1px solid rgba(220, 227, 239, 0.8);
+            box-shadow: var(--shadow-soft);
         }
 
         .info-label {
-            font-size: 0.9rem;
+            font-size: 0.85rem;
             letter-spacing: 0.08em;
             text-transform: uppercase;
             color: var(--muted);
-            margin-bottom: 4px;
-            display: block;
+            margin-bottom: 6px;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .info-label::before {
+            content: "";
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--primary-blue), var(--primary-purple));
+            box-shadow: 0 6px 12px rgba(10,79,191,0.25);
         }
 
         .info-value {
-            font-size: 1.15rem;
-            font-weight: 600;
+            font-size: 1.2rem;
+            font-weight: 700;
+            color: #0f2f6b;
         }
 
         .assist {
@@ -228,6 +282,12 @@
             white-space: nowrap;
         }
 
+        .intro {
+            margin: 12px 0 0;
+            color: rgba(255,255,255,0.9);
+            font-size: 1rem;
+        }
+
         @media (max-width: 640px) {
             section {
                 padding: 22px;
@@ -236,14 +296,15 @@
     </style>
 </head>
 <body>
+    <div class="page-bg-pattern" aria-hidden="true"></div>
     <header>
-        <div>學生媒合結果</div>
-    </header>
-    <div class="top-bar-left">
-        <div id="menu-btn" title="選單" role="button" tabindex="0">
-            <span></span><span></span><span></span>
+        <div class="top-bar-left">
+            <div id="menu-btn" title="選單" role="button" tabindex="0">
+                <span></span><span></span><span></span>
+            </div>
         </div>
-    </div>
+        <div class="header-title">學生媒合結果</div>
+    </header>
 
     <div class="shell">
         <div class="card-shell">
@@ -326,7 +387,7 @@
                     companyName.textContent = admission.company_name || fallback;
                     companyAddress.textContent = admission.company_address || "";
                     internSemester.textContent = admission.semester ? `學期：${admission.semester}` : "";
-                    teacherInfo.textContent = admission.teacher_name
+                    teacherInfo.textContent = admission.teacher_name 
                         ? `${admission.teacher_name}${admission.teacher_email ? `（${admission.teacher_email}）` : ""}`
                         : "尚未指派承辦老師";
                     admitDate.textContent = admission.admitted_at ? `錄取時間：${formatDate(admission.admitted_at)}` : "";
