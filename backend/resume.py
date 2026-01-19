@@ -1928,15 +1928,17 @@ def submit_and_generate_api():
         # 寫入 resumes
         # status: 班導/主任審核狀態，預設為 'uploaded'
         # 使用 status 字段表示履歷狀態，初始為 'uploaded'（待班導/主任審核）
+        # category 設為 'draft'（草稿），學生需要提交後才會進入審核流程
         cursor.execute("""
             INSERT INTO resumes
-            (user_id, filepath, original_filename, status, semester_id, created_at)
-            VALUES (%s, %s, %s, %s, %s, NOW())
+            (user_id, filepath, original_filename, status, category, semester_id, created_at)
+            VALUES (%s, %s, %s, %s, %s, %s, NOW())
         """, (
             user_id,
             save_path,
             filename,
             'uploaded',  # 履歷狀態：待班導/主任審核
+            'draft',     # 分類：草稿（學生需要提交後才會進入審核）
             semester_id
         ))
 
@@ -3239,10 +3241,11 @@ def review_resume(resume_id):
 
         # 3. 更新履歷狀態
         # 所有角色都使用 status 欄位，並設置 reviewed_by 為審核人的 id
+        # category 保持不變（只有 draft 和 ready），審核狀態用 status 表示
         old_status_for_check = old_status
         
         if user_role == 'teacher':
-            # 指導老師審核：更新 status 和 reviewed_by
+            # 指導老師審核：更新 status 和 reviewed_by（category 保持不變）
             cursor.execute("""
                 UPDATE resumes SET 
                     status=%s,
@@ -3253,10 +3256,10 @@ def review_resume(resume_id):
                 WHERE id=%s
             """, (status, comment, user_id, resume_id))
         else:
-            # 班導、主任等其他角色：更新 status 和 reviewed_by
+            # 班導、主任等其他角色：更新 status 和 reviewed_by（category 保持不變）
             cursor.execute("""
                 UPDATE resumes SET 
-                    status=%s, 
+                    status=%s,
                     comment=%s,
                     reviewed_by=%s,
                     reviewed_at=NOW(),
@@ -3838,32 +3841,6 @@ def get_class_resumes():
 
 
 # -------------------------
-# API：查詢學生履歷列表
-# -------------------------
-@resume_bp.route('/api/get_my_resumes', methods=['GET'])
-def get_my_resumes():
-    if 'user_id' not in session or session.get('role') != 'student':
-        return jsonify({"success": False, "message": "未授權"}), 403
-
-    conn = get_db()
-    cursor = conn.cursor(dictionary=True)
-    try:
-        cursor.execute("""
-            SELECT r.id, r.original_filename, r.status, r.comment, r.note, r.created_at AS upload_time
-            FROM resumes r
-            WHERE r.user_id = %s
-            ORDER BY r.created_at DESC
-        """, (session['user_id'],))
-        resumes = cursor.fetchall()
-        for r in resumes:
-            if isinstance(r.get('upload_time'), datetime):
-                r['upload_time'] = r['upload_time'].strftime("%Y-%m-%d %H:%M:%S")
-        return jsonify({"success": True, "resumes": resumes})
-    finally:
-        cursor.close()
-        conn.close()
-
-# -------------------------
 # API：取得缺勤統計
 # -------------------------
 @resume_bp.route('/api/get_absence_stats', methods=['GET'])
@@ -6333,13 +6310,14 @@ def submit_and_generate_api():
         # 寫入 resumes
         cursor.execute("""
             INSERT INTO resumes
-            (user_id, filepath, original_filename, status, semester_id, created_at)
-            VALUES (%s, %s, %s, %s, %s, NOW())
+            (user_id, filepath, original_filename, status, category, semester_id, created_at)
+            VALUES (%s, %s, %s, %s, %s, %s, NOW())
         """, (
             user_id,
             save_path,
             filename,
             'uploaded',  # 使用資料庫 enum 定義的狀態值
+            'draft',     # 分類：草稿（學生需要提交後才會進入審核）
             semester_id
         ))
 
@@ -8034,32 +8012,6 @@ def get_class_resumes():
 
 
 # -------------------------
-# API：查詢學生履歷列表
-# -------------------------
-@resume_bp.route('/api/get_my_resumes', methods=['GET'])
-def get_my_resumes():
-    if 'user_id' not in session or session.get('role') != 'student':
-        return jsonify({"success": False, "message": "未授權"}), 403
-
-    conn = get_db()
-    cursor = conn.cursor(dictionary=True)
-    try:
-        cursor.execute("""
-            SELECT r.id, r.original_filename, r.status, r.comment, r.note, r.created_at AS upload_time
-            FROM resumes r
-            WHERE r.user_id = %s
-            ORDER BY r.created_at DESC
-        """, (session['user_id'],))
-        resumes = cursor.fetchall()
-        for r in resumes:
-            if isinstance(r.get('upload_time'), datetime):
-                r['upload_time'] = r['upload_time'].strftime("%Y-%m-%d %H:%M:%S")
-        return jsonify({"success": True, "resumes": resumes})
-    finally:
-        cursor.close()
-        conn.close()
-
-# -------------------------
 # API：取得缺勤統計
 # -------------------------
 @resume_bp.route('/api/get_absence_stats', methods=['GET'])
@@ -10528,13 +10480,14 @@ def submit_and_generate_api():
         # 寫入 resumes
         cursor.execute("""
             INSERT INTO resumes
-            (user_id, filepath, original_filename, status, semester_id, created_at)
-            VALUES (%s, %s, %s, %s, %s, NOW())
+            (user_id, filepath, original_filename, status, category, semester_id, created_at)
+            VALUES (%s, %s, %s, %s, %s, %s, NOW())
         """, (
             user_id,
             save_path,
             filename,
             'uploaded',  # 使用資料庫 enum 定義的狀態值
+            'draft',     # 分類：草稿（學生需要提交後才會進入審核）
             semester_id
         ))
 
@@ -12229,32 +12182,6 @@ def get_class_resumes():
 
 
 # -------------------------
-# API：查詢學生履歷列表
-# -------------------------
-@resume_bp.route('/api/get_my_resumes', methods=['GET'])
-def get_my_resumes():
-    if 'user_id' not in session or session.get('role') != 'student':
-        return jsonify({"success": False, "message": "未授權"}), 403
-
-    conn = get_db()
-    cursor = conn.cursor(dictionary=True)
-    try:
-        cursor.execute("""
-            SELECT r.id, r.original_filename, r.status, r.comment, r.note, r.created_at AS upload_time
-            FROM resumes r
-            WHERE r.user_id = %s
-            ORDER BY r.created_at DESC
-        """, (session['user_id'],))
-        resumes = cursor.fetchall()
-        for r in resumes:
-            if isinstance(r.get('upload_time'), datetime):
-                r['upload_time'] = r['upload_time'].strftime("%Y-%m-%d %H:%M:%S")
-        return jsonify({"success": True, "resumes": resumes})
-    finally:
-        cursor.close()
-        conn.close()
-
-# -------------------------
 # API：取得缺勤統計
 # -------------------------
 @resume_bp.route('/api/get_absence_stats', methods=['GET'])
@@ -14723,13 +14650,14 @@ def submit_and_generate_api():
         # 寫入 resumes
         cursor.execute("""
             INSERT INTO resumes
-            (user_id, filepath, original_filename, status, semester_id, created_at)
-            VALUES (%s, %s, %s, %s, %s, NOW())
+            (user_id, filepath, original_filename, status, category, semester_id, created_at)
+            VALUES (%s, %s, %s, %s, %s, %s, NOW())
         """, (
             user_id,
             save_path,
             filename,
             'uploaded',  # 使用資料庫 enum 定義的狀態值
+            'draft',     # 分類：草稿（學生需要提交後才會進入審核）
             semester_id
         ))
 
@@ -16424,32 +16352,6 @@ def get_class_resumes():
 
 
 # -------------------------
-# API：查詢學生履歷列表
-# -------------------------
-@resume_bp.route('/api/get_my_resumes', methods=['GET'])
-def get_my_resumes():
-    if 'user_id' not in session or session.get('role') != 'student':
-        return jsonify({"success": False, "message": "未授權"}), 403
-
-    conn = get_db()
-    cursor = conn.cursor(dictionary=True)
-    try:
-        cursor.execute("""
-            SELECT r.id, r.original_filename, r.status, r.comment, r.note, r.created_at AS upload_time
-            FROM resumes r
-            WHERE r.user_id = %s
-            ORDER BY r.created_at DESC
-        """, (session['user_id'],))
-        resumes = cursor.fetchall()
-        for r in resumes:
-            if isinstance(r.get('upload_time'), datetime):
-                r['upload_time'] = r['upload_time'].strftime("%Y-%m-%d %H:%M:%S")
-        return jsonify({"success": True, "resumes": resumes})
-    finally:
-        cursor.close()
-        conn.close()
-
-# -------------------------
 # API：取得缺勤統計
 # -------------------------
 @resume_bp.route('/api/get_absence_stats', methods=['GET'])
@@ -18918,13 +18820,14 @@ def submit_and_generate_api():
         # 寫入 resumes
         cursor.execute("""
             INSERT INTO resumes
-            (user_id, filepath, original_filename, status, semester_id, created_at)
-            VALUES (%s, %s, %s, %s, %s, NOW())
+            (user_id, filepath, original_filename, status, category, semester_id, created_at)
+            VALUES (%s, %s, %s, %s, %s, %s, NOW())
         """, (
             user_id,
             save_path,
             filename,
             'uploaded',  # 使用資料庫 enum 定義的狀態值
+            'draft',     # 分類：草稿（學生需要提交後才會進入審核）
             semester_id
         ))
 
@@ -20619,32 +20522,6 @@ def get_class_resumes():
 
 
 # -------------------------
-# API：查詢學生履歷列表
-# -------------------------
-@resume_bp.route('/api/get_my_resumes', methods=['GET'])
-def get_my_resumes():
-    if 'user_id' not in session or session.get('role') != 'student':
-        return jsonify({"success": False, "message": "未授權"}), 403
-
-    conn = get_db()
-    cursor = conn.cursor(dictionary=True)
-    try:
-        cursor.execute("""
-            SELECT r.id, r.original_filename, r.status, r.comment, r.note, r.created_at AS upload_time
-            FROM resumes r
-            WHERE r.user_id = %s
-            ORDER BY r.created_at DESC
-        """, (session['user_id'],))
-        resumes = cursor.fetchall()
-        for r in resumes:
-            if isinstance(r.get('upload_time'), datetime):
-                r['upload_time'] = r['upload_time'].strftime("%Y-%m-%d %H:%M:%S")
-        return jsonify({"success": True, "resumes": resumes})
-    finally:
-        cursor.close()
-        conn.close()
-
-# -------------------------
 # API：取得缺勤統計
 # -------------------------
 @resume_bp.route('/api/get_absence_stats', methods=['GET'])
@@ -23113,13 +22990,14 @@ def submit_and_generate_api():
         # 寫入 resumes
         cursor.execute("""
             INSERT INTO resumes
-            (user_id, filepath, original_filename, status, semester_id, created_at)
-            VALUES (%s, %s, %s, %s, %s, NOW())
+            (user_id, filepath, original_filename, status, category, semester_id, created_at)
+            VALUES (%s, %s, %s, %s, %s, %s, NOW())
         """, (
             user_id,
             save_path,
             filename,
             'uploaded',  # 使用資料庫 enum 定義的狀態值
+            'draft',     # 分類：草稿（學生需要提交後才會進入審核）
             semester_id
         ))
 
@@ -24460,133 +24338,25 @@ def review_resume(resume_id):
         conn.close()
 
 # -------------------------
-# API - 履歷資料夾管理
+# API - 履歷分類管理
 # -------------------------
-@resume_bp.route("/api/resume_folders", methods=["GET"])
-def get_folders():
-    if not require_login(): return jsonify({"success": False, "message": "未登入"}), 401
-    user_id = session['user_id']
-    conn = get_db()
-    cursor = conn.cursor(dictionary=True)
-    cursor.execute("SELECT * FROM resume_folders WHERE user_id = %s ORDER BY created_at DESC", (user_id,))
-    folders = cursor.fetchall()
-    
-    # 格式化日期，保持與 POST 方法一致
-    from datetime import datetime
-    for folder in folders:
-        if folder.get('created_at') and isinstance(folder['created_at'], datetime):
-            folder['created_at'] = folder['created_at'].strftime("%Y-%m-%d %H:%M:%S")
-    
-    cursor.close()
-    conn.close()
-    return jsonify({"success": True, "folders": folders})
-
-# -------------------------
-# API - 建立/更新履歷資料夾
-# -------------------------
-@resume_bp.route("/api/resume_folders", methods=["POST"])
-def create_folder():
+# 獲取學生的所有履歷（按分類）
+@resume_bp.route("/api/my_resumes", methods=["GET"])
+def get_my_resumes():
     if not require_login(): 
         return jsonify({"success": False, "message": "未登入"}), 401
-    
-    user_id = session['user_id']
-    conn = get_db()
-    cursor = conn.cursor(dictionary=True) # 使用 dictionary=True 方便前端讀取欄位
-    
-    try:
-        # 1. 執行插入資料夾
-        # 這裡使用 %s 作為參數佔位符
-        cursor.execute("INSERT INTO resume_folders (user_id, folder_name) VALUES (%s, '未命名履歷')", (user_id,))
-        new_id = cursor.lastrowid
-        conn.commit()
-
-        # 2. 立即查回該筆資料
-        # 使用簡單的 SELECT 查詢，避免 SQL 中的 DATE_FORMAT 導致參數化查詢問題
-        query = "SELECT id, folder_name, created_at FROM resume_folders WHERE id = %s"
-        cursor.execute(query, (new_id,))
-        new_folder = cursor.fetchone()
-
-        # 3. 在 Python 中格式化日期，避免 SQL 參數化查詢的轉義問題
-        if new_folder and new_folder.get('created_at'):
-            from datetime import datetime
-            if isinstance(new_folder['created_at'], datetime):
-                new_folder['created_at'] = new_folder['created_at'].strftime("%Y-%m-%d %H:%M:%S")
-
-        # 4. 回傳成功狀態與新資料夾物件
-        return jsonify({"success": True, "folder": new_folder})
-        
-    except Exception as e:
-        conn.rollback()
-        # 列印出具體錯誤到後端終端機，方便後續排查
-        print(f"Error in create_folder: {str(e)}") 
-        return jsonify({"success": False, "message": str(e)}), 500
-        
-    finally:
-        cursor.close()
-        conn.close()
-
-# -------------------------
-# API - 刪除履歷資料夾
-# -------------------------
-@resume_bp.route("/api/resume_folders/<int:folder_id>", methods=["DELETE"])
-def delete_folder(folder_id):
-    if not require_login(): return jsonify({"success": False, "message": "未登入"}), 401
-    user_id = session['user_id']
-    conn = get_db()
-    cursor = conn.cursor()
-    try:
-        # 增加 user_id 檢查，確保學生只能刪除自己的資料夾
-        cursor.execute("DELETE FROM resume_folders WHERE id = %s AND user_id = %s", (folder_id, user_id))
-        conn.commit()
-        return jsonify({"success": True})
-    except Exception as e:
-        conn.rollback()
-        return jsonify({"success": False, "message": str(e)}), 500
-    finally:
-        cursor.close()
-        conn.close()       
-        
-# -------------------------
-# API - 更新履歷資料夾名稱
-# -------------------------
-@resume_bp.route("/api/resume_folders/<int:folder_id>", methods=["PUT"])
-def update_folder(folder_id):
-    data = request.json
-    new_name = data.get("folder_name")
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute("UPDATE resume_folders SET folder_name = %s WHERE id = %s", (new_name, folder_id))
-    conn.commit()
-    cursor.close()
-    conn.close()
-    return jsonify({"success": True})
-
-# -------------------------
-# API - 取得資料夾下的所有履歷版本
-# -------------------------
-@resume_bp.route("/api/resume_folders/<int:folder_id>/resumes", methods=["GET"])
-def get_resumes_by_folder(folder_id):
-    if not require_login(): 
-        return jsonify({"success": False, "message": "未登入"}), 401
-    
     user_id = session['user_id']
     conn = get_db()
     cursor = conn.cursor(dictionary=True)
     
     try:
-        # 驗證資料夾屬於當前用戶
-        cursor.execute("SELECT id FROM resume_folders WHERE id = %s AND user_id = %s", (folder_id, user_id))
-        folder = cursor.fetchone()
-        if not folder:
-            return jsonify({"success": False, "message": "資料夾不存在或無權限"}), 403
-        
-        # 取得該資料夾下的所有履歷
+        # 獲取所有履歷，包含分類資訊
         cursor.execute("""
-            SELECT id, original_filename, status, created_at, note
+            SELECT id, original_filename, status, category, created_at, updated_at, comment, note
             FROM resumes
-            WHERE folder_id = %s AND user_id = %s
+            WHERE user_id = %s
             ORDER BY created_at DESC
-        """, (folder_id, user_id))
+        """, (user_id,))
         resumes = cursor.fetchall()
         
         # 格式化日期
@@ -24594,6 +24364,11 @@ def get_resumes_by_folder(folder_id):
         for r in resumes:
             if isinstance(r.get('created_at'), datetime):
                 r['created_at'] = r['created_at'].strftime("%Y-%m-%d %H:%M:%S")
+            if isinstance(r.get('updated_at'), datetime):
+                r['updated_at'] = r['updated_at'].strftime("%Y-%m-%d %H:%M:%S")
+            # 確保有 category 欄位，預設為 draft
+            if not r.get('category'):
+                r['category'] = 'draft'
         
         return jsonify({"success": True, "resumes": resumes})
     except Exception as e:
@@ -24601,6 +24376,240 @@ def get_resumes_by_folder(folder_id):
     finally:
         cursor.close()
         conn.close()
+
+# 更新履歷分類（只允許修改草稿狀態的履歷）
+@resume_bp.route("/api/resumes/<int:resume_id>/category", methods=["PUT"])
+def update_resume_category(resume_id):
+    if not require_login(): 
+        return jsonify({"success": False, "message": "未登入"}), 401
+    
+    user_id = session['user_id']
+    data = request.json
+    new_category = data.get('category')
+    
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+    
+    try:
+        # 驗證履歷屬於當前用戶
+        cursor.execute("""
+            SELECT id, category, status, note FROM resumes 
+            WHERE id = %s AND user_id = %s
+        """, (resume_id, user_id))
+        resume = cursor.fetchone()
+        
+        if not resume:
+            return jsonify({"success": False, "message": "履歷不存在或無權限"}), 403
+        
+        resume_category = resume.get('category', 'draft')
+        resume_status = resume.get('status', 'uploaded')
+        resume_note = resume.get('note') or ''
+        
+        # 驗證分類值
+        valid_categories = ['draft', 'ready']
+        if new_category not in valid_categories:
+            return jsonify({"success": False, "message": "無效的分類值"}), 400
+        
+        # 如果選擇「正式版本」（ready），執行提交邏輯
+        if new_category == 'ready':
+            # 只允許提交草稿（category='draft'）
+            if resume_category != 'draft':
+                return jsonify({
+                    "success": False, 
+                    "message": "只能將草稿改為正式版本。此履歷可能已經是正式版本。"
+                }), 403
+            
+            # 將履歷從草稿改為正式版本（可以投遞）
+            cursor.execute("""
+                UPDATE resumes 
+                SET category = 'ready',
+                    status = 'uploaded',
+                    updated_at = NOW()
+                WHERE id = %s AND user_id = %s 
+                AND category = 'draft'
+            """, (resume_id, user_id))
+            
+            if cursor.rowcount == 0:
+                return jsonify({"success": False, "message": "提交失敗，履歷狀態可能已改變"}), 400
+            
+            conn.commit()
+            return jsonify({"success": True, "message": "履歷已提交為正式版本，可以投遞"})
+        
+        # 如果選擇「草稿」（draft），只允許從正式版本改回草稿（且必須是未投遞的）
+        if new_category == 'draft':
+            # 只允許將正式版本改回草稿，且必須是未投遞的（status='uploaded' 且沒有審核記錄）
+            if resume_category != 'ready':
+                return jsonify({
+                    "success": False, 
+                    "message": "只能將正式版本改回草稿。"
+                }), 403
+            
+            # 只有未投遞的正式版本才能改回草稿（status='uploaded' 且沒有 reviewed_by）
+            cursor.execute("""
+                UPDATE resumes 
+                SET category = 'draft',
+                    updated_at = NOW()
+                WHERE id = %s AND user_id = %s 
+                AND category = 'ready' 
+                AND status = 'uploaded'
+                AND reviewed_by IS NULL
+            """, (resume_id, user_id))
+            
+            if cursor.rowcount == 0:
+                return jsonify({
+                    "success": False, 
+                    "message": "無法改回草稿。此履歷可能已經投遞或正在審核中。"
+                }), 400
+            
+            conn.commit()
+            return jsonify({"success": True, "message": "履歷已改回草稿"})
+        conn.commit()
+        return jsonify({"success": True})
+    except Exception as e:
+        conn.rollback()
+        return jsonify({"success": False, "message": str(e)}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+# 提交履歷（從草稿改為正式版本，可以投遞）
+@resume_bp.route("/api/resumes/<int:resume_id>/submit", methods=["POST"])
+def submit_resume(resume_id):
+    if not require_login(): 
+        return jsonify({"success": False, "message": "未登入"}), 401
+    
+    user_id = session['user_id']
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+    
+    try:
+        # 驗證履歷屬於當前用戶，且為真正的草稿（未提交）
+        cursor.execute("""
+            SELECT id, category, status, note FROM resumes 
+            WHERE id = %s AND user_id = %s
+        """, (resume_id, user_id))
+        resume = cursor.fetchone()
+        
+        if not resume:
+            return jsonify({"success": False, "message": "履歷不存在或無權限"}), 403
+        
+        # 只允許提交草稿（category='draft'）
+        resume_category = resume.get('category', 'draft')
+        
+        if resume_category != 'draft':
+            return jsonify({
+                "success": False, 
+                "message": "只能提交草稿履歷。此履歷可能已經是正式版本。"
+            }), 403
+        
+        # 將履歷從草稿改為正式版本（可以投遞）
+        cursor.execute("""
+            UPDATE resumes 
+            SET category = 'ready',
+                status = 'uploaded',
+                updated_at = NOW()
+            WHERE id = %s AND user_id = %s 
+            AND category = 'draft'
+        """, (resume_id, user_id))
+        
+        if cursor.rowcount == 0:
+            return jsonify({"success": False, "message": "提交失敗，履歷狀態可能已改變"}), 400
+        
+        conn.commit()
+        return jsonify({"success": True, "message": "履歷已提交為正式版本，可以投遞"})
+    except Exception as e:
+        conn.rollback()
+        return jsonify({"success": False, "message": str(e)}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+# 刪除履歷（只允許刪除真正的草稿，未提交的履歷）
+@resume_bp.route("/api/resumes/<int:resume_id>", methods=["DELETE"])
+def delete_resume(resume_id):
+    if not require_login(): 
+        return jsonify({"success": False, "message": "未登入"}), 401
+    
+    user_id = session['user_id']
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+    
+    try:
+        # 驗證履歷屬於當前用戶，且為真正的草稿（未提交）
+        cursor.execute("""
+            SELECT id, category, status, filepath FROM resumes 
+            WHERE id = %s AND user_id = %s
+        """, (resume_id, user_id))
+        resume = cursor.fetchone()
+        
+        if not resume:
+            return jsonify({"success": False, "message": "履歷不存在或無權限"}), 403
+        
+        # 只允許刪除草稿（category='draft'）
+        resume_category = resume.get('category', 'draft')
+        
+        if resume_category != 'draft':
+            return jsonify({
+                "success": False, 
+                "message": "只能刪除草稿履歷。已提交為正式版本的履歷無法刪除。"
+            }), 403
+        
+        # 刪除檔案（如果存在）
+        import os
+        filepath = resume.get('filepath')
+        if filepath:
+            try:
+                full_path = os.path.join(current_app.config['UPLOAD_FOLDER'], filepath)
+                if os.path.exists(full_path):
+                    os.remove(full_path)
+            except Exception as e:
+                print(f"刪除檔案失敗: {e}")
+        
+        # 刪除資料庫記錄（只刪除草稿）
+        cursor.execute("""
+            DELETE FROM resumes 
+            WHERE id = %s AND user_id = %s 
+            AND category = 'draft'
+        """, (resume_id, user_id))
+        
+        if cursor.rowcount == 0:
+            return jsonify({"success": False, "message": "刪除失敗，履歷狀態可能已改變"}), 400
+        
+        conn.commit()
+        return jsonify({"success": True, "message": "履歷已刪除"})
+    except Exception as e:
+        conn.rollback()
+        return jsonify({"success": False, "message": str(e)}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+# ========== 以下為舊的資料夾API，已廢棄 ==========
+# @resume_bp.route("/api/resume_folders", methods=["GET"])
+# def get_folders():
+#     # 已改用分類系統，此API已廢棄
+#     return jsonify({"success": False, "message": "此API已廢棄，請使用 /api/my_resumes"}), 410
+
+# ========== 以下為舊的資料夾API，已廢棄（改用分類系統） ==========
+# @resume_bp.route("/api/resume_folders", methods=["POST"])
+# def create_folder():
+#     # 已改用分類系統，此API已廢棄
+#     return jsonify({"success": False, "message": "此API已廢棄"}), 410
+
+# @resume_bp.route("/api/resume_folders/<int:folder_id>", methods=["DELETE"])
+# def delete_folder(folder_id):
+#     # 已改用分類系統，此API已廢棄
+#     return jsonify({"success": False, "message": "此API已廢棄"}), 410
+
+# @resume_bp.route("/api/resume_folders/<int:folder_id>", methods=["PUT"])
+# def update_folder(folder_id):
+#     # 已改用分類系統，此API已廢棄
+#     return jsonify({"success": False, "message": "此API已廢棄"}), 410
+
+# @resume_bp.route("/api/resume_folders/<int:folder_id>/resumes", methods=["GET"])
+# def get_resumes_by_folder(folder_id):
+#     # 已改用分類系統，此API已廢棄
+#     return jsonify({"success": False, "message": "此API已廢棄"}), 410
 
 # -------------------------
 # 頁面路由
@@ -24955,32 +24964,6 @@ def get_class_resumes():
         cursor.close()
         conn.close()
 
-
-# -------------------------
-# API：查詢學生履歷列表
-# -------------------------
-@resume_bp.route('/api/get_my_resumes', methods=['GET'])
-def get_my_resumes():
-    if 'user_id' not in session or session.get('role') != 'student':
-        return jsonify({"success": False, "message": "未授權"}), 403
-
-    conn = get_db()
-    cursor = conn.cursor(dictionary=True)
-    try:
-        cursor.execute("""
-            SELECT r.id, r.original_filename, r.status, r.comment, r.note, r.created_at AS upload_time
-            FROM resumes r
-            WHERE r.user_id = %s
-            ORDER BY r.created_at DESC
-        """, (session['user_id'],))
-        resumes = cursor.fetchall()
-        for r in resumes:
-            if isinstance(r.get('upload_time'), datetime):
-                r['upload_time'] = r['upload_time'].strftime("%Y-%m-%d %H:%M:%S")
-        return jsonify({"success": True, "resumes": resumes})
-    finally:
-        cursor.close()
-        conn.close()
 
 # -------------------------
 # API：取得缺勤統計

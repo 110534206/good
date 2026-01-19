@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>智慧實習平台 | 學生主頁</title>
+  <title>智慧實習平台 | 實習流程常見問題</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
   <style>
     /* 重置與基本樣式 */
@@ -99,300 +99,49 @@
       margin-top: 6px;
     }
 
-    /* 輪播區塊 */
-    .carousel-container {
-      position: relative;
-      width: 100%;
-      max-width: 1200px;
-      margin: 80px auto 2rem auto;
-      padding: 0 0.5rem;
-      overflow: hidden;
-    }
-
-    .carousel-wrapper {
-      position: relative;
-      width: 100%;
-      aspect-ratio: 3 / 1;
-    }
-
-    .carousel-slide {
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      opacity: 0;
-      transition: opacity 0.5s ease-in-out;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
-
-    .carousel-slide.active {
-      opacity: 1;
-      z-index: 1;
-    }
-
-    /* 第一頁：圖片 */
-    .carousel-slide.hero-image {
-      background-image: url('/static/images/title.png');
-      background-size: cover;
-      background-repeat: no-repeat;
-      background-position: center;
-    }
-
-    /* 第二頁：問題圖片 */
-    .carousel-slide.faq-preview {
-      background-image: url('/static/images/實習常見問題.png');
-      background-size: contain;
-      background-repeat: no-repeat;
-      background-position: center;
-      cursor: pointer;
-      transition: transform 0.3s ease;
-    }
-
-    .carousel-slide.faq-preview:hover {
-      transform: scale(1.02);
-    }
-
-    /* 輪播控制按鈕 */
-    .carousel-control {
-      position: absolute;
-      top: 50%;
-      transform: translateY(-50%);
-      background-color: white;
-      color: rgba(0, 102, 204, 0.8);
-      border: none;
-      width: 50px;
-      height: 50px;
-      border-radius: 50%;
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 1.5rem;
-      z-index: 10;
-      transition: background-color 0.3s ease, transform 0.2s ease;
-    }
-
-    .carousel-control:hover {
-      background-color: rgb(233, 231, 231);
-      transform: translateY(-50%) scale(1.1);
-    }
-
-    .carousel-control:active {
-      transform: translateY(-50%) scale(0.95);
-    }
-
-    .carousel-control.prev {
-      left: 20px;
-    }
-
-    .carousel-control.next {
-      right: 20px;
-    }
-
-    /* 輪播指示器 */
-    .carousel-indicators {
-      position: absolute;
-      bottom: 20px;
-      left: 50%;
-      transform: translateX(-50%);
-      display: flex;
-      gap: 10px;
-      z-index: 10;
-    }
-
-    .carousel-indicator {
-      width: 12px;
-      height: 12px;
-      border-radius: 50%;
-      background-color: rgba(255, 255, 255, 0.5);
-      border: 2px solid rgba(255, 255, 255, 0.8);
-      cursor: pointer;
-      transition: all 0.3s ease;
-    }
-
-    .carousel-indicator.active {
-      background-color: #0066cc;
-      border-color: #0066cc;
-      transform: scale(1.2);
-    }
-
     main {
       background-color: #fff;
       padding: 2rem;
+      margin-top: 80px;
       margin-bottom: 3rem;
     }
 
-    .page-title {
+    .page-header {
       text-align: center;
-      max-width: 1200px;
-      margin: 0 auto 3rem auto;
+      margin-bottom: 3rem;
     }
 
-    .card-container {
-      max-width: 1200px;
-      margin: 0 auto;
-      display: grid;
-      grid-template-columns: repeat(2, 1fr);
-      gap: 2rem;
-      padding: 0;
-    }
-
-    .card {
-      border: 2px solid #0066cc;
-      background: #fff;
-      border-radius: 12px;
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-      padding: 2rem;
-      text-align: center;
-      transition: transform 0.3s ease;
-    }
-
-    .card:hover {
-      transform: translateY(-5px);
-    }
-
-    .card h3 {
-      margin-bottom: 0.5rem;
+    .page-header h1 {
       color: #0066cc;
-    }
-
-    .card p {
-      font-size: 0.95rem;
-      color: #666;
-    }
-
-    .card a {
-      display: inline-block;
-      margin-top: 1rem;
-      padding: 0.6rem 2rem;
-      background-color: #0066cc;
-      color: white;
-      border-radius: 8px;
-      min-width: 120px;
-      text-decoration: none;
-      transition: background-color 0.3s ease;
-    }
-
-    .card a:hover {
-      background-color: #024689;
-    }
-
-    /* 側邊選單 */
-    #side-menu {
-      position: fixed;
-      top: 0;
-      left: 0;
-      height: 100vh;
-      width: 320px;
-      max-width: 80vw;
-      background-color: rgba(10, 10, 10, 0.95);
-      backdrop-filter: blur(6px);
-      box-shadow: 3px 0 12px rgb(0 0 0 / 0.7);
-      padding: 2rem 1.5rem;
-      transform: translateX(-100%);
-      transition: transform 0.3s ease-in-out;
-      z-index: 1100;
-      display: flex;
-      flex-direction: column;
-      align-items: flex-start;
-      color: white;
-      user-select: none;
-    }
-
-    #side-menu.open {
-      transform: translateX(0);
-    }
-
-    #close-btn {
-      position: absolute;
-      top: 2rem;
-      right: 1.6rem;
-      font-size: 2.2rem;
-      background: none;
-      border: none;
-      color: white;
-      cursor: pointer;
-      line-height: 1;
-      width: 2.5rem;
-      height: 2.5rem;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
-
-    #side-menu h2 {
-      width: 100%;
-      margin-bottom: 1.5rem;
+      font-size: 2rem;
       font-weight: 700;
-      font-size: 1.5rem;
-      text-align: left;
+      margin-bottom: 0.5rem;
     }
 
-    #side-menu a {
-      display: block;
-      width: 100%;
-      padding: 0.5rem 0;
-      font-size: 1.1rem;
-      color: #ddd;
-      text-decoration: none;
-      border-radius: 4px;
-      transition: background-color 0.2s ease;
+    .page-header p {
+      color: #666;
+      font-size: 1rem;
     }
 
-    #side-menu a:hover {
-      background-color: rgba(255, 255, 255, 0.15);
-      color: white;
-    }
-
-    /* 通知鈴鐺圖示 */
-    .notification-bell {
-      position: relative;
-      top: 3px; 
-      cursor: pointer;
-      display: flex;
+    .back-button {
+      display: inline-flex;
       align-items: center;
-      justify-content: center;
-      width: 40px;
-      height: 40px;
-      margin-right: 10px;
-      color: #333;
-      font-size: 1.5rem;
+      gap: 0.5rem;
+      color: #0066cc;
+      text-decoration: none;
+      margin-bottom: 2rem;
+      font-weight: 500;
       transition: color 0.3s ease;
     }
 
-    .notification-bell:hover {
-      color: #0066cc;
-    }
-
-    .notification-badge {
-      position: absolute;
-      top: 0;
-      right: 0;
-      background-color: #ff4d4f;
-      color: white;
-      border-radius: 10px;
-      min-width: 18px;
-      height: 18px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 0.75rem;
-      font-weight: bold;
-      padding: 0 4px;
-      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-    }
-
-    .notification-badge.hidden {
-      display: none;
+    .back-button:hover {
+      color: #024689;
     }
 
     /* 實習流程問題表格區塊 */
     .faq-section {
       max-width: 1200px;
-      margin: 4rem auto 3rem auto;
+      margin: 0 auto;
       padding: 2rem;
       background-color: #f8f9fa;
       border-radius: 12px;
@@ -477,10 +226,118 @@
       color: #666;
     }
 
+    /* 側邊選單 */
+    #side-menu {
+      position: fixed;
+      top: 0;
+      left: 0;
+      height: 100vh;
+      width: 320px;
+      max-width: 80vw;
+      background-color: rgba(10, 10, 10, 0.95);
+      backdrop-filter: blur(6px);
+      box-shadow: 3px 0 12px rgb(0 0 0 / 0.7);
+      padding: 2rem 1.5rem;
+      transform: translateX(-100%);
+      transition: transform 0.3s ease-in-out;
+      z-index: 1100;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      color: white;
+      user-select: none;
+    }
+
+    #side-menu.open {
+      transform: translateX(0);
+    }
+
+    #close-btn {
+      position: absolute;
+      top: 2rem;
+      right: 1.6rem;
+      font-size: 2.2rem;
+      background: none;
+      border: none;
+      color: white;
+      cursor: pointer;
+      line-height: 1;
+      width: 2.5rem;
+      height: 2.5rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    #side-menu h2 {
+      width: 100%;
+      margin-bottom: 1.5rem;
+      font-weight: 700;
+      font-size: 1.5rem;
+      text-align: left;
+    }
+
+    #side-menu a {
+      display: block;
+      width: 100%;
+      padding: 0.5rem 0;
+      font-size: 1.1rem;
+      color: #ddd;
+      text-decoration: none;
+      border-radius: 4px;
+      transition: background-color 0.2s ease;
+    }
+
+    #side-menu a:hover {
+      background-color: rgba(255, 255, 255, 0.15);
+      color: white;
+    }
+
+    /* 通知鈴鐺圖示 */
+    .notification-bell {
+      position: relative;
+      top: 3px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 40px;
+      height: 40px;
+      margin-right: 10px;
+      color: #333;
+      font-size: 1.5rem;
+      transition: color 0.3s ease;
+    }
+
+    .notification-bell:hover {
+      color: #0066cc;
+    }
+
+    .notification-badge {
+      position: absolute;
+      top: 0;
+      right: 0;
+      background-color: #ff4d4f;
+      color: white;
+      border-radius: 10px;
+      min-width: 18px;
+      height: 18px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.75rem;
+      font-weight: bold;
+      padding: 0 4px;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    }
+
+    .notification-badge.hidden {
+      display: none;
+    }
+
     @media (max-width: 768px) {
       .faq-section {
         padding: 1.5rem;
-        margin: 2rem auto;
       }
 
       .faq-table {
@@ -544,72 +401,82 @@
     </div>
   </div>
 
-  <!-- 輪播區塊 -->
-  <div class="carousel-container">
-    <div class="carousel-wrapper">
-      <!-- 第一頁：圖片 -->
-      <div class="carousel-slide hero-image active" role="img" aria-label="平台標題圖片"></div>
-      
-      <!-- 第二頁：問題圖片 -->
-      <div class="carousel-slide faq-preview" onclick="window.location.href='/intern_faq'" role="button" aria-label="查看實習常見問題"></div>
-    </div>
-    
-    <!-- 左右控制按鈕 -->
-    <button class="carousel-control prev" aria-label="上一頁" onclick="changeSlide(-1)">
-      <i class="bi bi-chevron-left"></i>
-    </button>
-    <button class="carousel-control next" aria-label="下一頁" onclick="changeSlide(1)">
-      <i class="bi bi-chevron-right"></i>
-    </button>
-    
-    <!-- 指示器 -->
-    <div class="carousel-indicators">
-      <span class="carousel-indicator active" onclick="goToSlide(0)" aria-label="第1頁"></span>
-      <span class="carousel-indicator" onclick="goToSlide(1)" aria-label="第2頁"></span>
-    </div>
-  </div>
-
   <div class="container">
     <main>
-      <h2 class="page-title">請選擇你要使用的功能</h2>
-        <section class="card-container">
-         <div class="card" role="listitem">
-          <h3>履歷管理</h3>
-          <p>建立個人化履歷模板。</p>
-          <a href="/resume_folders" role="link">新增履歷</a>
-        </div>
-        <div class="card" role="listitem">
-          <h3>填寫志願序</h3>
-          <p>選擇你心儀的實習廠商與排序。</p>
-          <a href="/fill_preferences" role="link">填寫志願</a>
-        </div>
-         <div class="card" role="listitem">
-          <h3>投遞履歷</h3>
-          <p>查看最新公告的實習公司，並投遞履歷。</p>
-          <a href="/look_company" role="link">上傳履歷</a>
-        </div>
-        <div class="card" role="listitem">
-          <h3>通知</h3>
-          <p>接收來自老師與平台的最新消息。</p>
-          <a href="/notifications" role="link">查看通知</a>
-        </div>
-        <div class="card" role="listitem">
-          <h3>行事曆</h3>
-          <p>查看與管理重要的日期和活動安排。</p>
-          <a href="/interview_schedule" role="link">行事曆</a>
-        </div>
-        <div class="card" role="listitem">
-          <h3>學生媒合結果</h3>
-          <p>查看錄取公司、期間、最終錄取志願、指導老師 。</p>
-          <a href="/intern_achievement" role="link">上傳成果</a>
-        </div>
-        <div class="card" role="listitem">
-          <h3>實習心得</h3>
-          <p>瀏覽學長姐的實習經驗或分享你的心得。</p>
-          <a href="/intern_experience" role="link">前往查看</a>
-          </div>
-      </section>
+      <a href="/student_home" class="back-button">
+        <i class="bi bi-arrow-left"></i>
+        返回首頁
+      </a>
+      
+      <div class="page-header">
+        <h1>實習流程常見問題</h1>
+        <p>以下為實習流程中學生常見的問題與解答，如有其他疑問請聯繫指導老師</p>
+      </div>
 
+      <!-- 實習流程常見問題表格 -->
+      <section class="faq-section">
+        <table class="faq-table">
+          <thead>
+            <tr>
+              <th>編號</th>
+              <th>問題</th>
+              <th>解答</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>1</td>
+              <td>如何開始建立履歷？</td>
+              <td>請點選「履歷管理」功能，選擇「新增履歷」，即可開始建立個人履歷。系統提供多種履歷模板供您選擇，您也可以自訂格式。</td>
+            </tr>
+            <tr>
+              <td>2</td>
+              <td>什麼時候可以填寫志願序？</td>
+              <td>志願序填寫時間會由系統管理員設定，通常在實習申請開始後開放。請留意平台通知，或查看行事曆中的重要日期。</td>
+            </tr>
+            <tr>
+              <td>3</td>
+              <td>可以修改已提交的志願序嗎？</td>
+              <td>在志願序填寫截止日期前，您可以隨時修改志願順序。請前往「填寫志願序」頁面進行修改。截止後將無法更改。</td>
+            </tr>
+            <tr>
+              <td>4</td>
+              <td>如何投遞履歷給公司？</td>
+              <td>請先完成履歷建立，然後前往「投遞履歷」頁面，瀏覽可申請的實習公司，選擇心儀的公司後點選「上傳履歷」即可。</td>
+            </tr>
+            <tr>
+              <td>5</td>
+              <td>履歷投遞後多久會收到回覆？</td>
+              <td>各公司的審核時間不同，通常為1-2週。您可以在「通知」功能中查看最新消息，系統也會發送通知給您。</td>
+            </tr>
+            <tr>
+              <td>6</td>
+              <td>面試時間如何安排？</td>
+              <td>面試時間會由公司或指導老師通知，請查看「行事曆」功能確認面試日期。如有衝突，請盡早聯繫指導老師或公司人資。</td>
+            </tr>
+            <tr>
+              <td>7</td>
+              <td>如何查看媒合結果？</td>
+              <td>媒合結果公布後，請前往「學生媒合結果」頁面查看。您可以看到錄取的公司、實習期間、最終錄取志願及指導老師資訊。</td>
+            </tr>
+            <tr>
+              <td>8</td>
+              <td>實習期間需要注意什麼？</td>
+              <td>請遵守公司規定，準時出勤，積極學習。定期與指導老師聯繫，並在實習結束後上傳實習成果報告。如有任何問題，可隨時聯繫指導老師。</td>
+            </tr>
+            <tr>
+              <td>9</td>
+              <td>如何分享實習心得？</td>
+              <td>實習結束後，您可以前往「實習心得」頁面，瀏覽學長姐的經驗分享，也可以撰寫並分享您的實習心得，幫助學弟妹了解實習過程。</td>
+            </tr>
+            <tr>
+              <td>10</td>
+              <td>如果對實習流程有疑問該找誰？</td>
+              <td>您可以透過「通知」功能聯繫指導老師，或查看平台公告。如有緊急問題，請直接聯繫系辦或實習承辦人員。</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
     </main>
   </div>
 
@@ -690,76 +557,6 @@
           // 保持預設頭像
         });
     }
-
-    // 輪播功能
-    let currentSlide = 0;
-    const slides = document.querySelectorAll('.carousel-slide');
-    const indicators = document.querySelectorAll('.carousel-indicator');
-    const totalSlides = slides.length;
-
-    function showSlide(index) {
-      // 確保索引在有效範圍內
-      if (index < 0) {
-        currentSlide = totalSlides - 1;
-      } else if (index >= totalSlides) {
-        currentSlide = 0;
-      } else {
-        currentSlide = index;
-      }
-
-      // 更新幻燈片顯示
-      slides.forEach((slide, i) => {
-        if (i === currentSlide) {
-          slide.classList.add('active');
-        } else {
-          slide.classList.remove('active');
-        }
-      });
-
-      // 更新指示器
-      indicators.forEach((indicator, i) => {
-        if (i === currentSlide) {
-          indicator.classList.add('active');
-        } else {
-          indicator.classList.remove('active');
-        }
-      });
-    }
-
-    function changeSlide(direction) {
-      showSlide(currentSlide + direction);
-    }
-
-    function goToSlide(index) {
-      showSlide(index);
-    }
-
-    // 鍵盤控制
-    document.addEventListener('keydown', function(e) {
-      if (e.key === 'ArrowLeft') {
-        changeSlide(-1);
-      } else if (e.key === 'ArrowRight') {
-        changeSlide(1);
-      }
-    });
-
-    // 自動播放（可選，每5秒切換）
-    // let autoPlayInterval = setInterval(() => {
-    //   changeSlide(1);
-    // }, 5000);
-
-    // 當滑鼠懸停在輪播上時暫停自動播放
-    // const carouselContainer = document.querySelector('.carousel-container');
-    // if (carouselContainer) {
-    //   carouselContainer.addEventListener('mouseenter', () => {
-    //     clearInterval(autoPlayInterval);
-    //   });
-    //   carouselContainer.addEventListener('mouseleave', () => {
-    //     autoPlayInterval = setInterval(() => {
-    //       changeSlide(1);
-    //     }, 5000);
-    //   });
-    // }
 
     // 帳號下拉選單
     document.addEventListener("DOMContentLoaded", function () {

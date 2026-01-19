@@ -176,10 +176,6 @@
           <button class="nav-link" id="ai-edit-tab" data-bs-toggle="tab" data-bs-target="#ai-edit-pane" type="button"
             role="tab" aria-controls="ai-edit-pane" aria-selected="false">AI 履歷修改</button>
         </li>
-        <li class="nav-item" role="presentation">
-          <button class="nav-link" id="records-tab" data-bs-toggle="tab" data-bs-target="#records-pane" type="button"
-            role="tab" aria-controls="records-pane" aria-selected="false">歷史紀錄</button>
-        </li>
       </ul>
 
       <div class="tab-content" id="myTabContent">
@@ -467,26 +463,6 @@
               <button type="button" id="editResumeBtn" class="btn btn-warning btn-lg d-none">修改履歷</button>
             </div>
           </form>
-        </div>
-
-        <div class="tab-pane fade" id="records-pane" role="tabpanel" aria-labelledby="records-tab" tabindex="0">
-          <div id="resumeRecords" class="p-3">
-            <table class="table table-striped align-middle text-center">
-              <thead class="table-light">
-                <tr>
-                  <th>生成時間</th>
-                  <th>檔名</th>
-                  <th>審核狀態</th>
-                  <th>下載</th>
-                </tr>
-              </thead>
-              <tbody id="recordsBody">
-                <tr>
-                  <td colspan="4" class="text-muted">尚無履歷紀錄</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
         </div>
 
         <!-- AI 履歷修改頁籤 -->
@@ -3336,7 +3312,8 @@
         }, 500);
       }
 
-      loadResumeRecords();
+      // 歷史記錄頁籤已移除，不再載入履歷記錄
+      // loadResumeRecords();
       // 載入學期列表
       loadSemesters();
 
@@ -3757,11 +3734,7 @@
           await loadResumeData();
 
           // 🚨 核心要求：切換到紀錄頁籤
-          const recordsTab = document.querySelector('[data-bs-target="#records-pane"]');
-          new bootstrap.Tab(recordsTab).show();
-
-          // 重新載入歷史紀錄列表
-          await loadResumeRecords();
+          // 履歷提交成功，保持在當前頁籤
 
         } else {
           alert("❌ 提交失敗：" + (result.message || "未知錯誤"));

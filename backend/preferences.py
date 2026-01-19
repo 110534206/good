@@ -236,9 +236,11 @@ def get_my_preferences():
     try:
         cursor.execute("""
             SELECT 
+                sp.id,
                 sp.preference_order, 
                 sp.company_id, 
                 sp.job_id,
+                sp.resume_id,
                 sp.status,
                 sp.submitted_at,
                 ic.company_name,
