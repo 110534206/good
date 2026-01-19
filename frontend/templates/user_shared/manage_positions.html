@@ -42,7 +42,7 @@
 
 
     main.management-container {
-      max-width: 1200px;
+      max-width: 1800px;
       margin: 24px auto 60px;
       padding: 0 24px;
       display: flex;
@@ -60,7 +60,7 @@
     }
 
     .topbar {
-      max-width: 1200px;
+      max-width: 1800px;
       margin: 0 auto;
       padding: 18px 24px;
       display: flex;
@@ -288,6 +288,23 @@
       text-decoration: underline;
     }
 
+    /* 同一筆資料使用相同背景色 */
+    table.positions-table tbody tr.data-row {
+      background: #ffffff;
+    }
+    
+    table.positions-table tbody tr.data-row.even-row {
+      background: #f8fafc;
+    }
+    
+    table.positions-table tbody tr.detail-row.even-row td {
+      background: #f8fafc;
+    }
+    
+    table.positions-table tbody tr.detail-row.odd-row td {
+      background: #ffffff;
+    }
+    
     .detail-row td {
       background: #f8fafc;
     }
@@ -598,16 +615,18 @@
         <table class="positions-table">
           <thead>
             <tr>
-              <th style="width: 30%;">職缺名稱 / 公司</th>
-              <th style="width: 15%;">名額</th>
-              <th style="width: 20%;">期間 / 時間</th>
-              <th style="width: 15%;">薪資</th>
-              <th style="width: 20%;">操作</th>
+              <th style="width: 18%;">職缺名稱 / 公司</th>
+              <th style="width: 8%;">名額</th>
+              <th style="width: 13%;">期間 / 時間</th>
+              <th style="width: 10%;">薪資</th>
+              <th style="width: 25%;">職務說明</th>
+              <th style="width: 18%;">備註</th>
+              <th style="width: 10%;">操作</th>
             </tr>
           </thead>
           <tbody id="positionsTableBody">
             <tr>
-              <td colspan="5">資料載入中...</td>
+              <td colspan="7">資料載入中...</td>
             </tr>
           </tbody>
         </table>
@@ -675,7 +694,7 @@
         if (!els.positionsTableBody) return;
         els.positionsTableBody.innerHTML = `
           <tr>
-            <td colspan="5">資料載入中...</td>
+            <td colspan="6">資料載入中...</td>
           </tr>
         `;
       }
@@ -709,22 +728,42 @@
         if (!jobs.length) {
           els.positionsTableBody.innerHTML = `
             <tr>
-              <td colspan="5">尚無職缺資料。</td>
+                <td colspan="7">尚無職缺資料。</td>
             </tr>
           `;
           return;
         }
 
         const rows = [];
-        jobs.forEach((job) => {
+        jobs.forEach((job, index) => {
           const salaryText = formatSalary(job.salary);
-          const periodText = job.period ? escapeHtml(job.period) : '—';
+          
+          // 處理期間文字：將括號內容分離到下一行
+          let periodMain = '—';
+          let periodNote = '';
+          if (job.period) {
+            const periodEscaped = escapeHtml(job.period);
+            // 使用正則表達式分離括號內容，例如：2025/02-2025/06(一學期) -> 2025/02-2025/06 和 (一學期)
+            const match = periodEscaped.match(/^([^(]+)(\(.+\))?$/);
+            if (match) {
+              periodMain = match[1].trim();
+              if (match[2]) {
+                periodNote = match[2]; // 包含括號，例如：(一學期)
+              }
+            } else {
+              periodMain = periodEscaped;
+            }
+          }
+          
           const workTimeText = job.work_time ? escapeHtml(job.work_time) : '—';
           const descriptionText = job.description ? escapeHtml(job.description) : '尚未提供';
           const remarkText = job.remark ? escapeHtml(job.remark) : '—';
+          
+          // 根據索引決定背景色類別（奇數行用白色，偶數行用淺灰色）
+          const rowClass = index % 2 === 0 ? 'even-row' : 'odd-row';
 
           rows.push(`
-            <tr data-id="${job.id}">
+            <tr data-id="${job.id}" class="data-row ${rowClass}">
               <td>
                 <div class="title-cell">
                   <span style="font-weight:700;font-size:1.05rem;">${escapeHtml(job.title)}</span>
@@ -734,32 +773,31 @@
               <td>${job.slots ?? 0} 人</td>
               <td>
                 <div class="title-cell" style="gap:4px;">
-                  <span>${periodText}</span>
-                  <span style="color:var(--color-muted); font-size:0.85rem;">${workTimeText}</span>
+                  <div>
+                    <span>${periodMain}</span>
+                    ${periodNote ? `<div>${periodNote}</div>` : ''}
+                  </div>
+                  ${workTimeText !== '—' ? `<span style="color:var(--color-muted); font-size:0.85rem;">${workTimeText}</span>` : ''}
                 </div>
               </td>
               <td>${salaryText}</td>
+              <td style="max-width: 300px;">
+                <div style="font-size: 0.9rem; line-height: 1.5; color: var(--color-text);">
+                  ${descriptionText.length > 100 ? descriptionText.substring(0, 100) + '...' : descriptionText}
+                </div>
+              </td>
+              <td style="max-width: 250px;">
+                <div style="font-size: 0.9rem; line-height: 1.5; color: var(--color-text);">
+                  ${remarkText && remarkText !== '—' ? remarkText : ''}
+                </div>
+              </td>
               <td>
-                <div style="display:flex; align-items:center; gap:12px;">
+                <div style="display:flex; align-items:center; gap:12px; flex-wrap: wrap;">
                   ${job.is_created_by_vendor === false ? `
                     <span style="color:var(--color-muted); font-size:0.85rem;">由指導老師建立</span>
                   ` : ''}
                   <button class="link-button" data-action="edit" data-id="${job.id}" style="color:var(--color-primary);">修改</button>
                   <button class="link-button" data-action="delete" data-id="${job.id}" style="color:var(--color-danger);">刪除</button>
-                </div>
-              </td>
-            </tr>
-            <tr class="detail-row">
-              <td colspan="5">
-                <div class="detail-grid">
-                  <div>
-                    <span class="detail-label">職務說明</span>
-                    <p style="margin:0;">${descriptionText}</p>
-                  </div>
-                  <div>
-                    <span class="detail-label">備註</span>
-                    <p style="margin:0;">${remarkText}</p>
-                  </div>
                 </div>
               </td>
             </tr>
@@ -818,7 +856,7 @@
           showToast(error.message || '資料載入失敗，請稍後再試', 'error');
           els.positionsTableBody.innerHTML = `
             <tr>
-              <td colspan="5">載入資料時發生錯誤，請稍後再試。</td>
+                <td colspan="7">載入資料時發生錯誤，請稍後再試。</td>
             </tr>
           `;
         }
