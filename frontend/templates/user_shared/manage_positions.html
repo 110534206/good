@@ -636,7 +636,8 @@
 
       const state = {
         companies: [],
-        jobs: []
+        jobs: [],
+        vendorCompanyName: null // 從 profile API 獲取的廠商公司名稱
       };
 
       const els = {
@@ -768,6 +769,23 @@
         els.positionsTableBody.innerHTML = rows.join('');
       }
 
+      async function loadProfile() {
+        try {
+          const response = await fetch('/api/profile', {
+            headers: { 'Accept': 'application/json' },
+            credentials: 'include'
+          });
+          const result = await response.json();
+          if (result.success && result.user && result.user.role === 'vendor') {
+            // 如果是廠商，從 profile API 獲取公司名稱
+            state.vendorCompanyName = result.user.name || null;
+            console.log('📋 從 profile API 獲取的公司名稱：', state.vendorCompanyName);
+          }
+        } catch (error) {
+          console.error('載入 profile 資料失敗：', error);
+        }
+      }
+
       async function loadPositions() {
         setTableLoading();
         try {
@@ -780,7 +798,19 @@
             throw new Error(result.message || '載入失敗');
           }
           state.companies = result.companies || [];
-          state.jobs = result.items || [];
+          const allJobs = result.items || [];
+
+          // 如果已經從 profile 獲取到公司名稱，只顯示該公司的職缺
+          if (state.vendorCompanyName && state.vendorCompanyName.trim()) {
+            state.jobs = allJobs.filter(job => {
+              const jobCompanyName = (job.company_name || '').trim();
+              return jobCompanyName === state.vendorCompanyName.trim();
+            });
+            console.log(`✅ 過濾後，只顯示「${state.vendorCompanyName}」的職缺：${state.jobs.length} 筆`);
+          } else {
+            // 如果沒有獲取到公司名稱，顯示所有職缺（向後兼容）
+            state.jobs = allJobs;
+          }
 
           updateCompaniesControls();
           renderPositions();
@@ -867,10 +897,13 @@
         });
       }
 
-      function init() {
+      async function init() {
         initMenu();
         bindEvents();
-        loadPositions();
+        // 先載入 profile 資料以獲取公司名稱
+        await loadProfile();
+        // 然後載入職缺資料（會自動過濾只顯示該公司的職缺）
+        await loadPositions();
       }
 
       document.addEventListener('DOMContentLoaded', init);

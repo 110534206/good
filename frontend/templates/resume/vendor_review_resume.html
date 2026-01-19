@@ -390,6 +390,8 @@
     const interviewedSet = new Set();
     // 面試地點下拉選單用的公司名稱列表（從履歷資料收集）
     let interviewCompanyNames = [];
+    // 從 profile API 獲取的廠商公司名稱
+    let vendorCompanyName = null;
 
     // 定義狀態顏色，approved 對應 success (綠色)
     function statusColor(status) {
@@ -431,6 +433,12 @@
         .then(res => res.json())
         .then(profileData => {
           userRole = profileData.success && profileData.user ? profileData.user.role : 'vendor';
+          
+          // 如果是廠商，從 profile 獲取公司名稱
+          if (userRole === 'vendor' && profileData.success && profileData.user) {
+            vendorCompanyName = profileData.user.name || null;
+            console.log('📋 從 profile API 獲取的公司名稱：', vendorCompanyName);
+          }
           
           // 廠商專用 API（老師也可以訪問）
           const apiUrl = getResumeApiUrl();
@@ -638,11 +646,31 @@
       const companyNameSelect = document.getElementById("companyNameFilter");
       companyNameSelect.innerHTML = `<option value="">所有公司</option>`;
       const companySet = new Set();
-      data.forEach(r => { 
-        if(r.company_name && r.company_name.trim()) {
-          companySet.add(r.company_name.trim());
+      
+      // 如果是廠商，優先從 profile API 獲取的公司名稱
+      if (userRole === 'vendor' && vendorCompanyName && vendorCompanyName.trim()) {
+        companySet.add(vendorCompanyName.trim());
+        console.log('✅ 使用 profile API 的公司名稱：', vendorCompanyName);
+      } else {
+        // 如果不是廠商或沒有從 profile 獲取到，從履歷資料中提取公司名稱
+        data.forEach(r => { 
+          if(r.company_name && r.company_name.trim()) {
+            companySet.add(r.company_name.trim());
+          }
+        });
+        
+        // 如果履歷資料中沒有公司名稱，嘗試從職缺資料中提取
+        if (companySet.size === 0 && positionData && positionData.items && Array.isArray(positionData.items)) {
+          positionData.items.forEach(job => {
+            const companyName = job.company_name || job.companyName || '';
+            if (companyName && companyName.trim()) {
+              companySet.add(companyName.trim());
+            }
+          });
         }
-      });
+      }
+      
+      // 按公司名稱排序後加入選單
       Array.from(companySet).sort().forEach(company => {
         companyNameSelect.innerHTML += `<option value="${escapeHtml(company)}">${escapeHtml(company)}</option>`;
       });
