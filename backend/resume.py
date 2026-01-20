@@ -3061,6 +3061,7 @@ def get_teacher_review_resumes():
                 r.created_at AS upload_time,
                 r.original_filename,
                 r.status AS display_status,
+                r.teacher_review_status,
                 sp.id AS preference_id,
                 sp.preference_order,
                 ic.company_name,
@@ -3171,9 +3172,44 @@ def get_teacher_review_resumes():
                     'display_company': row.get('company_name') or '—',
                     'display_job': row.get('job_title') or '—',
                     'display_status': status,
+                    'status': row.get('display_status'),  # resumes.status
+                    'teacher_review_status': row.get('teacher_review_status'),  # resumes.teacher_review_status
                 })
         
-        return jsonify({"success": True, "data": result_data})
+        # 獲取履歷上傳截止時間資訊（與 update_resume_status_after_deadline 函數一致）
+        deadline_info = None
+        try:
+            cursor.execute("""
+                SELECT end_time 
+                FROM announcement 
+                WHERE title LIKE '[作業]%上傳履歷截止時間' AND is_published = 1
+                ORDER BY created_at DESC 
+                LIMIT 1
+            """)
+            deadline_result = cursor.fetchone()
+            if deadline_result and deadline_result.get('end_time'):
+                deadline = deadline_result['end_time']
+                if isinstance(deadline, datetime):
+                    deadline_info = deadline.strftime('%Y/%m/%d %H:%M')
+                else:
+                    try:
+                        deadline_dt = datetime.strptime(str(deadline), '%Y-%m-%d %H:%M:%S')
+                        deadline_info = deadline_dt.strftime('%Y/%m/%d %H:%M')
+                    except:
+                        try:
+                            deadline_dt = datetime.strptime(str(deadline), '%Y-%m-%d %H:%M')
+                            deadline_info = deadline_dt.strftime('%Y/%m/%d %H:%M')
+                        except:
+                            deadline_info = str(deadline)
+        except Exception as e:
+            print(f"⚠️ 無法獲取截止時間資訊: {e}")
+        
+        return jsonify({
+            "success": True, 
+            "data": result_data,
+            "deadline": deadline_info,
+            "is_deadline_passed": is_resume_deadline_passed
+        })
 
     except Exception as e:
         # 請確保您已在 resume.py 頂部導入 import traceback
@@ -3620,6 +3656,7 @@ def get_class_resumes():
                     FROM resumes r
                     JOIN users u ON r.user_id = u.id
                     LEFT JOIN classes c ON u.class_id = c.id
+                    JOIN student_preferences sp ON sp.resume_id = r.id
                     LEFT JOIN (
                         SELECT 
                             sp.student_id,
@@ -3630,7 +3667,6 @@ def get_class_resumes():
                             COALESCE(ij.title, sp.job_title) AS job_title,
                             ij.id AS job_id,
                             (SELECT vph.comment 
-                             FROM vendor_preference_history vph 
                              WHERE vph.preference_id = sp.id 
                              ORDER BY vph.created_at DESC 
                              LIMIT 1) AS vendor_comment
@@ -3638,9 +3674,27 @@ def get_class_resumes():
                         JOIN internship_companies ic ON sp.company_id = ic.id
                         LEFT JOIN internship_jobs ij ON sp.job_id = ij.id
                         WHERE sp.status = 'approved'
-                    ) pref ON pref.student_id = u.id
+                        AND sp.preference_order = (
+                            SELECT MIN(sp2.preference_order)
+                            FROM student_preferences sp2
+                            WHERE sp2.student_id = sp.student_id
+                            AND sp2.status = 'approved'
+                        )
+                    ) pref ON pref.student_id = u.id AND pref.preference_id = sp.id
                     WHERE r.status IN ('uploaded', 'pending', 'approved')
                     AND r.status != 'rejected'
+                    AND sp.status = 'approved'
+                    AND sp.resume_id IS NOT NULL
+                    -- 確保只選擇每個 preference_id 對應的最新履歷（根據 student_preferences.resume_id）
+                    AND r.created_at = (
+                        SELECT MAX(r2.created_at)
+                        FROM resumes r2
+                        JOIN student_preferences sp2 ON sp2.resume_id = r2.id
+                        WHERE sp2.id = sp.id
+                        AND sp2.resume_id IS NOT NULL
+                        AND r2.status IN ('uploaded', 'pending', 'approved')
+                        AND r2.status != 'rejected'
+                    )
                     AND EXISTS (
                         SELECT 1
                         FROM classes c2

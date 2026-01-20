@@ -608,10 +608,11 @@
 
       resumes.forEach(r => {
         // 直接使用最新的志願序資料（後端已處理）
+        // review_resume.html 使用 resumes.teacher_review_status
         const comp = r.company_name || '—';
         const job = r.job_title || r.jobTitle || '—';
         const pid = r.preference_id || null;
-        const st = r.application_statuses || r.display_status || r.status || 'pending';
+        const st = r.teacher_review_status || r.display_status || r.status || 'pending';
         const cm = r.comment || '';
 
         // 狀態篩選
