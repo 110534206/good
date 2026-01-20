@@ -2,6 +2,7 @@ from flask import Blueprint, request, jsonify, render_template, session
 from config import get_db
 from datetime import datetime, timedelta
 import traceback
+import re
 
 
 # 註：此處需根據你的資料庫實作匯入模型，例如：from models import Announcement
@@ -51,6 +52,75 @@ announcement_bp = Blueprint("announcement_bp", __name__)
 def get_taiwan_time():
     """取得目前的台灣時間 (UTC+8)"""
     return datetime.utcnow() + timedelta(hours=8)
+
+def clean_announcement_content(content_str, end_time_str=None):
+    """
+    清理公告內容中的錯誤時間格式（如 P26-01-21 21:39）
+    
+    Args:
+        content_str: 公告內容字符串
+        end_time_str: 結束時間字符串（可選）
+    
+    Returns:
+        清理後的內容字符串
+    """
+    if not content_str:
+        return content_str
+    
+    # 移除錯誤的時間格式前綴 P（匹配 "上傳履歷的P26-01-21 21:39" 這樣的格式）
+    # 先處理帶P前綴的錯誤格式，直接替換為正確格式
+    def replace_p_format(match):
+        keyword = match.group(1)  # "上傳履歷的" 或 "填寫志願序的"
+        wrong_time = match.group(2)  # "26-01-21 21:39"
+        if end_time_str:
+            # 轉換時間格式
+            if 'T' in end_time_str:
+                formatted_time = end_time_str.replace('T', ' ').strip()
+            else:
+                formatted_time = end_time_str.strip()
+            # 如果格式正確（YYYY-MM-DD HH:mm），使用它
+            if re.match(r'\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}', formatted_time):
+                return f"{keyword}截止時間為:{formatted_time}"
+        return f"{keyword}截止時間為:請選擇結束時間"
+    
+    content_str = re.sub(
+        r'(上傳履歷的|填寫志願序的)\s*[Pp](\d{2}-\d{2}-\d{2}\s+\d{2}:\d{2})',
+        replace_p_format,
+        content_str
+    )
+    
+    # 處理任何錯誤的兩年份日期格式（不帶P前綴的）
+    if end_time_str:
+        # 轉換時間格式
+        if 'T' in end_time_str:
+            formatted_time = end_time_str.replace('T', ' ').strip()
+        else:
+            formatted_time = end_time_str.strip()
+        # 如果格式正確（YYYY-MM-DD HH:mm），使用它
+        if re.match(r'\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}', formatted_time):
+            # 替換錯誤格式為正確格式（匹配不帶P前綴的兩年份格式）
+            content_str = re.sub(
+                r'(上傳履歷的|填寫志願序的)\s*(\d{2}-\d{2}-\d{2}\s+\d{2}:\d{2})',
+                r'\1截止時間為:' + formatted_time,
+                content_str
+            )
+            # 確保有「截止時間為:」格式
+            if '截止時間為:' not in content_str and ('上傳履歷的' in content_str or '填寫志願序的' in content_str):
+                content_str = re.sub(
+                    r'(上傳履歷的|填寫志願序的)([^,，。\n]*)',
+                    r'\1截止時間為:' + formatted_time,
+                    content_str,
+                    count=1
+                )
+    else:
+        # 沒有結束時間，替換錯誤格式為佔位符
+        content_str = re.sub(
+            r'(上傳履歷的|填寫志願序的)\s*(\d{2}-\d{2}-\d{2}\s+\d{2}:\d{2})',
+            r'\1截止時間為:請選擇結束時間',
+            content_str
+        )
+    
+    return content_str
 
 # --- 頁面路由 ---
 @announcement_bp.route("/manage_announcements")
@@ -155,6 +225,10 @@ def create_announcement():
         target_roles = data.get("target_roles") or []
         print("[create_announcement] payload target_roles =", target_roles)
 
+        # 清理內容中的錯誤時間格式
+        if content:
+            content = clean_announcement_content(content, end_time)
+
         conn = get_db()
         cursor = conn.cursor()
         cursor.execute("""
@@ -193,6 +267,10 @@ def update_announcement(ann_id):
         is_published = data.get("is_published", 0)
         target_roles = data.get("target_roles") or []
         print(f"[update_announcement] ann_id={ann_id}, target_roles={target_roles}")
+
+        # 清理內容中的錯誤時間格式
+        if content:
+            content = clean_announcement_content(content, end_time)
 
         conn = get_db()
         cursor = conn.cursor(dictionary=True, buffered=True)
@@ -288,6 +366,154 @@ def push_announcement_notifications(conn, title, content, ann_id, target_roles=N
 
         users = cursor.fetchall() or []
         
+        # 獲取公告的最新內容和 end_time，用於格式化通知內容中的時間
+        # 從資料庫中獲取最新的內容，確保內容完整且格式正確
+        cursor.execute("""
+            SELECT content, end_time FROM announcement WHERE id = %s
+        """, (ann_id,))
+        ann_info = cursor.fetchone()
+        
+        # 如果從資料庫獲取到內容，使用資料庫中的內容（更準確）
+        # 但需要先清理內容中可能的錯誤格式（如 P26-01-21 21:39）
+        if ann_info and ann_info.get('content'):
+            content = ann_info.get('content')
+            # 清理內容中的錯誤格式
+            end_time_for_clean = ann_info.get('end_time')
+            if end_time_for_clean:
+                if isinstance(end_time_for_clean, datetime):
+                    end_time_str_for_clean = end_time_for_clean.strftime('%Y-%m-%d %H:%M:%S')
+                else:
+                    end_time_str_for_clean = str(end_time_for_clean)
+            else:
+                end_time_str_for_clean = None
+            content = clean_announcement_content(content, end_time_str_for_clean)
+        
+        # 輔助函數：格式化時間為完整的 YYYY-MM-DD HH:MM 格式
+        def format_time_to_full(end_time):
+            if not end_time:
+                return None
+            if isinstance(end_time, datetime):
+                return end_time.strftime("%Y-%m-%d %H:%M")
+            elif isinstance(end_time, str):
+                try:
+                    if 'T' in end_time:
+                        dt = datetime.fromisoformat(end_time.replace('Z', '+00:00'))
+                    elif len(end_time) >= 19:
+                        dt = datetime.strptime(end_time[:19], '%Y-%m-%d %H:%M:%S')
+                    elif len(end_time) >= 16:
+                        dt = datetime.strptime(end_time[:16], '%Y-%m-%d %H:%M')
+                    else:
+                        dt = datetime.strptime(end_time, '%Y-%m-%d %H:%M:%S')
+                    return dt.strftime("%Y-%m-%d %H:%M")
+                except Exception:
+                    # 嘗試從各種格式中提取
+                    time_match = re.search(r'(\d{4})[-/](\d{1,2})[-/](\d{1,2})[^\d]*(\d{1,2})[:：](\d{2})', end_time)
+                    if time_match:
+                        year = time_match.group(1)
+                        month = time_match.group(2).zfill(2)
+                        day = time_match.group(3).zfill(2)
+                        hour = time_match.group(4).zfill(2)
+                        minute = time_match.group(5)
+                        return f"{year}-{month}-{day} {hour}:{minute}"
+                    return end_time[:16] if len(end_time) >= 16 else end_time
+            else:
+                return str(end_time)
+        
+        # 輔助函數：確保通知內容中的時間格式完整
+        def ensure_full_time_in_content(message_content, end_time):
+            if not message_content:
+                return message_content
+            
+            # 首先處理錯誤的時間格式（如 P26-01-21 21:39 或 26-01-21 21:39）
+            # 這些格式應該被替換為正確的格式或佔位符
+            # 優先處理：如果內容中有 "上傳履歷的" 或 "填寫志願序的" 後面跟著錯誤的時間格式
+            def replace_wrong_time_format(match):
+                keyword = match.group(1)  # "上傳履歷的" 或 "填寫志願序的"
+                if end_time:
+                    formatted_time = format_time_to_full(end_time)
+                    if formatted_time:
+                        return f"{keyword}截止時間為:{formatted_time}"
+                return f"{keyword}截止時間為:請選擇結束時間"
+            
+            message_content = re.sub(
+                r'(上傳履歷的|填寫志願序的)\s*([Pp]?\d{2}-\d{2}-\d{2}\s+\d{2}:\d{2})',
+                replace_wrong_time_format,
+                message_content
+            )
+            
+            # 處理其他位置的錯誤時間格式（不在特定關鍵字後的）
+            # 匹配不在 "截止時間為:" 後的錯誤格式（因為已經在第一個正則表達式中處理過了）
+            # 使用負向回顧後發確保前面沒有 "截止時間為:"
+            message_content = re.sub(
+                r'(?<!截止時間為[：:]\s*)[Pp]?\d{2}-\d{2}-\d{2}\s+\d{2}:\d{2}',
+                '請選擇結束時間',
+                message_content
+            )
+            
+            # 如果內容中包含「截止時間為:」的格式
+            pattern = r'(截止時間為[：:]\s*)([^,，。\n]*)'
+            match = re.search(pattern, message_content)
+            if match:
+                # 如果已經有「請選擇結束時間」或「請選擇開始時間」，保留它
+                if '請選擇結束時間' in match.group(2) or '請選擇開始時間' in match.group(2):
+                    # 如果有實際的結束時間，使用實際時間替換佔位符
+                    if end_time:
+                        formatted_time = format_time_to_full(end_time)
+                        if formatted_time:
+                            message_content = re.sub(
+                                pattern,
+                                r'\1' + formatted_time,
+                                message_content,
+                                count=1  # 只替換第一個匹配
+                            )
+                    # 否則保留佔位符
+                    else:
+                        pass
+                elif end_time:
+                    # 如果有實際時間且內容中沒有佔位符，使用實際時間
+                    formatted_time = format_time_to_full(end_time)
+                    if formatted_time:
+                        message_content = re.sub(
+                            pattern,
+                            r'\1' + formatted_time,
+                            message_content,
+                            count=1  # 只替換第一個匹配
+                        )
+            else:
+                # 如果內容中沒有「截止時間為:」，檢查是否需要添加
+                # 例如：如果內容是 "請注意!上傳履歷的請選擇結束時間"
+                # 應該改為 "請注意!上傳履歷的截止時間為:請選擇結束時間"
+                if '上傳履歷' in message_content or '填寫志願序' in message_content:
+                    # 檢查是否已經有正確的時間格式但缺少「截止時間為:」
+                    time_pattern = r'(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2})'
+                    time_match = re.search(time_pattern, message_content)
+                    if time_match:
+                        # 如果已經有時間，確保前面有「截止時間為:」
+                        message_content = re.sub(
+                            r'(上傳履歷的|填寫志願序的)(\s*)(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2})',
+                            r'\1截止時間為:\3',
+                            message_content
+                        )
+                    elif '請選擇結束時間' in message_content or '請選擇開始時間' in message_content:
+                        # 如果已經有「請選擇結束時間」，確保前面有「截止時間為:」
+                        # 檢查「請選擇結束時間」是否緊跟在「上傳履歷的」或「填寫志願序的」後面
+                        if not re.search(r'(上傳履歷的|填寫志願序的)\s*截止時間為[：:]\s*請選擇(結束|開始)時間', message_content):
+                            message_content = re.sub(
+                                r'(上傳履歷的|填寫志願序的)(\s*)(請選擇(結束|開始)時間)',
+                                r'\1截止時間為:\3',
+                                message_content
+                            )
+                    else:
+                        # 如果沒有時間也沒有佔位符，添加「截止時間為:請選擇結束時間」
+                        message_content = re.sub(
+                            r'(上傳履歷的|填寫志願序的)([^,，。\n]*)',
+                            r'\1截止時間為:' + (format_time_to_full(end_time) if end_time else '請選擇結束時間'),
+                            message_content,
+                            count=1
+                        )
+            
+            return message_content
+        
         # 為每個用戶創建通知記錄（如果還不存在）
         for u in users:
             uid = u['id'] if isinstance(u, dict) else u[0]
@@ -300,20 +526,68 @@ def push_announcement_notifications(conn, title, content, ann_id, target_roles=N
             
             existing = cursor.fetchone()
             # 確保讀取完查詢結果（即使為空也要讀取）
+            
+            # 準備通知內容（先處理時間格式，再截斷，確保時間信息完整）
+            message_content = content if content else ""
+            
+            # 確保時間格式完整（無論是創建還是更新都要處理）
+            # 在截斷前先處理時間格式，確保時間信息不會被截斷
+            # 注意：如果內容中有「請選擇結束時間」，保留它；如果有錯誤的時間格式，替換為「請選擇結束時間」
+            if ann_info:
+                message_content = ensure_full_time_in_content(message_content, ann_info.get('end_time'))
+            
+            # 處理完時間格式後再截斷（保留足夠長度以包含完整的時間信息）
+            # 如果內容包含時間信息，確保截斷後仍包含完整的時間
+            if len(message_content) > 200:
+                # 檢查是否包含時間信息，如果包含，確保時間信息完整
+                time_pattern = r'截止時間為[：:]\s*\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}'
+                time_match = re.search(time_pattern, message_content)
+                if time_match:
+                    # 如果包含時間信息，截斷時確保時間信息完整
+                    time_end_pos = time_match.end()
+                    if time_end_pos <= 200:
+                        # 時間信息在200字符內，正常截斷
+                        message_content = message_content[:200]
+                    else:
+                        # 時間信息超過200字符，保留時間信息及前面的內容
+                        # 找到時間信息前的句子邊界，盡量保留完整句子
+                        before_time = message_content[:time_match.start()]
+                        if len(before_time) > 150:
+                            # 找到最後一個句號、逗號或換行符
+                            last_punct = max(
+                                before_time.rfind('。'),
+                                before_time.rfind('，'),
+                                before_time.rfind('.'),
+                                before_time.rfind(','),
+                                before_time.rfind('\n')
+                            )
+                            if last_punct > 100:  # 確保保留足夠的上下文
+                                message_content = before_time[:last_punct + 1] + message_content[time_match.start():time_match.end()]
+                            else:
+                                # 如果找不到合適的斷點，直接保留時間信息前的150字符
+                                message_content = before_time[:150] + '...' + message_content[time_match.start():time_match.end()]
+                        else:
+                            # 時間信息前的內容不長，完整保留
+                            message_content = before_time + message_content[time_match.start():time_match.end()]
+                else:
+                    # 不包含時間信息，正常截斷
+                    message_content = message_content[:200]
+            
             if existing is None:
                 # 如果不存在，創建新通知
                 cursor.execute("""
                     INSERT INTO notifications (user_id, title, message, category, link_url, is_read, created_at)
                     VALUES (%s, %s, %s, %s, %s, 0, %s)
-                """, (uid, f"公告：{title}", content[:200] if content else "", category, link_url, now))
+                """, (uid, f"公告：{title}", message_content, category, link_url, now))
             else:
                 # 如果已存在，更新通知時間為當前時間，並重置為未讀狀態
                 # 這樣已結束的公告修改後會重新出現在通知列表中，時間為修改時間
+                # 同時更新通知內容，確保內容中的時間資訊與公告一致
                 cursor.execute("""
                     UPDATE notifications 
                     SET created_at = %s, is_read = 0, title = %s, message = %s, category = %s
                     WHERE id = %s
-                """, (now, f"公告：{title}", content[:200] if content else "", category, existing['id']))
+                """, (now, f"公告：{title}", message_content, category, existing['id']))
         
         conn.commit()
     except Exception:
@@ -389,12 +663,15 @@ def save_deadlines():
         start_time = data.get("start_time")
         end_time = data.get("end_time")
         
+        
         ann_id = None
         
         # 處理志願序截止時間
         if pref_deadline:
             # 如果前端提供了完整的公告資訊，使用前端的資訊
             if title and content and start_time and end_time:
+                # 清理內容中的錯誤格式
+                content = clean_announcement_content(content, end_time)
                 start_dt = convert_datetime(start_time)
                 end_dt = convert_datetime(end_time)
             else:
@@ -426,6 +703,8 @@ def save_deadlines():
         if resume_deadline:
             # 如果前端提供了完整的公告資訊，使用前端的資訊
             if title and content and start_time and end_time:
+                # 清理內容中的錯誤格式
+                content = clean_announcement_content(content, end_time)
                 start_dt = convert_datetime(start_time)
                 end_dt = convert_datetime(end_time)
             else:

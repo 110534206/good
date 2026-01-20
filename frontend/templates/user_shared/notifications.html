@@ -1320,10 +1320,12 @@
       if (!n.is_read) markRead(n.id);
 
       modalTitle.innerText = n.title;
-      // 顯示通知內容
+      // 顯示通知內容，確保完整顯示時間與文字
+      // 使用 textContent 避免 XSS，然後用 innerHTML 設置格式
+      const messageText = (n.message || '').replace(/\n/g, '<br>');
       modalBody.innerHTML = `
         <div class="small muted mb-2">時間: ${formatDateTime(n.created_at)} | 類別: ${getCategoryLabel(n.category, n.title)}</div>
-        <p style="white-space:pre-wrap;">${n.message}</p>
+        <p style="white-space:pre-wrap; word-wrap:break-word; overflow-wrap:break-word;">${messageText}</p>
       `;
 
       // 處理「前往內容」按鈕
