@@ -733,6 +733,121 @@ def get_my_admission():
             if isinstance(exp.get('created_at'), datetime):
                 exp['created_at'] = exp['created_at'].strftime("%Y-%m-%d %H:%M:%S")
         
+        # 將錄取資料寫入 placement_results 表
+        if admission and admission.get('company_id'):
+            try:
+                # 檢查是否已存在該學生的記錄
+                cursor.execute("""
+                    SELECT id FROM placement_results
+                    WHERE student_id = %s
+                    LIMIT 1
+                """, (student_id,))
+                existing_record = cursor.fetchone()
+                
+                # 準備要寫入的資料
+                company_id = admission.get('company_id')
+                mentor_id = admission.get('teacher_id')
+                job_title = final_preference.get('job_title') if final_preference else None
+                semester_code = admission.get('semester')
+                
+                # 處理實習開始和結束日期
+                internship_start_date = admission.get('semester_start_date')
+                internship_end_date = admission.get('semester_end_date')
+                
+                # 如果日期是字串格式，確保格式正確（YYYY-MM-DD）
+                if internship_start_date and isinstance(internship_start_date, str):
+                    # 如果已經是正確格式，保持不變
+                    if len(internship_start_date) == 10 and internship_start_date.count('-') == 2:
+                        pass  # 格式正確
+                    else:
+                        # 嘗試解析其他格式
+                        try:
+                            dt = datetime.strptime(internship_start_date, "%Y-%m-%d %H:%M:%S")
+                            internship_start_date = dt.strftime("%Y-%m-%d")
+                        except:
+                            try:
+                                dt = datetime.strptime(internship_start_date, "%Y-%m-%d")
+                                internship_start_date = dt.strftime("%Y-%m-%d")
+                            except:
+                                internship_start_date = None
+                
+                if internship_end_date and isinstance(internship_end_date, str):
+                    if len(internship_end_date) == 10 and internship_end_date.count('-') == 2:
+                        pass  # 格式正確
+                    else:
+                        try:
+                            dt = datetime.strptime(internship_end_date, "%Y-%m-%d %H:%M:%S")
+                            internship_end_date = dt.strftime("%Y-%m-%d")
+                        except:
+                            try:
+                                dt = datetime.strptime(internship_end_date, "%Y-%m-%d")
+                                internship_end_date = dt.strftime("%Y-%m-%d")
+                            except:
+                                internship_end_date = None
+                
+                # 處理錄取時間
+                matched_at = admission.get('admitted_at')
+                if matched_at and isinstance(matched_at, str):
+                    # 如果已經是字串，嘗試解析為 datetime
+                    try:
+                        matched_at = datetime.strptime(matched_at, "%Y-%m-%d %H:%M:%S")
+                    except:
+                        try:
+                            matched_at = datetime.strptime(matched_at, "%Y-%m-%d")
+                        except:
+                            matched_at = datetime.now()
+                elif not matched_at:
+                    matched_at = datetime.now()
+                
+                if existing_record:
+                    # 更新現有記錄
+                    cursor.execute("""
+                        UPDATE placement_results
+                        SET company_id = %s,
+                            mentor_id = %s,
+                            job_title = %s,
+                            semester_code = %s,
+                            internship_start_date = %s,
+                            internship_end_date = %s,
+                            matched_at = %s
+                        WHERE student_id = %s
+                    """, (
+                        company_id,
+                        mentor_id,
+                        job_title,
+                        semester_code,
+                        internship_start_date,
+                        internship_end_date,
+                        matched_at,
+                        student_id
+                    ))
+                    print(f"✅ [DEBUG] 更新 placement_results: student_id={student_id}")
+                else:
+                    # 插入新記錄
+                    cursor.execute("""
+                        INSERT INTO placement_results
+                        (student_id, company_id, mentor_id, job_title, semester_code,
+                         internship_start_date, internship_end_date, matched_at)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                    """, (
+                        student_id,
+                        company_id,
+                        mentor_id,
+                        job_title,
+                        semester_code,
+                        internship_start_date,
+                        internship_end_date,
+                        matched_at
+                    ))
+                    print(f"✅ [DEBUG] 插入 placement_results: student_id={student_id}")
+                
+                conn.commit()
+            except Exception as e:
+                # 如果寫入失敗，記錄錯誤但不影響主要功能
+                print(f"⚠️ [WARNING] 寫入 placement_results 失敗: {str(e)}")
+                traceback.print_exc()
+                # 不拋出異常，讓主要功能繼續執行
+        
         # 調試：打印最終返回的資料
         print(f"🔍 [DEBUG] 最終返回的 admission: {admission}")
         print(f"🔍 [DEBUG] 最終返回的 final_preference: {final_preference}")

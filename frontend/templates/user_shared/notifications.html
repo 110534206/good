@@ -459,6 +459,138 @@
       white-space: nowrap;
       flex-shrink: 0;
     }
+
+    /* 美化發布類型選擇 Modal */
+    #publishTypeModal .modal-dialog {
+      max-width: 500px;
+    }
+
+    #publishTypeModal .modal-content {
+      border-radius: 16px;
+      border: none;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15);
+      overflow: hidden;
+      background: white;
+    }
+
+    #publishTypeModal .modal-header {
+      background: linear-gradient(135deg, #0454a3 0%,  #0454a3 100%);
+      color: white;
+      border-bottom: none;
+      padding: 1.5rem;
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    #publishTypeModal .modal-header::after {
+      content: '';
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+    }
+
+    #publishTypeModal .modal-title {
+      font-size: 1.35rem;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      margin: 0;
+      text-align: center;
+      flex: 1;
+      position: absolute;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 100%;
+    }
+
+    #publishTypeModal .modal-header .btn-close {
+      position: relative;
+      z-index: 1;
+      margin-left: auto;
+    }
+
+    #publishTypeModal .btn-close {
+      filter: brightness(0) invert(1);
+      opacity: 0.9;
+      transition: opacity 0.2s ease;
+    }
+
+    #publishTypeModal .btn-close:hover {
+      opacity: 1;
+    }
+
+    #publishTypeModal .modal-body {
+      padding: 2rem 1.5rem;
+      background: white;
+    }
+
+    /* 美化選項按鈕 */
+    #publishTypeModal .option-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.75rem;
+      padding: 1.25rem 1.5rem;
+      border-radius: 12px;
+      border: 2px solid #e8f0f8;
+      background: white;
+      color: #0f1724;
+      font-size: 1.05rem;
+      font-weight: 600;
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      cursor: pointer;
+      position: relative;
+      overflow: hidden;
+      text-align: center;
+      width: 100%;
+    }
+
+    #publishTypeModal .option-btn .icon {
+      font-size: 1.75rem;
+      line-height: 1;
+      flex-shrink: 0;
+      transition: transform 0.3s ease;
+    }
+
+    #publishTypeModal .option-btn:hover .icon {
+      transform: scale(1.1);
+    }
+
+    #publishTypeModal .option-btn.announcement {
+      border-color: #0d6efd;
+      background: white;
+      color: #0d6efd;
+    }
+
+    #publishTypeModal .option-btn.announcement:hover {
+      border-color: #0d6efd;
+      background: #0d6efd;
+      color: white;
+      transform: translateY(-2px);
+      box-shadow: 0 8px 24px rgba(13, 110, 253, 0.3);
+    }
+
+    #publishTypeModal .option-btn.deadline {
+      border-color: #198754;
+      background: white;
+      color: #198754;
+    }
+
+    #publishTypeModal .option-btn.deadline:hover {
+      border-color: #198754;
+      background: #198754;
+      color: white;
+      transform: translateY(-2px);
+      box-shadow: 0 8px 24px rgba(25, 135, 84, 0.3);
+    }
+
+    #publishTypeModal .option-btn:active {
+      transform: translateY(0);
+    }
   </style>
 </head>
 
@@ -588,9 +720,10 @@
               <option value="">請選擇發送對象</option>
               <option value="all">全部使用者</option>
               <option value="student">學生</option>
+              <option value="vendor">廠商</option>
+              <option value="class_teacher">班導</option>
               <option value="teacher">指導老師</option>
               <option value="director">主任</option>
-              <option value="class_teacher">班導</option>
             </select>
           </div>
           <div class="mb-3"><label class="form-label">開始時間</label><input id="pref-start" type="datetime-local" class="form-control"></div>
@@ -620,9 +753,10 @@
               <option value="">請選擇發送對象</option>
               <option value="all">全部使用者</option>
               <option value="student">學生</option>
+              <option value="vendor">廠商</option>
+              <option value="class_teacher">班導</option>
               <option value="teacher">指導老師</option>
               <option value="director">主任</option>
-              <option value="class_teacher">班導</option>
             </select>
           </div>
           <div class="mb-3"><label class="form-label">開始時間</label><input id="resume-start" type="datetime-local" class="form-control"></div>
@@ -638,27 +772,27 @@
 
   <!-- 科助專用 Modal：選擇發布類型 -->
   <div class="modal fade" id="publishTypeModal" tabindex="-1">
-    <div class="modal-dialog">
+    <div class="modal-dialog modal-dialog-centered">
       <div class="modal-content">
         <div class="modal-header">
-          <h5 class="modal-title" style="font-weight: bold;">選擇發布類型</h5>
-          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+          <h5 class="modal-title">選擇發布類型</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="關閉"></button>
         </div>
         <div class="modal-body">
-          <div class="d-grid gap-2">
-            <button type="button" class="btn btn-outline-primary btn-lg" id="btn-select-announcement">
-              📢 新增公告
+          <div class="d-grid gap-3">
+            <button type="button" class="option-btn announcement" data-bs-dismiss="modal" id="btn-select-announcement">
+              <span class="icon">📢</span>
+              <span class="text">新增公告</span>
             </button>
-            <button type="button" class="btn btn-outline-success btn-lg" id="btn-select-pref-deadline">
-              📝 填寫志願序截止時間
+            <button type="button" class="option-btn deadline" data-bs-dismiss="modal" id="btn-select-pref-deadline">
+              <span class="icon">📝</span>
+              <span class="text">填寫志願序截止時間</span>
             </button>
-            <button type="button" class="btn btn-outline-success btn-lg" id="btn-select-resume-deadline">
-              📝 上傳履歷截止時間
+            <button type="button" class="option-btn deadline" data-bs-dismiss="modal" id="btn-select-resume-deadline">
+              <span class="icon">📝</span>
+              <span class="text">上傳履歷截止時間</span>
             </button>
           </div>
-        </div>
-        <div class="modal-footer">
-          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
         </div>
       </div>
     </div>
@@ -680,9 +814,10 @@
               <option value="">請選擇發送對象</option>
               <option value="all">全部使用者</option>
               <option value="student">學生</option>
+              <option value="vendor">廠商</option>
+              <option value="class_teacher">班導</option>
               <option value="teacher">指導老師</option>
               <option value="director">主任</option>
-              <option value="class_teacher">班導</option>
             </select>
           </div>
           <div class="mb-3"><label class="form-label">開始時間</label><input id="ann-start" type="datetime-local" class="form-control"></div>
@@ -773,13 +908,27 @@
         allNotifications = data.notifications.map(n => {
           const title = n.title || '(無標題)';
           const category = n.category || 'general';
-          // 如果標題包含「公告」，將類別設為 "announcement"（兼容舊數據）
-          let finalCategory = (title.includes('公告') && !title.includes('面試通知') && !title.includes('錄取通知')) 
-            ? 'announcement' 
-            : category;
-          // 如果標題包含「實習心得」，將類別設為 "experience"（兼容舊數據）
-          if (title.includes('實習心得') || title.includes('心得退件') || title.includes('心得審核')) {
-            finalCategory = 'experience';
+          // 優先使用後端返回的 category，只有在 category 為 'general' 或空時才根據標題判斷
+          let finalCategory = category;
+          
+          // 如果 category 為 'general' 或空，才根據標題自動判斷（兼容舊數據）
+          if (!category || category === 'general') {
+            // 如果標題包含「志願序」，將類別設為 "ranking"
+            if (title.includes('志願序')) {
+              finalCategory = 'ranking';
+            }
+            // 如果標題包含「履歷」，將類別設為 "resume"
+            else if (title.includes('履歷') || title.includes('resume')) {
+              finalCategory = 'resume';
+            }
+            // 如果標題包含「公告」，將類別設為 "announcement"
+            else if (title.includes('公告') && !title.includes('面試通知') && !title.includes('錄取通知')) {
+              finalCategory = 'announcement';
+            }
+            // 如果標題包含「實習心得」，將類別設為 "experience"
+            else if (title.includes('實習心得') || title.includes('心得退件') || title.includes('心得審核')) {
+              finalCategory = 'experience';
+            }
           }
           
           return {

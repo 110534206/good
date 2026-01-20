@@ -257,6 +257,18 @@ def push_announcement_notifications(conn, title, content, ann_id, target_roles=N
         link_url = f"/view_announcement/{ann_id}"
         now = get_taiwan_time()
 
+        # 根據標題內容自動判斷通知類別
+        title_lower = (title or "").lower()
+        content_lower = (content or "").lower()
+        
+        # 判斷類別：志願序 > 履歷 > 一般公告
+        if "志願序" in title_lower or "志願序" in content_lower:
+            category = "ranking"
+        elif "履歷" in title_lower or "履歷" in content_lower or "resume" in title_lower or "resume" in content_lower:
+            category = "resume"
+        else:
+            category = "announcement"
+
         # 正規化角色清單
         valid_roles = {"student", "teacher", "director", "ta", "admin", "vendor", "class_teacher"}
         roles = [r for r in (target_roles or []) if r in valid_roles]
@@ -293,7 +305,15 @@ def push_announcement_notifications(conn, title, content, ann_id, target_roles=N
                 cursor.execute("""
                     INSERT INTO notifications (user_id, title, message, category, link_url, is_read, created_at)
                     VALUES (%s, %s, %s, %s, %s, 0, %s)
-                """, (uid, f"公告：{title}", content[:200] if content else "", "announcement", link_url, now))
+                """, (uid, f"公告：{title}", content[:200] if content else "", category, link_url, now))
+            else:
+                # 如果已存在，更新通知時間為當前時間，並重置為未讀狀態
+                # 這樣已結束的公告修改後會重新出現在通知列表中，時間為修改時間
+                cursor.execute("""
+                    UPDATE notifications 
+                    SET created_at = %s, is_read = 0, title = %s, message = %s, category = %s
+                    WHERE id = %s
+                """, (now, f"公告：{title}", content[:200] if content else "", category, existing['id']))
         
         conn.commit()
     except Exception:
