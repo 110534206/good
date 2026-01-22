@@ -542,7 +542,7 @@
 
         let matchesStatus = true;
         if (status) {
-           const statusStr = isCompanyView ? (r.display_status || '') : (r.application_statuses || r.status || '');
+           const statusStr = isCompanyView ? (r.display_status || '') : (r.status || r.display_status || '');
            matchesStatus = statusStr === status;  // 使用嚴格相等，確保精確匹配
         }
 

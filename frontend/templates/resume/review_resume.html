@@ -571,7 +571,8 @@
 
         let matchesStatus = true;
         if (status) {
-           const statusStr = isCompanyView ? (r.display_status || '') : (r.application_statuses || r.status || '');
+           // review_resume.html 使用 teacher_review_status 欄位
+           const statusStr = isCompanyView ? (r.display_status || '') : (r.teacher_review_status || 'pending');
            matchesStatus = statusStr === status;  // 使用嚴格相等，確保精確匹配
         }
 
@@ -608,11 +609,11 @@
 
       resumes.forEach(r => {
         // 直接使用最新的志願序資料（後端已處理）
-        // review_resume.html 使用 resumes.teacher_review_status
+        // review_resume.html 使用 resumes.teacher_review_status（直接從資料庫讀取）
         const comp = r.company_name || '—';
         const job = r.job_title || r.jobTitle || '—';
         const pid = r.preference_id || null;
-        const st = r.teacher_review_status || r.display_status || r.status || 'pending';
+        const st = r.teacher_review_status || 'pending';  // 直接使用 teacher_review_status，不 fallback 到 display_status
         const cm = r.comment || '';
 
         // 狀態篩選
