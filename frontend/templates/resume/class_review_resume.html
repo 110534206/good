@@ -699,11 +699,9 @@
           ? `<button class="btn btn-sm btn-outline-secondary" style="margin-right:4px;" disabled title="已過截止時間，無法退件">退件</button>`
           : '';
         
+        // class_review_resume.html 只顯示下載和退件按鈕，不顯示完成按鈕
         let btns = `<div style="display:flex; align-items:center;">${dlBtn}`;
         btns += rejectBtn;
-        if (!isDirectorMode) {
-            btns += `<button class="btn btn-sm btn-outline-success" onclick="${approveClick}">完成</button>`;
-        }
         btns += `</div>`;
         return btns;
     }

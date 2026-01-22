@@ -609,7 +609,7 @@
 
       resumes.forEach(r => {
         // 直接使用最新的志願序資料（後端已處理）
-        // review_resume.html 使用 resumes.teacher_review_status（直接從資料庫讀取）
+        // review_resume.html 使用 resumes.teacher_review_status
         const comp = r.company_name || '—';
         const job = r.job_title || r.jobTitle || '—';
         const pid = r.preference_id || null;
