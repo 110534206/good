@@ -384,21 +384,19 @@ body {
           <form id="addForm">
             <div class="mb-3">
               <label class="form-label">公司</label>
-              <select class="form-select" id="company_id" required>
-                <option value="">載入公司中...</option>
-              </select>
+              <input type="text" class="form-control" id="company_name_display" readonly style="background-color: #e9ecef;">
+              <input type="hidden" id="company_id" required>
             </div>
 
             <div class="mb-3">
               <label class="form-label">職缺</label>
-              <select class="form-select" id="job_id" required>
-                <option value="">請先選公司</option>
-              </select>
+              <input type="text" class="form-control" id="job_title_display" readonly style="background-color: #e9ecef;">
+              <input type="hidden" id="job_id" required>
             </div>
 
             <div class="mb-3">
               <label class="form-label">年份（可輸入西元或民國，如 2021 或 110，系統會存民國年）</label>
-              <input type="text" class="form-control" id="year" placeholder="例如 110 或 2021" required>
+              <input type="text" class="form-control" id="year" placeholder="例如 110 或 2021" readonly required style="background-color: #e9ecef;">
             </div>
 
             <div class="mb-3">
@@ -436,6 +434,9 @@ body {
     let selectedCompanyId = INITIAL_COMPANY_ID || '';
     let hasPrefilledFormCompany = false;
     let hasPrefilledFilterCompany = false;
+    
+    // 儲存學生的錄取資訊
+    let studentAdmissionInfo = null;
 
     // 產生民國年下拉 (近 6 年)
     function populateYearSelect(selectId) {
@@ -453,15 +454,63 @@ body {
     populateYearSelect('filterYear');
     populateYearSelect('myFilterYear');
 
-    // 載入公司下拉 - 從後端 API 抓取資料表公司資料
+    // 載入學生的錄取資訊
+    async function loadStudentAdmission() {
+      try {
+        const res = await fetch('/admission/api/get_my_admission');
+        if (!res.ok) throw new Error('資料讀取失敗');
+        const data = await res.json();
+        if (!data.success) throw new Error(data.message || '查詢失敗');
+        
+        studentAdmissionInfo = {
+          admission: data.admission,
+          final_preference: data.final_preference
+        };
+        
+        return studentAdmissionInfo;
+      } catch (error) {
+        console.error('載入學生錄取資訊失敗:', error);
+        return null;
+      }
+    }
+    
+    // 將西元年轉換為民國年
+    function toMinguoYear(westernYear) {
+      if (!westernYear) return null;
+      const year = parseInt(westernYear);
+      if (isNaN(year)) return null;
+      return year - 1911;
+    }
+    
+    // 從日期字串中提取年份
+    function extractYearFromDate(dateString) {
+      if (!dateString) return null;
+      // 處理 YYYY-MM-DD 格式
+      if (typeof dateString === 'string' && dateString.includes('-')) {
+        const parts = dateString.split('-');
+        if (parts.length >= 1) {
+          return parseInt(parts[0], 10);
+        }
+      }
+      // 嘗試解析為 Date 對象
+      try {
+        const date = new Date(dateString);
+        if (!isNaN(date.getTime())) {
+          return date.getFullYear();
+        }
+      } catch (e) {
+        // 忽略錯誤
+      }
+      return null;
+    }
+
+    // 載入公司下拉 - 從後端 API 抓取資料表公司資料（僅用於篩選器）
     async function loadCompanies() {
       try {
-        const companySelect = document.getElementById('company_id');
         const companyFilter = document.getElementById('filterCompany');
         const myCompanyFilter = document.getElementById('myFilterCompany');
         
         // 顯示載入中狀態
-        companySelect.innerHTML = '<option value="">載入公司中...</option>';
         companyFilter.innerHTML = '<option value="">載入公司中...</option>';
         myCompanyFilter.innerHTML = '<option value="">載入公司中...</option>';
         
@@ -469,74 +518,109 @@ body {
         const data = await res.json();
         
         // 重置選單
-        companySelect.innerHTML = '<option value="">請選擇公司</option>';
         companyFilter.innerHTML = '<option value="">選擇公司</option>';
         myCompanyFilter.innerHTML = '<option value="">選擇公司</option>';
         
         if (data.success && data.data && Array.isArray(data.data)) {
-          // 從資料表抓取到的公司資料，逐一加入下拉選單
+          // 從資料表抓取到的公司資料，逐一加入下拉選單（僅用於篩選器）
           if (data.data.length > 0) {
             data.data.forEach(c => {
               if (c.id && c.company_name) {
-                companySelect.innerHTML += `<option value="${c.id}">${c.company_name}</option>`;
                 companyFilter.innerHTML += `<option value="${c.id}">${c.company_name}</option>`;
                 myCompanyFilter.innerHTML += `<option value="${c.id}">${c.company_name}</option>`;
               }
             });
             
-            // 如果有初始公司 ID，自動選取
-            if (!hasPrefilledFormCompany && selectedCompanyId) {
-              companySelect.value = selectedCompanyId;
-              hasPrefilledFormCompany = true;
-              companySelect.dispatchEvent(new Event('change'));
-            }
             if (!hasPrefilledFilterCompany && selectedCompanyId) {
               companyFilter.value = selectedCompanyId;
               myCompanyFilter.value = selectedCompanyId;
               hasPrefilledFilterCompany = true;
             }
           } else {
-            companySelect.innerHTML = '<option value="">目前無可用公司</option>';
             companyFilter.innerHTML = '<option value="">目前無可用公司</option>';
             myCompanyFilter.innerHTML = '<option value="">目前無可用公司</option>';
           }
         } else {
           // API 回傳失敗或資料格式錯誤
           const errorMsg = data.message || '載入公司資料失敗';
-          companySelect.innerHTML = `<option value="">${errorMsg}</option>`;
           companyFilter.innerHTML = `<option value="">${errorMsg}</option>`;
           myCompanyFilter.innerHTML = `<option value="">${errorMsg}</option>`;
           console.error('載入公司資料失敗:', data);
         }
       } catch (error) {
         console.error('抓取公司資料時發生錯誤:', error);
-        const companySelect = document.getElementById('company_id');
         const companyFilter = document.getElementById('filterCompany');
         const myCompanyFilter = document.getElementById('myFilterCompany');
-        companySelect.innerHTML = '<option value="">載入失敗，請重新整理頁面</option>';
         companyFilter.innerHTML = '<option value="">載入失敗，請重新整理頁面</option>';
         myCompanyFilter.innerHTML = '<option value="">載入失敗，請重新整理頁面</option>';
       }
     }
+    
+    // 限制公司選擇並自動填入表單
+    async function setupAddFormWithAdmission() {
+      try {
+        // 載入學生的錄取資訊
+        const admissionInfo = await loadStudentAdmission();
+        
+        if (!admissionInfo || !admissionInfo.admission) {
+          // 如果沒有錄取資訊，顯示提示
+          document.getElementById('company_name_display').value = '您尚未有錄取紀錄，無法新增心得';
+          document.getElementById('company_id').value = '';
+          document.getElementById('job_title_display').value = '';
+          document.getElementById('job_id').value = '';
+          document.getElementById('year').value = '';
+          return;
+        }
+        
+        const { admission, final_preference } = admissionInfo;
+        const companyId = admission.company_id;
+        const companyName = admission.company_name || '';
+        const jobId = final_preference ? final_preference.job_id : null;
+        const jobTitle = final_preference ? final_preference.job_title : '';
+        
+        // 設定公司資訊（唯讀顯示）
+        if (companyId && companyName) {
+          document.getElementById('company_name_display').value = companyName;
+          document.getElementById('company_id').value = companyId;
+        }
+        
+        // 設定職缺資訊（唯讀顯示）
+        if (jobId && jobTitle) {
+          document.getElementById('job_title_display').value = jobTitle;
+          document.getElementById('job_id').value = jobId;
+        } else {
+          document.getElementById('job_title_display').value = '無職缺資訊';
+          document.getElementById('job_id').value = '';
+        }
+        
+        // 自動填入年份
+        const yearInput = document.getElementById('year');
+        let yearValue = null;
+        if (admission.semester_start_date) {
+          const westernYear = extractYearFromDate(admission.semester_start_date);
+          if (westernYear) {
+            yearValue = toMinguoYear(westernYear);
+          }
+        } else if (admission.semester_end_date) {
+          const westernYear = extractYearFromDate(admission.semester_end_date);
+          if (westernYear) {
+            yearValue = toMinguoYear(westernYear);
+          }
+        }
+        
+        if (yearValue) {
+          yearInput.value = yearValue;
+        } else {
+          yearInput.value = '';
+        }
+        
+      } catch (error) {
+        console.error('設定表單時發生錯誤:', error);
+      }
+    }
 
-    // 當選定公司時載入職缺
-    document.getElementById('company_id').addEventListener('change', async function () {
-      const companyId = this.value;
-      const jobSelect = document.getElementById('job_id');
-      jobSelect.innerHTML = '<option value="">載入中...</option>';
-      if (!companyId) {
-        jobSelect.innerHTML = '<option value="">請先選擇公司</option>';
-        return;
-      }
-      const res = await fetch(`/intern_experience/api/jobs/${companyId}`);
-      const data = await res.json();
-      jobSelect.innerHTML = '<option value="">請選擇職缺</option>';
-      if (data.success && data.data.length > 0) {
-        data.data.forEach(j => jobSelect.innerHTML += `<option value="${j.id}">${j.title}</option>`);
-      } else {
-        jobSelect.innerHTML = '<option value="">該公司無職缺</option>';
-      }
-    });
+    // 載入職缺的函數（已不再需要，因為職缺資訊直接從錄取資訊中獲取）
+    // 此函數保留以備不時之需，但現在不會被調用
 
     // 渲染心得卡片
     function renderExperienceCard(item, container, showDelete = false) {
@@ -915,6 +999,31 @@ body {
         loadExperiences();
       }
     });
+
+    // 當新增心得 Modal 開啟時，自動填入資料
+    const addModal = document.getElementById('addModal');
+    if (addModal) {
+      addModal.addEventListener('show.bs.modal', async function () {
+        // 先載入公司列表
+        await loadCompanies();
+        // 然後設定表單（限制公司選擇並自動填入）
+        await setupAddFormWithAdmission();
+      });
+      
+      // 當 Modal 關閉時，重置表單
+      addModal.addEventListener('hidden.bs.modal', function () {
+        const form = document.getElementById('addForm');
+        if (form) {
+          form.reset();
+        }
+        // 清空唯讀欄位
+        document.getElementById('company_name_display').value = '';
+        document.getElementById('company_id').value = '';
+        document.getElementById('job_title_display').value = '';
+        document.getElementById('job_id').value = '';
+        document.getElementById('year').value = '';
+      });
+    }
 
     // 初始載入
     window.onload = function () {

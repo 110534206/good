@@ -67,6 +67,14 @@ def clean_announcement_content(content_str, end_time_str=None):
     if not content_str:
         return content_str
     
+    # 首先，移除所有位置的 P 前綴（無論大小寫）
+    # 匹配任何位置的 P 或 p 後面跟著兩年份日期格式
+    content_str = re.sub(
+        r'[Pp](\d{2}-\d{2}-\d{2}\s+\d{2}:\d{2})',
+        r'\1',  # 只保留日期時間部分，移除 P 前綴
+        content_str
+    )
+    
     # 移除錯誤的時間格式前綴 P（匹配 "上傳履歷的P26-01-21 21:39" 這樣的格式）
     # 先處理帶P前綴的錯誤格式，直接替換為正確格式
     def replace_p_format(match):
@@ -81,7 +89,8 @@ def clean_announcement_content(content_str, end_time_str=None):
             # 如果格式正確（YYYY-MM-DD HH:mm），使用它
             if re.match(r'\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}', formatted_time):
                 return f"{keyword}截止時間為:{formatted_time}"
-        return f"{keyword}截止時間為:請選擇結束時間"
+        # 如果沒有有效的結束時間，移除整個錯誤格式（不插入佔位符）
+        return keyword
     
     content_str = re.sub(
         r'(上傳履歷的|填寫志願序的)\s*[Pp](\d{2}-\d{2}-\d{2}\s+\d{2}:\d{2})',
@@ -113,12 +122,28 @@ def clean_announcement_content(content_str, end_time_str=None):
                     count=1
                 )
     else:
-        # 沒有結束時間，替換錯誤格式為佔位符
+        # 沒有結束時間，移除錯誤格式（不插入佔位符）
         content_str = re.sub(
             r'(上傳履歷的|填寫志願序的)\s*(\d{2}-\d{2}-\d{2}\s+\d{2}:\d{2})',
-            r'\1截止時間為:請選擇結束時間',
+            r'\1',
             content_str
         )
+    
+    # 最後，移除所有包含「請選擇結束時間」的句子或部分
+    # 匹配「截止時間為:請選擇結束時間」或「請選擇結束時間」並移除
+    content_str = re.sub(
+        r'截止時間為[：:]\s*請選擇結束時間[，,。.\s]*',
+        '',
+        content_str
+    )
+    content_str = re.sub(
+        r'請選擇結束時間[，,。.\s]*',
+        '',
+        content_str
+    )
+    # 清理可能產生的多餘標點符號
+    content_str = re.sub(r'，\s*，', '，', content_str)
+    content_str = re.sub(r'。\s*。', '。', content_str)
     
     return content_str
 
@@ -162,6 +187,11 @@ def get_announcement(ann_id):
             else:
                 row['created_at'] = str(row['created_at'])
         
+        # 清理內容中的錯誤格式（如 P 前綴）
+        if row.get('content'):
+            end_time_str = row.get('end_time')
+            row['content'] = clean_announcement_content(row['content'], end_time_str)
+        
         cursor.close()
         conn.close()
         return jsonify({"success": True, "data": row})
@@ -201,6 +231,11 @@ def list_announcements():
                     row['created_at'] = row['created_at'].strftime('%Y-%m-%d %H:%M:%S')
                 else:
                     row['created_at'] = str(row['created_at'])
+            
+            # 清理內容中的錯誤格式（如 P 前綴）
+            if row.get('content'):
+                end_time_str = row.get('end_time')
+                row['content'] = clean_announcement_content(row['content'], end_time_str)
         
         cursor.close()
         conn.close()
@@ -424,6 +459,14 @@ def push_announcement_notifications(conn, title, content, ann_id, target_roles=N
             if not message_content:
                 return message_content
             
+            # 首先，移除所有位置的 P 前綴（無論大小寫）
+            # 匹配任何位置的 P 或 p 後面跟著兩年份日期格式
+            message_content = re.sub(
+                r'[Pp](\d{2}-\d{2}-\d{2}\s+\d{2}:\d{2})',
+                r'\1',  # 只保留日期時間部分，移除 P 前綴
+                message_content
+            )
+            
             # 首先處理錯誤的時間格式（如 P26-01-21 21:39 或 26-01-21 21:39）
             # 這些格式應該被替換為正確的格式或佔位符
             # 優先處理：如果內容中有 "上傳履歷的" 或 "填寫志願序的" 後面跟著錯誤的時間格式
@@ -433,7 +476,8 @@ def push_announcement_notifications(conn, title, content, ann_id, target_roles=N
                     formatted_time = format_time_to_full(end_time)
                     if formatted_time:
                         return f"{keyword}截止時間為:{formatted_time}"
-                return f"{keyword}截止時間為:請選擇結束時間"
+                # 如果沒有有效的結束時間，移除錯誤格式（不插入佔位符）
+                return keyword
             
             message_content = re.sub(
                 r'(上傳履歷的|填寫志願序的)\s*([Pp]?\d{2}-\d{2}-\d{2}\s+\d{2}:\d{2})',
@@ -444,17 +488,19 @@ def push_announcement_notifications(conn, title, content, ann_id, target_roles=N
             # 處理其他位置的錯誤時間格式（不在特定關鍵字後的）
             # 匹配不在 "截止時間為:" 後的錯誤格式（因為已經在第一個正則表達式中處理過了）
             # 使用負向回顧後發確保前面沒有 "截止時間為:"
-            message_content = re.sub(
-                r'(?<!截止時間為[：:]\s*)[Pp]?\d{2}-\d{2}-\d{2}\s+\d{2}:\d{2}',
-                '請選擇結束時間',
-                message_content
-            )
+            # 如果沒有有效的結束時間，直接移除錯誤格式
+            if not end_time:
+                message_content = re.sub(
+                    r'(?<!截止時間為[：:]\s*)[Pp]?\d{2}-\d{2}-\d{2}\s+\d{2}:\d{2}',
+                    '',
+                    message_content
+                )
             
             # 如果內容中包含「截止時間為:」的格式
             pattern = r'(截止時間為[：:]\s*)([^,，。\n]*)'
             match = re.search(pattern, message_content)
             if match:
-                # 如果已經有「請選擇結束時間」或「請選擇開始時間」，保留它
+                # 如果已經有「請選擇結束時間」或「請選擇開始時間」
                 if '請選擇結束時間' in match.group(2) or '請選擇開始時間' in match.group(2):
                     # 如果有實際的結束時間，使用實際時間替換佔位符
                     if end_time:
@@ -466,9 +512,14 @@ def push_announcement_notifications(conn, title, content, ann_id, target_roles=N
                                 message_content,
                                 count=1  # 只替換第一個匹配
                             )
-                    # 否則保留佔位符
+                    # 否則移除整個「截止時間為:請選擇結束時間」部分
                     else:
-                        pass
+                        message_content = re.sub(
+                            r'截止時間為[：:]\s*請選擇(結束|開始)時間[，,。.\s]*',
+                            '',
+                            message_content,
+                            count=1
+                        )
                 elif end_time:
                     # 如果有實際時間且內容中沒有佔位符，使用實際時間
                     formatted_time = format_time_to_full(end_time)
@@ -495,22 +546,53 @@ def push_announcement_notifications(conn, title, content, ann_id, target_roles=N
                             message_content
                         )
                     elif '請選擇結束時間' in message_content or '請選擇開始時間' in message_content:
-                        # 如果已經有「請選擇結束時間」，確保前面有「截止時間為:」
-                        # 檢查「請選擇結束時間」是否緊跟在「上傳履歷的」或「填寫志願序的」後面
-                        if not re.search(r'(上傳履歷的|填寫志願序的)\s*截止時間為[：:]\s*請選擇(結束|開始)時間', message_content):
+                        # 如果已經有「請選擇結束時間」，移除它（不應該顯示佔位符）
+                        if end_time:
+                            # 如果有有效的結束時間，替換佔位符
+                            formatted_time = format_time_to_full(end_time)
+                            if formatted_time:
+                                message_content = re.sub(
+                                    r'(上傳履歷的|填寫志願序的)(\s*)(請選擇(結束|開始)時間)',
+                                    r'\1截止時間為:' + formatted_time,
+                                    message_content
+                                )
+                        else:
+                            # 如果沒有有效的結束時間，移除「請選擇結束時間」
                             message_content = re.sub(
-                                r'(上傳履歷的|填寫志願序的)(\s*)(請選擇(結束|開始)時間)',
-                                r'\1截止時間為:\3',
+                                r'(上傳履歷的|填寫志願序的)(\s*)(請選擇(結束|開始)時間)[，,。.\s]*',
+                                r'\1',
                                 message_content
                             )
                     else:
-                        # 如果沒有時間也沒有佔位符，添加「截止時間為:請選擇結束時間」
-                        message_content = re.sub(
-                            r'(上傳履歷的|填寫志願序的)([^,，。\n]*)',
-                            r'\1截止時間為:' + (format_time_to_full(end_time) if end_time else '請選擇結束時間'),
-                            message_content,
-                            count=1
-                        )
+                        # 如果沒有時間也沒有佔位符，只有在有有效的結束時間時才添加
+                        if end_time:
+                            formatted_time = format_time_to_full(end_time)
+                            if formatted_time:
+                                message_content = re.sub(
+                                    r'(上傳履歷的|填寫志願序的)([^,，。\n]*)',
+                                    r'\1截止時間為:' + formatted_time,
+                                    message_content,
+                                    count=1
+                                )
+                        # 如果沒有有效的結束時間，不做任何處理（不添加佔位符）
+            
+            # 最後，移除所有剩餘的「請選擇結束時間」或「請選擇開始時間」
+            # 這些不應該出現在最終顯示的內容中
+            message_content = re.sub(
+                r'截止時間為[：:]\s*請選擇(結束|開始)時間[，,。.\s]*',
+                '',
+                message_content
+            )
+            message_content = re.sub(
+                r'請選擇(結束|開始)時間[，,。.\s]*',
+                '',
+                message_content
+            )
+            # 清理可能產生的多餘標點符號和空格
+            message_content = re.sub(r'，\s*，', '，', message_content)
+            message_content = re.sub(r'。\s*。', '。', message_content)
+            message_content = re.sub(r'\s+', ' ', message_content)
+            message_content = message_content.strip()
             
             return message_content
         
