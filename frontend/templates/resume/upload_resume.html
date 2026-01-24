@@ -155,10 +155,189 @@
       background-color: rgba(255, 255, 255, 0.15);
       color: white;
     }
+
+    /* 免責聲明彈跳視窗 Modal 樣式 */
+    .modal-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background-color: rgba(0, 0, 0, 0.6);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      z-index: 99999;
+      backdrop-filter: blur(4px);
+    }
+
+    .modal-content {
+      background: white;
+      border-radius: 20px;
+      padding: 0;
+      max-width: 600px;
+      width: 90%;
+      max-height: 85vh;
+      overflow-y: auto;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+      animation: modalSlideIn 0.3s ease-out;
+    }
+
+    @keyframes modalSlideIn {
+      from {
+        opacity: 0;
+        transform: translateY(-50px) scale(0.9);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+      }
+    }
+
+    .modal-header {
+      background: linear-gradient(135deg, #ffc107 0%, #ff9800 100%);
+      color: #856404;
+      padding: 25px 30px;
+      border-radius: 20px 20px 0 0;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-size: 22px;
+      font-weight: bold;
+    }
+
+    .modal-header::before {
+      content: "⚠️";
+      font-size: 28px;
+    }
+
+    .modal-body {
+      padding: 30px;
+      color: #333;
+    }
+
+    .modal-body h3 {
+      color: #d68910;
+      margin: 0 0 20px 0;
+      font-size: 18px;
+    }
+
+    .modal-body ul {
+      margin: 15px 0;
+      padding-left: 25px;
+      line-height: 2;
+    }
+
+    .modal-body li {
+      margin: 10px 0;
+      color: #555;
+    }
+
+    .modal-body strong {
+      color: #d68910;
+    }
+
+    .modal-checkbox-container {
+      background-color: #fff3cd;
+      border: 2px solid #ffc107;
+      border-radius: 10px;
+      padding: 20px;
+      margin: 25px 0;
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+    }
+
+    .modal-checkbox-container input[type="checkbox"] {
+      width: 22px;
+      height: 22px;
+      cursor: pointer;
+      margin-top: 2px;
+      flex-shrink: 0;
+    }
+
+    .modal-checkbox-container label {
+      cursor: pointer;
+      font-size: 15px;
+      color: #856404;
+      font-weight: 600;
+      line-height: 1.6;
+      user-select: none;
+    }
+
+    .modal-footer {
+      padding: 20px 30px;
+      border-top: 1px solid #e0e0e0;
+      display: flex;
+      justify-content: flex-end;
+      gap: 15px;
+    }
+
+    .modal-btn {
+      padding: 12px 30px;
+      border: none;
+      border-radius: 8px;
+      font-size: 16px;
+      font-weight: bold;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      width: auto;
+    }
+
+    .modal-btn-primary {
+      background: linear-gradient(90deg, #007BFF, #0069ff);
+      color: white;
+    }
+
+    .modal-btn-primary:hover:not(:disabled) {
+      opacity: 0.9;
+      box-shadow: 0 4px 12px rgba(0, 105, 255, 0.3);
+    }
+
+    .modal-btn-primary:disabled {
+      background: #ccc;
+      cursor: not-allowed;
+      opacity: 0.6;
+    }
+
+    .modal-overlay.hidden {
+      display: none !important;
+    }
   </style>
 </head>
 
 <body>
+  <!-- 免責聲明彈跳視窗 -->
+  <div id="disclaimerModal" class="modal-overlay hidden">
+    <div class="modal-content">
+      <div class="modal-header">
+        重要提醒：AI 生成內容免責聲明
+      </div>
+      <div class="modal-body">
+        <h3>使用本服務前，請務必仔細閱讀並理解以下事項：</h3>
+        <ul>
+          <li><strong>AI 生成的自傳內容可能過於美化</strong>，不一定完全符合您的實際情況</li>
+          <li><strong>生成內容僅供參考</strong>，請務必仔細審核並根據您的真實經歷進行調整</li>
+          <li><strong>請確保生成內容中的技能、經驗、成就等資訊與您的實際情況相符</strong></li>
+          <li><strong>過度美化的內容可能導致面試時無法回答相關問題</strong>，請謹慎使用</li>
+          <li><strong>系統不對生成內容的準確性或適用性承擔任何責任</strong></li>
+          <li><strong>您有責任確保提交的履歷內容真實、準確且符合實際情況</strong></li>
+        </ul>
+        <div class="modal-checkbox-container">
+          <input type="checkbox" id="disclaimerCheckbox" autocomplete="off" />
+          <label for="disclaimerCheckbox">
+            我已仔細閱讀並理解上述免責聲明，我了解 AI 生成內容可能過於美化，我將仔細審核所有生成內容並確保其與我的實際情況相符。我同意使用本服務並承擔相應責任。
+          </label>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="modal-btn modal-btn-primary" id="confirmDisclaimerBtn" disabled>
+          我已了解並同意
+        </button>
+      </div>
+    </div>
+  </div>
+
   <header>履歷管理</header>
   <div class="top-bar-left">
     <div id="menu-btn" title="選單" role="button" tabindex="0">
@@ -174,7 +353,7 @@
         </li>
         <li class="nav-item" role="presentation">
           <button class="nav-link" id="ai-edit-tab" data-bs-toggle="tab" data-bs-target="#ai-edit-pane" type="button"
-            role="tab" aria-controls="ai-edit-pane" aria-selected="false">AI 履歷修改</button>
+            role="tab" aria-controls="ai-edit-pane" aria-selected="false" onclick="return handleAITabClick(event)">AI 履歷修改</button>
         </li>
       </ul>
 
@@ -532,6 +711,97 @@
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
   <script>
+    // ==========================================================
+    // 免責聲明 Modal 控制邏輯
+    // ==========================================================
+    const DISCLAIMER_ACCEPTED_KEY = 'ai_disclaimer_accepted_v1';
+    
+    function hasAcceptedDisclaimer() {
+      return localStorage.getItem(DISCLAIMER_ACCEPTED_KEY) === 'true';
+    }
+    
+    function markDisclaimerAccepted() {
+      localStorage.setItem(DISCLAIMER_ACCEPTED_KEY, 'true');
+    }
+    
+    function showDisclaimerModal() {
+      console.log('📢 顯示免責聲明 Modal');
+      
+      const modal = document.getElementById('disclaimerModal');
+      const checkbox = document.getElementById('disclaimerCheckbox');
+      const confirmBtn = document.getElementById('confirmDisclaimerBtn');
+      
+      if (!modal) {
+        console.error('❌ 找不到 disclaimerModal');
+        alert('錯誤：找不到免責聲明視窗');
+        return;
+      }
+      
+      if (!checkbox) {
+        console.error('❌ 找不到 disclaimerCheckbox');
+        return;
+      }
+      
+      if (!confirmBtn) {
+        console.error('❌ 找不到 confirmDisclaimerBtn');
+        return;
+      }
+      
+      console.log('✅ 找到所有元素，顯示 modal');
+      
+      // 顯示 modal - 使用多種方式確保顯示
+      modal.classList.remove('hidden');
+      modal.style.display = 'flex';
+      modal.style.zIndex = '99999';
+      modal.style.visibility = 'visible';
+      
+      // 重置狀態
+      checkbox.checked = false;
+      confirmBtn.disabled = true;
+      
+      // Checkbox 變化時更新按鈕
+      checkbox.onchange = function() {
+        confirmBtn.disabled = !this.checked;
+        console.log('Checkbox 狀態:', this.checked, '按鈕 disabled:', confirmBtn.disabled);
+      };
+      
+      // 確認按鈕點擊
+      confirmBtn.onclick = function() {
+        console.log('確認按鈕被點擊，checkbox:', checkbox.checked);
+        if (checkbox.checked) {
+          // 不記錄到 localStorage，讓每次點擊按鈕都要顯示
+          modal.classList.add('hidden');
+          modal.style.display = 'none';
+          
+          // 切換到 AI 標籤頁（如果是從按鈕點擊觸發的）
+          setTimeout(function() {
+            const aiEditTab = document.getElementById('ai-edit-tab');
+            if (aiEditTab && !aiEditTab.classList.contains('active')) {
+              const tab = new bootstrap.Tab(aiEditTab);
+              tab.show();
+            }
+          }, 100);
+        } else {
+          alert('請先勾選確認框。');
+        }
+      };
+      
+      // 防止點擊外部關閉
+      modal.onclick = function(e) {
+        if (e.target === modal) {
+          alert('請先勾選確認框並點擊「我已了解並同意」按鈕。');
+        }
+      };
+      
+      console.log('✅ Modal 已顯示');
+    }
+    
+    // 測試函數
+    window.testShowModal = function() {
+      localStorage.removeItem(DISCLAIMER_ACCEPTED_KEY);
+      showDisclaimerModal();
+    };
+
     // 儲存所有課程的原始資料，用於篩選和查詢
     let disableAutoSave = false;
     let allCoursesData = [];
@@ -3794,33 +4064,53 @@
     // AI 履歷修改功能
     // ========================================
     
-    // 當切換到 AI 編輯頁籤時，自動載入自傳內容
-    document.getElementById('ai-edit-tab').addEventListener('click', async function() {
-      const aiResumeInput = document.getElementById('ai-resume-input');
-      const autobiographyTextarea = document.querySelector('textarea[name="autobiography"]');
+    // 處理 AI 標籤頁點擊 - 定義為全局函數供 onclick 使用
+    // 每次點擊都要顯示免責聲明
+    window.handleAITabClick = function(e) {
+      console.log('🖱️ AI 標籤頁被點擊');
       
-      // 優先使用表單中已填寫的自傳內容
-      if (autobiographyTextarea && autobiographyTextarea.value.trim()) {
-        aiResumeInput.value = autobiographyTextarea.value;
-        console.log('✅ 已載入表單中的自傳內容');
-      } else {
-        // 如果表單中沒有內容，嘗試從資料庫載入
-        try {
-          const res = await fetch('/api/get_resume_data');
-          const result = await res.json();
+      // 每次點擊都阻止切換並顯示 modal
+      e.preventDefault();
+      e.stopPropagation();
+      e.stopImmediatePropagation();
+      showDisclaimerModal();
+      return false;
+    };
+    
+    // 當切換到 AI 編輯頁籤時，自動載入自傳內容
+    document.addEventListener('DOMContentLoaded', function() {
+      const aiEditTab = document.getElementById('ai-edit-tab');
+      if (aiEditTab) {
+        aiEditTab.addEventListener('shown.bs.tab', async function() {
+          const aiResumeInput = document.getElementById('ai-resume-input');
+          const autobiographyTextarea = document.querySelector('textarea[name="autobiography"]');
           
-          if (result.success && result.data && result.data.studentInfo) {
-            const autobiography = result.data.studentInfo.autobiography || '';
-            if (autobiography) {
-              aiResumeInput.value = autobiography;
-              console.log('✅ 已自動載入資料庫中的自傳內容');
-            } else {
-              console.log('ℹ️ 資料庫中暫無自傳內容');
+          // 優先使用表單中已填寫的自傳內容
+          if (autobiographyTextarea && autobiographyTextarea.value.trim()) {
+            if (aiResumeInput) {
+              aiResumeInput.value = autobiographyTextarea.value;
+              console.log('✅ 已載入表單中的自傳內容');
+            }
+          } else {
+            // 如果表單中沒有內容，嘗試從資料庫載入
+            try {
+              const res = await fetch('/api/get_resume_data');
+              const result = await res.json();
+              
+              if (result.success && result.data && result.data.studentInfo) {
+                const autobiography = result.data.studentInfo.autobiography || '';
+                if (autobiography && aiResumeInput) {
+                  aiResumeInput.value = autobiography;
+                  console.log('✅ 已自動載入資料庫中的自傳內容');
+                } else {
+                  console.log('ℹ️ 資料庫中暫無自傳內容');
+                }
+              }
+            } catch (error) {
+              console.error('❌ 載入自傳內容失敗:', error);
             }
           }
-        } catch (error) {
-          console.error('❌ 載入自傳內容失敗:', error);
-        }
+        });
       }
     });
 
