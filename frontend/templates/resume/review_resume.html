@@ -156,9 +156,6 @@
         <h2 id="resumeListTitle">履歷列表</h2>
       </div>
       <div style="display: flex; flex-wrap: wrap; gap: 16px; align-items: center; margin-bottom: 16px;">
-        <select id="departmentFilter" style="padding: 10px 12px; border-radius: 8px; border: 1px solid #e2e8f0; min-width: 150px;">
-          <option value="">所有學年</option>
-        </select>
         <select id="classFilter" style="padding: 10px 12px; border-radius: 8px; border: 1px solid #e2e8f0; min-width: 150px;">
           <option value="">所有班級</option>
         </select>
@@ -393,7 +390,6 @@
           });
         });
 
-      document.getElementById("departmentFilter").addEventListener("change", applyFilters);
       document.getElementById("classFilter").addEventListener("change", applyFilters);
       document.getElementById("companyNameFilter").addEventListener("change", applyFilters);
       document.getElementById("companyFilter").addEventListener("change", applyFilters);
@@ -438,9 +434,6 @@
     function populateFilters(data, companyData, positionData) {
       const urlParams = new URLSearchParams(window.location.search);
       const isDirectorMode = urlParams.get('mode') === 'director';
-      
-      const deptSelect = document.getElementById("departmentFilter");
-      deptSelect.innerHTML = `<option value="">所有學年</option><option value="1132">1132</option><option value="1142">1142</option>`;
       
       const classSelect = document.getElementById("classFilter");
       if (isDirectorMode) {
@@ -504,6 +497,14 @@
               }
           });
       }
+      
+      // 也從履歷資料中提取公司名稱（作為補充，確保有資料顯示）
+      data.forEach(r => {
+          const companyName = r.company_name || '';
+          if (companyName && companyName.trim()) {
+              companySet.add(companyName.trim());
+          }
+      });
       
       // 將所有公司名稱排序後加入選單
       Array.from(companySet).sort().forEach(companyName => {
@@ -583,7 +584,6 @@
 
     function applyFilters() {
       currentPage = 1;
-      const dept = document.getElementById("departmentFilter").value.trim();
       const cls = document.getElementById("classFilter").value.trim();
       const companyName = document.getElementById("companyNameFilter").value.trim();
       const jobFilter = document.getElementById("companyFilter").value.trim();
@@ -594,7 +594,6 @@
       const isCompanyView = !!urlParams.get('company_id');
 
       const filtered = allResumes.filter(r => {
-        const matchesDept = !dept || r.department === dept;
         const matchesClass = !cls || r.className === cls;
         const matchesKeyword = (r.username && r.username.toLowerCase().includes(keyword)) ||
                                (r.original_filename && r.original_filename.toLowerCase().includes(keyword));
@@ -618,7 +617,7 @@
            matchesStatus = statusStr === status;  // 使用嚴格相等，確保精確匹配
         }
 
-        return matchesDept && matchesClass && matchesCompanyName && matchesJob && matchesStatus && matchesKeyword;
+        return matchesClass && matchesCompanyName && matchesJob && matchesStatus && matchesKeyword;
       });
 
       renderTable(filtered);
