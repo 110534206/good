@@ -2251,10 +2251,24 @@ def get_announcement_history():
 
         company_ids = [c["id"] for c in companies] if companies else []
         
-        # 從通知記錄中獲取廠商發布的公告（只顯示公告，排除面試通知、錄取通知等）
+        # 從通知記錄中獲取廠商發布的公告（只顯示該廠商發布的公告）
+        # 廠商發布的公告標題格式為：【{company_name} - {job_title}】公告：{title} 或 【{company_name}】公告：{title}
         if company_ids:
             placeholders = ", ".join(["%s"] * len(company_ids))
-            # 查詢類別為 "announcement" 的記錄，或標題中包含「公告」的記錄（兼容舊數據）
+            # 獲取廠商關聯的公司名稱列表，用於匹配標題
+            cursor.execute(f"""
+                SELECT company_name 
+                FROM internship_companies 
+                WHERE id IN ({placeholders})
+            """, tuple(company_ids))
+            company_names = [row['company_name'] for row in cursor.fetchall()]
+            
+            # 構建公司名稱的 LIKE 條件（用於匹配標題中的公司名稱）
+            company_name_conditions = " OR ".join([f"n.title LIKE %s" for _ in company_names])
+            company_name_params = [f"%【{name}%公告：%" for name in company_names]
+            
+            # 查詢類別為 "announcement" 且標題格式符合廠商發布格式的記錄
+            # 只顯示標題中包含「【」和「】公告：」格式的記錄（這是廠商發布的標記）
             cursor.execute(f"""
                 SELECT 
                     n.title,
@@ -2262,9 +2276,11 @@ def get_announcement_history():
                     n.created_at,
                     COUNT(DISTINCT n.user_id) AS recipient_count
                 FROM notifications n
-                WHERE (n.category = 'announcement' OR (n.category = 'company' AND n.title LIKE '%公告%'))
+                WHERE n.category = 'announcement'
+                  AND n.title LIKE '%【%】公告：%'
                   AND n.title NOT LIKE '%面試通知%'
                   AND n.title NOT LIKE '%錄取通知%'
+                  AND ({company_name_conditions})
                   AND EXISTS (
                       SELECT 1 
                       FROM student_preferences sp 
@@ -2274,7 +2290,7 @@ def get_announcement_history():
                 GROUP BY n.title, n.message, n.created_at
                 ORDER BY n.created_at DESC
                 LIMIT 50
-            """, tuple(company_ids))
+            """, tuple(company_name_params + list(company_ids)))
         else:
             # 如果沒有關聯公司，返回空列表
             announcements = []

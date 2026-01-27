@@ -369,10 +369,15 @@
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
   <script>
     let positions = []; // 儲存職缺列表，每個職缺包含 id, company_id, title 等
+    let vendorCompanyName = null; // 從 profile API 獲取的廠商公司名稱
 
     // DOMContentLoaded
     document.addEventListener("DOMContentLoaded", () => {
-      loadPositions();
+      // 先載入 profile 資料以獲取公司名稱
+      loadProfile().then(() => {
+        // 然後載入職缺列表（會自動過濾只顯示該公司的職缺）
+        loadPositions();
+      });
       loadAnnouncementHistory();
       
       // 綁定表單提交
@@ -405,7 +410,25 @@
       });
     });
 
-    // 載入職缺列表（只顯示該廠商實際關聯的職缺）
+    // 載入 profile 資料以獲取廠商公司名稱
+    async function loadProfile() {
+      try {
+        const response = await fetch('/api/profile', {
+          headers: { 'Accept': 'application/json' },
+          credentials: 'include'
+        });
+        const result = await response.json();
+        if (result.success && result.user && result.user.role === 'vendor') {
+          // 如果是廠商，從 profile API 獲取公司名稱
+          vendorCompanyName = result.user.name || null;
+          console.log('📋 從 profile API 獲取的公司名稱：', vendorCompanyName);
+        }
+      } catch (error) {
+        console.error('載入 profile 資料失敗：', error);
+      }
+    }
+
+    // 載入職缺列表（只顯示該廠商對應公司的職缺，與 manage_positions.html 一致）
     function loadPositions() {
       fetch('/vendor/api/positions', {
         headers: { 'Accept': 'application/json' },
@@ -417,12 +440,24 @@
           
           if (data.success && data.items && data.items.length > 0) {
             // 儲存職缺列表
-            positions = data.items.filter(position => {
+            let allPositions = data.items.filter(position => {
               return position && position.id && position.company_id;
             });
             
+            // 如果已經從 profile 獲取到公司名稱，只顯示該公司的職缺（與 manage_positions.html 一致）
+            if (vendorCompanyName && vendorCompanyName.trim()) {
+              allPositions = allPositions.filter(position => {
+                const positionCompanyName = (position.company_name || '').trim();
+                return positionCompanyName === vendorCompanyName.trim();
+              });
+              console.log(`✅ 過濾後，只顯示「${vendorCompanyName}」的職缺：${allPositions.length} 筆`);
+            }
+            
             // 只顯示啟用的職缺
-            const activePositions = positions.filter(position => position.is_active);
+            const activePositions = allPositions.filter(position => position.is_active);
+            
+            // 清空現有選項（保留「所有職缺的學生」選項）
+            positionSelect.innerHTML = '<option value="">所有職缺的學生</option>';
             
             activePositions.forEach(position => {
               const positionTitle = position.title || '未命名職缺';
@@ -436,7 +471,7 @@
             
             // 如果沒有職缺，顯示提示訊息
             if (activePositions.length === 0) {
-                const option = document.createElement("option");
+              const option = document.createElement("option");
               option.value = "";
               option.textContent = "您尚未建立任何職缺";
               option.disabled = true;
