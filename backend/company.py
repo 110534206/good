@@ -1825,3 +1825,52 @@ def apply_company():
     finally:
         cursor.close()
         conn.close()
+
+# =========================================================
+# 📋 學生查看自己的投遞記錄
+# =========================================================
+@company_bp.route('/api/student/my_applications', methods=['GET'])
+def get_my_applications():
+    """學生查看自己的投遞記錄"""
+    if 'user_id' not in session or session.get('role') != 'student':
+        return jsonify({"success": False, "message": "未授權"}), 403
+    
+    user_id = session['user_id']
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+    
+    try:
+        cursor.execute("""
+            SELECT 
+                sja.id,
+                sja.resume_id,
+                sja.company_id,
+                sja.job_id,
+                sja.status AS application_status,
+                sja.applied_at,
+                ic.company_name,
+                ij.title AS job_title,
+                r.status AS resume_status,
+                r.comment
+            FROM student_job_applications sja
+            JOIN internship_companies ic ON sja.company_id = ic.id
+            LEFT JOIN internship_jobs ij ON sja.job_id = ij.id
+            LEFT JOIN resumes r ON sja.resume_id = r.id
+            WHERE sja.student_id = %s
+            ORDER BY sja.applied_at DESC
+        """, (user_id,))
+        
+        applications = cursor.fetchall() or []
+        
+        # 格式化日期
+        for app in applications:
+            if isinstance(app.get('applied_at'), datetime):
+                app['applied_at'] = app['applied_at'].strftime("%Y-%m-%d %H:%M:%S")
+        
+        return jsonify({"success": True, "applications": applications})
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"success": False, "message": f"查詢失敗: {str(e)}"}), 500
+    finally:
+        cursor.close()
+        conn.close()

@@ -240,7 +240,6 @@ def get_my_preferences():
                 sp.preference_order, 
                 sp.company_id, 
                 sp.job_id,
-                sp.resume_id,
                 sp.status,
                 sp.submitted_at,
                 ic.company_name,

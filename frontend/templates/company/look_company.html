@@ -177,6 +177,18 @@
             font-size: 1.1rem;
         }
 
+        .table tbody td:first-child {
+            text-align: left;
+        }
+
+        .table tbody td:nth-child(2) {
+            text-align: left;
+        }
+
+        .table tbody td:last-child {
+            text-align: center;
+        }
+
         /* 表格內的按鈕樣式 */
         .table .btn-sm {
             font-size: 1rem;
@@ -275,6 +287,65 @@
             padding: 2rem;
             border-radius: 12px;
             box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        }
+
+        /* 分頁樣式 */
+        .pagination-container {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 1rem;
+            margin-top: 1.5rem;
+            padding: 1rem 0;
+        }
+
+        .pagination-info {
+            color: #64748b;
+            font-size: 1rem;
+        }
+
+        .pagination-btn {
+            padding: 0.5rem 1rem;
+            border: 1px solid #e2e8f0;
+            background: white;
+            color: #1a73e8;
+            border-radius: 0.5rem;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            font-size: 0.95rem;
+        }
+
+        .pagination-btn:hover:not(:disabled) {
+            background: #f0f7ff;
+            border-color: #1a73e8;
+        }
+
+        .pagination-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            color: #94a3b8;
+        }
+
+        .pagination-btn.active {
+            background: #1a73e8;
+            color: white;
+            border-color: #1a73e8;
+        }
+
+        /* 表格列寬設定 */
+        .table th:first-child,
+        .table td:first-child {
+            width: 30%;
+        }
+
+        .table th:nth-child(2),
+        .table td:nth-child(2) {
+            width: 40%;
+        }
+
+        .table th:last-child,
+        .table td:last-child {
+            width: 30%;
         }
 
         .btn-add {
@@ -402,17 +473,28 @@
                 <thead>
                     <tr>
                         <th>公司名稱</th>
+                        <th>職缺</th>
                         <th class="text-center">操作</th>
                     </tr>
                 </thead>
                 <tbody id="companyTable">
                     <tr>
-                        <td colspan="2" class="text-center text-muted">
+                        <td colspan="3" class="text-center text-muted">
                             <i class="bi bi-hourglass-split"></i> 載入中...
                         </td>
                     </tr>
                 </tbody>
             </table>
+            <!-- 分頁控件 -->
+            <div class="pagination-container" id="paginationContainer" style="display: none;">
+                <button class="pagination-btn" id="prevPageBtn" onclick="changePage(-1)">
+                    <i class="bi bi-chevron-left"></i> 上一頁
+                </button>
+                <div class="pagination-info" id="pageInfo">第 1 頁，共 1 頁</div>
+                <button class="pagination-btn" id="nextPageBtn" onclick="changePage(1)">
+                    下一頁 <i class="bi bi-chevron-right"></i>
+                </button>
+            </div>
         </div>
 
         <!-- 履歷審核狀態區域 -->
@@ -527,8 +609,11 @@
         let allResumeStatuses = []; // 所有履歷審核狀態
         let currentResumeStatus = 'reviewing'; // 當前選中的審核狀態頁籤
         let currentFilter = 'all'; // 當前公司篩選條件
+        let currentPage = 1; // 當前頁碼
+        let itemsPerPage = 5; // 每頁顯示的公司數量
+        let currentCompaniesList = []; // 當前要顯示的公司列表
+        let companyPreferenceJobs = new Map(); // 公司ID -> 用户在志願序中選擇的職缺列表
 
-        // HTML 轉義函數 - 與 review_resume.html 一致
         function escapeHtml(text) {
             if (text === null || text === undefined) return '';
             return String(text).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
@@ -586,7 +671,7 @@
         }
 
         /* ===============================
-           獲取志願序中已選擇的公司 ID
+           獲取志願序中已選擇的公司 ID 和職缺信息
         ================================ */
         async function getSelectedCompanyIds() {
             try {
@@ -596,9 +681,26 @@
                 if (result.success && result.preferences) {
                     // 從志願序中提取所有唯一的公司 ID
                     const companyIds = new Set();
+                    // 清空之前的映射
+                    companyPreferenceJobs.clear();
+                    
                     result.preferences.forEach(pref => {
                         if (pref.company_id) {
                             companyIds.add(pref.company_id);
+                            
+                            // 記錄該公司在志願序中選擇的職缺
+                            if (!companyPreferenceJobs.has(pref.company_id)) {
+                                companyPreferenceJobs.set(pref.company_id, []);
+                            }
+                            
+                            // 如果志願序中有職缺信息，添加到列表中
+                            if (pref.job_title) {
+                                const jobs = companyPreferenceJobs.get(pref.company_id);
+                                // 避免重複添加相同的職缺
+                                if (!jobs.includes(pref.job_title)) {
+                                    jobs.push(pref.job_title);
+                                }
+                            }
                         }
                     });
                     return companyIds;
@@ -627,6 +729,30 @@
             }
 
             allCompanies = result.companies || [];
+
+            // 為每個公司獲取職缺信息
+            await Promise.all(allCompanies.map(async (c) => {
+                try {
+                    const jobRes = await fetch(`/api/get_jobs_by_company?company_id=${c.id}&_v=${CACHE_VERSION}`);
+                    if (jobRes.ok) {
+                        const jobResult = await jobRes.json();
+                        if (jobResult.success && jobResult.jobs) {
+                            c.jobs = jobResult.jobs;
+                            c.jobTitles = jobResult.jobs.map(j => j.title).join('、');
+                        } else {
+                            c.jobs = [];
+                            c.jobTitles = '尚無職缺';
+                        }
+                    } else {
+                        c.jobs = [];
+                        c.jobTitles = '尚無職缺';
+                    }
+                } catch (error) {
+                    console.error(`獲取公司 ${c.id} 的職缺失敗:`, error);
+                    c.jobs = [];
+                    c.jobTitles = '尚無職缺';
+                }
+            }));
 
             // 分類公司
             selectedCompanies = [];
@@ -684,29 +810,61 @@
         }
 
         /* ===============================
-           渲染公司表格
+           渲染公司表格（帶分頁）
         ================================ */
         function renderCompanyTable(companies, emptyMessage = '<i class="bi bi-inbox"></i> 尚無公司資料') {
-            const tbody = document.getElementById('companyTable');
-            tbody.innerHTML = '';
-
+            currentCompaniesList = companies;
+            currentPage = 1; // 重置到第一頁
+            
             if (companies.length === 0) {
+                const tbody = document.getElementById('companyTable');
                 tbody.innerHTML = `
                     <tr>
-                        <td colspan="2" class="text-center text-muted">
+                        <td colspan="3" class="text-center text-muted">
                             ${emptyMessage}
                         </td>
                     </tr>
                 `;
+                document.getElementById('paginationContainer').style.display = 'none';
                 return;
             }
 
-            companies.forEach(c => {
+            updateCompanyTablePage();
+        }
+
+        /* ===============================
+           更新公司表格分頁顯示
+        ================================ */
+        function updateCompanyTablePage() {
+            const tbody = document.getElementById('companyTable');
+            tbody.innerHTML = '';
+
+            const totalPages = Math.ceil(currentCompaniesList.length / itemsPerPage);
+            const startIndex = (currentPage - 1) * itemsPerPage;
+            const endIndex = startIndex + itemsPerPage;
+            const pageCompanies = currentCompaniesList.slice(startIndex, endIndex);
+
+            pageCompanies.forEach(c => {
                 const escapedName = (c.company_name || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+                
+                // 根據當前篩選條件決定顯示哪些職缺
+                let jobTitles = '尚無職缺';
+                if (currentFilter === 'selected' && companyPreferenceJobs.has(c.id)) {
+                    // 如果是志願序公司，只顯示用户在志願序中選擇的職缺
+                    const preferenceJobs = companyPreferenceJobs.get(c.id);
+                    if (preferenceJobs && preferenceJobs.length > 0) {
+                        jobTitles = preferenceJobs.join('、');
+                    } else {
+                        jobTitles = '尚無職缺';
+                    }
+                } else {
+                    // 其他情況顯示所有職缺
+                    jobTitles = c.jobTitles || '尚無職缺';
+                }
 
                 // 所有公司都顯示投遞和下載按鈕
                 const actionButtons = `
-                    <div class="d-flex flex-column gap-2">
+                    <div class="d-flex gap-2 justify-content-center">
                         <button
                             class="btn btn-outline-primary btn-sm"
                             onclick="openApply(${c.id}, '${escapedName}')"
@@ -726,13 +884,57 @@
 
                 tbody.innerHTML += `
                     <tr id="company-row-${c.id}">
-                        <td>${c.company_name}</td>
-                        <td>
+                        <td>${escapeHtml(c.company_name || '')}</td>
+                        <td>${escapeHtml(jobTitles)}</td>
+                        <td class="text-center">
                             ${actionButtons}
                         </td>
                     </tr>
                 `;
             });
+
+            // 更新分頁控件
+            updatePaginationControls(totalPages);
+        }
+
+        /* ===============================
+           更新分頁控件
+        ================================ */
+        function updatePaginationControls(totalPages) {
+            const paginationContainer = document.getElementById('paginationContainer');
+            const pageInfo = document.getElementById('pageInfo');
+            const prevBtn = document.getElementById('prevPageBtn');
+            const nextBtn = document.getElementById('nextPageBtn');
+
+            if (totalPages <= 1) {
+                paginationContainer.style.display = 'none';
+                return;
+            }
+
+            paginationContainer.style.display = 'flex';
+            pageInfo.textContent = `第 ${currentPage} 頁，共 ${totalPages} 頁`;
+
+            // 更新按鈕狀態
+            prevBtn.disabled = currentPage === 1;
+            nextBtn.disabled = currentPage === totalPages;
+        }
+
+        /* ===============================
+           切換分頁
+        ================================ */
+        function changePage(direction) {
+            const totalPages = Math.ceil(currentCompaniesList.length / itemsPerPage);
+            const newPage = currentPage + direction;
+
+            if (newPage < 1 || newPage > totalPages) {
+                return;
+            }
+
+            currentPage = newPage;
+            updateCompanyTablePage();
+            
+            // 滾動到表格頂部
+            document.querySelector('.table-container').scrollIntoView({ behavior: 'smooth', block: 'start' });
         }
 
         // 已移除資料夾相關功能，改用分類系統
@@ -750,30 +952,46 @@
                     throw new Error(result.message || '無法獲取履歷列表');
                 }
 
-                // 獲取投遞信息（從 student_preferences）
-                const prefRes = await fetch('/api/get_my_preferences');
-                const prefResult = await prefRes.json();
-
-                const preferences = prefResult.success ? (prefResult.preferences || []) : [];
+                // 獲取投遞信息（從 student_job_applications 表）
+                const appRes = await fetch('/api/student/my_applications');
+                let applications = [];
+                if (appRes.ok) {
+                    const appResult = await appRes.json();
+                    if (appResult.success && appResult.applications) {
+                        applications = appResult.applications;
+                    }
+                }
 
                 // 合併履歷和投遞信息
-                // 只顯示正式版本（category='ready'）的履歷，根據 status 來分類
-                allResumeStatuses = result.resumes
-                    .filter(r => {
-                        const category = r.category || 'draft';
-                        return category === 'ready';
-                    })
-                    .map(resume => {
-                        // 找到對應的投遞記錄（通過 resume_id 匹配）
-                        const preference = preferences.find(p => p.resume_id === resume.id);
-                        return {
+                // 只顯示正式版本（category='ready'）且已投遞的履歷，根據 resumes.status 來分類
+                // 修改：允許同一份履歷投遞到多家公司，每個投遞記錄都單獨顯示
+                const resumeStatusList = [];
+                const readyResumes = result.resumes.filter(r => {
+                    const category = r.category || 'draft';
+                    return category === 'ready';
+                });
+
+                // 為每個投遞記錄創建一個獨立的條目
+                applications.forEach(application => {
+                    // 找到對應的履歷
+                    const resume = readyResumes.find(r => r.id === application.resume_id);
+                    if (resume) {
+                        // 為每個投遞記錄創建一個獨立的條目
+                        resumeStatusList.push({
                             ...resume,
-                            company_name: preference ? preference.company_name : '尚未選擇',
-                            job_title: preference ? (preference.job_title || '尚未選擇') : '尚未選擇',
-                            preference_id: preference ? preference.id : null,
-                            applied_at: preference ? (preference.submitted_at || resume.created_at) : resume.created_at
-                        };
-                    });
+                            company_name: application.company_name || '尚未選擇',
+                            job_title: application.job_title || '尚未選擇',
+                            application_id: application.id,
+                            applied_at: application.applied_at || resume.created_at,
+                            // 使用 application.resume_status（從 API 返回的 resumes.status）來判斷審核狀態
+                            // uploaded = 審核中, approved = 通過, rejected = 退件
+                            status: application.resume_status || resume.status || 'uploaded',
+                            comment: application.comment || resume.comment || ''
+                        });
+                    }
+                });
+
+                allResumeStatuses = resumeStatusList;
 
                 updateResumeStatusCounts();
                 filterResumeStatus(currentResumeStatus);
@@ -1230,6 +1448,8 @@
                 bootstrap.Modal
                     .getInstance(document.getElementById('applyModal'))
                     .hide();
+                // 重新載入履歷審核狀態，讓新投遞的履歷立即顯示
+                await loadResumeStatuses();
             } else {
                 alert(result.message || '投遞失敗');
             }
