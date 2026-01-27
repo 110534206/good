@@ -171,7 +171,74 @@ def get_experience_list():
             query += " AND ie.company_id = %s"
             params.append(company_id)
 
-        query += " ORDER BY ie.created_at DESC"
+        # 獲取分頁參數
+        page = request.args.get('page', '1')
+        per_page = request.args.get('per_page', '12')
+        
+        try:
+            page = int(page)
+            per_page = int(per_page)
+            if page < 1:
+                page = 1
+            if per_page < 1:
+                per_page = 12
+            if per_page > 100:  # 限制每頁最多100筆
+                per_page = 100
+        except (ValueError, TypeError):
+            page = 1
+            per_page = 12
+        
+        # 先計算總數（使用相同的 WHERE 條件）
+        count_query = """
+            SELECT COUNT(*) as total
+            FROM internship_experiences ie
+            LEFT JOIN users u ON ie.user_id = u.id
+            LEFT JOIN internship_companies c ON ie.company_id = c.id
+            LEFT JOIN internship_jobs j ON ie.job_id = j.id
+            WHERE 1=1
+        """
+        count_params = []
+        
+        # 過濾掉「已錄取」的自動記錄
+        count_query += " AND (ie.content IS NULL OR ie.content != '已錄取')"
+        
+        # 如果要求只顯示自己的心得
+        if my_experiences.lower() == 'true' and current_user_id:
+            count_query += " AND ie.user_id = %s"
+            count_params.append(current_user_id)
+        else:
+            # 一般情況：只顯示已公開心得（排除已退件的）
+            if not (include_unapproved.lower() == 'true' and current_role in ['teacher', 'director', 'class_teacher']):
+                count_query += " AND (ie.is_public = 1 AND (ie.status IS NULL OR ie.status != 'rejected') AND (ie.is_public != 2 OR ie.is_public IS NULL))"
+            else:
+                # 審核模式：只顯示該指導老師負責的廠商的心得
+                if include_unapproved.lower() == 'true' and current_role in ['teacher', 'director', 'class_teacher'] and current_user_id:
+                    count_query += " AND c.advisor_user_id = %s"
+                    count_params.append(current_user_id)
+        
+        if keyword:
+            count_query += " AND c.company_name LIKE %s"
+            count_params.append(f"%{keyword}%")
+        
+        if year:
+            count_query += " AND ie.year = %s"
+            count_params.append(year)
+        
+        if company_id:
+            count_query += " AND ie.company_id = %s"
+            count_params.append(company_id)
+        
+        cursor.execute(count_query, count_params)
+        total_count = cursor.fetchone()['total']
+        
+        # 計算總頁數
+        total_pages = (total_count + per_page - 1) // per_page if total_count > 0 else 0
+        
+        # 添加 LIMIT 和 OFFSET
+        query += " ORDER BY ie.created_at DESC LIMIT %s OFFSET %s"
+        offset = (page - 1) * per_page
+        params.append(per_page)
+        params.append(offset)
 
         cursor.execute(query, params)
         experiences = cursor.fetchall()
@@ -229,6 +296,10 @@ def get_experience_list():
             "success": True, 
             "data": experiences,
             "count": len(experiences),
+            "total": total_count,
+            "page": page,
+            "per_page": per_page,
+            "total_pages": total_pages,
             "debug": {
                 "keyword": keyword,
                 "year": year,

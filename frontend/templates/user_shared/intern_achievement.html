@@ -325,6 +325,26 @@
                     </div>
 
                     <div class="info-row">
+                        <span class="info-label">職缺描述</span>
+                        <div class="info-value" id="jobDescription" style="white-space: pre-wrap; line-height: 1.6;">—</div>
+                    </div>
+
+                    <div class="info-row">
+                        <span class="info-label">實習地址</span>
+                        <div class="info-value" id="companyAddressDisplay">—</div>
+                    </div>
+
+                    <div class="info-row">
+                        <span class="info-label">實習薪水</span>
+                        <div class="info-value" id="salaryDisplay">—</div>
+                    </div>
+
+                    <div class="info-row">
+                        <span class="info-label">上班時間</span>
+                        <div class="info-value" id="workTimeDisplay">—</div>
+                    </div>
+
+                    <div class="info-row">
                         <span class="info-label">實習期間</span>
                         <div class="info-value" id="internPeriod">—</div>
                         <p class="assist" id="internSemester"></p>
@@ -344,12 +364,16 @@
         const statusChip = document.getElementById("statusChip");
         const companyName = document.getElementById("companyName");
         const companyAddress = document.getElementById("companyAddress");
+        const companyAddressDisplay = document.getElementById("companyAddressDisplay");
+        const salaryDisplay = document.getElementById("salaryDisplay");
+        const workTimeDisplay = document.getElementById("workTimeDisplay");
         const contactBlock = document.getElementById("contactBlock");
         const internPeriod = document.getElementById("internPeriod");
         const internSemester = document.getElementById("internSemester");
         const teacherInfo = document.getElementById("teacherInfo");
         const admitDate = document.getElementById("admitDate");
         const jobTitle = document.getElementById("jobTitle");
+        const jobDescription = document.getElementById("jobDescription");
         const fallback = "—";
 
         const formatDate = (value) => {
@@ -386,6 +410,8 @@
                 if (admission) {
                     companyName.textContent = admission.company_name || fallback;
                     companyAddress.textContent = admission.company_address || "";
+                    // 顯示地址
+                    companyAddressDisplay.textContent = admission.company_address || fallback;
                     internSemester.textContent = admission.semester ? `學期：${admission.semester}` : "";
                     teacherInfo.textContent = admission.teacher_name 
                         ? `${admission.teacher_name}${admission.teacher_email ? `（${admission.teacher_email}）` : ""}`
@@ -395,6 +421,7 @@
                     statusChip.textContent = "錄取資料";
                 } else {
                     companyName.textContent = fallback;
+                    companyAddressDisplay.textContent = fallback;
                     statusChip.textContent = "尚未有錄取紀錄";
                 }
 
@@ -453,11 +480,42 @@
                     // - 從所有 status = 'approved' 的志願中
                     // - 選擇 preference_order 最小的那個志願的職缺
                     jobTitle.textContent = final_preference.job_title;
+                    // 顯示職缺描述（工作內容）
+                    jobDescription.textContent = final_preference.job_description || fallback;
                 } else if (admission && admission.company_name) {
                     // 如果沒有 final_preference 但有 admission，可能是舊資料或特殊情況
                     jobTitle.textContent = fallback;
+                    jobDescription.textContent = fallback;
                 } else {
                     jobTitle.textContent = fallback;
+                    jobDescription.textContent = fallback;
+                }
+
+                // 顯示薪水資訊：優先從 final_preference 獲取，如果沒有則從 admission 獲取
+                const formatSalary = (salary) => {
+                    if (!salary && salary !== 0) return fallback;
+                    // 如果是數字，格式化為貨幣格式
+                    const numSalary = typeof salary === 'string' ? parseFloat(salary) : salary;
+                    if (isNaN(numSalary)) return salary; // 如果不是有效數字，直接返回原值
+                    // 格式化為新台幣格式
+                    return `NT$ ${numSalary.toLocaleString('zh-TW')}`;
+                };
+
+                if (final_preference && (final_preference.salary !== undefined && final_preference.salary !== null)) {
+                    salaryDisplay.textContent = formatSalary(final_preference.salary);
+                } else if (admission && admission.salary !== undefined && admission.salary !== null) {
+                    salaryDisplay.textContent = formatSalary(admission.salary);
+                } else {
+                    salaryDisplay.textContent = fallback;
+                }
+
+                // 顯示上班時間：優先從 final_preference 獲取，如果沒有則從 admission 獲取
+                if (final_preference && final_preference.internship_time) {
+                    workTimeDisplay.textContent = final_preference.internship_time;
+                } else if (admission && admission.internship_time) {
+                    workTimeDisplay.textContent = admission.internship_time;
+                } else {
+                    workTimeDisplay.textContent = fallback;
                 }
 
             } catch (error) {

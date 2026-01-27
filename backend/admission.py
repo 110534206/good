@@ -190,6 +190,7 @@ def get_my_admission():
                 ij.description AS job_description,
                 ij.period AS internship_period,
                 ij.work_time AS internship_time,
+                ij.salary AS job_salary,
                 ic.company_name,
                 ic.location AS company_address,
                 ic.contact_person AS contact_name,
@@ -342,13 +343,14 @@ def get_my_admission():
                 'job_title': offer_info.get('job_title'),
                 'job_description': offer_info.get('job_description'),
                 'internship_period': offer_info.get('internship_period'),
-                'internship_time': offer_info.get('internship_time')
+                'internship_time': offer_info.get('internship_time'),
+                'salary': offer_info.get('job_salary')
             }
             
             # 如果 job_title 為空，嘗試從 internship_jobs 獲取
             if not final_preference.get('job_title') and offer_info.get('job_id'):
                 cursor.execute("""
-                    SELECT title, description, period, work_time
+                    SELECT title, description, period, work_time, salary
                     FROM internship_jobs
                     WHERE id = %s
                 """, (offer_info.get('job_id'),))
@@ -358,6 +360,8 @@ def get_my_admission():
                     final_preference['job_description'] = job_info.get('description')
                     final_preference['internship_period'] = job_info.get('period')
                     final_preference['internship_time'] = job_info.get('work_time')
+                    if job_info.get('salary') is not None:
+                        final_preference['salary'] = job_info.get('salary')
                     print(f"✅ [DEBUG] 重新查詢到職缺資訊: {job_info.get('title')}")
             
             # 嘗試從 student_preferences 獲取志願序資訊
@@ -386,7 +390,8 @@ def get_my_admission():
                         ij.title AS job_title,
                         ij.description AS job_description,
                         ij.period AS internship_period,
-                        ij.work_time AS internship_time
+                        ij.work_time AS internship_time,
+                        ij.salary AS job_salary
                     FROM student_preferences sp
                     LEFT JOIN internship_jobs ij ON sp.job_id = ij.id
                     WHERE sp.student_id = %s 
@@ -408,6 +413,8 @@ def get_my_admission():
                             final_preference['internship_period'] = top_preference.get('internship_period')
                         if top_preference.get('internship_time'):
                             final_preference['internship_time'] = top_preference.get('internship_time')
+                        if top_preference.get('job_salary') is not None:
+                            final_preference['salary'] = top_preference.get('job_salary')
                         if top_preference.get('job_id'):
                             final_preference['job_id'] = top_preference.get('job_id')
                         # 如果公司資訊不同，也需要更新
@@ -521,7 +528,8 @@ def get_my_admission():
                     ij.title AS job_title,
                     ij.description AS job_description,
                     ij.period AS internship_period,
-                    ij.work_time AS internship_time
+                    ij.work_time AS internship_time,
+                    ij.salary AS job_salary
                 FROM internship_experiences ie
                 LEFT JOIN internship_companies ic ON ie.company_id = ic.id
                 LEFT JOIN internship_jobs ij ON ie.job_id = ij.id
@@ -572,6 +580,7 @@ def get_my_admission():
                         ij.description AS job_description,
                         ij.period AS internship_period,
                         ij.work_time AS internship_time,
+                        ij.salary AS job_salary,
                         ic.company_name,
                         ic.location AS company_address,
                         ic.contact_person AS contact_name,
@@ -597,7 +606,8 @@ def get_my_admission():
                         'job_title': top_preference_info.get('job_title'),
                         'job_description': top_preference_info.get('job_description'),
                         'internship_period': top_preference_info.get('internship_period'),
-                        'internship_time': top_preference_info.get('internship_time')
+                        'internship_time': top_preference_info.get('internship_time'),
+                        'salary': top_preference_info.get('job_salary')
                     }
                     # 如果排名最前面的志願與當前 company_info 不同，更新公司資訊
                     if top_preference_info.get('company_id') != company_info.get('company_id'):
@@ -629,7 +639,8 @@ def get_my_admission():
                         'job_title': company_info.get('job_title'),
                         'job_description': company_info.get('job_description'),
                         'internship_period': company_info.get('internship_period'),
-                        'internship_time': company_info.get('internship_time')
+                        'internship_time': company_info.get('internship_time'),
+                        'salary': company_info.get('job_salary')
                     }
             else:
                 # 如果沒有從 internship_experiences 獲取到，則從 student_preferences 獲取（備用方案）
@@ -649,7 +660,8 @@ def get_my_admission():
                         ij.title AS job_title,
                         ij.description AS job_description,
                         ij.period AS internship_period,
-                        ij.work_time AS internship_time
+                        ij.work_time AS internship_time,
+                        ij.salary AS job_salary
                     FROM student_preferences sp
                     LEFT JOIN internship_companies ic ON sp.company_id = ic.id
                     LEFT JOIN internship_jobs ij ON sp.job_id = ij.id
@@ -693,7 +705,8 @@ def get_my_admission():
                         'job_title': final_preference.get('job_title'),
                         'job_description': final_preference.get('job_description'),
                         'internship_period': final_preference.get('internship_period'),
-                        'internship_time': final_preference.get('internship_time')
+                        'internship_time': final_preference.get('internship_time'),
+                        'salary': final_preference.get('job_salary')
                     }
                     final_preference = final_preference_clean
                 else:

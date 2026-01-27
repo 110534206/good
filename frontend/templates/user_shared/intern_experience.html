@@ -14,18 +14,17 @@
 
     body {
       font-family: "Noto Sans TC", sans-serif;
-      background: #f9fafb;
+      background: #f7f9fc;
       margin: 0;
-      overflow-x: hidden;
+      padding: 0;
     }
 
     header {
       background: #0454a3;
-      border-bottom: none;
-      position: sticky;
-      top: 0;
-      z-index: 10;
-      box-shadow: 0 8px 20px rgba(0, 68, 148, 0.35);
+      color: white;
+      padding: 1rem 2rem;
+      text-align: center;
+      font-size: 1.5rem;
     }
 
     .topbar {
@@ -38,13 +37,15 @@
       color: #fff;
     }
 
-    .topbar-left {
-      display: flex;
-      align-items: center;
-      gap: 16px;
+    /* 三條線選單按鈕樣式 - 與 approve_company.html 一致 */
+    .top-bar-left {
+      position: fixed;
+      top: 1rem;
+      left: 1rem;
+      z-index: 1100;
     }
 
-    .topbar-left #menu-btn {
+    .top-bar-left #menu-btn {
       width: 30px;
       height: 22px;
       cursor: pointer;
@@ -56,21 +57,13 @@
       padding: 0;
     }
 
-    .topbar-left #menu-btn span {
+    .top-bar-left #menu-btn span {
       display: block;
       width: 100%;
       height: 3px;
       background-color: white;
       border-radius: 2px;
       transition: all 0.3s ease;
-    }
-
-    .topbar h1 {
-      font-size: 1.5rem;
-      margin: 0;
-      text-align: center;
-      color: #fff;
-      flex: 1;
     }
 
     /* 側邊選單樣式 */
@@ -108,44 +101,44 @@
     }
 
     #side-menu h2 {
-      margin: 0;
+      width: 100%;
+      margin-bottom: 1.5rem;
       font-weight: 700;
       font-size: 1.5rem;
       text-align: left;
-      flex: 1;
-      color: white;
     }
 
     #close-btn {
-      font-size: 1.5rem;
+      position: absolute;
+      top: 2rem;
+      right: 1.6rem;
+      font-size: 2.2rem;
       background: none;
       border: none;
       color: white;
       cursor: pointer;
       line-height: 1;
-      width: auto;
-      height: auto;
+      width: 2.5rem;
+      height: 2.5rem;
       display: flex;
       align-items: center;
       justify-content: center;
-      padding: 0;
-      margin: 0;
     }
 
     #side-menu a {
       display: block;
       width: 100%;
-      padding: 0.6rem 0;
+      padding: 0.5rem 0;
       font-size: 1.1rem;
-      color: #e2e8f0;
+      color: #ddd;
       text-decoration: none;
       border-radius: 4px;
       transition: background-color 0.2s ease;
     }
 
     #side-menu a:hover {
-      background-color: rgba(255, 255, 255, 0.18);
-      color: #fff;
+      background-color: rgba(255, 255, 255, 0.15);
+      color: white;
     }
 
     .card:hover {
@@ -196,29 +189,28 @@ body {
                "PingFang TC", "Noto Sans TC", sans-serif;
 }
 
-/* Tabs 更像 SaaS 產品 */
-.nav-tabs {
-  border-bottom: none;
-}
+/* 標籤頁樣式 - 與 approve_company.html 一致 */
 .nav-tabs .nav-link {
-  border: none;
-  color: #64748b;
-  font-weight: 600;
-  margin-right: 8px;
+  color: #6c757d;
 }
+
 .nav-tabs .nav-link.active {
-  background: #2563eb;
-  color: #fff;
-  border-radius: 999px;
-  padding: 8px 18px;
+  color: #0066cc;
+  border-color: #0066cc #0066cc #fff;
 }
 
 /* 搜尋區卡片 */
 .filter-card {
-  background: #ffffff;
-  border-radius: 20px;
+  background: transparent;
+  border-radius: 0;
   padding: 18px;
-  box-shadow: 0 10px 25px rgba(0,0,0,.08);
+  border: none;
+  margin-bottom: 0;
+}
+
+/* Tab content border - 與 approve_company.html 一致 */
+.tab-content.border {
+  border-color: #0066cc !important;
 }
 
 /* 心得卡片細節 */
@@ -238,16 +230,27 @@ body {
   box-shadow: inset 0 0 0 1px rgba(0,0,0,.04);
 }
 
-/* 按鈕業界感 */
+/* 按鈕樣式 - 與 approve_company.html 一致 */
 .btn-outline-primary {
-  --bs-btn-color:#2563eb;
-  --bs-btn-border-color:#2563eb;
-  --bs-btn-hover-bg:#2563eb;
-  --bs-btn-hover-color:#fff;
+  --bs-btn-color: #0066cc;
+  --bs-btn-border-color: #0066cc;
+  --bs-btn-hover-bg: #0066cc;
+  --bs-btn-hover-color: #fff;
 }
+
+.btn-primary {
+  background-color: #0066cc;
+  border-color: #0066cc;
+}
+
+.btn-primary:hover {
+  background-color: #0052a3;
+  border-color: #0052a3;
+}
+
 .btn-success {
-  background: #22c55e;
-  border: none;
+  background: #28a745;
+  border-color: #28a745;
 }
 
 /* Modal 資訊層級 */
@@ -270,21 +273,16 @@ body {
 </head>
 
 <body class="p-0" data-user-id="{{ user_id or 0 }}" data-initial-company-id="{{ initial_company_id or '' }}">
-  <header>
-    <div class="topbar">
-      <div class="topbar-left">
-        <button id="menu-btn" title="選單" role="button" tabindex="0" aria-label="開啟側邊選單">
-          <span></span><span></span><span></span>
-        </button>
-      </div>
-      <h1>實習心得分享</h1>
-      <div style="width: 30px;"></div>
+  <header>實習心得分享</header>
+  <div class="top-bar-left">
+    <div id="menu-btn" title="選單" role="button" tabindex="0" aria-label="開啟側邊選單">
+      <span></span><span></span><span></span>
     </div>
-  </header>
+  </div>
 
-  <div class="container mt-4">
+  <div class="container my-4">
     <!-- 分頁標籤 -->
-    <ul class="nav nav-tabs mb-4" id="experienceTabs" role="tablist">
+    <ul class="nav nav-tabs" id="experienceTabs" role="tablist">
       <li class="nav-item" role="presentation">
         <button class="nav-link active" id="all-tab" data-bs-toggle="tab" data-bs-target="#all-experiences" type="button" role="tab" aria-controls="all-experiences" aria-selected="true">
           所有心得
@@ -298,10 +296,10 @@ body {
     </ul>
 
     <!-- 分頁內容 -->
-    <div class="tab-content" id="experienceTabContent">
+    <div class="tab-content border p-3 bg-white" id="experienceTabContent">
       <!-- 所有心得分頁 -->
       <div class="tab-pane fade show active" id="all-experiences" role="tabpanel" aria-labelledby="all-tab">
-        <div class="filter-card mb-5"><div class="row g-3">
+        <div class="filter-card"><div class="row g-3">
           <div class="col-md-3">
             <input id="searchKeyword" class="form-control" placeholder="搜尋公司名稱...">
           </div>
@@ -319,33 +317,19 @@ body {
             <button id="btnSearch" class="btn btn-primary w-100">搜尋</button>
           </div>
         </div></div>
-        <div id="experienceList" class="row g-3 mt-4"></div>
+        <div id="experienceList" class="row g-3 mt-3"></div>
+        <nav aria-label="所有心得分頁" id="allExperiencesPagination" class="mt-4"></nav>
       </div>
 
       <!-- 我的心得分頁 -->
       <div class="tab-pane fade" id="my-experiences" role="tabpanel" aria-labelledby="my-tab">
-        <div class="filter-card mb-5"><div class="row g-3">
-          <div class="col-md-3">
-            <input id="mySearchKeyword" class="form-control" placeholder="搜尋公司名稱...">
-          </div>
-          <div class="col-md-3">
-            <select id="myFilterCompany" class="form-select">
-              <option value="">選擇公司</option>
-            </select>
-          </div>
-          <div class="col-md-2">
-            <select id="myFilterYear" class="form-select">
-              <option value="">選擇年份</option>
-            </select>
-          </div>
-          <div class="col-md-2">
-            <button id="myBtnSearch" class="btn btn-primary w-100">搜尋</button>
-          </div>
-          <div class="col-md-2 text-end">
+        <div class="filter-card"><div class="row g-3">
+          <div class="col-md-12 text-end">
             <button class="btn btn-success" data-bs-toggle="modal" data-bs-target="#addModal">+ 上傳心得</button>
           </div>
-        </div>
-        <div id="myExperienceList" class="row g-3 mt-4"></div>
+        </div></div>
+        <div id="myExperienceList" class="row g-3 mt-3"></div>
+        <nav aria-label="我的心得分頁" id="myExperiencesPagination" class="mt-4"></nav>
       </div>
     </div>
   </div>
@@ -395,7 +379,7 @@ body {
             </div>
 
             <div class="mb-3">
-              <label class="form-label">年份（可輸入西元或民國，如 2021 或 110，系統會存民國年）</label>
+              <label class="form-label">年份</label>
               <input type="text" class="form-control" id="year" placeholder="例如 110 或 2021" readonly required style="background-color: #e9ecef;">
             </div>
 
@@ -437,6 +421,11 @@ body {
     
     // 儲存學生的錄取資訊
     let studentAdmissionInfo = null;
+    
+    // 分頁狀態
+    let allExperiencesPage = 1;
+    let myExperiencesPage = 1;
+    const perPage = 12;
 
     // 產生民國年下拉 (近 6 年)
     function populateYearSelect(selectId) {
@@ -450,9 +439,8 @@ body {
       }
     }
     
-    // 初始化年份下拉選單
+    // 初始化年份下拉選單（僅用於「所有心得」分頁）
     populateYearSelect('filterYear');
-    populateYearSelect('myFilterYear');
 
     // 載入學生的錄取資訊
     async function loadStudentAdmission() {
@@ -508,18 +496,15 @@ body {
     async function loadCompanies() {
       try {
         const companyFilter = document.getElementById('filterCompany');
-        const myCompanyFilter = document.getElementById('myFilterCompany');
         
         // 顯示載入中狀態
         companyFilter.innerHTML = '<option value="">載入公司中...</option>';
-        myCompanyFilter.innerHTML = '<option value="">載入公司中...</option>';
         
         const res = await fetch('/intern_experience/api/companies');
         const data = await res.json();
         
         // 重置選單
         companyFilter.innerHTML = '<option value="">選擇公司</option>';
-        myCompanyFilter.innerHTML = '<option value="">選擇公司</option>';
         
         if (data.success && data.data && Array.isArray(data.data)) {
           // 從資料表抓取到的公司資料，逐一加入下拉選單（僅用於篩選器）
@@ -527,32 +512,26 @@ body {
             data.data.forEach(c => {
               if (c.id && c.company_name) {
                 companyFilter.innerHTML += `<option value="${c.id}">${c.company_name}</option>`;
-                myCompanyFilter.innerHTML += `<option value="${c.id}">${c.company_name}</option>`;
               }
             });
             
             if (!hasPrefilledFilterCompany && selectedCompanyId) {
               companyFilter.value = selectedCompanyId;
-              myCompanyFilter.value = selectedCompanyId;
               hasPrefilledFilterCompany = true;
             }
           } else {
             companyFilter.innerHTML = '<option value="">目前無可用公司</option>';
-            myCompanyFilter.innerHTML = '<option value="">目前無可用公司</option>';
           }
         } else {
           // API 回傳失敗或資料格式錯誤
           const errorMsg = data.message || '載入公司資料失敗';
           companyFilter.innerHTML = `<option value="">${errorMsg}</option>`;
-          myCompanyFilter.innerHTML = `<option value="">${errorMsg}</option>`;
           console.error('載入公司資料失敗:', data);
         }
       } catch (error) {
         console.error('抓取公司資料時發生錯誤:', error);
         const companyFilter = document.getElementById('filterCompany');
-        const myCompanyFilter = document.getElementById('myFilterCompany');
         companyFilter.innerHTML = '<option value="">載入失敗，請重新整理頁面</option>';
-        myCompanyFilter.innerHTML = '<option value="">載入失敗，請重新整理頁面</option>';
       }
     }
     
@@ -667,16 +646,77 @@ body {
       container.appendChild(card);
     }
 
+    // 渲染分頁控件
+    function renderPagination(containerId, currentPage, totalPages, onPageChange) {
+      const container = document.getElementById(containerId);
+      if (!container) return;
+      
+      if (totalPages <= 1) {
+        container.innerHTML = '';
+        return;
+      }
+      
+      let html = '<ul class="pagination justify-content-center">';
+      
+      // 上一頁按鈕
+      html += `<li class="page-item ${currentPage === 1 ? 'disabled' : ''}">`;
+      html += `<a class="page-link" href="#" onclick="event.preventDefault(); ${currentPage > 1 ? `onPageChange(${currentPage - 1})` : ''}">上一頁</a>`;
+      html += '</li>';
+      
+      // 頁碼按鈕
+      const maxVisible = 5;
+      let startPage = Math.max(1, currentPage - Math.floor(maxVisible / 2));
+      let endPage = Math.min(totalPages, startPage + maxVisible - 1);
+      
+      if (endPage - startPage < maxVisible - 1) {
+        startPage = Math.max(1, endPage - maxVisible + 1);
+      }
+      
+      if (startPage > 1) {
+        html += `<li class="page-item"><a class="page-link" href="#" onclick="event.preventDefault(); onPageChange(1)">1</a></li>`;
+        if (startPage > 2) {
+          html += `<li class="page-item disabled"><span class="page-link">...</span></li>`;
+        }
+      }
+      
+      for (let i = startPage; i <= endPage; i++) {
+        html += `<li class="page-item ${i === currentPage ? 'active' : ''}">`;
+        html += `<a class="page-link" href="#" onclick="event.preventDefault(); onPageChange(${i})">${i}</a>`;
+        html += '</li>';
+      }
+      
+      if (endPage < totalPages) {
+        if (endPage < totalPages - 1) {
+          html += `<li class="page-item disabled"><span class="page-link">...</span></li>`;
+        }
+        html += `<li class="page-item"><a class="page-link" href="#" onclick="event.preventDefault(); onPageChange(${totalPages})">${totalPages}</a></li>`;
+      }
+      
+      // 下一頁按鈕
+      html += `<li class="page-item ${currentPage === totalPages ? 'disabled' : ''}">`;
+      html += `<a class="page-link" href="#" onclick="event.preventDefault(); ${currentPage < totalPages ? `onPageChange(${currentPage + 1})` : ''}">下一頁</a>`;
+      html += '</li>';
+      
+      html += '</ul>';
+      container.innerHTML = html;
+    }
+
     // 載入心得列表（所有心得）
-    async function loadExperiences() {
+    async function loadExperiences(page = null) {
       try {
+        if (page !== null) {
+          allExperiencesPage = page;
+        }
+        
         const keyword = document.getElementById('searchKeyword').value;
         const year = document.getElementById('filterYear').value;
         const params = new URLSearchParams({
           keyword,
           year,
           company_id: selectedCompanyId || '',
-          my_experiences: 'false'
+          my_experiences: 'false',
+          page: allExperiencesPage,
+          per_page: perPage
         });
         
         console.log('[載入心得] 請求參數:', params.toString());
@@ -697,27 +737,36 @@ body {
             // 在「所有心得」頁面，即使是自己上傳的心得也不顯示刪除按鈕
             renderExperienceCard(item, list, false);
           });
+          
+          // 渲染分頁控件
+          if (data.total_pages && data.total_pages > 0) {
+            renderPagination('allExperiencesPagination', data.page, data.total_pages, (page) => {
+              loadExperiences(page);
+            });
+          }
         } else {
           list.innerHTML = '<p class="text-muted">找不到資料</p>';
+          document.getElementById('allExperiencesPagination').innerHTML = '';
         }
       } catch (error) {
         console.error('[載入心得] 發生錯誤:', error);
         const list = document.getElementById('experienceList');
         list.innerHTML = `<p class="text-danger">載入失敗: ${error.message}<br>請檢查網路連線或重新整理頁面</p>`;
+        document.getElementById('allExperiencesPagination').innerHTML = '';
       }
     }
 
     // 載入自己的心得列表
-    async function loadMyExperiences() {
+    async function loadMyExperiences(page = null) {
       try {
-        const keyword = document.getElementById('mySearchKeyword').value;
-        const year = document.getElementById('myFilterYear').value;
-        const mySelectedCompanyId = document.getElementById('myFilterCompany').value || '';
+        if (page !== null) {
+          myExperiencesPage = page;
+        }
+        
         const params = new URLSearchParams({
-          keyword,
-          year,
-          company_id: mySelectedCompanyId,
-          my_experiences: 'true'
+          my_experiences: 'true',
+          page: myExperiencesPage,
+          per_page: perPage
         });
         
         console.log('[載入我的心得] 請求參數:', params.toString());
@@ -746,13 +795,22 @@ body {
             }
             renderExperienceCard(item, list, true); // 在「我的心得」分頁中，所有心得都顯示刪除按鈕
           });
+          
+          // 渲染分頁控件
+          if (data.total_pages && data.total_pages > 0) {
+            renderPagination('myExperiencesPagination', data.page, data.total_pages, (page) => {
+              loadMyExperiences(page);
+            });
+          }
         } else {
           list.innerHTML = '<p class="text-muted">您還沒有上傳任何心得</p>';
+          document.getElementById('myExperiencesPagination').innerHTML = '';
         }
       } catch (error) {
         console.error('[載入我的心得] 發生錯誤:', error);
         const list = document.getElementById('myExperienceList');
         list.innerHTML = `<p class="text-danger">載入失敗: ${error.message}<br>請檢查網路連線或重新整理頁面</p>`;
+        document.getElementById('myExperiencesPagination').innerHTML = '';
       }
     }
 
@@ -951,7 +1009,9 @@ body {
         setTimeout(async () => {
           const advisorName = data.advisor_name ? data.advisor_name : '指導老師';
           await showResultModal('新增心得', `心得上傳成功！您的心得已提交給指導老師${advisorName !== '指導老師' ? '：' + advisorName : ''}。`);
-          // 重新載入兩個分頁的心得
+          // 重新載入兩個分頁的心得（重置到第一頁）
+          allExperiencesPage = 1;
+          myExperiencesPage = 1;
           loadExperiences();
           loadMyExperiences();
         }, 250);
@@ -961,25 +1021,18 @@ body {
     });
 
     // 綁定篩選事件 - 所有心得分頁
-    document.getElementById('btnSearch').addEventListener('click', loadExperiences);
+    document.getElementById('btnSearch').addEventListener('click', function() {
+      allExperiencesPage = 1;
+      loadExperiences();
+    });
     document.getElementById('filterCompany').addEventListener('change', function () {
       selectedCompanyId = this.value;
+      allExperiencesPage = 1;
       loadExperiences();
     });
 
     // 綁定篩選事件 - 我的心得分頁
-    document.getElementById('myBtnSearch').addEventListener('click', loadMyExperiences);
-    document.getElementById('myFilterCompany').addEventListener('change', function () {
-      loadMyExperiences();
-    });
-    document.getElementById('myFilterYear').addEventListener('change', function () {
-      loadMyExperiences();
-    });
-    document.getElementById('mySearchKeyword').addEventListener('keypress', function (e) {
-      if (e.key === 'Enter') {
-        loadMyExperiences();
-      }
-    });
+    // 綁定篩選事件 - 我的心得分頁（已移除搜尋功能）
 
     // 綁定分頁切換事件
     const allTab = document.getElementById('all-tab');
@@ -1064,10 +1117,8 @@ body {
 
   <!-- 側邊選單 -->
   <nav id="side-menu" aria-hidden="true" role="navigation" aria-label="功能選單">
-    <div class="menu-header">
-      <h2>功能選單</h2>
-      <button id="close-btn" aria-label="關閉功能選單">×</button>
-    </div>
+    <button id="close-btn" aria-label="關閉功能選單">×</button>
+    <h2>功能選單</h2>
     <a href="/student_home">首頁</a>
     <a href="/profile">個人資料</a>
     <a href="/resume_folders">履歷管理</a>
