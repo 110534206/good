@@ -182,8 +182,11 @@ def get_profile():
             display_role = "teacher"
 
         original_role_from_db = user.pop("original_role")
-        user["role"] = display_role
+        # 返回當前 session 中的角色（active_role），而不是數據庫中的原始角色
+        # 這樣前端可以正確判斷當前身份（例如主任切換到指導老師身份時，應該返回 'teacher'）
+        user["role"] = display_role  # 使用 display_role（從 active_role 轉換而來）
         user["display_role"] = role_map.get(active_role, active_role)
+        user["original_role"] = original_role_from_db  # 同時返回原始角色，供前端參考
 
         if original_role_from_db == "student" and user.get("username") and len(user["username"]) >= 3:
             user["admission_year"] = user["username"][:3]

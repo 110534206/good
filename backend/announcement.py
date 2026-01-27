@@ -744,7 +744,7 @@ def save_deadlines():
         content = data.get("content")
         start_time = data.get("start_time")
         end_time = data.get("end_time")
-        
+        edit_id = data.get("edit_id")  # 如果提供 edit_id，表示是編輯模式
         
         ann_id = None
         
@@ -771,12 +771,43 @@ def save_deadlines():
             except ValueError as e:
                 return jsonify({"success": False, "message": f"時間格式錯誤：{str(e)}"}), 400
             
-            cursor.execute("""
-                INSERT INTO announcement (title, content, start_time, end_time, is_published, created_by, created_at)
-                VALUES (%s, %s, %s, %s, %s, %s, %s)
-            """, (title, content, start_dt, end_dt, 1, created_by, now))
-            ann_id = cursor.lastrowid
-            conn.commit()  # 先提交公告，確保公告已存在
+            # 檢查是否已存在相同類型的公告（通過標題匹配）
+            if edit_id:
+                # 編輯模式：更新現有公告
+                cursor.execute("""
+                    UPDATE announcement 
+                    SET title=%s, content=%s, start_time=%s, end_time=%s, is_published=%s
+                    WHERE id=%s
+                """, (title, content, start_dt, end_dt, 1, edit_id))
+                ann_id = edit_id
+                conn.commit()
+            else:
+                # 檢查是否已存在相同類型的公告
+                cursor.execute("""
+                    SELECT id FROM announcement 
+                    WHERE title LIKE '[作業]%填寫志願序截止時間' AND is_published = 1
+                    ORDER BY created_at DESC
+                    LIMIT 1
+                """)
+                existing = cursor.fetchone()
+                
+                if existing:
+                    # 更新現有公告
+                    ann_id = existing[0]
+                    cursor.execute("""
+                        UPDATE announcement 
+                        SET title=%s, content=%s, start_time=%s, end_time=%s, is_published=%s
+                        WHERE id=%s
+                    """, (title, content, start_dt, end_dt, 1, ann_id))
+                    conn.commit()
+                else:
+                    # 創建新公告
+                    cursor.execute("""
+                        INSERT INTO announcement (title, content, start_time, end_time, is_published, created_by, created_at)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s)
+                    """, (title, content, start_dt, end_dt, 1, created_by, now))
+                    ann_id = cursor.lastrowid
+                    conn.commit()
             
             # 發送通知給指定角色（若未指定則維持原本行為：所有使用者）
             push_announcement_notifications(conn, title, content, ann_id, target_roles=target_roles)
@@ -804,12 +835,43 @@ def save_deadlines():
             except ValueError as e:
                 return jsonify({"success": False, "message": f"時間格式錯誤：{str(e)}"}), 400
             
-            cursor.execute("""
-                INSERT INTO announcement (title, content, start_time, end_time, is_published, created_by, created_at)
-                VALUES (%s, %s, %s, %s, %s, %s, %s)
-            """, (title, content, start_dt, end_dt, 1, created_by, now))
-            ann_id = cursor.lastrowid
-            conn.commit()  # 先提交公告，確保公告已存在
+            # 檢查是否已存在相同類型的公告（通過標題匹配）
+            if edit_id:
+                # 編輯模式：更新現有公告
+                cursor.execute("""
+                    UPDATE announcement 
+                    SET title=%s, content=%s, start_time=%s, end_time=%s, is_published=%s
+                    WHERE id=%s
+                """, (title, content, start_dt, end_dt, 1, edit_id))
+                ann_id = edit_id
+                conn.commit()
+            else:
+                # 檢查是否已存在相同類型的公告
+                cursor.execute("""
+                    SELECT id FROM announcement 
+                    WHERE title LIKE '[作業]%上傳履歷截止時間' AND is_published = 1
+                    ORDER BY created_at DESC
+                    LIMIT 1
+                """)
+                existing = cursor.fetchone()
+                
+                if existing:
+                    # 更新現有公告
+                    ann_id = existing[0]
+                    cursor.execute("""
+                        UPDATE announcement 
+                        SET title=%s, content=%s, start_time=%s, end_time=%s, is_published=%s
+                        WHERE id=%s
+                    """, (title, content, start_dt, end_dt, 1, ann_id))
+                    conn.commit()
+                else:
+                    # 創建新公告
+                    cursor.execute("""
+                        INSERT INTO announcement (title, content, start_time, end_time, is_published, created_by, created_at)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s)
+                    """, (title, content, start_dt, end_dt, 1, created_by, now))
+                    ann_id = cursor.lastrowid
+                    conn.commit()
             
             # 發送通知給指定角色（若未指定則維持原本行為：所有使用者）
             push_announcement_notifications(conn, title, content, ann_id, target_roles=target_roles)

@@ -156,9 +156,6 @@
         <h2 id="resumeListTitle">履歷列表</h2>
       </div>
       <div style="display: flex; flex-wrap: wrap; gap: 16px; align-items: center; margin-bottom: 16px;">
-        <select id="departmentFilter" style="padding: 10px 12px; border-radius: 8px; border: 1px solid #e2e8f0; min-width: 150px;">
-          <option value="">所有學年</option>
-        </select>
         <select id="classFilter" style="padding: 10px 12px; border-radius: 8px; border: 1px solid #e2e8f0; min-width: 150px;">
           <option value="">所有班級</option>
         </select>
@@ -307,7 +304,23 @@
             if (resumeResponse.success) {
               // 處理履歷數據和截止時間信息（與 class_review_resume.html 一致）
               const resumes = userRole === 'vendor' ? (resumeResponse.resumes || []) : (resumeResponse.data || []);
-              allResumes = resumes;
+              
+              // 如果是指導老師且截止時間未過，強制設置為空數組（即使後端返回了數據）
+              // 檢查條件：1. 當前角色是 teacher 2. 截止時間未過 3. 或者後端返回了提示訊息
+              const isTeacherBeforeDeadline = userRole === 'teacher' && resumeResponse.is_deadline_passed === false;
+              const hasBlockMessage = resumeResponse.message && resumeResponse.message.includes('無法查看');
+              
+              if (isTeacherBeforeDeadline || hasBlockMessage) {
+                allResumes = [];
+                console.log('🔒 [DEBUG] 指導老師在截止時間前，強制清空履歷列表', {
+                  userRole,
+                  is_deadline_passed: resumeResponse.is_deadline_passed,
+                  message: resumeResponse.message,
+                  dataLength: resumes.length
+                });
+              } else {
+                allResumes = resumes;
+              }
               
               // 顯示截止時間提示（僅非 vendor 角色）
               if (userRole !== 'vendor' && resumeResponse.deadline) {
@@ -315,12 +328,22 @@
                 const deadlineAlert = document.getElementById('deadlineAlert');
                 if (deadlineAlert) {
                   const isExpired = resumeResponse.is_deadline_passed;
-                  if (isExpired) {
+                  
+                  // 如果是指導老師且截止時間未過，顯示特殊提示
+                  if (userRole === 'teacher' && !isExpired) {
+                    deadlineAlert.className = 'alert alert-warning alert-deadline';
+                    deadlineAlert.innerHTML = `
+                      <strong>⏰ 履歷提交截止時間提醒</strong><br>
+                      履歷提交截止時間：${resumeResponse.deadline}<br>
+                      目前無法查看學生履歷。請等待截止時間到達後，未被退件的履歷將自動通過並傳給您審核。
+                    `;
+                    deadlineAlert.style.display = 'block';
+                  } else if (isExpired) {
                     deadlineAlert.className = 'alert alert-warning alert-deadline';
                     deadlineAlert.innerHTML = `
                       <strong>⚠️ 履歷提交截止時間已過</strong><br>
                       履歷提交截止時間：${resumeResponse.deadline}<br>
-                      <span style="color: #dc3545;">已超過截止時間，未退件的履歷已自動通過並傳給指導老師審核。</span>
+                      已超過截止時間，未退件的履歷已自動通過並傳給指導老師審核。
                     `;
                     deadlineAlert.style.display = 'block';
                   } else {
@@ -333,6 +356,22 @@
                     deadlineAlert.style.display = 'block';
                   }
                 }
+              }
+              
+              // 如果有後端返回的提示訊息（例如指導老師在截止時間前無法查看），也顯示
+              if (resumeResponse.message && userRole === 'teacher') {
+                const deadlineAlert = document.getElementById('deadlineAlert');
+                if (deadlineAlert && !deadlineAlert.innerHTML.includes(resumeResponse.message)) {
+                  deadlineAlert.className = 'alert alert-warning alert-deadline';
+                  deadlineAlert.innerHTML = `
+                    <strong>⏰ ${resumeResponse.message}</strong><br>
+                    ${resumeResponse.deadline ? `履歷提交截止時間：${resumeResponse.deadline}` : ''}
+                  `;
+                  deadlineAlert.style.display = 'block';
+                }
+                // 強制清空履歷列表
+                allResumes = [];
+                console.log('🔒 [DEBUG] 收到後端提示訊息，強制清空履歷列表');
               }
               
               populateFilters(allResumes, companyData, positionData);
@@ -351,7 +390,6 @@
           });
         });
 
-      document.getElementById("departmentFilter").addEventListener("change", applyFilters);
       document.getElementById("classFilter").addEventListener("change", applyFilters);
       document.getElementById("companyNameFilter").addEventListener("change", applyFilters);
       document.getElementById("companyFilter").addEventListener("change", applyFilters);
@@ -396,9 +434,6 @@
     function populateFilters(data, companyData, positionData) {
       const urlParams = new URLSearchParams(window.location.search);
       const isDirectorMode = urlParams.get('mode') === 'director';
-      
-      const deptSelect = document.getElementById("departmentFilter");
-      deptSelect.innerHTML = `<option value="">所有學年</option><option value="1132">1132</option><option value="1142">1142</option>`;
       
       const classSelect = document.getElementById("classFilter");
       if (isDirectorMode) {
@@ -462,6 +497,14 @@
               }
           });
       }
+      
+      // 也從履歷資料中提取公司名稱（作為補充，確保有資料顯示）
+      data.forEach(r => {
+          const companyName = r.company_name || '';
+          if (companyName && companyName.trim()) {
+              companySet.add(companyName.trim());
+          }
+      });
       
       // 將所有公司名稱排序後加入選單
       Array.from(companySet).sort().forEach(companyName => {
@@ -541,7 +584,6 @@
 
     function applyFilters() {
       currentPage = 1;
-      const dept = document.getElementById("departmentFilter").value.trim();
       const cls = document.getElementById("classFilter").value.trim();
       const companyName = document.getElementById("companyNameFilter").value.trim();
       const jobFilter = document.getElementById("companyFilter").value.trim();
@@ -552,7 +594,6 @@
       const isCompanyView = !!urlParams.get('company_id');
 
       const filtered = allResumes.filter(r => {
-        const matchesDept = !dept || r.department === dept;
         const matchesClass = !cls || r.className === cls;
         const matchesKeyword = (r.username && r.username.toLowerCase().includes(keyword)) ||
                                (r.original_filename && r.original_filename.toLowerCase().includes(keyword));
@@ -576,7 +617,7 @@
            matchesStatus = statusStr === status;  // 使用嚴格相等，確保精確匹配
         }
 
-        return matchesDept && matchesClass && matchesCompanyName && matchesJob && matchesStatus && matchesKeyword;
+        return matchesClass && matchesCompanyName && matchesJob && matchesStatus && matchesKeyword;
       });
 
       renderTable(filtered);

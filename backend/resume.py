@@ -3041,6 +3041,9 @@ def get_teacher_review_resumes():
     session_user_id = session['user_id']
     session_role = session['role']
     
+    # 調試信息：記錄當前角色
+    print(f"🔍 [DEBUG] get_teacher_review_resumes: session_role={session_role}, user_id={session_user_id}")
+    
     conn = get_db() 
     # 使用 dictionary=True 讓查詢結果為字典格式
     cursor = conn.cursor(dictionary=True) 
@@ -3048,6 +3051,49 @@ def get_teacher_review_resumes():
     try:
         # 檢查履歷上傳截止時間並自動更新狀態
         is_resume_deadline_passed, update_counts = update_resume_status_after_deadline(cursor, conn)
+        
+        # 在截止時間之前，指導老師（包括主任切換身份）不能看到任何履歷，直接返回空結果
+        # 只要當前身份是 'teacher'，就按照指導老師的權限處理
+        if session_role == 'teacher' and not is_resume_deadline_passed:
+            # 獲取履歷上傳截止時間資訊（用於前端顯示）
+            deadline_info = None
+            try:
+                cursor.execute("""
+                    SELECT end_time 
+                    FROM announcement 
+                    WHERE title LIKE '[作業]%上傳履歷截止時間' AND is_published = 1
+                    ORDER BY created_at DESC 
+                    LIMIT 1
+                """)
+                deadline_result = cursor.fetchone()
+                if deadline_result and deadline_result.get('end_time'):
+                    deadline = deadline_result['end_time']
+                    if isinstance(deadline, datetime):
+                        deadline_info = deadline.strftime('%Y/%m/%d %H:%M')
+                    else:
+                        try:
+                            deadline_dt = datetime.strptime(str(deadline), '%Y-%m-%d %H:%M:%S')
+                            deadline_info = deadline_dt.strftime('%Y/%m/%d %H:%M')
+                        except:
+                            try:
+                                deadline_dt = datetime.strptime(str(deadline), '%Y-%m-%d %H:%M')
+                                deadline_info = deadline_dt.strftime('%Y/%m/%d %H:%M')
+                            except:
+                                deadline_info = str(deadline)
+            except Exception as e:
+                print(f"⚠️ 無法獲取截止時間資訊: {e}")
+            
+            # 調試信息：確認指導老師在截止時間前被正確攔截
+            print(f"🔒 [DEBUG] 指導老師 (session_role={session_role}, user_id={session_user_id}) 在截止時間前被攔截，返回空數據")
+            print(f"🔒 [DEBUG] is_resume_deadline_passed={is_resume_deadline_passed}, deadline_info={deadline_info}")
+            
+            return jsonify({
+                "success": True, 
+                "data": [],  # 返回空列表
+                "deadline": deadline_info,
+                "is_deadline_passed": False,
+                "message": "履歷提交截止時間尚未到達，目前無法查看學生履歷。"
+            })
         
         # 建立基本查詢：每個志願序都顯示一行履歷
         sql = """
@@ -3062,35 +3108,57 @@ def get_teacher_review_resumes():
                 r.original_filename,
                 r.status AS display_status,
                 r.teacher_review_status,
-                sp.id AS preference_id,
-                sp.preference_order,
+                r.teacher_review_status,
+                sja.id AS application_id,
+                sja.applied_at,
                 ic.company_name,
-                COALESCE(sp.job_title, ij.title) AS job_title
+                COALESCE(ij.title, '') AS job_title
             FROM users u
             LEFT JOIN classes c ON u.class_id = c.id
-            INNER JOIN student_preferences sp ON sp.student_id = u.id
-            LEFT JOIN resumes r ON r.id = sp.resume_id AND r.user_id = u.id
-            JOIN internship_companies ic ON sp.company_id = ic.id
-            LEFT JOIN internship_jobs ij ON sp.job_id = ij.id
+            INNER JOIN student_job_applications sja ON sja.student_id = u.id
+            LEFT JOIN resumes r ON r.id = sja.resume_id AND r.user_id = u.id
+            JOIN internship_companies ic ON sja.company_id = ic.id
+            LEFT JOIN internship_jobs ij ON sja.job_id = ij.id
             WHERE u.role = 'student' 
-              AND sp.resume_id IS NOT NULL
+              AND sja.resume_id IS NOT NULL
               AND r.id IS NOT NULL
         """
         params = []
         
-        # 根據截止時間狀態過濾履歷狀態
-        if is_resume_deadline_passed:
-            # 截止時間已過：顯示 approved 和 rejected 狀態的履歷
-            sql += " AND (r.status IN ('approved', 'rejected') OR r.id IS NULL)"
-        else:
-            # 截止時間未過：顯示 uploaded、rejected 和已審核通過的 approved 狀態履歷
-            # 包含 approved 狀態，讓班導可以看到已經通過的履歷
-            sql += " AND (r.status IN ('uploaded', 'rejected', 'approved') OR r.id IS NULL)"
+        # 根據角色和截止時間狀態過濾履歷
+        # 在截止時間之前，只有主任和班導能看到履歷；指導老師（包括主任切換身份）在截止時間之前不能看到履歷
+        if session_role == 'teacher':
+            # 指導老師（包括主任切換身份）：只有在截止時間之後才能看到履歷（這裡已經通過上面的檢查，所以一定是截止時間已過）
+            # 截止時間已過：顯示未被退件的履歷（approved 狀態）
+            sql += " AND r.status = 'approved'"
+        elif session_role == 'class_teacher':
+            # 班導：在截止時間之前和之後都能看到履歷
+            if is_resume_deadline_passed:
+                # 截止時間已過：顯示 approved 和 rejected 狀態的履歷
+                sql += " AND (r.status IN ('approved', 'rejected') OR r.id IS NULL)"
+            else:
+                # 截止時間未過：顯示 uploaded、rejected 和已審核通過的 approved 狀態履歷
+                sql += " AND (r.status IN ('uploaded', 'rejected', 'approved') OR r.id IS NULL)"
+        elif session_role == 'director':
+            # 主任：在截止時間之前和之後都能看到所有履歷
+            if is_resume_deadline_passed:
+                # 截止時間已過：顯示 approved 和 rejected 狀態的履歷
+                sql += " AND (r.status IN ('approved', 'rejected') OR r.id IS NULL)"
+            else:
+                # 截止時間未過：顯示 uploaded、rejected 和已審核通過的 approved 狀態履歷
+                sql += " AND (r.status IN ('uploaded', 'rejected', 'approved') OR r.id IS NULL)"
         
-        # 根據角色過濾資料
+        # 根據角色過濾資料（班級過濾和公司過濾）
         # 注意：班導應該能看到自己班級學生的履歷，主任應該能看到所有學生投遞的履歷
-        if session_role in ['teacher', 'class_teacher']:
-            # 指導老師/班導：只看自己班級的學生 (假設 classes_teacher 表格關聯了老師和班級)
+        # 指導老師（包括主任切換身份）需要按公司過濾（只看自己管理的公司的學生履歷），班導需要按班級過濾
+        if session_role == 'teacher':
+            # 指導老師：只看自己管理的公司的學生履歷（根據 internship_companies.advisor_user_id）
+            # 確保 advisor_user_id 不為 NULL，並且等於當前用戶 ID
+            sql += " AND ic.advisor_user_id IS NOT NULL AND ic.advisor_user_id = %s"
+            params.append(session_user_id)
+            print(f"🔍 [DEBUG] 指導老師過濾：只顯示 advisor_user_id = {session_user_id} 的公司履歷")
+        elif session_role == 'class_teacher':
+            # 班導：只看自己班級的學生 (假設 classes_teacher 表格關聯了老師和班級)
             sql += """
                 AND u.class_id IN (
                     SELECT class_id FROM classes_teacher WHERE teacher_id = %s
@@ -3102,24 +3170,55 @@ def get_teacher_review_resumes():
             pass
         
         # 排序：按照班級、姓名、志願順序、上傳時間（最新在上）
-        sql += " ORDER BY c.name, u.username, sp.preference_order ASC, r.created_at DESC"
+        sql += " ORDER BY c.name, u.username, sja.applied_at DESC, r.created_at DESC"
 
+        print(f"🔍 [DEBUG] 執行 SQL 查詢：")
+        print(f"🔍 [DEBUG] SQL: {sql}")
+        print(f"🔍 [DEBUG] Params: {params}")
+        print(f"🔍 [DEBUG] session_role={session_role}, session_user_id={session_user_id}")
+        
         cursor.execute(sql, tuple(params))
         rows = cursor.fetchall()
         
+        print(f"🔍 [DEBUG] 查詢結果數量: {len(rows)}")
+        if rows:
+            # 檢查第一筆結果的公司和 advisor_user_id
+            first_row = rows[0]
+            company_name = first_row.get('company_name')
+            application_id = first_row.get('application_id')
+            print(f"🔍 [DEBUG] 第一筆結果範例: company_name={company_name}, application_id={application_id}")
+            
+            # 查詢該公司的 advisor_user_id 以驗證
+            if application_id:
+                cursor.execute("""
+                    SELECT ic.id, ic.company_name, ic.advisor_user_id
+                    FROM student_job_applications sja
+                    JOIN internship_companies ic ON sja.company_id = ic.id
+                    WHERE sja.id = %s
+                """, (application_id,))
+                company_info = cursor.fetchone()
+                if company_info:
+                    print(f"🔍 [DEBUG] 公司資訊: company_id={company_info['id']}, company_name={company_info['company_name']}, advisor_user_id={company_info['advisor_user_id']}")
+                else:
+                    print(f"⚠️ [DEBUG] 無法找到 application_id={application_id} 對應的公司資訊")
+        else:
+            print(f"⚠️ [DEBUG] 查詢結果為空，可能的原因：")
+            print(f"   - advisor_user_id 不匹配（當前用戶 ID: {session_user_id}）")
+            print(f"   - 沒有符合條件的履歷記錄")
+            print(f"   - 履歷狀態不符合條件")
+        
         # 整理結果：每個志願序都顯示一行履歷記錄
         result_data = []
-        processed_combinations = set()  # 追蹤已處理的 (student_id, preference_id) 組合
+        processed_combinations = set()  # 追蹤已處理的 (resume_id, application_id) 組合
         
         for row in rows:
             student_id = row['student_id']
-            preference_id = row.get('preference_id')
-            preference_order = row.get('preference_order', 0)
+            application_id = row.get('application_id')  # 使用 application_id 而不是 preference_id
             
-            # 創建唯一標識符，避免重複添加相同的志願序
-            combo_key = (student_id, preference_id) if preference_id else (student_id, None)
+            # 創建唯一標識符，避免重複添加相同的履歷-申請組合
+            combo_key = (row['resume_id'], application_id) if row['resume_id'] and application_id else (student_id, application_id)
             
-            # 處理未上傳履歷的學生（每個志願序都顯示一行）
+            # 處理未上傳履歷的學生（每個申請都顯示一行）
             if not row['resume_id']:
                 if combo_key not in processed_combinations:
                     processed_combinations.add(combo_key)
@@ -3132,19 +3231,19 @@ def get_teacher_review_resumes():
                         'original_filename': 'N/A',
                         'company_name': row.get('company_name') or '—',
                         'job_title': row.get('job_title') or '—',
-                        'preference_order': preference_order,
+                        'application_id': application_id,
                         'display_company': row.get('company_name') or '—',
                         'display_job': row.get('job_title') or '—',
                         'display_status': 'not_uploaded' # 未上傳狀態
                     })
                 continue
 
-            # 為每個志願序添加履歷記錄
-            # 創建唯一標識符 (resume_id, preference_id) 避免重複
-            resume_pref_key = (row['resume_id'], preference_id) if preference_id else (row['resume_id'], None)
+            # 為每個申請添加履歷記錄
+            # 創建唯一標識符 (resume_id, application_id) 避免重複
+            resume_app_key = (row['resume_id'], application_id) if application_id else (row['resume_id'], None)
             
-            if resume_pref_key not in processed_combinations:
-                processed_combinations.add(resume_pref_key)
+            if resume_app_key not in processed_combinations:
+                processed_combinations.add(resume_app_key)
                 status = row.get('display_status') if row.get('display_status') else 'pending'
                 
                 # 根據截止時間狀態處理履歷狀態
@@ -3172,7 +3271,7 @@ def get_teacher_review_resumes():
                     'original_filename': row['original_filename'] or 'N/A',
                     'company_name': row.get('company_name') or '—',
                     'job_title': row.get('job_title') or '—',
-                    'preference_order': preference_order,
+                    'application_id': application_id,
                     'display_company': row.get('company_name') or '—',
                     'display_job': row.get('job_title') or '—',
                     'display_status': status,
@@ -3572,8 +3671,8 @@ def get_class_resumes():
             # 對於指導老師（teacher），只顯示選擇了該老師管理的公司的學生履歷
             # 對於班導（class_teacher），顯示班導的學生履歷
             if role == "teacher":
-                # 修改：返回所有志願序，而不是只返回第一個
-                # 這樣每個志願序都會對應一行履歷資料
+                # 修改：返回所有投遞履歷記錄
+                # 這樣每個投遞記錄都會對應一行履歷資料
                 sql_query = """
                     SELECT DISTINCT
                         r.id,
@@ -3585,59 +3684,51 @@ def get_class_resumes():
                         r.original_filename,
                         r.filepath,
                         r.status,
-                        r.status,
+                        r.teacher_review_status,
                         r.reviewed_by,
                         r.comment,
                         r.note,
                         r.created_at,
                         pref.company_name AS company_name,
                         pref.job_title AS job_title,
-                        pref.preference_id,
-                        pref.preference_order,
-                        pref.preference_status,
-                        pref.vendor_comment
+                        pref.application_id AS preference_id,
+                        sja.applied_at,
+                        pref.application_status AS preference_status,
+                        NULL AS vendor_comment
                     FROM resumes r
                     JOIN users u ON r.user_id = u.id
                     LEFT JOIN classes c ON u.class_id = c.id
+                    INNER JOIN student_job_applications sja ON sja.resume_id = r.id AND sja.student_id = u.id
                     INNER JOIN (
                         SELECT 
-                            sp.student_id,
-                            sp.id AS preference_id,
-                            sp.preference_order,
-                            'pending' AS preference_status,
+                            sja.student_id,
+                            sja.id AS application_id,
+                            sja.applied_at,
                             ic.company_name,
-                            COALESCE(ij.title, sp.job_title) AS job_title,
+                            COALESCE(ij.title, '') AS job_title,
                             ij.id AS job_id,
-                            (SELECT vph.comment 
-                             FROM vendor_preference_history vph 
-                             WHERE vph.preference_id = sp.id 
-                             ORDER BY vph.created_at DESC 
-                             LIMIT 1) AS vendor_comment
-                        FROM student_preferences sp
-                        JOIN internship_companies ic ON sp.company_id = ic.id
-                        LEFT JOIN internship_jobs ij ON sp.job_id = ij.id
+                            sja.status AS application_status
+                        FROM student_job_applications sja
+                        JOIN internship_companies ic ON sja.company_id = ic.id
+                        LEFT JOIN internship_jobs ij ON sja.job_id = ij.id
                         WHERE ic.advisor_user_id = %s
-                        AND sp.status = 'approved'
-                    ) pref ON pref.student_id = u.id
+                        AND sja.status = 'submitted'
+                    ) pref ON pref.student_id = u.id AND pref.application_id = sja.id
                     WHERE r.status = 'approved'
                     -- 只顯示班導已通過（status='approved'）的履歷，供指導老師審核
                     -- 只顯示選擇了該指導老師管理的公司的學生履歷
-                    -- 只顯示尚未被指導老師審核的履歷（reviewed_by 為 NULL 或不是 teacher 角色）
-                    AND (r.reviewed_by IS NULL 
-                         OR NOT EXISTS (
-                             SELECT 1 FROM users reviewer
-                             WHERE reviewer.id = r.reviewed_by
-                             AND reviewer.role = 'teacher'
-                         ))
+                    -- 只顯示尚未被指導老師審核的履歷（teacher_review_status 為 NULL 或 'uploaded'）
+                    AND (r.teacher_review_status IS NULL 
+                         OR r.teacher_review_status = 'uploaded')
                     AND EXISTS (
                         SELECT 1
-                        FROM student_preferences sp
-                        JOIN internship_companies ic2 ON sp.company_id = ic2.id
-                        WHERE sp.student_id = u.id 
+                        FROM student_job_applications sja2
+                        JOIN internship_companies ic2 ON sja2.company_id = ic2.id
+                        WHERE sja2.student_id = u.id 
                             AND ic2.advisor_user_id = %s
-                            AND sp.status = 'approved'
+                            AND sja2.status = 'submitted'
                     )
-                    ORDER BY pref.preference_order ASC
+                    ORDER BY sja.applied_at DESC
                 """
                 sql_params = (user_id, user_id)
             else:
@@ -3658,49 +3749,38 @@ def get_class_resumes():
                         r.created_at,
                         pref.company_name AS company_name,
                         pref.job_title AS job_title,
-                        pref.preference_id,
-                        pref.preference_order,
-                        pref.preference_status,
-                        pref.vendor_comment
+                        pref.application_id AS preference_id,
+                        sja.applied_at,
+                        pref.application_status AS preference_status,
+                        NULL AS vendor_comment
                     FROM resumes r
                     JOIN users u ON r.user_id = u.id
                     LEFT JOIN classes c ON u.class_id = c.id
-                    JOIN student_preferences sp ON sp.resume_id = r.id
+                    INNER JOIN student_job_applications sja ON sja.resume_id = r.id AND sja.student_id = u.id
                     LEFT JOIN (
                         SELECT 
-                            sp.student_id,
-                            sp.id AS preference_id,
-                            sp.preference_order,
-                            'pending' AS preference_status,
+                            sja.student_id,
+                            sja.id AS application_id,
+                            sja.applied_at,
                             ic.company_name,
-                            COALESCE(ij.title, sp.job_title) AS job_title,
+                            COALESCE(ij.title, '') AS job_title,
                             ij.id AS job_id,
-                            (SELECT vph.comment 
-                             WHERE vph.preference_id = sp.id 
-                             ORDER BY vph.created_at DESC 
-                             LIMIT 1) AS vendor_comment
-                        FROM student_preferences sp
-                        JOIN internship_companies ic ON sp.company_id = ic.id
-                        LEFT JOIN internship_jobs ij ON sp.job_id = ij.id
-                        WHERE sp.status = 'approved'
-                        AND sp.preference_order = (
-                            SELECT MIN(sp2.preference_order)
-                            FROM student_preferences sp2
-                            WHERE sp2.student_id = sp.student_id
-                            AND sp2.status = 'approved'
-                        )
-                    ) pref ON pref.student_id = u.id AND pref.preference_id = sp.id
+                            sja.status AS application_status
+                        FROM student_job_applications sja
+                        JOIN internship_companies ic ON sja.company_id = ic.id
+                        LEFT JOIN internship_jobs ij ON sja.job_id = ij.id
+                        WHERE sja.status = 'submitted'
+                    ) pref ON pref.student_id = u.id AND pref.application_id = sja.id
                     WHERE r.status IN ('uploaded', 'pending', 'approved')
                     AND r.status != 'rejected'
-                    AND sp.status = 'approved'
-                    AND sp.resume_id IS NOT NULL
-                    -- 確保只選擇每個 preference_id 對應的最新履歷（根據 student_preferences.resume_id）
+                    AND sja.resume_id IS NOT NULL
+                    -- 確保只選擇每個 application_id 對應的最新履歷
                     AND r.created_at = (
                         SELECT MAX(r2.created_at)
                         FROM resumes r2
-                        JOIN student_preferences sp2 ON sp2.resume_id = r2.id
-                        WHERE sp2.id = sp.id
-                        AND sp2.resume_id IS NOT NULL
+                        INNER JOIN student_job_applications sja2 ON sja2.resume_id = r2.id
+                        WHERE sja2.id = sja.id
+                        AND sja2.resume_id IS NOT NULL
                         AND r2.status IN ('uploaded', 'pending', 'approved')
                         AND r2.status != 'rejected'
                     )
@@ -3710,7 +3790,7 @@ def get_class_resumes():
                         JOIN classes_teacher ct ON ct.class_id = c2.id
                         WHERE c2.id = u.class_id AND ct.teacher_id = %s
                     )
-                    ORDER BY pref.preference_order ASC
+                    ORDER BY sja.applied_at DESC
                 """
                 sql_params = (user_id,)
             
@@ -3719,7 +3799,7 @@ def get_class_resumes():
                 # 在 WHERE 子句結束前添加 company_id 篩選
                 sql_query = sql_query.replace(
                     "ORDER BY pref.preference_order ASC",
-                    "AND pref.preference_id IN (SELECT id FROM student_preferences WHERE company_id = %s) ORDER BY pref.preference_order ASC"
+                    "AND pref.application_id IN (SELECT id FROM student_job_applications WHERE company_id = %s) ORDER BY sja.applied_at DESC"
                 )
                 sql_params = sql_params + (target_company_id,)
 
@@ -7332,26 +7412,34 @@ def get_teacher_review_resumes():
                 r.created_at AS upload_time,
                 r.original_filename,
                 r.status AS display_status,
-                sp.id AS preference_id,
-                sp.preference_order,
+                r.teacher_review_status,
+                sja.id AS application_id,
+                sja.applied_at,
                 ic.company_name,
-                COALESCE(sp.job_title, ij.title) AS job_title
+                COALESCE(ij.title, '') AS job_title
             FROM users u
             LEFT JOIN classes c ON u.class_id = c.id
-            INNER JOIN student_preferences sp ON sp.student_id = u.id
-            LEFT JOIN resumes r ON r.id = sp.resume_id AND r.user_id = u.id
-            JOIN internship_companies ic ON sp.company_id = ic.id
-            LEFT JOIN internship_jobs ij ON sp.job_id = ij.id
+            INNER JOIN student_job_applications sja ON sja.student_id = u.id
+            LEFT JOIN resumes r ON r.id = sja.resume_id AND r.user_id = u.id
+            JOIN internship_companies ic ON sja.company_id = ic.id
+            LEFT JOIN internship_jobs ij ON sja.job_id = ij.id
             WHERE u.role = 'student' 
-              AND sp.resume_id IS NOT NULL
+              AND sja.resume_id IS NOT NULL
               AND r.id IS NOT NULL
         """
         params = []
         
         # 根據角色過濾資料
         # 注意：班導應該能看到自己班級學生的履歷，主任應該能看到所有學生投遞的履歷
-        if session_role in ['teacher', 'class_teacher']:
-            # 指導老師/班導：只看自己班級的學生 (假設 classes_teacher 表格關聯了老師和班級)
+        # 指導老師（包括主任切換身份）需要按公司過濾（只看自己管理的公司的學生履歷），班導需要按班級過濾
+        if session_role == 'teacher':
+            # 指導老師：只看自己管理的公司的學生履歷（根據 internship_companies.advisor_user_id）
+            # 確保 advisor_user_id 不為 NULL，並且等於當前用戶 ID
+            sql += " AND ic.advisor_user_id IS NOT NULL AND ic.advisor_user_id = %s"
+            params.append(session_user_id)
+            print(f"🔍 [DEBUG] 指導老師過濾：只顯示 advisor_user_id = {session_user_id} 的公司履歷")
+        elif session_role == 'class_teacher':
+            # 班導：只看自己班級的學生 (假設 classes_teacher 表格關聯了老師和班級)
             sql += """
                 AND u.class_id IN (
                     SELECT class_id FROM classes_teacher WHERE teacher_id = %s
@@ -7363,33 +7451,40 @@ def get_teacher_review_resumes():
             pass
         
         # 排序：按照班級、姓名、志願順序、上傳時間（最新在上）
-        sql += " ORDER BY c.name, u.username, sp.preference_order ASC, r.created_at DESC"
+        sql += " ORDER BY c.name, u.username, sja.applied_at DESC, r.created_at DESC"
 
         cursor.execute(sql, tuple(params))
         rows = cursor.fetchall()
         
         # 整理結果：保留所有投遞記錄，每條投遞記錄都顯示一行
         # 使用 preference_id 作為唯一標識，這樣同一履歷投遞到不同公司會顯示多行記錄
-        preference_dict = {}  # key: preference_id, value: row data
+        application_dict = {}  # key: application_id, value: row data
         
         for row in rows:
             student_id = row['student_id']
-            preference_id = row.get('preference_id')
-            preference_order = row.get('preference_order', 0)
+            application_id = row.get('application_id')
             resume_id = row.get('resume_id')
             
-            # 確保 preference_id 和 resume_id 都存在
-            if not preference_id or not resume_id:
+            # 確保 application_id 和 resume_id 都存在
+            if not application_id or not resume_id:
                 continue
 
-            # 使用 preference_id 作為key，這樣每條投遞記錄都會保留
-            if preference_id not in preference_dict:
-                status = row.get('display_status') if row.get('display_status') else 'pending'
-                # 將 uploaded 狀態映射為 pending 供前端顯示
-                if status == 'uploaded':
-                    status = 'pending'
-                
-                preference_dict[preference_id] = {
+            # 根據角色決定顯示的狀態
+            # 班導/主任：顯示 resumes.status（uploaded/approved/rejected）
+            # 指導老師：顯示 resumes.teacher_review_status（如果有的話，否則顯示 resumes.status）
+            status = row.get('display_status') if row.get('display_status') else 'pending'
+            if session_role == 'teacher':
+                # 指導老師查看 teacher_review_status
+                teacher_status = row.get('teacher_review_status')
+                if teacher_status:
+                    status = teacher_status
+            # 將 uploaded 狀態映射為 pending 供前端顯示
+            if status == 'uploaded':
+                status = 'pending'
+            
+            # 使用 application_id 作為key，這樣每條投遞記錄都會保留
+            if application_id not in application_dict:
+                application_dict[application_id] = {
                     'id': resume_id,
                     'username': student_id,
                     'name': row['name'],
@@ -7398,15 +7493,14 @@ def get_teacher_review_resumes():
                     'original_filename': row['original_filename'] or 'N/A',
                     'company_name': row.get('company_name') or '—',
                     'job_title': row.get('job_title') or '—',
-                    'preference_order': preference_order,
-                    'preference_id': preference_id,
+                    'application_id': application_id,
                     'display_company': row.get('company_name') or '—',
                     'display_job': row.get('job_title') or '—',
                     'display_status': status,
                 }
         
         # 返回所有投遞記錄，每條記錄都會顯示（即使使用相同履歷）
-        result_data = list(preference_dict.values())
+        result_data = list(application_dict.values())
         
         # 獲取履歷提交截止時間信息
         deadline_info = None
@@ -11502,26 +11596,34 @@ def get_teacher_review_resumes():
                 r.created_at AS upload_time,
                 r.original_filename,
                 r.status AS display_status,
-                sp.id AS preference_id,
-                sp.preference_order,
+                r.teacher_review_status,
+                sja.id AS application_id,
+                sja.applied_at,
                 ic.company_name,
-                COALESCE(sp.job_title, ij.title) AS job_title
+                COALESCE(ij.title, '') AS job_title
             FROM users u
             LEFT JOIN classes c ON u.class_id = c.id
-            INNER JOIN student_preferences sp ON sp.student_id = u.id
-            LEFT JOIN resumes r ON r.id = sp.resume_id AND r.user_id = u.id
-            JOIN internship_companies ic ON sp.company_id = ic.id
-            LEFT JOIN internship_jobs ij ON sp.job_id = ij.id
+            INNER JOIN student_job_applications sja ON sja.student_id = u.id
+            LEFT JOIN resumes r ON r.id = sja.resume_id AND r.user_id = u.id
+            JOIN internship_companies ic ON sja.company_id = ic.id
+            LEFT JOIN internship_jobs ij ON sja.job_id = ij.id
             WHERE u.role = 'student' 
-              AND sp.resume_id IS NOT NULL
+              AND sja.resume_id IS NOT NULL
               AND r.id IS NOT NULL
         """
         params = []
         
         # 根據角色過濾資料
         # 注意：班導應該能看到自己班級學生的履歷，主任應該能看到所有學生投遞的履歷
-        if session_role in ['teacher', 'class_teacher']:
-            # 指導老師/班導：只看自己班級的學生 (假設 classes_teacher 表格關聯了老師和班級)
+        # 指導老師（包括主任切換身份）需要按公司過濾（只看自己管理的公司的學生履歷），班導需要按班級過濾
+        if session_role == 'teacher':
+            # 指導老師：只看自己管理的公司的學生履歷（根據 internship_companies.advisor_user_id）
+            # 確保 advisor_user_id 不為 NULL，並且等於當前用戶 ID
+            sql += " AND ic.advisor_user_id IS NOT NULL AND ic.advisor_user_id = %s"
+            params.append(session_user_id)
+            print(f"🔍 [DEBUG] 指導老師過濾：只顯示 advisor_user_id = {session_user_id} 的公司履歷")
+        elif session_role == 'class_teacher':
+            # 班導：只看自己班級的學生 (假設 classes_teacher 表格關聯了老師和班級)
             sql += """
                 AND u.class_id IN (
                     SELECT class_id FROM classes_teacher WHERE teacher_id = %s
@@ -11533,33 +11635,40 @@ def get_teacher_review_resumes():
             pass
         
         # 排序：按照班級、姓名、志願順序、上傳時間（最新在上）
-        sql += " ORDER BY c.name, u.username, sp.preference_order ASC, r.created_at DESC"
+        sql += " ORDER BY c.name, u.username, sja.applied_at DESC, r.created_at DESC"
 
         cursor.execute(sql, tuple(params))
         rows = cursor.fetchall()
         
         # 整理結果：保留所有投遞記錄，每條投遞記錄都顯示一行
         # 使用 preference_id 作為唯一標識，這樣同一履歷投遞到不同公司會顯示多行記錄
-        preference_dict = {}  # key: preference_id, value: row data
+        application_dict = {}  # key: application_id, value: row data
         
         for row in rows:
             student_id = row['student_id']
-            preference_id = row.get('preference_id')
-            preference_order = row.get('preference_order', 0)
+            application_id = row.get('application_id')
             resume_id = row.get('resume_id')
             
-            # 確保 preference_id 和 resume_id 都存在
-            if not preference_id or not resume_id:
+            # 確保 application_id 和 resume_id 都存在
+            if not application_id or not resume_id:
                 continue
 
-            # 使用 preference_id 作為key，這樣每條投遞記錄都會保留
-            if preference_id not in preference_dict:
-                status = row.get('display_status') if row.get('display_status') else 'pending'
-                # 將 uploaded 狀態映射為 pending 供前端顯示
-                if status == 'uploaded':
-                    status = 'pending'
-                
-                preference_dict[preference_id] = {
+            # 根據角色決定顯示的狀態
+            # 班導/主任：顯示 resumes.status（uploaded/approved/rejected）
+            # 指導老師：顯示 resumes.teacher_review_status（如果有的話，否則顯示 resumes.status）
+            status = row.get('display_status') if row.get('display_status') else 'pending'
+            if session_role == 'teacher':
+                # 指導老師查看 teacher_review_status
+                teacher_status = row.get('teacher_review_status')
+                if teacher_status:
+                    status = teacher_status
+            # 將 uploaded 狀態映射為 pending 供前端顯示
+            if status == 'uploaded':
+                status = 'pending'
+            
+            # 使用 application_id 作為key，這樣每條投遞記錄都會保留
+            if application_id not in application_dict:
+                application_dict[application_id] = {
                     'id': resume_id,
                     'username': student_id,
                     'name': row['name'],
@@ -11568,15 +11677,14 @@ def get_teacher_review_resumes():
                     'original_filename': row['original_filename'] or 'N/A',
                     'company_name': row.get('company_name') or '—',
                     'job_title': row.get('job_title') or '—',
-                    'preference_order': preference_order,
-                    'preference_id': preference_id,
+                    'application_id': application_id,
                     'display_company': row.get('company_name') or '—',
                     'display_job': row.get('job_title') or '—',
                     'display_status': status,
                 }
         
         # 返回所有投遞記錄，每條記錄都會顯示（即使使用相同履歷）
-        result_data = list(preference_dict.values())
+        result_data = list(application_dict.values())
         
         # 獲取履歷提交截止時間信息
         deadline_info = None
@@ -15672,26 +15780,34 @@ def get_teacher_review_resumes():
                 r.created_at AS upload_time,
                 r.original_filename,
                 r.status AS display_status,
-                sp.id AS preference_id,
-                sp.preference_order,
+                r.teacher_review_status,
+                sja.id AS application_id,
+                sja.applied_at,
                 ic.company_name,
-                COALESCE(sp.job_title, ij.title) AS job_title
+                COALESCE(ij.title, '') AS job_title
             FROM users u
             LEFT JOIN classes c ON u.class_id = c.id
-            INNER JOIN student_preferences sp ON sp.student_id = u.id
-            LEFT JOIN resumes r ON r.id = sp.resume_id AND r.user_id = u.id
-            JOIN internship_companies ic ON sp.company_id = ic.id
-            LEFT JOIN internship_jobs ij ON sp.job_id = ij.id
+            INNER JOIN student_job_applications sja ON sja.student_id = u.id
+            LEFT JOIN resumes r ON r.id = sja.resume_id AND r.user_id = u.id
+            JOIN internship_companies ic ON sja.company_id = ic.id
+            LEFT JOIN internship_jobs ij ON sja.job_id = ij.id
             WHERE u.role = 'student' 
-              AND sp.resume_id IS NOT NULL
+              AND sja.resume_id IS NOT NULL
               AND r.id IS NOT NULL
         """
         params = []
         
         # 根據角色過濾資料
         # 注意：班導應該能看到自己班級學生的履歷，主任應該能看到所有學生投遞的履歷
-        if session_role in ['teacher', 'class_teacher']:
-            # 指導老師/班導：只看自己班級的學生 (假設 classes_teacher 表格關聯了老師和班級)
+        # 指導老師（包括主任切換身份）需要按公司過濾（只看自己管理的公司的學生履歷），班導需要按班級過濾
+        if session_role == 'teacher':
+            # 指導老師：只看自己管理的公司的學生履歷（根據 internship_companies.advisor_user_id）
+            # 確保 advisor_user_id 不為 NULL，並且等於當前用戶 ID
+            sql += " AND ic.advisor_user_id IS NOT NULL AND ic.advisor_user_id = %s"
+            params.append(session_user_id)
+            print(f"🔍 [DEBUG] 指導老師過濾：只顯示 advisor_user_id = {session_user_id} 的公司履歷")
+        elif session_role == 'class_teacher':
+            # 班導：只看自己班級的學生 (假設 classes_teacher 表格關聯了老師和班級)
             sql += """
                 AND u.class_id IN (
                     SELECT class_id FROM classes_teacher WHERE teacher_id = %s
@@ -15703,33 +15819,40 @@ def get_teacher_review_resumes():
             pass
         
         # 排序：按照班級、姓名、志願順序、上傳時間（最新在上）
-        sql += " ORDER BY c.name, u.username, sp.preference_order ASC, r.created_at DESC"
+        sql += " ORDER BY c.name, u.username, sja.applied_at DESC, r.created_at DESC"
 
         cursor.execute(sql, tuple(params))
         rows = cursor.fetchall()
         
         # 整理結果：保留所有投遞記錄，每條投遞記錄都顯示一行
         # 使用 preference_id 作為唯一標識，這樣同一履歷投遞到不同公司會顯示多行記錄
-        preference_dict = {}  # key: preference_id, value: row data
+        application_dict = {}  # key: application_id, value: row data
         
         for row in rows:
             student_id = row['student_id']
-            preference_id = row.get('preference_id')
-            preference_order = row.get('preference_order', 0)
+            application_id = row.get('application_id')
             resume_id = row.get('resume_id')
             
-            # 確保 preference_id 和 resume_id 都存在
-            if not preference_id or not resume_id:
+            # 確保 application_id 和 resume_id 都存在
+            if not application_id or not resume_id:
                 continue
 
-            # 使用 preference_id 作為key，這樣每條投遞記錄都會保留
-            if preference_id not in preference_dict:
-                status = row.get('display_status') if row.get('display_status') else 'pending'
-                # 將 uploaded 狀態映射為 pending 供前端顯示
-                if status == 'uploaded':
-                    status = 'pending'
-                
-                preference_dict[preference_id] = {
+            # 根據角色決定顯示的狀態
+            # 班導/主任：顯示 resumes.status（uploaded/approved/rejected）
+            # 指導老師：顯示 resumes.teacher_review_status（如果有的話，否則顯示 resumes.status）
+            status = row.get('display_status') if row.get('display_status') else 'pending'
+            if session_role == 'teacher':
+                # 指導老師查看 teacher_review_status
+                teacher_status = row.get('teacher_review_status')
+                if teacher_status:
+                    status = teacher_status
+            # 將 uploaded 狀態映射為 pending 供前端顯示
+            if status == 'uploaded':
+                status = 'pending'
+            
+            # 使用 application_id 作為key，這樣每條投遞記錄都會保留
+            if application_id not in application_dict:
+                application_dict[application_id] = {
                     'id': resume_id,
                     'username': student_id,
                     'name': row['name'],
@@ -15738,15 +15861,14 @@ def get_teacher_review_resumes():
                     'original_filename': row['original_filename'] or 'N/A',
                     'company_name': row.get('company_name') or '—',
                     'job_title': row.get('job_title') or '—',
-                    'preference_order': preference_order,
-                    'preference_id': preference_id,
+                    'application_id': application_id,
                     'display_company': row.get('company_name') or '—',
                     'display_job': row.get('job_title') or '—',
                     'display_status': status,
                 }
         
         # 返回所有投遞記錄，每條記錄都會顯示（即使使用相同履歷）
-        result_data = list(preference_dict.values())
+        result_data = list(application_dict.values())
         
         # 獲取履歷提交截止時間信息
         deadline_info = None
@@ -19842,26 +19964,34 @@ def get_teacher_review_resumes():
                 r.created_at AS upload_time,
                 r.original_filename,
                 r.status AS display_status,
-                sp.id AS preference_id,
-                sp.preference_order,
+                r.teacher_review_status,
+                sja.id AS application_id,
+                sja.applied_at,
                 ic.company_name,
-                COALESCE(sp.job_title, ij.title) AS job_title
+                COALESCE(ij.title, '') AS job_title
             FROM users u
             LEFT JOIN classes c ON u.class_id = c.id
-            INNER JOIN student_preferences sp ON sp.student_id = u.id
-            LEFT JOIN resumes r ON r.id = sp.resume_id AND r.user_id = u.id
-            JOIN internship_companies ic ON sp.company_id = ic.id
-            LEFT JOIN internship_jobs ij ON sp.job_id = ij.id
+            INNER JOIN student_job_applications sja ON sja.student_id = u.id
+            LEFT JOIN resumes r ON r.id = sja.resume_id AND r.user_id = u.id
+            JOIN internship_companies ic ON sja.company_id = ic.id
+            LEFT JOIN internship_jobs ij ON sja.job_id = ij.id
             WHERE u.role = 'student' 
-              AND sp.resume_id IS NOT NULL
+              AND sja.resume_id IS NOT NULL
               AND r.id IS NOT NULL
         """
         params = []
         
         # 根據角色過濾資料
         # 注意：班導應該能看到自己班級學生的履歷，主任應該能看到所有學生投遞的履歷
-        if session_role in ['teacher', 'class_teacher']:
-            # 指導老師/班導：只看自己班級的學生 (假設 classes_teacher 表格關聯了老師和班級)
+        # 指導老師（包括主任切換身份）需要按公司過濾（只看自己管理的公司的學生履歷），班導需要按班級過濾
+        if session_role == 'teacher':
+            # 指導老師：只看自己管理的公司的學生履歷（根據 internship_companies.advisor_user_id）
+            # 確保 advisor_user_id 不為 NULL，並且等於當前用戶 ID
+            sql += " AND ic.advisor_user_id IS NOT NULL AND ic.advisor_user_id = %s"
+            params.append(session_user_id)
+            print(f"🔍 [DEBUG] 指導老師過濾：只顯示 advisor_user_id = {session_user_id} 的公司履歷")
+        elif session_role == 'class_teacher':
+            # 班導：只看自己班級的學生 (假設 classes_teacher 表格關聯了老師和班級)
             sql += """
                 AND u.class_id IN (
                     SELECT class_id FROM classes_teacher WHERE teacher_id = %s
@@ -19873,33 +20003,40 @@ def get_teacher_review_resumes():
             pass
         
         # 排序：按照班級、姓名、志願順序、上傳時間（最新在上）
-        sql += " ORDER BY c.name, u.username, sp.preference_order ASC, r.created_at DESC"
+        sql += " ORDER BY c.name, u.username, sja.applied_at DESC, r.created_at DESC"
 
         cursor.execute(sql, tuple(params))
         rows = cursor.fetchall()
         
         # 整理結果：保留所有投遞記錄，每條投遞記錄都顯示一行
         # 使用 preference_id 作為唯一標識，這樣同一履歷投遞到不同公司會顯示多行記錄
-        preference_dict = {}  # key: preference_id, value: row data
+        application_dict = {}  # key: application_id, value: row data
         
         for row in rows:
             student_id = row['student_id']
-            preference_id = row.get('preference_id')
-            preference_order = row.get('preference_order', 0)
+            application_id = row.get('application_id')
             resume_id = row.get('resume_id')
             
-            # 確保 preference_id 和 resume_id 都存在
-            if not preference_id or not resume_id:
+            # 確保 application_id 和 resume_id 都存在
+            if not application_id or not resume_id:
                 continue
 
-            # 使用 preference_id 作為key，這樣每條投遞記錄都會保留
-            if preference_id not in preference_dict:
-                status = row.get('display_status') if row.get('display_status') else 'pending'
-                # 將 uploaded 狀態映射為 pending 供前端顯示
-                if status == 'uploaded':
-                    status = 'pending'
-                
-                preference_dict[preference_id] = {
+            # 根據角色決定顯示的狀態
+            # 班導/主任：顯示 resumes.status（uploaded/approved/rejected）
+            # 指導老師：顯示 resumes.teacher_review_status（如果有的話，否則顯示 resumes.status）
+            status = row.get('display_status') if row.get('display_status') else 'pending'
+            if session_role == 'teacher':
+                # 指導老師查看 teacher_review_status
+                teacher_status = row.get('teacher_review_status')
+                if teacher_status:
+                    status = teacher_status
+            # 將 uploaded 狀態映射為 pending 供前端顯示
+            if status == 'uploaded':
+                status = 'pending'
+            
+            # 使用 application_id 作為key，這樣每條投遞記錄都會保留
+            if application_id not in application_dict:
+                application_dict[application_id] = {
                     'id': resume_id,
                     'username': student_id,
                     'name': row['name'],
@@ -19908,15 +20045,14 @@ def get_teacher_review_resumes():
                     'original_filename': row['original_filename'] or 'N/A',
                     'company_name': row.get('company_name') or '—',
                     'job_title': row.get('job_title') or '—',
-                    'preference_order': preference_order,
-                    'preference_id': preference_id,
+                    'application_id': application_id,
                     'display_company': row.get('company_name') or '—',
                     'display_job': row.get('job_title') or '—',
                     'display_status': status,
                 }
         
         # 返回所有投遞記錄，每條記錄都會顯示（即使使用相同履歷）
-        result_data = list(preference_dict.values())
+        result_data = list(application_dict.values())
         
         # 獲取履歷提交截止時間信息
         deadline_info = None
@@ -24012,26 +24148,34 @@ def get_teacher_review_resumes():
                 r.created_at AS upload_time,
                 r.original_filename,
                 r.status AS display_status,
-                sp.id AS preference_id,
-                sp.preference_order,
+                r.teacher_review_status,
+                sja.id AS application_id,
+                sja.applied_at,
                 ic.company_name,
-                COALESCE(sp.job_title, ij.title) AS job_title
+                COALESCE(ij.title, '') AS job_title
             FROM users u
             LEFT JOIN classes c ON u.class_id = c.id
-            INNER JOIN student_preferences sp ON sp.student_id = u.id
-            LEFT JOIN resumes r ON r.id = sp.resume_id AND r.user_id = u.id
-            JOIN internship_companies ic ON sp.company_id = ic.id
-            LEFT JOIN internship_jobs ij ON sp.job_id = ij.id
+            INNER JOIN student_job_applications sja ON sja.student_id = u.id
+            LEFT JOIN resumes r ON r.id = sja.resume_id AND r.user_id = u.id
+            JOIN internship_companies ic ON sja.company_id = ic.id
+            LEFT JOIN internship_jobs ij ON sja.job_id = ij.id
             WHERE u.role = 'student' 
-              AND sp.resume_id IS NOT NULL
+              AND sja.resume_id IS NOT NULL
               AND r.id IS NOT NULL
         """
         params = []
         
         # 根據角色過濾資料
         # 注意：班導應該能看到自己班級學生的履歷，主任應該能看到所有學生投遞的履歷
-        if session_role in ['teacher', 'class_teacher']:
-            # 指導老師/班導：只看自己班級的學生 (假設 classes_teacher 表格關聯了老師和班級)
+        # 指導老師（包括主任切換身份）需要按公司過濾（只看自己管理的公司的學生履歷），班導需要按班級過濾
+        if session_role == 'teacher':
+            # 指導老師：只看自己管理的公司的學生履歷（根據 internship_companies.advisor_user_id）
+            # 確保 advisor_user_id 不為 NULL，並且等於當前用戶 ID
+            sql += " AND ic.advisor_user_id IS NOT NULL AND ic.advisor_user_id = %s"
+            params.append(session_user_id)
+            print(f"🔍 [DEBUG] 指導老師過濾：只顯示 advisor_user_id = {session_user_id} 的公司履歷")
+        elif session_role == 'class_teacher':
+            # 班導：只看自己班級的學生 (假設 classes_teacher 表格關聯了老師和班級)
             sql += """
                 AND u.class_id IN (
                     SELECT class_id FROM classes_teacher WHERE teacher_id = %s
@@ -24043,33 +24187,40 @@ def get_teacher_review_resumes():
             pass
         
         # 排序：按照班級、姓名、志願順序、上傳時間（最新在上）
-        sql += " ORDER BY c.name, u.username, sp.preference_order ASC, r.created_at DESC"
+        sql += " ORDER BY c.name, u.username, sja.applied_at DESC, r.created_at DESC"
 
         cursor.execute(sql, tuple(params))
         rows = cursor.fetchall()
         
         # 整理結果：保留所有投遞記錄，每條投遞記錄都顯示一行
         # 使用 preference_id 作為唯一標識，這樣同一履歷投遞到不同公司會顯示多行記錄
-        preference_dict = {}  # key: preference_id, value: row data
+        application_dict = {}  # key: application_id, value: row data
         
         for row in rows:
             student_id = row['student_id']
-            preference_id = row.get('preference_id')
-            preference_order = row.get('preference_order', 0)
+            application_id = row.get('application_id')
             resume_id = row.get('resume_id')
             
-            # 確保 preference_id 和 resume_id 都存在
-            if not preference_id or not resume_id:
+            # 確保 application_id 和 resume_id 都存在
+            if not application_id or not resume_id:
                 continue
 
-            # 使用 preference_id 作為key，這樣每條投遞記錄都會保留
-            if preference_id not in preference_dict:
-                status = row.get('display_status') if row.get('display_status') else 'pending'
-                # 將 uploaded 狀態映射為 pending 供前端顯示
-                if status == 'uploaded':
-                    status = 'pending'
-                
-                preference_dict[preference_id] = {
+            # 根據角色決定顯示的狀態
+            # 班導/主任：顯示 resumes.status（uploaded/approved/rejected）
+            # 指導老師：顯示 resumes.teacher_review_status（如果有的話，否則顯示 resumes.status）
+            status = row.get('display_status') if row.get('display_status') else 'pending'
+            if session_role == 'teacher':
+                # 指導老師查看 teacher_review_status
+                teacher_status = row.get('teacher_review_status')
+                if teacher_status:
+                    status = teacher_status
+            # 將 uploaded 狀態映射為 pending 供前端顯示
+            if status == 'uploaded':
+                status = 'pending'
+            
+            # 使用 application_id 作為key，這樣每條投遞記錄都會保留
+            if application_id not in application_dict:
+                application_dict[application_id] = {
                     'id': resume_id,
                     'username': student_id,
                     'name': row['name'],
@@ -24078,15 +24229,14 @@ def get_teacher_review_resumes():
                     'original_filename': row['original_filename'] or 'N/A',
                     'company_name': row.get('company_name') or '—',
                     'job_title': row.get('job_title') or '—',
-                    'preference_order': preference_order,
-                    'preference_id': preference_id,
+                    'application_id': application_id,
                     'display_company': row.get('company_name') or '—',
                     'display_job': row.get('job_title') or '—',
                     'display_status': status,
                 }
         
         # 返回所有投遞記錄，每條記錄都會顯示（即使使用相同履歷）
-        result_data = list(preference_dict.values())
+        result_data = list(application_dict.values())
         
         # 獲取履歷提交截止時間信息
         deadline_info = None
