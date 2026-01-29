@@ -71,24 +71,50 @@ def is_valid_image_file(file_path):
 # 安全地創建 InlineImage 對象
 def safe_create_inline_image(doc, file_path, width, description=""):
     """
-    安全地創建 InlineImage 對象，如果失敗則返回 None
+    安全地創建 InlineImage 對象，如果失敗則返回 None。
+    先用 PIL 與 python-docx Image.from_file 驗證，避免 render 時 UnrecognizedImageError。
     """
     if not file_path or not os.path.exists(file_path):
         return None
-    
-    # 先驗證圖片
+
     if not is_valid_image_file(file_path):
         print(f"⚠️ {description}圖片無效或損壞，跳過: {file_path}")
         return None
-    
+
+    abs_path = os.path.abspath(file_path)
     try:
-        abs_path = os.path.abspath(file_path)
+        from docx.image.image import Image as DocxImage
+        DocxImage.from_file(abs_path)
+    except Exception as e:
+        print(f"⚠️ {description}圖片格式不被 Word 支援，跳過: {file_path} ({e})")
+        return None
+
+    try:
         image_obj = InlineImage(doc, abs_path, width=width)
         return image_obj
     except Exception as e:
         print(f"⚠️ {description}圖片載入錯誤 (路徑: {file_path}): {e}")
         traceback.print_exc()
         return None
+
+
+def resolve_upload_path(path):
+    """
+    將相對路徑（如 uploads/absence_proofs/xxx）轉為絕對路徑，
+    便於 os.path.exists 與 InlineImage 在產生 Word 時正確找到檔案。
+    """
+    if not path or not str(path).strip():
+        return ""
+    path = str(path).replace("\\", "/").strip()
+    if os.path.isabs(path) and os.path.exists(path):
+        return path
+    # 相對於 BASE_UPLOAD_DIR（backend 目錄）
+    abs_path = os.path.join(BASE_UPLOAD_DIR, path)
+    if os.path.exists(abs_path):
+        return os.path.normpath(abs_path)
+    if os.path.exists(path):
+        return os.path.abspath(path)
+    return path
 
 
 resume_bp = Blueprint("resume_bp", __name__)
@@ -341,10 +367,14 @@ def fill_certificates_to_doc(context, prefix, items, max_count):
     """
     填入 Word 模板（表格區）
     prefix 例如: LaborCerts_  → LaborCerts_1, LaborCerts_2 …
+    空欄位與 None 一律顯示空白。
     """
     for i in range(1, max_count + 1):
         if i <= len(items):
-            context[f"{prefix}{i}"] = items[i-1].get("table_name", "")
+            name = (items[i-1].get("table_name") or "").strip()
+            if name == "None":
+                name = ""
+            context[f"{prefix}{i}"] = name
         else:
             context[f"{prefix}{i}"] = ""
 
@@ -353,24 +383,29 @@ def fill_certificate_photos(context, doc, items, start_index, max_count=8):
     圖片區（依順序放，不分類）
     start_index → 從第幾張開始，例如 1、9、17、25
     max_count → 最多填充幾張（實際填充的數量可能少於此值）
+    空欄位一律填空白，不顯示 None。
     """
     image_size = Inches(3.0)
     actual_count = min(len(items), max_count)
     
     # 填充實際有的證照
     for idx, item in enumerate(items[:max_count], start=start_index):
-        photo_path = item.get("photo_path", "")
-        photo_name = item.get("photo_name", "")
+        photo_path = item.get("photo_path", "") or ""
+        photo_name = (item.get("photo_name", "") or "").strip()
+        if photo_name == "None":
+            photo_name = ""
         
         if photo_path:
             image_obj = safe_create_inline_image(doc, photo_path, image_size, "證照")
-            context[f"CertPhotoImages_{idx}"] = image_obj if image_obj else ""
+            if image_obj:
+                context[f"CertPhotoImages_{idx}"] = image_obj
+            else:
+                context[f"CertPhotoImages_{idx}"] = ""
         else:
             context[f"CertPhotoImages_{idx}"] = ""
-        
-        context[f"CertPhotoName_{idx}"] = photo_name
-    
-    # 清空本頁未使用的格子（如果實際數量少於 max_count）
+        context[f"CertPhotoName_{idx}"] = photo_name or ""
+
+    # 未使用的欄位：圖片與名稱都設為空白，避免模板顯示 None
     if actual_count < max_count:
         for idx in range(start_index + actual_count, start_index + max_count):
             context[f"CertPhotoImages_{idx}"] = ""
@@ -462,7 +497,9 @@ def save_structured_data(cursor, student_id, data, semester_id=None):
         processed_certs = set() # 用於去重 (job_category, level)
 
         # (3) 處理結構化的證照資料 (structured_certifications)
-        for cert in data.get("structured_certifications", []):
+        struct_certs = data.get("structured_certifications", [])
+        print(f"📋 收到 structured_certifications: {len(struct_certs)} 筆")
+        for cert in struct_certs:
             row = {"StuID": student_id}
             db_job_category = None
             db_level = None
@@ -481,13 +518,38 @@ def save_structured_data(cursor, student_id, data, semester_id=None):
                 db_job_category = (cert.get("job_category") or "").strip() or None
                 db_level = (cert.get("level") or "").strip() or None
             elif raw.isdigit():
-                # 前端傳的是 certificate_codes.id
+                # 數字可能是 id（如 2）或 code（如 14901、11800）。先查 id 是否存在，否則當 code 查
                 try:
-                    cert_code_id = int(raw)
-                except (ValueError, TypeError):
+                    as_id = int(raw)
+                    cursor.execute("SELECT id FROM certificate_codes WHERE id = %s LIMIT 1", (as_id,))
+                    if cursor.fetchone():
+                        cert_code_id = as_id
+                    else:
+                        level_from_cert = (cert.get("level") or "").strip()
+                        if level_from_cert:
+                            cursor.execute("""
+                                SELECT id, job_category, level, authority_id 
+                                FROM certificate_codes 
+                                WHERE code = %s AND (level = %s OR level IS NULL)
+                                LIMIT 1
+                            """, (raw_upper, level_from_cert))
+                        else:
+                            cursor.execute("""
+                                SELECT id, job_category, level, authority_id 
+                                FROM certificate_codes 
+                                WHERE code = %s
+                                LIMIT 1
+                            """, (raw_upper,))
+                        cert_info = cursor.fetchone()
+                        if cert_info:
+                            cert_code_id = cert_info.get('id')
+                except (ValueError, TypeError) as e:
+                    cert_code_id = None
+                except Exception as e:
+                    print(f"⚠️ 查詢 certificate_codes 失敗: {e}")
                     cert_code_id = None
             else:
-                # 前端傳的是證照代碼 code（如 11800、TQC-WORD），查詢對應的 id
+                # 前端傳的是證照代碼 code（如 TQC-WORD），查詢對應的 id
                 level_from_cert = (cert.get("level") or "").strip()
                 try:
                     if level_from_cert:
@@ -548,7 +610,7 @@ def save_structured_data(cursor, student_id, data, semester_id=None):
 
             if not cert_name:
                 print(f"⚠️ 忽略無名稱證照記錄: {cert}")
-                continue # 忽略沒有名稱的記錄
+                continue
 
             # 檢查是否重複（使用 job_category, level 作為唯一標識）
             if db_job_category and db_level:
@@ -607,8 +669,9 @@ def save_structured_data(cursor, student_id, data, semester_id=None):
 
         # (5) 實際寫入資料庫
         if cert_rows:
-            # 先刪除舊資料
+            print(f"📋 準備寫入 student_certifications: {len(cert_rows)} 筆")
             cursor.execute("DELETE FROM student_certifications WHERE StuID=%s", (student_id,))
+            insert_failed = False
             for row in cert_rows:
                 cols = list(row.keys())
                 values = list(row.values())
@@ -620,9 +683,15 @@ def save_structured_data(cursor, student_id, data, semester_id=None):
                         (*values, datetime.now())
                     )
                 except Exception as e:
-                    # 如果因為唯一索引衝突導致插入失敗，記錄錯誤但繼續處理其他記錄
-                    print(f"⚠️ 插入證照記錄失敗（可能是唯一索引衝突）: {e}")
+                    print(f"⚠️ 插入證照記錄失敗: {e}")
                     print(f" 記錄內容: {row}")
+                    insert_failed = True
+                    raise
+            if not insert_failed:
+                print(f"✅ student_certifications 已寫入 {len(cert_rows)} 筆")
+        else:
+            if struct_certs:
+                print(f"⚠️ 有 {len(struct_certs)} 筆證照但 cert_rows 為空（可能全部被跳過），不刪除既存證照")
         
         # -------------------------------------------------------------
         # 4) 儲存語言能力 student_languageskills
@@ -910,6 +979,11 @@ def format_data_for_doc(student_data, doc_path=None):
     fill_certificates_to_doc(context, "LocalCerts_", local, 4)
     fill_certificates_to_doc(context, "OtherCerts_", other, 4)
     
+    # 先將所有證照圖片/名稱佔位符設為空白，避免模板顯示 None
+    for i in range(1, 33):
+        context[f"CertPhotoImages_{i}"] = ""
+        context[f"CertPhotoName_{i}"] = ""
+    
     # 圖片區（不分類，按順序最多 32 張）
     certs_for_photos = [
         {'photo_path': c.get('CertPath'), 'photo_name': f"{c.get('job_category', '')}{c.get('level', '')}" if c.get('job_category') else c.get('CertName')}
@@ -1013,8 +1087,8 @@ def get_resume_data():
         if not resume:
             return jsonify({"success": False, "message": "沒有已提交的履歷"}), 404
 
-        # ===== 2. 抓 StudentID（學號）=====
-        cursor.execute("SELECT username FROM users WHERE id=%s", (user_id,))
+        # ===== 2. 抓 StudentID（學號）及 users 的 name, email, avatar_url =====
+        cursor.execute("SELECT username, name, email, avatar_url FROM users WHERE id=%s", (user_id,))
         user_result = cursor.fetchone()
         if not user_result:
             return jsonify({"success": False, "message": "找不到使用者"}), 404
@@ -1206,6 +1280,8 @@ def get_resume_data():
                     (c.get("cert_code") is not None)
                 )
             ]
+            # 依 id 升序排列，使編輯時證照順序與使用者新增順序一致（先新增的在前）
+            certifications.sort(key=lambda c: (c.get("id") or 0))
 
         # ===== 7. 語言能力 =====
 
@@ -1314,26 +1390,36 @@ def get_resume_data():
                 "AcquisitionDate": acquisition_date_str  # 轉換為字符串格式，確保 JSON 序列化正常
             })
 
-        # ===== 10. 回傳結果 =====
+        # ===== 10. 回傳結果（路徑一律正斜線、不回傳 None）=====
+        def norm_path(p):
+            if p is None or (isinstance(p, str) and p.strip() == ""):
+                return ""
+            return (p or "").replace("\\", "/").strip()
+
+        # 姓名、電子信箱、個人頭貼優先從 users 表帶入
+        user_name = (user_result.get("name") or "").strip() or student_info.get("StuName", "")
+        user_email = (user_result.get("email") or "").strip() or student_info.get("Email", "")
+        user_avatar = norm_path(user_result.get("avatar_url")) or norm_path(student_info.get("PhotoPath"))
+
         return jsonify({
             "success": True,
             "data": {
                 "student_info": {
-                    "name": student_info.get("StuName", ""),
+                    "name": user_name,
                     "birth_date": birth_date or "",
                     "gender": student_info.get("Gender", ""),
                     "phone": student_info.get("Phone", ""),
-                    "email": student_info.get("Email", ""),
+                    "email": user_email,
                     "address": student_info.get("Address", ""),
                     "conduct_score": student_info.get("ConductScore", ""),
                     "autobiography": student_info.get("Autobiography", ""),
-                    "photo_path": student_info.get("PhotoPath", "")
+                    "photo_path": user_avatar
                 },
                 "courses": courses,
                 "certifications": formatted_certs,
                 "languages": languages,
-                "transcript_path": transcript_path,
-                "absence_proof_path": absence_proof_path
+                "transcript_path": norm_path(transcript_path),
+                "absence_proof_path": norm_path(absence_proof_path)
             }
         })
 
@@ -1528,6 +1614,13 @@ def submit_and_generate_api():
             new_filename = f"{user_id}_photo_{datetime.now().strftime('%Y%m%d_%H%M%S')}{ext}"
             photo_path = os.path.join(photo_dir, new_filename)
             photo.save(photo_path)
+            photo_path = photo_path.replace("\\", "/")
+        else:
+            # 未上傳新照片時保留資料庫既有路徑
+            cursor.execute("SELECT PhotoPath FROM Student_Info WHERE StuID = (SELECT username FROM users WHERE id=%s)", (user_id,))
+            row = cursor.fetchone()
+            if row and row.get('PhotoPath'):
+                photo_path = (row['PhotoPath'] or '').replace('\\', '/')
 
         # 儲存成績單檔案（先儲存檔案，再 update 到 course_grades 的 transcript_path）
         transcript_path = None
@@ -1541,6 +1634,7 @@ def submit_and_generate_api():
             new_filename = f"{user_id}_transcript_{datetime.now().strftime('%Y%m%d_%H%M%S')}{ext}"
             transcript_path = os.path.join(transcript_dir, new_filename)
             transcript_file.save(transcript_path)
+            transcript_path = transcript_path.replace("\\", "/")
 
         # 儲存多張證照
         cert_photo_paths = []
@@ -1578,7 +1672,16 @@ def submit_and_generate_api():
                 traceback.print_exc()
                 image_path_for_template = None
 
-        if image_path_for_template or certificate_description:
+        # 先解析 structured_certifications，才能決定是否插入單張證照（避免多張證照時索引錯位、圖片重複）
+        _structured_from_form = []
+        _structured_json = request.form.get('structured_certifications', '')
+        if _structured_json:
+            try:
+                _structured_from_form = json.loads(_structured_json)
+            except Exception:
+                pass
+        # 僅在「沒有」使用新格式多張證照時，才在 index 0 插入單張證照
+        if (image_path_for_template or certificate_description) and not _structured_from_form:
             if cert_photo_paths is None:
                 cert_photo_paths = []
             if cert_names is None:
@@ -1681,7 +1784,8 @@ def submit_and_generate_api():
                     fname = f"{user_id}_absence_proof_{datetime.now().strftime('%Y%m%d_%H%M%S')}{ext}"
                     savep = os.path.join(ABSENCE_PROOF_FOLDER, fname)
                     uploaded_proof.save(savep)
-                    absence_image_path = savep
+                    # 統一用正斜線存進 DB，方便前端與靜態檔使用
+                    absence_image_path = savep.replace("\\", "/")
                 else:
                     print(f"⚠️ 上傳的缺勤佐證圖片格式不支援: {uploaded_proof.mimetype}")
         except Exception as e:
@@ -1747,13 +1851,13 @@ def submit_and_generate_api():
                                 fname = f"{user_id}_record_{record_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}{ext}"
                                 save_path = os.path.join(ABSENCE_PROOF_FOLDER, fname)
                                 uploaded_image.save(save_path)
-                                
+                                save_path_db = save_path.replace("\\", "/")
                                 # 更新資料庫中對應記錄的 image_path
                                 cursor.execute("""
                                     UPDATE absence_records 
                                     SET image_path = %s, updated_at = NOW()
                                     WHERE id = %s AND user_id = %s
-                                """, (save_path, record_id, user_id))
+                                """, (save_path_db, record_id, user_id))
                                 
                                 print(f"✅ 已更新缺勤記錄 {record_id} 的佐證圖片: {save_path}")
                             except Exception as e:
@@ -1766,17 +1870,16 @@ def submit_and_generate_api():
                     print(f"⚠️ 解析 absence_records_with_images 失敗: {e}")
                     traceback.print_exc()
             
-            # 2. 如果有整體佐證圖片，更新到該學期所有沒有圖片的記錄
+            # 2. 如果有整體佐證圖片，更新到該學期或全部沒有圖片的記錄
             if absence_image_path:
                 semester_id = request.form.get("semester_id", None)
-                if semester_id:
-                    try:
+                try:
+                    if semester_id:
                         # 檢查是否有 semester_id 欄位
                         cursor.execute("SHOW COLUMNS FROM absence_records LIKE 'semester_id'")
                         has_semester_id = cursor.fetchone() is not None
                         
                         if has_semester_id:
-                            # 更新該學期所有沒有圖片的記錄
                             cursor.execute("""
                                 UPDATE absence_records 
                                 SET image_path = %s, updated_at = NOW()
@@ -1784,19 +1887,32 @@ def submit_and_generate_api():
                                 AND (image_path IS NULL OR image_path = '')
                             """, (absence_image_path, user_id, semester_id))
                         else:
-                            # 如果沒有 semester_id 欄位，更新所有沒有圖片的記錄
                             cursor.execute("""
                                 UPDATE absence_records 
                                 SET image_path = %s, updated_at = NOW()
                                 WHERE user_id = %s 
                                 AND (image_path IS NULL OR image_path = '')
                             """, (absence_image_path, user_id))
-                        
-                        conn.commit()
-                        print(f"✅ 已將整體佐證圖片更新到缺勤記錄")
-                    except Exception as e:
-                        print(f"⚠️ 更新整體佐證圖片失敗: {e}")
-                        traceback.print_exc()
+                    else:
+                        # 未傳學期時：先更新所有「尚無圖片」的記錄
+                        cursor.execute("""
+                            UPDATE absence_records 
+                            SET image_path = %s, updated_at = NOW()
+                            WHERE user_id = %s 
+                            AND (image_path IS NULL OR image_path = '')
+                        """, (absence_image_path, user_id))
+                    # 若沒有任何一筆被更新，改為更新該使用者最新一筆缺勤記錄
+                    if cursor.rowcount == 0:
+                        cursor.execute("""
+                            UPDATE absence_records ar
+                            JOIN (SELECT id FROM absence_records WHERE user_id = %s ORDER BY id DESC LIMIT 1) t ON ar.id = t.id
+                            SET ar.image_path = %s, ar.updated_at = NOW()
+                        """, (user_id, absence_image_path))
+                    conn.commit()
+                    print(f"✅ 已將整體佐證圖片更新到缺勤記錄")
+                except Exception as e:
+                    print(f"⚠️ 更新整體佐證圖片失敗: {e}")
+                    traceback.print_exc()
         except Exception as e:
             print(f"⚠️ 處理缺勤記錄圖片失敗: {e}")
             traceback.print_exc()
@@ -1841,11 +1957,12 @@ def submit_and_generate_api():
                     "issuer": issuer.strip() if issuer else ""  # 新增：發證人
             })
 
-        # 將表單上傳的證照圖片路徑依序寫入 structured_certifications（與前端證照項目順序對應）
+        # 將表單上傳的證照圖片路徑依序寫入 structured_certifications（與前端證照項目順序 1:1 對應，避免重複或遺漏）
         if cert_photo_paths and structured_certifications:
-            for i, path in enumerate(cert_photo_paths):
-                if i < len(structured_certifications) and path:
-                    normalized = path.replace("\\", "/")
+            for i in range(len(structured_certifications)):
+                if i < len(cert_photo_paths) and cert_photo_paths[i]:
+                    path = cert_photo_paths[i]
+                    normalized = (path or "").replace("\\", "/")
                     if "uploads" in normalized:
                         parts = normalized.split("/")
                         idx_u = parts.index("uploads")
@@ -1876,6 +1993,22 @@ def submit_and_generate_api():
         cert_codes = request.form.getlist('cert_code[]')
         cert_issuers = request.form.getlist('cert_issuer[]')  # 新增：發證人列表
         
+        # 若未上傳新成績單，從資料庫取既有 ProofImage 寫回各課程（供 save_structured_data 使用）
+        if not transcript_path and result and student_id:
+            cursor.execute("SHOW COLUMNS FROM course_grades LIKE 'ProofImage'")
+            if cursor.fetchone():
+                cursor.execute("""
+                    SELECT ProofImage FROM course_grades
+                    WHERE StuID = %s AND ProofImage IS NOT NULL AND ProofImage != ''
+                    LIMIT 1
+                """, (student_id,))
+                row = cursor.fetchone()
+                if row and row.get('ProofImage'):
+                    existing_proof = (row['ProofImage'] or '').replace('\\', '/')
+                    for c in courses:
+                        if not c.get('proof_image'):
+                            c['proof_image'] = existing_proof
+
         # 建立結構化資料（傳入 save_structured_data）
         semester_id = get_current_semester_id(cursor)
         structured_data = {
@@ -1961,8 +2094,9 @@ def submit_and_generate_api():
 
         # 生成 Word 文件
         student_data_for_doc = get_student_info_for_doc(cursor, student_id, semester_id=semester_id)
-        # PhotoPath & ConductScoreNumeric
-        student_data_for_doc["info"]["PhotoPath"] = photo_path
+        # PhotoPath & ConductScoreNumeric（未上傳新照片時保留既有路徑）
+        if photo_path is not None:
+            student_data_for_doc["info"]["PhotoPath"] = photo_path
         student_data_for_doc["info"]["ConductScoreNumeric"] = data.get("conduct_score_numeric")
         # 傳遞證照圖片與名稱清單（generate 會自行從 certs 讀）
         student_data_for_doc["cert_photo_paths"] = cert_photo_paths
@@ -1974,27 +2108,25 @@ def submit_and_generate_api():
         absence_keys_in_doc = {k: v for k, v in student_data_for_doc.items() if k.startswith("absence_")}
         print("📊 student_data_for_doc 中的缺勤統計數據:", absence_keys_in_doc)
 
+        # 一律產生新檔並 INSERT 新履歷列，不覆蓋既有檔案，讓「前版本」仍可下載到原本內容
         filename = f"{student_id}_履歷_{datetime.now().strftime('%Y%m%d_%H%M%S')}.docx"
-        save_path = os.path.join(UPLOAD_FOLDER, filename)
+        save_path = os.path.join(BASE_UPLOAD_DIR, UPLOAD_FOLDER, filename) if not os.path.isabs(UPLOAD_FOLDER) else os.path.join(UPLOAD_FOLDER, filename)
 
         if not generate_application_form_docx(student_data_for_doc, save_path):
             conn.rollback()
             return jsonify({"success": False, "message": "文件生成失敗"}), 500
 
-        # 寫入 resumes
-        # status: 班導/主任審核狀態，預設為 'uploaded'
-        # 使用 status 字段表示履歷狀態，初始為 'uploaded'（待班導/主任審核）
-        # category 設為 'draft'（草稿），學生需要提交後才會進入審核流程
+        filepath_for_db = (os.path.join(UPLOAD_FOLDER, filename)).replace("\\", "/")
         cursor.execute("""
             INSERT INTO resumes
             (user_id, filepath, original_filename, status, category, semester_id, created_at)
             VALUES (%s, %s, %s, %s, %s, %s, NOW())
         """, (
             user_id,
-            save_path,
+            filepath_for_db,
             filename,
-            'uploaded',  # 履歷狀態：待班導/主任審核
-            'draft',     # 分類：草稿（學生需要提交後才會進入審核）
+            'uploaded',
+            'draft',
             semester_id
         ))
 
@@ -2051,14 +2183,11 @@ def generate_application_form_docx(student_data, output_path):
             except:
                 pass
 
-        # 照片
+        # 照片（使用 safe_create 驗證格式，避免 render 時 UnrecognizedImageError）
         image_obj = None
         photo_path = info.get("PhotoPath")
         if photo_path and os.path.exists(photo_path):
-            try:
-                image_obj = InlineImage(doc, os.path.abspath(photo_path), width=Inches(1.2))
-            except Exception as e:
-                print(f"⚠️ 圖片載入錯誤: {e}")
+            image_obj = safe_create_inline_image(doc, photo_path, Inches(1.2), "學生照片")
 
         # 處理課程資料（保留原邏輯）
         MAX_COURSES = 30
@@ -2075,27 +2204,21 @@ def generate_application_form_docx(student_data, output_path):
                     course = padded_grades[index]
                     row_num = i + 1
                     col_num = j + 1
-                    context_courses[f'CourseName_{row_num}_{col_num}'] = course.get('CourseName', '')
-                    context_courses[f'Credits_{row_num}_{col_num}'] = course.get('Credits', '')
+                    context_courses[f'CourseName_{row_num}_{col_num}'] = (course.get('CourseName') or '')
+                    context_courses[f'Credits_{row_num}_{col_num}'] = (course.get('Credits') or '')
 
-        # 插入成績單圖片：嘗試從 student_data['transcript_path']（由 get_student_info_for_doc 提供）
+        # 插入成績單圖片：使用 safe_create 驗證格式，避免 render 時 UnrecognizedImageError
         transcript_obj = None
         transcript_path = student_data.get("transcript_path") or info.get("TranscriptPath") or ''
         if transcript_path and os.path.exists(transcript_path):
-            try:
-                transcript_obj = InlineImage(doc, os.path.abspath(transcript_path), width=Inches(6.0))
-            except Exception as e:
-                print(f"⚠️ 成績單圖片載入錯誤: {e}")
+            transcript_obj = safe_create_inline_image(doc, transcript_path, Inches(6.0), "成績單")
 
         # 缺勤佐證圖片
         absence_proof_obj = None
         absence_proof_path = student_data.get("Absence_Proof_Path")
         image_size = Inches(6.0)
         if absence_proof_path and os.path.exists(absence_proof_path):
-            try:
-                absence_proof_obj = InlineImage(doc, os.path.abspath(absence_proof_path), width=image_size)
-            except Exception as e:
-                print(f"⚠️ 缺勤佐證圖片載入錯誤: {e}")
+            absence_proof_obj = safe_create_inline_image(doc, absence_proof_path, image_size, "缺勤佐證")
 
         # 操行等級
         conduct_score = info.get('ConductScore', '')
@@ -2108,38 +2231,56 @@ def generate_application_form_docx(student_data, output_path):
         # certs 已經從 get_student_info_for_doc 返回，格式統一
         # 優先使用前端提交的證照名稱（如果有的話）
         # 這樣可以確保只顯示用戶實際選擇的證照，而不是數據庫中所有相關記錄
-        cert_names_from_form = student_data.get("cert_names", [])
-        cert_photo_paths_from_form = student_data.get("cert_photo_paths", [])
-        
-        # 如果有前端提交的證照名稱，使用它們來覆蓋數據庫查詢結果
-        if cert_names_from_form:
-            # 重新構建證照列表，使用前端提交的名稱
-            certs_with_form_names = []
-            for idx, (name, path) in enumerate(zip(cert_names_from_form, cert_photo_paths_from_form)):
-                if name and name.strip():
-                    # 從原始 certs 中找到對應的證照（通過索引或路徑匹配）
-                    matching_cert = None
-                    if idx < len(certs):
-                        matching_cert = certs[idx]
-                    elif path:
-                        # 通過路徑匹配
-                        for c in certs:
-                            if c.get("cert_path") == path:
-                                matching_cert = c
-                                break
-                    
-                    # 使用前端提交的名稱，但保留其他信息（類別、路徑等）
-                    cert_item = {
-                        "cert_name": name.strip(),  # 使用前端提交的名稱
-                        "category": matching_cert.get("category", "other") if matching_cert else "other",
-                        "cert_path": path if path else (matching_cert.get("cert_path", "") if matching_cert else ""),
-                        "acquire_date": matching_cert.get("acquire_date", "") if matching_cert else "",
-                    }
-                    certs_with_form_names.append(cert_item)
-            
-            # 如果有匹配的證照，使用新的列表；否則使用原始列表
-            if certs_with_form_names:
-                certs = certs_with_form_names
+        cert_photo_paths_from_form = student_data.get("cert_photo_paths", []) or []
+        structured_certs = student_data.get("structured_certifications", [])
+
+        # 以 structured_certifications 為準疊代，確保每筆都有 authority_id / category，避免索引錯位
+        # 同一 photo_path 只使用一次，避免編輯後重新上傳時出現兩張一樣的證照圖
+        if structured_certs:
+            certs_from_form = []
+            used_photo_paths = set()
+            for idx, struct in enumerate(structured_certs):
+                name = (struct.get("name") or "").strip()
+                if not name:
+                    continue
+                path = (struct.get("cert_path") or "")
+                if not path and idx < len(cert_photo_paths_from_form):
+                    path = cert_photo_paths_from_form[idx] or ""
+                path = (path or "").replace("\\", "/").strip()
+                if path and path in used_photo_paths:
+                    path = ""
+                elif path:
+                    used_photo_paths.add(path)
+                matching_cert = certs[idx] if idx < len(certs) else None
+                if not matching_cert and path:
+                    for c in certs:
+                        if (c.get("cert_path") or "").replace("\\", "/") == path:
+                            matching_cert = c
+                            break
+                # 類別：勞動部 authority_id=1 必為 labor；否則用表單 category 或 DB 匹配
+                aid = struct.get("authority_id")
+                if aid is not None and str(aid).strip() in ("1",):
+                    category = "labor"
+                else:
+                    try:
+                        ai = int(aid)
+                        if ai == 1:
+                            category = "labor"
+                        else:
+                            category = (struct.get("category") or "").strip().lower() or "other"
+                            if category not in ("labor", "intl", "local", "other"):
+                                category = "other"
+                    except (TypeError, ValueError):
+                        cat = (struct.get("category") or "").strip().lower()
+                        category = cat if cat in ("labor", "intl", "local", "other") else ("other" if not matching_cert else matching_cert.get("category", "other"))
+                certs_from_form.append({
+                    "cert_name": name,
+                    "category": category,
+                    "cert_path": path or (matching_cert.get("cert_path", "") if matching_cert else ""),
+                    "acquire_date": (matching_cert.get("acquire_date") or struct.get("acquire_date") or "") if matching_cert else (struct.get("acquire_date") or ""),
+                })
+            if certs_from_form:
+                certs = certs_from_form
         
         # 分類證照
         labor_list, intl_list, local_list, other_list = categorize_certifications(certs)
@@ -2158,24 +2299,24 @@ def generate_application_form_docx(student_data, output_path):
             autobiography = autobiography.strip('\n')
         
         context = {
-            'StuID': info.get('StuID', ''),
-            'StuName': info.get('StuName', ''),
+            'StuID': (info.get('StuID') or ''),
+            'StuName': (info.get('StuName') or ''),
             'BirthYear': year, 'BirthMonth': month, 'BirthDay': day,
-            'Gender': info.get('Gender', ''),
-            'Phone': info.get('Phone', ''),
-            'Email': info.get('Email', ''),
-            'Address': info.get('Address', ''),
-            'ConductScoreNumeric': info.get('ConductScoreNumeric', ''),
+            'Gender': (info.get('Gender') or ''),
+            'Phone': (info.get('Phone') or ''),
+            'Email': (info.get('Email') or ''),
+            'Address': (info.get('Address') or ''),
+            'ConductScoreNumeric': (info.get('ConductScoreNumeric') or ''),
             'ConductScore': conduct_score,
-            'Autobiography': autobiography,  # 使用處理過的自傳
-            'Image_1': image_obj if image_obj else "",
-            'transcript_path': transcript_obj if transcript_obj else "",
-            'Absence_Proof_Image': absence_proof_obj if absence_proof_obj else ""
+            'Autobiography': (autobiography or ''),
         }
-        
-        # 清空可能出現在"缺勤記錄"標題上方的空變數
-        # 如果模板中有這些變數但值為空，設為 None 以避免顯示空白行
-        # 常見的可能變數名
+        if image_obj:
+            context['Image_1'] = image_obj
+        if transcript_obj:
+            context['transcript_path'] = transcript_obj
+        if absence_proof_obj:
+            context['Absence_Proof_Image'] = absence_proof_obj
+
         empty_vars_to_clear = [
             'empty_line_1', 'empty_line_2', 'empty_line_3',
             'blank_line_1', 'blank_line_2', 'blank_line_3',
@@ -2184,15 +2325,14 @@ def generate_application_form_docx(student_data, output_path):
             'blank_1', 'blank_2', 'blank_3',
         ]
         for var in empty_vars_to_clear:
-            context[var] = None  # 設為 None 而不是空字符串，Jinja2 會跳過 None 值
+            context[var] = ""
 
         # 加入缺勤統計
         # 只填充這8個標準字段，確保沒有多餘的空白行
         absence_fields = ['曠課', '遲到', '事假', '病假', '生理假', '公假', '喪假', '總計']
         for t in absence_fields:
             key = f"absence_{t}_units"
-            # 從 student_data 中獲取缺勤統計數據
-            value = student_data.get(key, "0 節")
+            value = (student_data.get(key) or "0 節")
             context[key] = value
             # 調試輸出
             if value == "0 節" and t != "總計":
@@ -2251,9 +2391,8 @@ def generate_application_form_docx(student_data, output_path):
         certs_to_display = certs_with_photos[:max_total]
         total_certs = len(certs_to_display)
         
-        # 初始化所有證照圖片和名稱為空
+        # 初始化證照名稱為空；圖片僅在有圖時才設 key，未輸入不設以免顯示 None
         for idx in range(1, 33):
-            context[f"CertPhotoImages_{idx}"] = ""
             context[f"CertPhotoName_{idx}"] = ""
         
         # 初始化所有頁面區塊為 False（不顯示）
@@ -2312,26 +2451,11 @@ def generate_application_form_docx(student_data, output_path):
 
         context.update(lang_context)
         
-        # 在渲染前，清理所有可能導致空白行的空變數
-        # 將所有空字符串變數設為 None，這樣 Jinja2 在模板中會跳過它們
-        # 但保留重要的變數（如數字、圖片等）
+        # 渲染前：所有 None 改為 ""，避免 Word 顯示 "None"；未輸入欄位顯示空白
         for key in list(context.keys()):
-            value = context[key]
-            # 如果是空字符串，設為 None（但保留重要的變數）
-            if isinstance(value, str) and value.strip() == '':
-                # 檢查是否為重要變數（不應設為 None）
-                important_vars = ['StuID', 'StuName', 'Gender', 'Phone', 'Email', 'Address', 
-                                 'ConductScore', 'ConductScoreNumeric', 'BirthYear', 'BirthMonth', 'BirthDay']
-                if key not in important_vars:
-                    # 對於可能出現在"缺勤記錄"標題上方的變數，設為 None
-                    # 這樣模板中如果使用 {% if variable %} 就不會顯示空白行
-                    if any(key.startswith(prefix) for prefix in ['empty_', 'blank_', 'spacer_', 'extra_']):
-                        context[key] = None
-                    # 或者，如果變數名包含 "line" 或 "row"，也可能是空白行變數
-                    elif 'line' in key.lower() or 'row' in key.lower():
-                        context[key] = None
+            if context[key] is None:
+                context[key] = ""
 
-        # 渲染與儲存
         doc.render(context)
         doc.save(output_path)
         print(f"✅ 履歷文件已生成: {output_path}")
@@ -4655,18 +4779,25 @@ def is_valid_image_file(file_path):
 # 安全地創建 InlineImage 對象
 def safe_create_inline_image(doc, file_path, width, description=""):
     """
-    安全地創建 InlineImage 對象，如果失敗則返回 None
+    安全地創建 InlineImage 對象，如果失敗則返回 None。
+    先用 PIL 與 python-docx Image.from_file 驗證，避免 render 時 UnrecognizedImageError。
     """
     if not file_path or not os.path.exists(file_path):
         return None
-    
-    # 先驗證圖片
+
     if not is_valid_image_file(file_path):
         print(f"⚠️ {description}圖片無效或損壞，跳過: {file_path}")
         return None
-    
+
+    abs_path = os.path.abspath(file_path)
     try:
-        abs_path = os.path.abspath(file_path)
+        from docx.image.image import Image as DocxImage
+        DocxImage.from_file(abs_path)
+    except Exception as e:
+        print(f"⚠️ {description}圖片格式不被 Word 支援，跳過: {file_path} ({e})")
+        return None
+
+    try:
         image_obj = InlineImage(doc, abs_path, width=width)
         return image_obj
     except Exception as e:
@@ -4922,10 +5053,14 @@ def fill_certificates_to_doc(context, prefix, items, max_count):
     """
     填入 Word 模板（表格區）
     prefix 例如: LaborCerts_  → LaborCerts_1, LaborCerts_2 …
+    空欄位與 None 一律顯示空白。
     """
     for i in range(1, max_count + 1):
         if i <= len(items):
-            context[f"{prefix}{i}"] = items[i-1].get("table_name", "")
+            name = (items[i-1].get("table_name") or "").strip()
+            if name == "None":
+                name = ""
+            context[f"{prefix}{i}"] = name
         else:
             context[f"{prefix}{i}"] = ""
 
@@ -4934,24 +5069,29 @@ def fill_certificate_photos(context, doc, items, start_index, max_count=8):
     圖片區（依順序放，不分類）
     start_index → 從第幾張開始，例如 1、9、17、25
     max_count → 最多填充幾張（實際填充的數量可能少於此值）
+    空欄位一律填空白，不顯示 None。
     """
     image_size = Inches(3.0)
     actual_count = min(len(items), max_count)
     
     # 填充實際有的證照
     for idx, item in enumerate(items[:max_count], start=start_index):
-        photo_path = item.get("photo_path", "")
-        photo_name = item.get("photo_name", "")
+        photo_path = item.get("photo_path", "") or ""
+        photo_name = (item.get("photo_name", "") or "").strip()
+        if photo_name == "None":
+            photo_name = ""
         
         if photo_path:
             image_obj = safe_create_inline_image(doc, photo_path, image_size, "證照")
-            context[f"CertPhotoImages_{idx}"] = image_obj if image_obj else ""
+            if image_obj:
+                context[f"CertPhotoImages_{idx}"] = image_obj
+            else:
+                context[f"CertPhotoImages_{idx}"] = ""
         else:
             context[f"CertPhotoImages_{idx}"] = ""
-        
-        context[f"CertPhotoName_{idx}"] = photo_name
-    
-    # 清空本頁未使用的格子（如果實際數量少於 max_count）
+        context[f"CertPhotoName_{idx}"] = photo_name or ""
+
+    # 未使用的欄位：圖片與名稱都設為空白，避免模板顯示 None
     if actual_count < max_count:
         for idx in range(start_index + actual_count, start_index + max_count):
             context[f"CertPhotoImages_{idx}"] = ""
@@ -5043,7 +5183,9 @@ def save_structured_data(cursor, student_id, data, semester_id=None):
         processed_certs = set() # 用於去重 (job_category, level)
 
         # (3) 處理結構化的證照資料 (structured_certifications)
-        for cert in data.get("structured_certifications", []):
+        struct_certs = data.get("structured_certifications", [])
+        print(f"📋 收到 structured_certifications: {len(struct_certs)} 筆")
+        for cert in struct_certs:
             row = {"StuID": student_id}
             db_job_category = None
             db_level = None
@@ -5062,13 +5204,38 @@ def save_structured_data(cursor, student_id, data, semester_id=None):
                 db_job_category = (cert.get("job_category") or "").strip() or None
                 db_level = (cert.get("level") or "").strip() or None
             elif raw.isdigit():
-                # 前端傳的是 certificate_codes.id
+                # 數字可能是 id（如 2）或 code（如 14901、11800）。先查 id 是否存在，否則當 code 查
                 try:
-                    cert_code_id = int(raw)
-                except (ValueError, TypeError):
+                    as_id = int(raw)
+                    cursor.execute("SELECT id FROM certificate_codes WHERE id = %s LIMIT 1", (as_id,))
+                    if cursor.fetchone():
+                        cert_code_id = as_id
+                    else:
+                        level_from_cert = (cert.get("level") or "").strip()
+                        if level_from_cert:
+                            cursor.execute("""
+                                SELECT id, job_category, level, authority_id 
+                                FROM certificate_codes 
+                                WHERE code = %s AND (level = %s OR level IS NULL)
+                                LIMIT 1
+                            """, (raw_upper, level_from_cert))
+                        else:
+                            cursor.execute("""
+                                SELECT id, job_category, level, authority_id 
+                                FROM certificate_codes 
+                                WHERE code = %s
+                                LIMIT 1
+                            """, (raw_upper,))
+                        cert_info = cursor.fetchone()
+                        if cert_info:
+                            cert_code_id = cert_info.get('id')
+                except (ValueError, TypeError) as e:
+                    cert_code_id = None
+                except Exception as e:
+                    print(f"⚠️ 查詢 certificate_codes 失敗: {e}")
                     cert_code_id = None
             else:
-                # 前端傳的是證照代碼 code（如 11800、TQC-WORD），查詢對應的 id
+                # 前端傳的是證照代碼 code（如 TQC-WORD），查詢對應的 id
                 level_from_cert = (cert.get("level") or "").strip()
                 try:
                     if level_from_cert:
@@ -5129,7 +5296,7 @@ def save_structured_data(cursor, student_id, data, semester_id=None):
 
             if not cert_name:
                 print(f"⚠️ 忽略無名稱證照記錄: {cert}")
-                continue # 忽略沒有名稱的記錄
+                continue
 
             # 檢查是否重複（使用 job_category, level 作為唯一標識）
             if db_job_category and db_level:
@@ -5188,8 +5355,9 @@ def save_structured_data(cursor, student_id, data, semester_id=None):
 
         # (5) 實際寫入資料庫
         if cert_rows:
-            # 先刪除舊資料
+            print(f"📋 準備寫入 student_certifications: {len(cert_rows)} 筆")
             cursor.execute("DELETE FROM student_certifications WHERE StuID=%s", (student_id,))
+            insert_failed = False
             for row in cert_rows:
                 cols = list(row.keys())
                 values = list(row.values())
@@ -5201,9 +5369,15 @@ def save_structured_data(cursor, student_id, data, semester_id=None):
                         (*values, datetime.now())
                     )
                 except Exception as e:
-                    # 如果因為唯一索引衝突導致插入失敗，記錄錯誤但繼續處理其他記錄
-                    print(f"⚠️ 插入證照記錄失敗（可能是唯一索引衝突）: {e}")
+                    print(f"⚠️ 插入證照記錄失敗: {e}")
                     print(f" 記錄內容: {row}")
+                    insert_failed = True
+                    raise
+            if not insert_failed:
+                print(f"✅ student_certifications 已寫入 {len(cert_rows)} 筆")
+        else:
+            if struct_certs:
+                print(f"⚠️ 有 {len(struct_certs)} 筆證照但 cert_rows 為空（可能全部被跳過），不刪除既存證照")
         
         # -------------------------------------------------------------
         # 4) 儲存語言能力 student_languageskills
@@ -5491,6 +5665,11 @@ def format_data_for_doc(student_data, doc_path=None):
     fill_certificates_to_doc(context, "LocalCerts_", local, 4)
     fill_certificates_to_doc(context, "OtherCerts_", other, 4)
     
+    # 先將所有證照圖片/名稱佔位符設為空白，避免模板顯示 None
+    for i in range(1, 33):
+        context[f"CertPhotoImages_{i}"] = ""
+        context[f"CertPhotoName_{i}"] = ""
+    
     # 圖片區（不分類，按順序最多 32 張）
     certs_for_photos = [
         {'photo_path': c.get('CertPath'), 'photo_name': f"{c.get('job_category', '')}{c.get('level', '')}" if c.get('job_category') else c.get('CertName')}
@@ -5594,8 +5773,8 @@ def get_resume_data():
         if not resume:
             return jsonify({"success": False, "message": "沒有已提交的履歷"}), 404
 
-        # ===== 2. 抓 StudentID（學號）=====
-        cursor.execute("SELECT username FROM users WHERE id=%s", (user_id,))
+        # ===== 2. 抓 StudentID（學號）及 users 的 name, email, avatar_url =====
+        cursor.execute("SELECT username, name, email, avatar_url FROM users WHERE id=%s", (user_id,))
         user_result = cursor.fetchone()
         if not user_result:
             return jsonify({"success": False, "message": "找不到使用者"}), 404
@@ -5787,6 +5966,8 @@ def get_resume_data():
                     (c.get("cert_code") is not None)
                 )
             ]
+            # 依 id 升序排列，使編輯時證照順序與使用者新增順序一致（先新增的在前）
+            certifications.sort(key=lambda c: (c.get("id") or 0))
 
         # ===== 7. 語言能力 =====
 
@@ -5895,26 +6076,36 @@ def get_resume_data():
                 "AcquisitionDate": acquisition_date_str  # 轉換為字符串格式，確保 JSON 序列化正常
             })
 
-        # ===== 10. 回傳結果 =====
+        # ===== 10. 回傳結果（路徑一律正斜線、不回傳 None）=====
+        def norm_path(p):
+            if p is None or (isinstance(p, str) and p.strip() == ""):
+                return ""
+            return (p or "").replace("\\", "/").strip()
+
+        # 姓名、電子信箱、個人頭貼優先從 users 表帶入
+        user_name = (user_result.get("name") or "").strip() or student_info.get("StuName", "")
+        user_email = (user_result.get("email") or "").strip() or student_info.get("Email", "")
+        user_avatar = norm_path(user_result.get("avatar_url")) or norm_path(student_info.get("PhotoPath"))
+
         return jsonify({
             "success": True,
             "data": {
                 "student_info": {
-                    "name": student_info.get("StuName", ""),
+                    "name": user_name,
                     "birth_date": birth_date or "",
                     "gender": student_info.get("Gender", ""),
                     "phone": student_info.get("Phone", ""),
-                    "email": student_info.get("Email", ""),
+                    "email": user_email,
                     "address": student_info.get("Address", ""),
                     "conduct_score": student_info.get("ConductScore", ""),
                     "autobiography": student_info.get("Autobiography", ""),
-                    "photo_path": student_info.get("PhotoPath", "")
+                    "photo_path": user_avatar
                 },
                 "courses": courses,
                 "certifications": formatted_certs,
                 "languages": languages,
-                "transcript_path": transcript_path,
-                "absence_proof_path": absence_proof_path
+                "transcript_path": norm_path(transcript_path),
+                "absence_proof_path": norm_path(absence_proof_path)
             }
         })
 
@@ -6109,6 +6300,13 @@ def submit_and_generate_api():
             new_filename = f"{user_id}_photo_{datetime.now().strftime('%Y%m%d_%H%M%S')}{ext}"
             photo_path = os.path.join(photo_dir, new_filename)
             photo.save(photo_path)
+            photo_path = photo_path.replace("\\", "/")
+        else:
+            # 未上傳新照片時保留資料庫既有路徑
+            cursor.execute("SELECT PhotoPath FROM Student_Info WHERE StuID = (SELECT username FROM users WHERE id=%s)", (user_id,))
+            row = cursor.fetchone()
+            if row and row.get('PhotoPath'):
+                photo_path = (row['PhotoPath'] or '').replace('\\', '/')
 
         # 儲存成績單檔案（先儲存檔案，再 update 到 course_grades 的 transcript_path）
         transcript_path = None
@@ -6122,6 +6320,7 @@ def submit_and_generate_api():
             new_filename = f"{user_id}_transcript_{datetime.now().strftime('%Y%m%d_%H%M%S')}{ext}"
             transcript_path = os.path.join(transcript_dir, new_filename)
             transcript_file.save(transcript_path)
+            transcript_path = transcript_path.replace("\\", "/")
 
         # 儲存多張證照
         cert_photo_paths = []
@@ -6159,7 +6358,16 @@ def submit_and_generate_api():
                 traceback.print_exc()
                 image_path_for_template = None
 
-        if image_path_for_template or certificate_description:
+        # 先解析 structured_certifications，才能決定是否插入單張證照（避免多張證照時索引錯位、圖片重複）
+        _structured_from_form = []
+        _structured_json = request.form.get('structured_certifications', '')
+        if _structured_json:
+            try:
+                _structured_from_form = json.loads(_structured_json)
+            except Exception:
+                pass
+        # 僅在「沒有」使用新格式多張證照時，才在 index 0 插入單張證照
+        if (image_path_for_template or certificate_description) and not _structured_from_form:
             if cert_photo_paths is None:
                 cert_photo_paths = []
             if cert_names is None:
@@ -6262,7 +6470,8 @@ def submit_and_generate_api():
                     fname = f"{user_id}_absence_proof_{datetime.now().strftime('%Y%m%d_%H%M%S')}{ext}"
                     savep = os.path.join(ABSENCE_PROOF_FOLDER, fname)
                     uploaded_proof.save(savep)
-                    absence_image_path = savep
+                    # 統一用正斜線存進 DB，方便前端與靜態檔使用
+                    absence_image_path = savep.replace("\\", "/")
                 else:
                     print(f"⚠️ 上傳的缺勤佐證圖片格式不支援: {uploaded_proof.mimetype}")
         except Exception as e:
@@ -6328,13 +6537,13 @@ def submit_and_generate_api():
                                 fname = f"{user_id}_record_{record_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}{ext}"
                                 save_path = os.path.join(ABSENCE_PROOF_FOLDER, fname)
                                 uploaded_image.save(save_path)
-                                
+                                save_path_db = save_path.replace("\\", "/")
                                 # 更新資料庫中對應記錄的 image_path
                                 cursor.execute("""
                                     UPDATE absence_records 
                                     SET image_path = %s, updated_at = NOW()
                                     WHERE id = %s AND user_id = %s
-                                """, (save_path, record_id, user_id))
+                                """, (save_path_db, record_id, user_id))
                                 
                                 print(f"✅ 已更新缺勤記錄 {record_id} 的佐證圖片: {save_path}")
                             except Exception as e:
@@ -6347,17 +6556,16 @@ def submit_and_generate_api():
                     print(f"⚠️ 解析 absence_records_with_images 失敗: {e}")
                     traceback.print_exc()
             
-            # 2. 如果有整體佐證圖片，更新到該學期所有沒有圖片的記錄
+            # 2. 如果有整體佐證圖片，更新到該學期或全部沒有圖片的記錄
             if absence_image_path:
                 semester_id = request.form.get("semester_id", None)
-                if semester_id:
-                    try:
+                try:
+                    if semester_id:
                         # 檢查是否有 semester_id 欄位
                         cursor.execute("SHOW COLUMNS FROM absence_records LIKE 'semester_id'")
                         has_semester_id = cursor.fetchone() is not None
                         
                         if has_semester_id:
-                            # 更新該學期所有沒有圖片的記錄
                             cursor.execute("""
                                 UPDATE absence_records 
                                 SET image_path = %s, updated_at = NOW()
@@ -6365,19 +6573,32 @@ def submit_and_generate_api():
                                 AND (image_path IS NULL OR image_path = '')
                             """, (absence_image_path, user_id, semester_id))
                         else:
-                            # 如果沒有 semester_id 欄位，更新所有沒有圖片的記錄
                             cursor.execute("""
                                 UPDATE absence_records 
                                 SET image_path = %s, updated_at = NOW()
                                 WHERE user_id = %s 
                                 AND (image_path IS NULL OR image_path = '')
                             """, (absence_image_path, user_id))
-                        
-                        conn.commit()
-                        print(f"✅ 已將整體佐證圖片更新到缺勤記錄")
-                    except Exception as e:
-                        print(f"⚠️ 更新整體佐證圖片失敗: {e}")
-                        traceback.print_exc()
+                    else:
+                        # 未傳學期時：先更新所有「尚無圖片」的記錄
+                        cursor.execute("""
+                            UPDATE absence_records 
+                            SET image_path = %s, updated_at = NOW()
+                            WHERE user_id = %s 
+                            AND (image_path IS NULL OR image_path = '')
+                        """, (absence_image_path, user_id))
+                    # 若沒有任何一筆被更新，改為更新該使用者最新一筆缺勤記錄
+                    if cursor.rowcount == 0:
+                        cursor.execute("""
+                            UPDATE absence_records ar
+                            JOIN (SELECT id FROM absence_records WHERE user_id = %s ORDER BY id DESC LIMIT 1) t ON ar.id = t.id
+                            SET ar.image_path = %s, ar.updated_at = NOW()
+                        """, (user_id, absence_image_path))
+                    conn.commit()
+                    print(f"✅ 已將整體佐證圖片更新到缺勤記錄")
+                except Exception as e:
+                    print(f"⚠️ 更新整體佐證圖片失敗: {e}")
+                    traceback.print_exc()
         except Exception as e:
             print(f"⚠️ 處理缺勤記錄圖片失敗: {e}")
             traceback.print_exc()
@@ -6422,11 +6643,12 @@ def submit_and_generate_api():
                     "issuer": issuer.strip() if issuer else ""  # 新增：發證人
             })
 
-        # 將表單上傳的證照圖片路徑依序寫入 structured_certifications（與前端證照項目順序對應）
+        # 將表單上傳的證照圖片路徑依序寫入 structured_certifications（與前端證照項目順序 1:1 對應，避免重複或遺漏）
         if cert_photo_paths and structured_certifications:
-            for i, path in enumerate(cert_photo_paths):
-                if i < len(structured_certifications) and path:
-                    normalized = path.replace("\\", "/")
+            for i in range(len(structured_certifications)):
+                if i < len(cert_photo_paths) and cert_photo_paths[i]:
+                    path = cert_photo_paths[i]
+                    normalized = (path or "").replace("\\", "/")
                     if "uploads" in normalized:
                         parts = normalized.split("/")
                         idx_u = parts.index("uploads")
@@ -6457,6 +6679,22 @@ def submit_and_generate_api():
         cert_codes = request.form.getlist('cert_code[]')
         cert_issuers = request.form.getlist('cert_issuer[]')  # 新增：發證人列表
         
+        # 若未上傳新成績單，從資料庫取既有 ProofImage 寫回各課程（供 save_structured_data 使用）
+        if not transcript_path and result and student_id:
+            cursor.execute("SHOW COLUMNS FROM course_grades LIKE 'ProofImage'")
+            if cursor.fetchone():
+                cursor.execute("""
+                    SELECT ProofImage FROM course_grades
+                    WHERE StuID = %s AND ProofImage IS NOT NULL AND ProofImage != ''
+                    LIMIT 1
+                """, (student_id,))
+                row = cursor.fetchone()
+                if row and row.get('ProofImage'):
+                    existing_proof = (row['ProofImage'] or '').replace('\\', '/')
+                    for c in courses:
+                        if not c.get('proof_image'):
+                            c['proof_image'] = existing_proof
+
         # 建立結構化資料（傳入 save_structured_data）
         semester_id = get_current_semester_id(cursor)
         structured_data = {
@@ -6542,8 +6780,9 @@ def submit_and_generate_api():
 
         # 生成 Word 文件
         student_data_for_doc = get_student_info_for_doc(cursor, student_id, semester_id=semester_id)
-        # PhotoPath & ConductScoreNumeric
-        student_data_for_doc["info"]["PhotoPath"] = photo_path
+        # PhotoPath & ConductScoreNumeric（未上傳新照片時保留既有路徑）
+        if photo_path is not None:
+            student_data_for_doc["info"]["PhotoPath"] = photo_path
         student_data_for_doc["info"]["ConductScoreNumeric"] = data.get("conduct_score_numeric")
         # 傳遞證照圖片與名稱清單（generate 會自行從 certs 讀）
         student_data_for_doc["cert_photo_paths"] = cert_photo_paths
@@ -6629,14 +6868,11 @@ def generate_application_form_docx(student_data, output_path):
             except:
                 pass
 
-        # 照片
+        # 照片（使用 safe_create 驗證格式，避免 render 時 UnrecognizedImageError）
         image_obj = None
         photo_path = info.get("PhotoPath")
         if photo_path and os.path.exists(photo_path):
-            try:
-                image_obj = InlineImage(doc, os.path.abspath(photo_path), width=Inches(1.2))
-            except Exception as e:
-                print(f"⚠️ 圖片載入錯誤: {e}")
+            image_obj = safe_create_inline_image(doc, photo_path, Inches(1.2), "學生照片")
 
         # 處理課程資料（保留原邏輯）
         MAX_COURSES = 30
@@ -6653,27 +6889,21 @@ def generate_application_form_docx(student_data, output_path):
                     course = padded_grades[index]
                     row_num = i + 1
                     col_num = j + 1
-                    context_courses[f'CourseName_{row_num}_{col_num}'] = course.get('CourseName', '')
-                    context_courses[f'Credits_{row_num}_{col_num}'] = course.get('Credits', '')
+                    context_courses[f'CourseName_{row_num}_{col_num}'] = (course.get('CourseName') or '')
+                    context_courses[f'Credits_{row_num}_{col_num}'] = (course.get('Credits') or '')
 
-        # 插入成績單圖片：嘗試從 student_data['transcript_path']（由 get_student_info_for_doc 提供）
+        # 插入成績單圖片：使用 safe_create 驗證格式，避免 render 時 UnrecognizedImageError
         transcript_obj = None
         transcript_path = student_data.get("transcript_path") or info.get("TranscriptPath") or ''
         if transcript_path and os.path.exists(transcript_path):
-            try:
-                transcript_obj = InlineImage(doc, os.path.abspath(transcript_path), width=Inches(6.0))
-            except Exception as e:
-                print(f"⚠️ 成績單圖片載入錯誤: {e}")
+            transcript_obj = safe_create_inline_image(doc, transcript_path, Inches(6.0), "成績單")
 
         # 缺勤佐證圖片
         absence_proof_obj = None
         absence_proof_path = student_data.get("Absence_Proof_Path")
         image_size = Inches(6.0)
         if absence_proof_path and os.path.exists(absence_proof_path):
-            try:
-                absence_proof_obj = InlineImage(doc, os.path.abspath(absence_proof_path), width=image_size)
-            except Exception as e:
-                print(f"⚠️ 缺勤佐證圖片載入錯誤: {e}")
+            absence_proof_obj = safe_create_inline_image(doc, absence_proof_path, image_size, "缺勤佐證")
 
         # 操行等級
         conduct_score = info.get('ConductScore', '')
@@ -6686,38 +6916,56 @@ def generate_application_form_docx(student_data, output_path):
         # certs 已經從 get_student_info_for_doc 返回，格式統一
         # 優先使用前端提交的證照名稱（如果有的話）
         # 這樣可以確保只顯示用戶實際選擇的證照，而不是數據庫中所有相關記錄
-        cert_names_from_form = student_data.get("cert_names", [])
-        cert_photo_paths_from_form = student_data.get("cert_photo_paths", [])
-        
-        # 如果有前端提交的證照名稱，使用它們來覆蓋數據庫查詢結果
-        if cert_names_from_form:
-            # 重新構建證照列表，使用前端提交的名稱
-            certs_with_form_names = []
-            for idx, (name, path) in enumerate(zip(cert_names_from_form, cert_photo_paths_from_form)):
-                if name and name.strip():
-                    # 從原始 certs 中找到對應的證照（通過索引或路徑匹配）
-                    matching_cert = None
-                    if idx < len(certs):
-                        matching_cert = certs[idx]
-                    elif path:
-                        # 通過路徑匹配
-                        for c in certs:
-                            if c.get("cert_path") == path:
-                                matching_cert = c
-                                break
-                    
-                    # 使用前端提交的名稱，但保留其他信息（類別、路徑等）
-                    cert_item = {
-                        "cert_name": name.strip(),  # 使用前端提交的名稱
-                        "category": matching_cert.get("category", "other") if matching_cert else "other",
-                        "cert_path": path if path else (matching_cert.get("cert_path", "") if matching_cert else ""),
-                        "acquire_date": matching_cert.get("acquire_date", "") if matching_cert else "",
-                    }
-                    certs_with_form_names.append(cert_item)
-            
-            # 如果有匹配的證照，使用新的列表；否則使用原始列表
-            if certs_with_form_names:
-                certs = certs_with_form_names
+        cert_photo_paths_from_form = student_data.get("cert_photo_paths", []) or []
+        structured_certs = student_data.get("structured_certifications", [])
+
+        # 以 structured_certifications 為準疊代，確保每筆都有 authority_id / category，避免索引錯位
+        # 同一 photo_path 只使用一次，避免編輯後重新上傳時出現兩張一樣的證照圖
+        if structured_certs:
+            certs_from_form = []
+            used_photo_paths = set()
+            for idx, struct in enumerate(structured_certs):
+                name = (struct.get("name") or "").strip()
+                if not name:
+                    continue
+                path = (struct.get("cert_path") or "")
+                if not path and idx < len(cert_photo_paths_from_form):
+                    path = cert_photo_paths_from_form[idx] or ""
+                path = (path or "").replace("\\", "/").strip()
+                if path and path in used_photo_paths:
+                    path = ""
+                elif path:
+                    used_photo_paths.add(path)
+                matching_cert = certs[idx] if idx < len(certs) else None
+                if not matching_cert and path:
+                    for c in certs:
+                        if (c.get("cert_path") or "").replace("\\", "/") == path:
+                            matching_cert = c
+                            break
+                # 類別：勞動部 authority_id=1 必為 labor；否則用表單 category 或 DB 匹配
+                aid = struct.get("authority_id")
+                if aid is not None and str(aid).strip() in ("1",):
+                    category = "labor"
+                else:
+                    try:
+                        ai = int(aid)
+                        if ai == 1:
+                            category = "labor"
+                        else:
+                            category = (struct.get("category") or "").strip().lower() or "other"
+                            if category not in ("labor", "intl", "local", "other"):
+                                category = "other"
+                    except (TypeError, ValueError):
+                        cat = (struct.get("category") or "").strip().lower()
+                        category = cat if cat in ("labor", "intl", "local", "other") else ("other" if not matching_cert else matching_cert.get("category", "other"))
+                certs_from_form.append({
+                    "cert_name": name,
+                    "category": category,
+                    "cert_path": path or (matching_cert.get("cert_path", "") if matching_cert else ""),
+                    "acquire_date": (matching_cert.get("acquire_date") or struct.get("acquire_date") or "") if matching_cert else (struct.get("acquire_date") or ""),
+                })
+            if certs_from_form:
+                certs = certs_from_form
         
         # 分類證照
         labor_list, intl_list, local_list, other_list = categorize_certifications(certs)
@@ -6736,24 +6984,24 @@ def generate_application_form_docx(student_data, output_path):
             autobiography = autobiography.strip('\n')
         
         context = {
-            'StuID': info.get('StuID', ''),
-            'StuName': info.get('StuName', ''),
+            'StuID': (info.get('StuID') or ''),
+            'StuName': (info.get('StuName') or ''),
             'BirthYear': year, 'BirthMonth': month, 'BirthDay': day,
-            'Gender': info.get('Gender', ''),
-            'Phone': info.get('Phone', ''),
-            'Email': info.get('Email', ''),
-            'Address': info.get('Address', ''),
-            'ConductScoreNumeric': info.get('ConductScoreNumeric', ''),
+            'Gender': (info.get('Gender') or ''),
+            'Phone': (info.get('Phone') or ''),
+            'Email': (info.get('Email') or ''),
+            'Address': (info.get('Address') or ''),
+            'ConductScoreNumeric': (info.get('ConductScoreNumeric') or ''),
             'ConductScore': conduct_score,
-            'Autobiography': autobiography,  # 使用處理過的自傳
-            'Image_1': image_obj if image_obj else "",
-            'transcript_path': transcript_obj if transcript_obj else "",
-            'Absence_Proof_Image': absence_proof_obj if absence_proof_obj else ""
+            'Autobiography': (autobiography or ''),
         }
-        
-        # 清空可能出現在"缺勤記錄"標題上方的空變數
-        # 如果模板中有這些變數但值為空，設為 None 以避免顯示空白行
-        # 常見的可能變數名
+        if image_obj:
+            context['Image_1'] = image_obj
+        if transcript_obj:
+            context['transcript_path'] = transcript_obj
+        if absence_proof_obj:
+            context['Absence_Proof_Image'] = absence_proof_obj
+
         empty_vars_to_clear = [
             'empty_line_1', 'empty_line_2', 'empty_line_3',
             'blank_line_1', 'blank_line_2', 'blank_line_3',
@@ -6762,15 +7010,14 @@ def generate_application_form_docx(student_data, output_path):
             'blank_1', 'blank_2', 'blank_3',
         ]
         for var in empty_vars_to_clear:
-            context[var] = None  # 設為 None 而不是空字符串，Jinja2 會跳過 None 值
+            context[var] = ""
 
         # 加入缺勤統計
         # 只填充這8個標準字段，確保沒有多餘的空白行
         absence_fields = ['曠課', '遲到', '事假', '病假', '生理假', '公假', '喪假', '總計']
         for t in absence_fields:
             key = f"absence_{t}_units"
-            # 從 student_data 中獲取缺勤統計數據
-            value = student_data.get(key, "0 節")
+            value = (student_data.get(key) or "0 節")
             context[key] = value
             # 調試輸出
             if value == "0 節" and t != "總計":
@@ -6829,9 +7076,8 @@ def generate_application_form_docx(student_data, output_path):
         certs_to_display = certs_with_photos[:max_total]
         total_certs = len(certs_to_display)
         
-        # 初始化所有證照圖片和名稱為空
+        # 初始化證照名稱為空；圖片僅在有圖時才設 key，未輸入不設以免顯示 None
         for idx in range(1, 33):
-            context[f"CertPhotoImages_{idx}"] = ""
             context[f"CertPhotoName_{idx}"] = ""
         
         # 初始化所有頁面區塊為 False（不顯示）
@@ -6890,26 +7136,11 @@ def generate_application_form_docx(student_data, output_path):
 
         context.update(lang_context)
         
-        # 在渲染前，清理所有可能導致空白行的空變數
-        # 將所有空字符串變數設為 None，這樣 Jinja2 在模板中會跳過它們
-        # 但保留重要的變數（如數字、圖片等）
+        # 渲染前：所有 None 改為 ""，避免 Word 顯示 "None"；未輸入欄位顯示空白
         for key in list(context.keys()):
-            value = context[key]
-            # 如果是空字符串，設為 None（但保留重要的變數）
-            if isinstance(value, str) and value.strip() == '':
-                # 檢查是否為重要變數（不應設為 None）
-                important_vars = ['StuID', 'StuName', 'Gender', 'Phone', 'Email', 'Address', 
-                                 'ConductScore', 'ConductScoreNumeric', 'BirthYear', 'BirthMonth', 'BirthDay']
-                if key not in important_vars:
-                    # 對於可能出現在"缺勤記錄"標題上方的變數，設為 None
-                    # 這樣模板中如果使用 {% if variable %} 就不會顯示空白行
-                    if any(key.startswith(prefix) for prefix in ['empty_', 'blank_', 'spacer_', 'extra_']):
-                        context[key] = None
-                    # 或者，如果變數名包含 "line" 或 "row"，也可能是空白行變數
-                    elif 'line' in key.lower() or 'row' in key.lower():
-                        context[key] = None
+            if context[key] is None:
+                context[key] = ""
 
-        # 渲染與儲存
         doc.render(context)
         doc.save(output_path)
         print(f"✅ 履歷文件已生成: {output_path}")
@@ -8895,18 +9126,25 @@ def is_valid_image_file(file_path):
 # 安全地創建 InlineImage 對象
 def safe_create_inline_image(doc, file_path, width, description=""):
     """
-    安全地創建 InlineImage 對象，如果失敗則返回 None
+    安全地創建 InlineImage 對象，如果失敗則返回 None。
+    先用 PIL 與 python-docx Image.from_file 驗證，避免 render 時 UnrecognizedImageError。
     """
     if not file_path or not os.path.exists(file_path):
         return None
-    
-    # 先驗證圖片
+
     if not is_valid_image_file(file_path):
         print(f"⚠️ {description}圖片無效或損壞，跳過: {file_path}")
         return None
-    
+
+    abs_path = os.path.abspath(file_path)
     try:
-        abs_path = os.path.abspath(file_path)
+        from docx.image.image import Image as DocxImage
+        DocxImage.from_file(abs_path)
+    except Exception as e:
+        print(f"⚠️ {description}圖片格式不被 Word 支援，跳過: {file_path} ({e})")
+        return None
+
+    try:
         image_obj = InlineImage(doc, abs_path, width=width)
         return image_obj
     except Exception as e:
@@ -9162,10 +9400,14 @@ def fill_certificates_to_doc(context, prefix, items, max_count):
     """
     填入 Word 模板（表格區）
     prefix 例如: LaborCerts_  → LaborCerts_1, LaborCerts_2 …
+    空欄位與 None 一律顯示空白。
     """
     for i in range(1, max_count + 1):
         if i <= len(items):
-            context[f"{prefix}{i}"] = items[i-1].get("table_name", "")
+            name = (items[i-1].get("table_name") or "").strip()
+            if name == "None":
+                name = ""
+            context[f"{prefix}{i}"] = name
         else:
             context[f"{prefix}{i}"] = ""
 
@@ -9174,24 +9416,29 @@ def fill_certificate_photos(context, doc, items, start_index, max_count=8):
     圖片區（依順序放，不分類）
     start_index → 從第幾張開始，例如 1、9、17、25
     max_count → 最多填充幾張（實際填充的數量可能少於此值）
+    空欄位一律填空白，不顯示 None。
     """
     image_size = Inches(3.0)
     actual_count = min(len(items), max_count)
     
     # 填充實際有的證照
     for idx, item in enumerate(items[:max_count], start=start_index):
-        photo_path = item.get("photo_path", "")
-        photo_name = item.get("photo_name", "")
+        photo_path = item.get("photo_path", "") or ""
+        photo_name = (item.get("photo_name", "") or "").strip()
+        if photo_name == "None":
+            photo_name = ""
         
         if photo_path:
             image_obj = safe_create_inline_image(doc, photo_path, image_size, "證照")
-            context[f"CertPhotoImages_{idx}"] = image_obj if image_obj else ""
+            if image_obj:
+                context[f"CertPhotoImages_{idx}"] = image_obj
+            else:
+                context[f"CertPhotoImages_{idx}"] = ""
         else:
             context[f"CertPhotoImages_{idx}"] = ""
-        
-        context[f"CertPhotoName_{idx}"] = photo_name
-    
-    # 清空本頁未使用的格子（如果實際數量少於 max_count）
+        context[f"CertPhotoName_{idx}"] = photo_name or ""
+
+    # 未使用的欄位：圖片與名稱都設為空白，避免模板顯示 None
     if actual_count < max_count:
         for idx in range(start_index + actual_count, start_index + max_count):
             context[f"CertPhotoImages_{idx}"] = ""
@@ -9283,7 +9530,9 @@ def save_structured_data(cursor, student_id, data, semester_id=None):
         processed_certs = set() # 用於去重 (job_category, level)
 
         # (3) 處理結構化的證照資料 (structured_certifications)
-        for cert in data.get("structured_certifications", []):
+        struct_certs = data.get("structured_certifications", [])
+        print(f"📋 收到 structured_certifications: {len(struct_certs)} 筆")
+        for cert in struct_certs:
             row = {"StuID": student_id}
             db_job_category = None
             db_level = None
@@ -9302,13 +9551,38 @@ def save_structured_data(cursor, student_id, data, semester_id=None):
                 db_job_category = (cert.get("job_category") or "").strip() or None
                 db_level = (cert.get("level") or "").strip() or None
             elif raw.isdigit():
-                # 前端傳的是 certificate_codes.id
+                # 數字可能是 id（如 2）或 code（如 14901、11800）。先查 id 是否存在，否則當 code 查
                 try:
-                    cert_code_id = int(raw)
-                except (ValueError, TypeError):
+                    as_id = int(raw)
+                    cursor.execute("SELECT id FROM certificate_codes WHERE id = %s LIMIT 1", (as_id,))
+                    if cursor.fetchone():
+                        cert_code_id = as_id
+                    else:
+                        level_from_cert = (cert.get("level") or "").strip()
+                        if level_from_cert:
+                            cursor.execute("""
+                                SELECT id, job_category, level, authority_id 
+                                FROM certificate_codes 
+                                WHERE code = %s AND (level = %s OR level IS NULL)
+                                LIMIT 1
+                            """, (raw_upper, level_from_cert))
+                        else:
+                            cursor.execute("""
+                                SELECT id, job_category, level, authority_id 
+                                FROM certificate_codes 
+                                WHERE code = %s
+                                LIMIT 1
+                            """, (raw_upper,))
+                        cert_info = cursor.fetchone()
+                        if cert_info:
+                            cert_code_id = cert_info.get('id')
+                except (ValueError, TypeError) as e:
+                    cert_code_id = None
+                except Exception as e:
+                    print(f"⚠️ 查詢 certificate_codes 失敗: {e}")
                     cert_code_id = None
             else:
-                # 前端傳的是證照代碼 code（如 11800、TQC-WORD），查詢對應的 id
+                # 前端傳的是證照代碼 code（如 TQC-WORD），查詢對應的 id
                 level_from_cert = (cert.get("level") or "").strip()
                 try:
                     if level_from_cert:
@@ -9369,7 +9643,7 @@ def save_structured_data(cursor, student_id, data, semester_id=None):
 
             if not cert_name:
                 print(f"⚠️ 忽略無名稱證照記錄: {cert}")
-                continue # 忽略沒有名稱的記錄
+                continue
 
             # 檢查是否重複（使用 job_category, level 作為唯一標識）
             if db_job_category and db_level:
@@ -9428,8 +9702,9 @@ def save_structured_data(cursor, student_id, data, semester_id=None):
 
         # (5) 實際寫入資料庫
         if cert_rows:
-            # 先刪除舊資料
+            print(f"📋 準備寫入 student_certifications: {len(cert_rows)} 筆")
             cursor.execute("DELETE FROM student_certifications WHERE StuID=%s", (student_id,))
+            insert_failed = False
             for row in cert_rows:
                 cols = list(row.keys())
                 values = list(row.values())
@@ -9441,9 +9716,15 @@ def save_structured_data(cursor, student_id, data, semester_id=None):
                         (*values, datetime.now())
                     )
                 except Exception as e:
-                    # 如果因為唯一索引衝突導致插入失敗，記錄錯誤但繼續處理其他記錄
-                    print(f"⚠️ 插入證照記錄失敗（可能是唯一索引衝突）: {e}")
+                    print(f"⚠️ 插入證照記錄失敗: {e}")
                     print(f" 記錄內容: {row}")
+                    insert_failed = True
+                    raise
+            if not insert_failed:
+                print(f"✅ student_certifications 已寫入 {len(cert_rows)} 筆")
+        else:
+            if struct_certs:
+                print(f"⚠️ 有 {len(struct_certs)} 筆證照但 cert_rows 為空（可能全部被跳過），不刪除既存證照")
         
         # -------------------------------------------------------------
         # 4) 儲存語言能力 student_languageskills
@@ -9731,6 +10012,11 @@ def format_data_for_doc(student_data, doc_path=None):
     fill_certificates_to_doc(context, "LocalCerts_", local, 4)
     fill_certificates_to_doc(context, "OtherCerts_", other, 4)
     
+    # 先將所有證照圖片/名稱佔位符設為空白，避免模板顯示 None
+    for i in range(1, 33):
+        context[f"CertPhotoImages_{i}"] = ""
+        context[f"CertPhotoName_{i}"] = ""
+    
     # 圖片區（不分類，按順序最多 32 張）
     certs_for_photos = [
         {'photo_path': c.get('CertPath'), 'photo_name': f"{c.get('job_category', '')}{c.get('level', '')}" if c.get('job_category') else c.get('CertName')}
@@ -9834,8 +10120,8 @@ def get_resume_data():
         if not resume:
             return jsonify({"success": False, "message": "沒有已提交的履歷"}), 404
 
-        # ===== 2. 抓 StudentID（學號）=====
-        cursor.execute("SELECT username FROM users WHERE id=%s", (user_id,))
+        # ===== 2. 抓 StudentID（學號）及 users 的 name, email, avatar_url =====
+        cursor.execute("SELECT username, name, email, avatar_url FROM users WHERE id=%s", (user_id,))
         user_result = cursor.fetchone()
         if not user_result:
             return jsonify({"success": False, "message": "找不到使用者"}), 404
@@ -10027,6 +10313,8 @@ def get_resume_data():
                     (c.get("cert_code") is not None)
                 )
             ]
+            # 依 id 升序排列，使編輯時證照順序與使用者新增順序一致（先新增的在前）
+            certifications.sort(key=lambda c: (c.get("id") or 0))
 
         # ===== 7. 語言能力 =====
 
@@ -10135,26 +10423,36 @@ def get_resume_data():
                 "AcquisitionDate": acquisition_date_str  # 轉換為字符串格式，確保 JSON 序列化正常
             })
 
-        # ===== 10. 回傳結果 =====
+        # ===== 10. 回傳結果（路徑一律正斜線、不回傳 None）=====
+        def norm_path(p):
+            if p is None or (isinstance(p, str) and p.strip() == ""):
+                return ""
+            return (p or "").replace("\\", "/").strip()
+
+        # 姓名、電子信箱、個人頭貼優先從 users 表帶入
+        user_name = (user_result.get("name") or "").strip() or student_info.get("StuName", "")
+        user_email = (user_result.get("email") or "").strip() or student_info.get("Email", "")
+        user_avatar = norm_path(user_result.get("avatar_url")) or norm_path(student_info.get("PhotoPath"))
+
         return jsonify({
             "success": True,
             "data": {
                 "student_info": {
-                    "name": student_info.get("StuName", ""),
+                    "name": user_name,
                     "birth_date": birth_date or "",
                     "gender": student_info.get("Gender", ""),
                     "phone": student_info.get("Phone", ""),
-                    "email": student_info.get("Email", ""),
+                    "email": user_email,
                     "address": student_info.get("Address", ""),
                     "conduct_score": student_info.get("ConductScore", ""),
                     "autobiography": student_info.get("Autobiography", ""),
-                    "photo_path": student_info.get("PhotoPath", "")
+                    "photo_path": user_avatar
                 },
                 "courses": courses,
                 "certifications": formatted_certs,
                 "languages": languages,
-                "transcript_path": transcript_path,
-                "absence_proof_path": absence_proof_path
+                "transcript_path": norm_path(transcript_path),
+                "absence_proof_path": norm_path(absence_proof_path)
             }
         })
 
@@ -10349,6 +10647,13 @@ def submit_and_generate_api():
             new_filename = f"{user_id}_photo_{datetime.now().strftime('%Y%m%d_%H%M%S')}{ext}"
             photo_path = os.path.join(photo_dir, new_filename)
             photo.save(photo_path)
+            photo_path = photo_path.replace("\\", "/")
+        else:
+            # 未上傳新照片時保留資料庫既有路徑
+            cursor.execute("SELECT PhotoPath FROM Student_Info WHERE StuID = (SELECT username FROM users WHERE id=%s)", (user_id,))
+            row = cursor.fetchone()
+            if row and row.get('PhotoPath'):
+                photo_path = (row['PhotoPath'] or '').replace('\\', '/')
 
         # 儲存成績單檔案（先儲存檔案，再 update 到 course_grades 的 transcript_path）
         transcript_path = None
@@ -10362,6 +10667,7 @@ def submit_and_generate_api():
             new_filename = f"{user_id}_transcript_{datetime.now().strftime('%Y%m%d_%H%M%S')}{ext}"
             transcript_path = os.path.join(transcript_dir, new_filename)
             transcript_file.save(transcript_path)
+            transcript_path = transcript_path.replace("\\", "/")
 
         # 儲存多張證照
         cert_photo_paths = []
@@ -10399,7 +10705,16 @@ def submit_and_generate_api():
                 traceback.print_exc()
                 image_path_for_template = None
 
-        if image_path_for_template or certificate_description:
+        # 先解析 structured_certifications，才能決定是否插入單張證照（避免多張證照時索引錯位、圖片重複）
+        _structured_from_form = []
+        _structured_json = request.form.get('structured_certifications', '')
+        if _structured_json:
+            try:
+                _structured_from_form = json.loads(_structured_json)
+            except Exception:
+                pass
+        # 僅在「沒有」使用新格式多張證照時，才在 index 0 插入單張證照
+        if (image_path_for_template or certificate_description) and not _structured_from_form:
             if cert_photo_paths is None:
                 cert_photo_paths = []
             if cert_names is None:
@@ -10502,7 +10817,8 @@ def submit_and_generate_api():
                     fname = f"{user_id}_absence_proof_{datetime.now().strftime('%Y%m%d_%H%M%S')}{ext}"
                     savep = os.path.join(ABSENCE_PROOF_FOLDER, fname)
                     uploaded_proof.save(savep)
-                    absence_image_path = savep
+                    # 統一用正斜線存進 DB，方便前端與靜態檔使用
+                    absence_image_path = savep.replace("\\", "/")
                 else:
                     print(f"⚠️ 上傳的缺勤佐證圖片格式不支援: {uploaded_proof.mimetype}")
         except Exception as e:
@@ -10568,13 +10884,13 @@ def submit_and_generate_api():
                                 fname = f"{user_id}_record_{record_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}{ext}"
                                 save_path = os.path.join(ABSENCE_PROOF_FOLDER, fname)
                                 uploaded_image.save(save_path)
-                                
+                                save_path_db = save_path.replace("\\", "/")
                                 # 更新資料庫中對應記錄的 image_path
                                 cursor.execute("""
                                     UPDATE absence_records 
                                     SET image_path = %s, updated_at = NOW()
                                     WHERE id = %s AND user_id = %s
-                                """, (save_path, record_id, user_id))
+                                """, (save_path_db, record_id, user_id))
                                 
                                 print(f"✅ 已更新缺勤記錄 {record_id} 的佐證圖片: {save_path}")
                             except Exception as e:
@@ -10587,17 +10903,16 @@ def submit_and_generate_api():
                     print(f"⚠️ 解析 absence_records_with_images 失敗: {e}")
                     traceback.print_exc()
             
-            # 2. 如果有整體佐證圖片，更新到該學期所有沒有圖片的記錄
+            # 2. 如果有整體佐證圖片，更新到該學期或全部沒有圖片的記錄
             if absence_image_path:
                 semester_id = request.form.get("semester_id", None)
-                if semester_id:
-                    try:
+                try:
+                    if semester_id:
                         # 檢查是否有 semester_id 欄位
                         cursor.execute("SHOW COLUMNS FROM absence_records LIKE 'semester_id'")
                         has_semester_id = cursor.fetchone() is not None
                         
                         if has_semester_id:
-                            # 更新該學期所有沒有圖片的記錄
                             cursor.execute("""
                                 UPDATE absence_records 
                                 SET image_path = %s, updated_at = NOW()
@@ -10605,19 +10920,32 @@ def submit_and_generate_api():
                                 AND (image_path IS NULL OR image_path = '')
                             """, (absence_image_path, user_id, semester_id))
                         else:
-                            # 如果沒有 semester_id 欄位，更新所有沒有圖片的記錄
                             cursor.execute("""
                                 UPDATE absence_records 
                                 SET image_path = %s, updated_at = NOW()
                                 WHERE user_id = %s 
                                 AND (image_path IS NULL OR image_path = '')
                             """, (absence_image_path, user_id))
-                        
-                        conn.commit()
-                        print(f"✅ 已將整體佐證圖片更新到缺勤記錄")
-                    except Exception as e:
-                        print(f"⚠️ 更新整體佐證圖片失敗: {e}")
-                        traceback.print_exc()
+                    else:
+                        # 未傳學期時：先更新所有「尚無圖片」的記錄
+                        cursor.execute("""
+                            UPDATE absence_records 
+                            SET image_path = %s, updated_at = NOW()
+                            WHERE user_id = %s 
+                            AND (image_path IS NULL OR image_path = '')
+                        """, (absence_image_path, user_id))
+                    # 若沒有任何一筆被更新，改為更新該使用者最新一筆缺勤記錄
+                    if cursor.rowcount == 0:
+                        cursor.execute("""
+                            UPDATE absence_records ar
+                            JOIN (SELECT id FROM absence_records WHERE user_id = %s ORDER BY id DESC LIMIT 1) t ON ar.id = t.id
+                            SET ar.image_path = %s, ar.updated_at = NOW()
+                        """, (user_id, absence_image_path))
+                    conn.commit()
+                    print(f"✅ 已將整體佐證圖片更新到缺勤記錄")
+                except Exception as e:
+                    print(f"⚠️ 更新整體佐證圖片失敗: {e}")
+                    traceback.print_exc()
         except Exception as e:
             print(f"⚠️ 處理缺勤記錄圖片失敗: {e}")
             traceback.print_exc()
@@ -10662,11 +10990,12 @@ def submit_and_generate_api():
                     "issuer": issuer.strip() if issuer else ""  # 新增：發證人
             })
 
-        # 將表單上傳的證照圖片路徑依序寫入 structured_certifications（與前端證照項目順序對應）
+        # 將表單上傳的證照圖片路徑依序寫入 structured_certifications（與前端證照項目順序 1:1 對應，避免重複或遺漏）
         if cert_photo_paths and structured_certifications:
-            for i, path in enumerate(cert_photo_paths):
-                if i < len(structured_certifications) and path:
-                    normalized = path.replace("\\", "/")
+            for i in range(len(structured_certifications)):
+                if i < len(cert_photo_paths) and cert_photo_paths[i]:
+                    path = cert_photo_paths[i]
+                    normalized = (path or "").replace("\\", "/")
                     if "uploads" in normalized:
                         parts = normalized.split("/")
                         idx_u = parts.index("uploads")
@@ -10697,6 +11026,22 @@ def submit_and_generate_api():
         cert_codes = request.form.getlist('cert_code[]')
         cert_issuers = request.form.getlist('cert_issuer[]')  # 新增：發證人列表
         
+        # 若未上傳新成績單，從資料庫取既有 ProofImage 寫回各課程（供 save_structured_data 使用）
+        if not transcript_path and result and student_id:
+            cursor.execute("SHOW COLUMNS FROM course_grades LIKE 'ProofImage'")
+            if cursor.fetchone():
+                cursor.execute("""
+                    SELECT ProofImage FROM course_grades
+                    WHERE StuID = %s AND ProofImage IS NOT NULL AND ProofImage != ''
+                    LIMIT 1
+                """, (student_id,))
+                row = cursor.fetchone()
+                if row and row.get('ProofImage'):
+                    existing_proof = (row['ProofImage'] or '').replace('\\', '/')
+                    for c in courses:
+                        if not c.get('proof_image'):
+                            c['proof_image'] = existing_proof
+
         # 建立結構化資料（傳入 save_structured_data）
         semester_id = get_current_semester_id(cursor)
         structured_data = {
@@ -10782,8 +11127,9 @@ def submit_and_generate_api():
 
         # 生成 Word 文件
         student_data_for_doc = get_student_info_for_doc(cursor, student_id, semester_id=semester_id)
-        # PhotoPath & ConductScoreNumeric
-        student_data_for_doc["info"]["PhotoPath"] = photo_path
+        # PhotoPath & ConductScoreNumeric（未上傳新照片時保留既有路徑）
+        if photo_path is not None:
+            student_data_for_doc["info"]["PhotoPath"] = photo_path
         student_data_for_doc["info"]["ConductScoreNumeric"] = data.get("conduct_score_numeric")
         # 傳遞證照圖片與名稱清單（generate 會自行從 certs 讀）
         student_data_for_doc["cert_photo_paths"] = cert_photo_paths
@@ -10869,14 +11215,11 @@ def generate_application_form_docx(student_data, output_path):
             except:
                 pass
 
-        # 照片
+        # 照片（使用 safe_create 驗證格式，避免 render 時 UnrecognizedImageError）
         image_obj = None
         photo_path = info.get("PhotoPath")
         if photo_path and os.path.exists(photo_path):
-            try:
-                image_obj = InlineImage(doc, os.path.abspath(photo_path), width=Inches(1.2))
-            except Exception as e:
-                print(f"⚠️ 圖片載入錯誤: {e}")
+            image_obj = safe_create_inline_image(doc, photo_path, Inches(1.2), "學生照片")
 
         # 處理課程資料（保留原邏輯）
         MAX_COURSES = 30
@@ -10893,27 +11236,21 @@ def generate_application_form_docx(student_data, output_path):
                     course = padded_grades[index]
                     row_num = i + 1
                     col_num = j + 1
-                    context_courses[f'CourseName_{row_num}_{col_num}'] = course.get('CourseName', '')
-                    context_courses[f'Credits_{row_num}_{col_num}'] = course.get('Credits', '')
+                    context_courses[f'CourseName_{row_num}_{col_num}'] = (course.get('CourseName') or '')
+                    context_courses[f'Credits_{row_num}_{col_num}'] = (course.get('Credits') or '')
 
-        # 插入成績單圖片：嘗試從 student_data['transcript_path']（由 get_student_info_for_doc 提供）
+        # 插入成績單圖片：使用 safe_create 驗證格式，避免 render 時 UnrecognizedImageError
         transcript_obj = None
         transcript_path = student_data.get("transcript_path") or info.get("TranscriptPath") or ''
         if transcript_path and os.path.exists(transcript_path):
-            try:
-                transcript_obj = InlineImage(doc, os.path.abspath(transcript_path), width=Inches(6.0))
-            except Exception as e:
-                print(f"⚠️ 成績單圖片載入錯誤: {e}")
+            transcript_obj = safe_create_inline_image(doc, transcript_path, Inches(6.0), "成績單")
 
         # 缺勤佐證圖片
         absence_proof_obj = None
         absence_proof_path = student_data.get("Absence_Proof_Path")
         image_size = Inches(6.0)
         if absence_proof_path and os.path.exists(absence_proof_path):
-            try:
-                absence_proof_obj = InlineImage(doc, os.path.abspath(absence_proof_path), width=image_size)
-            except Exception as e:
-                print(f"⚠️ 缺勤佐證圖片載入錯誤: {e}")
+            absence_proof_obj = safe_create_inline_image(doc, absence_proof_path, image_size, "缺勤佐證")
 
         # 操行等級
         conduct_score = info.get('ConductScore', '')
@@ -10926,38 +11263,56 @@ def generate_application_form_docx(student_data, output_path):
         # certs 已經從 get_student_info_for_doc 返回，格式統一
         # 優先使用前端提交的證照名稱（如果有的話）
         # 這樣可以確保只顯示用戶實際選擇的證照，而不是數據庫中所有相關記錄
-        cert_names_from_form = student_data.get("cert_names", [])
-        cert_photo_paths_from_form = student_data.get("cert_photo_paths", [])
-        
-        # 如果有前端提交的證照名稱，使用它們來覆蓋數據庫查詢結果
-        if cert_names_from_form:
-            # 重新構建證照列表，使用前端提交的名稱
-            certs_with_form_names = []
-            for idx, (name, path) in enumerate(zip(cert_names_from_form, cert_photo_paths_from_form)):
-                if name and name.strip():
-                    # 從原始 certs 中找到對應的證照（通過索引或路徑匹配）
-                    matching_cert = None
-                    if idx < len(certs):
-                        matching_cert = certs[idx]
-                    elif path:
-                        # 通過路徑匹配
-                        for c in certs:
-                            if c.get("cert_path") == path:
-                                matching_cert = c
-                                break
-                    
-                    # 使用前端提交的名稱，但保留其他信息（類別、路徑等）
-                    cert_item = {
-                        "cert_name": name.strip(),  # 使用前端提交的名稱
-                        "category": matching_cert.get("category", "other") if matching_cert else "other",
-                        "cert_path": path if path else (matching_cert.get("cert_path", "") if matching_cert else ""),
-                        "acquire_date": matching_cert.get("acquire_date", "") if matching_cert else "",
-                    }
-                    certs_with_form_names.append(cert_item)
-            
-            # 如果有匹配的證照，使用新的列表；否則使用原始列表
-            if certs_with_form_names:
-                certs = certs_with_form_names
+        cert_photo_paths_from_form = student_data.get("cert_photo_paths", []) or []
+        structured_certs = student_data.get("structured_certifications", [])
+
+        # 以 structured_certifications 為準疊代，確保每筆都有 authority_id / category，避免索引錯位
+        # 同一 photo_path 只使用一次，避免編輯後重新上傳時出現兩張一樣的證照圖
+        if structured_certs:
+            certs_from_form = []
+            used_photo_paths = set()
+            for idx, struct in enumerate(structured_certs):
+                name = (struct.get("name") or "").strip()
+                if not name:
+                    continue
+                path = (struct.get("cert_path") or "")
+                if not path and idx < len(cert_photo_paths_from_form):
+                    path = cert_photo_paths_from_form[idx] or ""
+                path = (path or "").replace("\\", "/").strip()
+                if path and path in used_photo_paths:
+                    path = ""
+                elif path:
+                    used_photo_paths.add(path)
+                matching_cert = certs[idx] if idx < len(certs) else None
+                if not matching_cert and path:
+                    for c in certs:
+                        if (c.get("cert_path") or "").replace("\\", "/") == path:
+                            matching_cert = c
+                            break
+                # 類別：勞動部 authority_id=1 必為 labor；否則用表單 category 或 DB 匹配
+                aid = struct.get("authority_id")
+                if aid is not None and str(aid).strip() in ("1",):
+                    category = "labor"
+                else:
+                    try:
+                        ai = int(aid)
+                        if ai == 1:
+                            category = "labor"
+                        else:
+                            category = (struct.get("category") or "").strip().lower() or "other"
+                            if category not in ("labor", "intl", "local", "other"):
+                                category = "other"
+                    except (TypeError, ValueError):
+                        cat = (struct.get("category") or "").strip().lower()
+                        category = cat if cat in ("labor", "intl", "local", "other") else ("other" if not matching_cert else matching_cert.get("category", "other"))
+                certs_from_form.append({
+                    "cert_name": name,
+                    "category": category,
+                    "cert_path": path or (matching_cert.get("cert_path", "") if matching_cert else ""),
+                    "acquire_date": (matching_cert.get("acquire_date") or struct.get("acquire_date") or "") if matching_cert else (struct.get("acquire_date") or ""),
+                })
+            if certs_from_form:
+                certs = certs_from_form
         
         # 分類證照
         labor_list, intl_list, local_list, other_list = categorize_certifications(certs)
@@ -10976,24 +11331,24 @@ def generate_application_form_docx(student_data, output_path):
             autobiography = autobiography.strip('\n')
         
         context = {
-            'StuID': info.get('StuID', ''),
-            'StuName': info.get('StuName', ''),
+            'StuID': (info.get('StuID') or ''),
+            'StuName': (info.get('StuName') or ''),
             'BirthYear': year, 'BirthMonth': month, 'BirthDay': day,
-            'Gender': info.get('Gender', ''),
-            'Phone': info.get('Phone', ''),
-            'Email': info.get('Email', ''),
-            'Address': info.get('Address', ''),
-            'ConductScoreNumeric': info.get('ConductScoreNumeric', ''),
+            'Gender': (info.get('Gender') or ''),
+            'Phone': (info.get('Phone') or ''),
+            'Email': (info.get('Email') or ''),
+            'Address': (info.get('Address') or ''),
+            'ConductScoreNumeric': (info.get('ConductScoreNumeric') or ''),
             'ConductScore': conduct_score,
-            'Autobiography': autobiography,  # 使用處理過的自傳
-            'Image_1': image_obj if image_obj else "",
-            'transcript_path': transcript_obj if transcript_obj else "",
-            'Absence_Proof_Image': absence_proof_obj if absence_proof_obj else ""
+            'Autobiography': (autobiography or ''),
         }
-        
-        # 清空可能出現在"缺勤記錄"標題上方的空變數
-        # 如果模板中有這些變數但值為空，設為 None 以避免顯示空白行
-        # 常見的可能變數名
+        if image_obj:
+            context['Image_1'] = image_obj
+        if transcript_obj:
+            context['transcript_path'] = transcript_obj
+        if absence_proof_obj:
+            context['Absence_Proof_Image'] = absence_proof_obj
+
         empty_vars_to_clear = [
             'empty_line_1', 'empty_line_2', 'empty_line_3',
             'blank_line_1', 'blank_line_2', 'blank_line_3',
@@ -11002,15 +11357,14 @@ def generate_application_form_docx(student_data, output_path):
             'blank_1', 'blank_2', 'blank_3',
         ]
         for var in empty_vars_to_clear:
-            context[var] = None  # 設為 None 而不是空字符串，Jinja2 會跳過 None 值
+            context[var] = ""
 
         # 加入缺勤統計
         # 只填充這8個標準字段，確保沒有多餘的空白行
         absence_fields = ['曠課', '遲到', '事假', '病假', '生理假', '公假', '喪假', '總計']
         for t in absence_fields:
             key = f"absence_{t}_units"
-            # 從 student_data 中獲取缺勤統計數據
-            value = student_data.get(key, "0 節")
+            value = (student_data.get(key) or "0 節")
             context[key] = value
             # 調試輸出
             if value == "0 節" and t != "總計":
@@ -11069,9 +11423,8 @@ def generate_application_form_docx(student_data, output_path):
         certs_to_display = certs_with_photos[:max_total]
         total_certs = len(certs_to_display)
         
-        # 初始化所有證照圖片和名稱為空
+        # 初始化證照名稱為空；圖片僅在有圖時才設 key，未輸入不設以免顯示 None
         for idx in range(1, 33):
-            context[f"CertPhotoImages_{idx}"] = ""
             context[f"CertPhotoName_{idx}"] = ""
         
         # 初始化所有頁面區塊為 False（不顯示）
@@ -11130,26 +11483,11 @@ def generate_application_form_docx(student_data, output_path):
 
         context.update(lang_context)
         
-        # 在渲染前，清理所有可能導致空白行的空變數
-        # 將所有空字符串變數設為 None，這樣 Jinja2 在模板中會跳過它們
-        # 但保留重要的變數（如數字、圖片等）
+        # 渲染前：所有 None 改為 ""，避免 Word 顯示 "None"；未輸入欄位顯示空白
         for key in list(context.keys()):
-            value = context[key]
-            # 如果是空字符串，設為 None（但保留重要的變數）
-            if isinstance(value, str) and value.strip() == '':
-                # 檢查是否為重要變數（不應設為 None）
-                important_vars = ['StuID', 'StuName', 'Gender', 'Phone', 'Email', 'Address', 
-                                 'ConductScore', 'ConductScoreNumeric', 'BirthYear', 'BirthMonth', 'BirthDay']
-                if key not in important_vars:
-                    # 對於可能出現在"缺勤記錄"標題上方的變數，設為 None
-                    # 這樣模板中如果使用 {% if variable %} 就不會顯示空白行
-                    if any(key.startswith(prefix) for prefix in ['empty_', 'blank_', 'spacer_', 'extra_']):
-                        context[key] = None
-                    # 或者，如果變數名包含 "line" 或 "row"，也可能是空白行變數
-                    elif 'line' in key.lower() or 'row' in key.lower():
-                        context[key] = None
+            if context[key] is None:
+                context[key] = ""
 
-        # 渲染與儲存
         doc.render(context)
         doc.save(output_path)
         print(f"✅ 履歷文件已生成: {output_path}")
@@ -13135,18 +13473,25 @@ def is_valid_image_file(file_path):
 # 安全地創建 InlineImage 對象
 def safe_create_inline_image(doc, file_path, width, description=""):
     """
-    安全地創建 InlineImage 對象，如果失敗則返回 None
+    安全地創建 InlineImage 對象，如果失敗則返回 None。
+    先用 PIL 與 python-docx Image.from_file 驗證，避免 render 時 UnrecognizedImageError。
     """
     if not file_path or not os.path.exists(file_path):
         return None
-    
-    # 先驗證圖片
+
     if not is_valid_image_file(file_path):
         print(f"⚠️ {description}圖片無效或損壞，跳過: {file_path}")
         return None
-    
+
+    abs_path = os.path.abspath(file_path)
     try:
-        abs_path = os.path.abspath(file_path)
+        from docx.image.image import Image as DocxImage
+        DocxImage.from_file(abs_path)
+    except Exception as e:
+        print(f"⚠️ {description}圖片格式不被 Word 支援，跳過: {file_path} ({e})")
+        return None
+
+    try:
         image_obj = InlineImage(doc, abs_path, width=width)
         return image_obj
     except Exception as e:
@@ -13402,10 +13747,14 @@ def fill_certificates_to_doc(context, prefix, items, max_count):
     """
     填入 Word 模板（表格區）
     prefix 例如: LaborCerts_  → LaborCerts_1, LaborCerts_2 …
+    空欄位與 None 一律顯示空白。
     """
     for i in range(1, max_count + 1):
         if i <= len(items):
-            context[f"{prefix}{i}"] = items[i-1].get("table_name", "")
+            name = (items[i-1].get("table_name") or "").strip()
+            if name == "None":
+                name = ""
+            context[f"{prefix}{i}"] = name
         else:
             context[f"{prefix}{i}"] = ""
 
@@ -13414,24 +13763,29 @@ def fill_certificate_photos(context, doc, items, start_index, max_count=8):
     圖片區（依順序放，不分類）
     start_index → 從第幾張開始，例如 1、9、17、25
     max_count → 最多填充幾張（實際填充的數量可能少於此值）
+    空欄位一律填空白，不顯示 None。
     """
     image_size = Inches(3.0)
     actual_count = min(len(items), max_count)
     
     # 填充實際有的證照
     for idx, item in enumerate(items[:max_count], start=start_index):
-        photo_path = item.get("photo_path", "")
-        photo_name = item.get("photo_name", "")
+        photo_path = item.get("photo_path", "") or ""
+        photo_name = (item.get("photo_name", "") or "").strip()
+        if photo_name == "None":
+            photo_name = ""
         
         if photo_path:
             image_obj = safe_create_inline_image(doc, photo_path, image_size, "證照")
-            context[f"CertPhotoImages_{idx}"] = image_obj if image_obj else ""
+            if image_obj:
+                context[f"CertPhotoImages_{idx}"] = image_obj
+            else:
+                context[f"CertPhotoImages_{idx}"] = ""
         else:
             context[f"CertPhotoImages_{idx}"] = ""
-        
-        context[f"CertPhotoName_{idx}"] = photo_name
-    
-    # 清空本頁未使用的格子（如果實際數量少於 max_count）
+        context[f"CertPhotoName_{idx}"] = photo_name or ""
+
+    # 未使用的欄位：圖片與名稱都設為空白，避免模板顯示 None
     if actual_count < max_count:
         for idx in range(start_index + actual_count, start_index + max_count):
             context[f"CertPhotoImages_{idx}"] = ""
@@ -13523,7 +13877,9 @@ def save_structured_data(cursor, student_id, data, semester_id=None):
         processed_certs = set() # 用於去重 (job_category, level)
 
         # (3) 處理結構化的證照資料 (structured_certifications)
-        for cert in data.get("structured_certifications", []):
+        struct_certs = data.get("structured_certifications", [])
+        print(f"📋 收到 structured_certifications: {len(struct_certs)} 筆")
+        for cert in struct_certs:
             row = {"StuID": student_id}
             db_job_category = None
             db_level = None
@@ -13542,13 +13898,38 @@ def save_structured_data(cursor, student_id, data, semester_id=None):
                 db_job_category = (cert.get("job_category") or "").strip() or None
                 db_level = (cert.get("level") or "").strip() or None
             elif raw.isdigit():
-                # 前端傳的是 certificate_codes.id
+                # 數字可能是 id（如 2）或 code（如 14901、11800）。先查 id 是否存在，否則當 code 查
                 try:
-                    cert_code_id = int(raw)
-                except (ValueError, TypeError):
+                    as_id = int(raw)
+                    cursor.execute("SELECT id FROM certificate_codes WHERE id = %s LIMIT 1", (as_id,))
+                    if cursor.fetchone():
+                        cert_code_id = as_id
+                    else:
+                        level_from_cert = (cert.get("level") or "").strip()
+                        if level_from_cert:
+                            cursor.execute("""
+                                SELECT id, job_category, level, authority_id 
+                                FROM certificate_codes 
+                                WHERE code = %s AND (level = %s OR level IS NULL)
+                                LIMIT 1
+                            """, (raw_upper, level_from_cert))
+                        else:
+                            cursor.execute("""
+                                SELECT id, job_category, level, authority_id 
+                                FROM certificate_codes 
+                                WHERE code = %s
+                                LIMIT 1
+                            """, (raw_upper,))
+                        cert_info = cursor.fetchone()
+                        if cert_info:
+                            cert_code_id = cert_info.get('id')
+                except (ValueError, TypeError) as e:
+                    cert_code_id = None
+                except Exception as e:
+                    print(f"⚠️ 查詢 certificate_codes 失敗: {e}")
                     cert_code_id = None
             else:
-                # 前端傳的是證照代碼 code（如 11800、TQC-WORD），查詢對應的 id
+                # 前端傳的是證照代碼 code（如 TQC-WORD），查詢對應的 id
                 level_from_cert = (cert.get("level") or "").strip()
                 try:
                     if level_from_cert:
@@ -13609,7 +13990,7 @@ def save_structured_data(cursor, student_id, data, semester_id=None):
 
             if not cert_name:
                 print(f"⚠️ 忽略無名稱證照記錄: {cert}")
-                continue # 忽略沒有名稱的記錄
+                continue
 
             # 檢查是否重複（使用 job_category, level 作為唯一標識）
             if db_job_category and db_level:
@@ -13668,8 +14049,9 @@ def save_structured_data(cursor, student_id, data, semester_id=None):
 
         # (5) 實際寫入資料庫
         if cert_rows:
-            # 先刪除舊資料
+            print(f"📋 準備寫入 student_certifications: {len(cert_rows)} 筆")
             cursor.execute("DELETE FROM student_certifications WHERE StuID=%s", (student_id,))
+            insert_failed = False
             for row in cert_rows:
                 cols = list(row.keys())
                 values = list(row.values())
@@ -13681,9 +14063,15 @@ def save_structured_data(cursor, student_id, data, semester_id=None):
                         (*values, datetime.now())
                     )
                 except Exception as e:
-                    # 如果因為唯一索引衝突導致插入失敗，記錄錯誤但繼續處理其他記錄
-                    print(f"⚠️ 插入證照記錄失敗（可能是唯一索引衝突）: {e}")
+                    print(f"⚠️ 插入證照記錄失敗: {e}")
                     print(f" 記錄內容: {row}")
+                    insert_failed = True
+                    raise
+            if not insert_failed:
+                print(f"✅ student_certifications 已寫入 {len(cert_rows)} 筆")
+        else:
+            if struct_certs:
+                print(f"⚠️ 有 {len(struct_certs)} 筆證照但 cert_rows 為空（可能全部被跳過），不刪除既存證照")
         
         # -------------------------------------------------------------
         # 4) 儲存語言能力 student_languageskills
@@ -13971,6 +14359,11 @@ def format_data_for_doc(student_data, doc_path=None):
     fill_certificates_to_doc(context, "LocalCerts_", local, 4)
     fill_certificates_to_doc(context, "OtherCerts_", other, 4)
     
+    # 先將所有證照圖片/名稱佔位符設為空白，避免模板顯示 None
+    for i in range(1, 33):
+        context[f"CertPhotoImages_{i}"] = ""
+        context[f"CertPhotoName_{i}"] = ""
+    
     # 圖片區（不分類，按順序最多 32 張）
     certs_for_photos = [
         {'photo_path': c.get('CertPath'), 'photo_name': f"{c.get('job_category', '')}{c.get('level', '')}" if c.get('job_category') else c.get('CertName')}
@@ -14074,8 +14467,8 @@ def get_resume_data():
         if not resume:
             return jsonify({"success": False, "message": "沒有已提交的履歷"}), 404
 
-        # ===== 2. 抓 StudentID（學號）=====
-        cursor.execute("SELECT username FROM users WHERE id=%s", (user_id,))
+        # ===== 2. 抓 StudentID（學號）及 users 的 name, email, avatar_url =====
+        cursor.execute("SELECT username, name, email, avatar_url FROM users WHERE id=%s", (user_id,))
         user_result = cursor.fetchone()
         if not user_result:
             return jsonify({"success": False, "message": "找不到使用者"}), 404
@@ -14267,6 +14660,8 @@ def get_resume_data():
                     (c.get("cert_code") is not None)
                 )
             ]
+            # 依 id 升序排列，使編輯時證照順序與使用者新增順序一致（先新增的在前）
+            certifications.sort(key=lambda c: (c.get("id") or 0))
 
         # ===== 7. 語言能力 =====
 
@@ -14375,26 +14770,36 @@ def get_resume_data():
                 "AcquisitionDate": acquisition_date_str  # 轉換為字符串格式，確保 JSON 序列化正常
             })
 
-        # ===== 10. 回傳結果 =====
+        # ===== 10. 回傳結果（路徑一律正斜線、不回傳 None）=====
+        def norm_path(p):
+            if p is None or (isinstance(p, str) and p.strip() == ""):
+                return ""
+            return (p or "").replace("\\", "/").strip()
+
+        # 姓名、電子信箱、個人頭貼優先從 users 表帶入
+        user_name = (user_result.get("name") or "").strip() or student_info.get("StuName", "")
+        user_email = (user_result.get("email") or "").strip() or student_info.get("Email", "")
+        user_avatar = norm_path(user_result.get("avatar_url")) or norm_path(student_info.get("PhotoPath"))
+
         return jsonify({
             "success": True,
             "data": {
                 "student_info": {
-                    "name": student_info.get("StuName", ""),
+                    "name": user_name,
                     "birth_date": birth_date or "",
                     "gender": student_info.get("Gender", ""),
                     "phone": student_info.get("Phone", ""),
-                    "email": student_info.get("Email", ""),
+                    "email": user_email,
                     "address": student_info.get("Address", ""),
                     "conduct_score": student_info.get("ConductScore", ""),
                     "autobiography": student_info.get("Autobiography", ""),
-                    "photo_path": student_info.get("PhotoPath", "")
+                    "photo_path": user_avatar
                 },
                 "courses": courses,
                 "certifications": formatted_certs,
                 "languages": languages,
-                "transcript_path": transcript_path,
-                "absence_proof_path": absence_proof_path
+                "transcript_path": norm_path(transcript_path),
+                "absence_proof_path": norm_path(absence_proof_path)
             }
         })
 
@@ -14589,6 +14994,13 @@ def submit_and_generate_api():
             new_filename = f"{user_id}_photo_{datetime.now().strftime('%Y%m%d_%H%M%S')}{ext}"
             photo_path = os.path.join(photo_dir, new_filename)
             photo.save(photo_path)
+            photo_path = photo_path.replace("\\", "/")
+        else:
+            # 未上傳新照片時保留資料庫既有路徑
+            cursor.execute("SELECT PhotoPath FROM Student_Info WHERE StuID = (SELECT username FROM users WHERE id=%s)", (user_id,))
+            row = cursor.fetchone()
+            if row and row.get('PhotoPath'):
+                photo_path = (row['PhotoPath'] or '').replace('\\', '/')
 
         # 儲存成績單檔案（先儲存檔案，再 update 到 course_grades 的 transcript_path）
         transcript_path = None
@@ -14602,6 +15014,7 @@ def submit_and_generate_api():
             new_filename = f"{user_id}_transcript_{datetime.now().strftime('%Y%m%d_%H%M%S')}{ext}"
             transcript_path = os.path.join(transcript_dir, new_filename)
             transcript_file.save(transcript_path)
+            transcript_path = transcript_path.replace("\\", "/")
 
         # 儲存多張證照
         cert_photo_paths = []
@@ -14639,7 +15052,16 @@ def submit_and_generate_api():
                 traceback.print_exc()
                 image_path_for_template = None
 
-        if image_path_for_template or certificate_description:
+        # 先解析 structured_certifications，才能決定是否插入單張證照（避免多張證照時索引錯位、圖片重複）
+        _structured_from_form = []
+        _structured_json = request.form.get('structured_certifications', '')
+        if _structured_json:
+            try:
+                _structured_from_form = json.loads(_structured_json)
+            except Exception:
+                pass
+        # 僅在「沒有」使用新格式多張證照時，才在 index 0 插入單張證照
+        if (image_path_for_template or certificate_description) and not _structured_from_form:
             if cert_photo_paths is None:
                 cert_photo_paths = []
             if cert_names is None:
@@ -14742,7 +15164,8 @@ def submit_and_generate_api():
                     fname = f"{user_id}_absence_proof_{datetime.now().strftime('%Y%m%d_%H%M%S')}{ext}"
                     savep = os.path.join(ABSENCE_PROOF_FOLDER, fname)
                     uploaded_proof.save(savep)
-                    absence_image_path = savep
+                    # 統一用正斜線存進 DB，方便前端與靜態檔使用
+                    absence_image_path = savep.replace("\\", "/")
                 else:
                     print(f"⚠️ 上傳的缺勤佐證圖片格式不支援: {uploaded_proof.mimetype}")
         except Exception as e:
@@ -14808,13 +15231,13 @@ def submit_and_generate_api():
                                 fname = f"{user_id}_record_{record_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}{ext}"
                                 save_path = os.path.join(ABSENCE_PROOF_FOLDER, fname)
                                 uploaded_image.save(save_path)
-                                
+                                save_path_db = save_path.replace("\\", "/")
                                 # 更新資料庫中對應記錄的 image_path
                                 cursor.execute("""
                                     UPDATE absence_records 
                                     SET image_path = %s, updated_at = NOW()
                                     WHERE id = %s AND user_id = %s
-                                """, (save_path, record_id, user_id))
+                                """, (save_path_db, record_id, user_id))
                                 
                                 print(f"✅ 已更新缺勤記錄 {record_id} 的佐證圖片: {save_path}")
                             except Exception as e:
@@ -14827,17 +15250,16 @@ def submit_and_generate_api():
                     print(f"⚠️ 解析 absence_records_with_images 失敗: {e}")
                     traceback.print_exc()
             
-            # 2. 如果有整體佐證圖片，更新到該學期所有沒有圖片的記錄
+            # 2. 如果有整體佐證圖片，更新到該學期或全部沒有圖片的記錄
             if absence_image_path:
                 semester_id = request.form.get("semester_id", None)
-                if semester_id:
-                    try:
+                try:
+                    if semester_id:
                         # 檢查是否有 semester_id 欄位
                         cursor.execute("SHOW COLUMNS FROM absence_records LIKE 'semester_id'")
                         has_semester_id = cursor.fetchone() is not None
                         
                         if has_semester_id:
-                            # 更新該學期所有沒有圖片的記錄
                             cursor.execute("""
                                 UPDATE absence_records 
                                 SET image_path = %s, updated_at = NOW()
@@ -14845,19 +15267,32 @@ def submit_and_generate_api():
                                 AND (image_path IS NULL OR image_path = '')
                             """, (absence_image_path, user_id, semester_id))
                         else:
-                            # 如果沒有 semester_id 欄位，更新所有沒有圖片的記錄
                             cursor.execute("""
                                 UPDATE absence_records 
                                 SET image_path = %s, updated_at = NOW()
                                 WHERE user_id = %s 
                                 AND (image_path IS NULL OR image_path = '')
                             """, (absence_image_path, user_id))
-                        
-                        conn.commit()
-                        print(f"✅ 已將整體佐證圖片更新到缺勤記錄")
-                    except Exception as e:
-                        print(f"⚠️ 更新整體佐證圖片失敗: {e}")
-                        traceback.print_exc()
+                    else:
+                        # 未傳學期時：先更新所有「尚無圖片」的記錄
+                        cursor.execute("""
+                            UPDATE absence_records 
+                            SET image_path = %s, updated_at = NOW()
+                            WHERE user_id = %s 
+                            AND (image_path IS NULL OR image_path = '')
+                        """, (absence_image_path, user_id))
+                    # 若沒有任何一筆被更新，改為更新該使用者最新一筆缺勤記錄
+                    if cursor.rowcount == 0:
+                        cursor.execute("""
+                            UPDATE absence_records ar
+                            JOIN (SELECT id FROM absence_records WHERE user_id = %s ORDER BY id DESC LIMIT 1) t ON ar.id = t.id
+                            SET ar.image_path = %s, ar.updated_at = NOW()
+                        """, (user_id, absence_image_path))
+                    conn.commit()
+                    print(f"✅ 已將整體佐證圖片更新到缺勤記錄")
+                except Exception as e:
+                    print(f"⚠️ 更新整體佐證圖片失敗: {e}")
+                    traceback.print_exc()
         except Exception as e:
             print(f"⚠️ 處理缺勤記錄圖片失敗: {e}")
             traceback.print_exc()
@@ -14902,11 +15337,12 @@ def submit_and_generate_api():
                     "issuer": issuer.strip() if issuer else ""  # 新增：發證人
             })
 
-        # 將表單上傳的證照圖片路徑依序寫入 structured_certifications（與前端證照項目順序對應）
+        # 將表單上傳的證照圖片路徑依序寫入 structured_certifications（與前端證照項目順序 1:1 對應，避免重複或遺漏）
         if cert_photo_paths and structured_certifications:
-            for i, path in enumerate(cert_photo_paths):
-                if i < len(structured_certifications) and path:
-                    normalized = path.replace("\\", "/")
+            for i in range(len(structured_certifications)):
+                if i < len(cert_photo_paths) and cert_photo_paths[i]:
+                    path = cert_photo_paths[i]
+                    normalized = (path or "").replace("\\", "/")
                     if "uploads" in normalized:
                         parts = normalized.split("/")
                         idx_u = parts.index("uploads")
@@ -14937,6 +15373,22 @@ def submit_and_generate_api():
         cert_codes = request.form.getlist('cert_code[]')
         cert_issuers = request.form.getlist('cert_issuer[]')  # 新增：發證人列表
         
+        # 若未上傳新成績單，從資料庫取既有 ProofImage 寫回各課程（供 save_structured_data 使用）
+        if not transcript_path and result and student_id:
+            cursor.execute("SHOW COLUMNS FROM course_grades LIKE 'ProofImage'")
+            if cursor.fetchone():
+                cursor.execute("""
+                    SELECT ProofImage FROM course_grades
+                    WHERE StuID = %s AND ProofImage IS NOT NULL AND ProofImage != ''
+                    LIMIT 1
+                """, (student_id,))
+                row = cursor.fetchone()
+                if row and row.get('ProofImage'):
+                    existing_proof = (row['ProofImage'] or '').replace('\\', '/')
+                    for c in courses:
+                        if not c.get('proof_image'):
+                            c['proof_image'] = existing_proof
+
         # 建立結構化資料（傳入 save_structured_data）
         semester_id = get_current_semester_id(cursor)
         structured_data = {
@@ -15022,8 +15474,9 @@ def submit_and_generate_api():
 
         # 生成 Word 文件
         student_data_for_doc = get_student_info_for_doc(cursor, student_id, semester_id=semester_id)
-        # PhotoPath & ConductScoreNumeric
-        student_data_for_doc["info"]["PhotoPath"] = photo_path
+        # PhotoPath & ConductScoreNumeric（未上傳新照片時保留既有路徑）
+        if photo_path is not None:
+            student_data_for_doc["info"]["PhotoPath"] = photo_path
         student_data_for_doc["info"]["ConductScoreNumeric"] = data.get("conduct_score_numeric")
         # 傳遞證照圖片與名稱清單（generate 會自行從 certs 讀）
         student_data_for_doc["cert_photo_paths"] = cert_photo_paths
@@ -15109,14 +15562,11 @@ def generate_application_form_docx(student_data, output_path):
             except:
                 pass
 
-        # 照片
+        # 照片（使用 safe_create 驗證格式，避免 render 時 UnrecognizedImageError）
         image_obj = None
         photo_path = info.get("PhotoPath")
         if photo_path and os.path.exists(photo_path):
-            try:
-                image_obj = InlineImage(doc, os.path.abspath(photo_path), width=Inches(1.2))
-            except Exception as e:
-                print(f"⚠️ 圖片載入錯誤: {e}")
+            image_obj = safe_create_inline_image(doc, photo_path, Inches(1.2), "學生照片")
 
         # 處理課程資料（保留原邏輯）
         MAX_COURSES = 30
@@ -15133,27 +15583,21 @@ def generate_application_form_docx(student_data, output_path):
                     course = padded_grades[index]
                     row_num = i + 1
                     col_num = j + 1
-                    context_courses[f'CourseName_{row_num}_{col_num}'] = course.get('CourseName', '')
-                    context_courses[f'Credits_{row_num}_{col_num}'] = course.get('Credits', '')
+                    context_courses[f'CourseName_{row_num}_{col_num}'] = (course.get('CourseName') or '')
+                    context_courses[f'Credits_{row_num}_{col_num}'] = (course.get('Credits') or '')
 
-        # 插入成績單圖片：嘗試從 student_data['transcript_path']（由 get_student_info_for_doc 提供）
+        # 插入成績單圖片：使用 safe_create 驗證格式，避免 render 時 UnrecognizedImageError
         transcript_obj = None
         transcript_path = student_data.get("transcript_path") or info.get("TranscriptPath") or ''
         if transcript_path and os.path.exists(transcript_path):
-            try:
-                transcript_obj = InlineImage(doc, os.path.abspath(transcript_path), width=Inches(6.0))
-            except Exception as e:
-                print(f"⚠️ 成績單圖片載入錯誤: {e}")
+            transcript_obj = safe_create_inline_image(doc, transcript_path, Inches(6.0), "成績單")
 
         # 缺勤佐證圖片
         absence_proof_obj = None
         absence_proof_path = student_data.get("Absence_Proof_Path")
         image_size = Inches(6.0)
         if absence_proof_path and os.path.exists(absence_proof_path):
-            try:
-                absence_proof_obj = InlineImage(doc, os.path.abspath(absence_proof_path), width=image_size)
-            except Exception as e:
-                print(f"⚠️ 缺勤佐證圖片載入錯誤: {e}")
+            absence_proof_obj = safe_create_inline_image(doc, absence_proof_path, image_size, "缺勤佐證")
 
         # 操行等級
         conduct_score = info.get('ConductScore', '')
@@ -15166,38 +15610,56 @@ def generate_application_form_docx(student_data, output_path):
         # certs 已經從 get_student_info_for_doc 返回，格式統一
         # 優先使用前端提交的證照名稱（如果有的話）
         # 這樣可以確保只顯示用戶實際選擇的證照，而不是數據庫中所有相關記錄
-        cert_names_from_form = student_data.get("cert_names", [])
-        cert_photo_paths_from_form = student_data.get("cert_photo_paths", [])
-        
-        # 如果有前端提交的證照名稱，使用它們來覆蓋數據庫查詢結果
-        if cert_names_from_form:
-            # 重新構建證照列表，使用前端提交的名稱
-            certs_with_form_names = []
-            for idx, (name, path) in enumerate(zip(cert_names_from_form, cert_photo_paths_from_form)):
-                if name and name.strip():
-                    # 從原始 certs 中找到對應的證照（通過索引或路徑匹配）
-                    matching_cert = None
-                    if idx < len(certs):
-                        matching_cert = certs[idx]
-                    elif path:
-                        # 通過路徑匹配
-                        for c in certs:
-                            if c.get("cert_path") == path:
-                                matching_cert = c
-                                break
-                    
-                    # 使用前端提交的名稱，但保留其他信息（類別、路徑等）
-                    cert_item = {
-                        "cert_name": name.strip(),  # 使用前端提交的名稱
-                        "category": matching_cert.get("category", "other") if matching_cert else "other",
-                        "cert_path": path if path else (matching_cert.get("cert_path", "") if matching_cert else ""),
-                        "acquire_date": matching_cert.get("acquire_date", "") if matching_cert else "",
-                    }
-                    certs_with_form_names.append(cert_item)
-            
-            # 如果有匹配的證照，使用新的列表；否則使用原始列表
-            if certs_with_form_names:
-                certs = certs_with_form_names
+        cert_photo_paths_from_form = student_data.get("cert_photo_paths", []) or []
+        structured_certs = student_data.get("structured_certifications", [])
+
+        # 以 structured_certifications 為準疊代，確保每筆都有 authority_id / category，避免索引錯位
+        # 同一 photo_path 只使用一次，避免編輯後重新上傳時出現兩張一樣的證照圖
+        if structured_certs:
+            certs_from_form = []
+            used_photo_paths = set()
+            for idx, struct in enumerate(structured_certs):
+                name = (struct.get("name") or "").strip()
+                if not name:
+                    continue
+                path = (struct.get("cert_path") or "")
+                if not path and idx < len(cert_photo_paths_from_form):
+                    path = cert_photo_paths_from_form[idx] or ""
+                path = (path or "").replace("\\", "/").strip()
+                if path and path in used_photo_paths:
+                    path = ""
+                elif path:
+                    used_photo_paths.add(path)
+                matching_cert = certs[idx] if idx < len(certs) else None
+                if not matching_cert and path:
+                    for c in certs:
+                        if (c.get("cert_path") or "").replace("\\", "/") == path:
+                            matching_cert = c
+                            break
+                # 類別：勞動部 authority_id=1 必為 labor；否則用表單 category 或 DB 匹配
+                aid = struct.get("authority_id")
+                if aid is not None and str(aid).strip() in ("1",):
+                    category = "labor"
+                else:
+                    try:
+                        ai = int(aid)
+                        if ai == 1:
+                            category = "labor"
+                        else:
+                            category = (struct.get("category") or "").strip().lower() or "other"
+                            if category not in ("labor", "intl", "local", "other"):
+                                category = "other"
+                    except (TypeError, ValueError):
+                        cat = (struct.get("category") or "").strip().lower()
+                        category = cat if cat in ("labor", "intl", "local", "other") else ("other" if not matching_cert else matching_cert.get("category", "other"))
+                certs_from_form.append({
+                    "cert_name": name,
+                    "category": category,
+                    "cert_path": path or (matching_cert.get("cert_path", "") if matching_cert else ""),
+                    "acquire_date": (matching_cert.get("acquire_date") or struct.get("acquire_date") or "") if matching_cert else (struct.get("acquire_date") or ""),
+                })
+            if certs_from_form:
+                certs = certs_from_form
         
         # 分類證照
         labor_list, intl_list, local_list, other_list = categorize_certifications(certs)
@@ -15216,24 +15678,24 @@ def generate_application_form_docx(student_data, output_path):
             autobiography = autobiography.strip('\n')
         
         context = {
-            'StuID': info.get('StuID', ''),
-            'StuName': info.get('StuName', ''),
+            'StuID': (info.get('StuID') or ''),
+            'StuName': (info.get('StuName') or ''),
             'BirthYear': year, 'BirthMonth': month, 'BirthDay': day,
-            'Gender': info.get('Gender', ''),
-            'Phone': info.get('Phone', ''),
-            'Email': info.get('Email', ''),
-            'Address': info.get('Address', ''),
-            'ConductScoreNumeric': info.get('ConductScoreNumeric', ''),
+            'Gender': (info.get('Gender') or ''),
+            'Phone': (info.get('Phone') or ''),
+            'Email': (info.get('Email') or ''),
+            'Address': (info.get('Address') or ''),
+            'ConductScoreNumeric': (info.get('ConductScoreNumeric') or ''),
             'ConductScore': conduct_score,
-            'Autobiography': autobiography,  # 使用處理過的自傳
-            'Image_1': image_obj if image_obj else "",
-            'transcript_path': transcript_obj if transcript_obj else "",
-            'Absence_Proof_Image': absence_proof_obj if absence_proof_obj else ""
+            'Autobiography': (autobiography or ''),
         }
-        
-        # 清空可能出現在"缺勤記錄"標題上方的空變數
-        # 如果模板中有這些變數但值為空，設為 None 以避免顯示空白行
-        # 常見的可能變數名
+        if image_obj:
+            context['Image_1'] = image_obj
+        if transcript_obj:
+            context['transcript_path'] = transcript_obj
+        if absence_proof_obj:
+            context['Absence_Proof_Image'] = absence_proof_obj
+
         empty_vars_to_clear = [
             'empty_line_1', 'empty_line_2', 'empty_line_3',
             'blank_line_1', 'blank_line_2', 'blank_line_3',
@@ -15242,15 +15704,14 @@ def generate_application_form_docx(student_data, output_path):
             'blank_1', 'blank_2', 'blank_3',
         ]
         for var in empty_vars_to_clear:
-            context[var] = None  # 設為 None 而不是空字符串，Jinja2 會跳過 None 值
+            context[var] = ""
 
         # 加入缺勤統計
         # 只填充這8個標準字段，確保沒有多餘的空白行
         absence_fields = ['曠課', '遲到', '事假', '病假', '生理假', '公假', '喪假', '總計']
         for t in absence_fields:
             key = f"absence_{t}_units"
-            # 從 student_data 中獲取缺勤統計數據
-            value = student_data.get(key, "0 節")
+            value = (student_data.get(key) or "0 節")
             context[key] = value
             # 調試輸出
             if value == "0 節" and t != "總計":
@@ -15309,9 +15770,8 @@ def generate_application_form_docx(student_data, output_path):
         certs_to_display = certs_with_photos[:max_total]
         total_certs = len(certs_to_display)
         
-        # 初始化所有證照圖片和名稱為空
+        # 初始化證照名稱為空；圖片僅在有圖時才設 key，未輸入不設以免顯示 None
         for idx in range(1, 33):
-            context[f"CertPhotoImages_{idx}"] = ""
             context[f"CertPhotoName_{idx}"] = ""
         
         # 初始化所有頁面區塊為 False（不顯示）
@@ -15370,26 +15830,11 @@ def generate_application_form_docx(student_data, output_path):
 
         context.update(lang_context)
         
-        # 在渲染前，清理所有可能導致空白行的空變數
-        # 將所有空字符串變數設為 None，這樣 Jinja2 在模板中會跳過它們
-        # 但保留重要的變數（如數字、圖片等）
+        # 渲染前：所有 None 改為 ""，避免 Word 顯示 "None"；未輸入欄位顯示空白
         for key in list(context.keys()):
-            value = context[key]
-            # 如果是空字符串，設為 None（但保留重要的變數）
-            if isinstance(value, str) and value.strip() == '':
-                # 檢查是否為重要變數（不應設為 None）
-                important_vars = ['StuID', 'StuName', 'Gender', 'Phone', 'Email', 'Address', 
-                                 'ConductScore', 'ConductScoreNumeric', 'BirthYear', 'BirthMonth', 'BirthDay']
-                if key not in important_vars:
-                    # 對於可能出現在"缺勤記錄"標題上方的變數，設為 None
-                    # 這樣模板中如果使用 {% if variable %} 就不會顯示空白行
-                    if any(key.startswith(prefix) for prefix in ['empty_', 'blank_', 'spacer_', 'extra_']):
-                        context[key] = None
-                    # 或者，如果變數名包含 "line" 或 "row"，也可能是空白行變數
-                    elif 'line' in key.lower() or 'row' in key.lower():
-                        context[key] = None
+            if context[key] is None:
+                context[key] = ""
 
-        # 渲染與儲存
         doc.render(context)
         doc.save(output_path)
         print(f"✅ 履歷文件已生成: {output_path}")
@@ -17375,18 +17820,25 @@ def is_valid_image_file(file_path):
 # 安全地創建 InlineImage 對象
 def safe_create_inline_image(doc, file_path, width, description=""):
     """
-    安全地創建 InlineImage 對象，如果失敗則返回 None
+    安全地創建 InlineImage 對象，如果失敗則返回 None。
+    先用 PIL 與 python-docx Image.from_file 驗證，避免 render 時 UnrecognizedImageError。
     """
     if not file_path or not os.path.exists(file_path):
         return None
-    
-    # 先驗證圖片
+
     if not is_valid_image_file(file_path):
         print(f"⚠️ {description}圖片無效或損壞，跳過: {file_path}")
         return None
-    
+
+    abs_path = os.path.abspath(file_path)
     try:
-        abs_path = os.path.abspath(file_path)
+        from docx.image.image import Image as DocxImage
+        DocxImage.from_file(abs_path)
+    except Exception as e:
+        print(f"⚠️ {description}圖片格式不被 Word 支援，跳過: {file_path} ({e})")
+        return None
+
+    try:
         image_obj = InlineImage(doc, abs_path, width=width)
         return image_obj
     except Exception as e:
@@ -17642,10 +18094,14 @@ def fill_certificates_to_doc(context, prefix, items, max_count):
     """
     填入 Word 模板（表格區）
     prefix 例如: LaborCerts_  → LaborCerts_1, LaborCerts_2 …
+    空欄位與 None 一律顯示空白。
     """
     for i in range(1, max_count + 1):
         if i <= len(items):
-            context[f"{prefix}{i}"] = items[i-1].get("table_name", "")
+            name = (items[i-1].get("table_name") or "").strip()
+            if name == "None":
+                name = ""
+            context[f"{prefix}{i}"] = name
         else:
             context[f"{prefix}{i}"] = ""
 
@@ -17654,24 +18110,29 @@ def fill_certificate_photos(context, doc, items, start_index, max_count=8):
     圖片區（依順序放，不分類）
     start_index → 從第幾張開始，例如 1、9、17、25
     max_count → 最多填充幾張（實際填充的數量可能少於此值）
+    空欄位一律填空白，不顯示 None。
     """
     image_size = Inches(3.0)
     actual_count = min(len(items), max_count)
     
     # 填充實際有的證照
     for idx, item in enumerate(items[:max_count], start=start_index):
-        photo_path = item.get("photo_path", "")
-        photo_name = item.get("photo_name", "")
+        photo_path = item.get("photo_path", "") or ""
+        photo_name = (item.get("photo_name", "") or "").strip()
+        if photo_name == "None":
+            photo_name = ""
         
         if photo_path:
             image_obj = safe_create_inline_image(doc, photo_path, image_size, "證照")
-            context[f"CertPhotoImages_{idx}"] = image_obj if image_obj else ""
+            if image_obj:
+                context[f"CertPhotoImages_{idx}"] = image_obj
+            else:
+                context[f"CertPhotoImages_{idx}"] = ""
         else:
             context[f"CertPhotoImages_{idx}"] = ""
-        
-        context[f"CertPhotoName_{idx}"] = photo_name
-    
-    # 清空本頁未使用的格子（如果實際數量少於 max_count）
+        context[f"CertPhotoName_{idx}"] = photo_name or ""
+
+    # 未使用的欄位：圖片與名稱都設為空白，避免模板顯示 None
     if actual_count < max_count:
         for idx in range(start_index + actual_count, start_index + max_count):
             context[f"CertPhotoImages_{idx}"] = ""
@@ -17763,7 +18224,9 @@ def save_structured_data(cursor, student_id, data, semester_id=None):
         processed_certs = set() # 用於去重 (job_category, level)
 
         # (3) 處理結構化的證照資料 (structured_certifications)
-        for cert in data.get("structured_certifications", []):
+        struct_certs = data.get("structured_certifications", [])
+        print(f"📋 收到 structured_certifications: {len(struct_certs)} 筆")
+        for cert in struct_certs:
             row = {"StuID": student_id}
             db_job_category = None
             db_level = None
@@ -17782,13 +18245,38 @@ def save_structured_data(cursor, student_id, data, semester_id=None):
                 db_job_category = (cert.get("job_category") or "").strip() or None
                 db_level = (cert.get("level") or "").strip() or None
             elif raw.isdigit():
-                # 前端傳的是 certificate_codes.id
+                # 數字可能是 id（如 2）或 code（如 14901、11800）。先查 id 是否存在，否則當 code 查
                 try:
-                    cert_code_id = int(raw)
-                except (ValueError, TypeError):
+                    as_id = int(raw)
+                    cursor.execute("SELECT id FROM certificate_codes WHERE id = %s LIMIT 1", (as_id,))
+                    if cursor.fetchone():
+                        cert_code_id = as_id
+                    else:
+                        level_from_cert = (cert.get("level") or "").strip()
+                        if level_from_cert:
+                            cursor.execute("""
+                                SELECT id, job_category, level, authority_id 
+                                FROM certificate_codes 
+                                WHERE code = %s AND (level = %s OR level IS NULL)
+                                LIMIT 1
+                            """, (raw_upper, level_from_cert))
+                        else:
+                            cursor.execute("""
+                                SELECT id, job_category, level, authority_id 
+                                FROM certificate_codes 
+                                WHERE code = %s
+                                LIMIT 1
+                            """, (raw_upper,))
+                        cert_info = cursor.fetchone()
+                        if cert_info:
+                            cert_code_id = cert_info.get('id')
+                except (ValueError, TypeError) as e:
+                    cert_code_id = None
+                except Exception as e:
+                    print(f"⚠️ 查詢 certificate_codes 失敗: {e}")
                     cert_code_id = None
             else:
-                # 前端傳的是證照代碼 code（如 11800、TQC-WORD），查詢對應的 id
+                # 前端傳的是證照代碼 code（如 TQC-WORD），查詢對應的 id
                 level_from_cert = (cert.get("level") or "").strip()
                 try:
                     if level_from_cert:
@@ -17849,7 +18337,7 @@ def save_structured_data(cursor, student_id, data, semester_id=None):
 
             if not cert_name:
                 print(f"⚠️ 忽略無名稱證照記錄: {cert}")
-                continue # 忽略沒有名稱的記錄
+                continue
 
             # 檢查是否重複（使用 job_category, level 作為唯一標識）
             if db_job_category and db_level:
@@ -17908,8 +18396,9 @@ def save_structured_data(cursor, student_id, data, semester_id=None):
 
         # (5) 實際寫入資料庫
         if cert_rows:
-            # 先刪除舊資料
+            print(f"📋 準備寫入 student_certifications: {len(cert_rows)} 筆")
             cursor.execute("DELETE FROM student_certifications WHERE StuID=%s", (student_id,))
+            insert_failed = False
             for row in cert_rows:
                 cols = list(row.keys())
                 values = list(row.values())
@@ -17921,9 +18410,15 @@ def save_structured_data(cursor, student_id, data, semester_id=None):
                         (*values, datetime.now())
                     )
                 except Exception as e:
-                    # 如果因為唯一索引衝突導致插入失敗，記錄錯誤但繼續處理其他記錄
-                    print(f"⚠️ 插入證照記錄失敗（可能是唯一索引衝突）: {e}")
+                    print(f"⚠️ 插入證照記錄失敗: {e}")
                     print(f" 記錄內容: {row}")
+                    insert_failed = True
+                    raise
+            if not insert_failed:
+                print(f"✅ student_certifications 已寫入 {len(cert_rows)} 筆")
+        else:
+            if struct_certs:
+                print(f"⚠️ 有 {len(struct_certs)} 筆證照但 cert_rows 為空（可能全部被跳過），不刪除既存證照")
         
         # -------------------------------------------------------------
         # 4) 儲存語言能力 student_languageskills
@@ -18211,6 +18706,11 @@ def format_data_for_doc(student_data, doc_path=None):
     fill_certificates_to_doc(context, "LocalCerts_", local, 4)
     fill_certificates_to_doc(context, "OtherCerts_", other, 4)
     
+    # 先將所有證照圖片/名稱佔位符設為空白，避免模板顯示 None
+    for i in range(1, 33):
+        context[f"CertPhotoImages_{i}"] = ""
+        context[f"CertPhotoName_{i}"] = ""
+    
     # 圖片區（不分類，按順序最多 32 張）
     certs_for_photos = [
         {'photo_path': c.get('CertPath'), 'photo_name': f"{c.get('job_category', '')}{c.get('level', '')}" if c.get('job_category') else c.get('CertName')}
@@ -18314,8 +18814,8 @@ def get_resume_data():
         if not resume:
             return jsonify({"success": False, "message": "沒有已提交的履歷"}), 404
 
-        # ===== 2. 抓 StudentID（學號）=====
-        cursor.execute("SELECT username FROM users WHERE id=%s", (user_id,))
+        # ===== 2. 抓 StudentID（學號）及 users 的 name, email, avatar_url =====
+        cursor.execute("SELECT username, name, email, avatar_url FROM users WHERE id=%s", (user_id,))
         user_result = cursor.fetchone()
         if not user_result:
             return jsonify({"success": False, "message": "找不到使用者"}), 404
@@ -18507,6 +19007,8 @@ def get_resume_data():
                     (c.get("cert_code") is not None)
                 )
             ]
+            # 依 id 升序排列，使編輯時證照順序與使用者新增順序一致（先新增的在前）
+            certifications.sort(key=lambda c: (c.get("id") or 0))
 
         # ===== 7. 語言能力 =====
 
@@ -18615,26 +19117,36 @@ def get_resume_data():
                 "AcquisitionDate": acquisition_date_str  # 轉換為字符串格式，確保 JSON 序列化正常
             })
 
-        # ===== 10. 回傳結果 =====
+        # ===== 10. 回傳結果（路徑一律正斜線、不回傳 None）=====
+        def norm_path(p):
+            if p is None or (isinstance(p, str) and p.strip() == ""):
+                return ""
+            return (p or "").replace("\\", "/").strip()
+
+        # 姓名、電子信箱、個人頭貼優先從 users 表帶入
+        user_name = (user_result.get("name") or "").strip() or student_info.get("StuName", "")
+        user_email = (user_result.get("email") or "").strip() or student_info.get("Email", "")
+        user_avatar = norm_path(user_result.get("avatar_url")) or norm_path(student_info.get("PhotoPath"))
+
         return jsonify({
             "success": True,
             "data": {
                 "student_info": {
-                    "name": student_info.get("StuName", ""),
+                    "name": user_name,
                     "birth_date": birth_date or "",
                     "gender": student_info.get("Gender", ""),
                     "phone": student_info.get("Phone", ""),
-                    "email": student_info.get("Email", ""),
+                    "email": user_email,
                     "address": student_info.get("Address", ""),
                     "conduct_score": student_info.get("ConductScore", ""),
                     "autobiography": student_info.get("Autobiography", ""),
-                    "photo_path": student_info.get("PhotoPath", "")
+                    "photo_path": user_avatar
                 },
                 "courses": courses,
                 "certifications": formatted_certs,
                 "languages": languages,
-                "transcript_path": transcript_path,
-                "absence_proof_path": absence_proof_path
+                "transcript_path": norm_path(transcript_path),
+                "absence_proof_path": norm_path(absence_proof_path)
             }
         })
 
@@ -18829,6 +19341,13 @@ def submit_and_generate_api():
             new_filename = f"{user_id}_photo_{datetime.now().strftime('%Y%m%d_%H%M%S')}{ext}"
             photo_path = os.path.join(photo_dir, new_filename)
             photo.save(photo_path)
+            photo_path = photo_path.replace("\\", "/")
+        else:
+            # 未上傳新照片時保留資料庫既有路徑
+            cursor.execute("SELECT PhotoPath FROM Student_Info WHERE StuID = (SELECT username FROM users WHERE id=%s)", (user_id,))
+            row = cursor.fetchone()
+            if row and row.get('PhotoPath'):
+                photo_path = (row['PhotoPath'] or '').replace('\\', '/')
 
         # 儲存成績單檔案（先儲存檔案，再 update 到 course_grades 的 transcript_path）
         transcript_path = None
@@ -18842,6 +19361,7 @@ def submit_and_generate_api():
             new_filename = f"{user_id}_transcript_{datetime.now().strftime('%Y%m%d_%H%M%S')}{ext}"
             transcript_path = os.path.join(transcript_dir, new_filename)
             transcript_file.save(transcript_path)
+            transcript_path = transcript_path.replace("\\", "/")
 
         # 儲存多張證照
         cert_photo_paths = []
@@ -18879,7 +19399,16 @@ def submit_and_generate_api():
                 traceback.print_exc()
                 image_path_for_template = None
 
-        if image_path_for_template or certificate_description:
+        # 先解析 structured_certifications，才能決定是否插入單張證照（避免多張證照時索引錯位、圖片重複）
+        _structured_from_form = []
+        _structured_json = request.form.get('structured_certifications', '')
+        if _structured_json:
+            try:
+                _structured_from_form = json.loads(_structured_json)
+            except Exception:
+                pass
+        # 僅在「沒有」使用新格式多張證照時，才在 index 0 插入單張證照
+        if (image_path_for_template or certificate_description) and not _structured_from_form:
             if cert_photo_paths is None:
                 cert_photo_paths = []
             if cert_names is None:
@@ -18982,7 +19511,8 @@ def submit_and_generate_api():
                     fname = f"{user_id}_absence_proof_{datetime.now().strftime('%Y%m%d_%H%M%S')}{ext}"
                     savep = os.path.join(ABSENCE_PROOF_FOLDER, fname)
                     uploaded_proof.save(savep)
-                    absence_image_path = savep
+                    # 統一用正斜線存進 DB，方便前端與靜態檔使用
+                    absence_image_path = savep.replace("\\", "/")
                 else:
                     print(f"⚠️ 上傳的缺勤佐證圖片格式不支援: {uploaded_proof.mimetype}")
         except Exception as e:
@@ -19048,13 +19578,13 @@ def submit_and_generate_api():
                                 fname = f"{user_id}_record_{record_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}{ext}"
                                 save_path = os.path.join(ABSENCE_PROOF_FOLDER, fname)
                                 uploaded_image.save(save_path)
-                                
+                                save_path_db = save_path.replace("\\", "/")
                                 # 更新資料庫中對應記錄的 image_path
                                 cursor.execute("""
                                     UPDATE absence_records 
                                     SET image_path = %s, updated_at = NOW()
                                     WHERE id = %s AND user_id = %s
-                                """, (save_path, record_id, user_id))
+                                """, (save_path_db, record_id, user_id))
                                 
                                 print(f"✅ 已更新缺勤記錄 {record_id} 的佐證圖片: {save_path}")
                             except Exception as e:
@@ -19067,17 +19597,16 @@ def submit_and_generate_api():
                     print(f"⚠️ 解析 absence_records_with_images 失敗: {e}")
                     traceback.print_exc()
             
-            # 2. 如果有整體佐證圖片，更新到該學期所有沒有圖片的記錄
+            # 2. 如果有整體佐證圖片，更新到該學期或全部沒有圖片的記錄
             if absence_image_path:
                 semester_id = request.form.get("semester_id", None)
-                if semester_id:
-                    try:
+                try:
+                    if semester_id:
                         # 檢查是否有 semester_id 欄位
                         cursor.execute("SHOW COLUMNS FROM absence_records LIKE 'semester_id'")
                         has_semester_id = cursor.fetchone() is not None
                         
                         if has_semester_id:
-                            # 更新該學期所有沒有圖片的記錄
                             cursor.execute("""
                                 UPDATE absence_records 
                                 SET image_path = %s, updated_at = NOW()
@@ -19085,19 +19614,32 @@ def submit_and_generate_api():
                                 AND (image_path IS NULL OR image_path = '')
                             """, (absence_image_path, user_id, semester_id))
                         else:
-                            # 如果沒有 semester_id 欄位，更新所有沒有圖片的記錄
                             cursor.execute("""
                                 UPDATE absence_records 
                                 SET image_path = %s, updated_at = NOW()
                                 WHERE user_id = %s 
                                 AND (image_path IS NULL OR image_path = '')
                             """, (absence_image_path, user_id))
-                        
-                        conn.commit()
-                        print(f"✅ 已將整體佐證圖片更新到缺勤記錄")
-                    except Exception as e:
-                        print(f"⚠️ 更新整體佐證圖片失敗: {e}")
-                        traceback.print_exc()
+                    else:
+                        # 未傳學期時：先更新所有「尚無圖片」的記錄
+                        cursor.execute("""
+                            UPDATE absence_records 
+                            SET image_path = %s, updated_at = NOW()
+                            WHERE user_id = %s 
+                            AND (image_path IS NULL OR image_path = '')
+                        """, (absence_image_path, user_id))
+                    # 若沒有任何一筆被更新，改為更新該使用者最新一筆缺勤記錄
+                    if cursor.rowcount == 0:
+                        cursor.execute("""
+                            UPDATE absence_records ar
+                            JOIN (SELECT id FROM absence_records WHERE user_id = %s ORDER BY id DESC LIMIT 1) t ON ar.id = t.id
+                            SET ar.image_path = %s, ar.updated_at = NOW()
+                        """, (user_id, absence_image_path))
+                    conn.commit()
+                    print(f"✅ 已將整體佐證圖片更新到缺勤記錄")
+                except Exception as e:
+                    print(f"⚠️ 更新整體佐證圖片失敗: {e}")
+                    traceback.print_exc()
         except Exception as e:
             print(f"⚠️ 處理缺勤記錄圖片失敗: {e}")
             traceback.print_exc()
@@ -19142,11 +19684,12 @@ def submit_and_generate_api():
                     "issuer": issuer.strip() if issuer else ""  # 新增：發證人
             })
 
-        # 將表單上傳的證照圖片路徑依序寫入 structured_certifications（與前端證照項目順序對應）
+        # 將表單上傳的證照圖片路徑依序寫入 structured_certifications（與前端證照項目順序 1:1 對應，避免重複或遺漏）
         if cert_photo_paths and structured_certifications:
-            for i, path in enumerate(cert_photo_paths):
-                if i < len(structured_certifications) and path:
-                    normalized = path.replace("\\", "/")
+            for i in range(len(structured_certifications)):
+                if i < len(cert_photo_paths) and cert_photo_paths[i]:
+                    path = cert_photo_paths[i]
+                    normalized = (path or "").replace("\\", "/")
                     if "uploads" in normalized:
                         parts = normalized.split("/")
                         idx_u = parts.index("uploads")
@@ -19177,6 +19720,22 @@ def submit_and_generate_api():
         cert_codes = request.form.getlist('cert_code[]')
         cert_issuers = request.form.getlist('cert_issuer[]')  # 新增：發證人列表
         
+        # 若未上傳新成績單，從資料庫取既有 ProofImage 寫回各課程（供 save_structured_data 使用）
+        if not transcript_path and result and student_id:
+            cursor.execute("SHOW COLUMNS FROM course_grades LIKE 'ProofImage'")
+            if cursor.fetchone():
+                cursor.execute("""
+                    SELECT ProofImage FROM course_grades
+                    WHERE StuID = %s AND ProofImage IS NOT NULL AND ProofImage != ''
+                    LIMIT 1
+                """, (student_id,))
+                row = cursor.fetchone()
+                if row and row.get('ProofImage'):
+                    existing_proof = (row['ProofImage'] or '').replace('\\', '/')
+                    for c in courses:
+                        if not c.get('proof_image'):
+                            c['proof_image'] = existing_proof
+
         # 建立結構化資料（傳入 save_structured_data）
         semester_id = get_current_semester_id(cursor)
         structured_data = {
@@ -19262,8 +19821,9 @@ def submit_and_generate_api():
 
         # 生成 Word 文件
         student_data_for_doc = get_student_info_for_doc(cursor, student_id, semester_id=semester_id)
-        # PhotoPath & ConductScoreNumeric
-        student_data_for_doc["info"]["PhotoPath"] = photo_path
+        # PhotoPath & ConductScoreNumeric（未上傳新照片時保留既有路徑）
+        if photo_path is not None:
+            student_data_for_doc["info"]["PhotoPath"] = photo_path
         student_data_for_doc["info"]["ConductScoreNumeric"] = data.get("conduct_score_numeric")
         # 傳遞證照圖片與名稱清單（generate 會自行從 certs 讀）
         student_data_for_doc["cert_photo_paths"] = cert_photo_paths
@@ -19349,14 +19909,11 @@ def generate_application_form_docx(student_data, output_path):
             except:
                 pass
 
-        # 照片
+        # 照片（使用 safe_create 驗證格式，避免 render 時 UnrecognizedImageError）
         image_obj = None
         photo_path = info.get("PhotoPath")
         if photo_path and os.path.exists(photo_path):
-            try:
-                image_obj = InlineImage(doc, os.path.abspath(photo_path), width=Inches(1.2))
-            except Exception as e:
-                print(f"⚠️ 圖片載入錯誤: {e}")
+            image_obj = safe_create_inline_image(doc, photo_path, Inches(1.2), "學生照片")
 
         # 處理課程資料（保留原邏輯）
         MAX_COURSES = 30
@@ -19373,27 +19930,21 @@ def generate_application_form_docx(student_data, output_path):
                     course = padded_grades[index]
                     row_num = i + 1
                     col_num = j + 1
-                    context_courses[f'CourseName_{row_num}_{col_num}'] = course.get('CourseName', '')
-                    context_courses[f'Credits_{row_num}_{col_num}'] = course.get('Credits', '')
+                    context_courses[f'CourseName_{row_num}_{col_num}'] = (course.get('CourseName') or '')
+                    context_courses[f'Credits_{row_num}_{col_num}'] = (course.get('Credits') or '')
 
-        # 插入成績單圖片：嘗試從 student_data['transcript_path']（由 get_student_info_for_doc 提供）
+        # 插入成績單圖片：使用 safe_create 驗證格式，避免 render 時 UnrecognizedImageError
         transcript_obj = None
         transcript_path = student_data.get("transcript_path") or info.get("TranscriptPath") or ''
         if transcript_path and os.path.exists(transcript_path):
-            try:
-                transcript_obj = InlineImage(doc, os.path.abspath(transcript_path), width=Inches(6.0))
-            except Exception as e:
-                print(f"⚠️ 成績單圖片載入錯誤: {e}")
+            transcript_obj = safe_create_inline_image(doc, transcript_path, Inches(6.0), "成績單")
 
         # 缺勤佐證圖片
         absence_proof_obj = None
         absence_proof_path = student_data.get("Absence_Proof_Path")
         image_size = Inches(6.0)
         if absence_proof_path and os.path.exists(absence_proof_path):
-            try:
-                absence_proof_obj = InlineImage(doc, os.path.abspath(absence_proof_path), width=image_size)
-            except Exception as e:
-                print(f"⚠️ 缺勤佐證圖片載入錯誤: {e}")
+            absence_proof_obj = safe_create_inline_image(doc, absence_proof_path, image_size, "缺勤佐證")
 
         # 操行等級
         conduct_score = info.get('ConductScore', '')
@@ -19406,38 +19957,56 @@ def generate_application_form_docx(student_data, output_path):
         # certs 已經從 get_student_info_for_doc 返回，格式統一
         # 優先使用前端提交的證照名稱（如果有的話）
         # 這樣可以確保只顯示用戶實際選擇的證照，而不是數據庫中所有相關記錄
-        cert_names_from_form = student_data.get("cert_names", [])
-        cert_photo_paths_from_form = student_data.get("cert_photo_paths", [])
-        
-        # 如果有前端提交的證照名稱，使用它們來覆蓋數據庫查詢結果
-        if cert_names_from_form:
-            # 重新構建證照列表，使用前端提交的名稱
-            certs_with_form_names = []
-            for idx, (name, path) in enumerate(zip(cert_names_from_form, cert_photo_paths_from_form)):
-                if name and name.strip():
-                    # 從原始 certs 中找到對應的證照（通過索引或路徑匹配）
-                    matching_cert = None
-                    if idx < len(certs):
-                        matching_cert = certs[idx]
-                    elif path:
-                        # 通過路徑匹配
-                        for c in certs:
-                            if c.get("cert_path") == path:
-                                matching_cert = c
-                                break
-                    
-                    # 使用前端提交的名稱，但保留其他信息（類別、路徑等）
-                    cert_item = {
-                        "cert_name": name.strip(),  # 使用前端提交的名稱
-                        "category": matching_cert.get("category", "other") if matching_cert else "other",
-                        "cert_path": path if path else (matching_cert.get("cert_path", "") if matching_cert else ""),
-                        "acquire_date": matching_cert.get("acquire_date", "") if matching_cert else "",
-                    }
-                    certs_with_form_names.append(cert_item)
-            
-            # 如果有匹配的證照，使用新的列表；否則使用原始列表
-            if certs_with_form_names:
-                certs = certs_with_form_names
+        cert_photo_paths_from_form = student_data.get("cert_photo_paths", []) or []
+        structured_certs = student_data.get("structured_certifications", [])
+
+        # 以 structured_certifications 為準疊代，確保每筆都有 authority_id / category，避免索引錯位
+        # 同一 photo_path 只使用一次，避免編輯後重新上傳時出現兩張一樣的證照圖
+        if structured_certs:
+            certs_from_form = []
+            used_photo_paths = set()
+            for idx, struct in enumerate(structured_certs):
+                name = (struct.get("name") or "").strip()
+                if not name:
+                    continue
+                path = (struct.get("cert_path") or "")
+                if not path and idx < len(cert_photo_paths_from_form):
+                    path = cert_photo_paths_from_form[idx] or ""
+                path = (path or "").replace("\\", "/").strip()
+                if path and path in used_photo_paths:
+                    path = ""
+                elif path:
+                    used_photo_paths.add(path)
+                matching_cert = certs[idx] if idx < len(certs) else None
+                if not matching_cert and path:
+                    for c in certs:
+                        if (c.get("cert_path") or "").replace("\\", "/") == path:
+                            matching_cert = c
+                            break
+                # 類別：勞動部 authority_id=1 必為 labor；否則用表單 category 或 DB 匹配
+                aid = struct.get("authority_id")
+                if aid is not None and str(aid).strip() in ("1",):
+                    category = "labor"
+                else:
+                    try:
+                        ai = int(aid)
+                        if ai == 1:
+                            category = "labor"
+                        else:
+                            category = (struct.get("category") or "").strip().lower() or "other"
+                            if category not in ("labor", "intl", "local", "other"):
+                                category = "other"
+                    except (TypeError, ValueError):
+                        cat = (struct.get("category") or "").strip().lower()
+                        category = cat if cat in ("labor", "intl", "local", "other") else ("other" if not matching_cert else matching_cert.get("category", "other"))
+                certs_from_form.append({
+                    "cert_name": name,
+                    "category": category,
+                    "cert_path": path or (matching_cert.get("cert_path", "") if matching_cert else ""),
+                    "acquire_date": (matching_cert.get("acquire_date") or struct.get("acquire_date") or "") if matching_cert else (struct.get("acquire_date") or ""),
+                })
+            if certs_from_form:
+                certs = certs_from_form
         
         # 分類證照
         labor_list, intl_list, local_list, other_list = categorize_certifications(certs)
@@ -19456,24 +20025,24 @@ def generate_application_form_docx(student_data, output_path):
             autobiography = autobiography.strip('\n')
         
         context = {
-            'StuID': info.get('StuID', ''),
-            'StuName': info.get('StuName', ''),
+            'StuID': (info.get('StuID') or ''),
+            'StuName': (info.get('StuName') or ''),
             'BirthYear': year, 'BirthMonth': month, 'BirthDay': day,
-            'Gender': info.get('Gender', ''),
-            'Phone': info.get('Phone', ''),
-            'Email': info.get('Email', ''),
-            'Address': info.get('Address', ''),
-            'ConductScoreNumeric': info.get('ConductScoreNumeric', ''),
+            'Gender': (info.get('Gender') or ''),
+            'Phone': (info.get('Phone') or ''),
+            'Email': (info.get('Email') or ''),
+            'Address': (info.get('Address') or ''),
+            'ConductScoreNumeric': (info.get('ConductScoreNumeric') or ''),
             'ConductScore': conduct_score,
-            'Autobiography': autobiography,  # 使用處理過的自傳
-            'Image_1': image_obj if image_obj else "",
-            'transcript_path': transcript_obj if transcript_obj else "",
-            'Absence_Proof_Image': absence_proof_obj if absence_proof_obj else ""
+            'Autobiography': (autobiography or ''),
         }
-        
-        # 清空可能出現在"缺勤記錄"標題上方的空變數
-        # 如果模板中有這些變數但值為空，設為 None 以避免顯示空白行
-        # 常見的可能變數名
+        if image_obj:
+            context['Image_1'] = image_obj
+        if transcript_obj:
+            context['transcript_path'] = transcript_obj
+        if absence_proof_obj:
+            context['Absence_Proof_Image'] = absence_proof_obj
+
         empty_vars_to_clear = [
             'empty_line_1', 'empty_line_2', 'empty_line_3',
             'blank_line_1', 'blank_line_2', 'blank_line_3',
@@ -19482,15 +20051,14 @@ def generate_application_form_docx(student_data, output_path):
             'blank_1', 'blank_2', 'blank_3',
         ]
         for var in empty_vars_to_clear:
-            context[var] = None  # 設為 None 而不是空字符串，Jinja2 會跳過 None 值
+            context[var] = ""
 
         # 加入缺勤統計
         # 只填充這8個標準字段，確保沒有多餘的空白行
         absence_fields = ['曠課', '遲到', '事假', '病假', '生理假', '公假', '喪假', '總計']
         for t in absence_fields:
             key = f"absence_{t}_units"
-            # 從 student_data 中獲取缺勤統計數據
-            value = student_data.get(key, "0 節")
+            value = (student_data.get(key) or "0 節")
             context[key] = value
             # 調試輸出
             if value == "0 節" and t != "總計":
@@ -19549,9 +20117,8 @@ def generate_application_form_docx(student_data, output_path):
         certs_to_display = certs_with_photos[:max_total]
         total_certs = len(certs_to_display)
         
-        # 初始化所有證照圖片和名稱為空
+        # 初始化證照名稱為空；圖片僅在有圖時才設 key，未輸入不設以免顯示 None
         for idx in range(1, 33):
-            context[f"CertPhotoImages_{idx}"] = ""
             context[f"CertPhotoName_{idx}"] = ""
         
         # 初始化所有頁面區塊為 False（不顯示）
@@ -19610,26 +20177,11 @@ def generate_application_form_docx(student_data, output_path):
 
         context.update(lang_context)
         
-        # 在渲染前，清理所有可能導致空白行的空變數
-        # 將所有空字符串變數設為 None，這樣 Jinja2 在模板中會跳過它們
-        # 但保留重要的變數（如數字、圖片等）
+        # 渲染前：所有 None 改為 ""，避免 Word 顯示 "None"；未輸入欄位顯示空白
         for key in list(context.keys()):
-            value = context[key]
-            # 如果是空字符串，設為 None（但保留重要的變數）
-            if isinstance(value, str) and value.strip() == '':
-                # 檢查是否為重要變數（不應設為 None）
-                important_vars = ['StuID', 'StuName', 'Gender', 'Phone', 'Email', 'Address', 
-                                 'ConductScore', 'ConductScoreNumeric', 'BirthYear', 'BirthMonth', 'BirthDay']
-                if key not in important_vars:
-                    # 對於可能出現在"缺勤記錄"標題上方的變數，設為 None
-                    # 這樣模板中如果使用 {% if variable %} 就不會顯示空白行
-                    if any(key.startswith(prefix) for prefix in ['empty_', 'blank_', 'spacer_', 'extra_']):
-                        context[key] = None
-                    # 或者，如果變數名包含 "line" 或 "row"，也可能是空白行變數
-                    elif 'line' in key.lower() or 'row' in key.lower():
-                        context[key] = None
+            if context[key] is None:
+                context[key] = ""
 
-        # 渲染與儲存
         doc.render(context)
         doc.save(output_path)
         print(f"✅ 履歷文件已生成: {output_path}")
@@ -21615,18 +22167,25 @@ def is_valid_image_file(file_path):
 # 安全地創建 InlineImage 對象
 def safe_create_inline_image(doc, file_path, width, description=""):
     """
-    安全地創建 InlineImage 對象，如果失敗則返回 None
+    安全地創建 InlineImage 對象，如果失敗則返回 None。
+    先用 PIL 與 python-docx Image.from_file 驗證，避免 render 時 UnrecognizedImageError。
     """
     if not file_path or not os.path.exists(file_path):
         return None
-    
-    # 先驗證圖片
+
     if not is_valid_image_file(file_path):
         print(f"⚠️ {description}圖片無效或損壞，跳過: {file_path}")
         return None
-    
+
+    abs_path = os.path.abspath(file_path)
     try:
-        abs_path = os.path.abspath(file_path)
+        from docx.image.image import Image as DocxImage
+        DocxImage.from_file(abs_path)
+    except Exception as e:
+        print(f"⚠️ {description}圖片格式不被 Word 支援，跳過: {file_path} ({e})")
+        return None
+
+    try:
         image_obj = InlineImage(doc, abs_path, width=width)
         return image_obj
     except Exception as e:
@@ -21882,10 +22441,14 @@ def fill_certificates_to_doc(context, prefix, items, max_count):
     """
     填入 Word 模板（表格區）
     prefix 例如: LaborCerts_  → LaborCerts_1, LaborCerts_2 …
+    空欄位與 None 一律顯示空白。
     """
     for i in range(1, max_count + 1):
         if i <= len(items):
-            context[f"{prefix}{i}"] = items[i-1].get("table_name", "")
+            name = (items[i-1].get("table_name") or "").strip()
+            if name == "None":
+                name = ""
+            context[f"{prefix}{i}"] = name
         else:
             context[f"{prefix}{i}"] = ""
 
@@ -21894,24 +22457,29 @@ def fill_certificate_photos(context, doc, items, start_index, max_count=8):
     圖片區（依順序放，不分類）
     start_index → 從第幾張開始，例如 1、9、17、25
     max_count → 最多填充幾張（實際填充的數量可能少於此值）
+    空欄位一律填空白，不顯示 None。
     """
     image_size = Inches(3.0)
     actual_count = min(len(items), max_count)
     
     # 填充實際有的證照
     for idx, item in enumerate(items[:max_count], start=start_index):
-        photo_path = item.get("photo_path", "")
-        photo_name = item.get("photo_name", "")
+        photo_path = item.get("photo_path", "") or ""
+        photo_name = (item.get("photo_name", "") or "").strip()
+        if photo_name == "None":
+            photo_name = ""
         
         if photo_path:
             image_obj = safe_create_inline_image(doc, photo_path, image_size, "證照")
-            context[f"CertPhotoImages_{idx}"] = image_obj if image_obj else ""
+            if image_obj:
+                context[f"CertPhotoImages_{idx}"] = image_obj
+            else:
+                context[f"CertPhotoImages_{idx}"] = ""
         else:
             context[f"CertPhotoImages_{idx}"] = ""
-        
-        context[f"CertPhotoName_{idx}"] = photo_name
-    
-    # 清空本頁未使用的格子（如果實際數量少於 max_count）
+        context[f"CertPhotoName_{idx}"] = photo_name or ""
+
+    # 未使用的欄位：圖片與名稱都設為空白，避免模板顯示 None
     if actual_count < max_count:
         for idx in range(start_index + actual_count, start_index + max_count):
             context[f"CertPhotoImages_{idx}"] = ""
@@ -22003,7 +22571,9 @@ def save_structured_data(cursor, student_id, data, semester_id=None):
         processed_certs = set() # 用於去重 (job_category, level)
 
         # (3) 處理結構化的證照資料 (structured_certifications)
-        for cert in data.get("structured_certifications", []):
+        struct_certs = data.get("structured_certifications", [])
+        print(f"📋 收到 structured_certifications: {len(struct_certs)} 筆")
+        for cert in struct_certs:
             row = {"StuID": student_id}
             db_job_category = None
             db_level = None
@@ -22022,13 +22592,38 @@ def save_structured_data(cursor, student_id, data, semester_id=None):
                 db_job_category = (cert.get("job_category") or "").strip() or None
                 db_level = (cert.get("level") or "").strip() or None
             elif raw.isdigit():
-                # 前端傳的是 certificate_codes.id
+                # 數字可能是 id（如 2）或 code（如 14901、11800）。先查 id 是否存在，否則當 code 查
                 try:
-                    cert_code_id = int(raw)
-                except (ValueError, TypeError):
+                    as_id = int(raw)
+                    cursor.execute("SELECT id FROM certificate_codes WHERE id = %s LIMIT 1", (as_id,))
+                    if cursor.fetchone():
+                        cert_code_id = as_id
+                    else:
+                        level_from_cert = (cert.get("level") or "").strip()
+                        if level_from_cert:
+                            cursor.execute("""
+                                SELECT id, job_category, level, authority_id 
+                                FROM certificate_codes 
+                                WHERE code = %s AND (level = %s OR level IS NULL)
+                                LIMIT 1
+                            """, (raw_upper, level_from_cert))
+                        else:
+                            cursor.execute("""
+                                SELECT id, job_category, level, authority_id 
+                                FROM certificate_codes 
+                                WHERE code = %s
+                                LIMIT 1
+                            """, (raw_upper,))
+                        cert_info = cursor.fetchone()
+                        if cert_info:
+                            cert_code_id = cert_info.get('id')
+                except (ValueError, TypeError) as e:
+                    cert_code_id = None
+                except Exception as e:
+                    print(f"⚠️ 查詢 certificate_codes 失敗: {e}")
                     cert_code_id = None
             else:
-                # 前端傳的是證照代碼 code（如 11800、TQC-WORD），查詢對應的 id
+                # 前端傳的是證照代碼 code（如 TQC-WORD），查詢對應的 id
                 level_from_cert = (cert.get("level") or "").strip()
                 try:
                     if level_from_cert:
@@ -22089,7 +22684,7 @@ def save_structured_data(cursor, student_id, data, semester_id=None):
 
             if not cert_name:
                 print(f"⚠️ 忽略無名稱證照記錄: {cert}")
-                continue # 忽略沒有名稱的記錄
+                continue
 
             # 檢查是否重複（使用 job_category, level 作為唯一標識）
             if db_job_category and db_level:
@@ -22148,8 +22743,9 @@ def save_structured_data(cursor, student_id, data, semester_id=None):
 
         # (5) 實際寫入資料庫
         if cert_rows:
-            # 先刪除舊資料
+            print(f"📋 準備寫入 student_certifications: {len(cert_rows)} 筆")
             cursor.execute("DELETE FROM student_certifications WHERE StuID=%s", (student_id,))
+            insert_failed = False
             for row in cert_rows:
                 cols = list(row.keys())
                 values = list(row.values())
@@ -22161,9 +22757,15 @@ def save_structured_data(cursor, student_id, data, semester_id=None):
                         (*values, datetime.now())
                     )
                 except Exception as e:
-                    # 如果因為唯一索引衝突導致插入失敗，記錄錯誤但繼續處理其他記錄
-                    print(f"⚠️ 插入證照記錄失敗（可能是唯一索引衝突）: {e}")
+                    print(f"⚠️ 插入證照記錄失敗: {e}")
                     print(f" 記錄內容: {row}")
+                    insert_failed = True
+                    raise
+            if not insert_failed:
+                print(f"✅ student_certifications 已寫入 {len(cert_rows)} 筆")
+        else:
+            if struct_certs:
+                print(f"⚠️ 有 {len(struct_certs)} 筆證照但 cert_rows 為空（可能全部被跳過），不刪除既存證照")
         
         # -------------------------------------------------------------
         # 4) 儲存語言能力 student_languageskills
@@ -22451,6 +23053,11 @@ def format_data_for_doc(student_data, doc_path=None):
     fill_certificates_to_doc(context, "LocalCerts_", local, 4)
     fill_certificates_to_doc(context, "OtherCerts_", other, 4)
     
+    # 先將所有證照圖片/名稱佔位符設為空白，避免模板顯示 None
+    for i in range(1, 33):
+        context[f"CertPhotoImages_{i}"] = ""
+        context[f"CertPhotoName_{i}"] = ""
+    
     # 圖片區（不分類，按順序最多 32 張）
     certs_for_photos = [
         {'photo_path': c.get('CertPath'), 'photo_name': f"{c.get('job_category', '')}{c.get('level', '')}" if c.get('job_category') else c.get('CertName')}
@@ -22554,8 +23161,8 @@ def get_resume_data():
         if not resume:
             return jsonify({"success": False, "message": "沒有已提交的履歷"}), 404
 
-        # ===== 2. 抓 StudentID（學號）=====
-        cursor.execute("SELECT username FROM users WHERE id=%s", (user_id,))
+        # ===== 2. 抓 StudentID（學號）及 users 的 name, email, avatar_url =====
+        cursor.execute("SELECT username, name, email, avatar_url FROM users WHERE id=%s", (user_id,))
         user_result = cursor.fetchone()
         if not user_result:
             return jsonify({"success": False, "message": "找不到使用者"}), 404
@@ -22747,6 +23354,8 @@ def get_resume_data():
                     (c.get("cert_code") is not None)
                 )
             ]
+            # 依 id 升序排列，使編輯時證照順序與使用者新增順序一致（先新增的在前）
+            certifications.sort(key=lambda c: (c.get("id") or 0))
 
         # ===== 7. 語言能力 =====
 
@@ -22855,26 +23464,36 @@ def get_resume_data():
                 "AcquisitionDate": acquisition_date_str  # 轉換為字符串格式，確保 JSON 序列化正常
             })
 
-        # ===== 10. 回傳結果 =====
+        # ===== 10. 回傳結果（路徑一律正斜線、不回傳 None）=====
+        def norm_path(p):
+            if p is None or (isinstance(p, str) and p.strip() == ""):
+                return ""
+            return (p or "").replace("\\", "/").strip()
+
+        # 姓名、電子信箱、個人頭貼優先從 users 表帶入
+        user_name = (user_result.get("name") or "").strip() or student_info.get("StuName", "")
+        user_email = (user_result.get("email") or "").strip() or student_info.get("Email", "")
+        user_avatar = norm_path(user_result.get("avatar_url")) or norm_path(student_info.get("PhotoPath"))
+
         return jsonify({
             "success": True,
             "data": {
                 "student_info": {
-                    "name": student_info.get("StuName", ""),
+                    "name": user_name,
                     "birth_date": birth_date or "",
                     "gender": student_info.get("Gender", ""),
                     "phone": student_info.get("Phone", ""),
-                    "email": student_info.get("Email", ""),
+                    "email": user_email,
                     "address": student_info.get("Address", ""),
                     "conduct_score": student_info.get("ConductScore", ""),
                     "autobiography": student_info.get("Autobiography", ""),
-                    "photo_path": student_info.get("PhotoPath", "")
+                    "photo_path": user_avatar
                 },
                 "courses": courses,
                 "certifications": formatted_certs,
                 "languages": languages,
-                "transcript_path": transcript_path,
-                "absence_proof_path": absence_proof_path
+                "transcript_path": norm_path(transcript_path),
+                "absence_proof_path": norm_path(absence_proof_path)
             }
         })
 
@@ -23069,6 +23688,13 @@ def submit_and_generate_api():
             new_filename = f"{user_id}_photo_{datetime.now().strftime('%Y%m%d_%H%M%S')}{ext}"
             photo_path = os.path.join(photo_dir, new_filename)
             photo.save(photo_path)
+            photo_path = photo_path.replace("\\", "/")
+        else:
+            # 未上傳新照片時保留資料庫既有路徑
+            cursor.execute("SELECT PhotoPath FROM Student_Info WHERE StuID = (SELECT username FROM users WHERE id=%s)", (user_id,))
+            row = cursor.fetchone()
+            if row and row.get('PhotoPath'):
+                photo_path = (row['PhotoPath'] or '').replace('\\', '/')
 
         # 儲存成績單檔案（先儲存檔案，再 update 到 course_grades 的 transcript_path）
         transcript_path = None
@@ -23082,6 +23708,7 @@ def submit_and_generate_api():
             new_filename = f"{user_id}_transcript_{datetime.now().strftime('%Y%m%d_%H%M%S')}{ext}"
             transcript_path = os.path.join(transcript_dir, new_filename)
             transcript_file.save(transcript_path)
+            transcript_path = transcript_path.replace("\\", "/")
 
         # 儲存多張證照
         cert_photo_paths = []
@@ -23119,7 +23746,16 @@ def submit_and_generate_api():
                 traceback.print_exc()
                 image_path_for_template = None
 
-        if image_path_for_template or certificate_description:
+        # 先解析 structured_certifications，才能決定是否插入單張證照（避免多張證照時索引錯位、圖片重複）
+        _structured_from_form = []
+        _structured_json = request.form.get('structured_certifications', '')
+        if _structured_json:
+            try:
+                _structured_from_form = json.loads(_structured_json)
+            except Exception:
+                pass
+        # 僅在「沒有」使用新格式多張證照時，才在 index 0 插入單張證照
+        if (image_path_for_template or certificate_description) and not _structured_from_form:
             if cert_photo_paths is None:
                 cert_photo_paths = []
             if cert_names is None:
@@ -23222,7 +23858,8 @@ def submit_and_generate_api():
                     fname = f"{user_id}_absence_proof_{datetime.now().strftime('%Y%m%d_%H%M%S')}{ext}"
                     savep = os.path.join(ABSENCE_PROOF_FOLDER, fname)
                     uploaded_proof.save(savep)
-                    absence_image_path = savep
+                    # 統一用正斜線存進 DB，方便前端與靜態檔使用
+                    absence_image_path = savep.replace("\\", "/")
                 else:
                     print(f"⚠️ 上傳的缺勤佐證圖片格式不支援: {uploaded_proof.mimetype}")
         except Exception as e:
@@ -23288,13 +23925,13 @@ def submit_and_generate_api():
                                 fname = f"{user_id}_record_{record_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}{ext}"
                                 save_path = os.path.join(ABSENCE_PROOF_FOLDER, fname)
                                 uploaded_image.save(save_path)
-                                
+                                save_path_db = save_path.replace("\\", "/")
                                 # 更新資料庫中對應記錄的 image_path
                                 cursor.execute("""
                                     UPDATE absence_records 
                                     SET image_path = %s, updated_at = NOW()
                                     WHERE id = %s AND user_id = %s
-                                """, (save_path, record_id, user_id))
+                                """, (save_path_db, record_id, user_id))
                                 
                                 print(f"✅ 已更新缺勤記錄 {record_id} 的佐證圖片: {save_path}")
                             except Exception as e:
@@ -23307,17 +23944,16 @@ def submit_and_generate_api():
                     print(f"⚠️ 解析 absence_records_with_images 失敗: {e}")
                     traceback.print_exc()
             
-            # 2. 如果有整體佐證圖片，更新到該學期所有沒有圖片的記錄
+            # 2. 如果有整體佐證圖片，更新到該學期或全部沒有圖片的記錄
             if absence_image_path:
                 semester_id = request.form.get("semester_id", None)
-                if semester_id:
-                    try:
+                try:
+                    if semester_id:
                         # 檢查是否有 semester_id 欄位
                         cursor.execute("SHOW COLUMNS FROM absence_records LIKE 'semester_id'")
                         has_semester_id = cursor.fetchone() is not None
                         
                         if has_semester_id:
-                            # 更新該學期所有沒有圖片的記錄
                             cursor.execute("""
                                 UPDATE absence_records 
                                 SET image_path = %s, updated_at = NOW()
@@ -23325,19 +23961,32 @@ def submit_and_generate_api():
                                 AND (image_path IS NULL OR image_path = '')
                             """, (absence_image_path, user_id, semester_id))
                         else:
-                            # 如果沒有 semester_id 欄位，更新所有沒有圖片的記錄
                             cursor.execute("""
                                 UPDATE absence_records 
                                 SET image_path = %s, updated_at = NOW()
                                 WHERE user_id = %s 
                                 AND (image_path IS NULL OR image_path = '')
                             """, (absence_image_path, user_id))
-                        
-                        conn.commit()
-                        print(f"✅ 已將整體佐證圖片更新到缺勤記錄")
-                    except Exception as e:
-                        print(f"⚠️ 更新整體佐證圖片失敗: {e}")
-                        traceback.print_exc()
+                    else:
+                        # 未傳學期時：先更新所有「尚無圖片」的記錄
+                        cursor.execute("""
+                            UPDATE absence_records 
+                            SET image_path = %s, updated_at = NOW()
+                            WHERE user_id = %s 
+                            AND (image_path IS NULL OR image_path = '')
+                        """, (absence_image_path, user_id))
+                    # 若沒有任何一筆被更新，改為更新該使用者最新一筆缺勤記錄
+                    if cursor.rowcount == 0:
+                        cursor.execute("""
+                            UPDATE absence_records ar
+                            JOIN (SELECT id FROM absence_records WHERE user_id = %s ORDER BY id DESC LIMIT 1) t ON ar.id = t.id
+                            SET ar.image_path = %s, ar.updated_at = NOW()
+                        """, (user_id, absence_image_path))
+                    conn.commit()
+                    print(f"✅ 已將整體佐證圖片更新到缺勤記錄")
+                except Exception as e:
+                    print(f"⚠️ 更新整體佐證圖片失敗: {e}")
+                    traceback.print_exc()
         except Exception as e:
             print(f"⚠️ 處理缺勤記錄圖片失敗: {e}")
             traceback.print_exc()
@@ -23382,11 +24031,12 @@ def submit_and_generate_api():
                     "issuer": issuer.strip() if issuer else ""  # 新增：發證人
             })
 
-        # 將表單上傳的證照圖片路徑依序寫入 structured_certifications（與前端證照項目順序對應）
+        # 將表單上傳的證照圖片路徑依序寫入 structured_certifications（與前端證照項目順序 1:1 對應，避免重複或遺漏）
         if cert_photo_paths and structured_certifications:
-            for i, path in enumerate(cert_photo_paths):
-                if i < len(structured_certifications) and path:
-                    normalized = path.replace("\\", "/")
+            for i in range(len(structured_certifications)):
+                if i < len(cert_photo_paths) and cert_photo_paths[i]:
+                    path = cert_photo_paths[i]
+                    normalized = (path or "").replace("\\", "/")
                     if "uploads" in normalized:
                         parts = normalized.split("/")
                         idx_u = parts.index("uploads")
@@ -23417,6 +24067,22 @@ def submit_and_generate_api():
         cert_codes = request.form.getlist('cert_code[]')
         cert_issuers = request.form.getlist('cert_issuer[]')  # 新增：發證人列表
         
+        # 若未上傳新成績單，從資料庫取既有 ProofImage 寫回各課程（供 save_structured_data 使用）
+        if not transcript_path and result and student_id:
+            cursor.execute("SHOW COLUMNS FROM course_grades LIKE 'ProofImage'")
+            if cursor.fetchone():
+                cursor.execute("""
+                    SELECT ProofImage FROM course_grades
+                    WHERE StuID = %s AND ProofImage IS NOT NULL AND ProofImage != ''
+                    LIMIT 1
+                """, (student_id,))
+                row = cursor.fetchone()
+                if row and row.get('ProofImage'):
+                    existing_proof = (row['ProofImage'] or '').replace('\\', '/')
+                    for c in courses:
+                        if not c.get('proof_image'):
+                            c['proof_image'] = existing_proof
+
         # 建立結構化資料（傳入 save_structured_data）
         semester_id = get_current_semester_id(cursor)
         structured_data = {
@@ -23502,8 +24168,9 @@ def submit_and_generate_api():
 
         # 生成 Word 文件
         student_data_for_doc = get_student_info_for_doc(cursor, student_id, semester_id=semester_id)
-        # PhotoPath & ConductScoreNumeric
-        student_data_for_doc["info"]["PhotoPath"] = photo_path
+        # PhotoPath & ConductScoreNumeric（未上傳新照片時保留既有路徑）
+        if photo_path is not None:
+            student_data_for_doc["info"]["PhotoPath"] = photo_path
         student_data_for_doc["info"]["ConductScoreNumeric"] = data.get("conduct_score_numeric")
         # 傳遞證照圖片與名稱清單（generate 會自行從 certs 讀）
         student_data_for_doc["cert_photo_paths"] = cert_photo_paths
@@ -23589,14 +24256,11 @@ def generate_application_form_docx(student_data, output_path):
             except:
                 pass
 
-        # 照片
+        # 照片（使用 safe_create 驗證格式，避免 render 時 UnrecognizedImageError）
         image_obj = None
         photo_path = info.get("PhotoPath")
         if photo_path and os.path.exists(photo_path):
-            try:
-                image_obj = InlineImage(doc, os.path.abspath(photo_path), width=Inches(1.2))
-            except Exception as e:
-                print(f"⚠️ 圖片載入錯誤: {e}")
+            image_obj = safe_create_inline_image(doc, photo_path, Inches(1.2), "學生照片")
 
         # 處理課程資料（保留原邏輯）
         MAX_COURSES = 30
@@ -23613,27 +24277,21 @@ def generate_application_form_docx(student_data, output_path):
                     course = padded_grades[index]
                     row_num = i + 1
                     col_num = j + 1
-                    context_courses[f'CourseName_{row_num}_{col_num}'] = course.get('CourseName', '')
-                    context_courses[f'Credits_{row_num}_{col_num}'] = course.get('Credits', '')
+                    context_courses[f'CourseName_{row_num}_{col_num}'] = (course.get('CourseName') or '')
+                    context_courses[f'Credits_{row_num}_{col_num}'] = (course.get('Credits') or '')
 
-        # 插入成績單圖片：嘗試從 student_data['transcript_path']（由 get_student_info_for_doc 提供）
+        # 插入成績單圖片：使用 safe_create 驗證格式，避免 render 時 UnrecognizedImageError
         transcript_obj = None
         transcript_path = student_data.get("transcript_path") or info.get("TranscriptPath") or ''
         if transcript_path and os.path.exists(transcript_path):
-            try:
-                transcript_obj = InlineImage(doc, os.path.abspath(transcript_path), width=Inches(6.0))
-            except Exception as e:
-                print(f"⚠️ 成績單圖片載入錯誤: {e}")
+            transcript_obj = safe_create_inline_image(doc, transcript_path, Inches(6.0), "成績單")
 
         # 缺勤佐證圖片
         absence_proof_obj = None
         absence_proof_path = student_data.get("Absence_Proof_Path")
         image_size = Inches(6.0)
         if absence_proof_path and os.path.exists(absence_proof_path):
-            try:
-                absence_proof_obj = InlineImage(doc, os.path.abspath(absence_proof_path), width=image_size)
-            except Exception as e:
-                print(f"⚠️ 缺勤佐證圖片載入錯誤: {e}")
+            absence_proof_obj = safe_create_inline_image(doc, absence_proof_path, image_size, "缺勤佐證")
 
         # 操行等級
         conduct_score = info.get('ConductScore', '')
@@ -23646,38 +24304,56 @@ def generate_application_form_docx(student_data, output_path):
         # certs 已經從 get_student_info_for_doc 返回，格式統一
         # 優先使用前端提交的證照名稱（如果有的話）
         # 這樣可以確保只顯示用戶實際選擇的證照，而不是數據庫中所有相關記錄
-        cert_names_from_form = student_data.get("cert_names", [])
-        cert_photo_paths_from_form = student_data.get("cert_photo_paths", [])
-        
-        # 如果有前端提交的證照名稱，使用它們來覆蓋數據庫查詢結果
-        if cert_names_from_form:
-            # 重新構建證照列表，使用前端提交的名稱
-            certs_with_form_names = []
-            for idx, (name, path) in enumerate(zip(cert_names_from_form, cert_photo_paths_from_form)):
-                if name and name.strip():
-                    # 從原始 certs 中找到對應的證照（通過索引或路徑匹配）
-                    matching_cert = None
-                    if idx < len(certs):
-                        matching_cert = certs[idx]
-                    elif path:
-                        # 通過路徑匹配
-                        for c in certs:
-                            if c.get("cert_path") == path:
-                                matching_cert = c
-                                break
-                    
-                    # 使用前端提交的名稱，但保留其他信息（類別、路徑等）
-                    cert_item = {
-                        "cert_name": name.strip(),  # 使用前端提交的名稱
-                        "category": matching_cert.get("category", "other") if matching_cert else "other",
-                        "cert_path": path if path else (matching_cert.get("cert_path", "") if matching_cert else ""),
-                        "acquire_date": matching_cert.get("acquire_date", "") if matching_cert else "",
-                    }
-                    certs_with_form_names.append(cert_item)
-            
-            # 如果有匹配的證照，使用新的列表；否則使用原始列表
-            if certs_with_form_names:
-                certs = certs_with_form_names
+        cert_photo_paths_from_form = student_data.get("cert_photo_paths", []) or []
+        structured_certs = student_data.get("structured_certifications", [])
+
+        # 以 structured_certifications 為準疊代，確保每筆都有 authority_id / category，避免索引錯位
+        # 同一 photo_path 只使用一次，避免編輯後重新上傳時出現兩張一樣的證照圖
+        if structured_certs:
+            certs_from_form = []
+            used_photo_paths = set()
+            for idx, struct in enumerate(structured_certs):
+                name = (struct.get("name") or "").strip()
+                if not name:
+                    continue
+                path = (struct.get("cert_path") or "")
+                if not path and idx < len(cert_photo_paths_from_form):
+                    path = cert_photo_paths_from_form[idx] or ""
+                path = (path or "").replace("\\", "/").strip()
+                if path and path in used_photo_paths:
+                    path = ""
+                elif path:
+                    used_photo_paths.add(path)
+                matching_cert = certs[idx] if idx < len(certs) else None
+                if not matching_cert and path:
+                    for c in certs:
+                        if (c.get("cert_path") or "").replace("\\", "/") == path:
+                            matching_cert = c
+                            break
+                # 類別：勞動部 authority_id=1 必為 labor；否則用表單 category 或 DB 匹配
+                aid = struct.get("authority_id")
+                if aid is not None and str(aid).strip() in ("1",):
+                    category = "labor"
+                else:
+                    try:
+                        ai = int(aid)
+                        if ai == 1:
+                            category = "labor"
+                        else:
+                            category = (struct.get("category") or "").strip().lower() or "other"
+                            if category not in ("labor", "intl", "local", "other"):
+                                category = "other"
+                    except (TypeError, ValueError):
+                        cat = (struct.get("category") or "").strip().lower()
+                        category = cat if cat in ("labor", "intl", "local", "other") else ("other" if not matching_cert else matching_cert.get("category", "other"))
+                certs_from_form.append({
+                    "cert_name": name,
+                    "category": category,
+                    "cert_path": path or (matching_cert.get("cert_path", "") if matching_cert else ""),
+                    "acquire_date": (matching_cert.get("acquire_date") or struct.get("acquire_date") or "") if matching_cert else (struct.get("acquire_date") or ""),
+                })
+            if certs_from_form:
+                certs = certs_from_form
         
         # 分類證照
         labor_list, intl_list, local_list, other_list = categorize_certifications(certs)
@@ -23696,24 +24372,24 @@ def generate_application_form_docx(student_data, output_path):
             autobiography = autobiography.strip('\n')
         
         context = {
-            'StuID': info.get('StuID', ''),
-            'StuName': info.get('StuName', ''),
+            'StuID': (info.get('StuID') or ''),
+            'StuName': (info.get('StuName') or ''),
             'BirthYear': year, 'BirthMonth': month, 'BirthDay': day,
-            'Gender': info.get('Gender', ''),
-            'Phone': info.get('Phone', ''),
-            'Email': info.get('Email', ''),
-            'Address': info.get('Address', ''),
-            'ConductScoreNumeric': info.get('ConductScoreNumeric', ''),
+            'Gender': (info.get('Gender') or ''),
+            'Phone': (info.get('Phone') or ''),
+            'Email': (info.get('Email') or ''),
+            'Address': (info.get('Address') or ''),
+            'ConductScoreNumeric': (info.get('ConductScoreNumeric') or ''),
             'ConductScore': conduct_score,
-            'Autobiography': autobiography,  # 使用處理過的自傳
-            'Image_1': image_obj if image_obj else "",
-            'transcript_path': transcript_obj if transcript_obj else "",
-            'Absence_Proof_Image': absence_proof_obj if absence_proof_obj else ""
+            'Autobiography': (autobiography or ''),
         }
-        
-        # 清空可能出現在"缺勤記錄"標題上方的空變數
-        # 如果模板中有這些變數但值為空，設為 None 以避免顯示空白行
-        # 常見的可能變數名
+        if image_obj:
+            context['Image_1'] = image_obj
+        if transcript_obj:
+            context['transcript_path'] = transcript_obj
+        if absence_proof_obj:
+            context['Absence_Proof_Image'] = absence_proof_obj
+
         empty_vars_to_clear = [
             'empty_line_1', 'empty_line_2', 'empty_line_3',
             'blank_line_1', 'blank_line_2', 'blank_line_3',
@@ -23722,15 +24398,14 @@ def generate_application_form_docx(student_data, output_path):
             'blank_1', 'blank_2', 'blank_3',
         ]
         for var in empty_vars_to_clear:
-            context[var] = None  # 設為 None 而不是空字符串，Jinja2 會跳過 None 值
+            context[var] = ""
 
         # 加入缺勤統計
         # 只填充這8個標準字段，確保沒有多餘的空白行
         absence_fields = ['曠課', '遲到', '事假', '病假', '生理假', '公假', '喪假', '總計']
         for t in absence_fields:
             key = f"absence_{t}_units"
-            # 從 student_data 中獲取缺勤統計數據
-            value = student_data.get(key, "0 節")
+            value = (student_data.get(key) or "0 節")
             context[key] = value
             # 調試輸出
             if value == "0 節" and t != "總計":
@@ -23789,9 +24464,8 @@ def generate_application_form_docx(student_data, output_path):
         certs_to_display = certs_with_photos[:max_total]
         total_certs = len(certs_to_display)
         
-        # 初始化所有證照圖片和名稱為空
+        # 初始化證照名稱為空；圖片僅在有圖時才設 key，未輸入不設以免顯示 None
         for idx in range(1, 33):
-            context[f"CertPhotoImages_{idx}"] = ""
             context[f"CertPhotoName_{idx}"] = ""
         
         # 初始化所有頁面區塊為 False（不顯示）
@@ -23850,26 +24524,11 @@ def generate_application_form_docx(student_data, output_path):
 
         context.update(lang_context)
         
-        # 在渲染前，清理所有可能導致空白行的空變數
-        # 將所有空字符串變數設為 None，這樣 Jinja2 在模板中會跳過它們
-        # 但保留重要的變數（如數字、圖片等）
+        # 渲染前：所有 None 改為 ""，避免 Word 顯示 "None"；未輸入欄位顯示空白
         for key in list(context.keys()):
-            value = context[key]
-            # 如果是空字符串，設為 None（但保留重要的變數）
-            if isinstance(value, str) and value.strip() == '':
-                # 檢查是否為重要變數（不應設為 None）
-                important_vars = ['StuID', 'StuName', 'Gender', 'Phone', 'Email', 'Address', 
-                                 'ConductScore', 'ConductScoreNumeric', 'BirthYear', 'BirthMonth', 'BirthDay']
-                if key not in important_vars:
-                    # 對於可能出現在"缺勤記錄"標題上方的變數，設為 None
-                    # 這樣模板中如果使用 {% if variable %} 就不會顯示空白行
-                    if any(key.startswith(prefix) for prefix in ['empty_', 'blank_', 'spacer_', 'extra_']):
-                        context[key] = None
-                    # 或者，如果變數名包含 "line" 或 "row"，也可能是空白行變數
-                    elif 'line' in key.lower() or 'row' in key.lower():
-                        context[key] = None
+            if context[key] is None:
+                context[key] = ""
 
-        # 渲染與儲存
         doc.render(context)
         doc.save(output_path)
         print(f"✅ 履歷文件已生成: {output_path}")
