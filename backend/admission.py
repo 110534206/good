@@ -23,6 +23,22 @@ def admission_results_page():
     return render_template('user_shared/admission_results.html')
 
 # =========================================================
+# 頁面路由：實習生管理
+# =========================================================
+@admission_bp.route("/intern_management", methods=["GET"])
+def intern_management_page():
+    """實習生管理頁面"""
+    if 'user_id' not in session:
+        return redirect('/login')
+    
+    user_role = session.get('role')
+    # 允許老師、主任、ta、admin、vendor 訪問
+    if user_role not in ['teacher', 'director', 'ta', 'admin', 'vendor']:
+        return "無權限訪問此頁面", 403
+    
+    return render_template('user_shared/Intern management.html')
+
+# =========================================================
 # API: 記錄實習錄取結果（錄取後自動綁定指導老師與學生）
 # =========================================================
 @admission_bp.route("/api/record_admission", methods=["POST"])
@@ -1044,6 +1060,96 @@ def get_company_students():
     except Exception as e:
         traceback.print_exc()
         return jsonify({"success": False, "message": f"查詢失敗: {str(e)}"}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+# =========================================================
+# API: 退實習生（刪除師生關係）
+# =========================================================
+@admission_bp.route("/api/withdraw_student", methods=["POST"])
+def withdraw_student():
+    """退實習生，刪除 teacher_student_relations 記錄"""
+    if 'user_id' not in session or session.get('role') not in ['teacher', 'director', 'ta', 'admin', 'vendor']:
+        return jsonify({"success": False, "message": "未授權"}), 403
+    
+    data = request.get_json() or {}
+    relation_id = data.get("relation_id")
+    student_id = data.get("student_id")
+    
+    if not relation_id and not student_id:
+        return jsonify({"success": False, "message": "請提供關係ID或學生ID"}), 400
+    
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+    
+    try:
+        teacher_id = session.get('user_id')
+        
+        # 如果提供了 relation_id，直接刪除
+        if relation_id:
+            # 驗證該關係是否屬於當前老師（除非是 admin 或 ta）
+            if session.get('role') not in ['admin', 'ta']:
+                cursor.execute("""
+                    SELECT id FROM teacher_student_relations 
+                    WHERE id = %s AND teacher_id = %s
+                """, (relation_id, teacher_id))
+                relation = cursor.fetchone()
+                if not relation:
+                    return jsonify({"success": False, "message": "找不到該關係或無權限"}), 404
+            
+            cursor.execute("DELETE FROM teacher_student_relations WHERE id = %s", (relation_id,))
+        else:
+            # 如果只提供了 student_id，需要找到對應的關係
+            if session.get('role') not in ['admin', 'ta']:
+                cursor.execute("""
+                    SELECT id FROM teacher_student_relations 
+                    WHERE student_id = %s AND teacher_id = %s
+                """, (student_id, teacher_id))
+            else:
+                cursor.execute("""
+                    SELECT id FROM teacher_student_relations 
+                    WHERE student_id = %s
+                """, (student_id,))
+            
+            relation = cursor.fetchone()
+            if not relation:
+                # 如果找不到實習關係，視為已經退出，直接返回成功
+                # 同時更新志願序狀態
+                if student_id:
+                    cursor.execute("""
+                        UPDATE student_preferences
+                        SET status = 'pending'
+                        WHERE student_id = %s AND status = 'approved'
+                    """, (student_id,))
+                    conn.commit()
+                return jsonify({
+                    "success": True,
+                    "message": "已成功退實習生"
+                })
+            
+            cursor.execute("DELETE FROM teacher_student_relations WHERE id = %s", (relation['id'],))
+        
+        # 同時將學生的志願序狀態改為 pending（取消錄取）
+        if student_id:
+            cursor.execute("""
+                UPDATE student_preferences
+                SET status = 'pending'
+                WHERE student_id = %s AND status = 'approved'
+            """, (student_id,))
+        
+        conn.commit()
+        
+        return jsonify({
+            "success": True,
+            "message": "已成功退實習生"
+        })
+    
+    except Exception as e:
+        traceback.print_exc()
+        if conn:
+            conn.rollback()
+        return jsonify({"success": False, "message": f"退實習生失敗: {str(e)}"}), 500
     finally:
         cursor.close()
         conn.close()

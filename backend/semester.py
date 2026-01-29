@@ -176,6 +176,9 @@ def perform_semester_switch(semester_id):
             print(f"⚠️ 更新 company_openings 表時發生錯誤: {e}")
             pass
         
+        # 觸發實習流程範圍自動更新
+        _auto_update_internship_ranges(cursor, current_code)
+        
         conn.commit()
         return True, f"已切換至學期 {current_code}"
     except Exception as e:
@@ -202,6 +205,57 @@ def switch_semester():
         return jsonify({"success": True, "message": message})
     else:
         return jsonify({"success": False, "message": message}), 500
+
+# =========================================================
+# Helper: 根據入學年度自動更新實習流程範圍 (當學期切換時觸發)
+# =========================================================
+def _auto_update_internship_ranges(cursor, new_semester_code):
+    """
+    當學期切換時，根據入學年度自動調整 absence_default_semester_range
+    邏輯範例：
+    1. 針對所有已設定的入學年度
+    2. 自動將「結束學期代碼」展延至新學期 (若新學期較晚)
+    3. 或可根據年級 (新學期 - 入學年) 判斷是否開啟特定階段
+    """
+    try:
+        print(f"🔄正在執行實習範圍自動更新，新學期: {new_semester_code}")
+        
+        # 1. 取得目前所有設定
+        cursor.execute("SELECT id, admission_year, start_semester_code, end_semester_code FROM absence_default_semester_range")
+        ranges = cursor.fetchall()
+        
+        for r in ranges:
+            adm_year = r['admission_year']
+            current_end = r['end_semester_code']
+            
+            # --- 範例邏輯：判斷年級 ---
+            # 假設學期代碼格式為 1132 (113學年第2學期)
+            try:
+                current_year_part = int(str(new_semester_code)[:3])
+                student_grade = current_year_part - adm_year + 1
+                
+                # 若您的規則是：「實習範圍始終包含最新學期」，則展延結束學期
+                if str(new_semester_code) > str(current_end):
+                    print(f"  - 更新 {adm_year} 屆 (約大{student_grade})：結束學期 {current_end} -> {new_semester_code}")
+                    cursor.execute("""
+                        UPDATE absence_default_semester_range 
+                        SET end_semester_code = %s, updated_at = NOW()
+                        WHERE id = %s
+                    """, (new_semester_code, r['id']))
+                    
+                # 若需要更複雜邏輯 (例如：大三才開始追蹤) 可在此擴充
+                # if student_grade >= 3:
+                #    ensure_range_covers(cursor, r['id'], new_semester_code)
+                    
+            except Exception as ex:
+                print(f"  ⚠️ 處理 {adm_year} 屆時發生錯誤: {ex}")
+                continue
+                
+    except Exception as e:
+        print(f"❌ _auto_update_internship_ranges 執行失敗: {e}")
+        # 不拋出錯誤，避免影響主切換流程
+
+
 
 # =========================================================
 # API: 更新學期資訊

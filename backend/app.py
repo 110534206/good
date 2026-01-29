@@ -88,6 +88,22 @@ def admin_index():
     return redirect(url_for("auth_bp.login_page"))
 
 # -------------------------
+# 實習生管理頁面（兼容簡短連結）
+# -------------------------
+@app.route("/intern_management")
+def intern_management_redirect():
+    """實習生管理頁面（兼容簡短連結格式）"""
+    if 'user_id' not in session:
+        return redirect('/login')
+    
+    user_role = session.get('role')
+    # 允許老師、主任、ta、admin、vendor 訪問
+    if user_role not in ['teacher', 'director', 'ta', 'admin', 'vendor']:
+        return "無權限訪問此頁面", 403
+    
+    return redirect('/admission/intern_management')
+
+# -------------------------
 # 查看錄取結果頁面（兼容舊連結）
 # -------------------------
 @app.route("/admission_results")

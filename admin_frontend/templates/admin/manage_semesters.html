@@ -1,9 +1,10 @@
 <!DOCTYPE html>
 <html lang="zh-Hant">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>學期管理 | 智慧實習平台</title>
+  <title>智慧實習平台 | 學期管理</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css">
   <style>
@@ -13,10 +14,11 @@
       padding: 0;
     }
 
-    body { 
-      background-color: #f8f9fa; 
-      font-family: 'Inter', sans-serif; 
-      padding-top: 60px; /* 為固定頂端列留出空間 */
+    body {
+      background-color: #f8f9fa;
+      font-family: 'Inter', sans-serif;
+      padding-top: 60px;
+      /* 為固定頂端列留出空間 */
     }
 
     /* 頂端列 */
@@ -146,18 +148,48 @@
       color: white;
     }
 
-    .container { 
-      max-width: 900px; 
-      margin: 2rem auto; 
+    .container {
+      max-width: 900px;
+      margin: 2rem auto;
       padding: 0 1rem;
     }
-    .card { border: none; box-shadow: 0 2px 10px rgba(0,0,0,0.05); border-radius: 12px; }
-    .card-header { background-color: #fff; border-bottom: 1px solid #eee; padding: 1.5rem; font-weight: 600; font-size: 1.25rem; color: #0066cc; }
-    .btn-primary { background-color: #0066cc; border-color: #0066cc; }
-    .btn-primary:hover { background-color: #0052a3; border-color: #0052a3; }
-    .active-badge { background-color: #e6f7eb; color: #28a745; border: 1px solid #28a745; padding: 2px 8px; border-radius: 12px; font-size: 0.8rem; }
+
+    .card {
+      border: none;
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+      border-radius: 12px;
+    }
+
+    .card-header {
+      background-color: #fff;
+      border-bottom: 1px solid #eee;
+      padding: 1.5rem;
+      font-weight: 600;
+      font-size: 1.25rem;
+      color: #0066cc;
+    }
+
+    .btn-primary {
+      background-color: #0066cc;
+      border-color: #0066cc;
+    }
+
+    .btn-primary:hover {
+      background-color: #0052a3;
+      border-color: #0052a3;
+    }
+
+    .active-badge {
+      background-color: #e6f7eb;
+      color: #28a745;
+      border: 1px solid #28a745;
+      padding: 2px 8px;
+      border-radius: 12px;
+      font-size: 0.8rem;
+    }
   </style>
 </head>
+
 <body>
   <!-- 頂部欄 -->
   <div class="top-bar">
@@ -185,173 +217,174 @@
     <a href="/logout">登出</a>
   </nav>
 
-<div class="container mb-5">
+  <div class="container mb-5">
 
-  <!-- 新增學期卡片 -->
-  <div class="card mb-4">
-    <div class="card-header"><i class="bi bi-plus-circle me-2"></i>新增學期</div>
-    <div class="card-body">
-      <form id="createSemesterForm" class="row g-3">
-        <div class="col-md-3">
-          <label class="form-label">學期代碼 (如 1132)</label>
-          <input type="text" class="form-control" name="code" required>
-        </div>
-        <div class="col-md-3">
-          <label class="form-label">開始日期</label>
-          <input type="date" class="form-control" name="start_date">
-        </div>
-        <div class="col-md-3">
-          <label class="form-label">結束日期</label>
-          <input type="date" class="form-control" name="end_date">
-        </div>
-        <div class="col-md-3">
+    <!-- 新增學期卡片 -->
+    <div class="card mb-4">
+      <div class="card-header"><i class="bi bi-plus-circle me-2"></i>新增學期</div>
+      <div class="card-body">
+        <form id="createSemesterForm" class="row g-3">
+          <div class="col-md-3">
+            <label class="form-label">學期代碼 (如 1132)</label>
+            <input type="text" class="form-control" name="code" required>
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">開始日期</label>
+            <input type="date" class="form-control" name="start_date">
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">結束日期</label>
+            <input type="date" class="form-control" name="end_date">
+          </div>
+          <div class="col-md-3">
             <!-- 預留排程切換 -->
-        </div>
-        <div class="col-12 text-end">
-          <button type="submit" class="btn btn-primary">建立學期</button>
-        </div>
-      </form>
+          </div>
+          <div class="col-12 text-end">
+            <button type="submit" class="btn btn-primary">建立學期</button>
+          </div>
+        </form>
+      </div>
     </div>
-  </div>
 
-  <!-- 學期列表 -->
-  <div class="card">
-    <div class="card-header d-flex justify-content-between align-items-center">
+    <!-- 學期列表 -->
+    <div class="card">
+      <div class="card-header d-flex justify-content-between align-items-center">
         <span><i class="bi bi-list-ul me-2"></i>學期列表</span>
-        <button class="btn btn-sm btn-outline-primary" onclick="loadSemesters()"><i class="bi bi-arrow-clockwise"></i> 重新整理</button>
-    </div>
-    <div class="card-body p-0">
-      <div class="table-responsive">
-        <table class="table table-hover align-middle mb-0">
-          <thead class="bg-light">
-            <tr>
-              <th class="ps-4">學期代碼</th>
-              <th>起訖日期</th>
-              <th>狀態</th>
-              <th>自動切換設定</th>
-              <th class="text-end pe-4">操作</th>
-            </tr>
-          </thead>
-          <tbody id="semesterListBody">
-            <!-- JS 渲染 -->
-          </tbody>
-        </table>
+        <button class="btn btn-sm btn-outline-primary" onclick="loadSemesters()"><i class="bi bi-arrow-clockwise"></i>
+          重新整理</button>
+      </div>
+      <div class="card-body p-0">
+        <div class="table-responsive">
+          <table class="table table-hover align-middle mb-0">
+            <thead class="bg-light">
+              <tr>
+                <th class="ps-4">學期代碼</th>
+                <th>起訖日期</th>
+                <th>狀態</th>
+                <th>自動切換設定</th>
+                <th class="text-end pe-4">操作</th>
+              </tr>
+            </thead>
+            <tbody id="semesterListBody">
+              <!-- JS 渲染 -->
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   </div>
-</div>
 
-<!-- 設定自動切換 Modal -->
-<div class="modal fade" id="autoSwitchModal" tabindex="-1">
-  <div class="modal-dialog">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h5 class="modal-title">設定自動切換時間</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-      </div>
-      <div class="modal-body">
-        <p class="text-muted small mb-3">設定此時間後，系統將自動將此學期設為「當前學期」，並封存舊學期資料。</p>
-        <input type="hidden" id="switchTargetId">
-        <label class="form-label">預定執行時間</label>
-        <input type="datetime-local" class="form-control" id="switchTimeInput">
-      </div>
-      <div class="modal-footer">
-        <button type="button" class="btn btn-outline-secondary" onclick="clearAutoSwitch()">清除設定</button>
-        <button type="button" class="btn btn-primary" onclick="saveAutoSwitch()">儲存設定</button>
+  <!-- 設定自動切換 Modal -->
+  <div class="modal fade" id="autoSwitchModal" tabindex="-1">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">設定自動切換時間</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <p class="text-muted small mb-3">設定此時間後，系統將自動將此學期設為「當前學期」，並封存舊學期資料。</p>
+          <input type="hidden" id="switchTargetId">
+          <label class="form-label">預定執行時間</label>
+          <input type="datetime-local" class="form-control" id="switchTimeInput">
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" onclick="clearAutoSwitch()">清除設定</button>
+          <button type="button" class="btn btn-primary" onclick="saveAutoSwitch()">儲存設定</button>
+        </div>
       </div>
     </div>
   </div>
-</div>
 
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-<script>
-  // 選單開關邏輯
-  const menuBtn = document.getElementById("menu-btn");
-  const sideMenu = document.getElementById("side-menu");
-  const closeBtn = document.getElementById("close-btn");
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script>
+    // 選單開關邏輯
+    const menuBtn = document.getElementById("menu-btn");
+    const sideMenu = document.getElementById("side-menu");
+    const closeBtn = document.getElementById("close-btn");
 
-  if (menuBtn && sideMenu && closeBtn) {
-    menuBtn.addEventListener("click", () => {
-      sideMenu.classList.add("open");
-      sideMenu.setAttribute("aria-hidden", "false");
-    });
+    if (menuBtn && sideMenu && closeBtn) {
+      menuBtn.addEventListener("click", () => {
+        sideMenu.classList.add("open");
+        sideMenu.setAttribute("aria-hidden", "false");
+      });
 
-    closeBtn.addEventListener("click", () => {
-      sideMenu.classList.remove("open");
-      sideMenu.setAttribute("aria-hidden", "true");
-    });
-
-    document.addEventListener("click", (e) => {
-      if (!sideMenu.contains(e.target) && !menuBtn.contains(e.target)) {
+      closeBtn.addEventListener("click", () => {
         sideMenu.classList.remove("open");
         sideMenu.setAttribute("aria-hidden", "true");
-      }
+      });
+
+      document.addEventListener("click", (e) => {
+        if (!sideMenu.contains(e.target) && !menuBtn.contains(e.target)) {
+          sideMenu.classList.remove("open");
+          sideMenu.setAttribute("aria-hidden", "true");
+        }
+      });
+    }
+
+    let autoSwitchModal;
+
+    document.addEventListener("DOMContentLoaded", () => {
+      loadSemesters();
+      autoSwitchModal = new bootstrap.Modal(document.getElementById('autoSwitchModal'));
+
+      document.getElementById("createSemesterForm").addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const formData = new FormData(e.target);
+        const data = Object.fromEntries(formData.entries());
+
+        try {
+          const res = await fetch("/semester/api/create", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(data)
+          });
+          const result = await res.json();
+          if (result.success) {
+            alert("建立成功");
+            e.target.reset();
+            loadSemesters();
+          } else {
+            alert("建立失敗: " + result.message);
+          }
+        } catch (err) {
+          console.error(err);
+          alert("系统錯誤");
+        }
+      });
     });
-  }
 
-  let autoSwitchModal;
-
-  document.addEventListener("DOMContentLoaded", () => {
-    loadSemesters();
-    autoSwitchModal = new bootstrap.Modal(document.getElementById('autoSwitchModal'));
-
-    document.getElementById("createSemesterForm").addEventListener("submit", async (e) => {
-      e.preventDefault();
-      const formData = new FormData(e.target);
-      const data = Object.fromEntries(formData.entries());
-      
+    async function loadSemesters() {
       try {
-        const res = await fetch("/semester/api/create", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(data)
-        });
-        const result = await res.json();
-        if (result.success) {
-          alert("建立成功");
-          e.target.reset();
-          loadSemesters();
-        } else {
-          alert("建立失敗: " + result.message);
-        }
-      } catch (err) {
-        console.error(err);
-        alert("系统錯誤");
-      }
-    });
-  });
+        const res = await fetch("/semester/api/list");
+        const data = await res.json();
+        if (!data.success) throw new Error(data.message);
 
-  async function loadSemesters() {
-    try {
-      const res = await fetch("/semester/api/list");
-      const data = await res.json();
-      if (!data.success) throw new Error(data.message);
-      
-      const tbody = document.getElementById("semesterListBody");
-      tbody.innerHTML = "";
-      
-      data.semesters.forEach(s => {
-        const isActive = s.is_active === 1;
-        const statusBadge = isActive ? 
-          `<span class="active-badge"><i class="bi bi-check-circle-fill me-1"></i>當前學期</span>` : 
-          `<span class="text-muted">非當前</span>`;
+        const tbody = document.getElementById("semesterListBody");
+        tbody.innerHTML = "";
 
-        let autoSwitchDisplay = '<span class="text-muted small">-</span>';
-        if (s.auto_switch_at) {
+        data.semesters.forEach(s => {
+          const isActive = s.is_active === 1;
+          const statusBadge = isActive ?
+            `<span class="active-badge"><i class="bi bi-check-circle-fill me-1"></i>當前學期</span>` :
+            `<span class="text-muted">非當前</span>`;
+
+          let autoSwitchDisplay = '<span class="text-muted small">-</span>';
+          if (s.auto_switch_at) {
             autoSwitchDisplay = `<span class="badge bg-info text-dark" title="自動切換"><i class="bi bi-clock me-1"></i>${s.auto_switch_at}</span>`;
-        }
+          }
 
-        const switchBtn = !isActive ? 
-          `<button class="btn btn-sm btn-outline-success me-1" onclick="switchSemester(${s.id}, '${s.code}')">立即切換</button>` : '';
-        
-        const scheduleBtn = !isActive ?
-          `<button class="btn btn-sm btn-outline-secondary me-1" onclick="openAutoSwitchModal(${s.id}, '${s.auto_switch_at || ''}')" title="預約切換"><i class="bi bi-calendar-event"></i></button>` : '';
+          const switchBtn = !isActive ?
+            `<button class="btn btn-sm btn-outline-success me-1" onclick="switchSemester(${s.id}, '${s.code}')">立即切換</button>` : '';
 
-        const deleteBtn = !isActive ? 
-          `<button class="btn btn-sm btn-outline-danger" onclick="deleteSemester(${s.id})"><i class="bi bi-trash"></i></button>` : '';
+          const scheduleBtn = !isActive ?
+            `<button class="btn btn-sm btn-outline-secondary me-1" onclick="openAutoSwitchModal(${s.id}, '${s.auto_switch_at || ''}')" title="預約切換"><i class="bi bi-calendar-event"></i></button>` : '';
 
-        const tr = document.createElement("tr");
-        tr.innerHTML = `
+          const deleteBtn = !isActive ?
+            `<button class="btn btn-sm btn-outline-danger" onclick="deleteSemester(${s.id})"><i class="bi bi-trash"></i></button>` : '';
+
+          const tr = document.createElement("tr");
+          tr.innerHTML = `
           <td class="ps-4 fw-bold text-primary">${s.code}</td>
           <td>
             <small class="d-block text-muted">起: ${s.start_date || '-'}</small>
@@ -365,99 +398,100 @@
             ${deleteBtn}
           </td>
         `;
-        tbody.appendChild(tr);
-      });
-    } catch (err) {
-      alert("載入失敗: " + err.message);
-    }
-  }
-
-  async function switchSemester(id, code) {
-    if (!confirm(`確定要立即切換到學期 ${code} 嗎？\n這將會使其他學期變為非活躍狀態。`)) return;
-    
-    try {
-      const res = await fetch("/semester/api/switch", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ semester_id: id })
-      });
-      const result = await res.json();
-      if (result.success) {
-        alert(result.message);
-        loadSemesters();
-      } else {
-        alert("切換失敗: " + result.message);
+          tbody.appendChild(tr);
+        });
+      } catch (err) {
+        alert("載入失敗: " + err.message);
       }
-    } catch (err) {
-      alert("錯誤: " + err);
     }
-  }
 
-  function openAutoSwitchModal(id, currentVal) {
-    document.getElementById("switchTargetId").value = id;
-    // datetime-local 需要 YYYY-MM-DDTHH:mm 格式
-    if (currentVal) {
+    async function switchSemester(id, code) {
+      if (!confirm(`確定要立即切換到學期 ${code} 嗎？\n這將會使其他學期變為非活躍狀態。`)) return;
+
+      try {
+        const res = await fetch("/semester/api/switch", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ semester_id: id })
+        });
+        const result = await res.json();
+        if (result.success) {
+          alert(result.message);
+          loadSemesters();
+        } else {
+          alert("切換失敗: " + result.message);
+        }
+      } catch (err) {
+        alert("錯誤: " + err);
+      }
+    }
+
+    function openAutoSwitchModal(id, currentVal) {
+      document.getElementById("switchTargetId").value = id;
+      // datetime-local 需要 YYYY-MM-DDTHH:mm 格式
+      if (currentVal) {
         // 簡單處理格式轉換: "YYYY-MM-DD HH:MM:SS" -> "YYYY-MM-DDTHH:MM"
         const formatted = currentVal.replace(" ", "T").substring(0, 16);
         document.getElementById("switchTimeInput").value = formatted;
-    } else {
+      } else {
         document.getElementById("switchTimeInput").value = "";
+      }
+      autoSwitchModal.show();
     }
-    autoSwitchModal.show();
-  }
 
-  async function saveAutoSwitch() {
-    const id = document.getElementById("switchTargetId").value;
-    const timeVal = document.getElementById("switchTimeInput").value;
-    
-    if (!timeVal) {
+    async function saveAutoSwitch() {
+      const id = document.getElementById("switchTargetId").value;
+      const timeVal = document.getElementById("switchTimeInput").value;
+
+      if (!timeVal) {
         alert("請選擇時間");
         return;
-    }
-
-    await updateSemesterAutoSwitch(id, timeVal);
-    autoSwitchModal.hide();
-  }
-
-  async function clearAutoSwitch() {
-    const id = document.getElementById("switchTargetId").value;
-    await updateSemesterAutoSwitch(id, null);
-    autoSwitchModal.hide();
-  }
-
-  async function updateSemesterAutoSwitch(id, timeVal) {
-    try {
-      const res = await fetch(`/semester/api/update/${id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ auto_switch_at: timeVal })
-      });
-      const result = await res.json();
-      if (result.success) {
-        loadSemesters();
-      } else {
-        alert("設定失敗: " + result.message);
       }
-    } catch (err) {
-      alert("錯誤: " + err);
-    }
-  }
 
-  async function deleteSemester(id) {
-    if (!confirm("確定要刪除此學期嗎？此操作無法復原。")) return;
-    try {
-      const res = await fetch(`/semester/api/delete/${id}`, { method: "DELETE" });
-      const result = await res.json();
-      if (result.success) {
-        loadSemesters();
-      } else {
-        alert("刪除失敗: " + result.message);
-      }
-    } catch (err) {
-      alert("錯誤: " + err);
+      await updateSemesterAutoSwitch(id, timeVal);
+      autoSwitchModal.hide();
     }
-  }
-</script>
+
+    async function clearAutoSwitch() {
+      const id = document.getElementById("switchTargetId").value;
+      await updateSemesterAutoSwitch(id, null);
+      autoSwitchModal.hide();
+    }
+
+    async function updateSemesterAutoSwitch(id, timeVal) {
+      try {
+        const res = await fetch(`/semester/api/update/${id}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ auto_switch_at: timeVal })
+        });
+        const result = await res.json();
+        if (result.success) {
+          loadSemesters();
+        } else {
+          alert("設定失敗: " + result.message);
+        }
+      } catch (err) {
+        alert("錯誤: " + err);
+      }
+    }
+
+    async function deleteSemester(id) {
+      if (!confirm("確定要刪除此學期嗎？此操作無法復原。")) return;
+      try {
+        const res = await fetch(`/semester/api/delete/${id}`, { method: "DELETE" });
+        const result = await res.json();
+        if (result.success) {
+          loadSemesters();
+        } else {
+          alert("刪除失敗: " + result.message);
+        }
+      } catch (err) {
+        alert("錯誤: " + err);
+      }
+    }
+  </script>
 
 </body>
+
 </html>

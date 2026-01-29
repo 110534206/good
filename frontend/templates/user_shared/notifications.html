@@ -1328,14 +1328,92 @@
     }
 
     // 【修改】show bootstrap modal
-    function showModal(n) {
+    async function showModal(n) {
       // 【需求】點開 Modal 時自動標為已讀
       if (!n.is_read) markRead(n.id);
 
       modalTitle.innerText = n.title;
+      
+      // 處理消息內容，修復不完整的時間格式
+      let messageText = n.message || '';
+      
+      // 如果是履歷或志願序相關的公告，嘗試從公告詳情獲取完整的截止時間
+      const isResumeOrPrefAnnouncement = (n.title && (
+        n.title.includes('上傳履歷截止時間') || 
+        n.title.includes('履歷截止時間') ||
+        n.title.includes('填寫志願序截止時間') ||
+        n.title.includes('志願序截止時間')
+      )) || (messageText && (
+        messageText.includes('上傳履歷') || 
+        messageText.includes('填寫志願序')
+      ));
+      
+      if (isResumeOrPrefAnnouncement) {
+        // 檢查消息中是否有不完整的時間格式（如 P26-01-27 08:43 或 26-01-27 08:43）
+        const incompleteTimePattern = /[Pp]?\d{2}-\d{2}-\d{2}\s+\d{2}:\d{2}/;
+        if (incompleteTimePattern.test(messageText)) {
+          // 嘗試從 link_url 提取公告 ID 並獲取完整的截止時間
+          let annId = null;
+          if (n.url || n.link_url) {
+            const linkUrl = n.url || n.link_url;
+            const match = linkUrl.match(/\/view_announcement\/(\d+)/);
+            if (match) {
+              annId = parseInt(match[1]);
+            }
+          }
+          
+          if (annId) {
+            try {
+              const res = await fetch(`/announcement/api/get/${annId}`);
+              const result = await res.json();
+              
+              if (result.success && result.data && result.data.end_time) {
+                // 格式化完整的截止時間
+                const endTime = new Date(result.data.end_time);
+                const formattedTime = endTime.toLocaleString('zh-TW', {
+                  year: 'numeric',
+                  month: '2-digit',
+                  day: '2-digit',
+                  hour: '2-digit',
+                  minute: '2-digit',
+                  hour12: false
+                }).replace(/\//g, '-');
+                
+                // 替換消息中的不完整時間格式
+                messageText = messageText.replace(
+                  /(上傳履歷的|填寫志願序的)\s*[Pp]?\d{2}-\d{2}-\d{2}\s+\d{2}:\d{2}/,
+                  `$1截止時間為:${formattedTime}`
+                );
+                
+                // 如果替換後仍然沒有「截止時間為:」，則添加
+                if (!messageText.includes('截止時間為:')) {
+                  messageText = messageText.replace(
+                    /(上傳履歷的|填寫志願序的)([^,，。\n]*)/,
+                    `$1截止時間為:${formattedTime}$2`
+                  );
+                }
+              }
+            } catch (error) {
+              console.error('獲取公告詳情失敗:', error);
+              // 即使獲取失敗，也嘗試修復明顯的格式問題
+              messageText = messageText.replace(
+                /(上傳履歷的|填寫志願序的)\s*[Pp]?(\d{2}-\d{2}-\d{2}\s+\d{2}:\d{2})/,
+                '$1截止時間為:20$2'
+              );
+            }
+          } else {
+            // 如果無法獲取公告ID，嘗試修復明顯的格式問題
+            messageText = messageText.replace(
+              /(上傳履歷的|填寫志願序的)\s*[Pp]?(\d{2}-\d{2}-\d{2}\s+\d{2}:\d{2})/,
+              '$1截止時間為:20$2'
+            );
+          }
+        }
+      }
+      
       // 顯示通知內容，確保完整顯示時間與文字
       // 使用 textContent 避免 XSS，然後用 innerHTML 設置格式
-      const messageText = (n.message || '').replace(/\n/g, '<br>');
+      messageText = messageText.replace(/\n/g, '<br>');
       modalBody.innerHTML = `
         <div class="small muted mb-2">時間: ${formatDateTime(n.created_at)} | 類別: ${getCategoryLabel(n.category, n.title)}</div>
         <p style="white-space:pre-wrap; word-wrap:break-word; overflow-wrap:break-word;">${messageText}</p>
