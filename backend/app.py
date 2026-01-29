@@ -1,4 +1,4 @@
-from flask import Flask, redirect, url_for, session, render_template
+from flask import Flask, redirect, url_for, session, render_template, send_from_directory
 from flask_cors import CORS
 from jinja2 import ChoiceLoader, FileSystemLoader
 from dotenv import load_dotenv
@@ -19,6 +19,11 @@ app = Flask(
 app.secret_key = os.getenv("SECRET_KEY", "your_secret_key")
 app.config['UPLOAD_FOLDER'] = os.path.join(os.path.dirname(__file__), "uploads")
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
+
+# 提供上傳檔案（圖片）供前端顯示，路徑如 /uploads/resumes/photos/xxx
+@app.route('/uploads/<path:filename>')
+def serve_upload(filename):
+    return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
 
 # CORS
 CORS(app, supports_credentials=True)

@@ -65,6 +65,32 @@
       font-weight: 600;
     }
 
+    /* 表單圖片預覽框：個人照片、成績單、缺勤佐證、證照等 */
+    .image-preview-box {
+      width: 100%;
+      max-width: 200px;
+      min-height: 140px;
+      border: 2px dashed #dee2e6;
+      border-radius: 8px;
+      background: #f8f9fa;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      margin-top: 8px;
+    }
+    .image-preview-box img {
+      max-width: 100%;
+      max-height: 200px;
+      object-fit: contain;
+    }
+    .image-preview-box .placeholder-text {
+      color: #6c757d;
+      font-size: 0.875rem;
+      padding: 1rem;
+      text-align: center;
+    }
+
     /* 選單按鈕樣式 */
     .top-bar-left {
       position: fixed;
@@ -201,6 +227,7 @@
       border-radius: 20px 20px 0 0;
       display: flex;
       align-items: center;
+      justify-content: center;
       gap: 12px;
       font-size: 22px;
       font-weight: bold;
@@ -400,7 +427,10 @@
               </div>
               <div class="col-md-6 mt-3">
                 <label for="photo" class="form-label">個人大頭照 (JPG/PNG)</label>
-                <input class="form-control" type="file" id="photo" name="photo" accept="image/*" />
+                <div class="image-preview-box" id="photoPreviewBox">
+                  <span class="placeholder-text">選擇或上傳後顯示預覽</span>
+                </div>
+                <input class="form-control mt-2" type="file" id="photo" name="photo" accept="image/*" />
               </div>
             </div>
 
@@ -542,7 +572,10 @@
               <div class="row g-3">
                 <div class="col-12">
                   <label class="form-label">上傳學期成績單 (JPG/PNG)</label>
-                  <input type="file" name="transcript_file" class="form-control" accept="image/jpeg, image/png"
+                  <div class="image-preview-box" id="transcriptPreviewBox">
+                    <span class="placeholder-text">選擇或上傳後顯示預覽</span>
+                  </div>
+                  <input type="file" id="transcript_file" name="transcript_file" class="form-control mt-2" accept="image/jpeg, image/png"
                     required />
                 </div>
               </div>
@@ -626,7 +659,10 @@
                   <!-- 缺勤記錄佐證圖上傳 -->
                   <div class="mb-3">
                     <label for="proof_image" class="form-label">缺勤記錄佐證圖上傳</label>
-                    <input class="form-control" type="file" id="proof_image" name="proof_image" accept="image/*">
+                    <div class="image-preview-box" id="proofImagePreviewBox">
+                      <span class="placeholder-text">選擇或上傳後顯示預覽</span>
+                    </div>
+                    <input class="form-control mt-2" type="file" id="proof_image" name="proof_image" accept="image/*">
                     <div class="form-text">💡 提示：接受圖片檔案 (PNG, JPG, JPEG)。</div>
                   </div>
                 </div>
@@ -819,6 +855,105 @@
     let currentPage = 1;
     const PAGE_SIZE = 10;
     let filteredCoursesCache = [];
+
+    // 🧩 將儲存路徑轉為前端可顯示的 URL（支援反斜線路徑）
+    function imagePathToUrl(path) {
+      if (!path || typeof path !== 'string') return '';
+      const normalized = (path + '').replace(/\\/g, '/').replace(/^\/+/, '');
+      return normalized ? '/' + normalized : '';
+    }
+
+    // 🧩 更新圖片預覽框：顯示既有路徑或佔位文字
+    function updateImagePreviewBox(boxId, imageUrl) {
+      const box = document.getElementById(boxId);
+      if (!box) return;
+      if (imageUrl) {
+        box.innerHTML = '';
+        const img = document.createElement('img');
+        img.alt = '預覽';
+        img.src = imageUrl;
+        box.appendChild(img);
+      } else {
+        box.innerHTML = '<span class="placeholder-text">選擇或上傳後顯示預覽</span>';
+      }
+    }
+
+    // 🧩 從 users 表帶入姓名、電子信箱、個人頭貼（avatar_url）
+    async function fillBasicInfoFromUser() {
+      const form = document.getElementById('resumeForm');
+      if (!form) return;
+      try {
+        const res = await fetch('/api/current_user_profile');
+        const result = await res.json();
+        if (!result.success || !result.data) return;
+        const d = result.data;
+        const nameInput = form.querySelector('input[name="name"]');
+        if (nameInput && (d.name != null && d.name !== '')) nameInput.value = d.name;
+        const emailInput = form.querySelector('input[name="email"]');
+        if (emailInput && (d.email != null && d.email !== '')) emailInput.value = d.email;
+        if (d.avatar_url) {
+          const photoInput = form.querySelector('input[name="photo"]');
+          if (photoInput) {
+            photoInput.setAttribute('data-image-path', d.avatar_url);
+            updateImagePreviewBox('photoPreviewBox', imagePathToUrl(d.avatar_url));
+          }
+        }
+        console.log('✅ 已從 users 帶入姓名、電子信箱、個人頭貼');
+      } catch (e) {
+        console.warn('取得使用者基本資料失敗:', e);
+      }
+    }
+
+    // 🧩 清空所有圖片預覽與檔案、證照（用於「新增履歷」），含每筆證照的佐證圖
+    async function clearAllImagesAndCertificates() {
+      const form = document.getElementById('resumeForm');
+      if (!form) return;
+
+      // 個人照片
+      const photoInput = form.querySelector('input[name="photo"]');
+      if (photoInput) {
+        photoInput.value = '';
+        photoInput.removeAttribute('data-image-path');
+      }
+      updateImagePreviewBox('photoPreviewBox', '');
+
+      // 成績單
+      const transcriptInput = document.getElementById('transcript_file');
+      if (transcriptInput) {
+        transcriptInput.value = '';
+        transcriptInput.removeAttribute('data-image-path');
+      }
+      updateImagePreviewBox('transcriptPreviewBox', '');
+
+      // 缺勤佐證圖
+      const proofInput = document.getElementById('proof_image');
+      if (proofInput) proofInput.value = '';
+      updateImagePreviewBox('proofImagePreviewBox', '');
+
+      // 證照清空（移除所有證照條目，含每筆證照的佐證圖片）
+      await initializeCertificatesUI([]);
+      console.log('✅ 已清空所有圖片與證照');
+    }
+
+    // 🧩 綁定檔案選擇時即時預覽（個人照片、成績單、缺勤佐證）
+    function bindImagePreview(inputId, boxId) {
+      const input = document.getElementById(inputId);
+      const box = document.getElementById(boxId);
+      if (!input || !box) return;
+      input.addEventListener('change', function () {
+        const file = this.files && this.files[0];
+        if (file && file.type.startsWith('image/')) {
+          const reader = new FileReader();
+          reader.onload = function (e) {
+            updateImagePreviewBox(boxId, e.target.result);
+          };
+          reader.readAsDataURL(file);
+        } else if (!file) {
+          const existingPath = input.getAttribute('data-image-path');
+          updateImagePreviewBox(boxId, imagePathToUrl(existingPath));
+        }
+      });
+    }
 
     // 🧩 分頁相關函數（移到全局作用域，以便其他函數可以訪問）
     function renderPagedCourses() {
@@ -1415,7 +1550,10 @@
          </div>
          <div class="col-md-6 col-lg-4">
            <label class="form-label form-label-sm">佐證圖片 (可選)</label>
-           <input type="file" class="form-control form-control-sm cert-photo-input" 
+           <div class="image-preview-box small" id="cert_photo_preview_${entryId}" style="max-width:120px;min-height:80px;">
+             <span class="placeholder-text">可選</span>
+           </div>
+           <input type="file" class="form-control form-control-sm cert-photo-input mt-1" 
                   name="cert_photos[]" id="cert_photo_${entryId}" accept="image/*">
          </div>
        </div>
@@ -1571,14 +1709,28 @@
 
       if (certImagePath && certImagePath.trim()) {
         fileInput.setAttribute('data-image-path', certImagePath);
-
         // 移除舊的提示（如果存在）
         const oldHint = fileInput.parentElement.querySelector('.cert-photo-hint');
         if (oldHint) oldHint.remove();
-
       } else {
         console.log(`⚠️ 沒有證照圖片路徑，跳過設置按鈕`);
       }
+
+      // 證照佐證圖片選擇時即時預覽
+      fileInput.addEventListener('change', function () {
+        const boxId = 'cert_photo_preview_' + entryId;
+        const file = this.files && this.files[0];
+        if (file && file.type.startsWith('image/')) {
+          const reader = new FileReader();
+          reader.onload = function (e) {
+            updateImagePreviewBox(boxId, e.target.result);
+          };
+          reader.readAsDataURL(file);
+        } else if (!file) {
+          const path = this.getAttribute('data-image-path');
+          updateImagePreviewBox(boxId, imagePathToUrl(path || ''));
+        }
+      });
 
       // 發證中心選擇改變時，載入該中心的職類和級別列表
       authoritySelect.addEventListener('change', async () => {
@@ -1709,6 +1861,11 @@
       removeBtn.addEventListener('click', () => removeCertificateEntry(entryId));
 
       container.appendChild(element);
+
+      // 證照圖片預覽須在元素已加入 DOM 後再更新，否則 getElementById 找不到
+      if (certImagePath && certImagePath.trim()) {
+        updateImagePreviewBox('cert_photo_preview_' + entryId, imagePathToUrl(certImagePath));
+      }
 
       certEntries.push({
         id: entryId,
@@ -2395,7 +2552,8 @@
 
             // 保存圖片路徑到 data 屬性，用於瀏覽和下載
             photoInput.setAttribute('data-image-path', studentInfo.photo_path);
-
+            photoInput.removeAttribute('required');
+            updateImagePreviewBox('photoPreviewBox', imagePathToUrl(studentInfo.photo_path));
           }
         }
 
@@ -2505,7 +2663,8 @@
 
             // 保存圖片路徑到 data 屬性，用於瀏覽和下載
             transcriptInput.setAttribute('data-image-path', transcriptPath);
-
+            transcriptInput.removeAttribute('required');
+            updateImagePreviewBox('transcriptPreviewBox', imagePathToUrl(transcriptPath));
           }
         } else {
           console.log("⚠️ 沒有成績單路徑");
@@ -2517,11 +2676,10 @@
           const proofImageInput = document.getElementById('proof_image');
           if (proofImageInput) {
             proofImageInput.setAttribute('data-image-path', data.absence_proof_path);
-
-            // 移除舊的提示（如果存在）
+            proofImageInput.removeAttribute('required');
+            updateImagePreviewBox('proofImagePreviewBox', imagePathToUrl(data.absence_proof_path));
             const oldHint = proofImageInput.parentElement.querySelector('.proof-image-hint');
             if (oldHint) oldHint.remove();
-
           }
         }
 
@@ -2571,11 +2729,10 @@
                   const proofImageInput = document.getElementById('proof_image');
                   if (proofImageInput) {
                     proofImageInput.setAttribute('data-image-path', absenceProofPath);
-
-                    // 移除舊的提示（如果存在）
+                    proofImageInput.removeAttribute('required');
+                    updateImagePreviewBox('proofImagePreviewBox', imagePathToUrl(absenceProofPath));
                     const oldHint = proofImageInput.parentElement.querySelector('.proof-image-hint');
                     if (oldHint) oldHint.remove();
-
                   }
                 } else {
                   console.log("⚠️ 沒有缺勤記錄佐證圖路徑");
@@ -3103,6 +3260,8 @@
             const proofImageInput = document.getElementById('proof_image');
             if (proofImageInput) {
               proofImageInput.setAttribute('data-image-path', latestRecordWithImage.image_path);
+              proofImageInput.removeAttribute('required');
+              updateImagePreviewBox('proofImagePreviewBox', imagePathToUrl(latestRecordWithImage.image_path));
               const isCurrentlyReadonly = proofImageInput.disabled;
             }
           }
@@ -3399,6 +3558,8 @@
                       if (result.success && result.data.absence_proof_path) {
                         const absenceProofPath = result.data.absence_proof_path;
                         proofImageInput.setAttribute('data-image-path', absenceProofPath);
+                        proofImageInput.removeAttribute('required');
+                        updateImagePreviewBox('proofImagePreviewBox', imagePathToUrl(absenceProofPath));
                         const isCurrentlyReadonly = proofImageInput.disabled;
                       }
                     })
@@ -3541,6 +3702,11 @@
 
       const form = document.getElementById("resumeForm");
 
+      // 綁定圖片預覽：個人照片、成績單、缺勤佐證（選擇檔案時即時顯示）
+      bindImagePreview('photo', 'photoPreviewBox');
+      bindImagePreview('transcript_file', 'transcriptPreviewBox');
+      bindImagePreview('proof_image', 'proofImagePreviewBox');
+
       // 針對非動態生成的欄位，設定監聽器
       form.querySelectorAll('input:not([type="file"]), select, textarea').forEach(input => {
         // 檔案欄位不儲存，動態生成的證照欄位在 addCertificateEntry 中自行綁定
@@ -3577,14 +3743,24 @@
       // 如果之後發現有已提交的履歷，再設置為 false
       isEditing = true;
 
-      // 先檢查是否有已提交的履歷
-      const hasResume = await checkLatestResume();
+      // 「新增履歷」按鈕進入時（?new=1）：清空所有圖片與證照，不載入既有履歷
+      const urlParams = new URLSearchParams(window.location.search);
+      const isNewResume = urlParams.get('new') === '1';
+      if (isNewResume) {
+        localStorage.removeItem(AUTO_SAVE_KEY);
+        await clearAllImagesAndCertificates();
+        await fillBasicInfoFromUser();
+      }
+
+      // 先檢查是否有已提交的履歷（新增履歷模式則不載入）
+      const hasResume = isNewResume ? false : await checkLatestResume();
 
       if (!hasResume) {
-        // 如果沒有已提交的履歷，保持編輯模式並載入 LocalStorage 資料
+        // 如果沒有已提交的履歷，從 users 帶入姓名、電子信箱、個人頭貼
+        await fillBasicInfoFromUser();
+        // 保持編輯模式並載入 LocalStorage 資料
         loadFormData();
         // 在載入 LocalStorage 資料後，再載入其他資料
-        // 確保 LocalStorage 的資料不會被後端資料覆蓋
         await loadPersonalTemplate();
       } else {
         // 如果有已提交的履歷，設置為只讀模式（不載入 LocalStorage）
@@ -3656,8 +3832,9 @@
       }, 2500); // 等待學期列表和預設範圍載入完成
 
       // 確保所有圖片路徑在頁面載入時能夠恢復（從資料庫重新載入）
-      // 這對於返回上一頁後再次進入頁面時特別重要
+      // 「新增履歷」模式不恢復，保持清空
       setTimeout(async () => {
+        if (isNewResume) return;
         try {
           const res = await fetch('/api/get_resume_data');
           const result = await res.json();
@@ -3665,32 +3842,35 @@
           if (result.success && result.data) {
             const data = result.data;
 
-            // 恢復照片路徑
+            // 恢復照片路徑並顯示預覽（有既有路徑時移除必填，方便再次送出）
             if (data.student_info && data.student_info.photo_path) {
               const photoInput = form.querySelector('input[name="photo"]');
               if (photoInput && !photoInput.getAttribute('data-image-path')) {
                 photoInput.setAttribute('data-image-path', data.student_info.photo_path);
-                const isCurrentlyReadonly = photoInput.disabled;
+                photoInput.removeAttribute('required');
+                updateImagePreviewBox('photoPreviewBox', imagePathToUrl(data.student_info.photo_path));
                 console.log(`✅ 照片路徑已恢復: ${data.student_info.photo_path}`);
               }
             }
 
-            // 恢復成績單路徑
+            // 恢復成績單路徑並顯示預覽
             if (data.transcript_path) {
               const transcriptInput = form.querySelector('input[name="transcript_file"]');
               if (transcriptInput && !transcriptInput.getAttribute('data-image-path')) {
                 transcriptInput.setAttribute('data-image-path', data.transcript_path);
-                const isCurrentlyReadonly = transcriptInput.disabled;
+                transcriptInput.removeAttribute('required');
+                updateImagePreviewBox('transcriptPreviewBox', imagePathToUrl(data.transcript_path));
                 console.log(`✅ 成績單路徑已恢復: ${data.transcript_path}`);
               }
             }
 
-            // 恢復缺勤記錄佐證圖路徑
+            // 恢復缺勤記錄佐證圖路徑並顯示預覽
             if (data.absence_proof_path) {
               const proofImageInput = document.getElementById('proof_image');
               if (proofImageInput && !proofImageInput.getAttribute('data-image-path')) {
                 proofImageInput.setAttribute('data-image-path', data.absence_proof_path);
-                const isCurrentlyReadonly = proofImageInput.disabled;
+                proofImageInput.removeAttribute('required');
+                updateImagePreviewBox('proofImagePreviewBox', imagePathToUrl(data.absence_proof_path));
                 console.log(`✅ 缺勤記錄佐證圖路徑已恢復: ${data.absence_proof_path}`);
               }
             }
@@ -3887,6 +4067,12 @@
         }
       });
 
+      // 未上傳新成績單時，帶入既有成績單路徑（供後端保留 ProofImage）
+      const transcriptInput = document.getElementById('transcript_file');
+      const existingTranscriptPath = (transcriptInput && !(transcriptInput.files && transcriptInput.files[0]))
+        ? (transcriptInput.getAttribute('data-image-path') || '').replace(/\\/g, '/')
+        : '';
+
       // ⚠️ 關鍵修正：使用 allCoursesData 收集所有課程，而不是只收集當前頁面的課程
       // 這樣可以確保所有30門課程都被提交，而不只是當前頁面顯示的10門
       const courses = allCoursesData
@@ -3895,7 +4081,8 @@
           name: course.name.trim(),
           credits: course.credits || '0',
           grade: course.grade || '',
-          isNotTaken: course.isNotTaken || false
+          isNotTaken: course.isNotTaken || false,
+          proof_image: course.proof_image || existingTranscriptPath || ''
         }));
 
       console.log(`📤 準備提交 ${courses.length} 門課程（從 allCoursesData 收集，共 ${allCoursesData.length} 門）`);
@@ -4001,6 +4188,14 @@
 
       console.log(`📤 準備提交 ${structuredLanguages.length} 項語文能力`);
       formData.append("structured_languages", JSON.stringify(structuredLanguages));
+
+      // 編輯模式：若有 resume_id 則一併傳送，後端會覆蓋既有檔案而非新增一筆
+      const urlParams = new URLSearchParams(window.location.search);
+      const resumeIdFromUrl = urlParams.get('resume_id');
+      if (resumeIdFromUrl) {
+        formData.append("resume_id", resumeIdFromUrl);
+        console.log("📤 編輯模式，傳送 resume_id:", resumeIdFromUrl);
+      }
 
       try {
         const res = await fetch("/api/submit_and_generate", {

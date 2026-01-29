@@ -7,6 +7,36 @@ import re
 
 users_bp = Blueprint("users_bp", __name__)
 
+
+# -------------------------
+# API: 取得當前使用者基本資料（姓名、電子信箱、頭貼）供履歷表單帶入
+# -------------------------
+@users_bp.route('/api/current_user_profile', methods=['GET'])
+def current_user_profile():
+    if 'user_id' not in session:
+        return jsonify({"success": False, "message": "未登入"}), 403
+    user_id = session['user_id']
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute("SELECT name, email, avatar_url FROM users WHERE id=%s", (user_id,))
+        row = cursor.fetchone()
+        if not row:
+            return jsonify({"success": False, "message": "找不到使用者"}), 404
+        avatar_url = (row.get("avatar_url") or "").replace("\\", "/").strip() or None
+        return jsonify({
+            "success": True,
+            "data": {
+                "name": row.get("name") or "",
+                "email": row.get("email") or "",
+                "avatar_url": avatar_url
+            }
+        })
+    finally:
+        cursor.close()
+        conn.close()
+
+
 role_map = {
     "student": "學生",
     "teacher": "指導老師",
