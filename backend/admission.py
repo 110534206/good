@@ -1648,33 +1648,80 @@ def director_matching_results():
                 result["is_duplicate"] = False
                 result["duplicate_companies"] = []
         
+        # 先獲取所有已審核的公司（即使沒有媒合結果也要顯示）
+        cursor.execute("""
+            SELECT DISTINCT ic.id AS company_id, ic.company_name
+            FROM internship_companies ic
+            WHERE ic.status = 'approved'
+            ORDER BY ic.company_name
+        """)
+        all_companies = cursor.fetchall() or []
+        
+        # 獲取所有已審核公司的職缺
+        cursor.execute("""
+            SELECT ij.id AS job_id, ij.company_id, ij.title AS job_title, ij.slots AS job_slots
+            FROM internship_jobs ij
+            JOIN internship_companies ic ON ij.company_id = ic.id
+            WHERE ic.status = 'approved' AND ij.is_active = 1
+            ORDER BY ij.company_id, ij.id
+        """)
+        all_jobs = cursor.fetchall() or []
+        
         # 按公司組織資料
         companies_data = {}
+        
+        # 先初始化所有已審核的公司
+        for company in all_companies:
+            company_id = company["company_id"]
+            company_name = company["company_name"]
+            companies_data[company_id] = {
+                "company_id": company_id,
+                "company_name": company_name,
+                "jobs": {}
+            }
+        
+        # 為每個公司添加職缺（即使沒有媒合結果）
+        for job in all_jobs:
+            company_id = job["company_id"]
+            job_id = job["job_id"]
+            job_title = job["job_title"] or "未指定職缺"
+            job_slots = job["job_slots"] or 1
+            
+            if company_id in companies_data:
+                companies_data[company_id]["jobs"][job_id] = {
+                    "job_id": job_id,
+                    "job_title": job_title,
+                    "job_slots": job_slots,
+                    "regulars": [],
+                    "reserves": []
+                }
+        
+        # 將媒合結果分配到對應的公司和職缺
         for result in formatted_results:
             company_id = result["company_id"]
-            company_name = result["company_name"]
-            
-            if company_id not in companies_data:
-                companies_data[company_id] = {
-                    "company_id": company_id,
-                    "company_name": company_name,
-                    "jobs": {}
-                }
-            
             job_id = result.get("job_id") or 0
             job_title = result.get("job_title") or "未指定職缺"
             
+            # 如果公司不在列表中，添加它
+            if company_id not in companies_data:
+                companies_data[company_id] = {
+                    "company_id": company_id,
+                    "company_name": result["company_name"],
+                    "jobs": {}
+                }
+            
+            # 如果職缺不在列表中，添加它
             if job_id not in companies_data[company_id]["jobs"]:
-                # 獲取職缺名額（從第一個結果中取得）
                 job_slots = result.get("job_slots") or 1
                 companies_data[company_id]["jobs"][job_id] = {
                     "job_id": job_id,
                     "job_title": job_title,
-                    "job_slots": job_slots,  # 職缺名額
-                    "regulars": [],  # 正取名單
-                    "reserves": []    # 備取名單
+                    "job_slots": job_slots,
+                    "regulars": [],
+                    "reserves": []
                 }
             
+            # 分配學生到正取或備取
             if result["is_reserve"]:
                 companies_data[company_id]["jobs"][job_id]["reserves"].append(result)
             else:

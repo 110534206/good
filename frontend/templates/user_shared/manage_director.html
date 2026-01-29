@@ -690,7 +690,7 @@
     </div>
 
     <!-- 媒合結果公司卡片容器（框架一直存在） -->
-    <div id="companiesContainer" class="companies-container" style="display: none;">
+    <div id="companiesContainer" class="companies-container" style="display: flex;">
       <!-- 廠商卡片將動態生成 -->
     </div>
 
@@ -742,9 +742,12 @@
       const emptyState = document.getElementById('emptyState');
       const filtersContainer = document.getElementById('filtersContainer');
       
-      // 顯示載入狀態，隱藏其他狀態
+      // 確保框架一直存在
+      filtersContainer.style.display = 'flex';  // 過濾器框架一直顯示
+      
+      // 顯示載入狀態，但保持其他框架存在
       loadingState.style.display = 'flex';
-      companiesContainer.style.display = 'none';
+      companiesContainer.style.display = 'flex';  // 框架一直存在，即使沒有內容
       emptyState.style.display = 'none';
       
       try {
@@ -774,20 +777,22 @@
           renderCompanies();
           renderDuplicateAlert();
           
-          // 隱藏載入狀態
+          // 隱藏載入狀態，但保持框架存在
           loadingState.style.display = 'none';
           
-          // 根據是否有資料顯示對應的容器
+          // 根據是否有資料顯示對應的內容，但框架一直存在
           if (allCompaniesData.length === 0) {
-            companiesContainer.style.display = 'none';
+            companiesContainer.style.display = 'flex';  // 框架存在
+            companiesContainer.innerHTML = '';  // 清空內容
             emptyState.style.display = 'block';
           } else {
-            companiesContainer.style.display = 'flex';
+            companiesContainer.style.display = 'flex';  // 框架存在
             emptyState.style.display = 'none';
           }
         } else {
           loadingState.style.display = 'none';
-          companiesContainer.style.display = 'none';
+          companiesContainer.style.display = 'flex';  // 框架一直存在
+          companiesContainer.innerHTML = '';  // 清空內容
           emptyState.style.display = 'block';
           emptyState.innerHTML = `
             <i class="fa-solid fa-triangle-exclamation"></i>
@@ -797,7 +802,8 @@
       } catch (error) {
         console.error('載入失敗:', error);
         loadingState.style.display = 'none';
-        companiesContainer.style.display = 'none';
+        companiesContainer.style.display = 'flex';  // 框架一直存在
+        companiesContainer.innerHTML = '';  // 清空內容
         emptyState.style.display = 'block';
         emptyState.innerHTML = `
           <i class="fa-solid fa-triangle-exclamation"></i>
@@ -918,21 +924,23 @@
       
       // 確保框架一直存在
       loadingState.style.display = 'none';
+      container.style.display = 'flex';  // 框架一直存在
       
       if (allCompaniesData.length === 0) {
-        container.style.display = 'none';
+        container.innerHTML = '';  // 清空內容，但框架存在
         emptyState.style.display = 'block';
         updateNavigation();
         return;
       }
 
-      // 顯示容器，隱藏空狀態
-      container.style.display = 'flex';
+      // 顯示內容，隱藏空狀態
       emptyState.style.display = 'none';
       
-      // 渲染所有廠商，水平排列
+      // 渲染所有廠商，水平排列（即使沒有資料也顯示框架）
       container.innerHTML = allCompaniesData.map(company => {
-        const jobsHtml = company.jobs.map(job => {
+        // 確保 jobs 陣列存在
+        const jobs = company.jobs || [];
+        const jobsHtml = jobs.map(job => {
           const regularsHtml = renderStudentList(job.regulars, 'regular', job);
           const reservesHtml = renderStudentList(job.reserves, 'reserve', job);
           
@@ -987,10 +995,13 @@
           `;
         }).join('');
 
+        // 即使沒有職缺，也顯示廠商框架
+        const jobsContent = jobsHtml || '<div class="job-section"><div style="padding: 20px; text-align: center; color: var(--color-muted);">目前沒有職缺</div></div>';
+        
         return `
           <div class="company-card">
             <div class="company-header">${company.company_name}</div>
-            ${jobsHtml}
+            ${jobsContent}
           </div>
         `;
       }).join('');
