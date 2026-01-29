@@ -489,6 +489,9 @@
                 <button class="btn btn-sm btn-outline-primary" onclick="editResume(${resume.id})">
                   <i class="bi bi-pencil"></i> 編輯
                 </button>
+                <a href="/api/download_resume/${resume.id}" class="btn btn-sm btn-outline-secondary" target="_blank" rel="noopener noreferrer" title="下載履歷">
+                  <i class="bi bi-download"></i> 下載
+                </a>
                 ${isDraft ? `
                   <button class="btn btn-sm btn-outline-danger" onclick="deleteResume(${resume.id})">
                     <i class="bi bi-trash"></i> 刪除

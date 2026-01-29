@@ -144,15 +144,41 @@
     /* 第二頁：問題圖片 */
     .carousel-slide.faq-preview {
       background-image: url('/static/images/實習常見問題.png');
-      background-size: contain;
+      position: relative; 
+      background-size: cover;
       background-repeat: no-repeat;
       background-position: center;
-      cursor: pointer;
-      transition: transform 0.3s ease;
     }
 
-    .carousel-slide.faq-preview:hover {
-      transform: scale(1.02);
+    /* 第二頁按鈕 */
+    .faq-button {
+      position: absolute;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      padding: 0.8rem 2rem;
+      background-color: #0066cc;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-size: 1.2rem;
+      font-weight: 600;
+      cursor: pointer;
+      bottom: 90px; 
+      transition: all 0.3s ease;
+      box-shadow: 0 4px 12px rgba(0, 102, 204, 0.3);
+      z-index: 5;
+      white-space: nowrap;
+    }
+
+    .faq-button:hover {
+      background-color: #024689;
+      transform: translateX(-50%) translateY(-2px);
+      box-shadow: 0 6px 16px rgba(0, 102, 204, 0.4);
+    }
+
+    .faq-button:active {
+      transform: translateX(-50%) translateY(0);
     }
 
     /* 輪播控制按鈕 */
@@ -551,7 +577,11 @@
       <div class="carousel-slide hero-image active" role="img" aria-label="平台標題圖片"></div>
       
       <!-- 第二頁：問題圖片 -->
-      <div class="carousel-slide faq-preview" onclick="window.location.href='/intern_faq'" role="button" aria-label="查看實習常見問題"></div>
+      <div class="carousel-slide faq-preview" role="img" aria-label="實習常見問題圖片">
+        <button class="faq-button" onclick="window.location.href='/intern_faq'" aria-label="查看問題">
+          點擊此處 - >
+        </button>
+      </div>
     </div>
     
     <!-- 左右控制按鈕 -->
@@ -743,23 +773,23 @@
       }
     });
 
-    // 自動播放（可選，每5秒切換）
-    // let autoPlayInterval = setInterval(() => {
-    //   changeSlide(1);
-    // }, 5000);
+    // 自動播放（每5秒切換）
+    let autoPlayInterval = setInterval(() => {
+      changeSlide(1);
+    }, 5000);
 
     // 當滑鼠懸停在輪播上時暫停自動播放
-    // const carouselContainer = document.querySelector('.carousel-container');
-    // if (carouselContainer) {
-    //   carouselContainer.addEventListener('mouseenter', () => {
-    //     clearInterval(autoPlayInterval);
-    //   });
-    //   carouselContainer.addEventListener('mouseleave', () => {
-    //     autoPlayInterval = setInterval(() => {
-    //       changeSlide(1);
-    //     }, 5000);
-    //   });
-    // }
+    const carouselContainer = document.querySelector('.carousel-container');
+    if (carouselContainer) {
+      carouselContainer.addEventListener('mouseenter', () => {
+        clearInterval(autoPlayInterval);
+      });
+      carouselContainer.addEventListener('mouseleave', () => {
+        autoPlayInterval = setInterval(() => {
+          changeSlide(1);
+        }, 5000);
+      });
+    }
 
     // 帳號下拉選單
     document.addEventListener("DOMContentLoaded", function () {

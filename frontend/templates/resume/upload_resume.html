@@ -2631,7 +2631,11 @@
             if (langName.includes('英語') || langName.includes('English') || langName === 'en') {
               selectElement = form.querySelector('select[name="lang_en_level"]');
             } else if (langName.includes('日語') || langName.includes('Japanese') || langName === 'ja') {
-              selectElement = form.querySelector('select[name="lang_ja_level"]');
+              selectElement = form.querySelector('select[name="lang_jp_level"]');
+            } else if (langName.includes('台語') || langName.includes('Taiwanese') || langName === 'tw') {
+              selectElement = form.querySelector('select[name="lang_tw_level"]');
+            } else if (langName.includes('客語') || langName.includes('Hakka') || langName === 'hk') {
+              selectElement = form.querySelector('select[name="lang_hk_level"]');
             } else if (langName.includes('韓語') || langName.includes('Korean') || langName === 'ko') {
               selectElement = form.querySelector('select[name="lang_ko_level"]');
             } else if (langName.includes('其他') || langName.includes('Other')) {
@@ -2643,6 +2647,9 @@
             }
           });
         }
+        
+        // 4.5. 如果語言能力沒有選擇，預設為「略懂」（僅在生成文件時使用，不影響表單顯示）
+        // 這個邏輯在後端生成文件時處理
 
         // 標記已從資料庫載入資料（只有在成功載入課程後才標記，防止被覆蓋）
         // 注意：如果課程資料為空，會在課程資料處理部分載入標準課程後再標記
@@ -3959,12 +3966,14 @@
           cert_code: codeInput || 'OTHER',
           name: nameInput || (entry.customNameInput ? entry.customNameInput.value.trim() : ''),
           custom_cert_name: entry.customNameInput ? entry.customNameInput.value.trim() : '',
+          authority_id: authorityId && authorityId !== 'OTHER' ? authorityId : null, // 新增：發證中心ID
+          authority_name: isOther && entry.authorityNameInput ? entry.authorityNameInput.value.trim() : '', // 新增：發證中心名稱（僅當為其他時）
           job_category: isOther && entry.otherJobCategoryInput ? entry.otherJobCategoryInput.value.trim() : (entry.jobCategorySelect ? entry.jobCategorySelect.value.trim() : ''),
           level: isOther && entry.otherLevelInput ? entry.otherLevelInput.value : (entry.levelSelect ? entry.levelSelect.value : ''),
           category: entry.categoryInput ? entry.categoryInput.value : 'other',
           acquire_date: entry.acquisitionDateInput ? entry.acquisitionDateInput.value : '',
           issuer: entry.issuerInput ? entry.issuerInput.value.trim() : '',
-          cert_path: entry.photoInput && entry.photoInput.dataset.imagePath ? entry.photoInput.dataset.imagePath : ''
+          cert_path: entry.fileInput && entry.fileInput.dataset.imagePath ? entry.fileInput.dataset.imagePath : ''
         };
       }).filter(cert => cert.name || cert.cert_code); // 過濾掉空的證照
 
