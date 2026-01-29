@@ -1014,6 +1014,7 @@ def get_vendor_reviewed_students(company_id):
         # 查詢所有選擇該公司的學生履歷（包括已審核和未審核的）
         # 返回廠商審核狀態和留言（如果有的話）
         # 只顯示有廠商審核記錄的學生，每個學生只顯示一筆（最新的審核記錄）
+        # 注意：審核狀態從 student_preferences.status 獲取，vendor_preference_history 只用於檢查是否有審核記錄
         cursor.execute("""
             SELECT 
                 u.id AS student_id,
@@ -1027,17 +1028,8 @@ def get_vendor_reviewed_students(company_id):
                 sp.id AS preference_id,
                 sp.preference_order,
                 ij.title AS job_title,
-                CASE 
-                    WHEN EXISTS (
-                        SELECT 1 FROM vendor_preference_history vph 
-                        WHERE vph.preference_id = sp.id AND vph.action = 'approve'
-                    ) THEN 'approved'
-                    WHEN EXISTS (
-                        SELECT 1 FROM vendor_preference_history vph 
-                        WHERE vph.preference_id = sp.id AND vph.action = 'reject'
-                    ) THEN 'rejected'
-                    ELSE 'pending'
-                END AS vendor_review_status,
+                -- 審核狀態從 student_preferences.status 獲取
+                COALESCE(sp.status, 'pending') AS vendor_review_status,
                 (SELECT vph.comment 
                  FROM vendor_preference_history vph 
                  WHERE vph.preference_id = sp.id 
@@ -1055,11 +1047,11 @@ def get_vendor_reviewed_students(company_id):
             LEFT JOIN internship_jobs ij ON sp.job_id = ij.id
             WHERE sp.company_id = %s
             AND EXISTS (
-                -- 只顯示有廠商審核記錄的學生
+                -- 只顯示有廠商審核記錄的學生（檢查 vendor_preference_history 表中是否有記錄）
                 SELECT 1 FROM vendor_preference_history vph 
-                WHERE vph.preference_id = sp.id 
-                AND (vph.action = 'approve' OR vph.action = 'reject')
+                WHERE vph.preference_id = sp.id
             )
+            AND sp.status IN ('approved', 'rejected')
             ORDER BY u.id, vendor_reviewed_at DESC
         """, (company_id,))
         

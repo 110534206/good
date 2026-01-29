@@ -207,26 +207,102 @@ def _ensure_history_table(cursor):
                 traceback.print_exc()
             
             # 嘗試添加外鍵約束（如果失敗，不影響表的使用）
+            # 先檢查是否已存在外鍵約束，避免重複
             try:
+                # 檢查是否已存在 preference_id 的外鍵約束
                 cursor.execute("""
-                    ALTER TABLE vendor_preference_history
-                    ADD CONSTRAINT fk_vph_preference 
-                    FOREIGN KEY (preference_id)
-                    REFERENCES student_preferences(id) ON DELETE CASCADE
+                    SELECT COUNT(*) as count
+                    FROM information_schema.TABLE_CONSTRAINTS 
+                    WHERE TABLE_SCHEMA = DATABASE()
+                    AND TABLE_NAME = 'vendor_preference_history'
+                    AND CONSTRAINT_TYPE = 'FOREIGN KEY'
+                    AND CONSTRAINT_NAME LIKE '%preference%'
                 """)
+                has_pref_fk = cursor.fetchone().get('count', 0) > 0
+                
+                if not has_pref_fk:
+                    # 驗證 student_preferences 表的 id 欄位存在且是主鍵
+                    cursor.execute("""
+                        SELECT COLUMN_TYPE, COLUMN_KEY
+                        FROM information_schema.COLUMNS
+                        WHERE TABLE_SCHEMA = DATABASE()
+                        AND TABLE_NAME = 'student_preferences'
+                        AND COLUMN_NAME = 'id'
+                    """)
+                    pref_col = cursor.fetchone()
+                    if pref_col and pref_col.get('COLUMN_KEY') == 'PRI':
+                        cursor.execute("""
+                            ALTER TABLE vendor_preference_history
+                            ADD CONSTRAINT fk_vph_preference_id 
+                            FOREIGN KEY (preference_id)
+                            REFERENCES student_preferences(id) ON DELETE CASCADE
+                        """)
+                        print("✅ 已添加 preference_id 外鍵約束")
+                    else:
+                        print("⚠️ student_preferences.id 欄位不存在或不是主鍵，跳過外鍵約束")
+                else:
+                    print("ℹ️ preference_id 外鍵約束已存在，跳過添加")
             except Exception as fk_error:
                 print(f"⚠️ 無法添加 preference_id 外鍵約束: {fk_error}")
                 # 繼續執行，不影響功能
             
             try:
+                # 檢查是否已存在 reviewer_id 的外鍵約束
                 cursor.execute("""
-                    ALTER TABLE vendor_preference_history
-                    ADD CONSTRAINT fk_vph_reviewer 
-                    FOREIGN KEY (reviewer_id)
-                    REFERENCES users(id) ON DELETE CASCADE
+                    SELECT COUNT(*) as count
+                    FROM information_schema.TABLE_CONSTRAINTS 
+                    WHERE TABLE_SCHEMA = DATABASE()
+                    AND TABLE_NAME = 'vendor_preference_history'
+                    AND CONSTRAINT_TYPE = 'FOREIGN KEY'
+                    AND CONSTRAINT_NAME LIKE '%reviewer%'
                 """)
+                has_reviewer_fk = cursor.fetchone().get('count', 0) > 0
+                
+                if not has_reviewer_fk:
+                    # 驗證 users 表的 id 欄位存在且是主鍵
+                    cursor.execute("""
+                        SELECT COLUMN_TYPE, COLUMN_KEY
+                        FROM information_schema.COLUMNS
+                        WHERE TABLE_SCHEMA = DATABASE()
+                        AND TABLE_NAME = 'users'
+                        AND COLUMN_NAME = 'id'
+                    """)
+                    users_col = cursor.fetchone()
+                    if users_col and users_col.get('COLUMN_KEY') == 'PRI':
+                        # 檢查欄位類型是否匹配
+                        cursor.execute("""
+                            SELECT COLUMN_TYPE
+                            FROM information_schema.COLUMNS
+                            WHERE TABLE_SCHEMA = DATABASE()
+                            AND TABLE_NAME = 'vendor_preference_history'
+                            AND COLUMN_NAME = 'reviewer_id'
+                        """)
+                        reviewer_col = cursor.fetchone()
+                        
+                        if reviewer_col and users_col:
+                            # 確保類型匹配（都應該是 INT）
+                            reviewer_type = reviewer_col.get('COLUMN_TYPE', '').upper()
+                            users_type = users_col.get('COLUMN_TYPE', '').upper()
+                            
+                            if 'INT' in reviewer_type and 'INT' in users_type:
+                                cursor.execute("""
+                                    ALTER TABLE vendor_preference_history
+                                    ADD CONSTRAINT fk_vph_reviewer_id 
+                                    FOREIGN KEY (reviewer_id)
+                                    REFERENCES users(id) ON DELETE CASCADE
+                                """)
+                                print("✅ 已添加 reviewer_id 外鍵約束")
+                            else:
+                                print(f"⚠️ 欄位類型不匹配：reviewer_id={reviewer_type}, users.id={users_type}，跳過外鍵約束")
+                        else:
+                            print("⚠️ 無法獲取欄位類型，跳過外鍵約束")
+                    else:
+                        print("⚠️ users.id 欄位不存在或不是主鍵，跳過外鍵約束")
+                else:
+                    print("ℹ️ reviewer_id 外鍵約束已存在，跳過添加")
             except Exception as fk_error:
                 print(f"⚠️ 無法添加 reviewer_id 外鍵約束: {fk_error}")
+                traceback.print_exc()
                 # 繼續執行，不影響功能
         
         HISTORY_TABLE_READY = True

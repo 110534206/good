@@ -1,0 +1,1230 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>智慧實習平台 | 主任媒合</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet" />
+  <style>
+    :root {
+      --color-primary: #0454a3;
+      --color-primary-dark: #0454a3;
+      --color-border: #e2e8f0;
+      --color-bg: #f7f9fc;
+      --color-card: #ffffff;
+      --color-text: #1f2933;
+      --color-muted: #64748b;
+      --color-success: #16a34a;
+      --color-danger: #dc2626;
+      --color-warning: #fbbf24;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Inter', 'Noto Sans TC', sans-serif;
+      background: var(--color-bg);
+      color: var(--color-text);
+      margin: 0;
+      min-height: 100vh;
+    }
+
+    header {
+      background: linear-gradient(135deg, #0055a8 0%, #006acb 50%, #004f94 100%);
+      border-bottom: none;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      box-shadow: 0 8px 20px rgba(0, 68, 148, 0.35);
+    }
+
+    .topbar {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 18px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #fff;
+      position: relative;
+    }
+
+    .topbar h1 {
+      font-size: 1.5rem;
+      margin: 0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      color: #fff;
+      flex: 1;
+    }
+
+    .topbar h1 .header-title {
+      flex: 1;
+      text-align: center;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+    }
+
+    #menu-btn {
+      width: 30px;
+      height: 22px;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      background: none;
+      border: none;
+      padding: 0;
+    }
+
+    #menu-btn span {
+      display: block;
+      width: 100%;
+      height: 3px;
+      background-color: white;
+      border-radius: 2px;
+      transition: all 0.3s ease;
+    }
+
+    main.management-container {
+      max-width: 1200px;
+      margin: 24px auto 60px;
+      padding: 0 24px;
+    }
+
+    .panel {
+      background: var(--color-card);
+      border-radius: 12px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+      margin-bottom: 24px;
+      overflow: hidden;
+    }
+
+    .panel-header {
+      background: linear-gradient(135deg, #0055a8 0%, #006acb 100%);
+      color: #fff;
+      padding: 20px 24px;
+      font-size: 1.25rem;
+      font-weight: 600;
+    }
+
+    .panel-body {
+      padding: 24px;
+    }
+
+    .company-navigation {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 24px;
+      padding: 16px 20px;
+      background: #f8fafc;
+      border-radius: 8px;
+      border: 1px solid var(--color-border);
+    }
+
+    .nav-buttons {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+    }
+
+    .nav-btn {
+      padding: 8px 16px;
+      border: 1px solid var(--color-border);
+      border-radius: 6px;
+      background: #fff;
+      color: var(--color-text);
+      cursor: pointer;
+      font-size: 0.9rem;
+      font-weight: 500;
+      transition: all 0.2s ease;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .nav-btn:hover:not(:disabled) {
+      background: var(--color-primary);
+      color: #fff;
+      border-color: var(--color-primary);
+    }
+
+    .nav-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .company-counter {
+      font-size: 0.95rem;
+      color: var(--color-muted);
+      font-weight: 500;
+    }
+
+    .duplicate-alert {
+      background: #fef3c7;
+      border-left: 4px solid var(--color-warning);
+      padding: 16px;
+      margin-bottom: 24px;
+      border-radius: 8px;
+    }
+
+    .duplicate-alert h4 {
+      color: #92400e;
+      margin-bottom: 8px;
+      font-size: 1.1rem;
+    }
+
+    .duplicate-alert ul {
+      margin: 0;
+      padding-left: 20px;
+      color: #78350f;
+    }
+
+    .company-card {
+      border: 2px solid var(--color-border);
+      border-radius: 12px;
+      overflow: hidden;
+      background: var(--color-card);
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+      transition: box-shadow 0.2s ease;
+      min-width: 400px;
+      max-width: 500px;
+      flex-shrink: 0;
+    }
+
+    .company-card:hover {
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+    }
+
+    .company-header {
+      background: linear-gradient(135deg, #0055a8 0%, #006acb 100%);
+      color: #fff;
+      padding: 18px 24px;
+      border-bottom: none;
+      font-weight: 600;
+      font-size: 1.2rem;
+    }
+
+    .job-section {
+      padding: 20px;
+      border-bottom: 1px solid var(--color-border);
+    }
+
+    .job-section:last-child {
+      border-bottom: none;
+    }
+
+    .job-title {
+      font-weight: 600;
+      color: var(--color-text);
+      margin-bottom: 16px;
+      font-size: 1.05rem;
+    }
+
+    .btn-sm {
+      padding: 4px 8px;
+      font-size: 0.8rem;
+      min-width: auto;
+    }
+
+    .regular-list, .reserve-list {
+      margin-bottom: 16px;
+    }
+
+    .list-label {
+      font-weight: 600;
+      color: var(--color-muted);
+      margin-bottom: 12px;
+      font-size: 0.9rem;
+      text-transform: uppercase;
+    }
+
+    .student-item {
+      background: #fff;
+      border: 1px solid var(--color-border);
+      border-radius: 8px;
+      padding: 12px 16px;
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      transition: all 0.2s ease;
+    }
+
+    .student-item:hover {
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    }
+
+    .student-item.duplicate {
+      border-left: 4px solid var(--color-warning);
+      background: #fffbeb;
+    }
+
+    .student-info {
+      flex: 1;
+    }
+
+    .student-name {
+      font-weight: 600;
+      color: var(--color-text);
+      margin-bottom: 4px;
+    }
+
+    .student-details {
+      display: flex;
+      gap: 16px;
+      font-size: 0.9rem;
+      color: var(--color-muted);
+    }
+
+    .student-details span {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      margin-left: 8px;
+    }
+
+    .badge-regular {
+      background: var(--color-success);
+      color: #fff;
+    }
+
+    .badge-reserve {
+      background: var(--color-warning);
+      color: #fff;
+    }
+
+    .badge-duplicate {
+      background: var(--color-danger);
+      color: #fff;
+    }
+
+    .preference-order {
+      color: var(--color-primary);
+      font-weight: 600;
+    }
+
+    .student-actions {
+      display: flex;
+      gap: 8px;
+    }
+
+    .btn {
+      padding: 6px 12px;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 0.875rem;
+      font-weight: 500;
+      transition: all 0.2s ease;
+    }
+
+    .btn-danger {
+      background: var(--color-danger);
+      color: #fff;
+    }
+
+    .btn-danger:hover {
+      background: #b91c1c;
+    }
+
+    .btn-primary {
+      background: var(--color-primary);
+      color: #fff;
+    }
+
+    .btn-primary:hover {
+      background: var(--color-primary-dark);
+    }
+
+    .btn-success {
+      background: var(--color-success);
+      color: #fff;
+    }
+
+    .btn-success:hover {
+      background: #15803d;
+    }
+
+    .empty-slot {
+      border: 2px dashed var(--color-border);
+      background: #f8fafc;
+      padding: 16px;
+      text-align: center;
+      color: var(--color-muted);
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .empty-slot:hover {
+      border-color: var(--color-primary);
+      background: #eff6ff;
+      color: var(--color-primary);
+    }
+
+    .empty-slot i {
+      font-size: 1.5rem;
+      margin-bottom: 8px;
+      display: block;
+    }
+
+    #side-menu {
+      position: fixed;
+      top: 0;
+      left: 0;
+      height: 100vh;
+      width: 320px;
+      max-width: 80vw;
+      background-color: rgba(10, 10, 10, 0.95);
+      backdrop-filter: blur(6px);
+      box-shadow: 3px 0 12px rgba(0, 0, 0, 0.6);
+      padding: 2rem 1.5rem;
+      transform: translateX(-100%);
+      transition: transform 0.3s ease-in-out;
+      z-index: 1300;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      color: #fff;
+      user-select: none;
+    }
+
+    #side-menu.open {
+      transform: translateX(0);
+    }
+
+    #close-btn {
+      position: absolute;
+      top: 2rem;
+      right: 1.6rem;
+      font-size: 2.2rem;
+      background: none;
+      border: none;
+      color: #fff;
+      cursor: pointer;
+      line-height: 1;
+      width: 2.4rem;
+      height: 2.4rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    #side-menu h2 {
+      margin: 0.5rem 0 1.5rem;
+      font-weight: 700;
+      font-size: 1.6rem;
+    }
+
+    #side-menu a {
+      display: block;
+      width: 100%;
+      padding: 0.6rem 0;
+      font-size: 1.1rem;
+      color: #e2e8f0;
+      text-decoration: none;
+      border-radius: 4px;
+      transition: background-color 0.2s ease;
+    }
+
+    #side-menu a:hover {
+      background-color: rgba(255, 255, 255, 0.18);
+      color: #fff;
+    }
+
+    .toast {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      min-width: 240px;
+      max-width: 360px;
+      padding: 14px 16px;
+      background: var(--color-text);
+      color: #fff;
+      border-radius: 12px;
+      box-shadow: 0 12px 32px rgba(15, 23, 42, 0.2);
+      display: none;
+      z-index: 1500;
+      font-weight: 600;
+    }
+
+    .toast.show {
+      display: block;
+      animation: fade-in 0.2s ease;
+    }
+
+    .toast.success {
+      background: var(--color-success);
+    }
+
+    .toast.error {
+      background: var(--color-danger);
+    }
+
+    @keyframes fade-in {
+      from {
+        transform: translateY(8px);
+        opacity: 0;
+      }
+      to {
+        transform: translateY(0);
+        opacity: 1;
+      }
+    }
+
+    .loading {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      padding: 48px;
+      color: var(--color-muted);
+    }
+
+    .loading .spinner {
+      width: 24px;
+      height: 24px;
+      border: 3px solid rgba(4, 84, 163, 0.2);
+      border-top-color: var(--color-primary);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin {
+      to {
+        transform: rotate(360deg);
+      }
+    }
+
+    /* 媒合結果過濾器和卡片樣式（與 final_results.html 相同） */
+    .filters-container {
+      display: flex;
+      gap: 16px;
+      margin-bottom: 24px;
+      padding: 20px;
+      background: #ffffff;
+      border-radius: 12px;
+      box-shadow: 0 2px 8px rgba(15, 23, 42, 0.06);
+      align-items: flex-end;
+      flex-wrap: wrap;
+    }
+
+    .filter-group {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      flex: 1;
+      min-width: 200px;
+    }
+
+    .filter-group label {
+      font-size: 0.95rem;
+      font-weight: 500;
+      color: var(--color-text);
+    }
+
+    .filter-group select,
+    .filter-group input {
+      width: 100%;
+      padding: 10px 16px;
+      border: 1px solid var(--color-border);
+      border-radius: 8px;
+      font-size: 0.95rem;
+      color: var(--color-text);
+      background: #ffffff;
+      transition: border-color 0.2s ease, box-shadow 0.2s ease;
+      appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23333' d='M6 9L1 4h10z'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 12px center;
+      background-size: 12px;
+      padding-right: 36px;
+    }
+
+    .filter-group input {
+      background-image: none;
+      padding-right: 16px;
+    }
+
+    .filter-group select:focus,
+    .filter-group input:focus {
+      outline: none;
+      border-color: var(--color-primary);
+      box-shadow: 0 0 0 3px rgba(4, 84, 163, 0.1);
+    }
+
+  
+    .companies-container {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: nowrap;  
+    gap: 24px;
+    overflow-x: auto;  
+    padding: 10px 5px 20px 5px; 
+    align-items: flex-start;   
+    }
+
+
+    .company-card {
+    border: 2px solid var(--color-border);
+    border-radius: 12px;
+    background: var(--color-card);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+    
+    
+    width: 450px;      
+    flex-shrink: 0;    
+    display: flex;
+    flex-direction: column;
+    max-height: 80vh;   
+    overflow-y: auto;
+    }
+
+    .companies-container::-webkit-scrollbar {
+      height: 8px;
+    }
+
+    .companies-container::-webkit-scrollbar-track {
+      background: #f0f0f0;
+      border-radius: 4px;
+    }
+
+    .companies-container::-webkit-scrollbar-thumb {
+      background: var(--color-primary);
+      border-radius: 4px;
+    }
+
+    .companies-container::-webkit-scrollbar-thumb:hover {
+      background: var(--color-primary-dark);
+    }
+
+    .empty-state {
+      text-align: center;
+      padding: 48px 24px;
+      color: var(--color-muted);
+    }
+
+    .empty-state i {
+      font-size: 3rem;
+      margin-bottom: 16px;
+      color: rgba(4, 84, 163, 0.3);
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="topbar">
+      <h1>
+        <button id="menu-btn" title="選單" role="button" tabindex="0" aria-label="開啟側邊選單">
+          <span></span>
+          <span></span>
+          <span></span>
+        </button>
+        <div class="header-title">主任媒合</div>
+        <div style="width: 30px;"></div>
+      </h1>
+    </div>
+  </header>
+
+  <main class="management-container">
+    <!-- 重複中選警告 -->
+    <div id="duplicateAlert" class="duplicate-alert" style="display: none;">
+      <h4><i class="fas fa-exclamation-triangle"></i> 發現重複中選學生</h4>
+      <ul id="duplicateList"></ul>
+    </div>
+
+    <!-- 廠商導航（一個一個顯示） -->
+    <div id="companyNavigation" class="company-navigation" style="display: none;">
+      <div class="nav-buttons">
+        <button id="prevBtn" class="nav-btn" onclick="showPreviousCompany()" disabled>
+          <i class="fas fa-chevron-left"></i> 上一個
+        </button>
+        <button id="nextBtn" class="nav-btn" onclick="showNextCompany()">
+          下一個 <i class="fas fa-chevron-right"></i>
+        </button>
+      </div>
+      <div id="companyCounter" class="company-counter">1 / 1</div>
+    </div>
+
+    <!-- 媒合結果過濾器（框架一直存在） -->
+    <div class="filters-container" id="filtersContainer">
+      <div class="filter-group">
+        <label for="companyFilter">選擇公司</label>
+        <select id="companyFilter">
+          <option value="">選擇公司</option>
+        </select>
+      </div>
+      <div class="filter-group">
+        <label for="jobFilter">選擇職缺</label>
+        <select id="jobFilter">
+          <option value="">選擇職缺</option>
+        </select>
+      </div>
+      <div class="filter-group">
+        <label for="studentNameFilter">搜尋學生姓名或學號</label>
+        <input type="text" id="studentNameFilter" placeholder="輸入學生姓名或學號">
+      </div>
+    </div>
+
+    <!-- 媒合結果載入狀態（框架一直存在） -->
+    <div id="loadingState" class="loading" style="display: none;">
+      <span class="spinner"></span>
+      <span>載入中...</span>
+    </div>
+
+    <!-- 媒合結果公司卡片容器（框架一直存在） -->
+    <div id="companiesContainer" class="companies-container" style="display: none;">
+      <!-- 廠商卡片將動態生成 -->
+    </div>
+
+    <!-- 媒合結果空狀態（框架一直存在） -->
+    <div id="emptyState" class="empty-state" style="display: none;">
+      <i class="fa-solid fa-inbox"></i>
+      <div>目前沒有廠商媒合結果</div>
+    </div>
+  </main>
+
+  <nav id="side-menu" aria-hidden="true" role="navigation" aria-label="功能選單">
+    <button id="close-btn" aria-label="關閉功能選單">×</button>
+    <h2>功能選單</h2>
+    <a href="/director_home">首頁</a>
+    <a href="/profile">個人資料</a>
+    <a href="/approve_company">審核實習單位</a>
+    <a href="/review_resume?mode=director">審核實習履歷</a>
+    <a href="/manage_director">主任媒合</a>
+    <a href="/interview_schedule">行事曆</a>
+    <a href="/notifications">管理公告</a>
+    <a href="/admin_statistics">統計資料</a>
+  </nav>
+
+  <div id="toast" class="toast"></div>
+
+  <script>
+    let allCompaniesData = [];
+    let duplicateStudents = [];
+    let currentCompanyIndex = 0;  // 當前顯示的廠商索引
+    let jobSlotsMap = {};  // 儲存每個職缺的名額設定 {companyId_jobId: slots}
+
+    // 側邊選單控制
+    const menuBtn = document.getElementById('menu-btn');
+    const sideMenu = document.getElementById('side-menu');
+    const closeBtn = document.getElementById('close-btn');
+
+    menuBtn.addEventListener('click', () => {
+      sideMenu.classList.add('open');
+    });
+
+    closeBtn.addEventListener('click', () => {
+      sideMenu.classList.remove('open');
+    });
+
+    // 載入媒合結果
+    async function loadMatchingResults() {
+      const loadingState = document.getElementById('loadingState');
+      const companiesContainer = document.getElementById('companiesContainer');
+      const emptyState = document.getElementById('emptyState');
+      const filtersContainer = document.getElementById('filtersContainer');
+      
+      // 顯示載入狀態，隱藏其他狀態
+      loadingState.style.display = 'flex';
+      companiesContainer.style.display = 'none';
+      emptyState.style.display = 'none';
+      
+      try {
+        const res = await fetch('/admission/api/director_matching_results', {
+          credentials: 'include'
+        });
+        const data = await res.json();
+
+        if (data.success) {
+          allCompaniesData = data.companies || [];
+          duplicateStudents = data.duplicate_students || [];
+          currentCompanyIndex = 0;  // 重置到第一個廠商
+          
+          // 初始化職缺名額設定（從資料中取得，如果沒有則預設為1）
+          jobSlotsMap = {};
+          allCompaniesData.forEach(company => {
+            company.jobs.forEach(job => {
+              const key = `${company.company_id}_${job.job_id}`;
+              jobSlotsMap[key] = job.job_slots || 1;  // 使用職缺的名額，如果沒有則預設為1
+            });
+          });
+          
+          // 填充過濾器選項
+          populateFilters();
+          
+          // 渲染結果
+          renderCompanies();
+          renderDuplicateAlert();
+          
+          // 隱藏載入狀態
+          loadingState.style.display = 'none';
+          
+          // 根據是否有資料顯示對應的容器
+          if (allCompaniesData.length === 0) {
+            companiesContainer.style.display = 'none';
+            emptyState.style.display = 'block';
+          } else {
+            companiesContainer.style.display = 'flex';
+            emptyState.style.display = 'none';
+          }
+        } else {
+          loadingState.style.display = 'none';
+          companiesContainer.style.display = 'none';
+          emptyState.style.display = 'block';
+          emptyState.innerHTML = `
+            <i class="fa-solid fa-triangle-exclamation"></i>
+            <div>載入失敗：${data.message || '未知錯誤'}</div>
+          `;
+        }
+      } catch (error) {
+        console.error('載入失敗:', error);
+        loadingState.style.display = 'none';
+        companiesContainer.style.display = 'none';
+        emptyState.style.display = 'block';
+        emptyState.innerHTML = `
+          <i class="fa-solid fa-triangle-exclamation"></i>
+          <div>載入失敗：${error.message}</div>
+        `;
+      }
+    }
+
+    // 填充過濾器選項
+    function populateFilters() {
+      const companyFilter = document.getElementById('companyFilter');
+      const jobFilter = document.getElementById('jobFilter');
+      
+      // 清空並填充公司選項
+      companyFilter.innerHTML = '<option value="">選擇公司</option>';
+      allCompaniesData.forEach(company => {
+        const option = document.createElement('option');
+        option.value = company.company_id;
+        option.textContent = company.company_name;
+        companyFilter.appendChild(option);
+      });
+      
+      // 收集所有職缺
+      const jobTitles = new Set();
+      allCompaniesData.forEach(company => {
+        company.jobs.forEach(job => {
+          if (job.job_title) {
+            jobTitles.add(job.job_title);
+          }
+        });
+      });
+      
+      // 清空並填充職缺選項
+      jobFilter.innerHTML = '<option value="">選擇職缺</option>';
+      Array.from(jobTitles).sort().forEach(jobTitle => {
+        const option = document.createElement('option');
+        option.value = jobTitle;
+        option.textContent = jobTitle;
+        jobFilter.appendChild(option);
+      });
+    }
+
+    // 渲染重複中選警告
+    function renderDuplicateAlert() {
+      const alert = document.getElementById('duplicateAlert');
+      const list = document.getElementById('duplicateList');
+      
+      if (duplicateStudents.length === 0) {
+        alert.style.display = 'none';
+        return;
+      }
+
+      alert.style.display = 'block';
+      list.innerHTML = '';
+
+      // 獲取重複學生的詳細資訊
+      const duplicateInfo = [];
+      allCompaniesData.forEach(company => {
+        company.jobs.forEach(job => {
+          [...job.regulars, ...job.reserves].forEach(student => {
+            if (duplicateStudents.includes(student.student_id)) {
+              const existing = duplicateInfo.find(d => d.student_id === student.student_id);
+              if (existing) {
+                existing.companies.push(company.company_name);
+              } else {
+                duplicateInfo.push({
+                  student_id: student.student_id,
+                  student_name: student.student_name,
+                  student_number: student.student_number,
+                  companies: [company.company_name]
+                });
+              }
+            }
+          });
+        });
+      });
+
+      duplicateInfo.forEach(info => {
+        const li = document.createElement('li');
+        li.innerHTML = `<strong>${info.student_name}</strong> (${info.student_number}) 被以下公司選中：${info.companies.join('、')}`;
+        list.appendChild(li);
+      });
+    }
+
+    // 顯示上一個廠商
+    function showPreviousCompany() {
+      if (currentCompanyIndex > 0) {
+        currentCompanyIndex--;
+        renderCompanies();
+        updateNavigation();
+      }
+    }
+
+    // 顯示下一個廠商
+    function showNextCompany() {
+      if (currentCompanyIndex < allCompaniesData.length - 1) {
+        currentCompanyIndex++;
+        renderCompanies();
+        updateNavigation();
+      }
+    }
+
+    // 更新導航按鈕狀態（水平排列時隱藏導航）
+    function updateNavigation() {
+      const nav = document.getElementById('companyNavigation');
+      
+      // 水平排列時隱藏導航按鈕
+      if (nav) {
+        nav.style.display = 'none';
+      }
+    }
+
+    // 渲染公司列表（水平排列顯示所有廠商）
+    function renderCompanies() {
+      const container = document.getElementById('companiesContainer');
+      const loadingState = document.getElementById('loadingState');
+      const emptyState = document.getElementById('emptyState');
+      
+      // 確保框架一直存在
+      loadingState.style.display = 'none';
+      
+      if (allCompaniesData.length === 0) {
+        container.style.display = 'none';
+        emptyState.style.display = 'block';
+        updateNavigation();
+        return;
+      }
+
+      // 顯示容器，隱藏空狀態
+      container.style.display = 'flex';
+      emptyState.style.display = 'none';
+      
+      // 渲染所有廠商，水平排列
+      container.innerHTML = allCompaniesData.map(company => {
+        const jobsHtml = company.jobs.map(job => {
+          const regularsHtml = renderStudentList(job.regulars, 'regular', job);
+          const reservesHtml = renderStudentList(job.reserves, 'reserve', job);
+          
+          // 獲取該職缺的名額設定（可手動調整）
+          const key = `${company.company_id}_${job.job_id}`;
+          const maxSlots = jobSlotsMap[key] || job.job_slots || 1;
+          const filledSlots = job.regulars.length;
+          const emptySlots = [];
+          
+          // 根據職缺名額計算空位
+          for (let i = filledSlots + 1; i <= maxSlots; i++) {
+            emptySlots.push(i);
+          }
+
+          const emptySlotsHtml = emptySlots.map(slotIndex => `
+            <div class="empty-slot" onclick="promoteFromReserve(${company.company_id}, ${job.job_id}, ${slotIndex})">
+              <i class="fas fa-plus-circle"></i>
+              <div>正取 ${slotIndex}（點擊從備取名單補上）</div>
+            </div>
+          `).join('');
+
+          return `
+            <div class="job-section">
+              <div class="job-title">
+                <div style="display: flex; align-items: center; justify-content: space-between;">
+                  <span>${job.job_title || '未指定職缺'}</span>
+                  <div style="display: flex; align-items: center; gap: 8px;">
+                    <span style="font-size: 0.85rem; color: var(--color-muted);">
+                      （已選：${filledSlots} / 名額：${maxSlots}）
+                    </span>
+                    <button class="btn btn-sm" onclick="adjustJobSlots(${company.company_id}, ${job.job_id}, -1)" style="padding: 4px 8px; font-size: 0.8rem;" title="減少名額">
+                      <i class="fas fa-minus"></i>
+                    </button>
+                    <button class="btn btn-sm" onclick="adjustJobSlots(${company.company_id}, ${job.job_id}, 1)" style="padding: 4px 8px; font-size: 0.8rem;" title="增加名額">
+                      <i class="fas fa-plus"></i>
+                    </button>
+                  </div>
+                </div>
+              </div>
+              <div class="regular-list">
+                <div class="list-label">正取名單</div>
+                ${regularsHtml}
+                ${emptySlotsHtml}
+              </div>
+              ${job.reserves.length > 0 ? `
+                <div class="reserve-list">
+                  <div class="list-label">備取名單</div>
+                  ${reservesHtml}
+                </div>
+              ` : ''}
+            </div>
+          `;
+        }).join('');
+
+        return `
+          <div class="company-card">
+            <div class="company-header">${company.company_name}</div>
+            ${jobsHtml}
+          </div>
+        `;
+      }).join('');
+      
+      updateNavigation();
+    }
+
+    // 渲染學生列表
+    function renderStudentList(students, type, job) {
+      if (students.length === 0) {
+        return '<div class="text-muted" style="padding: 12px;">尚無學生</div>';
+      }
+
+      return students.map(student => {
+        const isDuplicate = duplicateStudents.includes(student.student_id);
+        const badgeClass = type === 'regular' ? 'badge-regular' : 'badge-reserve';
+        const badgeText = type === 'regular' 
+          ? `正取${student.slot_index || ''}` 
+          : '候補';
+        
+        return `
+          <div class="student-item ${isDuplicate ? 'duplicate' : ''}">
+            <div class="student-info">
+              <div class="student-name">
+                ${escapeHtml(student.student_name)}
+                <span class="badge ${badgeClass}">${badgeText}</span>
+                ${isDuplicate ? '<span class="badge badge-duplicate">重複中選</span>' : ''}
+              </div>
+              <div class="student-details">
+                <span><i class="fas fa-id-card"></i> ${escapeHtml(student.student_number || '—')}</span>
+                <span><i class="fas fa-users"></i> ${escapeHtml(student.class_name || '—')}</span>
+                <span class="preference-order">
+                  <i class="fas fa-list-ol"></i> 志願序：${student.preference_order || '—'}
+                </span>
+              </div>
+            </div>
+            <div class="student-actions">
+              <button class="btn btn-danger" onclick="removeStudent(${student.id}, '${escapeHtml(student.student_name)}')">
+                <i class="fas fa-times"></i> 移除
+              </button>
+              ${type === 'reserve' ? `
+                <button class="btn btn-success" onclick="promoteToRegular(${student.id}, ${job.job_id})">
+                  <i class="fas fa-arrow-up"></i> 提升為正取
+                </button>
+              ` : ''}
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    // 移除學生
+    async function removeStudent(historyId, studentName) {
+      if (!confirm(`確定要移除「${studentName}」嗎？`)) {
+        return;
+      }
+
+      try {
+        const res = await fetch('/admission/api/director_remove_student', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ history_id: historyId })
+        });
+
+        const data = await res.json();
+        if (data.success) {
+          showToast('已移除學生', 'success');
+          loadMatchingResults();
+        } else {
+          showToast(data.message || '移除失敗', 'error');
+        }
+      } catch (error) {
+        console.error('移除失敗:', error);
+        showToast('移除失敗', 'error');
+      }
+    }
+
+    // 從備取名單提升為正取
+    async function promoteToRegular(historyId, jobId) {
+      // 找到該職缺的正取數量，下一個位置就是新的正取位置
+      let nextSlotIndex = 1;
+      allCompaniesData.forEach(company => {
+        company.jobs.forEach(job => {
+          if (job.job_id === jobId) {
+            nextSlotIndex = job.regulars.length + 1;
+          }
+        });
+      });
+
+      try {
+        const res = await fetch('/admission/api/director_promote_reserve', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({
+            history_id: historyId,
+            slot_index: nextSlotIndex
+          })
+        });
+
+        const data = await res.json();
+        if (data.success) {
+          showToast('已提升為正取', 'success');
+          loadMatchingResults();
+        } else {
+          showToast(data.message || '提升失敗', 'error');
+        }
+      } catch (error) {
+        console.error('提升失敗:', error);
+        showToast('提升失敗', 'error');
+      }
+    }
+
+    // 從備取名單補上空位
+    async function promoteFromReserve(companyId, jobId, slotIndex) {
+      // 找到該職缺的備取名單
+      let reserves = [];
+      allCompaniesData.forEach(company => {
+        if (company.company_id === companyId) {
+          company.jobs.forEach(job => {
+            if (job.job_id === jobId) {
+              reserves = job.reserves;
+            }
+          });
+        }
+      });
+
+      if (reserves.length === 0) {
+        showToast('該職缺無備取名單', 'error');
+        return;
+      }
+
+      // 顯示備取名單供選擇
+      const studentList = reserves.map((s, i) => 
+        `${i + 1}. ${s.student_name} (${s.student_number})`
+      ).join('\n');
+
+      const choice = prompt(`請選擇要補上的學生（輸入編號）：\n\n${studentList}`);
+      const index = parseInt(choice) - 1;
+
+      if (isNaN(index) || index < 0 || index >= reserves.length) {
+        return;
+      }
+
+      const selectedStudent = reserves[index];
+
+      try {
+        const res = await fetch('/admission/api/director_promote_reserve', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({
+            history_id: selectedStudent.id,
+            slot_index: slotIndex
+          })
+        });
+
+        const data = await res.json();
+        if (data.success) {
+          showToast('已從備取名單補上', 'success');
+          loadMatchingResults();
+        } else {
+          showToast(data.message || '補上失敗', 'error');
+        }
+      } catch (error) {
+        console.error('補上失敗:', error);
+        showToast('補上失敗', 'error');
+      }
+    }
+
+    // 顯示提示訊息
+    function showToast(message, type = 'info') {
+      const toast = document.getElementById('toast');
+      toast.textContent = message;
+      toast.className = `toast ${type} show`;
+      setTimeout(() => {
+        toast.classList.remove('show');
+      }, 3000);
+    }
+
+    // 調整職缺名額
+    function adjustJobSlots(companyId, jobId, delta) {
+      const key = `${companyId}_${jobId}`;
+      const currentSlots = jobSlotsMap[key] || 1;
+      const newSlots = Math.max(1, currentSlots + delta);  // 至少1個名額
+      
+      if (newSlots !== currentSlots) {
+        jobSlotsMap[key] = newSlots;
+        // 重新渲染以更新顯示
+        renderCompanies();
+        showToast(`已將名額調整為 ${newSlots}`, 'success');
+      }
+    }
+
+    // HTML 轉義
+    function escapeHtml(text) {
+      if (!text) return '';
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    // 頁面載入時執行
+    document.addEventListener('DOMContentLoaded', () => {
+      loadMatchingResults();
+      
+      // 綁定過濾器事件（框架一直存在，所以事件綁定也要一直存在）
+      const companyFilter = document.getElementById('companyFilter');
+      const jobFilter = document.getElementById('jobFilter');
+      const studentNameFilter = document.getElementById('studentNameFilter');
+      
+      if (companyFilter) {
+        companyFilter.addEventListener('change', () => {
+          // 過濾功能可以後續實作
+          console.log('公司過濾器變更');
+        });
+      }
+      
+      if (jobFilter) {
+        jobFilter.addEventListener('change', () => {
+          // 過濾功能可以後續實作
+          console.log('職缺過濾器變更');
+        });
+      }
+      
+      if (studentNameFilter) {
+        studentNameFilter.addEventListener('input', () => {
+          // 過濾功能可以後續實作
+          console.log('學生姓名過濾器變更');
+        });
+      }
+    });
+  </script>
+</body>
+</html>
+

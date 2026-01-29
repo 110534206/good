@@ -376,7 +376,7 @@
       // 先載入 profile 資料以獲取公司名稱
       loadProfile().then(() => {
         // 然後載入職缺列表（會自動過濾只顯示該公司的職缺）
-        loadPositions();
+      loadPositions();
       });
       loadAnnouncementHistory();
       
@@ -471,7 +471,7 @@
             
             // 如果沒有職缺，顯示提示訊息
             if (activePositions.length === 0) {
-              const option = document.createElement("option");
+                const option = document.createElement("option");
               option.value = "";
               option.textContent = "您尚未建立任何職缺";
               option.disabled = true;

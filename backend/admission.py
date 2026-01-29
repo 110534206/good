@@ -39,6 +39,22 @@ def intern_management_page():
     return render_template('user_shared/Intern management.html')
 
 # =========================================================
+# 頁面路由：主任媒合
+# =========================================================
+@admission_bp.route("/manage_director", methods=["GET"])
+def manage_director_page():
+    """主任媒合頁面"""
+    if 'user_id' not in session:
+        return redirect('/login')
+    
+    user_role = session.get('role')
+    # 只允許主任訪問
+    if user_role != 'director':
+        return "無權限訪問此頁面", 403
+    
+    return render_template('user_shared/manage_director.html')
+
+# =========================================================
 # API: 記錄實習錄取結果（錄取後自動綁定指導老師與學生）
 # =========================================================
 @admission_bp.route("/api/record_admission", methods=["POST"])
@@ -1486,6 +1502,385 @@ def vendor_matching_results():
     except Exception as e:
         traceback.print_exc()
         return jsonify({"success": False, "message": f"查詢失敗: {str(e)}"}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+# =========================================================
+# API: 主任查看所有廠商媒合結果（包含重複中選檢測）
+# =========================================================
+@admission_bp.route("/api/director_matching_results", methods=["GET"])
+def director_matching_results():
+    """主任查看所有廠商的媒合結果，自動檢測重複中選的學生（從 manage_director 表讀取）"""
+    if 'user_id' not in session or session.get('role') != 'director':
+        return jsonify({"success": False, "message": "未授權"}), 403
+    
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+    
+    try:
+        # 獲取當前學期代碼（用於 project_id）
+        current_semester_code = get_current_semester_code(cursor)
+        if not current_semester_code:
+            return jsonify({"success": False, "message": "無法取得當前學期"}), 500
+        
+        # 從 manage_director 表讀取資料
+        # 只顯示 Pending 和 Approved 的記錄（不顯示 Rejected）
+        query = """
+            SELECT 
+                md.match_id,
+                md.project_id,
+                md.vendor_id,
+                md.student_id,
+                md.preference_id,
+                md.original_type,
+                md.original_rank,
+                md.is_conflict,
+                md.director_decision,
+                md.final_rank,
+                md.is_adjusted,
+                md.reviewer_id,
+                md.updated_at,
+                sp.company_id,
+                sp.preference_order,
+                sp.job_id,
+                ic.company_name,
+                u.name AS student_name,
+                u.username AS student_number,
+                u.email AS student_email,
+                c.name AS class_name,
+                c.department AS class_department,
+                v.name AS vendor_name,
+                ij.title AS job_title,
+                ij.slots AS job_slots
+            FROM manage_director md
+            JOIN student_preferences sp ON md.preference_id = sp.id
+            LEFT JOIN internship_companies ic ON sp.company_id = ic.id
+            LEFT JOIN internship_jobs ij ON sp.job_id = ij.id
+            LEFT JOIN users u ON md.student_id = u.id
+            LEFT JOIN classes c ON u.class_id = c.id
+            LEFT JOIN users v ON md.vendor_id = v.id
+            WHERE md.director_decision IN ('Pending', 'Approved')
+            ORDER BY sp.company_id, COALESCE(sp.job_id, 0), 
+                CASE WHEN md.director_decision = 'Approved' AND md.final_rank IS NOT NULL THEN 0 ELSE 1 END,
+                COALESCE(md.final_rank, 999) ASC,
+                md.original_rank ASC
+        """
+        cursor.execute(query)
+        all_results = cursor.fetchall() or []
+        
+        # 格式化結果並組織資料結構
+        formatted_results = []
+        student_company_map = {}  # 用於檢測重複中選：{student_id: [company_ids]}
+        
+        for result in all_results:
+            student_id = result.get("student_id")
+            company_id = result.get("company_id")
+            
+            # 記錄每個學生被哪些公司選中
+            if student_id not in student_company_map:
+                student_company_map[student_id] = []
+            if company_id not in student_company_map[student_id]:
+                student_company_map[student_id].append(company_id)
+            
+            # 判斷是否為正取或備取
+            # 如果 director_decision 是 Approved 且有 final_rank，則為正取
+            # 如果 director_decision 是 Pending 且 original_type 是 Regular，則為正取
+            # 否則為備取
+            is_reserve = False
+            slot_index = None
+            
+            if result.get("director_decision") == "Approved" and result.get("final_rank") is not None:
+                # 主任已核定為正取
+                is_reserve = False
+                slot_index = result.get("final_rank")
+            elif result.get("director_decision") == "Pending":
+                # 待定狀態，根據原始設定判斷
+                if result.get("original_type") == "Regular" and result.get("original_rank") is not None:
+                    is_reserve = False
+                    slot_index = result.get("original_rank")
+                else:
+                    is_reserve = True
+            else:
+                is_reserve = True
+            
+            formatted_result = {
+                "id": result.get("match_id"),  # 使用 match_id 作為識別符
+                "match_id": result.get("match_id"),
+                "vendor_id": result.get("vendor_id"),
+                "vendor_name": result.get("vendor_name"),
+                "company_id": company_id,
+                "company_name": result.get("company_name"),
+                "job_id": result.get("job_id"),
+                "job_title": result.get("job_title") or "未指定職缺",
+                "student_id": student_id,
+                "student_name": result.get("student_name"),
+                "student_number": result.get("student_number"),
+                "student_email": result.get("student_email"),
+                "class_name": result.get("class_name"),
+                "class_department": result.get("class_department"),
+                "preference_order": result.get("preference_order"),
+                "preference_id": result.get("preference_id"),
+                "slot_index": slot_index,
+                "is_reserve": is_reserve,
+                "director_decision": result.get("director_decision"),
+                "final_rank": result.get("final_rank"),
+                "is_adjusted": bool(result.get("is_adjusted")),
+                "is_conflict": bool(result.get("is_conflict")),
+                "original_type": result.get("original_type"),
+                "original_rank": result.get("original_rank"),
+                "updated_at": result.get("updated_at").strftime("%Y-%m-%d %H:%M:%S") if isinstance(result.get("updated_at"), datetime) else str(result.get("updated_at", ""))
+            }
+            formatted_results.append(formatted_result)
+        
+        # 標記重複中選的學生（根據 is_conflict 或實際重複情況）
+        duplicate_students = {}
+        for sid, companies in student_company_map.items():
+            if len(companies) > 1:
+                duplicate_students[sid] = companies
+        
+        # 也檢查 is_conflict 標記
+        for result in formatted_results:
+            if result.get("is_conflict") or result["student_id"] in duplicate_students:
+                result["is_duplicate"] = True
+                result["duplicate_companies"] = duplicate_students.get(result["student_id"], [])
+            else:
+                result["is_duplicate"] = False
+                result["duplicate_companies"] = []
+        
+        # 按公司組織資料
+        companies_data = {}
+        for result in formatted_results:
+            company_id = result["company_id"]
+            company_name = result["company_name"]
+            
+            if company_id not in companies_data:
+                companies_data[company_id] = {
+                    "company_id": company_id,
+                    "company_name": company_name,
+                    "jobs": {}
+                }
+            
+            job_id = result.get("job_id") or 0
+            job_title = result.get("job_title") or "未指定職缺"
+            
+            if job_id not in companies_data[company_id]["jobs"]:
+                # 獲取職缺名額（從第一個結果中取得）
+                job_slots = result.get("job_slots") or 1
+                companies_data[company_id]["jobs"][job_id] = {
+                    "job_id": job_id,
+                    "job_title": job_title,
+                    "job_slots": job_slots,  # 職缺名額
+                    "regulars": [],  # 正取名單
+                    "reserves": []    # 備取名單
+                }
+            
+            if result["is_reserve"]:
+                companies_data[company_id]["jobs"][job_id]["reserves"].append(result)
+            else:
+                companies_data[company_id]["jobs"][job_id]["regulars"].append(result)
+        
+        # 轉換為列表格式
+        companies_list = []
+        for company_id, company_data in companies_data.items():
+            jobs_list = list(company_data["jobs"].values())
+            companies_list.append({
+                "company_id": company_id,
+                "company_name": company_data["company_name"],
+                "jobs": jobs_list
+            })
+        
+        return jsonify({
+            "success": True,
+            "companies": companies_list,
+            "duplicate_students": list(duplicate_students.keys()),
+            "total_matches": len(formatted_results)
+        })
+    
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"success": False, "message": f"查詢失敗: {str(e)}"}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+# =========================================================
+# API: 主任移除學生（從媒合結果中移除）
+# =========================================================
+@admission_bp.route("/api/director_remove_student", methods=["POST"])
+def director_remove_student():
+    """主任從媒合結果中移除學生（更新 manage_director 表的 director_decision 為 Rejected）"""
+    if 'user_id' not in session or session.get('role') != 'director':
+        return jsonify({"success": False, "message": "未授權"}), 403
+    
+    data = request.get_json() or {}
+    match_id = data.get("history_id") or data.get("match_id")  # 支援兩種參數名稱
+    
+    if not match_id:
+        return jsonify({"success": False, "message": "請提供記錄ID"}), 400
+    
+    director_id = session.get('user_id')
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+    
+    try:
+        # 更新 manage_director 表，將 director_decision 設為 Rejected
+        cursor.execute("""
+            UPDATE manage_director
+            SET director_decision = 'Rejected',
+                reviewer_id = %s,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE match_id = %s
+        """, (director_id, match_id))
+        
+        if cursor.rowcount == 0:
+            return jsonify({"success": False, "message": "找不到該記錄"}), 404
+        
+        conn.commit()
+        
+        return jsonify({
+            "success": True,
+            "message": "已移除學生"
+        })
+    
+    except Exception as e:
+        traceback.print_exc()
+        if conn:
+            conn.rollback()
+        return jsonify({"success": False, "message": f"移除失敗: {str(e)}"}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+# =========================================================
+# API: 主任從備取名單補上學生
+# =========================================================
+@admission_bp.route("/api/director_promote_reserve", methods=["POST"])
+def director_promote_reserve():
+    """主任將備取學生提升為正取（更新 manage_director 表）"""
+    if 'user_id' not in session or session.get('role') != 'director':
+        return jsonify({"success": False, "message": "未授權"}), 403
+    
+    data = request.get_json() or {}
+    match_id = data.get("history_id") or data.get("match_id")  # 支援兩種參數名稱
+    slot_index = data.get("slot_index")  # 新的正取位置
+    
+    if not match_id or slot_index is None:
+        return jsonify({"success": False, "message": "請提供記錄ID和正取位置"}), 400
+    
+    director_id = session.get('user_id')
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+    
+    try:
+        # 檢查記錄是否存在
+        cursor.execute("""
+            SELECT match_id, original_type, final_rank
+            FROM manage_director
+            WHERE match_id = %s
+        """, (match_id,))
+        record = cursor.fetchone()
+        
+        if not record:
+            return jsonify({"success": False, "message": "找不到該記錄"}), 404
+        
+        # 判斷是否為調整（如果 original_type 不是 Regular 或 original_rank 不等於 final_rank）
+        is_adjusted = True
+        if record.get("original_type") == "Regular" and record.get("original_rank") == slot_index:
+            is_adjusted = False
+        
+        # 更新 manage_director 表
+        cursor.execute("""
+            UPDATE manage_director
+            SET director_decision = 'Approved',
+                final_rank = %s,
+                is_adjusted = %s,
+                reviewer_id = %s,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE match_id = %s
+        """, (slot_index, is_adjusted, director_id, match_id))
+        
+        conn.commit()
+        
+        return jsonify({
+            "success": True,
+            "message": "已將備取學生提升為正取"
+        })
+    
+    except Exception as e:
+        traceback.print_exc()
+        if conn:
+            conn.rollback()
+        return jsonify({"success": False, "message": f"提升失敗: {str(e)}"}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+# =========================================================
+# API: 主任調整學生位置
+# =========================================================
+@admission_bp.route("/api/director_update_position", methods=["POST"])
+def director_update_position():
+    """主任調整學生在媒合結果中的位置"""
+    if 'user_id' not in session or session.get('role') != 'director':
+        return jsonify({"success": False, "message": "未授權"}), 403
+    
+    data = request.get_json() or {}
+    history_id = data.get("history_id")
+    slot_index = data.get("slot_index")
+    is_reserve = data.get("is_reserve", False)
+    
+    if not history_id:
+        return jsonify({"success": False, "message": "請提供記錄ID"}), 400
+    
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+    
+    try:
+        from vendor import _ensure_history_table
+        _ensure_history_table(cursor)
+        
+        # 檢查欄位是否存在
+        cursor.execute("""
+            SELECT COLUMN_NAME 
+            FROM information_schema.COLUMNS 
+            WHERE TABLE_SCHEMA = DATABASE() 
+            AND TABLE_NAME = 'vendor_preference_history'
+            AND COLUMN_NAME IN ('slot_index', 'is_reserve')
+        """)
+        existing_columns = {row['COLUMN_NAME'] for row in cursor.fetchall()}
+        
+        if 'slot_index' in existing_columns and 'is_reserve' in existing_columns:
+            # 更新位置
+            cursor.execute("""
+                UPDATE vendor_preference_history
+                SET slot_index = %s, is_reserve = %s
+                WHERE id = %s
+            """, (slot_index, is_reserve, history_id))
+        else:
+            # 如果欄位不存在，更新 comment
+            if is_reserve:
+                comment = "媒合排序：候補"
+            else:
+                comment = f"媒合排序：正取{slot_index}"
+            cursor.execute("""
+                UPDATE vendor_preference_history
+                SET comment = %s
+                WHERE id = %s
+            """, (comment, history_id))
+        
+        conn.commit()
+        
+        return jsonify({
+            "success": True,
+            "message": "已更新學生位置"
+        })
+    
+    except Exception as e:
+        traceback.print_exc()
+        if conn:
+            conn.rollback()
+        return jsonify({"success": False, "message": f"更新失敗: {str(e)}"}), 500
     finally:
         cursor.close()
         conn.close()
