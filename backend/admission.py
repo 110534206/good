@@ -1541,15 +1541,15 @@ def director_matching_results():
                 md.is_adjusted,
                 md.reviewer_id,
                 md.updated_at,
-                sp.company_id,
-                sp.preference_order,
+            sp.company_id,
+            sp.preference_order,
                 sp.job_id,
-                ic.company_name,
-                u.name AS student_name,
-                u.username AS student_number,
-                u.email AS student_email,
-                c.name AS class_name,
-                c.department AS class_department,
+            ic.company_name,
+            u.name AS student_name,
+            u.username AS student_number,
+            u.email AS student_email,
+            c.name AS class_name,
+            c.department AS class_department,
                 v.name AS vendor_name,
                 ij.title AS job_title,
                 ij.slots AS job_slots
@@ -1669,7 +1669,7 @@ def director_matching_results():
         
         # 按公司組織資料
         companies_data = {}
-        
+            
         # 先初始化所有已審核的公司
         for company in all_companies:
             company_id = company["company_id"]
@@ -1679,7 +1679,7 @@ def director_matching_results():
                 "company_name": company_name,
                 "jobs": {}
             }
-        
+            
         # 為每個公司添加職缺（即使沒有媒合結果）
         for job in all_jobs:
             company_id = job["company_id"]
@@ -1837,7 +1837,7 @@ def director_promote_reserve():
             is_adjusted = False
         
         # 更新 manage_director 表
-        cursor.execute("""
+            cursor.execute("""
             UPDATE manage_director
             SET director_decision = 'Approved',
                 final_rank = %s,

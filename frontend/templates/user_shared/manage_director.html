@@ -191,7 +191,7 @@
     .company-card {
       border: 2px solid var(--color-border);
       border-radius: 12px;
-      overflow: hidden;
+      overflow: visible;  /* 改為 visible，讓內容可以超出卡片 */
       background: var(--color-card);
       box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
       transition: box-shadow 0.2s ease;
@@ -216,6 +216,7 @@
     .job-section {
       padding: 20px;
       border-bottom: 1px solid var(--color-border);
+      overflow: visible;  /* 讓內容可以超出區塊 */
     }
 
     .job-section:last-child {
@@ -237,6 +238,7 @@
 
     .regular-list, .reserve-list {
       margin-bottom: 16px;
+      overflow: visible;  /* 讓空位框格可以超出列表範圍 */
     }
 
     .list-label {
@@ -572,13 +574,19 @@
 
   
     .companies-container {
-    display: flex;
-    flex-direction: row;
-    flex-wrap: nowrap;  
-    gap: 24px;
-    overflow-x: auto;  
-    padding: 10px 5px 20px 5px; 
-    align-items: flex-start;   
+     display: flex;
+     flex-direction: row;
+     flex-wrap: wrap;  /* 允許換行，當橫向空間不足時自動換到下一行 */
+     gap: 24px;
+     padding: 10px 5px 20px 5px; 
+     align-items: flex-start;
+     justify-content: flex-start;  /* 從左開始排列 */
+     }
+
+    .companies-container::after {
+      content: '';
+      flex: 1 1 calc(33.333% - 24px);  /* 幫助最後一行對齊 */
+      max-width: calc(33.333% - 24px);
     }
 
 
@@ -587,14 +595,16 @@
     border-radius: 12px;
     background: var(--color-card);
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+    margin-bottom: 24px;  /* 確保每個卡片之間有間距 */
     
-    
-    width: 450px;      
-    flex-shrink: 0;    
+    /* 一排顯示3個，每個佔約33.33%寬度，減去gap */
+    flex: 1 1 calc(33.333% - 16px);
+    min-width: 300px;  /* 最小寬度，確保在小螢幕上也能正常顯示 */
+    max-width: calc(33.333% - 16px);  /* 最大寬度，確保一排3個 */
     display: flex;
     flex-direction: column;
-    max-height: 80vh;   
-    overflow-y: auto;
+    overflow: visible;  /* 改為 visible，讓下方的框格可以超出卡片範圍 */
+    position: relative;  /* 確保卡片獨立定位 */
     }
 
     .companies-container::-webkit-scrollbar {
