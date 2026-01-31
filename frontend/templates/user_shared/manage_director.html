@@ -211,6 +211,39 @@
       border-bottom: none;
       font-weight: 600;
       font-size: 1.2rem;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      user-select: none;
+      transition: background 0.2s ease;
+    }
+
+    .company-header:hover {
+      background: linear-gradient(135deg, #004a94 0%, #005bb8 100%);
+    }
+
+    .company-header .toggle-icon {
+      font-size: 1rem;
+      transition: transform 0.3s ease;
+      margin-left: 12px;
+    }
+
+    .company-card.collapsed .company-header .toggle-icon {
+      transform: rotate(-90deg);
+    }
+
+    .company-content {
+      max-height: 5000px;
+      overflow: hidden;
+      transition: max-height 0.3s ease, opacity 0.3s ease;
+      opacity: 1;
+    }
+
+    .company-card.collapsed .company-content {
+      max-height: 0;
+      opacity: 0;
+      padding: 0;
     }
 
     .job-section {
@@ -730,7 +763,7 @@
     let allCompaniesData = [];
     let duplicateStudents = [];
     let currentCompanyIndex = 0;  // 當前顯示的廠商索引
-    let jobSlotsMap = {};  // 儲存每個職缺的名額設定 {companyId_jobId: slots}
+    let jobSlotsMap = {};  // 儲存每個職缺的名額設定 {companyId_jobId: slots}，從職缺資料自動帶入
 
     // 側邊選單控制
     const menuBtn = document.getElementById('menu-btn');
@@ -771,12 +804,13 @@
           duplicateStudents = data.duplicate_students || [];
           currentCompanyIndex = 0;  // 重置到第一個廠商
           
-          // 初始化職缺名額設定（從資料中取得，如果沒有則預設為1）
+          // 從媒合結果中的職缺資料自動帶入名額設定
           jobSlotsMap = {};
           allCompaniesData.forEach(company => {
             company.jobs.forEach(job => {
               const key = `${company.company_id}_${job.job_id}`;
-              jobSlotsMap[key] = job.job_slots || 1;  // 使用職缺的名額，如果沒有則預設為1
+              // 使用職缺的名額（從資料庫直接取得）
+              jobSlotsMap[key] = job.job_slots || 1;
             });
           });
           
@@ -977,17 +1011,9 @@
               <div class="job-title">
                 <div style="display: flex; align-items: center; justify-content: space-between;">
                   <span>${job.job_title || '未指定職缺'}</span>
-                  <div style="display: flex; align-items: center; gap: 8px;">
-                    <span style="font-size: 0.85rem; color: var(--color-muted);">
-                      （已選：${filledSlots} / 名額：${maxSlots}）
-                    </span>
-                    <button class="btn btn-sm" onclick="adjustJobSlots(${company.company_id}, ${job.job_id}, -1)" style="padding: 4px 8px; font-size: 0.8rem;" title="減少名額">
-                      <i class="fas fa-minus"></i>
-                    </button>
-                    <button class="btn btn-sm" onclick="adjustJobSlots(${company.company_id}, ${job.job_id}, 1)" style="padding: 4px 8px; font-size: 0.8rem;" title="增加名額">
-                      <i class="fas fa-plus"></i>
-                    </button>
-                  </div>
+                  <span style="font-size: 0.85rem; color: var(--color-muted);">
+                    （已選：${filledSlots} / 名額：${maxSlots}）
+                  </span>
                 </div>
               </div>
               <div class="regular-list">
@@ -1008,10 +1034,16 @@
         // 即使沒有職缺，也顯示廠商框架
         const jobsContent = jobsHtml || '<div class="job-section"><div style="padding: 20px; text-align: center; color: var(--color-muted);">目前沒有職缺</div></div>';
         
+        const companyCardId = `company-card-${company.company_id}`;
         return `
-          <div class="company-card">
-            <div class="company-header">${company.company_name}</div>
-            ${jobsContent}
+          <div class="company-card collapsed" id="${companyCardId}">
+            <div class="company-header" onclick="toggleCompanyCard('${companyCardId}')">
+              <span>${company.company_name}</span>
+              <i class="fas fa-chevron-down toggle-icon"></i>
+            </div>
+            <div class="company-content">
+              ${jobsContent}
+            </div>
           </div>
         `;
       }).join('');
@@ -1193,17 +1225,11 @@
       }, 3000);
     }
 
-    // 調整職缺名額
-    function adjustJobSlots(companyId, jobId, delta) {
-      const key = `${companyId}_${jobId}`;
-      const currentSlots = jobSlotsMap[key] || 1;
-      const newSlots = Math.max(1, currentSlots + delta);  // 至少1個名額
-      
-      if (newSlots !== currentSlots) {
-        jobSlotsMap[key] = newSlots;
-        // 重新渲染以更新顯示
-        renderCompanies();
-        showToast(`已將名額調整為 ${newSlots}`, 'success');
+    // 切換公司卡片展開/收合
+    function toggleCompanyCard(cardId) {
+      const card = document.getElementById(cardId);
+      if (card) {
+        card.classList.toggle('collapsed');
       }
     }
 
