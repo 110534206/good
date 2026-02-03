@@ -105,7 +105,7 @@ def search_users():
         users = cursor.fetchall()
         
         # 補齊 post-processing 邏輯，確保前端能正確顯示角色名稱和學生屆數
-        role_map = {'ta': '科助', 'teacher': '老師', 'student': '學生', 'director': '主任', 'admin': '管理員', 'vendor': '廠商'}
+        role_map = {'ta': '科助', 'teacher': '教師', 'student': '學生', 'director': '主任', 'admin': '管理員', 'vendor': '廠商'}
         
         for user in users:
             if user.get('created_at'):

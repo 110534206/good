@@ -847,7 +847,7 @@ def api_get_reviewed_companies():
                 LEFT JOIN users advisor ON ic.advisor_user_id = advisor.id
                 LEFT JOIN company_openings co ON ic.id = co.company_id 
                     AND co.semester = %s
-                WHERE ic.status = 'approved'
+                WHERE ic.status IN ('approved', 'rejected')
                 ORDER BY 
                     CASE WHEN ic.reviewed_at IS NULL THEN 1 ELSE 0 END,
                     ic.reviewed_at DESC,
@@ -878,7 +878,7 @@ def api_get_reviewed_companies():
                 FROM internship_companies ic
                 LEFT JOIN users u ON ic.uploaded_by_user_id = u.id
                 LEFT JOIN users advisor ON ic.advisor_user_id = advisor.id
-                WHERE ic.status = 'approved'
+                WHERE ic.status IN ('approved', 'rejected')
                 ORDER BY 
                     CASE WHEN ic.reviewed_at IS NULL THEN 1 ELSE 0 END,
                     ic.reviewed_at DESC,
