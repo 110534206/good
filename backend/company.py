@@ -1,4 +1,4 @@
-from flask import Blueprint, request, jsonify, render_template, session, send_file, current_app
+from flask import Blueprint, request, jsonify, render_template, session, send_file, current_app, flash, redirect, url_for
 from config import get_db
 from datetime import datetime
 from werkzeug.utils import secure_filename
@@ -11,7 +11,7 @@ from docx.enum.table import WD_CELL_VERTICAL_ALIGNMENT
 from docx.oxml.ns import qn
 from docx.oxml import OxmlElement
 from notification import create_notification
-from semester import get_current_semester_code
+from semester import get_current_semester_code, is_student_in_current_internship
 
 company_bp = Blueprint("company_bp", __name__)
 
@@ -1622,13 +1622,15 @@ def api_get_pending_companies():
 # -------------------------
 @company_bp.route('/api/student/companies', methods=['GET'])
 def get_student_companies():
-    """取得所有已審核通過的實習公司（不限制學期開放狀態）"""
+    """取得所有已審核通過的實習公司（僅當前實習學期學生可呼叫）"""
+    if "user_id" not in session or session.get("role") != "student":
+        return jsonify({"success": False, "message": "未授權"}), 403
     conn = get_db()
     cursor = conn.cursor(dictionary=True)
-
     try:
+        if not is_student_in_current_internship(cursor, session["user_id"]):
+            return jsonify({"success": False, "message": "您本學期非實習學期，無法使用此功能"}), 403
         # 取得當前學期代碼（用於標記哪些公司是當前學期開放的）
-        from semester import get_current_semester_code
         current_semester_code = get_current_semester_code(cursor)
         
         # 查詢所有已審核通過的公司，並標記當前學期是否開放
@@ -1705,6 +1707,17 @@ def approve_company_form_page():
 # =========================================================
 @company_bp.route("/look_company")
 def look_company_page():
+    """僅當前實習學期學生可進入"""
+    if session.get("role") == "student" and "user_id" in session:
+        conn = get_db()
+        cursor = conn.cursor(dictionary=True)
+        try:
+            if not is_student_in_current_internship(cursor, session["user_id"]):
+                flash("您本學期非實習學期，無法使用投遞履歷功能。", "warning")
+                return redirect(url_for("users_bp.student_home"))
+        finally:
+            cursor.close()
+            conn.close()
     return render_template("company/look_company.html")
 
 # =========================================================
@@ -1712,23 +1725,21 @@ def look_company_page():
 # =========================================================
 @company_bp.route('/api/student/apply_company', methods=['POST'])
 def apply_company():
-    """學生投遞履歷到公司"""
+    """學生投遞履歷到公司（僅當前實習學期學生）"""
     if 'user_id' not in session or session.get('role') != 'student':
         return jsonify({"success": False, "message": "未授權"}), 403
-    
-    data = request.get_json()
-    company_id = data.get('company_id')
-    job_id = data.get('job_id')
-    resume_id = data.get('resume_id')
-    
-    if not company_id or not job_id or not resume_id:
-        return jsonify({"success": False, "message": "缺少必要參數"}), 400
-    
     user_id = session['user_id']
     conn = get_db()
     cursor = conn.cursor(dictionary=True)
-    
     try:
+        if not is_student_in_current_internship(cursor, user_id):
+            return jsonify({"success": False, "message": "您本學期非實習學期，無法投遞履歷"}), 403
+        data = request.get_json()
+        company_id = data.get('company_id')
+        job_id = data.get('job_id')
+        resume_id = data.get('resume_id')
+        if not company_id or not job_id or not resume_id:
+            return jsonify({"success": False, "message": "缺少必要參數"}), 400
         # 驗證履歷屬於該用戶，且為正式版本（可以投遞）
         cursor.execute("""
             SELECT id, status, category FROM resumes 
@@ -1831,15 +1842,15 @@ def apply_company():
 # =========================================================
 @company_bp.route('/api/student/my_applications', methods=['GET'])
 def get_my_applications():
-    """學生查看自己的投遞記錄"""
+    """學生查看自己的投遞記錄（僅當前實習學期學生）"""
     if 'user_id' not in session or session.get('role') != 'student':
         return jsonify({"success": False, "message": "未授權"}), 403
-    
     user_id = session['user_id']
     conn = get_db()
     cursor = conn.cursor(dictionary=True)
-    
     try:
+        if not is_student_in_current_internship(cursor, user_id):
+            return jsonify({"success": False, "message": "您本學期非實習學期，無法使用此功能"}), 403
         cursor.execute("""
             SELECT 
                 sja.id,

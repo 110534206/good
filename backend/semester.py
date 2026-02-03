@@ -31,6 +31,33 @@ def get_current_semester_id(cursor):
     return semester['id'] if semester else None
 
 # =========================================================
+# Helper: 是否為「當前實習學期」學生（可被其他模組導入使用）
+# =========================================================
+def is_student_in_current_internship(cursor, user_id):
+    """
+    判斷該使用者是否為學生且其實習學期為當前學期。
+    僅當 users.current_semester_code == 當前學期 id 時回傳 True，
+    供「查看公司／投遞履歷」「填寫志願序」等頁面限制使用。
+    """
+    if not user_id:
+        return False
+    current_semester_id = get_current_semester_id(cursor)
+    if not current_semester_id:
+        return False
+    cursor.execute(
+        "SELECT role, current_semester_code FROM users WHERE id = %s",
+        (user_id,)
+    )
+    row = cursor.fetchone()
+    if not row or row.get("role") != "student":
+        return False
+    # current_semester_code 存的是 semester id（實習學期）
+    user_semester_id = row.get("current_semester_code")
+    if user_semester_id is None:
+        return False
+    return int(user_semester_id) == int(current_semester_id)
+
+# =========================================================
 # API: 取得當前學期
 # =========================================================
 @semester_bp.route("/api/current", methods=["GET"])

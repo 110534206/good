@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, request, jsonify, session,send_file, redirect, url_for
+from flask import Blueprint, render_template, request, jsonify, session, send_file, redirect, url_for, flash
 from config import get_db
 from datetime import datetime
 import traceback
@@ -15,7 +15,7 @@ from reportlab.lib import colors
 from docx import Document
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.enum.table import WD_TABLE_ALIGNMENT
-from semester import get_current_semester_code, get_current_semester_id
+from semester import get_current_semester_code, get_current_semester_id, is_student_in_current_internship
 from notification import create_notification
 preferences_bp = Blueprint("preferences_bp", __name__)
 
@@ -117,13 +117,15 @@ def get_class_preferences(cursor, class_id):
 # -------------------------
 @preferences_bp.route("/fill_preferences", methods=["GET"])
 def fill_preferences_page():
-    # 允許未登入/非學生以預覽模式進入
+    # 允許未登入/非學生以預覽模式進入；若為學生則僅當前實習學期可填寫
     is_student = ("user_id" in session and session.get("role") == "student")
     student_id = session.get("user_id") if is_student else None
     conn = get_db()
     cursor = conn.cursor(dictionary=True)
-
     try:
+        if is_student and student_id and not is_student_in_current_internship(cursor, student_id):
+            flash("您本學期非實習學期，無法使用填寫志願序功能。", "warning")
+            return redirect(url_for("users_bp.student_home"))
         # 1) 取得本學期開放的公司（id, name）
         # 只顯示已審核通過且在當前學期開放的公司
         current_semester_code = get_current_semester_code(cursor)
@@ -225,15 +227,15 @@ def get_jobs_by_company():
 # -------------------------
 @preferences_bp.route("/api/get_my_preferences", methods=["GET"])
 def get_my_preferences():
-    """學生查看自己的志願序"""
+    """學生查看自己的志願序（僅當前實習學期學生）"""
     if "user_id" not in session or session.get("role") != "student":
         return jsonify({"success": False, "message": "未授權"}), 403
-
     student_id = session.get("user_id")
     conn = get_db()
     cursor = conn.cursor(dictionary=True)
-
     try:
+        if not is_student_in_current_internship(cursor, student_id):
+            return jsonify({"success": False, "message": "您本學期非實習學期，無法使用此功能"}), 403
         cursor.execute("""
             SELECT 
                 sp.id,
@@ -273,23 +275,20 @@ def save_preferences():
     # 權限檢查
     if "user_id" not in session or session.get("role") != "student":
         return jsonify({"success": False, "message": "未授權"}), 403
-
     student_id = session["user_id"]
     data = request.get_json(silent=True) or {}
     preferences = data.get("preferences", [])
-
     # 基本驗證
     if not preferences:
         return jsonify({"success": False, "message": "請至少選擇一個志願。"}), 400
-
     MAX_PREFS = 5
     if len(preferences) > MAX_PREFS:
         return jsonify({"success": False, "message": f"最多只能填寫 {MAX_PREFS} 個志願。"}), 400
-
     conn = get_db()
     cursor = conn.cursor(dictionary=True)
-
     try:
+        if not is_student_in_current_internship(cursor, student_id):
+            return jsonify({"success": False, "message": "您本學期非實習學期，無法填寫志願序"}), 403
         # 1) 檢查公司是否重複 - 移除此邏輯，以配合前端的「公司可重複選，職缺互斥」
         selected_job_ids = set() # 用來檢查職缺是否重複，以防萬一
         for p in preferences:
