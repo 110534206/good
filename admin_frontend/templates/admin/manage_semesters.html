@@ -14,12 +14,14 @@
       padding: 0;
     }
 
+    html { font-size: 18px; }
     body {
       background-color: #f8f9fa;
-      font-family: 'Inter', sans-serif;
+      font-family: 'Inter', 'Noto Sans TC', sans-serif;
       padding-top: 60px;
-      /* 為固定頂端列留出空間 */
+      font-size: 1rem;
     }
+    body.embed-mode { padding-top: 0; }
 
     /* 頂端列 */
     .top-bar {
@@ -43,6 +45,9 @@
       height: 100%;
       padding: 0 16px;
       position: relative;
+      max-width: 1400px;
+      margin: 0 auto;
+      width: 100%;
     }
 
     .top-bar-title {
@@ -148,51 +153,136 @@
       color: white;
     }
 
-    .container {
-      max-width: 900px;
-      margin: 2rem auto;
-      padding: 0 1rem;
+    .page-container {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 1.5rem 1rem 2rem;
     }
 
     .card {
       border: none;
-      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
-      border-radius: 12px;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.06);
+      border-radius: 16px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+      min-height: 0;
     }
 
+    .card.semesters-card {
+      border-top: 4px solid #0454a3;
+    }
     .card-header {
-      background-color: #fff;
-      border-bottom: 1px solid #eee;
-      padding: 1.5rem;
+      background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+      border-bottom: 1px solid #e2e8f0;
+      padding: 0.9rem 1.15rem;
       font-weight: 600;
-      font-size: 1.25rem;
-      color: #0066cc;
+      font-size: 1.1rem;
+      color: #0f172a;
+      flex-shrink: 0;
+    }
+    .card-header .bi {
+      opacity: 0.9;
+    }
+
+    .card-body-scroll {
+      overflow-y: auto;
+      flex: 1;
+      min-height: 320px;
+      max-height: min(72vh, 620px);
+    }
+
+    .card-body-scroll::-webkit-scrollbar {
+      width: 8px;
+    }
+    .card-body-scroll::-webkit-scrollbar-track {
+      background: #f1f5f9;
+      border-radius: 4px;
+    }
+    .card-body-scroll::-webkit-scrollbar-thumb {
+      background: #cbd5e1;
+      border-radius: 4px;
+    }
+    .card-body-scroll::-webkit-scrollbar-thumb:hover {
+      background: #94a3b8;
+    }
+
+    .card-desc {
+      font-size: 0.95rem;
+      color: #64748b;
+      padding: 0 1.15rem 0.6rem;
+      border-bottom: 1px solid #f1f5f9;
+      flex-shrink: 0;
     }
 
     .btn-primary {
-      background-color: #0066cc;
-      border-color: #0066cc;
+      background: linear-gradient(180deg, #0454a3 0%, #034078 100%);
+      border-color: #0454a3;
     }
-
     .btn-primary:hover {
-      background-color: #0052a3;
-      border-color: #0052a3;
+      background: linear-gradient(180deg, #034078 0%, #02305a 100%);
+      border-color: #034078;
     }
 
     .active-badge {
-      background-color: #e6f7eb;
-      color: #28a745;
-      border: 1px solid #28a745;
-      padding: 2px 8px;
-      border-radius: 12px;
-      font-size: 0.8rem;
+      background: linear-gradient(135deg, #dcfce7 0%, #bbf7d0 100%);
+      color: #166534;
+      border: 1px solid #86efac;
+      padding: 4px 10px;
+      border-radius: 20px;
+      font-size: 0.95rem;
+      font-weight: 500;
     }
+
+    .card .table {
+      font-size: 1.05rem;
+    }
+    .card .table thead th {
+      font-size: 0.95rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.02em;
+      color: #475569;
+      padding: 0.7rem 0.9rem;
+      background: #f8fafc;
+      border-bottom: 1px solid #e2e8f0;
+    }
+    .card .table tbody td {
+      padding: 0.7rem 0.9rem;
+      vertical-align: middle;
+      font-size: 1.05rem;
+    }
+    .card .table tbody tr:hover {
+      background: #f8fafc;
+    }
+    .card .table .active-badge {
+      font-size: 0.95rem;
+      padding: 4px 10px;
+    }
+    .card .table .btn {
+      font-size: 1rem;
+    }
+    .card .table small {
+      font-size: 1rem;
+    }
+
+    .modal.modal-top .modal-dialog {
+      margin-top: 4rem;
+      margin-bottom: auto;
+    }
+    .modal.modal-top {
+      align-items: flex-start;
+      padding-top: 0;
+    }
+    body.embed-mode .embed-hide { display: none !important; }
+    body.embed-mode .page-container { padding-top: 0.5rem; }
   </style>
 </head>
 
 <body>
-  <!-- 頂部欄 -->
-  <div class="top-bar">
+  <!-- 頂部欄（嵌入時隱藏） -->
+  <div class="top-bar embed-hide">
     <div class="container">
       <div class="top-bar-left">
         <div id="menu-btn" title="選單" role="button" tabindex="0" aria-label="開啟側邊選單">
@@ -203,13 +293,13 @@
     </div>
   </div>
 
-  <!-- 側邊選單 -->
-  <nav id="side-menu" aria-hidden="true" role="navigation" aria-label="功能選單">
+  <!-- 側邊選單（嵌入時隱藏） -->
+  <nav id="side-menu" class="embed-hide" aria-hidden="true" role="navigation" aria-label="功能選單">
     <button id="close-btn" aria-label="關閉功能選單">×</button>
     <h2>功能選單</h2>
     <a href="/admin_home">首頁</a>
     <a href="/semester/manage">學期管理</a>
-    <a href="admin/user_management">使用者管理</a>
+    <a href="/admin/user_management">使用者管理</a>
     <a href="/admin/system_settings">系統設定</a>
     <a href="/admin/reports">報表與統計</a>
     <a href="/notifications">通知管理</a>
@@ -217,52 +307,21 @@
     <a href="/logout">登出</a>
   </nav>
 
-  <div class="container mb-5">
-
-    <!-- 新增學期卡片 -->
-    <div class="card mb-4">
-      <div class="card-header"><i class="bi bi-plus-circle me-2"></i>新增學期</div>
-      <div class="card-body">
-        <form id="createSemesterForm" class="row g-3">
-          <div class="col-md-3">
-            <label class="form-label">學期代碼 (如 1132)</label>
-            <input type="text" class="form-control" name="code" required>
-          </div>
-          <div class="col-md-3">
-            <label class="form-label">開始日期</label>
-            <input type="date" class="form-control" name="start_date">
-          </div>
-          <div class="col-md-3">
-            <label class="form-label">結束日期</label>
-            <input type="date" class="form-control" name="end_date">
-          </div>
-          <div class="col-md-3">
-            <!-- 預留排程切換 -->
-          </div>
-          <div class="col-12 text-end">
-            <button type="submit" class="btn btn-primary">建立學期</button>
-          </div>
-        </form>
-      </div>
-    </div>
-
-    <!-- 學期列表 -->
-    <div class="card">
+  <div class="page-container">
+    <div class="card semesters-card">
       <div class="card-header d-flex justify-content-between align-items-center">
-        <span><i class="bi bi-list-ul me-2"></i>學期列表</span>
-        <button class="btn btn-sm btn-outline-primary" onclick="loadSemesters()"><i class="bi bi-arrow-clockwise"></i>
-          重新整理</button>
+        <span><i class="bi bi-calendar3 me-2 text-primary"></i>學期列表</span>
+        <button class="btn btn-sm btn-outline-primary" onclick="loadSemesters()"><i class="bi bi-arrow-clockwise"></i> 重新整理</button>
       </div>
-      <div class="card-body p-0">
+      <div class="card-body-scroll">
         <div class="table-responsive">
           <table class="table table-hover align-middle mb-0">
-            <thead class="bg-light">
+            <thead>
               <tr>
-                <th class="ps-4">學期代碼</th>
-                <th>起訖日期</th>
+                <th class="ps-3">學期代碼</th>
+                <th>法定起訖</th>
                 <th>狀態</th>
-                <th>自動切換設定</th>
-                <th class="text-end pe-4">操作</th>
+                <th class="text-end pe-3">操作</th>
               </tr>
             </thead>
             <tbody id="semesterListBody">
@@ -274,23 +333,30 @@
     </div>
   </div>
 
-  <!-- 設定自動切換 Modal -->
-  <div class="modal fade" id="autoSwitchModal" tabindex="-1">
+  <!-- 編輯學期起訖日期 Modal（法定區間） -->
+  <div class="modal fade modal-top" id="editDatesModal" tabindex="-1">
     <div class="modal-dialog">
       <div class="modal-content">
         <div class="modal-header">
-          <h5 class="modal-title">設定自動切換時間</h5>
+          <h5 class="modal-title">編輯法定起訖日期</h5>
           <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
         </div>
         <div class="modal-body">
-          <p class="text-muted small mb-3">設定此時間後，系統將自動將此學期設為「當前學期」，並封存舊學期資料。</p>
-          <input type="hidden" id="switchTargetId">
-          <label class="form-label">預定執行時間</label>
-          <input type="datetime-local" class="form-control" id="switchTimeInput">
+          <input type="hidden" id="editDatesTargetId">
+          <p class="text-muted small mb-3">學期代碼：<strong id="editDatesCodeDisplay"></strong></p>
+          <p class="text-muted small mb-3">系統會依「開始日期」自動決定切換至本學期的時間。</p>
+          <div class="mb-3">
+            <label class="form-label">開始日期</label>
+            <input type="date" class="form-control" id="editStartDateInput">
+          </div>
+          <div class="mb-3">
+            <label class="form-label">結束日期</label>
+            <input type="date" class="form-control" id="editEndDateInput">
+          </div>
         </div>
         <div class="modal-footer">
-          <button type="button" class="btn btn-outline-secondary" onclick="clearAutoSwitch()">清除設定</button>
-          <button type="button" class="btn btn-primary" onclick="saveAutoSwitch()">儲存設定</button>
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">取消</button>
+          <button type="button" class="btn btn-primary" onclick="saveEditDates()">儲存</button>
         </div>
       </div>
     </div>
@@ -298,6 +364,10 @@
 
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
   <script>
+    (function () {
+      var embed = window.self !== window.top || (new URLSearchParams(window.location.search).get('embed') === '1');
+      if (embed) document.body.classList.add('embed-mode');
+    })();
     // 選單開關邏輯
     const menuBtn = document.getElementById("menu-btn");
     const sideMenu = document.getElementById("side-menu");
@@ -322,37 +392,42 @@
       });
     }
 
-    let autoSwitchModal;
+    let editDatesModalInstance;
 
     document.addEventListener("DOMContentLoaded", () => {
       loadSemesters();
-      autoSwitchModal = new bootstrap.Modal(document.getElementById('autoSwitchModal'));
-
-      document.getElementById("createSemesterForm").addEventListener("submit", async (e) => {
+      const editDatesModalEl = document.getElementById('editDatesModal');
+      editDatesModalInstance = new bootstrap.Modal(editDatesModalEl);
+      editDatesModalEl.addEventListener('shown.bs.modal', () => {
+        document.getElementById('editStartDateInput').focus();
+      });
+      document.getElementById('semesterListBody').addEventListener('click', (e) => {
+        const btn = e.target.closest('.btn-edit-dates');
+        if (!btn) return;
         e.preventDefault();
-        const formData = new FormData(e.target);
-        const data = Object.fromEntries(formData.entries());
-
-        try {
-          const res = await fetch("/semester/api/create", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(data)
-          });
-          const result = await res.json();
-          if (result.success) {
-            alert("建立成功");
-            e.target.reset();
-            loadSemesters();
-          } else {
-            alert("建立失敗: " + result.message);
-          }
-        } catch (err) {
-          console.error(err);
-          alert("系统錯誤");
-        }
+        const id = btn.getAttribute('data-id');
+        const code = (btn.getAttribute('data-code') || '').replace(/&quot;/g, '"');
+        const startDate = (btn.getAttribute('data-start') || '').replace(/&quot;/g, '"');
+        const endDate = (btn.getAttribute('data-end') || '').replace(/&quot;/g, '"');
+        openEditDatesModal(id, code, startDate, endDate);
       });
     });
+
+    // 將 API 回傳的日期統一顯示為 YYYY/MM/DD（可視化格式）
+    function formatDateDisplay(val) {
+      if (!val) return '-';
+      const str = String(val).trim();
+      const m = str.match(/^(\d{4})-(\d{2})-(\d{2})/);
+      if (m) return `${m[1]}/${m[2]}/${m[3]}`;
+      const d = new Date(str);
+      if (!isNaN(d.getTime())) {
+        const y = d.getFullYear();
+        const mm = String(d.getMonth() + 1).padStart(2, '0');
+        const dd = String(d.getDate()).padStart(2, '0');
+        return `${y}/${mm}/${dd}`;
+      }
+      return str;
+    }
 
     async function loadSemesters() {
       try {
@@ -369,34 +444,14 @@
             `<span class="active-badge"><i class="bi bi-check-circle-fill me-1"></i>當前學期</span>` :
             `<span class="text-muted">非當前</span>`;
 
-          let autoSwitchDisplay = '<span class="text-muted small">-</span>';
-          if (s.auto_switch_at) {
-            autoSwitchDisplay = `<span class="badge bg-info text-dark" title="自動切換"><i class="bi bi-clock me-1"></i>${s.auto_switch_at}</span>`;
-          }
-
-          const switchBtn = !isActive ?
-            `<button class="btn btn-sm btn-outline-success me-1" onclick="switchSemester(${s.id}, '${s.code}')">立即切換</button>` : '';
-
-          const scheduleBtn = !isActive ?
-            `<button class="btn btn-sm btn-outline-secondary me-1" onclick="openAutoSwitchModal(${s.id}, '${s.auto_switch_at || ''}')" title="預約切換"><i class="bi bi-calendar-event"></i></button>` : '';
-
-          const deleteBtn = !isActive ?
-            `<button class="btn btn-sm btn-outline-danger" onclick="deleteSemester(${s.id})"><i class="bi bi-trash"></i></button>` : '';
+          const editDatesBtn = `<button type="button" class="btn btn-sm btn-outline-primary me-1 btn-edit-dates" data-id="${s.id}" data-code="${String(s.code || '').replace(/"/g, '&quot;')}" data-start="${String(s.start_date || '').replace(/"/g, '&quot;')}" data-end="${String(s.end_date || '').replace(/"/g, '&quot;')}" title="編輯起始／結束日期"><i class="bi bi-pencil"></i> 編輯日期</button>`;
 
           const tr = document.createElement("tr");
           tr.innerHTML = `
-          <td class="ps-4 fw-bold text-primary">${s.code}</td>
-          <td>
-            <small class="d-block text-muted">起: ${s.start_date || '-'}</small>
-            <small class="d-block text-muted">迄: ${s.end_date || '-'}</small>
-          </td>
+          <td class="ps-3 fw-bold text-primary">${s.code}</td>
+          <td><small class="text-muted">${formatDateDisplay(s.start_date)} ～ ${formatDateDisplay(s.end_date)}</small></td>
           <td>${statusBadge}</td>
-          <td>${autoSwitchDisplay}</td>
-          <td class="text-end pe-4">
-            ${switchBtn}
-            ${scheduleBtn}
-            ${deleteBtn}
-          </td>
+          <td class="text-end pe-3">${editDatesBtn}</td>
         `;
           tbody.appendChild(tr);
         });
@@ -405,89 +460,43 @@
       }
     }
 
-    async function switchSemester(id, code) {
-      if (!confirm(`確定要立即切換到學期 ${code} 嗎？\n這將會使其他學期變為非活躍狀態。`)) return;
-
-      try {
-        const res = await fetch("/semester/api/switch", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ semester_id: id })
-        });
-        const result = await res.json();
-        if (result.success) {
-          alert(result.message);
-          loadSemesters();
-        } else {
-          alert("切換失敗: " + result.message);
-        }
-      } catch (err) {
-        alert("錯誤: " + err);
-      }
+    function openEditDatesModal(id, code, startDate, endDate) {
+      document.getElementById("editDatesTargetId").value = id;
+      document.getElementById("editDatesCodeDisplay").textContent = code || '-';
+      document.getElementById("editStartDateInput").value = startDate || '';
+      document.getElementById("editEndDateInput").value = endDate || '';
+      editDatesModalInstance.show();
     }
 
-    function openAutoSwitchModal(id, currentVal) {
-      document.getElementById("switchTargetId").value = id;
-      // datetime-local 需要 YYYY-MM-DDTHH:mm 格式
-      if (currentVal) {
-        // 簡單處理格式轉換: "YYYY-MM-DD HH:MM:SS" -> "YYYY-MM-DDTHH:MM"
-        const formatted = currentVal.replace(" ", "T").substring(0, 16);
-        document.getElementById("switchTimeInput").value = formatted;
-      } else {
-        document.getElementById("switchTimeInput").value = "";
+    async function saveEditDates() {
+      const id = document.getElementById("editDatesTargetId").value;
+      const startDate = document.getElementById("editStartDateInput").value;
+      const endDate = document.getElementById("editEndDateInput").value;
+
+      if (!startDate || !endDate) {
+        alert("請填寫開始日期與結束日期");
+        return;
       }
-      autoSwitchModal.show();
-    }
-
-    async function saveAutoSwitch() {
-      const id = document.getElementById("switchTargetId").value;
-      const timeVal = document.getElementById("switchTimeInput").value;
-
-      if (!timeVal) {
-        alert("請選擇時間");
+      if (new Date(startDate) > new Date(endDate)) {
+        alert("開始日期不可晚於結束日期");
         return;
       }
 
-      await updateSemesterAutoSwitch(id, timeVal);
-      autoSwitchModal.hide();
-    }
-
-    async function clearAutoSwitch() {
-      const id = document.getElementById("switchTargetId").value;
-      await updateSemesterAutoSwitch(id, null);
-      autoSwitchModal.hide();
-    }
-
-    async function updateSemesterAutoSwitch(id, timeVal) {
       try {
         const res = await fetch(`/semester/api/update/${id}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ auto_switch_at: timeVal })
+          body: JSON.stringify({ start_date: startDate, end_date: endDate })
         });
         const result = await res.json();
         if (result.success) {
+          editDatesModalInstance.hide();
           loadSemesters();
         } else {
-          alert("設定失敗: " + result.message);
+          alert("更新失敗: " + result.message);
         }
       } catch (err) {
-        alert("錯誤: " + err);
-      }
-    }
-
-    async function deleteSemester(id) {
-      if (!confirm("確定要刪除此學期嗎？此操作無法復原。")) return;
-      try {
-        const res = await fetch(`/semester/api/delete/${id}`, { method: "DELETE" });
-        const result = await res.json();
-        if (result.success) {
-          loadSemesters();
-        } else {
-          alert("刪除失敗: " + result.message);
-        }
-      } catch (err) {
-        alert("錯誤: " + err);
+        alert("錯誤: " + err.message);
       }
     }
   </script>
