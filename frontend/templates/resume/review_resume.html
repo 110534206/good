@@ -733,13 +733,14 @@
 
         // 主任模式只顯示退件按鈕，不顯示通過按鈕
         // 根據截止時間狀態決定是否顯示退件按鈕
-        // 注意：截止時間後，班導和主任仍能看到履歷，但退件按鈕會被禁用
+        // 注意：指導老師（teacher）可以隨時退件，不受截止時間限制
         const isRejected = row.display_status === 'rejected';
-        const canReject = !isDeadlinePassed || userRole === 'vendor';
+        // 指導老師和廠商可以隨時退件，班導和主任受截止時間限制
+        const canReject = !isDeadlinePassed || userRole === 'vendor' || userRole === 'teacher';
         
         // 退件按鈕顯示邏輯：
         // 1. 已退件的履歷：不顯示退件按鈕（已退件）
-        // 2. 截止時間前：顯示可用的退件按鈕
+        // 2. 可以退件的情況（指導老師、廠商、或截止時間前）：顯示可用的退件按鈕
         // 3. 截止時間後（班導/主任）：顯示禁用的退件按鈕，表示無法再退件
         const rejectBtn = isRejected 
           ? '' // 已退件的履歷不顯示退件按鈕
@@ -803,8 +804,8 @@
     }
 
     function rejectResume(resumeId, preferenceId) {
-       // 檢查截止時間（僅非 vendor 角色）
-       if (userRole !== 'vendor' && isDeadlinePassed) {
+       // 檢查截止時間（指導老師和廠商不受限制，班導和主任受限制）
+       if (userRole !== 'vendor' && userRole !== 'teacher' && isDeadlinePassed) {
          alert('⚠️ 已超過履歷提交截止時間，無法再退件履歷。未退件的履歷已自動通過並傳給指導老師審核。');
          return;
        }
