@@ -932,6 +932,17 @@
 
       // 證照清空（移除所有證照條目，含每筆證照的佐證圖片）
       await initializeCertificatesUI([]);
+
+      // 新增履歷時一併清空缺勤紀錄區塊與佐證圖（避免載入缺勤後又帶回舊圖）
+      if (window.isNewResume) {
+        const absenceDisplay = document.getElementById('absenceRecordsDisplay');
+        if (absenceDisplay) {
+          absenceDisplay.innerHTML = '<p class="text-muted text-center">請選擇學期範圍並點擊「篩選」按鈕以載入缺勤記錄</p>';
+        }
+        document.querySelectorAll('.absence-proof-image').forEach(function (input) {
+          input.value = '';
+        });
+      }
       console.log('✅ 已清空所有圖片與證照');
     }
 
@@ -3254,15 +3265,16 @@
           // 載入缺勤統計（基於篩選的學期範圍）
           await loadAbsenceStats();
 
-          // 檢查並設置缺勤記錄佐證圖的瀏覽和下載按鈕（使用最新的記錄）
-          const latestRecordWithImage = records.find(r => r.image_path);
-          if (latestRecordWithImage && latestRecordWithImage.image_path) {
-            const proofImageInput = document.getElementById('proof_image');
-            if (proofImageInput) {
-              proofImageInput.setAttribute('data-image-path', latestRecordWithImage.image_path);
-              proofImageInput.removeAttribute('required');
-              updateImagePreviewBox('proofImagePreviewBox', imagePathToUrl(latestRecordWithImage.image_path));
-              const isCurrentlyReadonly = proofImageInput.disabled;
+          // 檢查並設置缺勤記錄佐證圖（新增履歷模式不帶入舊圖，保持清空）
+          if (!window.isNewResume) {
+            const latestRecordWithImage = records.find(r => r.image_path);
+            if (latestRecordWithImage && latestRecordWithImage.image_path) {
+              const proofImageInput = document.getElementById('proof_image');
+              if (proofImageInput) {
+                proofImageInput.setAttribute('data-image-path', latestRecordWithImage.image_path);
+                proofImageInput.removeAttribute('required');
+                updateImagePreviewBox('proofImagePreviewBox', imagePathToUrl(latestRecordWithImage.image_path));
+              }
             }
           }
         } else {
@@ -3746,6 +3758,7 @@
       // 「新增履歷」按鈕進入時（?new=1）：清空所有圖片與證照，不載入既有履歷
       const urlParams = new URLSearchParams(window.location.search);
       const isNewResume = urlParams.get('new') === '1';
+      window.isNewResume = isNewResume;
       if (isNewResume) {
         localStorage.removeItem(AUTO_SAVE_KEY);
         await clearAllImagesAndCertificates();
@@ -4167,7 +4180,7 @@
       console.log(`📤 準備提交 ${structuredCertifications.length} 項證照`);
       formData.append("structured_certifications", JSON.stringify(structuredCertifications));
 
-      // 7. 收集語文能力資料（structured_languages）
+      // 7. 收集語文能力資料（未填寫的語文自動代入「略懂」，Word 與資料表都會帶入）
       const structuredLanguages = [];
       const languageFields = [
         { name: 'lang_en_level', language: '英語' },
@@ -4178,12 +4191,11 @@
 
       languageFields.forEach(field => {
         const selectElement = document.querySelector(`select[name="${field.name}"]`);
-        if (selectElement && selectElement.value) {
-          structuredLanguages.push({
-            language: field.language,
-            level: selectElement.value
-          });
-        }
+        const level = (selectElement && selectElement.value) ? selectElement.value : '略懂';
+        structuredLanguages.push({
+          language: field.language,
+          level: level
+        });
       });
 
       console.log(`📤 準備提交 ${structuredLanguages.length} 項語文能力`);

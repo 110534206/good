@@ -1779,13 +1779,14 @@ def submit_and_generate_api():
             uploaded_proof = request.files.get('proof_image') or request.files.get('absence_proof')
             if uploaded_proof and uploaded_proof.filename:
                 if uploaded_proof.mimetype in ALLOWED_IMAGE_MIMES:
-                    os.makedirs(ABSENCE_PROOF_FOLDER, exist_ok=True)
+                    abs_dir = os.path.join(BASE_UPLOAD_DIR, ABSENCE_PROOF_FOLDER)
+                    os.makedirs(abs_dir, exist_ok=True)
                     ext = os.path.splitext(secure_filename(uploaded_proof.filename))[1] or ".png"
                     fname = f"{user_id}_absence_proof_{datetime.now().strftime('%Y%m%d_%H%M%S')}{ext}"
-                    savep = os.path.join(ABSENCE_PROOF_FOLDER, fname)
+                    savep = os.path.join(abs_dir, fname)
                     uploaded_proof.save(savep)
-                    # 統一用正斜線存進 DB，方便前端與靜態檔使用
-                    absence_image_path = savep.replace("\\", "/")
+                    # 存進 context 用相對路徑，產生 Word 時 resolve_upload_path 可正確找到
+                    absence_image_path = (ABSENCE_PROOF_FOLDER + "/" + fname).replace("\\", "/")
                 else:
                     print(f"⚠️ 上傳的缺勤佐證圖片格式不支援: {uploaded_proof.mimetype}")
         except Exception as e:
@@ -1845,13 +1846,13 @@ def submit_and_generate_api():
                         
                         if uploaded_image and uploaded_image.filename:
                             try:
-                                # 保存圖片
-                                os.makedirs(ABSENCE_PROOF_FOLDER, exist_ok=True)
+                                abs_dir = os.path.join(BASE_UPLOAD_DIR, ABSENCE_PROOF_FOLDER)
+                                os.makedirs(abs_dir, exist_ok=True)
                                 ext = os.path.splitext(secure_filename(uploaded_image.filename))[1] or ".png"
                                 fname = f"{user_id}_record_{record_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}{ext}"
-                                save_path = os.path.join(ABSENCE_PROOF_FOLDER, fname)
+                                save_path = os.path.join(abs_dir, fname)
                                 uploaded_image.save(save_path)
-                                save_path_db = save_path.replace("\\", "/")
+                                save_path_db = (ABSENCE_PROOF_FOLDER + "/" + fname).replace("\\", "/")
                                 # 更新資料庫中對應記錄的 image_path
                                 cursor.execute("""
                                     UPDATE absence_records 
@@ -1982,12 +1983,11 @@ def submit_and_generate_api():
         }
         
         for form_field, lang_name in lang_mapping.items():
-            level = request.form.get(form_field, '').strip()
-            if level:  # 如果有選擇等級
-                structured_languages.append({
-                    "language": lang_name,
-                    "level": level
-                })
+            level = request.form.get(form_field, '').strip() or '略懂'
+            structured_languages.append({
+                "language": lang_name,
+                "level": level
+            })
 
         # 收集證照代碼和發證人（從前端表單）
         cert_codes = request.form.getlist('cert_code[]')
@@ -2108,27 +2108,64 @@ def submit_and_generate_api():
         absence_keys_in_doc = {k: v for k, v in student_data_for_doc.items() if k.startswith("absence_")}
         print("📊 student_data_for_doc 中的缺勤統計數據:", absence_keys_in_doc)
 
-        # 一律產生新檔並 INSERT 新履歷列，不覆蓋既有檔案，讓「前版本」仍可下載到原本內容
-        filename = f"{student_id}_履歷_{datetime.now().strftime('%Y%m%d_%H%M%S')}.docx"
-        save_path = os.path.join(BASE_UPLOAD_DIR, UPLOAD_FOLDER, filename) if not os.path.isabs(UPLOAD_FOLDER) else os.path.join(UPLOAD_FOLDER, filename)
+        # 編輯模式：若有 resume_id 則覆蓋既有檔案並只更新該筆履歷，畫面只保留一個檔案；新增則產生新檔並 INSERT
+        resume_id_param = request.form.get("resume_id", "").strip()
+        had_resume_id = bool(resume_id_param)  # 僅在「從未帶 resume_id」時才 INSERT，避免編輯時誤新增一筆
+        existing_filepath = None
+        if resume_id_param:
+            try:
+                rid = int(resume_id_param)
+                cursor.execute(
+                    "SELECT filepath, original_filename FROM resumes WHERE id = %s AND user_id = %s",
+                    (rid, user_id)
+                )
+                row = cursor.fetchone()
+                if row and row.get("filepath"):
+                    existing_filepath = row["filepath"]
+            except (ValueError, TypeError):
+                pass
+
+        if existing_filepath:
+            # 覆蓋既有檔案：DB 可能存相對路徑，轉成絕對路徑再寫入
+            if os.path.isabs(existing_filepath):
+                save_path = existing_filepath
+            else:
+                save_path = os.path.normpath(os.path.join(BASE_UPLOAD_DIR, existing_filepath.replace("\\", "/")))
+            filename = os.path.basename(save_path) or f"{student_id}_履歷_{datetime.now().strftime('%Y%m%d_%H%M%S')}.docx"
+        else:
+            filename = f"{student_id}_履歷_{datetime.now().strftime('%Y%m%d_%H%M%S')}.docx"
+            save_path = os.path.join(BASE_UPLOAD_DIR, UPLOAD_FOLDER, filename) if not os.path.isabs(UPLOAD_FOLDER) else os.path.join(UPLOAD_FOLDER, filename)
 
         if not generate_application_form_docx(student_data_for_doc, save_path):
             conn.rollback()
             return jsonify({"success": False, "message": "文件生成失敗"}), 500
 
-        filepath_for_db = (os.path.join(UPLOAD_FOLDER, filename)).replace("\\", "/")
-        cursor.execute("""
-            INSERT INTO resumes
-            (user_id, filepath, original_filename, status, category, semester_id, created_at)
-            VALUES (%s, %s, %s, %s, %s, %s, NOW())
-        """, (
-            user_id,
-            filepath_for_db,
-            filename,
-            'uploaded',
-            'draft',
-            semester_id
-        ))
+        if had_resume_id and resume_id_param:
+            # 編輯：一律只更新該筆履歷，不新增列，畫面上只保留一個檔案
+            try:
+                rid = int(resume_id_param)
+                filepath_for_db = existing_filepath if existing_filepath else (os.path.join(UPLOAD_FOLDER, filename)).replace("\\", "/")
+                cursor.execute("""
+                    UPDATE resumes
+                    SET filepath = %s, original_filename = %s, updated_at = NOW()
+                    WHERE id = %s AND user_id = %s
+                """, (filepath_for_db, filename, rid, user_id))
+            except (ValueError, TypeError):
+                pass  # 不將 resume_id_param 清空，避免誤執行下面的 INSERT
+        if not had_resume_id:
+            filepath_for_db = (os.path.join(UPLOAD_FOLDER, filename)).replace("\\", "/")
+            cursor.execute("""
+                INSERT INTO resumes
+                (user_id, filepath, original_filename, status, category, semester_id, created_at)
+                VALUES (%s, %s, %s, %s, %s, %s, NOW())
+            """, (
+                user_id,
+                filepath_for_db,
+                filename,
+                'uploaded',
+                'draft',
+                semester_id
+            ))
 
         conn.commit()
         return jsonify({
@@ -2183,9 +2220,9 @@ def generate_application_form_docx(student_data, output_path):
             except:
                 pass
 
-        # 照片（使用 safe_create 驗證格式，避免 render 時 UnrecognizedImageError）
+        # 照片（使用 safe_create 驗證格式，相對路徑需轉絕對路徑）
         image_obj = None
-        photo_path = info.get("PhotoPath")
+        photo_path = resolve_upload_path(info.get("PhotoPath") or "")
         if photo_path and os.path.exists(photo_path):
             image_obj = safe_create_inline_image(doc, photo_path, Inches(1.2), "學生照片")
 
@@ -2207,15 +2244,16 @@ def generate_application_form_docx(student_data, output_path):
                     context_courses[f'CourseName_{row_num}_{col_num}'] = (course.get('CourseName') or '')
                     context_courses[f'Credits_{row_num}_{col_num}'] = (course.get('Credits') or '')
 
-        # 插入成績單圖片：使用 safe_create 驗證格式，避免 render 時 UnrecognizedImageError
+        # 插入成績單圖片：相對路徑需轉絕對路徑
         transcript_obj = None
-        transcript_path = student_data.get("transcript_path") or info.get("TranscriptPath") or ''
+        transcript_path = resolve_upload_path(student_data.get("transcript_path") or info.get("TranscriptPath") or '')
         if transcript_path and os.path.exists(transcript_path):
             transcript_obj = safe_create_inline_image(doc, transcript_path, Inches(6.0), "成績單")
 
-        # 缺勤佐證圖片
+        # 缺勤佐證圖片（相對路徑需轉絕對路徑；相容 Absence_Proof_Path / absence_proof_path）
         absence_proof_obj = None
-        absence_proof_path = student_data.get("Absence_Proof_Path")
+        absence_raw = (student_data.get("Absence_Proof_Path") or student_data.get("absence_proof_path") or "").strip()
+        absence_proof_path = resolve_upload_path(absence_raw)
         image_size = Inches(6.0)
         if absence_proof_path and os.path.exists(absence_proof_path):
             absence_proof_obj = safe_create_inline_image(doc, absence_proof_path, image_size, "缺勤佐證")
@@ -2448,6 +2486,11 @@ def generate_application_form_docx(student_data, output_path):
                 key = f'{lang_code}_{level_code}'
                 if key in lang_context:
                     lang_context[key] = '■'
+
+        # 未填寫的語文能力自動代入「略懂」
+        for code in lang_codes:
+            if all(lang_context.get(f'{code}_{lc}', '□') == '□' for lc in level_codes):
+                lang_context[f'{code}_Lue'] = '■'
 
         context.update(lang_context)
         
@@ -6465,13 +6508,14 @@ def submit_and_generate_api():
             uploaded_proof = request.files.get('proof_image') or request.files.get('absence_proof')
             if uploaded_proof and uploaded_proof.filename:
                 if uploaded_proof.mimetype in ALLOWED_IMAGE_MIMES:
-                    os.makedirs(ABSENCE_PROOF_FOLDER, exist_ok=True)
+                    abs_dir = os.path.join(BASE_UPLOAD_DIR, ABSENCE_PROOF_FOLDER)
+                    os.makedirs(abs_dir, exist_ok=True)
                     ext = os.path.splitext(secure_filename(uploaded_proof.filename))[1] or ".png"
                     fname = f"{user_id}_absence_proof_{datetime.now().strftime('%Y%m%d_%H%M%S')}{ext}"
-                    savep = os.path.join(ABSENCE_PROOF_FOLDER, fname)
+                    savep = os.path.join(abs_dir, fname)
                     uploaded_proof.save(savep)
-                    # 統一用正斜線存進 DB，方便前端與靜態檔使用
-                    absence_image_path = savep.replace("\\", "/")
+                    # 存進 context 用相對路徑，產生 Word 時 resolve_upload_path 可正確找到
+                    absence_image_path = (ABSENCE_PROOF_FOLDER + "/" + fname).replace("\\", "/")
                 else:
                     print(f"⚠️ 上傳的缺勤佐證圖片格式不支援: {uploaded_proof.mimetype}")
         except Exception as e:
@@ -6531,13 +6575,13 @@ def submit_and_generate_api():
                         
                         if uploaded_image and uploaded_image.filename:
                             try:
-                                # 保存圖片
-                                os.makedirs(ABSENCE_PROOF_FOLDER, exist_ok=True)
+                                abs_dir = os.path.join(BASE_UPLOAD_DIR, ABSENCE_PROOF_FOLDER)
+                                os.makedirs(abs_dir, exist_ok=True)
                                 ext = os.path.splitext(secure_filename(uploaded_image.filename))[1] or ".png"
                                 fname = f"{user_id}_record_{record_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}{ext}"
-                                save_path = os.path.join(ABSENCE_PROOF_FOLDER, fname)
+                                save_path = os.path.join(abs_dir, fname)
                                 uploaded_image.save(save_path)
-                                save_path_db = save_path.replace("\\", "/")
+                                save_path_db = (ABSENCE_PROOF_FOLDER + "/" + fname).replace("\\", "/")
                                 # 更新資料庫中對應記錄的 image_path
                                 cursor.execute("""
                                     UPDATE absence_records 
@@ -6668,12 +6712,11 @@ def submit_and_generate_api():
         }
         
         for form_field, lang_name in lang_mapping.items():
-            level = request.form.get(form_field, '').strip()
-            if level:  # 如果有選擇等級
-                structured_languages.append({
-                    "language": lang_name,
-                    "level": level
-                })
+            level = request.form.get(form_field, '').strip() or '略懂'
+            structured_languages.append({
+                "language": lang_name,
+                "level": level
+            })
 
         # 收集證照代碼和發證人（從前端表單）
         cert_codes = request.form.getlist('cert_code[]')
@@ -6794,26 +6837,62 @@ def submit_and_generate_api():
         absence_keys_in_doc = {k: v for k, v in student_data_for_doc.items() if k.startswith("absence_")}
         print("📊 student_data_for_doc 中的缺勤統計數據:", absence_keys_in_doc)
 
-        filename = f"{student_id}_履歷_{datetime.now().strftime('%Y%m%d_%H%M%S')}.docx"
-        save_path = os.path.join(UPLOAD_FOLDER, filename)
+        # 編輯模式：若有 resume_id 則覆蓋既有檔案並只更新該筆履歷，畫面只保留一個檔案；新增則產生新檔並 INSERT
+        resume_id_param = request.form.get("resume_id", "").strip()
+        had_resume_id = bool(resume_id_param)
+        existing_filepath = None
+        if resume_id_param:
+            try:
+                rid = int(resume_id_param)
+                cursor.execute(
+                    "SELECT filepath, original_filename FROM resumes WHERE id = %s AND user_id = %s",
+                    (rid, user_id)
+                )
+                row = cursor.fetchone()
+                if row and row.get("filepath"):
+                    existing_filepath = row["filepath"]
+            except (ValueError, TypeError):
+                pass
+
+        if existing_filepath:
+            if os.path.isabs(existing_filepath):
+                save_path = existing_filepath
+            else:
+                save_path = os.path.normpath(os.path.join(BASE_UPLOAD_DIR, existing_filepath.replace("\\", "/")))
+            filename = os.path.basename(save_path) or f"{student_id}_履歷_{datetime.now().strftime('%Y%m%d_%H%M%S')}.docx"
+        else:
+            filename = f"{student_id}_履歷_{datetime.now().strftime('%Y%m%d_%H%M%S')}.docx"
+            save_path = os.path.join(BASE_UPLOAD_DIR, UPLOAD_FOLDER, filename) if not os.path.isabs(UPLOAD_FOLDER) else os.path.join(UPLOAD_FOLDER, filename)
 
         if not generate_application_form_docx(student_data_for_doc, save_path):
             conn.rollback()
             return jsonify({"success": False, "message": "文件生成失敗"}), 500
 
-        # 寫入 resumes
-        cursor.execute("""
-            INSERT INTO resumes
-            (user_id, filepath, original_filename, status, category, semester_id, created_at)
-            VALUES (%s, %s, %s, %s, %s, %s, NOW())
-        """, (
-            user_id,
-            save_path,
-            filename,
-            'uploaded',  # 使用資料庫 enum 定義的狀態值
-            'draft',     # 分類：草稿（學生需要提交後才會進入審核）
-            semester_id
-        ))
+        if had_resume_id and resume_id_param:
+            try:
+                rid = int(resume_id_param)
+                filepath_for_db = existing_filepath if existing_filepath else (os.path.join(UPLOAD_FOLDER, filename)).replace("\\", "/")
+                cursor.execute("""
+                    UPDATE resumes
+                    SET filepath = %s, original_filename = %s, updated_at = NOW()
+                    WHERE id = %s AND user_id = %s
+                """, (filepath_for_db, filename, rid, user_id))
+            except (ValueError, TypeError):
+                pass
+        if not had_resume_id:
+            filepath_for_db = (os.path.join(UPLOAD_FOLDER, filename)).replace("\\", "/")
+            cursor.execute("""
+                INSERT INTO resumes
+                (user_id, filepath, original_filename, status, category, semester_id, created_at)
+                VALUES (%s, %s, %s, %s, %s, %s, NOW())
+            """, (
+                user_id,
+                filepath_for_db,
+                filename,
+                'uploaded',
+                'draft',
+                semester_id
+            ))
 
         conn.commit()
         return jsonify({
@@ -6868,9 +6947,9 @@ def generate_application_form_docx(student_data, output_path):
             except:
                 pass
 
-        # 照片（使用 safe_create 驗證格式，避免 render 時 UnrecognizedImageError）
+        # 照片（使用 safe_create 驗證格式，相對路徑需轉絕對路徑）
         image_obj = None
-        photo_path = info.get("PhotoPath")
+        photo_path = resolve_upload_path(info.get("PhotoPath") or "")
         if photo_path and os.path.exists(photo_path):
             image_obj = safe_create_inline_image(doc, photo_path, Inches(1.2), "學生照片")
 
@@ -6892,15 +6971,16 @@ def generate_application_form_docx(student_data, output_path):
                     context_courses[f'CourseName_{row_num}_{col_num}'] = (course.get('CourseName') or '')
                     context_courses[f'Credits_{row_num}_{col_num}'] = (course.get('Credits') or '')
 
-        # 插入成績單圖片：使用 safe_create 驗證格式，避免 render 時 UnrecognizedImageError
+        # 插入成績單圖片：相對路徑需轉絕對路徑
         transcript_obj = None
-        transcript_path = student_data.get("transcript_path") or info.get("TranscriptPath") or ''
+        transcript_path = resolve_upload_path(student_data.get("transcript_path") or info.get("TranscriptPath") or '')
         if transcript_path and os.path.exists(transcript_path):
             transcript_obj = safe_create_inline_image(doc, transcript_path, Inches(6.0), "成績單")
 
-        # 缺勤佐證圖片
+        # 缺勤佐證圖片（相對路徑需轉絕對路徑；相容 Absence_Proof_Path / absence_proof_path）
         absence_proof_obj = None
-        absence_proof_path = student_data.get("Absence_Proof_Path")
+        absence_raw = (student_data.get("Absence_Proof_Path") or student_data.get("absence_proof_path") or "").strip()
+        absence_proof_path = resolve_upload_path(absence_raw)
         image_size = Inches(6.0)
         if absence_proof_path and os.path.exists(absence_proof_path):
             absence_proof_obj = safe_create_inline_image(doc, absence_proof_path, image_size, "缺勤佐證")
@@ -7133,6 +7213,11 @@ def generate_application_form_docx(student_data, output_path):
                 key = f'{lang_code}_{level_code}'
                 if key in lang_context:
                     lang_context[key] = '■'
+
+        # 未填寫的語文能力自動代入「略懂」
+        for code in lang_codes:
+            if all(lang_context.get(f'{code}_{lc}', '□') == '□' for lc in level_codes):
+                lang_context[f'{code}_Lue'] = '■'
 
         context.update(lang_context)
         
@@ -10812,13 +10897,14 @@ def submit_and_generate_api():
             uploaded_proof = request.files.get('proof_image') or request.files.get('absence_proof')
             if uploaded_proof and uploaded_proof.filename:
                 if uploaded_proof.mimetype in ALLOWED_IMAGE_MIMES:
-                    os.makedirs(ABSENCE_PROOF_FOLDER, exist_ok=True)
+                    abs_dir = os.path.join(BASE_UPLOAD_DIR, ABSENCE_PROOF_FOLDER)
+                    os.makedirs(abs_dir, exist_ok=True)
                     ext = os.path.splitext(secure_filename(uploaded_proof.filename))[1] or ".png"
                     fname = f"{user_id}_absence_proof_{datetime.now().strftime('%Y%m%d_%H%M%S')}{ext}"
-                    savep = os.path.join(ABSENCE_PROOF_FOLDER, fname)
+                    savep = os.path.join(abs_dir, fname)
                     uploaded_proof.save(savep)
-                    # 統一用正斜線存進 DB，方便前端與靜態檔使用
-                    absence_image_path = savep.replace("\\", "/")
+                    # 存進 context 用相對路徑，產生 Word 時 resolve_upload_path 可正確找到
+                    absence_image_path = (ABSENCE_PROOF_FOLDER + "/" + fname).replace("\\", "/")
                 else:
                     print(f"⚠️ 上傳的缺勤佐證圖片格式不支援: {uploaded_proof.mimetype}")
         except Exception as e:
@@ -10878,13 +10964,13 @@ def submit_and_generate_api():
                         
                         if uploaded_image and uploaded_image.filename:
                             try:
-                                # 保存圖片
-                                os.makedirs(ABSENCE_PROOF_FOLDER, exist_ok=True)
+                                abs_dir = os.path.join(BASE_UPLOAD_DIR, ABSENCE_PROOF_FOLDER)
+                                os.makedirs(abs_dir, exist_ok=True)
                                 ext = os.path.splitext(secure_filename(uploaded_image.filename))[1] or ".png"
                                 fname = f"{user_id}_record_{record_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}{ext}"
-                                save_path = os.path.join(ABSENCE_PROOF_FOLDER, fname)
+                                save_path = os.path.join(abs_dir, fname)
                                 uploaded_image.save(save_path)
-                                save_path_db = save_path.replace("\\", "/")
+                                save_path_db = (ABSENCE_PROOF_FOLDER + "/" + fname).replace("\\", "/")
                                 # 更新資料庫中對應記錄的 image_path
                                 cursor.execute("""
                                     UPDATE absence_records 
@@ -11015,12 +11101,11 @@ def submit_and_generate_api():
         }
         
         for form_field, lang_name in lang_mapping.items():
-            level = request.form.get(form_field, '').strip()
-            if level:  # 如果有選擇等級
-                structured_languages.append({
-                    "language": lang_name,
-                    "level": level
-                })
+            level = request.form.get(form_field, '').strip() or '略懂'
+            structured_languages.append({
+                "language": lang_name,
+                "level": level
+            })
 
         # 收集證照代碼和發證人（從前端表單）
         cert_codes = request.form.getlist('cert_code[]')
@@ -11141,26 +11226,62 @@ def submit_and_generate_api():
         absence_keys_in_doc = {k: v for k, v in student_data_for_doc.items() if k.startswith("absence_")}
         print("📊 student_data_for_doc 中的缺勤統計數據:", absence_keys_in_doc)
 
-        filename = f"{student_id}_履歷_{datetime.now().strftime('%Y%m%d_%H%M%S')}.docx"
-        save_path = os.path.join(UPLOAD_FOLDER, filename)
+        # 編輯模式：若有 resume_id 則覆蓋既有檔案並只更新該筆履歷，畫面只保留一個檔案；新增則產生新檔並 INSERT
+        resume_id_param = request.form.get("resume_id", "").strip()
+        had_resume_id = bool(resume_id_param)
+        existing_filepath = None
+        if resume_id_param:
+            try:
+                rid = int(resume_id_param)
+                cursor.execute(
+                    "SELECT filepath, original_filename FROM resumes WHERE id = %s AND user_id = %s",
+                    (rid, user_id)
+                )
+                row = cursor.fetchone()
+                if row and row.get("filepath"):
+                    existing_filepath = row["filepath"]
+            except (ValueError, TypeError):
+                pass
+
+        if existing_filepath:
+            if os.path.isabs(existing_filepath):
+                save_path = existing_filepath
+            else:
+                save_path = os.path.normpath(os.path.join(BASE_UPLOAD_DIR, existing_filepath.replace("\\", "/")))
+            filename = os.path.basename(save_path) or f"{student_id}_履歷_{datetime.now().strftime('%Y%m%d_%H%M%S')}.docx"
+        else:
+            filename = f"{student_id}_履歷_{datetime.now().strftime('%Y%m%d_%H%M%S')}.docx"
+            save_path = os.path.join(BASE_UPLOAD_DIR, UPLOAD_FOLDER, filename) if not os.path.isabs(UPLOAD_FOLDER) else os.path.join(UPLOAD_FOLDER, filename)
 
         if not generate_application_form_docx(student_data_for_doc, save_path):
             conn.rollback()
             return jsonify({"success": False, "message": "文件生成失敗"}), 500
 
-        # 寫入 resumes
-        cursor.execute("""
-            INSERT INTO resumes
-            (user_id, filepath, original_filename, status, category, semester_id, created_at)
-            VALUES (%s, %s, %s, %s, %s, %s, NOW())
-        """, (
-            user_id,
-            save_path,
-            filename,
-            'uploaded',  # 使用資料庫 enum 定義的狀態值
-            'draft',     # 分類：草稿（學生需要提交後才會進入審核）
-            semester_id
-        ))
+        if had_resume_id and resume_id_param:
+            try:
+                rid = int(resume_id_param)
+                filepath_for_db = existing_filepath if existing_filepath else (os.path.join(UPLOAD_FOLDER, filename)).replace("\\", "/")
+                cursor.execute("""
+                    UPDATE resumes
+                    SET filepath = %s, original_filename = %s, updated_at = NOW()
+                    WHERE id = %s AND user_id = %s
+                """, (filepath_for_db, filename, rid, user_id))
+            except (ValueError, TypeError):
+                pass
+        if not had_resume_id:
+            filepath_for_db = (os.path.join(UPLOAD_FOLDER, filename)).replace("\\", "/")
+            cursor.execute("""
+                INSERT INTO resumes
+                (user_id, filepath, original_filename, status, category, semester_id, created_at)
+                VALUES (%s, %s, %s, %s, %s, %s, NOW())
+            """, (
+                user_id,
+                filepath_for_db,
+                filename,
+                'uploaded',
+                'draft',
+                semester_id
+            ))
 
         conn.commit()
         return jsonify({
@@ -11215,9 +11336,9 @@ def generate_application_form_docx(student_data, output_path):
             except:
                 pass
 
-        # 照片（使用 safe_create 驗證格式，避免 render 時 UnrecognizedImageError）
+        # 照片（使用 safe_create 驗證格式，相對路徑需轉絕對路徑）
         image_obj = None
-        photo_path = info.get("PhotoPath")
+        photo_path = resolve_upload_path(info.get("PhotoPath") or "")
         if photo_path and os.path.exists(photo_path):
             image_obj = safe_create_inline_image(doc, photo_path, Inches(1.2), "學生照片")
 
@@ -11239,15 +11360,16 @@ def generate_application_form_docx(student_data, output_path):
                     context_courses[f'CourseName_{row_num}_{col_num}'] = (course.get('CourseName') or '')
                     context_courses[f'Credits_{row_num}_{col_num}'] = (course.get('Credits') or '')
 
-        # 插入成績單圖片：使用 safe_create 驗證格式，避免 render 時 UnrecognizedImageError
+        # 插入成績單圖片：相對路徑需轉絕對路徑
         transcript_obj = None
-        transcript_path = student_data.get("transcript_path") or info.get("TranscriptPath") or ''
+        transcript_path = resolve_upload_path(student_data.get("transcript_path") or info.get("TranscriptPath") or '')
         if transcript_path and os.path.exists(transcript_path):
             transcript_obj = safe_create_inline_image(doc, transcript_path, Inches(6.0), "成績單")
 
-        # 缺勤佐證圖片
+        # 缺勤佐證圖片（相對路徑需轉絕對路徑；相容 Absence_Proof_Path / absence_proof_path）
         absence_proof_obj = None
-        absence_proof_path = student_data.get("Absence_Proof_Path")
+        absence_raw = (student_data.get("Absence_Proof_Path") or student_data.get("absence_proof_path") or "").strip()
+        absence_proof_path = resolve_upload_path(absence_raw)
         image_size = Inches(6.0)
         if absence_proof_path and os.path.exists(absence_proof_path):
             absence_proof_obj = safe_create_inline_image(doc, absence_proof_path, image_size, "缺勤佐證")
@@ -11480,6 +11602,11 @@ def generate_application_form_docx(student_data, output_path):
                 key = f'{lang_code}_{level_code}'
                 if key in lang_context:
                     lang_context[key] = '■'
+
+        # 未填寫的語文能力自動代入「略懂」
+        for code in lang_codes:
+            if all(lang_context.get(f'{code}_{lc}', '□') == '□' for lc in level_codes):
+                lang_context[f'{code}_Lue'] = '■'
 
         context.update(lang_context)
         
@@ -15159,13 +15286,14 @@ def submit_and_generate_api():
             uploaded_proof = request.files.get('proof_image') or request.files.get('absence_proof')
             if uploaded_proof and uploaded_proof.filename:
                 if uploaded_proof.mimetype in ALLOWED_IMAGE_MIMES:
-                    os.makedirs(ABSENCE_PROOF_FOLDER, exist_ok=True)
+                    abs_dir = os.path.join(BASE_UPLOAD_DIR, ABSENCE_PROOF_FOLDER)
+                    os.makedirs(abs_dir, exist_ok=True)
                     ext = os.path.splitext(secure_filename(uploaded_proof.filename))[1] or ".png"
                     fname = f"{user_id}_absence_proof_{datetime.now().strftime('%Y%m%d_%H%M%S')}{ext}"
-                    savep = os.path.join(ABSENCE_PROOF_FOLDER, fname)
+                    savep = os.path.join(abs_dir, fname)
                     uploaded_proof.save(savep)
-                    # 統一用正斜線存進 DB，方便前端與靜態檔使用
-                    absence_image_path = savep.replace("\\", "/")
+                    # 存進 context 用相對路徑，產生 Word 時 resolve_upload_path 可正確找到
+                    absence_image_path = (ABSENCE_PROOF_FOLDER + "/" + fname).replace("\\", "/")
                 else:
                     print(f"⚠️ 上傳的缺勤佐證圖片格式不支援: {uploaded_proof.mimetype}")
         except Exception as e:
@@ -15225,13 +15353,13 @@ def submit_and_generate_api():
                         
                         if uploaded_image and uploaded_image.filename:
                             try:
-                                # 保存圖片
-                                os.makedirs(ABSENCE_PROOF_FOLDER, exist_ok=True)
+                                abs_dir = os.path.join(BASE_UPLOAD_DIR, ABSENCE_PROOF_FOLDER)
+                                os.makedirs(abs_dir, exist_ok=True)
                                 ext = os.path.splitext(secure_filename(uploaded_image.filename))[1] or ".png"
                                 fname = f"{user_id}_record_{record_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}{ext}"
-                                save_path = os.path.join(ABSENCE_PROOF_FOLDER, fname)
+                                save_path = os.path.join(abs_dir, fname)
                                 uploaded_image.save(save_path)
-                                save_path_db = save_path.replace("\\", "/")
+                                save_path_db = (ABSENCE_PROOF_FOLDER + "/" + fname).replace("\\", "/")
                                 # 更新資料庫中對應記錄的 image_path
                                 cursor.execute("""
                                     UPDATE absence_records 
@@ -15362,12 +15490,11 @@ def submit_and_generate_api():
         }
         
         for form_field, lang_name in lang_mapping.items():
-            level = request.form.get(form_field, '').strip()
-            if level:  # 如果有選擇等級
-                structured_languages.append({
-                    "language": lang_name,
-                    "level": level
-                })
+            level = request.form.get(form_field, '').strip() or '略懂'
+            structured_languages.append({
+                "language": lang_name,
+                "level": level
+            })
 
         # 收集證照代碼和發證人（從前端表單）
         cert_codes = request.form.getlist('cert_code[]')
@@ -15488,26 +15615,62 @@ def submit_and_generate_api():
         absence_keys_in_doc = {k: v for k, v in student_data_for_doc.items() if k.startswith("absence_")}
         print("📊 student_data_for_doc 中的缺勤統計數據:", absence_keys_in_doc)
 
-        filename = f"{student_id}_履歷_{datetime.now().strftime('%Y%m%d_%H%M%S')}.docx"
-        save_path = os.path.join(UPLOAD_FOLDER, filename)
+        # 編輯模式：若有 resume_id 則覆蓋既有檔案並只更新該筆履歷，畫面只保留一個檔案；新增則產生新檔並 INSERT
+        resume_id_param = request.form.get("resume_id", "").strip()
+        had_resume_id = bool(resume_id_param)
+        existing_filepath = None
+        if resume_id_param:
+            try:
+                rid = int(resume_id_param)
+                cursor.execute(
+                    "SELECT filepath, original_filename FROM resumes WHERE id = %s AND user_id = %s",
+                    (rid, user_id)
+                )
+                row = cursor.fetchone()
+                if row and row.get("filepath"):
+                    existing_filepath = row["filepath"]
+            except (ValueError, TypeError):
+                pass
+
+        if existing_filepath:
+            if os.path.isabs(existing_filepath):
+                save_path = existing_filepath
+            else:
+                save_path = os.path.normpath(os.path.join(BASE_UPLOAD_DIR, existing_filepath.replace("\\", "/")))
+            filename = os.path.basename(save_path) or f"{student_id}_履歷_{datetime.now().strftime('%Y%m%d_%H%M%S')}.docx"
+        else:
+            filename = f"{student_id}_履歷_{datetime.now().strftime('%Y%m%d_%H%M%S')}.docx"
+            save_path = os.path.join(BASE_UPLOAD_DIR, UPLOAD_FOLDER, filename) if not os.path.isabs(UPLOAD_FOLDER) else os.path.join(UPLOAD_FOLDER, filename)
 
         if not generate_application_form_docx(student_data_for_doc, save_path):
             conn.rollback()
             return jsonify({"success": False, "message": "文件生成失敗"}), 500
 
-        # 寫入 resumes
-        cursor.execute("""
-            INSERT INTO resumes
-            (user_id, filepath, original_filename, status, category, semester_id, created_at)
-            VALUES (%s, %s, %s, %s, %s, %s, NOW())
-        """, (
-            user_id,
-            save_path,
-            filename,
-            'uploaded',  # 使用資料庫 enum 定義的狀態值
-            'draft',     # 分類：草稿（學生需要提交後才會進入審核）
-            semester_id
-        ))
+        if had_resume_id and resume_id_param:
+            try:
+                rid = int(resume_id_param)
+                filepath_for_db = existing_filepath if existing_filepath else (os.path.join(UPLOAD_FOLDER, filename)).replace("\\", "/")
+                cursor.execute("""
+                    UPDATE resumes
+                    SET filepath = %s, original_filename = %s, updated_at = NOW()
+                    WHERE id = %s AND user_id = %s
+                """, (filepath_for_db, filename, rid, user_id))
+            except (ValueError, TypeError):
+                pass
+        if not had_resume_id:
+            filepath_for_db = (os.path.join(UPLOAD_FOLDER, filename)).replace("\\", "/")
+            cursor.execute("""
+                INSERT INTO resumes
+                (user_id, filepath, original_filename, status, category, semester_id, created_at)
+                VALUES (%s, %s, %s, %s, %s, %s, NOW())
+            """, (
+                user_id,
+                filepath_for_db,
+                filename,
+                'uploaded',
+                'draft',
+                semester_id
+            ))
 
         conn.commit()
         return jsonify({
@@ -15562,9 +15725,9 @@ def generate_application_form_docx(student_data, output_path):
             except:
                 pass
 
-        # 照片（使用 safe_create 驗證格式，避免 render 時 UnrecognizedImageError）
+        # 照片（使用 safe_create 驗證格式，相對路徑需轉絕對路徑）
         image_obj = None
-        photo_path = info.get("PhotoPath")
+        photo_path = resolve_upload_path(info.get("PhotoPath") or "")
         if photo_path and os.path.exists(photo_path):
             image_obj = safe_create_inline_image(doc, photo_path, Inches(1.2), "學生照片")
 
@@ -15586,15 +15749,16 @@ def generate_application_form_docx(student_data, output_path):
                     context_courses[f'CourseName_{row_num}_{col_num}'] = (course.get('CourseName') or '')
                     context_courses[f'Credits_{row_num}_{col_num}'] = (course.get('Credits') or '')
 
-        # 插入成績單圖片：使用 safe_create 驗證格式，避免 render 時 UnrecognizedImageError
+        # 插入成績單圖片：相對路徑需轉絕對路徑
         transcript_obj = None
-        transcript_path = student_data.get("transcript_path") or info.get("TranscriptPath") or ''
+        transcript_path = resolve_upload_path(student_data.get("transcript_path") or info.get("TranscriptPath") or '')
         if transcript_path and os.path.exists(transcript_path):
             transcript_obj = safe_create_inline_image(doc, transcript_path, Inches(6.0), "成績單")
 
-        # 缺勤佐證圖片
+        # 缺勤佐證圖片（相對路徑需轉絕對路徑；相容 Absence_Proof_Path / absence_proof_path）
         absence_proof_obj = None
-        absence_proof_path = student_data.get("Absence_Proof_Path")
+        absence_raw = (student_data.get("Absence_Proof_Path") or student_data.get("absence_proof_path") or "").strip()
+        absence_proof_path = resolve_upload_path(absence_raw)
         image_size = Inches(6.0)
         if absence_proof_path and os.path.exists(absence_proof_path):
             absence_proof_obj = safe_create_inline_image(doc, absence_proof_path, image_size, "缺勤佐證")
@@ -15827,6 +15991,11 @@ def generate_application_form_docx(student_data, output_path):
                 key = f'{lang_code}_{level_code}'
                 if key in lang_context:
                     lang_context[key] = '■'
+
+        # 未填寫的語文能力自動代入「略懂」
+        for code in lang_codes:
+            if all(lang_context.get(f'{code}_{lc}', '□') == '□' for lc in level_codes):
+                lang_context[f'{code}_Lue'] = '■'
 
         context.update(lang_context)
         
@@ -19506,13 +19675,14 @@ def submit_and_generate_api():
             uploaded_proof = request.files.get('proof_image') or request.files.get('absence_proof')
             if uploaded_proof and uploaded_proof.filename:
                 if uploaded_proof.mimetype in ALLOWED_IMAGE_MIMES:
-                    os.makedirs(ABSENCE_PROOF_FOLDER, exist_ok=True)
+                    abs_dir = os.path.join(BASE_UPLOAD_DIR, ABSENCE_PROOF_FOLDER)
+                    os.makedirs(abs_dir, exist_ok=True)
                     ext = os.path.splitext(secure_filename(uploaded_proof.filename))[1] or ".png"
                     fname = f"{user_id}_absence_proof_{datetime.now().strftime('%Y%m%d_%H%M%S')}{ext}"
-                    savep = os.path.join(ABSENCE_PROOF_FOLDER, fname)
+                    savep = os.path.join(abs_dir, fname)
                     uploaded_proof.save(savep)
-                    # 統一用正斜線存進 DB，方便前端與靜態檔使用
-                    absence_image_path = savep.replace("\\", "/")
+                    # 存進 context 用相對路徑，產生 Word 時 resolve_upload_path 可正確找到
+                    absence_image_path = (ABSENCE_PROOF_FOLDER + "/" + fname).replace("\\", "/")
                 else:
                     print(f"⚠️ 上傳的缺勤佐證圖片格式不支援: {uploaded_proof.mimetype}")
         except Exception as e:
@@ -19572,13 +19742,13 @@ def submit_and_generate_api():
                         
                         if uploaded_image and uploaded_image.filename:
                             try:
-                                # 保存圖片
-                                os.makedirs(ABSENCE_PROOF_FOLDER, exist_ok=True)
+                                abs_dir = os.path.join(BASE_UPLOAD_DIR, ABSENCE_PROOF_FOLDER)
+                                os.makedirs(abs_dir, exist_ok=True)
                                 ext = os.path.splitext(secure_filename(uploaded_image.filename))[1] or ".png"
                                 fname = f"{user_id}_record_{record_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}{ext}"
-                                save_path = os.path.join(ABSENCE_PROOF_FOLDER, fname)
+                                save_path = os.path.join(abs_dir, fname)
                                 uploaded_image.save(save_path)
-                                save_path_db = save_path.replace("\\", "/")
+                                save_path_db = (ABSENCE_PROOF_FOLDER + "/" + fname).replace("\\", "/")
                                 # 更新資料庫中對應記錄的 image_path
                                 cursor.execute("""
                                     UPDATE absence_records 
@@ -19709,12 +19879,11 @@ def submit_and_generate_api():
         }
         
         for form_field, lang_name in lang_mapping.items():
-            level = request.form.get(form_field, '').strip()
-            if level:  # 如果有選擇等級
-                structured_languages.append({
-                    "language": lang_name,
-                    "level": level
-                })
+            level = request.form.get(form_field, '').strip() or '略懂'
+            structured_languages.append({
+                "language": lang_name,
+                "level": level
+            })
 
         # 收集證照代碼和發證人（從前端表單）
         cert_codes = request.form.getlist('cert_code[]')
@@ -19835,26 +20004,62 @@ def submit_and_generate_api():
         absence_keys_in_doc = {k: v for k, v in student_data_for_doc.items() if k.startswith("absence_")}
         print("📊 student_data_for_doc 中的缺勤統計數據:", absence_keys_in_doc)
 
-        filename = f"{student_id}_履歷_{datetime.now().strftime('%Y%m%d_%H%M%S')}.docx"
-        save_path = os.path.join(UPLOAD_FOLDER, filename)
+        # 編輯模式：若有 resume_id 則覆蓋既有檔案並只更新該筆履歷，畫面只保留一個檔案；新增則產生新檔並 INSERT
+        resume_id_param = request.form.get("resume_id", "").strip()
+        had_resume_id = bool(resume_id_param)
+        existing_filepath = None
+        if resume_id_param:
+            try:
+                rid = int(resume_id_param)
+                cursor.execute(
+                    "SELECT filepath, original_filename FROM resumes WHERE id = %s AND user_id = %s",
+                    (rid, user_id)
+                )
+                row = cursor.fetchone()
+                if row and row.get("filepath"):
+                    existing_filepath = row["filepath"]
+            except (ValueError, TypeError):
+                pass
+
+        if existing_filepath:
+            if os.path.isabs(existing_filepath):
+                save_path = existing_filepath
+            else:
+                save_path = os.path.normpath(os.path.join(BASE_UPLOAD_DIR, existing_filepath.replace("\\", "/")))
+            filename = os.path.basename(save_path) or f"{student_id}_履歷_{datetime.now().strftime('%Y%m%d_%H%M%S')}.docx"
+        else:
+            filename = f"{student_id}_履歷_{datetime.now().strftime('%Y%m%d_%H%M%S')}.docx"
+            save_path = os.path.join(BASE_UPLOAD_DIR, UPLOAD_FOLDER, filename) if not os.path.isabs(UPLOAD_FOLDER) else os.path.join(UPLOAD_FOLDER, filename)
 
         if not generate_application_form_docx(student_data_for_doc, save_path):
             conn.rollback()
             return jsonify({"success": False, "message": "文件生成失敗"}), 500
 
-        # 寫入 resumes
-        cursor.execute("""
-            INSERT INTO resumes
-            (user_id, filepath, original_filename, status, category, semester_id, created_at)
-            VALUES (%s, %s, %s, %s, %s, %s, NOW())
-        """, (
-            user_id,
-            save_path,
-            filename,
-            'uploaded',  # 使用資料庫 enum 定義的狀態值
-            'draft',     # 分類：草稿（學生需要提交後才會進入審核）
-            semester_id
-        ))
+        if had_resume_id and resume_id_param:
+            try:
+                rid = int(resume_id_param)
+                filepath_for_db = existing_filepath if existing_filepath else (os.path.join(UPLOAD_FOLDER, filename)).replace("\\", "/")
+                cursor.execute("""
+                    UPDATE resumes
+                    SET filepath = %s, original_filename = %s, updated_at = NOW()
+                    WHERE id = %s AND user_id = %s
+                """, (filepath_for_db, filename, rid, user_id))
+            except (ValueError, TypeError):
+                pass
+        if not had_resume_id:
+            filepath_for_db = (os.path.join(UPLOAD_FOLDER, filename)).replace("\\", "/")
+            cursor.execute("""
+                INSERT INTO resumes
+                (user_id, filepath, original_filename, status, category, semester_id, created_at)
+                VALUES (%s, %s, %s, %s, %s, %s, NOW())
+            """, (
+                user_id,
+                filepath_for_db,
+                filename,
+                'uploaded',
+                'draft',
+                semester_id
+            ))
 
         conn.commit()
         return jsonify({
@@ -19909,9 +20114,9 @@ def generate_application_form_docx(student_data, output_path):
             except:
                 pass
 
-        # 照片（使用 safe_create 驗證格式，避免 render 時 UnrecognizedImageError）
+        # 照片（使用 safe_create 驗證格式，相對路徑需轉絕對路徑）
         image_obj = None
-        photo_path = info.get("PhotoPath")
+        photo_path = resolve_upload_path(info.get("PhotoPath") or "")
         if photo_path and os.path.exists(photo_path):
             image_obj = safe_create_inline_image(doc, photo_path, Inches(1.2), "學生照片")
 
@@ -19933,15 +20138,16 @@ def generate_application_form_docx(student_data, output_path):
                     context_courses[f'CourseName_{row_num}_{col_num}'] = (course.get('CourseName') or '')
                     context_courses[f'Credits_{row_num}_{col_num}'] = (course.get('Credits') or '')
 
-        # 插入成績單圖片：使用 safe_create 驗證格式，避免 render 時 UnrecognizedImageError
+        # 插入成績單圖片：相對路徑需轉絕對路徑
         transcript_obj = None
-        transcript_path = student_data.get("transcript_path") or info.get("TranscriptPath") or ''
+        transcript_path = resolve_upload_path(student_data.get("transcript_path") or info.get("TranscriptPath") or '')
         if transcript_path and os.path.exists(transcript_path):
             transcript_obj = safe_create_inline_image(doc, transcript_path, Inches(6.0), "成績單")
 
-        # 缺勤佐證圖片
+        # 缺勤佐證圖片（相對路徑需轉絕對路徑；相容 Absence_Proof_Path / absence_proof_path）
         absence_proof_obj = None
-        absence_proof_path = student_data.get("Absence_Proof_Path")
+        absence_raw = (student_data.get("Absence_Proof_Path") or student_data.get("absence_proof_path") or "").strip()
+        absence_proof_path = resolve_upload_path(absence_raw)
         image_size = Inches(6.0)
         if absence_proof_path and os.path.exists(absence_proof_path):
             absence_proof_obj = safe_create_inline_image(doc, absence_proof_path, image_size, "缺勤佐證")
@@ -20174,6 +20380,11 @@ def generate_application_form_docx(student_data, output_path):
                 key = f'{lang_code}_{level_code}'
                 if key in lang_context:
                     lang_context[key] = '■'
+
+        # 未填寫的語文能力自動代入「略懂」
+        for code in lang_codes:
+            if all(lang_context.get(f'{code}_{lc}', '□') == '□' for lc in level_codes):
+                lang_context[f'{code}_Lue'] = '■'
 
         context.update(lang_context)
         
@@ -23853,13 +24064,14 @@ def submit_and_generate_api():
             uploaded_proof = request.files.get('proof_image') or request.files.get('absence_proof')
             if uploaded_proof and uploaded_proof.filename:
                 if uploaded_proof.mimetype in ALLOWED_IMAGE_MIMES:
-                    os.makedirs(ABSENCE_PROOF_FOLDER, exist_ok=True)
+                    abs_dir = os.path.join(BASE_UPLOAD_DIR, ABSENCE_PROOF_FOLDER)
+                    os.makedirs(abs_dir, exist_ok=True)
                     ext = os.path.splitext(secure_filename(uploaded_proof.filename))[1] or ".png"
                     fname = f"{user_id}_absence_proof_{datetime.now().strftime('%Y%m%d_%H%M%S')}{ext}"
-                    savep = os.path.join(ABSENCE_PROOF_FOLDER, fname)
+                    savep = os.path.join(abs_dir, fname)
                     uploaded_proof.save(savep)
-                    # 統一用正斜線存進 DB，方便前端與靜態檔使用
-                    absence_image_path = savep.replace("\\", "/")
+                    # 存進 context 用相對路徑，產生 Word 時 resolve_upload_path 可正確找到
+                    absence_image_path = (ABSENCE_PROOF_FOLDER + "/" + fname).replace("\\", "/")
                 else:
                     print(f"⚠️ 上傳的缺勤佐證圖片格式不支援: {uploaded_proof.mimetype}")
         except Exception as e:
@@ -23919,13 +24131,13 @@ def submit_and_generate_api():
                         
                         if uploaded_image and uploaded_image.filename:
                             try:
-                                # 保存圖片
-                                os.makedirs(ABSENCE_PROOF_FOLDER, exist_ok=True)
+                                abs_dir = os.path.join(BASE_UPLOAD_DIR, ABSENCE_PROOF_FOLDER)
+                                os.makedirs(abs_dir, exist_ok=True)
                                 ext = os.path.splitext(secure_filename(uploaded_image.filename))[1] or ".png"
                                 fname = f"{user_id}_record_{record_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}{ext}"
-                                save_path = os.path.join(ABSENCE_PROOF_FOLDER, fname)
+                                save_path = os.path.join(abs_dir, fname)
                                 uploaded_image.save(save_path)
-                                save_path_db = save_path.replace("\\", "/")
+                                save_path_db = (ABSENCE_PROOF_FOLDER + "/" + fname).replace("\\", "/")
                                 # 更新資料庫中對應記錄的 image_path
                                 cursor.execute("""
                                     UPDATE absence_records 
@@ -24056,12 +24268,11 @@ def submit_and_generate_api():
         }
         
         for form_field, lang_name in lang_mapping.items():
-            level = request.form.get(form_field, '').strip()
-            if level:  # 如果有選擇等級
-                structured_languages.append({
-                    "language": lang_name,
-                    "level": level
-                })
+            level = request.form.get(form_field, '').strip() or '略懂'
+            structured_languages.append({
+                "language": lang_name,
+                "level": level
+            })
 
         # 收集證照代碼和發證人（從前端表單）
         cert_codes = request.form.getlist('cert_code[]')
@@ -24182,26 +24393,62 @@ def submit_and_generate_api():
         absence_keys_in_doc = {k: v for k, v in student_data_for_doc.items() if k.startswith("absence_")}
         print("📊 student_data_for_doc 中的缺勤統計數據:", absence_keys_in_doc)
 
-        filename = f"{student_id}_履歷_{datetime.now().strftime('%Y%m%d_%H%M%S')}.docx"
-        save_path = os.path.join(UPLOAD_FOLDER, filename)
+        # 編輯模式：若有 resume_id 則覆蓋既有檔案並只更新該筆履歷，畫面只保留一個檔案；新增則產生新檔並 INSERT
+        resume_id_param = request.form.get("resume_id", "").strip()
+        had_resume_id = bool(resume_id_param)
+        existing_filepath = None
+        if resume_id_param:
+            try:
+                rid = int(resume_id_param)
+                cursor.execute(
+                    "SELECT filepath, original_filename FROM resumes WHERE id = %s AND user_id = %s",
+                    (rid, user_id)
+                )
+                row = cursor.fetchone()
+                if row and row.get("filepath"):
+                    existing_filepath = row["filepath"]
+            except (ValueError, TypeError):
+                pass
+
+        if existing_filepath:
+            if os.path.isabs(existing_filepath):
+                save_path = existing_filepath
+            else:
+                save_path = os.path.normpath(os.path.join(BASE_UPLOAD_DIR, existing_filepath.replace("\\", "/")))
+            filename = os.path.basename(save_path) or f"{student_id}_履歷_{datetime.now().strftime('%Y%m%d_%H%M%S')}.docx"
+        else:
+            filename = f"{student_id}_履歷_{datetime.now().strftime('%Y%m%d_%H%M%S')}.docx"
+            save_path = os.path.join(BASE_UPLOAD_DIR, UPLOAD_FOLDER, filename) if not os.path.isabs(UPLOAD_FOLDER) else os.path.join(UPLOAD_FOLDER, filename)
 
         if not generate_application_form_docx(student_data_for_doc, save_path):
             conn.rollback()
             return jsonify({"success": False, "message": "文件生成失敗"}), 500
 
-        # 寫入 resumes
-        cursor.execute("""
-            INSERT INTO resumes
-            (user_id, filepath, original_filename, status, category, semester_id, created_at)
-            VALUES (%s, %s, %s, %s, %s, %s, NOW())
-        """, (
-            user_id,
-            save_path,
-            filename,
-            'uploaded',  # 使用資料庫 enum 定義的狀態值
-            'draft',     # 分類：草稿（學生需要提交後才會進入審核）
-            semester_id
-        ))
+        if had_resume_id and resume_id_param:
+            try:
+                rid = int(resume_id_param)
+                filepath_for_db = existing_filepath if existing_filepath else (os.path.join(UPLOAD_FOLDER, filename)).replace("\\", "/")
+                cursor.execute("""
+                    UPDATE resumes
+                    SET filepath = %s, original_filename = %s, updated_at = NOW()
+                    WHERE id = %s AND user_id = %s
+                """, (filepath_for_db, filename, rid, user_id))
+            except (ValueError, TypeError):
+                pass
+        if not had_resume_id:
+            filepath_for_db = (os.path.join(UPLOAD_FOLDER, filename)).replace("\\", "/")
+            cursor.execute("""
+                INSERT INTO resumes
+                (user_id, filepath, original_filename, status, category, semester_id, created_at)
+                VALUES (%s, %s, %s, %s, %s, %s, NOW())
+            """, (
+                user_id,
+                filepath_for_db,
+                filename,
+                'uploaded',
+                'draft',
+                semester_id
+            ))
 
         conn.commit()
         return jsonify({
@@ -24256,9 +24503,9 @@ def generate_application_form_docx(student_data, output_path):
             except:
                 pass
 
-        # 照片（使用 safe_create 驗證格式，避免 render 時 UnrecognizedImageError）
+        # 照片（使用 safe_create 驗證格式，相對路徑需轉絕對路徑）
         image_obj = None
-        photo_path = info.get("PhotoPath")
+        photo_path = resolve_upload_path(info.get("PhotoPath") or "")
         if photo_path and os.path.exists(photo_path):
             image_obj = safe_create_inline_image(doc, photo_path, Inches(1.2), "學生照片")
 
@@ -24280,15 +24527,16 @@ def generate_application_form_docx(student_data, output_path):
                     context_courses[f'CourseName_{row_num}_{col_num}'] = (course.get('CourseName') or '')
                     context_courses[f'Credits_{row_num}_{col_num}'] = (course.get('Credits') or '')
 
-        # 插入成績單圖片：使用 safe_create 驗證格式，避免 render 時 UnrecognizedImageError
+        # 插入成績單圖片：相對路徑需轉絕對路徑
         transcript_obj = None
-        transcript_path = student_data.get("transcript_path") or info.get("TranscriptPath") or ''
+        transcript_path = resolve_upload_path(student_data.get("transcript_path") or info.get("TranscriptPath") or '')
         if transcript_path and os.path.exists(transcript_path):
             transcript_obj = safe_create_inline_image(doc, transcript_path, Inches(6.0), "成績單")
 
-        # 缺勤佐證圖片
+        # 缺勤佐證圖片（相對路徑需轉絕對路徑；相容 Absence_Proof_Path / absence_proof_path）
         absence_proof_obj = None
-        absence_proof_path = student_data.get("Absence_Proof_Path")
+        absence_raw = (student_data.get("Absence_Proof_Path") or student_data.get("absence_proof_path") or "").strip()
+        absence_proof_path = resolve_upload_path(absence_raw)
         image_size = Inches(6.0)
         if absence_proof_path and os.path.exists(absence_proof_path):
             absence_proof_obj = safe_create_inline_image(doc, absence_proof_path, image_size, "缺勤佐證")
@@ -24521,6 +24769,11 @@ def generate_application_form_docx(student_data, output_path):
                 key = f'{lang_code}_{level_code}'
                 if key in lang_context:
                     lang_context[key] = '■'
+
+        # 未填寫的語文能力自動代入「略懂」
+        for code in lang_codes:
+            if all(lang_context.get(f'{code}_{lc}', '□') == '□' for lc in level_codes):
+                lang_context[f'{code}_Lue'] = '■'
 
         context.update(lang_context)
         
