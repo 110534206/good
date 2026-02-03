@@ -1,7 +1,7 @@
 from flask import Blueprint, request, jsonify, session, render_template, redirect
 from config import get_db
 from datetime import datetime
-from semester import get_current_semester_code
+from semester import get_current_semester_code, get_current_semester_id
 import traceback
 
 admission_bp = Blueprint("admission_bp", __name__, url_prefix="/admission")
@@ -1269,11 +1269,18 @@ def get_all_admissions():
                 })
         elif user_role == 'director':
             # 主任可以看到自己科系的學生
-            cursor.execute("SELECT department FROM users WHERE id = %s", (user_id,))
-            user_dept = cursor.fetchone()
-            if user_dept and user_dept.get('department'):
+            # 透過 classes_teacher 和 classes 表取得主任所屬科系
+            cursor.execute("""
+                SELECT DISTINCT c.department
+                FROM classes c
+                JOIN classes_teacher ct ON ct.class_id = c.id
+                WHERE ct.teacher_id = %s
+                LIMIT 1
+            """, (user_id,))
+            dept_result = cursor.fetchone()
+            if dept_result and dept_result.get('department'):
                 base_query += " AND c.department = %s"
-                params.append(user_dept['department'])
+                params.append(dept_result['department'])
         # ta 和 admin 可以看到所有學生，不需要額外限制
         
         # 應用篩選條件
@@ -1308,6 +1315,115 @@ def get_all_admissions():
             "success": True,
             "students": students,
             "count": len(students)
+        })
+    
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"success": False, "message": f"查詢失敗: {str(e)}"}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+# =========================================================
+# API: 獲取所有學生列表（用於未被錄取學生顯示）
+# =========================================================
+@admission_bp.route("/api/get_all_students", methods=["GET"])
+def get_all_students():
+    """獲取所有學生列表（根據角色過濾），並排除已在媒合結果中的學生"""
+    if 'user_id' not in session:
+        return jsonify({"success": False, "message": "未授權"}), 403
+    
+    user_id = session.get('user_id')
+    user_role = session.get('role')
+    
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+    
+    try:
+        # 獲取當前學期代碼
+        current_semester_code = get_current_semester_code(cursor)
+        if not current_semester_code:
+            return jsonify({"success": False, "message": "無法取得當前學期"}), 500
+        
+        # 獲取當前學期ID
+        current_semester_id = get_current_semester_id(cursor)
+        if not current_semester_id:
+            return jsonify({"success": False, "message": "無法取得當前學期"}), 500
+        
+        # 獲取所有已在媒合結果中的學生 ID（只包括 Pending 和 Approved 狀態，Rejected 的學生應該出現在未錄取名單中）
+        cursor.execute("""
+            SELECT DISTINCT student_id
+            FROM manage_director
+            WHERE semester_id = %s 
+            AND director_decision IN ('Pending', 'Approved')
+        """, (current_semester_id,))
+        matched_student_ids = {row['student_id'] for row in cursor.fetchall()}
+        
+        # 基礎查詢：獲取所有學生
+        base_query = """
+            SELECT 
+                u.id AS student_id,
+                u.id,
+                u.name AS student_name,
+                u.username AS student_number,
+                c.id AS class_id,
+                c.name AS class_name,
+                c.department
+            FROM users u
+            LEFT JOIN classes c ON u.class_id = c.id
+            WHERE u.role = 'student'
+        """
+        params = []
+        
+        # 根據角色限制查詢範圍
+        if user_role == 'director':
+            # 主任可以看到自己科系的學生
+            cursor.execute("""
+                SELECT DISTINCT c.department
+                FROM classes c
+                JOIN classes_teacher ct ON ct.class_id = c.id
+                WHERE ct.teacher_id = %s
+                LIMIT 1
+            """, (user_id,))
+            dept_result = cursor.fetchone()
+            if dept_result and dept_result.get('department'):
+                base_query += " AND c.department = %s"
+                params.append(dept_result['department'])
+        elif user_role == 'class_teacher':
+            # 班導只能看到自己管理的班級的學生
+            cursor.execute("""
+                SELECT class_id FROM classes_teacher 
+                WHERE teacher_id = %s
+            """, (user_id,))
+            teacher_classes = cursor.fetchall()
+            if teacher_classes:
+                class_ids = [tc['class_id'] for tc in teacher_classes]
+                placeholders = ','.join(['%s'] * len(class_ids))
+                base_query += f" AND u.class_id IN ({placeholders})"
+                params.extend(class_ids)
+            else:
+                return jsonify({
+                    "success": True,
+                    "students": [],
+                    "count": 0
+                })
+        # ta 和 admin 可以看到所有學生，不需要額外限制
+        
+        base_query += " ORDER BY u.username ASC"
+        
+        cursor.execute(base_query, params)
+        all_students = cursor.fetchall()
+        
+        # 過濾出未在媒合結果中的學生
+        unmatched_students = [
+            student for student in all_students
+            if student['student_id'] not in matched_student_ids
+        ]
+        
+        return jsonify({
+            "success": True,
+            "students": unmatched_students,
+            "count": len(unmatched_students)
         })
     
     except Exception as e:
@@ -1519,17 +1635,19 @@ def director_matching_results():
     cursor = conn.cursor(dictionary=True)
     
     try:
-        # 獲取當前學期代碼（用於 project_id）
+        # 獲取當前學期ID和代碼
+        current_semester_id = get_current_semester_id(cursor)
         current_semester_code = get_current_semester_code(cursor)
-        if not current_semester_code:
+        if not current_semester_id or not current_semester_code:
             return jsonify({"success": False, "message": "無法取得當前學期"}), 500
         
         # 從 manage_director 表讀取資料
-        # 只顯示 Pending 和 Approved 的記錄（不顯示 Rejected）
+        # 顯示所有狀態的記錄（Pending, Approved, Rejected），讓主任可以看到並處理
+        # 使用 LEFT JOIN 以處理 preference_id 為 NULL 的情況
+        # 當 preference_id 為 NULL 時，從該公司的第一個職缺獲取 job_id
         query = """
             SELECT 
                 md.match_id,
-                md.project_id,
                 md.vendor_id,
                 md.student_id,
                 md.preference_id,
@@ -1541,32 +1659,56 @@ def director_matching_results():
                 md.is_adjusted,
                 md.reviewer_id,
                 md.updated_at,
-            sp.company_id,
-            sp.preference_order,
-                sp.job_id,
-            ic.company_name,
-            u.name AS student_name,
-            u.username AS student_number,
-            u.email AS student_email,
-            c.name AS class_name,
-            c.department AS class_department,
+                COALESCE(sp.company_id, md.vendor_id) AS company_id,
+                sp.preference_order,
+                COALESCE(sp.job_id, (
+                    SELECT id FROM internship_jobs 
+                    WHERE company_id = COALESCE(sp.company_id, md.vendor_id) 
+                    ORDER BY id ASC LIMIT 1
+                )) AS job_id,
+                COALESCE(ic.company_name, v.name) AS company_name,
+                u.name AS student_name,
+                u.username AS student_number,
+                u.email AS student_email,
+                c.name AS class_name,
+                c.department AS class_department,
                 v.name AS vendor_name,
-                ij.title AS job_title,
-                ij.slots AS job_slots
+                COALESCE(ij.title, (
+                    SELECT title FROM internship_jobs 
+                    WHERE company_id = COALESCE(sp.company_id, md.vendor_id) 
+                    ORDER BY id ASC LIMIT 1
+                )) AS job_title,
+                COALESCE(ij.slots, (
+                    SELECT slots FROM internship_jobs 
+                    WHERE company_id = COALESCE(sp.company_id, md.vendor_id) 
+                    ORDER BY id ASC LIMIT 1
+                )) AS job_slots
             FROM manage_director md
-            JOIN student_preferences sp ON md.preference_id = sp.id
-            LEFT JOIN internship_companies ic ON sp.company_id = ic.id
+            LEFT JOIN student_preferences sp ON md.preference_id = sp.id
+            LEFT JOIN internship_companies ic ON COALESCE(sp.company_id, md.vendor_id) = ic.id
             LEFT JOIN internship_jobs ij ON sp.job_id = ij.id
             LEFT JOIN users u ON md.student_id = u.id
             LEFT JOIN classes c ON u.class_id = c.id
             LEFT JOIN users v ON md.vendor_id = v.id
-            WHERE md.director_decision IN ('Pending', 'Approved')
-            ORDER BY sp.company_id, COALESCE(sp.job_id, 0), 
+            WHERE md.semester_id = %s
+            ORDER BY 
+                CASE md.director_decision 
+                    WHEN 'Approved' THEN 1 
+                    WHEN 'Pending' THEN 2 
+                    WHEN 'Rejected' THEN 3 
+                    ELSE 4 
+                END,
+                COALESCE(sp.company_id, md.vendor_id), 
+                COALESCE(sp.job_id, (
+                    SELECT id FROM internship_jobs 
+                    WHERE company_id = COALESCE(sp.company_id, md.vendor_id) 
+                    ORDER BY id ASC LIMIT 1
+                ), 0), 
                 CASE WHEN md.director_decision = 'Approved' AND md.final_rank IS NOT NULL THEN 0 ELSE 1 END,
                 COALESCE(md.final_rank, 999) ASC,
                 md.original_rank ASC
         """
-        cursor.execute(query)
+        cursor.execute(query, (current_semester_id,))
         all_results = cursor.fetchall() or []
         
         # 格式化結果並組織資料結構
@@ -1837,7 +1979,7 @@ def director_promote_reserve():
             is_adjusted = False
         
         # 更新 manage_director 表
-            cursor.execute("""
+        cursor.execute("""
             UPDATE manage_director
             SET director_decision = 'Approved',
                 final_rank = %s,
@@ -1859,6 +2001,319 @@ def director_promote_reserve():
         if conn:
             conn.rollback()
         return jsonify({"success": False, "message": f"提升失敗: {str(e)}"}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+# =========================================================
+# API: 主任添加未錄取學生到公司
+# =========================================================
+@admission_bp.route("/api/director_add_student", methods=["POST"])
+def director_add_student():
+    """主任將未錄取的學生添加到公司的職缺"""
+    if 'user_id' not in session or session.get('role') != 'director':
+        return jsonify({"success": False, "message": "未授權"}), 403
+    
+    try:
+        data = request.get_json()
+        if not data:
+            print("❌ 錯誤：請求體為空")
+            return jsonify({"success": False, "message": "請求體為空"}), 400
+        
+        print(f"📥 收到請求數據: {data}")
+        
+        student_id = data.get("student_id")
+        company_id = data.get("company_id")
+        job_id = data.get("job_id")
+        type = data.get("type", "regular")  # 'regular' 或 'reserve'
+        slot_index = data.get("slot_index")  # 正取位置（如果是正取）
+        
+        print(f"📋 解析後的參數: student_id={student_id}, company_id={company_id}, job_id={job_id}, type={type}, slot_index={slot_index}")
+        
+        # 詳細的參數驗證和錯誤訊息
+        if student_id is None:
+            print("❌ 錯誤：缺少學生ID")
+            return jsonify({"success": False, "message": "缺少學生ID (student_id)"}), 400
+        if company_id is None:
+            print("❌ 錯誤：缺少公司ID")
+            return jsonify({"success": False, "message": "缺少公司ID (company_id)"}), 400
+        if job_id is None:
+            print("❌ 錯誤：缺少職缺ID")
+            return jsonify({"success": False, "message": "缺少職缺ID (job_id)"}), 400
+        
+        # 確保 ID 是整數
+        try:
+            student_id = int(student_id)
+            company_id = int(company_id)
+            job_id = int(job_id)
+            if slot_index is not None:
+                slot_index = int(slot_index)
+            print(f"✅ 參數驗證通過: student_id={student_id}, company_id={company_id}, job_id={job_id}, slot_index={slot_index}")
+        except (ValueError, TypeError) as e:
+            print(f"❌ ID 格式錯誤: {e}")
+            return jsonify({"success": False, "message": f"ID 格式錯誤: {str(e)}"}), 400
+    except Exception as parse_error:
+        print(f"❌ 解析請求數據時出錯: {parse_error}")
+        traceback.print_exc()
+        return jsonify({"success": False, "message": f"解析請求數據失敗: {str(parse_error)}"}), 400
+    
+    director_id = session.get('user_id')
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+    
+    try:
+        print(f"🔍 開始處理：student_id={student_id}, company_id={company_id}, job_id={job_id}, type={type}, slot_index={slot_index}")
+        
+        # 獲取當前學期代碼
+        current_semester_code = get_current_semester_code(cursor)
+        if not current_semester_code:
+            return jsonify({"success": False, "message": "無法取得當前學期"}), 500
+        
+        # 1. 驗證學生是否存在
+        cursor.execute("SELECT id, name, username FROM users WHERE id = %s AND role = 'student'", (student_id,))
+        student = cursor.fetchone()
+        cursor.fetchall()  # 確保所有結果都被讀取
+        if not student:
+            return jsonify({"success": False, "message": "找不到該學生"}), 404
+        
+        # 1.5. 確保 students 表中有對應記錄（如果外鍵約束需要）
+        # 檢查 students 表是否存在，如果存在則確保有對應記錄
+        try:
+            # 先檢查 students 表是否存在
+            cursor.execute("""
+                SELECT TABLE_NAME 
+                FROM information_schema.TABLES 
+                WHERE TABLE_SCHEMA = DATABASE() 
+                AND TABLE_NAME = 'students'
+            """)
+            students_table_exists = cursor.fetchone()
+            # 確保所有結果都被讀取
+            cursor.fetchall()
+            
+            if students_table_exists:
+                # 檢查 students 表中是否有該學生記錄
+                cursor.execute("""
+                    SELECT id FROM students WHERE id = %s
+                """, (student_id,))
+                student_in_students = cursor.fetchone()
+                # 確保所有結果都被讀取
+                cursor.fetchall()
+                
+                if not student_in_students:
+                    # 獲取 students 表的欄位結構
+                    cursor.execute("""
+                        SELECT COLUMN_NAME, DATA_TYPE 
+                        FROM information_schema.COLUMNS 
+                        WHERE TABLE_SCHEMA = DATABASE() 
+                        AND TABLE_NAME = 'students'
+                        ORDER BY ORDINAL_POSITION
+                    """)
+                    columns = cursor.fetchall()
+                    column_names = [col['COLUMN_NAME'] for col in columns] if columns else []
+                    
+                    # 根據實際欄位構建 INSERT 語句
+                    if 'id' in column_names:
+                        # 構建欄位和值的列表
+                        insert_columns = ['id']
+                        insert_values = [student_id]
+                        
+                        # 添加其他常見欄位
+                        if 'name' in column_names:
+                            insert_columns.append('name')
+                            insert_values.append(student.get('name', ''))
+                        if 'username' in column_names:
+                            insert_columns.append('username')
+                            insert_values.append(student.get('username', ''))
+                        if 'user_id' in column_names:
+                            insert_columns.append('user_id')
+                            insert_values.append(student_id)
+                        
+                        # 構建並執行 INSERT 語句
+                        columns_str = ', '.join(insert_columns)
+                        placeholders = ', '.join(['%s'] * len(insert_values))
+                        insert_query = f"INSERT INTO students ({columns_str}) VALUES ({placeholders})"
+                        cursor.execute(insert_query, insert_values)
+        except Exception as students_error:
+            # 如果處理 students 表時出錯，記錄但不中斷流程
+            # 外鍵約束可能實際指向 users 表，或者 students 表結構不同
+            print(f"警告：處理 students 表時出錯: {students_error}")
+            pass
+        
+        # 2. 驗證公司和職缺是否存在
+        cursor.execute("SELECT id, company_name FROM internship_companies WHERE id = %s", (company_id,))
+        company = cursor.fetchone()
+        cursor.fetchall()  # 確保所有結果都被讀取
+        if not company:
+            return jsonify({"success": False, "message": "找不到該公司"}), 404
+        
+        cursor.execute("SELECT id, title, company_id, slots FROM internship_jobs WHERE id = %s", (job_id,))
+        job = cursor.fetchone()
+        cursor.fetchall()  # 確保所有結果都被讀取
+        if not job:
+            return jsonify({"success": False, "message": "找不到該職缺"}), 404
+        
+        if job['company_id'] != company_id:
+            print(f"❌ 錯誤：職缺 {job_id} 不屬於公司 {company_id}，實際屬於公司 {job['company_id']}")
+            return jsonify({"success": False, "message": "職缺不屬於該公司"}), 400
+        
+        # 3. 獲取當前學期ID
+        current_semester_id = get_current_semester_id(cursor)
+        if not current_semester_id:
+            return jsonify({"success": False, "message": "無法取得當前學期"}), 500
+        
+        # 4. 檢查是否已經存在該學生的媒合記錄
+        cursor.execute("""
+            SELECT match_id, director_decision, preference_id, vendor_id
+            FROM manage_director
+            WHERE student_id = %s AND semester_id = %s
+        """, (student_id, current_semester_id))
+        existing = cursor.fetchone()
+        cursor.fetchall()  # 確保所有結果都被讀取
+        
+        if existing:
+            # 如果記錄存在且狀態為 Rejected，允許更新
+            if existing.get('director_decision') == 'Rejected':
+                print(f"ℹ️ 學生 {student_id} 有 Rejected 記錄，將更新為新記錄")
+                # 繼續處理，後續會更新或創建新記錄
+            else:
+                # 檢查是否是要更新到同一個公司/職缺
+                existing_preference_id = existing.get('preference_id')
+                if existing_preference_id:
+                    cursor.execute("""
+                        SELECT company_id, job_id FROM student_preferences WHERE id = %s
+                    """, (existing_preference_id,))
+                    existing_pref = cursor.fetchone()
+                    cursor.fetchall()  # 確保所有結果都被讀取
+                    if existing_pref:
+                        existing_company_id = existing_pref.get('company_id')
+                        existing_job_id = existing_pref.get('job_id')
+                        # 如果是同一個公司/職缺，允許更新
+                        if existing_company_id == company_id and existing_job_id == job_id:
+                            print(f"ℹ️ 學生 {student_id} 已存在於相同公司/職缺，將更新記錄")
+                            # 繼續處理，後續會更新記錄
+                        else:
+                            # 不同的公司/職缺，需要先移除舊記錄或提示錯誤
+                            print(f"❌ 錯誤：學生 {student_id} 已經在媒合結果中 (match_id: {existing.get('match_id')}, 狀態: {existing.get('director_decision')})")
+                            return jsonify({
+                                "success": False, 
+                                "message": "該學生已經在媒合結果中，請先移除舊記錄"
+                            }), 400
+                else:
+                    print(f"❌ 錯誤：學生 {student_id} 已經在媒合結果中但 preference_id 為空")
+                    return jsonify({"success": False, "message": "該學生已經在媒合結果中"}), 400
+        
+        # 4. 獲取或創建 student_preference 記錄
+        cursor.execute("""
+            SELECT id FROM student_preferences
+            WHERE student_id = %s AND company_id = %s AND job_id = %s
+            LIMIT 1
+        """, (student_id, company_id, job_id))
+        preference = cursor.fetchone()
+        cursor.fetchall()  # 確保所有結果都被讀取
+        
+        preference_id = None
+        if preference:
+            preference_id = preference['id']
+        else:
+            # 創建新的 student_preference 記錄
+            # 計算下一個 preference_order
+            cursor.execute("""
+                SELECT COALESCE(MAX(preference_order), 0) + 1 AS next_order
+                FROM student_preferences
+                WHERE student_id = %s
+            """, (student_id,))
+            next_order_result = cursor.fetchone()
+            cursor.fetchall()  # 確保所有結果都被讀取
+            next_order = next_order_result['next_order'] if next_order_result else 1
+            
+            # 獲取職缺標題
+            job_title = job.get('title', '未指定職缺')
+            
+            # 獲取當前學期ID（如果有的話）
+            cursor.execute("SELECT id FROM semesters WHERE is_active = 1 LIMIT 1")
+            semester_row = cursor.fetchone()
+            cursor.fetchall()  # 確保所有結果都被讀取
+            semester_id = semester_row['id'] if semester_row else None
+            
+            # 插入 student_preference 記錄
+            if semester_id:
+                cursor.execute("""
+                    INSERT INTO student_preferences 
+                    (student_id, semester_id, preference_order, company_id, job_id, job_title, status, submitted_at)
+                    VALUES (%s, %s, %s, %s, %s, %s, 'approved', CURRENT_TIMESTAMP)
+                """, (student_id, semester_id, next_order, company_id, job_id, job_title))
+            else:
+                cursor.execute("""
+                    INSERT INTO student_preferences 
+                    (student_id, preference_order, company_id, job_id, job_title, status, submitted_at)
+                    VALUES (%s, %s, %s, %s, %s, 'approved', CURRENT_TIMESTAMP)
+                """, (student_id, next_order, company_id, job_id, job_title))
+            preference_id = cursor.lastrowid
+        
+        # 5. 在 manage_director 表中創建或更新記錄
+        is_reserve = (type == 'reserve')
+        original_type = "Regular" if not is_reserve else "Reserve"
+        original_rank = slot_index if not is_reserve else None
+        final_rank = slot_index if not is_reserve else None
+        
+        # 如果已存在記錄，更新它；否則創建新記錄
+        if existing and existing.get('match_id'):
+            match_id = existing.get('match_id')
+            print(f"🔄 更新現有記錄 match_id={match_id}")
+            cursor.execute("""
+                UPDATE manage_director
+                SET vendor_id = %s,
+                    preference_id = %s,
+                    original_type = %s,
+                    original_rank = %s,
+                    is_conflict = 0,
+                    director_decision = 'Approved',
+                    final_rank = %s,
+                    is_adjusted = 0,
+                    reviewer_id = %s,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE match_id = %s
+            """, (
+                company_id, preference_id,
+                original_type, original_rank,
+                final_rank,
+                director_id,
+                match_id
+            ))
+        else:
+            print(f"➕ 創建新記錄")
+            cursor.execute("""
+                INSERT INTO manage_director (
+                    semester_id, vendor_id, student_id, preference_id,
+                    original_type, original_rank, is_conflict,
+                    director_decision, final_rank, is_adjusted,
+                    reviewer_id, updated_at
+                ) VALUES (
+                    %s, %s, %s, %s,
+                    %s, %s, 0,
+                    'Approved', %s, 0,
+                    %s, CURRENT_TIMESTAMP
+                )
+            """, (
+                current_semester_id, company_id, student_id, preference_id,
+                original_type, original_rank,
+                final_rank,
+                director_id
+            ))
+        
+        conn.commit()
+        
+        type_name = '正取' if type == 'regular' else '備取'
+        return jsonify({
+            "success": True,
+            "message": f"已將學生添加到{type_name}名單"
+        })
+    
+    except Exception as e:
+        traceback.print_exc()
+        if conn:
+            conn.rollback()
+        return jsonify({"success": False, "message": f"添加失敗: {str(e)}"}), 500
     finally:
         cursor.close()
         conn.close()
