@@ -1,6 +1,6 @@
 from flask import Blueprint, request, jsonify, session, render_template
 from config import get_db
-from datetime import datetime, timedelta
+from datetime import datetime, date, timedelta
 import traceback
 import time
 
@@ -29,6 +29,33 @@ def get_current_semester_id(cursor):
     """取得當前學期ID"""
     semester = get_current_semester(cursor)
     return semester['id'] if semester else None
+
+# =========================================================
+# Helper: 是否為「當前實習學期」學生（可被其他模組導入使用）
+# =========================================================
+def is_student_in_current_internship(cursor, user_id):
+    """
+    判斷該使用者是否為學生且其實習學期為當前學期。
+    僅當 users.current_semester_code == 當前學期 id 時回傳 True，
+    供「查看公司／投遞履歷」「填寫志願序」等頁面限制使用。
+    """
+    if not user_id:
+        return False
+    current_semester_id = get_current_semester_id(cursor)
+    if not current_semester_id:
+        return False
+    cursor.execute(
+        "SELECT role, current_semester_code FROM users WHERE id = %s",
+        (user_id,)
+    )
+    row = cursor.fetchone()
+    if not row or row.get("role") != "student":
+        return False
+    # current_semester_code 存的是 semester id（實習學期）
+    user_semester_id = row.get("current_semester_code")
+    if user_semester_id is None:
+        return False
+    return int(user_semester_id) == int(current_semester_id)
 
 # =========================================================
 # API: 取得當前學期
@@ -79,12 +106,12 @@ def list_semesters():
         """)
         semesters = cursor.fetchall()
         
-        # 格式化日期
+        # 格式化日期（DATE 欄位可能回傳 date 或 datetime）
         for s in semesters:
-            if isinstance(s.get('start_date'), datetime):
-                s['start_date'] = s['start_date'].strftime("%Y-%m-%d")
-            if isinstance(s.get('end_date'), datetime):
-                s['end_date'] = s['end_date'].strftime("%Y-%m-%d")
+            for key in ('start_date', 'end_date'):
+                v = s.get(key)
+                if isinstance(v, (datetime, date)):
+                    s[key] = v.strftime("%Y-%m-%d")
             if isinstance(s.get('created_at'), datetime):
                 s['created_at'] = s['created_at'].strftime("%Y-%m-%d %H:%M:%S")
             if isinstance(s.get('auto_switch_at'), datetime):
@@ -282,14 +309,19 @@ def update_semester(semester_id):
         if start_date is not None:
             update_fields.append("start_date = %s")
             params.append(start_date)
+            # 未明確傳入 auto_switch_at 時，依起始日期決定切換時間（該日 00:00:00）
+            if "auto_switch_at" not in data and isinstance(start_date, str) and start_date.strip():
+                switch_at = start_date.strip() + " 00:00:00"
+                update_fields.append("auto_switch_at = %s")
+                params.append(switch_at)
         if end_date is not None:
             update_fields.append("end_date = %s")
             params.append(end_date)
         
-        # 特別處理 auto_switch_at，允許傳入空字串或 None 來清除設定
+        # 若前端明確傳入 auto_switch_at 則依其值（允許清除）
         if "auto_switch_at" in data:
             val = data["auto_switch_at"]
-            if not val: # 空字串或 None
+            if not val:
                 update_fields.append("auto_switch_at = NULL")
             else:
                 update_fields.append("auto_switch_at = %s")
@@ -384,6 +416,164 @@ def delete_semester(semester_id):
         conn.commit()
         
         return jsonify({"success": True, "message": "學期已刪除"})
+    except Exception as e:
+        traceback.print_exc()
+        conn.rollback()
+        return jsonify({"success": False, "message": str(e)}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+# =========================================================
+# 實習配置 (internship_configs)：依 admission_year / user_id / semester_id 設定實習起迄
+# =========================================================
+
+@semester_bp.route("/api/internship-configs", methods=["GET"])
+def list_internship_configs():
+    """取得實習配置列表（管理員/科助）"""
+    if session.get('role') not in ['admin', 'ta']:
+        return jsonify({"success": False, "message": "未授權"}), 403
+    try:
+        conn = get_db()
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute("""
+            SELECT ic.id, ic.admission_year, ic.user_id, ic.semester_id,
+                   ic.intern_start_date, ic.intern_end_date,
+                   s.code AS semester_code,
+                   u.name AS user_name, u.username
+            FROM internship_configs ic
+            LEFT JOIN semesters s ON s.id = ic.semester_id
+            LEFT JOIN users u ON u.id = ic.user_id
+            ORDER BY ic.admission_year DESC, ic.user_id IS NULL DESC, ic.semester_id
+        """)
+        rows = cursor.fetchall()
+        for r in rows:
+            for key in ('intern_start_date', 'intern_end_date'):
+                v = r.get(key)
+                if isinstance(v, (datetime, date)):
+                    r[key] = v.strftime("%Y-%m-%d")
+        return jsonify({"success": True, "configs": rows})
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"success": False, "message": str(e)}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+@semester_bp.route("/api/internship-configs/options", methods=["GET"])
+def internship_config_options():
+    """取得下拉選單：學期列表、具 admission_year 的學生（管理員/科助）"""
+    if session.get('role') not in ['admin', 'ta']:
+        return jsonify({"success": False, "message": "未授權"}), 403
+    try:
+        conn = get_db()
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute("""
+            SELECT id, code, start_date, end_date
+            FROM semesters
+            ORDER BY code DESC
+        """)
+        semesters = cursor.fetchall()
+        for s in semesters:
+            for key in ('start_date', 'end_date'):
+                v = s.get(key)
+                if isinstance(v, (datetime, date)):
+                    s[key] = v.strftime("%Y-%m-%d")
+        cursor.execute("""
+            SELECT id, admission_year, name, username
+            FROM users
+            WHERE role = 'student' AND admission_year IS NOT NULL
+            ORDER BY admission_year DESC, id
+        """)
+        students = cursor.fetchall()
+        return jsonify({
+            "success": True,
+            "semesters": semesters,
+            "students": students
+        })
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"success": False, "message": str(e)}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+@semester_bp.route("/api/internship-configs", methods=["POST"])
+def create_internship_config():
+    """新增實習配置（管理員/科助）"""
+    if session.get('role') not in ['admin', 'ta']:
+        return jsonify({"success": False, "message": "未授權"}), 403
+    data = request.get_json() or {}
+    admission_year = data.get("admission_year")
+    user_id = data.get("user_id")  # 可為 null 表示該屆公版
+    semester_id = data.get("semester_id")
+    intern_start_date = data.get("intern_start_date")
+    intern_end_date = data.get("intern_end_date")
+    if admission_year is None or not semester_id or not intern_start_date or not intern_end_date:
+        return jsonify({"success": False, "message": "請填寫入學年度、學期、實習開始日與結束日"}), 400
+    try:
+        conn = get_db()
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute("""
+            INSERT INTO internship_configs (admission_year, user_id, semester_id, intern_start_date, intern_end_date)
+            VALUES (%s, %s, %s, %s, %s)
+        """, (int(admission_year), user_id or None, int(semester_id), intern_start_date, intern_end_date))
+        conn.commit()
+        return jsonify({"success": True, "message": "已新增", "id": cursor.lastrowid})
+    except Exception as e:
+        traceback.print_exc()
+        conn.rollback()
+        return jsonify({"success": False, "message": str(e)}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+@semester_bp.route("/api/internship-configs/<int:config_id>", methods=["PUT"])
+def update_internship_config(config_id):
+    """更新實習配置（管理員/科助）"""
+    if session.get('role') not in ['admin', 'ta']:
+        return jsonify({"success": False, "message": "未授權"}), 403
+    data = request.get_json() or {}
+    admission_year = data.get("admission_year")
+    user_id = data.get("user_id")
+    semester_id = data.get("semester_id")
+    intern_start_date = data.get("intern_start_date")
+    intern_end_date = data.get("intern_end_date")
+    if admission_year is None or not semester_id or not intern_start_date or not intern_end_date:
+        return jsonify({"success": False, "message": "請填寫入學年度、學期、實習開始日與結束日"}), 400
+    try:
+        conn = get_db()
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute("""
+            UPDATE internship_configs
+            SET admission_year = %s, user_id = %s, semester_id = %s, intern_start_date = %s, intern_end_date = %s
+            WHERE id = %s
+        """, (int(admission_year), user_id or None, int(semester_id), intern_start_date, intern_end_date, config_id))
+        conn.commit()
+        if cursor.rowcount == 0:
+            return jsonify({"success": False, "message": "找不到該筆配置"}), 404
+        return jsonify({"success": True, "message": "已更新"})
+    except Exception as e:
+        traceback.print_exc()
+        conn.rollback()
+        return jsonify({"success": False, "message": str(e)}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+@semester_bp.route("/api/internship-configs/<int:config_id>", methods=["DELETE"])
+def delete_internship_config(config_id):
+    """刪除實習配置（管理員/科助）"""
+    if session.get('role') not in ['admin', 'ta']:
+        return jsonify({"success": False, "message": "未授權"}), 403
+    try:
+        conn = get_db()
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute("DELETE FROM internship_configs WHERE id = %s", (config_id,))
+        conn.commit()
+        if cursor.rowcount == 0:
+            return jsonify({"success": False, "message": "找不到該筆配置"}), 404
+        return jsonify({"success": True, "message": "已刪除"})
     except Exception as e:
         traceback.print_exc()
         conn.rollback()

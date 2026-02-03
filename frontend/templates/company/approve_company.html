@@ -201,6 +201,10 @@
         <button class="nav-link active" id="pending-tab" data-bs-toggle="tab" data-bs-target="#pending" type="button"
           role="tab" aria-controls="pending" aria-selected="true">目前上傳單位</button>
       </li>
+      <li class="nav-item" role="presentation">
+        <button class="nav-link" id="reviewed-tab" data-bs-toggle="tab" data-bs-target="#reviewed" type="button"
+          role="tab" aria-controls="reviewed" aria-selected="false">審核完成的公司</button>
+      </li>
     </ul>
 
     <div class="tab-content border p-3 bg-white" id="myTabContent">
@@ -218,6 +222,25 @@
           <tbody id="pendingTableBody">
             <tr>
               <td colspan="5" class="text-center text-muted">載入中...</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="tab-pane fade" id="reviewed" role="tabpanel" aria-labelledby="reviewed-tab">
+        <table class="table table-bordered table-striped table-hover align-middle">
+          <thead class="custom-header-blue">
+            <tr>
+              <th>ID</th>
+              <th>公司名稱</th>
+              <th>上傳教師</th>
+              <th>審核狀態</th>
+              <th>審核時間</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody id="reviewedTableBody">
+            <tr>
+              <td colspan="6" class="text-center text-muted">載入中...</td>
             </tr>
           </tbody>
         </table>
@@ -292,6 +315,9 @@
     // 載入待審核清單
     document.addEventListener('DOMContentLoaded', loadPending);
 
+    // 切換到「審核完成的公司」時載入
+    document.getElementById('reviewed-tab').addEventListener('shown.bs.tab', loadReviewed);
+
     async function loadPending() {
       const tbody = document.getElementById('pendingTableBody');
       tbody.innerHTML = `<tr><td colspan="5" class="text-center text-muted">載入中...</td></tr>`;
@@ -329,7 +355,46 @@
       }
     }
 
+    async function loadReviewed() {
+      const tbody = document.getElementById('reviewedTableBody');
+      tbody.innerHTML = `<tr><td colspan="6" class="text-center text-muted">載入中...</td></tr>`;
 
+      try {
+        const res = await fetch("/api/get_reviewed_companies");
+        const data = await res.json();
+
+        if (!data.success) {
+          tbody.innerHTML = `<tr><td colspan="6" class="text-center text-danger">載入失敗: ${data.message}</td></tr>`;
+          return;
+        }
+
+        if (data.companies.length === 0) {
+          tbody.innerHTML = `<tr><td colspan="6" class="text-center text-muted">尚無審核完成的公司</td></tr>`;
+          return;
+        }
+
+        tbody.innerHTML = data.companies.map(r => {
+          const statusClass = r.status === 'approved' ? 'bg-success' : 'bg-danger';
+          const statusText = r.status === 'approved' ? '核准' : '退回';
+          return `
+          <tr>
+            <td>${r.id}</td>
+            <td>${r.company_name}</td>
+            <td>${r.upload_teacher_name || '-'}</td>
+            <td><span class="badge ${statusClass} status-badge">${statusText}</span></td>
+            <td>${r.reviewed_at || ''}</td>
+            <td>
+              <button class="btn btn-sm btn-outline-primary me-2" onclick="openCompanyModal(${r.id}, false)">查看</button>
+              <a href="/api/download_company_file/${r.id}" class="btn btn-sm btn-outline-primary">下載附檔</a>
+            </td>
+          </tr>
+        `;
+        }).join("");
+      } catch (error) {
+        console.error("載入審核完成紀錄發生錯誤:", error);
+        tbody.innerHTML = `<tr><td colspan="6" class="text-center text-danger">伺服器錯誤，載入失敗。</td></tr>`;
+      }
+    }
 
     // 彈窗
     async function openCompanyModal(id, isPending) {

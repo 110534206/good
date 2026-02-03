@@ -85,11 +85,15 @@
         }
 
         .table thead th {
-            background-color: #0454a3;
-            color: white;
+            background-color: #e9ecef;
+            color: #495057;
             position: sticky;
             top: 0;
             z-index: 10;
+        }
+
+        .table tbody tr:hover {
+            background-color: #e9ecef;
         }
 
         .table-responsive {
@@ -215,6 +219,65 @@
             background-color: #f8f9fa;
         }
 
+        /* 用戶詳情 Modal 美觀樣式 */
+        #viewUserDetailModal .modal-content {
+            border: none;
+            border-radius: 12px;
+            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.15);
+            overflow: hidden;
+        }
+        #viewUserDetailModal .modal-header {
+            background: linear-gradient(135deg, #0454a3 0%, #0671c7 100%);
+            color: white;
+            padding: 1rem 1.25rem;
+            border: none;
+        }
+        #viewUserDetailModal .modal-header .modal-title {
+            font-weight: 600;
+            font-size: 1.15rem;
+        }
+        #viewUserDetailModal .modal-header .btn-close-white {
+            filter: brightness(0) invert(1);
+            opacity: 0.9;
+        }
+        #viewUserDetailModal .modal-body {
+            padding: 1.5rem 1.5rem 1.25rem;
+            background: #fafbfc;
+        }
+        #viewUserDetailModal .detail-item {
+            display: flex;
+            align-items: flex-start;
+            padding: 0.65rem 0;
+            border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+            gap: 0.75rem;
+        }
+        #viewUserDetailModal .detail-item:last-child {
+            border-bottom: none;
+        }
+        #viewUserDetailModal .detail-item .detail-label {
+            flex: 0 0 110px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: #64748b;
+            letter-spacing: 0.02em;
+        }
+        #viewUserDetailModal .detail-item .detail-value {
+            flex: 1;
+            font-size: 0.95rem;
+            color: #1e293b;
+            margin: 0;
+        }
+        #viewUserDetailModal .modal-footer {
+            padding: 0.9rem 1.5rem;
+            background: #fff;
+            border-top: 1px solid rgba(0, 0, 0, 0.08);
+        }
+        #viewUserDetailModal .modal-footer .btn {
+            border-radius: 8px;
+            font-weight: 500;
+            padding: 0.4rem 1rem;
+        }
+
         /* 隱藏密碼欄位的文字 */
         .password-mask {
             -webkit-text-security: disc;
@@ -222,17 +285,20 @@
 
         /* Modal 樣式調整 - 避開頂端列 */
         .modal {
-            z-index: 1300; /* 高於 top-bar 的 z-index: 1200 */
+            z-index: 1300;
+            /* 高於 top-bar 的 z-index: 1200 */
         }
 
         .modal-backdrop {
-            z-index: 1299; /* 低於 modal 但高於其他元素 */
+            z-index: 1299;
+            /* 低於 modal 但高於其他元素 */
         }
 
         /* 為特定 modal 添加上邊距，往下移一點 */
         #assignTeacherClassModal .modal-dialog,
         #assignStudentClassModal .modal-dialog {
-            margin-top: 80px; /* 往下移，避開 top-bar (60px) + 一些間距 */
+            margin-top: 80px;
+            /* 往下移，避開 top-bar (60px) + 一些間距 */
         }
     </style>
 </head>
@@ -245,7 +311,7 @@
                     <span></span><span></span><span></span>
                 </div>
             </div>
-                <div class="top-bar-title">用戶管理</div>
+            <div class="top-bar-title">用戶管理</div>
         </div>
     </div>
 
@@ -290,7 +356,7 @@
             </div>
 
             <div class="table-responsive">
-                <table class="table table-striped table-hover align-middle">
+                <table class="table table-hover align-middle">
                     <thead>
                         <tr>
                             <th>ID</th>
@@ -423,7 +489,8 @@
                     <input type="hidden" id="assignTeacherId">
                     <div class="mb-3">
                         <label class="form-label">選擇帶班班級 <span class="text-muted">(最多可選2個)</span></label>
-                        <div id="assignTeacherClassCheckboxes" class="border rounded p-3" style="max-height: 300px; overflow-y: auto;">
+                        <div id="assignTeacherClassCheckboxes" class="border rounded p-3"
+                            style="max-height: 300px; overflow-y: auto;">
                             <div class="text-muted text-center">載入中...</div>
                         </div>
                         <small class="text-muted d-block mt-2">已選擇: <span id="selectedClassCount">0</span>/2</small>
@@ -472,71 +539,122 @@
         </div>
     </div>
 
-    <div class="modal fade" id="viewUserDetailModal" tabindex="-1" aria-labelledby="viewUserDetailModalLabel"
+    <!-- 實習配置 Modal（依學生編輯實習起迄日） -->
+    <div class="modal fade" id="internshipConfigModal" tabindex="-1" aria-labelledby="internshipConfigModalLabel"
         aria-hidden="true">
         <div class="modal-dialog modal-lg">
             <div class="modal-content">
-                <div class="modal-header bg-info text-white">
-                    <h5 class="modal-title" id="viewUserDetailModalLabel"><i class="bi bi-info-circle"></i> 用戶詳情</h5>
+                <div class="modal-header bg-light text-dark border-bottom">
+                    <h5 class="modal-title" id="internshipConfigModalLabel"><i class="bi bi-calendar-range"></i> 實習配置 -
+                        <span id="internshipConfigStudentName"></span>
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="text-muted small mb-3">入學年度：<strong id="internshipConfigAdmissionYearDisplay"></strong>
+                        <span id="internshipConfigYearNote" class="text-muted"></span>
+                    </p>
+                    <div class="table-responsive mb-3">
+                        <table class="table table-sm table-hover">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>學期</th>
+                                    <th>實習開始日</th>
+                                    <th>實習結束日</th>
+                                    <th class="text-end">操作</th>
+                                </tr>
+                            </thead>
+                            <tbody id="internshipConfigModalBody"></tbody>
+                        </table>
+                    </div>
+                    <div class="border rounded p-3 bg-light" id="internshipConfigFormBlock">
+                        <h6 class="mb-3" id="internshipConfigFormTitle">新增一筆</h6>
+                        <input type="hidden" id="internshipConfigEditId">
+                        <div class="row g-2">
+                            <div class="col-md-4">
+                                <label class="form-label small">學期</label>
+                                <select class="form-select form-select-sm" id="internshipConfigSemesterId">
+                                    <option value="">請選擇</option>
+                                </select>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label small">實習開始日</label>
+                                <input type="date" class="form-control form-control-sm" id="internshipConfigStartDate">
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label small">實習結束日</label>
+                                <input type="date" class="form-control form-control-sm" id="internshipConfigEndDate">
+                            </div>
+                            <div class="col-md-2 d-flex align-items-end">
+                                <button type="button" class="btn btn-sm btn-success me-1"
+                                    id="internshipConfigSaveBtn">儲存</button>
+                                <button type="button" class="btn btn-sm btn-outline-secondary"
+                                    id="internshipConfigCancelBtn">取消</button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="mt-2">
+                        <button type="button" class="btn btn-sm btn-outline-primary" id="internshipConfigAddBtn"><i
+                                class="bi bi-plus-lg"></i> 新增一筆</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="viewUserDetailModal" tabindex="-1" aria-labelledby="viewUserDetailModalLabel"
+        aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="viewUserDetailModalLabel"><i class="bi bi-person-vcard"></i> 用戶詳情</h5>
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"
                         aria-label="Close"></button>
                 </div>
                 <div class="modal-body">
-                    <div class="row mb-3">
-                        <div class="col-md-6">
-                            <label class="form-label fw-bold">ID</label>
-                            <p class="form-control-plaintext" id="detailUserId">-</p>
-                        </div>
-                        <div class="col-md-6">
-                            <label class="form-label fw-bold">帳號</label>
-                            <p class="form-control-plaintext" id="detailUsername">-</p>
-                        </div>
+                    <div class="detail-item">
+                        <span class="detail-label">ID</span>
+                        <p class="detail-value" id="detailUserId">-</p>
                     </div>
-                    <div class="row mb-3">
-                        <div class="col-md-6">
-                            <label class="form-label fw-bold">姓名</label>
-                            <p class="form-control-plaintext" id="detailName">-</p>
-                        </div>
-                        <div class="col-md-6">
-                            <label class="form-label fw-bold">Email</label>
-                            <p class="form-control-plaintext" id="detailEmail">-</p>
-                        </div>
+                    <div class="detail-item">
+                        <span class="detail-label">帳號</span>
+                        <p class="detail-value" id="detailUsername">-</p>
                     </div>
-                    <div class="row mb-3">
-                        <div class="col-md-6">
-                            <label class="form-label fw-bold">角色</label>
-                            <p class="form-control-plaintext" id="detailRole">-</p>
-                        </div>
-                        <div class="col-md-6">
-                            <label class="form-label fw-bold">狀態</label>
-                            <p class="form-control-plaintext" id="detailStatus">-</p>
-                        </div>
+                    <div class="detail-item">
+                        <span class="detail-label">姓名</span>
+                        <p class="detail-value" id="detailName">-</p>
                     </div>
-                    <div class="row mb-3" id="detailClassDeptRow" style="display: none;">
-                        <div class="col-md-6">
-                            <label class="form-label fw-bold">科系/班級</label>
-                            <p class="form-control-plaintext" id="detailClassDept">-</p>
-                        </div>
-                        <div class="col-md-6" id="detailAdmissionYearCol" style="display: none;">
-                            <label class="form-label fw-bold">屆數</label>
-                            <p class="form-control-plaintext" id="detailAdmissionYear">-</p>
-                        </div>
+                    <div class="detail-item">
+                        <span class="detail-label">Email</span>
+                        <p class="detail-value" id="detailEmail">-</p>
                     </div>
-                    <div class="row mb-3" id="detailTeachingClassesRow" style="display: none;">
-                        <div class="col-md-12">
-                            <label class="form-label fw-bold">帶班列表</label>
-                            <p class="form-control-plaintext" id="detailTeachingClasses">-</p>
-                        </div>
+                    <div class="detail-item">
+                        <span class="detail-label">角色</span>
+                        <p class="detail-value" id="detailRole">-</p>
                     </div>
-                    <div class="row mb-3">
-                        <div class="col-md-6">
-                            <label class="form-label fw-bold">建立日期</label>
-                            <p class="form-control-plaintext" id="detailCreatedAt">-</p>
-                        </div>
+                    <div class="detail-item">
+                        <span class="detail-label">狀態</span>
+                        <p class="detail-value" id="detailStatus">-</p>
+                    </div>
+                    <div class="detail-item" id="detailClassDeptRow" style="display: none;">
+                        <span class="detail-label">科系/班級</span>
+                        <p class="detail-value" id="detailClassDept">-</p>
+                    </div>
+                    <div class="detail-item" id="detailAdmissionYearRow" style="display: none;">
+                        <span class="detail-label">屆數</span>
+                        <p class="detail-value" id="detailAdmissionYear">-</p>
+                    </div>
+                    <div class="detail-item" id="detailTeachingClassesRow" style="display: none;">
+                        <span class="detail-label">帶班列表</span>
+                        <p class="detail-value" id="detailTeachingClasses">-</p>
+                    </div>
+                    <div class="detail-item">
+                        <span class="detail-label">建立日期</span>
+                        <p class="detail-value" id="detailCreatedAt">-</p>
                     </div>
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">關閉</button>
+                    <button type="button" class="btn btn-primary" data-bs-dismiss="modal">關閉</button>
                 </div>
             </div>
         </div>
@@ -615,8 +733,8 @@
                 }
 
                 users.forEach(user => {
-                    // 確保能正確取得顯示名稱，否則使用原始角色
-                    const roleDisplay = user.role_display || roleMap[user.role] || user.role;
+                    // 以本地 roleMap 為準，與篩選按鈕「教師」一致，不依賴後端 role_display
+                    const roleDisplay = roleMap[user.role] || user.role_display || user.role;
                     const roleClass = roleClassMap[user.role] || '';
 
                     // 根據角色決定顯示的內容，將空值替換為 '-'
@@ -677,6 +795,7 @@
                         name: user.name || '-',
                         email: user.email || '-',
                         role: roleDisplay,
+                        roleClass: roleClass, // 用於詳情 Modal 角色徽章
                         originalRole: user.role, // 保存原始角色，用於判斷是否顯示字段
                         status: statusDisplay,
                         statusBadgeClass: statusBadgeClass,
@@ -701,6 +820,7 @@
                             <button class="btn btn-sm btn-warning" onclick="openEditModal(${user.id}, '${escapeHtml(user.username).replace(/'/g, "\\'")}', '${escapeHtml(user.name || '').replace(/'/g, "\\'")}', '${escapeHtml(user.email || '').replace(/'/g, "\\'")}', '${user.role}', '${user.class_id || ''}')" title="編輯"><i class="bi bi-pencil"></i> 編輯</button>
                             <button class="btn btn-sm btn-danger" onclick="deleteUser(${user.id})" title="刪除"><i class="bi bi-trash"></i> 刪除</button>
                             ${user.role === 'student' ? `<button class="btn btn-sm btn-outline-primary" onclick="openAssignStudentClass(${user.id})" title="設班級"><i class="bi bi-person-badge"></i> 設班級</button>` : ''}
+                            ${user.role === 'student' ? `<button class="btn btn-sm btn-outline-success" onclick="openInternshipConfigModal(${user.id}, '${String(user.name || user.username || '').replace(/'/g, "\\'")}', ${user.admission_year ? parseInt(user.admission_year, 10) : 'null'})" title="實習配置"><i class="bi bi-calendar-range"></i> 實習配置</button>` : ''}
                             ${['teacher', 'director'].includes(user.role) ? `<button class="btn btn-sm btn-outline-secondary" onclick="openAssignTeacherClass(${user.id})" title="設帶班"><i class="bi bi-diagram-3"></i> 設帶班</button>` : ''}
                           </div>
                         </td>`;
@@ -942,7 +1062,14 @@
                 document.getElementById('detailUsername').textContent = userDetail.username || '-';
                 document.getElementById('detailName').textContent = userDetail.name || '-';
                 document.getElementById('detailEmail').textContent = userDetail.email || '-';
-                document.getElementById('detailRole').textContent = userDetail.role || '-';
+
+                // 角色：有 roleClass 時顯示徽章
+                const roleEl = document.getElementById('detailRole');
+                if (userDetail.roleClass && userDetail.role && userDetail.role !== '-') {
+                    roleEl.innerHTML = `<span class="badge ${userDetail.roleClass}">${userDetail.role}</span>`;
+                } else {
+                    roleEl.textContent = userDetail.role || '-';
+                }
 
                 // 顯示狀態（使用徽章）
                 const statusEl = document.getElementById('detailStatus');
@@ -956,7 +1083,7 @@
 
                 // 科系/班級和屆數：只有學生才顯示，且值不為空或'-'
                 const classDeptRow = document.getElementById('detailClassDeptRow');
-                const admissionYearCol = document.getElementById('detailAdmissionYearCol');
+                const admissionYearRow = document.getElementById('detailAdmissionYearRow');
 
                 if (originalRole === 'student') {
                     // 科系/班級：去除空格后检查是否有有效值
@@ -979,14 +1106,14 @@
                     }
 
                     if (admissionYearValue) {
-                        admissionYearCol.style.display = '';
+                        admissionYearRow.style.display = '';
                         document.getElementById('detailAdmissionYear').textContent = admissionYearValue;
                         // 如果屆數有值，确保行显示
                         if (!classDeptValue) {
                             classDeptRow.style.display = '';
                         }
                     } else {
-                        admissionYearCol.style.display = 'none';
+                        admissionYearRow.style.display = 'none';
                         // 如果兩個字段都沒有值，隐藏整行
                         if (!classDeptValue) {
                             classDeptRow.style.display = 'none';
@@ -1106,7 +1233,7 @@
             window.openAssignTeacherClass = async (teacherId) => {
                 document.getElementById('assignTeacherId').value = teacherId;
                 const containerEl = document.getElementById('assignTeacherClassCheckboxes');
-                
+
                 // 先載入班級列表
                 await loadClassCheckboxes(containerEl);
 
@@ -1224,6 +1351,147 @@
                 } catch (e) {
                     showAlert("❌ 審核連線錯誤：" + e.message, 'danger');
                 }
+            };
+
+            // ---------- 實習配置（依學生編輯實習起迄日） ----------
+            let internshipConfigUserId = null;
+            let internshipConfigAdmissionYear = null;
+            let internshipConfigUserName = '';
+            let internshipConfigList = [];
+            let internshipSemesterOptions = [];
+
+            function formatDateDisplay(val) {
+                if (!val) return '-';
+                const str = String(val).trim();
+                const m = str.match(/^(\d{4})-(\d{2})-(\d{2})/);
+                if (m) return m[1] + '/' + m[2] + '/' + m[3];
+                return str;
+            }
+
+            async function loadInternshipSemesterOptions() {
+                try {
+                    const res = await fetch('/semester/api/internship-configs/options');
+                    const data = await res.json();
+                    if (!data.success) return;
+                    internshipSemesterOptions = data.semesters || [];
+                    const sel = document.getElementById('internshipConfigSemesterId');
+                    sel.innerHTML = '<option value="">請選擇學期</option>';
+                    internshipSemesterOptions.forEach(s => {
+                        sel.innerHTML += '<option value="' + s.id + '">' + (s.code || s.id) + '</option>';
+                    });
+                } catch (e) { console.error('載入學期選項失敗', e); }
+            }
+
+            window.openInternshipConfigModal = async (userId, userName, admissionYear) => {
+                internshipConfigUserId = userId;
+                internshipConfigUserName = userName || '學生';
+                internshipConfigAdmissionYear = (admissionYear === null || admissionYear === undefined || admissionYear === '' || admissionYear === 'null') ? null : parseInt(admissionYear, 10);
+                document.getElementById('internshipConfigStudentName').textContent = internshipConfigUserName;
+                document.getElementById('internshipConfigAdmissionYearDisplay').textContent = internshipConfigAdmissionYear != null ? internshipConfigAdmissionYear + ' 屆' : '未設定';
+                document.getElementById('internshipConfigYearNote').textContent = internshipConfigAdmissionYear == null ? '（新增時請填寫入學年度）' : '';
+                document.getElementById('internshipConfigEditId').value = '';
+                document.getElementById('internshipConfigFormTitle').textContent = '新增一筆';
+                document.getElementById('internshipConfigFormBlock').style.display = 'none';
+                await loadInternshipSemesterOptions();
+                try {
+                    const res = await fetch('/semester/api/internship-configs');
+                    const data = await res.json();
+                    internshipConfigList = (data.configs || []).filter(c => c.user_id == userId);
+                } catch (e) {
+                    internshipConfigList = [];
+                }
+                renderInternshipConfigModalTable();
+                new bootstrap.Modal(document.getElementById('internshipConfigModal')).show();
+            };
+
+            function renderInternshipConfigModalTable() {
+                const tbody = document.getElementById('internshipConfigModalBody');
+                tbody.innerHTML = '';
+                if (internshipConfigList.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted">尚無實習配置，可點「新增一筆」設定學期與實習起迄日。</td></tr>';
+                    return;
+                }
+                internshipConfigList.forEach(c => {
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = '<td>' + (c.semester_code || '-') + '</td><td>' + formatDateDisplay(c.intern_start_date) + '</td><td>' + formatDateDisplay(c.intern_end_date) + '</td>' +
+                        '<td class="text-end"><button type="button" class="btn btn-sm btn-outline-warning me-1" onclick="editInternshipConfigRow(' + c.id + ')" title="編輯"><i class="bi bi-pencil"></i></button>' +
+                        '<button type="button" class="btn btn-sm btn-outline-danger" onclick="deleteInternshipConfigRow(' + c.id + ')" title="刪除"><i class="bi bi-trash"></i></button></td>';
+                    tbody.appendChild(tr);
+                });
+            }
+
+            window.editInternshipConfigRow = (configId) => {
+                const c = internshipConfigList.find(x => x.id == configId);
+                if (!c) return;
+                document.getElementById('internshipConfigEditId').value = c.id;
+                document.getElementById('internshipConfigFormTitle').textContent = '編輯';
+                document.getElementById('internshipConfigSemesterId').value = c.semester_id;
+                document.getElementById('internshipConfigStartDate').value = c.intern_start_date || '';
+                document.getElementById('internshipConfigEndDate').value = c.intern_end_date || '';
+                document.getElementById('internshipConfigFormBlock').style.display = 'block';
+            };
+
+            window.deleteInternshipConfigRow = async (configId) => {
+                if (!confirm('確定要刪除此筆實習配置？')) return;
+                try {
+                    const res = await fetch('/semester/api/internship-configs/' + configId, { method: 'DELETE' });
+                    const data = await res.json();
+                    if (data.success) {
+                        internshipConfigList = internshipConfigList.filter(c => c.id != configId);
+                        renderInternshipConfigModalTable();
+                        showAlert('已刪除', 'success');
+                    } else showAlert('刪除失敗：' + (data.message || ''), 'danger');
+                } catch (e) { showAlert('連線錯誤', 'danger'); }
+            };
+
+            document.getElementById('internshipConfigAddBtn').onclick = () => {
+                document.getElementById('internshipConfigEditId').value = '';
+                document.getElementById('internshipConfigFormTitle').textContent = '新增一筆';
+                document.getElementById('internshipConfigSemesterId').value = '';
+                document.getElementById('internshipConfigStartDate').value = '';
+                document.getElementById('internshipConfigEndDate').value = '';
+                document.getElementById('internshipConfigFormBlock').style.display = 'block';
+            };
+
+            document.getElementById('internshipConfigCancelBtn').onclick = () => {
+                document.getElementById('internshipConfigFormBlock').style.display = 'none';
+            };
+
+            document.getElementById('internshipConfigSaveBtn').onclick = async () => {
+                const editId = document.getElementById('internshipConfigEditId').value;
+                const semesterId = document.getElementById('internshipConfigSemesterId').value;
+                const startDate = document.getElementById('internshipConfigStartDate').value;
+                const endDate = document.getElementById('internshipConfigEndDate').value;
+                let admissionYear = internshipConfigAdmissionYear;
+                if (admissionYear == null) {
+                    const y = prompt('此學生尚未設定入學年度，請輸入（例如 110、111）');
+                    if (y === null || y === '') return;
+                    admissionYear = parseInt(y, 10);
+                    if (isNaN(admissionYear)) { showAlert('請輸入數字', 'warning'); return; }
+                }
+                if (!semesterId || !startDate || !endDate) {
+                    showAlert('請填寫學期、實習開始日與結束日', 'warning');
+                    return;
+                }
+                if (new Date(startDate) > new Date(endDate)) {
+                    showAlert('實習開始日不可晚於結束日', 'warning');
+                    return;
+                }
+                const body = { admission_year: admissionYear, user_id: internshipConfigUserId, semester_id: parseInt(semesterId, 10), intern_start_date: startDate, intern_end_date: endDate };
+                try {
+                    const url = editId ? ('/semester/api/internship-configs/' + editId) : '/semester/api/internship-configs';
+                    const method = editId ? 'PUT' : 'POST';
+                    const res = await fetch(url, { method: method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+                    const data = await res.json();
+                    if (data.success) {
+                        const listRes = await fetch('/semester/api/internship-configs');
+                        const listData = await listRes.json();
+                        internshipConfigList = (listData.configs || []).filter(c => c.user_id == internshipConfigUserId);
+                        renderInternshipConfigModalTable();
+                        document.getElementById('internshipConfigFormBlock').style.display = 'none';
+                        showAlert(editId ? '已更新' : '已新增', 'success');
+                    } else showAlert('儲存失敗：' + (data.message || ''), 'danger');
+                } catch (e) { showAlert('連線錯誤', 'danger'); }
             };
 
             // 初始載入

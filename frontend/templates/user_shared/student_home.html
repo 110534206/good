@@ -601,6 +601,15 @@
 
   <div class="container">
     <main>
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+          {% for category, message in messages %}
+            <div class="flash-message flash-{{ category if category != 'message' else 'info' }}" role="alert" style="padding:0.75rem 1rem; margin-bottom:1rem; border-radius:8px; background:#fff3cd; border:1px solid #ffc107;">
+              {{ message }}
+            </div>
+          {% endfor %}
+        {% endif %}
+      {% endwith %}
       <h2 class="page-title">請選擇你要使用的功能</h2>
         <section class="card-container">
          <div class="card" role="listitem">
