@@ -6,8 +6,12 @@
   <title>智慧實習平台 | 廠商查看履歷與通知</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
   <style>
-    /* 這裡保留您原本所有的 CSS 樣式 */
-    * { box-sizing: border-box; margin: 0; padding: 0; }
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
     :root {
       --color-primary: #0066cc;
       --color-primary-dark: #024689;
@@ -24,345 +28,924 @@
       --radius-md: 12px;
       --radius-lg: 16px;
     }
-    body { font-family: 'Inter', 'Noto Sans TC', sans-serif; background: var(--color-bg); color: var(--color-text); min-height: 100vh; }
-    header { background: linear-gradient(135deg, #0055a8 0%, #006acb 50%, #004f94 100%); position: sticky; top: 0; z-index: 10; box-shadow: 0 8px 20px rgba(0, 68, 148, 0.35); }
-    .topbar { max-width: 1200px; margin: 0 auto; padding: 18px 24px; display: flex; align-items: center; justify-content: center; color: #fff; }
-    .topbar h1 { font-size: 1.5rem; margin: 0; display: flex; align-items: center; justify-content: space-between; width: 100%; }
-    #menu-btn { width: 30px; height: 22px; cursor: pointer; display: flex; flex-direction: column; justify-content: space-between; background: none; border: none; }
-    #menu-btn span { display: block; width: 100%; height: 3px; background-color: white; border-radius: 2px; }
-    main.management-container { max-width: 1200px; margin: 24px auto 60px; padding: 0 24px; }
-    .panel { background: var(--color-card); border-radius: var(--radius-lg); padding: 24px; box-shadow: var(--shadow-md); border: 1px solid var(--color-border); }
-    .status-badge { font-size: 0.85rem; padding: 0.4em 0.8em; border-radius: 6px; }
-    #side-menu { position: fixed; top: 0; left: 0; height: 100vh; width: 280px; background: rgba(10, 10, 10, 0.95); backdrop-filter: blur(6px); transform: translateX(-100%); transition: transform 0.3s ease; z-index: 1300; padding: 2rem; color: #fff; }
-    #side-menu.open { transform: translateX(0); }
-    #side-menu a { display: block; color: #e2e8f0; text-decoration: none; padding: 10px 0; border-bottom: 1px solid rgba(255,255,255,0.1); }
-    #close-btn { position: absolute; top: 10px; right: 20px; font-size: 2rem; background: none; border: none; color: white; }
-    /* ... 這裡省略其他重複樣式，請保留您原本的樣式表 ... */
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Inter', 'Noto Sans TC', sans-serif;
+      background: var(--color-bg);
+      color: var(--color-text);
+      margin: 0;
+      min-height: 100vh;
+    }
+
+    a {
+      color: inherit;
+    }
+
+    header {
+      background: linear-gradient(135deg, #0055a8 0%, #006acb 50%, #004f94 100%);
+      border-bottom: none;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      box-shadow: 0 8px 20px rgba(0, 68, 148, 0.35);
+    }
+
+    .topbar {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 18px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #fff;
+      position: relative;
+    }
+
+    .topbar h1 {
+      font-size: 1.5rem;
+      margin: 0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      color: #fff;
+      flex: 1;
+    }
+
+    .topbar h1 .header-title {
+      flex: 1;
+      text-align: center;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+    }
+
+    .topbar h1 i {
+      color: #ffe27a;
+    }
+
+    .table thead th {
+      text-align: center;
+      background-color: #fafafb;
+    }
+
+    .table tbody td {
+      text-align: center;
+      vertical-align: middle;
+    }
+
+    .status-badge {
+      font-size: 0.9em;
+      padding: 0.3em 0.6em;
+      border-radius: 0.5rem;
+      display: inline-block;
+      font-weight: 600;
+    }
+
+    .status-badge.bg-success {
+      color: #fff;
+    }
+
+    .status-badge.bg-danger {
+      color: #fff;
+    }
+
+    .status-badge.bg-info {
+      color: #fff;
+    }
+
+    .status-badge.bg-warning {
+      color: #212529;
+    }
+
+    /* 選單按鈕樣式 */
+    #menu-btn {
+      width: 30px;
+      height: 22px;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      background: none;
+      border: none;
+      padding: 0;
+    }
+
+    #menu-btn span {
+      display: block;
+      width: 100%;
+      height: 3px;
+      background-color: white;
+      border-radius: 2px;
+      transition: all 0.3s ease;
+    }
+
+    main.management-container {
+      max-width: 1200px;
+      margin: 24px auto 60px;
+      padding: 0 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+    }
+
+    .panel {
+      background: var(--color-card);
+      border-radius: var(--radius-lg);
+      padding: 24px;
+      box-shadow: var(--shadow-md);
+      border: 1px solid var(--color-border);
+      margin-bottom: 32px;
+    }
+
+    .panel-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+
+    .panel-header h2 {
+      font-size: 1.2rem;
+      margin: 0;
+    }
+
+    .table-wrapper {
+      overflow-x: auto;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      min-width: 1000px;
+    }
+
+    table thead {
+      background: #f1f5f9;
+    }
+
+    table th,
+    table td {
+      padding: 14px 16px;
+      text-align: left;
+      border-bottom: 1px solid var(--color-border);
+      vertical-align: top;
+    }
+
+    table tbody tr:hover {
+      background: rgba(15, 23, 42, 0.02);
+    }
+
+    #side-menu {
+      position: fixed;
+      top: 0;
+      left: 0;
+      height: 100vh;
+      width: 320px;
+      max-width: 80vw;
+      background-color: rgba(10, 10, 10, 0.95);
+      backdrop-filter: blur(6px);
+      box-shadow: 3px 0 12px rgba(0, 0, 0, 0.6);
+      padding: 2rem 1.5rem;
+      transform: translateX(-100%);
+      transition: transform 0.3s ease-in-out;
+      z-index: 1300;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      color: #fff;
+      user-select: none;
+    }
+
+    #side-menu.open {
+      transform: translateX(0);
+    }
+
+    #close-btn {
+      position: absolute;
+      top: 2rem;
+      right: 1.6rem;
+      font-size: 2.2rem;
+      background: none;
+      border: none;
+      color: #fff;
+      cursor: pointer;
+      line-height: 1;
+      width: 2.4rem;
+      height: 2.4rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    #side-menu h2 {
+      margin: 0.5rem 0 1.5rem;
+      font-weight: 700;
+      font-size: 1.6rem;
+    }
+
+    #side-menu a {
+      display: block;
+      width: 100%;
+      padding: 0.6rem 0;
+      font-size: 1.1rem;
+      color: #e2e8f0;
+      text-decoration: none;
+      border-radius: 4px;
+      transition: background-color 0.2s ease;
+    }
+
+    #side-menu a:hover {
+      background-color: rgba(255, 255, 255, 0.18);
+      color: #fff;
+    }
+
+    .btn-action {
+      margin: 0 2px;
+      padding: 0.3rem 0.8rem;
+      font-size: 0.9rem;
+    }
+
+    .modal-body textarea {
+      width: 100%;
+      min-height: 120px;
+      resize: vertical;
+    }
   </style>
 </head>
 <body>
-
   <header>
     <div class="topbar">
       <h1>
-        <button id="menu-btn" aria-label="開啟選單"><span></span><span></span><span></span></button>
-        <div class="header-title text-center flex-grow-1">查看履歷與通知</div>
-        <div style="width: 30px;"></div>
+        <button id="menu-btn" title="選單" role="button" tabindex="0" aria-label="開啟側邊選單">
+          <span></span>
+          <span></span>
+          <span></span>
+        </button>
+        <div class="header-title">查看履歷與通知</div>
+        <div style="width: 30px;"></div> <!-- 佔位元素，保持標題置中 -->
       </h1>
     </div>
   </header>
 
   <main class="management-container">
-    <section class="panel">
-      <div class="d-flex justify-content-between align-items-center mb-4">
-        <h2>學生履歷列表</h2>
-        <button class="btn btn-outline-primary" onclick="viewEmailLogs()">查看已發送 Email</button>
+    <section class="panel" aria-label="履歷列表">
+      <div class="panel-header">
+        <h2>履歷列表</h2>
+      </div>
+      <div style="display: flex; flex-wrap: wrap; gap: 16px; align-items: center; margin-bottom: 16px;">
+        <select id="companyFilter" style="padding: 10px 12px; border-radius: 8px; border: 1px solid var(--color-border); background: #fff; font-size: 0.95rem; min-width: 150px;">
+          <option value="">所有職缺</option>
+        </select>
+        <select id="statusFilter" style="padding: 10px 12px; border-radius: 8px; border: 1px solid var(--color-border); background: #fff; font-size: 0.95rem; min-width: 150px;">
+          <option value="">所有狀態</option>
+          <option value="pending">待審核</option>
+          <option value="approved">通過</option>
+          <option value="rejected">退件</option>
+        </select>
+        <input type="text" id="searchBox" style="padding: 10px 12px; border-radius: 8px; border: 1px solid var(--color-border); background: #fff; font-size: 0.95rem; min-width: 200px; flex: 1;" placeholder="搜尋學生姓名或學號" />
+        <button class="btn" style="background: var(--color-primary); color: #fff; padding: 10px 18px; border-radius: 8px; font-weight: 600; font-size: 0.95rem; cursor: pointer; border: none;" onclick="viewEmailLogs()">查看 Email 記錄</button>
       </div>
 
-      <div class="row g-3 mb-4">
-        <div class="col-md-3">
-          <select id="companyFilter" class="form-select"><option value="">所有職缺</option></select>
-        </div>
-        <div class="col-md-3">
-          <select id="statusFilter" class="form-select">
-            <option value="">所有狀態</option>
-            <option value="pending">待審核</option>
-            <option value="approved">通過</option>
-            <option value="rejected">退件</option>
-          </select>
-        </div>
-        <div class="col-md-6">
-          <input type="text" id="searchBox" class="form-control" placeholder="搜尋姓名或學號..." />
-        </div>
-      </div>
-
-      <div class="table-responsive">
-        <table class="table table-hover align-middle">
-          <thead class="table-light">
+      <div class="table-wrapper">
+        <table style="width: 100%; border-collapse: collapse; min-width: 1000px;">
+          <thead style="background: #f1f5f9;">
             <tr>
-              <th>學號</th>
-              <th>姓名</th>
-              <th>投遞職缺</th>
-              <th>上傳日期</th>
-              <th>履歷檔案</th>
-              <th>目前狀態</th>
-              <th>動作</th>
+              <th style="padding: 14px 16px; text-align: left; border-bottom: 1px solid var(--color-border); font-weight: 600;">學生學號</th>
+              <th style="padding: 14px 16px; text-align: left; border-bottom: 1px solid var(--color-border); font-weight: 600;">姓名</th>
+              <th style="padding: 14px 16px; text-align: left; border-bottom: 1px solid var(--color-border); font-weight: 600;">職缺</th>
+              <th style="padding: 14px 16px; text-align: left; border-bottom: 1px solid var(--color-border); font-weight: 600;">上傳時間</th>
+              <th style="padding: 14px 16px; text-align: left; border-bottom: 1px solid var(--color-border); font-weight: 600;">履歷檔案</th>
+              <th style="padding: 14px 16px; text-align: left; border-bottom: 1px solid var(--color-border); font-weight: 600;">狀態</th>
+              <th style="padding: 14px 16px; text-align: left; border-bottom: 1px solid var(--color-border); font-weight: 600;">操作</th>
             </tr>
           </thead>
-          <tbody id="resumeTableBody"></tbody>
+          <tbody id="resumeTableBody">
+            <tr>
+              <td colspan="7" style="padding: 14px 16px; text-align: center; color: var(--color-muted); border-bottom: 1px solid var(--color-border);">載入中...</td>
+            </tr>
+          </tbody>
         </table>
       </div>
-      <nav><ul class="pagination justify-content-center mt-4" id="pagination"></ul></nav>
+
+      <nav>
+        <ul class="pagination justify-content-center mt-3" id="pagination"></ul>
+      </nav>
     </section>
   </main>
 
-  <div class="modal fade" id="notificationModal" tabindex="-1">
-    <div class="modal-dialog modal-dialog-centered">
+<!-- 發送通知 Modal（與圖示版型一致） -->
+<div class="modal fade" id="notificationModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">發送 Email 通知</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+
+      <div class="modal-body px-4 py-3">
+        <!-- 姓名 / Email -->
+        <div class="row mb-4">
+          <div class="col-md-6">
+            <label class="form-label">學生姓名</label>
+            <input type="text" class="form-control" id="studentNameInput" readonly>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">學生 Email</label>
+            <input type="email" class="form-control" id="studentEmailInput" readonly>
+          </div>
+        </div>
+
+        <!-- 通知類型 -->
+        <div class="mb-4">
+          <label class="form-label">通知類型</label>
+          <select class="form-select" id="notificationType" onchange="toggleNotificationFields()">
+            <option value="interview">面試通知</option>
+            <option value="admission">錄取通知</option>
+          </select>
+        </div>
+
+        <!-- 面試地點 -->
+        <div class="mb-4 interview-only">
+          <label class="form-label">面試地點</label>
+          <input type="text" class="form-control" id="interviewLocation" placeholder="請輸入地點">
+        </div>
+
+        <!-- 面試時間 -->
+        <div class="mb-4 interview-only">
+          <label class="form-label">面試時間</label>
+          <input type="datetime-local" class="form-control" id="interviewTime">
+        </div>
+
+        <!-- 攜帶文件 -->
+        <div class="mb-4 interview-only">
+          <label class="form-label">需攜帶文件（可複選）</label>
+          <div class="d-flex flex-wrap gap-4 mt-2">
+            <div class="form-check">
+              <input class="form-check-input" type="checkbox" value="履歷">
+              <label class="form-check-label">履歷</label>
+            </div>
+            <div class="form-check">
+              <input class="form-check-input" type="checkbox" value="紙跟筆">
+              <label class="form-check-label">紙跟筆</label>
+            </div>
+            <div class="form-check">
+              <input class="form-check-input" type="checkbox" value="身分證明文件">
+              <label class="form-check-label">身分證明文件</label>
+            </div>
+            <div class="form-check d-flex align-items-center gap-2">
+              <input class="form-check-input" type="checkbox" value="其他">
+              <label class="form-check-label">其他</label>
+              <input type="text" class="form-control form-control-sm" style="width:180px">
+            </div>
+          </div>
+        </div>
+
+        <!-- 備註 -->
+        <div class="mb-3">
+          <label class="form-label">備註事項</label>
+          <textarea class="form-control" id="notificationContent" rows="4"></textarea>
+        </div>
+      </div>
+
+      <div class="modal-footer px-4 pb-4">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+        <button type="button" class="btn btn-primary" id="sendNotificationBtn">確認發送</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+  <!-- 查看履歷詳情 Modal -->
+  <div class="modal fade" id="resumeDetailModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
       <div class="modal-content">
         <div class="modal-header">
-          <h5 class="modal-title">發送面試/錄取通知</h5>
+          <h5 class="modal-title">履歷詳情</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body" id="resumeDetailContent">
+          <p class="text-muted">載入中...</p>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">關閉</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Email 記錄 Modal -->
+  <div class="modal fade" id="emailLogsModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Email 發送記錄</h5>
           <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
         </div>
         <div class="modal-body">
-          <div class="mb-3">
-            <label class="form-label">學生姓名</label>
-            <input type="text" class="form-control" id="studentNameInput" readonly />
-          </div>
-          <div class="mb-3">
-            <label class="form-label">學生 Email</label>
-            <input type="email" class="form-control" id="studentEmailInput" readonly />
-          </div>
-          <div class="mb-3">
-            <label class="form-label">通知類型</label>
-            <select class="form-select" id="notificationType">
-              <option value="interview">面試通知</option>
-              <option value="admission">錄取通知</option>
-            </select>
-          </div>
-          <div class="mb-3">
-            <label class="form-label">面試地點</label>
-            <input type="text" class="form-control" id="interviewLocationInput" placeholder="請輸入面試地點">
-          </div>
-          <div class="mb-3">
-            <label class="form-label">面試時間</label>
-            <input type="text" class="form-control" id="interviewTimeInput" placeholder="例如：2026-02-01 10:00">
-          </div>
-          <div class="mb-3">
-            <label class="form-label">需攜帶文件</label>
-            <textarea class="form-control" id="interviewDocumentsInput" rows="2"></textarea>
-          </div>
-          <div class="mb-3">
-            <label class="form-label">備註事項</label>
-            <textarea class="form-control" id="interviewNotesInput" rows="2"></textarea>
+          <div class="table-responsive">
+            <table class="table table-hover">
+              <thead>
+                <tr>
+                  <th>發送時間</th>
+                  <th>收件人</th>
+                  <th>學生姓名</th>
+                  <th>主旨</th>
+                  <th>狀態</th>
+                </tr>
+              </thead>
+              <tbody id="emailLogsTableBody">
+                <tr>
+                  <td colspan="5" class="text-center text-muted">載入中...</td>
+                </tr>
+              </tbody>
+            </table>
           </div>
         </div>
         <div class="modal-footer">
-          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
-          <button type="button" class="btn btn-primary" id="sendNotificationBtn">確認發送</button>
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">關閉</button>
+          <button type="button" class="btn btn-primary" onclick="loadEmailLogs()">重新載入</button>
         </div>
       </div>
     </div>
   </div>
 
-  <div class="modal fade" id="emailLogsModal" tabindex="-1">
-    <div class="modal-dialog modal-xl modal-dialog-centered">
-      <div class="modal-content">
-        <div class="modal-header"><h5>Email 發送記錄</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
-        <div class="modal-body">
-          <table class="table table-sm">
-            <thead><tr><th>時間</th><th>收件人</th><th>主旨</th><th>狀態</th></tr></thead>
-            <tbody id="emailLogsTableBody"></tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <nav id="side-menu">
-    <button id="close-btn">&times;</button>
-    <div class="mt-4">
-      <a href="/vendor_home">首頁</a>
-      <a href="/vendor_review_resume">學生履歷審核</a>
-      <a href="/manage_positions">職位需求管理</a>
-      <a href="/logout">登出</a>
-    </div>
+  <nav id="side-menu" aria-hidden="true" role="navigation" aria-label="功能選單">
+    <button id="close-btn" aria-label="關閉功能選單">×</button>
+    <h2>功能選單</h2>
+    <a href="/vendor_home">首頁</a>
+    <a href="/profile">個人資料</a>
+    <a href="/vendor_review_resume">學生履歷審核</a>
+    <a href="/manage_positions">職位需求管理</a>
+    <a href="/confirm_matching">媒合結果</a>
+    <a href="/publish_announcements">發布公告</a>
+    <a href="/reviews_resumes_notifications">查看履歷與通知</a>
+    <a href="/logout">登出</a>
   </nav>
 
-  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js">
+    function toggleNotificationFields() {
+      const type = document.getElementById("notificationType").value;
+      document.getElementById("interviewFields").style.display =
+        type === "interview" ? "block" : "none";
+    }
+
+  </script>
   <script>
-    // ---------------- 全域變數 ----------------
     let allResumes = [];
     let currentPage = 1;
     const rowsPerPage = 10;
     let currentStudentId = null;
+    let currentStudentEmail = null;
+    let currentStudentName = null;
 
-    // ---------------- 初始化 ----------------
-    document.addEventListener("DOMContentLoaded", () => {
-      fetchResumes();
-      initEvents();
-    });
-
-    function initEvents() {
-      document.getElementById("companyFilter").onchange = applyFilters;
-      document.getElementById("statusFilter").onchange = applyFilters;
-      document.getElementById("searchBox").oninput = applyFilters;
-      document.getElementById("sendNotificationBtn").onclick = sendNotification;
-      
-      const menu = document.getElementById('side-menu');
-      document.getElementById('menu-btn').onclick = () => menu.classList.add('open');
-      document.getElementById('close-btn').onclick = () => menu.classList.remove('open');
+    // 狀態轉換函式
+    function statusColor(status) {
+      return {
+        'pending': 'info',
+        'approved': 'success',
+        'rejected': 'danger',
+        'submitted': 'info',
+        'uploaded': 'info'
+      }[status] || 'secondary';
     }
 
-    // ---------------- 資料獲取 ----------------
-    function fetchResumes() {
-      Promise.all([
-        fetch('/vendor/api/resumes').then(r => r.json()),
-        fetch('/vendor/api/positions').then(r => r.json())
-      ]).then(([resData, posData]) => {
-        if (resData.success) {
-          allResumes = resData.resumes || [];
-          populateJobFilter(posData.items || []);
-          applyFilters();
+    function mapStatus(status) {
+      return {
+        'pending': '待審核',
+        'approved': '通過',
+        'rejected': '退件',
+        'submitted': '待審核',
+        'uploaded': '待審核'
+      }[status] || '未知';
+    }
+
+    // DOMContentLoaded
+    document.addEventListener("DOMContentLoaded", () => {
+      loadResumes();
+      
+      // 綁定篩選事件
+      document.getElementById("companyFilter").addEventListener("change", applyFilters);
+      document.getElementById("statusFilter").addEventListener("change", applyFilters);
+      document.getElementById("searchBox").addEventListener("input", applyFilters);
+      
+      // 綁定發送通知按鈕
+      document.getElementById("sendNotificationBtn").addEventListener("click", sendNotification);
+      
+      // 側邊選單
+      const sideMenu = document.getElementById('side-menu');
+      const menuBtn = document.getElementById('menu-btn');
+      const closeBtn = document.getElementById('close-btn');
+      
+      if (menuBtn) {
+        menuBtn.addEventListener('click', () => {
+          sideMenu.classList.add('open');
+          sideMenu.setAttribute('aria-hidden', 'false');
+        });
+      }
+      
+      if (closeBtn) {
+        closeBtn.addEventListener('click', () => {
+          sideMenu.classList.remove('open');
+          sideMenu.setAttribute('aria-hidden', 'true');
+        });
+      }
+      
+      document.addEventListener('click', (event) => {
+        if (sideMenu && !sideMenu.contains(event.target) && menuBtn && !menuBtn.contains(event.target)) {
+          sideMenu.classList.remove('open');
+          sideMenu.setAttribute('aria-hidden', 'true');
         }
       });
+    });
+
+    // 載入履歷資料
+    function loadResumes() {
+      Promise.all([
+        fetch('/vendor/api/resumes').then(res => res.json()),
+        fetch('/vendor/api/positions').then(res => res.json())
+      ])
+        .then(([resumeData, positionData]) => {
+          console.log("API 返回資料:", resumeData); // 調試用
+          
+          if (resumeData.success) {
+            allResumes = resumeData.resumes || [];
+            console.log("履歷數量:", allResumes.length); // 調試用
+            
+            // 填充職缺篩選器
+            const companySelect = document.getElementById("companyFilter");
+            companySelect.innerHTML = '<option value="">所有職缺</option>';
+            
+            let hasJobs = false;
+            
+            // 從職缺 API 獲取職缺列表
+            if (positionData.success && positionData.items && Array.isArray(positionData.items) && positionData.items.length > 0) {
+              console.log("從職缺 API 填充，數量:", positionData.items.length);
+              positionData.items.forEach(job => {
+                if (job.title && job.title.trim()) {
+                  const option = document.createElement("option");
+                  option.value = job.id;
+                  option.textContent = job.title;
+                  companySelect.appendChild(option);
+                  hasJobs = true;
+                }
+              });
+            }
+            
+            // 備用方案：從履歷資料中提取職缺資訊
+            if (!hasJobs && allResumes.length > 0) {
+              console.log("從履歷資料中提取職缺名稱");
+              const jobSet = new Set();
+              allResumes.forEach(r => {
+                const jobTitle = r.job_title || r.jobTitle;
+                if (jobTitle && jobTitle.trim()) {
+                  jobSet.add(jobTitle.trim());
+                }
+              });
+              
+              if (jobSet.size > 0) {
+                console.log("從履歷中找到的職缺:", Array.from(jobSet));
+                Array.from(jobSet).sort().forEach(jobTitle => {
+                  const option = document.createElement("option");
+                  option.value = jobTitle;
+                  option.textContent = jobTitle;
+                  companySelect.appendChild(option);
+                  hasJobs = true;
+                });
+              }
+            }
+            
+            // 如果還是沒有職缺，顯示提示
+            if (!hasJobs) {
+              console.warn("⚠️ 沒有找到職缺資料");
+              console.warn("可能的原因：");
+              console.warn("1. 尚未建立任何職缺");
+              console.warn("2. 沒有學生填寫志願序");
+              console.warn("3. 履歷資料中沒有職缺資訊");
+              
+              // 在控制台顯示更多調試信息
+              if (allResumes.length > 0) {
+                console.log("履歷範例:", allResumes[0]);
+              } else {
+                console.warn("⚠️ 也沒有找到任何履歷資料");
+              }
+              
+              // 顯示 API 返回的完整資料
+              console.log("完整 API 回應:", resumeData);
+            }
+            
+            applyFilters();
+          } else {
+            alert("載入資料失敗：" + (resumeData.message || "未知錯誤"));
+          }
+        })
+        .catch(error => {
+          console.error("API調用錯誤:", error);
+          alert("載入資料失敗，請檢查網路連線");
+        });
     }
 
-    function populateJobFilter(items) {
-      const select = document.getElementById("companyFilter");
-      items.forEach(item => {
-        const opt = new Option(item.title, item.id);
-        select.add(opt);
-      });
-    }
-
-    // ---------------- 渲染邏輯 ----------------
+    // 應用篩選
     function applyFilters() {
-      const jobVal = document.getElementById("companyFilter").value;
-      const statusVal = document.getElementById("statusFilter").value;
-      const searchVal = document.getElementById("searchBox").value.toLowerCase();
+      currentPage = 1;
+      const jobFilter = document.getElementById("companyFilter").value;
+      const statusFilter = document.getElementById("statusFilter").value;
+      const searchText = document.getElementById("searchBox").value.toLowerCase();
 
-      const filtered = allResumes.filter(r => {
-        const matchJob = !jobVal || String(r.job_id) === jobVal || r.job_title === jobVal;
-        const matchStatus = !statusVal || r.status === statusVal;
-        const name = (r.name || '').toLowerCase();
-        const sid = (r.username || '').toLowerCase();
-        const matchSearch = !searchVal || name.includes(searchVal) || sid.includes(searchVal);
+      let filtered = allResumes.filter(r => {
+        // 職缺篩選：根據職缺 ID 或職缺名稱匹配
+        let matchJob = true;
+        if (jobFilter) {
+          const jobTitle = r.job_title || r.jobTitle || '';
+          const jobId = r.job_id || r.jobId;
+          // 如果篩選值是數字，則匹配 job_id；否則匹配 job_title
+          const filterIsNumeric = /^\d+$/.test(jobFilter);
+          if (filterIsNumeric) {
+            matchJob = jobId && String(jobId) === jobFilter;
+          } else {
+            matchJob = jobTitle && jobTitle.trim() === jobFilter.trim();
+          }
+        }
+        
+        const matchStatus = !statusFilter || r.status === statusFilter;
+        const matchSearch = !searchText || 
+          (r.name && r.name.toLowerCase().includes(searchText)) ||
+          (r.username && r.username.toLowerCase().includes(searchText));
+        
         return matchJob && matchStatus && matchSearch;
       });
+
       renderTable(filtered);
     }
 
+    // 渲染表格
     function renderTable(data) {
       const tbody = document.getElementById("resumeTableBody");
       const start = (currentPage - 1) * rowsPerPage;
-      const paginated = data.slice(start, start + rowsPerPage);
+      const end = start + rowsPerPage;
+      const pageData = data.slice(start, end);
 
-      if (paginated.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="7" class="text-center py-4">暫無匹配資料</td></tr>';
+      if (pageData.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" style="padding: 14px 16px; text-align: center; color: var(--color-muted); border-bottom: 1px solid var(--color-border);">沒有符合條件的資料</td></tr>';
+        document.getElementById("pagination").innerHTML = '';
         return;
       }
 
-      tbody.innerHTML = paginated.map(r => `
-        <tr>
-          <td>${r.username || '-'}</td>
-          <td>${r.name || '-'}</td>
-          <td>${r.job_title || '-'}</td>
-          <td>${r.upload_time || '-'}</td>
-          <td>
-            ${r.filepath ? `<a href="/api/download_resume/${r.id}" target="_blank" class="btn btn-sm btn-outline-primary">下載</a>` : '無檔案'}
-          </td>
-          <td>
-            <span class="badge bg-${r.status==='approved'?'success':r.status==='rejected'?'danger':'info'}">
-              ${r.status==='approved'?'通過':r.status==='rejected'?'退件':'待審'}
-            </span>
-          </td>
-          <td>
-            <button class="btn btn-success btn-sm" onclick="openNotificationModal(${r.student_id}, '${r.name}')">發送通知</button>
-          </td>
-        </tr>
-      `).join('');
+      tbody.innerHTML = pageData.map(r => {
+        const statusColorClass = statusColor(r.status);
+        const statusLabel = mapStatus(r.status);
+        
+        return `
+          <tr style="border-bottom: 1px solid var(--color-border);">
+            <td style="padding: 14px 16px; vertical-align: middle;">${r.username || '—'}</td>
+            <td style="padding: 14px 16px; vertical-align: middle;">${r.name || '—'}</td>
+            <td style="padding: 14px 16px; vertical-align: middle;">${(r.job_title || r.jobTitle || '—')}</td>
+            <td style="padding: 14px 16px; vertical-align: middle;">${r.upload_time || '—'}</td>
+            <td style="padding: 14px 16px; vertical-align: middle;">
+              ${r.filepath ? `<a href="/api/download_resume/${r.id}" target="_blank" style="padding: 6px 12px; border-radius: 6px; border: 1px solid var(--color-primary); background: #fff; color: var(--color-primary); text-decoration: none; font-size: 0.875rem; display: inline-block;">查看履歷</a>` : '—'}
+            </td>
+            <td style="padding: 14px 16px; vertical-align: middle;">
+              <span class="badge bg-${statusColorClass} status-badge">${statusLabel}</span>
+            </td>
+            <td style="padding: 14px 16px; vertical-align: middle;">
+              <button class="btn" style="background: var(--color-success); color: #fff; padding: 6px 12px; border-radius: 6px; border: none; font-size: 0.875rem; cursor: pointer;" onclick="openNotificationModal(${r.student_id}, '${(r.name || '').replace(/'/g, "\\'")}', '')">發送通知</button>
+            </td>
+          </tr>
+        `;
+      }).join('');
+
       renderPagination(data.length);
     }
 
+    // 渲染分頁
     function renderPagination(total) {
       const totalPages = Math.ceil(total / rowsPerPage);
-      const container = document.getElementById("pagination");
-      container.innerHTML = '';
-      for (let i = 1; i <= totalPages; i++) {
-        const li = document.createElement('li');
-        li.className = `page-item ${i === currentPage ? 'active' : ''}`;
-        li.innerHTML = `<a class="page-link" href="javascript:void(0)" onclick="goToPage(${i})">${i}</a>`;
-        container.appendChild(li);
+      const pagination = document.getElementById("pagination");
+      
+      if (totalPages <= 1) {
+        pagination.innerHTML = '';
+        return;
       }
+
+      let html = '';
+      if (currentPage > 1) {
+        html += `<li class="page-item"><a class="page-link" href="#" onclick="changePage(${currentPage - 1}); return false;">上一頁</a></li>`;
+      }
+      
+      for (let i = 1; i <= totalPages; i++) {
+        if (i === currentPage) {
+          html += `<li class="page-item active"><span class="page-link">${i}</span></li>`;
+        } else {
+          html += `<li class="page-item"><a class="page-link" href="#" onclick="changePage(${i}); return false;">${i}</a></li>`;
+        }
+      }
+      
+      if (currentPage < totalPages) {
+        html += `<li class="page-item"><a class="page-link" href="#" onclick="changePage(${currentPage + 1}); return false;">下一頁</a></li>`;
+      }
+      
+      pagination.innerHTML = html;
     }
 
-    function goToPage(p) { currentPage = p; applyFilters(); }
+    function changePage(page) {
+      currentPage = page;
+      applyFilters();
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
 
-    // ---------------- 通知發送邏輯 (核心修復) ----------------
-    function openNotificationModal(studentId, studentName) {
-      currentStudentId = studentId;
-      
-      // 獲取該學生的詳細資料（主要是 Email）
+    // 查看履歷詳情
+    function viewResumeDetail(studentId) {
       fetch(`/vendor/api/applications?student_id=${studentId}`)
         .then(res => res.json())
         .then(data => {
-          const info = (data.items && data.items[0]) || {};
-          document.getElementById("studentNameInput").value = studentName;
-          document.getElementById("studentEmailInput").value = info.student_email || '無電子郵件紀錄';
-          
-          // 清空所有輸入欄位，避免上一次的資料殘留
-          document.getElementById("interviewLocationInput").value = '';
-          document.getElementById("interviewTimeInput").value = '';
-          document.getElementById("interviewDocumentsInput").value = '';
-          document.getElementById("interviewNotesInput").value = '';
+          if (data.items && data.items.length > 0) {
+            const item = data.items[0];
+            // 轉義 HTML 特殊字符
+            const escapeHtml = (text) => {
+              const div = document.createElement('div');
+              div.textContent = text;
+              return div.innerHTML;
+            };
+            
+            const detailHtml = `
+              <div class="mb-3">
+                <strong>學生姓名：</strong> ${escapeHtml(item.name || '—')}<br>
+                <strong>學號：</strong> ${escapeHtml(item.student_number || '—')}<br>
+                <strong>Email：</strong> ${escapeHtml(item.student_email || '—')}<br>
+                <strong>公司名稱：</strong> ${escapeHtml(item.company_name || '—')}<br>
+                <strong>職位：</strong> ${escapeHtml(item.position_label || '—')}<br>
+                <strong>申請日期：</strong> ${escapeHtml(item.applied_date || '—')}<br>
+                <strong>狀態：</strong> <span class="badge bg-${statusColor(item.status)}">${escapeHtml(item.status_label || '—')}</span>
+              </div>
+              ${item.summary ? `<div class="mb-3"><strong>自傳：</strong><p>${escapeHtml(item.summary)}</p></div>` : ''}
+              ${item.skills && item.skills.length > 0 ? `<div class="mb-3"><strong>技能：</strong><p>${escapeHtml(item.skills.join(', '))}</p></div>` : ''}
+              ${item.resume_url ? `<div><a href="${item.resume_url}" target="_blank" class="btn btn-primary">下載履歷</a></div>` : ''}
+            `;
+            document.getElementById("resumeDetailContent").innerHTML = detailHtml;
+            new bootstrap.Modal(document.getElementById("resumeDetailModal")).show();
+          } else {
+            alert("找不到該學生的詳細資料");
+          }
+        })
+        .catch(error => {
+          console.error("載入詳情失敗:", error);
+          alert("載入詳情失敗");
+        });
+    }
 
+    // 開啟發送通知 Modal
+    function openNotificationModal(studentId, studentName, studentEmail) {
+      currentStudentId = studentId;
+      currentStudentName = studentName;
+      
+      // 先獲取學生詳細資訊以取得 Email
+      fetch(`/vendor/api/applications?student_id=${studentId}`)
+        .then(res => res.json())
+        .then(data => {
+          if (data.items && data.items.length > 0) {
+            const item = data.items[0];
+            currentStudentEmail = item.student_email || studentEmail || '';
+            
+            document.getElementById("studentNameInput").value = item.name || studentName || '';
+            document.getElementById("studentEmailInput").value = currentStudentEmail;
+            document.getElementById("notificationContent").value = '';
+            document.getElementById("notificationType").value = 'interview';
+            
+            new bootstrap.Modal(document.getElementById("notificationModal")).show();
+          } else {
+            // 如果找不到詳細資訊，使用傳入的參數
+            currentStudentEmail = studentEmail || '';
+            document.getElementById("studentNameInput").value = studentName || '';
+            document.getElementById("studentEmailInput").value = currentStudentEmail;
+            document.getElementById("notificationContent").value = '';
+            document.getElementById("notificationType").value = 'interview';
+            
+            new bootstrap.Modal(document.getElementById("notificationModal")).show();
+          }
+        })
+        .catch(error => {
+          console.error("載入學生資訊失敗:", error);
+          // 如果載入失敗，使用傳入的參數
+          currentStudentEmail = studentEmail || '';
+          document.getElementById("studentNameInput").value = studentName || '';
+          document.getElementById("studentEmailInput").value = currentStudentEmail;
+          document.getElementById("notificationContent").value = '';
+          document.getElementById("notificationType").value = 'interview';
+          
           new bootstrap.Modal(document.getElementById("notificationModal")).show();
         });
     }
 
+    // 發送通知
     function sendNotification() {
-      const loc = document.getElementById("interviewLocationInput").value.trim();
-      const time = document.getElementById("interviewTimeInput").value.trim();
-      const docs = document.getElementById("interviewDocumentsInput").value.trim();
-      const notes = document.getElementById("interviewNotesInput").value.trim();
-
-      if (!loc || !time) {
-        alert("面試地點與時間為必填項！");
+      const notificationType = document.getElementById("notificationType").value;
+      const content = document.getElementById("notificationContent").value.trim();
+      
+      if (notificationType === "interview" && !content) {
+        alert("請輸入通知內容");
         return;
       }
 
-      // 組合所有欄位內容
-      const finalContent = `【面試通知內容】\n地點：${loc}\n時間：${time}\n需帶文件：${docs}\n其他備註：${notes}`;
+      if (!currentStudentId) {
+        alert("學生資訊不完整，無法發送通知");
+        return;
+      }
 
-      const btn = document.getElementById("sendNotificationBtn");
-      btn.disabled = true;
-      btn.textContent = "發送中...";
+      const sendBtn = document.getElementById("sendNotificationBtn");
+      sendBtn.disabled = true;
+      sendBtn.textContent = "發送中...";
 
+      // Email 和姓名將從資料庫自動獲取，不需要前端傳遞
       fetch('/vendor/api/send_notification', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json'
+        },
         body: JSON.stringify({
           student_id: currentStudentId,
-          notification_type: document.getElementById("notificationType").value,
-          content: finalContent
+          notification_type: notificationType,
+          content: content || ''
         })
       })
-      .then(res => res.json())
-      .then(data => {
-        if (data.success) {
-          alert("通知發送成功！");
-          bootstrap.Modal.getInstance(document.getElementById("notificationModal")).hide();
-        } else {
-          alert("發送失敗：" + data.message);
-        }
-      })
-      .catch(err => alert("網路錯誤，請稍後再試"))
-      .finally(() => {
-        btn.disabled = false;
-        btn.textContent = "確認發送";
-      });
+        .then(res => res.json())
+        .then(data => {
+          if (data.success) {
+            const emailInfo = data.student_email ? `\n收件人：${data.student_email}` : '';
+            const logInfo = data.email_log_id ? `\n郵件記錄ID：${data.email_log_id}` : '';
+            alert(`通知發送成功！${emailInfo}${logInfo}`);
+            bootstrap.Modal.getInstance(document.getElementById("notificationModal")).hide();
+            // 重新載入履歷列表以更新狀態
+            loadResumes();
+          } else {
+            alert("發送失敗：" + (data.message || "未知錯誤"));
+          }
+        })
+        .catch(error => {
+          console.error("發送通知失敗:", error);
+          alert("發送通知失敗，請檢查網路連線");
+        })
+        .finally(() => {
+          sendBtn.disabled = false;
+          sendBtn.textContent = "發送通知";
+        });
     }
 
+    // 查看 Email 記錄
     function viewEmailLogs() {
-      const tbody = document.getElementById("emailLogsTableBody");
-      tbody.innerHTML = '<tr><td colspan="4" class="text-center">讀取中...</td></tr>';
       new bootstrap.Modal(document.getElementById("emailLogsModal")).show();
+      loadEmailLogs();
+    }
 
+    // 載入 Email 記錄
+    function loadEmailLogs() {
+      const tbody = document.getElementById("emailLogsTableBody");
+      tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">載入中...</td></tr>';
+      
       fetch('/vendor/api/email_logs?limit=50')
         .then(res => res.json())
         .then(data => {
-          if (data.success && data.logs) {
-            tbody.innerHTML = data.logs.map(l => `
-              <tr>
-                <td>${l.sent_at || '-'}</td>
-                <td>${l.recipient_email || '-'}</td>
-                <td>${l.subject || '-'}</td>
-                <td><span class="badge bg-success">已發送</span></td>
-              </tr>
-            `).join('');
+          if (data.success && data.logs && data.logs.length > 0) {
+            // 只顯示狀態為「已發送」的記錄
+            const sentLogs = data.logs.filter(log => log.status === 'sent');
+            
+            if (sentLogs.length > 0) {
+              tbody.innerHTML = sentLogs.map(log => {
+                return `
+                  <tr>
+                    <td>${log.sent_at || '—'}</td>
+                    <td>${log.recipient_email || '—'}</td>
+                    <td>${log.student_name || '—'} (${log.student_number || '—'})</td>
+                    <td>${log.subject || '—'}</td>
+                    <td><span class="badge bg-success">已發送</span></td>
+                  </tr>
+                `;
+              }).join('');
+            } else {
+              tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">暫無已發送的 Email 記錄</td></tr>';
+            }
+          } else {
+            tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">暫無 Email 記錄</td></tr>';
           }
+        })
+        .catch(error => {
+          console.error("載入 Email 記錄失敗:", error);
+          tbody.innerHTML = '<tr><td colspan="5" class="text-center text-danger">載入失敗</td></tr>';
         });
     }
+
+  
+    function toggleNotificationFields() {
+      const type = document.getElementById("notificationType").value;
+      document.getElementById("interviewFields").style.display =
+        type === "interview" ? "block" : "none";
+    }
+
   </script>
 </body>
 </html>
