@@ -1826,6 +1826,32 @@ def apply_company():
             datetime.now()
         ))
         
+        # 同時創建 resume_applications 記錄（給廠商審核用）
+        # 檢查是否已經存在該履歷對該公司的記錄
+        cursor.execute("""
+            SELECT id FROM resume_applications
+            WHERE resumes_id = %s AND internship_companies_id = %s
+        """, (resume_id, company_id))
+        existing_record = cursor.fetchone()
+        
+        if not existing_record:
+            # 如果不存在，創建新記錄
+            cursor.execute("""
+                INSERT INTO resume_applications
+                (resumes_id, internship_companies_id, apply_status, interview_status, interview_result, created_at)
+                VALUES (%s, %s, %s, %s, %s, NOW())
+            """, (resume_id, company_id, 'applied', 'none', 'pending'))
+        else:
+            # 如果已存在，更新狀態為 'applied'（重新投遞）
+            cursor.execute("""
+                UPDATE resume_applications
+                SET apply_status = 'applied',
+                    interview_status = 'none',
+                    interview_result = 'pending',
+                    updated_at = NOW()
+                WHERE id = %s
+            """, (existing_record['id'],))
+        
         conn.commit()
         return jsonify({"success": True, "message": "投遞成功"})
         

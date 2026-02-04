@@ -97,9 +97,7 @@
         }
 
         .table-responsive {
-            max-height: 70vh;
-            /* 限制表格高度，防止頁面過長 */
-            overflow-y: auto;
+            overflow-x: auto;
         }
 
         /* 側邊選單 */
@@ -324,7 +322,7 @@
         <a href="/logout">登出</a>
     </nav>
 
-    <div class="container mt-3 pt-3">
+    <div class="container mt-3 pt-3 mb-5 pb-1">
         <div class="card p-4">
             <div class="d-flex gap-2 mb-4 flex-wrap align-items-end">
                 <div class="flex-grow-1">
@@ -355,10 +353,26 @@
                 <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
             </div>
 
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h5 class="mb-0">用戶列表</h5>
+                <div class="d-flex gap-2">
+                    <button type="button" class="btn btn-primary" id="btnGlobalConfig" onclick="openGlobalConfigModal()">
+                        <i class="bi bi-globe"></i> 全部套用 (設定屆別預設)
+                    </button>
+                    <button type="button" class="btn btn-warning" id="batchEditBtn" onclick="toggleBatchMode()">
+                        <i class="bi bi-check-all"></i> 批次修改實習週期
+                    </button>
+                    <button type="button" class="btn btn-success" id="saveBatchBtn" style="display:none;" onclick="openBatchEditModal()" disabled title="請先勾選至少一位學生">
+                        <i class="bi bi-save"></i> 儲存選中學生
+                    </button>
+                </div>
+            </div>
+
             <div class="table-responsive">
                 <table class="table table-hover align-middle">
                     <thead>
                         <tr>
+                            <th style="width:2.5rem;display:none;" class="batch-checkbox-cell"><input type="checkbox" id="userTableSelectAll" title="全選/取消學生" aria-label="全選學生"></th>
                             <th>ID</th>
                             <th>帳號</th>
                             <th>姓名</th>
@@ -371,6 +385,19 @@
                     <tbody id="userTableBody">
                     </tbody>
                 </table>
+            </div>
+            <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mt-2 py-2 border-top" id="userTablePaginationWrap">
+                <div class="text-muted small" id="userTablePaginationInfo">共 0 筆</div>
+                <div class="d-flex align-items-center gap-2" id="userTablePaginationControls">
+                    <select class="form-select form-select-sm" id="userTablePerPage" style="width:auto;">
+                        <option value="10">每頁 10 筆</option>
+                        <option value="20" selected>每頁 20 筆</option>
+                        <option value="50">每頁 50 筆</option>
+                    </select>
+                    <nav aria-label="用戶列表分頁">
+                        <ul class="pagination pagination-sm mb-0" id="userTablePagination"></ul>
+                    </nav>
+                </div>
             </div>
         </div>
     </div>
@@ -602,6 +629,82 @@
         </div>
     </div>
 
+    <!-- 全部套用（屆別預設值）Modal：存檔時 user_id = NULL -->
+    <div class="modal fade" id="globalConfigModal" tabindex="-1" aria-labelledby="globalConfigModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header bg-primary text-white">
+                    <h5 class="modal-title" id="globalConfigModalLabel">全部套用 (設定屆別預設值)</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="text-muted small">※ 此設定將套用於該屆所有「未個別設定」的學生。</p>
+                    <form id="globalConfigForm">
+                        <div class="mb-3">
+                            <label class="form-label">入學年度</label>
+                            <select class="form-select" id="g_admission_year" required>
+                                <option value="">請選擇</option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">實習學期</label>
+                            <select class="form-select" id="g_semester_id" required>
+                                <option value="">請選擇</option>
+                            </select>
+                        </div>
+                        <div class="row">
+                            <div class="col-6 mb-3">
+                                <label class="form-label">開始日期</label>
+                                <input type="date" class="form-control" id="g_start_date" required>
+                            </div>
+                            <div class="col-6 mb-3">
+                                <label class="form-label">結束日期</label>
+                                <input type="date" class="form-control" id="g_end_date" required>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="button" class="btn btn-primary" onclick="submitGlobalConfig()">確認套用</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 批次設定實習週期 Modal -->
+    <div class="modal fade" id="batchInternshipConfigModal" tabindex="-1" aria-labelledby="batchInternshipConfigModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header bg-primary text-white">
+                    <h5 class="modal-title" id="batchInternshipConfigModalLabel"><i class="bi bi-calendar-check"></i> 批次設定實習週期</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="text-muted small">已勾選 <strong id="batchSelectedCount">0</strong> 位學生，將為其建立/更新「個人」實習週期（覆蓋屆別預設）。</p>
+                    <div class="mb-3">
+                        <label class="form-label">實習學期</label>
+                        <select class="form-select" id="batchModalSemester">
+                            <option value="">請選擇</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">開始日期</label>
+                        <input type="date" class="form-control" id="batchModalStart">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">結束日期</label>
+                        <input type="date" class="form-control" id="batchModalEnd">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="button" class="btn btn-primary" id="btnBatchModalConfirm"><i class="bi bi-check2"></i> 套用至勾選學生</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <div class="modal fade" id="viewUserDetailModal" tabindex="-1" aria-labelledby="viewUserDetailModalLabel"
         aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered">
@@ -728,7 +831,7 @@
                 usersDetailData = {};
 
                 if (users.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted"><i class="bi bi-info-circle"></i> 無符合條件的用戶數據</td></tr>';
+                    tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted"><i class="bi bi-info-circle"></i> 無符合條件的用戶數據</td></tr>';
                     return;
                 }
 
@@ -805,8 +908,13 @@
                         displayCreatedAt: displayCreatedAt
                     };
 
+                    const isStudent = user.role === 'student';
+                    const checkTd = isStudent
+                        ? `<td class="batch-checkbox-cell" style="display:none;"><input type="checkbox" class="form-check-input user-row-checkbox" value="${user.id}" data-user-id="${user.id}" aria-label="勾選"></td>`
+                        : '<td class="batch-checkbox-cell text-muted" style="display:none;">-</td>';
                     const tr = document.createElement('tr');
                     tr.innerHTML = `
+                        ${checkTd}
                         <td>${user.id}</td>
                         <td class="text-truncate" title="${escapeHtml(user.username)}">${escapeHtml(user.username)}</td>
                         <td>${escapeHtml(user.name || '-')}</td>
@@ -826,65 +934,106 @@
                         </td>`;
                     tbody.appendChild(tr);
                 });
+                if (window.isBatchMode) toggleBatchMode();
             }
 
 
+            // 分頁狀態（用戶列表）
+            let userListPage = 1;
+            let userListTotal = 0;
+            let userListPerPage = 20;
+            let userListIsSearch = false;
+
+            function renderUserTablePagination(total, page, perPage) {
+                const wrap = document.getElementById('userTablePaginationInfo');
+                const ul = document.getElementById('userTablePagination');
+                const totalPages = Math.max(1, Math.ceil(total / perPage));
+                wrap.textContent = '共 ' + total + ' 筆，第 ' + page + ' / ' + totalPages + ' 頁';
+                ul.innerHTML = '';
+                const prevLi = document.createElement('li');
+                prevLi.className = 'page-item' + (page <= 1 ? ' disabled' : '');
+                prevLi.innerHTML = '<a class="page-link" href="javascript:void(0)" data-page="' + (page - 1) + '" aria-label="上一頁">上一頁</a>';
+                ul.appendChild(prevLi);
+                const nextLi = document.createElement('li');
+                nextLi.className = 'page-item' + (page >= totalPages ? ' disabled' : '');
+                nextLi.innerHTML = '<a class="page-link" href="javascript:void(0)" data-page="' + (page + 1) + '" aria-label="下一頁">下一頁</a>';
+                ul.appendChild(nextLi);
+                ul.querySelectorAll('.page-link').forEach(a => {
+                    a.addEventListener('click', function (e) {
+                        e.preventDefault();
+                        if (this.parentElement.classList.contains('disabled')) return;
+                        const p = parseInt(this.getAttribute('data-page'), 10);
+                        if (userListIsSearch) doSearchUsers(p); else loadUsers(p);
+                    });
+                });
+            }
+
             /**
-             * 初始載入所有用戶
+             * 載入指定頁的用戶（全部列表）
              */
-            async function loadUsers() {
+            async function loadUsers(page) {
+                if (page != null) userListPage = Math.max(1, page);
+                userListIsSearch = false;
+                const perPage = parseInt(document.getElementById('userTablePerPage').value, 10) || 20;
+                userListPerPage = perPage;
                 try {
-                    document.getElementById('userTableBody').innerHTML = '<tr><td colspan="7" class="text-center text-info"><i class="bi bi-arrow-clockwise"></i> 載入數據中，請稍候...</td></tr>';
-                    const res = await fetch('/admin/api/get_all_users');
+                    document.getElementById('userTableBody').innerHTML = '<tr><td colspan="8" class="text-center text-info"><i class="bi bi-arrow-clockwise"></i> 載入數據中，請稍候...</td></tr>';
+                    const res = await fetch('/admin/api/get_all_users?page=' + userListPage + '&per_page=' + perPage);
                     const data = await res.json();
                     if (!data.success) {
                         showAlert("載入失敗：" + data.message, 'danger');
-                        document.getElementById('userTableBody').innerHTML = '<tr><td colspan="7" class="text-center text-danger">載入失敗</td></tr>';
+                        document.getElementById('userTableBody').innerHTML = '<tr><td colspan="8" class="text-center text-danger">載入失敗</td></tr>';
                         return;
                     }
+                    userListTotal = data.total != null ? data.total : data.users.length;
                     renderUserTable(data.users);
+                    renderUserTablePagination(userListTotal, data.page || userListPage, data.per_page || perPage);
                 } catch (err) {
                     console.error("載入用戶錯誤：", err);
                     showAlert('連線錯誤，載入用戶資料失敗', 'danger');
-                    document.getElementById('userTableBody').innerHTML = '<tr><td colspan="7" class="text-center text-danger">連線錯誤，載入失敗</td></tr>';
+                    document.getElementById('userTableBody').innerHTML = '<tr><td colspan="8" class="text-center text-danger">連線錯誤，載入失敗</td></tr>';
                 }
             }
-            window.loadUsers = loadUsers;
+            window.loadUsers = () => loadUsers(1);
 
             /**
-             * 搜尋用戶
+             * 搜尋用戶（分頁）
              */
-            window.searchUsers = async () => {
+            async function doSearchUsers(page) {
                 const username = document.getElementById('searchUsername').value.trim();
                 const role = document.getElementById('filterRole').value;
-
                 if (!username && !role) {
-                    loadUsers(); // 如果都沒有填，則載入全部
+                    loadUsers(page != null ? page : 1);
                     return;
                 }
-
+                if (page != null) userListPage = Math.max(1, page);
+                userListIsSearch = true;
+                const perPage = parseInt(document.getElementById('userTablePerPage').value, 10) || 20;
+                userListPerPage = perPage;
                 const params = new URLSearchParams();
                 if (username) params.append('username', username);
-                if (role) params.append('role', role); // 後端已支援
-
+                if (role) params.append('role', role);
+                params.append('page', userListPage);
+                params.append('per_page', perPage);
                 try {
-                    document.getElementById('userTableBody').innerHTML = '<tr><td colspan="7" class="text-center text-primary"><i class="bi bi-search"></i> 搜尋中...</td></tr>';
+                    document.getElementById('userTableBody').innerHTML = '<tr><td colspan="8" class="text-center text-primary"><i class="bi bi-search"></i> 搜尋中...</td></tr>';
                     const res = await fetch('/admin/api/search_users?' + params.toString());
                     const data = await res.json();
                     if (!data.success) {
                         showAlert('搜尋失敗: ' + data.message, 'danger');
                         return;
                     }
-
+                    userListTotal = data.total != null ? data.total : data.users.length;
                     renderUserTable(data.users);
-                    showAlert(`成功找到 ${data.users.length} 筆用戶資料`, 'success');
-
+                    renderUserTablePagination(userListTotal, data.page || userListPage, data.per_page || perPage);
+                    if (userListPage === 1) showAlert('找到 ' + userListTotal + ' 筆符合的用戶', 'success');
                 } catch (err) {
                     console.error("搜尋用戶錯誤：", err);
                     showAlert('連線錯誤，搜尋失敗', 'danger');
-                    document.getElementById('userTableBody').innerHTML = '<tr><td colspan="7" class="text-center text-danger">連線錯誤，搜尋失敗</td></tr>';
+                    document.getElementById('userTableBody').innerHTML = '<tr><td colspan="8" class="text-center text-danger">連線錯誤，搜尋失敗</td></tr>';
                 }
-            };
+            }
+            window.searchUsers = () => doSearchUsers(1);
 
             /**
              * 重置搜尋
@@ -892,9 +1041,14 @@
             window.resetSearch = () => {
                 document.getElementById('searchUsername').value = '';
                 document.getElementById('filterRole').value = '';
-                loadUsers();
+                loadUsers(1);
                 showAlert('搜尋條件已重置', 'info');
             };
+
+            document.getElementById('userTablePerPage').addEventListener('change', function () {
+                const p = parseInt(this.value, 10);
+                if (userListIsSearch) doSearchUsers(1); else loadUsers(1);
+            });
 
             /**
              * 載入班級列表到 Select 元素中
@@ -1396,7 +1550,11 @@
                 try {
                     const res = await fetch('/semester/api/internship-configs');
                     const data = await res.json();
-                    internshipConfigList = (data.configs || []).filter(c => c.user_id == userId);
+                    // 顯示該生的個人設定 + 適用於該生的屆別預設（user_id 為 null 且 admission_year 相符）
+                    internshipConfigList = (data.configs || []).filter(c =>
+                        c.user_id == userId ||
+                        (c.user_id == null && internshipConfigAdmissionYear != null && c.admission_year == internshipConfigAdmissionYear)
+                    );
                 } catch (e) {
                     internshipConfigList = [];
                 }
@@ -1412,19 +1570,24 @@
                     return;
                 }
                 internshipConfigList.forEach(c => {
+                    const isGlobal = c.user_id == null;
+                    const badge = isGlobal ? ' <span class="badge bg-secondary">屆別預設</span>' : '';
+                    const delBtn = isGlobal
+                        ? '<span class="text-muted small">（屆別預設不可刪）</span>'
+                        : '<button type="button" class="btn btn-sm btn-outline-danger" onclick="deleteInternshipConfigRow(' + c.id + ')" title="刪除"><i class="bi bi-trash"></i></button>';
                     const tr = document.createElement('tr');
-                    tr.innerHTML = '<td>' + (c.semester_code || '-') + '</td><td>' + formatDateDisplay(c.intern_start_date) + '</td><td>' + formatDateDisplay(c.intern_end_date) + '</td>' +
-                        '<td class="text-end"><button type="button" class="btn btn-sm btn-outline-warning me-1" onclick="editInternshipConfigRow(' + c.id + ')" title="編輯"><i class="bi bi-pencil"></i></button>' +
-                        '<button type="button" class="btn btn-sm btn-outline-danger" onclick="deleteInternshipConfigRow(' + c.id + ')" title="刪除"><i class="bi bi-trash"></i></button></td>';
+                    tr.innerHTML = '<td>' + (c.semester_code || '-') + badge + '</td><td>' + formatDateDisplay(c.intern_start_date) + '</td><td>' + formatDateDisplay(c.intern_end_date) + '</td>' +
+                        '<td class="text-end"><button type="button" class="btn btn-sm btn-outline-warning me-1" onclick="editInternshipConfigRow(' + c.id + ', ' + (isGlobal ? 'true' : 'false') + ')" title="' + (isGlobal ? '覆蓋為個人設定' : '編輯') + '"><i class="bi bi-pencil"></i></button>' + delBtn + '</td>';
                     tbody.appendChild(tr);
                 });
             }
 
-            window.editInternshipConfigRow = (configId) => {
+            window.editInternshipConfigRow = (configId, isGlobalRow) => {
                 const c = internshipConfigList.find(x => x.id == configId);
                 if (!c) return;
-                document.getElementById('internshipConfigEditId').value = c.id;
-                document.getElementById('internshipConfigFormTitle').textContent = '編輯';
+                // 屆別預設列：不帶 editId，儲存時會新增一筆個人設定（覆蓋預設）
+                document.getElementById('internshipConfigEditId').value = (isGlobalRow ? '' : c.id);
+                document.getElementById('internshipConfigFormTitle').textContent = isGlobalRow ? '覆蓋為個人設定' : '編輯';
                 document.getElementById('internshipConfigSemesterId').value = c.semester_id;
                 document.getElementById('internshipConfigStartDate').value = c.intern_start_date || '';
                 document.getElementById('internshipConfigEndDate').value = c.intern_end_date || '';
@@ -1486,13 +1649,238 @@
                     if (data.success) {
                         const listRes = await fetch('/semester/api/internship-configs');
                         const listData = await listRes.json();
-                        internshipConfigList = (listData.configs || []).filter(c => c.user_id == internshipConfigUserId);
+                        internshipConfigList = (listData.configs || []).filter(c =>
+                            c.user_id == internshipConfigUserId ||
+                            (c.user_id == null && internshipConfigAdmissionYear != null && c.admission_year == internshipConfigAdmissionYear)
+                        );
                         renderInternshipConfigModalTable();
                         document.getElementById('internshipConfigFormBlock').style.display = 'none';
                         showAlert(editId ? '已更新' : '已新增', 'success');
                     } else showAlert('儲存失敗：' + (data.message || ''), 'danger');
                 } catch (e) { showAlert('連線錯誤', 'danger'); }
             };
+
+            // ---------- 全部套用（屆別預設）/ 批次修改 ----------
+            window.isBatchMode = false;
+
+            window.toggleBatchMode = function () {
+                window.isBatchMode = !window.isBatchMode;
+                const btn = document.getElementById('batchEditBtn');
+                const saveBtn = document.getElementById('saveBatchBtn');
+                document.querySelectorAll('.batch-checkbox-cell').forEach(el => {
+                    el.style.display = window.isBatchMode ? 'table-cell' : 'none';
+                });
+                if (window.isBatchMode) {
+                    btn.innerHTML = '<i class="bi bi-x-circle"></i> 取消批次';
+                    btn.classList.replace('btn-warning', 'btn-secondary');
+                    saveBtn.style.display = 'inline-block';
+                } else {
+                    btn.innerHTML = '<i class="bi bi-check-all"></i> 批次修改實習週期';
+                    btn.classList.replace('btn-secondary', 'btn-warning');
+                    saveBtn.style.display = 'none';
+                    saveBtn.disabled = true;
+                    document.querySelectorAll('.user-row-checkbox').forEach(cb => { cb.checked = false; });
+                    const selectAll = document.getElementById('userTableSelectAll');
+                    if (selectAll) selectAll.checked = false;
+                }
+            };
+
+            document.getElementById('userTableSelectAll').addEventListener('change', function () {
+                document.querySelectorAll('.user-row-checkbox').forEach(cb => { cb.checked = this.checked; });
+                document.getElementById('saveBatchBtn').disabled = !this.checked;
+            });
+
+            document.getElementById('userTableBody').addEventListener('change', function (e) {
+                if (!e.target.classList.contains('user-row-checkbox')) return;
+                const n = document.querySelectorAll('.user-row-checkbox:checked').length;
+                document.getElementById('saveBatchBtn').disabled = n === 0;
+                const selectAll = document.getElementById('userTableSelectAll');
+                const total = document.querySelectorAll('.user-row-checkbox').length;
+                selectAll.checked = total > 0 && n === total;
+            });
+
+            // 入學年度 ↔ 實習學期 對應：111 學年 → 1142，110 學年 → 1132（公式：學期 code = (入學年度+3)*10+2）
+            function admissionYearToSemesterCode(year) {
+                const y = parseInt(year, 10);
+                if (isNaN(y)) return null;
+                return (y + 3) * 10 + 2;
+            }
+            function semesterCodeToAdmissionYear(code) {
+                const c = parseInt(code, 10);
+                if (isNaN(c)) return null;
+                return Math.floor(c / 10) - 3;
+            }
+
+            window.openGlobalConfigModal = async function () {
+                const yearSel = document.getElementById('g_admission_year');
+                const semSel = document.getElementById('g_semester_id');
+                yearSel.innerHTML = '<option value="">請選擇</option>';
+                semSel.innerHTML = '<option value="">請選擇</option>';
+                try {
+                    const res = await fetch('/semester/api/internship-configs/options');
+                    const data = await res.json();
+                    if (data.success) {
+                        (data.admission_years || []).forEach(y => { yearSel.innerHTML += '<option value="' + y + '">' + y + ' 學年</option>'; });
+                        (data.semesters || []).forEach(s => {
+                            const code = s.code != null ? s.code : s.id;
+                            semSel.innerHTML += '<option value="' + s.id + '" data-code="' + code + '">' + code + '</option>';
+                        });
+                    }
+                } catch (e) {}
+                document.getElementById('g_start_date').value = '';
+                document.getElementById('g_end_date').value = '';
+                new bootstrap.Modal(document.getElementById('globalConfigModal')).show();
+            };
+
+            async function fillGlobalDefaultDates() {
+                const yearSel = document.getElementById('g_admission_year');
+                const semSel = document.getElementById('g_semester_id');
+                const startInp = document.getElementById('g_start_date');
+                const endInp = document.getElementById('g_end_date');
+                const year = yearSel && yearSel.value;
+                const semesterId = semSel && semSel.value;
+                if (!year || !semesterId) {
+                    if (startInp) startInp.value = '';
+                    if (endInp) endInp.value = '';
+                    return;
+                }
+                try {
+                    const res = await fetch('/semester/api/internship-configs/global-default?admission_year=' + encodeURIComponent(year) + '&semester_id=' + encodeURIComponent(semesterId));
+                    const data = await res.json();
+                    if (data.success && data.found && data.intern_start_date != null && data.intern_end_date != null) {
+                        if (startInp) startInp.value = data.intern_start_date;
+                        if (endInp) endInp.value = data.intern_end_date;
+                    } else {
+                        if (startInp) startInp.value = '';
+                        if (endInp) endInp.value = '';
+                    }
+                } catch (e) {
+                    if (startInp) startInp.value = '';
+                    if (endInp) endInp.value = '';
+                }
+            }
+
+            (function setupGlobalConfigSync() {
+                const yearSel = document.getElementById('g_admission_year');
+                const semSel = document.getElementById('g_semester_id');
+                if (!yearSel || !semSel) return;
+                yearSel.addEventListener('change', function () {
+                    const year = this.value;
+                    if (!year) { semSel.value = ''; fillGlobalDefaultDates(); return; }
+                    const code = admissionYearToSemesterCode(year);
+                    const opt = Array.from(semSel.options).find(o => o.getAttribute('data-code') === String(code));
+                    if (opt) semSel.value = opt.value;
+                    fillGlobalDefaultDates();
+                });
+                semSel.addEventListener('change', function () {
+                    const opt = this.options[this.selectedIndex];
+                    if (!opt || !opt.value) { yearSel.value = ''; fillGlobalDefaultDates(); return; }
+                    const code = opt.getAttribute('data-code');
+                    const year = semesterCodeToAdmissionYear(code);
+                    if (year != null) {
+                        const yearOpt = Array.from(yearSel.options).find(o => o.value === String(year));
+                        if (yearOpt) yearSel.value = yearOpt.value;
+                    }
+                    fillGlobalDefaultDates();
+                });
+            })();
+
+            window.submitGlobalConfig = async function () {
+                const admission_year = document.getElementById('g_admission_year').value;
+                const semester_id = document.getElementById('g_semester_id').value;
+                const start = document.getElementById('g_start_date').value;
+                const end = document.getElementById('g_end_date').value;
+                if (!admission_year || !semester_id || !start || !end) {
+                    showAlert('請填寫入學年度、實習學期、開始與結束日期', 'warning');
+                    return;
+                }
+                if (new Date(start) > new Date(end)) {
+                    showAlert('開始日期不可晚於結束日期', 'warning');
+                    return;
+                }
+                try {
+                    const res = await fetch('/semester/api/internship-configs/global', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            admission_year: parseInt(admission_year, 10),
+                            semester_id: parseInt(semester_id, 10),
+                            intern_start_date: start,
+                            intern_end_date: end
+                        })
+                    });
+                    const data = await res.json();
+                    if (data.success) {
+                        bootstrap.Modal.getInstance(document.getElementById('globalConfigModal')).hide();
+                        loadUsers();
+                        showAlert('✅ ' + data.message, 'success');
+                    } else {
+                        showAlert('❌ ' + (data.message || '儲存失敗'), 'danger');
+                    }
+                } catch (e) {
+                    showAlert('❌ 連線錯誤：' + e.message, 'danger');
+                }
+            };
+
+            window.openBatchEditModal = async function () {
+                const ids = Array.from(document.querySelectorAll('.user-row-checkbox:checked')).map(cb => cb.value);
+                if (ids.length === 0) {
+                    showAlert('請先勾選至少一位學生', 'warning');
+                    return;
+                }
+                document.getElementById('batchSelectedCount').textContent = ids.length;
+                const semSel = document.getElementById('batchModalSemester');
+                semSel.innerHTML = '<option value="">請選擇</option>';
+                try {
+                    const res = await fetch('/semester/api/internship-configs/options');
+                    const data = await res.json();
+                    if (data.success && data.semesters)
+                        data.semesters.forEach(s => { semSel.innerHTML += '<option value="' + s.id + '">' + (s.code || s.id) + '</option>'; });
+                } catch (e) {}
+                document.getElementById('batchModalStart').value = '';
+                document.getElementById('batchModalEnd').value = '';
+                window._batchSelectedUserIds = ids;
+                new bootstrap.Modal(document.getElementById('batchInternshipConfigModal')).show();
+            };
+
+            document.getElementById('btnBatchModalConfirm').addEventListener('click', async () => {
+                const ids = window._batchSelectedUserIds;
+                if (!ids || ids.length === 0) return;
+                const semester_id = document.getElementById('batchModalSemester').value;
+                const start = document.getElementById('batchModalStart').value;
+                const end = document.getElementById('batchModalEnd').value;
+                if (!semester_id || !start || !end) {
+                    showAlert('請填寫實習學期、開始與結束日期', 'warning');
+                    return;
+                }
+                if (new Date(start) > new Date(end)) {
+                    showAlert('開始日期不可晚於結束日期', 'warning');
+                    return;
+                }
+                try {
+                    const res = await fetch('/semester/api/internship-configs/batch', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            user_ids: ids,
+                            semester_id: parseInt(semester_id, 10),
+                            intern_start_date: start,
+                            intern_end_date: end
+                        })
+                    });
+                    const data = await res.json();
+                    if (data.success) {
+                        bootstrap.Modal.getInstance(document.getElementById('batchInternshipConfigModal')).hide();
+                        toggleBatchMode();
+                        loadUsers();
+                        showAlert('✅ ' + data.message, 'success');
+                    } else {
+                        showAlert('❌ ' + (data.message || '批次儲存失敗'), 'danger');
+                    }
+                } catch (e) {
+                    showAlert('❌ 連線錯誤：' + e.message, 'danger');
+                }
+            });
 
             // 初始載入
             loadUsers();

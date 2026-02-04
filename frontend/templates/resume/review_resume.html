@@ -167,7 +167,7 @@
         </select>
         <select id="statusFilter" style="padding: 10px 12px; border-radius: 8px; border: 1px solid #e2e8f0; min-width: 150px;">
           <option value="">所有狀態</option>
-          <option value="pending">待審核</option>
+          <option value="uploaded">待審核</option>
           <option value="approved">通過</option>
           <option value="rejected">退件</option>
         </select>
@@ -244,12 +244,12 @@
 
     // 定義狀態顏色，approved 對應 success (綠色)
     function statusColor(status) {
-      return { 'pending': 'info', 'approved': 'success', 'rejected': 'danger', 'submitted': 'info', 'uploaded': 'info' }[status] || 'secondary';
+      return { 'uploaded': 'info', 'approved': 'success', 'rejected': 'danger' }[status] || 'secondary';
     }
 
     // 定義狀態文字，approved 對應 "通過"
     function mapStatus(status) {
-      return { 'pending': '待審核', 'approved': '通過', 'rejected': '退件', 'submitted': '待審核', 'uploaded': '待審核' }[status] || '待審核';
+      return { 'uploaded': '待審核', 'approved': '通過', 'rejected': '退件' }[status] || '待審核';
     }
 
     function escapeHtml(text) {
@@ -378,7 +378,7 @@
 
               if (targetStatus) {
                  const statusSelect = document.getElementById('statusFilter');
-                 const mapped = (targetStatus === 'submitted' || targetStatus === 'uploaded') ? 'pending' : targetStatus;
+                 const mapped = targetStatus === 'uploaded' ? 'uploaded' : targetStatus;
                  if(statusSelect) statusSelect.value = mapped;
               }
 
@@ -613,7 +613,7 @@
         let matchesStatus = true;
         if (status) {
            // review_resume.html 使用 teacher_review_status 欄位
-           const statusStr = isCompanyView ? (r.display_status || '') : (r.teacher_review_status || 'pending');
+           const statusStr = isCompanyView ? (r.display_status || '') : (r.teacher_review_status || 'uploaded');
            matchesStatus = statusStr === status;  // 使用嚴格相等，確保精確匹配
         }
 
@@ -654,7 +654,7 @@
         const comp = r.company_name || '—';
         const job = r.job_title || r.jobTitle || '—';
         const pid = r.preference_id || null;
-        const st = r.teacher_review_status || 'pending';  // 直接使用 teacher_review_status，不 fallback 到 display_status
+        const st = r.teacher_review_status || 'uploaded';  // 直接使用 teacher_review_status，不 fallback 到 display_status
         const cm = r.comment || '';
 
         // 狀態篩選
@@ -753,7 +753,7 @@
         let btns = `<div style="display:flex; align-items:center;">${dlBtn}`;
         btns += rejectBtn;
         if (!isDirectorMode) {
-            btns += `<button class="btn btn-sm btn-outline-success" onclick="${approveClick}">完成</button>`;
+            btns += `<button class="btn btn-sm btn-outline-success" onclick="${approveClick}">通過</button>`;
         }
         btns += `</div>`;
         return btns;
@@ -787,6 +787,11 @@
       }).then(res => res.json()).then(data => {
           if (data.success) {
               alert("✅ 狀態更新成功");
+              // 清除狀態篩選器，確保更新後的履歷可見
+              const statusFilter = document.getElementById('statusFilter');
+              if (statusFilter) {
+                statusFilter.value = '';
+              }
               // 重新載入資料
               if (userRole === 'vendor') {
                 fetch('/vendor/api/resumes').then(r=>r.json()).then(d=>{
@@ -794,12 +799,37 @@
                 });
               } else {
                 fetch('/api/teacher_review_resumes').then(r=>r.json()).then(d=>{
-                  if(d.success) { allResumes=d.data || []; applyFilters(); }
+                  if(d.success) { 
+                    allResumes=d.data || []; 
+                    console.log('🔍 [DEBUG] 重新載入指導老師履歷資料:', allResumes.length, '筆');
+                    // 調試：檢查特定履歷的狀態
+                    if (allResumes.length > 0) {
+                      const updatedResume = allResumes.find(r => r.id === resumeId);
+                      if (updatedResume) {
+                        console.log('🔍 [DEBUG] 更新後的履歷狀態:', {
+                          id: updatedResume.id,
+                          teacher_review_status: updatedResume.teacher_review_status,
+                          display_status: updatedResume.display_status,
+                          status: updatedResume.status
+                        });
+                      } else {
+                        console.log('⚠️ [DEBUG] 找不到更新後的履歷，resumeId:', resumeId);
+                      }
+                    }
+                    applyFilters(); 
+                  } else {
+                    console.error('❌ [DEBUG] 重新載入失敗:', d);
+                  }
+                }).catch(err => {
+                  console.error('❌ [DEBUG] 重新載入錯誤:', err);
                 });
               }
           } else {
               alert("失敗：" + data.message);
           }
+      }).catch(err => {
+          console.error('❌ [DEBUG] 更新狀態錯誤:', err);
+          alert("更新失敗，請稍後再試");
       });
     }
 

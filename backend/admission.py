@@ -1420,10 +1420,126 @@ def get_all_students():
             if student['student_id'] not in matched_student_ids
         ]
         
+        # 為每個學生獲取志願序資訊（只包括 preference_order 在 1-5 範圍內的）
+        for student in unmatched_students:
+            student_id = student['student_id']
+            if current_semester_id:
+                cursor.execute("""
+                    SELECT 
+                        sp.preference_order,
+                        ic.company_name,
+                        ij.title AS job_title
+                    FROM student_preferences sp
+                    LEFT JOIN internship_companies ic ON sp.company_id = ic.id
+                    LEFT JOIN internship_jobs ij ON sp.job_id = ij.id
+                    WHERE sp.student_id = %s
+                      AND sp.semester_id = %s
+                      AND sp.preference_order >= 1
+                      AND sp.preference_order <= 5
+                    ORDER BY sp.preference_order ASC
+                """, (student_id, current_semester_id))
+            else:
+                cursor.execute("""
+                    SELECT 
+                        sp.preference_order,
+                        ic.company_name,
+                        ij.title AS job_title
+                    FROM student_preferences sp
+                    LEFT JOIN internship_companies ic ON sp.company_id = ic.id
+                    LEFT JOIN internship_jobs ij ON sp.job_id = ij.id
+                    WHERE sp.student_id = %s
+                      AND sp.preference_order >= 1
+                      AND sp.preference_order <= 5
+                    ORDER BY sp.preference_order ASC
+                """, (student_id,))
+            
+            preferences = cursor.fetchall() or []
+            student['preferences'] = preferences
+        
         return jsonify({
             "success": True,
             "students": unmatched_students,
             "count": len(unmatched_students)
+        })
+    
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"success": False, "message": f"查詢失敗: {str(e)}"}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+# =========================================================
+# API: 獲取學生的志願序資料（主任查看）
+# =========================================================
+@admission_bp.route("/api/get_student_preferences", methods=["GET"])
+def get_student_preferences():
+    """獲取指定學生的志願序資料（主任可以查看）"""
+    if 'user_id' not in session or session.get('role') != 'director':
+        return jsonify({"success": False, "message": "未授權"}), 403
+    
+    student_id = request.args.get('student_id')
+    if not student_id:
+        return jsonify({"success": False, "message": "請提供學生ID"}), 400
+    
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+    
+    try:
+        # 獲取當前學期ID
+        current_semester_id = get_current_semester_id(cursor)
+        
+        # 查詢學生的志願序
+        if current_semester_id:
+            cursor.execute("""
+                SELECT 
+                    sp.id AS preference_id,
+                    sp.preference_order,
+                    sp.company_id,
+                    sp.job_id,
+                    sp.status,
+                    sp.submitted_at,
+                    ic.company_name,
+                    ij.title AS job_title
+                FROM student_preferences sp
+                LEFT JOIN internship_companies ic ON sp.company_id = ic.id
+                LEFT JOIN internship_jobs ij ON sp.job_id = ij.id
+                WHERE sp.student_id = %s
+                  AND sp.semester_id = %s
+                ORDER BY sp.preference_order ASC
+            """, (student_id, current_semester_id))
+        else:
+            cursor.execute("""
+                SELECT 
+                    sp.id AS preference_id,
+                    sp.preference_order,
+                    sp.company_id,
+                    sp.job_id,
+                    sp.status,
+                    sp.submitted_at,
+                    ic.company_name,
+                    ij.title AS job_title
+                FROM student_preferences sp
+                LEFT JOIN internship_companies ic ON sp.company_id = ic.id
+                LEFT JOIN internship_jobs ij ON sp.job_id = ij.id
+                WHERE sp.student_id = %s
+                ORDER BY sp.preference_order ASC
+            """, (student_id,))
+        
+        preferences = cursor.fetchall() or []
+        
+        # 格式化日期
+        for pref in preferences:
+            if isinstance(pref.get('submitted_at'), datetime):
+                pref['submitted_at'] = pref['submitted_at'].strftime("%Y-%m-%d %H:%M:%S")
+            elif pref.get('submitted_at'):
+                pref['submitted_at'] = str(pref['submitted_at'])
+            else:
+                pref['submitted_at'] = ""
+        
+        return jsonify({
+            "success": True,
+            "preferences": preferences
         })
     
     except Exception as e:
@@ -1691,6 +1807,7 @@ def director_matching_results():
             LEFT JOIN classes c ON u.class_id = c.id
             LEFT JOIN users v ON md.vendor_id = v.id
             WHERE md.semester_id = %s
+            AND md.director_decision != 'Rejected'  -- 排除已移除（Rejected）的學生，這些學生應該顯示在未錄取名單中
             ORDER BY 
                 CASE md.director_decision 
                     WHEN 'Approved' THEN 1 
@@ -2383,6 +2500,89 @@ def director_update_position():
         if conn:
             conn.rollback()
         return jsonify({"success": False, "message": f"更新失敗: {str(e)}"}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+# =========================================================
+# API: 主任調整正取名單中學生的順序
+# =========================================================
+@admission_bp.route("/api/director_swap_positions", methods=["POST"])
+def director_swap_positions():
+    """主任調整正取名單中兩個學生的位置順序"""
+    if 'user_id' not in session or session.get('role') != 'director':
+        return jsonify({"success": False, "message": "未授權"}), 403
+    
+    data = request.get_json() or {}
+    match_id1 = data.get("match_id1")
+    match_id2 = data.get("match_id2")
+    
+    if not match_id1 or not match_id2:
+        return jsonify({"success": False, "message": "請提供兩個記錄ID"}), 400
+    
+    director_id = session.get('user_id')
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+    
+    try:
+        # 獲取兩個記錄的當前 final_rank
+        cursor.execute("""
+            SELECT match_id, final_rank, director_decision
+            FROM manage_director
+            WHERE match_id IN (%s, %s)
+        """, (match_id1, match_id2))
+        records = cursor.fetchall()
+        
+        if len(records) != 2:
+            return jsonify({"success": False, "message": "找不到指定的記錄"}), 404
+        
+        record1 = next((r for r in records if r['match_id'] == match_id1), None)
+        record2 = next((r for r in records if r['match_id'] == match_id2), None)
+        
+        if not record1 or not record2:
+            return jsonify({"success": False, "message": "找不到指定的記錄"}), 404
+        
+        # 確保兩個記錄都是正取狀態
+        if record1.get('director_decision') != 'Approved' or record2.get('director_decision') != 'Approved':
+            return jsonify({"success": False, "message": "只能調整正取學生的順序"}), 400
+        
+        rank1 = record1.get('final_rank')
+        rank2 = record2.get('final_rank')
+        
+        if rank1 is None or rank2 is None:
+            return jsonify({"success": False, "message": "學生必須有正取位置才能調整順序"}), 400
+        
+        # 交換兩個學生的 final_rank
+        cursor.execute("""
+            UPDATE manage_director
+            SET final_rank = %s,
+                is_adjusted = TRUE,
+                reviewer_id = %s,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE match_id = %s
+        """, (rank2, director_id, match_id1))
+        
+        cursor.execute("""
+            UPDATE manage_director
+            SET final_rank = %s,
+                is_adjusted = TRUE,
+                reviewer_id = %s,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE match_id = %s
+        """, (rank1, director_id, match_id2))
+        
+        conn.commit()
+        
+        return jsonify({
+            "success": True,
+            "message": "已交換學生位置"
+        })
+    
+    except Exception as e:
+        traceback.print_exc()
+        if conn:
+            conn.rollback()
+        return jsonify({"success": False, "message": f"調整失敗: {str(e)}"}), 500
     finally:
         cursor.close()
         conn.close()

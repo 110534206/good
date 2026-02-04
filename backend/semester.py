@@ -36,7 +36,9 @@ def get_current_semester_id(cursor):
 def is_student_in_current_internship(cursor, user_id):
     """
     判斷該使用者是否為學生且其實習學期為當前學期。
-    僅當 users.current_semester_code == 當前學期 id 時回傳 True，
+    採用預設值機制：存在一筆 internship_configs 符合
+    (user_id = 該生 OR (user_id IS NULL AND admission_year = 該生屆數)) AND semester_id = 當前學期，
+    ORDER BY user_id DESC 取一筆（個人設定優先）。
     供「查看公司／投遞履歷」「填寫志願序」等頁面限制使用。
     """
     if not user_id:
@@ -45,17 +47,32 @@ def is_student_in_current_internship(cursor, user_id):
     if not current_semester_id:
         return False
     cursor.execute(
-        "SELECT role, current_semester_code FROM users WHERE id = %s",
+        "SELECT role, admission_year, username FROM users WHERE id = %s",
         (user_id,)
     )
     row = cursor.fetchone()
     if not row or row.get("role") != "student":
         return False
-    # current_semester_code 存的是 semester id（實習學期）
-    user_semester_id = row.get("current_semester_code")
-    if user_semester_id is None:
-        return False
-    return int(user_semester_id) == int(current_semester_id)
+    admission_year_val = None
+    if row.get("admission_year") is not None and str(row.get("admission_year", "")).strip() != "":
+        try:
+            admission_year_val = int(row["admission_year"])
+        except (TypeError, ValueError):
+            pass
+    if admission_year_val is None and row.get("username") and len(row.get("username", "")) >= 3:
+        try:
+            admission_year_val = int(row["username"][:3])
+        except (TypeError, ValueError):
+            pass
+    cursor.execute(
+        """SELECT 1 FROM internship_configs
+           WHERE semester_id = %s
+             AND (user_id = %s OR (user_id IS NULL AND admission_year = %s))
+           ORDER BY user_id DESC
+           LIMIT 1""",
+        (current_semester_id, user_id, admission_year_val)
+    )
+    return cursor.fetchone() is not None
 
 # =========================================================
 # API: 取得當前學期
@@ -462,18 +479,29 @@ def list_internship_configs():
 
 @semester_bp.route("/api/internship-configs/options", methods=["GET"])
 def internship_config_options():
-    """取得下拉選單：學期列表、具 admission_year 的學生（管理員/科助）"""
+    """取得下拉選單：學期列表、入學年度（來自 internship_configs + 學生屆別）、具 admission_year 的學生（管理員/科助）"""
     if session.get('role') not in ['admin', 'ta']:
         return jsonify({"success": False, "message": "未授權"}), 403
     try:
         conn = get_db()
         cursor = conn.cursor(dictionary=True)
+        # 實習學期：以 internship_configs 出現過的 semester_id 對應的學期為主，若無則回傳全部學期
         cursor.execute("""
-            SELECT id, code, start_date, end_date
-            FROM semesters
-            ORDER BY code DESC
+            SELECT DISTINCT s.id, s.code, s.start_date, s.end_date
+            FROM semesters s
+            INNER JOIN internship_configs ic ON ic.semester_id = s.id
+            ORDER BY s.code DESC
         """)
-        semesters = cursor.fetchall()
+        semesters_from_config = cursor.fetchall()
+        if not semesters_from_config:
+            cursor.execute("""
+                SELECT id, code, start_date, end_date
+                FROM semesters
+                ORDER BY code DESC
+            """)
+            semesters = cursor.fetchall()
+        else:
+            semesters = semesters_from_config
         for s in semesters:
             for key in ('start_date', 'end_date'):
                 v = s.get(key)
@@ -486,10 +514,34 @@ def internship_config_options():
             ORDER BY admission_year DESC, id
         """)
         students = cursor.fetchall()
+        # 入學年度：來自 internship_configs 的 DISTINCT admission_year，再合併學生屆別
+        cursor.execute("""
+            SELECT DISTINCT admission_year
+            FROM internship_configs
+            ORDER BY admission_year DESC
+        """)
+        years_from_config = [r["admission_year"] for r in cursor.fetchall() if r.get("admission_year") is not None]
+        cursor.execute("""
+            SELECT DISTINCT admission_year
+            FROM users
+            WHERE role = 'student' AND admission_year IS NOT NULL
+            ORDER BY admission_year DESC
+        """)
+        years_from_users = [r["admission_year"] for r in cursor.fetchall() if r.get("admission_year") is not None]
+        seen = set()
+        admission_years = []
+        for y in years_from_config + years_from_users:
+            if y is None:
+                continue
+            if y not in seen:
+                seen.add(y)
+                admission_years.append(y)
+        admission_years.sort(reverse=True)
         return jsonify({
             "success": True,
             "semesters": semesters,
-            "students": students
+            "students": students,
+            "admission_years": admission_years
         })
     except Exception as e:
         traceback.print_exc()
@@ -528,6 +580,39 @@ def create_internship_config():
         cursor.close()
         conn.close()
 
+@semester_bp.route("/api/internship-configs/global-default", methods=["GET"])
+def get_global_internship_default():
+    """取得某屆+某學期的屆別預設實習日期（user_id IS NULL 的那筆），供全部套用彈窗帶入預設。"""
+    if session.get('role') not in ['admin', 'ta']:
+        return jsonify({"success": False, "message": "未授權"}), 403
+    admission_year = request.args.get("admission_year", type=int)
+    semester_id = request.args.get("semester_id", type=int)
+    if admission_year is None or semester_id is None:
+        return jsonify({"success": False, "message": "請提供 admission_year 與 semester_id"}), 400
+    try:
+        conn = get_db()
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute("""
+            SELECT intern_start_date, intern_end_date
+            FROM internship_configs
+            WHERE admission_year = %s AND user_id IS NULL AND semester_id = %s
+            LIMIT 1
+        """, (admission_year, semester_id))
+        row = cursor.fetchone()
+        if not row:
+            return jsonify({"success": True, "found": False})
+        for key in ('intern_start_date', 'intern_end_date'):
+            v = row.get(key)
+            if isinstance(v, (datetime, date)):
+                row[key] = v.strftime("%Y-%m-%d")
+        return jsonify({"success": True, "found": True, "intern_start_date": row["intern_start_date"], "intern_end_date": row["intern_end_date"]})
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"success": False, "message": str(e)}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
 @semester_bp.route("/api/internship-configs/<int:config_id>", methods=["PUT"])
 def update_internship_config(config_id):
     """更新實習配置（管理員/科助）"""
@@ -553,6 +638,112 @@ def update_internship_config(config_id):
         if cursor.rowcount == 0:
             return jsonify({"success": False, "message": "找不到該筆配置"}), 404
         return jsonify({"success": True, "message": "已更新"})
+    except Exception as e:
+        traceback.print_exc()
+        conn.rollback()
+        return jsonify({"success": False, "message": str(e)}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+@semester_bp.route("/api/internship-configs/global", methods=["POST"])
+def save_global_internship_config():
+    """儲存屆別預設值（user_id = NULL），供全屆學生共用。若該屆+學期已存在預設則更新。"""
+    if session.get('role') not in ['admin', 'ta']:
+        return jsonify({"success": False, "message": "未授權"}), 403
+    data = request.get_json() or {}
+    admission_year = data.get("admission_year")
+    semester_id = data.get("semester_id")
+    intern_start_date = data.get("intern_start_date")
+    intern_end_date = data.get("intern_end_date")
+    if admission_year is None or not semester_id or not intern_start_date or not intern_end_date:
+        return jsonify({"success": False, "message": "請填寫入學年度、學期、實習開始日與結束日"}), 400
+    try:
+        conn = get_db()
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute("""
+            SELECT id FROM internship_configs
+            WHERE admission_year = %s AND user_id IS NULL AND semester_id = %s
+            LIMIT 1
+        """, (int(admission_year), int(semester_id)))
+        existing = cursor.fetchone()
+        if existing:
+            cursor.execute("""
+                UPDATE internship_configs
+                SET intern_start_date = %s, intern_end_date = %s
+                WHERE id = %s
+            """, (intern_start_date, intern_end_date, existing["id"]))
+            conn.commit()
+            return jsonify({"success": True, "message": "已更新該屆預設值"})
+        cursor.execute("""
+            INSERT INTO internship_configs (admission_year, user_id, semester_id, intern_start_date, intern_end_date)
+            VALUES (%s, NULL, %s, %s, %s)
+        """, (int(admission_year), int(semester_id), intern_start_date, intern_end_date))
+        conn.commit()
+        return jsonify({"success": True, "message": "已新增該屆預設值", "id": cursor.lastrowid})
+    except Exception as e:
+        traceback.print_exc()
+        conn.rollback()
+        return jsonify({"success": False, "message": str(e)}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+@semester_bp.route("/api/internship-configs/batch", methods=["POST"])
+def batch_internship_config():
+    """為多個學生建立個人實習配置（同一學期、同一日期）。僅針對勾選的 user_id 寫入。"""
+    if session.get('role') not in ['admin', 'ta']:
+        return jsonify({"success": False, "message": "未授權"}), 403
+    data = request.get_json() or {}
+    user_ids = data.get("user_ids")
+    semester_id = data.get("semester_id")
+    intern_start_date = data.get("intern_start_date")
+    intern_end_date = data.get("intern_end_date")
+    if not user_ids or not isinstance(user_ids, list) or not semester_id or not intern_start_date or not intern_end_date:
+        return jsonify({"success": False, "message": "請提供 user_ids 陣列、學期、實習開始日與結束日"}), 400
+    try:
+        conn = get_db()
+        cursor = conn.cursor(dictionary=True)
+        created = 0
+        updated = 0
+        for uid in user_ids:
+            uid = int(uid)
+            cursor.execute("SELECT admission_year, username FROM users WHERE id = %s AND role = 'student'", (uid,))
+            u = cursor.fetchone()
+            if not u:
+                continue
+            ay = u.get("admission_year")
+            if ay is None or str(ay).strip() == "":
+                try:
+                    ay = int(u.get("username", "000")[:3])
+                except (TypeError, ValueError):
+                    ay = None
+            if ay is None:
+                continue
+            try:
+                admission_year = int(ay)
+            except (TypeError, ValueError):
+                continue
+            cursor.execute(
+                "SELECT id FROM internship_configs WHERE user_id = %s AND semester_id = %s LIMIT 1",
+                (uid, int(semester_id))
+            )
+            ex = cursor.fetchone()
+            if ex:
+                cursor.execute("""
+                    UPDATE internship_configs
+                    SET intern_start_date = %s, intern_end_date = %s
+                    WHERE id = %s
+                """, (intern_start_date, intern_end_date, ex["id"]))
+                updated += 1
+            else:
+                cursor.execute("""
+                    INSERT INTO internship_configs (admission_year, user_id, semester_id, intern_start_date, intern_end_date)
+                    VALUES (%s, %s, %s, %s, %s)
+                """, (admission_year, uid, int(semester_id), intern_start_date, intern_end_date))
+                created += 1
+        conn.commit()
+        return jsonify({"success": True, "message": f"已處理：新增 {created} 筆、更新 {updated} 筆"})
     except Exception as e:
         traceback.print_exc()
         conn.rollback()

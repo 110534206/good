@@ -280,7 +280,7 @@
     <section class="card-container">
       <div class="card" onclick="location.href='/semester/manage'">
         <h3>學期管理</h3>
-        <p>設定當前學期、建立新學期與自動切換排程。</p>
+        <p>設定當前學期、自動切換排程。</p>
         <a href="/semester/manage">前往設定</a>
       </div>
       <div class="card" onclick="location.href='/admin/user_management'">
@@ -379,7 +379,6 @@
         .then(data => {
           console.log('API 回應:', data);
           if (data.success && data.user && data.user.avatar_url) {
-            // 確保頭像URL是完整的路徑，並加上時間戳避免快取
             const rawUrl = data.user.avatar_url.startsWith('http') ?
               data.user.avatar_url :
               window.location.origin + data.user.avatar_url;
