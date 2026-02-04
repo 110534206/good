@@ -640,10 +640,21 @@ def confirm_matching_page():
 def student_home():
     return render_template('user_shared/student_home.html')
 
+# 功能操作說明頁面
+@users_bp.route('/operation_manual')
+def operation_manual():
+    return render_template('user_shared/operation_manual.html')
+
 # 實習流程常見問題頁面
 @users_bp.route('/intern_faq')
 def intern_faq():
     return render_template('user_shared/intern_faq.html')
+
+# 實習常見問題頁面（第二版）
+@users_bp.route('/intern_faq_2')
+@users_bp.route('/intern_faq_2/')
+def intern_faq_2():
+    return render_template('user_shared/intern_faq_2.html')
 
 # 使用者首頁 (主任前台)
 @users_bp.route("/director_home")
