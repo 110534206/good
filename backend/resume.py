@@ -3645,7 +3645,68 @@ def review_resume(resume_id):
         else:
             reviewer_name = "審核者"
 
-        # 5. 處理 Email 寄送與通知 (僅在狀態改變時處理)
+        # 5. 如果是廠商審核，更新 resume_applications 表
+        if user_role == 'vendor':
+            # 獲取 preference_id（如果有的話）來確定公司 ID
+            preference_id_param = data.get('preference_id')
+            company_id = None
+            
+            if preference_id_param:
+                # 從 preference_id 獲取公司 ID
+                cursor.execute("""
+                    SELECT company_id FROM student_preferences WHERE id = %s
+                """, (preference_id_param,))
+                pref_result = cursor.fetchone()
+                if pref_result:
+                    company_id = pref_result.get('company_id')
+            
+            # 如果沒有 preference_id，嘗試從 student_job_applications 獲取公司 ID
+            if not company_id:
+                cursor.execute("""
+                    SELECT DISTINCT company_id FROM student_job_applications
+                    WHERE resume_id = %s AND student_id = %s
+                    ORDER BY applied_at DESC
+                    LIMIT 1
+                """, (resume_id, student_user_id))
+                sja_result = cursor.fetchone()
+                if sja_result:
+                    company_id = sja_result.get('company_id')
+            
+            # 如果找到公司 ID，更新或創建 resume_applications 記錄
+            if company_id:
+                # 檢查是否已存在記錄
+                cursor.execute("""
+                    SELECT id FROM resume_applications
+                    WHERE resumes_id = %s AND internship_companies_id = %s
+                """, (resume_id, company_id))
+                existing_ra = cursor.fetchone()
+                
+                # 映射狀態：approved -> accepted, rejected -> rejected
+                apply_status_map = {
+                    'approved': 'accepted',
+                    'rejected': 'rejected'
+                }
+                new_apply_status = apply_status_map.get(status, 'reviewing')
+                
+                if existing_ra:
+                    # 更新現有記錄
+                    cursor.execute("""
+                        UPDATE resume_applications
+                        SET apply_status = %s,
+                            company_comment = %s,
+                            updated_at = NOW()
+                        WHERE id = %s
+                    """, (new_apply_status, comment or '', existing_ra['id']))
+                else:
+                    # 創建新記錄
+                    cursor.execute("""
+                        INSERT INTO resume_applications
+                        (resumes_id, internship_companies_id, apply_status, company_comment, created_at, updated_at)
+                        VALUES (%s, %s, %s, %s, NOW(), NOW())
+                    """, (resume_id, company_id, new_apply_status, comment or ''))
+                print(f"✅ 已更新 resume_applications 表 (resume_id: {resume_id}, company_id: {company_id}, status: {new_apply_status})")
+        
+        # 6. 處理 Email 寄送與通知 (僅在狀態改變時處理)
         # 使用對應角色的舊狀態進行比較
         status_changed = (old_status_for_check != status) if old_status_for_check is not None else True
         if status_changed:
