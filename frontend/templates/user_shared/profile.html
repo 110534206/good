@@ -119,7 +119,7 @@
       <input id="identity" type="text" readonly />
 
       <div id="admissionYearField">
-        <label for="admissionYear">入學屆數</label>
+        <label id="admissionYearLabel" for="admissionYear">入學屆數</label>
         <input id="admissionYear" type="text" readonly />
       </div>
 
@@ -146,16 +146,16 @@
 
       <div id="page2" class="page">
 
-        <div id="studentIdField">
-          <label id="studentIdLabel" for="studentId">學號</label>
-          <input id="studentId" type="text" readonly />
-        </div>
-
       <label id="nameLabel" for="name">姓名</label>
       <input id="name" type="text" />
 
       <label for="email">電子郵件</label>
       <input id="email" type="email" readonly />
+
+        <div id="studentIdField">
+          <label id="studentIdLabel" for="studentId">帳號</label>
+          <input id="studentId" type="text" readonly />
+        </div>
 
       <label for="oldPassword">舊密碼</label>
       <div class="password-container">
@@ -199,42 +199,52 @@
       }
 
       function showRoleSpecificFields(role, isHomeroom) {
-        // 先獲取所有需要控制的元素
         const advisorField = document.getElementById('advisorField');
         const studentFieldsEl = document.getElementById('studentFields');
-        
-        // 隱藏所有角色專用欄位
+        const admissionYearLabel = document.getElementById('admissionYearLabel');
+
         document.querySelectorAll('.role-specific-fields').forEach(field => {
           field.style.display = 'none';
         });
 
-        // 預設隱藏實習學期
         document.getElementById('currentSemesterContainer').style.display = 'none';
 
         if (nameLabel) nameLabel.textContent = '姓名';
-        if (admissionYearField) admissionYearField.style.display = '';
         if (studentIdField) studentIdField.style.display = '';
+        if (studentIdLabel) studentIdLabel.textContent = '帳號';
+
+        // 學生：入學屆數；班導：帶班班級、年級（classes_teacher）；指導老師：指導學生所屬班級（teacher_student_relations）；主任：不顯示此欄位
+        if (admissionYearField) {
+          if (role === 'student') {
+            admissionYearField.style.display = '';
+            if (admissionYearLabel) admissionYearLabel.textContent = '入學屆數';
+            document.getElementById('admissionYear').value = document.getElementById('admissionYear').value || '';
+          } else if (role === 'class_teacher') {
+            admissionYearField.style.display = 'block';
+            if (admissionYearLabel) admissionYearLabel.textContent = '帶班班級、年級';
+            const ayEl = document.getElementById('admissionYear');
+            if (ayEl) ayEl.value = ayEl.dataset.homeroomDisplay || '';
+          } else if (role === 'teacher') {
+            admissionYearField.style.display = 'block';
+            if (admissionYearLabel) admissionYearLabel.textContent = '指導學生所屬班級';
+            const ayEl = document.getElementById('admissionYear');
+            if (ayEl) ayEl.value = ayEl.dataset.guidedDisplay || '';
+          } else {
+            admissionYearField.style.display = 'none';
+          }
+        }
 
         if (role === 'vendor') {
           if (nameLabel) nameLabel.textContent = '公司名稱';
-          if (admissionYearField) admissionYearField.style.display = 'none';
-          if (studentIdField) studentIdField.style.display = 'none';
-          // 顯示指導老師欄位
-          if (advisorField) {
-            advisorField.style.display = 'block';
-          }
+          if (advisorField) advisorField.style.display = 'block';
           return;
         }
-        
-        // 非廠商角色隱藏指導老師欄位
-        if (advisorField) {
-          advisorField.style.display = 'none';
-        }
 
-        // 根據角色顯示相應欄位
+        if (advisorField) advisorField.style.display = 'none';
+
         if (role === 'student') {
           if (studentFieldsEl) studentFieldsEl.style.display = 'block';
-          document.getElementById('currentSemesterContainer').style.display = 'block'; // 學生顯示實習學期
+          document.getElementById('currentSemesterContainer').style.display = 'block';
         } else if (isHomeroom) {
           if (managedClassesContainer) managedClassesContainer.style.display = 'block';
         }
@@ -257,7 +267,20 @@
           document.getElementById('identity').value = user.display_role || '';
           document.getElementById('name').value = user.name || '';
           document.getElementById('email').value = user.email || '';
-          document.getElementById('admissionYear').value = user.admission_year || '';
+          const admissionYearEl = document.getElementById('admissionYear');
+          if (admissionYearEl) {
+            if (userRole === 'teacher' || userRole === 'director' || userRole === 'class_teacher') {
+              const homeroomVal = user.homeroom_class_display || '';
+              const guidedVal = user.guided_class_display || '';
+              admissionYearEl.dataset.homeroomDisplay = homeroomVal;
+              admissionYearEl.dataset.guidedDisplay = guidedVal;
+              admissionYearEl.value = (userRole === 'class_teacher' ? homeroomVal : guidedVal);
+            } else {
+              admissionYearEl.value = user.admission_year || '';
+              admissionYearEl.dataset.homeroomDisplay = '';
+              admissionYearEl.dataset.guidedDisplay = '';
+            }
+          }
           document.getElementById('studentId').value = user.username || '';
           
           // 根據 user_changed 字段控制帳號是否可編輯

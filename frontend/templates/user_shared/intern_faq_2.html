@@ -138,7 +138,7 @@
       color: #024689;
     }
 
-    /* 實習流程問題表格區塊 */
+    /* 實習流程問題區塊 */
     .faq-section {
       max-width: 1200px;
       margin: 0 auto;
@@ -156,74 +156,148 @@
       font-weight: 700;
     }
 
-    .faq-table {
-      width: 100%;
-      border-collapse: collapse;
+    /* 主題標籤篩選 */
+    .faq-tags-wrap {
+      margin-bottom: 1.5rem;
+    }
+
+    .faq-tags-wrap .faq-tags-label {
+      display: block;
+      margin-bottom: 0.5rem;
+      font-size: 0.9rem;
+      color: #555;
+      font-weight: 500;
+    }
+
+    .faq-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+    }
+
+    .faq-tag {
+      display: inline-block;
+      padding: 0.45rem 1rem;
+      border: 1px solid #0066cc;
+      border-radius: 20px;
+      background: #fff;
+      color: #0066cc;
+      font-size: 0.9rem;
+      cursor: pointer;
+      transition: background-color 0.2s ease, color 0.2s ease;
+    }
+
+    .faq-tag:hover {
+      background: #e6f0ff;
+    }
+
+    .faq-tag.active {
+      background: #0066cc;
+      color: #fff;
+    }
+
+    .faq-tags-wrap .faq-no-result {
+      margin-top: 0.75rem;
+      color: #666;
+      font-size: 0.95rem;
+      display: none;
+    }
+
+    .faq-tags-wrap .faq-no-result.visible {
+      display: block;
+    }
+
+    /* 手風琴問答列表 */
+    .faq-list {
       background-color: #fff;
       border-radius: 8px;
       overflow: hidden;
       box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
     }
 
-    .faq-table thead {
-      background-color: #0066cc;
-      color: white;
-    }
-
-    .faq-table th {
-      padding: 1rem;
-      text-align: left;
-      font-weight: 600;
-      font-size: 1rem;
-    }
-
-    .faq-table th:first-child {
-      width: 10%;
-      text-align: center;
-    }
-
-    .faq-table th:nth-child(2) {
-      width: 35%;
-    }
-
-    .faq-table th:nth-child(3) {
-      width: 55%;
-    }
-
-    .faq-table tbody tr {
+    .faq-item {
       border-bottom: 1px solid #e0e0e0;
-      transition: background-color 0.2s ease;
     }
 
-    .faq-table tbody tr:hover {
-      background-color: #f0f7ff;
-    }
-
-    .faq-table tbody tr:last-child {
+    .faq-item:last-child {
       border-bottom: none;
     }
 
-    .faq-table td {
-      padding: 1.2rem 1rem;
-      vertical-align: top;
-      font-size: 0.95rem;
-      line-height: 1.6;
+    .faq-item.hidden-by-tag {
+      display: none;
     }
 
-    .faq-table td:first-child {
-      text-align: center;
+    .faq-question {
+      width: 100%;
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      padding: 1rem 1.2rem;
+      text-align: left;
+      border: none;
+      background: #fff;
+      cursor: pointer;
+      font-size: 1rem;
+      font-family: inherit;
+      color: #333;
+      transition: background-color 0.2s ease;
+    }
+
+    .faq-question:hover {
+      background-color: #f0f7ff;
+    }
+
+    .faq-question .faq-num {
+      flex-shrink: 0;
       font-weight: 600;
       color: #0066cc;
-      font-size: 1.1rem;
+      font-size: 1.05rem;
+      min-width: 1.5em;
     }
 
-    .faq-table td:nth-child(2) {
+    .faq-question .faq-q {
+      flex: 1;
       font-weight: 500;
-      color: #333;
     }
 
-    .faq-table td:nth-child(3) {
+    .faq-question .faq-icon {
+      flex-shrink: 0;
+      font-size: 1.1rem;
       color: #666;
+      transition: transform 0.25s ease;
+    }
+
+    .faq-item.open .faq-question .faq-icon {
+      transform: rotate(180deg);
+    }
+
+    .faq-answer {
+      display: none;
+      padding: 0 1.2rem 1.2rem 1.2rem;
+      padding-left: calc(1.2rem + 1.5em + 0.75rem);
+    }
+
+    .faq-item.open .faq-answer {
+      display: block;
+    }
+
+    .faq-answer-inner {
+      padding: 1rem 1.2rem;
+      background: #f8f9fa;
+      border-radius: 8px;
+      font-size: 0.95rem;
+      line-height: 1.7;
+      color: #555;
+    }
+
+    @media (max-width: 768px) {
+      .faq-question .faq-num {
+        min-width: 1.2em;
+      }
+
+      .faq-answer {
+        padding-left: 1.2rem;
+      }
     }
 
     /* 側邊選單 */
@@ -340,28 +414,13 @@
         padding: 1.5rem;
       }
 
-      .faq-table {
-        font-size: 0.85rem;
+      .faq-question {
+        padding: 0.9rem 1rem;
+        font-size: 0.95rem;
       }
 
-      .faq-table th,
-      .faq-table td {
-        padding: 0.8rem 0.5rem;
-      }
-
-      .faq-table th:first-child,
-      .faq-table td:first-child {
-        display: none;
-      }
-
-      .faq-table th:nth-child(2),
-      .faq-table td:nth-child(2) {
-        width: 40%;
-      }
-
-      .faq-table th:nth-child(3),
-      .faq-table td:nth-child(3) {
-        width: 60%;
+      .faq-answer-inner {
+        font-size: 0.9rem;
       }
     }
   </style>
@@ -413,69 +472,218 @@
         <p>以下為實習流程中學生常見的問題與解答，如有其他疑問請聯繫指導老師</p>
       </div>
 
-      <!-- 實習流程常見問題表格 -->
+      <!-- 實習流程常見問題（手風琴 + 主題標籤） -->
       <section class="faq-section">
-        <table class="faq-table">
-          <thead>
-            <tr>
-              <th>編號</th>
-              <th>問題</th>
-              <th>解答</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td>1</td>
-              <td>如何開始建立履歷？</td>
-              <td>請點選「履歷管理」功能，選擇「新增履歷」，即可開始建立個人履歷。系統提供多種履歷模板供您選擇，您也可以自訂格式。</td>
-            </tr>
-            <tr>
-              <td>2</td>
-              <td>什麼時候可以填寫志願序？</td>
-              <td>志願序填寫時間會由系統管理員設定，通常在實習申請開始後開放。請留意平台通知，或查看行事曆中的重要日期。</td>
-            </tr>
-            <tr>
-              <td>3</td>
-              <td>可以修改已提交的志願序嗎？</td>
-              <td>在志願序填寫截止日期前，您可以隨時修改志願順序。請前往「填寫志願序」頁面進行修改。截止後將無法更改。</td>
-            </tr>
-            <tr>
-              <td>4</td>
-              <td>如何投遞履歷給公司？</td>
-              <td>請先完成履歷建立，然後前往「投遞履歷」頁面，瀏覽可申請的實習公司，選擇心儀的公司後點選「上傳履歷」即可。</td>
-            </tr>
-            <tr>
-              <td>5</td>
-              <td>履歷投遞後多久會收到回覆？</td>
-              <td>各公司的審核時間不同，通常為1-2週。您可以在「通知」功能中查看最新消息，系統也會發送通知給您。</td>
-            </tr>
-            <tr>
-              <td>6</td>
-              <td>面試時間如何安排？</td>
-              <td>面試時間會由公司或指導老師通知，請查看「行事曆」功能確認面試日期。如有衝突，請盡早聯繫指導老師或公司人資。</td>
-            </tr>
-            <tr>
-              <td>7</td>
-              <td>如何查看媒合結果？</td>
-              <td>媒合結果公布後，請前往「學生媒合結果」頁面查看。您可以看到錄取的公司、實習期間、最終錄取志願及指導老師資訊。</td>
-            </tr>
-            <tr>
-              <td>8</td>
-              <td>實習期間需要注意什麼？</td>
-              <td>請遵守公司規定，準時出勤，積極學習。定期與指導老師聯繫，並在實習結束後上傳實習成果報告。如有任何問題，可隨時聯繫指導老師。</td>
-            </tr>
-            <tr>
-              <td>9</td>
-              <td>如何分享實習心得？</td>
-              <td>實習結束後，您可以前往「實習心得」頁面，瀏覽學長姐的經驗分享，也可以撰寫並分享您的實習心得，幫助學弟妹了解實習過程。</td>
-            </tr>
-            <tr>
-              <td>10</td>
-              <td>如果對實習流程有疑問該找誰？</td>
-              <td>您可以透過「通知」功能聯繫指導老師，或查看平台公告。如有緊急問題，請直接聯繫系辦或實習承辦人員。</td>
-            </tr>
-          </tbody>
-        </table>
+        <div class="faq-tags-wrap">
+          <span class="faq-tags-label">依主題篩選：</span>
+          <div class="faq-tags" id="faq-tags" role="group" aria-label="主題標籤">
+            <button type="button" class="faq-tag active" data-tag="全部" aria-pressed="true">全部</button>
+            <button type="button" class="faq-tag" data-tag="課程規劃" aria-pressed="false">課程規劃</button>
+            <button type="button" class="faq-tag" data-tag="機構篩選" aria-pressed="false">機構篩選</button>
+            <button type="button" class="faq-tag" data-tag="合約與薪資" aria-pressed="false">合約與薪資</button>
+            <button type="button" class="faq-tag" data-tag="保險" aria-pressed="false">保險</button>
+            <button type="button" class="faq-tag" data-tag="衝突與輔導" aria-pressed="false">衝突與輔導</button>
+            <button type="button" class="faq-tag" data-tag="意外處理" aria-pressed="false">意外處理</button>
+            <button type="button" class="faq-tag" data-tag="權利義務" aria-pressed="false">權利義務</button>
+            <button type="button" class="faq-tag" data-tag="其他" aria-pressed="false">其他</button>
+          </div>
+          <p class="faq-no-result" id="faq-no-result">此主題目前沒有問題。</p>
+        </div>
+        <div class="faq-list" id="faq-list">
+          <div class="faq-item" data-tag="課程規劃">
+            <button class="faq-question" type="button" aria-expanded="false">
+              <span class="faq-num">1</span>
+              <span class="faq-q">為何要參加校外實習？</span>
+              <i class="bi bi-chevron-down faq-icon"></i>
+            </button>
+            <div class="faq-answer"><div class="faq-answer-inner">透過校外實習可以協助學生將理論與實務做結合，同時增加畢業後的就業機會，整體而言可以提升學生就業競爭力。</div></div>
+          </div>
+          <div class="faq-item" data-tag="課程規劃">
+            <button class="faq-question" type="button" aria-expanded="false">
+              <span class="faq-num">2</span>
+              <span class="faq-q">校外實習課程是否就是打工？</span>
+              <i class="bi bi-chevron-down faq-icon"></i>
+            </button>
+            <div class="faq-answer"><div class="faq-answer-inner">1.「校外實習課程」係指學校針對畢業生未來就業、職涯發展所需技能進行校外實習相關規劃，安排校外實習機構指派專人擔任業界輔導教師，參與課程規劃、設計與實務之指導。<br>2. 「打工」係指同學們進入適用「勞動基準法」的公民營事業單位從事工讀生的工作，其各項勞動條件，如工資、工作時間、休息、休假、請假及職業災害補償，悉依勞動基準法辦理，而其他未適用勞動基準法之事業單位，則建請雇主參照該法辦理。（資料來源:勞委會網站）<br>3. 校外實習課程係為學校正式課程之一，與一般計時打工性質並不同。</div></div>
+          </div>
+          <div class="faq-item" data-tag="課程規劃">
+            <button class="faq-question" type="button" aria-expanded="false">
+              <span class="faq-num">3</span>
+              <span class="faq-q">全校每系（學位學程）都應規劃校外實習課程嗎？</span>
+              <i class="bi bi-chevron-down faq-icon"></i>
+            </button>
+            <div class="faq-answer"><div class="faq-answer-inner">1. 以培養學生就業競爭力為前提，建議技職院校應積極規劃每一系（學位學程）均有校外實習課程。但實施初期，應考量校外實習單位的需求、配合度，以及學校執行之經驗，建議分階段進行，從選修到必修、從系（學位學程）到院到校逐步推行。<br>2. 另校外實習課程應考慮學校各系（學位學程）屬性、校外實習課程實施方式、校外實習單位人力需求及配合度等因素，將校外實習規劃為選修或必修課程。</div></div>
+          </div>
+          <div class="faq-item" data-tag="機構篩選">
+            <button class="faq-question" type="button" aria-expanded="false">
+              <span class="faq-num">4</span>
+              <span class="faq-q">如何篩選校外實習機構？</span>
+              <i class="bi bi-chevron-down faq-icon"></i>
+            </button>
+            <div class="faq-answer"><div class="faq-answer-inner">1. 學校各系（學位學程）實施校外實習課程時，應先確認本系（學位學程）之定位，針對實習機構屬性及提供之實習內容進行評估，並建立相關表單。<br>2. 表單內容可分成實習工作概況及實習工作內容評估之兩大部份，其中項目可包括公司名稱、工作內容、需求條件或專長、是否輪班、工作時間、工作環境、工作安全性、工作專業性、體力負荷、培訓計畫，並與實習機構協調學生實習時程長短，亦請實習機構確認勿因任何因素而中途解約，造成學生中斷實習之困擾。</div></div>
+          </div>
+          <div class="faq-item" data-tag="合約與薪資">
+            <button class="faq-question" type="button" aria-expanded="false">
+              <span class="faq-num">5</span>
+              <span class="faq-q">校外實習合約訂定時，應注意之事項為何？</span>
+              <i class="bi bi-chevron-down faq-icon"></i>
+            </button>
+            <div class="faq-answer"><div class="faq-answer-inner">1. 學校各系（學位學程）與實習機構訂定實習合約時，應確實載明實習生實習職務內容、薪資、勞健保、勞退、意外險有無與其負擔單位，以及其他實習機構、學校及實習生之權利義務等事項。（參考附表6）<br>2. 實習生如於境外進行實習，其違約情形發生時須依據之準據法律以及法院亦應於合約中呈現。<br>3. 校外實習為學校開設讓實習生與實習機構進行實務操作之課程，如透過仲介機構簽訂實習合約，各系（學位學程）須確實掌握合約內容之約束性，以及實習機構提供之實習內容專業性與品質，切勿全權委託實習仲介機構代為處理各方面事宜，以免發生學校無法處理及協助實習時發生之相關問題。</div></div>
+          </div>
+          <div class="faq-item" data-tag="合約與薪資">
+            <button class="faq-question" type="button" aria-expanded="false">
+              <span class="faq-num">6</span>
+              <span class="faq-q">學生參與校外實習，實習機構會提供工資嗎？</span>
+              <i class="bi bi-chevron-down faq-icon"></i>
+            </button>
+            <div class="faq-answer"><div class="faq-answer-inner">1. 不一定，需視實習機構情況而定。實習機構提供實習學生工資者（包括工資、薪金及按計時、計日、計月、計件以現金或實物等方式給付之獎金、津貼及其他任何名義之經常性給與均屬之），則實習學生與實習機構成為雇傭關係，適用勞動基準法之相關規範；倘實習機構無法提供實習學生工資，或僅以獎助學金及相關助學金方式提供者，則學生與實習機構非為雇傭關係，適用學校訂定之實習規定及實習契約之規定。<br>2. 實習學生參加校外實習課程，該課程係屬學校正式課程之一，且為列入畢業學分之必修或選修課程，相關課程規劃應以實務實習為原則。學校各系（學位學程）於實習機構篩選時，得將實習機構給薪與否納入考量，並得為實習學生向實習機構爭取工資或相關助學金。</div></div>
+          </div>
+          <div class="faq-item" data-tag="合約與薪資">
+            <button class="faq-question" type="button" aria-expanded="false">
+              <span class="faq-num">7</span>
+              <span class="faq-q">實習學生之獎助學金是否為工資？</span>
+              <i class="bi bi-chevron-down faq-icon"></i>
+            </button>
+            <div class="faq-answer"><div class="faq-answer-inner">1. 根據勞委會的解釋函，不論是獎助學金及相關助學金，都不屬於薪資範圍，這些學生還是不能被認定為有雇傭事實，所以不得參加勞保。<br>2. 另實習學生倘領受實習機構提供之生活津貼者，因生活津貼依勞動基準法規定屬於工資範圍，企業需依照勞基法之規定幫實習學生加保勞保（依勞動基準法第2條規定，工資為勞工因工作而獲得之報酬；包括工資、薪金及按計時、計日、計月、計件以現金或實物等方式給付之獎金、津貼及其他任何名義之經常性給與均屬之）。</div></div>
+          </div>
+          <div class="faq-item" data-tag="保險">
+            <button class="faq-question" type="button" aria-expanded="false">
+              <span class="faq-num">8</span>
+              <span class="faq-q">實習學生參與校外實習，如實習機構無提供薪資時，保險事宜如何處理？</span>
+              <i class="bi bi-chevron-down faq-icon"></i>
+            </button>
+            <div class="faq-answer"><div class="faq-answer-inner">1. 學生在校期間，已有學生團體平安保險，考量學生校外實習安全，應幫學生加保團體傷害保險（每人保額不低於100萬元）與傷害醫療（每人保額不低於5萬元）。<br>2. 教育部技職司每年皆有辦理保險共同供應契約乙案，提供學校能有較便宜保費之選擇。</div></div>
+          </div>
+          <div class="faq-item" data-tag="保險">
+            <button class="faq-question" type="button" aria-expanded="false">
+              <span class="faq-num">9</span>
+              <span class="faq-q">實習學生可否投保勞保？</span>
+              <i class="bi bi-chevron-down faq-icon"></i>
+            </button>
+            <div class="faq-answer"><div class="faq-answer-inner">實習機構（投保單位）接受學校委託，於寒暑假期間提供在學學生實習場所，並評定其實習成績供學校參考，該等學生與實習機構之間既無僱傭關係，又無支領薪資之約定，依照勞工保險條例第6條及第8條規定，應不得參加勞工保險。惟實習生與實習機構（投保單位）如有僱傭關係，並確有支領薪資者可加保，於加保時請備文說明即可受理。</div></div>
+          </div>
+          <div class="faq-item" data-tag="衝突與輔導">
+            <button class="faq-question" type="button" aria-expanded="false">
+              <span class="faq-num">10</span>
+              <span class="faq-q">學生實習期間與上司、同事或顧客間有衝突，應如何處理？</span>
+              <i class="bi bi-chevron-down faq-icon"></i>
+            </button>
+            <div class="faq-answer"><div class="faq-answer-inner">實習輔導老師須瞭解衝突起因，與實習機構人員溝通，給予實習學生適當輔導，必要時請求學生輔導中心派員協助輔導。</div></div>
+          </div>
+          <div class="faq-item" data-tag="衝突與輔導">
+            <button class="faq-question" type="button" aria-expanded="false">
+              <span class="faq-num">11</span>
+              <span class="faq-q">學生實習期間工作情形不佳，實習機構建議辭退，應如何處理？</span>
+              <i class="bi bi-chevron-down faq-icon"></i>
+            </button>
+            <div class="faq-answer"><div class="faq-answer-inner">1. 學校各系（學位學程）實習輔導老師應深入了解實習學生之工作表現，以及工作職務與實習學生之專長是否相符，給予實習學生積極輔導。學校教學單位、業者及學生可共同訂定預計達成目標，如仍無法達成目標或與學生專長不符，可轉介至其他實習機構。建議將實習學生中止及轉介至其他實習機構之處理事宜，納入契約書中規定。<br>2. 實習學生於實習期間表現不佳者，除需通報各系（學位學程）輔導外，建議依學校校規處罰，若情節重大者，遭實習機構辭退者，應送交各系（學位學程）學生校外實習委員會處理，必要時該科目需重修。</div></div>
+          </div>
+          <div class="faq-item" data-tag="衝突與輔導">
+            <button class="faq-question" type="button" aria-expanded="false">
+              <span class="faq-num">12</span>
+              <span class="faq-q">學生實習期間因適應不良、理念、家庭、健康等因素而離開實習公司，應如何處理？</span>
+              <i class="bi bi-chevron-down faq-icon"></i>
+            </button>
+            <div class="faq-answer"><div class="faq-answer-inner">應深入了解學生離職之原因，給予積極之輔導並灌輸正確之職場觀念，必要時給予轉介至其他實習機構完成實習。</div></div>
+          </div>
+          <div class="faq-item" data-tag="衝突與輔導">
+            <button class="faq-question" type="button" aria-expanded="false">
+              <span class="faq-num">13</span>
+              <span class="faq-q">學校老師輔導訪視應注意之事項為何？</span>
+              <i class="bi bi-chevron-down faq-icon"></i>
+            </button>
+            <div class="faq-answer"><div class="faq-answer-inner">學生進行校外實習期間，學校各系（學位學程）實習輔導老師每月至少應至實習機構訪視實習生一次，了解實習生實習狀況與生活情形並做成紀錄存檔。學生於訪視期間所反應之事項，輔導老師亦應透過校內相關機制協助實習生解決並做成紀錄，如相關問題可歸咎於實習機構本身，亦可作為實習機會轉換或未來合作參考之依據。</div></div>
+          </div>
+          <div class="faq-item" data-tag="衝突與輔導">
+            <button class="faq-question" type="button" aria-expanded="false">
+              <span class="faq-num">14</span>
+              <span class="faq-q">學生實習期間發生性騷擾，應如何處理？</span>
+              <i class="bi bi-chevron-down faq-icon"></i>
+            </button>
+            <div class="faq-answer"><div class="faq-answer-inner">事前宣導預防方法及投訴管道，如實際發生時，應由學校、實習機構、性騷擾委員會及學生，依「性別平等教育法」、「性別工作平等法」及「性騷擾防治法」等相關法律規定處理之。（參考附件六「學生校外實習期間遭性騷擾之處理機制」）（校安中心24小時專線電話：0937-675867或(02)26585801轉2251）（性別平等教育委員會聯絡電話：(02)2658-5801轉2212）</div></div>
+          </div>
+          <div class="faq-item" data-tag="衝突與輔導">
+            <button class="faq-question" type="button" aria-expanded="false">
+              <span class="faq-num">15</span>
+              <span class="faq-q">學生實習期間若有任何問題時，需聯絡何人？</span>
+              <i class="bi bi-chevron-down faq-icon"></i>
+            </button>
+            <div class="faq-answer"><div class="faq-answer-inner">學校應建立學生校外實習聯繫機制，從各系（學位學程）負責窗口至校級聯繫窗口，於學生參與校外實習之前公告週知，讓學生可與實習輔導老師或學校相關窗口聯繫請益。（校安中心24小時專線電話：0937-675867或(02)26585801轉2251）（校級實習聯繫窗口專線電話：(02)2658-8508）</div></div>
+          </div>
+          <div class="faq-item" data-tag="意外處理">
+            <button class="faq-question" type="button" aria-expanded="false">
+              <span class="faq-num">16</span>
+              <span class="faq-q">學生實習期間上下班過程發生意外，應如何處理？</span>
+              <i class="bi bi-chevron-down faq-icon"></i>
+            </button>
+            <div class="faq-answer"><div class="faq-answer-inner">需加強宣導交通安全注意事項，建議於契約書中明訂實習機構確認職災認定及賠償等問題。</div></div>
+          </div>
+          <div class="faq-item" data-tag="意外處理">
+            <button class="faq-question" type="button" aria-expanded="false">
+              <span class="faq-num">17</span>
+              <span class="faq-q">學生校外實習因工作關係發生意外，應如何處理？</span>
+              <i class="bi bi-chevron-down faq-icon"></i>
+            </button>
+            <div class="faq-answer"><div class="faq-answer-inner">1. 若學生校外實習機關有給薪，實習學生與校外實習機構屬雇傭關係，則依照勞動基準法等相關規定處理之。<br>2. 若學生校外實習屬無給薪，學校各系（學位學程）應於與實習機構簽訂契約時，載明學生發生工安事件之處理流程與責任歸屬，確認職災認定及賠償等事宜。<br>3. 為維護學生於校外實習安全之保障，學校將為每位實習學生投保意外傷害險，統一辦理學生團體意外險。<br>4. 學生如有參與實習意外保險，保險資訊請於投保後提供給實習生及其監護人，如有保險事故情形發生，亦請各系（學位學程）承辦同仁偕同保險公司人員處理意外保險理賠相關事宜。</div></div>
+          </div>
+          <div class="faq-item" data-tag="權利義務">
+            <button class="faq-question" type="button" aria-expanded="false">
+              <span class="faq-num">18</span>
+              <span class="faq-q">校外實習機構有哪些權利義務？</span>
+              <i class="bi bi-chevron-down faq-icon"></i>
+            </button>
+            <div class="faq-answer"><div class="faq-answer-inner">1. 給予實習學生所擔任職務之必要訓練。<br>2. 協助實習輔導老師瞭解實習學生實習狀況。<br>3. 實習期間協助實習學生之生活管理及專業知能輔導，並協助評量實習學生之實習成績。<br>4. 依實習機構需求提供實習機會與名額，並自校方推薦學生中遴選實習生。<br>5. 實習學生於實習期間表現不良者，由校外實習機構會同學校各系（學位學程）實習輔導老師處理之。<br>6. 提供實習學生參與公司所辦理的相關教育訓練的機會。<br>7. 適時向學校告知學生的實習狀況。<br>8. 安排之實習內容不得影響到實習學生健康及安全。<br>9. 當學生實習產生適應問題時，經輔導仍未獲改善時，得經學校同意，轉換至其他單位繼續實習。</div></div>
+          </div>
+          <div class="faq-item" data-tag="權利義務">
+            <button class="faq-question" type="button" aria-expanded="false">
+              <span class="faq-num">19</span>
+              <span class="faq-q">學校辦理學生校外實習有哪些責任與義務？</span>
+              <i class="bi bi-chevron-down faq-icon"></i>
+            </button>
+            <div class="faq-answer"><div class="faq-answer-inner">1. 學校各系（學位學程）應建立校外實習管理制度，接洽實習機構並簽訂實習契約。<br>2. 協助實習機構遴選分發實習學生。<br>3. 針對實習學生實施職前及工安教育，並辦理行前座談會，詳細說明有關校外實習規定及生活作息等注意事項，俾讓參加校外實習學生瞭解並遵循。<br>4. 負責督導或輔導其選派之實習學生，確實遵守實習單位之工作規定，並辦理學生意外保險及平安保險。<br>5. 針對實習學生之專業能力，協助實習機構研擬實習相關教學，定期巡迴輔導或電話聯繫實習機構以監督及瞭解學生實習情形。<br>6. 協助實習學生實習期間之生活輔導與問題解答，並審閱實習學生實習作業、報告及評量校外實習成績。<br>7. 實習學生實習表現不良者，經輔導而未改善時，得由各系（學位學程）學生校外實習委員會協助轉換實習機構，並以一次為限。<br>8. 與實習機構共同協助實習學生處理實習時所面臨的問題。<br>9. 建立與實習學生及實習機構的溝通協調機制。</div></div>
+          </div>
+          <div class="faq-item" data-tag="權利義務">
+            <button class="faq-question" type="button" aria-expanded="false">
+              <span class="faq-num">20</span>
+              <span class="faq-q">參與校外實習之學生有哪些權利義務？</span>
+              <i class="bi bi-chevron-down faq-icon"></i>
+            </button>
+            <div class="faq-answer"><div class="faq-answer-inner">1. 須於規定期間內完成實習時數。<br>2. 對所擔任之職務確實負責，虛心接受指導，認真學習，維護校譽。<br>3. 實習期間考勤依實習機構或學校規定辦理，實習期間請假應事先辦理手續，並經實習單位主管核准；緊急突發之狀況應事先以電話向實習機構及學校報備。<br>4. 須按學校各系（學位學程）要求定期繳交實習報告。<br>5. 實習期間應與輔導老師保持聯繫，告知實習狀況。<br>6. 實習期間碰到不合理的要求時，儘速跟學校聯繫，由學校協助解決之。<br>7. 不要與公司職員及顧客有情感上的糾紛。<br>8. 不要在網路及部落格散播不利公司營運及未經證實的言論。<br>9. 不要揭露公司營運相關機密。</div></div>
+          </div>
+          <div class="faq-item" data-tag="其他">
+            <button class="faq-question" type="button" aria-expanded="false">
+              <span class="faq-num">21</span>
+              <span class="faq-q">實習課程結束後，是否需有相關評估機制？</span>
+              <i class="bi bi-chevron-down faq-icon"></i>
+            </button>
+            <div class="faq-answer"><div class="faq-answer-inner">學校辦理實習課程結束後，應辦理相關評估事宜。<br>1. 在學校方面：學校各系（學位學程）應評估該實習機構提供之實習內容實質上是否符合該科系學生專長或實務技能學習、該實習機構與各系（學位學程）配合情形、實習生反應該實習機構之實習情形、實習生反應各系（學位學程）開辦實習課程之運作情形，以作為下年度實習課程開辦與實習機構合作調整之依據。另各系（學位學程）亦可辦理實習生實習滿意度問卷、實習生或實習機構留用情形、實習生畢業後就業情形之相關量化評估，以了解實習課程開設是否達到預期之效益。<br>2. 在學生方面：實習生於實習結束後，應提出相關實習成果或報告，該成果及報告至少應包含該科系相關之專業內容，讓實習生於實作過程中更能反思在校所學專業知識與實務間之印證，各系（學位學程）收到實習生繳交之實習成果或報告後，應對實習生提出之專業內容部分給予實習生回饋，加深實習課程與一般打工不同之處。</div></div>
+          </div>
+          <div class="faq-item" data-tag="其他">
+            <button class="faq-question" type="button" aria-expanded="false">
+              <span class="faq-num">22</span>
+              <span class="faq-q">若全年或半年均在校外實習，學生可否免繳學雜費？</span>
+              <i class="bi bi-chevron-down faq-icon"></i>
+            </button>
+            <div class="faq-answer"><div class="faq-answer-inner">教育部推動之校外實習課程，係屬學校正式課程之選修或必修學分，為正式課程且採計畢業學分，雖然在校時間有限，但學校需負責實習課程規劃、實習機構評估、安排學生至實習機構實習、辦理實習前講習、實習中輔導、及實習後評量等等事宜，故仍需依各校學雜費收費標準進行繳費。依據教育部88年6月3日台88技字第88058056號函，學生如全學期均在校外機構實習者，該學期費用以徵收學費全部、雜費5分之4為限，說明如下：<br>1. 學費係與教學活動直接相關，用以支付學校教學、訓輔、研究、人事所需之費用。大學學生依據學則須於4年期間修畢一定學分數方得畢業，又大學學費收費標準係採固定金額，如每學期50,000元；然全學期在外實習之學生，因將課程集中於大學前3年學習，衍生之課程費用並未於前3年之當學期額外徵收，是以收取實習學生學費全部係因平均分配4年所學課程費用。<br>2. 雜費係作為與教學活動間接相關、用以支付學校行政、業務、實驗、基本設備使用費所需之費用。學生在外實習，需與簽訂單位進行課程研擬、支付實習場所設備維護、學習指導、實習場所材料、教師訪視等業務相關費用，是項費用得由學生雜費之經費支應，惟考量學生並未使用學校設施，故雜費之收取以5分之4為限。</div></div>
+          </div>
+        
+          <div class="faq-item" data-tag="其他">
+            <button class="faq-question" type="button" aria-expanded="false">
+              <span class="faq-num">23</span>
+              <span class="faq-q">如何取得家長認同？</span>
+              <i class="bi bi-chevron-down faq-icon"></i>
+            </button>
+            <div class="faq-answer"><div class="faq-answer-inner">學校應透過新生家長座談會、親師會、發信…等聯繫方式，向學生家長說明校外實習之目的、對學生未來發展之影響、學校輔導處理機制等，以減少家長對校外實習之疑慮，進而支持與肯定校外實習。</div></div>
+          </div>
+          <div class="faq-item" data-tag="其他">
+            <button class="faq-question" type="button" aria-expanded="false">
+              <span class="faq-num">24</span>
+              <span class="faq-q">學生校外實習可以請假嗎？</span>
+              <i class="bi bi-chevron-down faq-icon"></i>
+            </button>
+            <div class="faq-answer"><div class="faq-answer-inner">學校各系（學位學程）應於篩選校外實習機構時，一併討論學生請假之相關獎懲規定，並建議納入契約書中規範之。</div></div>
+          </div>
+        </div>
       </section>
     </main>
   </div>
@@ -556,6 +764,41 @@
           console.log('載入頭像失敗:', err);
           // 保持預設頭像
         });
+    }
+
+    // 問答手風琴：點題目展開/收合答案
+    document.querySelectorAll('.faq-question').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var item = this.closest('.faq-item');
+        var isOpen = item.classList.contains('open');
+        item.classList.toggle('open');
+        this.setAttribute('aria-expanded', !isOpen);
+      });
+    });
+
+    // 主題標籤篩選
+    var faqTags = document.getElementById('faq-tags');
+    var faqList = document.getElementById('faq-list');
+    var faqNoResult = document.getElementById('faq-no-result');
+    if (faqTags && faqList && faqNoResult) {
+      faqTags.addEventListener('click', function (e) {
+        var btn = e.target.closest('.faq-tag');
+        if (!btn) return;
+        var tag = btn.getAttribute('data-tag');
+        faqTags.querySelectorAll('.faq-tag').forEach(function (t) {
+          t.classList.toggle('active', t === btn);
+          t.setAttribute('aria-pressed', t === btn ? 'true' : 'false');
+        });
+        var items = faqList.querySelectorAll('.faq-item');
+        var visibleCount = 0;
+        items.forEach(function (item) {
+          var itemTag = item.getAttribute('data-tag') || '';
+          var show = tag === '全部' || itemTag === tag;
+          item.classList.toggle('hidden-by-tag', !show);
+          if (show) visibleCount++;
+        });
+        faqNoResult.classList.toggle('visible', tag !== '全部' && visibleCount === 0);
+      });
     }
 
     // 帳號下拉選單
