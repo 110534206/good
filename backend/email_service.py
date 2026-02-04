@@ -382,6 +382,55 @@ def send_admission_email(student_email, student_name, company_name, teacher_name
 """
     return send_email(student_email, subject, content)
 
+def send_account_created_email(recipient_email, username, name, role_display, initial_password=None):
+    """
+    帳號建立通知信（管理員新增或用戶自行註冊後發送）
+    recipient_email: 收件人 Email
+    username: 登入帳號
+    name: 姓名/顯示名稱
+    role_display: 角色顯示名稱（如 學生、廠商、教師）
+    initial_password: 若為管理員設定的初始密碼則傳入，否則 None（自行註冊不顯示密碼）
+    回傳: (success, message, log_id)
+    """
+    subject = "【智慧實習平台】帳號建立通知"
+    if initial_password is not None and str(initial_password).strip():
+        content = f"""
+親愛的 {name} 您好：
+
+您的智慧實習平台帳號已建立。
+
+登入資訊：
+- 帳號：{username}
+- 初始密碼：{initial_password}
+- 角色：{role_display}
+
+請盡速登入系統，並至「個人資料」頁面修改您的帳號與密碼，以確保帳號安全。
+
+此為系統自動發送，請勿直接回覆此郵件。
+
+--
+智慧實習平台
+"""
+    else:
+        content = f"""
+親愛的 {name} 您好：
+
+您的智慧實習平台帳號已建立。
+
+登入資訊：
+- 帳號：{username}
+- 角色：{role_display}
+
+請使用您註冊時設定的密碼登入系統。如需修改帳號或密碼，可登入後至「個人資料」頁面操作。
+
+此為系統自動發送，請勿直接回覆此郵件。
+
+--
+智慧實習平台
+"""
+    return send_email(recipient_email, subject, content)
+
+
 def send_interview_email(student_email, student_name, company_name, vendor_name="", custom_content=""):
     """
     發送面試通知郵件

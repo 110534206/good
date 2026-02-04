@@ -287,13 +287,29 @@ def create_user():
 
         hashed = generate_password_hash(password)
 
-        # 後台註冊的用戶，狀態設為 'approved'（已啟用）
+        # 後台註冊的用戶，狀態設為 'approved'（已啟用）；user_changed=0 強制首次登入後至個人資料修改帳密
         query = """
-            INSERT INTO users (username, name, email, role, class_id, password, status)
-            VALUES (%s, %s, %s, %s, %s, %s, 'approved')
+            INSERT INTO users (username, name, email, role, class_id, password, status, user_changed)
+            VALUES (%s, %s, %s, %s, %s, %s, 'approved', 0)
         """
         cursor.execute(query, (username, name, email, role, class_id, hashed))
         conn.commit()
+
+        # 建立帳號後自動發送 Email 通知給用戶（含初始密碼）
+        if email and email.strip():
+            try:
+                from email_service import send_account_created_email
+                role_display_map = {
+                    "student": "學生", "teacher": "教師", "director": "主任",
+                    "ta": "科助", "admin": "管理員", "vendor": "廠商"
+                }
+                send_account_created_email(
+                    email.strip(), username, name,
+                    role_display_map.get(role, role),
+                    initial_password=password
+                )
+            except Exception as send_err:
+                print(f"⚠️ 帳號建立成功，但發送通知信失敗: {send_err}")
 
         return jsonify({"success": True, "message": "使用者建立成功"})
     except Exception as e:

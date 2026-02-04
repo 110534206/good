@@ -49,6 +49,7 @@ role_map = {
 role_map_reverse = {
     "學生": "student",
     "指導老師": "teacher",
+    "班導師": "teacher",
     "主任": "director",
     "科助": "ta",
     "管理員": "admin",
@@ -181,8 +182,8 @@ def get_profile():
     try:
         cursor.execute("""
             SELECT u.id, u.username, u.email, u.role AS original_role, u.name,
-                   c.department, c.name AS class_name, u.class_id, u.avatar_url, u.current_semester_code,
-                   u.teacher_name
+                   c.department, c.name AS class_name, u.class_id, u.avatar_url,
+                   u.teacher_name, u.user_changed, u.admission_year AS db_admission_year
             FROM users u
             LEFT JOIN classes c ON u.class_id = c.id
             WHERE u.id = %s
@@ -193,32 +194,35 @@ def get_profile():
             return jsonify({"success": False, "message": "使用者不存在"}), 404
 
         # ------------------------------
-        # ⭐ 修正：從 semesters 取得顯示用學期名稱
+        # 學期：全部由 internship_configs 連結 semesters.id（users 表已無 current_semester_code）
         # ------------------------------
         user['current_semester_display'] = ''
-        semester_id = user.get('current_semester_code')
-
-        if semester_id:
-            cursor.execute("SELECT code FROM semesters WHERE id = %s", (semester_id,))
-            semester_row = cursor.fetchone()
-            if semester_row:
-                user['current_semester_display'] = semester_row['code']
-            else:
-                user['current_semester_display'] = str(semester_id)
+        user['current_semester_code'] = None
+        cursor.execute("""
+            SELECT ic.semester_id, s.code
+            FROM internship_configs ic
+            JOIN semesters s ON s.id = ic.semester_id
+            WHERE ic.user_id = %s
+            ORDER BY ic.semester_id DESC
+            LIMIT 1
+        """, (user_id,))
+        ic_row = cursor.fetchone()
+        if ic_row:
+            user['current_semester_display'] = ic_row.get('code') or ''
+            user['current_semester_code'] = ic_row.get('semester_id')
         # ------------------------------
 
-        display_role = active_role
-        if active_role == "class_teacher":
-            display_role = "teacher"
-
         original_role_from_db = user.pop("original_role")
-        # 返回當前 session 中的角色（active_role），而不是數據庫中的原始角色
-        # 這樣前端可以正確判斷當前身份（例如主任切換到指導老師身份時，應該返回 'teacher'）
-        user["role"] = display_role  # 使用 display_role（從 active_role 轉換而來）
+        # 返回當前 session 的 active_role，供前端區分班導(class_teacher)與指導老師(teacher)以顯示對應標籤與資料
+        user["role"] = active_role
         user["display_role"] = role_map.get(active_role, active_role)
         user["original_role"] = original_role_from_db  # 同時返回原始角色，供前端參考
 
-        if original_role_from_db == "student" and user.get("username") and len(user["username"]) >= 3:
+        # 入學屆數：優先使用資料庫欄位，學生可從 username 前 3 碼推得
+        db_ay = user.pop("db_admission_year", None)
+        if db_ay is not None and str(db_ay).strip() != "":
+            user["admission_year"] = str(db_ay)
+        elif original_role_from_db == "student" and user.get("username") and len(user["username"]) >= 3:
             user["admission_year"] = user["username"][:3]
         else:
             user["admission_year"] = ""
@@ -238,9 +242,30 @@ def get_profile():
         user["is_homeroom"] = is_homeroom
         user["email"] = user["email"] or ""
 
-        if active_role in ("teacher", "director", "class_teacher") and is_homeroom and classes:
-            class_names = [f"{c['department'].replace('管科', '')}{c['name']}" for c in classes]
-            user["class_display_name"] = "、".join(class_names)
+        # 班導：帶班班級、年級（classes_teacher role=班導師）；指導老師：指導學生所屬班級（teacher_student_relations）
+        if active_role in ("teacher", "director", "class_teacher") and original_role_from_db in ("teacher", "director"):
+            homeroom_class_names = []
+            if is_homeroom and classes:
+                homeroom_classes = [c for c in classes if c.get("role") == "班導師"]
+                homeroom_class_names = [f"{c['department'].replace('管科', '')}{c['name']}" for c in homeroom_classes]
+            user["homeroom_class_display"] = "、".join(homeroom_class_names) if homeroom_class_names else ""
+
+            guided_class_names = []
+            cursor.execute("""
+                SELECT DISTINCT c.id, c.department, c.name
+                FROM teacher_student_relations tsr
+                JOIN users u ON u.id = tsr.student_id AND u.role = 'student'
+                JOIN classes c ON c.id = u.class_id
+                WHERE tsr.teacher_id = %s
+                ORDER BY c.department, c.name
+            """, (user["id"],))
+            guided_classes = cursor.fetchall()
+            if guided_classes:
+                guided_class_names = [f"{c['department'].replace('管科', '')}{c['name']}" for c in guided_classes]
+            user["guided_class_display"] = "、".join(guided_class_names) if guided_class_names else ""
+
+            # 相容用：班導優先顯示帶班，否則顯示指導學生所屬
+            user["class_display_name"] = user["homeroom_class_display"] or user["guided_class_display"]
         elif original_role_from_db == "student":
             dep_short = user['department'].replace("管科", "") if user['department'] else ""
             user["class_display_name"] = f"{dep_short}{user['class_name'] or ''}"
@@ -345,10 +370,10 @@ def save_profile():
             if existing:
                 return jsonify({"success": False, "message": "此帳號已被使用"}), 400
             
-            # 更新帳號
+            # 更新帳號，並標記已修改過帳密（user_changed=1）
             cursor.execute("""
                 UPDATE users 
-                SET username = %s
+                SET username = %s, user_changed = 1
                 WHERE id = %s
             """, (username.strip(), user_id))
             
@@ -548,7 +573,7 @@ def change_password():
             check_cursor.close()
             
         hashed_pw = generate_password_hash(new_password)
-        cursor.execute("UPDATE users SET password = %s WHERE id = %s", (hashed_pw, user_id))
+        cursor.execute("UPDATE users SET password = %s, user_changed = 1 WHERE id = %s", (hashed_pw, user_id))
         conn.commit()
 
         return jsonify({
