@@ -3621,6 +3621,7 @@ def review_resume(resume_id):
                     updated_at=NOW()
                 WHERE id=%s
             """, (status, comment, user_id, resume_id))
+            print(f"🔍 [DEBUG] 指導老師審核履歷: resume_id={resume_id}, teacher_review_status={status}, reviewed_by={user_id}")
         else:
             # 班導、主任等其他角色：更新 status 和 reviewed_by（category 保持不變）
             old_status_for_check = old_status
