@@ -520,6 +520,11 @@
             allResumes = [];
             renderTable([]);
           }
+        })
+        .catch(err => {
+          console.error('載入履歷資料失敗:', err);
+          allResumes = [];
+          renderTable([]);
         });
 
       document.getElementById("departmentFilter").addEventListener("change", applyFilters);
@@ -772,7 +777,26 @@
       const tbody = document.getElementById("resumeTableBody");
       tbody.innerHTML = "";
       if (resumes.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="9" style="text-align: center; color: #64748b; padding: 16px;">目前沒有資料</td></tr>`;
+        // 顯示更明確的提示訊息，說明為什麼沒有資料
+        tbody.innerHTML = `
+          <tr>
+            <td colspan="9" style="text-align: center; color: #64748b; padding: 24px;">
+              <div style="display: flex; flex-direction: column; align-items: center; gap: 12px;">
+                <div style="font-size: 1.1rem; font-weight: 600; color: #475569; margin-bottom: 8px;">
+                  目前沒有可審核的履歷
+                </div>
+                <div style="font-size: 0.95rem; color: #64748b; max-width: 600px; line-height: 1.6;">
+                  <p style="margin: 0; padding-left: 20px;">
+                    審核機制說明：指導老師審核通過後，才會顯示在此頁面供廠商審核。
+                  </p>
+                  <p style="margin: 12px 0 0 0; padding-left: 20px;">
+                    請等待指導老師完成審核
+                  </p>
+                </div>
+              </div>
+            </td>
+          </tr>
+        `;
         document.getElementById("pagination").innerHTML = "";
         return;
       }

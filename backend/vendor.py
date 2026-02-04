@@ -868,10 +868,13 @@ def get_company_locations():
 def get_vendor_resumes():
     """
     獲取廠商可以查看的已通過審核的學生履歷。
+    重要機制：必須等指導老師審核完後，才會給廠商學生的資料。
+    
     邏輯：
-    1. 老師已通過 (resumes.status = 'approved')。
-    2. 履歷會自動進入廠商的學生履歷審核流程。
-    3. 廠商介面狀態取決於 student_preferences.status（如果存在），否則為 pending。
+    1. 只顯示已經被指導老師（role='teacher'）審核通過的履歷
+    2. 必須同時滿足：teacher_review_status = 'approved' 且 reviewed_by 是 teacher 角色
+    3. 履歷會自動進入廠商的學生履歷審核流程
+    4. 廠商介面狀態優先從 resume_applications 表讀取，如果沒有則從 student_preferences 讀取
     
     允許 vendor 和 teacher 角色訪問（老師可以查看廠商審核結果）。
     """
@@ -989,8 +992,8 @@ def get_vendor_resumes():
             })
 
         # 步驟 1: 獲取所有已通過指導老師審核的最新履歷
-        # 只顯示已經被指導老師（role='teacher'）審核通過的履歷
-        # 如果廠商有關聯公司，可以進一步篩選；如果沒有，顯示所有已通過指導老師審核的履歷
+        # 重要：只顯示已經被指導老師（role='teacher'）審核通過的履歷
+        # 必須等指導老師審核完後，才會給廠商學生的資料
         base_query = """
             SELECT
                 r.id, r.user_id AS student_id, u.name AS student_name, u.username AS student_number,
@@ -1000,27 +1003,24 @@ def get_vendor_resumes():
             JOIN users u ON r.user_id = u.id
             LEFT JOIN classes c ON u.class_id = c.id
             
-            -- 只取最新一份已通過老師審核的履歷
+            -- 只取最新一份已通過指導老師審核的履歷
             JOIN (
                 SELECT user_id, MAX(created_at) AS max_created_at
                 FROM resumes
-                WHERE status = 'approved'
+                WHERE teacher_review_status = 'approved'
                 GROUP BY user_id
             ) latest ON latest.user_id = r.user_id AND latest.max_created_at = r.created_at
             
-            -- 只顯示已經被指導老師（role='teacher'）審核通過的履歷
-            -- 檢查方式：
-            -- 1. reviewed_by 不為空且是 teacher 角色（主要方式）
-            -- 2. 或者 reviewed_by 為 NULL 但 status = 'approved'（向後兼容歷史數據）
-            WHERE r.status = 'approved'
-            AND (
-                (r.reviewed_by IS NOT NULL 
-                 AND EXISTS (
-                     SELECT 1 FROM users reviewer
-                     WHERE reviewer.id = r.reviewed_by
-                     AND reviewer.role = 'teacher'
-                 ))
-                OR (r.reviewed_by IS NULL)
+            -- 嚴格要求：只顯示已經被指導老師（role='teacher'）審核通過的履歷
+            -- 必須同時滿足：
+            -- 1. teacher_review_status = 'approved'（指導老師已審核通過）
+            -- 2. reviewed_by 不為空且是 teacher 角色
+            WHERE r.teacher_review_status = 'approved'
+            AND r.reviewed_by IS NOT NULL
+            AND EXISTS (
+                SELECT 1 FROM users reviewer
+                WHERE reviewer.id = r.reviewed_by
+                AND reviewer.role = 'teacher'
             )
         """
         
@@ -1043,6 +1043,40 @@ def get_vendor_resumes():
         
         cursor.execute(base_query, tuple(params))
         latest_resumes = cursor.fetchall() or []
+        
+        # 調試信息：記錄查詢結果和詳細信息
+        print(f"🔍 [DEBUG] 廠商履歷查詢結果：找到 {len(latest_resumes)} 筆履歷")
+        if latest_resumes:
+            print(f"   ⚠️ 注意：這些履歷的 teacher_review_status 都是 'approved'，且 reviewed_by 是 teacher 角色")
+            print(f"   如果這些履歷不應該顯示，請檢查資料庫中這些履歷的審核狀態")
+            for r in latest_resumes[:5]:  # 顯示前5筆
+                resume_id = r.get('id')
+                student_name = r.get('student_name')
+                reviewed_by = r.get('reviewed_by')
+                # 查詢該履歷的詳細審核信息
+                cursor.execute("""
+                    SELECT teacher_review_status, reviewed_by, reviewed_at
+                    FROM resumes
+                    WHERE id = %s
+                """, (resume_id,))
+                resume_detail = cursor.fetchone()
+                if resume_detail:
+                    teacher_status = resume_detail.get('teacher_review_status')
+                    reviewed_by_id = resume_detail.get('reviewed_by')
+                    reviewed_at = resume_detail.get('reviewed_at')
+                    # 檢查審核者角色
+                    if reviewed_by_id:
+                        cursor.execute("SELECT role, name FROM users WHERE id = %s", (reviewed_by_id,))
+                        reviewer_info = cursor.fetchone()
+                        reviewer_role = reviewer_info.get('role') if reviewer_info else 'unknown'
+                        reviewer_name = reviewer_info.get('name') if reviewer_info else 'unknown'
+                        print(f"   - 履歷 ID: {resume_id}, 學生: {student_name}")
+                        print(f"     teacher_review_status: {teacher_status}, reviewed_by: {reviewed_by_id} ({reviewer_role}: {reviewer_name})")
+                        print(f"     reviewed_at: {reviewed_at}")
+                    else:
+                        print(f"   - 履歷 ID: {resume_id}, 學生: {student_name}, reviewed_by 為 NULL（不應該顯示）")
+        else:
+            print(f"   ✅ 沒有找到符合條件的履歷（teacher_review_status = 'approved' 且 reviewed_by 是 teacher）")
 
         # 步驟 3: 查詢學生對該廠商所屬公司填寫的志願序，並用來覆蓋狀態
         preferences_map = {}
@@ -1086,17 +1120,15 @@ def get_vendor_resumes():
                     -- 如果是老師訪問，顯示所有職缺；如果是廠商訪問，只顯示該廠商建立的職缺或老師建立的職缺
                     AND (%s IN ('teacher', 'ta') OR ij.created_by_vendor_id = %s OR ij.created_by_vendor_id IS NULL)
                     -- 只顯示已經被指導老師審核通過的志願序
+                    -- 必須等指導老師審核完後，才會給廠商學生的資料
                     -- 檢查該學生的履歷是否已經被指導老師（role='teacher'）審核通過
-                    -- 支持向後兼容：如果 reviewed_by 為 NULL，只要 status = 'approved' 就顯示
                     AND EXISTS (
                         SELECT 1 FROM resumes r
-                        LEFT JOIN users reviewer ON r.reviewed_by = reviewer.id
+                        JOIN users reviewer ON r.reviewed_by = reviewer.id
                         WHERE r.user_id = sp.student_id
-                        AND r.status = 'approved'
-                        AND (
-                            (r.reviewed_by IS NOT NULL AND reviewer.role = 'teacher')
-                            OR (r.reviewed_by IS NULL)
-                        )
+                        AND r.teacher_review_status = 'approved'
+                        AND r.reviewed_by IS NOT NULL
+                        AND reviewer.role = 'teacher'
                     )
                 """, tuple(company_ids) + (user_role, vendor_id))
             else:
@@ -1119,17 +1151,15 @@ def get_vendor_resumes():
                     -- 如果是老師訪問，顯示所有職缺；如果是廠商訪問，只顯示該廠商建立的職缺或老師建立的職缺
                     AND (%s IN ('teacher', 'ta') OR ij.created_by_vendor_id = %s OR ij.created_by_vendor_id IS NULL)
                     -- 只顯示已經被指導老師審核通過的志願序
+                    -- 必須等指導老師審核完後，才會給廠商學生的資料
                     -- 檢查該學生的履歷是否已經被指導老師（role='teacher'）審核通過
-                    -- 支持向後兼容：如果 reviewed_by 為 NULL，只要 status = 'approved' 就顯示
                     AND EXISTS (
                         SELECT 1 FROM resumes r
-                        LEFT JOIN users reviewer ON r.reviewed_by = reviewer.id
+                        JOIN users reviewer ON r.reviewed_by = reviewer.id
                         WHERE r.user_id = sp.student_id
-                        AND r.status = 'approved'
-                        AND (
-                            (r.reviewed_by IS NOT NULL AND reviewer.role = 'teacher')
-                            OR (r.reviewed_by IS NULL)
-                        )
+                        AND r.teacher_review_status = 'approved'
+                        AND r.reviewed_by IS NOT NULL
+                        AND reviewer.role = 'teacher'
                     )
                 """, tuple(company_ids) + (user_role, vendor_id))
             
@@ -1179,17 +1209,15 @@ def get_vendor_resumes():
                     -- 如果是老師訪問，顯示所有職缺；如果是廠商訪問，只顯示該廠商建立的職缺或老師建立的職缺
                     WHERE (%s IN ('teacher', 'ta') OR ij.created_by_vendor_id = %s OR ij.created_by_vendor_id IS NULL)
                     -- 只顯示已經被指導老師審核通過的志願序
+                    -- 必須等指導老師審核完後，才會給廠商學生的資料
                     -- 檢查該學生的履歷是否已經被指導老師（role='teacher'）審核通過
-                    -- 支持向後兼容：如果 reviewed_by 為 NULL，只要 status = 'approved' 就顯示
                     AND EXISTS (
                         SELECT 1 FROM resumes r
-                        LEFT JOIN users reviewer ON r.reviewed_by = reviewer.id
+                        JOIN users reviewer ON r.reviewed_by = reviewer.id
                         WHERE r.user_id = sp.student_id
-                        AND r.status = 'approved'
-                        AND (
-                            (r.reviewed_by IS NOT NULL AND reviewer.role = 'teacher')
-                            OR (r.reviewed_by IS NULL)
-                        )
+                        AND r.teacher_review_status = 'approved'
+                        AND r.reviewed_by IS NOT NULL
+                        AND reviewer.role = 'teacher'
                     )
                 """, (user_role, vendor_id))
             else:
@@ -1212,17 +1240,15 @@ def get_vendor_resumes():
                     -- 如果是老師訪問，顯示所有職缺；如果是廠商訪問，只顯示該廠商建立的職缺或老師建立的職缺
                     WHERE (%s IN ('teacher', 'ta') OR ij.created_by_vendor_id = %s OR ij.created_by_vendor_id IS NULL)
                     -- 只顯示已經被指導老師審核通過的志願序
+                    -- 必須等指導老師審核完後，才會給廠商學生的資料
                     -- 檢查該學生的履歷是否已經被指導老師（role='teacher'）審核通過
-                    -- 支持向後兼容：如果 reviewed_by 為 NULL，只要 status = 'approved' 就顯示
                     AND EXISTS (
                         SELECT 1 FROM resumes r
-                        LEFT JOIN users reviewer ON r.reviewed_by = reviewer.id
+                        JOIN users reviewer ON r.reviewed_by = reviewer.id
                         WHERE r.user_id = sp.student_id
-                        AND r.status = 'approved'
-                        AND (
-                            (r.reviewed_by IS NOT NULL AND reviewer.role = 'teacher')
-                            OR (r.reviewed_by IS NULL)
-                        )
+                        AND r.teacher_review_status = 'approved'
+                        AND r.reviewed_by IS NOT NULL
+                        AND reviewer.role = 'teacher'
                     )
                 """, (user_role, vendor_id))
             for pref in cursor.fetchall() or []:
@@ -1281,52 +1307,55 @@ def get_vendor_resumes():
             
             # 如果存在志願序，則使用志願序的狀態和公司資訊。
             preference_order = None
+            resume_id = row.get("id")
+            
             if filtered_preferences:
                 # 簡單地取第一個志願序的狀態作為展示狀態。
                 pref_to_show = filtered_preferences[0]
                 sp_status = pref_to_show.get('vendor_review_status')
                 preference_id = pref_to_show.get("preference_id")
                 preference_order = pref_to_show.get("preference_order")
-                
-                # 調試信息：記錄原始狀態
-                print(f"🔍 學生 {student_id} 的志願序狀態: {sp_status} (preference_id: {preference_id})")
-                print(f"   從 SQL 查詢返回的 vendor_review_status: {sp_status}")
-                
-                # 如果狀態是 'approved'，檢查是否有審核歷史記錄
-                if sp_status == 'approved' and preference_id:
-                    # 由於 interview_status 欄位只用於面試狀態，直接從 student_preferences 表獲取狀態
-                    cursor.execute("""
-                        SELECT status, updated_at
-                        FROM student_preferences 
-                        WHERE id = %s
-                    """, (preference_id,))
-                    pref_result = cursor.fetchone()
-                    pref_status = pref_result.get('status') if pref_result else None
-                    has_approve_history = pref_status == 'approved'
-                    last_approve_time = pref_result.get('updated_at') if pref_result else None
-                    
-                    if not has_approve_history:
-                        # 如果狀態不是 'approved'，強制改為 'pending'
-                        print(f"⚠️ 狀態為 'approved' 但沒有審核記錄，強制改為 'pending' (preference_id: {preference_id})")
-                        sp_status = 'pending'
-                        display_status = 'pending'
-                    else:
-                        # 有審核記錄，使用 'approved'
-                        display_status = 'approved'
-                        print(f"✅ 狀態為 'approved' 且有審核記錄，使用 'approved' (preference_id: {preference_id}, 最後審核時間: {last_approve_time})")
-                else:
-                    # 廠商視角狀態：如果狀態為 NULL、空值或不在 STATUS_LABELS 中，則使用 "pending"（待審核）
-                    if sp_status and sp_status in STATUS_LABELS:
-                        display_status = sp_status
-                        print(f"✅ 使用志願序狀態: {display_status}")
-                    else:
-                        display_status = "pending"  # 預設為待審核
-                        print(f"⚠️ 狀態無效或為空，使用預設狀態: {display_status}")
                 company_id = pref_to_show.get("company_id")
                 company_name = pref_to_show.get("company_name") or ""
                 job_id = pref_to_show.get("job_id")
                 job_title = pref_to_show.get("job_title_display") or pref_to_show.get("job_title") or ""
                 job_slots = pref_to_show.get("job_slots") or 0
+                
+                # 優先從 resume_applications 表讀取狀態和留言
+                if resume_id and company_id:
+                    cursor.execute("""
+                        SELECT apply_status, company_comment, interview_status, interview_time, interview_result
+                        FROM resume_applications
+                        WHERE resumes_id = %s AND internship_companies_id = %s
+                    """, (resume_id, company_id))
+                    ra_result = cursor.fetchone()
+                    
+                    if ra_result:
+                        # 從 resume_applications 表獲取狀態
+                        ra_status = ra_result.get('apply_status')
+                        # 映射狀態：applied -> pending, reviewing -> reviewing, accepted -> approved, rejected -> rejected
+                        status_map = {
+                            'applied': 'pending',
+                            'reviewing': 'reviewing',
+                            'accepted': 'approved',
+                            'rejected': 'rejected'
+                        }
+                        display_status = status_map.get(ra_status, 'pending')
+                        print(f"✅ 從 resume_applications 表讀取狀態: {ra_status} -> {display_status}")
+                    else:
+                        # 如果 resume_applications 表沒有記錄，使用 student_preferences 的狀態（向後兼容）
+                        if sp_status and sp_status in STATUS_LABELS:
+                            display_status = sp_status
+                            print(f"⚠️ resume_applications 表無記錄，使用 student_preferences 狀態: {display_status}")
+                        else:
+                            display_status = "pending"
+                            print(f"⚠️ 狀態無效或為空，使用預設狀態: {display_status}")
+                else:
+                    # 如果沒有 resume_id 或 company_id，使用 student_preferences 的狀態（向後兼容）
+                    if sp_status and sp_status in STATUS_LABELS:
+                        display_status = sp_status
+                    else:
+                        display_status = "pending"
             elif company_ids:
                 # 如果沒有志願序，但廠商有關聯的公司，顯示第一個公司名稱
                 # 這種情況不應該出現（因為上面已經過濾掉了），但保留作為備用
@@ -1352,11 +1381,37 @@ def get_vendor_resumes():
                 elif company_id != company_filter:
                     continue
                 
-            # 獲取廠商留言（從 vendor_preference_history）
+            # 獲取廠商留言和面試資訊（優先從 resume_applications 表）
             vendor_comment = None
             has_interview = False  # 是否有面試記錄
             interview_completed = False  # 是否已完成面試
-            if preference_id:
+            interview_time = None  # 面試時間
+            interview_result = None  # 面試結果
+            
+            # 優先從 resume_applications 表讀取
+            if resume_id and company_id:
+                cursor.execute("""
+                    SELECT company_comment, interview_status, interview_time, interview_result
+                    FROM resume_applications
+                    WHERE resumes_id = %s AND internship_companies_id = %s
+                """, (resume_id, company_id))
+                ra_result = cursor.fetchone()
+                
+                if ra_result:
+                    vendor_comment = ra_result.get('company_comment') or None
+                    interview_status = ra_result.get('interview_status')
+                    interview_time = ra_result.get('interview_time')
+                    interview_result = ra_result.get('interview_result')
+                    
+                    # 判斷是否有面試記錄
+                    if interview_status and interview_status != 'none':
+                        has_interview = True
+                        if interview_status == 'finished':
+                            interview_completed = True
+                    print(f"✅ 從 resume_applications 表讀取留言和面試資訊")
+            
+            # 如果 resume_applications 表沒有記錄，從 vendor_preference_history 讀取（向後兼容）
+            if not vendor_comment and preference_id:
                 try:
                     _ensure_history_table(cursor)
                     # 查詢留言 (老師訪問時查詢所有廠商的留言，廠商訪問時只查詢自己的留言)
@@ -1440,8 +1495,8 @@ def get_vendor_resumes():
                 "department": row.get("department") or "",
                 "original_filename": row.get("original_filename"),
                 "filepath": row.get("filepath"),
-                "status": display_status,  # 顯示基於 student_preferences 的狀態，如果沒有則為 pending
-                "comment": vendor_comment or "", # 廠商的留言（優先），如果沒有則為空
+                "status": display_status,  # 顯示基於 resume_applications 或 student_preferences 的狀態
+                "comment": vendor_comment or "", # 廠商的留言（優先從 resume_applications），如果沒有則為空
                 "vendor_comment": vendor_comment or "", # 明確標記為廠商留言
                 "note": row.get("note") or "",
                 "upload_time": _format_datetime(row.get("created_at")),
@@ -1455,6 +1510,8 @@ def get_vendor_resumes():
                 "preference_order": preference_order, # 志願序（1=第一志願, 2=第二志願...）
                 "has_interview": has_interview, # 是否有面試記錄
                 "interview_completed": interview_completed, # 是否已完成面試
+                "interview_time": _format_datetime(interview_time) if interview_time else None, # 面試時間
+                "interview_result": interview_result, # 面試結果 (pending, pass, fail)
             }
             resumes.append(resume)
 

@@ -138,7 +138,7 @@
       color: #024689;
     }
 
-    /* 實習流程問題表格區塊 */
+    /* 實習流程問題區塊 */
     .faq-section {
       max-width: 1200px;
       margin: 0 auto;
@@ -156,74 +156,148 @@
       font-weight: 700;
     }
 
-    .faq-table {
-      width: 100%;
-      border-collapse: collapse;
+    /* 主題標籤篩選 */
+    .faq-tags-wrap {
+      margin-bottom: 1.5rem;
+    }
+
+    .faq-tags-wrap .faq-tags-label {
+      display: block;
+      margin-bottom: 0.5rem;
+      font-size: 0.9rem;
+      color: #555;
+      font-weight: 500;
+    }
+
+    .faq-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+    }
+
+    .faq-tag {
+      display: inline-block;
+      padding: 0.45rem 1rem;
+      border: 1px solid #0066cc;
+      border-radius: 20px;
+      background: #fff;
+      color: #0066cc;
+      font-size: 0.9rem;
+      cursor: pointer;
+      transition: background-color 0.2s ease, color 0.2s ease;
+    }
+
+    .faq-tag:hover {
+      background: #e6f0ff;
+    }
+
+    .faq-tag.active {
+      background: #0066cc;
+      color: #fff;
+    }
+
+    .faq-tags-wrap .faq-no-result {
+      margin-top: 0.75rem;
+      color: #666;
+      font-size: 0.95rem;
+      display: none;
+    }
+
+    .faq-tags-wrap .faq-no-result.visible {
+      display: block;
+    }
+
+    /* 手風琴問答列表 */
+    .faq-list {
       background-color: #fff;
       border-radius: 8px;
       overflow: hidden;
       box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
     }
 
-    .faq-table thead {
-      background-color: #0066cc;
-      color: white;
-    }
-
-    .faq-table th {
-      padding: 1rem;
-      text-align: left;
-      font-weight: 600;
-      font-size: 1rem;
-    }
-
-    .faq-table th:first-child {
-      width: 10%;
-      text-align: center;
-    }
-
-    .faq-table th:nth-child(2) {
-      width: 35%;
-    }
-
-    .faq-table th:nth-child(3) {
-      width: 55%;
-    }
-
-    .faq-table tbody tr {
+    .faq-item {
       border-bottom: 1px solid #e0e0e0;
-      transition: background-color 0.2s ease;
     }
 
-    .faq-table tbody tr:hover {
-      background-color: #f0f7ff;
-    }
-
-    .faq-table tbody tr:last-child {
+    .faq-item:last-child {
       border-bottom: none;
     }
 
-    .faq-table td {
-      padding: 1.2rem 1rem;
-      vertical-align: top;
-      font-size: 0.95rem;
-      line-height: 1.6;
+    .faq-item.hidden-by-tag {
+      display: none;
     }
 
-    .faq-table td:first-child {
-      text-align: center;
+    .faq-question {
+      width: 100%;
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      padding: 1rem 1.2rem;
+      text-align: left;
+      border: none;
+      background: #fff;
+      cursor: pointer;
+      font-size: 1rem;
+      font-family: inherit;
+      color: #333;
+      transition: background-color 0.2s ease;
+    }
+
+    .faq-question:hover {
+      background-color: #f0f7ff;
+    }
+
+    .faq-question .faq-num {
+      flex-shrink: 0;
       font-weight: 600;
       color: #0066cc;
-      font-size: 1.1rem;
+      font-size: 1.05rem;
+      min-width: 1.5em;
     }
 
-    .faq-table td:nth-child(2) {
+    .faq-question .faq-q {
+      flex: 1;
       font-weight: 500;
-      color: #333;
     }
 
-    .faq-table td:nth-child(3) {
+    .faq-question .faq-icon {
+      flex-shrink: 0;
+      font-size: 1.1rem;
       color: #666;
+      transition: transform 0.25s ease;
+    }
+
+    .faq-item.open .faq-question .faq-icon {
+      transform: rotate(180deg);
+    }
+
+    .faq-answer {
+      display: none;
+      padding: 0 1.2rem 1.2rem 1.2rem;
+      padding-left: calc(1.2rem + 1.5em + 0.75rem);
+    }
+
+    .faq-item.open .faq-answer {
+      display: block;
+    }
+
+    .faq-answer-inner {
+      padding: 1rem 1.2rem;
+      background: #f8f9fa;
+      border-radius: 8px;
+      font-size: 0.95rem;
+      line-height: 1.7;
+      color: #555;
+    }
+
+    @media (max-width: 768px) {
+      .faq-question .faq-num {
+        min-width: 1.2em;
+      }
+
+      .faq-answer {
+        padding-left: 1.2rem;
+      }
     }
 
     /* 側邊選單 */
@@ -340,28 +414,13 @@
         padding: 1.5rem;
       }
 
-      .faq-table {
-        font-size: 0.85rem;
+      .faq-question {
+        padding: 0.9rem 1rem;
+        font-size: 0.95rem;
       }
 
-      .faq-table th,
-      .faq-table td {
-        padding: 0.8rem 0.5rem;
-      }
-
-      .faq-table th:first-child,
-      .faq-table td:first-child {
-        display: none;
-      }
-
-      .faq-table th:nth-child(2),
-      .faq-table td:nth-child(2) {
-        width: 40%;
-      }
-
-      .faq-table th:nth-child(3),
-      .faq-table td:nth-child(3) {
-        width: 60%;
+      .faq-answer-inner {
+        font-size: 0.9rem;
       }
     }
   </style>
@@ -413,69 +472,103 @@
         <p>以下為實習流程中學生所使用的功能操作說明，如有其他疑問請聯繫管理員</p>
       </div>
 
-      <!-- 實習流程常見問題表格 -->
+      <!-- 功能操作說明（手風琴 + 主題標籤） -->
       <section class="faq-section">
-        <table class="faq-table">
-          <thead>
-            <tr>
-              <th>編號</th>
-              <th>問題</th>
-              <th>解答</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td>1</td>
-              <td>如何開始建立履歷？</td>
-              <td>請點選「履歷管理」功能，選擇「新增履歷」，即可開始建立個人履歷。系統提供多種履歷模板供您選擇，您也可以自訂格式。</td>
-            </tr>
-            <tr>
-              <td>2</td>
-              <td>什麼時候可以填寫志願序？</td>
-              <td>志願序填寫時間會由系統管理員設定，通常在實習申請開始後開放。請留意平台通知，或查看行事曆中的重要日期。</td>
-            </tr>
-            <tr>
-              <td>3</td>
-              <td>可以修改已提交的志願序嗎？</td>
-              <td>在志願序填寫截止日期前，您可以隨時修改志願順序。請前往「填寫志願序」頁面進行修改。截止後將無法更改。</td>
-            </tr>
-            <tr>
-              <td>4</td>
-              <td>如何投遞履歷給公司？</td>
-              <td>請先完成履歷建立，然後前往「投遞履歷」頁面，瀏覽可申請的實習公司，選擇心儀的公司後點選「上傳履歷」即可。</td>
-            </tr>
-            <tr>
-              <td>5</td>
-              <td>履歷投遞後多久會收到回覆？</td>
-              <td>各公司的審核時間不同，通常為1-2週。您可以在「通知」功能中查看最新消息，系統也會發送通知給您。</td>
-            </tr>
-            <tr>
-              <td>6</td>
-              <td>面試時間如何安排？</td>
-              <td>面試時間會由公司或指導老師通知，請查看「行事曆」功能確認面試日期。如有衝突，請盡早聯繫指導老師或公司人資。</td>
-            </tr>
-            <tr>
-              <td>7</td>
-              <td>如何查看媒合結果？</td>
-              <td>媒合結果公布後，請前往「學生媒合結果」頁面查看。您可以看到錄取的公司、實習期間、最終錄取志願及指導老師資訊。</td>
-            </tr>
-            <tr>
-              <td>8</td>
-              <td>實習期間需要注意什麼？</td>
-              <td>請遵守公司規定，準時出勤，積極學習。定期與指導老師聯繫，並在實習結束後上傳實習成果報告。如有任何問題，可隨時聯繫指導老師。</td>
-            </tr>
-            <tr>
-              <td>9</td>
-              <td>如何分享實習心得？</td>
-              <td>實習結束後，您可以前往「實習心得」頁面，瀏覽學長姐的經驗分享，也可以撰寫並分享您的實習心得，幫助學弟妹了解實習過程。</td>
-            </tr>
-            <tr>
-              <td>10</td>
-              <td>如果對實習流程有疑問該找誰？</td>
-              <td>您可以透過「通知」功能聯繫指導老師，或查看平台公告。如有緊急問題，請直接聯繫系辦或實習承辦人員。</td>
-            </tr>
-          </tbody>
-        </table>
+        <div class="faq-tags-wrap">
+          <span class="faq-tags-label">依主題篩選：</span>
+          <div class="faq-tags" id="faq-tags" role="group" aria-label="主題標籤">
+            <button type="button" class="faq-tag active" data-tag="全部" aria-pressed="true">全部</button>
+            <button type="button" class="faq-tag" data-tag="履歷" aria-pressed="false">履歷</button>
+            <button type="button" class="faq-tag" data-tag="志願序" aria-pressed="false">志願序</button>
+            <button type="button" class="faq-tag" data-tag="投遞履歷" aria-pressed="false">投遞履歷</button>
+            <button type="button" class="faq-tag" data-tag="面試媒合" aria-pressed="false">面試媒合</button>
+            <button type="button" class="faq-tag" data-tag="實習須知" aria-pressed="false">實習須知</button>
+            <button type="button" class="faq-tag" data-tag="心得與聯絡" aria-pressed="false">心得與聯絡</button>
+          </div>
+          <p class="faq-no-result" id="faq-no-result">此主題目前沒有問題。</p>
+        </div>
+        <div class="faq-list" id="faq-list">
+          <div class="faq-item" data-tag="履歷">
+            <button class="faq-question" type="button" aria-expanded="false">
+              <span class="faq-num">1</span>
+              <span class="faq-q">如何開始建立履歷？</span>
+              <i class="bi bi-chevron-down faq-icon"></i>
+            </button>
+            <div class="faq-answer"><div class="faq-answer-inner">請點選「履歷管理」功能，選擇「新增履歷」，即可開始建立個人履歷。系統提供多種履歷模板供您選擇，您也可以自訂格式。</div></div>
+          </div>
+          <div class="faq-item" data-tag="志願序">
+            <button class="faq-question" type="button" aria-expanded="false">
+              <span class="faq-num">2</span>
+              <span class="faq-q">什麼時候可以填寫志願序？</span>
+              <i class="bi bi-chevron-down faq-icon"></i>
+            </button>
+            <div class="faq-answer"><div class="faq-answer-inner">志願序填寫時間會由系統管理員設定，通常在實習申請開始後開放。請留意平台通知，或查看行事曆中的重要日期。</div></div>
+          </div>
+          <div class="faq-item" data-tag="志願序">
+            <button class="faq-question" type="button" aria-expanded="false">
+              <span class="faq-num">3</span>
+              <span class="faq-q">可以修改已提交的志願序嗎？</span>
+              <i class="bi bi-chevron-down faq-icon"></i>
+            </button>
+            <div class="faq-answer"><div class="faq-answer-inner">在志願序填寫截止日期前，您可以隨時修改志願順序。請前往「填寫志願序」頁面進行修改。截止後將無法更改。</div></div>
+          </div>
+          <div class="faq-item" data-tag="投遞履歷">
+            <button class="faq-question" type="button" aria-expanded="false">
+              <span class="faq-num">4</span>
+              <span class="faq-q">如何投遞履歷給公司？</span>
+              <i class="bi bi-chevron-down faq-icon"></i>
+            </button>
+            <div class="faq-answer"><div class="faq-answer-inner">請先完成履歷建立，然後前往「投遞履歷」頁面，瀏覽可申請的實習公司，選擇心儀的公司後點選「上傳履歷」即可。</div></div>
+          </div>
+          <div class="faq-item" data-tag="投遞履歷">
+            <button class="faq-question" type="button" aria-expanded="false">
+              <span class="faq-num">5</span>
+              <span class="faq-q">履歷投遞後多久會收到回覆？</span>
+              <i class="bi bi-chevron-down faq-icon"></i>
+            </button>
+            <div class="faq-answer"><div class="faq-answer-inner">各公司的審核時間不同，通常為1-2週。您可以在「通知」功能中查看最新消息，系統也會發送通知給您。</div></div>
+          </div>
+          <div class="faq-item" data-tag="面試媒合">
+            <button class="faq-question" type="button" aria-expanded="false">
+              <span class="faq-num">6</span>
+              <span class="faq-q">面試時間如何安排？</span>
+              <i class="bi bi-chevron-down faq-icon"></i>
+            </button>
+            <div class="faq-answer"><div class="faq-answer-inner">面試時間會由公司或指導老師通知，請查看「行事曆」功能確認面試日期。如有衝突，請盡早聯繫指導老師或公司人資。</div></div>
+          </div>
+          <div class="faq-item" data-tag="面試媒合">
+            <button class="faq-question" type="button" aria-expanded="false">
+              <span class="faq-num">7</span>
+              <span class="faq-q">如何查看媒合結果？</span>
+              <i class="bi bi-chevron-down faq-icon"></i>
+            </button>
+            <div class="faq-answer"><div class="faq-answer-inner">媒合結果公布後，請前往「學生媒合結果」頁面查看。您可以看到錄取的公司、實習期間、最終錄取志願及指導老師資訊。</div></div>
+          </div>
+          <div class="faq-item" data-tag="實習須知">
+            <button class="faq-question" type="button" aria-expanded="false">
+              <span class="faq-num">8</span>
+              <span class="faq-q">實習期間需要注意什麼？</span>
+              <i class="bi bi-chevron-down faq-icon"></i>
+            </button>
+            <div class="faq-answer"><div class="faq-answer-inner">請遵守公司規定，準時出勤，積極學習。定期與指導老師聯繫，並在實習結束後上傳實習成果報告。如有任何問題，可隨時聯繫指導老師。</div></div>
+          </div>
+          <div class="faq-item" data-tag="心得與聯絡">
+            <button class="faq-question" type="button" aria-expanded="false">
+              <span class="faq-num">9</span>
+              <span class="faq-q">如何分享實習心得？</span>
+              <i class="bi bi-chevron-down faq-icon"></i>
+            </button>
+            <div class="faq-answer"><div class="faq-answer-inner">實習結束後，您可以前往「實習心得」頁面，瀏覽學長姐的經驗分享，也可以撰寫並分享您的實習心得，幫助學弟妹了解實習過程。</div></div>
+          </div>
+          <div class="faq-item" data-tag="心得與聯絡">
+            <button class="faq-question" type="button" aria-expanded="false">
+              <span class="faq-num">10</span>
+              <span class="faq-q">如果對實習流程有疑問該找誰？</span>
+              <i class="bi bi-chevron-down faq-icon"></i>
+            </button>
+            <div class="faq-answer"><div class="faq-answer-inner">您可以透過「通知」功能聯繫指導老師，或查看平台公告。如有緊急問題，請直接聯繫系辦或實習承辦人員。</div></div>
+          </div>
+        </div>
       </section>
     </main>
   </div>
@@ -556,6 +649,41 @@
           console.log('載入頭像失敗:', err);
           // 保持預設頭像
         });
+    }
+
+    // 問答手風琴：點題目展開/收合答案
+    document.querySelectorAll('.faq-question').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var item = this.closest('.faq-item');
+        var isOpen = item.classList.contains('open');
+        item.classList.toggle('open');
+        this.setAttribute('aria-expanded', !isOpen);
+      });
+    });
+
+    // 主題標籤篩選
+    var faqTags = document.getElementById('faq-tags');
+    var faqList = document.getElementById('faq-list');
+    var faqNoResult = document.getElementById('faq-no-result');
+    if (faqTags && faqList && faqNoResult) {
+      faqTags.addEventListener('click', function (e) {
+        var btn = e.target.closest('.faq-tag');
+        if (!btn) return;
+        var tag = btn.getAttribute('data-tag');
+        faqTags.querySelectorAll('.faq-tag').forEach(function (t) {
+          t.classList.toggle('active', t === btn);
+          t.setAttribute('aria-pressed', t === btn ? 'true' : 'false');
+        });
+        var items = faqList.querySelectorAll('.faq-item');
+        var visibleCount = 0;
+        items.forEach(function (item) {
+          var itemTag = item.getAttribute('data-tag') || '';
+          var show = tag === '全部' || itemTag === tag;
+          item.classList.toggle('hidden-by-tag', !show);
+          if (show) visibleCount++;
+        });
+        faqNoResult.classList.toggle('visible', tag !== '全部' && visibleCount === 0);
+      });
     }
 
     // 帳號下拉選單

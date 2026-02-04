@@ -94,6 +94,8 @@ def notify_all_directors(conn, title, message, link_url=None, category="general"
 # =========================================================
 # API - 登入
 # =========================================================
+# 未來可在此加入雙重認證 (2FA)：密碼驗證通過後若用戶已啟用 2FA，
+# 則回傳 need_2fa 並要求輸入 TOTP 驗證碼，驗證通過後再寫入 session 並導向。
 @auth_bp.route('/api/login', methods=['POST'])
 def login():
     data = request.get_json()
@@ -140,44 +142,37 @@ def login():
         session['is_homeroom'] = is_homeroom 
 
         original_role = user['role']
-        
+        # 未修改過帳密者不強制跳轉，改由各角色首頁顯示提示訊息
+
         if original_role == 'director':
-            # 主任：導向選擇頁面 (login-confirm)
+            session['role'] = 'director'
             session['pending_roles'] = [
                 {"id": "director", "name": "主任"},
                 {"id": "teacher", "name": "指導老師"},
             ]
-            # 初始 active role 設為 director (在選擇前仍需一個預設值，但它會被 confirm-role 覆蓋)
-            session['role'] = 'director' 
             return jsonify({"success": True, "redirect": url_for("auth_bp.login_confirm_page")})
-            
-        elif original_role == 'teacher':
-            # 指導老師：直接導向指導老師主頁 (role 設為 teacher)
-            session['role'] = 'teacher' 
-            
-            # 💡 備註：在您的需求中，老師的班導切換由「下拉選單」控制，
-            # 因此這裡不需自動跳轉到 class_teacher_home。
+
+        if original_role == 'teacher':
+            session['role'] = 'teacher'
             return jsonify({"success": True, "redirect": url_for("users_bp.teacher_home")})
-            
-        # ... 其他角色的處理 (例如 student, ta, admin,vendor 等)
-        elif original_role == 'student':
+
+        if original_role == 'student':
             session['role'] = 'student'
             return jsonify({"success": True, "redirect": url_for("users_bp.student_home")})
 
-        elif original_role == 'admin':
+        if original_role == 'admin':
             session['role'] = 'admin'
             return jsonify({"success": True, "redirect": url_for("users_bp.admin_home")})
-        
-        elif original_role == 'ta':
+
+        if original_role == 'ta':
             session['role'] = 'ta'
             return jsonify({"success": True, "redirect": url_for("users_bp.ta_home")})
-        
-        elif original_role == 'vendor':
+
+        if original_role == 'vendor':
             session['role'] = 'vendor'
             return jsonify({"success": True, "redirect": url_for("users_bp.vendor_home")})
-        # Fallback 處理
-        else:
-            return jsonify({"success": False, "message": "帳號角色未定義"}), 403
+
+        return jsonify({"success": False, "message": "帳號角色未定義"}), 403
 
     except Exception as e:
         current_app.logger.error(f"Login error for {username}: {e}")
@@ -203,12 +198,12 @@ def confirm_role():
         return jsonify({"success": False, "message": "無效的角色選擇"}), 400
 
     session['role'] = selected_role
-    session.pop('pending_roles', None) 
+    session.pop('pending_roles', None)
 
     if selected_role == 'director':
         redirect_page = '/director_home'
     elif selected_role == 'teacher':
-        redirect_page = '/teacher_home' 
+        redirect_page = '/teacher_home'
     else:
         return jsonify({"success": False, "message": "系統錯誤：未知的角色"}), 500
 
@@ -247,6 +242,13 @@ def register_student():
             VALUES (%s, %s, %s, %s)
         """, (username, hashed_pw, email, role))
         conn.commit()
+
+        # 建立帳號後自動發送 Email 通知給用戶
+        try:
+            from email_service import send_account_created_email
+            send_account_created_email(email, username, username, "學生", initial_password=None)
+        except Exception as send_err:
+            print(f"⚠️ 學生註冊成功，但發送通知信失敗: {send_err}")
 
         return jsonify({"success": True, "message": "註冊成功"})
     except Exception as e:
@@ -300,11 +302,19 @@ def register_company():
         # 4. 將廠商資料寫入 users 資料表，並將 status 設為 'active'
         cursor.execute("""
             INSERT INTO users (username, password, email, role, status)
-            VALUES (%s, %s, %s, %s, 'active')  -- 註冊後即啟用
+            VALUES (%s, %s, %s, %s, 'active')
         """, (username, hashed_pw, email, role))
         
-        user_id = cursor.lastrowid # 獲取剛插入的 users.id
-        
+        user_id = cursor.lastrowid
+        name_for_email = data.get("name") or username  # 廠商註冊表若有姓名則用，否則用 username
+
+        # 4.1 建立帳號後自動發送 Email 通知給該廠商
+        try:
+            from email_service import send_account_created_email
+            send_account_created_email(email, username, name_for_email, "廠商", initial_password=None)
+        except Exception as send_err:
+            print(f"⚠️ 廠商註冊成功，但發送通知信失敗: {send_err}")
+
         # 5. 發送通知給所有科助和主任
         title = "新廠商註冊通知"
         message = f"有新的廠商已完成註冊：\n帳號：{username}\nEmail：{email}\n請前往管理頁面留意後續合作。"
