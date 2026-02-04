@@ -194,22 +194,40 @@ def get_profile():
             return jsonify({"success": False, "message": "使用者不存在"}), 404
 
         # ------------------------------
-        # 學期：全部由 internship_configs 連結 semesters.id（users 表已無 current_semester_code）
+        # 學期：由 internship_configs 取得（優先個人設定，否則採用屆別預設 user_id IS NULL）
         # ------------------------------
         user['current_semester_display'] = ''
         user['current_semester_code'] = None
-        cursor.execute("""
-            SELECT ic.semester_id, s.code
-            FROM internship_configs ic
-            JOIN semesters s ON s.id = ic.semester_id
-            WHERE ic.user_id = %s
-            ORDER BY ic.semester_id DESC
-            LIMIT 1
-        """, (user_id,))
-        ic_row = cursor.fetchone()
-        if ic_row:
-            user['current_semester_display'] = ic_row.get('code') or ''
-            user['current_semester_code'] = ic_row.get('semester_id')
+        cursor.execute("SELECT id FROM semesters WHERE is_active = 1 LIMIT 1")
+        active_semester = cursor.fetchone()
+        active_semester_id = active_semester.get('id') if active_semester else None
+        if active_semester_id:
+            # 學生：採用 (user_id = 本人 OR (user_id IS NULL AND admission_year = 屆數)) 且 semester_id = 當前學期，ORDER BY user_id DESC 取一筆（個人優先）
+            db_ay = user.get('db_admission_year')
+            admission_year_val = None
+            if db_ay is not None and str(db_ay).strip() != '':
+                try:
+                    admission_year_val = int(db_ay)
+                except (TypeError, ValueError):
+                    pass
+            elif user.get('original_role') == 'student' and user.get('username') and len(user.get('username', '')) >= 3:
+                try:
+                    admission_year_val = int(user['username'][:3])
+                except (TypeError, ValueError):
+                    pass
+            cursor.execute("""
+                SELECT ic.semester_id, s.code
+                FROM internship_configs ic
+                JOIN semesters s ON s.id = ic.semester_id
+                WHERE ic.semester_id = %s
+                  AND (ic.user_id = %s OR (ic.user_id IS NULL AND ic.admission_year = %s))
+                ORDER BY ic.user_id DESC
+                LIMIT 1
+            """, (active_semester_id, user_id, admission_year_val))
+            ic_row = cursor.fetchone()
+            if ic_row:
+                user['current_semester_display'] = ic_row.get('code') or ''
+                user['current_semester_code'] = ic_row.get('semester_id')
         # ------------------------------
 
         original_role_from_db = user.pop("original_role")

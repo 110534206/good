@@ -9,11 +9,31 @@ admin_bp = Blueprint("admin_bp", __name__, url_prefix='/admin')
 # --------------------------------
 # 用戶管理
 # --------------------------------
+def _post_process_users(users):
+    """共用：補齊 role_display、admission_year、created_at 格式"""
+    role_map = {'ta': '科助', 'teacher': '教師', 'student': '學生', 'director': '主任', 'admin': '管理員', 'vendor': '廠商'}
+    for user in users:
+        if user.get('created_at'):
+            user['created_at'] = user['created_at'].strftime("%Y-%m-%d %H:%M:%S")
+        user['role_display'] = role_map.get(user['role'], user['role'])
+        if user['role'] == 'student' and user.get('username') and len(user['username']) >= 3:
+            user['admission_year'] = user['username'][:3]
+        else:
+            user['admission_year'] = ''
+    return users
+
 @admin_bp.route('/api/get_all_users', methods=['GET'])
 def get_all_users():
+    page = max(1, request.args.get('page', 1, type=int))
+    per_page = max(1, min(100, request.args.get('per_page', 20, type=int)))
     conn = get_db()
     cursor = conn.cursor(dictionary=True)
     try:
+        cursor.execute("""
+            SELECT COUNT(*) AS total FROM users u
+        """)
+        total = cursor.fetchone()['total']
+
         cursor.execute("""
             SELECT 
                 u.id, u.username, u.name, u.email, u.role, u.class_id, u.status,
@@ -29,25 +49,18 @@ def get_all_users():
             FROM users u
             LEFT JOIN classes c ON u.class_id = c.id
             ORDER BY u.created_at DESC
-        """)
+            LIMIT %s OFFSET %s
+        """, (per_page, (page - 1) * per_page))
         users = cursor.fetchall()
+        _post_process_users(users)
 
-        for user in users:
-            if user.get('created_at'):
-                user['created_at'] = user['created_at'].strftime("%Y-%m-%d %H:%M:%S")
-
-            role_map = {'ta': '科助', 'teacher': '教師', 'student': '學生', 'director': '主任', 'admin': '管理員', 'vendor': '廠商'}
-            # 使用 role_map 賦值給 role_display，這是前端需要顯示的中文名稱
-            user['role_display'] = role_map.get(user['role'], user['role']) #
-
-            # 【新增邏輯】提取學生的入學屆數
-            if user['role'] == 'student' and user.get('username') and len(user['username']) >= 3:
-                user['admission_year'] = user['username'][:3]
-            else:
-                user['admission_year'] = ''
-            # 【新增邏輯結束】
-
-        return jsonify({"success": True, "users": users})
+        return jsonify({
+            "success": True,
+            "users": users,
+            "total": total,
+            "page": page,
+            "per_page": per_page
+        })
     except Exception as e:
         print(f"取得所有用戶錯誤: {e}")
         return jsonify({"success": False, "message": "取得失敗"}), 500
@@ -57,11 +70,11 @@ def get_all_users():
 
 @admin_bp.route('/api/search_users', methods=['GET'])
 def search_users():
-    # 修正：將前端傳送的參數名稱 'username' 變更為更具描述性的名稱
     username_or_name_or_email = (request.args.get('username') or '').strip()
-    # 新增：取得角色篩選參數
-    role = (request.args.get('role') or '').strip() 
+    role = (request.args.get('role') or '').strip()
     filename = (request.args.get('filename') or '').strip()
+    page = max(1, request.args.get('page', 1, type=int))
+    per_page = max(1, min(100, request.args.get('per_page', 20, type=int)))
     conn = get_db()
     cursor = conn.cursor(dictionary=True)
     try:
@@ -69,57 +82,49 @@ def search_users():
         params = []
 
         if username_or_name_or_email:
-            # 修正：支援同時搜尋帳號、姓名或 Email (與前端提示一致)
             conditions.append("(u.username LIKE %s OR u.name LIKE %s OR u.email LIKE %s)")
             search_term = f"%{username_or_name_or_email}%"
             params.extend([search_term, search_term, search_term])
-        
-        # 修正：加入角色篩選條件
         if role:
             conditions.append("u.role = %s")
             params.append(role)
-
         if filename:
             conditions.append("EXISTS (SELECT 1 FROM resumes r WHERE r.user_id = u.id AND r.original_filename LIKE %s)")
             params.append(f"%{filename}%")
 
         where_clause = "WHERE " + " AND ".join(conditions) if conditions else ""
 
+        cursor.execute(f"SELECT COUNT(*) AS total FROM users u {where_clause}", params)
+        total = cursor.fetchone()['total']
+
         cursor.execute(f"""
             SELECT 
-            u.id, u.username, u.name, u.email, u.role, u.class_id, u.status,
-            c.name AS class_name,
-            c.department,
-            (
-                SELECT GROUP_CONCAT(CONCAT(c2.admission_year, '屆', c2.department, c2.name) SEPARATOR ', ')
-                FROM classes_teacher ct2
-                JOIN classes c2 ON ct2.class_id = c2.id
-                WHERE ct2.teacher_id = u.id
-            ) AS teaching_classes,
-            u.created_at
-        FROM users u
-        LEFT JOIN classes c ON u.class_id = c.id
-        {where_clause}
-        ORDER BY u.created_at DESC
-    """, params)
+                u.id, u.username, u.name, u.email, u.role, u.class_id, u.status,
+                c.name AS class_name,
+                c.department,
+                (
+                    SELECT GROUP_CONCAT(CONCAT(c2.admission_year, '屆', c2.department, c2.name) SEPARATOR ', ')
+                    FROM classes_teacher ct2
+                    JOIN classes c2 ON ct2.class_id = c2.id
+                    WHERE ct2.teacher_id = u.id
+                ) AS teaching_classes,
+                u.created_at
+            FROM users u
+            LEFT JOIN classes c ON u.class_id = c.id
+            {where_clause}
+            ORDER BY u.created_at DESC
+            LIMIT %s OFFSET %s
+        """, params + [per_page, (page - 1) * per_page])
         users = cursor.fetchall()
-        
-        # 補齊 post-processing 邏輯，確保前端能正確顯示角色名稱和學生屆數
-        role_map = {'ta': '科助', 'teacher': '教師', 'student': '學生', 'director': '主任', 'admin': '管理員', 'vendor': '廠商'}
-        
-        for user in users:
-            if user.get('created_at'):
-                user['created_at'] = user['created_at'].strftime("%Y-%m-%d %H:%M:%S")
+        _post_process_users(users)
 
-            user['role_display'] = role_map.get(user['role'], user['role'])
-
-            # 提取學生的入學屆數
-            if user['role'] == 'student' and user.get('username') and len(user['username']) >= 3:
-                user['admission_year'] = user['username'][:3]
-            else:
-                user['admission_year'] = ''
-            
-        return jsonify({"success": True, "users": users})
+        return jsonify({
+            "success": True,
+            "users": users,
+            "total": total,
+            "page": page,
+            "per_page": per_page
+        })
     except Exception as e:
         print(f"搜尋用戶錯誤: {e}")
         return jsonify({"success": False, "message": "搜尋失敗"}), 500
