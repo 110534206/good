@@ -8179,7 +8179,9 @@ def review_resume(resume_id):
         # 2. 查詢履歷並取得學生Email和姓名
         cursor.execute("""
             SELECT 
-                r.user_id, r.original_filename, r.status AS old_status, r.comment,
+                r.user_id, r.original_filename, r.status AS old_status, 
+                r.teacher_review_status AS old_teacher_review_status,
+                r.comment,
                 u.email AS student_email, u.name AS student_name
             FROM resumes r
             JOIN users u ON r.user_id = u.id
@@ -8194,14 +8196,37 @@ def review_resume(resume_id):
         student_email = resume_data['student_email'] 
         student_name = resume_data['student_name']  
         old_status = resume_data['old_status']
+        old_teacher_review_status = resume_data.get('old_teacher_review_status')
 
         # 3. 更新履歷狀態
-        cursor.execute("""
-            UPDATE resumes SET 
-                status=%s, 
-                comment=%s
-            WHERE id=%s
-        """, (status, comment, resume_id))
+        # 根據角色決定更新哪個欄位：
+        # - 指導老師 (teacher)：更新 teacher_review_status
+        # - 其他角色：更新 status
+        if user_role == 'teacher':
+            # 指導老師審核：更新 teacher_review_status 和 reviewed_by
+            old_status_for_check = old_teacher_review_status
+            cursor.execute("""
+                UPDATE resumes SET 
+                    teacher_review_status=%s,
+                    comment=%s,
+                    reviewed_by=%s,
+                    reviewed_at=NOW(),
+                    updated_at=NOW()
+                WHERE id=%s
+            """, (status, comment, user_id, resume_id))
+            print(f"🔍 [DEBUG] 指導老師審核履歷: resume_id={resume_id}, teacher_review_status={status}, reviewed_by={user_id}")
+        else:
+            # 其他角色：更新 status
+            old_status_for_check = old_status
+            cursor.execute("""
+                UPDATE resumes SET 
+                    status=%s, 
+                    comment=%s,
+                    reviewed_by=%s,
+                    reviewed_at=NOW(),
+                    updated_at=NOW()
+                WHERE id=%s
+            """, (status, comment, user_id, resume_id))
         
         # 4. 取得審核者姓名
         cursor.execute("SELECT name, role FROM users WHERE id = %s", (user_id,))
@@ -8215,7 +8240,9 @@ def review_resume(resume_id):
             reviewer_name = "審核者"
 
         # 5. 處理 Email 寄送與通知 (僅在狀態改變時處理)
-        if old_status != status:
+        # 使用對應角色的舊狀態進行比較
+        status_changed = (old_status_for_check != status) if old_status_for_check is not None else True
+        if status_changed:
             # =============== 退件 ===============
             if status == 'rejected':
                 # 嘗試發送郵件（如果 email_service 存在）
@@ -12568,7 +12595,9 @@ def review_resume(resume_id):
         # 2. 查詢履歷並取得學生Email和姓名
         cursor.execute("""
             SELECT 
-                r.user_id, r.original_filename, r.status AS old_status, r.comment,
+                r.user_id, r.original_filename, r.status AS old_status, 
+                r.teacher_review_status AS old_teacher_review_status,
+                r.comment,
                 u.email AS student_email, u.name AS student_name
             FROM resumes r
             JOIN users u ON r.user_id = u.id
@@ -12583,14 +12612,37 @@ def review_resume(resume_id):
         student_email = resume_data['student_email'] 
         student_name = resume_data['student_name']  
         old_status = resume_data['old_status']
+        old_teacher_review_status = resume_data.get('old_teacher_review_status')
 
         # 3. 更新履歷狀態
-        cursor.execute("""
-            UPDATE resumes SET 
-                status=%s, 
-                comment=%s
-            WHERE id=%s
-        """, (status, comment, resume_id))
+        # 根據角色決定更新哪個欄位：
+        # - 指導老師 (teacher)：更新 teacher_review_status
+        # - 其他角色：更新 status
+        if user_role == 'teacher':
+            # 指導老師審核：更新 teacher_review_status 和 reviewed_by
+            old_status_for_check = old_teacher_review_status
+            cursor.execute("""
+                UPDATE resumes SET 
+                    teacher_review_status=%s,
+                    comment=%s,
+                    reviewed_by=%s,
+                    reviewed_at=NOW(),
+                    updated_at=NOW()
+                WHERE id=%s
+            """, (status, comment, user_id, resume_id))
+            print(f"🔍 [DEBUG] 指導老師審核履歷: resume_id={resume_id}, teacher_review_status={status}, reviewed_by={user_id}")
+        else:
+            # 其他角色：更新 status
+            old_status_for_check = old_status
+            cursor.execute("""
+                UPDATE resumes SET 
+                    status=%s, 
+                    comment=%s,
+                    reviewed_by=%s,
+                    reviewed_at=NOW(),
+                    updated_at=NOW()
+                WHERE id=%s
+            """, (status, comment, user_id, resume_id))
         
         # 4. 取得審核者姓名
         cursor.execute("SELECT name, role FROM users WHERE id = %s", (user_id,))
@@ -12604,7 +12656,9 @@ def review_resume(resume_id):
             reviewer_name = "審核者"
 
         # 5. 處理 Email 寄送與通知 (僅在狀態改變時處理)
-        if old_status != status:
+        # 使用對應角色的舊狀態進行比較
+        status_changed = (old_status_for_check != status) if old_status_for_check is not None else True
+        if status_changed:
             # =============== 退件 ===============
             if status == 'rejected':
                 # 嘗試發送郵件（如果 email_service 存在）
@@ -16957,7 +17011,9 @@ def review_resume(resume_id):
         # 2. 查詢履歷並取得學生Email和姓名
         cursor.execute("""
             SELECT 
-                r.user_id, r.original_filename, r.status AS old_status, r.comment,
+                r.user_id, r.original_filename, r.status AS old_status, 
+                r.teacher_review_status AS old_teacher_review_status,
+                r.comment,
                 u.email AS student_email, u.name AS student_name
             FROM resumes r
             JOIN users u ON r.user_id = u.id
@@ -16972,14 +17028,37 @@ def review_resume(resume_id):
         student_email = resume_data['student_email'] 
         student_name = resume_data['student_name']  
         old_status = resume_data['old_status']
+        old_teacher_review_status = resume_data.get('old_teacher_review_status')
 
         # 3. 更新履歷狀態
-        cursor.execute("""
-            UPDATE resumes SET 
-                status=%s, 
-                comment=%s
-            WHERE id=%s
-        """, (status, comment, resume_id))
+        # 根據角色決定更新哪個欄位：
+        # - 指導老師 (teacher)：更新 teacher_review_status
+        # - 其他角色：更新 status
+        if user_role == 'teacher':
+            # 指導老師審核：更新 teacher_review_status 和 reviewed_by
+            old_status_for_check = old_teacher_review_status
+            cursor.execute("""
+                UPDATE resumes SET 
+                    teacher_review_status=%s,
+                    comment=%s,
+                    reviewed_by=%s,
+                    reviewed_at=NOW(),
+                    updated_at=NOW()
+                WHERE id=%s
+            """, (status, comment, user_id, resume_id))
+            print(f"🔍 [DEBUG] 指導老師審核履歷: resume_id={resume_id}, teacher_review_status={status}, reviewed_by={user_id}")
+        else:
+            # 其他角色：更新 status
+            old_status_for_check = old_status
+            cursor.execute("""
+                UPDATE resumes SET 
+                    status=%s, 
+                    comment=%s,
+                    reviewed_by=%s,
+                    reviewed_at=NOW(),
+                    updated_at=NOW()
+                WHERE id=%s
+            """, (status, comment, user_id, resume_id))
         
         # 4. 取得審核者姓名
         cursor.execute("SELECT name, role FROM users WHERE id = %s", (user_id,))
@@ -16993,7 +17072,9 @@ def review_resume(resume_id):
             reviewer_name = "審核者"
 
         # 5. 處理 Email 寄送與通知 (僅在狀態改變時處理)
-        if old_status != status:
+        # 使用對應角色的舊狀態進行比較
+        status_changed = (old_status_for_check != status) if old_status_for_check is not None else True
+        if status_changed:
             # =============== 退件 ===============
             if status == 'rejected':
                 # 嘗試發送郵件（如果 email_service 存在）
@@ -21346,7 +21427,9 @@ def review_resume(resume_id):
         # 2. 查詢履歷並取得學生Email和姓名
         cursor.execute("""
             SELECT 
-                r.user_id, r.original_filename, r.status AS old_status, r.comment,
+                r.user_id, r.original_filename, r.status AS old_status, 
+                r.teacher_review_status AS old_teacher_review_status,
+                r.comment,
                 u.email AS student_email, u.name AS student_name
             FROM resumes r
             JOIN users u ON r.user_id = u.id
@@ -21361,14 +21444,37 @@ def review_resume(resume_id):
         student_email = resume_data['student_email'] 
         student_name = resume_data['student_name']  
         old_status = resume_data['old_status']
+        old_teacher_review_status = resume_data.get('old_teacher_review_status')
 
         # 3. 更新履歷狀態
-        cursor.execute("""
-            UPDATE resumes SET 
-                status=%s, 
-                comment=%s
-            WHERE id=%s
-        """, (status, comment, resume_id))
+        # 根據角色決定更新哪個欄位：
+        # - 指導老師 (teacher)：更新 teacher_review_status
+        # - 其他角色：更新 status
+        if user_role == 'teacher':
+            # 指導老師審核：更新 teacher_review_status 和 reviewed_by
+            old_status_for_check = old_teacher_review_status
+            cursor.execute("""
+                UPDATE resumes SET 
+                    teacher_review_status=%s,
+                    comment=%s,
+                    reviewed_by=%s,
+                    reviewed_at=NOW(),
+                    updated_at=NOW()
+                WHERE id=%s
+            """, (status, comment, user_id, resume_id))
+            print(f"🔍 [DEBUG] 指導老師審核履歷: resume_id={resume_id}, teacher_review_status={status}, reviewed_by={user_id}")
+        else:
+            # 其他角色：更新 status
+            old_status_for_check = old_status
+            cursor.execute("""
+                UPDATE resumes SET 
+                    status=%s, 
+                    comment=%s,
+                    reviewed_by=%s,
+                    reviewed_at=NOW(),
+                    updated_at=NOW()
+                WHERE id=%s
+            """, (status, comment, user_id, resume_id))
         
         # 4. 取得審核者姓名
         cursor.execute("SELECT name, role FROM users WHERE id = %s", (user_id,))
@@ -21382,7 +21488,9 @@ def review_resume(resume_id):
             reviewer_name = "審核者"
 
         # 5. 處理 Email 寄送與通知 (僅在狀態改變時處理)
-        if old_status != status:
+        # 使用對應角色的舊狀態進行比較
+        status_changed = (old_status_for_check != status) if old_status_for_check is not None else True
+        if status_changed:
             # =============== 退件 ===============
             if status == 'rejected':
                 # 嘗試發送郵件（如果 email_service 存在）
@@ -25735,7 +25843,9 @@ def review_resume(resume_id):
         # 2. 查詢履歷並取得學生Email和姓名
         cursor.execute("""
             SELECT 
-                r.user_id, r.original_filename, r.status AS old_status, r.comment,
+                r.user_id, r.original_filename, r.status AS old_status, 
+                r.teacher_review_status AS old_teacher_review_status,
+                r.comment,
                 u.email AS student_email, u.name AS student_name
             FROM resumes r
             JOIN users u ON r.user_id = u.id
@@ -25750,14 +25860,37 @@ def review_resume(resume_id):
         student_email = resume_data['student_email'] 
         student_name = resume_data['student_name']  
         old_status = resume_data['old_status']
+        old_teacher_review_status = resume_data.get('old_teacher_review_status')
 
         # 3. 更新履歷狀態
-        cursor.execute("""
-            UPDATE resumes SET 
-                status=%s, 
-                comment=%s
-            WHERE id=%s
-        """, (status, comment, resume_id))
+        # 根據角色決定更新哪個欄位：
+        # - 指導老師 (teacher)：更新 teacher_review_status
+        # - 其他角色：更新 status
+        if user_role == 'teacher':
+            # 指導老師審核：更新 teacher_review_status 和 reviewed_by
+            old_status_for_check = old_teacher_review_status
+            cursor.execute("""
+                UPDATE resumes SET 
+                    teacher_review_status=%s,
+                    comment=%s,
+                    reviewed_by=%s,
+                    reviewed_at=NOW(),
+                    updated_at=NOW()
+                WHERE id=%s
+            """, (status, comment, user_id, resume_id))
+            print(f"🔍 [DEBUG] 指導老師審核履歷: resume_id={resume_id}, teacher_review_status={status}, reviewed_by={user_id}")
+        else:
+            # 其他角色：更新 status
+            old_status_for_check = old_status
+            cursor.execute("""
+                UPDATE resumes SET 
+                    status=%s, 
+                    comment=%s,
+                    reviewed_by=%s,
+                    reviewed_at=NOW(),
+                    updated_at=NOW()
+                WHERE id=%s
+            """, (status, comment, user_id, resume_id))
         
         # 4. 取得審核者姓名
         cursor.execute("SELECT name, role FROM users WHERE id = %s", (user_id,))
@@ -25771,7 +25904,9 @@ def review_resume(resume_id):
             reviewer_name = "審核者"
 
         # 5. 處理 Email 寄送與通知 (僅在狀態改變時處理)
-        if old_status != status:
+        # 使用對應角色的舊狀態進行比較
+        status_changed = (old_status_for_check != status) if old_status_for_check is not None else True
+        if status_changed:
             # =============== 退件 ===============
             if status == 'rejected':
                 # 嘗試發送郵件（如果 email_service 存在）
