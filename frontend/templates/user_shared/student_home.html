@@ -42,6 +42,7 @@
       box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
     }
 
+    /* 頂端列內容用 container 包裹，寬度跟下方一致（與 admin_home 一致） */
     .top-bar>.container {
       display: flex;
       justify-content: space-between;
@@ -99,13 +100,12 @@
       margin-top: 6px;
     }
 
-    /* 輪播區塊 */
+    /* 輪播區塊：放在 .container 內，與頂端列、主內容同寬（與 admin_home 一致） */
     .carousel-container {
       position: relative;
       width: 100%;
-      max-width: 1200px;
-      margin: 80px auto 2rem auto;
-      padding: 0 0.5rem;
+      margin-top: 80px;
+      margin-bottom: 2rem;
       overflow: hidden;
     }
 
@@ -133,27 +133,61 @@
       z-index: 1;
     }
 
-    /* 第一頁：圖片 */
+    /* 三張跑馬燈共用同一格式：僅背景圖不同 */
+    .carousel-slide.hero-image,
+    .carousel-slide.manual-preview,
+    .carousel-slide.faq-preview {
+      background-size: cover;
+      background-repeat: no-repeat;
+      background-position: center;
+    }
+
     .carousel-slide.hero-image {
       background-image: url('/static/images/title.png');
-      background-size: cover;
-      background-repeat: no-repeat;
-      background-position: center;
     }
 
-    /* 第二頁：問題圖片 */
+    .carousel-slide.manual-preview {
+      background-image: url('/static/images/功能操作說明.png');
+    }
+
     .carousel-slide.faq-preview {
       background-image: url('/static/images/實習常見問題.png');
-      position: relative; 
-      background-size: cover;
-      background-repeat: no-repeat;
-      background-position: center;
     }
 
-    /* 第二頁按鈕 */
+/* 第二頁跑馬燈內按鈕（維持原本置中樣式） */
+    .faq-button1 {
+      position: absolute;
+      bottom: 90px;
+      left: 50%;
+      transform: translateX(-50%);
+      padding: 0.8rem 2rem;
+      background-color:rgb(215, 176, 78);
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-size: 1.2rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      box-shadow: 0 4px 12px rgba(222, 152, 49, 0.3);
+      z-index: 5;
+      white-space: nowrap;
+    }
+
+    .faq-button1:hover {
+      background-color: rgb(209, 166, 59);
+      transform: translateX(-50%) translateY(-2px);
+      box-shadow: 0 6px 16px  rgba(222, 152, 49, 0.3);
+    }
+
+    .faq-button1:active {
+      transform: translateX(-50%) translateY(0);
+    }
+
+    /* 第三頁跑馬燈內按鈕（維持原本置中樣式） */
     .faq-button {
       position: absolute;
-      bottom: 20px;
+      bottom: 90px;
       left: 50%;
       transform: translateX(-50%);
       padding: 0.8rem 2rem;
@@ -164,7 +198,6 @@
       font-size: 1.2rem;
       font-weight: 600;
       cursor: pointer;
-      bottom: 90px; 
       transition: all 0.3s ease;
       box-shadow: 0 4px 12px rgba(0, 102, 204, 0.3);
       z-index: 5;
@@ -264,6 +297,7 @@
       grid-template-columns: repeat(2, 1fr);
       gap: 2rem;
       padding: 0;
+      margin-bottom: 2rem;  /* 實習心得底下留空白 */
     }
 
     .card {
@@ -570,15 +604,23 @@
     </div>
   </div>
 
-  <!-- 輪播區塊 -->
-  <div class="carousel-container">
+  <!-- 輪播區塊（與 admin_home 一樣包在 .container 內，與主內容同寬） -->
+  <div class="container">
+    <div class="carousel-container">
     <div class="carousel-wrapper">
-      <!-- 第一頁：圖片 -->
+      <!-- 第一頁：平台標題圖片 -->
       <div class="carousel-slide hero-image active" role="img" aria-label="平台標題圖片"></div>
       
-      <!-- 第二頁：問題圖片 -->
+      <!-- 第二頁：功能操作說明（連至實習常見問題頁面） -->
+      <div class="carousel-slide manual-preview" role="img" aria-label="功能操作說明圖片">
+        <button class="faq-button1" onclick="window.location.href='/intern_faq'" aria-label="查看功能操作說明">
+          點擊此處 - >
+        </button>
+      </div>
+      
+      <!-- 第三頁：實習常見問題（連至 intern_faq_2） -->
       <div class="carousel-slide faq-preview" role="img" aria-label="實習常見問題圖片">
-        <button class="faq-button" onclick="window.location.href='/intern_faq'" aria-label="查看問題">
+        <button class="faq-button" onclick="window.location.href='/intern_faq_2'" aria-label="查看常見問題">
           點擊此處 - >
         </button>
       </div>
@@ -596,11 +638,13 @@
     <div class="carousel-indicators">
       <span class="carousel-indicator active" onclick="goToSlide(0)" aria-label="第1頁"></span>
       <span class="carousel-indicator" onclick="goToSlide(1)" aria-label="第2頁"></span>
+      <span class="carousel-indicator" onclick="goToSlide(2)" aria-label="第3頁"></span>
     </div>
   </div>
+  </div>
 
-  <div class="container">
-    <main>
+  <!-- 主內容（與 admin_home 一樣 main 使用 .container，履歷管理等按鈕與跑馬燈同寬） -->
+  <main class="container">
       {% with messages = get_flashed_messages(with_categories=true) %}
         {% if messages %}
           {% for category, message in messages %}
@@ -648,9 +692,7 @@
           <a href="/intern_experience" role="link">前往查看</a>
           </div>
       </section>
-
-    </main>
-  </div>
+  </main>
 
   <nav id="side-menu" aria-hidden="true" role="navigation" aria-label="功能選單">
     <button id="close-btn" aria-label="關閉功能選單">×</button>

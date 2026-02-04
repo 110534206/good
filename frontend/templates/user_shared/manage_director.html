@@ -662,6 +662,8 @@
     flex-direction: column;
     overflow: visible;  /* 改為 visible，讓下方的框格可以超出卡片範圍 */
     position: relative;  /* 確保卡片獨立定位 */
+    z-index: 1;  /* 確保卡片在拖放時可以接收事件 */
+    pointer-events: auto;  /* 確保可以接收拖放事件 */
     }
 
     .companies-container::-webkit-scrollbar {
@@ -1442,6 +1444,7 @@
                ondragover="handleDragOver(event)"
                ondragleave="handleDragLeave(event)">
             <div class="company-header" 
+                 data-company-id="${company.company_id}"
                  onclick="toggleCompanyCard('${companyCardId}')"
                  ondrop="handleDrop(event)"
                  ondragover="handleDragOver(event)"
@@ -1707,13 +1710,17 @@
       event.preventDefault();
       event.stopPropagation();
       
-      // 如果拖放到公司標題，阻止點擊事件觸發
-      if (event.currentTarget.classList.contains('company-header')) {
+      const target = event.currentTarget;
+      
+      // 如果拖放到公司標題或公司卡片，阻止點擊事件觸發並自動展開卡片
+      const isCompanyHeader = target.classList.contains('company-header');
+      const isCompanyCard = target.classList.contains('company-card');
+      
+      if (isCompanyHeader || isCompanyCard) {
         // 延遲執行，確保點擊事件不會觸發
         setTimeout(() => {
-          const card = event.currentTarget.closest('.company-card');
+          const card = isCompanyCard ? target : target.closest('.company-card');
           if (card) {
-            const cardId = card.id;
             // 如果卡片是收合的，自動展開
             if (card.classList.contains('collapsed')) {
               card.classList.remove('collapsed');
@@ -1740,30 +1747,38 @@
         student_name: draggedStudent.student_name,
         student_number: draggedStudent.student_number
       };
-
-      const target = event.currentTarget;
       
       // 更可靠地獲取 companyId 和 jobId
       let companyId = target.dataset.companyId;
       let jobId = target.dataset.jobId;
       
       // 如果當前元素沒有，向上查找父元素
-      if (!companyId || !jobId) {
+      if (!companyId) {
         const parentWithCompanyId = target.closest('[data-company-id]');
-        const parentWithJobId = target.closest('[data-job-id]');
         if (parentWithCompanyId) companyId = parentWithCompanyId.dataset.companyId;
+      }
+      
+      if (!jobId) {
+        const parentWithJobId = target.closest('[data-job-id]');
         if (parentWithJobId) jobId = parentWithJobId.dataset.jobId;
       }
       
-      // 如果拖放到公司卡片本身（沒有 jobId），嘗試找到該公司的第一個職缺
+      // 如果拖放到公司卡片本身或公司標題（沒有 jobId），嘗試找到該公司的第一個職缺
       if (companyId && !jobId) {
         const company = allCompaniesData.find(c => c.company_id.toString() === companyId.toString());
         if (company && company.jobs && company.jobs.length > 0) {
           // 使用第一個職缺
           jobId = company.jobs[0].job_id;
-          console.log('拖放到公司卡片，使用第一個職缺:', { companyId, jobId, jobTitle: company.jobs[0].job_title });
+          console.log('拖放到公司卡片，使用第一個職缺:', { 
+            companyId, 
+            jobId, 
+            jobTitle: company.jobs[0].job_title,
+            targetClass: target.className,
+            isCompanyCard: isCompanyCard,
+            isCompanyHeader: isCompanyHeader
+          });
         } else {
-          console.error('公司沒有職缺:', { companyId });
+          console.error('公司沒有職缺:', { companyId, company });
           showToast('該公司沒有職缺，無法添加學生', 'error');
           return;
         }
