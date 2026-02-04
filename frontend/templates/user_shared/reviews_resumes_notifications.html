@@ -843,58 +843,58 @@
     }
 
     // 發送通知
-    function sendNotification() {
-      const notificationType = document.getElementById("notificationType").value;
-      const content = document.getElementById("notificationContent").value.trim();
-      
-      if (notificationType === "interview" && !content) {
-        alert("請輸入通知內容");
-        return;
-      }
-
-      if (!currentStudentId) {
-        alert("學生資訊不完整，無法發送通知");
-        return;
-      }
-
-      const sendBtn = document.getElementById("sendNotificationBtn");
-      sendBtn.disabled = true;
-      sendBtn.textContent = "發送中...";
-
-      // Email 和姓名將從資料庫自動獲取，不需要前端傳遞
-      fetch('/vendor/api/send_notification', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          student_id: currentStudentId,
-          notification_type: notificationType,
-          content: content || ''
-        })
-      })
-        .then(res => res.json())
-        .then(data => {
-          if (data.success) {
-            const emailInfo = data.student_email ? `\n收件人：${data.student_email}` : '';
-            const logInfo = data.email_log_id ? `\n郵件記錄ID：${data.email_log_id}` : '';
-            alert(`通知發送成功！${emailInfo}${logInfo}`);
-            bootstrap.Modal.getInstance(document.getElementById("notificationModal")).hide();
-            // 重新載入履歷列表以更新狀態
-            loadResumes();
-          } else {
-            alert("發送失敗：" + (data.message || "未知錯誤"));
-          }
-        })
-        .catch(error => {
-          console.error("發送通知失敗:", error);
-          alert("發送通知失敗，請檢查網路連線");
-        })
-        .finally(() => {
-          sendBtn.disabled = false;
-          sendBtn.textContent = "發送通知";
-        });
+  function sendNotification() {
+  const type = document.getElementById("notificationType").value;
+  
+  // 1. 抓取各個格子的內容
+  const location = document.getElementById("interviewLocation").value;
+  const time = document.getElementById("interviewTime").value;
+  const notes = document.getElementById("notificationContent").value;
+  
+  // 2. 抓取勾選的文件
+  const selectedDocs = [];
+  document.querySelectorAll(".interview-only .form-check-input:checked").forEach(cb => {
+    if (cb.value === "其他") {
+      const otherText = cb.parentElement.querySelector("input[type='text']").value;
+      if(otherText) selectedDocs.push(`其他: ${otherText}`);
+    } else {
+      selectedDocs.push(cb.value);
     }
+  });
+
+  // 3. 把所有內容「組合成一段文案」
+  let finalContent = "";
+  if (type === "interview") {
+    finalContent = `【面試詳細資訊】\n` +
+                   `📍 面試地點：${location || "請洽廠商"}\n` +
+                   `⏰ 面試時間：${time ? time.replace("T", " ") : "另行通知"}\n` +
+                   `📁 需攜帶文件：${selectedDocs.length > 0 ? selectedDocs.join("、") : "無"}\n` +
+                   `📝 備註事項：\n${notes || "無"}`;
+  } else {
+    // 如果是錄取通知，也可以比照辦理
+    finalContent = notes; 
+  }
+
+  // 4. 發送給後端 (後端不需要改，它會直接收到這一整串組合好的文字)
+  fetch('/vendor/api/send_notification', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      student_id: currentStudentId,
+      notification_type: type,
+      content: finalContent  // 傳送組合後的完整文案
+    })
+  })
+  .then(res => res.json())
+  .then(data => {
+    if (data.success) {
+      alert("Email 已成功發送！");
+      bootstrap.Modal.getInstance(document.getElementById("notificationModal")).hide();
+    } else {
+      alert("發送失敗：" + data.message);
+    }
+  });
+}
 
     // 查看 Email 記錄
     function viewEmailLogs() {
