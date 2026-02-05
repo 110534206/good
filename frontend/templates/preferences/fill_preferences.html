@@ -285,6 +285,14 @@
         </div>
         {% endif %}
 
+        {% if not preview and (not companies or companies|length == 0) %}
+        <div class="alert alert-info text-center" role="alert" style="max-width: 900px;">
+            <i class="bi bi-info-circle me-2"></i>
+            <strong>目前沒有可選的公司。</strong><br>
+            本學期尚未開放任何實習公司，請聯絡科助或管理員在「管理學期／公司開放」中開放公司後再填寫志願序。
+        </div>
+        {% endif %}
+
         <form id="preferencesForm" class="mx-auto" style="max-width: 900px;">
 
             {% for rank in range(1, 5+1) %}

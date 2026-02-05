@@ -1247,6 +1247,9 @@ def api_set_company_open_status():
         if company['status'] != 'approved':
             return jsonify({"success": False, "message": "只有已審核通過的公司才能設定開放狀態"}), 400
 
+        # 目前操作者（科助/管理員）寫入 opened_by_id，對應 users.id
+        opened_by_id = session.get("user_id")
+
         # 檢查是否已存在該公司該學期的記錄
         cursor.execute("""
             SELECT id FROM company_openings 
@@ -1255,18 +1258,18 @@ def api_set_company_open_status():
         existing = cursor.fetchone()
 
         if existing:
-            # 更新現有記錄
+            # 更新現有記錄（含 opened_by_id）
             cursor.execute("""
                 UPDATE company_openings 
-                SET is_open = %s, opened_at = %s
+                SET is_open = %s, opened_at = %s, opened_by_id = %s
                 WHERE company_id = %s AND semester = %s
-            """, (is_open, datetime.now(), company_id, current_semester_code))
+            """, (is_open, datetime.now(), opened_by_id, company_id, current_semester_code))
         else:
-            # 建立新記錄
+            # 建立新記錄（含 opened_by_id）
             cursor.execute("""
-                INSERT INTO company_openings (company_id, semester, is_open, opened_at)
-                VALUES (%s, %s, %s, %s)
-            """, (company_id, current_semester_code, is_open, datetime.now()))
+                INSERT INTO company_openings (company_id, semester, is_open, opened_at, opened_by_id)
+                VALUES (%s, %s, %s, %s, %s)
+            """, (company_id, current_semester_code, is_open, datetime.now(), opened_by_id))
 
         conn.commit()
         
@@ -1462,13 +1465,14 @@ def api_export_company_reviews():
         """)
         companies = cursor.fetchall()
         
-        # 查詢公司開放狀態
+        # 查詢公司開放狀態（含 opened_by_id 對應 users.id）
         cursor.execute("""
             SELECT 
                 co.company_id,
                 co.semester,
                 co.is_open,
-                co.opened_at
+                co.opened_at,
+                co.opened_by_id
             FROM company_openings co
             ORDER BY co.company_id, co.semester
         """)
@@ -1518,7 +1522,7 @@ def api_export_company_reviews():
                 sql_lines.append(f"WHERE id = {company['id']};")
                 sql_lines.append("")
         
-        # 更新開放狀態
+        # 更新開放狀態（含 opened_by_id 對應 users.id）
         sql_lines.append("-- 更新公司開放狀態\n")
         for company_id, opening_list in openings_dict.items():
             for opening in opening_list:
@@ -1526,12 +1530,14 @@ def api_export_company_reviews():
                 is_open = 1 if opening['is_open'] else 0
                 opened_at = opening['opened_at']
                 opened_at_str = f"'{opened_at.strftime('%Y-%m-%d %H:%M:%S')}'" if opened_at else "NOW()"
-                
-                sql_lines.append(f"INSERT INTO company_openings (company_id, semester, is_open, opened_at)")
-                sql_lines.append(f"VALUES ({company_id}, '{semester}', {is_open}, {opened_at_str})")
+                opened_by_id = opening.get('opened_by_id')
+                opened_by_str = str(opened_by_id) if opened_by_id else "NULL"
+                sql_lines.append(f"INSERT INTO company_openings (company_id, semester, is_open, opened_at, opened_by_id)")
+                sql_lines.append(f"VALUES ({company_id}, '{semester}', {is_open}, {opened_at_str}, {opened_by_str})")
                 sql_lines.append(f"ON DUPLICATE KEY UPDATE")
                 sql_lines.append(f"    is_open = {is_open},")
-                sql_lines.append(f"    opened_at = {opened_at_str};")
+                sql_lines.append(f"    opened_at = {opened_at_str},")
+                sql_lines.append(f"    opened_by_id = {opened_by_str};")
                 sql_lines.append("")
         
         sql_lines.append("COMMIT;")
