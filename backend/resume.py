@@ -245,19 +245,8 @@ def can_access_target_resume(cursor, session_user_id, session_role, target_user_
     if session_role == "ta":
         return True
 
-    # vendor 可以查看已通過老師審核的履歷
+    # vendor 角色不允許訪問履歷
     if session_role == "vendor":
-        # 檢查履歷狀態是否為 'approved'（老師已通過）
-        cursor.execute("""
-            SELECT status 
-            FROM resumes 
-            WHERE user_id = %s 
-            ORDER BY created_at DESC 
-            LIMIT 1
-        """, (target_user_id,))
-        resume = cursor.fetchone()
-        if resume and resume.get('status') == 'approved':
-            return True
         return False
 
     # 取得 target student's class_id
@@ -3226,33 +3215,33 @@ def update_resume_status_after_deadline(cursor, conn):
         
         # 如果已經過了截止時間，執行狀態更新
         if is_resume_deadline_passed:
-            # 將所有未退件的履歷（uploaded 或 pending 狀態）自動改為 approved（班導審核通過）
+            # 將所有未退件的履歷（uploaded 狀態）自動改為 approved（班導審核通過）
             # 不處理 rejected 狀態的履歷，保留退件狀態
             cursor.execute("""
                 UPDATE resumes 
                 SET status = 'approved', updated_at = NOW()
-                WHERE status IN ('uploaded', 'pending')
+                WHERE status = 'uploaded'
             """)
-            pending_to_approved_count = cursor.rowcount
+            uploaded_to_approved_count = cursor.rowcount
             
             # 截止時間後，所有班導已通過（status='approved'）的履歷會自動傳給指導老師審核
             # status 保持為 'approved'，表示已通過班導審核，等待指導老師審核
             # 注意：這裡不需要額外更新，因為 status 已經是 'approved'，指導老師可以查看並審核
             
-            if pending_to_approved_count > 0:
+            if uploaded_to_approved_count > 0:
                 conn.commit()
-                print(f"✅ 履歷提交截止時間已過，已將 {pending_to_approved_count} 筆未退件的履歷狀態改為 'approved'（班導審核通過），等待指導老師審核")
+                print(f"✅ 履歷提交截止時間已過，已將 {uploaded_to_approved_count} 筆未退件的履歷狀態改為 'approved'（班導審核通過），等待指導老師審核")
             
             return is_resume_deadline_passed, {
-                'pending_to_approved': pending_to_approved_count,
+                'uploaded_to_approved': uploaded_to_approved_count,
                 'teacher_review_status_updated': 0  # 不再使用 teacher_review_status
             }
         
-        return False, {'pending_to_approved': 0, 'teacher_review_status_updated': 0}
+        return False, {'uploaded_to_approved': 0, 'teacher_review_status_updated': 0}
     except Exception as e:
         print(f"❌ 更新履歷狀態錯誤: {e}")
         traceback.print_exc()
-        return False, {'pending_to_approved': 0, 'teacher_review_status_updated': 0}
+        return False, {'uploaded_to_approved': 0, 'teacher_review_status_updated': 0}
 
 
 @resume_bp.route('/api/teacher_review_resumes', methods=['GET'])
@@ -3330,8 +3319,7 @@ def get_teacher_review_resumes():
                 r.created_at AS upload_time,
                 r.original_filename,
                 r.status AS display_status,
-                r.teacher_review_status,
-                r.teacher_review_status,
+                COALESCE(r.teacher_review_status, 'uploaded') AS teacher_review_status,
                 sja.id AS application_id,
                 sja.applied_at,
                 ic.company_name,
@@ -3467,7 +3455,10 @@ def get_teacher_review_resumes():
             
             if resume_app_key not in processed_combinations:
                 processed_combinations.add(resume_app_key)
-                status = row.get('display_status') if row.get('display_status') else 'pending'
+                # 確保 status 符合 enum('uploaded', 'approved', 'rejected')
+                status = row.get('display_status') or 'uploaded'
+                if status not in ['uploaded', 'approved', 'rejected']:
+                    status = 'uploaded'
                 
                 # 根據截止時間狀態處理履歷狀態
                 if is_resume_deadline_passed:
@@ -3475,14 +3466,20 @@ def get_teacher_review_resumes():
                     if status == 'uploaded':
                         status = 'approved'  # 已經在資料庫中更新，這裡確保顯示正確
                     # approved 和 rejected 保持原樣
-                else:
-                    # 截止時間未過：將 uploaded 狀態映射為 pending 供前端顯示
-                    if status == 'uploaded':
-                        status = 'pending'
+                # 截止時間未過：保持原狀態（uploaded, approved, rejected）
                 
-                # 直接使用資料庫中的 teacher_review_status 值，不做映射處理
+                # 直接使用資料庫中的 teacher_review_status 值，確保符合 enum('uploaded', 'approved', 'rejected')
                 # review_resume.html 使用此欄位
                 teacher_review_status = row.get('teacher_review_status')
+                # 如果 teacher_review_status 為 None 或空，使用 'uploaded' 作為預設值
+                if not teacher_review_status:
+                    teacher_review_status = 'uploaded'
+                # 驗證狀態值是否符合 enum 定義
+                if teacher_review_status not in ['uploaded', 'approved', 'rejected']:
+                    teacher_review_status = 'uploaded'  # 如果值不符合 enum，默認為 'uploaded'
+                
+                # 調試：記錄 teacher_review_status 的值
+                print(f"🔍 [DEBUG] resume_id={row['resume_id']}, teacher_review_status={teacher_review_status}, display_status={status}")
                 
                 result_data.append({
                     # 前端下載連結 /api/download_resume/${row.id} 需要的是履歷 ID
@@ -3556,7 +3553,7 @@ def review_resume(resume_id):
     user_role = session.get('role')
 
     # 1. 權限檢查
-    ALLOWED_ROLES = ['teacher', 'admin', 'class_teacher', 'vendor']
+    ALLOWED_ROLES = ['teacher', 'admin', 'class_teacher']
     if not user_id or user_role not in ALLOWED_ROLES:
         return jsonify({"success": False, "message": "未授權或無權限"}), 403
 
@@ -3600,7 +3597,10 @@ def review_resume(resume_id):
         student_email = resume_data['student_email'] 
         student_name = resume_data['student_name']  
         old_status = resume_data['old_status']
-        old_teacher_review_status = resume_data.get('old_teacher_review_status')
+        # 確保 old_teacher_review_status 符合 enum 定義，NULL 視為 'uploaded'
+        old_teacher_review_status = resume_data.get('old_teacher_review_status') or 'uploaded'
+        if old_teacher_review_status not in ['uploaded', 'approved', 'rejected']:
+            old_teacher_review_status = 'uploaded'
         old_reviewed_by = resume_data.get('old_reviewed_by')
 
         # 3. 更新履歷狀態
@@ -3639,75 +3639,11 @@ def review_resume(resume_id):
         cursor.execute("SELECT name, role FROM users WHERE id = %s", (user_id,))
         reviewer = cursor.fetchone()
         if reviewer:
-            if reviewer.get('role') == 'vendor':
-                reviewer_name = reviewer['name'] if reviewer['name'] else "審核廠商"
-            else:
-                reviewer_name = reviewer['name'] if reviewer['name'] else "審核老師"
+            reviewer_name = reviewer['name'] if reviewer['name'] else "審核老師"
         else:
             reviewer_name = "審核者"
 
-        # 5. 如果是廠商審核，更新 resume_applications 表
-        if user_role == 'vendor':
-            # 獲取 preference_id（如果有的話）來確定公司 ID
-            preference_id_param = data.get('preference_id')
-            company_id = None
-            
-            if preference_id_param:
-                # 從 preference_id 獲取公司 ID
-                cursor.execute("""
-                    SELECT company_id FROM student_preferences WHERE id = %s
-                """, (preference_id_param,))
-                pref_result = cursor.fetchone()
-                if pref_result:
-                    company_id = pref_result.get('company_id')
-            
-            # 如果沒有 preference_id，嘗試從 student_job_applications 獲取公司 ID
-            if not company_id:
-                cursor.execute("""
-                    SELECT DISTINCT company_id FROM student_job_applications
-                    WHERE resume_id = %s AND student_id = %s
-                    ORDER BY applied_at DESC
-                    LIMIT 1
-                """, (resume_id, student_user_id))
-                sja_result = cursor.fetchone()
-                if sja_result:
-                    company_id = sja_result.get('company_id')
-            
-            # 如果找到公司 ID，更新或創建 resume_applications 記錄
-            if company_id:
-                # 檢查是否已存在記錄
-                cursor.execute("""
-                    SELECT id FROM resume_applications
-                    WHERE resumes_id = %s AND internship_companies_id = %s
-                """, (resume_id, company_id))
-                existing_ra = cursor.fetchone()
-                
-                # 映射狀態：approved -> accepted, rejected -> rejected
-                apply_status_map = {
-                    'approved': 'accepted',
-                    'rejected': 'rejected'
-                }
-                new_apply_status = apply_status_map.get(status, 'reviewing')
-                
-                if existing_ra:
-                    # 更新現有記錄
-                    cursor.execute("""
-                        UPDATE resume_applications
-                        SET apply_status = %s,
-                            company_comment = %s,
-                            updated_at = NOW()
-                        WHERE id = %s
-                    """, (new_apply_status, comment or '', existing_ra['id']))
-                else:
-                    # 創建新記錄
-                    cursor.execute("""
-                        INSERT INTO resume_applications
-                        (resumes_id, internship_companies_id, apply_status, company_comment, created_at, updated_at)
-                        VALUES (%s, %s, %s, %s, NOW(), NOW())
-                    """, (resume_id, company_id, new_apply_status, comment or ''))
-                print(f"✅ 已更新 resume_applications 表 (resume_id: {resume_id}, company_id: {company_id}, status: {new_apply_status})")
-        
-        # 6. 處理 Email 寄送與通知 (僅在狀態改變時處理)
+        # 5. 處理 Email 寄送與通知 (僅在狀態改變時處理)
         # 使用對應角色的舊狀態進行比較
         status_changed = (old_status_for_check != status) if old_status_for_check is not None else True
         if status_changed:
@@ -3737,18 +3673,18 @@ def review_resume(resume_id):
                     category="resume"
                 )
                 
-                # 🔄 如果是老師、班導或主任退件，將 student_preferences 狀態重置為 'pending'
+                # 🔄 如果是老師、班導或主任退件，將 student_preferences 狀態重置為 'rejected'
                 if user_role in ['teacher', 'class_teacher', 'director']:
                     cursor.execute("""
                         UPDATE student_preferences 
-                        SET status = 'pending'
+                        SET status = 'rejected'
                         WHERE student_id = %s
                         AND status = 'approved'
                     """, (student_user_id,))
                     updated_count = cursor.rowcount
                     if updated_count > 0:
                         role_name = '老師' if user_role == 'teacher' else ('班導' if user_role == 'class_teacher' else '主任')
-                        print(f"✅ {role_name}退件，已將 {updated_count} 筆學生志願序狀態重置為 'pending'，該履歷不會同步到廠商審核頁面")
+                        print(f"✅ {role_name}退件，已將 {updated_count} 筆學生志願序狀態重置為 'rejected'")
 
             # =============== 通過 ===============
             elif status == 'approved':
@@ -3777,105 +3713,117 @@ def review_resume(resume_id):
                 
                 # 🎯 新增邏輯：根據角色處理志願序狀態
                 if user_role == 'class_teacher':
-                    # 班導通過履歷：將該學生所有志願序狀態從 'pending' 更新為 'approved'
+                    # 班導通過履歷：將該學生所有志願序狀態從 'rejected' 更新為 'approved'
                     # 這樣履歷會同步到指導老師審核頁面
                     cursor.execute("""
                         UPDATE student_preferences 
                         SET status = 'approved'
                         WHERE student_id = %s
-                        AND status = 'pending'
+                        AND status = 'rejected'
                     """, (student_user_id,))
                     updated_count = cursor.rowcount
                     if updated_count > 0:
                         print(f"✅ 班導通過履歷，已將 {updated_count} 筆學生志願序狀態更新為 'approved'，將同步到指導老師審核頁面")
                 elif user_role == 'teacher':
-                    # 指導老師通過履歷：該履歷會同步到廠商審核頁面
-                    print(f"✅ 指導老師通過履歷，該履歷將同步到廠商審核頁面")
-                    
-                    # 🎯 確保該學生所有志願序狀態為 'approved'，這樣履歷才能同步到廠商審核頁面
-                    # 因為廠商 API 需要檢查 student_preferences 的狀態
+                    # 指導老師通過履歷：同步傳給對應的廠商
+                    # 1. 找到該學生投遞的所有公司（通過 student_job_applications 表）
                     cursor.execute("""
-                        UPDATE student_preferences 
-                        SET status = 'approved'
-                        WHERE student_id = %s
-                        AND status IN ('pending', 'uploaded')
-                    """, (student_user_id,))
-                    updated_preferences_count = cursor.rowcount
-                    if updated_preferences_count > 0:
-                        print(f"✅ 指導老師通過履歷，已將 {updated_preferences_count} 筆學生志願序狀態更新為 'approved'，履歷將同步到廠商審核頁面")
+                        SELECT DISTINCT company_id, resume_id
+                        FROM student_job_applications
+                        WHERE student_id = %s AND resume_id = %s
+                    """, (student_user_id, resume_id))
+                    applications = cursor.fetchall()
                     
-                    # 🎯 記錄到 vendor_preference_history 表
-                    # 查找該學生相關的所有志願序（preference_id）
-                    preference_id_param = data.get('preference_id')
-                    
-                    if preference_id_param:
-                        # 如果提供了 preference_id，只記錄該志願序
-                        preference_ids = [preference_id_param]
-                    else:
-                        # 如果沒有提供 preference_id，查找該學生所有已通過的志願序
-                        cursor.execute("""
-                            SELECT id FROM student_preferences 
-                            WHERE student_id = %s 
-                            AND status = 'approved'
-                        """, (student_user_id,))
-                        preference_rows = cursor.fetchall()
-                        preference_ids = [row['id'] for row in preference_rows]
-                    
-                    # 確保 vendor_preference_history 表存在
-                    try:
-                        cursor.execute("""
-                            SELECT COUNT(*) as count
-                            FROM information_schema.tables
-                            WHERE table_schema = DATABASE()
-                            AND table_name = 'vendor_preference_history'
-                        """)
-                        table_exists = cursor.fetchone().get('count', 0) > 0
+                    if applications:
+                        # 2. 更新對應的 resume_applications 記錄，確保廠商可以看到履歷
+                        updated_companies = []
+                        for app in applications:
+                            company_id = app['company_id']
+                            app_resume_id = app['resume_id']
+                            
+                            # 檢查 resume_applications 表是否已有記錄
+                            cursor.execute("""
+                                SELECT id, apply_status
+                                FROM resume_applications
+                                WHERE resumes_id = %s AND internship_companies_id = %s
+                            """, (app_resume_id, company_id))
+                            existing_ra = cursor.fetchone()
+                            
+                            if existing_ra:
+                                # 如果已存在，確保狀態為 'applied'（讓廠商可以看到）
+                                if existing_ra['apply_status'] not in ['applied', 'reviewing', 'accepted']:
+                                    cursor.execute("""
+                                        UPDATE resume_applications
+                                        SET apply_status = 'applied',
+                                            updated_at = NOW()
+                                        WHERE id = %s
+                                    """, (existing_ra['id'],))
+                                    updated_companies.append(company_id)
+                            else:
+                                # 如果不存在，創建新記錄
+                                cursor.execute("""
+                                    INSERT INTO resume_applications
+                                    (resumes_id, internship_companies_id, apply_status, interview_status, interview_result, created_at)
+                                    VALUES (%s, %s, %s, %s, %s, NOW())
+                                """, (app_resume_id, company_id, 'applied', 'none', 'pending'))
+                                updated_companies.append(company_id)
                         
-                        if not table_exists:
-                            # 如果表不存在，創建表（簡化版本，不包含所有欄位）
-                            cursor.execute("""
-                                CREATE TABLE IF NOT EXISTS vendor_preference_history (
-                                    id INT AUTO_INCREMENT PRIMARY KEY,
-                                    preference_id INT NOT NULL,
-                                    student_id INT,
-                                    reviewer_id INT NOT NULL,
-                                    interview_status ENUM('not yet', 'in interview', 'done') NOT NULL DEFAULT 'not yet',
-                                    comment TEXT,
-                                    created_at DATETIME NOT NULL,
-                                    INDEX idx_vph_preference (preference_id),
-                                    INDEX idx_vph_student (student_id),
-                                    INDEX idx_vph_reviewer (reviewer_id)
-                                )
-                            """)
-                            print("✅ 已創建 vendor_preference_history 表")
-                    except Exception as e:
-                        print(f"⚠️ 檢查/創建 vendor_preference_history 表時發生錯誤: {e}")
-                    
-                    # 為每個 preference_id 記錄審核歷史
-                    for pref_id in preference_ids:
-                        try:
-                            # 獲取該志願序的 student_id（如果沒有從參數中獲取）
-                            cursor.execute("SELECT student_id FROM student_preferences WHERE id = %s", (pref_id,))
-                            pref_row = cursor.fetchone()
-                            pref_student_id = pref_row['student_id'] if pref_row else student_user_id
+                        if updated_companies:
+                            # 獲取公司名稱用於日誌
+                            placeholders = ','.join(['%s'] * len(updated_companies))
+                            cursor.execute(f"""
+                                SELECT id, company_name, advisor_user_id
+                                FROM internship_companies
+                                WHERE id IN ({placeholders})
+                            """, tuple(updated_companies))
+                            companies = cursor.fetchall()
+                            company_names = [c['company_name'] for c in companies]
                             
-                            # 記錄到 vendor_preference_history
-                            # 使用 'not yet' 作為 interview_status（因為這是審核操作，不是面試操作）
-                            # 在 comment 中記錄審核信息
-                            review_comment = f"指導老師 {reviewer_name} 已通過審核"
-                            if comment:
-                                review_comment += f"：{comment}"
+                            # 3. 通知相關廠商有新履歷可審核
+                            notified_vendors = set()
+                            for company in companies:
+                                advisor_user_id = company.get('advisor_user_id')
+                                if advisor_user_id:
+                                    # 找到該指導老師的名字
+                                    cursor.execute("""
+                                        SELECT name FROM users WHERE id = %s
+                                    """, (advisor_user_id,))
+                                    advisor = cursor.fetchone()
+                                    if advisor and advisor.get('name'):
+                                        teacher_name = advisor['name']
+                                        # 找到所有關聯到該指導老師的廠商
+                                        cursor.execute("""
+                                            SELECT id, name FROM users
+                                            WHERE role = 'vendor' AND teacher_name = %s
+                                        """, (teacher_name,))
+                                        vendors = cursor.fetchall()
+                                        
+                                        for vendor in vendors:
+                                            vendor_id = vendor['id']
+                                            if vendor_id not in notified_vendors:
+                                                # 發送通知給廠商
+                                                notification_title = "新履歷待審核"
+                                                notification_message = (
+                                                    f"學生 {student_name} 的履歷已由指導老師審核通過，"
+                                                    f"已投遞至「{company['company_name']}」，請前往審核。"
+                                                )
+                                                create_notification(
+                                                    user_id=vendor_id,
+                                                    title=notification_title,
+                                                    message=notification_message,
+                                                    category="resume",
+                                                    link_url="/vendor/resumes"
+                                                )
+                                                notified_vendors.add(vendor_id)
                             
-                            cursor.execute("""
-                                INSERT INTO vendor_preference_history
-                                    (preference_id, student_id, reviewer_id, interview_status, comment, created_at)
-                                VALUES (%s, %s, %s, 'not yet', %s, NOW())
-                            """, (pref_id, pref_student_id, user_id, review_comment))
-                            
-                            print(f"✅ 已記錄指導老師審核通過到 vendor_preference_history (preference_id: {pref_id}, reviewer_id: {user_id})")
-                        except Exception as e:
-                            print(f"⚠️ 記錄到 vendor_preference_history 失敗 (preference_id: {pref_id}): {e}")
-                            # 繼續處理其他 preference_id，不中斷流程
+                            if notified_vendors:
+                                print(f"✅ 指導老師通過履歷，已同步傳給 {len(updated_companies)} 家公司，並通知 {len(notified_vendors)} 位廠商：{', '.join(company_names)}")
+                            else:
+                                print(f"✅ 指導老師通過履歷，已同步傳給 {len(updated_companies)} 家公司：{', '.join(company_names)}（未找到對應廠商）")
+                        else:
+                            print(f"✅ 指導老師通過履歷（履歷已存在於 resume_applications 表中）")
+                    else:
+                        print(f"✅ 指導老師通過履歷（該學生尚未投遞任何公司）")
 
         conn.commit()
 
@@ -3899,15 +3847,6 @@ def review_resume_page():
     # 檢查登入狀態
     if not require_login():
         return redirect('/login')
-    
-    # 如果是廠商，重定向到廠商專用的履歷審核頁面
-    if session.get("role") == "vendor":
-        # 保留查詢參數（如 company_id, status 等）
-        query_string = request.query_string.decode('utf-8')
-        redirect_url = '/vendor_review_resume'
-        if query_string:
-            redirect_url += '?' + query_string
-        return redirect(redirect_url)
     
     # 統一使用整合後的審核頁面（給指導老師使用）
     return render_template('resume/review_resume.html')
@@ -4056,7 +3995,7 @@ def get_class_resumes():
                         LEFT JOIN internship_jobs ij ON sja.job_id = ij.id
                         WHERE sja.status = 'submitted'
                     ) pref ON pref.student_id = u.id AND pref.application_id = sja.id
-                    WHERE r.status IN ('uploaded', 'pending', 'approved')
+                    WHERE r.status IN ('uploaded', 'approved')
                     AND r.status != 'rejected'
                     AND sja.resume_id IS NOT NULL
                     -- 確保只選擇每個 application_id 對應的最新履歷
@@ -4066,7 +4005,7 @@ def get_class_resumes():
                         INNER JOIN student_job_applications sja2 ON sja2.resume_id = r2.id
                         WHERE sja2.id = sja.id
                         AND sja2.resume_id IS NOT NULL
-                        AND r2.status IN ('uploaded', 'pending', 'approved')
+                        AND r2.status IN ('uploaded', 'approved')
                         AND r2.status != 'rejected'
                     )
                     AND EXISTS (
@@ -4232,29 +4171,30 @@ def get_class_resumes():
                 r['upload_time'] = r['created_at']
             # 處理志願序狀態：根據角色使用不同的狀態欄位
             if role == 'teacher':
-                # 指導老師：使用 status 欄位和 reviewed_by 來判斷
-                # 如果 reviewed_by 是當前指導老師，表示已審核，使用 status 的值
-                # 如果 reviewed_by 為 NULL 或不是當前指導老師，表示待審核，顯示為 'pending'
-                reviewed_by = r.get('reviewed_by')
-                if reviewed_by and reviewed_by == user_id:
-                    # 已由當前指導老師審核，使用 status 的值
-                    r['application_statuses'] = r.get('status', 'pending')
-                    r['display_status'] = r.get('status', 'pending')
-                else:
-                    # 尚未經過指導老師審核，顯示為 'pending'
-                    r['application_statuses'] = 'pending'
-                    r['display_status'] = 'pending'
+                # 指導老師：使用 teacher_review_status 欄位（enum: 'uploaded', 'approved', 'rejected'）
+                # teacher_review_status 為 NULL 或 'uploaded' 表示待審核，'approved' 表示通過，'rejected' 表示退件
+                teacher_review_status = r.get('teacher_review_status') or 'uploaded'
+                # 確保狀態值符合 enum 定義
+                if teacher_review_status not in ['uploaded', 'approved', 'rejected']:
+                    teacher_review_status = 'uploaded'
+                r['application_statuses'] = teacher_review_status
+                r['display_status'] = teacher_review_status
+                # 同時設置 teacher_review_status 供前端使用
+                r['teacher_review_status'] = teacher_review_status
             else:
-                # 其他角色（class_teacher, director, ta, admin, vendor）：使用 status 欄位（班導/主任的審核狀態）
+                # 其他角色（class_teacher, director, ta, admin）：使用 status 欄位（班導/主任的審核狀態）
+                # status 欄位也使用 enum('uploaded', 'approved', 'rejected')
                 if 'preference_status' in r and r.get('preference_status'):
                     r['application_statuses'] = r['preference_status']
                     r['display_status'] = r['preference_status']
                 else:
-                    r['application_statuses'] = r.get('status', 'pending')
-                    r['display_status'] = r.get('status', 'pending')
-            # 處理留言：如果有 vendor_comment，使用它；否則使用履歷的 comment
-            if 'vendor_comment' in r and r.get('vendor_comment'):
-                r['comment'] = r['vendor_comment']
+                    # 確保 status 符合 enum('uploaded', 'approved', 'rejected')
+                    status_value = r.get('status') or 'uploaded'
+                    if status_value not in ['uploaded', 'approved', 'rejected']:
+                        status_value = 'uploaded'
+                    r['application_statuses'] = status_value
+                    r['display_status'] = status_value
+            # 使用履歷的 comment
 
         print(f"✅ [DEBUG] Returning {len(resumes)} resumes for role {role}")
         return jsonify({"success": True, "resumes": resumes})
@@ -5036,19 +4976,8 @@ def can_access_target_resume(cursor, session_user_id, session_role, target_user_
     if session_role == "ta":
         return True
 
-    # vendor 可以查看已通過老師審核的履歷
+    # vendor 角色不允許訪問履歷
     if session_role == "vendor":
-        # 檢查履歷狀態是否為 'approved'（老師已通過）
-        cursor.execute("""
-            SELECT status 
-            FROM resumes 
-            WHERE user_id = %s 
-            ORDER BY created_at DESC 
-            LIMIT 1
-        """, (target_user_id,))
-        resume = cursor.fetchone()
-        if resume and resume.get('status') == 'approved':
-            return True
         return False
 
     # 取得 target student's class_id
@@ -7961,16 +7890,17 @@ def get_teacher_review_resumes():
 
             # 根據角色決定顯示的狀態
             # 班導/主任：顯示 resumes.status（uploaded/approved/rejected）
-            # 指導老師：顯示 resumes.teacher_review_status（如果有的話，否則顯示 resumes.status）
-            status = row.get('display_status') if row.get('display_status') else 'pending'
+            # 指導老師：顯示 resumes.teacher_review_status（uploaded/approved/rejected）
+            status = row.get('display_status') or 'uploaded'
+            if status not in ['uploaded', 'approved', 'rejected']:
+                status = 'uploaded'
             if session_role == 'teacher':
                 # 指導老師查看 teacher_review_status
-                teacher_status = row.get('teacher_review_status')
-                if teacher_status:
+                teacher_status = row.get('teacher_review_status') or 'uploaded'
+                if teacher_status in ['uploaded', 'approved', 'rejected']:
                     status = teacher_status
-            # 將 uploaded 狀態映射為 pending 供前端顯示
-            if status == 'uploaded':
-                status = 'pending'
+                else:
+                    status = 'uploaded'
             
             # 使用 application_id 作為key，這樣每條投遞記錄都會保留
             if application_id not in application_dict:
@@ -8161,7 +8091,7 @@ def review_resume(resume_id):
     user_role = session.get('role')
 
     # 1. 權限檢查
-    ALLOWED_ROLES = ['teacher', 'admin', 'class_teacher', 'vendor']
+    ALLOWED_ROLES = ['teacher', 'admin', 'class_teacher']
     if not user_id or user_role not in ALLOWED_ROLES:
         return jsonify({"success": False, "message": "未授權或無權限"}), 403
 
@@ -8232,10 +8162,7 @@ def review_resume(resume_id):
         cursor.execute("SELECT name, role FROM users WHERE id = %s", (user_id,))
         reviewer = cursor.fetchone()
         if reviewer:
-            if reviewer.get('role') == 'vendor':
-                reviewer_name = reviewer['name'] if reviewer['name'] else "審核廠商"
-            else:
-                reviewer_name = reviewer['name'] if reviewer['name'] else "審核老師"
+            reviewer_name = reviewer['name'] if reviewer['name'] else "審核老師"
         else:
             reviewer_name = "審核者"
 
@@ -8269,17 +8196,17 @@ def review_resume(resume_id):
                     category="resume"
                 )
                 
-                # 🔄 如果是老師退件，將 student_preferences 狀態重置為 'pending'
+                # 🔄 如果是老師退件，將 student_preferences 狀態重置為 'rejected'
                 if user_role in ['teacher', 'class_teacher']:
                     cursor.execute("""
                         UPDATE student_preferences 
-                        SET status = 'pending'
+                        SET status = 'rejected'
                         WHERE student_id = %s
                         AND status = 'approved'
                     """, (student_user_id,))
                     updated_count = cursor.rowcount
                     if updated_count > 0:
-                        print(f"✅ 已將 {updated_count} 筆學生志願序狀態重置為 'pending'，該履歷不會同步到廠商審核頁面")
+                        print(f"✅ 已將 {updated_count} 筆學生志願序狀態重置為 'rejected'")
 
             # =============== 通過 ===============
             elif status == 'approved':
@@ -8306,13 +8233,13 @@ def review_resume(resume_id):
                     category="resume"
                 )
                 
-                # 🎯 新增邏輯：如果班導通過履歷，將該學生所有志願序狀態從 'pending' 更新為 'approved'
+                # 🎯 新增邏輯：如果班導通過履歷，將該學生所有志願序狀態從 'rejected' 更新為 'approved'
                 if user_role in ['teacher', 'class_teacher']:
                     cursor.execute("""
                         UPDATE student_preferences 
                         SET status = 'approved'
                         WHERE student_id = %s
-                        AND status = 'pending'
+                        AND status = 'rejected'
                     """, (student_user_id,))
                     updated_count = cursor.rowcount
                     if updated_count > 0:
@@ -8412,7 +8339,7 @@ def get_class_resumes():
                             sp.student_id,
                             sp.id AS preference_id,
                             sp.preference_order,
-                            'pending' AS preference_status,
+                            sp.status AS preference_status,
                             ic.company_name,
                             ij.title AS job_title,
                             ij.id AS job_id,
@@ -8479,7 +8406,7 @@ def get_class_resumes():
                             sp.student_id,
                             sp.id AS preference_id,
                             sp.preference_order,
-                            'pending' AS preference_status,
+                            sp.status AS preference_status,
                             ic.company_name,
                             ij.title AS job_title,
                             ij.id AS job_id,
@@ -8651,27 +8578,26 @@ def get_class_resumes():
                 r['upload_time'] = r['created_at']
             # 處理志願序狀態：對於指導老師（teacher），從班導同步過來的履歷應該顯示為待審核
             if role == 'teacher':
-                # 如果這是從班導同步過來的履歷（有 preference_id 且履歷狀態為 approved），顯示為 pending
-                if 'preference_id' in r and r.get('preference_id') and r.get('status') == 'approved':
-                    r['application_statuses'] = 'pending'
-                    r['display_status'] = 'pending'
-                elif 'preference_status' in r and r.get('preference_status'):
-                    r['application_statuses'] = r['preference_status']
-                    r['display_status'] = r['preference_status']
-                else:
-                    r['application_statuses'] = r.get('status', 'pending')
-                    r['display_status'] = r.get('status', 'pending')
+                # 指導老師：使用 teacher_review_status 欄位（enum: 'uploaded', 'approved', 'rejected'）
+                teacher_review_status = r.get('teacher_review_status') or 'uploaded'
+                if teacher_review_status not in ['uploaded', 'approved', 'rejected']:
+                    teacher_review_status = 'uploaded'
+                r['application_statuses'] = teacher_review_status
+                r['display_status'] = teacher_review_status
+                r['teacher_review_status'] = teacher_review_status
             else:
-                # 其他角色（class_teacher, director, ta, admin, vendor）使用原有邏輯
+                # 其他角色（class_teacher, director, ta, admin）：使用 status 欄位（enum: 'uploaded', 'approved', 'rejected'）
                 if 'preference_status' in r and r.get('preference_status'):
                     r['application_statuses'] = r['preference_status']
                     r['display_status'] = r['preference_status']
                 else:
-                    r['application_statuses'] = r.get('status', 'pending')
-                    r['display_status'] = r.get('status', 'pending')
-            # 處理留言：如果有 vendor_comment，使用它；否則使用履歷的 comment
-            if 'vendor_comment' in r and r.get('vendor_comment'):
-                r['comment'] = r['vendor_comment']
+                    # 確保 status 符合 enum('uploaded', 'approved', 'rejected')
+                    status_value = r.get('status') or 'uploaded'
+                    if status_value not in ['uploaded', 'approved', 'rejected']:
+                        status_value = 'uploaded'
+                    r['application_statuses'] = status_value
+                    r['display_status'] = status_value
+            # 使用履歷的 comment
 
         print(f"✅ [DEBUG] Returning {len(resumes)} resumes for role {role}")
         return jsonify({"success": True, "resumes": resumes})
@@ -9452,19 +9378,8 @@ def can_access_target_resume(cursor, session_user_id, session_role, target_user_
     if session_role == "ta":
         return True
 
-    # vendor 可以查看已通過老師審核的履歷
+    # vendor 角色不允許訪問履歷
     if session_role == "vendor":
-        # 檢查履歷狀態是否為 'approved'（老師已通過）
-        cursor.execute("""
-            SELECT status 
-            FROM resumes 
-            WHERE user_id = %s 
-            ORDER BY created_at DESC 
-            LIMIT 1
-        """, (target_user_id,))
-        resume = cursor.fetchone()
-        if resume and resume.get('status') == 'approved':
-            return True
         return False
 
     # 取得 target student's class_id
@@ -12377,16 +12292,17 @@ def get_teacher_review_resumes():
 
             # 根據角色決定顯示的狀態
             # 班導/主任：顯示 resumes.status（uploaded/approved/rejected）
-            # 指導老師：顯示 resumes.teacher_review_status（如果有的話，否則顯示 resumes.status）
-            status = row.get('display_status') if row.get('display_status') else 'pending'
+            # 指導老師：顯示 resumes.teacher_review_status（uploaded/approved/rejected）
+            status = row.get('display_status') or 'uploaded'
+            if status not in ['uploaded', 'approved', 'rejected']:
+                status = 'uploaded'
             if session_role == 'teacher':
                 # 指導老師查看 teacher_review_status
-                teacher_status = row.get('teacher_review_status')
-                if teacher_status:
+                teacher_status = row.get('teacher_review_status') or 'uploaded'
+                if teacher_status in ['uploaded', 'approved', 'rejected']:
                     status = teacher_status
-            # 將 uploaded 狀態映射為 pending 供前端顯示
-            if status == 'uploaded':
-                status = 'pending'
+                else:
+                    status = 'uploaded'
             
             # 使用 application_id 作為key，這樣每條投遞記錄都會保留
             if application_id not in application_dict:
@@ -12577,7 +12493,7 @@ def review_resume(resume_id):
     user_role = session.get('role')
 
     # 1. 權限檢查
-    ALLOWED_ROLES = ['teacher', 'admin', 'class_teacher', 'vendor']
+    ALLOWED_ROLES = ['teacher', 'admin', 'class_teacher']
     if not user_id or user_role not in ALLOWED_ROLES:
         return jsonify({"success": False, "message": "未授權或無權限"}), 403
 
@@ -12648,10 +12564,7 @@ def review_resume(resume_id):
         cursor.execute("SELECT name, role FROM users WHERE id = %s", (user_id,))
         reviewer = cursor.fetchone()
         if reviewer:
-            if reviewer.get('role') == 'vendor':
-                reviewer_name = reviewer['name'] if reviewer['name'] else "審核廠商"
-            else:
-                reviewer_name = reviewer['name'] if reviewer['name'] else "審核老師"
+            reviewer_name = reviewer['name'] if reviewer['name'] else "審核老師"
         else:
             reviewer_name = "審核者"
 
@@ -12685,17 +12598,17 @@ def review_resume(resume_id):
                     category="resume"
                 )
                 
-                # 🔄 如果是老師退件，將 student_preferences 狀態重置為 'pending'
+                # 🔄 如果是老師退件，將 student_preferences 狀態重置為 'rejected'
                 if user_role in ['teacher', 'class_teacher']:
                     cursor.execute("""
                         UPDATE student_preferences 
-                        SET status = 'pending'
+                        SET status = 'rejected'
                         WHERE student_id = %s
                         AND status = 'approved'
                     """, (student_user_id,))
                     updated_count = cursor.rowcount
                     if updated_count > 0:
-                        print(f"✅ 已將 {updated_count} 筆學生志願序狀態重置為 'pending'，該履歷不會同步到廠商審核頁面")
+                        print(f"✅ 已將 {updated_count} 筆學生志願序狀態重置為 'rejected'")
 
             # =============== 通過 ===============
             elif status == 'approved':
@@ -12722,13 +12635,13 @@ def review_resume(resume_id):
                     category="resume"
                 )
                 
-                # 🎯 新增邏輯：如果班導通過履歷，將該學生所有志願序狀態從 'pending' 更新為 'approved'
+                # 🎯 新增邏輯：如果班導通過履歷，將該學生所有志願序狀態從 'rejected' 更新為 'approved'
                 if user_role in ['teacher', 'class_teacher']:
                     cursor.execute("""
                         UPDATE student_preferences 
                         SET status = 'approved'
                         WHERE student_id = %s
-                        AND status = 'pending'
+                        AND status = 'rejected'
                     """, (student_user_id,))
                     updated_count = cursor.rowcount
                     if updated_count > 0:
@@ -12828,7 +12741,7 @@ def get_class_resumes():
                             sp.student_id,
                             sp.id AS preference_id,
                             sp.preference_order,
-                            'pending' AS preference_status,
+                            sp.status AS preference_status,
                             ic.company_name,
                             ij.title AS job_title,
                             ij.id AS job_id,
@@ -12895,7 +12808,7 @@ def get_class_resumes():
                             sp.student_id,
                             sp.id AS preference_id,
                             sp.preference_order,
-                            'pending' AS preference_status,
+                            sp.status AS preference_status,
                             ic.company_name,
                             ij.title AS job_title,
                             ij.id AS job_id,
@@ -13067,27 +12980,26 @@ def get_class_resumes():
                 r['upload_time'] = r['created_at']
             # 處理志願序狀態：對於指導老師（teacher），從班導同步過來的履歷應該顯示為待審核
             if role == 'teacher':
-                # 如果這是從班導同步過來的履歷（有 preference_id 且履歷狀態為 approved），顯示為 pending
-                if 'preference_id' in r and r.get('preference_id') and r.get('status') == 'approved':
-                    r['application_statuses'] = 'pending'
-                    r['display_status'] = 'pending'
-                elif 'preference_status' in r and r.get('preference_status'):
-                    r['application_statuses'] = r['preference_status']
-                    r['display_status'] = r['preference_status']
-                else:
-                    r['application_statuses'] = r.get('status', 'pending')
-                    r['display_status'] = r.get('status', 'pending')
+                # 指導老師：使用 teacher_review_status 欄位（enum: 'uploaded', 'approved', 'rejected'）
+                teacher_review_status = r.get('teacher_review_status') or 'uploaded'
+                if teacher_review_status not in ['uploaded', 'approved', 'rejected']:
+                    teacher_review_status = 'uploaded'
+                r['application_statuses'] = teacher_review_status
+                r['display_status'] = teacher_review_status
+                r['teacher_review_status'] = teacher_review_status
             else:
-                # 其他角色（class_teacher, director, ta, admin, vendor）使用原有邏輯
+                # 其他角色（class_teacher, director, ta, admin）：使用 status 欄位（enum: 'uploaded', 'approved', 'rejected'）
                 if 'preference_status' in r and r.get('preference_status'):
                     r['application_statuses'] = r['preference_status']
                     r['display_status'] = r['preference_status']
                 else:
-                    r['application_statuses'] = r.get('status', 'pending')
-                    r['display_status'] = r.get('status', 'pending')
-            # 處理留言：如果有 vendor_comment，使用它；否則使用履歷的 comment
-            if 'vendor_comment' in r and r.get('vendor_comment'):
-                r['comment'] = r['vendor_comment']
+                    # 確保 status 符合 enum('uploaded', 'approved', 'rejected')
+                    status_value = r.get('status') or 'uploaded'
+                    if status_value not in ['uploaded', 'approved', 'rejected']:
+                        status_value = 'uploaded'
+                    r['application_statuses'] = status_value
+                    r['display_status'] = status_value
+            # 使用履歷的 comment
 
         print(f"✅ [DEBUG] Returning {len(resumes)} resumes for role {role}")
         return jsonify({"success": True, "resumes": resumes})
@@ -13868,19 +13780,8 @@ def can_access_target_resume(cursor, session_user_id, session_role, target_user_
     if session_role == "ta":
         return True
 
-    # vendor 可以查看已通過老師審核的履歷
+    # vendor 角色不允許訪問履歷
     if session_role == "vendor":
-        # 檢查履歷狀態是否為 'approved'（老師已通過）
-        cursor.execute("""
-            SELECT status 
-            FROM resumes 
-            WHERE user_id = %s 
-            ORDER BY created_at DESC 
-            LIMIT 1
-        """, (target_user_id,))
-        resume = cursor.fetchone()
-        if resume and resume.get('status') == 'approved':
-            return True
         return False
 
     # 取得 target student's class_id
@@ -16793,16 +16694,17 @@ def get_teacher_review_resumes():
 
             # 根據角色決定顯示的狀態
             # 班導/主任：顯示 resumes.status（uploaded/approved/rejected）
-            # 指導老師：顯示 resumes.teacher_review_status（如果有的話，否則顯示 resumes.status）
-            status = row.get('display_status') if row.get('display_status') else 'pending'
+            # 指導老師：顯示 resumes.teacher_review_status（uploaded/approved/rejected）
+            status = row.get('display_status') or 'uploaded'
+            if status not in ['uploaded', 'approved', 'rejected']:
+                status = 'uploaded'
             if session_role == 'teacher':
                 # 指導老師查看 teacher_review_status
-                teacher_status = row.get('teacher_review_status')
-                if teacher_status:
+                teacher_status = row.get('teacher_review_status') or 'uploaded'
+                if teacher_status in ['uploaded', 'approved', 'rejected']:
                     status = teacher_status
-            # 將 uploaded 狀態映射為 pending 供前端顯示
-            if status == 'uploaded':
-                status = 'pending'
+                else:
+                    status = 'uploaded'
             
             # 使用 application_id 作為key，這樣每條投遞記錄都會保留
             if application_id not in application_dict:
@@ -16993,7 +16895,7 @@ def review_resume(resume_id):
     user_role = session.get('role')
 
     # 1. 權限檢查
-    ALLOWED_ROLES = ['teacher', 'admin', 'class_teacher', 'vendor']
+    ALLOWED_ROLES = ['teacher', 'admin', 'class_teacher']
     if not user_id or user_role not in ALLOWED_ROLES:
         return jsonify({"success": False, "message": "未授權或無權限"}), 403
 
@@ -17064,10 +16966,7 @@ def review_resume(resume_id):
         cursor.execute("SELECT name, role FROM users WHERE id = %s", (user_id,))
         reviewer = cursor.fetchone()
         if reviewer:
-            if reviewer.get('role') == 'vendor':
-                reviewer_name = reviewer['name'] if reviewer['name'] else "審核廠商"
-            else:
-                reviewer_name = reviewer['name'] if reviewer['name'] else "審核老師"
+            reviewer_name = reviewer['name'] if reviewer['name'] else "審核老師"
         else:
             reviewer_name = "審核者"
 
@@ -17101,17 +17000,17 @@ def review_resume(resume_id):
                     category="resume"
                 )
                 
-                # 🔄 如果是老師退件，將 student_preferences 狀態重置為 'pending'
+                # 🔄 如果是老師退件，將 student_preferences 狀態重置為 'rejected'
                 if user_role in ['teacher', 'class_teacher']:
                     cursor.execute("""
                         UPDATE student_preferences 
-                        SET status = 'pending'
+                        SET status = 'rejected'
                         WHERE student_id = %s
                         AND status = 'approved'
                     """, (student_user_id,))
                     updated_count = cursor.rowcount
                     if updated_count > 0:
-                        print(f"✅ 已將 {updated_count} 筆學生志願序狀態重置為 'pending'，該履歷不會同步到廠商審核頁面")
+                        print(f"✅ 已將 {updated_count} 筆學生志願序狀態重置為 'rejected'")
 
             # =============== 通過 ===============
             elif status == 'approved':
@@ -17138,13 +17037,13 @@ def review_resume(resume_id):
                     category="resume"
                 )
                 
-                # 🎯 新增邏輯：如果班導通過履歷，將該學生所有志願序狀態從 'pending' 更新為 'approved'
+                # 🎯 新增邏輯：如果班導通過履歷，將該學生所有志願序狀態從 'rejected' 更新為 'approved'
                 if user_role in ['teacher', 'class_teacher']:
                     cursor.execute("""
                         UPDATE student_preferences 
                         SET status = 'approved'
                         WHERE student_id = %s
-                        AND status = 'pending'
+                        AND status = 'rejected'
                     """, (student_user_id,))
                     updated_count = cursor.rowcount
                     if updated_count > 0:
@@ -17244,7 +17143,7 @@ def get_class_resumes():
                             sp.student_id,
                             sp.id AS preference_id,
                             sp.preference_order,
-                            'pending' AS preference_status,
+                            sp.status AS preference_status,
                             ic.company_name,
                             ij.title AS job_title,
                             ij.id AS job_id,
@@ -17311,7 +17210,7 @@ def get_class_resumes():
                             sp.student_id,
                             sp.id AS preference_id,
                             sp.preference_order,
-                            'pending' AS preference_status,
+                            sp.status AS preference_status,
                             ic.company_name,
                             ij.title AS job_title,
                             ij.id AS job_id,
@@ -17483,27 +17382,26 @@ def get_class_resumes():
                 r['upload_time'] = r['created_at']
             # 處理志願序狀態：對於指導老師（teacher），從班導同步過來的履歷應該顯示為待審核
             if role == 'teacher':
-                # 如果這是從班導同步過來的履歷（有 preference_id 且履歷狀態為 approved），顯示為 pending
-                if 'preference_id' in r and r.get('preference_id') and r.get('status') == 'approved':
-                    r['application_statuses'] = 'pending'
-                    r['display_status'] = 'pending'
-                elif 'preference_status' in r and r.get('preference_status'):
-                    r['application_statuses'] = r['preference_status']
-                    r['display_status'] = r['preference_status']
-                else:
-                    r['application_statuses'] = r.get('status', 'pending')
-                    r['display_status'] = r.get('status', 'pending')
+                # 指導老師：使用 teacher_review_status 欄位（enum: 'uploaded', 'approved', 'rejected'）
+                teacher_review_status = r.get('teacher_review_status') or 'uploaded'
+                if teacher_review_status not in ['uploaded', 'approved', 'rejected']:
+                    teacher_review_status = 'uploaded'
+                r['application_statuses'] = teacher_review_status
+                r['display_status'] = teacher_review_status
+                r['teacher_review_status'] = teacher_review_status
             else:
-                # 其他角色（class_teacher, director, ta, admin, vendor）使用原有邏輯
+                # 其他角色（class_teacher, director, ta, admin）：使用 status 欄位（enum: 'uploaded', 'approved', 'rejected'）
                 if 'preference_status' in r and r.get('preference_status'):
                     r['application_statuses'] = r['preference_status']
                     r['display_status'] = r['preference_status']
                 else:
-                    r['application_statuses'] = r.get('status', 'pending')
-                    r['display_status'] = r.get('status', 'pending')
-            # 處理留言：如果有 vendor_comment，使用它；否則使用履歷的 comment
-            if 'vendor_comment' in r and r.get('vendor_comment'):
-                r['comment'] = r['vendor_comment']
+                    # 確保 status 符合 enum('uploaded', 'approved', 'rejected')
+                    status_value = r.get('status') or 'uploaded'
+                    if status_value not in ['uploaded', 'approved', 'rejected']:
+                        status_value = 'uploaded'
+                    r['application_statuses'] = status_value
+                    r['display_status'] = status_value
+            # 使用履歷的 comment
 
         print(f"✅ [DEBUG] Returning {len(resumes)} resumes for role {role}")
         return jsonify({"success": True, "resumes": resumes})
@@ -18284,19 +18182,8 @@ def can_access_target_resume(cursor, session_user_id, session_role, target_user_
     if session_role == "ta":
         return True
 
-    # vendor 可以查看已通過老師審核的履歷
+    # vendor 角色不允許訪問履歷
     if session_role == "vendor":
-        # 檢查履歷狀態是否為 'approved'（老師已通過）
-        cursor.execute("""
-            SELECT status 
-            FROM resumes 
-            WHERE user_id = %s 
-            ORDER BY created_at DESC 
-            LIMIT 1
-        """, (target_user_id,))
-        resume = cursor.fetchone()
-        if resume and resume.get('status') == 'approved':
-            return True
         return False
 
     # 取得 target student's class_id
@@ -21209,16 +21096,17 @@ def get_teacher_review_resumes():
 
             # 根據角色決定顯示的狀態
             # 班導/主任：顯示 resumes.status（uploaded/approved/rejected）
-            # 指導老師：顯示 resumes.teacher_review_status（如果有的話，否則顯示 resumes.status）
-            status = row.get('display_status') if row.get('display_status') else 'pending'
+            # 指導老師：顯示 resumes.teacher_review_status（uploaded/approved/rejected）
+            status = row.get('display_status') or 'uploaded'
+            if status not in ['uploaded', 'approved', 'rejected']:
+                status = 'uploaded'
             if session_role == 'teacher':
                 # 指導老師查看 teacher_review_status
-                teacher_status = row.get('teacher_review_status')
-                if teacher_status:
+                teacher_status = row.get('teacher_review_status') or 'uploaded'
+                if teacher_status in ['uploaded', 'approved', 'rejected']:
                     status = teacher_status
-            # 將 uploaded 狀態映射為 pending 供前端顯示
-            if status == 'uploaded':
-                status = 'pending'
+                else:
+                    status = 'uploaded'
             
             # 使用 application_id 作為key，這樣每條投遞記錄都會保留
             if application_id not in application_dict:
@@ -21409,7 +21297,7 @@ def review_resume(resume_id):
     user_role = session.get('role')
 
     # 1. 權限檢查
-    ALLOWED_ROLES = ['teacher', 'admin', 'class_teacher', 'vendor']
+    ALLOWED_ROLES = ['teacher', 'admin', 'class_teacher']
     if not user_id or user_role not in ALLOWED_ROLES:
         return jsonify({"success": False, "message": "未授權或無權限"}), 403
 
@@ -21480,10 +21368,7 @@ def review_resume(resume_id):
         cursor.execute("SELECT name, role FROM users WHERE id = %s", (user_id,))
         reviewer = cursor.fetchone()
         if reviewer:
-            if reviewer.get('role') == 'vendor':
-                reviewer_name = reviewer['name'] if reviewer['name'] else "審核廠商"
-            else:
-                reviewer_name = reviewer['name'] if reviewer['name'] else "審核老師"
+            reviewer_name = reviewer['name'] if reviewer['name'] else "審核老師"
         else:
             reviewer_name = "審核者"
 
@@ -21517,17 +21402,17 @@ def review_resume(resume_id):
                     category="resume"
                 )
                 
-                # 🔄 如果是老師退件，將 student_preferences 狀態重置為 'pending'
+                # 🔄 如果是老師退件，將 student_preferences 狀態重置為 'rejected'
                 if user_role in ['teacher', 'class_teacher']:
                     cursor.execute("""
                         UPDATE student_preferences 
-                        SET status = 'pending'
+                        SET status = 'rejected'
                         WHERE student_id = %s
                         AND status = 'approved'
                     """, (student_user_id,))
                     updated_count = cursor.rowcount
                     if updated_count > 0:
-                        print(f"✅ 已將 {updated_count} 筆學生志願序狀態重置為 'pending'，該履歷不會同步到廠商審核頁面")
+                        print(f"✅ 已將 {updated_count} 筆學生志願序狀態重置為 'rejected'")
 
             # =============== 通過 ===============
             elif status == 'approved':
@@ -21554,13 +21439,13 @@ def review_resume(resume_id):
                     category="resume"
                 )
                 
-                # 🎯 新增邏輯：如果班導通過履歷，將該學生所有志願序狀態從 'pending' 更新為 'approved'
+                # 🎯 新增邏輯：如果班導通過履歷，將該學生所有志願序狀態從 'rejected' 更新為 'approved'
                 if user_role in ['teacher', 'class_teacher']:
                     cursor.execute("""
                         UPDATE student_preferences 
                         SET status = 'approved'
                         WHERE student_id = %s
-                        AND status = 'pending'
+                        AND status = 'rejected'
                     """, (student_user_id,))
                     updated_count = cursor.rowcount
                     if updated_count > 0:
@@ -21660,7 +21545,7 @@ def get_class_resumes():
                             sp.student_id,
                             sp.id AS preference_id,
                             sp.preference_order,
-                            'pending' AS preference_status,
+                            sp.status AS preference_status,
                             ic.company_name,
                             ij.title AS job_title,
                             ij.id AS job_id,
@@ -21727,7 +21612,7 @@ def get_class_resumes():
                             sp.student_id,
                             sp.id AS preference_id,
                             sp.preference_order,
-                            'pending' AS preference_status,
+                            sp.status AS preference_status,
                             ic.company_name,
                             ij.title AS job_title,
                             ij.id AS job_id,
@@ -21899,27 +21784,26 @@ def get_class_resumes():
                 r['upload_time'] = r['created_at']
             # 處理志願序狀態：對於指導老師（teacher），從班導同步過來的履歷應該顯示為待審核
             if role == 'teacher':
-                # 如果這是從班導同步過來的履歷（有 preference_id 且履歷狀態為 approved），顯示為 pending
-                if 'preference_id' in r and r.get('preference_id') and r.get('status') == 'approved':
-                    r['application_statuses'] = 'pending'
-                    r['display_status'] = 'pending'
-                elif 'preference_status' in r and r.get('preference_status'):
-                    r['application_statuses'] = r['preference_status']
-                    r['display_status'] = r['preference_status']
-                else:
-                    r['application_statuses'] = r.get('status', 'pending')
-                    r['display_status'] = r.get('status', 'pending')
+                # 指導老師：使用 teacher_review_status 欄位（enum: 'uploaded', 'approved', 'rejected'）
+                teacher_review_status = r.get('teacher_review_status') or 'uploaded'
+                if teacher_review_status not in ['uploaded', 'approved', 'rejected']:
+                    teacher_review_status = 'uploaded'
+                r['application_statuses'] = teacher_review_status
+                r['display_status'] = teacher_review_status
+                r['teacher_review_status'] = teacher_review_status
             else:
-                # 其他角色（class_teacher, director, ta, admin, vendor）使用原有邏輯
+                # 其他角色（class_teacher, director, ta, admin）：使用 status 欄位（enum: 'uploaded', 'approved', 'rejected'）
                 if 'preference_status' in r and r.get('preference_status'):
                     r['application_statuses'] = r['preference_status']
                     r['display_status'] = r['preference_status']
                 else:
-                    r['application_statuses'] = r.get('status', 'pending')
-                    r['display_status'] = r.get('status', 'pending')
-            # 處理留言：如果有 vendor_comment，使用它；否則使用履歷的 comment
-            if 'vendor_comment' in r and r.get('vendor_comment'):
-                r['comment'] = r['vendor_comment']
+                    # 確保 status 符合 enum('uploaded', 'approved', 'rejected')
+                    status_value = r.get('status') or 'uploaded'
+                    if status_value not in ['uploaded', 'approved', 'rejected']:
+                        status_value = 'uploaded'
+                    r['application_statuses'] = status_value
+                    r['display_status'] = status_value
+            # 使用履歷的 comment
 
         print(f"✅ [DEBUG] Returning {len(resumes)} resumes for role {role}")
         return jsonify({"success": True, "resumes": resumes})
@@ -22700,19 +22584,8 @@ def can_access_target_resume(cursor, session_user_id, session_role, target_user_
     if session_role == "ta":
         return True
 
-    # vendor 可以查看已通過老師審核的履歷
+    # vendor 角色不允許訪問履歷
     if session_role == "vendor":
-        # 檢查履歷狀態是否為 'approved'（老師已通過）
-        cursor.execute("""
-            SELECT status 
-            FROM resumes 
-            WHERE user_id = %s 
-            ORDER BY created_at DESC 
-            LIMIT 1
-        """, (target_user_id,))
-        resume = cursor.fetchone()
-        if resume and resume.get('status') == 'approved':
-            return True
         return False
 
     # 取得 target student's class_id
@@ -25625,16 +25498,17 @@ def get_teacher_review_resumes():
 
             # 根據角色決定顯示的狀態
             # 班導/主任：顯示 resumes.status（uploaded/approved/rejected）
-            # 指導老師：顯示 resumes.teacher_review_status（如果有的話，否則顯示 resumes.status）
-            status = row.get('display_status') if row.get('display_status') else 'pending'
+            # 指導老師：顯示 resumes.teacher_review_status（uploaded/approved/rejected）
+            status = row.get('display_status') or 'uploaded'
+            if status not in ['uploaded', 'approved', 'rejected']:
+                status = 'uploaded'
             if session_role == 'teacher':
                 # 指導老師查看 teacher_review_status
-                teacher_status = row.get('teacher_review_status')
-                if teacher_status:
+                teacher_status = row.get('teacher_review_status') or 'uploaded'
+                if teacher_status in ['uploaded', 'approved', 'rejected']:
                     status = teacher_status
-            # 將 uploaded 狀態映射為 pending 供前端顯示
-            if status == 'uploaded':
-                status = 'pending'
+                else:
+                    status = 'uploaded'
             
             # 使用 application_id 作為key，這樣每條投遞記錄都會保留
             if application_id not in application_dict:
@@ -25825,7 +25699,7 @@ def review_resume(resume_id):
     user_role = session.get('role')
 
     # 1. 權限檢查
-    ALLOWED_ROLES = ['teacher', 'admin', 'class_teacher', 'vendor']
+    ALLOWED_ROLES = ['teacher', 'admin', 'class_teacher']
     if not user_id or user_role not in ALLOWED_ROLES:
         return jsonify({"success": False, "message": "未授權或無權限"}), 403
 
@@ -25896,10 +25770,7 @@ def review_resume(resume_id):
         cursor.execute("SELECT name, role FROM users WHERE id = %s", (user_id,))
         reviewer = cursor.fetchone()
         if reviewer:
-            if reviewer.get('role') == 'vendor':
-                reviewer_name = reviewer['name'] if reviewer['name'] else "審核廠商"
-            else:
-                reviewer_name = reviewer['name'] if reviewer['name'] else "審核老師"
+            reviewer_name = reviewer['name'] if reviewer['name'] else "審核老師"
         else:
             reviewer_name = "審核者"
 
@@ -25933,17 +25804,17 @@ def review_resume(resume_id):
                     category="resume"
                 )
                 
-                # 🔄 如果是老師退件，將 student_preferences 狀態重置為 'pending'
+                # 🔄 如果是老師退件，將 student_preferences 狀態重置為 'rejected'
                 if user_role in ['teacher', 'class_teacher']:
                     cursor.execute("""
                         UPDATE student_preferences 
-                        SET status = 'pending'
+                        SET status = 'rejected'
                         WHERE student_id = %s
                         AND status = 'approved'
                     """, (student_user_id,))
                     updated_count = cursor.rowcount
                     if updated_count > 0:
-                        print(f"✅ 已將 {updated_count} 筆學生志願序狀態重置為 'pending'，該履歷不會同步到廠商審核頁面")
+                        print(f"✅ 已將 {updated_count} 筆學生志願序狀態重置為 'rejected'")
 
             # =============== 通過 ===============
             elif status == 'approved':
@@ -25970,13 +25841,13 @@ def review_resume(resume_id):
                     category="resume"
                 )
                 
-                # 🎯 新增邏輯：如果班導通過履歷，將該學生所有志願序狀態從 'pending' 更新為 'approved'
+                # 🎯 新增邏輯：如果班導通過履歷，將該學生所有志願序狀態從 'rejected' 更新為 'approved'
                 if user_role in ['teacher', 'class_teacher']:
                     cursor.execute("""
                         UPDATE student_preferences 
                         SET status = 'approved'
                         WHERE student_id = %s
-                        AND status = 'pending'
+                        AND status = 'rejected'
                     """, (student_user_id,))
                     updated_count = cursor.rowcount
                     if updated_count > 0:
@@ -26398,7 +26269,7 @@ def get_class_resumes():
                             sp.student_id,
                             sp.id AS preference_id,
                             sp.preference_order,
-                            'pending' AS preference_status,
+                            sp.status AS preference_status,
                             ic.company_name,
                             ij.title AS job_title,
                             ij.id AS job_id,
@@ -26465,7 +26336,7 @@ def get_class_resumes():
                             sp.student_id,
                             sp.id AS preference_id,
                             sp.preference_order,
-                            'pending' AS preference_status,
+                            sp.status AS preference_status,
                             ic.company_name,
                             ij.title AS job_title,
                             ij.id AS job_id,
@@ -26637,27 +26508,26 @@ def get_class_resumes():
                 r['upload_time'] = r['created_at']
             # 處理志願序狀態：對於指導老師（teacher），從班導同步過來的履歷應該顯示為待審核
             if role == 'teacher':
-                # 如果這是從班導同步過來的履歷（有 preference_id 且履歷狀態為 approved），顯示為 pending
-                if 'preference_id' in r and r.get('preference_id') and r.get('status') == 'approved':
-                    r['application_statuses'] = 'pending'
-                    r['display_status'] = 'pending'
-                elif 'preference_status' in r and r.get('preference_status'):
-                    r['application_statuses'] = r['preference_status']
-                    r['display_status'] = r['preference_status']
-                else:
-                    r['application_statuses'] = r.get('status', 'pending')
-                    r['display_status'] = r.get('status', 'pending')
+                # 指導老師：使用 teacher_review_status 欄位（enum: 'uploaded', 'approved', 'rejected'）
+                teacher_review_status = r.get('teacher_review_status') or 'uploaded'
+                if teacher_review_status not in ['uploaded', 'approved', 'rejected']:
+                    teacher_review_status = 'uploaded'
+                r['application_statuses'] = teacher_review_status
+                r['display_status'] = teacher_review_status
+                r['teacher_review_status'] = teacher_review_status
             else:
-                # 其他角色（class_teacher, director, ta, admin, vendor）使用原有邏輯
+                # 其他角色（class_teacher, director, ta, admin）：使用 status 欄位（enum: 'uploaded', 'approved', 'rejected'）
                 if 'preference_status' in r and r.get('preference_status'):
                     r['application_statuses'] = r['preference_status']
                     r['display_status'] = r['preference_status']
                 else:
-                    r['application_statuses'] = r.get('status', 'pending')
-                    r['display_status'] = r.get('status', 'pending')
-            # 處理留言：如果有 vendor_comment，使用它；否則使用履歷的 comment
-            if 'vendor_comment' in r and r.get('vendor_comment'):
-                r['comment'] = r['vendor_comment']
+                    # 確保 status 符合 enum('uploaded', 'approved', 'rejected')
+                    status_value = r.get('status') or 'uploaded'
+                    if status_value not in ['uploaded', 'approved', 'rejected']:
+                        status_value = 'uploaded'
+                    r['application_statuses'] = status_value
+                    r['display_status'] = status_value
+            # 使用履歷的 comment
 
         print(f"✅ [DEBUG] Returning {len(resumes)} resumes for role {role}")
         return jsonify({"success": True, "resumes": resumes})
