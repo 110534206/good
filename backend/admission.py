@@ -1329,7 +1329,7 @@ def get_all_admissions():
 # =========================================================
 @admission_bp.route("/api/get_all_students", methods=["GET"])
 def get_all_students():
-    """獲取所有學生列表（根據角色過濾），並排除已在媒合結果中的學生"""
+    """獲取所有學生列表（根據角色過濾），標記哪些已在媒合結果中"""
     if 'user_id' not in session:
         return jsonify({"success": False, "message": "未授權"}), 403
     
@@ -1350,12 +1350,12 @@ def get_all_students():
         if not current_semester_id:
             return jsonify({"success": False, "message": "無法取得當前學期"}), 500
         
-        # 獲取所有已在媒合結果中的學生 ID（只包括 Pending 和 Approved 狀態，Rejected 的學生應該出現在未錄取名單中）
+        # 獲取所有已在媒合結果中的學生 ID（只包括 Approved 或 Pending，不包括 Rejected）
         cursor.execute("""
             SELECT DISTINCT student_id
             FROM manage_director
-            WHERE semester_id = %s 
-            AND director_decision IN ('Pending', 'Approved')
+            WHERE semester_id = %s
+            AND director_decision IN ('Approved', 'Pending')
         """, (current_semester_id,))
         matched_student_ids = {row['student_id'] for row in cursor.fetchall()}
         
@@ -1414,15 +1414,13 @@ def get_all_students():
         cursor.execute(base_query, params)
         all_students = cursor.fetchall()
         
-        # 過濾出未在媒合結果中的學生
-        unmatched_students = [
-            student for student in all_students
-            if student['student_id'] not in matched_student_ids
-        ]
-        
-        # 為每個學生獲取志願序資訊（只包括 preference_order 在 1-5 範圍內的）
-        for student in unmatched_students:
+        # 為每個學生標記是否已在媒合結果中，並獲取志願序資訊
+        for student in all_students:
             student_id = student['student_id']
+            # 標記是否已在媒合結果中
+            student['is_matched'] = student_id in matched_student_ids
+            
+            # 為每個學生獲取志願序資訊（只包括 preference_order 在 1-5 範圍內的）
             if current_semester_id:
                 cursor.execute("""
                     SELECT 
@@ -1458,8 +1456,8 @@ def get_all_students():
         
         return jsonify({
             "success": True,
-            "students": unmatched_students,
-            "count": len(unmatched_students)
+            "students": all_students,
+            "count": len(all_students)
         })
     
     except Exception as e:
@@ -1773,7 +1771,6 @@ def director_matching_results():
                 md.director_decision,
                 md.final_rank,
                 md.is_adjusted,
-                md.reviewer_id,
                 md.updated_at,
                 COALESCE(sp.company_id, md.vendor_id) AS company_id,
                 sp.preference_order,
@@ -2034,10 +2031,9 @@ def director_remove_student():
         cursor.execute("""
             UPDATE manage_director
             SET director_decision = 'Rejected',
-                reviewer_id = %s,
                 updated_at = CURRENT_TIMESTAMP
             WHERE match_id = %s
-        """, (director_id, match_id))
+        """, (match_id,))
         
         if cursor.rowcount == 0:
             return jsonify({"success": False, "message": "找不到該記錄"}), 404
@@ -2101,10 +2097,9 @@ def director_promote_reserve():
             SET director_decision = 'Approved',
                 final_rank = %s,
                 is_adjusted = %s,
-                reviewer_id = %s,
                 updated_at = CURRENT_TIMESTAMP
             WHERE match_id = %s
-        """, (slot_index, is_adjusted, director_id, match_id))
+        """, (slot_index, is_adjusted, match_id))
         
         conn.commit()
         
@@ -2387,14 +2382,12 @@ def director_add_student():
                     director_decision = 'Approved',
                     final_rank = %s,
                     is_adjusted = 0,
-                    reviewer_id = %s,
                     updated_at = CURRENT_TIMESTAMP
                 WHERE match_id = %s
             """, (
                 company_id, preference_id,
                 original_type, original_rank,
                 final_rank,
-                director_id,
                 match_id
             ))
         else:
@@ -2404,18 +2397,17 @@ def director_add_student():
                     semester_id, vendor_id, student_id, preference_id,
                     original_type, original_rank, is_conflict,
                     director_decision, final_rank, is_adjusted,
-                    reviewer_id, updated_at
+                    updated_at
                 ) VALUES (
                     %s, %s, %s, %s,
                     %s, %s, 0,
                     'Approved', %s, 0,
-                    %s, CURRENT_TIMESTAMP
+                    CURRENT_TIMESTAMP
                 )
             """, (
                 current_semester_id, company_id, student_id, preference_id,
                 original_type, original_rank,
-                final_rank,
-                director_id
+                final_rank
             ))
         
         conn.commit()
@@ -2557,19 +2549,17 @@ def director_swap_positions():
             UPDATE manage_director
             SET final_rank = %s,
                 is_adjusted = TRUE,
-                reviewer_id = %s,
                 updated_at = CURRENT_TIMESTAMP
             WHERE match_id = %s
-        """, (rank2, director_id, match_id1))
+        """, (rank2, match_id1))
         
         cursor.execute("""
             UPDATE manage_director
             SET final_rank = %s,
                 is_adjusted = TRUE,
-                reviewer_id = %s,
                 updated_at = CURRENT_TIMESTAMP
             WHERE match_id = %s
-        """, (rank1, director_id, match_id2))
+        """, (rank1, match_id2))
         
         conn.commit()
         

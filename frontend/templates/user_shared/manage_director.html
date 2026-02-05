@@ -94,9 +94,15 @@
     }
 
     main.management-container {
-      max-width: 1200px;
-      margin: 24px auto 60px;
+      max-width: 100%;
+      margin: 24px auto 60px auto;
       padding: 0 24px;
+    }
+    
+    /* 確保過濾器容器置中 */
+    #filtersContainer {
+      margin-left: auto;
+      margin-right: auto;
     }
 
     .panel {
@@ -117,6 +123,7 @@
 
     .panel-body {
       padding: 24px;
+      overflow: visible;
     }
 
     .company-navigation {
@@ -256,9 +263,9 @@
     }
 
     .company-content {
-      max-height: 5000px;
-      overflow: hidden;
-      transition: max-height 0.3s ease, opacity 0.3s ease;
+      max-height: none;
+      overflow: visible;
+      transition: opacity 0.3s ease;
       opacity: 1;
     }
 
@@ -334,6 +341,11 @@
       font-weight: 600;
       color: var(--color-text);
       margin-bottom: 4px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: nowrap;
+      white-space: nowrap;
     }
 
     .student-details {
@@ -395,6 +407,10 @@
       border-radius: 6px;
       cursor: pointer;
       font-size: 0.875rem;
+      white-space: nowrap;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
       font-weight: 500;
       transition: all 0.2s ease;
     }
@@ -581,13 +597,15 @@
     .filters-container {
       display: flex;
       gap: 16px;
-      margin-bottom: 24px;
+      margin: 0 auto 24px auto;
       padding: 20px;
       background: #ffffff;
       border-radius: 12px;
       box-shadow: 0 2px 8px rgba(15, 23, 42, 0.06);
       align-items: flex-end;
       flex-wrap: wrap;
+      justify-content: center;
+      max-width: 900px;
     }
 
     .filter-group {
@@ -636,37 +654,32 @@
 
   
     .companies-container {
-     display: flex;
-     flex-direction: row;
-     flex-wrap: wrap;  /* 允許換行，當橫向空間不足時自動換到下一行 */
-     gap: 24px;
-     padding: 10px 5px 20px 5px; 
-     align-items: flex-start;
-     justify-content: flex-start;  /* 從左開始排列 */
+     display: grid;
+     grid-template-columns: repeat(2, 1fr);
+     gap: 16px;
+     padding: 20px;
+     align-items: start;
+     overflow: visible;
      }
 
-    .companies-container::after {
-      content: '';
-      flex: 1 1 calc(33.333% - 24px);  /* 幫助最後一行對齊 */
-      max-width: calc(33.333% - 24px);
+    /* 響應式調整：在小螢幕上改為單列 */
+    @media (max-width: 900px) {
+      .companies-container {
+        grid-template-columns: 1fr;
+      }
     }
-
 
     .company-card {
     border: 2px solid var(--color-border);
     border-radius: 12px;
     background: var(--color-card);
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
-    margin-bottom: 24px;  /* 確保每個卡片之間有間距 */
-    
-    /* 一排顯示3個，每個佔約33.33%寬度，減去gap */
-    flex: 1 1 calc(33.333% - 16px);
-    min-width: 300px;  /* 最小寬度，確保在小螢幕上也能正常顯示 */
-    max-width: calc(33.333% - 16px);  /* 最大寬度，確保一排3個 */
+    width: 100%;
     display: flex;
     flex-direction: column;
     overflow: visible;  /* 改為 visible，讓下方的框格可以超出卡片範圍 */
     position: relative;  /* 確保卡片獨立定位 */
+    min-height: fit-content;  /* 根據內容自動調整高度 */
     }
 
     .companies-container::-webkit-scrollbar {
@@ -699,11 +712,97 @@
       color: rgba(4, 84, 163, 0.3);
     }
 
-    /* 未被錄取學生列表樣式 */
+    /* 主雙頁面容器：左側學生名單，右側公司列表 */
+    .dual-page-container {
+      display: flex;
+      gap: 24px;
+      width: 100%;
+      align-items: flex-start;
+      margin-left: 0;
+      padding-left: 0;
+    }
+
+    .dual-page-left {
+      flex: 0 0 40%;
+      min-width: 0;
+    }
+
+    .dual-page-right {
+      flex: 1;
+      min-width: 0;
+      margin-left: auto;
+    }
+
+    .dual-page-left .panel,
+    .dual-page-right .panel {
+      margin-bottom: 0;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      background: transparent;
+      border-radius: 0;
+      box-shadow: none;
+      border: none;
+      overflow: visible;
+    }
+
+    .dual-page-left .panel-header,
+    .dual-page-right .panel-header {
+      background: transparent;
+      padding: 0 0 12px 0;
+      margin-bottom: 16px;
+      border-bottom: 2px solid var(--color-border);
+    }
+
+    .dual-page-left .panel-header,
+    .dual-page-right .panel-header {
+      color: var(--color-text);
+      font-size: 1.1rem;
+      font-weight: 600;
+    }
+
+    .dual-page-left .panel-body,
+    .dual-page-right .panel-body {
+      display: flex;
+      flex-direction: column;
+      overflow: visible;
+      min-height: 0;
+      padding: 0;
+    }
+
+    .dual-page-left #unmatchedStudentsContainer {
+      overflow: visible;
+      min-height: 0;
+    }
+
+    .dual-page-right #companiesContainer {
+      overflow: visible;
+      min-height: 0;
+    }
+
+    /* 未被錄取學生列表樣式 - 雙欄顯示 */
     #unmatchedStudentsContainer {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+      display: flex;
       gap: 16px;
+      width: 100%;
+    }
+
+    .student-page-column {
+      flex: 1;
+      min-width: 0;  /* 允許 flex 項目縮小 */
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+      gap: 12px;
+      align-content: start;
+    }
+
+    .student-page-column:first-child {
+      border-right: 2px solid var(--color-border);
+      padding-right: 8px;
+    }
+
+    .student-page-column:last-child {
+      padding-left: 8px;
     }
 
     .unmatched-student-item {
@@ -719,6 +818,17 @@
       cursor: grab;
       user-select: none;
       position: relative;
+      pointer-events: auto;  /* 確保可以接收事件 */
+    }
+
+    /* 未匹配的學生可以正常拖放和點擊 */
+    .unmatched-student-item:not(.matched) {
+      cursor: grab;
+      pointer-events: auto;
+    }
+
+    .unmatched-student-item:not(.matched):active {
+      cursor: grabbing;
     }
 
     .unmatched-student-item::before {
@@ -803,12 +913,98 @@
       text-align: center;
       padding: 48px 24px;
       color: var(--color-muted);
+      grid-column: 1 / -1;
     }
 
     .unmatched-empty i {
       font-size: 3rem;
       margin-bottom: 16px;
       color: rgba(4, 84, 163, 0.3);
+    }
+
+    /* 當只有一頁時，右側欄位顯示空狀態 */
+    .student-page-column:only-child {
+      border-right: none;
+      padding-right: 0;
+    }
+
+    /* 分頁樣式 - 雙頁面模式 */
+    .pagination-container {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 12px;
+      margin-top: 24px;
+      padding: 16px;
+      background: #f8fafc;
+      border-radius: 8px;
+    }
+
+    .pagination-btn {
+      padding: 8px 16px;
+      border: 1px solid var(--color-border);
+      border-radius: 6px;
+      background: #fff;
+      color: var(--color-text);
+      cursor: pointer;
+      font-size: 0.9rem;
+      font-weight: 500;
+      transition: all 0.2s ease;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .pagination-btn:hover:not(:disabled) {
+      background: var(--color-primary);
+      color: #fff;
+      border-color: var(--color-primary);
+    }
+
+    .pagination-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .pagination-info {
+      font-size: 0.95rem;
+      color: var(--color-muted);
+      font-weight: 500;
+    }
+
+    .page-column-label {
+      font-size: 0.85rem;
+      color: var(--color-muted);
+      font-weight: 600;
+      margin-bottom: 12px;
+      padding: 8px 12px;
+      background: #f1f5f9;
+      border-radius: 6px;
+      text-align: center;
+    }
+
+    /* 已匹配學生樣式（刪除線） */
+    .unmatched-student-item.matched {
+      opacity: 0.6;
+      background: #f3f4f6;
+    }
+
+    .unmatched-student-item.matched .unmatched-student-name {
+      text-decoration: line-through;
+      color: var(--color-muted);
+    }
+
+    .unmatched-student-item.matched .unmatched-student-details {
+      color: var(--color-muted);
+    }
+
+    .unmatched-student-item.matched {
+      cursor: default;
+    }
+
+    .unmatched-student-item.matched[draggable="true"] {
+      cursor: not-allowed;
+      opacity: 0.5;
     }
   </style>
 </head>
@@ -873,25 +1069,56 @@
       <span>載入中...</span>
     </div>
 
-    <!-- 媒合結果公司卡片容器（框架一直存在） -->
-    <div id="companiesContainer" class="companies-container" style="display: flex;">
-      <!-- 廠商卡片將動態生成 -->
-    </div>
-
-    <!-- 媒合結果空狀態（框架一直存在） -->
-    <div id="emptyState" class="empty-state" style="display: none;">
-      <i class="fa-solid fa-inbox"></i>
-      <div>目前沒有廠商媒合結果</div>
-    </div>
-
-    <!-- 未被錄取學生列表 -->
-    <div class="panel" id="unmatchedStudentsPanel" style="display: none;">
-      <div class="panel-header">
-        <i class="fas fa-users"></i> 未被錄取學生名單
+    <!-- 雙頁面容器：左側學生名單，右側公司列表 -->
+    <div class="dual-page-container">
+      <!-- 左側：所有學生名單 -->
+      <div class="dual-page-left">
+        <div class="panel" id="unmatchedStudentsPanel" style="display: block;">
+          <div class="panel-header">
+            <i class="fas fa-users"></i> 所有學生名單
+          </div>
+          <div class="panel-body">
+            <div id="unmatchedStudentsContainer">
+              <!-- 所有學生將動態生成 -->
+            </div>
+            <!-- 分頁控制 -->
+            <div class="pagination-container" id="paginationContainer" style="display: none;">
+              <button class="pagination-btn" id="prevPageBtn" onclick="changePage(-1)">
+                <i class="fas fa-chevron-left"></i> 上一頁
+              </button>
+              <span class="pagination-info" id="pageInfo">第 1 頁，共 1 頁</span>
+              <button class="pagination-btn" id="nextPageBtn" onclick="changePage(1)">
+                下一頁 <i class="fas fa-chevron-right"></i>
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
-      <div class="panel-body">
-        <div id="unmatchedStudentsContainer">
-          <!-- 未被錄取的學生將動態生成 -->
+
+      <!-- 右側：公司列表 -->
+      <div class="dual-page-right">
+        <div class="panel" id="companiesPanel" style="display: block;">
+          <div class="panel-header">
+            <i class="fas fa-building"></i> 公司列表
+          </div>
+          <div class="panel-body">
+            <!-- 媒合結果載入狀態 -->
+            <div id="loadingState" class="loading" style="display: none;">
+              <span class="spinner"></span>
+              <span>載入中...</span>
+            </div>
+
+            <!-- 媒合結果公司卡片容器 -->
+            <div id="companiesContainer" class="companies-container" style="display: grid;">
+              <!-- 廠商卡片將動態生成 -->
+            </div>
+
+            <!-- 媒合結果空狀態 -->
+            <div id="emptyState" class="empty-state" style="display: none;">
+              <i class="fa-solid fa-inbox"></i>
+              <div>目前沒有廠商媒合結果</div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -917,7 +1144,9 @@
     let duplicateStudents = [];
     let currentCompanyIndex = 0;  // 當前顯示的廠商索引
     let jobSlotsMap = {};  // 儲存每個職缺的名額設定 {companyId_jobId: slots}，從職缺資料自動帶入
-    let unmatchedStudents = [];  // 未被錄取的學生列表
+    let unmatchedStudents = [];  // 所有學生列表
+    let currentPage = 1;  // 當前頁碼
+    let studentsPerPage = 20;  // 每頁顯示的學生數量
 
     // 側邊選單控制
     const menuBtn = document.getElementById('menu-btn');
@@ -944,7 +1173,7 @@
       
       // 顯示載入狀態，但保持其他框架存在
       loadingState.style.display = 'flex';
-      companiesContainer.style.display = 'flex';  // 框架一直存在，即使沒有內容
+      companiesContainer.style.display = 'grid';  // 框架一直存在，即使沒有內容
       emptyState.style.display = 'none';
       
       try {
@@ -983,16 +1212,22 @@
           
           // 根據是否有資料顯示對應的內容，但框架一直存在
           if (allCompaniesData.length === 0) {
-            companiesContainer.style.display = 'flex';  // 框架存在
+            companiesContainer.style.display = 'grid';  // 框架存在
             companiesContainer.innerHTML = '';  // 清空內容
             emptyState.style.display = 'block';
           } else {
-            companiesContainer.style.display = 'flex';  // 框架存在
+            companiesContainer.style.display = 'grid';  // 框架存在
             emptyState.style.display = 'none';
+          }
+          
+          // 確保學生名單面板顯示
+          const unmatchedPanel = document.getElementById('unmatchedStudentsPanel');
+          if (unmatchedPanel) {
+            unmatchedPanel.style.display = 'block';
           }
         } else {
           loadingState.style.display = 'none';
-          companiesContainer.style.display = 'flex';  // 框架一直存在
+          companiesContainer.style.display = 'grid';  // 框架一直存在
           companiesContainer.innerHTML = '';  // 清空內容
           emptyState.style.display = 'block';
           emptyState.innerHTML = `
@@ -1003,7 +1238,7 @@
       } catch (error) {
         console.error('載入失敗:', error);
         loadingState.style.display = 'none';
-        companiesContainer.style.display = 'flex';  // 框架一直存在
+        companiesContainer.style.display = 'grid';  // 框架一直存在
         companiesContainer.innerHTML = '';  // 清空內容
         emptyState.style.display = 'block';
         emptyState.innerHTML = `
@@ -1081,74 +1316,160 @@
       }
     }
 
-    // 載入未被錄取的學生
+    // 載入所有學生
     async function loadUnmatchedStudents() {
       try {
-        // 獲取所有未錄取的學生（後端 API 已經過濾掉已在媒合結果中的學生）
+        // 獲取所有學生（後端 API 會標記哪些已在媒合結果中）
         const res = await fetch('/admission/api/get_all_students', {
           credentials: 'include'
         });
         const data = await res.json();
 
         if (data.success && data.students) {
-          // 後端已經過濾，直接使用結果
+          // 使用所有學生（包括已匹配的）
           unmatchedStudents = data.students;
-          console.log(`📊 未錄取學生數量: ${unmatchedStudents.length}`);
+          console.log(`📊 所有學生數量: ${unmatchedStudents.length}`);
 
-          // 渲染未被錄取的學生
+          // 重置到第一頁
+          currentPage = 1;
+
+          // 渲染所有學生
           renderUnmatchedStudents();
         } else {
           unmatchedStudents = [];
+          currentPage = 1;
           renderUnmatchedStudents();
         }
       } catch (error) {
-        console.error('載入未被錄取學生失敗:', error);
+        console.error('載入學生失敗:', error);
         unmatchedStudents = [];
+        currentPage = 1;
         renderUnmatchedStudents();
       }
     }
 
-    // 渲染未被錄取的學生
+    // 渲染所有學生（雙頁面顯示）
     function renderUnmatchedStudents() {
       const panel = document.getElementById('unmatchedStudentsPanel');
       const container = document.getElementById('unmatchedStudentsContainer');
+      const paginationContainer = document.getElementById('paginationContainer');
+      const pageInfo = document.getElementById('pageInfo');
+      const prevPageBtn = document.getElementById('prevPageBtn');
+      const nextPageBtn = document.getElementById('nextPageBtn');
 
       if (!panel || !container) return;
+      
+      // 確保面板始終顯示
+      panel.style.display = 'block';
 
       // 應用搜尋過濾（如果有的話）
       const studentNameFilter = document.getElementById('studentNameFilter');
       const searchKeyword = studentNameFilter ? studentNameFilter.value.trim().toLowerCase() : '';
       
-      let filteredUnmatched = unmatchedStudents;
+      let filteredStudents = unmatchedStudents;
       if (searchKeyword) {
-        filteredUnmatched = unmatchedStudents.filter(student => {
+        filteredStudents = unmatchedStudents.filter(student => {
           const name = (student.student_name || student.name || '').toLowerCase();
           const number = (student.student_number || student.username || '').toLowerCase();
           return name.includes(searchKeyword) || number.includes(searchKeyword);
         });
       }
 
-      // 如果有未被錄取的學生，顯示面板
-      if (filteredUnmatched.length > 0) {
-        panel.style.display = 'block';
-        container.innerHTML = filteredUnmatched.map(student => {
+      // 計算分頁（按班級分類時不需要分頁）
+      const totalStudents = filteredStudents.length;
+      const totalPages = 1;  // 按班級分類時只有一頁
+      currentPage = 1;  // 重置為第一頁
+
+      // 面板始終顯示
+      panel.style.display = 'block';
+      
+      // 如果有學生，顯示內容
+      if (totalStudents > 0) {
+        
+        // 按照班級分類：忠班在左邊，孝班在右邊
+        let leftPageStudents = [];
+        let rightPageStudents = [];
+        let leftPageLabel = '忠班';
+        let rightPageLabel = '孝班';
+        
+        // 將學生按照班級分類
+        filteredStudents.forEach(student => {
+          const className = (student.class_name || '').toString();
+          // 如果班級名稱包含「忠」，放在左側
+          if (className.includes('忠')) {
+            leftPageStudents.push(student);
+          } 
+          // 如果班級名稱包含「孝」，放在右側
+          else if (className.includes('孝')) {
+            rightPageStudents.push(student);
+          }
+          // 如果都不包含，根據其他條件分配（例如包含「忠」的放左側，其他放右側）
+          else {
+            // 可以根據需要調整這個邏輯
+            rightPageStudents.push(student);
+          }
+        });
+        
+        // 渲染學生項目的函數
+        const renderStudentItem = (student) => {
           const studentName = escapeHtml(student.student_name || student.name || '未知');
           const studentNumber = escapeHtml(student.student_number || student.username || '—');
           const className = escapeHtml(student.class_name || '—');
 
           const studentId = student.student_id || student.id;
+          const isMatched = student.is_matched || false;  // 檢查是否已在媒合結果中
+          
+          // 檢查該學生是否在任何職缺的備取名單中
+          let isReserve = false;
+          let reserveInfo = null;
+          if (allCompaniesData && allCompaniesData.length > 0) {
+            for (const company of allCompaniesData) {
+              for (const job of company.jobs || []) {
+                const reserves = job.reserves || [];
+                const reserveIndex = reserves.findIndex(s => {
+                  const sId = s.student_id || s.id;
+                  return sId && sId.toString() === studentId.toString();
+                });
+                if (reserveIndex !== -1) {
+                  isReserve = true;
+                  reserveInfo = {
+                    companyName: company.company_name,
+                    jobTitle: job.job_title || '未指定職缺',
+                    reserveOrder: reserveIndex + 1
+                  };
+                  break;
+                }
+              }
+              if (isReserve) break;
+            }
+          }
+          
+          // 生成備取標記
+          const reserveBadge = isReserve 
+            ? `<span class="badge badge-reserve" style="margin-left: 8px;">備取${reserveInfo.reserveOrder}</span>`
+            : '';
+          
+          // 如果學生已在媒合結果中，添加 matched class 並禁用拖放
+          const matchedClass = isMatched ? 'matched' : '';
+          const draggableAttr = isMatched ? 'draggable="false"' : 'draggable="true"';
+          const dragStartHandler = isMatched ? '' : 'ondragstart="handleDragStart(event)"';
+          const dragEndHandler = isMatched ? '' : 'ondragend="handleDragEnd(event)"';
+          const titleText = isMatched 
+            ? '此學生已在媒合結果中' 
+            : '點擊查看志願序，拖放此學生到公司職缺中';
+          
           return `
-            <div class="unmatched-student-item" 
-                 draggable="true" 
+            <div class="unmatched-student-item ${matchedClass}" 
+                 ${draggableAttr}
                  data-student-id="${studentId}"
                  data-student-name="${escapeHtml(studentName)}"
                  data-student-number="${escapeHtml(studentNumber)}"
-                 ondragstart="handleDragStart(event)"
-                 ondragend="handleDragEnd(event)"
+                 ${dragStartHandler}
+                 ${dragEndHandler}
                  onclick="showStudentPreferences(${studentId}, '${escapeHtml(studentName)}')"
-                 title="點擊查看志願序，拖放此學生到公司職缺中">
-              <div class="unmatched-student-name">
-                ${studentName}
+                 title="${titleText}">
+              <div class="unmatched-student-name" style="display: flex; align-items: center; white-space: nowrap;">
+                ${studentName}${reserveBadge}
               </div>
               <div class="unmatched-student-details">
                 <span><i class="fas fa-id-card"></i> 學號：${studentNumber}</span>
@@ -1156,19 +1477,78 @@
               </div>
             </div>
           `;
-        }).join('');
-      } else {
-        // 如果搜尋後沒有結果，顯示搜尋無結果；否則顯示所有學生都已被錄取
-        const studentNameFilter = document.getElementById('studentNameFilter');
-        const searchKeyword = studentNameFilter ? studentNameFilter.value.trim() : '';
+        };
         
-        panel.style.display = 'block';
+        // 構建雙頁面 HTML
+        let containerHTML = '<div class="student-page-column">';
+        if (leftPageStudents.length > 0) {
+          if (leftPageLabel) {
+            containerHTML += `<div class="page-column-label">${leftPageLabel}</div>`;
+          }
+          containerHTML += leftPageStudents.map(renderStudentItem).join('');
+        } else {
+          containerHTML += '<div class="unmatched-empty"><i class="fa-solid fa-inbox"></i><div>無學生</div></div>';
+        }
+        containerHTML += '</div>';
+        
+        containerHTML += '<div class="student-page-column">';
+        if (rightPageStudents.length > 0) {
+          if (rightPageLabel) {
+            containerHTML += `<div class="page-column-label">${rightPageLabel}</div>`;
+          }
+          containerHTML += rightPageStudents.map(renderStudentItem).join('');
+        } else {
+          // 如果該班級沒有學生，顯示空狀態
+          if (rightPageLabel) {
+            containerHTML += `<div class="page-column-label">${rightPageLabel}</div>`;
+          }
+          containerHTML += '<div class="unmatched-empty"><i class="fa-solid fa-inbox"></i><div>無學生</div></div>';
+        }
+        containerHTML += '</div>';
+        
+        container.innerHTML = containerHTML;
+
+        // 按班級分類時不顯示分頁控制
+        paginationContainer.style.display = 'none';
+      } else {
+        // 如果搜尋後沒有結果，顯示搜尋無結果
+        paginationContainer.style.display = 'none';
         container.innerHTML = `
-          <div class="unmatched-empty" style="grid-column: 1 / -1;">
-            <i class="fa-solid ${searchKeyword ? 'fa-search' : 'fa-check-circle'}"></i>
-            <div>${searchKeyword ? '搜尋無結果' : '所有學生都已被錄取'}</div>
+          <div class="student-page-column" style="grid-column: 1 / -1; width: 100%;">
+            <div class="unmatched-empty">
+              <i class="fa-solid ${searchKeyword ? 'fa-search' : 'fa-check-circle'}"></i>
+              <div>${searchKeyword ? '搜尋無結果' : '目前沒有學生'}</div>
+            </div>
           </div>
         `;
+      }
+    }
+
+    // 切換頁面
+    function changePage(direction) {
+      const studentNameFilter = document.getElementById('studentNameFilter');
+      const searchKeyword = studentNameFilter ? studentNameFilter.value.trim().toLowerCase() : '';
+      
+      let filteredStudents = unmatchedStudents;
+      if (searchKeyword) {
+        filteredStudents = unmatchedStudents.filter(student => {
+          const name = (student.student_name || student.name || '').toLowerCase();
+          const number = (student.student_number || student.username || '').toLowerCase();
+          return name.includes(searchKeyword) || number.includes(searchKeyword);
+        });
+      }
+
+      const totalPages = Math.ceil(filteredStudents.length / studentsPerPage);
+      const newPage = currentPage + direction;
+      
+      if (newPage >= 1 && newPage <= totalPages) {
+        currentPage = newPage;
+        renderUnmatchedStudents();
+        // 滾動到學生列表頂部
+        const panel = document.getElementById('unmatchedStudentsPanel');
+        if (panel) {
+          panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
       }
     }
 
@@ -1316,7 +1696,7 @@
       
       // 確保框架一直存在
       loadingState.style.display = 'none';
-      container.style.display = 'flex';  // 框架一直存在
+      container.style.display = 'grid';  // 框架一直存在
       
       // 使用過濾後的數據或原始數據
       const companiesToRender = filteredData !== null ? filteredData : allCompaniesData;
@@ -1395,10 +1775,7 @@
                 <div class="reserve-list"
                      data-company-id="${company.company_id}"
                      data-job-id="${job.job_id}"
-                     data-type="reserve"
-                     ondrop="handleDrop(event)"
-                     ondragover="handleDragOver(event)"
-                     ondragleave="handleDragLeave(event)">
+                     data-type="reserve">
                   <div class="list-label">備取名單</div>
                   ${reservesHtml}
                 </div>
@@ -1407,12 +1784,9 @@
                      data-company-id="${company.company_id}"
                      data-job-id="${job.job_id}"
                      data-type="reserve"
-                     ondrop="handleDrop(event)"
-                     ondragover="handleDragOver(event)"
-                     ondragleave="handleDragLeave(event)"
                      style="min-height: 60px; border: 2px dashed transparent; border-radius: 8px; padding: 8px; transition: all 0.2s ease;">
                   <div class="list-label">備取名單</div>
-                  <div style="padding: 12px; text-align: center; color: var(--color-muted); font-size: 0.9rem;">尚無學生（可拖放學生至此）</div>
+                  <div style="padding: 12px; text-align: center; color: var(--color-muted); font-size: 0.9rem;">尚無學生</div>
                 </div>
               `}
             </div>
@@ -1472,12 +1846,12 @@
         return '<div class="text-muted" style="padding: 12px;">尚無學生</div>';
       }
 
-      return students.map(student => {
+      return students.map((student, index) => {
         const isDuplicate = duplicateStudents.includes(student.student_id);
         const badgeClass = type === 'regular' ? 'badge-regular' : 'badge-reserve';
         const badgeText = type === 'regular' 
           ? `正取${student.slot_index || ''}` 
-          : '候補';
+          : `備取${index + 1}`;
         
         return `
           <div class="student-item ${isDuplicate ? 'duplicate' : ''}">
@@ -1545,9 +1919,10 @@
         const data = await res.json();
         if (data.success) {
           showToast('已移除學生，學生已回到未錄取名單', 'success');
-          // 同時重新載入媒合結果和未錄取學生列表
-          loadMatchingResults();
-          loadUnmatchedStudents();
+          // 先重新載入媒合結果，然後重新載入學生列表
+          // 這樣可以確保學生的 is_matched 狀態正確更新
+          await loadMatchingResults();
+          await loadUnmatchedStudents();
         } else {
           showToast(data.message || '移除失敗', 'error');
         }
@@ -1745,24 +2120,42 @@
 
     // 選擇學生填入空位（可以從未錄取學生或備取名單中選擇）
     async function selectStudentForSlot(companyId, jobId, slotIndex) {
-      // 找到該職缺的備取名單
+      // 找到該職缺的正取名單和備取名單
+      let regulars = [];
       let reserves = [];
       allCompaniesData.forEach(company => {
         if (company.company_id === companyId) {
           company.jobs.forEach(job => {
             if (job.job_id === jobId) {
+              regulars = job.regulars || [];
               reserves = job.reserves || [];
             }
           });
         }
       });
 
+      // 收集已經在該職缺上的所有學生ID（正取和備取）
+      const assignedStudentIds = new Set();
+      regulars.forEach(student => {
+        const studentId = student.student_id || student.id;
+        if (studentId) assignedStudentIds.add(studentId);
+      });
+      reserves.forEach(student => {
+        const studentId = student.student_id || student.id;
+        if (studentId) assignedStudentIds.add(studentId);
+      });
+
       // 構建選擇列表：先顯示未錄取學生，再顯示備取名單
       let studentOptions = [];
       
-      // 添加未錄取學生
+      // 添加未錄取學生（排除已經在職缺上的學生）
       if (unmatchedStudents && unmatchedStudents.length > 0) {
         unmatchedStudents.forEach((student, index) => {
+          const studentId = student.student_id || student.id;
+          // 如果學生已經在該職缺上，則跳過
+          if (assignedStudentIds.has(studentId)) {
+            return;
+          }
           studentOptions.push({
             type: 'unmatched',
             index: index,
@@ -1772,8 +2165,13 @@
         });
       }
       
-      // 添加備取名單學生
+      // 添加備取名單學生（排除已經在該職缺正取名單上的學生）
       reserves.forEach((student, index) => {
+        const studentId = student.student_id || student.id;
+        // 如果學生已經在該職缺的正取名單上，則跳過
+        if (assignedStudentIds.has(studentId)) {
+          return;
+        }
         studentOptions.push({
           type: 'reserve',
           index: index,
@@ -2040,6 +2438,14 @@
       const item = event.target.closest('.unmatched-student-item');
       if (!item) return;
       
+      // 如果學生已在媒合結果中（有 matched class），阻止拖放
+      if (item.classList.contains('matched')) {
+        event.preventDefault();
+        showToast('此學生已在媒合結果中，無法拖放', 'info');
+        return;
+      }
+      
+      // 確保未匹配的學生可以拖放
       draggedStudent = {
         student_id: item.dataset.studentId,
         student_name: item.dataset.studentName,
@@ -2064,11 +2470,18 @@
     }
 
     function handleDragOver(event) {
+      const target = event.currentTarget;
+      
+      // 禁止在備取名單上拖放
+      if (target.classList.contains('reserve-list') || target.dataset.type === 'reserve') {
+        event.dataTransfer.dropEffect = 'none';
+        return;
+      }
+      
       event.preventDefault();
       // 不要阻止事件冒泡，讓事件能正確傳播到所有可拖放的元素
       event.dataTransfer.dropEffect = 'move';
       
-      const target = event.currentTarget;
       if (!target.classList.contains('drag-over')) {
         target.classList.add('drag-over');
       }
@@ -2199,6 +2612,12 @@
       
       let type = target.dataset.type || 'regular'; // regular 或 reserve
       let slotIndex = target.dataset.slotIndex ? parseInt(target.dataset.slotIndex) : null;
+
+      // 禁止拖放到備取名單（只有廠商排序時可以設定備取）
+      if (type === 'reserve' || target.classList.contains('reserve-list')) {
+        showToast('主任無法將學生拖放到備取名單，備取僅由廠商排序時設定', 'info');
+        return;
+      }
 
       // 如果拖放到空位框格，設定為正取類型
       if (target.classList.contains('empty-slot')) {
@@ -2377,6 +2796,7 @@
         studentNameFilter.addEventListener('input', () => {
           clearTimeout(searchTimeout);
           searchTimeout = setTimeout(() => {
+            currentPage = 1;  // 搜尋時重置到第一頁
             applyFilters();
           }, 300);  // 300ms 延遲，提升效能
         });
