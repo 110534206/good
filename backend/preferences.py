@@ -521,14 +521,15 @@ def review_preferences():
     cursor = conn.cursor(dictionary=True)
 
     try:
-        # 確認是否為班導
+        # 確認是否為班導（取完所有結果再重用 cursor，避免 Unread result found）
         cursor.execute("""
             SELECT c.id AS class_id
             FROM classes c
             JOIN classes_teacher ct ON c.id = ct.class_id
             WHERE ct.teacher_id = %s AND ct.role = '班導師'
         """, (user_id,))
-        class_info = cursor.fetchone()
+        class_rows = cursor.fetchall()
+        class_info = class_rows[0] if class_rows else None
         if not class_info:
             return "你不是班導，無法查看志願序", 403
 
@@ -965,14 +966,15 @@ def export_preferences_excel():
     cursor = conn.cursor(dictionary=True)
 
     try:
-        # 確認是否為班導
+        # 確認是否為班導（取完結果再重用 cursor，避免 Unread result found）
         cursor.execute("""
         SELECT c.id AS class_id, c.name AS class_name
         FROM classes c
         JOIN classes_teacher ct ON c.id = ct.class_id
         WHERE ct.teacher_id = %s AND ct.role = '班導師'
         """, (user_id,))
-        class_info = cursor.fetchone()
+        class_rows = cursor.fetchall()
+        class_info = class_rows[0] if class_rows else None
         if not class_info:
             return "你不是班導，無法導出志願序", 403
 
@@ -1173,14 +1175,15 @@ def export_preferences_pdf():
     cursor = conn.cursor(dictionary=True)
 
     try:
-        # 確認是否為班導
+        # 確認是否為班導（取完結果再重用 cursor，避免 Unread result found）
         cursor.execute("""
         SELECT c.id AS class_id, c.name AS class_name
         FROM classes c
         JOIN classes_teacher ct ON c.id = ct.class_id
         WHERE ct.teacher_id = %s AND ct.role = '班導師'
         """, (user_id,))
-        class_info = cursor.fetchone()
+        class_rows = cursor.fetchall()
+        class_info = class_rows[0] if class_rows else None
         if not class_info:
             return "你不是班導，無法導出志願序", 403
 
@@ -1431,14 +1434,15 @@ def export_preferences_docx():
     cursor = conn.cursor(dictionary=True)
 
     try:
-        # 確認是否為班導
+        # 確認是否為班導（取完結果再重用 cursor，避免 Unread result found）
         cursor.execute("""
         SELECT c.id AS class_id, c.name AS class_name
         FROM classes c
         JOIN classes_teacher ct ON c.id = ct.class_id
         WHERE ct.teacher_id = %s AND ct.role = '班導師'
         """, (user_id,))
-        class_info = cursor.fetchone()
+        class_rows = cursor.fetchall()
+        class_info = class_rows[0] if class_rows else None
         if not class_info:
             return "你不是班導，無法導出志願序", 403
 
