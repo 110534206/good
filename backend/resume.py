@@ -17,7 +17,7 @@ import io
 
 
 # --- 檔案路徑設定 ---
-BASE_UPLOAD_DIR = r"C:\Featured\good\backend"
+BASE_UPLOAD_DIR = os.path.dirname(os.path.abspath(__file__))
 
 # 定義 uploads/standard_courses
 STANDARD_COURSE_UPLOAD_PATH = os.path.join('uploads', 'standard_courses')
@@ -2489,6 +2489,10 @@ def generate_application_form_docx(student_data, output_path):
                 context[key] = ""
 
         doc.render(context)
+        # 確保輸出路徑所在目錄存在（不同電腦路徑不同時可正常寫入）
+        output_dir = os.path.dirname(output_path)
+        if output_dir:
+            os.makedirs(output_dir, exist_ok=True)
         doc.save(output_path)
         print(f"✅ 履歷文件已生成: {output_path}")
         return True
@@ -4770,7 +4774,7 @@ import io
 resume_bp = Blueprint("resume_bp", __name__)
 
 # --- 檔案路徑設定 ---
-BASE_UPLOAD_DIR = r"C:\Featured\good\backend"
+BASE_UPLOAD_DIR = os.path.dirname(os.path.abspath(__file__))
 
 # 定義 uploads/standard_courses
 STANDARD_COURSE_UPLOAD_PATH = os.path.join('uploads', 'standard_courses')
@@ -7218,6 +7222,10 @@ def generate_application_form_docx(student_data, output_path):
                 context[key] = ""
 
         doc.render(context)
+        # 確保輸出路徑所在目錄存在（不同電腦路徑不同時可正常寫入）
+        output_dir = os.path.dirname(output_path)
+        if output_dir:
+            os.makedirs(output_dir, exist_ok=True)
         doc.save(output_path)
         print(f"✅ 履歷文件已生成: {output_path}")
         return True
@@ -9172,7 +9180,7 @@ import io
 resume_bp = Blueprint("resume_bp", __name__)
 
 # --- 檔案路徑設定 ---
-BASE_UPLOAD_DIR = r"C:\Featured\good\backend"
+BASE_UPLOAD_DIR = os.path.dirname(os.path.abspath(__file__))
 
 # 定義 uploads/standard_courses
 STANDARD_COURSE_UPLOAD_PATH = os.path.join('uploads', 'standard_courses')
@@ -11620,6 +11628,10 @@ def generate_application_form_docx(student_data, output_path):
                 context[key] = ""
 
         doc.render(context)
+        # 確保輸出路徑所在目錄存在（不同電腦路徑不同時可正常寫入）
+        output_dir = os.path.dirname(output_path)
+        if output_dir:
+            os.makedirs(output_dir, exist_ok=True)
         doc.save(output_path)
         print(f"✅ 履歷文件已生成: {output_path}")
         return True
@@ -13574,7 +13586,7 @@ import io
 resume_bp = Blueprint("resume_bp", __name__)
 
 # --- 檔案路徑設定 ---
-BASE_UPLOAD_DIR = r"C:\Featured\good\backend"
+BASE_UPLOAD_DIR = os.path.dirname(os.path.abspath(__file__))
 
 # 定義 uploads/standard_courses
 STANDARD_COURSE_UPLOAD_PATH = os.path.join('uploads', 'standard_courses')
@@ -16022,6 +16034,10 @@ def generate_application_form_docx(student_data, output_path):
                 context[key] = ""
 
         doc.render(context)
+        # 確保輸出路徑所在目錄存在（不同電腦路徑不同時可正常寫入）
+        output_dir = os.path.dirname(output_path)
+        if output_dir:
+            os.makedirs(output_dir, exist_ok=True)
         doc.save(output_path)
         print(f"✅ 履歷文件已生成: {output_path}")
         return True
@@ -17976,7 +17992,7 @@ import io
 resume_bp = Blueprint("resume_bp", __name__)
 
 # --- 檔案路徑設定 ---
-BASE_UPLOAD_DIR = r"C:\Featured\good\backend"
+BASE_UPLOAD_DIR = os.path.dirname(os.path.abspath(__file__))
 
 # 定義 uploads/standard_courses
 STANDARD_COURSE_UPLOAD_PATH = os.path.join('uploads', 'standard_courses')
@@ -20424,6 +20440,10 @@ def generate_application_form_docx(student_data, output_path):
                 context[key] = ""
 
         doc.render(context)
+        # 確保輸出路徑所在目錄存在（不同電腦路徑不同時可正常寫入）
+        output_dir = os.path.dirname(output_path)
+        if output_dir:
+            os.makedirs(output_dir, exist_ok=True)
         doc.save(output_path)
         print(f"✅ 履歷文件已生成: {output_path}")
         return True
@@ -22378,7 +22398,7 @@ import io
 resume_bp = Blueprint("resume_bp", __name__)
 
 # --- 檔案路徑設定 ---
-BASE_UPLOAD_DIR = r"C:\Featured\good\backend"
+BASE_UPLOAD_DIR = os.path.dirname(os.path.abspath(__file__))
 
 # 定義 uploads/standard_courses
 STANDARD_COURSE_UPLOAD_PATH = os.path.join('uploads', 'standard_courses')
@@ -24826,6 +24846,10 @@ def generate_application_form_docx(student_data, output_path):
                 context[key] = ""
 
         doc.render(context)
+        # 確保輸出路徑所在目錄存在（不同電腦路徑不同時可正常寫入）
+        output_dir = os.path.dirname(output_path)
+        if output_dir:
+            os.makedirs(output_dir, exist_ok=True)
         doc.save(output_path)
         print(f"✅ 履歷文件已生成: {output_path}")
         return True
