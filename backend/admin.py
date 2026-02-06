@@ -9,18 +9,104 @@ admin_bp = Blueprint("admin_bp", __name__, url_prefix='/admin')
 # --------------------------------
 # 用戶管理
 # --------------------------------
-def _post_process_users(users):
-    """共用：補齊 role_display、admission_year、created_at 格式"""
+def _get_active_semester_year(cursor):
+    """取得當前啟用學期學年：優先 is_active=1 的 code 前三碼（如 1132->113）；若無則用 code 最大的一筆；再無則用 id 最大的一筆。"""
+    cursor.execute("SELECT code FROM semesters WHERE is_active = 1 LIMIT 1")
+    row = cursor.fetchone()
+    if not row or row.get('code') is None:
+        cursor.execute("SELECT code FROM semesters WHERE code IS NOT NULL AND code != '' ORDER BY code DESC LIMIT 1")
+        row = cursor.fetchone()
+    if not row or row.get('code') is None:
+        cursor.execute("SELECT code FROM semesters ORDER BY id DESC LIMIT 1")
+        row = cursor.fetchone()
+    raw = row.get('code') if row else None
+    if raw is None:
+        return None
+    # 支援 code 為 int（如 1132）或 str（如 '1132'）或 bytes
+    if isinstance(raw, int):
+        return raw // 10 if raw >= 100 else None  # 1132 -> 113
+    if isinstance(raw, bytes):
+        raw = raw.decode('utf-8', errors='ignore')
+    code = str(raw).strip()
+    if len(code) >= 3:
+        try:
+            return int(code[:3])
+        except (TypeError, ValueError):
+            pass
+    return None
+
+
+def _post_process_users(users, active_semester_year=None):
+    """共用：補齊 role_display、admission_year（優先 DB）、created_at、動態 grade_display（不讀 users.grade）。"""
     role_map = {'ta': '科助', 'teacher': '教師', 'student': '學生', 'director': '主任', 'admin': '管理員', 'vendor': '廠商'}
+    grade_labels = {1: '一年級', 2: '二年級', 3: '三年級', 4: '四年級', 5: '五年級', 6: '六年級'}
     for user in users:
         if user.get('created_at'):
             user['created_at'] = user['created_at'].strftime("%Y-%m-%d %H:%M:%S")
         user['role_display'] = role_map.get(user['role'], user['role'])
-        if user['role'] == 'student' and user.get('username') and len(user['username']) >= 3:
-            user['admission_year'] = user['username'][:3]
+        # 入學年度：優先使用資料庫 u.admission_year，其次學生 username 前三碼
+        if user['role'] == 'student':
+            db_ay = user.get('admission_year')  # 已從 SELECT 取得 u.admission_year
+            if db_ay is not None and str(db_ay).strip() != '':
+                try:
+                    user['admission_year'] = int(db_ay)
+                except (TypeError, ValueError):
+                    user['admission_year'] = user['username'][:3] if user.get('username') and len(user.get('username', '')) >= 3 else ''
+            elif user.get('username') and len(user['username']) >= 3:
+                try:
+                    user['admission_year'] = int(user['username'][:3])
+                except (TypeError, ValueError):
+                    user['admission_year'] = ''
+            else:
+                user['admission_year'] = ''
+            # 年級動態計算：當前啟用學期學年(code 前三碼) - admission_year + 1
+            user['grade_display'] = '-'
+            ay_for_grade = user.get('admission_year')
+            if ay_for_grade == '' or ay_for_grade is None:
+                try:
+                    if user.get('username') and len(str(user['username'])) >= 3:
+                        ay_for_grade = int(str(user['username'])[:3])
+                except (TypeError, ValueError):
+                    pass
+            if active_semester_year is not None and ay_for_grade != '' and ay_for_grade is not None:
+                try:
+                    ay = int(ay_for_grade)
+                    grade_num = active_semester_year - ay + 1
+                    if 1 <= grade_num <= 6:
+                        user['grade_display'] = grade_labels.get(grade_num, f'{grade_num}年級')
+                    elif grade_num > 0:
+                        user['grade_display'] = f'{grade_num}年級'
+                except (TypeError, ValueError):
+                    pass
         else:
             user['admission_year'] = ''
+            user['grade_display'] = '-'
+        # 班級動態顯示：僅科系 + 班名（例：資管科 忠），不顯示屆
+        if user['role'] == 'student':
+            dept = (user.get('department') or '').strip()
+            cname = (user.get('class_name') or '').strip()
+            if dept or cname:
+                user['class_display'] = ' '.join(p for p in [dept, cname] if p)
+            else:
+                user['class_display'] = '-'
+        else:
+            user['class_display'] = '-'
     return users
+
+@admin_bp.route('/api/current_semester_year', methods=['GET'])
+def get_current_semester_year():
+    """取得目前系統學年（semesters 表 is_active=1 的 code 前三碼），供詳情動態年級計算。"""
+    if 'user_id' not in session or session.get('role') not in ['admin', 'ta']:
+        return jsonify({"success": False, "message": "未授權"}), 403
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        year = _get_active_semester_year(cursor)
+        return jsonify({"success": True, "active_semester_year": year})
+    finally:
+        cursor.close()
+        conn.close()
+
 
 @admin_bp.route('/api/get_all_users', methods=['GET'])
 def get_all_users():
@@ -37,8 +123,10 @@ def get_all_users():
         cursor.execute("""
             SELECT 
                 u.id, u.username, u.name, u.email, u.role, u.class_id, u.status,
+                u.admission_year,
                 c.name AS class_name,
                 c.department,
+                c.admission_year AS class_admission_year,
                 (
                     SELECT GROUP_CONCAT(CONCAT(c2.admission_year, '屆', c2.department, c2.name) SEPARATOR ', ')
                     FROM classes_teacher ct2
@@ -52,14 +140,16 @@ def get_all_users():
             LIMIT %s OFFSET %s
         """, (per_page, (page - 1) * per_page))
         users = cursor.fetchall()
-        _post_process_users(users)
+        active_semester_year = _get_active_semester_year(cursor)
+        _post_process_users(users, active_semester_year)
 
         return jsonify({
             "success": True,
             "users": users,
             "total": total,
             "page": page,
-            "per_page": per_page
+            "per_page": per_page,
+            "active_semester_year": active_semester_year,
         })
     except Exception as e:
         print(f"取得所有用戶錯誤: {e}")
@@ -100,8 +190,10 @@ def search_users():
         cursor.execute(f"""
             SELECT 
                 u.id, u.username, u.name, u.email, u.role, u.class_id, u.status,
+                u.admission_year,
                 c.name AS class_name,
                 c.department,
+                c.admission_year AS class_admission_year,
                 (
                     SELECT GROUP_CONCAT(CONCAT(c2.admission_year, '屆', c2.department, c2.name) SEPARATOR ', ')
                     FROM classes_teacher ct2
@@ -116,14 +208,16 @@ def search_users():
             LIMIT %s OFFSET %s
         """, params + [per_page, (page - 1) * per_page])
         users = cursor.fetchall()
-        _post_process_users(users)
+        active_semester_year = _get_active_semester_year(cursor)
+        _post_process_users(users, active_semester_year)
 
         return jsonify({
             "success": True,
             "users": users,
             "total": total,
             "page": page,
-            "per_page": per_page
+            "per_page": per_page,
+            "active_semester_year": active_semester_year,
         })
     except Exception as e:
         print(f"搜尋用戶錯誤: {e}")
