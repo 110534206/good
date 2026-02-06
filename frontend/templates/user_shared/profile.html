@@ -129,6 +129,10 @@
       </div>
 
       <div id="studentFields" class="role-specific-fields" style="display: none;">
+        <div id="gradeDisplayContainer">
+          <label for="gradeDisplay">年級</label>
+          <input id="gradeDisplay" type="text" readonly />
+        </div>
         <label for="combinedClass">班級</label>
         <input id="combinedClass" type="text" readonly />
 
@@ -310,7 +314,30 @@
 
           // 填入角色特定資料
           if (userRole === 'student') {
-            document.getElementById('combinedClass').value = user.class_display_name || '';
+            const gradeDisplayEl = document.getElementById('gradeDisplay');
+            const gradeDisplayContainer = document.getElementById('gradeDisplayContainer');
+            if (gradeDisplayEl && gradeDisplayContainer) {
+              gradeDisplayEl.value = user.grade_display || '';
+              gradeDisplayContainer.style.display = user.grade_display ? 'block' : 'none';
+            }
+            // 班級：以「科系 + 動態年級 + 班名」（資管科 四孝）顯示；優先依 API 的 active_semester_year 或 current_semester_display 與 admission_year 計算
+            let classDisplay = user.class_display_name || '';
+            const dept = (user.department || '').trim();
+            const cname = (user.class_name || '').trim();
+            const ayStr = (user.admission_year != null && user.admission_year !== '') ? String(user.admission_year).trim() : '';
+            const codeStr = (user.current_semester_display || '').toString();
+            const apiYear = user.active_semester_year != null && user.active_semester_year !== '' ? parseInt(String(user.active_semester_year), 10) : NaN;
+            const activeYear = !isNaN(apiYear) ? apiYear : (codeStr.length >= 3 ? parseInt(codeStr.substring(0, 3), 10) : NaN);
+            if (dept && cname && ayStr && !isNaN(activeYear)) {
+              const ay = parseInt(ayStr, 10);
+              if (!isNaN(ay)) {
+                const gradeNum = activeYear - ay + 1;
+                const gradeLabels = ['一', '二', '三', '四', '五', '六'];
+                const gradeChar = (gradeNum >= 1 && gradeNum <= 6) ? gradeLabels[gradeNum - 1] : (gradeNum > 0 ? String(gradeNum) : '');
+                classDisplay = gradeChar ? `${dept} ${gradeChar}${cname}` : `${dept} ${cname}`;
+              }
+            }
+            document.getElementById('combinedClass').value = classDisplay || '';
           } else if (isHomeroom) {
             document.getElementById('managedClasses').value = user.class_display_name || '';
           } else if (userRole === 'vendor') {

@@ -8,6 +8,32 @@ import re
 users_bp = Blueprint("users_bp", __name__)
 
 
+def _get_active_semester_year(cursor):
+    """取得當前啟用學期學年（semesters 表 is_active=1 的 code 前三碼，如 1132->113），與 admin 邏輯一致。"""
+    cursor.execute("SELECT code FROM semesters WHERE is_active = 1 LIMIT 1")
+    row = cursor.fetchone()
+    if not row or row.get('code') is None:
+        cursor.execute("SELECT code FROM semesters WHERE code IS NOT NULL AND code != '' ORDER BY code DESC LIMIT 1")
+        row = cursor.fetchone()
+    if not row or row.get('code') is None:
+        cursor.execute("SELECT code FROM semesters ORDER BY id DESC LIMIT 1")
+        row = cursor.fetchone()
+    raw = row.get('code') if row else None
+    if raw is None:
+        return None
+    if isinstance(raw, int):
+        return raw // 10 if raw >= 100 else None
+    if isinstance(raw, bytes):
+        raw = raw.decode('utf-8', errors='ignore')
+    code = str(raw).strip()
+    if len(code) >= 3:
+        try:
+            return int(code[:3])
+        except (TypeError, ValueError):
+            pass
+    return None
+
+
 # -------------------------
 # API: 取得當前使用者基本資料（姓名、電子信箱、頭貼）供履歷表單帶入
 # -------------------------
@@ -194,7 +220,7 @@ def get_profile():
             return jsonify({"success": False, "message": "使用者不存在"}), 404
 
         # ------------------------------
-        # 學期：由 internship_configs 取得（優先個人設定，否則採用屆別預設 user_id IS NULL）
+        # 學期：由 internship_configs 取得。優先順序：1) 該 user_id + 當前學期之專屬設定；2) 無則 user_id IS NULL 且 admission_year 相符之公版。
         # ------------------------------
         user['current_semester_display'] = ''
         user['current_semester_code'] = None
@@ -285,8 +311,42 @@ def get_profile():
             # 相容用：班導優先顯示帶班，否則顯示指導學生所屬
             user["class_display_name"] = user["homeroom_class_display"] or user["guided_class_display"]
         elif original_role_from_db == "student":
-            dep_short = user['department'].replace("管科", "") if user['department'] else ""
-            user["class_display_name"] = f"{dep_short}{user['class_name'] or ''}"
+            dept = (user.get('department') or '').strip()
+            cname = (user.get('class_name') or '').strip()
+            # 班級格式：資管科 X孝，X 為動態年級（與 user_management 年級邏輯一致）
+            ay = user.get('admission_year')
+            if ay is not None and str(ay).strip() != '':
+                try:
+                    ay_int = int(ay)
+                except (TypeError, ValueError):
+                    ay_int = None
+            else:
+                ay_int = None
+            if ay_int is None and user.get('username') and len(str(user.get('username', ''))) >= 3:
+                try:
+                    ay_int = int(str(user['username'])[:3])
+                except (TypeError, ValueError):
+                    pass
+            grade_char = ''
+            active_year = _get_active_semester_year(cursor)
+            if active_year is not None and ay_int is not None:
+                grade_num = active_year - ay_int + 1
+                grade_labels = ('一', '二', '三', '四', '五', '六')
+                if 1 <= grade_num <= 6:
+                    grade_char = grade_labels[grade_num - 1]
+                elif grade_num > 0:
+                    grade_char = str(grade_num)
+            # 年級顯示（供個人資料頁「年級」欄位）
+            if grade_char:
+                user["grade_display"] = {'一': '一年級', '二': '二年級', '三': '三年級', '四': '四年級', '五': '五年級', '六': '六年級'}.get(grade_char, grade_char + '年級')
+            else:
+                user["grade_display"] = ''
+            if dept and cname:
+                user["class_display_name"] = f"{dept} {grade_char}{cname}" if grade_char else f"{dept} {cname}"
+            elif dept or cname:
+                user["class_display_name"] = f"{dept} {grade_char}{cname}".strip() or dept or cname
+            else:
+                user["class_display_name"] = '-'
         else:
             user["class_display_name"] = ""
 
@@ -332,6 +392,9 @@ def get_profile():
                 print(f"✅ 從 internship_companies 表查詢到的指導老師名稱: {user['advisor_name']}")
         else:
             user["advisor_name"] = ""
+
+        # 供前端計算班級年級顯示（學生／老師班級皆可用）
+        user["active_semester_year"] = _get_active_semester_year(cursor)
 
         return jsonify({"success": True, "user": user})
     except Exception as e:

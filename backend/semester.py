@@ -443,6 +443,7 @@ def delete_semester(semester_id):
 
 # =========================================================
 # 實習配置 (internship_configs)：依 admission_year / user_id / semester_id 設定實習起迄
+# 讀取優先順序：1) 該 user_id + 學期的個人設定；2) 無則用 user_id IS NULL 且 admission_year 相符之屆別公版。
 # =========================================================
 
 @semester_bp.route("/api/internship-configs", methods=["GET"])
