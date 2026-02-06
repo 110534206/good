@@ -664,6 +664,7 @@
           <div class="chip outline" data-category="ranking">志願序</div>
           <div class="chip outline" data-category="company">實習公司</div>
           <div class="chip outline" data-category="experience">實習心得</div>
+          <div class="chip outline" data-category="matching">媒合</div>
           <div class="chip outline" data-category="approval" id="approval-filter" style="display: none;">時程</div>
           <div class="unread-badge" id="unreadBadgeTA" style="position: static; margin-left: auto; display: none;">
             未讀 <span id="unreadCounterTA">0</span>
@@ -877,6 +878,7 @@
         'company': '實習公司',
         'experience': '實習心得',
         'intern_experience': '實習心得',  // 兼容不同的類別名稱
+        'matching': '媒合',
         'approval': '時程',
         'general': '一般',
         'preferences': '志願序'  // 兼容舊的 preferences 類別
@@ -913,8 +915,12 @@
           
           // 如果 category 為 'general' 或空，才根據標題自動判斷（兼容舊數據）
           if (!category || category === 'general') {
+            // 如果標題包含「媒合」，將類別設為 "matching"
+            if (title.includes('媒合')) {
+              finalCategory = 'matching';
+            }
             // 如果標題包含「志願序」，將類別設為 "ranking"
-            if (title.includes('志願序')) {
+            else if (title.includes('志願序')) {
               finalCategory = 'ranking';
             }
             // 如果標題包含「履歷」，將類別設為 "resume"
@@ -929,6 +935,11 @@
             else if (title.includes('實習心得') || title.includes('心得退件') || title.includes('心得審核')) {
               finalCategory = 'experience';
             }
+          }
+          
+          // 如果後端返回的 category 是 'approval' 但標題包含「媒合」，則改為 'matching'
+          if (category === 'approval' && title.includes('媒合')) {
+            finalCategory = 'matching';
           }
           
           return {
@@ -1003,7 +1014,12 @@
         
         // 類別篩選：如果選擇「公告」或「實習心得」，也要包含標題包含相關關鍵字的通知（兼容舊數據）
         if (currentCategoryFilter !== 'all') {
-          if (currentCategoryFilter === 'experience') {
+          if (currentCategoryFilter === 'matching') {
+            // 媒合類別：只顯示媒合相關的通知
+            const isMatching = n.category === 'matching' || 
+              n.title.includes('媒合') || n.message.includes('媒合');
+            if (!isMatching) return false;
+          } else if (currentCategoryFilter === 'experience') {
             // 實習心得類別：只顯示實習心得相關的通知
             const isExperience = n.category === 'experience' || n.category === 'intern_experience' ||
               n.title.includes('實習心得') || n.title.includes('心得退件') || n.title.includes('心得審核');

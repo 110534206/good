@@ -27,9 +27,14 @@ def create_notification(user_id, title, message, category="general", link_url=No
             title_lower = title.lower()
             msg_lower = message.lower()
 
+            # 媒合相關（優先判斷，避免被其他類別誤判）
+            if any(k in title_lower for k in ["媒合", "matching"]) or \
+               any(k in msg_lower for k in ["媒合", "matching"]):
+                category = "matching"
+
             # 履歷相關
-            if any(k in title_lower for k in ["履歷", "resume"]) or \
-               any(k in msg_lower for k in ["履歷", "resume"]):
+            elif any(k in title_lower for k in ["履歷", "resume"]) or \
+                 any(k in msg_lower for k in ["履歷", "resume"]):
                 category = "resume"
 
             # 志願序

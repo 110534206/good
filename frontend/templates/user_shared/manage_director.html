@@ -569,6 +569,275 @@
       }
     }
 
+    /* 彈跳視窗樣式 */
+    .quota-modal-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.5);
+      z-index: 2000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.2s ease;
+    }
+
+    .quota-modal-overlay.show {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .quota-modal {
+      background: white;
+      border-radius: 18px;
+      padding: 32px;
+      max-width: 480px;
+      width: 90%;
+      box-shadow: 0 20px 48px rgba(15, 23, 42, 0.18);
+      transform: scale(0.95);
+      transition: transform 0.2s ease;
+    }
+
+    .quota-modal-overlay.show .quota-modal {
+      transform: scale(1);
+    }
+
+    .quota-modal-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 20px;
+      padding-bottom: 16px;
+      border-bottom: 2px solid var(--color-border);
+    }
+
+    .quota-modal-header h3 {
+      margin: 0;
+      font-size: 1.5rem;
+      color: var(--color-text);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .quota-modal-header h3 i {
+      color: var(--color-danger);
+      font-size: 1.8rem;
+    }
+
+    .quota-modal-close {
+      background: none;
+      border: none;
+      font-size: 28px;
+      cursor: pointer;
+      color: var(--color-muted);
+      padding: 0;
+      width: 32px;
+      height: 32px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 8px;
+      transition: all 0.2s ease;
+    }
+
+    .quota-modal-close:hover {
+      background: var(--color-bg);
+      color: var(--color-text);
+    }
+
+    .quota-modal-body {
+      padding: 8px 0 24px 0;
+    }
+
+    .quota-modal-body p {
+      margin: 0;
+      font-size: 1.1rem;
+      color: var(--color-text);
+      line-height: 1.6;
+    }
+
+    .quota-modal-footer {
+      display: flex;
+      justify-content: flex-end;
+      gap: 12px;
+    }
+
+    .quota-modal-btn {
+      padding: 10px 24px;
+      border: none;
+      border-radius: 8px;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .quota-modal-btn-primary {
+      background: var(--color-primary);
+      color: white;
+    }
+
+    .quota-modal-btn-primary:hover {
+      background: var(--color-primary-dark);
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(4, 84, 163, 0.3);
+    }
+
+    /* 確認媒合結果彈跳視窗樣式 */
+    .confirm-modal-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.5);
+      z-index: 2000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.2s ease;
+    }
+
+    .confirm-modal-overlay.show {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .confirm-modal {
+      background: white;
+      border-radius: 18px;
+      padding: 32px;
+      max-width: 520px;
+      width: 90%;
+      box-shadow: 0 20px 48px rgba(15, 23, 42, 0.18);
+      transform: scale(0.95);
+      transition: transform 0.2s ease;
+    }
+
+    .confirm-modal-overlay.show .confirm-modal {
+      transform: scale(1);
+    }
+
+    .confirm-modal-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 20px;
+      padding-bottom: 16px;
+      border-bottom: 2px solid var(--color-border);
+    }
+
+    .confirm-modal-header h3 {
+      margin: 0;
+      font-size: 1.5rem;
+      color: var(--color-text);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .confirm-modal-header h3 i {
+      color: #dc2626;
+      font-size: 1.8rem;
+    }
+
+    .confirm-modal-close {
+      background: none;
+      border: none;
+      font-size: 28px;
+      cursor: pointer;
+      color: var(--color-muted);
+      padding: 0;
+      width: 32px;
+      height: 32px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 8px;
+      transition: all 0.2s ease;
+    }
+
+    .confirm-modal-close:hover {
+      background: var(--color-bg);
+      color: var(--color-text);
+    }
+
+    .confirm-modal-body {
+      padding: 8px 0 24px 0;
+    }
+
+    .confirm-modal-body p {
+      margin: 0 0 16px 0;
+      font-size: 1.1rem;
+      color: var(--color-text);
+      line-height: 1.6;
+    }
+
+    .confirm-modal-body ul {
+      margin: 16px 0;
+      padding-left: 24px;
+      color: var(--color-text);
+    }
+
+    .confirm-modal-body li {
+      margin: 8px 0;
+      font-size: 1rem;
+      line-height: 1.6;
+    }
+
+    .confirm-modal-body .warning {
+      background: #fef3c7;
+      border-left: 4px solid var(--color-warning);
+      padding: 12px 16px;
+      border-radius: 8px;
+      margin: 16px 0;
+      color: #78350f;
+      font-size: 0.95rem;
+    }
+
+    .confirm-modal-footer {
+      display: flex;
+      justify-content: flex-end;
+      gap: 12px;
+    }
+
+    .confirm-modal-btn {
+      padding: 10px 24px;
+      border: none;
+      border-radius: 8px;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .confirm-modal-btn-cancel {
+      background: #f3f4f6;
+      color: var(--color-text);
+    }
+
+    .confirm-modal-btn-cancel:hover {
+      background: #e5e7eb;
+    }
+
+    .confirm-modal-btn-confirm {
+      background: #dc2626;
+      color: white;
+    }
+
+    .confirm-modal-btn-confirm:hover {
+      background: #b91c1c;
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(220, 38, 38, 0.3);
+    }
+
     .loading {
       display: flex;
       align-items: center;
@@ -650,6 +919,57 @@
       outline: none;
       border-color: var(--color-primary);
       box-shadow: 0 0 0 3px rgba(4, 84, 163, 0.1);
+    }
+
+    /* 按鈕組樣式 */
+    .filter-buttons {
+      display: flex;
+      gap: 12px;
+      align-items: flex-end;
+    }
+
+    .btn-excel {
+      background-color: #16a34a;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      padding: 10px 20px;
+      font-size: 1rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .btn-excel:hover {
+      background-color: #15803d;
+      color: #fff;
+      transform: translateY(-2px);
+      box-shadow: 0 4px 8px rgba(22, 163, 74, 0.3);
+    }
+
+    .btn-confirm {
+      background-color: #dc2626;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      padding: 10px 20px;
+      font-size: 1rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .btn-confirm:hover {
+      background-color: #b91c1c;
+      color: #fff;
+      transform: translateY(-2px);
+      box-shadow: 0 4px 8px rgba(220, 38, 38, 0.3);
     }
 
   
@@ -1061,6 +1381,14 @@
         <label for="studentNameFilter">搜尋學生姓名或學號</label>
         <input type="text" id="studentNameFilter" placeholder="輸入學生姓名或學號">
       </div>
+      <div class="filter-buttons">
+        <button id="exportExcelBtn" class="btn-excel">
+          <i class="fas fa-file-excel"></i> Excel
+        </button>
+        <button id="confirmBtn" class="btn-confirm">
+          <i class="fas fa-check"></i> 確認
+        </button>
+      </div>
     </div>
 
     <!-- 媒合結果載入狀態（框架一直存在） -->
@@ -1387,28 +1715,48 @@
       if (totalStudents > 0) {
         
         // 按照班級分類：忠班在左邊，孝班在右邊
+        // 在每個班級內，未媒合的學生在前，已媒合的學生在後
         let leftPageStudents = [];
         let rightPageStudents = [];
         let leftPageLabel = '忠班';
         let rightPageLabel = '孝班';
         
-        // 將學生按照班級分類
+        // 將學生按照班級分類，並區分是否已媒合
         filteredStudents.forEach(student => {
           const className = (student.class_name || '').toString();
+          const isMatched = student.is_matched || false;
+          
           // 如果班級名稱包含「忠」，放在左側
           if (className.includes('忠')) {
-            leftPageStudents.push(student);
+            leftPageStudents.push({ student, isMatched });
           } 
           // 如果班級名稱包含「孝」，放在右側
           else if (className.includes('孝')) {
-            rightPageStudents.push(student);
+            rightPageStudents.push({ student, isMatched });
           }
           // 如果都不包含，根據其他條件分配（例如包含「忠」的放左側，其他放右側）
           else {
             // 可以根據需要調整這個邏輯
-            rightPageStudents.push(student);
+            rightPageStudents.push({ student, isMatched });
           }
         });
+        
+        // 對每個班級的學生進行排序：未媒合的在前，已媒合的在後
+        leftPageStudents.sort((a, b) => {
+          // 未媒合的在前（isMatched = false），已媒合的在後（isMatched = true）
+          if (a.isMatched === b.isMatched) return 0;
+          return a.isMatched ? 1 : -1;
+        });
+        
+        rightPageStudents.sort((a, b) => {
+          // 未媒合的在前（isMatched = false），已媒合的在後（isMatched = true）
+          if (a.isMatched === b.isMatched) return 0;
+          return a.isMatched ? 1 : -1;
+        });
+        
+        // 提取學生對象
+        leftPageStudents = leftPageStudents.map(item => item.student);
+        rightPageStudents = rightPageStudents.map(item => item.student);
         
         // 渲染學生項目的函數
         const renderStudentItem = (student) => {
@@ -1918,7 +2266,6 @@
 
         const data = await res.json();
         if (data.success) {
-          showToast('已移除學生，學生已回到未錄取名單', 'success');
           // 先重新載入媒合結果，然後重新載入學生列表
           // 這樣可以確保學生的 is_matched 狀態正確更新
           await loadMatchingResults();
@@ -2134,26 +2481,36 @@
         }
       });
 
-      // 收集已經在該職缺上的所有學生ID（正取和備取）
-      const assignedStudentIds = new Set();
-      regulars.forEach(student => {
-        const studentId = student.student_id || student.id;
-        if (studentId) assignedStudentIds.add(studentId);
-      });
-      reserves.forEach(student => {
-        const studentId = student.student_id || student.id;
-        if (studentId) assignedStudentIds.add(studentId);
+      // 收集已經在媒合結果中的所有學生ID（所有公司的所有職缺的正取和備取）
+      const matchedStudentIds = new Set();
+      allCompaniesData.forEach(company => {
+        company.jobs.forEach(job => {
+          // 收集正取學生
+          if (job.regulars && job.regulars.length > 0) {
+            job.regulars.forEach(student => {
+              const studentId = student.student_id || student.id;
+              if (studentId) matchedStudentIds.add(String(studentId));
+            });
+          }
+          // 收集備取學生
+          if (job.reserves && job.reserves.length > 0) {
+            job.reserves.forEach(student => {
+              const studentId = student.student_id || student.id;
+              if (studentId) matchedStudentIds.add(String(studentId));
+            });
+          }
+        });
       });
 
       // 構建選擇列表：先顯示未錄取學生，再顯示備取名單
       let studentOptions = [];
       
-      // 添加未錄取學生（排除已經在職缺上的學生）
+      // 添加未錄取學生（排除已經在媒合結果中的學生）
       if (unmatchedStudents && unmatchedStudents.length > 0) {
         unmatchedStudents.forEach((student, index) => {
-          const studentId = student.student_id || student.id;
-          // 如果學生已經在該職缺上，則跳過
-          if (assignedStudentIds.has(studentId)) {
+          const studentId = String(student.student_id || student.id);
+          // 如果學生已經在媒合結果中，則跳過
+          if (matchedStudentIds.has(studentId)) {
             return;
           }
           studentOptions.push({
@@ -2165,11 +2522,11 @@
         });
       }
       
-      // 添加備取名單學生（排除已經在該職缺正取名單上的學生）
+      // 添加備取名單學生（排除已經在媒合結果中的學生）
       reserves.forEach((student, index) => {
-        const studentId = student.student_id || student.id;
-        // 如果學生已經在該職缺的正取名單上，則跳過
-        if (assignedStudentIds.has(studentId)) {
+        const studentId = String(student.student_id || student.id);
+        // 如果學生已經在媒合結果中，則跳過
+        if (matchedStudentIds.has(studentId)) {
           return;
         }
         studentOptions.push({
@@ -2388,6 +2745,163 @@
       }, 3000);
     }
 
+    // 顯示名額已滿的彈跳視窗
+    function showQuotaFullModal(selectedCount, maxSlots) {
+      // 移除已存在的彈跳視窗
+      const existingModal = document.getElementById('quotaFullModal');
+      if (existingModal) {
+        existingModal.remove();
+      }
+
+      // 創建彈跳視窗
+      const modalOverlay = document.createElement('div');
+      modalOverlay.id = 'quotaFullModal';
+      modalOverlay.className = 'quota-modal-overlay';
+      modalOverlay.innerHTML = `
+        <div class="quota-modal">
+          <div class="quota-modal-header">
+            <h3>
+              <i class="fas fa-exclamation-triangle"></i>
+              名額已滿
+            </h3>
+            <button class="quota-modal-close" onclick="closeQuotaFullModal()">&times;</button>
+          </div>
+          <div class="quota-modal-body">
+            <p>此職缺名額已滿，無法再拖移學生進來。</p>
+            <p style="margin-top: 12px; color: var(--color-muted); font-size: 1rem;">
+              已選：<strong style="color: var(--color-text);">${selectedCount}</strong> / 名額：<strong style="color: var(--color-text);">${maxSlots}</strong>
+            </p>
+          </div>
+          <div class="quota-modal-footer">
+            <button class="quota-modal-btn quota-modal-btn-primary" onclick="closeQuotaFullModal()">確定</button>
+          </div>
+        </div>
+      `;
+
+      document.body.appendChild(modalOverlay);
+
+      // 顯示動畫
+      setTimeout(() => {
+        modalOverlay.classList.add('show');
+      }, 10);
+
+      // 點擊背景關閉
+      modalOverlay.addEventListener('click', (e) => {
+        if (e.target === modalOverlay) {
+          closeQuotaFullModal();
+        }
+      });
+
+      // ESC 鍵關閉
+      const handleEsc = (e) => {
+        if (e.key === 'Escape') {
+          closeQuotaFullModal();
+          document.removeEventListener('keydown', handleEsc);
+        }
+      };
+      document.addEventListener('keydown', handleEsc);
+    }
+
+    // 關閉名額已滿的彈跳視窗
+    function closeQuotaFullModal() {
+      const modal = document.getElementById('quotaFullModal');
+      if (modal) {
+        modal.classList.remove('show');
+        setTimeout(() => {
+          modal.remove();
+        }, 200);
+      }
+    }
+
+    // 顯示確認媒合結果的彈跳視窗
+    function showConfirmMatchingModal() {
+      // 移除已存在的彈跳視窗
+      const existingModal = document.getElementById('confirmMatchingModal');
+      if (existingModal) {
+        existingModal.remove();
+      }
+
+      // 構建警告訊息
+      let warningHtml = '';
+      if (duplicateStudents && duplicateStudents.length > 0) {
+        warningHtml = `
+          <div class="warning">
+            <i class="fas fa-exclamation-triangle"></i>
+            <strong>注意：</strong>發現 ${duplicateStudents.length} 位重複中選的學生
+          </div>
+        `;
+      }
+
+      // 創建彈跳視窗
+      const modalOverlay = document.createElement('div');
+      modalOverlay.id = 'confirmMatchingModal';
+      modalOverlay.className = 'confirm-modal-overlay';
+      modalOverlay.innerHTML = `
+        <div class="confirm-modal">
+          <div class="confirm-modal-header">
+            <h3>
+              <i class="fas fa-check-circle"></i>
+              確認媒合結果
+            </h3>
+            <button class="confirm-modal-close" onclick="closeConfirmMatchingModal()">&times;</button>
+          </div>
+          <div class="confirm-modal-body">
+            <p>確定要確認媒合結果嗎？</p>
+            ${warningHtml}
+          </div>
+          <div class="confirm-modal-footer">
+            <button class="confirm-modal-btn confirm-modal-btn-cancel" onclick="closeConfirmMatchingModal()">取消</button>
+            <button class="confirm-modal-btn confirm-modal-btn-confirm" onclick="handleConfirmMatching()">
+              <i class="fas fa-check"></i> 確認
+            </button>
+          </div>
+        </div>
+      `;
+
+      document.body.appendChild(modalOverlay);
+
+      // 顯示動畫
+      setTimeout(() => {
+        modalOverlay.classList.add('show');
+      }, 10);
+
+      // 點擊背景關閉
+      modalOverlay.addEventListener('click', (e) => {
+        if (e.target === modalOverlay) {
+          closeConfirmMatchingModal();
+        }
+      });
+
+      // ESC 鍵關閉
+      const handleEsc = (e) => {
+        if (e.key === 'Escape') {
+          closeConfirmMatchingModal();
+          document.removeEventListener('keydown', handleEsc);
+        }
+      };
+      document.addEventListener('keydown', handleEsc);
+    }
+
+    // 關閉確認媒合結果的彈跳視窗
+    function closeConfirmMatchingModal() {
+      const modal = document.getElementById('confirmMatchingModal');
+      if (modal) {
+        modal.classList.remove('show');
+        setTimeout(() => {
+          modal.remove();
+        }, 200);
+      }
+    }
+
+    // 處理確認媒合結果
+    async function handleConfirmMatching() {
+      // 關閉彈跳視窗
+      closeConfirmMatchingModal();
+      
+      // 執行確認邏輯
+      await confirmMatching();
+    }
+
     // 切換公司卡片展開/收合
     function toggleCompanyCard(cardId) {
       const card = document.getElementById(cardId);
@@ -2476,6 +2990,40 @@
       if (target.classList.contains('reserve-list') || target.dataset.type === 'reserve') {
         event.dataTransfer.dropEffect = 'none';
         return;
+      }
+      
+      // 檢查名額是否已滿（僅對正取名單檢查）
+      let companyId = target.dataset.companyId;
+      let jobId = target.dataset.jobId;
+      let type = target.dataset.type || 'regular';
+      
+      // 如果當前元素沒有，向上查找父元素
+      if (!companyId) {
+        const parentWithCompanyId = target.closest('[data-company-id]');
+        if (parentWithCompanyId) companyId = parentWithCompanyId.dataset.companyId;
+      }
+      
+      if (!jobId) {
+        const parentWithJobId = target.closest('[data-job-id]');
+        if (parentWithJobId) jobId = parentWithJobId.dataset.jobId;
+      }
+      
+      // 如果是正取類型，檢查名額
+      if (type === 'regular' && companyId && jobId) {
+        const company = allCompaniesData.find(c => c.company_id.toString() === companyId.toString());
+        if (company) {
+          const job = company.jobs?.find(j => j.job_id.toString() === jobId.toString());
+          if (job) {
+            const regulars = job.regulars || [];
+            const maxSlots = jobSlotsMap[`${companyId}_${jobId}`] || job.job_slots || 1;
+            
+            // 如果名額已滿，禁止拖放
+            if (regulars.length >= maxSlots) {
+              event.dataTransfer.dropEffect = 'none';
+              return;
+            }
+          }
+        }
       }
       
       event.preventDefault();
@@ -2641,38 +3189,53 @@
         return;
       }
 
+      // 檢查名額是否已滿（在計算 slotIndex 之前）
+      let foundJob = null;
+      allCompaniesData.forEach(company => {
+        if (company.company_id.toString() === companyId.toString()) {
+          company.jobs.forEach(job => {
+            if (job.job_id.toString() === jobId.toString()) {
+              foundJob = job;
+            }
+          });
+        }
+      });
+      
+      // 對於正取類型，檢查名額是否已滿
+      if (type === 'regular' && foundJob) {
+        const regulars = foundJob.regulars || [];
+        const maxSlots = jobSlotsMap[`${companyId}_${jobId}`] || foundJob.job_slots || 1;
+        
+        // 檢查名額是否已滿
+        if (regulars.length >= maxSlots) {
+          showQuotaFullModal(regulars.length, maxSlots);
+          return;
+        }
+      }
+      
       // 如果是正取但沒有指定 slot_index，計算第一個可用的正取位置
-      if (type === 'regular' && !slotIndex) {
-        // 找到該職缺，計算第一個可用的正取位置
-        allCompaniesData.forEach(company => {
-          if (company.company_id.toString() === companyId.toString()) {
-            company.jobs.forEach(job => {
-              if (job.job_id.toString() === jobId.toString()) {
-                const regulars = job.regulars || [];
-                const maxSlots = jobSlotsMap[`${company.company_id}_${job.job_id}`] || job.job_slots || 1;
-                
-                // 找出所有已使用的 slot_index
-                const usedSlots = new Set();
-                regulars.forEach(student => {
-                  if (student.slot_index) {
-                    usedSlots.add(student.slot_index);
-                  }
-                });
-                
-                // 從1開始找到第一個可用的位置
-                slotIndex = 1;
-                while (usedSlots.has(slotIndex) && slotIndex <= maxSlots) {
-                  slotIndex++;
-                }
-                
-                // 如果所有位置都被使用，使用下一個位置
-                if (slotIndex > maxSlots) {
-                  slotIndex = regulars.length + 1;
-                }
-              }
-            });
+      if (type === 'regular' && !slotIndex && foundJob) {
+        const regulars = foundJob.regulars || [];
+        const maxSlots = jobSlotsMap[`${companyId}_${jobId}`] || foundJob.job_slots || 1;
+        
+        // 找出所有已使用的 slot_index
+        const usedSlots = new Set();
+        regulars.forEach(student => {
+          if (student.slot_index) {
+            usedSlots.add(student.slot_index);
           }
         });
+        
+        // 從1開始找到第一個可用的位置
+        slotIndex = 1;
+        while (usedSlots.has(slotIndex) && slotIndex <= maxSlots) {
+          slotIndex++;
+        }
+        
+        // 如果所有位置都被使用，使用下一個位置
+        if (slotIndex > maxSlots) {
+          slotIndex = regulars.length + 1;
+        }
       }
 
       // 驗證所有必要的參數
@@ -2760,6 +3323,80 @@
       }
     }
 
+    // Excel 匯出功能
+    async function exportToExcel() {
+      try {
+        // 調用後端 API 生成 Excel
+        const res = await fetch('/admission/api/export_matching_results_excel', {
+          method: 'GET',
+          credentials: 'include'
+        });
+        
+        if (!res.ok) {
+          const errorData = await res.json().catch(() => ({ message: '匯出失敗' }));
+          showToast(errorData.message || '匯出失敗', 'error');
+          return;
+        }
+        
+        // 獲取文件 blob
+        const blob = await res.blob();
+        
+        // 創建下載連結
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `媒合結果_${new Date().toISOString().split('T')[0]}.xlsx`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(url);
+      } catch (error) {
+        console.error('匯出失敗:', error);
+        showToast('匯出失敗：' + (error.message || '未知錯誤'), 'error');
+      }
+    }
+
+    // 確認功能
+    async function confirmMatching() {
+      try {
+        // 顯示載入狀態
+        const confirmBtn = document.getElementById('confirmBtn');
+        const originalText = confirmBtn ? confirmBtn.innerHTML : '';
+        if (confirmBtn) {
+          confirmBtn.disabled = true;
+        }
+        
+        // 發送確認請求
+        const res = await fetch('/admission/api/director_confirm_matching', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({})
+        });
+        
+        const data = await res.json();
+        
+        // 恢復按鈕狀態
+        if (confirmBtn) {
+          confirmBtn.disabled = false;
+          confirmBtn.innerHTML = originalText;
+        }
+        
+        if (data.success) {
+          // 重新載入媒合結果
+          await loadMatchingResults();
+        }
+      } catch (error) {
+        console.error('確認失敗:', error);
+        // 恢復按鈕狀態
+        const confirmBtn = document.getElementById('confirmBtn');
+        if (confirmBtn) {
+          confirmBtn.disabled = false;
+          confirmBtn.innerHTML = '<i class="fas fa-check"></i> 確認';
+        }
+      }
+    }
+
     // 頁面載入時執行
     document.addEventListener('DOMContentLoaded', () => {
       loadMatchingResults();
@@ -2768,6 +3405,18 @@
       const companyFilter = document.getElementById('companyFilter');
       const jobFilter = document.getElementById('jobFilter');
       const studentNameFilter = document.getElementById('studentNameFilter');
+      
+      // 綁定按鈕事件
+      const exportExcelBtn = document.getElementById('exportExcelBtn');
+      const confirmBtn = document.getElementById('confirmBtn');
+      
+      if (exportExcelBtn) {
+        exportExcelBtn.addEventListener('click', exportToExcel);
+      }
+      
+      if (confirmBtn) {
+        confirmBtn.addEventListener('click', showConfirmMatchingModal);
+      }
       
       // 統一的過濾和重新渲染函數
       function applyFilters() {

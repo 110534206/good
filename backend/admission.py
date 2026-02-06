@@ -1,7 +1,12 @@
-from flask import Blueprint, request, jsonify, session, render_template, redirect
+from flask import Blueprint, request, jsonify, session, render_template, redirect, send_file
 from config import get_db
 from datetime import datetime
 from semester import get_current_semester_code, get_current_semester_id
+from notification import create_notification
+from openpyxl import Workbook
+from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
+from openpyxl.utils import get_column_letter
+import io
 import traceback
 
 admission_bp = Blueprint("admission_bp", __name__, url_prefix="/admission")
@@ -2573,6 +2578,370 @@ def director_swap_positions():
         if conn:
             conn.rollback()
         return jsonify({"success": False, "message": f"調整失敗: {str(e)}"}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+# =========================================================
+# API: 主任確認媒合結果
+# =========================================================
+@admission_bp.route("/api/director_confirm_matching", methods=["POST"])
+def director_confirm_matching():
+    """
+    主任確認媒合結果後：
+    1. 通知指導老師與班導最後結果已經出來
+    2. 傳給廠商做確認
+    3. 由科助進行最後發布
+    """
+    if 'user_id' not in session or session.get('role') != 'director':
+        return jsonify({"success": False, "message": "未授權"}), 403
+    
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+    
+    try:
+        # 獲取當前學期ID
+        current_semester_id = get_current_semester_id(cursor)
+        if not current_semester_id:
+            return jsonify({"success": False, "message": "無法取得當前學期"}), 500
+        
+        # 1. 收集所有需要通知的指導老師和班導（去重，避免同一個人收到兩個通知）
+        notified_user_ids = set()
+        
+        # 收集所有指導老師（role='teacher'）
+        cursor.execute("SELECT id FROM users WHERE role = 'teacher'")
+        teachers = cursor.fetchall() or []
+        for teacher in teachers:
+            notified_user_ids.add(teacher['id'])
+        
+        # 收集所有班導（從 classes_teacher 表獲取）
+        cursor.execute("""
+            SELECT DISTINCT ct.teacher_id
+            FROM classes_teacher ct
+            JOIN users u ON ct.teacher_id = u.id
+            WHERE ct.role = '班導師'
+        """)
+        class_teachers = cursor.fetchall() or []
+        for class_teacher in class_teachers:
+            notified_user_ids.add(class_teacher['teacher_id'])
+        
+        # 只發送一個通知給所有需要通知的用戶（指導老師和班導）
+        title = "媒合結果已出爐"
+        message = "媒合結果已出爐"
+        link_url = "/admission/results"
+        
+        for user_id in notified_user_ids:
+            create_notification(
+                user_id=user_id,
+                title=title,
+                message=message,
+                category="matching",
+                link_url=link_url
+            )
+        
+        # 3. 通知所有廠商（role='vendor'）進行確認
+        cursor.execute("SELECT id, name FROM users WHERE role = 'vendor'")
+        vendors = cursor.fetchall() or []
+        
+        for vendor in vendors:
+            title = "媒合結果待確認"
+            message = "主任已確認媒合結果，請前往確認您的實習生名單。"
+            link_url = "/vendor/matching_results"  # 廠商查看媒合結果的頁面
+            create_notification(
+                user_id=vendor['id'],
+                title=title,
+                message=message,
+                category="approval",
+                link_url=link_url
+            )
+        
+        # 4. 通知所有科助（role='ta'）進行最後發布
+        cursor.execute("SELECT id, name FROM users WHERE role = 'ta'")
+        tas = cursor.fetchall() or []
+        
+        for ta in tas:
+            title = "媒合結果待發布"
+            message = "主任已確認媒合結果，廠商確認後請進行最後發布。"
+            link_url = "/final_results"  # 科助查看最終結果的頁面
+            create_notification(
+                user_id=ta['id'],
+                title=title,
+                message=message,
+                category="approval",
+                link_url=link_url
+            )
+        
+        # 5. 更新媒合結果狀態（可選：在 manage_director 表中添加狀態欄位，或創建新的狀態表）
+        # 這裡可以添加狀態更新的邏輯，例如標記為「已確認，待廠商確認」
+        # 目前先不更新資料庫狀態，只發送通知
+        
+        return jsonify({
+            "success": True,
+            "message": "媒合結果確認成功，已通知相關人員",
+            "notified": {
+                "teachers_and_class_teachers": len(notified_user_ids),
+                "vendors": len(vendors),
+                "tas": len(tas)
+            }
+        })
+    
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"success": False, "message": f"確認失敗: {str(e)}"}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+# =========================================================
+# API: 匯出媒合結果 Excel（網格格式）
+# =========================================================
+@admission_bp.route("/api/export_matching_results_excel", methods=["GET"])
+def export_matching_results_excel():
+    """
+    匯出媒合結果為 Excel 格式，按照圖片樣式：
+    - 3列網格布局
+    - 每個公司一個區塊
+    - 公司名稱用黃色背景
+    - 學生列表（學號 + 姓名）
+    - 總人數統計
+    """
+    if 'user_id' not in session or session.get('role') != 'director':
+        return jsonify({"success": False, "message": "未授權"}), 403
+    
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+    
+    try:
+        # 獲取當前學期ID
+        current_semester_id = get_current_semester_id(cursor)
+        if not current_semester_id:
+            return jsonify({"success": False, "message": "無法取得當前學期"}), 500
+        
+        # 獲取媒合結果數據（與 director_matching_results 相同的邏輯）
+        query = """
+            SELECT 
+                md.match_id,
+                md.vendor_id,
+                md.student_id,
+                md.preference_id,
+                md.original_type,
+                md.original_rank,
+                md.is_conflict,
+                md.director_decision,
+                md.final_rank,
+                md.is_adjusted,
+                COALESCE(sp.company_id, md.vendor_id) AS company_id,
+                sp.preference_order,
+                COALESCE(sp.job_id, (
+                    SELECT id FROM internship_jobs 
+                    WHERE company_id = COALESCE(sp.company_id, md.vendor_id) 
+                    ORDER BY id ASC LIMIT 1
+                )) AS job_id,
+                COALESCE(ic.company_name, v.name) AS company_name,
+                u.name AS student_name,
+                u.username AS student_number,
+                c.name AS class_name,
+                COALESCE(ij.title, (
+                    SELECT title FROM internship_jobs 
+                    WHERE company_id = COALESCE(sp.company_id, md.vendor_id) 
+                    ORDER BY id ASC LIMIT 1
+                )) AS job_title
+            FROM manage_director md
+            LEFT JOIN student_preferences sp ON md.preference_id = sp.id
+            LEFT JOIN internship_companies ic ON COALESCE(sp.company_id, md.vendor_id) = ic.id
+            LEFT JOIN internship_jobs ij ON sp.job_id = ij.id
+            LEFT JOIN users u ON md.student_id = u.id
+            LEFT JOIN classes c ON u.class_id = c.id
+            LEFT JOIN users v ON md.vendor_id = v.id
+            WHERE md.semester_id = %s
+            AND md.director_decision IN ('Approved', 'Pending')
+            ORDER BY COALESCE(sp.company_id, md.vendor_id), 
+                     COALESCE(sp.job_id, 0),
+                     CASE WHEN md.director_decision = 'Approved' AND md.final_rank IS NOT NULL THEN 0 ELSE 1 END,
+                     COALESCE(md.final_rank, 999) ASC
+        """
+        cursor.execute(query, (current_semester_id,))
+        all_results = cursor.fetchall() or []
+        
+        # 按公司分組數據
+        companies_data = {}
+        for result in all_results:
+            company_id = result.get("company_id")
+            company_name = result.get("company_name") or "未知公司"
+            job_title = result.get("job_title") or "未指定職缺"
+            
+            if company_id not in companies_data:
+                companies_data[company_id] = {
+                    "company_name": company_name,
+                    "jobs": {}
+                }
+            
+            if job_title not in companies_data[company_id]["jobs"]:
+                companies_data[company_id]["jobs"][job_title] = []
+            
+            companies_data[company_id]["jobs"][job_title].append({
+                "student_number": result.get("student_number") or "",
+                "student_name": result.get("student_name") or "",
+                "job_title": job_title
+            })
+        
+        # 創建 Excel 工作簿
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "媒合結果"
+        
+        # 設定樣式
+        company_header_fill = PatternFill(start_color="FFFF00", end_color="FFFF00", fill_type="solid")  # 黃色背景
+        company_header_font = Font(bold=True, size=12)
+        student_font = Font(size=11)
+        total_fill = PatternFill(start_color="F0F0F0", end_color="F0F0F0", fill_type="solid")  # 灰色背景
+        total_font = Font(bold=True, size=11)
+        
+        # 邊框樣式
+        thin_border = Border(
+            left=Side(style='thin'),
+            right=Side(style='thin'),
+            top=Side(style='thin'),
+            bottom=Side(style='thin')
+        )
+        
+        # 4列網格布局
+        COLUMNS = 4
+        COLUMN_WIDTH = 20  # 每列寬度（字符）
+        
+        # 準備公司數據
+        companies_list = []
+        for company in companies_data.values():
+            company_name = company["company_name"]
+            all_students = []
+            
+            # 收集該公司所有職缺的學生
+            for job_title, students in company["jobs"].items():
+                all_students.extend(students)
+            
+            if all_students:
+                companies_list.append({
+                    "name": company_name,
+                    "students": all_students
+                })
+        
+        # 將公司分配到4列
+        columns_data = [[], [], [], []]  # 4列
+        for idx, company in enumerate(companies_list):
+            col_idx = idx % COLUMNS
+            columns_data[col_idx].append(company)
+        
+        # 為每列填充數據
+        for col_idx in range(COLUMNS):
+            # 計算欄位：第1列用A-B-C，第2列用D-E-F，第3列用G-H-I，第4列用J-K-L
+            # 每個公司區塊佔用3欄（前兩欄用於內容，第三欄為空）
+            col_number_start = col_idx * 3 + 1  # A=1, D=4, G=7, J=10
+            col_letter_start = get_column_letter(col_number_start)
+            col_letter_end = get_column_letter(col_number_start + 1)
+            col_letter_right = get_column_letter(col_number_start + 2)  # 右邊空一格
+            current_row = 1
+            
+            for company in columns_data[col_idx]:
+                company_name = company["name"]
+                students = company["students"]
+                
+                # 公司名稱標題（黃色背景，跨兩欄置中，右邊空一格）
+                header_cell = ws[f"{col_letter_start}{current_row}"]
+                header_cell.value = company_name
+                header_cell.fill = company_header_fill
+                header_cell.font = company_header_font
+                header_cell.border = thin_border
+                header_cell.alignment = Alignment(horizontal='center', vertical='center')
+                # 合併兩欄
+                ws.merge_cells(f"{col_letter_start}{current_row}:{col_letter_end}{current_row}")
+                # 確保合併後的單元格也有邊框
+                ws[f"{col_letter_end}{current_row}"].border = thin_border
+                # 右邊空一格（第三欄留空）
+                right_empty_cell = ws[f"{col_letter_right}{current_row}"]
+                right_empty_cell.value = ""
+                right_empty_cell.border = thin_border
+                current_row += 1
+                
+                # 學生列表（學號和姓名分開兩欄，右邊空一格）
+                for student in students:
+                    student_number = student.get('student_number') or ''
+                    student_name = student.get('student_name') or ''
+                    
+                    # 學號欄位
+                    number_cell = ws[f"{col_letter_start}{current_row}"]
+                    number_cell.value = student_number
+                    number_cell.font = student_font
+                    number_cell.border = thin_border
+                    number_cell.alignment = Alignment(horizontal='left', vertical='center')
+                    
+                    # 姓名欄位
+                    name_cell = ws[f"{col_letter_end}{current_row}"]
+                    name_cell.value = student_name
+                    name_cell.font = student_font
+                    name_cell.border = thin_border
+                    name_cell.alignment = Alignment(horizontal='left', vertical='center')
+                    
+                    # 右邊空一格（第三欄留空）
+                    right_empty_cell = ws[f"{col_letter_right}{current_row}"]
+                    right_empty_cell.value = ""
+                    right_empty_cell.border = thin_border
+                    
+                    current_row += 1
+                
+                # 總人數
+                # 左欄留空
+                ws[f"{col_letter_start}{current_row}"].value = ""
+                ws[f"{col_letter_start}{current_row}"].border = thin_border
+                # 右欄顯示總人數
+                total_text = f"{len(students)}人"
+                total_cell = ws[f"{col_letter_end}{current_row}"]
+                total_cell.value = total_text
+                total_cell.fill = total_fill
+                total_cell.font = total_font
+                total_cell.border = thin_border
+                total_cell.alignment = Alignment(horizontal='center', vertical='center')
+                # 右邊空一格（第三欄留空）
+                right_empty_cell = ws[f"{col_letter_right}{current_row}"]
+                right_empty_cell.value = ""
+                right_empty_cell.border = thin_border
+                current_row += 1  # 移到下一行
+                
+                # 公司與公司之間的間隔行（三欄都留空）
+                ws[f"{col_letter_start}{current_row}"].value = ""
+                ws[f"{col_letter_start}{current_row}"].border = thin_border
+                ws[f"{col_letter_end}{current_row}"].value = ""
+                ws[f"{col_letter_end}{current_row}"].border = thin_border
+                ws[f"{col_letter_right}{current_row}"].value = ""
+                ws[f"{col_letter_right}{current_row}"].border = thin_border
+                current_row += 1  # 移到下一行
+        
+        # 設定列寬（每列佔用3個欄位，所以總共12欄）
+        for col in range(1, COLUMNS * 3 + 1):
+            col_letter = get_column_letter(col)
+            ws.column_dimensions[col_letter].width = COLUMN_WIDTH / 3  # 每欄寬度為原寬度的1/3
+        
+        # 設定行高
+        for row in range(1, ws.max_row + 1):
+            ws.row_dimensions[row].height = 20
+        
+        # 保存到內存
+        output = io.BytesIO()
+        wb.save(output)
+        output.seek(0)
+        
+        # 生成文件名
+        filename = f"媒合結果_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+        
+        return send_file(
+            output,
+            mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            as_attachment=True,
+            download_name=filename
+        )
+    
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"success": False, "message": f"匯出失敗: {str(e)}"}), 500
     finally:
         cursor.close()
         conn.close()
