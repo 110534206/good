@@ -2624,7 +2624,6 @@
 
           const data = await res.json();
           if (data.success) {
-            showToast(`已將「${studentInfo.student_name}」添加到正取 ${slotIndex}`, 'success');
             loadMatchingResults();
             loadUnmatchedStudents();
           } else {
@@ -3309,7 +3308,6 @@
         console.log('收到回應:', data);
         
         if (data.success) {
-          showToast(`已將「${studentInfo.student_name}」添加到${type === 'regular' ? '正取' : '備取'}名單`, 'success');
           loadMatchingResults(); // 重新載入媒合結果
         } else {
           showToast(data.message || '添加失敗', 'error');
