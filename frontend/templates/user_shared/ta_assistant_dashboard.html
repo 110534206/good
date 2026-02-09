@@ -1,0 +1,635 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>智慧實習平台 | 科助工作台</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <style>
+    :root {
+      --brand-blue: #0066cc;
+      --brand-blue-dark: #024689;
+      --bg-light: #f5f8ff;
+      --border-light: #dbe4f4;
+      --text-dark: #1f2937;
+      --text-muted: #6b7280;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: "Noto Sans TC", "Segoe UI", sans-serif;
+      background: var(--bg-light);
+      color: var(--text-dark);
+      min-height: 100vh;
+    }
+
+    header {
+      background: linear-gradient(135deg, #0055a8 0%, #006acb 50%, #004f94 100%);
+      border-bottom: none;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      box-shadow: 0 8px 20px rgba(0, 68, 148, 0.35);
+    }
+
+    .topbar {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 18px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #fff;
+      position: relative;
+    }
+
+    .topbar h1 {
+      font-size: 1.5rem;
+      margin: 0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      color: #fff;
+      flex: 1;
+    }
+
+    .topbar h1 .header-title {
+      flex: 1;
+      text-align: center;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+    }
+
+    .topbar h1 i { color: #ffe27a; }
+
+    #menu-btn {
+      width: 30px;
+      height: 22px;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      background: none;
+      border: none;
+      padding: 0;
+    }
+
+    #menu-btn span {
+      display: block;
+      width: 100%;
+      height: 3px;
+      background-color: white;
+      border-radius: 2px;
+      transition: all 0.3s ease;
+    }
+
+    #side-menu {
+      position: fixed;
+      top: 0;
+      left: 0;
+      height: 100vh;
+      width: 320px;
+      max-width: 80vw;
+      background-color: rgba(10, 10, 10, 0.95);
+      backdrop-filter: blur(6px);
+      box-shadow: 3px 0 12px rgba(0, 0, 0, 0.6);
+      padding: 2rem 1.5rem;
+      transform: translateX(-100%);
+      transition: transform 0.3s ease-in-out;
+      z-index: 1300;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      color: #fff;
+      user-select: none;
+    }
+
+    #side-menu.open { transform: translateX(0); }
+
+    #close-btn {
+      position: absolute;
+      top: 2rem;
+      right: 1.6rem;
+      font-size: 2.8rem;
+      background: none;
+      border: none;
+      color: #fff;
+      cursor: pointer;
+      line-height: 2.4rem;
+      height: 2.5rem;
+      width: 2.5rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 10;
+    }
+
+    #side-menu h2 {
+      margin: 0 0 1.5rem 0;
+      font-weight: 700;
+      font-size: 1.6rem;
+      color: #fff;
+    }
+
+    #side-menu a {
+      display: block;
+      width: 100%;
+      padding: 0.6rem 0;
+      font-size: 1.1rem;
+      color: #e2e8f0;
+      text-decoration: none;
+      border-radius: 4px;
+      transition: background-color 0.2s ease;
+    }
+
+    #side-menu a:hover {
+      background-color: rgba(255, 255, 255, 0.18);
+      color: #fff;
+    }
+
+    main {
+      max-width: 1000px;
+      margin: 24px auto 60px;
+      padding: 0 24px;
+    }
+
+    .page-intro {
+      text-align: center;
+      margin-bottom: 32px;
+    }
+
+    .page-intro h2 {
+      font-size: 1.5rem;
+      color: var(--brand-blue-dark);
+      margin: 0 0 8px 0;
+    }
+
+    .page-intro p {
+      color: var(--text-muted);
+      font-size: 1rem;
+      margin: 0;
+    }
+
+    .panel {
+      background: #ffffff;
+      border-radius: 16px;
+      padding: 24px;
+      box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
+      border: 1px solid var(--border-light);
+      margin-bottom: 24px;
+    }
+
+    .panel-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 16px;
+      padding-bottom: 12px;
+      border-bottom: 2px solid var(--bg-light);
+    }
+
+    .panel-header h3 {
+      font-size: 1.2rem;
+      margin: 0;
+      color: var(--brand-blue-dark);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .panel-header h3 i {
+      color: var(--brand-blue);
+    }
+
+    .panel-desc {
+      color: var(--text-muted);
+      font-size: 0.95rem;
+      line-height: 1.6;
+      margin-bottom: 20px;
+    }
+
+    .panel-desc ul {
+      margin: 0;
+      padding-left: 1.2rem;
+    }
+
+    .panel-desc li {
+      margin-bottom: 6px;
+    }
+
+    .panel-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+
+    .btn-primary {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 12px 20px;
+      background: var(--brand-blue);
+      color: #fff;
+      border: none;
+      border-radius: 10px;
+      font-size: 0.95rem;
+      font-weight: 600;
+      text-decoration: none;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      box-shadow: 0 2px 8px rgba(0, 102, 204, 0.2);
+    }
+
+    .btn-primary:hover {
+      background: var(--brand-blue-dark);
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(0, 102, 204, 0.3);
+    }
+
+    .btn-secondary {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 12px 20px;
+      background: #fff;
+      color: var(--brand-blue);
+      border: 2px solid var(--brand-blue);
+      border-radius: 10px;
+      font-size: 0.95rem;
+      font-weight: 600;
+      text-decoration: none;
+      cursor: pointer;
+      transition: all 0.3s ease;
+    }
+
+    .btn-secondary:hover {
+      background: var(--bg-light);
+      border-color: var(--brand-blue-dark);
+      color: var(--brand-blue-dark);
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      background: rgba(0, 102, 204, 0.12);
+      color: var(--brand-blue-dark);
+      margin-left: 8px;
+    }
+
+    .stats-bar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 16px;
+      align-items: center;
+      justify-content: center;
+      padding: 16px 20px;
+      background: #fff;
+      border-radius: 12px;
+      box-shadow: 0 4px 16px rgba(15, 23, 42, 0.06);
+      border: 1px solid var(--border-light);
+      margin-bottom: 24px;
+    }
+
+    .stats-bar .stat-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.95rem;
+      color: var(--text-muted);
+    }
+
+    .stats-bar .stat-item strong {
+      color: var(--brand-blue-dark);
+      font-size: 1.1rem;
+    }
+
+    .stats-bar .stat-item span.num {
+      font-weight: 700;
+      color: var(--brand-blue-dark);
+      margin-left: 4px;
+    }
+
+    .panel-stat {
+      margin-bottom: 12px;
+      font-size: 0.95rem;
+      color: var(--text-muted);
+    }
+
+    .panel-stat .num {
+      font-weight: 700;
+      color: var(--brand-blue-dark);
+    }
+
+    .loading-stats {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--text-muted);
+      font-size: 0.9rem;
+    }
+
+    .loading-stats .spinner {
+      width: 16px;
+      height: 16px;
+      border: 2px solid rgba(0, 102, 204, 0.2);
+      border-top-color: var(--brand-blue);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .stats-error {
+      color: #b91c1c;
+      font-size: 0.9rem;
+      margin-top: 8px;
+    }
+
+    .process-flow {
+      margin-top: 16px;
+    }
+
+    @media (max-width: 768px) {
+      .topbar { padding: 14px 16px; }
+      main { padding: 0 16px; }
+      .panel { padding: 18px; }
+      .panel-actions { flex-direction: column; }
+      .btn-primary, .btn-secondary { width: 100%; justify-content: center; }
+      .process-flow > div:last-child {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+      .process-flow .fa-arrow-right {
+        transform: rotate(90deg);
+        margin: 4px 0;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="topbar">
+      <h1>
+        <button id="menu-btn" title="選單" role="button" tabindex="0" aria-label="開啟側邊選單">
+          <span></span><span></span><span></span>
+        </button>
+        <div class="header-title"><i class="fa-solid fa-clipboard-list"></i> 科助工作台</div>
+        <div style="width: 30px;"></div>
+      </h1>
+    </div>
+  </header>
+
+  <nav id="side-menu" aria-hidden="true" role="navigation" aria-label="功能選單">
+    <button id="close-btn" aria-label="關閉功能選單">×</button>
+    <h2>功能選單</h2>
+    <a href="/ta_home">首頁</a>
+    <a href="/ta/dashboard">科助工作台</a>
+    <a href="/profile">個人資料</a>
+    <a href="/notifications">通知</a>
+    <a href="/ta/statistics/manage_companies">實習廠商管理</a>
+    <a href="/ta/interview_schedule">行事曆</a>
+    <a href="/final_results">媒合結果確認</a>
+    <a href="/admission/intern_management">實習生管理</a>
+    <a href="/admin/absence_default_range">缺勤預設學期範圍設定</a>
+    <a href="/ta/upload_standard_courses">專業核心科目管理</a>
+    <a href="/logout">登出</a>
+  </nav>
+
+  <main>
+    <div class="page-intro">
+      <p>媒合最終公告與未錄取名單、二面流程管理</p>
+    </div>
+
+    <!-- 統計列（由後端 API 填入） -->
+    <div id="statsBar" class="stats-bar">
+      <div class="loading-stats">
+        <span class="spinner"></span>
+        <span>載入統計中...</span>
+      </div>
+    </div>
+
+    <!-- 1. 媒合最終公告功能 -->
+    <section class="panel" aria-label="媒合最終公告功能">
+      <div class="panel-header">
+        <h3><i class="fa-solid fa-bullhorn"></i> 1. 媒合最終公告功能</h3>
+      </div>
+      <div id="panel1Stat" class="panel-stat" aria-live="polite">
+        <!-- 已核定媒合人數由 JS 填入 -->
+      </div>
+      <div class="panel-desc">
+        <ul>
+          <li>接收主任核定後的名單</li>
+          <li>確認並公告媒合結果</li>
+          <li>科助統整結果後，匯成 Excel 進行公告</li>
+        </ul>
+      </div>
+      <div class="panel-actions">
+        <a href="/final_results" class="btn-primary">
+          <i class="fa-solid fa-list-check"></i> 前往媒合結果確認
+        </a>
+        <button id="exportExcelBtn" class="btn-primary" style="margin: 0;">
+          <i class="fa-solid fa-file-excel"></i> 匯出 Excel 公告
+        </button>
+        <a href="/notifications" class="btn-secondary">
+          <i class="fa-solid fa-bell"></i> 通知與公告
+        </a>
+      </div>
+    </section>
+
+    <!-- 2. 統計未錄取名單、進行二面流程 -->
+    <section class="panel" aria-label="統計未錄取名單與二面流程">
+      <div class="panel-header">
+        <h3><i class="fa-solid fa-user-clock"></i> 2. 統計未錄取名單，進行二面流程</h3>
+      </div>
+      <div id="panel2Stat" class="panel-stat" aria-live="polite">
+        <!-- 未錄取人數由 JS 填入 -->
+      </div>
+      <div class="panel-desc">
+        <ul>
+          <li>媒合名單異常檢查</li>
+          <li>統整未錄取學生名單</li>
+          <li>在一面結束後，會讓指導老師盡快詢問實習公司二面意願，繼續進行二面作業流程</li>
+        </ul>
+        <div class="process-flow" style="margin-top: 16px; padding: 16px; background: #f8f9fa; border-radius: 8px; border-left: 4px solid var(--brand-blue);">
+          <div style="font-size: 0.85rem; font-weight: 600; color: var(--brand-blue-dark); margin-bottom: 12px;">
+            <i class="fa-solid fa-diagram-project"></i> 二面流程說明
+          </div>
+          <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 0.9rem; color: var(--text-muted);">
+            <span style="padding: 6px 12px; background: #fff; border: 1px solid var(--border-light); border-radius: 6px;">一面結束</span>
+            <i class="fa-solid fa-arrow-right" style="color: var(--brand-blue);"></i>
+            <span style="padding: 6px 12px; background: #fff; border: 1px solid var(--border-light); border-radius: 6px;">科助統整未錄取名單</span>
+            <i class="fa-solid fa-arrow-right" style="color: var(--brand-blue);"></i>
+            <span style="padding: 6px 12px; background: #fff; border: 1px solid var(--border-light); border-radius: 6px;">指導老師詢問二面意願</span>
+            <i class="fa-solid fa-arrow-right" style="color: var(--brand-blue);"></i>
+            <span style="padding: 6px 12px; background: #fff; border: 1px solid var(--border-light); border-radius: 6px;">進行二面流程</span>
+          </div>
+        </div>
+      </div>
+      <div class="panel-actions">
+        <a href="/admission/unadmitted_list" class="btn-primary">
+          <i class="fa-solid fa-users"></i> 實習生／未錄取名單管理
+        </a>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const sideMenu = document.getElementById('side-menu');
+    const menuBtn = document.getElementById('menu-btn');
+    const closeBtn = document.getElementById('close-btn');
+    const statsBar = document.getElementById('statsBar');
+    const panel1Stat = document.getElementById('panel1Stat');
+    const panel2Stat = document.getElementById('panel2Stat');
+
+    // 從後端取得科助工作台統計
+    async function loadDashboardStats() {
+      if (!statsBar) return;
+      try {
+        const res = await fetch('/admission/api/ta_dashboard_stats', {
+          method: 'GET',
+          headers: { 'Accept': 'application/json' },
+          credentials: 'include'
+        });
+        const data = await res.json();
+
+        if (!res.ok || !data.success) {
+          statsBar.innerHTML = '<span class="stats-error">無法載入統計：' + (data.message || res.statusText) + '</span>';
+          if (panel1Stat) panel1Stat.textContent = '';
+          if (panel2Stat) panel2Stat.textContent = '';
+          return;
+        }
+
+        const matchingCount = data.matching_approved_count ?? 0;
+        const unadmittedCount = data.unadmitted_count ?? 0;
+        const totalStudents = data.total_students ?? 0;
+        const semesterCode = data.semester_code || '';
+
+        statsBar.innerHTML = ''
+          + (semesterCode ? '<div class="stat-item">學期：<strong>' + escapeHtml(semesterCode) + '</strong></div>' : '')
+          + '<div class="stat-item">已核定媒合人數：<span class="num">' + matchingCount + '</span> 人</div>'
+          + '<div class="stat-item">未錄取人數：<span class="num">' + unadmittedCount + '</span> 人</div>'
+          + (totalStudents > 0 ? '<div class="stat-item">學生總數：<span class="num">' + totalStudents + '</span> 人</div>' : '');
+
+        if (panel1Stat) {
+          panel1Stat.innerHTML = '已核定可公告媒合：<span class="num">' + matchingCount + '</span> 人';
+        }
+        if (panel2Stat) {
+          panel2Stat.innerHTML = '未錄取學生：<span class="num">' + unadmittedCount + '</span> 人（可進行二面流程）';
+        }
+      } catch (err) {
+        console.error('載入科助工作台統計失敗', err);
+        statsBar.innerHTML = '<span class="stats-error">載入失敗，請稍後再試</span>';
+        if (panel1Stat) panel1Stat.textContent = '';
+        if (panel2Stat) panel2Stat.textContent = '';
+      }
+    }
+
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    if (menuBtn) {
+      menuBtn.addEventListener('click', () => {
+        sideMenu.classList.add('open');
+        sideMenu.setAttribute('aria-hidden', 'false');
+      });
+    }
+
+    if (closeBtn) {
+      closeBtn.addEventListener('click', () => {
+        sideMenu.classList.remove('open');
+        sideMenu.setAttribute('aria-hidden', 'true');
+      });
+    }
+
+    document.addEventListener('click', (event) => {
+      if (sideMenu && !sideMenu.contains(event.target) && menuBtn && !menuBtn.contains(event.target)) {
+        sideMenu.classList.remove('open');
+        sideMenu.setAttribute('aria-hidden', 'true');
+      }
+    });
+
+    // Excel 匯出功能
+    const exportExcelBtn = document.getElementById('exportExcelBtn');
+    if (exportExcelBtn) {
+      exportExcelBtn.addEventListener('click', async function() {
+        if (!confirm('確定要匯出媒合結果 Excel 檔案嗎？\n\n匯出後可用於公告使用。')) {
+          return;
+        }
+
+        exportExcelBtn.disabled = true;
+        const originalText = exportExcelBtn.innerHTML;
+        exportExcelBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> 匯出中...';
+
+        try {
+          const res = await fetch('/admission/api/ta/export_matching_results_excel', {
+            method: 'GET',
+            credentials: 'include'
+          });
+
+          if (!res.ok) {
+            // 嘗試解析錯誤訊息
+            let errorMsg = res.statusText;
+            try {
+              const errorData = await res.json();
+              errorMsg = errorData.message || errorMsg;
+            } catch (e) {
+              // 如果不是 JSON，使用 statusText
+            }
+            throw new Error(errorMsg);
+          }
+
+          // 取得檔案 blob
+          const blob = await res.blob();
+          const url = window.URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          
+          // 從 Content-Disposition header 取得檔名
+          const contentDisposition = res.headers.get('Content-Disposition');
+          let filename = '媒合結果公告.xlsx';
+          if (contentDisposition) {
+            const filenameMatch = contentDisposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
+            if (filenameMatch && filenameMatch[1]) {
+              filename = filenameMatch[1].replace(/['"]/g, '');
+              if (filename.startsWith("UTF-8''")) {
+                filename = decodeURIComponent(filename.replace("UTF-8''", ''));
+              }
+            }
+          }
+          
+          a.download = filename;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          window.URL.revokeObjectURL(url);
+
+          alert('✅ Excel 檔案匯出成功！\n\n檔案已下載，可用於公告。');
+        } catch (err) {
+          console.error('匯出 Excel 失敗:', err);
+          alert('❌ 匯出失敗：' + (err.message || '未知錯誤'));
+        } finally {
+          exportExcelBtn.disabled = false;
+          exportExcelBtn.innerHTML = originalText;
+        }
+      });
+    }
+
+    loadDashboardStats();
+  </script>
+</body>
+</html>

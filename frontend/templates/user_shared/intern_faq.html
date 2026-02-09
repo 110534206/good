@@ -290,6 +290,60 @@
       color: #555;
     }
 
+    /* 步驟圖表（文字下方說明步驟） */
+    .faq-step-chart {
+      margin-top: 1.25rem;
+      padding-top: 1.25rem;
+      border-top: 1px dashed #d0d7de;
+    }
+
+    .faq-step-chart-title {
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: #0066cc;
+      margin-bottom: 0.75rem;
+    }
+
+    .faq-step-chart-flow {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .faq-step-chart .step-item {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      padding: 0.5rem 0.85rem;
+      background: #fff;
+      border: 1px solid #0066cc;
+      border-radius: 8px;
+      font-size: 0.9rem;
+      font-weight: 500;
+      color: #024689;
+      box-shadow: 0 1px 3px rgba(0, 102, 204, 0.1);
+    }
+
+    .faq-step-chart .step-item .step-num {
+      flex-shrink: 0;
+      width: 1.4em;
+      height: 1.4em;
+      line-height: 1.4em;
+      text-align: center;
+      background: #0066cc;
+      color: #fff;
+      border-radius: 50%;
+      font-size: 0.8rem;
+      font-weight: 700;
+    }
+
+    .faq-step-chart .step-arrow {
+      flex-shrink: 0;
+      color: #0066cc;
+      font-size: 1rem;
+    }
+
     @media (max-width: 768px) {
       .faq-question .faq-num {
         min-width: 1.2em;
@@ -494,7 +548,19 @@
               <span class="faq-q">如何開始建立履歷？</span>
               <i class="bi bi-chevron-down faq-icon"></i>
             </button>
-            <div class="faq-answer"><div class="faq-answer-inner">請點選「履歷管理」功能，選擇「新增履歷」，即可開始建立個人履歷。系統提供多種履歷模板供您選擇，您也可以自訂格式。</div></div>
+            <div class="faq-answer"><div class="faq-answer-inner">
+              請點選「履歷管理」功能，選擇「新增履歷」，即可開始建立個人履歷。系統提供多種履歷模板供您選擇，您也可以自訂格式。
+              <div class="faq-step-chart" aria-label="步驟說明">
+                <div class="faq-step-chart-title">步驟說明</div>
+                <div class="faq-step-chart-flow">
+                  <span class="step-item"><span class="step-num">1</span>履歷管理</span>
+                  <i class="bi bi-arrow-right step-arrow" aria-hidden="true"></i>
+                  <span class="step-item"><span class="step-num">2</span>新增履歷</span>
+                  <i class="bi bi-arrow-right step-arrow" aria-hidden="true"></i>
+                  <span class="step-item"><span class="step-num">3</span>開始建立履歷</span>
+                </div>
+              </div>
+            </div></div>
           </div>
           <div class="faq-item" data-tag="志願序">
             <button class="faq-question" type="button" aria-expanded="false">
@@ -510,7 +576,19 @@
               <span class="faq-q">可以修改已提交的志願序嗎？</span>
               <i class="bi bi-chevron-down faq-icon"></i>
             </button>
-            <div class="faq-answer"><div class="faq-answer-inner">在志願序填寫截止日期前，您可以隨時修改志願順序。請前往「填寫志願序」頁面進行修改。截止後將無法更改。</div></div>
+            <div class="faq-answer"><div class="faq-answer-inner">
+              在志願序填寫截止日期前，您可以隨時修改志願順序。請前往「填寫志願序」頁面進行修改。截止後將無法更改。
+              <div class="faq-step-chart" aria-label="步驟說明">
+                <div class="faq-step-chart-title">步驟說明</div>
+                <div class="faq-step-chart-flow">
+                  <span class="step-item"><span class="step-num">1</span>填寫志願序頁面</span>
+                  <i class="bi bi-arrow-right step-arrow" aria-hidden="true"></i>
+                  <span class="step-item"><span class="step-num">2</span>修改志願順序</span>
+                  <i class="bi bi-arrow-right step-arrow" aria-hidden="true"></i>
+                  <span class="step-item"><span class="step-num">3</span>截止前送出</span>
+                </div>
+              </div>
+            </div></div>
           </div>
           <div class="faq-item" data-tag="投遞履歷">
             <button class="faq-question" type="button" aria-expanded="false">
@@ -518,7 +596,21 @@
               <span class="faq-q">如何投遞履歷給公司？</span>
               <i class="bi bi-chevron-down faq-icon"></i>
             </button>
-            <div class="faq-answer"><div class="faq-answer-inner">請先完成履歷建立，然後前往「投遞履歷」頁面，瀏覽可申請的實習公司，選擇心儀的公司後點選「上傳履歷」即可。</div></div>
+            <div class="faq-answer"><div class="faq-answer-inner">
+              請先完成履歷建立，然後前往「投遞履歷」頁面，瀏覽可申請的實習公司，選擇心儀的公司後點選「上傳履歷」即可。
+              <div class="faq-step-chart" aria-label="步驟說明">
+                <div class="faq-step-chart-title">步驟說明</div>
+                <div class="faq-step-chart-flow">
+                  <span class="step-item"><span class="step-num">1</span>完成履歷</span>
+                  <i class="bi bi-arrow-right step-arrow" aria-hidden="true"></i>
+                  <span class="step-item"><span class="step-num">2</span>投遞履歷頁</span>
+                  <i class="bi bi-arrow-right step-arrow" aria-hidden="true"></i>
+                  <span class="step-item"><span class="step-num">3</span>選擇公司</span>
+                  <i class="bi bi-arrow-right step-arrow" aria-hidden="true"></i>
+                  <span class="step-item"><span class="step-num">4</span>上傳履歷</span>
+                </div>
+              </div>
+            </div></div>
           </div>
           <div class="faq-item" data-tag="投遞履歷">
             <button class="faq-question" type="button" aria-expanded="false">
@@ -542,7 +634,19 @@
               <span class="faq-q">如何查看媒合結果？</span>
               <i class="bi bi-chevron-down faq-icon"></i>
             </button>
-            <div class="faq-answer"><div class="faq-answer-inner">媒合結果公布後，請前往「學生媒合結果」頁面查看。您可以看到錄取的公司、實習期間、最終錄取志願及指導老師資訊。</div></div>
+            <div class="faq-answer"><div class="faq-answer-inner">
+              媒合結果公布後，請前往「學生媒合結果」頁面查看。您可以看到錄取的公司、實習期間、最終錄取志願及指導老師資訊。
+              <div class="faq-step-chart" aria-label="步驟說明">
+                <div class="faq-step-chart-title">步驟說明</div>
+                <div class="faq-step-chart-flow">
+                  <span class="step-item"><span class="step-num">1</span>媒合結果公布</span>
+                  <i class="bi bi-arrow-right step-arrow" aria-hidden="true"></i>
+                  <span class="step-item"><span class="step-num">2</span>學生媒合結果頁面</span>
+                  <i class="bi bi-arrow-right step-arrow" aria-hidden="true"></i>
+                  <span class="step-item"><span class="step-num">3</span>查看錄取資訊</span>
+                </div>
+              </div>
+            </div></div>
           </div>
           <div class="faq-item" data-tag="實習須知">
             <button class="faq-question" type="button" aria-expanded="false">

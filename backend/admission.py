@@ -44,6 +44,21 @@ def intern_management_page():
     return render_template('user_shared/Intern management.html')
 
 # =========================================================
+# 頁面路由：實習生／未錄取名單管理
+# =========================================================
+@admission_bp.route("/unadmitted_list", methods=["GET"])
+def unadmitted_list_page():
+    """實習生／未錄取名單管理頁面（科助、主任、老師、管理員）"""
+    if 'user_id' not in session:
+        return redirect('/login')
+    
+    user_role = session.get('role')
+    if user_role not in ['ta', 'admin', 'director', 'teacher']:
+        return "無權限訪問此頁面", 403
+    
+    return render_template('user_shared/intern_unadmitted_management.html')
+
+# =========================================================
 # 頁面路由：主任媒合
 # =========================================================
 @admission_bp.route("/manage_director", methods=["GET"])
@@ -1355,12 +1370,13 @@ def get_all_students():
         if not current_semester_id:
             return jsonify({"success": False, "message": "無法取得當前學期"}), 500
         
-        # 獲取所有已在媒合結果中的學生 ID（只包括 Approved 或 Pending，不包括 Rejected）
+        # 獲取所有已在媒合結果中的學生 ID（只包括 Approved 或 Pending）
+        # 以 student_preferences.semester_id 篩選，避免依賴 manage_director.semester_id（該欄位可能不存在）
         cursor.execute("""
-            SELECT DISTINCT student_id
-            FROM manage_director
-            WHERE semester_id = %s
-            AND director_decision IN ('Approved', 'Pending')
+            SELECT DISTINCT md.student_id
+            FROM manage_director md
+            INNER JOIN student_preferences sp ON md.preference_id = sp.id AND sp.semester_id = %s
+            WHERE md.director_decision IN ('Approved', 'Pending')
         """, (current_semester_id,))
         matched_student_ids = {row['student_id'] for row in cursor.fetchall()}
         
@@ -2693,6 +2709,65 @@ def director_confirm_matching():
         conn.close()
 
 # =========================================================
+# API: 科助工作台統計（媒合已核定數、未錄取人數）
+# =========================================================
+@admission_bp.route("/api/ta_dashboard_stats", methods=["GET"])
+def ta_dashboard_stats():
+    """
+    科助工作台用：回傳已核定媒合數、未錄取學生人數。
+    僅允許 role 為 ta 或 admin。
+    """
+    if 'user_id' not in session or session.get('role') not in ['ta', 'admin']:
+        return jsonify({"success": False, "message": "未授權"}), 403
+
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+
+    try:
+        current_semester_id = get_current_semester_id(cursor)
+        current_semester_code = get_current_semester_code(cursor)
+        if not current_semester_id:
+            return jsonify({"success": False, "message": "無法取得當前學期"}), 500
+
+        # 已核定／待公告的媒合人數（Approved + Pending，以「不重複學生」計）
+        # 以 student_preferences.semester_id 篩選學期（不依賴 manage_director.semester_id，因該欄位可能不存在）
+        cursor.execute("""
+            SELECT COUNT(DISTINCT md.student_id) AS cnt
+            FROM manage_director md
+            INNER JOIN student_preferences sp ON md.preference_id = sp.id AND sp.semester_id = %s
+            WHERE md.director_decision IN ('Approved', 'Pending')
+        """, (current_semester_id,))
+        row = cursor.fetchone()
+        matching_approved_count = (row.get("cnt") or 0) if row else 0
+
+        # 所有學生人數（role = 'student'）
+        cursor.execute("""
+            SELECT COUNT(*) AS cnt
+            FROM users u
+            WHERE u.role = 'student'
+        """)
+        row = cursor.fetchone()
+        total_students = (row.get("cnt") or 0) if row else 0
+
+        # 未錄取人數 = 全部學生 - 已核定媒合學生數
+        unadmitted_count = max(0, total_students - matching_approved_count)
+
+        return jsonify({
+            "success": True,
+            "semester_code": current_semester_code or "",
+            "matching_approved_count": matching_approved_count,
+            "unadmitted_count": unadmitted_count,
+            "total_students": total_students,
+        })
+
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"success": False, "message": str(e)}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+# =========================================================
 # API: 匯出媒合結果 Excel（網格格式）
 # =========================================================
 @admission_bp.route("/api/export_matching_results_excel", methods=["GET"])
@@ -2931,6 +3006,225 @@ def export_matching_results_excel():
         
         # 生成文件名
         filename = f"媒合結果_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+        
+        return send_file(
+            output,
+            mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            as_attachment=True,
+            download_name=filename
+        )
+    
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"success": False, "message": f"匯出失敗: {str(e)}"}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+# =========================================================
+# API: 科助匯出媒合結果 Excel（用於公告）
+# =========================================================
+@admission_bp.route("/api/ta/export_matching_results_excel", methods=["GET"])
+def ta_export_matching_results_excel():
+    """
+    科助匯出媒合結果為 Excel 格式（用於公告）。
+    允許 role 為 ta 或 admin。
+    使用 student_preferences.semester_id 篩選，避免依賴 manage_director.semester_id。
+    """
+    if 'user_id' not in session or session.get('role') not in ['ta', 'admin']:
+        return jsonify({"success": False, "message": "未授權"}), 403
+    
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+    
+    try:
+        # 獲取當前學期ID
+        current_semester_id = get_current_semester_id(cursor)
+        if not current_semester_id:
+            return jsonify({"success": False, "message": "無法取得當前學期"}), 500
+        
+        # 獲取媒合結果數據（使用 student_preferences.semester_id 篩選）
+        query = """
+            SELECT 
+                md.match_id,
+                md.vendor_id,
+                md.student_id,
+                md.preference_id,
+                md.original_type,
+                md.original_rank,
+                md.is_conflict,
+                md.director_decision,
+                md.final_rank,
+                md.is_adjusted,
+                COALESCE(sp.company_id, md.vendor_id) AS company_id,
+                sp.preference_order,
+                COALESCE(sp.job_id, (
+                    SELECT id FROM internship_jobs 
+                    WHERE company_id = COALESCE(sp.company_id, md.vendor_id) 
+                    ORDER BY id ASC LIMIT 1
+                )) AS job_id,
+                COALESCE(ic.company_name, v.name) AS company_name,
+                u.name AS student_name,
+                u.username AS student_number,
+                c.name AS class_name,
+                COALESCE(ij.title, (
+                    SELECT title FROM internship_jobs 
+                    WHERE company_id = COALESCE(sp.company_id, md.vendor_id) 
+                    ORDER BY id ASC LIMIT 1
+                )) AS job_title
+            FROM manage_director md
+            INNER JOIN student_preferences sp ON md.preference_id = sp.id AND sp.semester_id = %s
+            LEFT JOIN internship_companies ic ON COALESCE(sp.company_id, md.vendor_id) = ic.id
+            LEFT JOIN internship_jobs ij ON sp.job_id = ij.id
+            LEFT JOIN users u ON md.student_id = u.id
+            LEFT JOIN classes c ON u.class_id = c.id
+            LEFT JOIN users v ON md.vendor_id = v.id
+            WHERE md.director_decision IN ('Approved', 'Pending')
+            ORDER BY COALESCE(sp.company_id, md.vendor_id), 
+                     COALESCE(sp.job_id, 0),
+                     CASE WHEN md.director_decision = 'Approved' AND md.final_rank IS NOT NULL THEN 0 ELSE 1 END,
+                     COALESCE(md.final_rank, 999) ASC
+        """
+        cursor.execute(query, (current_semester_id,))
+        all_results = cursor.fetchall() or []
+        
+        # 按公司分組數據（與原函數相同的邏輯）
+        companies_data = {}
+        for result in all_results:
+            company_id = result.get("company_id")
+            company_name = result.get("company_name") or "未知公司"
+            job_title = result.get("job_title") or "未指定職缺"
+            
+            if company_id not in companies_data:
+                companies_data[company_id] = {
+                    "company_name": company_name,
+                    "jobs": {}
+                }
+            
+            if job_title not in companies_data[company_id]["jobs"]:
+                companies_data[company_id]["jobs"][job_title] = []
+            
+            companies_data[company_id]["jobs"][job_title].append({
+                "student_number": result.get("student_number") or "",
+                "student_name": result.get("student_name") or "",
+                "job_title": job_title
+            })
+        
+        # 創建 Excel 工作簿（與原函數相同的邏輯）
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "媒合結果"
+        
+        # 設定樣式
+        company_header_fill = PatternFill(start_color="FFFF00", end_color="FFFF00", fill_type="solid")
+        company_header_font = Font(bold=True, size=12)
+        student_font = Font(size=11)
+        total_fill = PatternFill(start_color="F0F0F0", end_color="F0F0F0", fill_type="solid")
+        total_font = Font(bold=True, size=11)
+        
+        thin_border = Border(
+            left=Side(style='thin'),
+            right=Side(style='thin'),
+            top=Side(style='thin'),
+            bottom=Side(style='thin')
+        )
+        
+        COLUMNS = 4
+        COLUMN_WIDTH = 20
+        
+        companies_list = []
+        for company in companies_data.values():
+            company_name = company["company_name"]
+            all_students = []
+            for job_title, students in company["jobs"].items():
+                all_students.extend(students)
+            if all_students:
+                companies_list.append({
+                    "name": company_name,
+                    "students": all_students
+                })
+        
+        columns_data = [[], [], [], []]
+        for idx, company in enumerate(companies_list):
+            col_idx = idx % COLUMNS
+            columns_data[col_idx].append(company)
+        
+        for col_idx in range(COLUMNS):
+            col_number_start = col_idx * 3 + 1
+            col_letter_start = get_column_letter(col_number_start)
+            col_letter_end = get_column_letter(col_number_start + 1)
+            col_letter_right = get_column_letter(col_number_start + 2)
+            current_row = 1
+            
+            for company in columns_data[col_idx]:
+                company_name = company["name"]
+                students = company["students"]
+                
+                header_cell = ws[f"{col_letter_start}{current_row}"]
+                header_cell.value = company_name
+                header_cell.fill = company_header_fill
+                header_cell.font = company_header_font
+                header_cell.border = thin_border
+                header_cell.alignment = Alignment(horizontal='center', vertical='center')
+                ws.merge_cells(f"{col_letter_start}{current_row}:{col_letter_end}{current_row}")
+                ws[f"{col_letter_end}{current_row}"].border = thin_border
+                ws[f"{col_letter_right}{current_row}"].value = ""
+                ws[f"{col_letter_right}{current_row}"].border = thin_border
+                current_row += 1
+                
+                for student in students:
+                    student_number = student.get('student_number') or ''
+                    student_name = student.get('student_name') or ''
+                    
+                    number_cell = ws[f"{col_letter_start}{current_row}"]
+                    number_cell.value = student_number
+                    number_cell.font = student_font
+                    number_cell.border = thin_border
+                    number_cell.alignment = Alignment(horizontal='left', vertical='center')
+                    
+                    name_cell = ws[f"{col_letter_end}{current_row}"]
+                    name_cell.value = student_name
+                    name_cell.font = student_font
+                    name_cell.border = thin_border
+                    name_cell.alignment = Alignment(horizontal='left', vertical='center')
+                    
+                    ws[f"{col_letter_right}{current_row}"].value = ""
+                    ws[f"{col_letter_right}{current_row}"].border = thin_border
+                    current_row += 1
+                
+                ws[f"{col_letter_start}{current_row}"].value = ""
+                ws[f"{col_letter_start}{current_row}"].border = thin_border
+                total_text = f"{len(students)}人"
+                total_cell = ws[f"{col_letter_end}{current_row}"]
+                total_cell.value = total_text
+                total_cell.fill = total_fill
+                total_cell.font = total_font
+                total_cell.border = thin_border
+                total_cell.alignment = Alignment(horizontal='center', vertical='center')
+                ws[f"{col_letter_right}{current_row}"].value = ""
+                ws[f"{col_letter_right}{current_row}"].border = thin_border
+                current_row += 1
+                
+                ws[f"{col_letter_start}{current_row}"].value = ""
+                ws[f"{col_letter_start}{current_row}"].border = thin_border
+                ws[f"{col_letter_end}{current_row}"].value = ""
+                ws[f"{col_letter_end}{current_row}"].border = thin_border
+                ws[f"{col_letter_right}{current_row}"].value = ""
+                ws[f"{col_letter_right}{current_row}"].border = thin_border
+                current_row += 1
+        
+        for col in range(1, COLUMNS * 3 + 1):
+            col_letter = get_column_letter(col)
+            ws.column_dimensions[col_letter].width = COLUMN_WIDTH / 3
+        
+        for row in range(1, ws.max_row + 1):
+            ws.row_dimensions[row].height = 20
+        
+        output = io.BytesIO()
+        wb.save(output)
+        output.seek(0)
+        
+        filename = f"媒合結果公告_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
         
         return send_file(
             output,
