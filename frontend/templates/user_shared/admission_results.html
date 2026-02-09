@@ -544,24 +544,19 @@
       }
     }
 
-    // 初始化學期選單（固定顯示 1132 和 1142）
+    // 初始化學期選單（只顯示目前實習學期 1132，不會有 1142 的錄取結果）
     function initSemesterFilter() {
       const semesterFilter = document.getElementById('semesterFilter');
       const currentValue = semesterFilter.value;
       
-      // 清空現有選項（保留「所有學期」）
       semesterFilter.innerHTML = '<option value="">所有學期</option>';
       
-      // 添加固定的學期選項：1132 和 1142
-      const fixedSemesters = ['1132', '1142'];
-      fixedSemesters.forEach(sem => {
-        const option = document.createElement('option');
-        option.value = sem;
-        option.textContent = sem;
-        semesterFilter.appendChild(option);
-      });
+      // 只顯示目前學期 1132
+      const option = document.createElement('option');
+      option.value = '1132';
+      option.textContent = '1132';
+      semesterFilter.appendChild(option);
       
-      // 恢復之前選擇的值
       if (currentValue) {
         semesterFilter.value = currentValue;
       }

@@ -236,6 +236,11 @@
     .resume-actions {
       display: flex;
       gap: 0.5rem;
+      flex-wrap: nowrap;
+    }
+
+    .resume-actions .btn {
+      white-space: nowrap;
     }
 
     .btn-sm {
@@ -489,6 +494,9 @@
                 <button class="btn btn-sm btn-outline-primary" onclick="editResume(${resume.id})">
                   <i class="bi bi-pencil"></i> 編輯
                 </button>
+                <button class="btn btn-sm btn-outline-success" onclick="duplicateResume(${resume.id})" title="複製此履歷為新草稿">
+                  <i class="bi bi-files"></i> <span>增加副本</span>
+                </button>
                 <a href="/api/download_resume/${resume.id}" class="btn btn-sm btn-outline-secondary" target="_blank" rel="noopener noreferrer" title="下載履歷">
                   <i class="bi bi-download"></i> 下載
                 </a>
@@ -566,6 +574,30 @@
       window.location.href = `/upload_resume?resume_id=${resumeId}`;
     }
 
+    // 增加副本：複製履歷為新草稿，留在本頁並刷新列表顯示新檔案
+    async function duplicateResume(resumeId) {
+      try {
+        const res = await fetch(`/api/resumes/${resumeId}/duplicate`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' }
+        });
+        const result = await res.json();
+        if (result.success && result.resume_id) {
+          // 留在本頁，切到草稿並重新載入列表，新副本會出現在草稿中
+          currentCategory = 'draft';
+          document.querySelectorAll('.category-tab').forEach(tab => tab.classList.remove('active'));
+          const draftTab = document.querySelector('[data-category="draft"]');
+          if (draftTab) draftTab.classList.add('active');
+          await loadResumes();
+        } else {
+          alert('建立副本失敗：' + (result.message || '未知錯誤'));
+        }
+      } catch (err) {
+        console.error('建立副本失敗:', err);
+        alert('建立副本失敗，請重新整理頁面後再試');
+      }
+    }
+
     // 刪除履歷（只允許刪除草稿狀態的履歷）
     async function deleteResume(resumeId) {
       if (!confirm('確定要刪除此履歷嗎？此操作無法復原。')) return;
@@ -633,12 +665,17 @@
       input.focus();
       input.select();
 
-      // 保存文件名
+      // 保存文件名（內建預設 .docx：未含副檔名時自動補上，避免下載失敗）
       const saveFilename = async () => {
-        const newFilename = input.value.trim();
+        let newFilename = input.value.trim();
         if (!newFilename) {
           alert('文件名不能為空');
           return;
+        }
+        // 若結尾不是 .docx 或 .doc，自動加上 .docx
+        const lower = newFilename.toLowerCase();
+        if (!lower.endsWith('.docx') && !lower.endsWith('.doc')) {
+          newFilename = newFilename.replace(/\.+$/, '') + '.docx';
         }
 
         if (newFilename === currentFilename) {
@@ -656,7 +693,7 @@
           const result = await res.json();
           
           if (result.success) {
-            // 更新本地數據
+            // 更新本地數據（使用含 .docx 的完整檔名）
             const resume = allResumes.find(r => r.id === resumeId);
             if (resume) {
               resume.original_filename = newFilename;

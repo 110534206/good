@@ -9,6 +9,7 @@ import traceback
 import json
 import re
 from datetime import datetime, date
+from urllib.parse import quote
 from notification import create_notification
 from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
@@ -16,8 +17,8 @@ from openpyxl.utils import get_column_letter
 import io
 
 
-# --- 檔案路徑設定 ---
-BASE_UPLOAD_DIR = os.path.dirname(os.path.abspath(__file__))
+# --- 檔案路徑設定：專案根目錄 (good)，使 uploads/resumes 對應 Featured\good\uploads\resumes ---
+BASE_UPLOAD_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 
 # 定義 uploads/standard_courses
 STANDARD_COURSE_UPLOAD_PATH = os.path.join('uploads', 'standard_courses')
@@ -37,6 +38,45 @@ role_map = {
     "approved": "通過",
     "rejected": "退回"
 }
+
+def _normalize_cert_category(category):
+    """
+    將資料庫 category 正規化為 labor / intl / local / other，
+    對應履歷：1.勞動部 / 2.國際證照 / 3.國內證照 / 4.其他證照
+    """
+    if not category:
+        return "other"
+    c = str(category).strip().lower()
+    if c == "labor":
+        return "labor"
+    if c == "intl":
+        return "intl"
+    if c == "local":
+        return "local"
+    return "other"
+
+def _upsert_resume_content_mapping(cursor, resume_id, stu_id, course_grade_ids=None, certification_ids=None, language_skill_ids=None, absence_record_ids=None):
+    """依 resume_id 更新或新增一筆 resume_content_mapping。ID 列表以逗號分隔字串儲存。"""
+    cg = ",".join(str(x) for x in (course_grade_ids or [])) if course_grade_ids else ""
+    cert = ",".join(str(x) for x in (certification_ids or [])) if certification_ids else ""
+    lang = ",".join(str(x) for x in (language_skill_ids or [])) if language_skill_ids else ""
+    abs_ids = ",".join(str(x) for x in (absence_record_ids or [])) if absence_record_ids else ""
+    cursor.execute("SELECT id FROM resume_content_mapping WHERE resume_id = %s LIMIT 1", (resume_id,))
+    row = cursor.fetchone()
+    if row:
+        cursor.execute("""
+            UPDATE resume_content_mapping SET
+                stu_info_id = %s, course_grade_ids = %s, certification_ids = %s,
+                language_skill_ids = %s, absence_record_ids = %s, updated_at = CURRENT_TIMESTAMP
+            WHERE resume_id = %s
+        """, (stu_id, cg or None, cert or None, lang or None, abs_ids or None, resume_id))
+    else:
+        cursor.execute("""
+            INSERT INTO resume_content_mapping (resume_id, stu_info_id, course_grade_ids, certification_ids, language_skill_ids, absence_record_ids)
+            VALUES (%s, %s, %s, %s, %s, %s)
+        """, (resume_id, stu_id, cg or None, cert or None, lang or None, abs_ids or None))
+
+
 
 # 添加圖片驗證函數
 def is_valid_image_file(file_path):
@@ -322,26 +362,24 @@ def load_student_certifications(cursor, student_id):
 
 def categorize_certifications(cert_list):
     """
-    分類證照 → 放到四種類別
+    分類證照 → 放到四種類別（對應履歷 1.勞動部 2.國際證照 3.國內證照 4.其他證照）
     """
     labor = []
     international = []
     local = []
     other = []
     for c in cert_list:
-        # 兼容多種字段名稱：cert_name/CertName, cert_path/CertPath, acquire_date/AcquisitionDate
         cert_name = c.get("cert_name") or c.get("CertName") or f"{c.get('job_category', '')}{c.get('level', '')}"
         cert_path = c.get("cert_path") or c.get("CertPath", "")
         acquire_date = c.get("acquire_date") or c.get("AcquisitionDate", "")
-        
         item = {
-            "table_name": cert_name,     # 表格區顯示名稱（只顯示證照名稱，不含發證中心）
-            "photo_name": cert_name,     # 圖片下方名稱
-            "photo_path": cert_path,     # 圖片路徑
-            "date": acquire_date,        # 日期
+            "table_name": cert_name,
+            "photo_name": cert_name,
+            "photo_path": cert_path,
+            "date": acquire_date,
         }
-        # 檢查多個可能的字段名稱：CertCategory（從SQL查詢）或 category（從其他來源）
-        category = c.get("CertCategory") or c.get("category", "other")
+        raw = c.get("CertCategory") or c.get("category", "other")
+        category = _normalize_cert_category(raw)
         if category == "labor":
             labor.append(item)
         elif category == "intl":
@@ -403,7 +441,7 @@ def fill_certificate_photos(context, doc, items, start_index, max_count=8):
 # -------------------------
 # 儲存結構化資料（重整 + 稳定版）
 # -------------------------
-def save_structured_data(cursor, student_id, data, semester_id=None):
+def save_structured_data(cursor, student_id, data, semester_id=None, resume_id=None):
     try:
         # -------------------------------------------------------------
         # 1) 儲存 Student_Info（基本資料）
@@ -561,6 +599,18 @@ def save_structured_data(cursor, student_id, data, semester_id=None):
                 except Exception as e:
                     print(f"⚠️ 查詢 certificate_codes 失敗: {e}")
 
+            # 編輯時若表單未帶 cert_code（或為 OTHER/空），保留既有 student_certifications 的 cert_code，避免日文等證照被誤存為「其他」
+            existing_cert_id = cert.get("id")
+            if (cert_code_id is None or cert_code_id == 0) and existing_cert_id and str(existing_cert_id).strip():
+                try:
+                    eid = int(existing_cert_id)
+                    cursor.execute("SELECT cert_code FROM student_certifications WHERE id = %s AND StuID = %s LIMIT 1", (eid, student_id))
+                    existing_row = cursor.fetchone()
+                    if existing_row and existing_row.get("cert_code") is not None:
+                        cert_code_id = existing_row["cert_code"]
+                        print(f"✅ 保留既有證照 cert_code（id={eid}）: {cert_code_id}")
+                except (ValueError, TypeError, Exception):
+                    pass
             row["cert_code"] = cert_code_id
 
             # 優先使用前端傳來的 authority_id
@@ -656,21 +706,25 @@ def save_structured_data(cursor, student_id, data, semester_id=None):
 
         # (4) 處理上傳證照圖片（舊的圖片上傳方式，向後兼容） - 這裡為了程式碼完整性省略，因為前端應主要傳遞 structured_certifications
 
-        # (5) 實際寫入資料庫
+        # (5) 實際寫入資料庫；有 resume_id 時不刪除既有證照，僅新增或更新（ON DUPLICATE KEY UPDATE 避免重複鍵）
         if cert_rows:
             print(f"📋 準備寫入 student_certifications: {len(cert_rows)} 筆")
-            cursor.execute("DELETE FROM student_certifications WHERE StuID=%s", (student_id,))
+            if not resume_id:
+                cursor.execute("DELETE FROM student_certifications WHERE StuID=%s", (student_id,))
             insert_failed = False
             for row in cert_rows:
                 cols = list(row.keys())
                 values = list(row.values())
                 cols.append("CreatedAt")
                 placeholders = ", ".join(["%s"] * (len(values) + 1))
+                sql = f"INSERT INTO student_certifications ({','.join(cols)}) VALUES ({placeholders})"
+                if resume_id:
+                    # 唯一鍵 (StuID, cert_code, level)：重複時只更新可變欄位
+                    update_cols = [c for c in cols if c not in ('StuID', 'cert_code', 'level', 'CreatedAt')]
+                    if update_cols:
+                        sql += " ON DUPLICATE KEY UPDATE " + ", ".join(f"{c}=VALUES({c})" for c in update_cols)
                 try:
-                    cursor.execute(
-                        f"INSERT INTO student_certifications ({','.join(cols)}) VALUES ({placeholders})",
-                        (*values, datetime.now())
-                    )
+                    cursor.execute(sql, (*values, datetime.now()))
                 except Exception as e:
                     print(f"⚠️ 插入證照記錄失敗: {e}")
                     print(f" 記錄內容: {row}")
@@ -686,12 +740,40 @@ def save_structured_data(cursor, student_id, data, semester_id=None):
         # 4) 儲存語言能力 student_languageskills
         # -------------------------------------------------------------
         cursor.execute("DELETE FROM student_languageskills WHERE StuID=%s", (student_id,))
+        lang_ids_saved = []
         for row in data.get("structured_languages", []):
             if row.get("language") and row.get("level"):
                 cursor.execute("""
                     INSERT INTO student_languageskills (StuID, Language, Level, CreatedAt)
                     VALUES (%s,%s,%s,NOW())
                 """, (student_id, row["language"], row["level"]))
+                lang_ids_saved.append(cursor.lastrowid)
+
+        # 若有 resume_id，同步更新履歷內容關聯表（使用剛寫入的證照/語文 id，確保該份履歷的 mapping 正確）
+        if resume_id:
+            course_ids = data.get("selected_course_grade_ids")
+            if course_ids is None:
+                course_ids = [c.get("name") for c in data.get("courses", []) if c.get("name")]
+            # 證照：以剛寫入的 cert_rows 對應的 DB id 為準（避免副本仍沿用第一份的舊 id）
+            cert_ids_for_mapping = data.get("selected_certification_ids")
+            if cert_rows:
+                cursor.execute("SELECT id, cert_code, level FROM student_certifications WHERE StuID=%s", (student_id,))
+                db_certs = {(r.get("cert_code"), r.get("level")): r.get("id") for r in cursor.fetchall()}
+                ids_in_order = []
+                for r in cert_rows:
+                    key = (r.get("cert_code"), r.get("level"))
+                    if key in db_certs and db_certs[key]:
+                        ids_in_order.append(db_certs[key])
+                if ids_in_order:
+                    cert_ids_for_mapping = ids_in_order
+            # 語文：使用剛寫入的 id（與表單順序一致）
+            lang_ids_for_mapping = data.get("selected_language_skill_ids")
+            if lang_ids_saved:
+                lang_ids_for_mapping = lang_ids_saved
+            _upsert_resume_content_mapping(cursor, resume_id, student_id, course_grade_ids=course_ids,
+                certification_ids=cert_ids_for_mapping,
+                language_skill_ids=lang_ids_for_mapping,
+                absence_record_ids=data.get("selected_absence_record_ids"))
 
         return True
 
@@ -783,12 +865,17 @@ def get_certificates_by_authority():
 
 
 # -------------------------
-# 取回學生資料 (for 生成履歷)
+# 取回學生資料 (for 生成履歷)；resume_id 有值時依 resume_content_mapping 篩選課程/證照/語文
 # -------------------------
-def get_student_info_for_doc(cursor, student_id, semester_id=None):
+def get_student_info_for_doc(cursor, student_id, semester_id=None, resume_id=None):
     data = {}
     cursor.execute("SELECT * FROM Student_Info WHERE StuID=%s", (student_id,))
     data['info'] = cursor.fetchone() or {}
+
+    mapping = None
+    if resume_id:
+        cursor.execute("SELECT course_grade_ids, certification_ids, language_skill_ids FROM resume_content_mapping WHERE resume_id = %s LIMIT 1", (resume_id,))
+        mapping = cursor.fetchone()
 
     # 檢查表是否有 SemesterID、ProofImage 和 transcript_path 列
     try:
@@ -838,6 +925,10 @@ def get_student_info_for_doc(cursor, student_id, semester_id=None):
             """, (student_id,))
     
     grades_rows = cursor.fetchall() or []
+    if mapping and mapping.get("course_grade_ids"):
+        ids_set = set(x.strip() for x in (mapping["course_grade_ids"] or "").split(",") if x.strip())
+        if ids_set:
+            grades_rows = [r for r in grades_rows if (r.get("CourseName") or "").strip() in ids_set]
     
     data['grades'] = grades_rows
     data['transcript_path'] = ''
@@ -863,16 +954,32 @@ def get_student_info_for_doc(cursor, student_id, semester_id=None):
         WHERE sc.StuID = %s
         ORDER BY sc.AcquisitionDate DESC, sc.id ASC
     """, (student_id,))
-    data['certifications'] = cursor.fetchall() or []
+    certs_rows = cursor.fetchall() or []
+    if mapping and mapping.get("certification_ids"):
+        try:
+            ids_set = set(int(x.strip()) for x in (mapping["certification_ids"] or "").split(",") if x.strip())
+            if ids_set:
+                certs_rows = [c for c in certs_rows if c.get("id") in ids_set]
+        except ValueError:
+            pass
+    data['certifications'] = certs_rows
 
     # 語言能力
     cursor.execute(""" 
-        SELECT Language AS language, Level AS level 
+        SELECT id, Language AS language, Level AS level 
         FROM student_languageskills 
         WHERE StuID=%s 
         ORDER BY Language
     """, (student_id,))
-    data['languages'] = cursor.fetchall() or []
+    lang_rows = cursor.fetchall() or []
+    if mapping and mapping.get("language_skill_ids"):
+        try:
+            ids_set = set(int(x.strip()) for x in (mapping["language_skill_ids"] or "").split(",") if x.strip())
+            if ids_set:
+                lang_rows = [l for l in lang_rows if l.get("id") in ids_set]
+        except ValueError:
+            pass
+    data['languages'] = lang_rows
 
     # 缺勤記錄佐證圖片（僅返回最新的）
     absence_proof_path = ''
@@ -1034,8 +1141,14 @@ def save_resume_data():
     try:
         # 取得目前的學期 ID (如果系統使用學期分流)
         semester_id = get_current_semester_id(cursor)
+        resume_id = None
+        if data.get("resume_id") is not None and str(data.get("resume_id")).strip():
+            try:
+                resume_id = int(data.get("resume_id"))
+            except (TypeError, ValueError):
+                pass
 
-        if save_structured_data(cursor, student_id, data, semester_id):
+        if save_structured_data(cursor, student_id, data, semester_id, resume_id=resume_id):
             conn.commit()
             return jsonify({"success": True, "message": "履歷資料儲存成功"})
         else:
@@ -1064,15 +1177,26 @@ def get_resume_data():
     cursor = conn.cursor(dictionary=True)
 
     try:
-        # ===== 1. 檢查是否有已提交履歷 =====
-        cursor.execute("""
-            SELECT id FROM resumes 
-            WHERE user_id = %s 
-            ORDER BY created_at DESC 
-            LIMIT 1
-        """, (user_id,))
-        resume = cursor.fetchone()
-
+        # ===== 1. 決定要載入哪一筆履歷（可傳 resume_id 編輯指定履歷）=====
+        resume = None
+        resume_id_param = request.args.get("resume_id", "").strip()
+        if resume_id_param:
+            try:
+                rid = int(resume_id_param)
+                cursor.execute("SELECT id FROM resumes WHERE id = %s AND user_id = %s", (rid, user_id))
+                resume = cursor.fetchone()
+                if not resume:
+                    return jsonify({"success": False, "message": "找不到該履歷或無權限"}), 404
+            except (ValueError, TypeError):
+                resume = None
+        if not resume:
+            cursor.execute("""
+                SELECT id FROM resumes 
+                WHERE user_id = %s 
+                ORDER BY created_at DESC 
+                LIMIT 1
+            """, (user_id,))
+            resume = cursor.fetchone()
         if not resume:
             return jsonify({"success": False, "message": "沒有已提交的履歷"}), 404
 
@@ -1083,6 +1207,10 @@ def get_resume_data():
             return jsonify({"success": False, "message": "找不到使用者"}), 404
 
         student_id = user_result["username"]
+
+        # 載入該履歷的內容關聯（若有則只顯示勾選的課程/證照/語文/缺勤）
+        cursor.execute("SELECT course_grade_ids, certification_ids, language_skill_ids, absence_record_ids FROM resume_content_mapping WHERE resume_id = %s LIMIT 1", (resume["id"],))
+        mapping = cursor.fetchone()
 
         # ===== 3. 基本資料 =====
         cursor.execute("SELECT * FROM Student_Info WHERE StuID=%s", (student_id,))
@@ -1108,6 +1236,10 @@ def get_resume_data():
                 ORDER BY CourseName
             """, (student_id,))
         courses = cursor.fetchall() or []
+        if mapping and mapping.get("course_grade_ids"):
+            ids_set = set(x.strip() for x in (mapping["course_grade_ids"] or "").split(",") if x.strip())
+            if ids_set:
+                courses = [c for c in courses if (c.get("name") or "").strip() in ids_set]
         
         # 提取成績單路徑（從 ProofImage 欄位）
         transcript_path = ''
@@ -1231,6 +1363,13 @@ def get_resume_data():
 
         cursor.execute(sql_cert, (student_id,))
         all_certifications = cursor.fetchall() or []
+        if mapping and mapping.get("certification_ids"):
+            try:
+                ids_set = set(int(x.strip()) for x in (mapping["certification_ids"] or "").split(",") if x.strip())
+                if ids_set:
+                    all_certifications = [c for c in all_certifications if c.get("id") in ids_set]
+            except ValueError:
+                pass
         
         # 在處理證照分類時
         labor_certs = [c for c in all_certifications if c.get('category') == 'labor' or c.get('authority_id') == 1]
@@ -1275,45 +1414,102 @@ def get_resume_data():
         # ===== 7. 語言能力 =====
 
         cursor.execute("""
-            SELECT Language AS language, Level AS level
+            SELECT id, Language AS language, Level AS level
             FROM student_languageskills
             WHERE StuID=%s
             ORDER BY Language
         """, (student_id,))
         languages = cursor.fetchall() or []
+        if mapping and mapping.get("language_skill_ids"):
+            try:
+                ids_set = set(int(x.strip()) for x in (mapping["language_skill_ids"] or "").split(",") if x.strip())
+                if ids_set:
+                    languages = [l for l in languages if l.get("id") in ids_set]
+            except ValueError:
+                pass
         
-        # ===== 7.5 缺勤記錄佐證圖片 =====
-        # 從 absence_records 表獲取最新的 image_path
+        # ===== 7.5 缺勤記錄與佐證圖片（依 mapping 篩選，供編輯頁載入）=====
         absence_proof_path = ''
+        absence_data = None
         try:
             cursor.execute("SELECT id FROM users WHERE username=%s", (student_id,))
             user_row = cursor.fetchone()
             if user_row:
                 user_id = user_row.get('id')
-                # 嘗試使用 created_at 排序，如果沒有該欄位則使用 id
+                # 若有 mapping 的 absence_record_ids，只查這些筆；否則查該使用者全部缺勤
+                absence_ids_filter = None
+                if mapping and mapping.get("absence_record_ids"):
+                    try:
+                        absence_ids_filter = [int(x.strip()) for x in (mapping["absence_record_ids"] or "").split(",") if x.strip()]
+                    except (ValueError, TypeError):
+                        pass
                 try:
-                    cursor.execute("""
-                        SELECT image_path, created_at
+                    cursor.execute("SHOW COLUMNS FROM absence_records LIKE 'semester_id'")
+                    has_semester = cursor.fetchone() is not None
+                except Exception:
+                    has_semester = False
+                if absence_ids_filter:
+                    placeholders = ",".join(["%s"] * len(absence_ids_filter))
+                    cursor.execute(f"""
+                        SELECT id, absence_date, absence_type, duration_units, reason, image_path
+                        {" , semester_id" if has_semester else ""}
                         FROM absence_records
-                        WHERE user_id = %s AND image_path IS NOT NULL AND image_path != ''
-                        ORDER BY created_at DESC
-                        LIMIT 1
-                    """, (user_id,))
-                except:
-                    # 如果 created_at 欄位不存在，使用 id 排序
-                    cursor.execute("""
-                        SELECT image_path
+                        WHERE user_id = %s AND id IN ({placeholders})
+                        ORDER BY absence_date DESC, id ASC
+                    """, (user_id, *absence_ids_filter))
+                else:
+                    cursor.execute(f"""
+                        SELECT id, absence_date, absence_type, duration_units, reason, image_path
+                        {" , semester_id" if has_semester else ""}
                         FROM absence_records
-                        WHERE user_id = %s AND image_path IS NOT NULL AND image_path != ''
-                        ORDER BY id DESC
-                        LIMIT 1
+                        WHERE user_id = %s
+                        ORDER BY absence_date DESC, id ASC
                     """, (user_id,))
-                absence_row = cursor.fetchone()
-                if absence_row:
-                    absence_proof_path = absence_row.get('image_path', '')
+                absence_rows = cursor.fetchall() or []
+                # 第一筆有 image_path 的作為佐證圖
+                for row in absence_rows:
+                    ip = (row.get("image_path") or "").strip()
+                    if ip and not absence_proof_path:
+                        absence_proof_path = ip
+                if not absence_proof_path:
+                    cursor.execute("""
+                        SELECT image_path FROM absence_records
+                        WHERE user_id = %s AND image_path IS NOT NULL AND image_path != ''
+                        ORDER BY id DESC LIMIT 1
+                    """, (user_id,))
+                    fallback = cursor.fetchone()
+                    if fallback:
+                        absence_proof_path = fallback.get("image_path", "")
+                # 組 absence_data 供前端編輯頁顯示列表與佐證圖
+                all_types = ["曠課", "遲到", "事假", "病假", "生理假", "公假", "喪假"]
+                stats = {t: 0 for t in all_types}
+                records = []
+                for r in absence_rows:
+                    ad = r.get("absence_date")
+                    if hasattr(ad, "strftime"):
+                        ad = ad.strftime("%Y-%m-%d")
+                    records.append({
+                        "id": r.get("id"),
+                        "absence_date": ad or "",
+                        "absence_type": r.get("absence_type") or "",
+                        "duration_units": r.get("duration_units") or 0,
+                        "reason": r.get("reason") or "",
+                        "image_path": (r.get("image_path") or "").strip(),
+                    })
+                    at = r.get("absence_type")
+                    if at in stats:
+                        stats[at] = stats.get(at, 0) + int(r.get("duration_units") or 0)
+                stat_str = {t: f"{stats.get(t, 0)} 節" for t in all_types}
+                absence_data = {
+                    "records": records,
+                    "stats": stat_str,
+                    "start_semester_id": None,
+                    "end_semester_id": None,
+                }
+                if absence_proof_path:
                     print(f"🔍 找到缺勤佐證圖片: {absence_proof_path}")
         except Exception as e:
-            print(f"⚠️ 查詢缺勤佐證圖片失敗: {e}")
+            print(f"⚠️ 查詢缺勤記錄/佐證圖片失敗: {e}")
             traceback.print_exc()
 
         # ===== 8. 日期格式轉換 =====
@@ -1393,6 +1589,7 @@ def get_resume_data():
         return jsonify({
             "success": True,
             "data": {
+                "resume_id": resume["id"],
                 "student_info": {
                     "name": user_name,
                     "birth_date": birth_date or "",
@@ -1408,7 +1605,8 @@ def get_resume_data():
                 "certifications": formatted_certs,
                 "languages": languages,
                 "transcript_path": norm_path(transcript_path),
-                "absence_proof_path": norm_path(absence_proof_path)
+                "absence_proof_path": norm_path(absence_proof_path),
+                "absence_data": absence_data
             }
         })
 
@@ -2023,8 +2221,29 @@ def submit_and_generate_api():
         context.update(data)
         context.update(structured_data)
 
+        # 不論新增或編輯，都準備 selected_* 供 resume_content_mapping 使用
+        resume_id_for_save = None
+        if request.form.get("resume_id", "").strip():
+            try:
+                resume_id_for_save = int(request.form.get("resume_id", "").strip())
+            except (ValueError, TypeError):
+                pass
+        structured_data["selected_course_grade_ids"] = [c.get("name") for c in courses if c.get("name")]
+        try:
+            structured_data["selected_certification_ids"] = json.loads(request.form.get("selected_certification_ids", "[]") or "[]")
+        except Exception:
+            structured_data["selected_certification_ids"] = [c.get("id") for c in structured_certifications if c.get("id")]
+        try:
+            structured_data["selected_language_skill_ids"] = json.loads(request.form.get("selected_language_skill_ids", "[]") or "[]")
+        except Exception:
+            structured_data["selected_language_skill_ids"] = None
+        try:
+            structured_data["selected_absence_record_ids"] = json.loads(request.form.get("selected_absence_record_ids", "[]") or "[]")
+        except Exception:
+            structured_data["selected_absence_record_ids"] = None
+
         # 儲存結構化資料（包含 language / Certs / course_grades）
-        if not save_structured_data(cursor, student_id, structured_data, semester_id=semester_id):
+        if not save_structured_data(cursor, student_id, structured_data, semester_id=semester_id, resume_id=resume_id_for_save):
             conn.rollback()
             return jsonify({"success": False, "message": "資料儲存失敗"}), 500
 
@@ -2082,7 +2301,7 @@ def submit_and_generate_api():
                 traceback.print_exc()
 
         # 生成 Word 文件
-        student_data_for_doc = get_student_info_for_doc(cursor, student_id, semester_id=semester_id)
+        student_data_for_doc = get_student_info_for_doc(cursor, student_id, semester_id=semester_id, resume_id=resume_id_for_save)
         # PhotoPath & ConductScoreNumeric（未上傳新照片時保留既有路徑）
         if photo_path is not None:
             student_data_for_doc["info"]["PhotoPath"] = photo_path
@@ -2130,7 +2349,7 @@ def submit_and_generate_api():
             return jsonify({"success": False, "message": "文件生成失敗"}), 500
 
         if had_resume_id and resume_id_param:
-            # 編輯：一律只更新該筆履歷，不新增列，畫面上只保留一個檔案
+            # 編輯：一律只更新該筆履歷，不新增列，並更新 resume_content_mapping（含 absence_record_ids）
             try:
                 rid = int(resume_id_param)
                 filepath_for_db = existing_filepath if existing_filepath else (os.path.join(UPLOAD_FOLDER, filename)).replace("\\", "/")
@@ -2139,6 +2358,13 @@ def submit_and_generate_api():
                     SET filepath = %s, original_filename = %s, updated_at = NOW()
                     WHERE id = %s AND user_id = %s
                 """, (filepath_for_db, filename, rid, user_id))
+                _upsert_resume_content_mapping(
+                    cursor, rid, student_id,
+                    course_grade_ids=structured_data.get("selected_course_grade_ids"),
+                    certification_ids=structured_data.get("selected_certification_ids"),
+                    language_skill_ids=structured_data.get("selected_language_skill_ids"),
+                    absence_record_ids=structured_data.get("selected_absence_record_ids"),
+                )
             except (ValueError, TypeError):
                 pass  # 不將 resume_id_param 清空，避免誤執行下面的 INSERT
         if not had_resume_id:
@@ -2155,6 +2381,16 @@ def submit_and_generate_api():
                 'draft',
                 semester_id
             ))
+            # 新增履歷也要寫入 resume_content_mapping，否則該筆履歷沒有關聯的課程/證照/語文
+            new_resume_id = cursor.lastrowid
+            if new_resume_id:
+                _upsert_resume_content_mapping(
+                    cursor, new_resume_id, student_id,
+                    course_grade_ids=structured_data.get("selected_course_grade_ids"),
+                    certification_ids=structured_data.get("selected_certification_ids"),
+                    language_skill_ids=structured_data.get("selected_language_skill_ids"),
+                    absence_record_ids=structured_data.get("selected_absence_record_ids")
+                )
 
         conn.commit()
         return jsonify({
@@ -2284,10 +2520,15 @@ def generate_application_form_docx(student_data, output_path):
                         if (c.get("cert_path") or "").replace("\\", "/") == path:
                             matching_cert = c
                             break
-                # 類別：勞動部 authority_id=1 必為 labor；否則用表單 category 或 DB 匹配
+                # 類別：優先使用 DB（certificate_codes）的 category，確保如 JLPT 等 intl 正確歸類
                 aid = struct.get("authority_id")
+                db_category = None
+                if matching_cert:
+                    db_category = (matching_cert.get("CertCategory") or matching_cert.get("category") or "").strip().lower()
                 if aid is not None and str(aid).strip() in ("1",):
                     category = "labor"
+                elif db_category and db_category in ("labor", "intl", "local", "other"):
+                    category = db_category
                 else:
                     try:
                         ai = int(aid)
@@ -2299,7 +2540,7 @@ def generate_application_form_docx(student_data, output_path):
                                 category = "other"
                     except (TypeError, ValueError):
                         cat = (struct.get("category") or "").strip().lower()
-                        category = cat if cat in ("labor", "intl", "local", "other") else ("other" if not matching_cert else matching_cert.get("category", "other"))
+                        category = cat if cat in ("labor", "intl", "local", "other") else (db_category if db_category in ("labor", "intl", "local", "other") else "other")
                 certs_from_form.append({
                     "cert_name": name,
                     "category": category,
@@ -2527,7 +2768,11 @@ def download_resume(resume_id):
             
         target_user_id = resume_row['user_id']
         file_relative_path = resume_row['filepath'] # 例如: uploads/resumes/...
-        download_name = resume_row['original_filename'] # 例如: 110534235_履歷_....docx
+        raw_name = (resume_row['original_filename'] or '').strip() or 'resume'
+        # 內建預設 .docx：無副檔名一律補上，避免「只打名稱」無法下載或無法開啟
+        if not (raw_name.lower().endswith('.docx') or raw_name.lower().endswith('.doc')):
+            raw_name = raw_name.rstrip('.') + '.docx'
+        download_name = raw_name
 
         # 2. 權限檢查 (使用正確的 target_user_id)
         # 您需要確保 can_access_target_resume 函式能夠判斷 session_user_id (1) 
@@ -2546,13 +2791,19 @@ def download_resume(resume_id):
             print(f"❌ 檔案遺失: {full_file_path}")
             return "伺服器上的檔案已遺失", 500
         
-        # 5. 回傳已上傳的檔案
-        return send_file(
+        # 5. 回傳已上傳的檔案（一律用 UTF-8 filename* 設定實際檔名，確保只打名稱時也能下載）
+        # 使用 ASCII 檔名給 send_file 避免部分環境編碼問題，實際下載檔名由 Content-Disposition 指定
+        safe_for_send = "resume.docx"
+        response = send_file(
             full_file_path,
             as_attachment=True,
-            download_name=download_name,
+            download_name=safe_for_send,
             mimetype='application/vnd.openxmlformats-officedocument.wordprocessingml.document'
         )
+        # 一律設定實際檔名（含中文與 .docx），瀏覽器會以 filename* 為準
+        disp = f'attachment; filename="{safe_for_send}"; filename*=UTF-8\'\'' + quote(download_name, safe="")
+        response.headers["Content-Disposition"] = disp
+        return response
 
     except Exception as e:
         print("❌ 下載已上傳履歷錯誤:", e)
@@ -4765,6 +5016,7 @@ import traceback
 import json
 import re
 from datetime import datetime, date
+from urllib.parse import quote
 from notification import create_notification
 from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
@@ -4773,8 +5025,8 @@ import io
 
 resume_bp = Blueprint("resume_bp", __name__)
 
-# --- 檔案路徑設定 ---
-BASE_UPLOAD_DIR = os.path.dirname(os.path.abspath(__file__))
+# --- 檔案路徑設定：專案根目錄 (good)，使 uploads/resumes 對應 Featured\good\uploads\resumes ---
+BASE_UPLOAD_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 
 # 定義 uploads/standard_courses
 STANDARD_COURSE_UPLOAD_PATH = os.path.join('uploads', 'standard_courses')
@@ -5057,26 +5309,24 @@ def load_student_certifications(cursor, student_id):
 
 def categorize_certifications(cert_list):
     """
-    分類證照 → 放到四種類別
+    分類證照 → 放到四種類別（對應履歷 1.勞動部 2.國際證照 3.國內證照 4.其他證照）
     """
     labor = []
     international = []
     local = []
     other = []
     for c in cert_list:
-        # 兼容多種字段名稱：cert_name/CertName, cert_path/CertPath, acquire_date/AcquisitionDate
         cert_name = c.get("cert_name") or c.get("CertName") or f"{c.get('job_category', '')}{c.get('level', '')}"
         cert_path = c.get("cert_path") or c.get("CertPath", "")
         acquire_date = c.get("acquire_date") or c.get("AcquisitionDate", "")
-        
         item = {
-            "table_name": cert_name,     # 表格區顯示名稱（只顯示證照名稱，不含發證中心）
-            "photo_name": cert_name,     # 圖片下方名稱
-            "photo_path": cert_path,     # 圖片路徑
-            "date": acquire_date,        # 日期
+            "table_name": cert_name,
+            "photo_name": cert_name,
+            "photo_path": cert_path,
+            "date": acquire_date,
         }
-        # 檢查多個可能的字段名稱：CertCategory（從SQL查詢）或 category（從其他來源）
-        category = c.get("CertCategory") or c.get("category", "other")
+        raw = c.get("CertCategory") or c.get("category", "other")
+        category = _normalize_cert_category(raw)
         if category == "labor":
             labor.append(item)
         elif category == "intl":
@@ -5138,7 +5388,7 @@ def fill_certificate_photos(context, doc, items, start_index, max_count=8):
 # -------------------------
 # 儲存結構化資料（重整 + 稳定版）
 # -------------------------
-def save_structured_data(cursor, student_id, data, semester_id=None):
+def save_structured_data(cursor, student_id, data, semester_id=None, resume_id=None):
     try:
         # -------------------------------------------------------------
         # 1) 儲存 Student_Info（基本資料）
@@ -5296,6 +5546,18 @@ def save_structured_data(cursor, student_id, data, semester_id=None):
                 except Exception as e:
                     print(f"⚠️ 查詢 certificate_codes 失敗: {e}")
 
+            # 編輯時若表單未帶 cert_code（或為 OTHER/空），保留既有 student_certifications 的 cert_code，避免日文等證照被誤存為「其他」
+            existing_cert_id = cert.get("id")
+            if (cert_code_id is None or cert_code_id == 0) and existing_cert_id and str(existing_cert_id).strip():
+                try:
+                    eid = int(existing_cert_id)
+                    cursor.execute("SELECT cert_code FROM student_certifications WHERE id = %s AND StuID = %s LIMIT 1", (eid, student_id))
+                    existing_row = cursor.fetchone()
+                    if existing_row and existing_row.get("cert_code") is not None:
+                        cert_code_id = existing_row["cert_code"]
+                        print(f"✅ 保留既有證照 cert_code（id={eid}）: {cert_code_id}")
+                except (ValueError, TypeError, Exception):
+                    pass
             row["cert_code"] = cert_code_id
 
             # 優先使用前端傳來的 authority_id
@@ -5391,21 +5653,25 @@ def save_structured_data(cursor, student_id, data, semester_id=None):
 
         # (4) 處理上傳證照圖片（舊的圖片上傳方式，向後兼容） - 這裡為了程式碼完整性省略，因為前端應主要傳遞 structured_certifications
 
-        # (5) 實際寫入資料庫
+        # (5) 實際寫入資料庫；有 resume_id 時不刪除既有證照，僅新增或更新（ON DUPLICATE KEY UPDATE 避免重複鍵）
         if cert_rows:
             print(f"📋 準備寫入 student_certifications: {len(cert_rows)} 筆")
-            cursor.execute("DELETE FROM student_certifications WHERE StuID=%s", (student_id,))
+            if not resume_id:
+                cursor.execute("DELETE FROM student_certifications WHERE StuID=%s", (student_id,))
             insert_failed = False
             for row in cert_rows:
                 cols = list(row.keys())
                 values = list(row.values())
                 cols.append("CreatedAt")
                 placeholders = ", ".join(["%s"] * (len(values) + 1))
+                sql = f"INSERT INTO student_certifications ({','.join(cols)}) VALUES ({placeholders})"
+                if resume_id:
+                    # 唯一鍵 (StuID, cert_code, level)：重複時只更新可變欄位
+                    update_cols = [c for c in cols if c not in ('StuID', 'cert_code', 'level', 'CreatedAt')]
+                    if update_cols:
+                        sql += " ON DUPLICATE KEY UPDATE " + ", ".join(f"{c}=VALUES({c})" for c in update_cols)
                 try:
-                    cursor.execute(
-                        f"INSERT INTO student_certifications ({','.join(cols)}) VALUES ({placeholders})",
-                        (*values, datetime.now())
-                    )
+                    cursor.execute(sql, (*values, datetime.now()))
                 except Exception as e:
                     print(f"⚠️ 插入證照記錄失敗: {e}")
                     print(f" 記錄內容: {row}")
@@ -5421,12 +5687,40 @@ def save_structured_data(cursor, student_id, data, semester_id=None):
         # 4) 儲存語言能力 student_languageskills
         # -------------------------------------------------------------
         cursor.execute("DELETE FROM student_languageskills WHERE StuID=%s", (student_id,))
+        lang_ids_saved = []
         for row in data.get("structured_languages", []):
             if row.get("language") and row.get("level"):
                 cursor.execute("""
                     INSERT INTO student_languageskills (StuID, Language, Level, CreatedAt)
                     VALUES (%s,%s,%s,NOW())
                 """, (student_id, row["language"], row["level"]))
+                lang_ids_saved.append(cursor.lastrowid)
+
+        # 若有 resume_id，同步更新履歷內容關聯表（使用剛寫入的證照/語文 id，確保該份履歷的 mapping 正確）
+        if resume_id:
+            course_ids = data.get("selected_course_grade_ids")
+            if course_ids is None:
+                course_ids = [c.get("name") for c in data.get("courses", []) if c.get("name")]
+            # 證照：以剛寫入的 cert_rows 對應的 DB id 為準（避免副本仍沿用第一份的舊 id）
+            cert_ids_for_mapping = data.get("selected_certification_ids")
+            if cert_rows:
+                cursor.execute("SELECT id, cert_code, level FROM student_certifications WHERE StuID=%s", (student_id,))
+                db_certs = {(r.get("cert_code"), r.get("level")): r.get("id") for r in cursor.fetchall()}
+                ids_in_order = []
+                for r in cert_rows:
+                    key = (r.get("cert_code"), r.get("level"))
+                    if key in db_certs and db_certs[key]:
+                        ids_in_order.append(db_certs[key])
+                if ids_in_order:
+                    cert_ids_for_mapping = ids_in_order
+            # 語文：使用剛寫入的 id（與表單順序一致）
+            lang_ids_for_mapping = data.get("selected_language_skill_ids")
+            if lang_ids_saved:
+                lang_ids_for_mapping = lang_ids_saved
+            _upsert_resume_content_mapping(cursor, resume_id, student_id, course_grade_ids=course_ids,
+                certification_ids=cert_ids_for_mapping,
+                language_skill_ids=lang_ids_for_mapping,
+                absence_record_ids=data.get("selected_absence_record_ids"))
 
         return True
 
@@ -5518,12 +5812,17 @@ def get_certificates_by_authority():
 
 
 # -------------------------
-# 取回學生資料 (for 生成履歷)
+# 取回學生資料 (for 生成履歷)；resume_id 有值時依 resume_content_mapping 篩選課程/證照/語文
 # -------------------------
-def get_student_info_for_doc(cursor, student_id, semester_id=None):
+def get_student_info_for_doc(cursor, student_id, semester_id=None, resume_id=None):
     data = {}
     cursor.execute("SELECT * FROM Student_Info WHERE StuID=%s", (student_id,))
     data['info'] = cursor.fetchone() or {}
+
+    mapping = None
+    if resume_id:
+        cursor.execute("SELECT course_grade_ids, certification_ids, language_skill_ids FROM resume_content_mapping WHERE resume_id = %s LIMIT 1", (resume_id,))
+        mapping = cursor.fetchone()
 
     # 檢查表是否有 SemesterID、ProofImage 和 transcript_path 列
     try:
@@ -5573,6 +5872,10 @@ def get_student_info_for_doc(cursor, student_id, semester_id=None):
             """, (student_id,))
     
     grades_rows = cursor.fetchall() or []
+    if mapping and mapping.get("course_grade_ids"):
+        ids_set = set(x.strip() for x in (mapping["course_grade_ids"] or "").split(",") if x.strip())
+        if ids_set:
+            grades_rows = [r for r in grades_rows if (r.get("CourseName") or "").strip() in ids_set]
     
     data['grades'] = grades_rows
     data['transcript_path'] = ''
@@ -5598,16 +5901,32 @@ def get_student_info_for_doc(cursor, student_id, semester_id=None):
         WHERE sc.StuID = %s
         ORDER BY sc.AcquisitionDate DESC, sc.id ASC
     """, (student_id,))
-    data['certifications'] = cursor.fetchall() or []
+    certs_rows = cursor.fetchall() or []
+    if mapping and mapping.get("certification_ids"):
+        try:
+            ids_set = set(int(x.strip()) for x in (mapping["certification_ids"] or "").split(",") if x.strip())
+            if ids_set:
+                certs_rows = [c for c in certs_rows if c.get("id") in ids_set]
+        except ValueError:
+            pass
+    data['certifications'] = certs_rows
 
     # 語言能力
     cursor.execute(""" 
-        SELECT Language AS language, Level AS level 
+        SELECT id, Language AS language, Level AS level 
         FROM student_languageskills 
         WHERE StuID=%s 
         ORDER BY Language
     """, (student_id,))
-    data['languages'] = cursor.fetchall() or []
+    lang_rows = cursor.fetchall() or []
+    if mapping and mapping.get("language_skill_ids"):
+        try:
+            ids_set = set(int(x.strip()) for x in (mapping["language_skill_ids"] or "").split(",") if x.strip())
+            if ids_set:
+                lang_rows = [l for l in lang_rows if l.get("id") in ids_set]
+        except ValueError:
+            pass
+    data['languages'] = lang_rows
 
     # 缺勤記錄佐證圖片（僅返回最新的）
     absence_proof_path = ''
@@ -5769,8 +6088,14 @@ def save_resume_data():
     try:
         # 取得目前的學期 ID (如果系統使用學期分流)
         semester_id = get_current_semester_id(cursor)
+        resume_id = None
+        if data.get("resume_id") is not None and str(data.get("resume_id")).strip():
+            try:
+                resume_id = int(data.get("resume_id"))
+            except (TypeError, ValueError):
+                pass
 
-        if save_structured_data(cursor, student_id, data, semester_id):
+        if save_structured_data(cursor, student_id, data, semester_id, resume_id=resume_id):
             conn.commit()
             return jsonify({"success": True, "message": "履歷資料儲存成功"})
         else:
@@ -5799,15 +6124,26 @@ def get_resume_data():
     cursor = conn.cursor(dictionary=True)
 
     try:
-        # ===== 1. 檢查是否有已提交履歷 =====
-        cursor.execute("""
-            SELECT id FROM resumes 
-            WHERE user_id = %s 
-            ORDER BY created_at DESC 
-            LIMIT 1
-        """, (user_id,))
-        resume = cursor.fetchone()
-
+        # ===== 1. 決定要載入哪一筆履歷（可傳 resume_id 編輯指定履歷）=====
+        resume = None
+        resume_id_param = request.args.get("resume_id", "").strip()
+        if resume_id_param:
+            try:
+                rid = int(resume_id_param)
+                cursor.execute("SELECT id FROM resumes WHERE id = %s AND user_id = %s", (rid, user_id))
+                resume = cursor.fetchone()
+                if not resume:
+                    return jsonify({"success": False, "message": "找不到該履歷或無權限"}), 404
+            except (ValueError, TypeError):
+                resume = None
+        if not resume:
+            cursor.execute("""
+                SELECT id FROM resumes 
+                WHERE user_id = %s 
+                ORDER BY created_at DESC 
+                LIMIT 1
+            """, (user_id,))
+            resume = cursor.fetchone()
         if not resume:
             return jsonify({"success": False, "message": "沒有已提交的履歷"}), 404
 
@@ -5818,6 +6154,10 @@ def get_resume_data():
             return jsonify({"success": False, "message": "找不到使用者"}), 404
 
         student_id = user_result["username"]
+
+        # 載入該履歷的內容關聯（若有則只顯示勾選的課程/證照/語文/缺勤）
+        cursor.execute("SELECT course_grade_ids, certification_ids, language_skill_ids, absence_record_ids FROM resume_content_mapping WHERE resume_id = %s LIMIT 1", (resume["id"],))
+        mapping = cursor.fetchone()
 
         # ===== 3. 基本資料 =====
         cursor.execute("SELECT * FROM Student_Info WHERE StuID=%s", (student_id,))
@@ -5843,6 +6183,10 @@ def get_resume_data():
                 ORDER BY CourseName
             """, (student_id,))
         courses = cursor.fetchall() or []
+        if mapping and mapping.get("course_grade_ids"):
+            ids_set = set(x.strip() for x in (mapping["course_grade_ids"] or "").split(",") if x.strip())
+            if ids_set:
+                courses = [c for c in courses if (c.get("name") or "").strip() in ids_set]
         
         # 提取成績單路徑（從 ProofImage 欄位）
         transcript_path = ''
@@ -5966,6 +6310,13 @@ def get_resume_data():
 
         cursor.execute(sql_cert, (student_id,))
         all_certifications = cursor.fetchall() or []
+        if mapping and mapping.get("certification_ids"):
+            try:
+                ids_set = set(int(x.strip()) for x in (mapping["certification_ids"] or "").split(",") if x.strip())
+                if ids_set:
+                    all_certifications = [c for c in all_certifications if c.get("id") in ids_set]
+            except ValueError:
+                pass
         
         # 在處理證照分類時
         labor_certs = [c for c in all_certifications if c.get('category') == 'labor' or c.get('authority_id') == 1]
@@ -6010,45 +6361,102 @@ def get_resume_data():
         # ===== 7. 語言能力 =====
 
         cursor.execute("""
-            SELECT Language AS language, Level AS level
+            SELECT id, Language AS language, Level AS level
             FROM student_languageskills
             WHERE StuID=%s
             ORDER BY Language
         """, (student_id,))
         languages = cursor.fetchall() or []
+        if mapping and mapping.get("language_skill_ids"):
+            try:
+                ids_set = set(int(x.strip()) for x in (mapping["language_skill_ids"] or "").split(",") if x.strip())
+                if ids_set:
+                    languages = [l for l in languages if l.get("id") in ids_set]
+            except ValueError:
+                pass
         
-        # ===== 7.5 缺勤記錄佐證圖片 =====
-        # 從 absence_records 表獲取最新的 image_path
+        # ===== 7.5 缺勤記錄與佐證圖片（依 mapping 篩選，供編輯頁載入）=====
         absence_proof_path = ''
+        absence_data = None
         try:
             cursor.execute("SELECT id FROM users WHERE username=%s", (student_id,))
             user_row = cursor.fetchone()
             if user_row:
                 user_id = user_row.get('id')
-                # 嘗試使用 created_at 排序，如果沒有該欄位則使用 id
+                # 若有 mapping 的 absence_record_ids，只查這些筆；否則查該使用者全部缺勤
+                absence_ids_filter = None
+                if mapping and mapping.get("absence_record_ids"):
+                    try:
+                        absence_ids_filter = [int(x.strip()) for x in (mapping["absence_record_ids"] or "").split(",") if x.strip()]
+                    except (ValueError, TypeError):
+                        pass
                 try:
-                    cursor.execute("""
-                        SELECT image_path, created_at
+                    cursor.execute("SHOW COLUMNS FROM absence_records LIKE 'semester_id'")
+                    has_semester = cursor.fetchone() is not None
+                except Exception:
+                    has_semester = False
+                if absence_ids_filter:
+                    placeholders = ",".join(["%s"] * len(absence_ids_filter))
+                    cursor.execute(f"""
+                        SELECT id, absence_date, absence_type, duration_units, reason, image_path
+                        {" , semester_id" if has_semester else ""}
                         FROM absence_records
-                        WHERE user_id = %s AND image_path IS NOT NULL AND image_path != ''
-                        ORDER BY created_at DESC
-                        LIMIT 1
-                    """, (user_id,))
-                except:
-                    # 如果 created_at 欄位不存在，使用 id 排序
-                    cursor.execute("""
-                        SELECT image_path
+                        WHERE user_id = %s AND id IN ({placeholders})
+                        ORDER BY absence_date DESC, id ASC
+                    """, (user_id, *absence_ids_filter))
+                else:
+                    cursor.execute(f"""
+                        SELECT id, absence_date, absence_type, duration_units, reason, image_path
+                        {" , semester_id" if has_semester else ""}
                         FROM absence_records
-                        WHERE user_id = %s AND image_path IS NOT NULL AND image_path != ''
-                        ORDER BY id DESC
-                        LIMIT 1
+                        WHERE user_id = %s
+                        ORDER BY absence_date DESC, id ASC
                     """, (user_id,))
-                absence_row = cursor.fetchone()
-                if absence_row:
-                    absence_proof_path = absence_row.get('image_path', '')
+                absence_rows = cursor.fetchall() or []
+                # 第一筆有 image_path 的作為佐證圖
+                for row in absence_rows:
+                    ip = (row.get("image_path") or "").strip()
+                    if ip and not absence_proof_path:
+                        absence_proof_path = ip
+                if not absence_proof_path:
+                    cursor.execute("""
+                        SELECT image_path FROM absence_records
+                        WHERE user_id = %s AND image_path IS NOT NULL AND image_path != ''
+                        ORDER BY id DESC LIMIT 1
+                    """, (user_id,))
+                    fallback = cursor.fetchone()
+                    if fallback:
+                        absence_proof_path = fallback.get("image_path", "")
+                # 組 absence_data 供前端編輯頁顯示列表與佐證圖
+                all_types = ["曠課", "遲到", "事假", "病假", "生理假", "公假", "喪假"]
+                stats = {t: 0 for t in all_types}
+                records = []
+                for r in absence_rows:
+                    ad = r.get("absence_date")
+                    if hasattr(ad, "strftime"):
+                        ad = ad.strftime("%Y-%m-%d")
+                    records.append({
+                        "id": r.get("id"),
+                        "absence_date": ad or "",
+                        "absence_type": r.get("absence_type") or "",
+                        "duration_units": r.get("duration_units") or 0,
+                        "reason": r.get("reason") or "",
+                        "image_path": (r.get("image_path") or "").strip(),
+                    })
+                    at = r.get("absence_type")
+                    if at in stats:
+                        stats[at] = stats.get(at, 0) + int(r.get("duration_units") or 0)
+                stat_str = {t: f"{stats.get(t, 0)} 節" for t in all_types}
+                absence_data = {
+                    "records": records,
+                    "stats": stat_str,
+                    "start_semester_id": None,
+                    "end_semester_id": None,
+                }
+                if absence_proof_path:
                     print(f"🔍 找到缺勤佐證圖片: {absence_proof_path}")
         except Exception as e:
-            print(f"⚠️ 查詢缺勤佐證圖片失敗: {e}")
+            print(f"⚠️ 查詢缺勤記錄/佐證圖片失敗: {e}")
             traceback.print_exc()
 
         # ===== 8. 日期格式轉換 =====
@@ -6128,6 +6536,7 @@ def get_resume_data():
         return jsonify({
             "success": True,
             "data": {
+                "resume_id": resume["id"],
                 "student_info": {
                     "name": user_name,
                     "birth_date": birth_date or "",
@@ -6143,7 +6552,8 @@ def get_resume_data():
                 "certifications": formatted_certs,
                 "languages": languages,
                 "transcript_path": norm_path(transcript_path),
-                "absence_proof_path": norm_path(absence_proof_path)
+                "absence_proof_path": norm_path(absence_proof_path),
+                "absence_data": absence_data
             }
         })
 
@@ -6758,8 +7168,29 @@ def submit_and_generate_api():
         context.update(data)
         context.update(structured_data)
 
+        # 不論新增或編輯，都準備 selected_* 供 resume_content_mapping 使用
+        resume_id_for_save = None
+        if request.form.get("resume_id", "").strip():
+            try:
+                resume_id_for_save = int(request.form.get("resume_id", "").strip())
+            except (ValueError, TypeError):
+                pass
+        structured_data["selected_course_grade_ids"] = [c.get("name") for c in courses if c.get("name")]
+        try:
+            structured_data["selected_certification_ids"] = json.loads(request.form.get("selected_certification_ids", "[]") or "[]")
+        except Exception:
+            structured_data["selected_certification_ids"] = [c.get("id") for c in structured_certifications if c.get("id")]
+        try:
+            structured_data["selected_language_skill_ids"] = json.loads(request.form.get("selected_language_skill_ids", "[]") or "[]")
+        except Exception:
+            structured_data["selected_language_skill_ids"] = None
+        try:
+            structured_data["selected_absence_record_ids"] = json.loads(request.form.get("selected_absence_record_ids", "[]") or "[]")
+        except Exception:
+            structured_data["selected_absence_record_ids"] = None
+
         # 儲存結構化資料（包含 language / Certs / course_grades）
-        if not save_structured_data(cursor, student_id, structured_data, semester_id=semester_id):
+        if not save_structured_data(cursor, student_id, structured_data, semester_id=semester_id, resume_id=resume_id_for_save):
             conn.rollback()
             return jsonify({"success": False, "message": "資料儲存失敗"}), 500
 
@@ -6817,7 +7248,7 @@ def submit_and_generate_api():
                 traceback.print_exc()
 
         # 生成 Word 文件
-        student_data_for_doc = get_student_info_for_doc(cursor, student_id, semester_id=semester_id)
+        student_data_for_doc = get_student_info_for_doc(cursor, student_id, semester_id=semester_id, resume_id=resume_id_for_save)
         # PhotoPath & ConductScoreNumeric（未上傳新照片時保留既有路徑）
         if photo_path is not None:
             student_data_for_doc["info"]["PhotoPath"] = photo_path
@@ -6888,6 +7319,16 @@ def submit_and_generate_api():
                 'draft',
                 semester_id
             ))
+            # 新增履歷也要寫入 resume_content_mapping，否則該筆履歷沒有關聯的課程/證照/語文
+            new_resume_id = cursor.lastrowid
+            if new_resume_id:
+                _upsert_resume_content_mapping(
+                    cursor, new_resume_id, student_id,
+                    course_grade_ids=structured_data.get("selected_course_grade_ids"),
+                    certification_ids=structured_data.get("selected_certification_ids"),
+                    language_skill_ids=structured_data.get("selected_language_skill_ids"),
+                    absence_record_ids=structured_data.get("selected_absence_record_ids")
+                )
 
         conn.commit()
         return jsonify({
@@ -7017,10 +7458,15 @@ def generate_application_form_docx(student_data, output_path):
                         if (c.get("cert_path") or "").replace("\\", "/") == path:
                             matching_cert = c
                             break
-                # 類別：勞動部 authority_id=1 必為 labor；否則用表單 category 或 DB 匹配
+                # 類別：優先使用 DB（certificate_codes）的 category，確保如 JLPT 等 intl 正確歸類
                 aid = struct.get("authority_id")
+                db_category = None
+                if matching_cert:
+                    db_category = (matching_cert.get("CertCategory") or matching_cert.get("category") or "").strip().lower()
                 if aid is not None and str(aid).strip() in ("1",):
                     category = "labor"
+                elif db_category and db_category in ("labor", "intl", "local", "other"):
+                    category = db_category
                 else:
                     try:
                         ai = int(aid)
@@ -7032,7 +7478,7 @@ def generate_application_form_docx(student_data, output_path):
                                 category = "other"
                     except (TypeError, ValueError):
                         cat = (struct.get("category") or "").strip().lower()
-                        category = cat if cat in ("labor", "intl", "local", "other") else ("other" if not matching_cert else matching_cert.get("category", "other"))
+                        category = cat if cat in ("labor", "intl", "local", "other") else (db_category if db_category in ("labor", "intl", "local", "other") else "other")
                 certs_from_form.append({
                     "cert_name": name,
                     "category": category,
@@ -7260,7 +7706,11 @@ def download_resume(resume_id):
             
         target_user_id = resume_row['user_id']
         file_relative_path = resume_row['filepath'] # 例如: uploads/resumes/...
-        download_name = resume_row['original_filename'] # 例如: 110534235_履歷_....docx
+        raw_name = (resume_row['original_filename'] or '').strip() or 'resume'
+        # 內建預設 .docx：無副檔名一律補上，避免「只打名稱」無法下載或無法開啟
+        if not (raw_name.lower().endswith('.docx') or raw_name.lower().endswith('.doc')):
+            raw_name = raw_name.rstrip('.') + '.docx'
+        download_name = raw_name
 
         # 2. 權限檢查 (使用正確的 target_user_id)
         # 您需要確保 can_access_target_resume 函式能夠判斷 session_user_id (1) 
@@ -7279,13 +7729,19 @@ def download_resume(resume_id):
             print(f"❌ 檔案遺失: {full_file_path}")
             return "伺服器上的檔案已遺失", 500
         
-        # 5. 回傳已上傳的檔案
-        return send_file(
+        # 5. 回傳已上傳的檔案（一律用 UTF-8 filename* 設定實際檔名，確保只打名稱時也能下載）
+        # 使用 ASCII 檔名給 send_file 避免部分環境編碼問題，實際下載檔名由 Content-Disposition 指定
+        safe_for_send = "resume.docx"
+        response = send_file(
             full_file_path,
             as_attachment=True,
-            download_name=download_name,
+            download_name=safe_for_send,
             mimetype='application/vnd.openxmlformats-officedocument.wordprocessingml.document'
         )
+        # 一律設定實際檔名（含中文與 .docx），瀏覽器會以 filename* 為準
+        disp = f'attachment; filename="{safe_for_send}"; filename*=UTF-8\'\'' + quote(download_name, safe="")
+        response.headers["Content-Disposition"] = disp
+        return response
 
     except Exception as e:
         print("❌ 下載已上傳履歷錯誤:", e)
@@ -9171,6 +9627,7 @@ import traceback
 import json
 import re
 from datetime import datetime, date
+from urllib.parse import quote
 from notification import create_notification
 from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
@@ -9179,8 +9636,8 @@ import io
 
 resume_bp = Blueprint("resume_bp", __name__)
 
-# --- 檔案路徑設定 ---
-BASE_UPLOAD_DIR = os.path.dirname(os.path.abspath(__file__))
+# --- 檔案路徑設定：專案根目錄 (good)，使 uploads/resumes 對應 Featured\good\uploads\resumes ---
+BASE_UPLOAD_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 
 # 定義 uploads/standard_courses
 STANDARD_COURSE_UPLOAD_PATH = os.path.join('uploads', 'standard_courses')
@@ -9463,26 +9920,24 @@ def load_student_certifications(cursor, student_id):
 
 def categorize_certifications(cert_list):
     """
-    分類證照 → 放到四種類別
+    分類證照 → 放到四種類別（對應履歷 1.勞動部 2.國際證照 3.國內證照 4.其他證照）
     """
     labor = []
     international = []
     local = []
     other = []
     for c in cert_list:
-        # 兼容多種字段名稱：cert_name/CertName, cert_path/CertPath, acquire_date/AcquisitionDate
         cert_name = c.get("cert_name") or c.get("CertName") or f"{c.get('job_category', '')}{c.get('level', '')}"
         cert_path = c.get("cert_path") or c.get("CertPath", "")
         acquire_date = c.get("acquire_date") or c.get("AcquisitionDate", "")
-        
         item = {
-            "table_name": cert_name,     # 表格區顯示名稱（只顯示證照名稱，不含發證中心）
-            "photo_name": cert_name,     # 圖片下方名稱
-            "photo_path": cert_path,     # 圖片路徑
-            "date": acquire_date,        # 日期
+            "table_name": cert_name,
+            "photo_name": cert_name,
+            "photo_path": cert_path,
+            "date": acquire_date,
         }
-        # 檢查多個可能的字段名稱：CertCategory（從SQL查詢）或 category（從其他來源）
-        category = c.get("CertCategory") or c.get("category", "other")
+        raw = c.get("CertCategory") or c.get("category", "other")
+        category = _normalize_cert_category(raw)
         if category == "labor":
             labor.append(item)
         elif category == "intl":
@@ -9544,7 +9999,7 @@ def fill_certificate_photos(context, doc, items, start_index, max_count=8):
 # -------------------------
 # 儲存結構化資料（重整 + 稳定版）
 # -------------------------
-def save_structured_data(cursor, student_id, data, semester_id=None):
+def save_structured_data(cursor, student_id, data, semester_id=None, resume_id=None):
     try:
         # -------------------------------------------------------------
         # 1) 儲存 Student_Info（基本資料）
@@ -9702,6 +10157,18 @@ def save_structured_data(cursor, student_id, data, semester_id=None):
                 except Exception as e:
                     print(f"⚠️ 查詢 certificate_codes 失敗: {e}")
 
+            # 編輯時若表單未帶 cert_code（或為 OTHER/空），保留既有 student_certifications 的 cert_code，避免日文等證照被誤存為「其他」
+            existing_cert_id = cert.get("id")
+            if (cert_code_id is None or cert_code_id == 0) and existing_cert_id and str(existing_cert_id).strip():
+                try:
+                    eid = int(existing_cert_id)
+                    cursor.execute("SELECT cert_code FROM student_certifications WHERE id = %s AND StuID = %s LIMIT 1", (eid, student_id))
+                    existing_row = cursor.fetchone()
+                    if existing_row and existing_row.get("cert_code") is not None:
+                        cert_code_id = existing_row["cert_code"]
+                        print(f"✅ 保留既有證照 cert_code（id={eid}）: {cert_code_id}")
+                except (ValueError, TypeError, Exception):
+                    pass
             row["cert_code"] = cert_code_id
 
             # 優先使用前端傳來的 authority_id
@@ -9797,21 +10264,25 @@ def save_structured_data(cursor, student_id, data, semester_id=None):
 
         # (4) 處理上傳證照圖片（舊的圖片上傳方式，向後兼容） - 這裡為了程式碼完整性省略，因為前端應主要傳遞 structured_certifications
 
-        # (5) 實際寫入資料庫
+        # (5) 實際寫入資料庫；有 resume_id 時不刪除既有證照，僅新增或更新（ON DUPLICATE KEY UPDATE 避免重複鍵）
         if cert_rows:
             print(f"📋 準備寫入 student_certifications: {len(cert_rows)} 筆")
-            cursor.execute("DELETE FROM student_certifications WHERE StuID=%s", (student_id,))
+            if not resume_id:
+                cursor.execute("DELETE FROM student_certifications WHERE StuID=%s", (student_id,))
             insert_failed = False
             for row in cert_rows:
                 cols = list(row.keys())
                 values = list(row.values())
                 cols.append("CreatedAt")
                 placeholders = ", ".join(["%s"] * (len(values) + 1))
+                sql = f"INSERT INTO student_certifications ({','.join(cols)}) VALUES ({placeholders})"
+                if resume_id:
+                    # 唯一鍵 (StuID, cert_code, level)：重複時只更新可變欄位
+                    update_cols = [c for c in cols if c not in ('StuID', 'cert_code', 'level', 'CreatedAt')]
+                    if update_cols:
+                        sql += " ON DUPLICATE KEY UPDATE " + ", ".join(f"{c}=VALUES({c})" for c in update_cols)
                 try:
-                    cursor.execute(
-                        f"INSERT INTO student_certifications ({','.join(cols)}) VALUES ({placeholders})",
-                        (*values, datetime.now())
-                    )
+                    cursor.execute(sql, (*values, datetime.now()))
                 except Exception as e:
                     print(f"⚠️ 插入證照記錄失敗: {e}")
                     print(f" 記錄內容: {row}")
@@ -9827,12 +10298,40 @@ def save_structured_data(cursor, student_id, data, semester_id=None):
         # 4) 儲存語言能力 student_languageskills
         # -------------------------------------------------------------
         cursor.execute("DELETE FROM student_languageskills WHERE StuID=%s", (student_id,))
+        lang_ids_saved = []
         for row in data.get("structured_languages", []):
             if row.get("language") and row.get("level"):
                 cursor.execute("""
                     INSERT INTO student_languageskills (StuID, Language, Level, CreatedAt)
                     VALUES (%s,%s,%s,NOW())
                 """, (student_id, row["language"], row["level"]))
+                lang_ids_saved.append(cursor.lastrowid)
+
+        # 若有 resume_id，同步更新履歷內容關聯表（使用剛寫入的證照/語文 id，確保該份履歷的 mapping 正確）
+        if resume_id:
+            course_ids = data.get("selected_course_grade_ids")
+            if course_ids is None:
+                course_ids = [c.get("name") for c in data.get("courses", []) if c.get("name")]
+            # 證照：以剛寫入的 cert_rows 對應的 DB id 為準（避免副本仍沿用第一份的舊 id）
+            cert_ids_for_mapping = data.get("selected_certification_ids")
+            if cert_rows:
+                cursor.execute("SELECT id, cert_code, level FROM student_certifications WHERE StuID=%s", (student_id,))
+                db_certs = {(r.get("cert_code"), r.get("level")): r.get("id") for r in cursor.fetchall()}
+                ids_in_order = []
+                for r in cert_rows:
+                    key = (r.get("cert_code"), r.get("level"))
+                    if key in db_certs and db_certs[key]:
+                        ids_in_order.append(db_certs[key])
+                if ids_in_order:
+                    cert_ids_for_mapping = ids_in_order
+            # 語文：使用剛寫入的 id（與表單順序一致）
+            lang_ids_for_mapping = data.get("selected_language_skill_ids")
+            if lang_ids_saved:
+                lang_ids_for_mapping = lang_ids_saved
+            _upsert_resume_content_mapping(cursor, resume_id, student_id, course_grade_ids=course_ids,
+                certification_ids=cert_ids_for_mapping,
+                language_skill_ids=lang_ids_for_mapping,
+                absence_record_ids=data.get("selected_absence_record_ids"))
 
         return True
 
@@ -9924,12 +10423,17 @@ def get_certificates_by_authority():
 
 
 # -------------------------
-# 取回學生資料 (for 生成履歷)
+# 取回學生資料 (for 生成履歷)；resume_id 有值時依 resume_content_mapping 篩選課程/證照/語文
 # -------------------------
-def get_student_info_for_doc(cursor, student_id, semester_id=None):
+def get_student_info_for_doc(cursor, student_id, semester_id=None, resume_id=None):
     data = {}
     cursor.execute("SELECT * FROM Student_Info WHERE StuID=%s", (student_id,))
     data['info'] = cursor.fetchone() or {}
+
+    mapping = None
+    if resume_id:
+        cursor.execute("SELECT course_grade_ids, certification_ids, language_skill_ids FROM resume_content_mapping WHERE resume_id = %s LIMIT 1", (resume_id,))
+        mapping = cursor.fetchone()
 
     # 檢查表是否有 SemesterID、ProofImage 和 transcript_path 列
     try:
@@ -9979,6 +10483,10 @@ def get_student_info_for_doc(cursor, student_id, semester_id=None):
             """, (student_id,))
     
     grades_rows = cursor.fetchall() or []
+    if mapping and mapping.get("course_grade_ids"):
+        ids_set = set(x.strip() for x in (mapping["course_grade_ids"] or "").split(",") if x.strip())
+        if ids_set:
+            grades_rows = [r for r in grades_rows if (r.get("CourseName") or "").strip() in ids_set]
     
     data['grades'] = grades_rows
     data['transcript_path'] = ''
@@ -10004,16 +10512,32 @@ def get_student_info_for_doc(cursor, student_id, semester_id=None):
         WHERE sc.StuID = %s
         ORDER BY sc.AcquisitionDate DESC, sc.id ASC
     """, (student_id,))
-    data['certifications'] = cursor.fetchall() or []
+    certs_rows = cursor.fetchall() or []
+    if mapping and mapping.get("certification_ids"):
+        try:
+            ids_set = set(int(x.strip()) for x in (mapping["certification_ids"] or "").split(",") if x.strip())
+            if ids_set:
+                certs_rows = [c for c in certs_rows if c.get("id") in ids_set]
+        except ValueError:
+            pass
+    data['certifications'] = certs_rows
 
     # 語言能力
     cursor.execute(""" 
-        SELECT Language AS language, Level AS level 
+        SELECT id, Language AS language, Level AS level 
         FROM student_languageskills 
         WHERE StuID=%s 
         ORDER BY Language
     """, (student_id,))
-    data['languages'] = cursor.fetchall() or []
+    lang_rows = cursor.fetchall() or []
+    if mapping and mapping.get("language_skill_ids"):
+        try:
+            ids_set = set(int(x.strip()) for x in (mapping["language_skill_ids"] or "").split(",") if x.strip())
+            if ids_set:
+                lang_rows = [l for l in lang_rows if l.get("id") in ids_set]
+        except ValueError:
+            pass
+    data['languages'] = lang_rows
 
     # 缺勤記錄佐證圖片（僅返回最新的）
     absence_proof_path = ''
@@ -10175,8 +10699,14 @@ def save_resume_data():
     try:
         # 取得目前的學期 ID (如果系統使用學期分流)
         semester_id = get_current_semester_id(cursor)
+        resume_id = None
+        if data.get("resume_id") is not None and str(data.get("resume_id")).strip():
+            try:
+                resume_id = int(data.get("resume_id"))
+            except (TypeError, ValueError):
+                pass
 
-        if save_structured_data(cursor, student_id, data, semester_id):
+        if save_structured_data(cursor, student_id, data, semester_id, resume_id=resume_id):
             conn.commit()
             return jsonify({"success": True, "message": "履歷資料儲存成功"})
         else:
@@ -10205,15 +10735,26 @@ def get_resume_data():
     cursor = conn.cursor(dictionary=True)
 
     try:
-        # ===== 1. 檢查是否有已提交履歷 =====
-        cursor.execute("""
-            SELECT id FROM resumes 
-            WHERE user_id = %s 
-            ORDER BY created_at DESC 
-            LIMIT 1
-        """, (user_id,))
-        resume = cursor.fetchone()
-
+        # ===== 1. 決定要載入哪一筆履歷（可傳 resume_id 編輯指定履歷）=====
+        resume = None
+        resume_id_param = request.args.get("resume_id", "").strip()
+        if resume_id_param:
+            try:
+                rid = int(resume_id_param)
+                cursor.execute("SELECT id FROM resumes WHERE id = %s AND user_id = %s", (rid, user_id))
+                resume = cursor.fetchone()
+                if not resume:
+                    return jsonify({"success": False, "message": "找不到該履歷或無權限"}), 404
+            except (ValueError, TypeError):
+                resume = None
+        if not resume:
+            cursor.execute("""
+                SELECT id FROM resumes 
+                WHERE user_id = %s 
+                ORDER BY created_at DESC 
+                LIMIT 1
+            """, (user_id,))
+            resume = cursor.fetchone()
         if not resume:
             return jsonify({"success": False, "message": "沒有已提交的履歷"}), 404
 
@@ -10224,6 +10765,10 @@ def get_resume_data():
             return jsonify({"success": False, "message": "找不到使用者"}), 404
 
         student_id = user_result["username"]
+
+        # 載入該履歷的內容關聯（若有則只顯示勾選的課程/證照/語文/缺勤）
+        cursor.execute("SELECT course_grade_ids, certification_ids, language_skill_ids, absence_record_ids FROM resume_content_mapping WHERE resume_id = %s LIMIT 1", (resume["id"],))
+        mapping = cursor.fetchone()
 
         # ===== 3. 基本資料 =====
         cursor.execute("SELECT * FROM Student_Info WHERE StuID=%s", (student_id,))
@@ -10249,6 +10794,10 @@ def get_resume_data():
                 ORDER BY CourseName
             """, (student_id,))
         courses = cursor.fetchall() or []
+        if mapping and mapping.get("course_grade_ids"):
+            ids_set = set(x.strip() for x in (mapping["course_grade_ids"] or "").split(",") if x.strip())
+            if ids_set:
+                courses = [c for c in courses if (c.get("name") or "").strip() in ids_set]
         
         # 提取成績單路徑（從 ProofImage 欄位）
         transcript_path = ''
@@ -10372,6 +10921,13 @@ def get_resume_data():
 
         cursor.execute(sql_cert, (student_id,))
         all_certifications = cursor.fetchall() or []
+        if mapping and mapping.get("certification_ids"):
+            try:
+                ids_set = set(int(x.strip()) for x in (mapping["certification_ids"] or "").split(",") if x.strip())
+                if ids_set:
+                    all_certifications = [c for c in all_certifications if c.get("id") in ids_set]
+            except ValueError:
+                pass
         
         # 在處理證照分類時
         labor_certs = [c for c in all_certifications if c.get('category') == 'labor' or c.get('authority_id') == 1]
@@ -10416,45 +10972,102 @@ def get_resume_data():
         # ===== 7. 語言能力 =====
 
         cursor.execute("""
-            SELECT Language AS language, Level AS level
+            SELECT id, Language AS language, Level AS level
             FROM student_languageskills
             WHERE StuID=%s
             ORDER BY Language
         """, (student_id,))
         languages = cursor.fetchall() or []
+        if mapping and mapping.get("language_skill_ids"):
+            try:
+                ids_set = set(int(x.strip()) for x in (mapping["language_skill_ids"] or "").split(",") if x.strip())
+                if ids_set:
+                    languages = [l for l in languages if l.get("id") in ids_set]
+            except ValueError:
+                pass
         
-        # ===== 7.5 缺勤記錄佐證圖片 =====
-        # 從 absence_records 表獲取最新的 image_path
+        # ===== 7.5 缺勤記錄與佐證圖片（依 mapping 篩選，供編輯頁載入）=====
         absence_proof_path = ''
+        absence_data = None
         try:
             cursor.execute("SELECT id FROM users WHERE username=%s", (student_id,))
             user_row = cursor.fetchone()
             if user_row:
                 user_id = user_row.get('id')
-                # 嘗試使用 created_at 排序，如果沒有該欄位則使用 id
+                # 若有 mapping 的 absence_record_ids，只查這些筆；否則查該使用者全部缺勤
+                absence_ids_filter = None
+                if mapping and mapping.get("absence_record_ids"):
+                    try:
+                        absence_ids_filter = [int(x.strip()) for x in (mapping["absence_record_ids"] or "").split(",") if x.strip()]
+                    except (ValueError, TypeError):
+                        pass
                 try:
-                    cursor.execute("""
-                        SELECT image_path, created_at
+                    cursor.execute("SHOW COLUMNS FROM absence_records LIKE 'semester_id'")
+                    has_semester = cursor.fetchone() is not None
+                except Exception:
+                    has_semester = False
+                if absence_ids_filter:
+                    placeholders = ",".join(["%s"] * len(absence_ids_filter))
+                    cursor.execute(f"""
+                        SELECT id, absence_date, absence_type, duration_units, reason, image_path
+                        {" , semester_id" if has_semester else ""}
                         FROM absence_records
-                        WHERE user_id = %s AND image_path IS NOT NULL AND image_path != ''
-                        ORDER BY created_at DESC
-                        LIMIT 1
-                    """, (user_id,))
-                except:
-                    # 如果 created_at 欄位不存在，使用 id 排序
-                    cursor.execute("""
-                        SELECT image_path
+                        WHERE user_id = %s AND id IN ({placeholders})
+                        ORDER BY absence_date DESC, id ASC
+                    """, (user_id, *absence_ids_filter))
+                else:
+                    cursor.execute(f"""
+                        SELECT id, absence_date, absence_type, duration_units, reason, image_path
+                        {" , semester_id" if has_semester else ""}
                         FROM absence_records
-                        WHERE user_id = %s AND image_path IS NOT NULL AND image_path != ''
-                        ORDER BY id DESC
-                        LIMIT 1
+                        WHERE user_id = %s
+                        ORDER BY absence_date DESC, id ASC
                     """, (user_id,))
-                absence_row = cursor.fetchone()
-                if absence_row:
-                    absence_proof_path = absence_row.get('image_path', '')
+                absence_rows = cursor.fetchall() or []
+                # 第一筆有 image_path 的作為佐證圖
+                for row in absence_rows:
+                    ip = (row.get("image_path") or "").strip()
+                    if ip and not absence_proof_path:
+                        absence_proof_path = ip
+                if not absence_proof_path:
+                    cursor.execute("""
+                        SELECT image_path FROM absence_records
+                        WHERE user_id = %s AND image_path IS NOT NULL AND image_path != ''
+                        ORDER BY id DESC LIMIT 1
+                    """, (user_id,))
+                    fallback = cursor.fetchone()
+                    if fallback:
+                        absence_proof_path = fallback.get("image_path", "")
+                # 組 absence_data 供前端編輯頁顯示列表與佐證圖
+                all_types = ["曠課", "遲到", "事假", "病假", "生理假", "公假", "喪假"]
+                stats = {t: 0 for t in all_types}
+                records = []
+                for r in absence_rows:
+                    ad = r.get("absence_date")
+                    if hasattr(ad, "strftime"):
+                        ad = ad.strftime("%Y-%m-%d")
+                    records.append({
+                        "id": r.get("id"),
+                        "absence_date": ad or "",
+                        "absence_type": r.get("absence_type") or "",
+                        "duration_units": r.get("duration_units") or 0,
+                        "reason": r.get("reason") or "",
+                        "image_path": (r.get("image_path") or "").strip(),
+                    })
+                    at = r.get("absence_type")
+                    if at in stats:
+                        stats[at] = stats.get(at, 0) + int(r.get("duration_units") or 0)
+                stat_str = {t: f"{stats.get(t, 0)} 節" for t in all_types}
+                absence_data = {
+                    "records": records,
+                    "stats": stat_str,
+                    "start_semester_id": None,
+                    "end_semester_id": None,
+                }
+                if absence_proof_path:
                     print(f"🔍 找到缺勤佐證圖片: {absence_proof_path}")
         except Exception as e:
-            print(f"⚠️ 查詢缺勤佐證圖片失敗: {e}")
+            print(f"⚠️ 查詢缺勤記錄/佐證圖片失敗: {e}")
             traceback.print_exc()
 
         # ===== 8. 日期格式轉換 =====
@@ -10534,6 +11147,7 @@ def get_resume_data():
         return jsonify({
             "success": True,
             "data": {
+                "resume_id": resume["id"],
                 "student_info": {
                     "name": user_name,
                     "birth_date": birth_date or "",
@@ -10549,7 +11163,8 @@ def get_resume_data():
                 "certifications": formatted_certs,
                 "languages": languages,
                 "transcript_path": norm_path(transcript_path),
-                "absence_proof_path": norm_path(absence_proof_path)
+                "absence_proof_path": norm_path(absence_proof_path),
+                "absence_data": absence_data
             }
         })
 
@@ -11164,8 +11779,29 @@ def submit_and_generate_api():
         context.update(data)
         context.update(structured_data)
 
+        # 不論新增或編輯，都準備 selected_* 供 resume_content_mapping 使用
+        resume_id_for_save = None
+        if request.form.get("resume_id", "").strip():
+            try:
+                resume_id_for_save = int(request.form.get("resume_id", "").strip())
+            except (ValueError, TypeError):
+                pass
+        structured_data["selected_course_grade_ids"] = [c.get("name") for c in courses if c.get("name")]
+        try:
+            structured_data["selected_certification_ids"] = json.loads(request.form.get("selected_certification_ids", "[]") or "[]")
+        except Exception:
+            structured_data["selected_certification_ids"] = [c.get("id") for c in structured_certifications if c.get("id")]
+        try:
+            structured_data["selected_language_skill_ids"] = json.loads(request.form.get("selected_language_skill_ids", "[]") or "[]")
+        except Exception:
+            structured_data["selected_language_skill_ids"] = None
+        try:
+            structured_data["selected_absence_record_ids"] = json.loads(request.form.get("selected_absence_record_ids", "[]") or "[]")
+        except Exception:
+            structured_data["selected_absence_record_ids"] = None
+
         # 儲存結構化資料（包含 language / Certs / course_grades）
-        if not save_structured_data(cursor, student_id, structured_data, semester_id=semester_id):
+        if not save_structured_data(cursor, student_id, structured_data, semester_id=semester_id, resume_id=resume_id_for_save):
             conn.rollback()
             return jsonify({"success": False, "message": "資料儲存失敗"}), 500
 
@@ -11223,7 +11859,7 @@ def submit_and_generate_api():
                 traceback.print_exc()
 
         # 生成 Word 文件
-        student_data_for_doc = get_student_info_for_doc(cursor, student_id, semester_id=semester_id)
+        student_data_for_doc = get_student_info_for_doc(cursor, student_id, semester_id=semester_id, resume_id=resume_id_for_save)
         # PhotoPath & ConductScoreNumeric（未上傳新照片時保留既有路徑）
         if photo_path is not None:
             student_data_for_doc["info"]["PhotoPath"] = photo_path
@@ -11294,6 +11930,16 @@ def submit_and_generate_api():
                 'draft',
                 semester_id
             ))
+            # 新增履歷也要寫入 resume_content_mapping，否則該筆履歷沒有關聯的課程/證照/語文
+            new_resume_id = cursor.lastrowid
+            if new_resume_id:
+                _upsert_resume_content_mapping(
+                    cursor, new_resume_id, student_id,
+                    course_grade_ids=structured_data.get("selected_course_grade_ids"),
+                    certification_ids=structured_data.get("selected_certification_ids"),
+                    language_skill_ids=structured_data.get("selected_language_skill_ids"),
+                    absence_record_ids=structured_data.get("selected_absence_record_ids")
+                )
 
         conn.commit()
         return jsonify({
@@ -11423,10 +12069,15 @@ def generate_application_form_docx(student_data, output_path):
                         if (c.get("cert_path") or "").replace("\\", "/") == path:
                             matching_cert = c
                             break
-                # 類別：勞動部 authority_id=1 必為 labor；否則用表單 category 或 DB 匹配
+                # 類別：優先使用 DB（certificate_codes）的 category，確保如 JLPT 等 intl 正確歸類
                 aid = struct.get("authority_id")
+                db_category = None
+                if matching_cert:
+                    db_category = (matching_cert.get("CertCategory") or matching_cert.get("category") or "").strip().lower()
                 if aid is not None and str(aid).strip() in ("1",):
                     category = "labor"
+                elif db_category and db_category in ("labor", "intl", "local", "other"):
+                    category = db_category
                 else:
                     try:
                         ai = int(aid)
@@ -11438,7 +12089,7 @@ def generate_application_form_docx(student_data, output_path):
                                 category = "other"
                     except (TypeError, ValueError):
                         cat = (struct.get("category") or "").strip().lower()
-                        category = cat if cat in ("labor", "intl", "local", "other") else ("other" if not matching_cert else matching_cert.get("category", "other"))
+                        category = cat if cat in ("labor", "intl", "local", "other") else (db_category if db_category in ("labor", "intl", "local", "other") else "other")
                 certs_from_form.append({
                     "cert_name": name,
                     "category": category,
@@ -11666,7 +12317,11 @@ def download_resume(resume_id):
             
         target_user_id = resume_row['user_id']
         file_relative_path = resume_row['filepath'] # 例如: uploads/resumes/...
-        download_name = resume_row['original_filename'] # 例如: 110534235_履歷_....docx
+        raw_name = (resume_row['original_filename'] or '').strip() or 'resume'
+        # 內建預設 .docx：無副檔名一律補上，避免「只打名稱」無法下載或無法開啟
+        if not (raw_name.lower().endswith('.docx') or raw_name.lower().endswith('.doc')):
+            raw_name = raw_name.rstrip('.') + '.docx'
+        download_name = raw_name
 
         # 2. 權限檢查 (使用正確的 target_user_id)
         # 您需要確保 can_access_target_resume 函式能夠判斷 session_user_id (1) 
@@ -11685,13 +12340,19 @@ def download_resume(resume_id):
             print(f"❌ 檔案遺失: {full_file_path}")
             return "伺服器上的檔案已遺失", 500
         
-        # 5. 回傳已上傳的檔案
-        return send_file(
+        # 5. 回傳已上傳的檔案（一律用 UTF-8 filename* 設定實際檔名，確保只打名稱時也能下載）
+        # 使用 ASCII 檔名給 send_file 避免部分環境編碼問題，實際下載檔名由 Content-Disposition 指定
+        safe_for_send = "resume.docx"
+        response = send_file(
             full_file_path,
             as_attachment=True,
-            download_name=download_name,
+            download_name=safe_for_send,
             mimetype='application/vnd.openxmlformats-officedocument.wordprocessingml.document'
         )
+        # 一律設定實際檔名（含中文與 .docx），瀏覽器會以 filename* 為準
+        disp = f'attachment; filename="{safe_for_send}"; filename*=UTF-8\'\'' + quote(download_name, safe="")
+        response.headers["Content-Disposition"] = disp
+        return response
 
     except Exception as e:
         print("❌ 下載已上傳履歷錯誤:", e)
@@ -13577,6 +14238,7 @@ import traceback
 import json
 import re
 from datetime import datetime, date
+from urllib.parse import quote
 from notification import create_notification
 from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
@@ -13585,8 +14247,8 @@ import io
 
 resume_bp = Blueprint("resume_bp", __name__)
 
-# --- 檔案路徑設定 ---
-BASE_UPLOAD_DIR = os.path.dirname(os.path.abspath(__file__))
+# --- 檔案路徑設定：專案根目錄 (good)，使 uploads/resumes 對應 Featured\good\uploads\resumes ---
+BASE_UPLOAD_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 
 # 定義 uploads/standard_courses
 STANDARD_COURSE_UPLOAD_PATH = os.path.join('uploads', 'standard_courses')
@@ -13869,26 +14531,24 @@ def load_student_certifications(cursor, student_id):
 
 def categorize_certifications(cert_list):
     """
-    分類證照 → 放到四種類別
+    分類證照 → 放到四種類別（對應履歷 1.勞動部 2.國際證照 3.國內證照 4.其他證照）
     """
     labor = []
     international = []
     local = []
     other = []
     for c in cert_list:
-        # 兼容多種字段名稱：cert_name/CertName, cert_path/CertPath, acquire_date/AcquisitionDate
         cert_name = c.get("cert_name") or c.get("CertName") or f"{c.get('job_category', '')}{c.get('level', '')}"
         cert_path = c.get("cert_path") or c.get("CertPath", "")
         acquire_date = c.get("acquire_date") or c.get("AcquisitionDate", "")
-        
         item = {
-            "table_name": cert_name,     # 表格區顯示名稱（只顯示證照名稱，不含發證中心）
-            "photo_name": cert_name,     # 圖片下方名稱
-            "photo_path": cert_path,     # 圖片路徑
-            "date": acquire_date,        # 日期
+            "table_name": cert_name,
+            "photo_name": cert_name,
+            "photo_path": cert_path,
+            "date": acquire_date,
         }
-        # 檢查多個可能的字段名稱：CertCategory（從SQL查詢）或 category（從其他來源）
-        category = c.get("CertCategory") or c.get("category", "other")
+        raw = c.get("CertCategory") or c.get("category", "other")
+        category = _normalize_cert_category(raw)
         if category == "labor":
             labor.append(item)
         elif category == "intl":
@@ -13950,7 +14610,7 @@ def fill_certificate_photos(context, doc, items, start_index, max_count=8):
 # -------------------------
 # 儲存結構化資料（重整 + 稳定版）
 # -------------------------
-def save_structured_data(cursor, student_id, data, semester_id=None):
+def save_structured_data(cursor, student_id, data, semester_id=None, resume_id=None):
     try:
         # -------------------------------------------------------------
         # 1) 儲存 Student_Info（基本資料）
@@ -14108,6 +14768,18 @@ def save_structured_data(cursor, student_id, data, semester_id=None):
                 except Exception as e:
                     print(f"⚠️ 查詢 certificate_codes 失敗: {e}")
 
+            # 編輯時若表單未帶 cert_code（或為 OTHER/空），保留既有 student_certifications 的 cert_code，避免日文等證照被誤存為「其他」
+            existing_cert_id = cert.get("id")
+            if (cert_code_id is None or cert_code_id == 0) and existing_cert_id and str(existing_cert_id).strip():
+                try:
+                    eid = int(existing_cert_id)
+                    cursor.execute("SELECT cert_code FROM student_certifications WHERE id = %s AND StuID = %s LIMIT 1", (eid, student_id))
+                    existing_row = cursor.fetchone()
+                    if existing_row and existing_row.get("cert_code") is not None:
+                        cert_code_id = existing_row["cert_code"]
+                        print(f"✅ 保留既有證照 cert_code（id={eid}）: {cert_code_id}")
+                except (ValueError, TypeError, Exception):
+                    pass
             row["cert_code"] = cert_code_id
 
             # 優先使用前端傳來的 authority_id
@@ -14203,21 +14875,25 @@ def save_structured_data(cursor, student_id, data, semester_id=None):
 
         # (4) 處理上傳證照圖片（舊的圖片上傳方式，向後兼容） - 這裡為了程式碼完整性省略，因為前端應主要傳遞 structured_certifications
 
-        # (5) 實際寫入資料庫
+        # (5) 實際寫入資料庫；有 resume_id 時不刪除既有證照，僅新增或更新（ON DUPLICATE KEY UPDATE 避免重複鍵）
         if cert_rows:
             print(f"📋 準備寫入 student_certifications: {len(cert_rows)} 筆")
-            cursor.execute("DELETE FROM student_certifications WHERE StuID=%s", (student_id,))
+            if not resume_id:
+                cursor.execute("DELETE FROM student_certifications WHERE StuID=%s", (student_id,))
             insert_failed = False
             for row in cert_rows:
                 cols = list(row.keys())
                 values = list(row.values())
                 cols.append("CreatedAt")
                 placeholders = ", ".join(["%s"] * (len(values) + 1))
+                sql = f"INSERT INTO student_certifications ({','.join(cols)}) VALUES ({placeholders})"
+                if resume_id:
+                    # 唯一鍵 (StuID, cert_code, level)：重複時只更新可變欄位
+                    update_cols = [c for c in cols if c not in ('StuID', 'cert_code', 'level', 'CreatedAt')]
+                    if update_cols:
+                        sql += " ON DUPLICATE KEY UPDATE " + ", ".join(f"{c}=VALUES({c})" for c in update_cols)
                 try:
-                    cursor.execute(
-                        f"INSERT INTO student_certifications ({','.join(cols)}) VALUES ({placeholders})",
-                        (*values, datetime.now())
-                    )
+                    cursor.execute(sql, (*values, datetime.now()))
                 except Exception as e:
                     print(f"⚠️ 插入證照記錄失敗: {e}")
                     print(f" 記錄內容: {row}")
@@ -14233,12 +14909,40 @@ def save_structured_data(cursor, student_id, data, semester_id=None):
         # 4) 儲存語言能力 student_languageskills
         # -------------------------------------------------------------
         cursor.execute("DELETE FROM student_languageskills WHERE StuID=%s", (student_id,))
+        lang_ids_saved = []
         for row in data.get("structured_languages", []):
             if row.get("language") and row.get("level"):
                 cursor.execute("""
                     INSERT INTO student_languageskills (StuID, Language, Level, CreatedAt)
                     VALUES (%s,%s,%s,NOW())
                 """, (student_id, row["language"], row["level"]))
+                lang_ids_saved.append(cursor.lastrowid)
+
+        # 若有 resume_id，同步更新履歷內容關聯表（使用剛寫入的證照/語文 id，確保該份履歷的 mapping 正確）
+        if resume_id:
+            course_ids = data.get("selected_course_grade_ids")
+            if course_ids is None:
+                course_ids = [c.get("name") for c in data.get("courses", []) if c.get("name")]
+            # 證照：以剛寫入的 cert_rows 對應的 DB id 為準（避免副本仍沿用第一份的舊 id）
+            cert_ids_for_mapping = data.get("selected_certification_ids")
+            if cert_rows:
+                cursor.execute("SELECT id, cert_code, level FROM student_certifications WHERE StuID=%s", (student_id,))
+                db_certs = {(r.get("cert_code"), r.get("level")): r.get("id") for r in cursor.fetchall()}
+                ids_in_order = []
+                for r in cert_rows:
+                    key = (r.get("cert_code"), r.get("level"))
+                    if key in db_certs and db_certs[key]:
+                        ids_in_order.append(db_certs[key])
+                if ids_in_order:
+                    cert_ids_for_mapping = ids_in_order
+            # 語文：使用剛寫入的 id（與表單順序一致）
+            lang_ids_for_mapping = data.get("selected_language_skill_ids")
+            if lang_ids_saved:
+                lang_ids_for_mapping = lang_ids_saved
+            _upsert_resume_content_mapping(cursor, resume_id, student_id, course_grade_ids=course_ids,
+                certification_ids=cert_ids_for_mapping,
+                language_skill_ids=lang_ids_for_mapping,
+                absence_record_ids=data.get("selected_absence_record_ids"))
 
         return True
 
@@ -14330,12 +15034,17 @@ def get_certificates_by_authority():
 
 
 # -------------------------
-# 取回學生資料 (for 生成履歷)
+# 取回學生資料 (for 生成履歷)；resume_id 有值時依 resume_content_mapping 篩選課程/證照/語文
 # -------------------------
-def get_student_info_for_doc(cursor, student_id, semester_id=None):
+def get_student_info_for_doc(cursor, student_id, semester_id=None, resume_id=None):
     data = {}
     cursor.execute("SELECT * FROM Student_Info WHERE StuID=%s", (student_id,))
     data['info'] = cursor.fetchone() or {}
+
+    mapping = None
+    if resume_id:
+        cursor.execute("SELECT course_grade_ids, certification_ids, language_skill_ids FROM resume_content_mapping WHERE resume_id = %s LIMIT 1", (resume_id,))
+        mapping = cursor.fetchone()
 
     # 檢查表是否有 SemesterID、ProofImage 和 transcript_path 列
     try:
@@ -14385,6 +15094,10 @@ def get_student_info_for_doc(cursor, student_id, semester_id=None):
             """, (student_id,))
     
     grades_rows = cursor.fetchall() or []
+    if mapping and mapping.get("course_grade_ids"):
+        ids_set = set(x.strip() for x in (mapping["course_grade_ids"] or "").split(",") if x.strip())
+        if ids_set:
+            grades_rows = [r for r in grades_rows if (r.get("CourseName") or "").strip() in ids_set]
     
     data['grades'] = grades_rows
     data['transcript_path'] = ''
@@ -14410,16 +15123,32 @@ def get_student_info_for_doc(cursor, student_id, semester_id=None):
         WHERE sc.StuID = %s
         ORDER BY sc.AcquisitionDate DESC, sc.id ASC
     """, (student_id,))
-    data['certifications'] = cursor.fetchall() or []
+    certs_rows = cursor.fetchall() or []
+    if mapping and mapping.get("certification_ids"):
+        try:
+            ids_set = set(int(x.strip()) for x in (mapping["certification_ids"] or "").split(",") if x.strip())
+            if ids_set:
+                certs_rows = [c for c in certs_rows if c.get("id") in ids_set]
+        except ValueError:
+            pass
+    data['certifications'] = certs_rows
 
     # 語言能力
     cursor.execute(""" 
-        SELECT Language AS language, Level AS level 
+        SELECT id, Language AS language, Level AS level 
         FROM student_languageskills 
         WHERE StuID=%s 
         ORDER BY Language
     """, (student_id,))
-    data['languages'] = cursor.fetchall() or []
+    lang_rows = cursor.fetchall() or []
+    if mapping and mapping.get("language_skill_ids"):
+        try:
+            ids_set = set(int(x.strip()) for x in (mapping["language_skill_ids"] or "").split(",") if x.strip())
+            if ids_set:
+                lang_rows = [l for l in lang_rows if l.get("id") in ids_set]
+        except ValueError:
+            pass
+    data['languages'] = lang_rows
 
     # 缺勤記錄佐證圖片（僅返回最新的）
     absence_proof_path = ''
@@ -14581,8 +15310,14 @@ def save_resume_data():
     try:
         # 取得目前的學期 ID (如果系統使用學期分流)
         semester_id = get_current_semester_id(cursor)
+        resume_id = None
+        if data.get("resume_id") is not None and str(data.get("resume_id")).strip():
+            try:
+                resume_id = int(data.get("resume_id"))
+            except (TypeError, ValueError):
+                pass
 
-        if save_structured_data(cursor, student_id, data, semester_id):
+        if save_structured_data(cursor, student_id, data, semester_id, resume_id=resume_id):
             conn.commit()
             return jsonify({"success": True, "message": "履歷資料儲存成功"})
         else:
@@ -14611,15 +15346,26 @@ def get_resume_data():
     cursor = conn.cursor(dictionary=True)
 
     try:
-        # ===== 1. 檢查是否有已提交履歷 =====
-        cursor.execute("""
-            SELECT id FROM resumes 
-            WHERE user_id = %s 
-            ORDER BY created_at DESC 
-            LIMIT 1
-        """, (user_id,))
-        resume = cursor.fetchone()
-
+        # ===== 1. 決定要載入哪一筆履歷（可傳 resume_id 編輯指定履歷）=====
+        resume = None
+        resume_id_param = request.args.get("resume_id", "").strip()
+        if resume_id_param:
+            try:
+                rid = int(resume_id_param)
+                cursor.execute("SELECT id FROM resumes WHERE id = %s AND user_id = %s", (rid, user_id))
+                resume = cursor.fetchone()
+                if not resume:
+                    return jsonify({"success": False, "message": "找不到該履歷或無權限"}), 404
+            except (ValueError, TypeError):
+                resume = None
+        if not resume:
+            cursor.execute("""
+                SELECT id FROM resumes 
+                WHERE user_id = %s 
+                ORDER BY created_at DESC 
+                LIMIT 1
+            """, (user_id,))
+            resume = cursor.fetchone()
         if not resume:
             return jsonify({"success": False, "message": "沒有已提交的履歷"}), 404
 
@@ -14630,6 +15376,10 @@ def get_resume_data():
             return jsonify({"success": False, "message": "找不到使用者"}), 404
 
         student_id = user_result["username"]
+
+        # 載入該履歷的內容關聯（若有則只顯示勾選的課程/證照/語文/缺勤）
+        cursor.execute("SELECT course_grade_ids, certification_ids, language_skill_ids, absence_record_ids FROM resume_content_mapping WHERE resume_id = %s LIMIT 1", (resume["id"],))
+        mapping = cursor.fetchone()
 
         # ===== 3. 基本資料 =====
         cursor.execute("SELECT * FROM Student_Info WHERE StuID=%s", (student_id,))
@@ -14655,6 +15405,10 @@ def get_resume_data():
                 ORDER BY CourseName
             """, (student_id,))
         courses = cursor.fetchall() or []
+        if mapping and mapping.get("course_grade_ids"):
+            ids_set = set(x.strip() for x in (mapping["course_grade_ids"] or "").split(",") if x.strip())
+            if ids_set:
+                courses = [c for c in courses if (c.get("name") or "").strip() in ids_set]
         
         # 提取成績單路徑（從 ProofImage 欄位）
         transcript_path = ''
@@ -14778,6 +15532,13 @@ def get_resume_data():
 
         cursor.execute(sql_cert, (student_id,))
         all_certifications = cursor.fetchall() or []
+        if mapping and mapping.get("certification_ids"):
+            try:
+                ids_set = set(int(x.strip()) for x in (mapping["certification_ids"] or "").split(",") if x.strip())
+                if ids_set:
+                    all_certifications = [c for c in all_certifications if c.get("id") in ids_set]
+            except ValueError:
+                pass
         
         # 在處理證照分類時
         labor_certs = [c for c in all_certifications if c.get('category') == 'labor' or c.get('authority_id') == 1]
@@ -14822,45 +15583,102 @@ def get_resume_data():
         # ===== 7. 語言能力 =====
 
         cursor.execute("""
-            SELECT Language AS language, Level AS level
+            SELECT id, Language AS language, Level AS level
             FROM student_languageskills
             WHERE StuID=%s
             ORDER BY Language
         """, (student_id,))
         languages = cursor.fetchall() or []
+        if mapping and mapping.get("language_skill_ids"):
+            try:
+                ids_set = set(int(x.strip()) for x in (mapping["language_skill_ids"] or "").split(",") if x.strip())
+                if ids_set:
+                    languages = [l for l in languages if l.get("id") in ids_set]
+            except ValueError:
+                pass
         
-        # ===== 7.5 缺勤記錄佐證圖片 =====
-        # 從 absence_records 表獲取最新的 image_path
+        # ===== 7.5 缺勤記錄與佐證圖片（依 mapping 篩選，供編輯頁載入）=====
         absence_proof_path = ''
+        absence_data = None
         try:
             cursor.execute("SELECT id FROM users WHERE username=%s", (student_id,))
             user_row = cursor.fetchone()
             if user_row:
                 user_id = user_row.get('id')
-                # 嘗試使用 created_at 排序，如果沒有該欄位則使用 id
+                # 若有 mapping 的 absence_record_ids，只查這些筆；否則查該使用者全部缺勤
+                absence_ids_filter = None
+                if mapping and mapping.get("absence_record_ids"):
+                    try:
+                        absence_ids_filter = [int(x.strip()) for x in (mapping["absence_record_ids"] or "").split(",") if x.strip()]
+                    except (ValueError, TypeError):
+                        pass
                 try:
-                    cursor.execute("""
-                        SELECT image_path, created_at
+                    cursor.execute("SHOW COLUMNS FROM absence_records LIKE 'semester_id'")
+                    has_semester = cursor.fetchone() is not None
+                except Exception:
+                    has_semester = False
+                if absence_ids_filter:
+                    placeholders = ",".join(["%s"] * len(absence_ids_filter))
+                    cursor.execute(f"""
+                        SELECT id, absence_date, absence_type, duration_units, reason, image_path
+                        {" , semester_id" if has_semester else ""}
                         FROM absence_records
-                        WHERE user_id = %s AND image_path IS NOT NULL AND image_path != ''
-                        ORDER BY created_at DESC
-                        LIMIT 1
-                    """, (user_id,))
-                except:
-                    # 如果 created_at 欄位不存在，使用 id 排序
-                    cursor.execute("""
-                        SELECT image_path
+                        WHERE user_id = %s AND id IN ({placeholders})
+                        ORDER BY absence_date DESC, id ASC
+                    """, (user_id, *absence_ids_filter))
+                else:
+                    cursor.execute(f"""
+                        SELECT id, absence_date, absence_type, duration_units, reason, image_path
+                        {" , semester_id" if has_semester else ""}
                         FROM absence_records
-                        WHERE user_id = %s AND image_path IS NOT NULL AND image_path != ''
-                        ORDER BY id DESC
-                        LIMIT 1
+                        WHERE user_id = %s
+                        ORDER BY absence_date DESC, id ASC
                     """, (user_id,))
-                absence_row = cursor.fetchone()
-                if absence_row:
-                    absence_proof_path = absence_row.get('image_path', '')
+                absence_rows = cursor.fetchall() or []
+                # 第一筆有 image_path 的作為佐證圖
+                for row in absence_rows:
+                    ip = (row.get("image_path") or "").strip()
+                    if ip and not absence_proof_path:
+                        absence_proof_path = ip
+                if not absence_proof_path:
+                    cursor.execute("""
+                        SELECT image_path FROM absence_records
+                        WHERE user_id = %s AND image_path IS NOT NULL AND image_path != ''
+                        ORDER BY id DESC LIMIT 1
+                    """, (user_id,))
+                    fallback = cursor.fetchone()
+                    if fallback:
+                        absence_proof_path = fallback.get("image_path", "")
+                # 組 absence_data 供前端編輯頁顯示列表與佐證圖
+                all_types = ["曠課", "遲到", "事假", "病假", "生理假", "公假", "喪假"]
+                stats = {t: 0 for t in all_types}
+                records = []
+                for r in absence_rows:
+                    ad = r.get("absence_date")
+                    if hasattr(ad, "strftime"):
+                        ad = ad.strftime("%Y-%m-%d")
+                    records.append({
+                        "id": r.get("id"),
+                        "absence_date": ad or "",
+                        "absence_type": r.get("absence_type") or "",
+                        "duration_units": r.get("duration_units") or 0,
+                        "reason": r.get("reason") or "",
+                        "image_path": (r.get("image_path") or "").strip(),
+                    })
+                    at = r.get("absence_type")
+                    if at in stats:
+                        stats[at] = stats.get(at, 0) + int(r.get("duration_units") or 0)
+                stat_str = {t: f"{stats.get(t, 0)} 節" for t in all_types}
+                absence_data = {
+                    "records": records,
+                    "stats": stat_str,
+                    "start_semester_id": None,
+                    "end_semester_id": None,
+                }
+                if absence_proof_path:
                     print(f"🔍 找到缺勤佐證圖片: {absence_proof_path}")
         except Exception as e:
-            print(f"⚠️ 查詢缺勤佐證圖片失敗: {e}")
+            print(f"⚠️ 查詢缺勤記錄/佐證圖片失敗: {e}")
             traceback.print_exc()
 
         # ===== 8. 日期格式轉換 =====
@@ -14940,6 +15758,7 @@ def get_resume_data():
         return jsonify({
             "success": True,
             "data": {
+                "resume_id": resume["id"],
                 "student_info": {
                     "name": user_name,
                     "birth_date": birth_date or "",
@@ -14955,7 +15774,8 @@ def get_resume_data():
                 "certifications": formatted_certs,
                 "languages": languages,
                 "transcript_path": norm_path(transcript_path),
-                "absence_proof_path": norm_path(absence_proof_path)
+                "absence_proof_path": norm_path(absence_proof_path),
+                "absence_data": absence_data
             }
         })
 
@@ -15570,8 +16390,29 @@ def submit_and_generate_api():
         context.update(data)
         context.update(structured_data)
 
+        # 不論新增或編輯，都準備 selected_* 供 resume_content_mapping 使用
+        resume_id_for_save = None
+        if request.form.get("resume_id", "").strip():
+            try:
+                resume_id_for_save = int(request.form.get("resume_id", "").strip())
+            except (ValueError, TypeError):
+                pass
+        structured_data["selected_course_grade_ids"] = [c.get("name") for c in courses if c.get("name")]
+        try:
+            structured_data["selected_certification_ids"] = json.loads(request.form.get("selected_certification_ids", "[]") or "[]")
+        except Exception:
+            structured_data["selected_certification_ids"] = [c.get("id") for c in structured_certifications if c.get("id")]
+        try:
+            structured_data["selected_language_skill_ids"] = json.loads(request.form.get("selected_language_skill_ids", "[]") or "[]")
+        except Exception:
+            structured_data["selected_language_skill_ids"] = None
+        try:
+            structured_data["selected_absence_record_ids"] = json.loads(request.form.get("selected_absence_record_ids", "[]") or "[]")
+        except Exception:
+            structured_data["selected_absence_record_ids"] = None
+
         # 儲存結構化資料（包含 language / Certs / course_grades）
-        if not save_structured_data(cursor, student_id, structured_data, semester_id=semester_id):
+        if not save_structured_data(cursor, student_id, structured_data, semester_id=semester_id, resume_id=resume_id_for_save):
             conn.rollback()
             return jsonify({"success": False, "message": "資料儲存失敗"}), 500
 
@@ -15629,7 +16470,7 @@ def submit_and_generate_api():
                 traceback.print_exc()
 
         # 生成 Word 文件
-        student_data_for_doc = get_student_info_for_doc(cursor, student_id, semester_id=semester_id)
+        student_data_for_doc = get_student_info_for_doc(cursor, student_id, semester_id=semester_id, resume_id=resume_id_for_save)
         # PhotoPath & ConductScoreNumeric（未上傳新照片時保留既有路徑）
         if photo_path is not None:
             student_data_for_doc["info"]["PhotoPath"] = photo_path
@@ -15700,6 +16541,16 @@ def submit_and_generate_api():
                 'draft',
                 semester_id
             ))
+            # 新增履歷也要寫入 resume_content_mapping，否則該筆履歷沒有關聯的課程/證照/語文
+            new_resume_id = cursor.lastrowid
+            if new_resume_id:
+                _upsert_resume_content_mapping(
+                    cursor, new_resume_id, student_id,
+                    course_grade_ids=structured_data.get("selected_course_grade_ids"),
+                    certification_ids=structured_data.get("selected_certification_ids"),
+                    language_skill_ids=structured_data.get("selected_language_skill_ids"),
+                    absence_record_ids=structured_data.get("selected_absence_record_ids")
+                )
 
         conn.commit()
         return jsonify({
@@ -15829,10 +16680,15 @@ def generate_application_form_docx(student_data, output_path):
                         if (c.get("cert_path") or "").replace("\\", "/") == path:
                             matching_cert = c
                             break
-                # 類別：勞動部 authority_id=1 必為 labor；否則用表單 category 或 DB 匹配
+                # 類別：優先使用 DB（certificate_codes）的 category，確保如 JLPT 等 intl 正確歸類
                 aid = struct.get("authority_id")
+                db_category = None
+                if matching_cert:
+                    db_category = (matching_cert.get("CertCategory") or matching_cert.get("category") or "").strip().lower()
                 if aid is not None and str(aid).strip() in ("1",):
                     category = "labor"
+                elif db_category and db_category in ("labor", "intl", "local", "other"):
+                    category = db_category
                 else:
                     try:
                         ai = int(aid)
@@ -15844,7 +16700,7 @@ def generate_application_form_docx(student_data, output_path):
                                 category = "other"
                     except (TypeError, ValueError):
                         cat = (struct.get("category") or "").strip().lower()
-                        category = cat if cat in ("labor", "intl", "local", "other") else ("other" if not matching_cert else matching_cert.get("category", "other"))
+                        category = cat if cat in ("labor", "intl", "local", "other") else (db_category if db_category in ("labor", "intl", "local", "other") else "other")
                 certs_from_form.append({
                     "cert_name": name,
                     "category": category,
@@ -16072,7 +16928,11 @@ def download_resume(resume_id):
             
         target_user_id = resume_row['user_id']
         file_relative_path = resume_row['filepath'] # 例如: uploads/resumes/...
-        download_name = resume_row['original_filename'] # 例如: 110534235_履歷_....docx
+        raw_name = (resume_row['original_filename'] or '').strip() or 'resume'
+        # 內建預設 .docx：無副檔名一律補上，避免「只打名稱」無法下載或無法開啟
+        if not (raw_name.lower().endswith('.docx') or raw_name.lower().endswith('.doc')):
+            raw_name = raw_name.rstrip('.') + '.docx'
+        download_name = raw_name
 
         # 2. 權限檢查 (使用正確的 target_user_id)
         # 您需要確保 can_access_target_resume 函式能夠判斷 session_user_id (1) 
@@ -16091,13 +16951,19 @@ def download_resume(resume_id):
             print(f"❌ 檔案遺失: {full_file_path}")
             return "伺服器上的檔案已遺失", 500
         
-        # 5. 回傳已上傳的檔案
-        return send_file(
+        # 5. 回傳已上傳的檔案（一律用 UTF-8 filename* 設定實際檔名，確保只打名稱時也能下載）
+        # 使用 ASCII 檔名給 send_file 避免部分環境編碼問題，實際下載檔名由 Content-Disposition 指定
+        safe_for_send = "resume.docx"
+        response = send_file(
             full_file_path,
             as_attachment=True,
-            download_name=download_name,
+            download_name=safe_for_send,
             mimetype='application/vnd.openxmlformats-officedocument.wordprocessingml.document'
         )
+        # 一律設定實際檔名（含中文與 .docx），瀏覽器會以 filename* 為準
+        disp = f'attachment; filename="{safe_for_send}"; filename*=UTF-8\'\'' + quote(download_name, safe="")
+        response.headers["Content-Disposition"] = disp
+        return response
 
     except Exception as e:
         print("❌ 下載已上傳履歷錯誤:", e)
@@ -17983,6 +18849,7 @@ import traceback
 import json
 import re
 from datetime import datetime, date
+from urllib.parse import quote
 from notification import create_notification
 from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
@@ -17991,8 +18858,8 @@ import io
 
 resume_bp = Blueprint("resume_bp", __name__)
 
-# --- 檔案路徑設定 ---
-BASE_UPLOAD_DIR = os.path.dirname(os.path.abspath(__file__))
+# --- 檔案路徑設定：專案根目錄 (good)，使 uploads/resumes 對應 Featured\good\uploads\resumes ---
+BASE_UPLOAD_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 
 # 定義 uploads/standard_courses
 STANDARD_COURSE_UPLOAD_PATH = os.path.join('uploads', 'standard_courses')
@@ -18275,26 +19142,24 @@ def load_student_certifications(cursor, student_id):
 
 def categorize_certifications(cert_list):
     """
-    分類證照 → 放到四種類別
+    分類證照 → 放到四種類別（對應履歷 1.勞動部 2.國際證照 3.國內證照 4.其他證照）
     """
     labor = []
     international = []
     local = []
     other = []
     for c in cert_list:
-        # 兼容多種字段名稱：cert_name/CertName, cert_path/CertPath, acquire_date/AcquisitionDate
         cert_name = c.get("cert_name") or c.get("CertName") or f"{c.get('job_category', '')}{c.get('level', '')}"
         cert_path = c.get("cert_path") or c.get("CertPath", "")
         acquire_date = c.get("acquire_date") or c.get("AcquisitionDate", "")
-        
         item = {
-            "table_name": cert_name,     # 表格區顯示名稱（只顯示證照名稱，不含發證中心）
-            "photo_name": cert_name,     # 圖片下方名稱
-            "photo_path": cert_path,     # 圖片路徑
-            "date": acquire_date,        # 日期
+            "table_name": cert_name,
+            "photo_name": cert_name,
+            "photo_path": cert_path,
+            "date": acquire_date,
         }
-        # 檢查多個可能的字段名稱：CertCategory（從SQL查詢）或 category（從其他來源）
-        category = c.get("CertCategory") or c.get("category", "other")
+        raw = c.get("CertCategory") or c.get("category", "other")
+        category = _normalize_cert_category(raw)
         if category == "labor":
             labor.append(item)
         elif category == "intl":
@@ -18356,7 +19221,7 @@ def fill_certificate_photos(context, doc, items, start_index, max_count=8):
 # -------------------------
 # 儲存結構化資料（重整 + 稳定版）
 # -------------------------
-def save_structured_data(cursor, student_id, data, semester_id=None):
+def save_structured_data(cursor, student_id, data, semester_id=None, resume_id=None):
     try:
         # -------------------------------------------------------------
         # 1) 儲存 Student_Info（基本資料）
@@ -18514,6 +19379,18 @@ def save_structured_data(cursor, student_id, data, semester_id=None):
                 except Exception as e:
                     print(f"⚠️ 查詢 certificate_codes 失敗: {e}")
 
+            # 編輯時若表單未帶 cert_code（或為 OTHER/空），保留既有 student_certifications 的 cert_code，避免日文等證照被誤存為「其他」
+            existing_cert_id = cert.get("id")
+            if (cert_code_id is None or cert_code_id == 0) and existing_cert_id and str(existing_cert_id).strip():
+                try:
+                    eid = int(existing_cert_id)
+                    cursor.execute("SELECT cert_code FROM student_certifications WHERE id = %s AND StuID = %s LIMIT 1", (eid, student_id))
+                    existing_row = cursor.fetchone()
+                    if existing_row and existing_row.get("cert_code") is not None:
+                        cert_code_id = existing_row["cert_code"]
+                        print(f"✅ 保留既有證照 cert_code（id={eid}）: {cert_code_id}")
+                except (ValueError, TypeError, Exception):
+                    pass
             row["cert_code"] = cert_code_id
 
             # 優先使用前端傳來的 authority_id
@@ -18609,21 +19486,25 @@ def save_structured_data(cursor, student_id, data, semester_id=None):
 
         # (4) 處理上傳證照圖片（舊的圖片上傳方式，向後兼容） - 這裡為了程式碼完整性省略，因為前端應主要傳遞 structured_certifications
 
-        # (5) 實際寫入資料庫
+        # (5) 實際寫入資料庫；有 resume_id 時不刪除既有證照，僅新增或更新（ON DUPLICATE KEY UPDATE 避免重複鍵）
         if cert_rows:
             print(f"📋 準備寫入 student_certifications: {len(cert_rows)} 筆")
-            cursor.execute("DELETE FROM student_certifications WHERE StuID=%s", (student_id,))
+            if not resume_id:
+                cursor.execute("DELETE FROM student_certifications WHERE StuID=%s", (student_id,))
             insert_failed = False
             for row in cert_rows:
                 cols = list(row.keys())
                 values = list(row.values())
                 cols.append("CreatedAt")
                 placeholders = ", ".join(["%s"] * (len(values) + 1))
+                sql = f"INSERT INTO student_certifications ({','.join(cols)}) VALUES ({placeholders})"
+                if resume_id:
+                    # 唯一鍵 (StuID, cert_code, level)：重複時只更新可變欄位
+                    update_cols = [c for c in cols if c not in ('StuID', 'cert_code', 'level', 'CreatedAt')]
+                    if update_cols:
+                        sql += " ON DUPLICATE KEY UPDATE " + ", ".join(f"{c}=VALUES({c})" for c in update_cols)
                 try:
-                    cursor.execute(
-                        f"INSERT INTO student_certifications ({','.join(cols)}) VALUES ({placeholders})",
-                        (*values, datetime.now())
-                    )
+                    cursor.execute(sql, (*values, datetime.now()))
                 except Exception as e:
                     print(f"⚠️ 插入證照記錄失敗: {e}")
                     print(f" 記錄內容: {row}")
@@ -18639,12 +19520,40 @@ def save_structured_data(cursor, student_id, data, semester_id=None):
         # 4) 儲存語言能力 student_languageskills
         # -------------------------------------------------------------
         cursor.execute("DELETE FROM student_languageskills WHERE StuID=%s", (student_id,))
+        lang_ids_saved = []
         for row in data.get("structured_languages", []):
             if row.get("language") and row.get("level"):
                 cursor.execute("""
                     INSERT INTO student_languageskills (StuID, Language, Level, CreatedAt)
                     VALUES (%s,%s,%s,NOW())
                 """, (student_id, row["language"], row["level"]))
+                lang_ids_saved.append(cursor.lastrowid)
+
+        # 若有 resume_id，同步更新履歷內容關聯表（使用剛寫入的證照/語文 id，確保該份履歷的 mapping 正確）
+        if resume_id:
+            course_ids = data.get("selected_course_grade_ids")
+            if course_ids is None:
+                course_ids = [c.get("name") for c in data.get("courses", []) if c.get("name")]
+            # 證照：以剛寫入的 cert_rows 對應的 DB id 為準（避免副本仍沿用第一份的舊 id）
+            cert_ids_for_mapping = data.get("selected_certification_ids")
+            if cert_rows:
+                cursor.execute("SELECT id, cert_code, level FROM student_certifications WHERE StuID=%s", (student_id,))
+                db_certs = {(r.get("cert_code"), r.get("level")): r.get("id") for r in cursor.fetchall()}
+                ids_in_order = []
+                for r in cert_rows:
+                    key = (r.get("cert_code"), r.get("level"))
+                    if key in db_certs and db_certs[key]:
+                        ids_in_order.append(db_certs[key])
+                if ids_in_order:
+                    cert_ids_for_mapping = ids_in_order
+            # 語文：使用剛寫入的 id（與表單順序一致）
+            lang_ids_for_mapping = data.get("selected_language_skill_ids")
+            if lang_ids_saved:
+                lang_ids_for_mapping = lang_ids_saved
+            _upsert_resume_content_mapping(cursor, resume_id, student_id, course_grade_ids=course_ids,
+                certification_ids=cert_ids_for_mapping,
+                language_skill_ids=lang_ids_for_mapping,
+                absence_record_ids=data.get("selected_absence_record_ids"))
 
         return True
 
@@ -18736,12 +19645,17 @@ def get_certificates_by_authority():
 
 
 # -------------------------
-# 取回學生資料 (for 生成履歷)
+# 取回學生資料 (for 生成履歷)；resume_id 有值時依 resume_content_mapping 篩選課程/證照/語文
 # -------------------------
-def get_student_info_for_doc(cursor, student_id, semester_id=None):
+def get_student_info_for_doc(cursor, student_id, semester_id=None, resume_id=None):
     data = {}
     cursor.execute("SELECT * FROM Student_Info WHERE StuID=%s", (student_id,))
     data['info'] = cursor.fetchone() or {}
+
+    mapping = None
+    if resume_id:
+        cursor.execute("SELECT course_grade_ids, certification_ids, language_skill_ids FROM resume_content_mapping WHERE resume_id = %s LIMIT 1", (resume_id,))
+        mapping = cursor.fetchone()
 
     # 檢查表是否有 SemesterID、ProofImage 和 transcript_path 列
     try:
@@ -18791,6 +19705,10 @@ def get_student_info_for_doc(cursor, student_id, semester_id=None):
             """, (student_id,))
     
     grades_rows = cursor.fetchall() or []
+    if mapping and mapping.get("course_grade_ids"):
+        ids_set = set(x.strip() for x in (mapping["course_grade_ids"] or "").split(",") if x.strip())
+        if ids_set:
+            grades_rows = [r for r in grades_rows if (r.get("CourseName") or "").strip() in ids_set]
     
     data['grades'] = grades_rows
     data['transcript_path'] = ''
@@ -18816,16 +19734,32 @@ def get_student_info_for_doc(cursor, student_id, semester_id=None):
         WHERE sc.StuID = %s
         ORDER BY sc.AcquisitionDate DESC, sc.id ASC
     """, (student_id,))
-    data['certifications'] = cursor.fetchall() or []
+    certs_rows = cursor.fetchall() or []
+    if mapping and mapping.get("certification_ids"):
+        try:
+            ids_set = set(int(x.strip()) for x in (mapping["certification_ids"] or "").split(",") if x.strip())
+            if ids_set:
+                certs_rows = [c for c in certs_rows if c.get("id") in ids_set]
+        except ValueError:
+            pass
+    data['certifications'] = certs_rows
 
     # 語言能力
     cursor.execute(""" 
-        SELECT Language AS language, Level AS level 
+        SELECT id, Language AS language, Level AS level 
         FROM student_languageskills 
         WHERE StuID=%s 
         ORDER BY Language
     """, (student_id,))
-    data['languages'] = cursor.fetchall() or []
+    lang_rows = cursor.fetchall() or []
+    if mapping and mapping.get("language_skill_ids"):
+        try:
+            ids_set = set(int(x.strip()) for x in (mapping["language_skill_ids"] or "").split(",") if x.strip())
+            if ids_set:
+                lang_rows = [l for l in lang_rows if l.get("id") in ids_set]
+        except ValueError:
+            pass
+    data['languages'] = lang_rows
 
     # 缺勤記錄佐證圖片（僅返回最新的）
     absence_proof_path = ''
@@ -18987,8 +19921,14 @@ def save_resume_data():
     try:
         # 取得目前的學期 ID (如果系統使用學期分流)
         semester_id = get_current_semester_id(cursor)
+        resume_id = None
+        if data.get("resume_id") is not None and str(data.get("resume_id")).strip():
+            try:
+                resume_id = int(data.get("resume_id"))
+            except (TypeError, ValueError):
+                pass
 
-        if save_structured_data(cursor, student_id, data, semester_id):
+        if save_structured_data(cursor, student_id, data, semester_id, resume_id=resume_id):
             conn.commit()
             return jsonify({"success": True, "message": "履歷資料儲存成功"})
         else:
@@ -19017,15 +19957,26 @@ def get_resume_data():
     cursor = conn.cursor(dictionary=True)
 
     try:
-        # ===== 1. 檢查是否有已提交履歷 =====
-        cursor.execute("""
-            SELECT id FROM resumes 
-            WHERE user_id = %s 
-            ORDER BY created_at DESC 
-            LIMIT 1
-        """, (user_id,))
-        resume = cursor.fetchone()
-
+        # ===== 1. 決定要載入哪一筆履歷（可傳 resume_id 編輯指定履歷）=====
+        resume = None
+        resume_id_param = request.args.get("resume_id", "").strip()
+        if resume_id_param:
+            try:
+                rid = int(resume_id_param)
+                cursor.execute("SELECT id FROM resumes WHERE id = %s AND user_id = %s", (rid, user_id))
+                resume = cursor.fetchone()
+                if not resume:
+                    return jsonify({"success": False, "message": "找不到該履歷或無權限"}), 404
+            except (ValueError, TypeError):
+                resume = None
+        if not resume:
+            cursor.execute("""
+                SELECT id FROM resumes 
+                WHERE user_id = %s 
+                ORDER BY created_at DESC 
+                LIMIT 1
+            """, (user_id,))
+            resume = cursor.fetchone()
         if not resume:
             return jsonify({"success": False, "message": "沒有已提交的履歷"}), 404
 
@@ -19036,6 +19987,10 @@ def get_resume_data():
             return jsonify({"success": False, "message": "找不到使用者"}), 404
 
         student_id = user_result["username"]
+
+        # 載入該履歷的內容關聯（若有則只顯示勾選的課程/證照/語文/缺勤）
+        cursor.execute("SELECT course_grade_ids, certification_ids, language_skill_ids, absence_record_ids FROM resume_content_mapping WHERE resume_id = %s LIMIT 1", (resume["id"],))
+        mapping = cursor.fetchone()
 
         # ===== 3. 基本資料 =====
         cursor.execute("SELECT * FROM Student_Info WHERE StuID=%s", (student_id,))
@@ -19061,6 +20016,10 @@ def get_resume_data():
                 ORDER BY CourseName
             """, (student_id,))
         courses = cursor.fetchall() or []
+        if mapping and mapping.get("course_grade_ids"):
+            ids_set = set(x.strip() for x in (mapping["course_grade_ids"] or "").split(",") if x.strip())
+            if ids_set:
+                courses = [c for c in courses if (c.get("name") or "").strip() in ids_set]
         
         # 提取成績單路徑（從 ProofImage 欄位）
         transcript_path = ''
@@ -19184,6 +20143,13 @@ def get_resume_data():
 
         cursor.execute(sql_cert, (student_id,))
         all_certifications = cursor.fetchall() or []
+        if mapping and mapping.get("certification_ids"):
+            try:
+                ids_set = set(int(x.strip()) for x in (mapping["certification_ids"] or "").split(",") if x.strip())
+                if ids_set:
+                    all_certifications = [c for c in all_certifications if c.get("id") in ids_set]
+            except ValueError:
+                pass
         
         # 在處理證照分類時
         labor_certs = [c for c in all_certifications if c.get('category') == 'labor' or c.get('authority_id') == 1]
@@ -19228,45 +20194,102 @@ def get_resume_data():
         # ===== 7. 語言能力 =====
 
         cursor.execute("""
-            SELECT Language AS language, Level AS level
+            SELECT id, Language AS language, Level AS level
             FROM student_languageskills
             WHERE StuID=%s
             ORDER BY Language
         """, (student_id,))
         languages = cursor.fetchall() or []
+        if mapping and mapping.get("language_skill_ids"):
+            try:
+                ids_set = set(int(x.strip()) for x in (mapping["language_skill_ids"] or "").split(",") if x.strip())
+                if ids_set:
+                    languages = [l for l in languages if l.get("id") in ids_set]
+            except ValueError:
+                pass
         
-        # ===== 7.5 缺勤記錄佐證圖片 =====
-        # 從 absence_records 表獲取最新的 image_path
+        # ===== 7.5 缺勤記錄與佐證圖片（依 mapping 篩選，供編輯頁載入）=====
         absence_proof_path = ''
+        absence_data = None
         try:
             cursor.execute("SELECT id FROM users WHERE username=%s", (student_id,))
             user_row = cursor.fetchone()
             if user_row:
                 user_id = user_row.get('id')
-                # 嘗試使用 created_at 排序，如果沒有該欄位則使用 id
+                # 若有 mapping 的 absence_record_ids，只查這些筆；否則查該使用者全部缺勤
+                absence_ids_filter = None
+                if mapping and mapping.get("absence_record_ids"):
+                    try:
+                        absence_ids_filter = [int(x.strip()) for x in (mapping["absence_record_ids"] or "").split(",") if x.strip()]
+                    except (ValueError, TypeError):
+                        pass
                 try:
-                    cursor.execute("""
-                        SELECT image_path, created_at
+                    cursor.execute("SHOW COLUMNS FROM absence_records LIKE 'semester_id'")
+                    has_semester = cursor.fetchone() is not None
+                except Exception:
+                    has_semester = False
+                if absence_ids_filter:
+                    placeholders = ",".join(["%s"] * len(absence_ids_filter))
+                    cursor.execute(f"""
+                        SELECT id, absence_date, absence_type, duration_units, reason, image_path
+                        {" , semester_id" if has_semester else ""}
                         FROM absence_records
-                        WHERE user_id = %s AND image_path IS NOT NULL AND image_path != ''
-                        ORDER BY created_at DESC
-                        LIMIT 1
-                    """, (user_id,))
-                except:
-                    # 如果 created_at 欄位不存在，使用 id 排序
-                    cursor.execute("""
-                        SELECT image_path
+                        WHERE user_id = %s AND id IN ({placeholders})
+                        ORDER BY absence_date DESC, id ASC
+                    """, (user_id, *absence_ids_filter))
+                else:
+                    cursor.execute(f"""
+                        SELECT id, absence_date, absence_type, duration_units, reason, image_path
+                        {" , semester_id" if has_semester else ""}
                         FROM absence_records
-                        WHERE user_id = %s AND image_path IS NOT NULL AND image_path != ''
-                        ORDER BY id DESC
-                        LIMIT 1
+                        WHERE user_id = %s
+                        ORDER BY absence_date DESC, id ASC
                     """, (user_id,))
-                absence_row = cursor.fetchone()
-                if absence_row:
-                    absence_proof_path = absence_row.get('image_path', '')
+                absence_rows = cursor.fetchall() or []
+                # 第一筆有 image_path 的作為佐證圖
+                for row in absence_rows:
+                    ip = (row.get("image_path") or "").strip()
+                    if ip and not absence_proof_path:
+                        absence_proof_path = ip
+                if not absence_proof_path:
+                    cursor.execute("""
+                        SELECT image_path FROM absence_records
+                        WHERE user_id = %s AND image_path IS NOT NULL AND image_path != ''
+                        ORDER BY id DESC LIMIT 1
+                    """, (user_id,))
+                    fallback = cursor.fetchone()
+                    if fallback:
+                        absence_proof_path = fallback.get("image_path", "")
+                # 組 absence_data 供前端編輯頁顯示列表與佐證圖
+                all_types = ["曠課", "遲到", "事假", "病假", "生理假", "公假", "喪假"]
+                stats = {t: 0 for t in all_types}
+                records = []
+                for r in absence_rows:
+                    ad = r.get("absence_date")
+                    if hasattr(ad, "strftime"):
+                        ad = ad.strftime("%Y-%m-%d")
+                    records.append({
+                        "id": r.get("id"),
+                        "absence_date": ad or "",
+                        "absence_type": r.get("absence_type") or "",
+                        "duration_units": r.get("duration_units") or 0,
+                        "reason": r.get("reason") or "",
+                        "image_path": (r.get("image_path") or "").strip(),
+                    })
+                    at = r.get("absence_type")
+                    if at in stats:
+                        stats[at] = stats.get(at, 0) + int(r.get("duration_units") or 0)
+                stat_str = {t: f"{stats.get(t, 0)} 節" for t in all_types}
+                absence_data = {
+                    "records": records,
+                    "stats": stat_str,
+                    "start_semester_id": None,
+                    "end_semester_id": None,
+                }
+                if absence_proof_path:
                     print(f"🔍 找到缺勤佐證圖片: {absence_proof_path}")
         except Exception as e:
-            print(f"⚠️ 查詢缺勤佐證圖片失敗: {e}")
+            print(f"⚠️ 查詢缺勤記錄/佐證圖片失敗: {e}")
             traceback.print_exc()
 
         # ===== 8. 日期格式轉換 =====
@@ -19346,6 +20369,7 @@ def get_resume_data():
         return jsonify({
             "success": True,
             "data": {
+                "resume_id": resume["id"],
                 "student_info": {
                     "name": user_name,
                     "birth_date": birth_date or "",
@@ -19361,7 +20385,8 @@ def get_resume_data():
                 "certifications": formatted_certs,
                 "languages": languages,
                 "transcript_path": norm_path(transcript_path),
-                "absence_proof_path": norm_path(absence_proof_path)
+                "absence_proof_path": norm_path(absence_proof_path),
+                "absence_data": absence_data
             }
         })
 
@@ -19976,8 +21001,29 @@ def submit_and_generate_api():
         context.update(data)
         context.update(structured_data)
 
+        # 不論新增或編輯，都準備 selected_* 供 resume_content_mapping 使用
+        resume_id_for_save = None
+        if request.form.get("resume_id", "").strip():
+            try:
+                resume_id_for_save = int(request.form.get("resume_id", "").strip())
+            except (ValueError, TypeError):
+                pass
+        structured_data["selected_course_grade_ids"] = [c.get("name") for c in courses if c.get("name")]
+        try:
+            structured_data["selected_certification_ids"] = json.loads(request.form.get("selected_certification_ids", "[]") or "[]")
+        except Exception:
+            structured_data["selected_certification_ids"] = [c.get("id") for c in structured_certifications if c.get("id")]
+        try:
+            structured_data["selected_language_skill_ids"] = json.loads(request.form.get("selected_language_skill_ids", "[]") or "[]")
+        except Exception:
+            structured_data["selected_language_skill_ids"] = None
+        try:
+            structured_data["selected_absence_record_ids"] = json.loads(request.form.get("selected_absence_record_ids", "[]") or "[]")
+        except Exception:
+            structured_data["selected_absence_record_ids"] = None
+
         # 儲存結構化資料（包含 language / Certs / course_grades）
-        if not save_structured_data(cursor, student_id, structured_data, semester_id=semester_id):
+        if not save_structured_data(cursor, student_id, structured_data, semester_id=semester_id, resume_id=resume_id_for_save):
             conn.rollback()
             return jsonify({"success": False, "message": "資料儲存失敗"}), 500
 
@@ -20035,7 +21081,7 @@ def submit_and_generate_api():
                 traceback.print_exc()
 
         # 生成 Word 文件
-        student_data_for_doc = get_student_info_for_doc(cursor, student_id, semester_id=semester_id)
+        student_data_for_doc = get_student_info_for_doc(cursor, student_id, semester_id=semester_id, resume_id=resume_id_for_save)
         # PhotoPath & ConductScoreNumeric（未上傳新照片時保留既有路徑）
         if photo_path is not None:
             student_data_for_doc["info"]["PhotoPath"] = photo_path
@@ -20106,6 +21152,16 @@ def submit_and_generate_api():
                 'draft',
                 semester_id
             ))
+            # 新增履歷也要寫入 resume_content_mapping，否則該筆履歷沒有關聯的課程/證照/語文
+            new_resume_id = cursor.lastrowid
+            if new_resume_id:
+                _upsert_resume_content_mapping(
+                    cursor, new_resume_id, student_id,
+                    course_grade_ids=structured_data.get("selected_course_grade_ids"),
+                    certification_ids=structured_data.get("selected_certification_ids"),
+                    language_skill_ids=structured_data.get("selected_language_skill_ids"),
+                    absence_record_ids=structured_data.get("selected_absence_record_ids")
+                )
 
         conn.commit()
         return jsonify({
@@ -20235,10 +21291,15 @@ def generate_application_form_docx(student_data, output_path):
                         if (c.get("cert_path") or "").replace("\\", "/") == path:
                             matching_cert = c
                             break
-                # 類別：勞動部 authority_id=1 必為 labor；否則用表單 category 或 DB 匹配
+                # 類別：優先使用 DB（certificate_codes）的 category，確保如 JLPT 等 intl 正確歸類
                 aid = struct.get("authority_id")
+                db_category = None
+                if matching_cert:
+                    db_category = (matching_cert.get("CertCategory") or matching_cert.get("category") or "").strip().lower()
                 if aid is not None and str(aid).strip() in ("1",):
                     category = "labor"
+                elif db_category and db_category in ("labor", "intl", "local", "other"):
+                    category = db_category
                 else:
                     try:
                         ai = int(aid)
@@ -20250,7 +21311,7 @@ def generate_application_form_docx(student_data, output_path):
                                 category = "other"
                     except (TypeError, ValueError):
                         cat = (struct.get("category") or "").strip().lower()
-                        category = cat if cat in ("labor", "intl", "local", "other") else ("other" if not matching_cert else matching_cert.get("category", "other"))
+                        category = cat if cat in ("labor", "intl", "local", "other") else (db_category if db_category in ("labor", "intl", "local", "other") else "other")
                 certs_from_form.append({
                     "cert_name": name,
                     "category": category,
@@ -20478,7 +21539,11 @@ def download_resume(resume_id):
             
         target_user_id = resume_row['user_id']
         file_relative_path = resume_row['filepath'] # 例如: uploads/resumes/...
-        download_name = resume_row['original_filename'] # 例如: 110534235_履歷_....docx
+        raw_name = (resume_row['original_filename'] or '').strip() or 'resume'
+        # 內建預設 .docx：無副檔名一律補上，避免「只打名稱」無法下載或無法開啟
+        if not (raw_name.lower().endswith('.docx') or raw_name.lower().endswith('.doc')):
+            raw_name = raw_name.rstrip('.') + '.docx'
+        download_name = raw_name
 
         # 2. 權限檢查 (使用正確的 target_user_id)
         # 您需要確保 can_access_target_resume 函式能夠判斷 session_user_id (1) 
@@ -20497,13 +21562,19 @@ def download_resume(resume_id):
             print(f"❌ 檔案遺失: {full_file_path}")
             return "伺服器上的檔案已遺失", 500
         
-        # 5. 回傳已上傳的檔案
-        return send_file(
+        # 5. 回傳已上傳的檔案（一律用 UTF-8 filename* 設定實際檔名，確保只打名稱時也能下載）
+        # 使用 ASCII 檔名給 send_file 避免部分環境編碼問題，實際下載檔名由 Content-Disposition 指定
+        safe_for_send = "resume.docx"
+        response = send_file(
             full_file_path,
             as_attachment=True,
-            download_name=download_name,
+            download_name=safe_for_send,
             mimetype='application/vnd.openxmlformats-officedocument.wordprocessingml.document'
         )
+        # 一律設定實際檔名（含中文與 .docx），瀏覽器會以 filename* 為準
+        disp = f'attachment; filename="{safe_for_send}"; filename*=UTF-8\'\'' + quote(download_name, safe="")
+        response.headers["Content-Disposition"] = disp
+        return response
 
     except Exception as e:
         print("❌ 下載已上傳履歷錯誤:", e)
@@ -22389,6 +23460,7 @@ import traceback
 import json
 import re
 from datetime import datetime, date
+from urllib.parse import quote
 from notification import create_notification
 from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
@@ -22397,8 +23469,8 @@ import io
 
 resume_bp = Blueprint("resume_bp", __name__)
 
-# --- 檔案路徑設定 ---
-BASE_UPLOAD_DIR = os.path.dirname(os.path.abspath(__file__))
+# --- 檔案路徑設定：專案根目錄 (good)，使 uploads/resumes 對應 Featured\good\uploads\resumes ---
+BASE_UPLOAD_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 
 # 定義 uploads/standard_courses
 STANDARD_COURSE_UPLOAD_PATH = os.path.join('uploads', 'standard_courses')
@@ -22681,26 +23753,24 @@ def load_student_certifications(cursor, student_id):
 
 def categorize_certifications(cert_list):
     """
-    分類證照 → 放到四種類別
+    分類證照 → 放到四種類別（對應履歷 1.勞動部 2.國際證照 3.國內證照 4.其他證照）
     """
     labor = []
     international = []
     local = []
     other = []
     for c in cert_list:
-        # 兼容多種字段名稱：cert_name/CertName, cert_path/CertPath, acquire_date/AcquisitionDate
         cert_name = c.get("cert_name") or c.get("CertName") or f"{c.get('job_category', '')}{c.get('level', '')}"
         cert_path = c.get("cert_path") or c.get("CertPath", "")
         acquire_date = c.get("acquire_date") or c.get("AcquisitionDate", "")
-        
         item = {
-            "table_name": cert_name,     # 表格區顯示名稱（只顯示證照名稱，不含發證中心）
-            "photo_name": cert_name,     # 圖片下方名稱
-            "photo_path": cert_path,     # 圖片路徑
-            "date": acquire_date,        # 日期
+            "table_name": cert_name,
+            "photo_name": cert_name,
+            "photo_path": cert_path,
+            "date": acquire_date,
         }
-        # 檢查多個可能的字段名稱：CertCategory（從SQL查詢）或 category（從其他來源）
-        category = c.get("CertCategory") or c.get("category", "other")
+        raw = c.get("CertCategory") or c.get("category", "other")
+        category = _normalize_cert_category(raw)
         if category == "labor":
             labor.append(item)
         elif category == "intl":
@@ -22762,7 +23832,7 @@ def fill_certificate_photos(context, doc, items, start_index, max_count=8):
 # -------------------------
 # 儲存結構化資料（重整 + 稳定版）
 # -------------------------
-def save_structured_data(cursor, student_id, data, semester_id=None):
+def save_structured_data(cursor, student_id, data, semester_id=None, resume_id=None):
     try:
         # -------------------------------------------------------------
         # 1) 儲存 Student_Info（基本資料）
@@ -22920,6 +23990,18 @@ def save_structured_data(cursor, student_id, data, semester_id=None):
                 except Exception as e:
                     print(f"⚠️ 查詢 certificate_codes 失敗: {e}")
 
+            # 編輯時若表單未帶 cert_code（或為 OTHER/空），保留既有 student_certifications 的 cert_code，避免日文等證照被誤存為「其他」
+            existing_cert_id = cert.get("id")
+            if (cert_code_id is None or cert_code_id == 0) and existing_cert_id and str(existing_cert_id).strip():
+                try:
+                    eid = int(existing_cert_id)
+                    cursor.execute("SELECT cert_code FROM student_certifications WHERE id = %s AND StuID = %s LIMIT 1", (eid, student_id))
+                    existing_row = cursor.fetchone()
+                    if existing_row and existing_row.get("cert_code") is not None:
+                        cert_code_id = existing_row["cert_code"]
+                        print(f"✅ 保留既有證照 cert_code（id={eid}）: {cert_code_id}")
+                except (ValueError, TypeError, Exception):
+                    pass
             row["cert_code"] = cert_code_id
 
             # 優先使用前端傳來的 authority_id
@@ -23015,21 +24097,25 @@ def save_structured_data(cursor, student_id, data, semester_id=None):
 
         # (4) 處理上傳證照圖片（舊的圖片上傳方式，向後兼容） - 這裡為了程式碼完整性省略，因為前端應主要傳遞 structured_certifications
 
-        # (5) 實際寫入資料庫
+        # (5) 實際寫入資料庫；有 resume_id 時不刪除既有證照，僅新增或更新（ON DUPLICATE KEY UPDATE 避免重複鍵）
         if cert_rows:
             print(f"📋 準備寫入 student_certifications: {len(cert_rows)} 筆")
-            cursor.execute("DELETE FROM student_certifications WHERE StuID=%s", (student_id,))
+            if not resume_id:
+                cursor.execute("DELETE FROM student_certifications WHERE StuID=%s", (student_id,))
             insert_failed = False
             for row in cert_rows:
                 cols = list(row.keys())
                 values = list(row.values())
                 cols.append("CreatedAt")
                 placeholders = ", ".join(["%s"] * (len(values) + 1))
+                sql = f"INSERT INTO student_certifications ({','.join(cols)}) VALUES ({placeholders})"
+                if resume_id:
+                    # 唯一鍵 (StuID, cert_code, level)：重複時只更新可變欄位
+                    update_cols = [c for c in cols if c not in ('StuID', 'cert_code', 'level', 'CreatedAt')]
+                    if update_cols:
+                        sql += " ON DUPLICATE KEY UPDATE " + ", ".join(f"{c}=VALUES({c})" for c in update_cols)
                 try:
-                    cursor.execute(
-                        f"INSERT INTO student_certifications ({','.join(cols)}) VALUES ({placeholders})",
-                        (*values, datetime.now())
-                    )
+                    cursor.execute(sql, (*values, datetime.now()))
                 except Exception as e:
                     print(f"⚠️ 插入證照記錄失敗: {e}")
                     print(f" 記錄內容: {row}")
@@ -23045,12 +24131,40 @@ def save_structured_data(cursor, student_id, data, semester_id=None):
         # 4) 儲存語言能力 student_languageskills
         # -------------------------------------------------------------
         cursor.execute("DELETE FROM student_languageskills WHERE StuID=%s", (student_id,))
+        lang_ids_saved = []
         for row in data.get("structured_languages", []):
             if row.get("language") and row.get("level"):
                 cursor.execute("""
                     INSERT INTO student_languageskills (StuID, Language, Level, CreatedAt)
                     VALUES (%s,%s,%s,NOW())
                 """, (student_id, row["language"], row["level"]))
+                lang_ids_saved.append(cursor.lastrowid)
+
+        # 若有 resume_id，同步更新履歷內容關聯表（使用剛寫入的證照/語文 id，確保該份履歷的 mapping 正確）
+        if resume_id:
+            course_ids = data.get("selected_course_grade_ids")
+            if course_ids is None:
+                course_ids = [c.get("name") for c in data.get("courses", []) if c.get("name")]
+            # 證照：以剛寫入的 cert_rows 對應的 DB id 為準（避免副本仍沿用第一份的舊 id）
+            cert_ids_for_mapping = data.get("selected_certification_ids")
+            if cert_rows:
+                cursor.execute("SELECT id, cert_code, level FROM student_certifications WHERE StuID=%s", (student_id,))
+                db_certs = {(r.get("cert_code"), r.get("level")): r.get("id") for r in cursor.fetchall()}
+                ids_in_order = []
+                for r in cert_rows:
+                    key = (r.get("cert_code"), r.get("level"))
+                    if key in db_certs and db_certs[key]:
+                        ids_in_order.append(db_certs[key])
+                if ids_in_order:
+                    cert_ids_for_mapping = ids_in_order
+            # 語文：使用剛寫入的 id（與表單順序一致）
+            lang_ids_for_mapping = data.get("selected_language_skill_ids")
+            if lang_ids_saved:
+                lang_ids_for_mapping = lang_ids_saved
+            _upsert_resume_content_mapping(cursor, resume_id, student_id, course_grade_ids=course_ids,
+                certification_ids=cert_ids_for_mapping,
+                language_skill_ids=lang_ids_for_mapping,
+                absence_record_ids=data.get("selected_absence_record_ids"))
 
         return True
 
@@ -23142,12 +24256,17 @@ def get_certificates_by_authority():
 
 
 # -------------------------
-# 取回學生資料 (for 生成履歷)
+# 取回學生資料 (for 生成履歷)；resume_id 有值時依 resume_content_mapping 篩選課程/證照/語文
 # -------------------------
-def get_student_info_for_doc(cursor, student_id, semester_id=None):
+def get_student_info_for_doc(cursor, student_id, semester_id=None, resume_id=None):
     data = {}
     cursor.execute("SELECT * FROM Student_Info WHERE StuID=%s", (student_id,))
     data['info'] = cursor.fetchone() or {}
+
+    mapping = None
+    if resume_id:
+        cursor.execute("SELECT course_grade_ids, certification_ids, language_skill_ids FROM resume_content_mapping WHERE resume_id = %s LIMIT 1", (resume_id,))
+        mapping = cursor.fetchone()
 
     # 檢查表是否有 SemesterID、ProofImage 和 transcript_path 列
     try:
@@ -23197,6 +24316,10 @@ def get_student_info_for_doc(cursor, student_id, semester_id=None):
             """, (student_id,))
     
     grades_rows = cursor.fetchall() or []
+    if mapping and mapping.get("course_grade_ids"):
+        ids_set = set(x.strip() for x in (mapping["course_grade_ids"] or "").split(",") if x.strip())
+        if ids_set:
+            grades_rows = [r for r in grades_rows if (r.get("CourseName") or "").strip() in ids_set]
     
     data['grades'] = grades_rows
     data['transcript_path'] = ''
@@ -23222,16 +24345,32 @@ def get_student_info_for_doc(cursor, student_id, semester_id=None):
         WHERE sc.StuID = %s
         ORDER BY sc.AcquisitionDate DESC, sc.id ASC
     """, (student_id,))
-    data['certifications'] = cursor.fetchall() or []
+    certs_rows = cursor.fetchall() or []
+    if mapping and mapping.get("certification_ids"):
+        try:
+            ids_set = set(int(x.strip()) for x in (mapping["certification_ids"] or "").split(",") if x.strip())
+            if ids_set:
+                certs_rows = [c for c in certs_rows if c.get("id") in ids_set]
+        except ValueError:
+            pass
+    data['certifications'] = certs_rows
 
     # 語言能力
     cursor.execute(""" 
-        SELECT Language AS language, Level AS level 
+        SELECT id, Language AS language, Level AS level 
         FROM student_languageskills 
         WHERE StuID=%s 
         ORDER BY Language
     """, (student_id,))
-    data['languages'] = cursor.fetchall() or []
+    lang_rows = cursor.fetchall() or []
+    if mapping and mapping.get("language_skill_ids"):
+        try:
+            ids_set = set(int(x.strip()) for x in (mapping["language_skill_ids"] or "").split(",") if x.strip())
+            if ids_set:
+                lang_rows = [l for l in lang_rows if l.get("id") in ids_set]
+        except ValueError:
+            pass
+    data['languages'] = lang_rows
 
     # 缺勤記錄佐證圖片（僅返回最新的）
     absence_proof_path = ''
@@ -23393,8 +24532,14 @@ def save_resume_data():
     try:
         # 取得目前的學期 ID (如果系統使用學期分流)
         semester_id = get_current_semester_id(cursor)
+        resume_id = None
+        if data.get("resume_id") is not None and str(data.get("resume_id")).strip():
+            try:
+                resume_id = int(data.get("resume_id"))
+            except (TypeError, ValueError):
+                pass
 
-        if save_structured_data(cursor, student_id, data, semester_id):
+        if save_structured_data(cursor, student_id, data, semester_id, resume_id=resume_id):
             conn.commit()
             return jsonify({"success": True, "message": "履歷資料儲存成功"})
         else:
@@ -23423,15 +24568,26 @@ def get_resume_data():
     cursor = conn.cursor(dictionary=True)
 
     try:
-        # ===== 1. 檢查是否有已提交履歷 =====
-        cursor.execute("""
-            SELECT id FROM resumes 
-            WHERE user_id = %s 
-            ORDER BY created_at DESC 
-            LIMIT 1
-        """, (user_id,))
-        resume = cursor.fetchone()
-
+        # ===== 1. 決定要載入哪一筆履歷（可傳 resume_id 編輯指定履歷）=====
+        resume = None
+        resume_id_param = request.args.get("resume_id", "").strip()
+        if resume_id_param:
+            try:
+                rid = int(resume_id_param)
+                cursor.execute("SELECT id FROM resumes WHERE id = %s AND user_id = %s", (rid, user_id))
+                resume = cursor.fetchone()
+                if not resume:
+                    return jsonify({"success": False, "message": "找不到該履歷或無權限"}), 404
+            except (ValueError, TypeError):
+                resume = None
+        if not resume:
+            cursor.execute("""
+                SELECT id FROM resumes 
+                WHERE user_id = %s 
+                ORDER BY created_at DESC 
+                LIMIT 1
+            """, (user_id,))
+            resume = cursor.fetchone()
         if not resume:
             return jsonify({"success": False, "message": "沒有已提交的履歷"}), 404
 
@@ -23442,6 +24598,10 @@ def get_resume_data():
             return jsonify({"success": False, "message": "找不到使用者"}), 404
 
         student_id = user_result["username"]
+
+        # 載入該履歷的內容關聯（若有則只顯示勾選的課程/證照/語文/缺勤）
+        cursor.execute("SELECT course_grade_ids, certification_ids, language_skill_ids, absence_record_ids FROM resume_content_mapping WHERE resume_id = %s LIMIT 1", (resume["id"],))
+        mapping = cursor.fetchone()
 
         # ===== 3. 基本資料 =====
         cursor.execute("SELECT * FROM Student_Info WHERE StuID=%s", (student_id,))
@@ -23467,6 +24627,10 @@ def get_resume_data():
                 ORDER BY CourseName
             """, (student_id,))
         courses = cursor.fetchall() or []
+        if mapping and mapping.get("course_grade_ids"):
+            ids_set = set(x.strip() for x in (mapping["course_grade_ids"] or "").split(",") if x.strip())
+            if ids_set:
+                courses = [c for c in courses if (c.get("name") or "").strip() in ids_set]
         
         # 提取成績單路徑（從 ProofImage 欄位）
         transcript_path = ''
@@ -23590,6 +24754,13 @@ def get_resume_data():
 
         cursor.execute(sql_cert, (student_id,))
         all_certifications = cursor.fetchall() or []
+        if mapping and mapping.get("certification_ids"):
+            try:
+                ids_set = set(int(x.strip()) for x in (mapping["certification_ids"] or "").split(",") if x.strip())
+                if ids_set:
+                    all_certifications = [c for c in all_certifications if c.get("id") in ids_set]
+            except ValueError:
+                pass
         
         # 在處理證照分類時
         labor_certs = [c for c in all_certifications if c.get('category') == 'labor' or c.get('authority_id') == 1]
@@ -23634,45 +24805,102 @@ def get_resume_data():
         # ===== 7. 語言能力 =====
 
         cursor.execute("""
-            SELECT Language AS language, Level AS level
+            SELECT id, Language AS language, Level AS level
             FROM student_languageskills
             WHERE StuID=%s
             ORDER BY Language
         """, (student_id,))
         languages = cursor.fetchall() or []
+        if mapping and mapping.get("language_skill_ids"):
+            try:
+                ids_set = set(int(x.strip()) for x in (mapping["language_skill_ids"] or "").split(",") if x.strip())
+                if ids_set:
+                    languages = [l for l in languages if l.get("id") in ids_set]
+            except ValueError:
+                pass
         
-        # ===== 7.5 缺勤記錄佐證圖片 =====
-        # 從 absence_records 表獲取最新的 image_path
+        # ===== 7.5 缺勤記錄與佐證圖片（依 mapping 篩選，供編輯頁載入）=====
         absence_proof_path = ''
+        absence_data = None
         try:
             cursor.execute("SELECT id FROM users WHERE username=%s", (student_id,))
             user_row = cursor.fetchone()
             if user_row:
                 user_id = user_row.get('id')
-                # 嘗試使用 created_at 排序，如果沒有該欄位則使用 id
+                # 若有 mapping 的 absence_record_ids，只查這些筆；否則查該使用者全部缺勤
+                absence_ids_filter = None
+                if mapping and mapping.get("absence_record_ids"):
+                    try:
+                        absence_ids_filter = [int(x.strip()) for x in (mapping["absence_record_ids"] or "").split(",") if x.strip()]
+                    except (ValueError, TypeError):
+                        pass
                 try:
-                    cursor.execute("""
-                        SELECT image_path, created_at
+                    cursor.execute("SHOW COLUMNS FROM absence_records LIKE 'semester_id'")
+                    has_semester = cursor.fetchone() is not None
+                except Exception:
+                    has_semester = False
+                if absence_ids_filter:
+                    placeholders = ",".join(["%s"] * len(absence_ids_filter))
+                    cursor.execute(f"""
+                        SELECT id, absence_date, absence_type, duration_units, reason, image_path
+                        {" , semester_id" if has_semester else ""}
                         FROM absence_records
-                        WHERE user_id = %s AND image_path IS NOT NULL AND image_path != ''
-                        ORDER BY created_at DESC
-                        LIMIT 1
-                    """, (user_id,))
-                except:
-                    # 如果 created_at 欄位不存在，使用 id 排序
-                    cursor.execute("""
-                        SELECT image_path
+                        WHERE user_id = %s AND id IN ({placeholders})
+                        ORDER BY absence_date DESC, id ASC
+                    """, (user_id, *absence_ids_filter))
+                else:
+                    cursor.execute(f"""
+                        SELECT id, absence_date, absence_type, duration_units, reason, image_path
+                        {" , semester_id" if has_semester else ""}
                         FROM absence_records
-                        WHERE user_id = %s AND image_path IS NOT NULL AND image_path != ''
-                        ORDER BY id DESC
-                        LIMIT 1
+                        WHERE user_id = %s
+                        ORDER BY absence_date DESC, id ASC
                     """, (user_id,))
-                absence_row = cursor.fetchone()
-                if absence_row:
-                    absence_proof_path = absence_row.get('image_path', '')
+                absence_rows = cursor.fetchall() or []
+                # 第一筆有 image_path 的作為佐證圖
+                for row in absence_rows:
+                    ip = (row.get("image_path") or "").strip()
+                    if ip and not absence_proof_path:
+                        absence_proof_path = ip
+                if not absence_proof_path:
+                    cursor.execute("""
+                        SELECT image_path FROM absence_records
+                        WHERE user_id = %s AND image_path IS NOT NULL AND image_path != ''
+                        ORDER BY id DESC LIMIT 1
+                    """, (user_id,))
+                    fallback = cursor.fetchone()
+                    if fallback:
+                        absence_proof_path = fallback.get("image_path", "")
+                # 組 absence_data 供前端編輯頁顯示列表與佐證圖
+                all_types = ["曠課", "遲到", "事假", "病假", "生理假", "公假", "喪假"]
+                stats = {t: 0 for t in all_types}
+                records = []
+                for r in absence_rows:
+                    ad = r.get("absence_date")
+                    if hasattr(ad, "strftime"):
+                        ad = ad.strftime("%Y-%m-%d")
+                    records.append({
+                        "id": r.get("id"),
+                        "absence_date": ad or "",
+                        "absence_type": r.get("absence_type") or "",
+                        "duration_units": r.get("duration_units") or 0,
+                        "reason": r.get("reason") or "",
+                        "image_path": (r.get("image_path") or "").strip(),
+                    })
+                    at = r.get("absence_type")
+                    if at in stats:
+                        stats[at] = stats.get(at, 0) + int(r.get("duration_units") or 0)
+                stat_str = {t: f"{stats.get(t, 0)} 節" for t in all_types}
+                absence_data = {
+                    "records": records,
+                    "stats": stat_str,
+                    "start_semester_id": None,
+                    "end_semester_id": None,
+                }
+                if absence_proof_path:
                     print(f"🔍 找到缺勤佐證圖片: {absence_proof_path}")
         except Exception as e:
-            print(f"⚠️ 查詢缺勤佐證圖片失敗: {e}")
+            print(f"⚠️ 查詢缺勤記錄/佐證圖片失敗: {e}")
             traceback.print_exc()
 
         # ===== 8. 日期格式轉換 =====
@@ -23752,6 +24980,7 @@ def get_resume_data():
         return jsonify({
             "success": True,
             "data": {
+                "resume_id": resume["id"],
                 "student_info": {
                     "name": user_name,
                     "birth_date": birth_date or "",
@@ -23767,7 +24996,8 @@ def get_resume_data():
                 "certifications": formatted_certs,
                 "languages": languages,
                 "transcript_path": norm_path(transcript_path),
-                "absence_proof_path": norm_path(absence_proof_path)
+                "absence_proof_path": norm_path(absence_proof_path),
+                "absence_data": absence_data
             }
         })
 
@@ -24382,8 +25612,29 @@ def submit_and_generate_api():
         context.update(data)
         context.update(structured_data)
 
+        # 不論新增或編輯，都準備 selected_* 供 resume_content_mapping 使用
+        resume_id_for_save = None
+        if request.form.get("resume_id", "").strip():
+            try:
+                resume_id_for_save = int(request.form.get("resume_id", "").strip())
+            except (ValueError, TypeError):
+                pass
+        structured_data["selected_course_grade_ids"] = [c.get("name") for c in courses if c.get("name")]
+        try:
+            structured_data["selected_certification_ids"] = json.loads(request.form.get("selected_certification_ids", "[]") or "[]")
+        except Exception:
+            structured_data["selected_certification_ids"] = [c.get("id") for c in structured_certifications if c.get("id")]
+        try:
+            structured_data["selected_language_skill_ids"] = json.loads(request.form.get("selected_language_skill_ids", "[]") or "[]")
+        except Exception:
+            structured_data["selected_language_skill_ids"] = None
+        try:
+            structured_data["selected_absence_record_ids"] = json.loads(request.form.get("selected_absence_record_ids", "[]") or "[]")
+        except Exception:
+            structured_data["selected_absence_record_ids"] = None
+
         # 儲存結構化資料（包含 language / Certs / course_grades）
-        if not save_structured_data(cursor, student_id, structured_data, semester_id=semester_id):
+        if not save_structured_data(cursor, student_id, structured_data, semester_id=semester_id, resume_id=resume_id_for_save):
             conn.rollback()
             return jsonify({"success": False, "message": "資料儲存失敗"}), 500
 
@@ -24441,7 +25692,7 @@ def submit_and_generate_api():
                 traceback.print_exc()
 
         # 生成 Word 文件
-        student_data_for_doc = get_student_info_for_doc(cursor, student_id, semester_id=semester_id)
+        student_data_for_doc = get_student_info_for_doc(cursor, student_id, semester_id=semester_id, resume_id=resume_id_for_save)
         # PhotoPath & ConductScoreNumeric（未上傳新照片時保留既有路徑）
         if photo_path is not None:
             student_data_for_doc["info"]["PhotoPath"] = photo_path
@@ -24512,6 +25763,16 @@ def submit_and_generate_api():
                 'draft',
                 semester_id
             ))
+            # 新增履歷也要寫入 resume_content_mapping，否則該筆履歷沒有關聯的課程/證照/語文
+            new_resume_id = cursor.lastrowid
+            if new_resume_id:
+                _upsert_resume_content_mapping(
+                    cursor, new_resume_id, student_id,
+                    course_grade_ids=structured_data.get("selected_course_grade_ids"),
+                    certification_ids=structured_data.get("selected_certification_ids"),
+                    language_skill_ids=structured_data.get("selected_language_skill_ids"),
+                    absence_record_ids=structured_data.get("selected_absence_record_ids")
+                )
 
         conn.commit()
         return jsonify({
@@ -24641,10 +25902,15 @@ def generate_application_form_docx(student_data, output_path):
                         if (c.get("cert_path") or "").replace("\\", "/") == path:
                             matching_cert = c
                             break
-                # 類別：勞動部 authority_id=1 必為 labor；否則用表單 category 或 DB 匹配
+                # 類別：優先使用 DB（certificate_codes）的 category，確保如 JLPT 等 intl 正確歸類
                 aid = struct.get("authority_id")
+                db_category = None
+                if matching_cert:
+                    db_category = (matching_cert.get("CertCategory") or matching_cert.get("category") or "").strip().lower()
                 if aid is not None and str(aid).strip() in ("1",):
                     category = "labor"
+                elif db_category and db_category in ("labor", "intl", "local", "other"):
+                    category = db_category
                 else:
                     try:
                         ai = int(aid)
@@ -24656,7 +25922,7 @@ def generate_application_form_docx(student_data, output_path):
                                 category = "other"
                     except (TypeError, ValueError):
                         cat = (struct.get("category") or "").strip().lower()
-                        category = cat if cat in ("labor", "intl", "local", "other") else ("other" if not matching_cert else matching_cert.get("category", "other"))
+                        category = cat if cat in ("labor", "intl", "local", "other") else (db_category if db_category in ("labor", "intl", "local", "other") else "other")
                 certs_from_form.append({
                     "cert_name": name,
                     "category": category,
@@ -24884,7 +26150,11 @@ def download_resume(resume_id):
             
         target_user_id = resume_row['user_id']
         file_relative_path = resume_row['filepath'] # 例如: uploads/resumes/...
-        download_name = resume_row['original_filename'] # 例如: 110534235_履歷_....docx
+        raw_name = (resume_row['original_filename'] or '').strip() or 'resume'
+        # 內建預設 .docx：無副檔名一律補上，避免「只打名稱」無法下載或無法開啟
+        if not (raw_name.lower().endswith('.docx') or raw_name.lower().endswith('.doc')):
+            raw_name = raw_name.rstrip('.') + '.docx'
+        download_name = raw_name
 
         # 2. 權限檢查 (使用正確的 target_user_id)
         # 您需要確保 can_access_target_resume 函式能夠判斷 session_user_id (1) 
@@ -24903,13 +26173,19 @@ def download_resume(resume_id):
             print(f"❌ 檔案遺失: {full_file_path}")
             return "伺服器上的檔案已遺失", 500
         
-        # 5. 回傳已上傳的檔案
-        return send_file(
+        # 5. 回傳已上傳的檔案（一律用 UTF-8 filename* 設定實際檔名，確保只打名稱時也能下載）
+        # 使用 ASCII 檔名給 send_file 避免部分環境編碼問題，實際下載檔名由 Content-Disposition 指定
+        safe_for_send = "resume.docx"
+        response = send_file(
             full_file_path,
             as_attachment=True,
-            download_name=download_name,
+            download_name=safe_for_send,
             mimetype='application/vnd.openxmlformats-officedocument.wordprocessingml.document'
         )
+        # 一律設定實際檔名（含中文與 .docx），瀏覽器會以 filename* 為準
+        disp = f'attachment; filename="{safe_for_send}"; filename*=UTF-8\'\'' + quote(download_name, safe="")
+        response.headers["Content-Disposition"] = disp
+        return response
 
     except Exception as e:
         print("❌ 下載已上傳履歷錯誤:", e)
@@ -25944,6 +27220,10 @@ def update_resume_filename(resume_id):
     if not new_filename:
         return jsonify({"success": False, "message": "文件名不能為空"}), 400
     
+    # 內建預設為 .docx：若使用者只改檔名沒加副檔名，自動補上，避免刪掉 .docx 導致無法下載/開啟
+    if not (new_filename.lower().endswith('.docx') or new_filename.lower().endswith('.doc')):
+        new_filename = new_filename.rstrip('.') + '.docx'
+    
     # 驗證文件名長度
     if len(new_filename) > 255:
         return jsonify({"success": False, "message": "文件名過長（最多255個字符）"}), 400
@@ -26184,6 +27464,109 @@ def delete_resume(resume_id):
     finally:
         cursor.close()
         conn.close()
+
+
+# 複製履歷（增加副本）：複製檔案與內容關聯，產生新草稿供重新編輯
+@resume_bp.route("/api/resumes/<int:resume_id>/duplicate", methods=["POST"])
+def duplicate_resume(resume_id):
+    if not require_login():
+        return jsonify({"success": False, "message": "未登入"}), 401
+
+    user_id = session['user_id']
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+
+    try:
+        cursor.execute("""
+            SELECT id, user_id, filepath, original_filename, status, category, semester_id
+            FROM resumes
+            WHERE id = %s AND user_id = %s
+        """, (resume_id, user_id))
+        src = cursor.fetchone()
+        if not src:
+            return jsonify({"success": False, "message": "履歷不存在或無權限"}), 403
+
+        src_path = src.get('filepath')
+        if not src_path:
+            return jsonify({"success": False, "message": "原履歷無檔案路徑，無法複製"}), 400
+
+        base_dir = BASE_UPLOAD_DIR
+        full_src = os.path.normpath(os.path.join(base_dir, src_path.replace("\\", "/")))
+        if not os.path.exists(full_src):
+            return jsonify({"success": False, "message": "伺服器上找不到原履歷檔案"}), 400
+
+        # 新檔名：原檔名（去掉副檔名）+ _副本_時間戳.docx
+        base_name = (src.get('original_filename') or '履歷').rsplit('.', 1)[0]
+        ext = (src.get('original_filename') or '').rsplit('.', 1)[-1].lower() or 'docx'
+        if ext not in ('docx', 'doc'):
+            ext = 'docx'
+        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+        new_filename = f"{base_name}_副本_{ts}.{ext}"
+        # 新檔案放在同一目錄，檔名加時間戳避免覆蓋
+        src_dir = os.path.dirname(full_src)
+        new_full_path = os.path.join(src_dir, new_filename)
+        new_relative = os.path.relpath(new_full_path, base_dir).replace("\\", "/")
+
+        import shutil
+        shutil.copy2(full_src, new_full_path)
+
+        semester_id = src.get('semester_id')
+        cursor.execute("""
+            INSERT INTO resumes
+            (user_id, filepath, original_filename, status, category, semester_id, created_at)
+            VALUES (%s, %s, %s, %s, %s, %s, NOW())
+        """, (
+            user_id,
+            new_relative,
+            new_filename,
+            'uploaded',
+            'draft',
+            semester_id
+        ))
+        new_resume_id = cursor.lastrowid
+        if not new_resume_id:
+            conn.rollback()
+            return jsonify({"success": False, "message": "建立副本記錄失敗"}), 500
+
+        # 複製 resume_content_mapping（若有）
+        cursor.execute("""
+            SELECT stu_info_id, course_grade_ids, certification_ids, language_skill_ids, absence_record_ids
+            FROM resume_content_mapping
+            WHERE resume_id = %s
+            LIMIT 1
+        """, (resume_id,))
+        mapping = cursor.fetchone()
+        if mapping:
+            cursor.execute("""
+                INSERT INTO resume_content_mapping
+                (resume_id, stu_info_id, course_grade_ids, certification_ids, language_skill_ids, absence_record_ids)
+                VALUES (%s, %s, %s, %s, %s, %s)
+            """, (
+                new_resume_id,
+                mapping.get('stu_info_id'),
+                mapping.get('course_grade_ids'),
+                mapping.get('certification_ids'),
+                mapping.get('language_skill_ids'),
+                mapping.get('absence_record_ids'),
+            ))
+
+        conn.commit()
+        return jsonify({
+            "success": True,
+            "message": "已建立履歷副本",
+            "resume_id": new_resume_id,
+            "original_filename": new_filename,
+        })
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        print(f"❌ 複製履歷失敗: {e}")
+        traceback.print_exc()
+        return jsonify({"success": False, "message": str(e)}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
 
 # ========== 以下為舊的資料夾API，已廢棄 ==========
 # @resume_bp.route("/api/resume_folders", methods=["GET"])
