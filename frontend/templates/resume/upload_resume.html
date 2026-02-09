@@ -1880,6 +1880,7 @@
 
       certEntries.push({
         id: entryId,
+        certId: prefill && prefill.id ? prefill.id : null,
         wrapper: element,
         authoritySelect,
         authorityNameWrapper,
@@ -2469,11 +2470,14 @@
       }
     }
 
-    // 🧩 載入已提交履歷的完整資料並填充表單
+    // 🧩 載入已提交履歷的完整資料並填充表單（若有 URL resume_id 則載入該筆履歷的關聯內容）
     async function loadResumeData() {
       try {
-        console.log("🔄 開始載入履歷資料...");
-        const res = await fetch("/api/get_resume_data");
+        const urlParams = new URLSearchParams(window.location.search);
+        const resumeId = urlParams.get('resume_id');
+        const apiUrl = resumeId ? `/api/get_resume_data?resume_id=${encodeURIComponent(resumeId)}` : '/api/get_resume_data';
+        console.log("🔄 開始載入履歷資料...", resumeId ? `resume_id=${resumeId}` : '最新一筆');
+        const res = await fetch(apiUrl);
         const result = await res.json();
 
         if (!result.success || !result.data) {
@@ -2636,6 +2640,7 @@
               console.log(`🔍 證照資料映射: id=${cert.id || '(空)'}, cert_path=${cert.cert_path || '(空)'}, CertPath=${cert.CertPath || '(空)'}, 最終路徑=${certImagePath || '(空)'}`);
 
               return {
+                id: cert.id || null,
                 authority_id: authorityId,
                 authority_name: cert.authority_name || '',
                 code: cert.cert_code || cert.code || '',
@@ -2699,6 +2704,18 @@
         if (data.absence_data) {
           const absenceData = data.absence_data;
 
+          // 立即寫入 allAbsenceRecords，確保提交時 selected_absence_record_ids 有值（不依賴 setAbsenceData 延遲）
+          if (absenceData.records && Array.isArray(absenceData.records)) {
+            allAbsenceRecords = absenceData.records.map(record => ({
+              absence_date: record.absence_date || '',
+              absence_type: record.absence_type || '',
+              duration_units: record.duration_units || 0,
+              reason: record.reason || '',
+              id: record.id || null,
+              image_path: record.image_path || ''
+            }));
+          }
+
           // 設置學期範圍（需要等待學期列表載入）
           const setAbsenceData = () => {
             if (absenceData.start_semester_id && absenceData.end_semester_id) {
@@ -2715,17 +2732,8 @@
 
               console.log(`📅 學期範圍: ${absenceData.start_semester_id} - ${absenceData.end_semester_id}`);
 
-              // 載入缺勤記錄列表和統計
+              // 載入缺勤記錄列表和統計（allAbsenceRecords 已在上方先設好，此處只做渲染與佐證圖）
               if (absenceData.records && Array.isArray(absenceData.records)) {
-                allAbsenceRecords = absenceData.records.map(record => ({
-                  absence_date: record.absence_date || '',
-                  absence_type: record.absence_type || '',
-                  duration_units: record.duration_units || 0,
-                  reason: record.reason || '',
-                  id: record.id || null,
-                  image_path: record.image_path || ''
-                }));
-
                 // 處理缺勤記錄佐證圖路徑（優先使用 API 返回的 absence_proof_path，否則使用記錄中的 image_path）
                 let absenceProofPath = data.absence_proof_path || '';
                 if (!absenceProofPath) {
@@ -2812,6 +2820,7 @@
 
             if (selectElement) {
               selectElement.value = langLevel;
+              if (lang.id) selectElement.setAttribute('data-language-id', String(lang.id));
             }
           });
         }
@@ -4155,19 +4164,23 @@
       });
       formData.append("absence_stats_json", JSON.stringify(absenceStats));
 
-      // 6. 收集證照資料（structured_certifications）
+      // 5.5 選用的缺勤紀錄 ID 列表（供 resume_content_mapping 儲存，提交後可於編輯時還原列表與佐證圖）
+      const selectedAbsenceRecordIds = Array.isArray(allAbsenceRecords) ? allAbsenceRecords.filter(r => r.id).map(r => r.id) : [];
+      formData.append("selected_absence_record_ids", JSON.stringify(selectedAbsenceRecordIds));
+
+      // 6. 收集證照資料（structured_certifications），含 id 供 resume_content_mapping 使用
       const structuredCertifications = certEntries.map(entry => {
         const authorityId = entry.authoritySelect ? entry.authoritySelect.value : '';
         const isOther = authorityId === 'OTHER';
         const codeInput = entry.codeInput ? entry.codeInput.value.trim() : '';
         const nameInput = entry.nameInput ? entry.nameInput.value.trim() : '';
         
-        return {
+        const cert = {
           cert_code: codeInput || 'OTHER',
           name: nameInput || (entry.customNameInput ? entry.customNameInput.value.trim() : ''),
           custom_cert_name: entry.customNameInput ? entry.customNameInput.value.trim() : '',
-          authority_id: authorityId && authorityId !== 'OTHER' ? authorityId : null, // 新增：發證中心ID
-          authority_name: isOther && entry.authorityNameInput ? entry.authorityNameInput.value.trim() : '', // 新增：發證中心名稱（僅當為其他時）
+          authority_id: authorityId && authorityId !== 'OTHER' ? authorityId : null,
+          authority_name: isOther && entry.authorityNameInput ? entry.authorityNameInput.value.trim() : '',
           job_category: isOther && entry.otherJobCategoryInput ? entry.otherJobCategoryInput.value.trim() : (entry.jobCategorySelect ? entry.jobCategorySelect.value.trim() : ''),
           level: isOther && entry.otherLevelInput ? entry.otherLevelInput.value : (entry.levelSelect ? entry.levelSelect.value : ''),
           category: entry.categoryInput ? entry.categoryInput.value : 'other',
@@ -4175,7 +4188,15 @@
           issuer: entry.issuerInput ? entry.issuerInput.value.trim() : '',
           cert_path: entry.fileInput && entry.fileInput.dataset.imagePath ? entry.fileInput.dataset.imagePath : ''
         };
-      }).filter(cert => cert.name || cert.cert_code); // 過濾掉空的證照
+        if (entry.certId) cert.id = entry.certId;
+        return cert;
+      }).filter(cert => cert.name || cert.cert_code);
+
+      const selectedCertIds = structuredCertifications.filter(c => c.id).map(c => c.id);
+      const resumeIdFromQuery = new URLSearchParams(window.location.search).get('resume_id');
+      if (resumeIdFromQuery && selectedCertIds.length) {
+        formData.append("selected_certification_ids", JSON.stringify(selectedCertIds));
+      }
 
       console.log(`📤 準備提交 ${structuredCertifications.length} 項證照`);
       formData.append("structured_certifications", JSON.stringify(structuredCertifications));
@@ -4200,6 +4221,15 @@
 
       console.log(`📤 準備提交 ${structuredLanguages.length} 項語文能力`);
       formData.append("structured_languages", JSON.stringify(structuredLanguages));
+
+      const selectedLangIds = [];
+      languageFields.forEach(field => {
+        const el = document.querySelector(`select[name="${field.name}"]`);
+        if (el && el.dataset.languageId) selectedLangIds.push(parseInt(el.dataset.languageId, 10));
+      });
+      if (resumeIdFromQuery && selectedLangIds.length) {
+        formData.append("selected_language_skill_ids", JSON.stringify(selectedLangIds));
+      }
 
       // 編輯模式：若有 resume_id 則一併傳送，後端會覆蓋既有檔案而非新增一筆
       const urlParams = new URLSearchParams(window.location.search);

@@ -129,11 +129,7 @@
       </div>
 
       <div id="studentFields" class="role-specific-fields" style="display: none;">
-        <div id="gradeDisplayContainer">
-          <label for="gradeDisplay">年級</label>
-          <input id="gradeDisplay" type="text" readonly />
-        </div>
-        <label for="combinedClass">班級</label>
+        <label for="combinedClass">班級/年級</label>
         <input id="combinedClass" type="text" readonly />
 
         <div id="managedClassesContainer" class="role-specific-fields" style="display: none;">
@@ -195,6 +191,27 @@
       const admissionYearField = document.getElementById('admissionYearField');
       const studentIdField = document.getElementById('studentIdField');
       const nameLabel = document.getElementById('nameLabel');
+
+      /**
+       * 將 admission_year 與純班序組合成「X年級X班」顯示（與 user_management 邏輯一致）
+       * @param {number|null} activeSemesterYear - 當前學年（如 113）
+       * @param {number|string|null} admissionYear - 入學屆數
+       * @param {string} department - 科系（如 資管科）
+       * @param {string} className - 純班序（如 忠、孝）
+       * @returns {string} 例如「資管 四孝」
+       */
+      function formatClassWithGrade(activeSemesterYear, admissionYear, department, className) {
+        const dept = (department || '').trim(); // 保留完整科系，如 資管科
+        const cname = (className || '').trim();
+        if (!cname) return dept || '-';
+        const sy = activeSemesterYear != null ? parseInt(activeSemesterYear, 10) : NaN;
+        const ay = admissionYear != null && admissionYear !== '' ? parseInt(admissionYear, 10) : NaN;
+        if (isNaN(sy) || isNaN(ay)) return (dept ? dept + ' ' + cname : cname);
+        const gradeNum = sy - ay + 1;
+        const gradeLabels = ['一', '二', '三', '四', '五', '六'];
+        const gradeChar = (gradeNum >= 1 && gradeNum <= 6) ? gradeLabels[gradeNum - 1] : (gradeNum > 0 ? String(gradeNum) : '');
+        return gradeChar ? (dept ? dept + ' ' + gradeChar + cname : gradeChar + cname) : (dept ? dept + ' ' + cname : cname);
+      }
 
       function showPage(index) {
         pages.forEach((page, i) => page.classList.toggle('active', i === index));
@@ -312,15 +329,8 @@
           // ⭐️ 修正點 B: 填入唯讀的實習學期資料 ⭐️
           currentSemesterInput.value = user.current_semester_display || '';
 
-          // 填入角色特定資料
+          // 填入角色特定資料：學生僅顯示「班級/年級」一欄，格式 資管科四孝
           if (userRole === 'student') {
-            const gradeDisplayEl = document.getElementById('gradeDisplay');
-            const gradeDisplayContainer = document.getElementById('gradeDisplayContainer');
-            if (gradeDisplayEl && gradeDisplayContainer) {
-              gradeDisplayEl.value = user.grade_display || '';
-              gradeDisplayContainer.style.display = user.grade_display ? 'block' : 'none';
-            }
-            // 班級：以「科系 + 動態年級 + 班名」（資管科 四孝）顯示；優先依 API 的 active_semester_year 或 current_semester_display 與 admission_year 計算
             let classDisplay = user.class_display_name || '';
             const dept = (user.department || '').trim();
             const cname = (user.class_name || '').trim();

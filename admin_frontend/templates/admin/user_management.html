@@ -357,13 +357,7 @@
                 <h5 class="mb-0">用戶列表</h5>
                 <div class="d-flex gap-2">
                     <button type="button" class="btn btn-primary" id="btnGlobalConfig" onclick="openGlobalConfigModal()">
-                        <i class="bi bi-globe"></i> 全部套用 (設定屆別預設)
-                    </button>
-                    <button type="button" class="btn btn-warning" id="batchEditBtn" onclick="toggleBatchMode()">
-                        <i class="bi bi-check-all"></i> 批次修改實習週期
-                    </button>
-                    <button type="button" class="btn btn-success" id="saveBatchBtn" style="display:none;" onclick="openBatchEditModal()" disabled title="請先勾選至少一位學生">
-                        <i class="bi bi-save"></i> 儲存選中學生
+                        <i class="bi bi-calendar-range"></i> 設定實習週期
                     </button>
                 </div>
             </div>
@@ -372,7 +366,7 @@
                 <table class="table table-hover align-middle">
                     <thead>
                         <tr>
-                            <th style="width:2.5rem;display:none;" class="batch-checkbox-cell"><input type="checkbox" id="userTableSelectAll" title="全選/取消學生" aria-label="全選學生"></th>
+                            <th style="width:2.5rem;"><input type="checkbox" id="userTableSelectAll" title="全選" aria-label="全選"></th>
                             <th>ID</th>
                             <th>帳號</th>
                             <th>姓名</th>
@@ -634,11 +628,11 @@
         <div class="modal-dialog">
             <div class="modal-content">
                 <div class="modal-header bg-primary text-white">
-                    <h5 class="modal-title" id="globalConfigModalLabel">全部套用 (設定屆別預設值)</h5>
+                    <h5 class="modal-title" id="globalConfigModalLabel">設定實習週期</h5>
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body">
-                    <p class="text-muted small">※ 此設定將套用於該屆所有「未個別設定」的學生。</p>
+                    <p class="text-muted small">※ 全部套用 (設定屆別預設值)</p>
                     <form id="globalConfigForm">
                         <div class="mb-3">
                             <label class="form-label">入學年度</label>
@@ -961,10 +955,8 @@
                         displayCreatedAt: displayCreatedAt
                     };
 
-                    const isStudent = user.role === 'student';
-                    const checkTd = isStudent
-                        ? `<td class="batch-checkbox-cell" style="display:none;"><input type="checkbox" class="form-check-input user-row-checkbox" value="${user.id}" data-user-id="${user.id}" aria-label="勾選"></td>`
-                        : '<td class="batch-checkbox-cell text-muted" style="display:none;">-</td>';
+                    // 勾選欄：所有用戶皆可勾選，供「編輯所選」使用
+                    const checkTd = `<td><input type="checkbox" class="form-check-input user-row-checkbox" value="${user.id}" data-user-id="${user.id}" aria-label="勾選"></td>`;
                     const tr = document.createElement('tr');
                     tr.innerHTML = `
                         ${checkTd}
@@ -987,7 +979,8 @@
                         </td>`;
                     tbody.appendChild(tr);
                 });
-                if (window.isBatchMode) toggleBatchMode();
+                window.lastRenderedUsers = users;
+                updateSelectAllState();
             }
 
 
@@ -1736,43 +1729,23 @@
                 } catch (e) { showAlert('連線錯誤', 'danger'); }
             };
 
-            // ---------- 全部套用（屆別預設）/ 批次修改 ----------
-            window.isBatchMode = false;
+            // ---------- 勾選欄（供多筆選擇，表格內按鈕仍可個別編輯/查看）----------
+            window.lastRenderedUsers = [];
 
-            window.toggleBatchMode = function () {
-                window.isBatchMode = !window.isBatchMode;
-                const btn = document.getElementById('batchEditBtn');
-                const saveBtn = document.getElementById('saveBatchBtn');
-                document.querySelectorAll('.batch-checkbox-cell').forEach(el => {
-                    el.style.display = window.isBatchMode ? 'table-cell' : 'none';
-                });
-                if (window.isBatchMode) {
-                    btn.innerHTML = '<i class="bi bi-x-circle"></i> 取消批次';
-                    btn.classList.replace('btn-warning', 'btn-secondary');
-                    saveBtn.style.display = 'inline-block';
-                } else {
-                    btn.innerHTML = '<i class="bi bi-check-all"></i> 批次修改實習週期';
-                    btn.classList.replace('btn-secondary', 'btn-warning');
-                    saveBtn.style.display = 'none';
-                    saveBtn.disabled = true;
-                    document.querySelectorAll('.user-row-checkbox').forEach(cb => { cb.checked = false; });
-                    const selectAll = document.getElementById('userTableSelectAll');
-                    if (selectAll) selectAll.checked = false;
-                }
-            };
+            function updateSelectAllState() {
+                const selectAll = document.getElementById('userTableSelectAll');
+                const total = document.querySelectorAll('.user-row-checkbox').length;
+                const n = document.querySelectorAll('.user-row-checkbox:checked').length;
+                if (selectAll) selectAll.checked = total > 0 && n === total;
+            }
 
             document.getElementById('userTableSelectAll').addEventListener('change', function () {
                 document.querySelectorAll('.user-row-checkbox').forEach(cb => { cb.checked = this.checked; });
-                document.getElementById('saveBatchBtn').disabled = !this.checked;
             });
 
             document.getElementById('userTableBody').addEventListener('change', function (e) {
                 if (!e.target.classList.contains('user-row-checkbox')) return;
-                const n = document.querySelectorAll('.user-row-checkbox:checked').length;
-                document.getElementById('saveBatchBtn').disabled = n === 0;
-                const selectAll = document.getElementById('userTableSelectAll');
-                const total = document.querySelectorAll('.user-row-checkbox').length;
-                selectAll.checked = total > 0 && n === total;
+                updateSelectAllState();
             });
 
             // 入學年度 ↔ 實習學期 對應：111 學年 → 1142，110 學年 → 1132（公式：學期 code = (入學年度+3)*10+2）
@@ -1947,7 +1920,6 @@
                     const data = await res.json();
                     if (data.success) {
                         bootstrap.Modal.getInstance(document.getElementById('batchInternshipConfigModal')).hide();
-                        toggleBatchMode();
                         loadUsers();
                         showAlert('✅ ' + data.message, 'success');
                     } else {
