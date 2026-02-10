@@ -339,18 +339,17 @@
     .semester-banner i {
       color: var(--brand-blue);
     }
-    .semester-select-row {
+    .semester-filter-row {
       display: flex;
       align-items: center;
       gap: 10px;
-      margin-top: 12px;
-      flex-wrap: wrap;
+      margin-bottom: 10px;
     }
-    .semester-select-row .semester-label {
+    .semester-filter-row .semester-filter-label {
       font-weight: 600;
       color: var(--brand-blue-dark);
     }
-    .semester-select-row #semesterSelect {
+    .semester-filter-row #semesterSelect {
       padding: 6px 12px;
       border: 1px solid var(--border-light);
       border-radius: 8px;
@@ -358,8 +357,12 @@
       font-weight: 600;
       color: var(--brand-blue-dark);
       background: #fff;
-      min-width: 100px;
+      min-width: 90px;
       cursor: pointer;
+    }
+    .semester-filter-row #semesterSelect:disabled {
+      cursor: default;
+      opacity: 0.9;
     }
     .btn-link {
       display: inline-flex;
@@ -421,15 +424,12 @@
     <div class="page-intro">
       <h2>實習生／未錄取名單管理</h2>
       <p>檢視未錄取學生名單，進行二面流程與媒合名單異常檢查</p>
-      <div class="semester-select-row">
-        <label for="semesterSelect" class="semester-label">學期：</label>
-        <select id="semesterSelect" aria-label="選擇學期">
-          <option value="">載入中...</option>
-        </select>
-      </div>
-      <div id="semesterBanner" class="semester-banner" role="status" aria-live="polite" style="display: none;">
-        <i class="fa-solid fa-calendar-alt"></i>
-        <span id="semesterText">學期：—</span>
+      <!-- 顯示固定學期：1132（移除下拉選單） -->
+      <div class="semester-filter-row">
+        <div class="semester-banner" role="status" aria-live="polite" style="display: inline-flex;">
+          <i class="fa-solid fa-calendar-alt"></i>
+          <span id="semesterText">以下名單為 1132 學期（113學年第2學期）</span>
+        </div>
       </div>
     </div>
 
@@ -516,24 +516,8 @@
       renderTable(filtered);
     }
 
-    async function loadSemesterOptions() {
-      var select = document.getElementById('semesterSelect');
-      if (!select) return;
-      try {
-        var res = await fetch('/semester/api/list', { method: 'GET', headers: { 'Accept': 'application/json' }, credentials: 'include' });
-        var data = await res.json();
-        if (!data.success || !Array.isArray(data.semesters)) return;
-        select.innerHTML = '';
-        data.semesters.forEach(function(s) {
-          var opt = document.createElement('option');
-          opt.value = s.id;
-          opt.textContent = s.code || ('ID ' + s.id);
-          select.appendChild(opt);
-        });
-      } catch (e) {
-        select.innerHTML = '<option value="">取得學期失敗</option>';
-      }
-    }
+    // 僅顯示並鎖定學期為 1132（若 API 可取得對應 id，則帶入該 id）
+    // 已移除學期下拉，改為固定顯示 1132，故不需載入學期選項的函式。
 
     async function loadStudents(semesterId) {
       if (!tableContainer) return;
@@ -564,11 +548,10 @@
 
         var semesterCode = data.semester_code || '';
         var semesterLabel = data.semester_label || semesterCode;
+        var semesterSelect = document.getElementById('semesterSelect');
+        if (semesterSelect && data.semester_id) semesterSelect.value = String(data.semester_id);
         var semesterBanner = document.getElementById('semesterBanner');
         var semesterText = document.getElementById('semesterText');
-        var semesterSelectEl = document.getElementById('semesterSelect');
-        if (semesterSelectEl && data.semester_id) semesterSelectEl.value = String(data.semester_id);
-
         if (semesterBanner && semesterText) {
           semesterBanner.style.display = 'inline-flex';
           if (semesterCode) {
@@ -635,8 +618,6 @@
 
         try {
           var exportUrl = '/admission/api/ta/export_unadmitted_students_excel';
-          var sel = document.getElementById('semesterSelect');
-          if (sel && sel.value) exportUrl += '?semester_id=' + encodeURIComponent(sel.value);
           const res = await fetch(exportUrl, {
             method: 'GET',
             credentials: 'include'
@@ -685,16 +666,8 @@
       });
     }
 
-    var semesterSelectEl = document.getElementById('semesterSelect');
-    if (semesterSelectEl) {
-      semesterSelectEl.addEventListener('change', function() {
-        var v = parseInt(this.value, 10);
-        if (!isNaN(v)) loadStudents(v);
-      });
-    }
-
-    (async function() {
-      await loadSemesterOptions();
+    // 直接載入學生列表（後端會以系統預設學期處理），不顯示或依賴任何學期下拉選單
+    (function() {
       loadStudents();
     })();
   </script>

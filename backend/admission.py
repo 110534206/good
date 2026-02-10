@@ -2749,6 +2749,48 @@ def director_confirm_matching():
         conn.close()
 
 # =========================================================
+# API: 學期篩選選項（來自 internship_configs 連結 semesters，學生入學學年對應實習週期）
+# =========================================================
+@admission_bp.route("/api/semesters_for_filter", methods=["GET"])
+def semesters_for_filter():
+    """
+    取得學期篩選下拉選單的選項。
+    資料來源：internship_configs（學生入學學年對應實習週期）INNER JOIN semesters（學期 id、代碼）。
+    """
+    if 'user_id' not in session:
+        return jsonify({"success": False, "message": "未授權"}), 403
+    if session.get('role') not in ['ta', 'admin', 'director', 'teacher']:
+        return jsonify({"success": False, "message": "未授權"}), 403
+
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        # internship_configs.semester_id 連結 semesters.id，取得有實習配置的學期
+        cursor.execute("""
+            SELECT DISTINCT s.id, s.code
+            FROM semesters s
+            INNER JOIN internship_configs ic ON ic.semester_id = s.id
+            ORDER BY s.code DESC
+        """)
+        semesters = cursor.fetchall()
+        current_semester_id = get_current_semester_id(cursor)
+        current_semester_code = get_current_semester_code(cursor)
+        if not semesters and current_semester_id and current_semester_code:
+            semesters = [{"id": current_semester_id, "code": current_semester_code}]
+        return jsonify({
+            "success": True,
+            "semesters": semesters,
+            "current_semester_id": current_semester_id
+        })
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"success": False, "message": str(e)}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+
+# =========================================================
 # API: 科助工作台統計（媒合已核定數、未錄取人數）
 # =========================================================
 @admission_bp.route("/api/ta_dashboard_stats", methods=["GET"])

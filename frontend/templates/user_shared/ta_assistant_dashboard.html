@@ -319,7 +319,17 @@
       margin-left: 4px;
     }
 
-    .stats-bar select#semesterSelect {
+    .semester-filter-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+    .semester-filter-row .semester-filter-label {
+      font-weight: 600;
+      color: var(--brand-blue-dark);
+    }
+    .semester-filter-row #semesterSelect {
       padding: 6px 12px;
       border: 1px solid var(--border-light);
       border-radius: 8px;
@@ -327,10 +337,9 @@
       font-weight: 600;
       color: var(--brand-blue-dark);
       background: #fff;
-      min-width: 100px;
+      min-width: 90px;
       cursor: pointer;
     }
-
     .semester-banner {
       display: inline-flex;
       align-items: center;
@@ -441,19 +450,16 @@
       <p>媒合最終公告與未錄取名單、二面流程管理</p>
     </div>
 
-    <!-- 學期橫幅（與未錄取名單管理頁一致） -->
-    <div id="semesterBanner" class="semester-banner" role="status" aria-live="polite" style="display: none;">
-      <i class="fa-solid fa-calendar-alt"></i>
-      <span id="semesterText">學期：—</span>
+    <!-- 固定顯示學期（移除下拉選單） -->
+    <div class="semester-filter-row">
+      <div id="semesterBanner" class="semester-banner" role="status" aria-live="polite" style="display: inline-flex;">
+        <i class="fa-solid fa-calendar-alt"></i>
+        <span id="semesterText">學期：1132</span>
+      </div>
     </div>
 
-    <!-- 統計列：學期下拉 + 由後端 API 填入的其餘項目 -->
+    <!-- 統計列（學期由上方橫幅顯示） -->
     <div class="stats-bar">
-      <div class="stat-item">
-        學期：        <select id="semesterSelect" aria-label="選擇學期">
-          <option value="">載入中...</option>
-        </select>
-      </div>
       <div id="statsBar" class="stats-bar-inner" style="display: flex; flex-wrap: wrap; gap: 16px; align-items: center;">
         <span class="loading-stats" style="display: flex; align-items: center; gap: 8px; color: var(--text-muted);">
           <span class="spinner"></span>
@@ -535,30 +541,11 @@
     const panel1Stat = document.getElementById('panel1Stat');
     const panel2Stat = document.getElementById('panel2Stat');
 
-    // 載入學期列表並填入下拉選單
-    async function loadSemesterOptions() {
-      const select = document.getElementById('semesterSelect');
-      if (!select) return;
-      try {
-        const res = await fetch('/semester/api/list', { method: 'GET', headers: { 'Accept': 'application/json' }, credentials: 'include' });
-        const data = await res.json();
-        if (!data.success || !Array.isArray(data.semesters)) return;
-        select.innerHTML = '';
-        data.semesters.forEach(function(s) {
-          const opt = document.createElement('option');
-          opt.value = s.id;
-          opt.textContent = s.code || ('ID ' + s.id);
-          select.appendChild(opt);
-        });
-      } catch (e) {
-        select.innerHTML = '<option value="">取得學期失敗</option>';
-      }
-    }
+    // 已移除學期下拉，故不需載入學期選項的函式。
 
-    // 從後端取得科助工作台統計（可傳入學期 ID 指定學期）
+    // 從後端取得科助工作台統計（可傳學期 ID，對應 internship_configs 之學期）
     async function loadDashboardStats(semesterId) {
       if (!statsBar) return;
-      const semesterSelect = document.getElementById('semesterSelect');
       try {
         let url = '/admission/api/ta_dashboard_stats';
         if (semesterId) url += '?semester_id=' + encodeURIComponent(semesterId);
@@ -584,8 +571,8 @@
         const semesterCode = data.semester_code || '';
         const semesterLabel = data.semester_label || semesterCode;
 
+        const semesterSelect = document.getElementById('semesterSelect');
         if (semesterSelect && data.semester_id) semesterSelect.value = String(data.semester_id);
-
         const semesterBanner = document.getElementById('semesterBanner');
         const semesterText = document.getElementById('semesterText');
         if (semesterBanner && semesterText) {
@@ -711,16 +698,8 @@
       });
     }
 
-    const semesterSelect = document.getElementById('semesterSelect');
-    if (semesterSelect) {
-      semesterSelect.addEventListener('change', function() {
-        const v = parseInt(this.value, 10);
-        if (!isNaN(v)) loadDashboardStats(v);
-      });
-    }
-
-    (async function() {
-      await loadSemesterOptions();
+    // 直接載入儀表板統計（不使用學期下拉）
+    (function() {
       loadDashboardStats();
     })();
   </script>
