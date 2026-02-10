@@ -209,7 +209,7 @@ def get_profile():
         cursor.execute("""
             SELECT u.id, u.username, u.email, u.role AS original_role, u.name,
                    c.department, c.name AS class_name, u.class_id, u.avatar_url,
-                   u.teacher_name, u.user_changed, u.admission_year AS db_admission_year
+                   u.teacher_id, u.user_changed, u.admission_year AS db_admission_year
             FROM users u
             LEFT JOIN classes c ON u.class_id = c.id
             WHERE u.id = %s
@@ -220,36 +220,39 @@ def get_profile():
             return jsonify({"success": False, "message": "使用者不存在"}), 404
 
         # ------------------------------
-        # 實習學期：僅學生顯示。由 internship_configs 取得該屆（或個人）設定，顯示學期代碼（如 1132、1142）。
+        # 學期：由 internship_configs 取得。優先順序：1) 該 user_id + 當前學期之專屬設定；2) 無則 user_id IS NULL 且 admission_year 相符之公版。
         # ------------------------------
         user['current_semester_display'] = ''
         user['current_semester_code'] = None
-        is_student = (user.get('original_role') == 'student')
-        db_ay = user.get('db_admission_year')
-        admission_year_val = None
-        if db_ay is not None and str(db_ay).strip() != '':
-            try:
-                admission_year_val = int(db_ay)
-            except (TypeError, ValueError):
-                pass
-        if admission_year_val is None and is_student and user.get('username') and len(str(user.get('username', ''))) >= 3:
-            try:
-                admission_year_val = int(str(user['username'])[:3])
-            except (TypeError, ValueError):
-                pass
-        if is_student and admission_year_val is not None:
+        cursor.execute("SELECT id FROM semesters WHERE is_active = 1 LIMIT 1")
+        active_semester = cursor.fetchone()
+        active_semester_id = active_semester.get('id') if active_semester else None
+        if active_semester_id:
+            # 學生：採用 (user_id = 本人 OR (user_id IS NULL AND admission_year = 屆數)) 且 semester_id = 當前學期，ORDER BY user_id DESC 取一筆（個人優先）
+            db_ay = user.get('db_admission_year')
+            admission_year_val = None
+            if db_ay is not None and str(db_ay).strip() != '':
+                try:
+                    admission_year_val = int(db_ay)
+                except (TypeError, ValueError):
+                    pass
+            elif user.get('original_role') == 'student' and user.get('username') and len(user.get('username', '')) >= 3:
+                try:
+                    admission_year_val = int(user['username'][:3])
+                except (TypeError, ValueError):
+                    pass
             cursor.execute("""
                 SELECT ic.semester_id, s.code
                 FROM internship_configs ic
                 JOIN semesters s ON s.id = ic.semester_id
-                WHERE ic.user_id = %s OR (ic.user_id IS NULL AND ic.admission_year = %s)
+                WHERE ic.semester_id = %s
+                  AND (ic.user_id = %s OR (ic.user_id IS NULL AND ic.admission_year = %s))
                 ORDER BY ic.user_id DESC
                 LIMIT 1
-            """, (user_id, admission_year_val))
+            """, (active_semester_id, user_id, admission_year_val))
             ic_row = cursor.fetchone()
             if ic_row:
-                code_val = ic_row.get('code')
-                user['current_semester_display'] = str(code_val).strip() if code_val is not None else ''
+                user['current_semester_display'] = ic_row.get('code') or ''
                 user['current_semester_code'] = ic_row.get('semester_id')
         # ------------------------------
 
@@ -272,7 +275,7 @@ def get_profile():
         classes = []
         if original_role_from_db in ("teacher", "director"):
             cursor.execute("""
-                SELECT c.id, c.name, c.department, c.admission_year, ct.role
+                SELECT c.id, c.name, c.department, ct.role
                 FROM classes c
                 JOIN classes_teacher ct ON c.id = ct.class_id
                 WHERE ct.teacher_id = %s
@@ -284,42 +287,16 @@ def get_profile():
         user["email"] = user["email"] or ""
 
         # 班導：帶班班級、年級（classes_teacher role=班導師）；指導老師：指導學生所屬班級（teacher_student_relations）
-        # 年級 = (當前學年 - admission_year + 1)，班級顯示為「科系 年級+班序」如 資管 四孝
-        active_year = _get_active_semester_year(cursor)
-        grade_labels = ('一', '二', '三', '四', '五', '六')
-
-        def _class_display_row(dept, cname, admission_yr):
-            """由 admission_year 與純班序組合成「科系 年級班序」，如 資管科 四孝、資管科 三忠。"""
-            dept_str = (dept or '').strip()  # 保留完整科系名稱，如 資管科
-            name_str = (cname or '').strip()
-            if not name_str:
-                return dept_str or '-'
-            if admission_yr is None or active_year is None:
-                return f"{dept_str} {name_str}".strip() if dept_str else name_str
-            try:
-                ay_int = int(admission_yr)
-            except (TypeError, ValueError):
-                return f"{dept_str} {name_str}".strip() if dept_str else name_str
-            grade_num = active_year - ay_int + 1
-            if 1 <= grade_num <= 6:
-                grade_char = grade_labels[grade_num - 1]
-            elif grade_num > 0:
-                grade_char = str(grade_num)
-            else:
-                grade_char = ''
-            # 顯示格式：資管科 四孝、資管科 三忠
-            return f"{dept_str} {grade_char}{name_str}".strip() if grade_char else (f"{dept_str} {name_str}".strip() if dept_str else name_str)
-
         if active_role in ("teacher", "director", "class_teacher") and original_role_from_db in ("teacher", "director"):
             homeroom_class_names = []
             if is_homeroom and classes:
                 homeroom_classes = [c for c in classes if c.get("role") == "班導師"]
-                homeroom_class_names = [_class_display_row(c.get('department'), c.get('name'), c.get('admission_year')) for c in homeroom_classes]
+                homeroom_class_names = [f"{c['department'].replace('管科', '')}{c['name']}" for c in homeroom_classes]
             user["homeroom_class_display"] = "、".join(homeroom_class_names) if homeroom_class_names else ""
 
             guided_class_names = []
             cursor.execute("""
-                SELECT DISTINCT c.id, c.department, c.name, c.admission_year
+                SELECT DISTINCT c.id, c.department, c.name
                 FROM teacher_student_relations tsr
                 JOIN users u ON u.id = tsr.student_id AND u.role = 'student'
                 JOIN classes c ON c.id = u.class_id
@@ -328,7 +305,7 @@ def get_profile():
             """, (user["id"],))
             guided_classes = cursor.fetchall()
             if guided_classes:
-                guided_class_names = [_class_display_row(c.get('department'), c.get('name'), c.get('admission_year')) for c in guided_classes]
+                guided_class_names = [f"{c['department'].replace('管科', '')}{c['name']}" for c in guided_classes]
             user["guided_class_display"] = "、".join(guided_class_names) if guided_class_names else ""
 
             # 相容用：班導優先顯示帶班，否則顯示指導學生所屬
@@ -351,6 +328,7 @@ def get_profile():
                 except (TypeError, ValueError):
                     pass
             grade_char = ''
+            active_year = _get_active_semester_year(cursor)
             if active_year is not None and ay_int is not None:
                 grade_num = active_year - ay_int + 1
                 grade_labels = ('一', '二', '三', '四', '五', '六')
@@ -373,18 +351,30 @@ def get_profile():
             user["class_display_name"] = ""
 
         # 如果是廠商，獲取對應的指導老師資訊
-        # 優先使用 users 表中的 teacher_name 欄位（如果有的話）
+        # 優先使用 users 表中的 teacher_id 欄位（如果有的話）
         # 如果沒有，則從 internship_companies 表中查詢
         if original_role_from_db == "vendor":
-            # 首先檢查 users 表中是否有直接儲存的 teacher_name
-            teacher_name_from_users = user.get("teacher_name") or ""
+            # 初始化 advisor_name
+            user["advisor_name"] = ""
             
-            if teacher_name_from_users and teacher_name_from_users.strip():
-                # 如果 users 表中有直接儲存的指導老師名稱，直接使用
-                user["advisor_name"] = teacher_name_from_users.strip()
-                print(f"✅ 從 users 表讀取指導老師名稱: {user['advisor_name']}")
-            else:
-                # 否則從 internship_companies 表中查詢
+            # 首先檢查 users 表中是否有直接儲存的 teacher_id
+            teacher_id_from_users = user.get("teacher_id")
+            
+            if teacher_id_from_users:
+                # 如果有 teacher_id，查詢老師的名字
+                cursor.execute("""
+                    SELECT name FROM users 
+                    WHERE id = %s AND role IN ('teacher', 'director')
+                """, (teacher_id_from_users,))
+                teacher_row = cursor.fetchone()
+                if teacher_row:
+                    teacher_name = teacher_row.get('name') if isinstance(teacher_row, dict) else teacher_row[0]
+                    if teacher_name:
+                        user["advisor_name"] = teacher_name
+                        print(f"✅ 從 users 表讀取指導老師 ID: {teacher_id_from_users}, 名稱: {user['advisor_name']}")
+            
+            # 如果從 teacher_id 沒有找到，或者 teacher_id 為空，則從 internship_companies 表中查詢
+            if not user.get("advisor_name"):
                 vendor_email = user.get("email") or ""
                 cursor.execute("""
                     SELECT DISTINCT u.id AS advisor_id, u.name AS advisor_name
@@ -410,13 +400,16 @@ def get_profile():
                                 advisor_names.append(advisor_name)
                 
                 # 如果有指導老師，顯示所有指導老師（用、分隔）
-                user["advisor_name"] = "、".join(advisor_names) if advisor_names else ""
-                print(f"✅ 從 internship_companies 表查詢到的指導老師名稱: {user['advisor_name']}")
+                if advisor_names:
+                    user["advisor_name"] = "、".join(advisor_names)
+                    print(f"✅ 從 internship_companies 表查詢到的指導老師名稱: {user['advisor_name']}")
+                else:
+                    print(f"⚠️ 廠商 {user_id} 沒有找到指導老師資訊")
         else:
             user["advisor_name"] = ""
 
         # 供前端計算班級年級顯示（學生／老師班級皆可用）
-        user["active_semester_year"] = active_year
+        user["active_semester_year"] = _get_active_semester_year(cursor)
 
         return jsonify({"success": True, "user": user})
     except Exception as e:
@@ -841,6 +834,17 @@ def ta_match_results():
 @users_bp.route('/final_results')
 def final_results():
     return render_template('user_shared/final_results.html')
+
+# 指導老師／班導：未錄取名單查看頁面
+@users_bp.route('/teacher/unadmitted_list')
+def teacher_unadmitted_list():
+    """
+    指導老師／班導查看未錄取名單的頁面。
+    允許 teacher、class_teacher、director、ta、admin 訪問。
+    """
+    if 'user_id' not in session or session.get('role') not in ['teacher', 'class_teacher', 'director', 'ta', 'admin']:
+        return redirect(url_for('auth_bp.login_page'))
+    return render_template('user_shared/teacher_unadmitted_list.html')
 
 # 管理員首頁（後台）
 @users_bp.route('/admin_home')
