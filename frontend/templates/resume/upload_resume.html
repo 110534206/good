@@ -524,7 +524,7 @@
               <div class="col-md-3 language-group">
                 <label>英語</label>
                 <select class="form-select form-select-sm" name="lang_en_level">
-                  <option value="">未選</option>
+                  <option value="">尚未設定</option>
                   <option value="精通">精通</option>
                   <option value="中等">中等</option>
                   <option value="略懂">略懂</option>
@@ -533,7 +533,7 @@
               <div class="col-md-3 language-group">
                 <label>台語</label>
                 <select class="form-select form-select-sm" name="lang_tw_level">
-                  <option value="">未選</option>
+                  <option value="">尚未設定</option>
                   <option value="精通">精通</option>
                   <option value="中等">中等</option>
                   <option value="略懂">略懂</option>
@@ -542,7 +542,7 @@
               <div class="col-md-3 language-group">
                 <label>日語</label>
                 <select class="form-select form-select-sm" name="lang_jp_level">
-                  <option value="">未選</option>
+                  <option value="">尚未設定</option>
                   <option value="精通">精通</option>
                   <option value="中等">中等</option>
                   <option value="略懂">略懂</option>
@@ -551,7 +551,7 @@
               <div class="col-md-3 language-group">
                 <label>客語</label>
                 <select class="form-select form-select-sm" name="lang_hk_level">
-                  <option value="">未選</option>
+                  <option value="">尚未設定</option>
                   <option value="精通">精通</option>
                   <option value="中等">中等</option>
                   <option value="略懂">略懂</option>
@@ -857,10 +857,16 @@
     let filteredCoursesCache = [];
 
     // 🧩 將儲存路徑轉為前端可顯示的 URL（支援反斜線路徑）
+    // 確保 uploads/absence_proofs/ 等路徑正確指向 /uploads/absence_proofs/xxx
     function imagePathToUrl(path) {
       if (!path || typeof path !== 'string') return '';
-      const normalized = (path + '').replace(/\\/g, '/').replace(/^\/+/, '');
-      return normalized ? '/' + normalized : '';
+      let normalized = (path + '').replace(/\\/g, '/').replace(/^\/+/, '').trim();
+      if (!normalized) return '';
+      // 若路徑含 absence_proofs 但未以 uploads/ 開頭，補上
+      if (normalized.includes('absence_proofs') && !normalized.startsWith('uploads/')) {
+        normalized = 'uploads/' + normalized;
+      }
+      return '/' + normalized;
     }
 
     // 🧩 更新圖片預覽框：顯示既有路徑或佔位文字
@@ -2278,9 +2284,10 @@
       container.innerHTML = '';
       certEntries = [];
 
-      // 如果沒有證照資料，不創建空條目（讓用戶手動添加）
+      // 如果沒有證照資料，顯示「尚未設定」提示，不創建空條目（讓用戶手動添加）
       if (!initialCerts || initialCerts.length === 0) {
         console.log('📋 沒有證照資料，不創建空條目');
+        container.innerHTML = '<p class="text-muted small mb-0 py-2">尚無證照，請點擊「＋新增證照」添加</p>';
         refreshCertificateIndices();
         return;
       }
@@ -4109,11 +4116,8 @@
 
       console.log(`📤 準備提交 ${courses.length} 門課程（從 allCoursesData 收集，共 ${allCoursesData.length} 門）`);
       formData.append("courses", JSON.stringify(courses));
-      // 供 resume_content_mapping.course_grade_ids 儲存（課程名稱列表）
-      const selectedCourseGradeIds = allCoursesData
-        .filter(course => course.name && course.name.trim())
-        .map(course => course.name.trim());
-      formData.append("selected_course_grade_ids", JSON.stringify(selectedCourseGradeIds));
+      // course_grade_ids 改由後端依插入的 course_grades 取得 id 並寫入 resume_content_mapping
+      formData.append("selected_course_grade_ids", JSON.stringify([]));
 
       // 移除舊的課程相關欄位，因為我們統一用 JSON 傳遞
       formData.delete("course_name[]");

@@ -121,8 +121,10 @@ def record_admission():
         if not advisor:
             return jsonify({"success": False, "message": "找不到該指導老師"}), 404
         
-        # 3. 設置學期代碼為 1132（固定值）
-        semester_code = '1132'
+        # 3. 獲取當前學期代碼
+        semester_code = get_current_semester_code(cursor)
+        if not semester_code:
+            return jsonify({"success": False, "message": "目前沒有設定當前學期"}), 400
         current_datetime_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         
         # 4. 檢查是否已經存在該關係（避免重複）
@@ -133,19 +135,19 @@ def record_admission():
         existing_relation = cursor.fetchone()
         
         if existing_relation:
-            # 如果已存在，更新 created_at 為當天日期（媒合時間）
+            # 如果已存在，更新公司ID（可能學生換了公司）
             cursor.execute("""
-                UPDATE teacher_student_relations 
-                SET created_at = CURDATE()
+                UPDATE teacher_student_relations
+                SET company_id = %s, updated_at = NOW()
                 WHERE id = %s
-            """, (existing_relation['id'],))
+            """, (company_id, existing_relation['id']))
         else:
             # 5. 創建師生關係記錄
             cursor.execute("""
                 INSERT INTO teacher_student_relations 
-                (teacher_id, student_id, semester, role, created_at)
-                VALUES (%s, %s, %s, '指導老師', CURDATE())
-            """, (advisor_user_id, student_id, semester_code))
+                (teacher_id, student_id, company_id, semester, role, created_at)
+                VALUES (%s, %s, %s, %s, '指導老師', NOW())
+            """, (advisor_user_id, student_id, company_id, semester_code))
         
         # 6. 在 internship_offers 表中記錄錄取結果 (新增的邏輯)
         # 這是 get_my_admission API 優先讀取的資料來源
@@ -2447,23 +2449,53 @@ def director_add_student():
             ))
         else:
             print(f"➕ 創建新記錄")
+            # 檢查 project_id 欄位是否存在，如果存在則包含在 INSERT 中
             cursor.execute("""
-                INSERT INTO manage_director (
-                    semester_id, vendor_id, student_id, preference_id,
-                    original_type, original_rank, is_conflict,
-                    director_decision, final_rank, is_adjusted,
-                    updated_at
-                ) VALUES (
-                    %s, %s, %s, %s,
-                    %s, %s, 0,
-                    'Approved', %s, 0,
-                    CURRENT_TIMESTAMP
-                )
-            """, (
-                current_semester_id, company_id, student_id, preference_id,
-                original_type, original_rank,
-                final_rank
-            ))
+                SELECT COLUMN_NAME 
+                FROM information_schema.COLUMNS 
+                WHERE TABLE_SCHEMA = DATABASE() 
+                AND TABLE_NAME = 'manage_director'
+                AND COLUMN_NAME = 'project_id'
+            """)
+            has_project_id = cursor.fetchone() is not None
+            cursor.fetchall()  # 確保所有結果都被讀取
+            
+            if has_project_id:
+                cursor.execute("""
+                    INSERT INTO manage_director (
+                        semester_id, project_id, vendor_id, student_id, preference_id,
+                        original_type, original_rank, is_conflict,
+                        director_decision, final_rank, is_adjusted,
+                        updated_at
+                    ) VALUES (
+                        %s, NULL, %s, %s, %s,
+                        %s, %s, 0,
+                        'Approved', %s, 0,
+                        CURRENT_TIMESTAMP
+                    )
+                """, (
+                    current_semester_id, company_id, student_id, preference_id,
+                    original_type, original_rank,
+                    final_rank
+                ))
+            else:
+                cursor.execute("""
+                    INSERT INTO manage_director (
+                        semester_id, vendor_id, student_id, preference_id,
+                        original_type, original_rank, is_conflict,
+                        director_decision, final_rank, is_adjusted,
+                        updated_at
+                    ) VALUES (
+                        %s, %s, %s, %s,
+                        %s, %s, 0,
+                        'Approved', %s, 0,
+                        CURRENT_TIMESTAMP
+                    )
+                """, (
+                    current_semester_id, company_id, student_id, preference_id,
+                    original_type, original_rank,
+                    final_rank
+                ))
         
         conn.commit()
         
@@ -2650,10 +2682,14 @@ def director_confirm_matching():
     cursor = conn.cursor(dictionary=True)
     
     try:
-        # 獲取當前學期ID
+        # 獲取當前學期ID和學期代碼
         current_semester_id = get_current_semester_id(cursor)
         if not current_semester_id:
             return jsonify({"success": False, "message": "無法取得當前學期"}), 500
+        
+        # 獲取當前學期代碼（如 '1132'）
+        current_semester_code = get_current_semester_code(cursor)
+        semester_prefix = f"{current_semester_code}學期" if current_semester_code else "本學期"
         
         # 1. 收集所有需要通知的指導老師和班導（去重，避免同一個人收到兩個通知）
         notified_user_ids = set()
@@ -2676,8 +2712,8 @@ def director_confirm_matching():
             notified_user_ids.add(class_teacher['teacher_id'])
         
         # 只發送一個通知給所有需要通知的用戶（指導老師和班導）
-        title = "媒合結果已出爐"
-        message = "媒合結果已出爐"
+        title = f"{semester_prefix} 媒合結果已出爐"
+        message = f"{semester_prefix}媒合結果已出爐，請前往查看。"
         link_url = "/admission/results"
         
         for user_id in notified_user_ids:
@@ -2694,8 +2730,8 @@ def director_confirm_matching():
         vendors = cursor.fetchall() or []
         
         for vendor in vendors:
-            title = "媒合結果待確認"
-            message = "主任已確認媒合結果，請前往確認您的實習生名單。"
+            title = f"{semester_prefix} 媒合結果待確認"
+            message = f"{semester_prefix}媒合結果已由主任確認，請前往確認您的實習生名單。"
             link_url = "/vendor/matching_results"  # 廠商查看媒合結果的頁面
             create_notification(
                 user_id=vendor['id'],
@@ -2710,8 +2746,8 @@ def director_confirm_matching():
         tas = cursor.fetchall() or []
         
         for ta in tas:
-            title = "媒合結果待發布"
-            message = "主任已確認媒合結果，廠商確認後請進行最後發布。"
+            title = f"{semester_prefix} 媒合結果待發布"
+            message = f"{semester_prefix}媒合結果已由主任確認，廠商確認後請進行最後發布。"
             link_url = "/final_results"  # 科助查看最終結果的頁面
             create_notification(
                 user_id=ta['id'],

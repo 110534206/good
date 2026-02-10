@@ -1490,7 +1490,7 @@
     });
 
     // 載入媒合結果
-    async function loadMatchingResults() {
+    async function loadMatchingResults(showLoading = true) {
       const loadingState = document.getElementById('loadingState');
       const companiesContainer = document.getElementById('companiesContainer');
       const emptyState = document.getElementById('emptyState');
@@ -1499,8 +1499,12 @@
       // 確保框架一直存在
       filtersContainer.style.display = 'flex';  // 過濾器框架一直顯示
       
-      // 顯示載入狀態，但保持其他框架存在
-      loadingState.style.display = 'flex';
+      // 根據參數決定是否顯示載入狀態
+      if (showLoading) {
+        loadingState.style.display = 'flex';
+      } else {
+        loadingState.style.display = 'none';
+      }
       companiesContainer.style.display = 'grid';  // 框架一直存在，即使沒有內容
       emptyState.style.display = 'none';
       
@@ -3308,7 +3312,9 @@
         console.log('收到回應:', data);
         
         if (data.success) {
-          loadMatchingResults(); // 重新載入媒合結果
+          // 重新載入媒合結果和未匹配學生列表，確保資料同步
+          await loadMatchingResults();
+          await loadUnmatchedStudents();
         } else {
           showToast(data.message || '添加失敗', 'error');
         }
@@ -3357,7 +3363,6 @@
     // 確認功能
     async function confirmMatching() {
       try {
-        // 顯示載入狀態
         const confirmBtn = document.getElementById('confirmBtn');
         const originalText = confirmBtn ? confirmBtn.innerHTML : '';
         if (confirmBtn) {
@@ -3381,8 +3386,8 @@
         }
         
         if (data.success) {
-          // 重新載入媒合結果
-          await loadMatchingResults();
+          // 重新載入媒合結果（不顯示載入狀態）
+          await loadMatchingResults(false);
         }
       } catch (error) {
         console.error('確認失敗:', error);
