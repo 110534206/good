@@ -323,6 +323,44 @@
       padding: 16px;
     }
 
+    .semester-banner {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 12px;
+      padding: 8px 16px;
+      background: rgba(0, 102, 204, 0.1);
+      border: 1px solid var(--border-light);
+      border-radius: 8px;
+      font-size: 0.95rem;
+      color: var(--brand-blue-dark);
+      font-weight: 600;
+    }
+    .semester-banner i {
+      color: var(--brand-blue);
+    }
+    .semester-select-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-top: 12px;
+      flex-wrap: wrap;
+    }
+    .semester-select-row .semester-label {
+      font-weight: 600;
+      color: var(--brand-blue-dark);
+    }
+    .semester-select-row #semesterSelect {
+      padding: 6px 12px;
+      border: 1px solid var(--border-light);
+      border-radius: 8px;
+      font-size: 1rem;
+      font-weight: 600;
+      color: var(--brand-blue-dark);
+      background: #fff;
+      min-width: 100px;
+      cursor: pointer;
+    }
     .btn-link {
       display: inline-flex;
       align-items: center;
@@ -379,10 +417,20 @@
     <a href="/logout">登出</a>
   </nav>
 
-  <main>
+    <main>
     <div class="page-intro">
       <h2>實習生／未錄取名單管理</h2>
       <p>檢視未錄取學生名單，進行二面流程與媒合名單異常檢查</p>
+      <div class="semester-select-row">
+        <label for="semesterSelect" class="semester-label">學期：</label>
+        <select id="semesterSelect" aria-label="選擇學期">
+          <option value="">載入中...</option>
+        </select>
+      </div>
+      <div id="semesterBanner" class="semester-banner" role="status" aria-live="polite" style="display: none;">
+        <i class="fa-solid fa-calendar-alt"></i>
+        <span id="semesterText">學期：—</span>
+      </div>
     </div>
 
     <section class="panel" aria-label="統計與名單">
@@ -403,6 +451,9 @@
 
       <div class="filter-bar">
         <input type="search" id="searchInput" placeholder="搜尋姓名或學號..." aria-label="搜尋學生">
+        <button id="exportUnadmittedBtn" class="btn-link" type="button" style="margin-left:auto;">
+          <i class="fa-solid fa-file-excel"></i> 匯出未錄取名單 (Excel)
+        </button>
       </div>
 
       <div id="tableContainer" class="table-wrapper">
@@ -424,6 +475,7 @@
     const tableContainer = document.getElementById('tableContainer');
     const loadingState = document.getElementById('loadingState');
     const searchInput = document.getElementById('searchInput');
+    const exportUnadmittedBtn = document.getElementById('exportUnadmittedBtn');
 
     let allStudents = [];
 
@@ -464,14 +516,35 @@
       renderTable(filtered);
     }
 
-    async function loadStudents() {
+    async function loadSemesterOptions() {
+      var select = document.getElementById('semesterSelect');
+      if (!select) return;
+      try {
+        var res = await fetch('/semester/api/list', { method: 'GET', headers: { 'Accept': 'application/json' }, credentials: 'include' });
+        var data = await res.json();
+        if (!data.success || !Array.isArray(data.semesters)) return;
+        select.innerHTML = '';
+        data.semesters.forEach(function(s) {
+          var opt = document.createElement('option');
+          opt.value = s.id;
+          opt.textContent = s.code || ('ID ' + s.id);
+          select.appendChild(opt);
+        });
+      } catch (e) {
+        select.innerHTML = '<option value="">取得學期失敗</option>';
+      }
+    }
+
+    async function loadStudents(semesterId) {
       if (!tableContainer) return;
       loadingState.style.display = 'flex';
       tableContainer.innerHTML = '';
       tableContainer.appendChild(loadingState);
 
       try {
-        const res = await fetch('/admission/api/get_all_students', {
+        var url = '/admission/api/get_all_students';
+        if (semesterId) url += '?semester_id=' + encodeURIComponent(semesterId);
+        const res = await fetch(url, {
           method: 'GET',
           headers: { 'Accept': 'application/json' },
           credentials: 'include'
@@ -484,11 +557,31 @@
           tableContainer.innerHTML = '<div class="error-msg">無法載入名單：' + escapeHtml(data.message || res.statusText) + '</div>';
           statTotal.textContent = '-';
           statUnadmitted.textContent = '-';
+          var sb = document.getElementById('semesterBanner');
+          if (sb) sb.style.display = 'none';
           return;
         }
 
+        var semesterCode = data.semester_code || '';
+        var semesterLabel = data.semester_label || semesterCode;
+        var semesterBanner = document.getElementById('semesterBanner');
+        var semesterText = document.getElementById('semesterText');
+        var semesterSelectEl = document.getElementById('semesterSelect');
+        if (semesterSelectEl && data.semester_id) semesterSelectEl.value = String(data.semester_id);
+
+        if (semesterBanner && semesterText) {
+          semesterBanner.style.display = 'inline-flex';
+          if (semesterCode) {
+            var part = '以下名單為 <strong>' + escapeHtml(semesterCode) + '</strong> 學期';
+            if (semesterLabel !== semesterCode) part += '（' + escapeHtml(semesterLabel) + '）';
+            semesterText.innerHTML = part;
+          } else {
+            semesterText.textContent = '以下名單為目前系統學期（學期代碼：—）';
+          }
+        }
+
         allStudents = data.students || [];
-        const unadmitted = allStudents.filter(s => !s.is_matched);
+        var unadmitted = allStudents.filter(function(s) { return !s.is_matched; });
 
         statTotal.textContent = allStudents.length;
         statUnadmitted.textContent = unadmitted.length;
@@ -524,7 +617,86 @@
 
     if (searchInput) searchInput.addEventListener('input', applyFilter);
 
-    loadStudents();
+    // 匯出未錄取名單 Excel
+    if (exportUnadmittedBtn) {
+      exportUnadmittedBtn.addEventListener('click', async function () {
+        if (!allStudents.length) {
+          alert('目前沒有學生資料可匯出。');
+          return;
+        }
+
+        if (!confirm('確定要匯出「未錄取學生名單」的 Excel 檔案嗎？')) {
+          return;
+        }
+
+        exportUnadmittedBtn.disabled = true;
+        const originalText = exportUnadmittedBtn.innerHTML;
+        exportUnadmittedBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> 匯出中...';
+
+        try {
+          var exportUrl = '/admission/api/ta/export_unadmitted_students_excel';
+          var sel = document.getElementById('semesterSelect');
+          if (sel && sel.value) exportUrl += '?semester_id=' + encodeURIComponent(sel.value);
+          const res = await fetch(exportUrl, {
+            method: 'GET',
+            credentials: 'include'
+          });
+
+          if (!res.ok) {
+            let msg = res.statusText;
+            try {
+              const data = await res.json();
+              if (data && data.message) msg = data.message;
+            } catch (e) {}
+            throw new Error(msg || '匯出失敗');
+          }
+
+          const blob = await res.blob();
+          const url = window.URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+
+          const cd = res.headers.get('Content-Disposition');
+          let filename = '未錄取學生名單.xlsx';
+          if (cd) {
+            const m = cd.match(/filename[^;=\n]*=((['\"]).*?\2|[^;\n]*)/);
+            if (m && m[1]) {
+              filename = m[1].replace(/['"]/g, '');
+              if (filename.startsWith("UTF-8''")) {
+                filename = decodeURIComponent(filename.replace("UTF-8''", ''));
+              }
+            }
+          }
+
+          a.download = filename;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          window.URL.revokeObjectURL(url);
+
+          alert('✅ 未錄取學生名單已匯出。');
+        } catch (err) {
+          console.error('匯出未錄取名單失敗', err);
+          alert('❌ 匯出失敗：' + (err.message || '未知錯誤'));
+        } finally {
+          exportUnadmittedBtn.disabled = false;
+          exportUnadmittedBtn.innerHTML = originalText;
+        }
+      });
+    }
+
+    var semesterSelectEl = document.getElementById('semesterSelect');
+    if (semesterSelectEl) {
+      semesterSelectEl.addEventListener('change', function() {
+        var v = parseInt(this.value, 10);
+        if (!isNaN(v)) loadStudents(v);
+      });
+    }
+
+    (async function() {
+      await loadSemesterOptions();
+      loadStudents();
+    })();
   </script>
 </body>
 </html>

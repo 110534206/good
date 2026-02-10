@@ -319,6 +319,35 @@
       margin-left: 4px;
     }
 
+    .stats-bar select#semesterSelect {
+      padding: 6px 12px;
+      border: 1px solid var(--border-light);
+      border-radius: 8px;
+      font-size: 1rem;
+      font-weight: 600;
+      color: var(--brand-blue-dark);
+      background: #fff;
+      min-width: 100px;
+      cursor: pointer;
+    }
+
+    .semester-banner {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 16px;
+      padding: 8px 16px;
+      background: rgba(0, 102, 204, 0.1);
+      border: 1px solid var(--border-light);
+      border-radius: 8px;
+      font-size: 0.95rem;
+      color: var(--brand-blue-dark);
+      font-weight: 600;
+    }
+    .semester-banner i {
+      color: var(--brand-blue);
+    }
+
     .panel-stat {
       margin-bottom: 12px;
       font-size: 0.95rem;
@@ -412,11 +441,24 @@
       <p>媒合最終公告與未錄取名單、二面流程管理</p>
     </div>
 
-    <!-- 統計列（由後端 API 填入） -->
-    <div id="statsBar" class="stats-bar">
-      <div class="loading-stats">
-        <span class="spinner"></span>
-        <span>載入統計中...</span>
+    <!-- 學期橫幅（與未錄取名單管理頁一致） -->
+    <div id="semesterBanner" class="semester-banner" role="status" aria-live="polite" style="display: none;">
+      <i class="fa-solid fa-calendar-alt"></i>
+      <span id="semesterText">學期：—</span>
+    </div>
+
+    <!-- 統計列：學期下拉 + 由後端 API 填入的其餘項目 -->
+    <div class="stats-bar">
+      <div class="stat-item">
+        學期：        <select id="semesterSelect" aria-label="選擇學期">
+          <option value="">載入中...</option>
+        </select>
+      </div>
+      <div id="statsBar" class="stats-bar-inner" style="display: flex; flex-wrap: wrap; gap: 16px; align-items: center;">
+        <span class="loading-stats" style="display: flex; align-items: center; gap: 8px; color: var(--text-muted);">
+          <span class="spinner"></span>
+          <span>載入統計中...</span>
+        </span>
       </div>
     </div>
 
@@ -493,11 +535,34 @@
     const panel1Stat = document.getElementById('panel1Stat');
     const panel2Stat = document.getElementById('panel2Stat');
 
-    // 從後端取得科助工作台統計
-    async function loadDashboardStats() {
-      if (!statsBar) return;
+    // 載入學期列表並填入下拉選單
+    async function loadSemesterOptions() {
+      const select = document.getElementById('semesterSelect');
+      if (!select) return;
       try {
-        const res = await fetch('/admission/api/ta_dashboard_stats', {
+        const res = await fetch('/semester/api/list', { method: 'GET', headers: { 'Accept': 'application/json' }, credentials: 'include' });
+        const data = await res.json();
+        if (!data.success || !Array.isArray(data.semesters)) return;
+        select.innerHTML = '';
+        data.semesters.forEach(function(s) {
+          const opt = document.createElement('option');
+          opt.value = s.id;
+          opt.textContent = s.code || ('ID ' + s.id);
+          select.appendChild(opt);
+        });
+      } catch (e) {
+        select.innerHTML = '<option value="">取得學期失敗</option>';
+      }
+    }
+
+    // 從後端取得科助工作台統計（可傳入學期 ID 指定學期）
+    async function loadDashboardStats(semesterId) {
+      if (!statsBar) return;
+      const semesterSelect = document.getElementById('semesterSelect');
+      try {
+        let url = '/admission/api/ta_dashboard_stats';
+        if (semesterId) url += '?semester_id=' + encodeURIComponent(semesterId);
+        const res = await fetch(url, {
           method: 'GET',
           headers: { 'Accept': 'application/json' },
           credentials: 'include'
@@ -505,7 +570,9 @@
         const data = await res.json();
 
         if (!res.ok || !data.success) {
-          statsBar.innerHTML = '<span class="stats-error">無法載入統計：' + (data.message || res.statusText) + '</span>';
+          statsBar.innerHTML = '<span class="stats-error">無法載入統計：' + escapeHtml(data.message || res.statusText) + '</span>';
+          const sb = document.getElementById('semesterBanner');
+          if (sb) sb.style.display = 'none';
           if (panel1Stat) panel1Stat.textContent = '';
           if (panel2Stat) panel2Stat.textContent = '';
           return;
@@ -515,9 +582,22 @@
         const unadmittedCount = data.unadmitted_count ?? 0;
         const totalStudents = data.total_students ?? 0;
         const semesterCode = data.semester_code || '';
+        const semesterLabel = data.semester_label || semesterCode;
+
+        if (semesterSelect && data.semester_id) semesterSelect.value = String(data.semester_id);
+
+        const semesterBanner = document.getElementById('semesterBanner');
+        const semesterText = document.getElementById('semesterText');
+        if (semesterBanner && semesterText) {
+          semesterBanner.style.display = 'inline-flex';
+          if (semesterCode) {
+            semesterText.innerHTML = '以下名單為 <strong>' + escapeHtml(semesterCode) + '</strong> 學期' + (semesterLabel !== semesterCode ? '（' + escapeHtml(semesterLabel) + '）' : '');
+          } else {
+            semesterText.textContent = '以下名單為目前系統學期（學期代碼：—）';
+          }
+        }
 
         statsBar.innerHTML = ''
-          + (semesterCode ? '<div class="stat-item">學期：<strong>' + escapeHtml(semesterCode) + '</strong></div>' : '')
           + '<div class="stat-item">已核定媒合人數：<span class="num">' + matchingCount + '</span> 人</div>'
           + '<div class="stat-item">未錄取人數：<span class="num">' + unadmittedCount + '</span> 人</div>'
           + (totalStudents > 0 ? '<div class="stat-item">學生總數：<span class="num">' + totalStudents + '</span> 人</div>' : '');
@@ -531,6 +611,8 @@
       } catch (err) {
         console.error('載入科助工作台統計失敗', err);
         statsBar.innerHTML = '<span class="stats-error">載入失敗，請稍後再試</span>';
+        const sb = document.getElementById('semesterBanner');
+        if (sb) sb.style.display = 'none';
         if (panel1Stat) panel1Stat.textContent = '';
         if (panel2Stat) panel2Stat.textContent = '';
       }
@@ -629,7 +711,18 @@
       });
     }
 
-    loadDashboardStats();
+    const semesterSelect = document.getElementById('semesterSelect');
+    if (semesterSelect) {
+      semesterSelect.addEventListener('change', function() {
+        const v = parseInt(this.value, 10);
+        if (!isNaN(v)) loadDashboardStats(v);
+      });
+    }
+
+    (async function() {
+      await loadSemesterOptions();
+      loadDashboardStats();
+    })();
   </script>
 </body>
 </html>

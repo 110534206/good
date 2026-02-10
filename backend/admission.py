@@ -1349,7 +1349,7 @@ def get_all_admissions():
 # =========================================================
 @admission_bp.route("/api/get_all_students", methods=["GET"])
 def get_all_students():
-    """獲取所有學生列表（根據角色過濾），標記哪些已在媒合結果中"""
+    """獲取所有學生列表（根據角色過濾），標記哪些已在媒合結果中。可傳 ?semester_id= 指定學期。"""
     if 'user_id' not in session:
         return jsonify({"success": False, "message": "未授權"}), 403
     
@@ -1360,18 +1360,24 @@ def get_all_students():
     cursor = conn.cursor(dictionary=True)
     
     try:
-        # 獲取當前學期代碼
-        current_semester_code = get_current_semester_code(cursor)
+        # 支援下拉選單選擇學期（與科助工作台一致）
+        chosen_id = request.args.get('semester_id', type=int)
+        if chosen_id:
+            cursor.execute("SELECT id, code FROM semesters WHERE id = %s", (chosen_id,))
+            row = cursor.fetchone()
+            if not row:
+                return jsonify({"success": False, "message": "找不到該學期"}), 400
+            current_semester_id = row['id']
+            current_semester_code = row.get('code') or ''
+        else:
+            current_semester_code = get_current_semester_code(cursor)
+            current_semester_id = get_current_semester_id(cursor)
         if not current_semester_code:
             return jsonify({"success": False, "message": "無法取得當前學期"}), 500
-        
-        # 獲取當前學期ID
-        current_semester_id = get_current_semester_id(cursor)
         if not current_semester_id:
             return jsonify({"success": False, "message": "無法取得當前學期"}), 500
         
         # 獲取所有已在媒合結果中的學生 ID（只包括 Approved 或 Pending）
-        # 以 student_preferences.semester_id 篩選，避免依賴 manage_director.semester_id（該欄位可能不存在）
         cursor.execute("""
             SELECT DISTINCT md.student_id
             FROM manage_director md
@@ -1380,6 +1386,15 @@ def get_all_students():
         """, (current_semester_id,))
         matched_student_ids = {row['student_id'] for row in cursor.fetchall()}
         
+        # 學期對應學號邏輯：1132→110xxx，1141/1142→111xxx（學號前3碼 = 學年前3碼 - 3）
+        student_id_prefix = None
+        if current_semester_code and len(current_semester_code) >= 3:
+            try:
+                year_part = int(current_semester_code[:3])  # 113, 114
+                student_id_prefix = str(year_part - 3)  # 110, 111
+            except (ValueError, TypeError):
+                pass
+
         # 基礎查詢：獲取所有學生
         base_query = """
             SELECT 
@@ -1395,6 +1410,10 @@ def get_all_students():
             WHERE u.role = 'student'
         """
         params = []
+
+        if student_id_prefix:
+            base_query += " AND u.username LIKE %s"
+            params.append(student_id_prefix + "%")
         
         # 根據角色限制查詢範圍
         if user_role == 'director':
@@ -1475,8 +1494,23 @@ def get_all_students():
             preferences = cursor.fetchall() or []
             student['preferences'] = preferences
         
+        # 學期代碼 1132 = 113學年第2學期；名單依學號篩選：1132→110xxx，1142→111xxx
+        semester_label = current_semester_code
+        if current_semester_code and len(current_semester_code) >= 4:
+            try:
+                year_part = current_semester_code[:3]  # 113
+                term_part = current_semester_code[-1]  # 2 或 1
+                term_name = "第1學期" if term_part == "1" else "第2學期"
+                semester_label = f"{year_part}學年{term_name}"
+            except Exception:
+                pass
+
         return jsonify({
             "success": True,
+            "semester_id": current_semester_id,
+            "semester_code": current_semester_code,
+            "semester_label": semester_label,
+            "student_id_prefix": student_id_prefix,  # 例：1132→"110"，1142→"111"（學號前3碼）
             "students": all_students,
             "count": len(all_students)
         })
@@ -2716,6 +2750,7 @@ def ta_dashboard_stats():
     """
     科助工作台用：回傳已核定媒合數、未錄取學生人數。
     僅允許 role 為 ta 或 admin。
+    可傳 ?semester_id= 指定學期，未傳則使用當前學期。
     """
     if 'user_id' not in session or session.get('role') not in ['ta', 'admin']:
         return jsonify({"success": False, "message": "未授權"}), 403
@@ -2724,37 +2759,84 @@ def ta_dashboard_stats():
     cursor = conn.cursor(dictionary=True)
 
     try:
-        current_semester_id = get_current_semester_id(cursor)
-        current_semester_code = get_current_semester_code(cursor)
+        # 支援下拉選單選擇學期
+        chosen_id = request.args.get('semester_id', type=int)
+        if chosen_id:
+            cursor.execute("SELECT id, code FROM semesters WHERE id = %s", (chosen_id,))
+            row = cursor.fetchone()
+            if not row:
+                return jsonify({"success": False, "message": "找不到該學期"}), 400
+            current_semester_id = row['id']
+            current_semester_code = row.get('code') or ''
+        else:
+            current_semester_id = get_current_semester_id(cursor)
+            current_semester_code = get_current_semester_code(cursor)
         if not current_semester_id:
             return jsonify({"success": False, "message": "無法取得當前學期"}), 500
 
+        # 學期對應學號：1132→110xxx，1142→111xxx（學號前3碼 = 學年前3碼 - 3）
+        student_id_prefix = None
+        if current_semester_code and len(current_semester_code) >= 3:
+            try:
+                y = int(current_semester_code[:3])
+                student_id_prefix = str(y - 3)
+            except (ValueError, TypeError):
+                pass
+
         # 已核定／待公告的媒合人數（Approved + Pending，以「不重複學生」計）
         # 以 student_preferences.semester_id 篩選學期（不依賴 manage_director.semester_id，因該欄位可能不存在）
-        cursor.execute("""
-            SELECT COUNT(DISTINCT md.student_id) AS cnt
-            FROM manage_director md
-            INNER JOIN student_preferences sp ON md.preference_id = sp.id AND sp.semester_id = %s
-            WHERE md.director_decision IN ('Approved', 'Pending')
-        """, (current_semester_id,))
+        if student_id_prefix:
+            cursor.execute("""
+                SELECT COUNT(DISTINCT md.student_id) AS cnt
+                FROM manage_director md
+                INNER JOIN student_preferences sp ON md.preference_id = sp.id AND sp.semester_id = %s
+                INNER JOIN users u ON md.student_id = u.id AND u.username LIKE %s
+                WHERE md.director_decision IN ('Approved', 'Pending')
+            """, (current_semester_id, student_id_prefix + "%"))
+        else:
+            cursor.execute("""
+                SELECT COUNT(DISTINCT md.student_id) AS cnt
+                FROM manage_director md
+                INNER JOIN student_preferences sp ON md.preference_id = sp.id AND sp.semester_id = %s
+                WHERE md.director_decision IN ('Approved', 'Pending')
+            """, (current_semester_id,))
         row = cursor.fetchone()
         matching_approved_count = (row.get("cnt") or 0) if row else 0
 
-        # 所有學生人數（role = 'student'）
-        cursor.execute("""
-            SELECT COUNT(*) AS cnt
-            FROM users u
-            WHERE u.role = 'student'
-        """)
+        # 本學期對應年級學生人數（學號前3碼 = 學年 - 3）
+        if student_id_prefix:
+            cursor.execute("""
+                SELECT COUNT(*) AS cnt
+                FROM users u
+                WHERE u.role = 'student' AND u.username LIKE %s
+            """, (student_id_prefix + "%",))
+        else:
+            cursor.execute("""
+                SELECT COUNT(*) AS cnt
+                FROM users u
+                WHERE u.role = 'student'
+            """)
         row = cursor.fetchone()
         total_students = (row.get("cnt") or 0) if row else 0
 
-        # 未錄取人數 = 全部學生 - 已核定媒合學生數
+        # 未錄取人數 = 本學期對應年級學生 - 已核定媒合學生數
         unadmitted_count = max(0, total_students - matching_approved_count)
+
+        # 學期說明：1132 → 113學年第2學期（與未錄取名單管理頁橫幅一致）
+        semester_label = current_semester_code or ""
+        if current_semester_code and len(current_semester_code) >= 4:
+            try:
+                y, t = current_semester_code[:3], current_semester_code[-1]
+                semester_label = y + "學年" + ("第1學期" if t == "1" else "第2學期")
+            except Exception:
+                pass
 
         return jsonify({
             "success": True,
+            "semester_id": current_semester_id,
             "semester_code": current_semester_code or "",
+            "semester_label": semester_label,
+            "student_id_prefix": student_id_prefix,  # 1132→"110"，1142→"111"（學號前3碼，科助工作台顯示用）
             "matching_approved_count": matching_approved_count,
             "unadmitted_count": unadmitted_count,
             "total_students": total_students,
