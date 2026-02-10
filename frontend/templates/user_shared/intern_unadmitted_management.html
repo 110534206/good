@@ -235,6 +235,15 @@
       min-width: 200px;
     }
 
+    .filter-bar select {
+      padding: 10px 14px;
+      border: 1px solid var(--border-light);
+      border-radius: 10px;
+      font-size: 0.95rem;
+      min-width: 200px;
+      background: #fff;
+    }
+
     .table-wrapper {
       overflow-x: auto;
     }
@@ -388,7 +397,7 @@
     @media (max-width: 768px) {
       main { padding: 0 16px; }
       .panel { padding: 18px; }
-      .filter-bar input { min-width: 100%; }
+      .filter-bar input, .filter-bar select { min-width: 100%; }
       th, td { padding: 10px 8px; font-size: 0.9rem; }
     }
   </style>
@@ -451,6 +460,9 @@
 
       <div class="filter-bar">
         <input type="search" id="searchInput" placeholder="搜尋姓名或學號..." aria-label="搜尋學生">
+        <select id="classSelect" aria-label="選擇班級">
+          <option value="">全部班級</option>
+        </select>
         <button id="exportUnadmittedBtn" class="btn-link" type="button" style="margin-left:auto;">
           <i class="fa-solid fa-file-excel"></i> 匯出未錄取名單 (Excel)
         </button>
@@ -475,14 +487,50 @@
     const tableContainer = document.getElementById('tableContainer');
     const loadingState = document.getElementById('loadingState');
     const searchInput = document.getElementById('searchInput');
+    const classSelect = document.getElementById('classSelect');
     const exportUnadmittedBtn = document.getElementById('exportUnadmittedBtn');
 
     let allStudents = [];
+    let currentSemesterId = null;
 
     function escapeHtml(text) {
       const div = document.createElement('div');
       div.textContent = text == null ? '' : text;
       return div.innerHTML;
+    }
+
+    function getClassLabel(s) {
+      const dept = ((s && s.department) || '').trim();
+      const cls = ((s && s.class_name) || '').trim();
+      return (dept + cls).trim();
+    }
+
+    function populateClassOptions(students) {
+      if (!classSelect) return;
+      const prevValue = classSelect.value || '';
+
+      const map = new Map();
+      (students || []).forEach(s => {
+        if (!s) return;
+        if (!s.class_id) return;
+        const id = String(s.class_id);
+        const label = getClassLabel(s);
+        if (!label) return;
+        if (!map.has(id)) map.set(id, label);
+      });
+
+      const entries = Array.from(map.entries()).sort((a, b) => {
+        return (a[1] || '').localeCompare((b[1] || ''), 'zh-Hant');
+      });
+
+      classSelect.innerHTML =
+        '<option value="">全部班級</option>' +
+        entries
+          .map(([id, label]) => '<option value="' + escapeHtml(id) + '">' + escapeHtml(label) + '</option>')
+          .join('');
+
+      if (prevValue && map.has(prevValue)) classSelect.value = prevValue;
+      else classSelect.value = '';
     }
 
     function renderTable(students) {
@@ -503,16 +551,31 @@
       tableContainer.innerHTML = '<table><thead><tr><th>姓名</th><th>學號</th><th>班級</th><th>狀態</th></tr></thead><tbody>' + rows + '</tbody></table>';
     }
 
+    function updateStats(students) {
+      const list = students || [];
+      const unadmitted = list.filter(function(s) { return s && !s.is_matched; });
+      statTotal.textContent = list.length;
+      statUnadmitted.textContent = unadmitted.length;
+    }
+
     function applyFilter() {
       const q = (searchInput && searchInput.value.trim()) || '';
       const lower = q.toLowerCase();
-      const filtered = q
-        ? allStudents.filter(s => {
-            const name = (s.student_name || '').toLowerCase();
-            const num = (s.student_number || '').toLowerCase();
-            return name.includes(lower) || num.includes(lower);
-          })
-        : allStudents;
+      const classId = (classSelect && classSelect.value) ? String(classSelect.value) : '';
+
+      let filtered = allStudents;
+      if (classId) {
+        filtered = filtered.filter(s => String((s && s.class_id) || '') === classId);
+      }
+      if (q) {
+        filtered = filtered.filter(s => {
+          const name = ((s && s.student_name) || '').toLowerCase();
+          const num = ((s && s.student_number) || '').toLowerCase();
+          return name.includes(lower) || num.includes(lower);
+        });
+      }
+
+      updateStats(filtered);
       renderTable(filtered);
     }
 
@@ -564,10 +627,8 @@
         }
 
         allStudents = data.students || [];
-        var unadmitted = allStudents.filter(function(s) { return !s.is_matched; });
-
-        statTotal.textContent = allStudents.length;
-        statUnadmitted.textContent = unadmitted.length;
+        currentSemesterId = data.semester_id || null;
+        populateClassOptions(allStudents);
 
         applyFilter();
       } catch (err) {
@@ -599,6 +660,7 @@
     });
 
     if (searchInput) searchInput.addEventListener('input', applyFilter);
+    if (classSelect) classSelect.addEventListener('change', applyFilter);
 
     // 匯出未錄取名單 Excel
     if (exportUnadmittedBtn) {
@@ -618,6 +680,13 @@
 
         try {
           var exportUrl = '/admission/api/ta/export_unadmitted_students_excel';
+          const params = new URLSearchParams();
+          if (currentSemesterId) params.set('semester_id', String(currentSemesterId));
+          const classId = (classSelect && classSelect.value) ? String(classSelect.value) : '';
+          if (classId) params.set('class_id', classId);
+          const qs = params.toString();
+          if (qs) exportUrl += '?' + qs;
+
           const res = await fetch(exportUrl, {
             method: 'GET',
             credentials: 'include'
