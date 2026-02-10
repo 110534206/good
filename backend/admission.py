@@ -121,8 +121,10 @@ def record_admission():
         if not advisor:
             return jsonify({"success": False, "message": "找不到該指導老師"}), 404
         
-        # 3. 設置學期代碼為 1132（固定值）
-        semester_code = '1132'
+        # 3. 獲取當前學期代碼
+        semester_code = get_current_semester_code(cursor)
+        if not semester_code:
+            return jsonify({"success": False, "message": "目前沒有設定當前學期"}), 400
         current_datetime_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         
         # 4. 檢查是否已經存在該關係（避免重複）
@@ -133,19 +135,19 @@ def record_admission():
         existing_relation = cursor.fetchone()
         
         if existing_relation:
-            # 如果已存在，更新 created_at 為當天日期（媒合時間）
+            # 如果已存在，更新公司ID（可能學生換了公司）
             cursor.execute("""
-                UPDATE teacher_student_relations 
-                SET created_at = CURDATE()
+                UPDATE teacher_student_relations
+                SET company_id = %s, updated_at = NOW()
                 WHERE id = %s
-            """, (existing_relation['id'],))
+            """, (company_id, existing_relation['id']))
         else:
             # 5. 創建師生關係記錄
             cursor.execute("""
                 INSERT INTO teacher_student_relations 
-                (teacher_id, student_id, semester, role, created_at)
-                VALUES (%s, %s, %s, '指導老師', CURDATE())
-            """, (advisor_user_id, student_id, semester_code))
+                (teacher_id, student_id, company_id, semester, role, created_at)
+                VALUES (%s, %s, %s, %s, '指導老師', NOW())
+            """, (advisor_user_id, student_id, company_id, semester_code))
         
         # 6. 在 internship_offers 表中記錄錄取結果 (新增的邏輯)
         # 這是 get_my_admission API 優先讀取的資料來源

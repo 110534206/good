@@ -489,6 +489,7 @@ def save_structured_data(cursor, student_id, data, semester_id=None, resume_id=N
             cursor.execute("DELETE FROM course_grades WHERE StuID=%s", (student_id,))
 
         seen_courses = set()
+        course_grade_ids_saved = []  # 儲存剛插入的 course_grades.id，供 resume_content_mapping 使用
         for c in data.get("courses", []):
             cname = (c.get("name") or "").strip()
             if not cname:
@@ -509,6 +510,7 @@ def save_structured_data(cursor, student_id, data, semester_id=None, resume_id=N
                         (StuID, CourseName, Credits, Grade, ProofImage)
                     VALUES (%s,%s,%s,%s,%s)
                 """, (student_id, cname, c.get("credits"), c.get("grade"), c.get("proof_image")))
+            course_grade_ids_saved.append(cursor.lastrowid)
         
         # -------------------------------------------------------------
         # 3) 儲存 student_certifications
@@ -748,33 +750,36 @@ def save_structured_data(cursor, student_id, data, semester_id=None, resume_id=N
                 """, (student_id, row["language"], row["level"]))
                 lang_ids_saved.append(cursor.lastrowid)
 
-        # 若有 resume_id，同步更新履歷內容關聯表（使用剛寫入的證照/語文 id，確保該份履歷的 mapping 正確）
+        # 一律計算 mapping 用的 ID（course_grades.id、證照 id、語文 id），供呼叫端寫入 resume_content_mapping
+        course_ids = course_grade_ids_saved if course_grade_ids_saved else None
+        data["selected_course_grade_ids"] = course_ids
+        cert_ids_for_mapping = data.get("selected_certification_ids")
+        if cert_rows:
+            cursor.execute("SELECT id, cert_code, level FROM student_certifications WHERE StuID=%s", (student_id,))
+            db_certs = {(r.get("cert_code"), r.get("level")): r.get("id") for r in cursor.fetchall()}
+            ids_in_order = []
+            for r in cert_rows:
+                key = (r.get("cert_code"), r.get("level"))
+                if key in db_certs and db_certs[key]:
+                    ids_in_order.append(db_certs[key])
+            if ids_in_order:
+                cert_ids_for_mapping = ids_in_order
+        lang_ids_for_mapping = data.get("selected_language_skill_ids")
+        if lang_ids_saved:
+            lang_ids_for_mapping = lang_ids_saved
+        mapping_ids = {
+            "course_grade_ids": course_ids,
+            "certification_ids": cert_ids_for_mapping,
+            "language_skill_ids": lang_ids_for_mapping,
+            "absence_record_ids": data.get("selected_absence_record_ids"),
+        }
         if resume_id:
-            course_ids = data.get("selected_course_grade_ids")
-            if course_ids is None:
-                course_ids = [c.get("name") for c in data.get("courses", []) if c.get("name")]
-            # 證照：以剛寫入的 cert_rows 對應的 DB id 為準（避免副本仍沿用第一份的舊 id）
-            cert_ids_for_mapping = data.get("selected_certification_ids")
-            if cert_rows:
-                cursor.execute("SELECT id, cert_code, level FROM student_certifications WHERE StuID=%s", (student_id,))
-                db_certs = {(r.get("cert_code"), r.get("level")): r.get("id") for r in cursor.fetchall()}
-                ids_in_order = []
-                for r in cert_rows:
-                    key = (r.get("cert_code"), r.get("level"))
-                    if key in db_certs and db_certs[key]:
-                        ids_in_order.append(db_certs[key])
-                if ids_in_order:
-                    cert_ids_for_mapping = ids_in_order
-            # 語文：使用剛寫入的 id（與表單順序一致）
-            lang_ids_for_mapping = data.get("selected_language_skill_ids")
-            if lang_ids_saved:
-                lang_ids_for_mapping = lang_ids_saved
             _upsert_resume_content_mapping(cursor, resume_id, student_id, course_grade_ids=course_ids,
                 certification_ids=cert_ids_for_mapping,
                 language_skill_ids=lang_ids_for_mapping,
                 absence_record_ids=data.get("selected_absence_record_ids"))
 
-        return True
+        return (True, mapping_ids)
 
     except Exception as e:
         print("❌ 儲存結構化資料錯誤:", e)
@@ -895,14 +900,14 @@ def get_student_info_for_doc(cursor, student_id, semester_id=None, resume_id=Non
     if semester_id is not None and has_semester_id:
         if transcript_field:
             cursor.execute(f"""
-                SELECT CourseName, Credits, Grade, IFNULL({transcript_field}, '') AS transcript_path, SemesterID 
+                SELECT id, CourseName, Credits, Grade, IFNULL({transcript_field}, '') AS transcript_path, SemesterID 
                 FROM course_grades 
                 WHERE StuID=%s AND SemesterID=%s
                 ORDER BY CourseName
             """, (student_id, semester_id))
         else:
             cursor.execute("""
-                SELECT CourseName, Credits, Grade, SemesterID 
+                SELECT id, CourseName, Credits, Grade, SemesterID 
                 FROM course_grades 
                 WHERE StuID=%s AND SemesterID=%s
                 ORDER BY CourseName
@@ -910,14 +915,14 @@ def get_student_info_for_doc(cursor, student_id, semester_id=None, resume_id=Non
     else:
         if transcript_field:
             cursor.execute(f"""
-                SELECT CourseName, Credits, Grade, IFNULL({transcript_field}, '') AS transcript_path 
+                SELECT id, CourseName, Credits, Grade, IFNULL({transcript_field}, '') AS transcript_path 
                 FROM course_grades 
                 WHERE StuID=%s 
                 ORDER BY CourseName
             """, (student_id,))
         else:
             cursor.execute("""
-                SELECT CourseName, Credits, Grade 
+                SELECT id, CourseName, Credits, Grade 
                 FROM course_grades 
                 WHERE StuID=%s 
                 ORDER BY CourseName
@@ -925,9 +930,15 @@ def get_student_info_for_doc(cursor, student_id, semester_id=None, resume_id=Non
     
     grades_rows = cursor.fetchall() or []
     if mapping and mapping.get("course_grade_ids"):
-        ids_set = set(x.strip() for x in (mapping["course_grade_ids"] or "").split(",") if x.strip())
-        if ids_set:
-            grades_rows = [r for r in grades_rows if (r.get("CourseName") or "").strip() in ids_set]
+        raw_ids = [x.strip() for x in (mapping["course_grade_ids"] or "").split(",") if x.strip()]
+        if raw_ids:
+            ids_are_int = all((x or "").replace("-", "").isdigit() for x in raw_ids)
+            if ids_are_int:
+                ids_set = set(int(x) for x in raw_ids)
+                grades_rows = [r for r in grades_rows if r.get("id") in ids_set]
+            else:
+                ids_set = set(raw_ids)
+                grades_rows = [r for r in grades_rows if (r.get("CourseName") or "").strip() in ids_set]
     
     data['grades'] = grades_rows
     data['transcript_path'] = ''
@@ -938,18 +949,20 @@ def get_student_info_for_doc(cursor, student_id, semester_id=None, resume_id=Non
             data['transcript_path'] = tp
             break
 
-    # 證照 - 使用新的查詢方式
+    # 證照 - authority 以 student_certifications.authority_id 優先對應 cert_authorities.id，無則用 certificate_codes.authority_id；分類用 cc.category (labor/local/intl/other)
     cursor.execute("""
         SELECT 
-            sc.id, sc.StuID, sc.cert_code, cc.job_category AS CertName, sc.AcquisitionDate, sc.CertPath,
+            sc.id, sc.StuID, sc.cert_code,
+            COALESCE(sc.authority_id, cc.authority_id) AS authority_id,
+            cc.job_category AS CertName, sc.AcquisitionDate, sc.CertPath,
             sc.issuer, 
-            cc.job_category, cc.level, cc.authority_id, cc.category AS CertCategory,
+            cc.job_category, cc.level, cc.category AS CertCategory,
             ca.name AS authority_name
         FROM student_certifications sc
         LEFT JOIN certificate_codes cc 
             ON sc.cert_code = cc.id
         LEFT JOIN cert_authorities ca 
-            ON cc.authority_id = ca.id
+            ON ca.id = COALESCE(sc.authority_id, cc.authority_id)
         WHERE sc.StuID = %s
         ORDER BY sc.AcquisitionDate DESC, sc.id ASC
     """, (student_id,))
@@ -1147,7 +1160,9 @@ def save_resume_data():
             except (TypeError, ValueError):
                 pass
 
-        if save_structured_data(cursor, student_id, data, semester_id, resume_id=resume_id):
+        save_result = save_structured_data(cursor, student_id, data, semester_id, resume_id=resume_id)
+        ok = save_result[0] if isinstance(save_result, tuple) else bool(save_result)
+        if ok:
             conn.commit()
             return jsonify({"success": True, "message": "履歷資料儲存成功"})
         else:
@@ -1222,23 +1237,30 @@ def get_resume_data():
         
         if has_proof_image:
             cursor.execute("""
-                SELECT CourseName AS name, Credits AS credits, Grade AS grade, ProofImage AS transcript_path
+                SELECT id, CourseName AS name, Credits AS credits, Grade AS grade, ProofImage AS transcript_path
                 FROM course_grades
                 WHERE StuID=%s
                 ORDER BY CourseName
             """, (student_id,))
         else:
             cursor.execute("""
-                SELECT CourseName AS name, Credits AS credits, Grade AS grade
+                SELECT id, CourseName AS name, Credits AS credits, Grade AS grade
                 FROM course_grades
                 WHERE StuID=%s
                 ORDER BY CourseName
             """, (student_id,))
         courses = cursor.fetchall() or []
         if mapping and mapping.get("course_grade_ids"):
-            ids_set = set(x.strip() for x in (mapping["course_grade_ids"] or "").split(",") if x.strip())
-            if ids_set:
-                courses = [c for c in courses if (c.get("name") or "").strip() in ids_set]
+            raw_ids = [x.strip() for x in (mapping["course_grade_ids"] or "").split(",") if x.strip()]
+            if raw_ids:
+                # 向後相容：若為數字則視為 course_grades.id，否則視為課程名稱
+                ids_are_int = all((x or "").replace("-", "").isdigit() for x in raw_ids)
+                if ids_are_int:
+                    ids_set = set(int(x) for x in raw_ids)
+                    courses = [c for c in courses if c.get("id") in ids_set]
+                else:
+                    ids_set = set(raw_ids)
+                    courses = [c for c in courses if (c.get("name") or "").strip() in ids_set]
         
         # 提取成績單路徑（從 ProofImage 欄位）
         transcript_path = ''
@@ -2241,8 +2263,11 @@ def submit_and_generate_api():
         except Exception:
             structured_data["selected_absence_record_ids"] = None
 
-        # 儲存結構化資料（包含 language / Certs / course_grades）
-        if not save_structured_data(cursor, student_id, structured_data, semester_id=semester_id, resume_id=resume_id_for_save):
+        # 儲存結構化資料（包含 language / Certs / course_grades）；回傳 mapping IDs 供 resume_content_mapping 寫入
+        save_result = save_structured_data(cursor, student_id, structured_data, semester_id=semester_id, resume_id=resume_id_for_save)
+        save_ok = save_result[0] if isinstance(save_result, tuple) else bool(save_result)
+        mapping_ids = save_result[1] if isinstance(save_result, tuple) and len(save_result) > 1 else {}
+        if not save_ok:
             conn.rollback()
             return jsonify({"success": False, "message": "資料儲存失敗"}), 500
 
@@ -2359,10 +2384,10 @@ def submit_and_generate_api():
                 """, (filepath_for_db, filename, rid, user_id))
                 _upsert_resume_content_mapping(
                     cursor, rid, student_id,
-                    course_grade_ids=structured_data.get("selected_course_grade_ids"),
-                    certification_ids=structured_data.get("selected_certification_ids"),
-                    language_skill_ids=structured_data.get("selected_language_skill_ids"),
-                    absence_record_ids=structured_data.get("selected_absence_record_ids"),
+                    course_grade_ids=mapping_ids.get("course_grade_ids"),
+                    certification_ids=mapping_ids.get("certification_ids"),
+                    language_skill_ids=mapping_ids.get("language_skill_ids"),
+                    absence_record_ids=mapping_ids.get("absence_record_ids"),
                 )
             except (ValueError, TypeError):
                 pass  # 不將 resume_id_param 清空，避免誤執行下面的 INSERT
@@ -2380,15 +2405,15 @@ def submit_and_generate_api():
                 'draft',
                 semester_id
             ))
-            # 新增履歷也要寫入 resume_content_mapping，否則該筆履歷沒有關聯的課程/證照/語文
+            # 新增履歷也要寫入 resume_content_mapping（使用 save_structured_data 回傳的 ID，確保存的是 id 而非課程名稱）
             new_resume_id = cursor.lastrowid
             if new_resume_id:
                 _upsert_resume_content_mapping(
                     cursor, new_resume_id, student_id,
-                    course_grade_ids=structured_data.get("selected_course_grade_ids"),
-                    certification_ids=structured_data.get("selected_certification_ids"),
-                    language_skill_ids=structured_data.get("selected_language_skill_ids"),
-                    absence_record_ids=structured_data.get("selected_absence_record_ids")
+                    course_grade_ids=mapping_ids.get("course_grade_ids"),
+                    certification_ids=mapping_ids.get("certification_ids"),
+                    language_skill_ids=mapping_ids.get("language_skill_ids"),
+                    absence_record_ids=mapping_ids.get("absence_record_ids")
                 )
 
         conn.commit()
@@ -2653,8 +2678,14 @@ def generate_application_form_docx(student_data, output_path):
         certs_per_page = 8
         max_total = 32  # 最多32張（4頁）
         
+        # 將相對路徑轉為絕對路徑，否則 os.path.exists 會失敗、導致只顯示部分證照圖（如 DB 有 3 張路徑卻只生成 2 張）
+        resolved_flat = []
+        for c in flat_list:
+            p = (c.get("photo_path") or "").strip()
+            resolved_p = resolve_upload_path(p) if p else ""
+            resolved_flat.append({**c, "photo_path": resolved_p or p})
         # 只處理實際有圖片的證照（最多32張）
-        certs_with_photos = [c for c in flat_list if c.get("photo_path") and os.path.exists(c.get("photo_path", ""))]
+        certs_with_photos = [c for c in resolved_flat if c.get("photo_path") and os.path.exists(c.get("photo_path", ""))]
         certs_to_display = certs_with_photos[:max_total]
         total_certs = len(certs_to_display)
         
@@ -5436,6 +5467,7 @@ def save_structured_data(cursor, student_id, data, semester_id=None, resume_id=N
             cursor.execute("DELETE FROM course_grades WHERE StuID=%s", (student_id,))
 
         seen_courses = set()
+        course_grade_ids_saved = []  # 儲存剛插入的 course_grades.id，供 resume_content_mapping 使用
         for c in data.get("courses", []):
             cname = (c.get("name") or "").strip()
             if not cname:
@@ -5456,6 +5488,7 @@ def save_structured_data(cursor, student_id, data, semester_id=None, resume_id=N
                         (StuID, CourseName, Credits, Grade, ProofImage)
                     VALUES (%s,%s,%s,%s,%s)
                 """, (student_id, cname, c.get("credits"), c.get("grade"), c.get("proof_image")))
+            course_grade_ids_saved.append(cursor.lastrowid)
         
         # -------------------------------------------------------------
         # 3) 儲存 student_certifications
@@ -5695,33 +5728,36 @@ def save_structured_data(cursor, student_id, data, semester_id=None, resume_id=N
                 """, (student_id, row["language"], row["level"]))
                 lang_ids_saved.append(cursor.lastrowid)
 
-        # 若有 resume_id，同步更新履歷內容關聯表（使用剛寫入的證照/語文 id，確保該份履歷的 mapping 正確）
+        # 一律計算 mapping 用的 ID（course_grades.id、證照 id、語文 id），供呼叫端寫入 resume_content_mapping
+        course_ids = course_grade_ids_saved if course_grade_ids_saved else None
+        data["selected_course_grade_ids"] = course_ids
+        cert_ids_for_mapping = data.get("selected_certification_ids")
+        if cert_rows:
+            cursor.execute("SELECT id, cert_code, level FROM student_certifications WHERE StuID=%s", (student_id,))
+            db_certs = {(r.get("cert_code"), r.get("level")): r.get("id") for r in cursor.fetchall()}
+            ids_in_order = []
+            for r in cert_rows:
+                key = (r.get("cert_code"), r.get("level"))
+                if key in db_certs and db_certs[key]:
+                    ids_in_order.append(db_certs[key])
+            if ids_in_order:
+                cert_ids_for_mapping = ids_in_order
+        lang_ids_for_mapping = data.get("selected_language_skill_ids")
+        if lang_ids_saved:
+            lang_ids_for_mapping = lang_ids_saved
+        mapping_ids = {
+            "course_grade_ids": course_ids,
+            "certification_ids": cert_ids_for_mapping,
+            "language_skill_ids": lang_ids_for_mapping,
+            "absence_record_ids": data.get("selected_absence_record_ids"),
+        }
         if resume_id:
-            course_ids = data.get("selected_course_grade_ids")
-            if course_ids is None:
-                course_ids = [c.get("name") for c in data.get("courses", []) if c.get("name")]
-            # 證照：以剛寫入的 cert_rows 對應的 DB id 為準（避免副本仍沿用第一份的舊 id）
-            cert_ids_for_mapping = data.get("selected_certification_ids")
-            if cert_rows:
-                cursor.execute("SELECT id, cert_code, level FROM student_certifications WHERE StuID=%s", (student_id,))
-                db_certs = {(r.get("cert_code"), r.get("level")): r.get("id") for r in cursor.fetchall()}
-                ids_in_order = []
-                for r in cert_rows:
-                    key = (r.get("cert_code"), r.get("level"))
-                    if key in db_certs and db_certs[key]:
-                        ids_in_order.append(db_certs[key])
-                if ids_in_order:
-                    cert_ids_for_mapping = ids_in_order
-            # 語文：使用剛寫入的 id（與表單順序一致）
-            lang_ids_for_mapping = data.get("selected_language_skill_ids")
-            if lang_ids_saved:
-                lang_ids_for_mapping = lang_ids_saved
             _upsert_resume_content_mapping(cursor, resume_id, student_id, course_grade_ids=course_ids,
                 certification_ids=cert_ids_for_mapping,
                 language_skill_ids=lang_ids_for_mapping,
                 absence_record_ids=data.get("selected_absence_record_ids"))
 
-        return True
+        return (True, mapping_ids)
 
     except Exception as e:
         print("❌ 儲存結構化資料錯誤:", e)
@@ -5842,14 +5878,14 @@ def get_student_info_for_doc(cursor, student_id, semester_id=None, resume_id=Non
     if semester_id is not None and has_semester_id:
         if transcript_field:
             cursor.execute(f"""
-                SELECT CourseName, Credits, Grade, IFNULL({transcript_field}, '') AS transcript_path, SemesterID 
+                SELECT id, CourseName, Credits, Grade, IFNULL({transcript_field}, '') AS transcript_path, SemesterID 
                 FROM course_grades 
                 WHERE StuID=%s AND SemesterID=%s
                 ORDER BY CourseName
             """, (student_id, semester_id))
         else:
             cursor.execute("""
-                SELECT CourseName, Credits, Grade, SemesterID 
+                SELECT id, CourseName, Credits, Grade, SemesterID 
                 FROM course_grades 
                 WHERE StuID=%s AND SemesterID=%s
                 ORDER BY CourseName
@@ -5857,14 +5893,14 @@ def get_student_info_for_doc(cursor, student_id, semester_id=None, resume_id=Non
     else:
         if transcript_field:
             cursor.execute(f"""
-                SELECT CourseName, Credits, Grade, IFNULL({transcript_field}, '') AS transcript_path 
+                SELECT id, CourseName, Credits, Grade, IFNULL({transcript_field}, '') AS transcript_path 
                 FROM course_grades 
                 WHERE StuID=%s 
                 ORDER BY CourseName
             """, (student_id,))
         else:
             cursor.execute("""
-                SELECT CourseName, Credits, Grade 
+                SELECT id, CourseName, Credits, Grade 
                 FROM course_grades 
                 WHERE StuID=%s 
                 ORDER BY CourseName
@@ -5872,9 +5908,15 @@ def get_student_info_for_doc(cursor, student_id, semester_id=None, resume_id=Non
     
     grades_rows = cursor.fetchall() or []
     if mapping and mapping.get("course_grade_ids"):
-        ids_set = set(x.strip() for x in (mapping["course_grade_ids"] or "").split(",") if x.strip())
-        if ids_set:
-            grades_rows = [r for r in grades_rows if (r.get("CourseName") or "").strip() in ids_set]
+        raw_ids = [x.strip() for x in (mapping["course_grade_ids"] or "").split(",") if x.strip()]
+        if raw_ids:
+            ids_are_int = all((x or "").replace("-", "").isdigit() for x in raw_ids)
+            if ids_are_int:
+                ids_set = set(int(x) for x in raw_ids)
+                grades_rows = [r for r in grades_rows if r.get("id") in ids_set]
+            else:
+                ids_set = set(raw_ids)
+                grades_rows = [r for r in grades_rows if (r.get("CourseName") or "").strip() in ids_set]
     
     data['grades'] = grades_rows
     data['transcript_path'] = ''
@@ -5885,18 +5927,20 @@ def get_student_info_for_doc(cursor, student_id, semester_id=None, resume_id=Non
             data['transcript_path'] = tp
             break
 
-    # 證照 - 使用新的查詢方式
+    # 證照 - authority 以 student_certifications.authority_id 優先對應 cert_authorities.id，無則用 certificate_codes.authority_id；分類用 cc.category (labor/local/intl/other)
     cursor.execute("""
         SELECT 
-            sc.id, sc.StuID, sc.cert_code, cc.job_category AS CertName, sc.AcquisitionDate, sc.CertPath,
+            sc.id, sc.StuID, sc.cert_code,
+            COALESCE(sc.authority_id, cc.authority_id) AS authority_id,
+            cc.job_category AS CertName, sc.AcquisitionDate, sc.CertPath,
             sc.issuer, 
-            cc.job_category, cc.level, cc.authority_id, cc.category AS CertCategory,
+            cc.job_category, cc.level, cc.category AS CertCategory,
             ca.name AS authority_name
         FROM student_certifications sc
         LEFT JOIN certificate_codes cc 
             ON sc.cert_code = cc.id
         LEFT JOIN cert_authorities ca 
-            ON cc.authority_id = ca.id
+            ON ca.id = COALESCE(sc.authority_id, cc.authority_id)
         WHERE sc.StuID = %s
         ORDER BY sc.AcquisitionDate DESC, sc.id ASC
     """, (student_id,))
@@ -6094,7 +6138,9 @@ def save_resume_data():
             except (TypeError, ValueError):
                 pass
 
-        if save_structured_data(cursor, student_id, data, semester_id, resume_id=resume_id):
+        save_result = save_structured_data(cursor, student_id, data, semester_id, resume_id=resume_id)
+        ok = save_result[0] if isinstance(save_result, tuple) else bool(save_result)
+        if ok:
             conn.commit()
             return jsonify({"success": True, "message": "履歷資料儲存成功"})
         else:
@@ -6169,23 +6215,30 @@ def get_resume_data():
         
         if has_proof_image:
             cursor.execute("""
-                SELECT CourseName AS name, Credits AS credits, Grade AS grade, ProofImage AS transcript_path
+                SELECT id, CourseName AS name, Credits AS credits, Grade AS grade, ProofImage AS transcript_path
                 FROM course_grades
                 WHERE StuID=%s
                 ORDER BY CourseName
             """, (student_id,))
         else:
             cursor.execute("""
-                SELECT CourseName AS name, Credits AS credits, Grade AS grade
+                SELECT id, CourseName AS name, Credits AS credits, Grade AS grade
                 FROM course_grades
                 WHERE StuID=%s
                 ORDER BY CourseName
             """, (student_id,))
         courses = cursor.fetchall() or []
         if mapping and mapping.get("course_grade_ids"):
-            ids_set = set(x.strip() for x in (mapping["course_grade_ids"] or "").split(",") if x.strip())
-            if ids_set:
-                courses = [c for c in courses if (c.get("name") or "").strip() in ids_set]
+            raw_ids = [x.strip() for x in (mapping["course_grade_ids"] or "").split(",") if x.strip()]
+            if raw_ids:
+                # 向後相容：若為數字則視為 course_grades.id，否則視為課程名稱
+                ids_are_int = all((x or "").replace("-", "").isdigit() for x in raw_ids)
+                if ids_are_int:
+                    ids_set = set(int(x) for x in raw_ids)
+                    courses = [c for c in courses if c.get("id") in ids_set]
+                else:
+                    ids_set = set(raw_ids)
+                    courses = [c for c in courses if (c.get("name") or "").strip() in ids_set]
         
         # 提取成績單路徑（從 ProofImage 欄位）
         transcript_path = ''
@@ -7188,8 +7241,11 @@ def submit_and_generate_api():
         except Exception:
             structured_data["selected_absence_record_ids"] = None
 
-        # 儲存結構化資料（包含 language / Certs / course_grades）
-        if not save_structured_data(cursor, student_id, structured_data, semester_id=semester_id, resume_id=resume_id_for_save):
+        # 儲存結構化資料（包含 language / Certs / course_grades）；回傳 mapping IDs 供 resume_content_mapping 寫入
+        save_result = save_structured_data(cursor, student_id, structured_data, semester_id=semester_id, resume_id=resume_id_for_save)
+        save_ok = save_result[0] if isinstance(save_result, tuple) else bool(save_result)
+        mapping_ids = save_result[1] if isinstance(save_result, tuple) and len(save_result) > 1 else {}
+        if not save_ok:
             conn.rollback()
             return jsonify({"success": False, "message": "資料儲存失敗"}), 500
 
@@ -7318,15 +7374,15 @@ def submit_and_generate_api():
                 'draft',
                 semester_id
             ))
-            # 新增履歷也要寫入 resume_content_mapping，否則該筆履歷沒有關聯的課程/證照/語文
+            # 新增履歷也要寫入 resume_content_mapping（使用 save_structured_data 回傳的 ID，確保存的是 id 而非課程名稱）
             new_resume_id = cursor.lastrowid
             if new_resume_id:
                 _upsert_resume_content_mapping(
                     cursor, new_resume_id, student_id,
-                    course_grade_ids=structured_data.get("selected_course_grade_ids"),
-                    certification_ids=structured_data.get("selected_certification_ids"),
-                    language_skill_ids=structured_data.get("selected_language_skill_ids"),
-                    absence_record_ids=structured_data.get("selected_absence_record_ids")
+                    course_grade_ids=mapping_ids.get("course_grade_ids"),
+                    certification_ids=mapping_ids.get("certification_ids"),
+                    language_skill_ids=mapping_ids.get("language_skill_ids"),
+                    absence_record_ids=mapping_ids.get("absence_record_ids")
                 )
 
         conn.commit()
@@ -7591,8 +7647,14 @@ def generate_application_form_docx(student_data, output_path):
         certs_per_page = 8
         max_total = 32  # 最多32張（4頁）
         
+        # 將相對路徑轉為絕對路徑，否則 os.path.exists 會失敗、導致只顯示部分證照圖（如 DB 有 3 張路徑卻只生成 2 張）
+        resolved_flat = []
+        for c in flat_list:
+            p = (c.get("photo_path") or "").strip()
+            resolved_p = resolve_upload_path(p) if p else ""
+            resolved_flat.append({**c, "photo_path": resolved_p or p})
         # 只處理實際有圖片的證照（最多32張）
-        certs_with_photos = [c for c in flat_list if c.get("photo_path") and os.path.exists(c.get("photo_path", ""))]
+        certs_with_photos = [c for c in resolved_flat if c.get("photo_path") and os.path.exists(c.get("photo_path", ""))]
         certs_to_display = certs_with_photos[:max_total]
         total_certs = len(certs_to_display)
         
@@ -10047,6 +10109,7 @@ def save_structured_data(cursor, student_id, data, semester_id=None, resume_id=N
             cursor.execute("DELETE FROM course_grades WHERE StuID=%s", (student_id,))
 
         seen_courses = set()
+        course_grade_ids_saved = []  # 儲存剛插入的 course_grades.id，供 resume_content_mapping 使用
         for c in data.get("courses", []):
             cname = (c.get("name") or "").strip()
             if not cname:
@@ -10067,6 +10130,7 @@ def save_structured_data(cursor, student_id, data, semester_id=None, resume_id=N
                         (StuID, CourseName, Credits, Grade, ProofImage)
                     VALUES (%s,%s,%s,%s,%s)
                 """, (student_id, cname, c.get("credits"), c.get("grade"), c.get("proof_image")))
+            course_grade_ids_saved.append(cursor.lastrowid)
         
         # -------------------------------------------------------------
         # 3) 儲存 student_certifications
@@ -10306,33 +10370,36 @@ def save_structured_data(cursor, student_id, data, semester_id=None, resume_id=N
                 """, (student_id, row["language"], row["level"]))
                 lang_ids_saved.append(cursor.lastrowid)
 
-        # 若有 resume_id，同步更新履歷內容關聯表（使用剛寫入的證照/語文 id，確保該份履歷的 mapping 正確）
+        # 一律計算 mapping 用的 ID（course_grades.id、證照 id、語文 id），供呼叫端寫入 resume_content_mapping
+        course_ids = course_grade_ids_saved if course_grade_ids_saved else None
+        data["selected_course_grade_ids"] = course_ids
+        cert_ids_for_mapping = data.get("selected_certification_ids")
+        if cert_rows:
+            cursor.execute("SELECT id, cert_code, level FROM student_certifications WHERE StuID=%s", (student_id,))
+            db_certs = {(r.get("cert_code"), r.get("level")): r.get("id") for r in cursor.fetchall()}
+            ids_in_order = []
+            for r in cert_rows:
+                key = (r.get("cert_code"), r.get("level"))
+                if key in db_certs and db_certs[key]:
+                    ids_in_order.append(db_certs[key])
+            if ids_in_order:
+                cert_ids_for_mapping = ids_in_order
+        lang_ids_for_mapping = data.get("selected_language_skill_ids")
+        if lang_ids_saved:
+            lang_ids_for_mapping = lang_ids_saved
+        mapping_ids = {
+            "course_grade_ids": course_ids,
+            "certification_ids": cert_ids_for_mapping,
+            "language_skill_ids": lang_ids_for_mapping,
+            "absence_record_ids": data.get("selected_absence_record_ids"),
+        }
         if resume_id:
-            course_ids = data.get("selected_course_grade_ids")
-            if course_ids is None:
-                course_ids = [c.get("name") for c in data.get("courses", []) if c.get("name")]
-            # 證照：以剛寫入的 cert_rows 對應的 DB id 為準（避免副本仍沿用第一份的舊 id）
-            cert_ids_for_mapping = data.get("selected_certification_ids")
-            if cert_rows:
-                cursor.execute("SELECT id, cert_code, level FROM student_certifications WHERE StuID=%s", (student_id,))
-                db_certs = {(r.get("cert_code"), r.get("level")): r.get("id") for r in cursor.fetchall()}
-                ids_in_order = []
-                for r in cert_rows:
-                    key = (r.get("cert_code"), r.get("level"))
-                    if key in db_certs and db_certs[key]:
-                        ids_in_order.append(db_certs[key])
-                if ids_in_order:
-                    cert_ids_for_mapping = ids_in_order
-            # 語文：使用剛寫入的 id（與表單順序一致）
-            lang_ids_for_mapping = data.get("selected_language_skill_ids")
-            if lang_ids_saved:
-                lang_ids_for_mapping = lang_ids_saved
             _upsert_resume_content_mapping(cursor, resume_id, student_id, course_grade_ids=course_ids,
                 certification_ids=cert_ids_for_mapping,
                 language_skill_ids=lang_ids_for_mapping,
                 absence_record_ids=data.get("selected_absence_record_ids"))
 
-        return True
+        return (True, mapping_ids)
 
     except Exception as e:
         print("❌ 儲存結構化資料錯誤:", e)
@@ -10453,14 +10520,14 @@ def get_student_info_for_doc(cursor, student_id, semester_id=None, resume_id=Non
     if semester_id is not None and has_semester_id:
         if transcript_field:
             cursor.execute(f"""
-                SELECT CourseName, Credits, Grade, IFNULL({transcript_field}, '') AS transcript_path, SemesterID 
+                SELECT id, CourseName, Credits, Grade, IFNULL({transcript_field}, '') AS transcript_path, SemesterID 
                 FROM course_grades 
                 WHERE StuID=%s AND SemesterID=%s
                 ORDER BY CourseName
             """, (student_id, semester_id))
         else:
             cursor.execute("""
-                SELECT CourseName, Credits, Grade, SemesterID 
+                SELECT id, CourseName, Credits, Grade, SemesterID 
                 FROM course_grades 
                 WHERE StuID=%s AND SemesterID=%s
                 ORDER BY CourseName
@@ -10468,14 +10535,14 @@ def get_student_info_for_doc(cursor, student_id, semester_id=None, resume_id=Non
     else:
         if transcript_field:
             cursor.execute(f"""
-                SELECT CourseName, Credits, Grade, IFNULL({transcript_field}, '') AS transcript_path 
+                SELECT id, CourseName, Credits, Grade, IFNULL({transcript_field}, '') AS transcript_path 
                 FROM course_grades 
                 WHERE StuID=%s 
                 ORDER BY CourseName
             """, (student_id,))
         else:
             cursor.execute("""
-                SELECT CourseName, Credits, Grade 
+                SELECT id, CourseName, Credits, Grade 
                 FROM course_grades 
                 WHERE StuID=%s 
                 ORDER BY CourseName
@@ -10483,9 +10550,15 @@ def get_student_info_for_doc(cursor, student_id, semester_id=None, resume_id=Non
     
     grades_rows = cursor.fetchall() or []
     if mapping and mapping.get("course_grade_ids"):
-        ids_set = set(x.strip() for x in (mapping["course_grade_ids"] or "").split(",") if x.strip())
-        if ids_set:
-            grades_rows = [r for r in grades_rows if (r.get("CourseName") or "").strip() in ids_set]
+        raw_ids = [x.strip() for x in (mapping["course_grade_ids"] or "").split(",") if x.strip()]
+        if raw_ids:
+            ids_are_int = all((x or "").replace("-", "").isdigit() for x in raw_ids)
+            if ids_are_int:
+                ids_set = set(int(x) for x in raw_ids)
+                grades_rows = [r for r in grades_rows if r.get("id") in ids_set]
+            else:
+                ids_set = set(raw_ids)
+                grades_rows = [r for r in grades_rows if (r.get("CourseName") or "").strip() in ids_set]
     
     data['grades'] = grades_rows
     data['transcript_path'] = ''
@@ -10496,18 +10569,20 @@ def get_student_info_for_doc(cursor, student_id, semester_id=None, resume_id=Non
             data['transcript_path'] = tp
             break
 
-    # 證照 - 使用新的查詢方式
+    # 證照 - authority 以 student_certifications.authority_id 優先對應 cert_authorities.id，無則用 certificate_codes.authority_id；分類用 cc.category (labor/local/intl/other)
     cursor.execute("""
         SELECT 
-            sc.id, sc.StuID, sc.cert_code, cc.job_category AS CertName, sc.AcquisitionDate, sc.CertPath,
+            sc.id, sc.StuID, sc.cert_code,
+            COALESCE(sc.authority_id, cc.authority_id) AS authority_id,
+            cc.job_category AS CertName, sc.AcquisitionDate, sc.CertPath,
             sc.issuer, 
-            cc.job_category, cc.level, cc.authority_id, cc.category AS CertCategory,
+            cc.job_category, cc.level, cc.category AS CertCategory,
             ca.name AS authority_name
         FROM student_certifications sc
         LEFT JOIN certificate_codes cc 
             ON sc.cert_code = cc.id
         LEFT JOIN cert_authorities ca 
-            ON cc.authority_id = ca.id
+            ON ca.id = COALESCE(sc.authority_id, cc.authority_id)
         WHERE sc.StuID = %s
         ORDER BY sc.AcquisitionDate DESC, sc.id ASC
     """, (student_id,))
@@ -10705,7 +10780,9 @@ def save_resume_data():
             except (TypeError, ValueError):
                 pass
 
-        if save_structured_data(cursor, student_id, data, semester_id, resume_id=resume_id):
+        save_result = save_structured_data(cursor, student_id, data, semester_id, resume_id=resume_id)
+        ok = save_result[0] if isinstance(save_result, tuple) else bool(save_result)
+        if ok:
             conn.commit()
             return jsonify({"success": True, "message": "履歷資料儲存成功"})
         else:
@@ -10780,23 +10857,30 @@ def get_resume_data():
         
         if has_proof_image:
             cursor.execute("""
-                SELECT CourseName AS name, Credits AS credits, Grade AS grade, ProofImage AS transcript_path
+                SELECT id, CourseName AS name, Credits AS credits, Grade AS grade, ProofImage AS transcript_path
                 FROM course_grades
                 WHERE StuID=%s
                 ORDER BY CourseName
             """, (student_id,))
         else:
             cursor.execute("""
-                SELECT CourseName AS name, Credits AS credits, Grade AS grade
+                SELECT id, CourseName AS name, Credits AS credits, Grade AS grade
                 FROM course_grades
                 WHERE StuID=%s
                 ORDER BY CourseName
             """, (student_id,))
         courses = cursor.fetchall() or []
         if mapping and mapping.get("course_grade_ids"):
-            ids_set = set(x.strip() for x in (mapping["course_grade_ids"] or "").split(",") if x.strip())
-            if ids_set:
-                courses = [c for c in courses if (c.get("name") or "").strip() in ids_set]
+            raw_ids = [x.strip() for x in (mapping["course_grade_ids"] or "").split(",") if x.strip()]
+            if raw_ids:
+                # 向後相容：若為數字則視為 course_grades.id，否則視為課程名稱
+                ids_are_int = all((x or "").replace("-", "").isdigit() for x in raw_ids)
+                if ids_are_int:
+                    ids_set = set(int(x) for x in raw_ids)
+                    courses = [c for c in courses if c.get("id") in ids_set]
+                else:
+                    ids_set = set(raw_ids)
+                    courses = [c for c in courses if (c.get("name") or "").strip() in ids_set]
         
         # 提取成績單路徑（從 ProofImage 欄位）
         transcript_path = ''
@@ -11799,8 +11883,11 @@ def submit_and_generate_api():
         except Exception:
             structured_data["selected_absence_record_ids"] = None
 
-        # 儲存結構化資料（包含 language / Certs / course_grades）
-        if not save_structured_data(cursor, student_id, structured_data, semester_id=semester_id, resume_id=resume_id_for_save):
+        # 儲存結構化資料（包含 language / Certs / course_grades）；回傳 mapping IDs 供 resume_content_mapping 寫入
+        save_result = save_structured_data(cursor, student_id, structured_data, semester_id=semester_id, resume_id=resume_id_for_save)
+        save_ok = save_result[0] if isinstance(save_result, tuple) else bool(save_result)
+        mapping_ids = save_result[1] if isinstance(save_result, tuple) and len(save_result) > 1 else {}
+        if not save_ok:
             conn.rollback()
             return jsonify({"success": False, "message": "資料儲存失敗"}), 500
 
@@ -11929,15 +12016,15 @@ def submit_and_generate_api():
                 'draft',
                 semester_id
             ))
-            # 新增履歷也要寫入 resume_content_mapping，否則該筆履歷沒有關聯的課程/證照/語文
+            # 新增履歷也要寫入 resume_content_mapping（使用 save_structured_data 回傳的 ID，確保存的是 id 而非課程名稱）
             new_resume_id = cursor.lastrowid
             if new_resume_id:
                 _upsert_resume_content_mapping(
                     cursor, new_resume_id, student_id,
-                    course_grade_ids=structured_data.get("selected_course_grade_ids"),
-                    certification_ids=structured_data.get("selected_certification_ids"),
-                    language_skill_ids=structured_data.get("selected_language_skill_ids"),
-                    absence_record_ids=structured_data.get("selected_absence_record_ids")
+                    course_grade_ids=mapping_ids.get("course_grade_ids"),
+                    certification_ids=mapping_ids.get("certification_ids"),
+                    language_skill_ids=mapping_ids.get("language_skill_ids"),
+                    absence_record_ids=mapping_ids.get("absence_record_ids")
                 )
 
         conn.commit()
@@ -12202,8 +12289,14 @@ def generate_application_form_docx(student_data, output_path):
         certs_per_page = 8
         max_total = 32  # 最多32張（4頁）
         
+        # 將相對路徑轉為絕對路徑，否則 os.path.exists 會失敗、導致只顯示部分證照圖（如 DB 有 3 張路徑卻只生成 2 張）
+        resolved_flat = []
+        for c in flat_list:
+            p = (c.get("photo_path") or "").strip()
+            resolved_p = resolve_upload_path(p) if p else ""
+            resolved_flat.append({**c, "photo_path": resolved_p or p})
         # 只處理實際有圖片的證照（最多32張）
-        certs_with_photos = [c for c in flat_list if c.get("photo_path") and os.path.exists(c.get("photo_path", ""))]
+        certs_with_photos = [c for c in resolved_flat if c.get("photo_path") and os.path.exists(c.get("photo_path", ""))]
         certs_to_display = certs_with_photos[:max_total]
         total_certs = len(certs_to_display)
         
@@ -14658,6 +14751,7 @@ def save_structured_data(cursor, student_id, data, semester_id=None, resume_id=N
             cursor.execute("DELETE FROM course_grades WHERE StuID=%s", (student_id,))
 
         seen_courses = set()
+        course_grade_ids_saved = []  # 儲存剛插入的 course_grades.id，供 resume_content_mapping 使用
         for c in data.get("courses", []):
             cname = (c.get("name") or "").strip()
             if not cname:
@@ -14678,6 +14772,7 @@ def save_structured_data(cursor, student_id, data, semester_id=None, resume_id=N
                         (StuID, CourseName, Credits, Grade, ProofImage)
                     VALUES (%s,%s,%s,%s,%s)
                 """, (student_id, cname, c.get("credits"), c.get("grade"), c.get("proof_image")))
+            course_grade_ids_saved.append(cursor.lastrowid)
         
         # -------------------------------------------------------------
         # 3) 儲存 student_certifications
@@ -14917,33 +15012,36 @@ def save_structured_data(cursor, student_id, data, semester_id=None, resume_id=N
                 """, (student_id, row["language"], row["level"]))
                 lang_ids_saved.append(cursor.lastrowid)
 
-        # 若有 resume_id，同步更新履歷內容關聯表（使用剛寫入的證照/語文 id，確保該份履歷的 mapping 正確）
+        # 一律計算 mapping 用的 ID（course_grades.id、證照 id、語文 id），供呼叫端寫入 resume_content_mapping
+        course_ids = course_grade_ids_saved if course_grade_ids_saved else None
+        data["selected_course_grade_ids"] = course_ids
+        cert_ids_for_mapping = data.get("selected_certification_ids")
+        if cert_rows:
+            cursor.execute("SELECT id, cert_code, level FROM student_certifications WHERE StuID=%s", (student_id,))
+            db_certs = {(r.get("cert_code"), r.get("level")): r.get("id") for r in cursor.fetchall()}
+            ids_in_order = []
+            for r in cert_rows:
+                key = (r.get("cert_code"), r.get("level"))
+                if key in db_certs and db_certs[key]:
+                    ids_in_order.append(db_certs[key])
+            if ids_in_order:
+                cert_ids_for_mapping = ids_in_order
+        lang_ids_for_mapping = data.get("selected_language_skill_ids")
+        if lang_ids_saved:
+            lang_ids_for_mapping = lang_ids_saved
+        mapping_ids = {
+            "course_grade_ids": course_ids,
+            "certification_ids": cert_ids_for_mapping,
+            "language_skill_ids": lang_ids_for_mapping,
+            "absence_record_ids": data.get("selected_absence_record_ids"),
+        }
         if resume_id:
-            course_ids = data.get("selected_course_grade_ids")
-            if course_ids is None:
-                course_ids = [c.get("name") for c in data.get("courses", []) if c.get("name")]
-            # 證照：以剛寫入的 cert_rows 對應的 DB id 為準（避免副本仍沿用第一份的舊 id）
-            cert_ids_for_mapping = data.get("selected_certification_ids")
-            if cert_rows:
-                cursor.execute("SELECT id, cert_code, level FROM student_certifications WHERE StuID=%s", (student_id,))
-                db_certs = {(r.get("cert_code"), r.get("level")): r.get("id") for r in cursor.fetchall()}
-                ids_in_order = []
-                for r in cert_rows:
-                    key = (r.get("cert_code"), r.get("level"))
-                    if key in db_certs and db_certs[key]:
-                        ids_in_order.append(db_certs[key])
-                if ids_in_order:
-                    cert_ids_for_mapping = ids_in_order
-            # 語文：使用剛寫入的 id（與表單順序一致）
-            lang_ids_for_mapping = data.get("selected_language_skill_ids")
-            if lang_ids_saved:
-                lang_ids_for_mapping = lang_ids_saved
             _upsert_resume_content_mapping(cursor, resume_id, student_id, course_grade_ids=course_ids,
                 certification_ids=cert_ids_for_mapping,
                 language_skill_ids=lang_ids_for_mapping,
                 absence_record_ids=data.get("selected_absence_record_ids"))
 
-        return True
+        return (True, mapping_ids)
 
     except Exception as e:
         print("❌ 儲存結構化資料錯誤:", e)
@@ -15064,14 +15162,14 @@ def get_student_info_for_doc(cursor, student_id, semester_id=None, resume_id=Non
     if semester_id is not None and has_semester_id:
         if transcript_field:
             cursor.execute(f"""
-                SELECT CourseName, Credits, Grade, IFNULL({transcript_field}, '') AS transcript_path, SemesterID 
+                SELECT id, CourseName, Credits, Grade, IFNULL({transcript_field}, '') AS transcript_path, SemesterID 
                 FROM course_grades 
                 WHERE StuID=%s AND SemesterID=%s
                 ORDER BY CourseName
             """, (student_id, semester_id))
         else:
             cursor.execute("""
-                SELECT CourseName, Credits, Grade, SemesterID 
+                SELECT id, CourseName, Credits, Grade, SemesterID 
                 FROM course_grades 
                 WHERE StuID=%s AND SemesterID=%s
                 ORDER BY CourseName
@@ -15079,14 +15177,14 @@ def get_student_info_for_doc(cursor, student_id, semester_id=None, resume_id=Non
     else:
         if transcript_field:
             cursor.execute(f"""
-                SELECT CourseName, Credits, Grade, IFNULL({transcript_field}, '') AS transcript_path 
+                SELECT id, CourseName, Credits, Grade, IFNULL({transcript_field}, '') AS transcript_path 
                 FROM course_grades 
                 WHERE StuID=%s 
                 ORDER BY CourseName
             """, (student_id,))
         else:
             cursor.execute("""
-                SELECT CourseName, Credits, Grade 
+                SELECT id, CourseName, Credits, Grade 
                 FROM course_grades 
                 WHERE StuID=%s 
                 ORDER BY CourseName
@@ -15094,9 +15192,15 @@ def get_student_info_for_doc(cursor, student_id, semester_id=None, resume_id=Non
     
     grades_rows = cursor.fetchall() or []
     if mapping and mapping.get("course_grade_ids"):
-        ids_set = set(x.strip() for x in (mapping["course_grade_ids"] or "").split(",") if x.strip())
-        if ids_set:
-            grades_rows = [r for r in grades_rows if (r.get("CourseName") or "").strip() in ids_set]
+        raw_ids = [x.strip() for x in (mapping["course_grade_ids"] or "").split(",") if x.strip()]
+        if raw_ids:
+            ids_are_int = all((x or "").replace("-", "").isdigit() for x in raw_ids)
+            if ids_are_int:
+                ids_set = set(int(x) for x in raw_ids)
+                grades_rows = [r for r in grades_rows if r.get("id") in ids_set]
+            else:
+                ids_set = set(raw_ids)
+                grades_rows = [r for r in grades_rows if (r.get("CourseName") or "").strip() in ids_set]
     
     data['grades'] = grades_rows
     data['transcript_path'] = ''
@@ -15107,18 +15211,20 @@ def get_student_info_for_doc(cursor, student_id, semester_id=None, resume_id=Non
             data['transcript_path'] = tp
             break
 
-    # 證照 - 使用新的查詢方式
+    # 證照 - authority 以 student_certifications.authority_id 優先對應 cert_authorities.id，無則用 certificate_codes.authority_id；分類用 cc.category (labor/local/intl/other)
     cursor.execute("""
         SELECT 
-            sc.id, sc.StuID, sc.cert_code, cc.job_category AS CertName, sc.AcquisitionDate, sc.CertPath,
+            sc.id, sc.StuID, sc.cert_code,
+            COALESCE(sc.authority_id, cc.authority_id) AS authority_id,
+            cc.job_category AS CertName, sc.AcquisitionDate, sc.CertPath,
             sc.issuer, 
-            cc.job_category, cc.level, cc.authority_id, cc.category AS CertCategory,
+            cc.job_category, cc.level, cc.category AS CertCategory,
             ca.name AS authority_name
         FROM student_certifications sc
         LEFT JOIN certificate_codes cc 
             ON sc.cert_code = cc.id
         LEFT JOIN cert_authorities ca 
-            ON cc.authority_id = ca.id
+            ON ca.id = COALESCE(sc.authority_id, cc.authority_id)
         WHERE sc.StuID = %s
         ORDER BY sc.AcquisitionDate DESC, sc.id ASC
     """, (student_id,))
@@ -15316,7 +15422,9 @@ def save_resume_data():
             except (TypeError, ValueError):
                 pass
 
-        if save_structured_data(cursor, student_id, data, semester_id, resume_id=resume_id):
+        save_result = save_structured_data(cursor, student_id, data, semester_id, resume_id=resume_id)
+        ok = save_result[0] if isinstance(save_result, tuple) else bool(save_result)
+        if ok:
             conn.commit()
             return jsonify({"success": True, "message": "履歷資料儲存成功"})
         else:
@@ -15391,23 +15499,30 @@ def get_resume_data():
         
         if has_proof_image:
             cursor.execute("""
-                SELECT CourseName AS name, Credits AS credits, Grade AS grade, ProofImage AS transcript_path
+                SELECT id, CourseName AS name, Credits AS credits, Grade AS grade, ProofImage AS transcript_path
                 FROM course_grades
                 WHERE StuID=%s
                 ORDER BY CourseName
             """, (student_id,))
         else:
             cursor.execute("""
-                SELECT CourseName AS name, Credits AS credits, Grade AS grade
+                SELECT id, CourseName AS name, Credits AS credits, Grade AS grade
                 FROM course_grades
                 WHERE StuID=%s
                 ORDER BY CourseName
             """, (student_id,))
         courses = cursor.fetchall() or []
         if mapping and mapping.get("course_grade_ids"):
-            ids_set = set(x.strip() for x in (mapping["course_grade_ids"] or "").split(",") if x.strip())
-            if ids_set:
-                courses = [c for c in courses if (c.get("name") or "").strip() in ids_set]
+            raw_ids = [x.strip() for x in (mapping["course_grade_ids"] or "").split(",") if x.strip()]
+            if raw_ids:
+                # 向後相容：若為數字則視為 course_grades.id，否則視為課程名稱
+                ids_are_int = all((x or "").replace("-", "").isdigit() for x in raw_ids)
+                if ids_are_int:
+                    ids_set = set(int(x) for x in raw_ids)
+                    courses = [c for c in courses if c.get("id") in ids_set]
+                else:
+                    ids_set = set(raw_ids)
+                    courses = [c for c in courses if (c.get("name") or "").strip() in ids_set]
         
         # 提取成績單路徑（從 ProofImage 欄位）
         transcript_path = ''
@@ -16410,8 +16525,11 @@ def submit_and_generate_api():
         except Exception:
             structured_data["selected_absence_record_ids"] = None
 
-        # 儲存結構化資料（包含 language / Certs / course_grades）
-        if not save_structured_data(cursor, student_id, structured_data, semester_id=semester_id, resume_id=resume_id_for_save):
+        # 儲存結構化資料（包含 language / Certs / course_grades）；回傳 mapping IDs 供 resume_content_mapping 寫入
+        save_result = save_structured_data(cursor, student_id, structured_data, semester_id=semester_id, resume_id=resume_id_for_save)
+        save_ok = save_result[0] if isinstance(save_result, tuple) else bool(save_result)
+        mapping_ids = save_result[1] if isinstance(save_result, tuple) and len(save_result) > 1 else {}
+        if not save_ok:
             conn.rollback()
             return jsonify({"success": False, "message": "資料儲存失敗"}), 500
 
@@ -16540,15 +16658,15 @@ def submit_and_generate_api():
                 'draft',
                 semester_id
             ))
-            # 新增履歷也要寫入 resume_content_mapping，否則該筆履歷沒有關聯的課程/證照/語文
+            # 新增履歷也要寫入 resume_content_mapping（使用 save_structured_data 回傳的 ID，確保存的是 id 而非課程名稱）
             new_resume_id = cursor.lastrowid
             if new_resume_id:
                 _upsert_resume_content_mapping(
                     cursor, new_resume_id, student_id,
-                    course_grade_ids=structured_data.get("selected_course_grade_ids"),
-                    certification_ids=structured_data.get("selected_certification_ids"),
-                    language_skill_ids=structured_data.get("selected_language_skill_ids"),
-                    absence_record_ids=structured_data.get("selected_absence_record_ids")
+                    course_grade_ids=mapping_ids.get("course_grade_ids"),
+                    certification_ids=mapping_ids.get("certification_ids"),
+                    language_skill_ids=mapping_ids.get("language_skill_ids"),
+                    absence_record_ids=mapping_ids.get("absence_record_ids")
                 )
 
         conn.commit()
@@ -16813,8 +16931,14 @@ def generate_application_form_docx(student_data, output_path):
         certs_per_page = 8
         max_total = 32  # 最多32張（4頁）
         
+        # 將相對路徑轉為絕對路徑，否則 os.path.exists 會失敗、導致只顯示部分證照圖（如 DB 有 3 張路徑卻只生成 2 張）
+        resolved_flat = []
+        for c in flat_list:
+            p = (c.get("photo_path") or "").strip()
+            resolved_p = resolve_upload_path(p) if p else ""
+            resolved_flat.append({**c, "photo_path": resolved_p or p})
         # 只處理實際有圖片的證照（最多32張）
-        certs_with_photos = [c for c in flat_list if c.get("photo_path") and os.path.exists(c.get("photo_path", ""))]
+        certs_with_photos = [c for c in resolved_flat if c.get("photo_path") and os.path.exists(c.get("photo_path", ""))]
         certs_to_display = certs_with_photos[:max_total]
         total_certs = len(certs_to_display)
         
@@ -19269,6 +19393,7 @@ def save_structured_data(cursor, student_id, data, semester_id=None, resume_id=N
             cursor.execute("DELETE FROM course_grades WHERE StuID=%s", (student_id,))
 
         seen_courses = set()
+        course_grade_ids_saved = []  # 儲存剛插入的 course_grades.id，供 resume_content_mapping 使用
         for c in data.get("courses", []):
             cname = (c.get("name") or "").strip()
             if not cname:
@@ -19289,6 +19414,7 @@ def save_structured_data(cursor, student_id, data, semester_id=None, resume_id=N
                         (StuID, CourseName, Credits, Grade, ProofImage)
                     VALUES (%s,%s,%s,%s,%s)
                 """, (student_id, cname, c.get("credits"), c.get("grade"), c.get("proof_image")))
+            course_grade_ids_saved.append(cursor.lastrowid)
         
         # -------------------------------------------------------------
         # 3) 儲存 student_certifications
@@ -19528,33 +19654,36 @@ def save_structured_data(cursor, student_id, data, semester_id=None, resume_id=N
                 """, (student_id, row["language"], row["level"]))
                 lang_ids_saved.append(cursor.lastrowid)
 
-        # 若有 resume_id，同步更新履歷內容關聯表（使用剛寫入的證照/語文 id，確保該份履歷的 mapping 正確）
+        # 一律計算 mapping 用的 ID（course_grades.id、證照 id、語文 id），供呼叫端寫入 resume_content_mapping
+        course_ids = course_grade_ids_saved if course_grade_ids_saved else None
+        data["selected_course_grade_ids"] = course_ids
+        cert_ids_for_mapping = data.get("selected_certification_ids")
+        if cert_rows:
+            cursor.execute("SELECT id, cert_code, level FROM student_certifications WHERE StuID=%s", (student_id,))
+            db_certs = {(r.get("cert_code"), r.get("level")): r.get("id") for r in cursor.fetchall()}
+            ids_in_order = []
+            for r in cert_rows:
+                key = (r.get("cert_code"), r.get("level"))
+                if key in db_certs and db_certs[key]:
+                    ids_in_order.append(db_certs[key])
+            if ids_in_order:
+                cert_ids_for_mapping = ids_in_order
+        lang_ids_for_mapping = data.get("selected_language_skill_ids")
+        if lang_ids_saved:
+            lang_ids_for_mapping = lang_ids_saved
+        mapping_ids = {
+            "course_grade_ids": course_ids,
+            "certification_ids": cert_ids_for_mapping,
+            "language_skill_ids": lang_ids_for_mapping,
+            "absence_record_ids": data.get("selected_absence_record_ids"),
+        }
         if resume_id:
-            course_ids = data.get("selected_course_grade_ids")
-            if course_ids is None:
-                course_ids = [c.get("name") for c in data.get("courses", []) if c.get("name")]
-            # 證照：以剛寫入的 cert_rows 對應的 DB id 為準（避免副本仍沿用第一份的舊 id）
-            cert_ids_for_mapping = data.get("selected_certification_ids")
-            if cert_rows:
-                cursor.execute("SELECT id, cert_code, level FROM student_certifications WHERE StuID=%s", (student_id,))
-                db_certs = {(r.get("cert_code"), r.get("level")): r.get("id") for r in cursor.fetchall()}
-                ids_in_order = []
-                for r in cert_rows:
-                    key = (r.get("cert_code"), r.get("level"))
-                    if key in db_certs and db_certs[key]:
-                        ids_in_order.append(db_certs[key])
-                if ids_in_order:
-                    cert_ids_for_mapping = ids_in_order
-            # 語文：使用剛寫入的 id（與表單順序一致）
-            lang_ids_for_mapping = data.get("selected_language_skill_ids")
-            if lang_ids_saved:
-                lang_ids_for_mapping = lang_ids_saved
             _upsert_resume_content_mapping(cursor, resume_id, student_id, course_grade_ids=course_ids,
                 certification_ids=cert_ids_for_mapping,
                 language_skill_ids=lang_ids_for_mapping,
                 absence_record_ids=data.get("selected_absence_record_ids"))
 
-        return True
+        return (True, mapping_ids)
 
     except Exception as e:
         print("❌ 儲存結構化資料錯誤:", e)
@@ -19675,14 +19804,14 @@ def get_student_info_for_doc(cursor, student_id, semester_id=None, resume_id=Non
     if semester_id is not None and has_semester_id:
         if transcript_field:
             cursor.execute(f"""
-                SELECT CourseName, Credits, Grade, IFNULL({transcript_field}, '') AS transcript_path, SemesterID 
+                SELECT id, CourseName, Credits, Grade, IFNULL({transcript_field}, '') AS transcript_path, SemesterID 
                 FROM course_grades 
                 WHERE StuID=%s AND SemesterID=%s
                 ORDER BY CourseName
             """, (student_id, semester_id))
         else:
             cursor.execute("""
-                SELECT CourseName, Credits, Grade, SemesterID 
+                SELECT id, CourseName, Credits, Grade, SemesterID 
                 FROM course_grades 
                 WHERE StuID=%s AND SemesterID=%s
                 ORDER BY CourseName
@@ -19690,14 +19819,14 @@ def get_student_info_for_doc(cursor, student_id, semester_id=None, resume_id=Non
     else:
         if transcript_field:
             cursor.execute(f"""
-                SELECT CourseName, Credits, Grade, IFNULL({transcript_field}, '') AS transcript_path 
+                SELECT id, CourseName, Credits, Grade, IFNULL({transcript_field}, '') AS transcript_path 
                 FROM course_grades 
                 WHERE StuID=%s 
                 ORDER BY CourseName
             """, (student_id,))
         else:
             cursor.execute("""
-                SELECT CourseName, Credits, Grade 
+                SELECT id, CourseName, Credits, Grade 
                 FROM course_grades 
                 WHERE StuID=%s 
                 ORDER BY CourseName
@@ -19705,9 +19834,15 @@ def get_student_info_for_doc(cursor, student_id, semester_id=None, resume_id=Non
     
     grades_rows = cursor.fetchall() or []
     if mapping and mapping.get("course_grade_ids"):
-        ids_set = set(x.strip() for x in (mapping["course_grade_ids"] or "").split(",") if x.strip())
-        if ids_set:
-            grades_rows = [r for r in grades_rows if (r.get("CourseName") or "").strip() in ids_set]
+        raw_ids = [x.strip() for x in (mapping["course_grade_ids"] or "").split(",") if x.strip()]
+        if raw_ids:
+            ids_are_int = all((x or "").replace("-", "").isdigit() for x in raw_ids)
+            if ids_are_int:
+                ids_set = set(int(x) for x in raw_ids)
+                grades_rows = [r for r in grades_rows if r.get("id") in ids_set]
+            else:
+                ids_set = set(raw_ids)
+                grades_rows = [r for r in grades_rows if (r.get("CourseName") or "").strip() in ids_set]
     
     data['grades'] = grades_rows
     data['transcript_path'] = ''
@@ -19718,18 +19853,20 @@ def get_student_info_for_doc(cursor, student_id, semester_id=None, resume_id=Non
             data['transcript_path'] = tp
             break
 
-    # 證照 - 使用新的查詢方式
+    # 證照 - authority 以 student_certifications.authority_id 優先對應 cert_authorities.id，無則用 certificate_codes.authority_id；分類用 cc.category (labor/local/intl/other)
     cursor.execute("""
         SELECT 
-            sc.id, sc.StuID, sc.cert_code, cc.job_category AS CertName, sc.AcquisitionDate, sc.CertPath,
+            sc.id, sc.StuID, sc.cert_code,
+            COALESCE(sc.authority_id, cc.authority_id) AS authority_id,
+            cc.job_category AS CertName, sc.AcquisitionDate, sc.CertPath,
             sc.issuer, 
-            cc.job_category, cc.level, cc.authority_id, cc.category AS CertCategory,
+            cc.job_category, cc.level, cc.category AS CertCategory,
             ca.name AS authority_name
         FROM student_certifications sc
         LEFT JOIN certificate_codes cc 
             ON sc.cert_code = cc.id
         LEFT JOIN cert_authorities ca 
-            ON cc.authority_id = ca.id
+            ON ca.id = COALESCE(sc.authority_id, cc.authority_id)
         WHERE sc.StuID = %s
         ORDER BY sc.AcquisitionDate DESC, sc.id ASC
     """, (student_id,))
@@ -19927,7 +20064,9 @@ def save_resume_data():
             except (TypeError, ValueError):
                 pass
 
-        if save_structured_data(cursor, student_id, data, semester_id, resume_id=resume_id):
+        save_result = save_structured_data(cursor, student_id, data, semester_id, resume_id=resume_id)
+        ok = save_result[0] if isinstance(save_result, tuple) else bool(save_result)
+        if ok:
             conn.commit()
             return jsonify({"success": True, "message": "履歷資料儲存成功"})
         else:
@@ -20002,23 +20141,30 @@ def get_resume_data():
         
         if has_proof_image:
             cursor.execute("""
-                SELECT CourseName AS name, Credits AS credits, Grade AS grade, ProofImage AS transcript_path
+                SELECT id, CourseName AS name, Credits AS credits, Grade AS grade, ProofImage AS transcript_path
                 FROM course_grades
                 WHERE StuID=%s
                 ORDER BY CourseName
             """, (student_id,))
         else:
             cursor.execute("""
-                SELECT CourseName AS name, Credits AS credits, Grade AS grade
+                SELECT id, CourseName AS name, Credits AS credits, Grade AS grade
                 FROM course_grades
                 WHERE StuID=%s
                 ORDER BY CourseName
             """, (student_id,))
         courses = cursor.fetchall() or []
         if mapping and mapping.get("course_grade_ids"):
-            ids_set = set(x.strip() for x in (mapping["course_grade_ids"] or "").split(",") if x.strip())
-            if ids_set:
-                courses = [c for c in courses if (c.get("name") or "").strip() in ids_set]
+            raw_ids = [x.strip() for x in (mapping["course_grade_ids"] or "").split(",") if x.strip()]
+            if raw_ids:
+                # 向後相容：若為數字則視為 course_grades.id，否則視為課程名稱
+                ids_are_int = all((x or "").replace("-", "").isdigit() for x in raw_ids)
+                if ids_are_int:
+                    ids_set = set(int(x) for x in raw_ids)
+                    courses = [c for c in courses if c.get("id") in ids_set]
+                else:
+                    ids_set = set(raw_ids)
+                    courses = [c for c in courses if (c.get("name") or "").strip() in ids_set]
         
         # 提取成績單路徑（從 ProofImage 欄位）
         transcript_path = ''
@@ -21021,8 +21167,11 @@ def submit_and_generate_api():
         except Exception:
             structured_data["selected_absence_record_ids"] = None
 
-        # 儲存結構化資料（包含 language / Certs / course_grades）
-        if not save_structured_data(cursor, student_id, structured_data, semester_id=semester_id, resume_id=resume_id_for_save):
+        # 儲存結構化資料（包含 language / Certs / course_grades）；回傳 mapping IDs 供 resume_content_mapping 寫入
+        save_result = save_structured_data(cursor, student_id, structured_data, semester_id=semester_id, resume_id=resume_id_for_save)
+        save_ok = save_result[0] if isinstance(save_result, tuple) else bool(save_result)
+        mapping_ids = save_result[1] if isinstance(save_result, tuple) and len(save_result) > 1 else {}
+        if not save_ok:
             conn.rollback()
             return jsonify({"success": False, "message": "資料儲存失敗"}), 500
 
@@ -21151,15 +21300,15 @@ def submit_and_generate_api():
                 'draft',
                 semester_id
             ))
-            # 新增履歷也要寫入 resume_content_mapping，否則該筆履歷沒有關聯的課程/證照/語文
+            # 新增履歷也要寫入 resume_content_mapping（使用 save_structured_data 回傳的 ID，確保存的是 id 而非課程名稱）
             new_resume_id = cursor.lastrowid
             if new_resume_id:
                 _upsert_resume_content_mapping(
                     cursor, new_resume_id, student_id,
-                    course_grade_ids=structured_data.get("selected_course_grade_ids"),
-                    certification_ids=structured_data.get("selected_certification_ids"),
-                    language_skill_ids=structured_data.get("selected_language_skill_ids"),
-                    absence_record_ids=structured_data.get("selected_absence_record_ids")
+                    course_grade_ids=mapping_ids.get("course_grade_ids"),
+                    certification_ids=mapping_ids.get("certification_ids"),
+                    language_skill_ids=mapping_ids.get("language_skill_ids"),
+                    absence_record_ids=mapping_ids.get("absence_record_ids")
                 )
 
         conn.commit()
@@ -21424,8 +21573,14 @@ def generate_application_form_docx(student_data, output_path):
         certs_per_page = 8
         max_total = 32  # 最多32張（4頁）
         
+        # 將相對路徑轉為絕對路徑，否則 os.path.exists 會失敗、導致只顯示部分證照圖（如 DB 有 3 張路徑卻只生成 2 張）
+        resolved_flat = []
+        for c in flat_list:
+            p = (c.get("photo_path") or "").strip()
+            resolved_p = resolve_upload_path(p) if p else ""
+            resolved_flat.append({**c, "photo_path": resolved_p or p})
         # 只處理實際有圖片的證照（最多32張）
-        certs_with_photos = [c for c in flat_list if c.get("photo_path") and os.path.exists(c.get("photo_path", ""))]
+        certs_with_photos = [c for c in resolved_flat if c.get("photo_path") and os.path.exists(c.get("photo_path", ""))]
         certs_to_display = certs_with_photos[:max_total]
         total_certs = len(certs_to_display)
         
@@ -23880,6 +24035,7 @@ def save_structured_data(cursor, student_id, data, semester_id=None, resume_id=N
             cursor.execute("DELETE FROM course_grades WHERE StuID=%s", (student_id,))
 
         seen_courses = set()
+        course_grade_ids_saved = []  # 儲存剛插入的 course_grades.id，供 resume_content_mapping 使用
         for c in data.get("courses", []):
             cname = (c.get("name") or "").strip()
             if not cname:
@@ -23900,6 +24056,7 @@ def save_structured_data(cursor, student_id, data, semester_id=None, resume_id=N
                         (StuID, CourseName, Credits, Grade, ProofImage)
                     VALUES (%s,%s,%s,%s,%s)
                 """, (student_id, cname, c.get("credits"), c.get("grade"), c.get("proof_image")))
+            course_grade_ids_saved.append(cursor.lastrowid)
         
         # -------------------------------------------------------------
         # 3) 儲存 student_certifications
@@ -24139,33 +24296,36 @@ def save_structured_data(cursor, student_id, data, semester_id=None, resume_id=N
                 """, (student_id, row["language"], row["level"]))
                 lang_ids_saved.append(cursor.lastrowid)
 
-        # 若有 resume_id，同步更新履歷內容關聯表（使用剛寫入的證照/語文 id，確保該份履歷的 mapping 正確）
+        # 一律計算 mapping 用的 ID（course_grades.id、證照 id、語文 id），供呼叫端寫入 resume_content_mapping
+        course_ids = course_grade_ids_saved if course_grade_ids_saved else None
+        data["selected_course_grade_ids"] = course_ids
+        cert_ids_for_mapping = data.get("selected_certification_ids")
+        if cert_rows:
+            cursor.execute("SELECT id, cert_code, level FROM student_certifications WHERE StuID=%s", (student_id,))
+            db_certs = {(r.get("cert_code"), r.get("level")): r.get("id") for r in cursor.fetchall()}
+            ids_in_order = []
+            for r in cert_rows:
+                key = (r.get("cert_code"), r.get("level"))
+                if key in db_certs and db_certs[key]:
+                    ids_in_order.append(db_certs[key])
+            if ids_in_order:
+                cert_ids_for_mapping = ids_in_order
+        lang_ids_for_mapping = data.get("selected_language_skill_ids")
+        if lang_ids_saved:
+            lang_ids_for_mapping = lang_ids_saved
+        mapping_ids = {
+            "course_grade_ids": course_ids,
+            "certification_ids": cert_ids_for_mapping,
+            "language_skill_ids": lang_ids_for_mapping,
+            "absence_record_ids": data.get("selected_absence_record_ids"),
+        }
         if resume_id:
-            course_ids = data.get("selected_course_grade_ids")
-            if course_ids is None:
-                course_ids = [c.get("name") for c in data.get("courses", []) if c.get("name")]
-            # 證照：以剛寫入的 cert_rows 對應的 DB id 為準（避免副本仍沿用第一份的舊 id）
-            cert_ids_for_mapping = data.get("selected_certification_ids")
-            if cert_rows:
-                cursor.execute("SELECT id, cert_code, level FROM student_certifications WHERE StuID=%s", (student_id,))
-                db_certs = {(r.get("cert_code"), r.get("level")): r.get("id") for r in cursor.fetchall()}
-                ids_in_order = []
-                for r in cert_rows:
-                    key = (r.get("cert_code"), r.get("level"))
-                    if key in db_certs and db_certs[key]:
-                        ids_in_order.append(db_certs[key])
-                if ids_in_order:
-                    cert_ids_for_mapping = ids_in_order
-            # 語文：使用剛寫入的 id（與表單順序一致）
-            lang_ids_for_mapping = data.get("selected_language_skill_ids")
-            if lang_ids_saved:
-                lang_ids_for_mapping = lang_ids_saved
             _upsert_resume_content_mapping(cursor, resume_id, student_id, course_grade_ids=course_ids,
                 certification_ids=cert_ids_for_mapping,
                 language_skill_ids=lang_ids_for_mapping,
                 absence_record_ids=data.get("selected_absence_record_ids"))
 
-        return True
+        return (True, mapping_ids)
 
     except Exception as e:
         print("❌ 儲存結構化資料錯誤:", e)
@@ -24286,14 +24446,14 @@ def get_student_info_for_doc(cursor, student_id, semester_id=None, resume_id=Non
     if semester_id is not None and has_semester_id:
         if transcript_field:
             cursor.execute(f"""
-                SELECT CourseName, Credits, Grade, IFNULL({transcript_field}, '') AS transcript_path, SemesterID 
+                SELECT id, CourseName, Credits, Grade, IFNULL({transcript_field}, '') AS transcript_path, SemesterID 
                 FROM course_grades 
                 WHERE StuID=%s AND SemesterID=%s
                 ORDER BY CourseName
             """, (student_id, semester_id))
         else:
             cursor.execute("""
-                SELECT CourseName, Credits, Grade, SemesterID 
+                SELECT id, CourseName, Credits, Grade, SemesterID 
                 FROM course_grades 
                 WHERE StuID=%s AND SemesterID=%s
                 ORDER BY CourseName
@@ -24301,14 +24461,14 @@ def get_student_info_for_doc(cursor, student_id, semester_id=None, resume_id=Non
     else:
         if transcript_field:
             cursor.execute(f"""
-                SELECT CourseName, Credits, Grade, IFNULL({transcript_field}, '') AS transcript_path 
+                SELECT id, CourseName, Credits, Grade, IFNULL({transcript_field}, '') AS transcript_path 
                 FROM course_grades 
                 WHERE StuID=%s 
                 ORDER BY CourseName
             """, (student_id,))
         else:
             cursor.execute("""
-                SELECT CourseName, Credits, Grade 
+                SELECT id, CourseName, Credits, Grade 
                 FROM course_grades 
                 WHERE StuID=%s 
                 ORDER BY CourseName
@@ -24316,9 +24476,15 @@ def get_student_info_for_doc(cursor, student_id, semester_id=None, resume_id=Non
     
     grades_rows = cursor.fetchall() or []
     if mapping and mapping.get("course_grade_ids"):
-        ids_set = set(x.strip() for x in (mapping["course_grade_ids"] or "").split(",") if x.strip())
-        if ids_set:
-            grades_rows = [r for r in grades_rows if (r.get("CourseName") or "").strip() in ids_set]
+        raw_ids = [x.strip() for x in (mapping["course_grade_ids"] or "").split(",") if x.strip()]
+        if raw_ids:
+            ids_are_int = all((x or "").replace("-", "").isdigit() for x in raw_ids)
+            if ids_are_int:
+                ids_set = set(int(x) for x in raw_ids)
+                grades_rows = [r for r in grades_rows if r.get("id") in ids_set]
+            else:
+                ids_set = set(raw_ids)
+                grades_rows = [r for r in grades_rows if (r.get("CourseName") or "").strip() in ids_set]
     
     data['grades'] = grades_rows
     data['transcript_path'] = ''
@@ -24329,18 +24495,20 @@ def get_student_info_for_doc(cursor, student_id, semester_id=None, resume_id=Non
             data['transcript_path'] = tp
             break
 
-    # 證照 - 使用新的查詢方式
+    # 證照 - authority 以 student_certifications.authority_id 優先對應 cert_authorities.id，無則用 certificate_codes.authority_id；分類用 cc.category (labor/local/intl/other)
     cursor.execute("""
         SELECT 
-            sc.id, sc.StuID, sc.cert_code, cc.job_category AS CertName, sc.AcquisitionDate, sc.CertPath,
+            sc.id, sc.StuID, sc.cert_code,
+            COALESCE(sc.authority_id, cc.authority_id) AS authority_id,
+            cc.job_category AS CertName, sc.AcquisitionDate, sc.CertPath,
             sc.issuer, 
-            cc.job_category, cc.level, cc.authority_id, cc.category AS CertCategory,
+            cc.job_category, cc.level, cc.category AS CertCategory,
             ca.name AS authority_name
         FROM student_certifications sc
         LEFT JOIN certificate_codes cc 
             ON sc.cert_code = cc.id
         LEFT JOIN cert_authorities ca 
-            ON cc.authority_id = ca.id
+            ON ca.id = COALESCE(sc.authority_id, cc.authority_id)
         WHERE sc.StuID = %s
         ORDER BY sc.AcquisitionDate DESC, sc.id ASC
     """, (student_id,))
@@ -24538,7 +24706,9 @@ def save_resume_data():
             except (TypeError, ValueError):
                 pass
 
-        if save_structured_data(cursor, student_id, data, semester_id, resume_id=resume_id):
+        save_result = save_structured_data(cursor, student_id, data, semester_id, resume_id=resume_id)
+        ok = save_result[0] if isinstance(save_result, tuple) else bool(save_result)
+        if ok:
             conn.commit()
             return jsonify({"success": True, "message": "履歷資料儲存成功"})
         else:
@@ -24613,23 +24783,30 @@ def get_resume_data():
         
         if has_proof_image:
             cursor.execute("""
-                SELECT CourseName AS name, Credits AS credits, Grade AS grade, ProofImage AS transcript_path
+                SELECT id, CourseName AS name, Credits AS credits, Grade AS grade, ProofImage AS transcript_path
                 FROM course_grades
                 WHERE StuID=%s
                 ORDER BY CourseName
             """, (student_id,))
         else:
             cursor.execute("""
-                SELECT CourseName AS name, Credits AS credits, Grade AS grade
+                SELECT id, CourseName AS name, Credits AS credits, Grade AS grade
                 FROM course_grades
                 WHERE StuID=%s
                 ORDER BY CourseName
             """, (student_id,))
         courses = cursor.fetchall() or []
         if mapping and mapping.get("course_grade_ids"):
-            ids_set = set(x.strip() for x in (mapping["course_grade_ids"] or "").split(",") if x.strip())
-            if ids_set:
-                courses = [c for c in courses if (c.get("name") or "").strip() in ids_set]
+            raw_ids = [x.strip() for x in (mapping["course_grade_ids"] or "").split(",") if x.strip()]
+            if raw_ids:
+                # 向後相容：若為數字則視為 course_grades.id，否則視為課程名稱
+                ids_are_int = all((x or "").replace("-", "").isdigit() for x in raw_ids)
+                if ids_are_int:
+                    ids_set = set(int(x) for x in raw_ids)
+                    courses = [c for c in courses if c.get("id") in ids_set]
+                else:
+                    ids_set = set(raw_ids)
+                    courses = [c for c in courses if (c.get("name") or "").strip() in ids_set]
         
         # 提取成績單路徑（從 ProofImage 欄位）
         transcript_path = ''
@@ -25632,8 +25809,11 @@ def submit_and_generate_api():
         except Exception:
             structured_data["selected_absence_record_ids"] = None
 
-        # 儲存結構化資料（包含 language / Certs / course_grades）
-        if not save_structured_data(cursor, student_id, structured_data, semester_id=semester_id, resume_id=resume_id_for_save):
+        # 儲存結構化資料（包含 language / Certs / course_grades）；回傳 mapping IDs 供 resume_content_mapping 寫入
+        save_result = save_structured_data(cursor, student_id, structured_data, semester_id=semester_id, resume_id=resume_id_for_save)
+        save_ok = save_result[0] if isinstance(save_result, tuple) else bool(save_result)
+        mapping_ids = save_result[1] if isinstance(save_result, tuple) and len(save_result) > 1 else {}
+        if not save_ok:
             conn.rollback()
             return jsonify({"success": False, "message": "資料儲存失敗"}), 500
 
@@ -25762,15 +25942,15 @@ def submit_and_generate_api():
                 'draft',
                 semester_id
             ))
-            # 新增履歷也要寫入 resume_content_mapping，否則該筆履歷沒有關聯的課程/證照/語文
+            # 新增履歷也要寫入 resume_content_mapping（使用 save_structured_data 回傳的 ID，確保存的是 id 而非課程名稱）
             new_resume_id = cursor.lastrowid
             if new_resume_id:
                 _upsert_resume_content_mapping(
                     cursor, new_resume_id, student_id,
-                    course_grade_ids=structured_data.get("selected_course_grade_ids"),
-                    certification_ids=structured_data.get("selected_certification_ids"),
-                    language_skill_ids=structured_data.get("selected_language_skill_ids"),
-                    absence_record_ids=structured_data.get("selected_absence_record_ids")
+                    course_grade_ids=mapping_ids.get("course_grade_ids"),
+                    certification_ids=mapping_ids.get("certification_ids"),
+                    language_skill_ids=mapping_ids.get("language_skill_ids"),
+                    absence_record_ids=mapping_ids.get("absence_record_ids")
                 )
 
         conn.commit()
@@ -26035,8 +26215,14 @@ def generate_application_form_docx(student_data, output_path):
         certs_per_page = 8
         max_total = 32  # 最多32張（4頁）
         
+        # 將相對路徑轉為絕對路徑，否則 os.path.exists 會失敗、導致只顯示部分證照圖（如 DB 有 3 張路徑卻只生成 2 張）
+        resolved_flat = []
+        for c in flat_list:
+            p = (c.get("photo_path") or "").strip()
+            resolved_p = resolve_upload_path(p) if p else ""
+            resolved_flat.append({**c, "photo_path": resolved_p or p})
         # 只處理實際有圖片的證照（最多32張）
-        certs_with_photos = [c for c in flat_list if c.get("photo_path") and os.path.exists(c.get("photo_path", ""))]
+        certs_with_photos = [c for c in resolved_flat if c.get("photo_path") and os.path.exists(c.get("photo_path", ""))]
         certs_to_display = certs_with_photos[:max_total]
         total_certs = len(certs_to_display)
         
