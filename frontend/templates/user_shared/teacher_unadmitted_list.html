@@ -1,0 +1,488 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>智慧實習平台 | 未錄取名單（指導老師）</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <style>
+    :root {
+      --brand-blue: #0066cc;
+      --brand-blue-dark: #024689;
+      --bg-light: #f5f8ff;
+      --border-light: #dbe4f4;
+      --text-dark: #1f2937;
+      --text-muted: #6b7280;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: "Noto Sans TC", "Segoe UI", sans-serif;
+      background: var(--bg-light);
+      color: var(--text-dark);
+      min-height: 100vh;
+    }
+
+    header {
+      background: linear-gradient(135deg, #0055a8 0%, #006acb 50%, #004f94 100%);
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      box-shadow: 0 8px 20px rgba(0, 68, 148, 0.35);
+    }
+
+    .topbar {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 18px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #fff;
+      position: relative;
+    }
+
+    .topbar h1 {
+      font-size: 1.5rem;
+      margin: 0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      color: #fff;
+      flex: 1;
+    }
+
+    .topbar h1 .header-title {
+      flex: 1;
+      text-align: center;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+    }
+
+    .topbar h1 i { color: #ffe27a; }
+
+    #menu-btn {
+      width: 30px;
+      height: 22px;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      background: none;
+      border: none;
+      padding: 0;
+    }
+
+    #menu-btn span {
+      display: block;
+      width: 100%;
+      height: 3px;
+      background-color: white;
+      border-radius: 2px;
+    }
+
+    #side-menu {
+      position: fixed;
+      top: 0;
+      left: 0;
+      height: 100vh;
+      width: 320px;
+      max-width: 80vw;
+      background-color: rgba(10, 10, 10, 0.95);
+      backdrop-filter: blur(6px);
+      box-shadow: 3px 0 12px rgba(0, 0, 0, 0.6);
+      padding: 2rem 1.5rem;
+      transform: translateX(-100%);
+      transition: transform 0.3s ease-in-out;
+      z-index: 1300;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      color: #fff;
+      user-select: none;
+    }
+
+    #side-menu.open { transform: translateX(0); }
+
+    #close-btn {
+      position: absolute;
+      top: 2rem;
+      right: 1.6rem;
+      font-size: 2.8rem;
+      background: none;
+      border: none;
+      color: #fff;
+      cursor: pointer;
+      line-height: 2.4rem;
+      height: 2.5rem;
+      width: 2.5rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 10;
+    }
+
+    #side-menu h2 { margin: 0 0 1.5rem 0; font-weight: 700; font-size: 1.6rem; color: #fff; }
+    #side-menu a {
+      display: block;
+      width: 100%;
+      padding: 0.6rem 0;
+      font-size: 1.1rem;
+      color: #e2e8f0;
+      text-decoration: none;
+      border-radius: 4px;
+      transition: background-color 0.2s ease;
+    }
+    #side-menu a:hover { background-color: rgba(255, 255, 255, 0.18); color: #fff; }
+
+    main {
+      max-width: 1100px;
+      margin: 24px auto 60px;
+      padding: 0 24px;
+    }
+
+    .page-intro {
+      text-align: center;
+      margin-bottom: 24px;
+    }
+
+    .page-intro h2 {
+      font-size: 1.5rem;
+      color: var(--brand-blue-dark);
+      margin: 0 0 8px 0;
+    }
+
+    .page-intro p {
+      color: var(--text-muted);
+      font-size: 1rem;
+      margin: 0;
+    }
+
+    .panel {
+      background: #fff;
+      border-radius: 16px;
+      padding: 24px;
+      box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
+      border: 1px solid var(--border-light);
+      margin-bottom: 24px;
+    }
+
+    .panel-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 16px;
+      padding-bottom: 12px;
+      border-bottom: 2px solid var(--bg-light);
+    }
+
+    .panel-header h3 {
+      font-size: 1.2rem;
+      margin: 0;
+      color: var(--brand-blue-dark);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .panel-header h3 i { color: var(--brand-blue); }
+
+    .stats-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 16px;
+      margin-bottom: 20px;
+    }
+
+    .stat-card {
+      background: var(--bg-light);
+      border: 1px solid var(--border-light);
+      border-radius: 12px;
+      padding: 16px 20px;
+      min-width: 140px;
+    }
+
+    .stat-card .label {
+      font-size: 0.9rem;
+      color: var(--text-muted);
+      margin-bottom: 4px;
+    }
+
+    .stat-card .value {
+      font-size: 1.5rem;
+      font-weight: 700;
+      color: var(--brand-blue-dark);
+    }
+
+    .filter-bar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      align-items: center;
+      margin-bottom: 16px;
+    }
+
+    .filter-bar input {
+      padding: 10px 14px;
+      border: 1px solid var(--border-light);
+      border-radius: 10px;
+      font-size: 0.95rem;
+      min-width: 200px;
+    }
+
+    .table-wrapper { overflow-x: auto; }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    th, td {
+      padding: 12px 14px;
+      text-align: left;
+      border-bottom: 1px solid var(--border-light);
+      font-size: 0.95rem;
+    }
+
+    th {
+      background: rgba(0, 102, 204, 0.08);
+      font-weight: 600;
+      color: var(--brand-blue-dark);
+    }
+
+    tbody tr:hover { background: rgba(0, 102, 204, 0.04); }
+
+    .badge-unmatched {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      background: rgba(234, 179, 8, 0.2);
+      color: #a16207;
+    }
+
+    .loading {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 32px;
+      color: var(--text-muted);
+      font-size: 0.95rem;
+    }
+
+    .loading .spinner {
+      width: 20px;
+      height: 20px;
+      border: 2px solid rgba(0, 102, 204, 0.2);
+      border-top-color: var(--brand-blue);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .empty-state {
+      text-align: center;
+      padding: 40px 24px;
+      color: var(--text-muted);
+    }
+
+    .empty-state i {
+      font-size: 2.5rem;
+      margin-bottom: 12px;
+      color: rgba(0, 102, 204, 0.35);
+    }
+
+    .error-msg {
+      color: #b91c1c;
+      font-size: 0.95rem;
+      padding: 16px;
+    }
+
+    @media (max-width: 768px) {
+      main { padding: 0 16px; }
+      .panel { padding: 18px; }
+      .filter-bar input { min-width: 100%; }
+      th, td { padding: 10px 8px; font-size: 0.9rem; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="topbar">
+      <h1>
+        <button id="menu-btn" title="選單" role="button" tabindex="0" aria-label="開啟側邊選單">
+          <span></span><span></span><span></span>
+        </button>
+        <div class="header-title"><i class="fa-solid fa-users"></i> 未錄取名單（指導老師）</div>
+        <div style="width: 30px;"></div>
+      </h1>
+    </div>
+  </header>
+
+  <nav id="side-menu" aria-hidden="true" role="navigation" aria-label="功能選單">
+    <button id="close-btn" aria-label="關閉功能選單">×</button>
+    <h2>功能選單</h2>
+    <a href="/teacher_home">首頁</a>
+    <a href="/profile">個人資料</a>
+    <a href="/teacher/unadmitted_list">未錄取名單（指導老師）</a>
+    <a href="/interview_schedule">面試行事曆</a>
+    <a href="/notifications">通知</a>
+  </nav>
+
+  <main>
+    <div class="page-intro">
+      <h2>未錄取學生名單（指導老師）</h2>
+      <p>協助掌握尚未媒合的學生，作為與實習公司協調二面意願的依據</p>
+    </div>
+
+    <section class="panel" aria-label="未錄取名單">
+      <div class="panel-header">
+        <h3><i class="fa-solid fa-list"></i> 未錄取學生</h3>
+      </div>
+
+      <div class="stats-row">
+        <div class="stat-card">
+          <div class="label">我的學生總數</div>
+          <div id="statTotal" class="value">-</div>
+        </div>
+        <div class="stat-card">
+          <div class="label">未錄取人數</div>
+          <div id="statUnadmitted" class="value">-</div>
+        </div>
+      </div>
+
+      <div class="filter-bar">
+        <input type="search" id="searchInput" placeholder="搜尋姓名或學號..." aria-label="搜尋學生">
+      </div>
+
+      <div id="tableContainer" class="table-wrapper">
+        <div class="loading" id="loadingState">
+          <span class="spinner"></span>
+          <span>載入名單中...</span>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const sideMenu = document.getElementById('side-menu');
+    const menuBtn = document.getElementById('menu-btn');
+    const closeBtn = document.getElementById('close-btn');
+    const statTotal = document.getElementById('statTotal');
+    const statUnadmitted = document.getElementById('statUnadmitted');
+    const tableContainer = document.getElementById('tableContainer');
+    const loadingState = document.getElementById('loadingState');
+    const searchInput = document.getElementById('searchInput');
+
+    let allStudents = [];
+
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text == null ? '' : text;
+      return div.innerHTML;
+    }
+
+    function renderTable(students) {
+      if (!students.length) {
+        tableContainer.innerHTML = '<div class="empty-state"><i class="fa-solid fa-inbox"></i><div>目前沒有未錄取學生</div></div>';
+        return;
+      }
+
+      const rows = students.map(s => {
+        const name = escapeHtml(s.student_name || '-');
+        const number = escapeHtml(s.student_number || '-');
+        const className = escapeHtml((s.department || '') + (s.class_name || ''));
+        return '<tr><td>' + name + '</td><td>' + number + '</td><td>' + className + '</td><td><span class="badge-unmatched">未錄取</span></td></tr>';
+      }).join('');
+
+      tableContainer.innerHTML = '<table><thead><tr><th>姓名</th><th>學號</th><th>班級</th><th>狀態</th></tr></thead><tbody>' + rows + '</tbody></table>';
+    }
+
+    function applyFilter() {
+      const q = (searchInput && searchInput.value.trim()) || '';
+      const lower = q.toLowerCase();
+      const filtered = q
+        ? allStudents.filter(s => {
+            const name = (s.student_name || '').toLowerCase();
+            const num = (s.student_number || '').toLowerCase();
+            return name.includes(lower) || num.includes(lower);
+          })
+        : allStudents;
+      renderTable(filtered);
+    }
+
+    async function loadStudents() {
+      if (!tableContainer) return;
+      loadingState.style.display = 'flex';
+      tableContainer.innerHTML = '';
+      tableContainer.appendChild(loadingState);
+
+      try {
+        const res = await fetch('/admission/api/get_all_students', {
+          method: 'GET',
+          headers: { 'Accept': 'application/json' },
+          credentials: 'include'
+        });
+        const data = await res.json();
+
+        loadingState.style.display = 'none';
+
+        if (!res.ok || !data.success) {
+          tableContainer.innerHTML = '<div class="error-msg">無法載入名單：' + escapeHtml(data.message || res.statusText) + '</div>';
+          statTotal.textContent = '-';
+          statUnadmitted.textContent = '-';
+          return;
+        }
+
+        // 只取「未錄取」學生
+        const students = (data.students || []).filter(s => !s.is_matched);
+        allStudents = students;
+
+        statTotal.textContent = data.students ? data.students.length : 0;
+        statUnadmitted.textContent = students.length;
+
+        applyFilter();
+      } catch (err) {
+        console.error('載入學生名單失敗', err);
+        loadingState.style.display = 'none';
+        tableContainer.innerHTML = '<div class="error-msg">載入失敗，請稍後再試</div>';
+        statTotal.textContent = '-';
+        statUnadmitted.textContent = '-';
+      }
+    }
+
+    if (menuBtn) {
+      menuBtn.addEventListener('click', () => {
+        sideMenu.classList.add('open');
+        sideMenu.setAttribute('aria-hidden', 'false');
+      });
+    }
+    if (closeBtn) {
+      closeBtn.addEventListener('click', () => {
+        sideMenu.classList.remove('open');
+        sideMenu.setAttribute('aria-hidden', 'true');
+      });
+    }
+    document.addEventListener('click', (e) => {
+      if (sideMenu && !sideMenu.contains(e.target) && menuBtn && !menuBtn.contains(e.target)) {
+        sideMenu.classList.remove('open');
+        sideMenu.setAttribute('aria-hidden', 'true');
+      }
+    });
+
+    if (searchInput) searchInput.addEventListener('input', applyFilter);
+
+    loadStudents();
+  </script>
+</body>
+</html>
+
