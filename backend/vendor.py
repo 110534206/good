@@ -324,31 +324,31 @@ def _get_vendor_profile(cursor, vendor_id):
 def _get_vendor_companies(cursor, vendor_id):
     """
     獲取廠商對應的公司列表。
-    邏輯：廠商通過指導老師（teacher_name）關聯到公司。
+    邏輯：廠商通過指導老師（teacher_id）關聯到公司。
     分組規則：
     - vendor、vendorA 的指導老師是 teacherA，只能看到 advisor_user_id = teacherA_id 的公司
     - vendorB、vendorD 的指導老師是 directorB，只能看到 advisor_user_id = directorB_id 的公司
     """
-    # 1. 獲取廠商的 teacher_name
-    cursor.execute("SELECT teacher_name FROM users WHERE id = %s", (vendor_id,))
+    # 1. 獲取廠商的 teacher_id
+    cursor.execute("SELECT teacher_id FROM users WHERE id = %s", (vendor_id,))
     vendor_row = cursor.fetchone()
-    if not vendor_row or not vendor_row.get("teacher_name"):
-        print(f"⚠️ 廠商 {vendor_id} 沒有設定 teacher_name")
+    if not vendor_row or not vendor_row.get("teacher_id"):
+        print(f"⚠️ 廠商 {vendor_id} 沒有設定 teacher_id")
         return []
     
-    teacher_name = vendor_row.get("teacher_name").strip()
-    if not teacher_name:
-        print(f"⚠️ 廠商 {vendor_id} 的 teacher_name 為空")
+    teacher_id = vendor_row.get("teacher_id")
+    if not teacher_id:
+        print(f"⚠️ 廠商 {vendor_id} 的 teacher_id 為空")
         return []
     
-    # 2. 找到指導老師的 ID
-    cursor.execute("SELECT id FROM users WHERE name = %s AND role IN ('teacher', 'director')", (teacher_name,))
+    # 2. 驗證該 ID 是否為有效的指導老師
+    cursor.execute("SELECT id, name FROM users WHERE id = %s AND role IN ('teacher', 'director')", (teacher_id,))
     teacher_row = cursor.fetchone()
     if not teacher_row:
-        print(f"⚠️ 找不到指導老師 '{teacher_name}' (廠商 {vendor_id})")
+        print(f"⚠️ 找不到指導老師 ID {teacher_id} (廠商 {vendor_id})")
         return []
     
-    teacher_id = teacher_row["id"]
+    teacher_name = teacher_row.get("name", "")
     print(f"✅ 廠商 {vendor_id} 的指導老師: {teacher_name} (ID: {teacher_id})")
     
     # 3. 找到該指導老師對接的公司（只回傳已審核通過的公司）
@@ -420,25 +420,23 @@ def _serialize_job(row):
 def _fetch_job_for_vendor(cursor, job_id, vendor_id, allow_teacher_created=False):
     """
     獲取廠商有權限訪問的職缺。
-    權限邏輯：通過指導老師（teacher_name）關聯到公司。
+    權限邏輯：通過指導老師（teacher_id）關聯到公司。
     """
-    # 1. 獲取廠商的 teacher_name
-    cursor.execute("SELECT teacher_name FROM users WHERE id = %s", (vendor_id,))
+    # 1. 獲取廠商的 teacher_id
+    cursor.execute("SELECT teacher_id FROM users WHERE id = %s", (vendor_id,))
     vendor_row = cursor.fetchone()
-    if not vendor_row or not vendor_row.get("teacher_name"):
+    if not vendor_row or not vendor_row.get("teacher_id"):
         return None
     
-    teacher_name = vendor_row.get("teacher_name").strip()
-    if not teacher_name:
+    teacher_id = vendor_row.get("teacher_id")
+    if not teacher_id:
         return None
     
-    # 2. 找到指導老師的 ID
-    cursor.execute("SELECT id FROM users WHERE name = %s AND role IN ('teacher', 'director')", (teacher_name,))
+    # 2. 驗證該 ID 是否為有效的指導老師
+    cursor.execute("SELECT id FROM users WHERE id = %s AND role IN ('teacher', 'director')", (teacher_id,))
     teacher_row = cursor.fetchone()
     if not teacher_row:
         return None
-    
-    teacher_id = teacher_row["id"]
     
     # 3. 構建查詢條件
     if allow_teacher_created:
@@ -752,25 +750,23 @@ def _fetch_application_detail(cursor, preference_id):
 def _get_application_access(cursor, preference_id, vendor_id):
     """
     獲取廠商有權限訪問的申請。
-    權限邏輯：通過指導老師（teacher_name）關聯到公司。
+    權限邏輯：通過指導老師（teacher_id）關聯到公司。
     """
-    # 獲取廠商的 teacher_name
-    cursor.execute("SELECT teacher_name FROM users WHERE id = %s", (vendor_id,))
+    # 獲取廠商的 teacher_id
+    cursor.execute("SELECT teacher_id FROM users WHERE id = %s", (vendor_id,))
     vendor_row = cursor.fetchone()
-    if not vendor_row or not vendor_row.get("teacher_name"):
+    if not vendor_row or not vendor_row.get("teacher_id"):
         return None
     
-    teacher_name = vendor_row.get("teacher_name").strip()
-    if not teacher_name:
+    teacher_id = vendor_row.get("teacher_id")
+    if not teacher_id:
         return None
     
-    # 找到指導老師的 ID
-    cursor.execute("SELECT id FROM users WHERE name = %s AND role IN ('teacher', 'director')", (teacher_name,))
+    # 驗證該 ID 是否為有效的指導老師
+    cursor.execute("SELECT id FROM users WHERE id = %s AND role IN ('teacher', 'director')", (teacher_id,))
     teacher_row = cursor.fetchone()
     if not teacher_row:
         return None
-    
-    teacher_id = teacher_row["id"]
     
     cursor.execute(
         """
@@ -823,9 +819,7 @@ def get_company_locations():
             cursor.execute("""
                 SELECT DISTINCT ic.location
                 FROM internship_companies ic
-                JOIN users u ON u.teacher_name = (
-                    SELECT name FROM users WHERE id = ic.advisor_user_id AND role = 'teacher'
-                )
+                JOIN users u ON u.teacher_id = ic.advisor_user_id
                 WHERE u.id = %s 
                 AND ic.status = 'approved'
                 AND ic.location IS NOT NULL
@@ -922,11 +916,12 @@ def get_vendor_resumes():
             conn.close()
             return jsonify({"success": False, "message": f"無權限查看此公司（公司指導老師 ID: {advisor_user_id}, 當前用戶 ID: {session['user_id']}）"}), 403
         
-        # 查找該老師對應的廠商（通過 teacher_name 匹配）
+        # 查找該老師對應的廠商（通過 teacher_id 匹配）
+        # 驗證指導老師是否存在
         cursor.execute("""
-            SELECT u.name as teacher_name 
-            FROM users u 
-            WHERE u.id = %s
+            SELECT id, name 
+            FROM users 
+            WHERE id = %s AND role IN ('teacher', 'director')
         """, (advisor_user_id,))
         teacher_result = cursor.fetchone()
         if not teacher_result:
@@ -934,13 +929,12 @@ def get_vendor_resumes():
             conn.close()
             return jsonify({"success": False, "message": "找不到指導老師資料"}), 404
         
-        teacher_name = teacher_result.get("teacher_name")
         # 找到所有該老師的廠商
         cursor.execute("""
             SELECT id 
             FROM users 
-            WHERE role = 'vendor' AND teacher_name = %s
-        """, (teacher_name,))
+            WHERE role = 'vendor' AND teacher_id = %s
+        """, (advisor_user_id,))
         vendor_results = cursor.fetchall()
         
         if not vendor_results:
@@ -2682,7 +2676,7 @@ def get_vendor_debug_info():
         
         # 1. 獲取廠商基本資訊
         cursor.execute("""
-            SELECT id, username, name, email, role, teacher_name
+            SELECT id, username, name, email, role, teacher_id
             FROM users
             WHERE id = %s
         """, (vendor_id,))
@@ -2696,14 +2690,14 @@ def get_vendor_debug_info():
             "preferences_count": 0
         }
         
-        # 2. 如果有 teacher_name，查找指導老師
-        if vendor_info and vendor_info.get("teacher_name"):
-            teacher_name = vendor_info.get("teacher_name").strip()
+        # 2. 如果有 teacher_id，查找指導老師
+        if vendor_info and vendor_info.get("teacher_id"):
+            teacher_id = vendor_info.get("teacher_id")
             cursor.execute("""
                 SELECT id, name, email, role
                 FROM users
-                WHERE name = %s AND role IN ('teacher', 'director')
-            """, (teacher_name,))
+                WHERE id = %s AND role IN ('teacher', 'director')
+            """, (teacher_id,))
             debug_info["teacher_info"] = cursor.fetchone()
             
             if debug_info["teacher_info"]:

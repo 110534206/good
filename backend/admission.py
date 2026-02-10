@@ -1619,13 +1619,13 @@ def vendor_matching_results():
     
     try:
         # 獲取廠商關聯的公司（通過 advisor_user_id，與 vendor.py 中的邏輯一致）
-        # 先獲取廠商的 teacher_name，然後找到對應的指導老師，再找到該指導老師對接的公司
+        # 先獲取廠商的 teacher_id，然後找到該指導老師對接的公司
         cursor.execute("""
-            SELECT teacher_name FROM users WHERE id = %s AND role = 'vendor'
+            SELECT teacher_id FROM users WHERE id = %s AND role = 'vendor'
         """, (vendor_id,))
         vendor_row = cursor.fetchone()
         
-        if not vendor_row or not vendor_row.get("teacher_name"):
+        if not vendor_row or not vendor_row.get("teacher_id"):
             return jsonify({
                 "success": True,
                 "matches": [],
@@ -1637,8 +1637,8 @@ def vendor_matching_results():
                 "message": "廠商帳號資料不完整，無法查詢媒合結果"
             })
         
-        teacher_name = vendor_row.get("teacher_name").strip()
-        if not teacher_name:
+        teacher_id = vendor_row.get("teacher_id")
+        if not teacher_id:
             return jsonify({
                 "success": True,
                 "matches": [],
@@ -1650,10 +1650,10 @@ def vendor_matching_results():
                 "message": "廠商尚未指派指導老師，無法查詢媒合結果"
             })
         
-        # 找到指導老師的 ID
+        # 驗證該 ID 是否為有效的指導老師
         cursor.execute("""
-            SELECT id FROM users WHERE name = %s AND role IN ('teacher', 'director')
-        """, (teacher_name,))
+            SELECT id FROM users WHERE id = %s AND role IN ('teacher', 'director')
+        """, (teacher_id,))
         teacher_row = cursor.fetchone()
         
         if not teacher_row:
@@ -2449,23 +2449,53 @@ def director_add_student():
             ))
         else:
             print(f"➕ 創建新記錄")
+            # 檢查 project_id 欄位是否存在，如果存在則包含在 INSERT 中
             cursor.execute("""
-                INSERT INTO manage_director (
-                    semester_id, vendor_id, student_id, preference_id,
-                    original_type, original_rank, is_conflict,
-                    director_decision, final_rank, is_adjusted,
-                    updated_at
-                ) VALUES (
-                    %s, %s, %s, %s,
-                    %s, %s, 0,
-                    'Approved', %s, 0,
-                    CURRENT_TIMESTAMP
-                )
-            """, (
-                current_semester_id, company_id, student_id, preference_id,
-                original_type, original_rank,
-                final_rank
-            ))
+                SELECT COLUMN_NAME 
+                FROM information_schema.COLUMNS 
+                WHERE TABLE_SCHEMA = DATABASE() 
+                AND TABLE_NAME = 'manage_director'
+                AND COLUMN_NAME = 'project_id'
+            """)
+            has_project_id = cursor.fetchone() is not None
+            cursor.fetchall()  # 確保所有結果都被讀取
+            
+            if has_project_id:
+                cursor.execute("""
+                    INSERT INTO manage_director (
+                        semester_id, project_id, vendor_id, student_id, preference_id,
+                        original_type, original_rank, is_conflict,
+                        director_decision, final_rank, is_adjusted,
+                        updated_at
+                    ) VALUES (
+                        %s, NULL, %s, %s, %s,
+                        %s, %s, 0,
+                        'Approved', %s, 0,
+                        CURRENT_TIMESTAMP
+                    )
+                """, (
+                    current_semester_id, company_id, student_id, preference_id,
+                    original_type, original_rank,
+                    final_rank
+                ))
+            else:
+                cursor.execute("""
+                    INSERT INTO manage_director (
+                        semester_id, vendor_id, student_id, preference_id,
+                        original_type, original_rank, is_conflict,
+                        director_decision, final_rank, is_adjusted,
+                        updated_at
+                    ) VALUES (
+                        %s, %s, %s, %s,
+                        %s, %s, 0,
+                        'Approved', %s, 0,
+                        CURRENT_TIMESTAMP
+                    )
+                """, (
+                    current_semester_id, company_id, student_id, preference_id,
+                    original_type, original_rank,
+                    final_rank
+                ))
         
         conn.commit()
         

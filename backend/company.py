@@ -377,17 +377,18 @@ def upload_company():
             status = 'approved'
             reviewed_at = datetime.now()
         elif role == 'vendor':
-            # 廠商上傳：根據廠商的 teacher_name 找到對應的指導老師
-            cursor.execute("SELECT teacher_name FROM users WHERE id = %s", (user_id,))
+            # 廠商上傳：根據廠商的 teacher_id 找到對應的指導老師
+            cursor.execute("SELECT teacher_id FROM users WHERE id = %s", (user_id,))
             vendor_row = cursor.fetchone()
             advisor_user_id = None
             if vendor_row and vendor_row[0]:
-                teacher_name = vendor_row[0].strip()
-                if teacher_name:
-                    cursor.execute("SELECT id FROM users WHERE name = %s AND role IN ('teacher', 'director')", (teacher_name,))
+                teacher_id = vendor_row[0]
+                if teacher_id:
+                    # 驗證該 ID 是否為有效的指導老師
+                    cursor.execute("SELECT id FROM users WHERE id = %s AND role IN ('teacher', 'director')", (teacher_id,))
                     teacher_row = cursor.fetchone()
                     if teacher_row:
-                        advisor_user_id = teacher_row[0]
+                        advisor_user_id = teacher_id
             reviewed_by_user_id = None
             status = 'pending'
             reviewed_at = None

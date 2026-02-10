@@ -4069,18 +4069,18 @@ def review_resume(resume_id):
                             for company in companies:
                                 advisor_user_id = company.get('advisor_user_id')
                                 if advisor_user_id:
-                                    # 找到該指導老師的名字
+                                    # 驗證該 ID 是否為有效的指導老師
                                     cursor.execute("""
-                                        SELECT name FROM users WHERE id = %s
+                                        SELECT id, name FROM users 
+                                        WHERE id = %s AND role IN ('teacher', 'director')
                                     """, (advisor_user_id,))
                                     advisor = cursor.fetchone()
-                                    if advisor and advisor.get('name'):
-                                        teacher_name = advisor['name']
+                                    if advisor and advisor.get('id'):
                                         # 找到所有關聯到該指導老師的廠商
                                         cursor.execute("""
                                             SELECT id, name FROM users
-                                            WHERE role = 'vendor' AND teacher_name = %s
-                                        """, (teacher_name,))
+                                            WHERE role = 'vendor' AND teacher_id = %s
+                                        """, (advisor_user_id,))
                                         vendors = cursor.fetchall()
                                         
                                         for vendor in vendors:
