@@ -1208,15 +1208,18 @@
 
           const left = document.createElement('div'); left.className = 'notif-left';
           const avatar = document.createElement('div'); avatar.className = 'avatar';
-          // 根據標題內容決定顯示的字：錄取通知顯示「錄」，履歷相關顯示「履」，面試通知顯示「面」
+          // 根據標題內容決定顯示的字：錄取通知顯示「錄」，履歷相關顯示「履」，面試通知顯示「面」，媒合相關顯示「媒」
           let avatarText = '';
           const title = n.title || '';
+          const category = n.category || '';
           if (title.includes('錄取')) {
             avatarText = '錄';
           } else if (title.includes('履歷')) {
             avatarText = '履';
           } else if (title.includes('面試')) {
             avatarText = '面';
+          } else if (title.includes('媒合') || category === 'matching') {
+            avatarText = '媒';
           } else {
             // 其他情況取第一個非符號的字
             const firstChar = title.replace(/^[【\[\]()（）\s]+/, '').slice(0, 1);

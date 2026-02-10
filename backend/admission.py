@@ -2652,10 +2652,14 @@ def director_confirm_matching():
     cursor = conn.cursor(dictionary=True)
     
     try:
-        # 獲取當前學期ID
+        # 獲取當前學期ID和學期代碼
         current_semester_id = get_current_semester_id(cursor)
         if not current_semester_id:
             return jsonify({"success": False, "message": "無法取得當前學期"}), 500
+        
+        # 獲取當前學期代碼（如 '1132'）
+        current_semester_code = get_current_semester_code(cursor)
+        semester_prefix = f"{current_semester_code}學期" if current_semester_code else "本學期"
         
         # 1. 收集所有需要通知的指導老師和班導（去重，避免同一個人收到兩個通知）
         notified_user_ids = set()
@@ -2678,8 +2682,8 @@ def director_confirm_matching():
             notified_user_ids.add(class_teacher['teacher_id'])
         
         # 只發送一個通知給所有需要通知的用戶（指導老師和班導）
-        title = "媒合結果已出爐"
-        message = "媒合結果已出爐"
+        title = f"{semester_prefix} 媒合結果已出爐"
+        message = f"{semester_prefix}媒合結果已出爐，請前往查看。"
         link_url = "/admission/results"
         
         for user_id in notified_user_ids:
@@ -2696,8 +2700,8 @@ def director_confirm_matching():
         vendors = cursor.fetchall() or []
         
         for vendor in vendors:
-            title = "媒合結果待確認"
-            message = "主任已確認媒合結果，請前往確認您的實習生名單。"
+            title = f"{semester_prefix} 媒合結果待確認"
+            message = f"{semester_prefix}媒合結果已由主任確認，請前往確認您的實習生名單。"
             link_url = "/vendor/matching_results"  # 廠商查看媒合結果的頁面
             create_notification(
                 user_id=vendor['id'],
@@ -2712,8 +2716,8 @@ def director_confirm_matching():
         tas = cursor.fetchall() or []
         
         for ta in tas:
-            title = "媒合結果待發布"
-            message = "主任已確認媒合結果，廠商確認後請進行最後發布。"
+            title = f"{semester_prefix} 媒合結果待發布"
+            message = f"{semester_prefix}媒合結果已由主任確認，廠商確認後請進行最後發布。"
             link_url = "/final_results"  # 科助查看最終結果的頁面
             create_notification(
                 user_id=ta['id'],
