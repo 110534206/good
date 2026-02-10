@@ -77,7 +77,6 @@ def _upsert_resume_content_mapping(cursor, resume_id, stu_id, course_grade_ids=N
         """, (resume_id, stu_id, cg or None, cert or None, lang or None, abs_ids or None))
 
 
-
 # 添加圖片驗證函數
 def is_valid_image_file(file_path):
     """
