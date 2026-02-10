@@ -3312,7 +3312,9 @@
         console.log('收到回應:', data);
         
         if (data.success) {
-          loadMatchingResults(); // 重新載入媒合結果
+          // 重新載入媒合結果和未匹配學生列表，確保資料同步
+          await loadMatchingResults();
+          await loadUnmatchedStudents();
         } else {
           showToast(data.message || '添加失敗', 'error');
         }

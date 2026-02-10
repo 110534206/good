@@ -2449,23 +2449,53 @@ def director_add_student():
             ))
         else:
             print(f"➕ 創建新記錄")
+            # 檢查 project_id 欄位是否存在，如果存在則包含在 INSERT 中
             cursor.execute("""
-                INSERT INTO manage_director (
-                    semester_id, vendor_id, student_id, preference_id,
-                    original_type, original_rank, is_conflict,
-                    director_decision, final_rank, is_adjusted,
-                    updated_at
-                ) VALUES (
-                    %s, %s, %s, %s,
-                    %s, %s, 0,
-                    'Approved', %s, 0,
-                    CURRENT_TIMESTAMP
-                )
-            """, (
-                current_semester_id, company_id, student_id, preference_id,
-                original_type, original_rank,
-                final_rank
-            ))
+                SELECT COLUMN_NAME 
+                FROM information_schema.COLUMNS 
+                WHERE TABLE_SCHEMA = DATABASE() 
+                AND TABLE_NAME = 'manage_director'
+                AND COLUMN_NAME = 'project_id'
+            """)
+            has_project_id = cursor.fetchone() is not None
+            cursor.fetchall()  # 確保所有結果都被讀取
+            
+            if has_project_id:
+                cursor.execute("""
+                    INSERT INTO manage_director (
+                        semester_id, project_id, vendor_id, student_id, preference_id,
+                        original_type, original_rank, is_conflict,
+                        director_decision, final_rank, is_adjusted,
+                        updated_at
+                    ) VALUES (
+                        %s, NULL, %s, %s, %s,
+                        %s, %s, 0,
+                        'Approved', %s, 0,
+                        CURRENT_TIMESTAMP
+                    )
+                """, (
+                    current_semester_id, company_id, student_id, preference_id,
+                    original_type, original_rank,
+                    final_rank
+                ))
+            else:
+                cursor.execute("""
+                    INSERT INTO manage_director (
+                        semester_id, vendor_id, student_id, preference_id,
+                        original_type, original_rank, is_conflict,
+                        director_decision, final_rank, is_adjusted,
+                        updated_at
+                    ) VALUES (
+                        %s, %s, %s, %s,
+                        %s, %s, 0,
+                        'Approved', %s, 0,
+                        CURRENT_TIMESTAMP
+                    )
+                """, (
+                    current_semester_id, company_id, student_id, preference_id,
+                    original_type, original_rank,
+                    final_rank
+                ))
         
         conn.commit()
         
