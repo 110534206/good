@@ -4109,6 +4109,11 @@
 
       console.log(`📤 準備提交 ${courses.length} 門課程（從 allCoursesData 收集，共 ${allCoursesData.length} 門）`);
       formData.append("courses", JSON.stringify(courses));
+      // 供 resume_content_mapping.course_grade_ids 儲存（課程名稱列表）
+      const selectedCourseGradeIds = allCoursesData
+        .filter(course => course.name && course.name.trim())
+        .map(course => course.name.trim());
+      formData.append("selected_course_grade_ids", JSON.stringify(selectedCourseGradeIds));
 
       // 移除舊的課程相關欄位，因為我們統一用 JSON 傳遞
       formData.delete("course_name[]");
