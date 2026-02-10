@@ -209,7 +209,7 @@ def get_profile():
         cursor.execute("""
             SELECT u.id, u.username, u.email, u.role AS original_role, u.name,
                    c.department, c.name AS class_name, u.class_id, u.avatar_url,
-                   u.teacher_name, u.user_changed, u.admission_year AS db_admission_year
+                   u.teacher_id, u.user_changed, u.admission_year AS db_admission_year
             FROM users u
             LEFT JOIN classes c ON u.class_id = c.id
             WHERE u.id = %s
@@ -373,18 +373,30 @@ def get_profile():
             user["class_display_name"] = ""
 
         # 如果是廠商，獲取對應的指導老師資訊
-        # 優先使用 users 表中的 teacher_name 欄位（如果有的話）
+        # 優先使用 users 表中的 teacher_id 欄位（如果有的話）
         # 如果沒有，則從 internship_companies 表中查詢
         if original_role_from_db == "vendor":
-            # 首先檢查 users 表中是否有直接儲存的 teacher_name
-            teacher_name_from_users = user.get("teacher_name") or ""
+            # 初始化 advisor_name
+            user["advisor_name"] = ""
             
-            if teacher_name_from_users and teacher_name_from_users.strip():
-                # 如果 users 表中有直接儲存的指導老師名稱，直接使用
-                user["advisor_name"] = teacher_name_from_users.strip()
-                print(f"✅ 從 users 表讀取指導老師名稱: {user['advisor_name']}")
-            else:
-                # 否則從 internship_companies 表中查詢
+            # 首先檢查 users 表中是否有直接儲存的 teacher_id
+            teacher_id_from_users = user.get("teacher_id")
+            
+            if teacher_id_from_users:
+                # 如果有 teacher_id，查詢老師的名字
+                cursor.execute("""
+                    SELECT name FROM users 
+                    WHERE id = %s AND role IN ('teacher', 'director')
+                """, (teacher_id_from_users,))
+                teacher_row = cursor.fetchone()
+                if teacher_row:
+                    teacher_name = teacher_row.get('name') if isinstance(teacher_row, dict) else teacher_row[0]
+                    if teacher_name:
+                        user["advisor_name"] = teacher_name
+                        print(f"✅ 從 users 表讀取指導老師 ID: {teacher_id_from_users}, 名稱: {user['advisor_name']}")
+            
+            # 如果從 teacher_id 沒有找到，或者 teacher_id 為空，則從 internship_companies 表中查詢
+            if not user.get("advisor_name"):
                 vendor_email = user.get("email") or ""
                 cursor.execute("""
                     SELECT DISTINCT u.id AS advisor_id, u.name AS advisor_name
@@ -410,8 +422,11 @@ def get_profile():
                                 advisor_names.append(advisor_name)
                 
                 # 如果有指導老師，顯示所有指導老師（用、分隔）
-                user["advisor_name"] = "、".join(advisor_names) if advisor_names else ""
-                print(f"✅ 從 internship_companies 表查詢到的指導老師名稱: {user['advisor_name']}")
+                if advisor_names:
+                    user["advisor_name"] = "、".join(advisor_names)
+                    print(f"✅ 從 internship_companies 表查詢到的指導老師名稱: {user['advisor_name']}")
+                else:
+                    print(f"⚠️ 廠商 {user_id} 沒有找到指導老師資訊")
         else:
             user["advisor_name"] = ""
 
