@@ -612,8 +612,8 @@
 
         let matchesStatus = true;
         if (status) {
-           // review_resume.html 使用 teacher_review_status 欄位
-           const statusStr = isCompanyView ? (r.display_status || '') : (r.teacher_review_status || 'uploaded');
+           // 統一使用 display_status 欄位
+           const statusStr = r.display_status || 'uploaded';
            matchesStatus = statusStr === status;  // 使用嚴格相等，確保精確匹配
         }
 
@@ -650,17 +650,11 @@
 
       resumes.forEach(r => {
         // 直接使用最新的志願序資料（後端已處理）
-        // review_resume.html 使用 resumes.teacher_review_status
+        // 統一使用 display_status 欄位
         const comp = r.company_name || '—';
         const job = r.job_title || r.jobTitle || '—';
         const pid = r.preference_id || null;
-        // 處理 teacher_review_status：如果是 undefined、null、空字符串或字符串 "undefined"，則使用 display_status
-        const teacherStatus = r.teacher_review_status;
-        const isValidStatus = teacherStatus && 
-                              teacherStatus !== 'undefined' && 
-                              teacherStatus !== 'null' && 
-                              ['uploaded', 'approved', 'rejected'].includes(teacherStatus);
-        const st = isValidStatus ? teacherStatus : (r.display_status || 'uploaded');
+        const st = r.display_status || 'uploaded';
         const cm = r.comment || '';
 
         // 狀態篩選
@@ -690,21 +684,8 @@
         // 渲染每一行，statusColor(row.display_status) 會決定背景色，mapStatus 決定文字
         const tr = document.createElement('tr');
         tr.style.borderBottom = '1px solid #e2e8f0';
-        // 指導老師優先使用 teacher_review_status，如果沒有則使用 display_status
-        // 處理字符串 "undefined" 或無效值的情況
-        let statusForDisplay = 'uploaded';
-        if (userRole === 'teacher') {
-          // 指導老師：優先使用 teacher_review_status，但需要驗證是否為有效值
-          const teacherStatus = row.teacher_review_status;
-          const isValidTeacherStatus = teacherStatus && 
-                                      teacherStatus !== 'undefined' && 
-                                      teacherStatus !== 'null' && 
-                                      ['uploaded', 'approved', 'rejected'].includes(teacherStatus);
-          statusForDisplay = isValidTeacherStatus ? teacherStatus : (row.display_status || 'uploaded');
-        } else {
-          // 其他角色：使用 display_status
-          statusForDisplay = row.display_status || 'uploaded';
-        }
+        // 統一使用 display_status 欄位
+        const statusForDisplay = row.display_status || 'uploaded';
         const statusCell = isDirectorMode ? '' : `
            <td style="padding: 14px 16px;">
              <span class="status-badge bg-${statusColor(statusForDisplay)}">${mapStatus(statusForDisplay)}</span>
@@ -832,16 +813,12 @@
                     if (allResumes.length > 0) {
                       const updatedResume = allResumes.find(r => r.id === resumeId);
                       if (updatedResume) {
-                        // 確保正確處理 undefined 值
-                        const teacherStatus = updatedResume.teacher_review_status;
                         const displayStatus = updatedResume.display_status;
                         const status = updatedResume.status;
                         console.log('🔍 [DEBUG] 更新後的履歷狀態:', {
                           id: updatedResume.id,
-                          teacher_review_status: teacherStatus || '(undefined/null)',
                           display_status: displayStatus || '(undefined/null)',
                           status: status || '(undefined/null)',
-                          '原始 teacher_review_status 類型': typeof teacherStatus,
                           '原始 display_status 類型': typeof displayStatus
                         });
                       } else {
