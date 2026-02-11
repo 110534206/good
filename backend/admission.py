@@ -56,7 +56,7 @@ def unadmitted_list_page():
     if user_role not in ['ta', 'admin', 'director', 'teacher']:
         return "無權限訪問此頁面", 403
     
-    return render_template('user_shared/intern_unadmitted_management.html')
+    return render_template('ta/unadmitted_list.html')
 
 # =========================================================
 # 頁面路由：主任媒合
