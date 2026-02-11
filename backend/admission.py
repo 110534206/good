@@ -1404,6 +1404,7 @@ def get_all_students():
                 u.id,
                 u.name AS student_name,
                 u.username AS student_number,
+                u.admission_year AS admission_year,
                 c.id AS class_id,
                 c.name AS class_name,
                 c.department
@@ -1459,6 +1460,12 @@ def get_all_students():
         # 為每個學生標記是否已在媒合結果中，並獲取志願序資訊
         for student in all_students:
             student_id = student['student_id']
+            # 入學屆數：如果沒有 admission_year，從學號前3碼推斷
+            if (student.get('admission_year') is None or str(student.get('admission_year', '')).strip() == '') and student.get('student_number') and len(str(student['student_number'])) >= 3:
+                try:
+                    student['admission_year'] = int(str(student['student_number'])[:3])
+                except (TypeError, ValueError):
+                    pass
             # 標記是否已在媒合結果中
             student['is_matched'] = student_id in matched_student_ids
             

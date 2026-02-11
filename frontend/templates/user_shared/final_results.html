@@ -607,13 +607,6 @@
   </nav>
 
   <div class="container mt-4">
-    <!-- 匯出按鈕 -->
-    <div class="d-flex flex-wrap justify-content-center align-items-center mb-4 gap-2">
-      <button id="exportPdfBtn" class="btn-custom-red"><i class="fas fa-file-pdf"></i> PDF</button>
-      <button id="exportWordBtn" class="btn-custom-yellow"><i class="fas fa-file-word"></i> Word</button>
-      <button id="exportExcelBtn" class="btn-custom-cyan"><i class="fas fa-file-excel"></i> Excel</button>
-    </div>
-
     <!-- 媒合結果過濾器 -->
     <div class="filters-container" id="filtersContainer" style="display: none;">
       <div class="filter-group">
@@ -697,59 +690,6 @@
       return visibleStudents;
     }
 
-    document.getElementById('exportExcelBtn').addEventListener('click', () => {
-      const visibleStudents = filterStudents();
-      let csvContent = "學生姓名,班級,志願序,公司名稱,送出時間\n";
-      visibleStudents.forEach(section => {
-        const studentName = section.dataset.name;
-        const className = section.dataset.class;
-        section.querySelectorAll('table tbody tr').forEach(tr => {
-          const order = tr.children[0].textContent;
-          const company = tr.children[1].textContent;
-          const time = tr.children[2].textContent;
-          csvContent += `${studentName},${className},${order},${company},${time}\n`;
-        });
-      });
-      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-      const link = document.createElement("a");
-      link.href = URL.createObjectURL(blob);
-      link.download = "學生志願序.csv";
-      link.click();
-    });
-
-    function exportTextFile(filename, content) {
-      const blob = new Blob([content], { type: 'text/plain;charset=utf-8;' });
-      const link = document.createElement("a");
-      link.href = URL.createObjectURL(blob);
-      link.download = filename;
-      link.click();
-    }
-
-    document.getElementById('exportWordBtn').addEventListener('click', () => {
-      const visibleStudents = filterStudents();
-      let content = '';
-      visibleStudents.forEach(section => {
-        content += `學生: ${section.dataset.name}\n班級: ${section.dataset.class}\n`;
-        section.querySelectorAll('table tbody tr').forEach(tr => {
-          content += `志願序:${tr.children[0].textContent}, 公司:${tr.children[1].textContent}, 送出時間:${tr.children[2].textContent}\n`;
-        });
-        content += '\n';
-      });
-      exportTextFile('學生志願序.docx', content);
-    });
-
-    document.getElementById('exportPdfBtn').addEventListener('click', () => {
-      const visibleStudents = filterStudents();
-      let content = '';
-      visibleStudents.forEach(section => {
-        content += `學生: ${section.dataset.name}\n班級: ${section.dataset.class}\n`;
-        section.querySelectorAll('table tbody tr').forEach(tr => {
-          content += `志願序:${tr.children[0].textContent}, 公司:${tr.children[1].textContent}, 送出時間:${tr.children[2].textContent}\n`;
-        });
-        content += '\n';
-      });
-      exportTextFile('學生志願序.pdf', content);
-    });
 
     // ========== 媒合結果相關功能 ==========
 

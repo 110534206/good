@@ -490,6 +490,8 @@
 
     let allStudents = [];
     let currentSemesterId = null;
+    let currentSemesterCode = null; // 當前學期代碼（用於計算年級）
+    let currentSemesterYear = null; // 當前學年（用於計算年級）
 
     function escapeHtml(text) {
       const div = document.createElement('div');
@@ -497,10 +499,53 @@
       return div.innerHTML;
     }
 
+    // 計算年級數字：根據當前學年和入學屆數
+    function calculateGradeNum(admissionYear, semesterCode) {
+      if (!admissionYear || !semesterCode) return null;
+      try {
+        const ay = parseInt(admissionYear, 10);
+        if (isNaN(ay)) return null;
+        // 從學期代碼提取學年：1132 -> 113
+        const sy = parseInt(semesterCode.substring(0, 3), 10);
+        if (isNaN(sy)) return null;
+        const gradeNum = sy - ay + 1;
+        if (gradeNum >= 1 && gradeNum <= 6) {
+          return gradeNum;
+        }
+        return null;
+      } catch (e) {
+        return null;
+      }
+    }
+
     function getClassLabel(s) {
       const dept = ((s && s.department) || '').trim();
       const cls = ((s && s.class_name) || '').trim();
       return (dept + cls).trim();
+    }
+
+    // 獲取班級顯示（將年級數字插入班級名稱中，例如：資管科四孝）
+    function getClassDisplayWithGrade(s, semesterCode) {
+      const classLabel = getClassLabel(s);
+      if (!classLabel) return '';
+      
+      const gradeNum = calculateGradeNum(s.admission_year, semesterCode);
+      if (!gradeNum) return classLabel;
+      
+      // 年級數字對應的中文
+      const gradeChars = ['', '一', '二', '三', '四', '五', '六'];
+      const gradeChar = gradeChars[gradeNum];
+      if (!gradeChar) return classLabel;
+      
+      // 在「科」和「孝/忠」之間插入年級數字
+      // 例如：「資管科孝」→「資管科四孝」
+      const match = classLabel.match(/^(.+科)(.+)$/);
+      if (match) {
+        return match[1] + gradeChar + match[2];
+      }
+      
+      // 如果格式不符合，嘗試在最後插入
+      return classLabel + gradeChar;
     }
 
     function populateClassOptions(students) {
@@ -542,7 +587,8 @@
         const statusText = s.is_matched ? '已媒合' : '未錄取';
         const name = escapeHtml(s.student_name || '-');
         const number = escapeHtml(s.student_number || '-');
-        const className = escapeHtml((s.department || '') + (s.class_name || ''));
+        // 班級顯示（包含年級）
+        const className = escapeHtml(getClassDisplayWithGrade(s, currentSemesterCode));
         return '<tr><td>' + name + '</td><td>' + number + '</td><td>' + className + '</td><td><span class="' + statusClass + '">' + statusText + '</span></td></tr>';
       }).join('');
 
@@ -609,6 +655,14 @@
 
         var semesterCode = data.semester_code || '';
         var semesterLabel = data.semester_label || semesterCode;
+        // 從學期代碼提取學年：1132 -> 113
+        if (semesterCode && semesterCode.length >= 3) {
+          try {
+            currentSemesterYear = parseInt(semesterCode.substring(0, 3), 10);
+          } catch (e) {
+            currentSemesterYear = null;
+          }
+        }
         var semesterSelect = document.getElementById('semesterSelect');
         if (semesterSelect && data.semester_id) semesterSelect.value = String(data.semester_id);
         var semesterBanner = document.getElementById('semesterBanner');
@@ -626,6 +680,7 @@
 
         allStudents = data.students || [];
         currentSemesterId = data.semester_id || null;
+        currentSemesterCode = semesterCode; // 保存當前學期代碼
         populateClassOptions(allStudents);
 
         applyFilter();

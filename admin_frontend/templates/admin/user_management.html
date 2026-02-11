@@ -1298,9 +1298,45 @@
                         userDetail.admissionYear !== '' ?
                         userDetail.admissionYear : '';
 
+                    // 年級：依「當前系統學期」即時計算，將年級數字插入班級名稱中
+                    function computeGradeNum(semesterYear, admissionY) {
+                        const n = semesterYear - admissionY + 1;
+                        return (n >= 1 && n <= 6) ? n : null;
+                    }
+                    let gradeNum = null;
+                    const ayRaw = admissionYearValue || userDetail.admissionYear;
+                    const ay = (ayRaw != null && ayRaw !== '' && ayRaw !== '-') ? parseInt(ayRaw, 10) : NaN;
+                    if (!isNaN(ay)) {
+                        let sy = null;
+                        try {
+                            const res = await fetch('/admin/api/current_semester_year');
+                            const data = await res.json();
+                            if (data.success && data.active_semester_year != null) sy = data.active_semester_year;
+                        } catch (e) { /* 忽略 */ }
+                        if (sy == null) sy = lastActiveSemesterYear;
+                        if (sy != null) gradeNum = computeGradeNum(sy, ay);
+                    }
+                    
+                    // 在班級顯示中插入年級數字（例如：資管科四孝）
+                    let classDeptDisplay = classDeptValue;
+                    if (classDeptDisplay && gradeNum) {
+                        const gradeChars = ['', '一', '二', '三', '四', '五', '六'];
+                        const gradeChar = gradeChars[gradeNum];
+                        if (gradeChar) {
+                            // 在「科」和「孝/忠」之間插入年級數字
+                            const match = classDeptDisplay.match(/^(.+科)(.+)$/);
+                            if (match) {
+                                classDeptDisplay = match[1] + gradeChar + match[2];
+                            } else {
+                                // 如果格式不符合，嘗試在最後插入
+                                classDeptDisplay = classDeptDisplay + gradeChar;
+                            }
+                        }
+                    }
+                    
                     if (classDeptValue) {
                         classDeptRow.style.display = '';
-                        document.getElementById('detailClassDept').textContent = classDeptValue;
+                        document.getElementById('detailClassDept').textContent = classDeptDisplay;
                     } else {
                         classDeptRow.style.display = 'none';
                     }
@@ -1319,28 +1355,9 @@
                             classDeptRow.style.display = 'none';
                         }
                     }
-                    // 年級：依「當前系統學期」即時計算（先試 API，再試列表快取學年，再試列表已有年級）
+                    // 年級：已在上面計算，這裡只顯示（年級已合併到班級顯示中，所以隱藏年級行）
                     const gradeRow = document.getElementById('detailGradeRow');
-                    gradeRow.style.display = '';
-                    const gradeLabels = ['一年級', '二年級', '三年級', '四年級', '五年級', '六年級'];
-                    function computeGrade(semesterYear, admissionY) {
-                        const n = semesterYear - admissionY + 1;
-                        return (n >= 1 && n <= 6) ? gradeLabels[n - 1] : (n > 0 ? n + '年級' : '');
-                    }
-                    let gradeVal = (userDetail.gradeDisplay && userDetail.gradeDisplay !== '-') ? userDetail.gradeDisplay : '';
-                    const ayRaw = admissionYearValue || userDetail.admissionYear;
-                    const ay = (ayRaw != null && ayRaw !== '' && ayRaw !== '-') ? parseInt(ayRaw, 10) : NaN;
-                    if (!isNaN(ay)) {
-                        let sy = null;
-                        try {
-                            const res = await fetch('/admin/api/current_semester_year');
-                            const data = await res.json();
-                            if (data.success && data.active_semester_year != null) sy = data.active_semester_year;
-                        } catch (e) { /* 忽略 */ }
-                        if (sy == null) sy = lastActiveSemesterYear;
-                        if (sy != null) gradeVal = computeGrade(sy, ay);
-                    }
-                    document.getElementById('detailGrade').textContent = gradeVal || '';
+                    gradeRow.style.display = 'none'; // 年級已合併到班級顯示中
                 } else {
                     document.getElementById('detailGradeRow').style.display = 'none';
                     classDeptRow.style.display = 'none';
