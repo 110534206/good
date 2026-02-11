@@ -1707,7 +1707,8 @@ def get_student_companies():
 # =========================================================
 @company_bp.route('/approve_company', methods=['GET'])
 def approve_company_form_page():
-    return render_template('company/approve_company.html')
+    is_ta = session.get('role') == 'ta'
+    return render_template('company/approve_company.html', is_ta=is_ta)
 
 # =========================================================
 # 🖥️ 查看公司頁面

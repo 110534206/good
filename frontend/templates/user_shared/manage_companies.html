@@ -3,7 +3,7 @@
 
 <head>
   <meta charset="UTF-8">
-  <title>智慧實習平台 | 科助後台</title>
+  <title>智慧實習平台 | 實習投遞流程管理</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
   <style>
     * {
@@ -39,8 +39,8 @@
     /* 三條線選單按鈕樣式 */
     .top-bar-left {
       position: fixed;
-      top: 1rem;
-      left: 1rem;
+      top: 1.5rem;
+      left: 7rem;
       z-index: 1300;
     }
 
@@ -217,11 +217,116 @@
       font-size: 0.875rem;
     }
 
+    /* 主內容區：單一卡片包住快捷操作 + 表格 */
+    .manage-companies-card {
+      background: #fff;
+      border-radius: 12px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+      border: 1px solid #e5e7eb;
+      overflow: hidden;
+    }
+
+    /* 快捷操作列：與卡片一體、不突兀 */
+    .page-actions-bar {
+      display: flex;
+      align-items: center;
+      justify-content: flex-start;
+      gap: 1rem;
+      padding: 1rem 1.5rem;
+      background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
+      border-bottom: 1px solid #e5e7eb;
+    }
+
+    .page-actions-bar a {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 140px;
+      padding: 0.6rem 1.25rem;
+      font-size: 0.95rem;
+      font-weight: 600;
+      border-radius: 8px;
+      text-decoration: none;
+      transition: all 0.2s ease;
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+    }
+
+    .page-actions-bar a.action-approve {
+      background: #0454a3;
+      color: #fff;
+      border: 1px solid #034078;
+    }
+
+    .page-actions-bar a.action-approve:hover {
+      background: #034078;
+      color: #fff;
+      transform: translateY(-1px);
+      box-shadow: 0 4px 8px rgba(4, 84, 163, 0.25);
+    }
+
+    .page-actions-bar a.action-students {
+      background: #fff;
+      color: #475569;
+      border: 1px solid #cbd5e1;
+    }
+
+    .page-actions-bar a.action-students:hover {
+      background: #f1f5f9;
+      color: #0f172a;
+      border-color: #94a3b8;
+      transform: translateY(-1px);
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
+    }
+
+    /* 表格區標題 */
+    .manage-companies-card .card-body {
+      padding: 1.5rem 1.5rem 1.75rem;
+    }
+
+    .manage-companies-card .table-section-title {
+      font-size: 1.1rem;
+      font-weight: 600;
+      color: #334155;
+      margin-bottom: 1rem;
+      padding-bottom: 0.5rem;
+    }
+
+    .manage-companies-card .table-section-title span {
+      color: #64748b;
+      font-weight: 500;
+    }
+
+    /* 表格圓角與邊框統一 */
+    .manage-companies-card .table-responsive {
+      border-radius: 8px;
+      border: 1px solid #e5e7eb;
+      overflow: hidden;
+    }
+
+    .manage-companies-card .table thead th {
+      background-color: #f8fafc;
+      font-weight: 600;
+      color: #475569;
+      border-color: #e2e8f0;
+      padding: 0.75rem 0.85rem;
+      font-size: 0.9rem;
+    }
+
+    .manage-companies-card .table tbody td {
+      border-color: #e2e8f0;
+      padding: 0.75rem 0.85rem;
+      font-size: 0.9rem;
+    }
+
+    .manage-companies-card .table tbody tr:hover td {
+      background-color: #f8fafc;
+    }
+
   </style>
 </head>
 
 <body class="p-0">
-  <header>實習廠商管理</header>
+  <header>實習投遞流程管理</header>
   <div class="top-bar-left">
     <div id="menu-btn" title="選單" role="button" tabindex="0">
       <span></span><span></span><span></span>
@@ -236,8 +341,8 @@
     </div>
     <a href="/ta_home">首頁</a>
     <a href="/profile">個人資料</a>
-    <a href="/notifications">通知</a>
-    <a href="/ta/statistics/manage_companies">實習廠商管理</a>
+    <a href="/notifications">公告</a>
+    <a href="/ta/statistics/manage_companies">實習投遞流程管理</a>
     <a href="/ta/interview_schedule">行事曆</a>
     <a href="/final_results">媒合結果確認</a>
     <a href="/admin/absence_default_range">缺勤預設學期範圍設定</a>
@@ -248,38 +353,33 @@
   <div class="container-fluid p-0">
     <div class="main-content">
       <div class="p-4">
-        <div class="mb-4">
-          <div class="d-flex gap-2 justify-content-center">
-            <a href="/approve_company" class="btn btn-danger">審核公司</a>
-            <a href="/ta/statistics/manage_students" class="btn btn-warning">學生管理</a>
+        <!-- 單一卡片：快捷操作 + 公司管理表格 -->
+        <div class="manage-companies-card">
+          <div class="page-actions-bar">
+            <a href="/approve_company" class="action-approve">審核公司</a>
+            <a href="/ta/statistics/manage_students" class="action-students">學生管理</a>
           </div>
-        </div>
-
-        <!-- 已審核公司列表 -->
-        <div class="mb-4">
-          <div class="card shadow-sm">
-            <div class="card-body p-4">
-              <h5 class="mb-3 text-center" style="color: #000000; font-weight: bold;">公司管理（<span id="currentSemesterDisplay">載入中...</span>）</h5>
-              <div class="table-responsive">
-                <table class="table table-bordered align-middle" style="margin-bottom: 0;">
-                  <thead>
-                    <tr>
-                      <th style="text-align: center; background-color: #fafafb; border: 1px solid #dee2e6;">公司名稱</th>
-                      <th style="text-align: center; background-color: #fafafb; border: 1px solid #dee2e6;">職缺</th>
-                      <th style="text-align: center; background-color: #fafafb; border: 1px solid #dee2e6;">上傳教師</th>
-                      <th style="text-align: center; background-color: #fafafb; border: 1px solid #dee2e6;">審核時間</th>
-                      <th style="text-align: center; background-color: #fafafb; border: 1px solid #dee2e6;">本學期開放</th>
-                      <th style="text-align: center; background-color: #fafafb; border: 1px solid #dee2e6;">狀態</th>
-                      <th style="text-align: center; background-color: #fafafb; border: 1px solid #dee2e6;">指導老師</th>
-                    </tr>
-                  </thead>
-                  <tbody id="reviewedCompaniesTableBody">
-                    <tr>
-                      <td colspan="7" class="text-center text-muted">載入中...</td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
+          <div class="card-body">
+            <h5 class="table-section-title">公司管理 <span id="currentSemesterDisplay">（載入中...）</span></h5>
+            <div class="table-responsive">
+              <table class="table table-bordered align-middle" style="margin-bottom: 0;">
+                <thead>
+                  <tr>
+                    <th style="text-align: center;">公司名稱</th>
+                    <th style="text-align: center;">職缺</th>
+                    <th style="text-align: center;">上傳教師</th>
+                    <th style="text-align: center;">審核時間</th>
+                    <th style="text-align: center;">本學期開放</th>
+                    <th style="text-align: center;">狀態</th>
+                    <th style="text-align: center;">指導老師</th>
+                  </tr>
+                </thead>
+                <tbody id="reviewedCompaniesTableBody">
+                  <tr>
+                    <td colspan="7" class="text-center text-muted">載入中...</td>
+                  </tr>
+                </tbody>
+              </table>
             </div>
           </div>
         </div>
@@ -358,7 +458,7 @@
         }
 
         currentSemesterCode = data.current_semester || '未設定';
-        semesterDisplay.textContent = currentSemesterCode || '未設定';
+        semesterDisplay.textContent = `（${currentSemesterCode}）`;
 
         if (!data.companies || data.companies.length === 0) {
           tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">目前沒有已審核的公司</td></tr>';

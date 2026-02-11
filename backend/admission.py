@@ -2693,40 +2693,23 @@ def director_confirm_matching():
         
         # 1. 收集所有需要通知的指導老師和班導（去重，避免同一個人收到兩個通知）
         notified_user_ids = set()
-        notified_users_with_email = []  # 儲存用戶ID和email的對應關係
         
-        # 收集所有指導老師（role='teacher'），包含email
-        cursor.execute("SELECT id, name, email FROM users WHERE role = 'teacher'")
+        # 收集所有指導老師（role='teacher'）
+        cursor.execute("SELECT id FROM users WHERE role = 'teacher'")
         teachers = cursor.fetchall() or []
         for teacher in teachers:
-            teacher_id = teacher['id']
-            notified_user_ids.add(teacher_id)
-            if teacher.get('email'):
-                notified_users_with_email.append({
-                    'user_id': teacher_id,
-                    'name': teacher.get('name', ''),
-                    'email': teacher['email']
-                })
+            notified_user_ids.add(teacher['id'])
         
-        # 收集所有班導（從 classes_teacher 表獲取），包含email
+        # 收集所有班導（從 classes_teacher 表獲取）
         cursor.execute("""
-            SELECT DISTINCT ct.teacher_id, u.name, u.email
+            SELECT DISTINCT ct.teacher_id
             FROM classes_teacher ct
             JOIN users u ON ct.teacher_id = u.id
             WHERE ct.role = '班導師'
         """)
         class_teachers = cursor.fetchall() or []
         for class_teacher in class_teachers:
-            teacher_id = class_teacher['teacher_id']
-            notified_user_ids.add(teacher_id)
-            if class_teacher.get('email'):
-                # 檢查是否已經在列表中（避免重複）
-                if not any(u['user_id'] == teacher_id for u in notified_users_with_email):
-                    notified_users_with_email.append({
-                        'user_id': teacher_id,
-                        'name': class_teacher.get('name', ''),
-                        'email': class_teacher['email']
-                    })
+            notified_user_ids.add(class_teacher['teacher_id'])
         
         # 只發送一個通知給所有需要通知的用戶（指導老師和班導）
         title = f"{semester_prefix} 媒合結果已出爐"
@@ -2741,63 +2724,6 @@ def director_confirm_matching():
                 category="matching",
                 link_url=link_url
             )
-        
-        # 發送 email 給所有指導老師和班導
-        email_success_count = 0
-        email_fail_count = 0
-        
-        # 嘗試導入 email_service（只導入一次）
-        send_email_func = None
-        try:
-            from email_service import send_email as send_email_func
-        except ImportError:
-            print("⚠️ email_service 模組不存在，跳過郵件發送")
-        except Exception as e:
-            print(f"⚠️ 導入 email_service 時發生錯誤: {str(e)}")
-        
-        if send_email_func:
-            try:
-                email_subject = f"{semester_prefix} 媒合結果已出爐"
-                # 構建系統連結（避免使用 IP，使用相對路徑）
-                # 使用相對路徑，讓收件人在自己的瀏覽器中打開時自動使用正確的域名
-                system_url = link_url
-                
-                email_content = f"""親愛的老師您好：
-
-{semester_prefix}實習媒合結果已出爐，請前往系統查看詳細結果。
-
-系統連結：{system_url}
-
-如有任何問題，請聯繫系統管理員。
-
-此為系統自動發送郵件，請勿直接回覆。
-
-智慧實習平台"""
-                
-                for user_info in notified_users_with_email:
-                    try:
-                        email_success, email_message, log_id = send_email_func(
-                            recipient_email=user_info['email'],
-                            subject=email_subject,
-                            content=email_content,
-                            related_user_id=user_info['user_id']
-                        )
-                        if email_success:
-                            email_success_count += 1
-                            print(f"✅ 已發送 email 給 {user_info['name']} ({user_info['email']})")
-                        else:
-                            email_fail_count += 1
-                            print(f"⚠️ 發送 email 失敗給 {user_info['name']} ({user_info['email']}): {email_message}")
-                    except Exception as email_error:
-                        email_fail_count += 1
-                        print(f"⚠️ 發送 email 時發生錯誤給 {user_info['name']} ({user_info['email']}): {str(email_error)}")
-                        traceback.print_exc()
-                
-                print(f"📧 老師 Email 發送統計：成功 {email_success_count} 封，失敗 {email_fail_count} 封")
-            except Exception as email_error:
-                print(f"⚠️ 發送老師 email 時發生錯誤: {str(email_error)}")
-                traceback.print_exc()
-                # 不影響主流程，只記錄錯誤
         
         # 3. 通知所有廠商（role='vendor'）進行確認
         cursor.execute("SELECT id, name FROM users WHERE role = 'vendor'")
@@ -2831,94 +2757,9 @@ def director_confirm_matching():
                 link_url=link_url
             )
         
-        # 5. 通知所有被媒合的學生
-        cursor.execute("""
-            SELECT DISTINCT md.student_id, u.name AS student_name, u.email AS student_email
-            FROM manage_director md
-            JOIN users u ON md.student_id = u.id
-            WHERE md.semester_id = %s
-            AND md.director_decision IN ('Approved', 'Pending')
-        """, (current_semester_id,))
-        matched_students = cursor.fetchall() or []
-        
-        student_notification_count = 0
-        student_email_success_count = 0
-        student_email_fail_count = 0
-        
-        for student in matched_students:
-            student_id = student['student_id']
-            student_name = student.get('student_name', '')
-            student_email = student.get('student_email')
-            
-            # 發送系統通知給學生
-            student_title = f"{semester_prefix} 媒合結果已出爐"
-            student_message = f"{semester_prefix}實習媒合結果已出爐，請前往查看您的媒合結果。"
-            student_link_url = "/admission/results"  # 學生查看媒合結果的頁面
-            
-            create_notification(
-                user_id=student_id,
-                title=student_title,
-                message=student_message,
-                category="matching",
-                link_url=student_link_url
-            )
-            student_notification_count += 1
-            
-            # 發送 email 給學生（如果有 email 且 email_service 可用）
-            if student_email and send_email_func:
-                try:
-                    student_email_subject = f"{semester_prefix} 實習媒合結果已出爐"
-                    # 構建系統連結（避免使用 IP，使用相對路徑）
-                    # 使用相對路徑，讓收件人在自己的瀏覽器中打開時自動使用正確的域名
-                    student_system_url = student_link_url
-                    
-                    student_email_content = f"""親愛的{student_name}同學您好：
-
-{semester_prefix}實習媒合結果已出爐，請前往系統查看您的媒合結果。
-
-系統連結：{student_system_url}
-
-如有任何問題，請聯繫您的指導老師或班導。
-
-此為系統自動發送郵件，請勿直接回覆。
-
-智慧實習平台"""
-                    
-                    email_success, email_message, log_id = send_email_func(
-                        recipient_email=student_email,
-                        subject=student_email_subject,
-                        content=student_email_content,
-                        related_user_id=student_id
-                    )
-                    if email_success:
-                        student_email_success_count += 1
-                        print(f"✅ 已發送 email 給學生 {student_name} ({student_email})")
-                    else:
-                        student_email_fail_count += 1
-                        print(f"⚠️ 發送 email 失敗給學生 {student_name} ({student_email}): {email_message}")
-                except Exception as email_error:
-                    student_email_fail_count += 1
-                    print(f"⚠️ 發送 email 時發生錯誤給學生 {student_name} ({student_email}): {str(email_error)}")
-                    traceback.print_exc()
-        
-        print(f"📧 學生通知統計：通知 {student_notification_count} 位學生，Email 成功 {student_email_success_count} 封，失敗 {student_email_fail_count} 封")
-        
-        # 6. 更新媒合結果狀態（可選：在 manage_director 表中添加狀態欄位，或創建新的狀態表）
+        # 5. 更新媒合結果狀態（可選：在 manage_director 表中添加狀態欄位，或創建新的狀態表）
         # 這裡可以添加狀態更新的邏輯，例如標記為「已確認，待廠商確認」
         # 目前先不更新資料庫狀態，只發送通知
-        
-        # Email 發送統計
-        teacher_email_stats = {
-            "email_sent": email_success_count,
-            "email_failed": email_fail_count,
-            "total_recipients": len(notified_users_with_email)
-        }
-        
-        student_email_stats = {
-            "email_sent": student_email_success_count,
-            "email_failed": student_email_fail_count,
-            "total_students": len(matched_students)
-        }
         
         return jsonify({
             "success": True,
@@ -2926,12 +2767,7 @@ def director_confirm_matching():
             "notified": {
                 "teachers_and_class_teachers": len(notified_user_ids),
                 "vendors": len(vendors),
-                "tas": len(tas),
-                "students": student_notification_count
-            },
-            "email": {
-                "teachers": teacher_email_stats,
-                "students": student_email_stats
+                "tas": len(tas)
             }
         })
     
@@ -3189,14 +3025,14 @@ def export_matching_results_excel():
         ws = wb.active
         ws.title = "媒合結果"
         
-        # 設定樣式（與圖片格式相同）
+        # 設定樣式
         company_header_fill = PatternFill(start_color="FFFF00", end_color="FFFF00", fill_type="solid")  # 黃色背景
-        company_header_font = Font(bold=True, size=12, color="000000")  # 黑色文字
+        company_header_font = Font(bold=True, size=12)
         student_font = Font(size=11)
-        total_fill = PatternFill(start_color="FFFFFF", end_color="FFFFFF", fill_type="solid")  # 白色背景
+        total_fill = PatternFill(start_color="F0F0F0", end_color="F0F0F0", fill_type="solid")  # 灰色背景
         total_font = Font(bold=True, size=11)
         
-        # 邊框樣式（細線，與圖片相同）
+        # 邊框樣式
         thin_border = Border(
             left=Side(style='thin'),
             right=Side(style='thin'),
@@ -3206,29 +3042,22 @@ def export_matching_results_excel():
         
         # 4列網格布局
         COLUMNS = 4
-        COLUMN_WIDTH = 25  # 每列寬度（字符），增加寬度以容納完整文字
+        COLUMN_WIDTH = 20  # 每列寬度（字符）
         
         # 準備公司數據
         companies_list = []
         for company in companies_data.values():
             company_name = company["company_name"]
             all_students = []
-            job_count = len(company["jobs"])  # 計算職缺數量
             
             # 收集該公司所有職缺的學生
             for job_title, students in company["jobs"].items():
-                # 如果公司有多個職缺，在學生資料中保留職缺資訊
-                for student in students:
-                    student_with_job = student.copy()
-                    if job_count >= 2:  # 如果有兩個或更多職缺，標記需要顯示職缺
-                        student_with_job["has_multiple_jobs"] = True
-                    all_students.append(student_with_job)
+                all_students.extend(students)
             
             if all_students:
                 companies_list.append({
                     "name": company_name,
-                    "students": all_students,
-                    "job_count": job_count
+                    "students": all_students
                 })
         
         # 將公司分配到4列
@@ -3251,22 +3080,17 @@ def export_matching_results_excel():
                 company_name = company["name"]
                 students = company["students"]
                 
-                # 公司名稱標題（白色背景，跨兩欄置中，右邊空一格）
+                # 公司名稱標題（黃色背景，跨兩欄置中，右邊空一格）
                 header_cell = ws[f"{col_letter_start}{current_row}"]
                 header_cell.value = company_name
                 header_cell.fill = company_header_fill
                 header_cell.font = company_header_font
                 header_cell.border = thin_border
-                header_cell.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
+                header_cell.alignment = Alignment(horizontal='center', vertical='center')
                 # 合併兩欄
                 ws.merge_cells(f"{col_letter_start}{current_row}:{col_letter_end}{current_row}")
                 # 確保合併後的單元格也有邊框
                 ws[f"{col_letter_end}{current_row}"].border = thin_border
-                # 根據公司名稱長度自動調整行高（確保完整顯示）
-                # 計算需要的行高：每15個字符約需要一行，最少25，最多60
-                estimated_lines = max(1, len(company_name) / 15)
-                row_height = max(25, min(60, int(estimated_lines * 20)))
-                ws.row_dimensions[current_row].height = row_height
                 # 右邊空一格（第三欄留空）
                 right_empty_cell = ws[f"{col_letter_right}{current_row}"]
                 right_empty_cell.value = ""
@@ -3274,44 +3098,23 @@ def export_matching_results_excel():
                 current_row += 1
                 
                 # 學生列表（學號和姓名分開兩欄，右邊空一格）
-                # 檢查公司是否有兩個或更多職缺
-                company_info = next((c for c in companies_list if c["name"] == company_name), None)
-                has_multiple_jobs = company_info and company_info.get("job_count", 0) >= 2
-                
                 for student in students:
                     student_number = student.get('student_number') or ''
                     student_name = student.get('student_name') or ''
-                    job_title = student.get('job_title') or ''
                     
-                    # 將學號轉為純數字（移除所有非數字字符）
-                    student_number_clean = ''.join(filter(str.isdigit, str(student_number)))
-                    # 如果學號不為空，嘗試轉換為整數（Excel 會識別為數字格式）
-                    if student_number_clean:
-                        try:
-                            student_number_clean = int(student_number_clean)
-                        except (ValueError, OverflowError):
-                            # 如果轉換失敗（例如學號太長），保持為字串
-                            pass
-                    
-                    # 如果公司有兩個或更多職缺，在姓名後面加上職缺名稱
-                    if has_multiple_jobs and job_title and job_title != "未指定職缺":
-                        display_name = f"{student_name}({job_title})"
-                    else:
-                        display_name = student_name
-                    
-                    # 學號欄位（置中對齊）
+                    # 學號欄位
                     number_cell = ws[f"{col_letter_start}{current_row}"]
-                    number_cell.value = student_number_clean
+                    number_cell.value = student_number
                     number_cell.font = student_font
                     number_cell.border = thin_border
-                    number_cell.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
+                    number_cell.alignment = Alignment(horizontal='left', vertical='center')
                     
-                    # 姓名欄位（置中對齊）
+                    # 姓名欄位
                     name_cell = ws[f"{col_letter_end}{current_row}"]
-                    name_cell.value = display_name
+                    name_cell.value = student_name
                     name_cell.font = student_font
                     name_cell.border = thin_border
-                    name_cell.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
+                    name_cell.alignment = Alignment(horizontal='left', vertical='center')
                     
                     # 右邊空一格（第三欄留空）
                     right_empty_cell = ws[f"{col_letter_right}{current_row}"]
@@ -3350,18 +3153,11 @@ def export_matching_results_excel():
         # 設定列寬（每列佔用3個欄位，所以總共12欄）
         for col in range(1, COLUMNS * 3 + 1):
             col_letter = get_column_letter(col)
-            # 增加欄位寬度以容納完整文字（學號欄位稍窄，姓名欄位稍寬，公司名稱跨兩欄）
-            if (col - 1) % 3 == 0:  # 學號欄位（A, D, G, J...）
-                ws.column_dimensions[col_letter].width = 12
-            elif (col - 1) % 3 == 1:  # 姓名欄位（B, E, H, K...），也是公司名稱的一部分
-                ws.column_dimensions[col_letter].width = 20  # 增加寬度以容納長公司名稱
-            else:  # 空欄位（C, F, I, L...）
-                ws.column_dimensions[col_letter].width = 2
+            ws.column_dimensions[col_letter].width = COLUMN_WIDTH / 3  # 每欄寬度為原寬度的1/3
         
-        # 設定行高（預設行高，已設定的行高會覆蓋此設定）
+        # 設定行高
         for row in range(1, ws.max_row + 1):
-            if row not in ws.row_dimensions or ws.row_dimensions[row].height is None:
-                ws.row_dimensions[row].height = 20
+            ws.row_dimensions[row].height = 20
         
         # 保存到內存
         output = io.BytesIO()
@@ -3479,14 +3275,13 @@ def ta_export_matching_results_excel():
         ws = wb.active
         ws.title = "媒合結果"
         
-        # 設定樣式（與圖片格式相同）
-        company_header_fill = PatternFill(start_color="FFFF00", end_color="FFFF00", fill_type="solid")  # 黃色背景
-        company_header_font = Font(bold=True, size=12, color="000000")  # 黑色文字
+        # 設定樣式
+        company_header_fill = PatternFill(start_color="FFFF00", end_color="FFFF00", fill_type="solid")
+        company_header_font = Font(bold=True, size=12)
         student_font = Font(size=11)
-        total_fill = PatternFill(start_color="FFFFFF", end_color="FFFFFF", fill_type="solid")  # 白色背景
+        total_fill = PatternFill(start_color="F0F0F0", end_color="F0F0F0", fill_type="solid")
         total_font = Font(bold=True, size=11)
         
-        # 邊框樣式（細線，與圖片相同）
         thin_border = Border(
             left=Side(style='thin'),
             right=Side(style='thin'),
@@ -3495,27 +3290,18 @@ def ta_export_matching_results_excel():
         )
         
         COLUMNS = 4
-        COLUMN_WIDTH = 25  # 每列寬度（字符），增加寬度以容納完整文字
+        COLUMN_WIDTH = 20
         
         companies_list = []
         for company in companies_data.values():
             company_name = company["company_name"]
             all_students = []
-            job_count = len(company["jobs"])  # 計算職缺數量
-            
             for job_title, students in company["jobs"].items():
-                # 如果公司有多個職缺，在學生資料中保留職缺資訊
-                for student in students:
-                    student_with_job = student.copy()
-                    if job_count >= 2:  # 如果有兩個或更多職缺，標記需要顯示職缺
-                        student_with_job["has_multiple_jobs"] = True
-                    all_students.append(student_with_job)
-            
+                all_students.extend(students)
             if all_students:
                 companies_list.append({
                     "name": company_name,
-                    "students": all_students,
-                    "job_count": job_count
+                    "students": all_students
                 })
         
         columns_data = [[], [], [], []]
@@ -3539,56 +3325,28 @@ def ta_export_matching_results_excel():
                 header_cell.fill = company_header_fill
                 header_cell.font = company_header_font
                 header_cell.border = thin_border
-                header_cell.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
+                header_cell.alignment = Alignment(horizontal='center', vertical='center')
                 ws.merge_cells(f"{col_letter_start}{current_row}:{col_letter_end}{current_row}")
                 ws[f"{col_letter_end}{current_row}"].border = thin_border
                 ws[f"{col_letter_right}{current_row}"].value = ""
                 ws[f"{col_letter_right}{current_row}"].border = thin_border
-                # 根據公司名稱長度自動調整行高（確保完整顯示）
-                # 計算需要的行高：每15個字符約需要一行，最少25，最多60
-                estimated_lines = max(1, len(company_name) / 15)
-                row_height = max(25, min(60, int(estimated_lines * 20)))
-                ws.row_dimensions[current_row].height = row_height
                 current_row += 1
-                
-                # 檢查公司是否有兩個或更多職缺
-                company_info = next((c for c in companies_list if c["name"] == company_name), None)
-                has_multiple_jobs = company_info and company_info.get("job_count", 0) >= 2
                 
                 for student in students:
                     student_number = student.get('student_number') or ''
                     student_name = student.get('student_name') or ''
-                    job_title = student.get('job_title') or ''
                     
-                    # 將學號轉為純數字（移除所有非數字字符）
-                    student_number_clean = ''.join(filter(str.isdigit, str(student_number)))
-                    # 如果學號不為空，嘗試轉換為整數（Excel 會識別為數字格式）
-                    if student_number_clean:
-                        try:
-                            student_number_clean = int(student_number_clean)
-                        except (ValueError, OverflowError):
-                            # 如果轉換失敗（例如學號太長），保持為字串
-                            pass
-                    
-                    # 如果公司有兩個或更多職缺，在姓名後面加上職缺名稱
-                    if has_multiple_jobs and job_title and job_title != "未指定職缺":
-                        display_name = f"{student_name}({job_title})"
-                    else:
-                        display_name = student_name
-                    
-                    # 學號欄位（置中對齊）
                     number_cell = ws[f"{col_letter_start}{current_row}"]
-                    number_cell.value = student_number_clean
+                    number_cell.value = student_number
                     number_cell.font = student_font
                     number_cell.border = thin_border
-                    number_cell.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
+                    number_cell.alignment = Alignment(horizontal='left', vertical='center')
                     
-                    # 姓名欄位（置中對齊）
                     name_cell = ws[f"{col_letter_end}{current_row}"]
-                    name_cell.value = display_name
+                    name_cell.value = student_name
                     name_cell.font = student_font
                     name_cell.border = thin_border
-                    name_cell.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
+                    name_cell.alignment = Alignment(horizontal='left', vertical='center')
                     
                     ws[f"{col_letter_right}{current_row}"].value = ""
                     ws[f"{col_letter_right}{current_row}"].border = thin_border
@@ -3615,21 +3373,12 @@ def ta_export_matching_results_excel():
                 ws[f"{col_letter_right}{current_row}"].border = thin_border
                 current_row += 1
         
-        # 設定列寬（每列佔用3個欄位，所以總共12欄）
         for col in range(1, COLUMNS * 3 + 1):
             col_letter = get_column_letter(col)
-            # 增加欄位寬度以容納完整文字（學號欄位稍窄，姓名欄位稍寬，公司名稱跨兩欄）
-            if (col - 1) % 3 == 0:  # 學號欄位（A, D, G, J...）
-                ws.column_dimensions[col_letter].width = 12
-            elif (col - 1) % 3 == 1:  # 姓名欄位（B, E, H, K...），也是公司名稱的一部分
-                ws.column_dimensions[col_letter].width = 20  # 增加寬度以容納長公司名稱
-            else:  # 空欄位（C, F, I, L...）
-                ws.column_dimensions[col_letter].width = 2
+            ws.column_dimensions[col_letter].width = COLUMN_WIDTH / 3
         
-        # 設定行高（預設行高，已設定的行高會覆蓋此設定）
         for row in range(1, ws.max_row + 1):
-            if row not in ws.row_dimensions or ws.row_dimensions[row].height is None:
-                ws.row_dimensions[row].height = 20
+            ws.row_dimensions[row].height = 20
         
         output = io.BytesIO()
         wb.save(output)
@@ -3644,206 +3393,6 @@ def ta_export_matching_results_excel():
             download_name=filename
         )
     
-    except Exception as e:
-        traceback.print_exc()
-        return jsonify({"success": False, "message": f"匯出失敗: {str(e)}"}), 500
-    finally:
-        cursor.close()
-        conn.close()
-
-# =========================================================
-# API: 匯出未錄取學生名單 Excel（科助/主任/班導/管理員）
-# =========================================================
-@admission_bp.route("/api/ta/export_unadmitted_students_excel", methods=["GET"])
-def ta_export_unadmitted_students_excel():
-    """
-    匯出未錄取學生名單 Excel。
-    - 預設使用系統當前學期對應的學號前綴規則（與 get_all_students 一致）
-    - 支援 ?semester_id= 指定學期（可選）
-    - 支援 ?class_id= 指定班級（可選）
-    - 角色限制：ta / admin / director / class_teacher
-    """
-    if 'user_id' not in session or session.get('role') not in ['ta', 'admin', 'director', 'class_teacher']:
-        return jsonify({"success": False, "message": "未授權"}), 403
-
-    user_id = session.get('user_id')
-    user_role = session.get('role')
-
-    conn = get_db()
-    cursor = conn.cursor(dictionary=True)
-
-    try:
-        chosen_id = request.args.get('semester_id', type=int)
-        class_id = request.args.get('class_id', type=int)
-
-        if chosen_id:
-            cursor.execute("SELECT id, code FROM semesters WHERE id = %s", (chosen_id,))
-            row = cursor.fetchone()
-            if not row:
-                return jsonify({"success": False, "message": "找不到該學期"}), 400
-            current_semester_id = row['id']
-            current_semester_code = row.get('code') or ''
-        else:
-            current_semester_code = get_current_semester_code(cursor)
-            current_semester_id = get_current_semester_id(cursor)
-
-        if not current_semester_code:
-            return jsonify({"success": False, "message": "無法取得當前學期"}), 500
-        if not current_semester_id:
-            return jsonify({"success": False, "message": "無法取得當前學期"}), 500
-
-        # 已在媒合結果中的學生（Approved/Pending）
-        cursor.execute("""
-            SELECT DISTINCT md.student_id
-            FROM manage_director md
-            INNER JOIN student_preferences sp ON md.preference_id = sp.id AND sp.semester_id = %s
-            WHERE md.director_decision IN ('Approved', 'Pending')
-        """, (current_semester_id,))
-        matched_student_ids = {row['student_id'] for row in cursor.fetchall()}
-
-        # 學期對應學號前綴（與 get_all_students 一致）
-        student_id_prefix = None
-        if current_semester_code and len(current_semester_code) >= 3:
-            try:
-                year_part = int(current_semester_code[:3])
-                student_id_prefix = str(year_part - 3)
-            except (ValueError, TypeError):
-                pass
-
-        # 基礎查詢：學生 + 班級
-        base_query = """
-            SELECT 
-                u.id AS student_id,
-                u.name AS student_name,
-                u.username AS student_number,
-                c.id AS class_id,
-                c.name AS class_name,
-                c.department
-            FROM users u
-            LEFT JOIN classes c ON u.class_id = c.id
-            WHERE u.role = 'student'
-        """
-        params = []
-
-        if student_id_prefix:
-            base_query += " AND u.username LIKE %s"
-            params.append(student_id_prefix + "%")
-
-        # 依角色限制範圍（與 get_all_students 一致）
-        if user_role == 'director':
-            cursor.execute("""
-                SELECT DISTINCT c.department
-                FROM classes c
-                JOIN classes_teacher ct ON ct.class_id = c.id
-                WHERE ct.teacher_id = %s
-                LIMIT 1
-            """, (user_id,))
-            dept_result = cursor.fetchone()
-            if dept_result and dept_result.get('department'):
-                base_query += " AND c.department = %s"
-                params.append(dept_result['department'])
-        elif user_role == 'class_teacher':
-            cursor.execute("""
-                SELECT class_id FROM classes_teacher 
-                WHERE teacher_id = %s
-            """, (user_id,))
-            teacher_classes = cursor.fetchall()
-            if teacher_classes:
-                class_ids = [tc['class_id'] for tc in teacher_classes]
-                placeholders = ','.join(['%s'] * len(class_ids))
-                base_query += f" AND u.class_id IN ({placeholders})"
-                params.extend(class_ids)
-            else:
-                # 沒有管理班級 → 匯出空檔（仍返回合法 Excel）
-                pass
-
-        if class_id:
-            base_query += " AND u.class_id = %s"
-            params.append(class_id)
-
-        base_query += " ORDER BY u.username ASC"
-        cursor.execute(base_query, params)
-        students = cursor.fetchall() or []
-
-        # 只匯出未錄取（未媒合）者
-        unadmitted_students = []
-        for s in students:
-            sid = s.get('student_id')
-            is_matched = (sid in matched_student_ids) if sid else False
-            if not is_matched:
-                unadmitted_students.append(s)
-
-        # 學期 label（與 get_all_students 一致）
-        semester_label = current_semester_code
-        if current_semester_code and len(current_semester_code) >= 4:
-            try:
-                year_part = current_semester_code[:3]
-                term_part = current_semester_code[-1]
-                term_name = "第1學期" if term_part == "1" else "第2學期"
-                semester_label = f"{year_part}學年{term_name}"
-            except Exception:
-                pass
-
-        # 建立 Excel
-        wb = Workbook()
-        ws = wb.active
-        ws.title = "未錄取名單"
-
-        header_font = Font(bold=True)
-        header_fill = PatternFill(start_color="E6F0FF", end_color="E6F0FF", fill_type="solid")
-        thin_border = Border(
-            left=Side(style='thin'),
-            right=Side(style='thin'),
-            top=Side(style='thin'),
-            bottom=Side(style='thin')
-        )
-
-        title = f"未錄取學生名單（{current_semester_code} {semester_label}）"
-        ws["A1"].value = title
-        ws.merge_cells("A1:C1")
-        ws["A1"].font = Font(bold=True, size=14)
-        ws["A1"].alignment = Alignment(horizontal="left", vertical="center")
-
-        ws.append(["姓名", "學號", "班級"])
-        for cell in ws[2]:
-            cell.font = header_font
-            cell.fill = header_fill
-            cell.border = thin_border
-            cell.alignment = Alignment(horizontal="center", vertical="center")
-
-        for s in unadmitted_students:
-            dept = (s.get("department") or "").strip()
-            cls = (s.get("class_name") or "").strip()
-            class_label = (dept + cls) if (dept or cls) else ""
-            ws.append([
-                s.get("student_name") or "",
-                s.get("student_number") or "",
-                class_label
-            ])
-
-        # 套用基本格式
-        for row in ws.iter_rows(min_row=3, max_row=ws.max_row, min_col=1, max_col=3):
-            for cell in row:
-                cell.border = thin_border
-                cell.alignment = Alignment(horizontal="left", vertical="center")
-
-        ws.column_dimensions["A"].width = 14
-        ws.column_dimensions["B"].width = 16
-        ws.column_dimensions["C"].width = 22
-
-        output = io.BytesIO()
-        wb.save(output)
-        output.seek(0)
-
-        # 檔名（包含學期與時間）
-        filename = f"未錄取學生名單_{current_semester_code}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
-
-        return send_file(
-            output,
-            mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-            as_attachment=True,
-            download_name=filename
-        )
     except Exception as e:
         traceback.print_exc()
         return jsonify({"success": False, "message": f"匯出失敗: {str(e)}"}), 500
