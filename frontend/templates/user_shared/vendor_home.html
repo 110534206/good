@@ -106,6 +106,7 @@
       color: #333;
       font-size: 1.5rem;
       transition: color 0.3s ease;
+      overflow: visible;
     }
 
     .notification-bell:hover {
@@ -114,8 +115,8 @@
 
     .notification-badge {
       position: absolute;
-      top: 0;
-      right: 0;
+      top: -2px;
+      right: -2px;
       background-color: #ff4d4f;
       color: white;
       border-radius: 10px;
@@ -128,10 +129,12 @@
       font-weight: bold;
       padding: 0 4px;
       box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+      z-index: 1;
+      line-height: 1;
     }
 
     .notification-badge.hidden {
-      display: none;
+      display: none !important;
     }
 
     /* Hero 區塊 */
@@ -150,6 +153,12 @@
       display: flex;
       align-items: center;
       justify-content: center;
+    }
+
+    /* 公告區：隱藏左右箭頭按鈕 */
+    #announcement-carousel #announcement-prev,
+    #announcement-carousel #announcement-next {
+      display: none;
     }
 
     main {
@@ -172,6 +181,7 @@
       grid-template-columns: repeat(2, 1fr);
       gap: 2rem;
       padding: 0;
+      margin-bottom: 2rem; /* 卡片區底下多留一行空白 */
     }
 
     .card {
@@ -313,9 +323,7 @@
   </div>
 
   <div id="announcement-carousel" role="region" aria-live="polite" aria-label="最新公告">
-    <button id="announcement-prev" aria-label="上一則公告">&#8592;</button>
     <div id="announcement-content"></div>
-    <button id="announcement-next" aria-label="下一則公告">&#8594;</button>
   </div>
 
   <!-- 主內容（main 使用 .container，與頂端列同寬） -->
@@ -342,24 +350,19 @@
           <p>向學生發布重要的實習資訊與消息。</p>
           <a href="/publish_announcements">發布公告</a>
         </div>
-        <div class="card">
-          <h3>查看履歷與通知</h3>
-          <p>查看學生履歷與接收來自平台的通知消息。</p>
-          <a href="/reviews_resumes_notifications">查看通知</a>
-        </div>
       </section>
   </main>
 
   <nav id="side-menu" aria-hidden="true" role="navigation" aria-label="廠商功能選單">
     <button id="close-btn" aria-label="關閉功能選單">×</button>
-    <h2>廠商功能選單</h2>
+    <h2>功能選單</h2>
     <a href="/company_home">首頁</a>
     <a href="/profile">個人資料</a>
     <a href="/vendor_review_resume">履歷審核</a>
     <a href="/manage_positions">職位管理</a>
     <a href="/confirm_matching">媒合結果</a>
     <a href="/publish_announcements">發布公告</a>
-    <a href="/reviews_resumes_notifications">查看履歷與通知</a>
+    <a href="/logout">登出</a>
   </nav>
 
   <script>
@@ -374,11 +377,11 @@
 
     // 未讀通知數量（與 student_home 一致）
     function loadUnreadNotificationCount() {
-      fetch('/api/my_notifications')
+      fetch('/api/my_notifications/unread_count')
         .then(response => response.json())
         .then(data => {
-          if (data && data.notifications) {
-            const unreadCount = data.notifications.filter(n => !n.is_read).length;
+          if (data.success && typeof data.unread_count === 'number') {
+            const unreadCount = data.unread_count;
             const badge = document.getElementById('notificationBadge');
             if (badge) {
               if (unreadCount > 0) {
@@ -399,8 +402,6 @@
     let notification = [];
     let currentAnnouncementIndex = 0;
     const announcementContent = document.getElementById('announcement-content');
-    const prevBtn = document.getElementById('announcement-prev');
-    const nextBtn = document.getElementById('announcement-next');
 
     function showAnnouncement(index) {
       if (notification.length > 0) {

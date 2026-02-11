@@ -106,6 +106,7 @@
       color: #333;
       font-size: 1.5rem;
       transition: color 0.3s ease;
+      overflow: visible;
     }
 
     .notification-bell:hover {
@@ -114,8 +115,8 @@
 
     .notification-badge {
       position: absolute;
-      top: 0;
-      right: 0;
+      top: -2px;
+      right: -2px;
       background-color: #ff4d4f;
       color: white;
       border-radius: 10px;
@@ -128,10 +129,12 @@
       font-weight: bold;
       padding: 0 4px;
       box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+      z-index: 1;
+      line-height: 1;
     }
 
     .notification-badge.hidden {
-      display: none;
+      display: none !important;
     }
 
     header.hero {
@@ -344,7 +347,7 @@
         <div class="card">
           <h3>媒合結果管理中心</h3>
           <p>辦理最終錄取公告，並針對未錄取學生啟動二面媒合流程。</p>
-          <a href="/ta/dashboard">開始作業</a>
+          <a href="/ta_assistant_dashboard">開始作業</a>
         </div>
       </section>
   </main>
@@ -360,7 +363,8 @@
     <a href="/ta/interview_schedule">行事曆</a>
     <a href="/admin/absence_default_range">缺勤預設學期範圍設定</a>
     <a href="/ta/upload_standard_courses">專業核心科目管理</a>
-    <a href="/ta/dashboard">媒合結果管理中心</a>
+    <a href="/ta_assistant_dashboard">媒合結果管理中心</a>
+    <a href="/login">登出</a>
   </nav>
 
   <script>
@@ -407,11 +411,11 @@
 
     // 載入未讀通知數量（與 student_home 一致）
     function loadUnreadNotificationCount() {
-      fetch('/api/my_notifications')
+      fetch('/api/my_notifications/unread_count')
         .then(response => response.json())
         .then(data => {
-          if (data.success && Array.isArray(data.notifications)) {
-            const unreadCount = data.notifications.filter(n => !n.is_read).length;
+          if (data.success && typeof data.unread_count === 'number') {
+            const unreadCount = data.unread_count;
             const badge = document.getElementById('notificationBadge');
             if (badge) {
               if (unreadCount > 0) {

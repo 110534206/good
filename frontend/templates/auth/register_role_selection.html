@@ -18,7 +18,7 @@
     }
     .card {
       width: 550px;
-      padding: 60px;
+      padding: 48px 60px 56px;
       border-radius: 10px;
       box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
       background-color: #ffffff;
@@ -27,7 +27,8 @@
     .card h1 {
       font-size: 35px;
       font-weight: 700;
-      margin-bottom: 30px;
+      margin-top: 0;
+      margin-bottom: 32px;
       color: #222;
     }
     .role-button {
@@ -41,7 +42,7 @@
       width: 350px;
       cursor: pointer;
       transition: background-color 0.3s ease, transform 0.2s ease;
-      margin: 10px auto;
+      margin: 14px auto;
       display: block;
     }
     .role-button:hover {
@@ -51,6 +52,21 @@
     .loading {
       opacity: 0.6;
       pointer-events: none;
+    }
+    .back-button {
+      margin-top: 36px;
+      margin-right: auto;
+      margin-left: 0;
+      display: block;
+      color: #000000;
+      background-color: transparent;
+      border: none;
+      font-size: 20px;
+      cursor: pointer;
+      text-decoration: underline;
+    }
+    .back-button:hover {
+      color: #5a6268;
     }
   </style>
 </head>
@@ -73,6 +89,7 @@
         </button>
 
       </div>
+      <button type="button" class="back-button" onclick="window.location.href='{{ url_for('auth_bp.login_page') }}'">返回登入頁面</button>
     </div>
   </div>
 

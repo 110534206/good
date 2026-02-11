@@ -122,8 +122,7 @@
       background-color: #fff;
       padding: 2rem;
       margin-bottom: 3rem;
-      padding-bottom: 5rem;
-
+      padding-bottom: 10rem; /* 頁面底部留多行空白 */
     }
 
     .page-title {
@@ -139,6 +138,7 @@
       grid-template-columns: repeat(2, 1fr);
       gap: 2rem;
       padding: 0;
+      margin-bottom: 2rem; /* 卡片區底下多留一行空白 */
     }
 
     .card {
@@ -249,7 +249,7 @@
   </style>
 </head>
 <body>
-  <!-- 頂端列（與 student_home 版型一致：右側僅帳號選單，無頭像、無通知鈴鐺） -->
+  <!-- 頂端列 -->
   <div class="top-bar">
     <div class="container">
       <div class="top-bar-left">
@@ -259,9 +259,10 @@
       </div>
       <div class="top-bar-right">
         <div class="dropdown" style="position: relative;">
-          <button id="accountDropdownBtn" class="btn-link" aria-expanded="false" aria-haspopup="true" aria-controls="accountDropdownMenu">帳號 ▾</button>
+          <button id="accountDropdownBtn" class="btn-link" aria-expanded="false" aria-haspopup="true" aria-controls="accountDropdownMenu">註冊 / 登出 ▾</button>
           <div id="accountDropdownMenu" class="dropdown-menu" style="position:absolute; right:0; top:120%; background:#fff; border:1px solid #ccc; border-radius:8px; padding:6px; min-width:180px; display:none; box-shadow:0 4px 12px rgba(0,0,0,.12);" role="menu" aria-label="帳號選單">
             <a href="/register_role_selection" class="btn-link" style="display:block; border:none; margin:4px 0;">註冊</a>
+            <a href="/logout" class="btn-link" style="display:block; border:none; margin:4px 0;">登出</a>
           </div>
         </div>
       </div>
@@ -301,7 +302,7 @@
     <a href="/visitor_page">首頁</a>
     <a href="/ai_edit_resume">AI修改履歷</a>
     <a href="/notifications">通知</a>
-    <a href="/login">登入</a>
+    <a href="/logout">登出</a>
   </nav>
 
   <script>

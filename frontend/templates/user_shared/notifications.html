@@ -1454,9 +1454,28 @@
       notifModal.show();
     }
 
-    // unread badge update
+    // 計算「可見」未讀數：排除已結束、未開始的公告（與主頁鈴鐺、後端 unread_count 一致）
+    function getVisibleUnreadCount() {
+      const now = new Date();
+      return allNotifications.filter(n => {
+        if (n.is_read) return false;
+        const hasAnnouncementTime = n.start_time != null || n.end_time != null;
+        if (!hasAnnouncementTime) return true; // 非公告一律計入
+        let isStarted = true;
+        if (n.start_time) {
+          try { isStarted = new Date(n.start_time) <= now; } catch (e) { isStarted = true; }
+        }
+        let isEnded = false;
+        if (n.end_time) {
+          try { isEnded = new Date(n.end_time) < now; } catch (e) { isEnded = false; }
+        }
+        return isStarted && !isEnded;
+      }).length;
+    }
+
+    // unread badge update（顯示與主頁鈴鐺相同的可見未讀數）
     function updateUnreadBadge() {
-      const count = allNotifications.filter(n => !n.is_read).length;
+      const count = getVisibleUnreadCount();
       // 更新右上角徽章（其他角色）
       if (unreadCounterTopRight) {
         unreadCounterTopRight.innerText = count;

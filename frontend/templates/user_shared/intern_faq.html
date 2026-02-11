@@ -707,23 +707,23 @@
 
     // 載入未讀通知數量
     function loadUnreadNotificationCount() {
-      fetch('/api/my_notifications')
+      fetch('/api/my_notifications/unread_count')
         .then(response => response.json())
         .then(data => {
-          if (data.success && Array.isArray(data.notifications)) {
-            const unreadCount = data.notifications.filter(n => !n.is_read).length;
+          if (data.success && typeof data.unread_count === 'number') {
+            const unreadCount = data.unread_count;
             const badge = document.getElementById('notificationBadge');
-            if (unreadCount > 0) {
-              badge.textContent = unreadCount > 99 ? '99+' : unreadCount;
-              badge.classList.remove('hidden');
-            } else {
-              badge.classList.add('hidden');
+            if (badge) {
+              if (unreadCount > 0) {
+                badge.textContent = unreadCount > 99 ? '99+' : unreadCount;
+                badge.classList.remove('hidden');
+              } else {
+                badge.classList.add('hidden');
+              }
             }
           }
         })
-        .catch(err => {
-          console.log('載入未讀通知數量失敗:', err);
-        });
+        .catch(() => {});
     }
 
     // 頁面載入時獲取未讀通知數量

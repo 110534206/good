@@ -1,10 +1,15 @@
 from flask import Blueprint, request, jsonify, render_template, session
 from config import get_db
-from datetime import datetime
+from datetime import datetime, timedelta
 from markupsafe import escape
 import traceback
 
 notification_bp = Blueprint("notification_bp", __name__)
+
+
+def _taiwan_now():
+    """與公告時間一致：使用台灣時間 (UTC+8) 判斷「現在」是否在公告區間內"""
+    return datetime.utcnow() + timedelta(hours=8)
 
 # =========================================================
 # 頁面
@@ -228,6 +233,66 @@ def get_my_notifications():
     finally:
         cursor.close()
         conn.close()
+
+
+@notification_bp.route("/api/my_notifications/unread_count", methods=["GET"])
+def get_visible_unread_count():
+    """
+    回傳「可見」未讀數量：排除已結束、未開始的公告，與通知頁面預設顯示一致。
+    主頁鈴鐺與通知中心的「未讀 X」皆為此數字。
+    """
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"success": False, "message": "未登入"}), 401
+
+    try:
+        conn = get_db()
+        cursor = conn.cursor(dictionary=True)
+        # 與 get_my_notifications 一致：JOIN 公告表取得 start_time/end_time（CAST 確保型別一致）
+        cursor.execute("""
+            SELECT n.id, n.is_read, n.category, n.link_url,
+                   a.start_time, a.end_time
+            FROM notifications n
+            LEFT JOIN announcement a ON n.link_url = CONCAT('/view_announcement/', CAST(a.id AS CHAR))
+            WHERE n.user_id = %s
+        """, (user_id,))
+        rows = cursor.fetchall() or []
+        cursor.close()
+        conn.close()
+
+        now = _taiwan_now()
+        count = 0
+        for row in rows:
+            if row.get("is_read"):
+                continue
+            start_time = row.get("start_time")
+            end_time = row.get("end_time")
+            # 有 JOIN 到公告時間則視為公告，需在區間內才計入
+            is_announcement = start_time is not None or end_time is not None
+            if is_announcement:
+                try:
+                    st = start_time
+                    if st is not None and isinstance(st, str):
+                        st = datetime.strptime(st[:19], "%Y-%m-%d %H:%M:%S") if len(st) >= 19 else now
+                    started = start_time is None or (st <= now if isinstance(st, datetime) else True)
+                except Exception:
+                    started = True
+                try:
+                    et = end_time
+                    if et is not None and isinstance(et, str):
+                        et = datetime.strptime(et[:19], "%Y-%m-%d %H:%M:%S") if len(et) >= 19 else now
+                    not_ended = end_time is None or (et >= now if isinstance(et, datetime) else True)
+                except Exception:
+                    not_ended = True
+                if not (started and not_ended):
+                    continue
+            count += 1
+
+        return jsonify({"success": True, "unread_count": count})
+    except Exception:
+        traceback.print_exc()
+        return jsonify({"success": False, "message": "讀取未讀數失敗"}), 500
+
 
 @notification_bp.route("/api/mark_read/<nid>", methods=["POST"])
 def mark_read(nid):

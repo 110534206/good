@@ -401,7 +401,7 @@
       color: white;
     }
 
-    /* 通知鈴鐺：固定於頂端列右側 */
+    /* 通知鈴鐺：固定於頂端列右側，未讀數量顯示於鈴鐺右上角 */
     .notification-bell {
       position: relative;
       top: 2px;
@@ -415,6 +415,7 @@
       color: #333;
       font-size: 1.5rem;
       transition: color 0.3s ease;
+      overflow: visible;
     }
 
     .notification-bell:hover {
@@ -423,8 +424,8 @@
 
     .notification-badge {
       position: absolute;
-      top: 0;
-      right: 0;
+      top: -2px;
+      right: -2px;
       background-color: #ff4d4f;
       color: white;
       border-radius: 10px;
@@ -437,10 +438,12 @@
       font-weight: bold;
       padding: 0 4px;
       box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+      z-index: 1;
+      line-height: 1;
     }
 
     .notification-badge.hidden {
-      display: none;
+      display: none !important;
     }
 
     /* 實習流程問題表格區塊 */
@@ -670,7 +673,7 @@
         <div class="card" role="listitem">
           <h3>學生媒合結果</h3>
           <p>查看錄取公司、期間、最終錄取志願、指導老師 。</p>
-          <a href="/intern_achievement" role="link">查看成果</a>
+          <a href="/intern_achievement" role="link">上傳成果</a>
         </div>
         <div class="card" role="listitem">
           <h3>實習心得</h3>
@@ -710,23 +713,23 @@
 
     // 載入未讀通知數量
     function loadUnreadNotificationCount() {
-      fetch('/api/my_notifications')
+      fetch('/api/my_notifications/unread_count')
         .then(response => response.json())
         .then(data => {
-          if (data.success && Array.isArray(data.notifications)) {
-            const unreadCount = data.notifications.filter(n => !n.is_read).length;
+          if (data.success && typeof data.unread_count === 'number') {
+            const unreadCount = data.unread_count;
             const badge = document.getElementById('notificationBadge');
-            if (unreadCount > 0) {
-              badge.textContent = unreadCount > 99 ? '99+' : unreadCount;
-              badge.classList.remove('hidden');
-            } else {
-              badge.classList.add('hidden');
+            if (badge) {
+              if (unreadCount > 0) {
+                badge.textContent = unreadCount > 99 ? '99+' : unreadCount;
+                badge.classList.remove('hidden');
+              } else {
+                badge.classList.add('hidden');
+              }
             }
           }
         })
-        .catch(err => {
-          console.log('載入未讀通知數量失敗:', err);
-        });
+        .catch(() => {});
     }
 
     // 頁面載入時獲取未讀通知數量
