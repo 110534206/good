@@ -56,25 +56,74 @@ def _normalize_cert_category(category):
     return "other"
 
 def _upsert_resume_content_mapping(cursor, resume_id, stu_id, course_grade_ids=None, certification_ids=None, language_skill_ids=None, absence_record_ids=None):
-    """依 resume_id 更新或新增一筆 resume_content_mapping。ID 列表以逗號分隔字串儲存。"""
-    cg = ",".join(str(x) for x in (course_grade_ids or [])) if course_grade_ids else ""
-    cert = ",".join(str(x) for x in (certification_ids or [])) if certification_ids else ""
-    lang = ",".join(str(x) for x in (language_skill_ids or [])) if language_skill_ids else ""
-    abs_ids = ",".join(str(x) for x in (absence_record_ids or [])) if absence_record_ids else ""
+    """依 resume_id 更新或新增一筆 resume_content_mapping，並以關聯表 resume_*_rel 儲存勾選的 ID。"""
     cursor.execute("SELECT id FROM resume_content_mapping WHERE resume_id = %s LIMIT 1", (resume_id,))
     row = cursor.fetchone()
     if row:
-        cursor.execute("""
-            UPDATE resume_content_mapping SET
-                stu_info_id = %s, course_grade_ids = %s, certification_ids = %s,
-                language_skill_ids = %s, absence_record_ids = %s, updated_at = CURRENT_TIMESTAMP
-            WHERE resume_id = %s
-        """, (stu_id, cg or None, cert or None, lang or None, abs_ids or None, resume_id))
+        mapping_id = row["id"]
+        cursor.execute(
+            "UPDATE resume_content_mapping SET stu_info_id = %s, updated_at = CURRENT_TIMESTAMP WHERE resume_id = %s",
+            (stu_id, resume_id),
+        )
     else:
-        cursor.execute("""
-            INSERT INTO resume_content_mapping (resume_id, stu_info_id, course_grade_ids, certification_ids, language_skill_ids, absence_record_ids)
-            VALUES (%s, %s, %s, %s, %s, %s)
-        """, (resume_id, stu_id, cg or None, cert or None, lang or None, abs_ids or None))
+        cursor.execute(
+            "INSERT INTO resume_content_mapping (resume_id, stu_info_id) VALUES (%s, %s)",
+            (resume_id, stu_id),
+        )
+        mapping_id = cursor.lastrowid
+
+    # 先刪除該 mapping 在四張關聯表中的舊資料，再寫入新勾選的 ID
+    cursor.execute("DELETE FROM resume_grade_rel WHERE mapping_id = %s", (mapping_id,))
+    cursor.execute("DELETE FROM resume_cert_rel WHERE mapping_id = %s", (mapping_id,))
+    cursor.execute("DELETE FROM resume_lang_rel WHERE mapping_id = %s", (mapping_id,))
+    cursor.execute("DELETE FROM resume_absence_rel WHERE mapping_id = %s", (mapping_id,))
+
+    def _to_id_list(v):
+        if not v:
+            return []
+        if isinstance(v, (list, tuple)):
+            return [int(x) for x in v if x is not None and str(x).strip() != ""]
+        return [int(x.strip()) for x in str(v).split(",") if x and x.strip()]
+
+    grade_ids = _to_id_list(course_grade_ids)
+    cert_ids = _to_id_list(certification_ids)
+    lang_ids = _to_id_list(language_skill_ids)
+    abs_ids = _to_id_list(absence_record_ids)
+
+    for gid in grade_ids:
+        cursor.execute("INSERT INTO resume_grade_rel (mapping_id, grade_id) VALUES (%s, %s)", (mapping_id, gid))
+    for cid in cert_ids:
+        cursor.execute("INSERT INTO resume_cert_rel (mapping_id, cert_id) VALUES (%s, %s)", (mapping_id, cid))
+    for lid in lang_ids:
+        cursor.execute("INSERT INTO resume_lang_rel (mapping_id, lang_skill_id) VALUES (%s, %s)", (mapping_id, lid))
+    for aid in abs_ids:
+        cursor.execute("INSERT INTO resume_absence_rel (mapping_id, absence_id) VALUES (%s, %s)", (mapping_id, aid))
+
+
+def _get_resume_content_mapping(cursor, resume_id):
+    """依 resume_id 從關聯表讀取勾選的 course_grade_ids, certification_ids, language_skill_ids, absence_record_ids。
+    回傳與舊版相容的 dict，鍵值為逗號分隔字串。若無 mapping 則回傳 None。"""
+    cursor.execute("SELECT id FROM resume_content_mapping WHERE resume_id = %s LIMIT 1", (resume_id,))
+    row = cursor.fetchone()
+    if not row:
+        return None
+    mapping_id = row["id"]
+
+    cursor.execute("SELECT grade_id FROM resume_grade_rel WHERE mapping_id = %s", (mapping_id,))
+    grade_ids = ",".join(str(r["grade_id"]) for r in (cursor.fetchall() or []))
+    cursor.execute("SELECT cert_id FROM resume_cert_rel WHERE mapping_id = %s", (mapping_id,))
+    cert_ids = ",".join(str(r["cert_id"]) for r in (cursor.fetchall() or []))
+    cursor.execute("SELECT lang_skill_id FROM resume_lang_rel WHERE mapping_id = %s", (mapping_id,))
+    lang_ids = ",".join(str(r["lang_skill_id"]) for r in (cursor.fetchall() or []))
+    cursor.execute("SELECT absence_id FROM resume_absence_rel WHERE mapping_id = %s", (mapping_id,))
+    abs_ids = ",".join(str(r["absence_id"]) for r in (cursor.fetchall() or []))
+
+    return {
+        "course_grade_ids": grade_ids or None,
+        "certification_ids": cert_ids or None,
+        "language_skill_ids": lang_ids or None,
+        "absence_record_ids": abs_ids or None,
+    }
 
 
 # 添加圖片驗證函數
@@ -878,8 +927,7 @@ def get_student_info_for_doc(cursor, student_id, semester_id=None, resume_id=Non
 
     mapping = None
     if resume_id:
-        cursor.execute("SELECT course_grade_ids, certification_ids, language_skill_ids FROM resume_content_mapping WHERE resume_id = %s LIMIT 1", (resume_id,))
-        mapping = cursor.fetchone()
+        mapping = _get_resume_content_mapping(cursor, resume_id)
 
     # 檢查表是否有 SemesterID、ProofImage 和 transcript_path 列
     try:
@@ -1223,8 +1271,7 @@ def get_resume_data():
         student_id = user_result["username"]
 
         # 載入該履歷的內容關聯（若有則只顯示勾選的課程/證照/語文/缺勤）
-        cursor.execute("SELECT course_grade_ids, certification_ids, language_skill_ids, absence_record_ids FROM resume_content_mapping WHERE resume_id = %s LIMIT 1", (resume["id"],))
-        mapping = cursor.fetchone()
+        mapping = _get_resume_content_mapping(cursor, resume["id"])
 
         # ===== 3. 基本資料 =====
         cursor.execute("SELECT * FROM Student_Info WHERE StuID=%s", (student_id,))
@@ -6238,8 +6285,7 @@ def get_student_info_for_doc(cursor, student_id, semester_id=None, resume_id=Non
 
     mapping = None
     if resume_id:
-        cursor.execute("SELECT course_grade_ids, certification_ids, language_skill_ids FROM resume_content_mapping WHERE resume_id = %s LIMIT 1", (resume_id,))
-        mapping = cursor.fetchone()
+        mapping = _get_resume_content_mapping(cursor, resume_id)
 
     # 檢查表是否有 SemesterID、ProofImage 和 transcript_path 列
     try:
@@ -6583,8 +6629,7 @@ def get_resume_data():
         student_id = user_result["username"]
 
         # 載入該履歷的內容關聯（若有則只顯示勾選的課程/證照/語文/缺勤）
-        cursor.execute("SELECT course_grade_ids, certification_ids, language_skill_ids, absence_record_ids FROM resume_content_mapping WHERE resume_id = %s LIMIT 1", (resume["id"],))
-        mapping = cursor.fetchone()
+        mapping = _get_resume_content_mapping(cursor, resume["id"])
 
         # ===== 3. 基本資料 =====
         cursor.execute("SELECT * FROM Student_Info WHERE StuID=%s", (student_id,))
@@ -11100,8 +11145,7 @@ def get_student_info_for_doc(cursor, student_id, semester_id=None, resume_id=Non
 
     mapping = None
     if resume_id:
-        cursor.execute("SELECT course_grade_ids, certification_ids, language_skill_ids FROM resume_content_mapping WHERE resume_id = %s LIMIT 1", (resume_id,))
-        mapping = cursor.fetchone()
+        mapping = _get_resume_content_mapping(cursor, resume_id)
 
     # 檢查表是否有 SemesterID、ProofImage 和 transcript_path 列
     try:
@@ -11445,8 +11489,7 @@ def get_resume_data():
         student_id = user_result["username"]
 
         # 載入該履歷的內容關聯（若有則只顯示勾選的課程/證照/語文/缺勤）
-        cursor.execute("SELECT course_grade_ids, certification_ids, language_skill_ids, absence_record_ids FROM resume_content_mapping WHERE resume_id = %s LIMIT 1", (resume["id"],))
-        mapping = cursor.fetchone()
+        mapping = _get_resume_content_mapping(cursor, resume["id"])
 
         # ===== 3. 基本資料 =====
         cursor.execute("SELECT * FROM Student_Info WHERE StuID=%s", (student_id,))
@@ -15962,8 +16005,7 @@ def get_student_info_for_doc(cursor, student_id, semester_id=None, resume_id=Non
 
     mapping = None
     if resume_id:
-        cursor.execute("SELECT course_grade_ids, certification_ids, language_skill_ids FROM resume_content_mapping WHERE resume_id = %s LIMIT 1", (resume_id,))
-        mapping = cursor.fetchone()
+        mapping = _get_resume_content_mapping(cursor, resume_id)
 
     # 檢查表是否有 SemesterID、ProofImage 和 transcript_path 列
     try:
@@ -16307,8 +16349,7 @@ def get_resume_data():
         student_id = user_result["username"]
 
         # 載入該履歷的內容關聯（若有則只顯示勾選的課程/證照/語文/缺勤）
-        cursor.execute("SELECT course_grade_ids, certification_ids, language_skill_ids, absence_record_ids FROM resume_content_mapping WHERE resume_id = %s LIMIT 1", (resume["id"],))
-        mapping = cursor.fetchone()
+        mapping = _get_resume_content_mapping(cursor, resume["id"])
 
         # ===== 3. 基本資料 =====
         cursor.execute("SELECT * FROM Student_Info WHERE StuID=%s", (student_id,))
@@ -20824,8 +20865,7 @@ def get_student_info_for_doc(cursor, student_id, semester_id=None, resume_id=Non
 
     mapping = None
     if resume_id:
-        cursor.execute("SELECT course_grade_ids, certification_ids, language_skill_ids FROM resume_content_mapping WHERE resume_id = %s LIMIT 1", (resume_id,))
-        mapping = cursor.fetchone()
+        mapping = _get_resume_content_mapping(cursor, resume_id)
 
     # 檢查表是否有 SemesterID、ProofImage 和 transcript_path 列
     try:
@@ -21169,8 +21209,7 @@ def get_resume_data():
         student_id = user_result["username"]
 
         # 載入該履歷的內容關聯（若有則只顯示勾選的課程/證照/語文/缺勤）
-        cursor.execute("SELECT course_grade_ids, certification_ids, language_skill_ids, absence_record_ids FROM resume_content_mapping WHERE resume_id = %s LIMIT 1", (resume["id"],))
-        mapping = cursor.fetchone()
+        mapping = _get_resume_content_mapping(cursor, resume["id"])
 
         # ===== 3. 基本資料 =====
         cursor.execute("SELECT * FROM Student_Info WHERE StuID=%s", (student_id,))
@@ -25686,8 +25725,7 @@ def get_student_info_for_doc(cursor, student_id, semester_id=None, resume_id=Non
 
     mapping = None
     if resume_id:
-        cursor.execute("SELECT course_grade_ids, certification_ids, language_skill_ids FROM resume_content_mapping WHERE resume_id = %s LIMIT 1", (resume_id,))
-        mapping = cursor.fetchone()
+        mapping = _get_resume_content_mapping(cursor, resume_id)
 
     # 檢查表是否有 SemesterID、ProofImage 和 transcript_path 列
     try:
@@ -26031,8 +26069,7 @@ def get_resume_data():
         student_id = user_result["username"]
 
         # 載入該履歷的內容關聯（若有則只顯示勾選的課程/證照/語文/缺勤）
-        cursor.execute("SELECT course_grade_ids, certification_ids, language_skill_ids, absence_record_ids FROM resume_content_mapping WHERE resume_id = %s LIMIT 1", (resume["id"],))
-        mapping = cursor.fetchone()
+        mapping = _get_resume_content_mapping(cursor, resume["id"])
 
         # ===== 3. 基本資料 =====
         cursor.execute("SELECT * FROM Student_Info WHERE StuID=%s", (student_id,))
@@ -29195,27 +29232,35 @@ def duplicate_resume(resume_id):
             conn.rollback()
             return jsonify({"success": False, "message": "建立副本記錄失敗"}), 500
 
-        # 複製 resume_content_mapping（若有）
-        cursor.execute("""
-            SELECT stu_info_id, course_grade_ids, certification_ids, language_skill_ids, absence_record_ids
-            FROM resume_content_mapping
-            WHERE resume_id = %s
-            LIMIT 1
-        """, (resume_id,))
-        mapping = cursor.fetchone()
-        if mapping:
-            cursor.execute("""
-                INSERT INTO resume_content_mapping
-                (resume_id, stu_info_id, course_grade_ids, certification_ids, language_skill_ids, absence_record_ids)
-                VALUES (%s, %s, %s, %s, %s, %s)
-            """, (
-                new_resume_id,
-                mapping.get('stu_info_id'),
-                mapping.get('course_grade_ids'),
-                mapping.get('certification_ids'),
-                mapping.get('language_skill_ids'),
-                mapping.get('absence_record_ids'),
-            ))
+        # 複製 resume_content_mapping 與關聯表（若有）
+        cursor.execute(
+            "SELECT id, stu_info_id FROM resume_content_mapping WHERE resume_id = %s LIMIT 1",
+            (resume_id,),
+        )
+        old_mapping = cursor.fetchone()
+        if old_mapping:
+            old_mapping_id = old_mapping["id"]
+            cursor.execute(
+                "INSERT INTO resume_content_mapping (resume_id, stu_info_id) VALUES (%s, %s)",
+                (new_resume_id, old_mapping["stu_info_id"]),
+            )
+            new_mapping_id = cursor.lastrowid
+            cursor.execute(
+                "INSERT INTO resume_grade_rel (mapping_id, grade_id) SELECT %s, grade_id FROM resume_grade_rel WHERE mapping_id = %s",
+                (new_mapping_id, old_mapping_id),
+            )
+            cursor.execute(
+                "INSERT INTO resume_cert_rel (mapping_id, cert_id) SELECT %s, cert_id FROM resume_cert_rel WHERE mapping_id = %s",
+                (new_mapping_id, old_mapping_id),
+            )
+            cursor.execute(
+                "INSERT INTO resume_lang_rel (mapping_id, lang_skill_id) SELECT %s, lang_skill_id FROM resume_lang_rel WHERE mapping_id = %s",
+                (new_mapping_id, old_mapping_id),
+            )
+            cursor.execute(
+                "INSERT INTO resume_absence_rel (mapping_id, absence_id) SELECT %s, absence_id FROM resume_absence_rel WHERE mapping_id = %s",
+                (new_mapping_id, old_mapping_id),
+            )
 
         conn.commit()
         return jsonify({
