@@ -66,11 +66,14 @@
       border-radius: 2px;
     }
 
+    /* 頂端列右側：通知鈴鐺、帳號選單（頭像已取消） */
     .top-bar-right {
       display: flex;
       align-items: center;
+      justify-content: flex-end;
       gap: 10px;
       font-weight: bold;
+      margin-left: auto;
     }
 
     .top-bar-right .btn-link {
@@ -272,6 +275,7 @@
       background-color: #fff;
       padding: 2rem;
       margin-bottom: 3rem;
+      padding-bottom: 5rem; /* 頁面最底下留空白 */
     }
 
     .page-title {
@@ -397,20 +401,21 @@
       color: white;
     }
 
-    /* 通知鈴鐺圖示 */
+    /* 通知鈴鐺：固定於頂端列右側，未讀數量顯示於鈴鐺右上角 */
     .notification-bell {
       position: relative;
-      top: 3px; 
+      top: 2px;
       cursor: pointer;
       display: flex;
       align-items: center;
       justify-content: center;
       width: 40px;
       height: 40px;
-      margin-right: 10px;
+      margin-right: 6px;
       color: #333;
       font-size: 1.5rem;
       transition: color 0.3s ease;
+      overflow: visible;
     }
 
     .notification-bell:hover {
@@ -419,8 +424,8 @@
 
     .notification-badge {
       position: absolute;
-      top: 0;
-      right: 0;
+      top: -2px;
+      right: -2px;
       background-color: #ff4d4f;
       color: white;
       border-radius: 10px;
@@ -433,10 +438,12 @@
       font-weight: bold;
       padding: 0 4px;
       box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+      z-index: 1;
+      line-height: 1;
     }
 
     .notification-badge.hidden {
-      display: none;
+      display: none !important;
     }
 
     /* 實習流程問題表格區塊 */
@@ -659,11 +666,6 @@
           <a href="/look_company" role="link">上傳履歷</a>
         </div>
         <div class="card" role="listitem">
-          <h3>通知</h3>
-          <p>接收來自老師與平台的最新消息。</p>
-          <a href="/notifications" role="link">查看通知</a>
-        </div>
-        <div class="card" role="listitem">
           <h3>行事曆</h3>
           <p>查看與管理重要的日期和活動安排。</p>
           <a href="/interview_schedule" role="link">行事曆</a>
@@ -711,23 +713,23 @@
 
     // 載入未讀通知數量
     function loadUnreadNotificationCount() {
-      fetch('/api/my_notifications')
+      fetch('/api/my_notifications/unread_count')
         .then(response => response.json())
         .then(data => {
-          if (data.success && Array.isArray(data.notifications)) {
-            const unreadCount = data.notifications.filter(n => !n.is_read).length;
+          if (data.success && typeof data.unread_count === 'number') {
+            const unreadCount = data.unread_count;
             const badge = document.getElementById('notificationBadge');
-            if (unreadCount > 0) {
-              badge.textContent = unreadCount > 99 ? '99+' : unreadCount;
-              badge.classList.remove('hidden');
-            } else {
-              badge.classList.add('hidden');
+            if (badge) {
+              if (unreadCount > 0) {
+                badge.textContent = unreadCount > 99 ? '99+' : unreadCount;
+                badge.classList.remove('hidden');
+              } else {
+                badge.classList.add('hidden');
+              }
             }
           }
         })
-        .catch(err => {
-          console.log('載入未讀通知數量失敗:', err);
-        });
+        .catch(() => {});
     }
 
     // 頁面載入時獲取未讀通知數量
@@ -735,29 +737,6 @@
     
     // 每30秒更新一次未讀通知數量
     setInterval(loadUnreadNotificationCount, 30000);
-
-    // 載入用戶頭像
-    function loadUserAvatar() {
-      fetch('/api/profile')
-        .then(res => {
-          if (!res.ok) throw new Error('無法取得用戶資料');
-          return res.json();
-        })
-        .then(data => {
-          if (data.success && data.user && data.user.avatar_url) {
-            // 確保頭像URL是完整的路徑，並加上時間戳避免快取
-            const rawUrl = data.user.avatar_url.startsWith('http') ?
-              data.user.avatar_url :
-              window.location.origin + data.user.avatar_url;
-            const avatarUrl = rawUrl + (rawUrl.includes('?') ? '&' : '?') + 't=' + Date.now();
-            document.getElementById('login-avatar').src = avatarUrl;
-          }
-        })
-        .catch(err => {
-          console.log('載入頭像失敗:', err);
-          // 保持預設頭像
-        });
-    }
 
     // 輪播功能
     let currentSlide = 0;
@@ -831,9 +810,6 @@
 
     // 帳號下拉選單
     document.addEventListener("DOMContentLoaded", function () {
-      // 載入用戶頭像
-      loadUserAvatar();
-
       const dropdownBtn = document.getElementById("accountDropdownBtn");
       const dropdownMenu = document.getElementById("accountDropdownMenu");
 

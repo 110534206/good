@@ -17,7 +17,7 @@
       max-width: 400px;
       margin: auto;
       background: #fff;
-      padding: 20px;
+      padding: 12px;
       border-radius: 12px;
       box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
     }
@@ -101,12 +101,155 @@
       cursor: pointer;
       color: #666;
     }
+
+  /* 頂端列 */
+    .profile-top-bar {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 56px;
+      background:  #0454a3;
+      display: flex;
+      align-items: center;
+      padding: 0 1rem;
+      z-index: 1000;
+      box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+    }
+
+    .profile-top-bar .title {
+      flex: 1;
+      text-align: center;
+      padding-right: 20px; 
+      font-size: 1.5rem;
+      color: white;
+    }
+
+    /* 三條線選單按鈕樣式 */
+    .top-bar-left {
+      position: absolute;
+      left: 12rem;
+      z-index: 1300;
+    }
+
+    .top-bar-left #menu-btn {
+      width: 30px;
+      height: 22px;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      background: none;
+      border: none;
+      padding: 0;
+    }
+
+    .top-bar-left #menu-btn span {
+      display: block;
+      width: 100%;
+      height: 3px;
+      background-color: white;
+      border-radius: 2px;
+      transition: all 0.3s ease;
+    }
+
+    #side-menu {
+      position: fixed;
+      top: 0;
+      left: 0;
+      height: 100vh;
+      width: 320px;
+      max-width: 80vw;
+      background-color: rgba(10, 10, 10, 0.95);
+      backdrop-filter: blur(6px);
+      box-shadow: 3px 0 12px rgb(0 0 0 / 0.7);
+      padding: 2rem 1.5rem;
+      transform: translateX(-100%);
+      transition: transform 0.3s ease-in-out;
+      z-index: 1400;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      color: white;
+      user-select: none;
+    }
+
+    #side-menu.open {
+      transform: translateX(0);
+    }
+
+    #side-menu .menu-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      width: 100%;
+      margin-bottom: 1.5rem;
+    }
+
+    #side-menu h2 {
+      margin: 0;
+      font-weight: 700;
+      font-size: 1.5rem;
+      text-align: left;
+      flex: 1;
+      color: white;
+    }
+
+    #close-btn {
+      font-size: 1.5rem;
+      background: none;
+      border: none;
+      color: white;
+      cursor: pointer;
+      line-height: 1;
+      width: auto;
+      height: auto;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0;
+      margin: 0;
+    }
+
+    #side-menu a {
+      display: block;
+      width: 100%;
+      padding: 0.5rem 0;
+      font-size: 1.1rem;
+      color: #ddd;
+      text-decoration: none;
+      border-radius: 4px;
+      transition: background-color 0.2s ease;
+    }
+
+    #side-menu a:hover {
+      background-color: rgba(255, 255, 255, 0.15);
+      color: white;
+    }
+
   </style>
 </head>
 
 <body>
-  <div class="container">
-    <h2>個人資料</h2>
+  <div class="profile-top-bar">
+    <div class="top-bar-left">
+      <button type="button" id="menu-btn" aria-label="開啟選單">
+        <span></span><span></span><span></span>
+      </button>
+    </div>
+    <span class="title">個人資料</span>
+  </div>
+
+  <nav id="side-menu" aria-hidden="true">
+    <div class="menu-header">
+      <h2>功能選單</h2>
+      <button type="button" id="close-btn" aria-label="關閉選單">×</button>
+    </div>
+    <a href="#" id="side-menu-home">首頁</a>
+    <a href="/login" id="side-menu-logout">登出</a>
+  </nav>
+
+  <div class="container" style="margin-top: 80px;">
 
     <img id="avatarPreview" class="avatar-preview" src="https://via.placeholder.com/100?text=頭像" alt="頭像預覽" />
     <input type="hidden" id="isHomeroom" value="false" />
@@ -181,6 +324,24 @@
       const pages = document.querySelectorAll('.page');
       let currentPage = 0;
       let userRole = ''; // 用來儲存跳轉時使用的 role
+
+      // 側拉選單：開關
+      const sideMenu = document.getElementById('side-menu');
+      const menuBtn = document.getElementById('menu-btn');
+      const closeBtn = document.getElementById('close-btn');
+      if (menuBtn) menuBtn.addEventListener('click', () => { sideMenu.classList.add('open'); sideMenu.setAttribute('aria-hidden', 'false'); });
+      if (closeBtn) closeBtn.addEventListener('click', () => { sideMenu.classList.remove('open'); sideMenu.setAttribute('aria-hidden', 'true'); });
+
+      /** 依角色與是否班導回傳首頁路徑 */
+      function getHomeUrl(role, isHomeroom) {
+        if (role === 'student') return '/student_home';
+        if (role === 'ta') return '/ta_home';
+        if (role === 'teacher' || role === 'director') return isHomeroom ? '/class_teacher_home' : '/' + role + '_home';
+        if (role === 'admin') return '/admin_home';
+        if (role === 'vendor') return '/vendor_home';
+        if (role === 'class_teacher') return '/class_teacher_home';
+        return '/student_home';
+      }
 
       const prevBtn = document.getElementById('prevBtn');
       const nextBtn = document.getElementById('nextBtn');
@@ -363,6 +524,10 @@
 
           // 根據使用者身分顯示相應的欄位
           showRoleSpecificFields(userRole, isHomeroom);
+
+          // 側拉選單：依角色設定首頁連結
+          const homeLink = document.getElementById('side-menu-home');
+          if (homeLink) homeLink.href = getHomeUrl(userRole, isHomeroom);
           
           // 如果是廠商，再次確認指導老師欄位已顯示
           if (userRole === 'vendor') {

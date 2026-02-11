@@ -345,12 +345,12 @@
                 const isVisitor = !result.success || res.status === 401 || result.role === 'visitor';
                 
                 if (isVisitor) {
-                    // 訪客模式：顯示首頁（指向訪客頁面）、AI修改履歷、通知、登入
+                    // 訪客模式：顯示首頁（指向訪客頁面）、AI修改履歷、通知、登出
                     menuLinks.innerHTML = `
                         <a href="/visitor_page">首頁</a>
                         <a href="/ai_edit_resume">AI修改履歷</a>
                         <a href="/notifications">通知</a>
-                        <a href="/login">登入</a>
+                        <a href="/logout">登出</a>
                     `;
                 } else {
                     // 已登入用戶：顯示完整選單
@@ -372,7 +372,7 @@
                     <a href="/visitor_page">首頁</a>
                     <a href="/ai_edit_resume">AI修改履歷</a>
                     <a href="/notifications">通知</a>
-                    <a href="/login">登入</a>
+                    <a href="/logout">登出</a>
                 `;
             }
         }

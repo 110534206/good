@@ -799,11 +799,11 @@ def ta_home():
     return render_template('user_shared/ta_home.html')
 
 # 科助工作台（媒合最終公告、未錄取名單／二面流程）
-@users_bp.route('/ta/dashboard')
+@users_bp.route('/ta_assistant_dashboard')
 def ta_assistant_dashboard():
     if 'user_id' not in session or session.get('role') not in ['ta', 'admin']:
         return redirect(url_for('auth_bp.login_page'))
-    return render_template('user_shared/ta_assistant_dashboard.html')
+    return render_template('ta/ta_assistant_dashboard.html')
 
 # 面試排程頁面（科助）
 @users_bp.route('/ta/interview_schedule')

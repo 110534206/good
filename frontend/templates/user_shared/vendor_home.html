@@ -4,6 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>智慧實習平台 | 廠商主頁</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
   <style>
     * {
       box-sizing: border-box;
@@ -39,6 +40,7 @@
       box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
     }
 
+    /* 頂端列內容：與主內容同寬（max-width 1200px）、對齊 */
     .top-bar>.container {
       display: flex;
       justify-content: space-between;
@@ -63,11 +65,14 @@
       border-radius: 2px;
     }
 
+    /* 頂端列右側：通知鈴鐺、帳號選單（頭像已取消，與 student_home 一致） */
     .top-bar-right {
       display: flex;
       align-items: center;
+      justify-content: flex-end;
       gap: 10px;
       font-weight: bold;
+      margin-left: auto;
     }
 
     .top-bar-right .btn-link {
@@ -87,13 +92,49 @@
       color: white;
     }
 
-    .top-bar-right #login-avatar {
+    /* 通知鈴鐺：固定於頂端列右側（與 student_home 一致） */
+    .notification-bell {
+      position: relative;
+      top: 2px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
       width: 40px;
       height: 40px;
-      border-radius: 50%;
-      object-fit: cover;
-      cursor: pointer;
-      margin-top: 6px;
+      margin-right: 6px;
+      color: #333;
+      font-size: 1.5rem;
+      transition: color 0.3s ease;
+      overflow: visible;
+    }
+
+    .notification-bell:hover {
+      color: #0066cc;
+    }
+
+    .notification-badge {
+      position: absolute;
+      top: -2px;
+      right: -2px;
+      background-color: #ff4d4f;
+      color: white;
+      border-radius: 10px;
+      min-width: 18px;
+      height: 18px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.75rem;
+      font-weight: bold;
+      padding: 0 4px;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+      z-index: 1;
+      line-height: 1;
+    }
+
+    .notification-badge.hidden {
+      display: none !important;
     }
 
     /* Hero 區塊 */
@@ -114,10 +155,17 @@
       justify-content: center;
     }
 
+    /* 公告區：隱藏左右箭頭按鈕 */
+    #announcement-carousel #announcement-prev,
+    #announcement-carousel #announcement-next {
+      display: none;
+    }
+
     main {
       background-color: #fff;
       padding: 2rem;
       margin-bottom: 3rem;
+      padding-bottom: 5rem; /* 頁面最底下留空白，與 student_home 一致 */
     }
 
     .page-title {
@@ -133,6 +181,7 @@
       grid-template-columns: repeat(2, 1fr);
       gap: 2rem;
       padding: 0;
+      margin-bottom: 2rem; /* 卡片區底下多留一行空白 */
     }
 
     .card {
@@ -245,20 +294,22 @@
 </head>
 
 <body>
+  <!-- 頂端列（與 student_home 一致：右側通知鈴鐺 + 帳號選單，無頭像） -->
   <div class="top-bar">
     <div class="container">
       <div class="top-bar-left">
-        <div id="menu-btn" title="選單" role="button" tabindex="0">
+        <div id="menu-btn" title="選單" role="button" tabindex="0" aria-label="開啟側邊選單">
           <span></span><span></span><span></span>
         </div>
       </div>
       <div class="top-bar-right">
-        <a href="/profile" id="avatar-link">
-         <img src="{{ url_for('static', filename='images/avatar.png') }}" alt="頭像" id="login-avatar" />
+        <a href="/notifications" class="notification-bell" aria-label="通知中心" title="通知中心">
+          <i class="bi bi-bell"></i>
+          <span class="notification-badge hidden" id="notificationBadge">0</span>
         </a>
         <div class="dropdown" style="position: relative;">
-          <button id="accountDropdownBtn" class="btn-link" aria-expanded="false">帳號 ▾</button>
-          <div id="accountDropdownMenu" class="dropdown-menu" style="position:absolute; right:0; top:120%; background:#fff; border:1px solid #ccc; border-radius:8px; padding:6px; min-width:180px; display:none; box-shadow:0 4px 12px rgba(0,0,0,.12);">
+          <button id="accountDropdownBtn" class="btn-link" aria-expanded="false" aria-haspopup="true" aria-controls="accountDropdownMenu">帳號 / 登出 ▾</button>
+          <div id="accountDropdownMenu" class="dropdown-menu" style="position:absolute; right:0; top:120%; background:#fff; border:1px solid #ccc; border-radius:8px; padding:6px; min-width:180px; display:none; box-shadow:0 4px 12px rgba(0,0,0,.12);" role="menu" aria-label="帳號選單">
             <a href="/profile" class="btn-link" style="display:block; border:none; margin:4px 0;">個人資料</a>
             <a href="/logout" class="btn-link" style="display:block; border:none; margin:4px 0;">登出</a>
           </div>
@@ -271,16 +322,13 @@
     <header class="hero"></header>
   </div>
 
-    <div id="announcement-carousel" role="region" aria-live="polite" aria-label="最新公告">
-      <button id="announcement-prev" aria-label="上一則公告">&#8592;</button>
-      <div id="announcement-content"></div>
-      <button id="announcement-next" aria-label="下一則公告">&#8594;</button>
-    </div>
+  <div id="announcement-carousel" role="region" aria-live="polite" aria-label="最新公告">
+    <div id="announcement-content"></div>
   </div>
 
-  <div class="container">
-    <main>
-      <h2 class="page-title">請選擇你要使用的功能</h2>
+  <!-- 主內容（main 使用 .container，與頂端列同寬） -->
+  <main class="container">
+    <h2 class="page-title">請選擇你要使用的功能</h2>
       <section class="card-container">
         <div class="card">
           <h3>學生履歷審核</h3>
@@ -302,25 +350,19 @@
           <p>向學生發布重要的實習資訊與消息。</p>
           <a href="/publish_announcements">發布公告</a>
         </div>
-        <div class="card">
-          <h3>查看履歷與通知</h3>
-          <p>查看學生履歷與接收來自平台的通知消息。</p>
-          <a href="/reviews_resumes_notifications">查看通知</a>
-        </div>
       </section>
-    </main>
-  </div>
+  </main>
 
   <nav id="side-menu" aria-hidden="true" role="navigation" aria-label="廠商功能選單">
     <button id="close-btn" aria-label="關閉功能選單">×</button>
-    <h2>廠商功能選單</h2>
+    <h2>功能選單</h2>
     <a href="/company_home">首頁</a>
     <a href="/profile">個人資料</a>
     <a href="/vendor_review_resume">履歷審核</a>
     <a href="/manage_positions">職位管理</a>
     <a href="/confirm_matching">媒合結果</a>
     <a href="/publish_announcements">發布公告</a>
-    <a href="/reviews_resumes_notifications">查看履歷與通知</a>
+    <a href="/logout">登出</a>
   </nav>
 
   <script>
@@ -333,12 +375,33 @@
       document.getElementById('side-menu').classList.remove('open');
     });
 
+    // 未讀通知數量（與 student_home 一致）
+    function loadUnreadNotificationCount() {
+      fetch('/api/my_notifications/unread_count')
+        .then(response => response.json())
+        .then(data => {
+          if (data.success && typeof data.unread_count === 'number') {
+            const unreadCount = data.unread_count;
+            const badge = document.getElementById('notificationBadge');
+            if (badge) {
+              if (unreadCount > 0) {
+                badge.textContent = unreadCount > 99 ? '99+' : unreadCount;
+                badge.classList.remove('hidden');
+              } else {
+                badge.classList.add('hidden');
+              }
+            }
+          }
+        })
+        .catch(() => {});
+    }
+    loadUnreadNotificationCount();
+    setInterval(loadUnreadNotificationCount, 30000);
+
     // 公告輪播內容
     let notification = [];
     let currentAnnouncementIndex = 0;
     const announcementContent = document.getElementById('announcement-content');
-    const prevBtn = document.getElementById('announcement-prev');
-    const nextBtn = document.getElementById('announcement-next');
 
     function showAnnouncement(index) {
       if (notification.length > 0) {
@@ -351,25 +414,6 @@
 
     // 帳號下拉
     document.addEventListener("DOMContentLoaded", function () {
-
-      const defaultAvatarUrl = "{{ url_for('static', filename='images/avatar.png') }}";
-      const avatarImg = document.getElementById('login-avatar');
-
-      if (avatarImg) {
-        fetch('/api/profile')
-          .then(res => res.ok ? res.json() : Promise.reject(new Error('取得個人資料失敗')))
-          .then(data => {
-            if (data.success && data.user && data.user.avatar_url) {
-              avatarImg.src = `${data.user.avatar_url}?t=${Date.now()}`;
-            } else {
-              avatarImg.src = defaultAvatarUrl;
-            }
-          })
-          .catch(() => {
-            avatarImg.src = defaultAvatarUrl;
-          });
-      }
-
       const dropdownBtn = document.getElementById("accountDropdownBtn");
       const dropdownMenu = document.getElementById("accountDropdownMenu");
 

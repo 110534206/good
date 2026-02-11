@@ -1,4 +1,5 @@
 import os
+import re
 import google.generativeai as genai
 from flask import Blueprint, request, Response, jsonify, session
 from config import get_db
@@ -271,8 +272,27 @@ def revise_resume():
             except Exception as e:
 
                 print(f"串流處理中發生錯誤: {e}")
-
-                yield f"AI 服務處理失敗: {e}"
+                
+                error_str = str(e)
+                
+                # 檢查是否為配額限制錯誤（429）
+                if "429" in error_str or "quota" in error_str.lower() or "Quota exceeded" in error_str:
+                    # 嘗試提取重試時間
+                    retry_seconds = None
+                    if "retry in" in error_str.lower() or "retry_delay" in error_str.lower():
+                        retry_match = re.search(r'retry in ([\d.]+)s', error_str, re.IGNORECASE)
+                        if retry_match:
+                            retry_seconds = int(float(retry_match.group(1)))
+                    
+                    error_message = "⚠️ AI 服務目前使用量已達上限（免費層級每日限制 20 次）"
+                    if retry_seconds:
+                        error_message += f"，請在 {retry_seconds} 秒後再試"
+                    else:
+                        error_message += "，請稍後再試或明天再使用此功能"
+                    
+                    yield error_message
+                else:
+                    yield f"AI 服務處理失敗: {error_str}"
 
 
         headers = {
@@ -293,8 +313,31 @@ def revise_resume():
     except Exception as e:
 
         print(f"Gemini API 呼叫失敗： {e}")
+        
+        error_str = str(e)
+        
+        # 檢查是否為配額限制錯誤（429）
+        if "429" in error_str or "quota" in error_str.lower() or "Quota exceeded" in error_str:
+            # 嘗試提取重試時間
+            retry_seconds = None
+            if "retry in" in error_str.lower() or "retry_delay" in error_str.lower():
+                retry_match = re.search(r'retry in ([\d.]+)s', error_str, re.IGNORECASE)
+                if retry_match:
+                    retry_seconds = int(float(retry_match.group(1)))
+            
+            error_message = "AI 服務目前使用量已達上限（每日限制 20 次）"
+            if retry_seconds:
+                error_message += f"，請在 {retry_seconds} 秒後再試"
+            else:
+                error_message += "，請稍後再試或明天再使用此功能"
+            
+            return jsonify({
+                "error": error_message,
+                "error_type": "quota_exceeded",
+                "retry_after": retry_seconds
+            }), 429
 
-        return jsonify({"error": f"AI 服務處理失敗: {e}"}), 500
+        return jsonify({"error": f"AI 服務處理失敗: {error_str}"}), 500
 
 
 
@@ -1753,7 +1796,6 @@ def recommend_preferences():
             # 嘗試提取重試時間
             retry_seconds = None
             if "retry in" in error_str.lower() or "retry_delay" in error_str.lower():
-                import re
                 retry_match = re.search(r'retry in ([\d.]+)s', error_str, re.IGNORECASE)
                 if retry_match:
                     retry_seconds = int(float(retry_match.group(1)))

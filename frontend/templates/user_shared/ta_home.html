@@ -5,6 +5,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>智慧實習平台 | 科助主頁</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
   <style>
     * {
       box-sizing: border-box;
@@ -64,11 +65,14 @@
       border-radius: 2px;
     }
 
+    /* 頂端列右側：通知鈴鐺、帳號選單（頭像已取消，與 student_home 一致） */
     .top-bar-right {
       display: flex;
       align-items: center;
+      justify-content: flex-end;
       gap: 10px;
       font-weight: bold;
+      margin-left: auto;
     }
 
     .top-bar-right .btn-link {
@@ -80,6 +84,7 @@
       text-decoration: none;
       transition: background-color 0.3s ease, color 0.3s ease;
       font-size: 0.9rem;
+      cursor: pointer;
     }
 
     .top-bar-right .btn-link:hover {
@@ -87,13 +92,49 @@
       color: white;
     }
 
-    .top-bar-right #login-avatar {
+    /* 通知鈴鐺：固定於頂端列右側 */
+    .notification-bell {
+      position: relative;
+      top: 2px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
       width: 40px;
       height: 40px;
-      border-radius: 50%;
-      object-fit: cover;
-      cursor: pointer;
-      margin-top: 6px;
+      margin-right: 6px;
+      color: #333;
+      font-size: 1.5rem;
+      transition: color 0.3s ease;
+      overflow: visible;
+    }
+
+    .notification-bell:hover {
+      color: #0066cc;
+    }
+
+    .notification-badge {
+      position: absolute;
+      top: -2px;
+      right: -2px;
+      background-color: #ff4d4f;
+      color: white;
+      border-radius: 10px;
+      min-width: 18px;
+      height: 18px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.75rem;
+      font-weight: bold;
+      padding: 0 4px;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+      z-index: 1;
+      line-height: 1;
+    }
+
+    .notification-badge.hidden {
+      display: none !important;
     }
 
     header.hero {
@@ -115,6 +156,7 @@
       background-color: #fff;
       padding: 2rem;
       margin-bottom: 3rem;
+      padding-bottom: 5rem; /* 頁面最底下留空白（與 student_home 一致） */
     }
 
     .page-title {
@@ -129,6 +171,8 @@
       display: grid;
       grid-template-columns: repeat(2, 1fr);
       gap: 2rem;
+      padding: 0;
+      margin-bottom: 2rem;
     }
 
     .card {
@@ -187,7 +231,9 @@
       z-index: 1100;
       display: flex;
       flex-direction: column;
+      align-items: flex-start;
       color: white;
+      user-select: none;
     }
 
     #side-menu.open {
@@ -203,15 +249,25 @@
       border: none;
       color: white;
       cursor: pointer;
+      line-height: 1;
+      width: 2.5rem;
+      height: 2.5rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
     }
 
     #side-menu h2 {
+      width: 100%;
       margin-bottom: 1.5rem;
       font-weight: 700;
       font-size: 1.5rem;
+      text-align: left;
     }
 
     #side-menu a {
+      display: block;
+      width: 100%;
       padding: 0.5rem 0;
       font-size: 1.1rem;
       color: #ddd;
@@ -228,63 +284,55 @@
 </head>
 
 <body>
-  <!-- 頂部欄 -->
+  <!-- 頂端列（與 student_home 一致：右側通知鈴鐺 + 帳號選單，無頭像） -->
   <div class="top-bar">
     <div class="container">
       <div class="top-bar-left">
-        <div id="menu-btn" title="選單" role="button" tabindex="0">
+        <div id="menu-btn" title="選單" role="button" tabindex="0" aria-label="開啟側邊選單">
           <span></span><span></span><span></span>
         </div>
       </div>
       <div class="top-bar-right">
-        <a href="/profile">
-          <img src="{{ url_for('static', filename='images/avatar.png') }}" alt="頭像" id="login-avatar" />
+        <a href="/notifications" class="notification-bell" aria-label="通知中心" title="通知中心">
+          <i class="bi bi-bell"></i>
+          <span class="notification-badge hidden" id="notificationBadge">0</span>
         </a>
         <div class="dropdown" style="position: relative;">
-          <button id="accountDropdownBtn" class="btn-link" aria-expanded="false">帳號 ▾</button>
+          <button id="accountDropdownBtn" class="btn-link" aria-expanded="false" aria-haspopup="true"
+            aria-controls="accountDropdownMenu">帳號 / 登出 ▾</button>
           <div id="accountDropdownMenu" class="dropdown-menu"
-            style="position:absolute; right:0; top:120%; background:#fff; border:1px solid #ccc; border-radius:8px; padding:6px; min-width:180px; display:none; box-shadow:0 4px 12px rgba(0,0,0,.12);">
-            <a href="/profile" class="btn-link" style="display:block; border:none; margin:4px 0;">個人資料</a>
-            <a href="/login" class="btn-link" style="display:block; border:none; margin:4px 0;">登出</a>
+            style="position:absolute; right:0; top:120%; background:#fff; border:1px solid #ccc; border-radius:8px; padding:6px; min-width:180px; display:none; box-shadow:0 4px 12px rgba(0,0,0,.12);"
+            role="menu" aria-label="帳號選單">
+            <a href="/profile" class="btn-link" style="display:block; border:none; margin:4px 0;" role="menuitem">個人資料</a>
+            <a href="/login" class="btn-link" style="display:block; border:none; margin:4px 0;" role="menuitem">登出</a>
           </div>
         </div>
       </div>
     </div>
   </div>
-  <!-- Hero 區塊 -->
+  <!-- Hero 區塊（與頂端列同寬） -->
   <div class="container">
     <header class="hero"></header>
   </div>
 
-  <!-- 主內容 -->
-  <div class="container">
-    <main>
+  <!-- 主內容（與頂端列同寬） -->
+  <main class="container">
       <h2 class="page-title">功能選單</h2>
       <section class="card-container">
         <div class="card">
-          <h3>科助工作台</h3>
-          <p>媒合最終公告、未錄取名單與二面流程管理。</p>
-          <a href="/ta/dashboard">進入工作台</a>
+          <h3>公告</h3>
+          <p>發布與查看系統通知訊息。</p>
+          <a href="/notifications">進行設定</a>
         </div>
         <div class="card">
-          <h3>通知</h3>
-          <p>查看系統自動提醒與學生狀況通知。</p>
-          <a href="/notifications">查看通知</a>
-        </div>
-        <div class="card">
-          <h3>實習廠商管理</h3>
-          <p>查看實習廠商清單，提供學生填寫履歷與志願序。</p>
-          <a href="/ta/statistics/manage_companies">管理廠商</a>
+          <h3>實習投遞流程管理</h3>
+          <p>管理廠商開放權限，並掌握學生履歷繳交與志願序進度。</p>
+          <a href="/ta/statistics/manage_companies">進行管理</a>
         </div>
         <div class="card">
           <h3>行事曆</h3>
           <p>管理學生與廠商的面試時間安排與排程。</p>
-          <a href="/ta/interview_schedule">行事曆</a>
-        </div>
-        <div class="card">
-          <h3>媒合結果確認</h3>
-          <p>查看與廠商媒合的學生與廠商配對結果。</p>
-          <a href="/final_results">查看結果</a>
+          <a href="/ta/interview_schedule">進行查看</a>
         </div>
         <div class="card">
           <h3>缺勤預設學期範圍設定</h3>
@@ -296,23 +344,27 @@
           <p>上傳Excel範本，管理必修科目清單，系統會自動更新標準課程表。</p>
           <a href="/ta/upload_standard_courses">上傳科目範本</a>
         </div>
+        <div class="card">
+          <h3>媒合結果管理中心</h3>
+          <p>辦理最終錄取公告，並針對未錄取學生啟動二面媒合流程。</p>
+          <a href="/ta_assistant_dashboard">開始作業</a>
+        </div>
       </section>
-    </main>
-  </div>
+  </main>
 
   <!-- 側邊選單 -->
   <nav id="side-menu">
     <button id="close-btn">×</button>
     <h2>功能選單</h2>
     <a href="/ta_home">首頁</a>
-    <a href="/ta/dashboard">科助工作台</a>
     <a href="/profile">個人資料</a>
-    <a href="/notifications">通知</a>
-    <a href="/ta/statistics/manage_companies">實習廠商管理</a>
+    <a href="/notifications">公告</a>
+    <a href="/ta/statistics/manage_companies">實習投遞流程管理</a>
     <a href="/ta/interview_schedule">行事曆</a>
-    <a href="/final_results">媒合結果確認</a>
     <a href="/admin/absence_default_range">缺勤預設學期範圍設定</a>
     <a href="/ta/upload_standard_courses">專業核心科目管理</a>
+    <a href="/ta_assistant_dashboard">媒合結果管理中心</a>
+    <a href="/login">登出</a>
   </nav>
 
   <script>
@@ -357,37 +409,27 @@
       }
     });
 
-    // 載入用戶頭像
-    function loadUserAvatar() {
-      console.log('開始載入頭像...');
-      fetch('/api/profile')
-        .then(res => {
-          if (!res.ok) throw new Error('無法取得用戶資料');
-          return res.json();
-        })
+    // 載入未讀通知數量（與 student_home 一致）
+    function loadUnreadNotificationCount() {
+      fetch('/api/my_notifications/unread_count')
+        .then(response => response.json())
         .then(data => {
-          console.log('API 回應:', data);
-          if (data.success && data.user && data.user.avatar_url) {
-            const rawUrl = data.user.avatar_url.startsWith('http') ?
-              data.user.avatar_url :
-              window.location.origin + data.user.avatar_url;
-            const avatarUrl = rawUrl + (rawUrl.includes('?') ? '&' : '?') + 't=' + Date.now();
-            console.log('設定頭像URL:', avatarUrl);
-            document.getElementById('login-avatar').src = avatarUrl;
-          } else {
-            console.log('沒有頭像URL或API失敗');
+          if (data.success && typeof data.unread_count === 'number') {
+            const unreadCount = data.unread_count;
+            const badge = document.getElementById('notificationBadge');
+            if (badge) {
+              if (unreadCount > 0) {
+                badge.textContent = unreadCount > 99 ? '99+' : unreadCount;
+                badge.classList.remove('hidden');
+              } else {
+                badge.classList.add('hidden');
+              }
+            }
           }
         })
-        .catch(err => {
-          console.log('載入頭像失敗:', err);
-          // 保持預設頭像
-        });
+        .catch(() => {});
     }
-
-    // 頁面就緒後載入頭像
-    document.addEventListener('DOMContentLoaded', () => {
-      loadUserAvatar();
-    });
+    loadUnreadNotificationCount();
 
     // 判斷是否為班導，顯示切換到班導主頁
     fetch('/api/profile').then(r => r.json()).then(d => {
