@@ -612,8 +612,10 @@
 
         let matchesStatus = true;
         if (status) {
-           // 統一使用 display_status 欄位
-           const statusStr = r.display_status || 'uploaded';
+           // 指導老師使用 review_status，班導使用 display_status
+           const statusStr = (userRole === 'teacher' && r.review_status) 
+                             ? r.review_status 
+                             : (r.display_status || 'uploaded');
            matchesStatus = statusStr === status;  // 使用嚴格相等，確保精確匹配
         }
 
@@ -650,11 +652,17 @@
 
       resumes.forEach(r => {
         // 直接使用最新的志願序資料（後端已處理）
-        // 統一使用 display_status 欄位
+        // 指導老師使用 review_status，班導使用 display_status
         const comp = r.company_name || '—';
         const job = r.job_title || r.jobTitle || '—';
         const pid = r.preference_id || null;
-        const st = r.display_status || 'uploaded';
+        // 處理 review_status：如果是 undefined、null、空字符串或字符串 "undefined"，則使用 display_status
+        const teacherStatus = r.review_status;
+        const isValidStatus = teacherStatus && 
+                              teacherStatus !== 'undefined' && 
+                              teacherStatus !== 'null' && 
+                              ['uploaded', 'approved', 'rejected'].includes(teacherStatus);
+        const st = (userRole === 'teacher' && isValidStatus) ? teacherStatus : (r.display_status || 'uploaded');
         const cm = r.comment || '';
 
         // 狀態篩選
@@ -684,8 +692,21 @@
         // 渲染每一行，statusColor(row.display_status) 會決定背景色，mapStatus 決定文字
         const tr = document.createElement('tr');
         tr.style.borderBottom = '1px solid #e2e8f0';
-        // 統一使用 display_status 欄位
-        const statusForDisplay = row.display_status || 'uploaded';
+        // 指導老師優先使用 review_status，如果沒有則使用 display_status
+        // 處理字符串 "undefined" 或無效值的情況
+        let statusForDisplay = 'uploaded';
+        if (userRole === 'teacher') {
+          // 指導老師：優先使用 review_status，但需要驗證是否為有效值
+          const teacherStatus = row.review_status;
+          const isValidTeacherStatus = teacherStatus && 
+                                      teacherStatus !== 'undefined' && 
+                                      teacherStatus !== 'null' && 
+                                      ['uploaded', 'approved', 'rejected'].includes(teacherStatus);
+          statusForDisplay = isValidTeacherStatus ? teacherStatus : (row.display_status || 'uploaded');
+        } else {
+          // 班導和其他角色：使用 display_status
+          statusForDisplay = row.display_status || 'uploaded';
+        }
         const statusCell = isDirectorMode ? '' : `
            <td style="padding: 14px 16px;">
              <span class="status-badge bg-${statusColor(statusForDisplay)}">${mapStatus(statusForDisplay)}</span>
