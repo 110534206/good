@@ -7,117 +7,375 @@
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js" crossorigin="anonymous"></script>
   <style>
+    * {
+      box-sizing: border-box;
+    }
+
     header {
-      background: #0066cc;
+      position: sticky;
+      top: 0;
+      z-index: 1100;
+      background: #0454a3;
       color: white;
-      padding: 1rem 2rem;
+      padding: 1rem 0;
+      text-align: center;
       font-size: 1.5rem;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
+    }
+
+    /* 頂端列內容與底下 table 同寬（max-width 1200px） */
+    header .header-inner {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 0 0.5rem;
+    }
+
+    /* 三條線選單按鈕 */
+    .top-bar-left {
+      position: fixed;
+      top: 1.5rem;
+      left: 7rem;
+      z-index: 1300;
+    }
+
+    .top-bar-left #menu-btn {
+      width: 30px;
+      height: 22px;
+      cursor: pointer;
       display: flex;
+      flex-direction: column;
       justify-content: space-between;
+      background: none;
+      border: none;
+      padding: 0;
+    }
+
+    .top-bar-left #menu-btn span {
+      display: block;
+      width: 100%;
+      height: 3px;
+      background-color: white;
+      border-radius: 2px;
+      transition: all 0.3s ease;
+    }
+
+    #side-menu {
+      position: fixed;
+      top: 0;
+      left: 0;
+      height: 100vh;
+      width: 320px;
+      max-width: 80vw;
+      background-color: rgba(10, 10, 10, 0.95);
+      backdrop-filter: blur(6px);
+      box-shadow: 3px 0 12px rgb(0 0 0 / 0.7);
+      padding: 2rem 1.5rem;
+      transform: translateX(-100%);
+      transition: transform 0.3s ease-in-out;
+      z-index: 1400;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      color: white;
+      user-select: none;
+    }
+
+    #side-menu.open {
+      transform: translateX(0);
+    }
+
+    #side-menu .menu-header {
+      display: flex;
       align-items: center;
+      justify-content: space-between;
+      width: 100%;
+      margin-bottom: 1.5rem;
     }
 
-    header > div:first-child {
+    #side-menu h2 {
+      margin: 0;
+      font-weight: 700;
+      font-size: 1.5rem;
+      text-align: left;
       flex: 1;
+      color: white;
     }
 
-    header > div:last-child {
-      flex: 1;
-      text-align: right;
+    #side-menu #close-btn {
+      font-size: 1.5rem;
+      background: none;
+      border: none;
+      color: white;
+      cursor: pointer;
+      line-height: 1;
+      width: auto;
+      height: auto;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0;
+      margin: 0;
+    }
+
+    #side-menu a {
+      display: block;
+      width: 100%;
+      padding: 0.5rem 0;
+      font-size: 1.1rem;
+      color: #ddd;
+      text-decoration: none;
+      border-radius: 4px;
+      transition: background-color 0.2s ease;
+    }
+
+    #side-menu a:hover {
+      background-color: rgba(255, 255, 255, 0.15);
+      color: white;
     }
 
     body {
       font-family: "Noto Sans TC", sans-serif;
-      background: #f7f9fc;
+      background: #f1f5f9;
       margin: 0;
       padding: 0;
     }
 
+    /* 與 student_home 同寬：width 100%、max-width 1200px、左右 padding 0.5rem */
     .container {
+      width: 100%;
       max-width: 1200px;
-      margin: auto;
-      padding: 2rem;
+      margin: 0 auto;
+      padding: 2rem 0.5rem;
+      margin-top: 2rem;
     }
 
-    /* 表格 */
-    table thead th,
-    table td {
-      text-align: center;
-      vertical-align: middle;
+    /* 篩選區卡片 */
+    .filter-section {
+      background: #fff;
+      padding: 1.5rem 1.75rem;
+      border-radius: 12px;
+      margin-bottom: 1.5rem;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+      border: 1px solid #e5e7eb;
+    }
+
+    .filter-section .form-label {
+      font-weight: 600;
+      color: #475569;
+      font-size: 0.9rem;
+      margin-bottom: 0.4rem;
+    }
+
+    .filter-section .form-select {
+      border-radius: 8px;
+      border-color: #cbd5e1;
       font-size: 0.95rem;
     }
 
-    .custom-header-blue {
-      background-color: #0066cc;
-      color: white;
-      border-color: #0066cc;
+    .filter-section .form-select:focus {
+      border-color: #0454a3;
+      box-shadow: 0 0 0 3px rgba(4, 84, 163, 0.15);
     }
 
-    .filter-section {
-      background: white;
-      padding: 1.5rem;
+    .filter-section .btn {
       border-radius: 8px;
-      margin-bottom: 1.5rem;
-      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+      font-weight: 600;
+      padding: 0.5rem 1rem;
+      transition: all 0.2s ease;
     }
 
+    .filter-section #loadBtn {
+      background: #0454a3;
+      border-color: #0454a3;
+    }
+
+    .filter-section #loadBtn:hover {
+      background: #034078;
+      border-color: #034078;
+      transform: translateY(-1px);
+      box-shadow: 0 4px 8px rgba(4, 84, 163, 0.25);
+    }
+
+    .filter-section #exportBtn {
+      background: #0d9488;
+      border-color: #0d9488;
+      color: #fff;
+    }
+
+    .filter-section #exportBtn:hover {
+      background: #0f766e;
+      border-color: #0f766e;
+      color: #fff;
+      transform: translateY(-1px);
+      box-shadow: 0 4px 8px rgba(13, 148, 136, 0.25);
+    }
+
+    /* 表格區卡片 */
     .table-container {
-      background: white;
-      padding: 1.5rem;
-      border-radius: 8px;
-      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+      background: #fff;
+      padding: 1.5rem 1.75rem;
+      border-radius: 12px;
       margin-bottom: 1.5rem;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+      border: 1px solid #e5e7eb;
+      overflow: hidden;
     }
 
-    .chart-container {
-      background: white;
-      padding: 1.5rem;
+    .table-container .table-responsive {
       border-radius: 8px;
-      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+      border: 1px solid #e2e8f0;
+      overflow: hidden;
+    }
+
+    .table-container .table {
+      margin-bottom: 0;
+      border-collapse: collapse;
+      table-layout: fixed;
+      width: 100%;
+    }
+
+    .table-container .table thead th {
+      background: #f8fafc;
+      color: #475569;
+      font-weight: 600;
+      border-color: #e2e8f0;
+      padding: 0.85rem 1rem;
+      font-size: 1.05rem;
+      text-align: center;
+      vertical-align: middle;
+    }
+
+    /* 欄寬：展開鈕｜學號｜姓名｜Email｜履歷上傳｜志願填寫｜操作（固定比例，志願填寫不凸出） */
+    .table-container .table thead th:nth-child(1) { width: 52px; }
+    .table-container .table thead th:nth-child(2) { width: 10%; }
+    .table-container .table thead th:nth-child(3) { width: 9%; }
+    .table-container .table thead th:nth-child(4) { width: 22%; }
+    .table-container .table thead th:nth-child(5) { width: 12%; }
+    .table-container .table thead th:nth-child(6) { width: 12%; }
+    .table-container .table thead th:nth-child(7) { width: 23%; }
+
+    .table-container .table tbody td {
+      border-color: #e2e8f0;
+      padding: 0.85rem 1rem;
+      font-size: 1.05rem;
+      text-align: center;
+      vertical-align: middle;
+    }
+
+    /* 履歷上傳、志願填寫欄：內容不凸出、與表頭對齊 */
+    .table-container .table tbody td:nth-child(5),
+    .table-container .table tbody td:nth-child(6) {
+      overflow: hidden;
+      max-width: 0;
+    }
+
+    .table-container .table tbody td:nth-child(5) .badge,
+    .table-container .table tbody td:nth-child(6) .badge {
+      display: inline-block;
+      max-width: 100%;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      vertical-align: middle;
+      font-size: 0.95rem;
+      padding: 0.35em 0.65em;
+    }
+
+    .table-container .table tbody td .btn {
+      font-size: 1rem;
+    }
+
+    .table-container .table tbody tr:hover td {
+      background-color: #f8fafc;
+    }
+
+    .table-container .table-striped > tbody > tr:nth-of-type(odd) > * {
+      --bs-table-accent-bg: #fafbfc;
+    }
+
+    /* 圖表區卡片 */
+    .chart-container {
+      background: #fff;
+      padding: 1.5rem 1.75rem;
+      border-radius: 12px;
       margin-bottom: 1.5rem;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+      border: 1px solid #e5e7eb;
     }
 
     .chart-container h2 {
-      font-size: 1.25rem;
+      font-size: 1.2rem;
       font-weight: 600;
-      color: #333;
-      margin-bottom: 1rem;
+      color: #334155;
+      margin-bottom: 0.5rem;
+    }
+
+    .chart-container p {
+      color: #64748b;
+      font-size: 0.95rem;
+      margin-bottom: 0;
     }
 
     .chart-container canvas {
       max-height: 300px;
     }
 
-    /* 統計圖表容器樣式 - 與公司管理頁面一致 */
+    /* 上中下區塊與中間圖表同寬 */
+    .content-width-match {
+      width: 100%;
+    }
+
+    /* 統計圖表區（三欄等寬） */
     #statsChartsContainer {
       display: flex !important;
       flex-wrap: nowrap;
+      gap: 1.25rem;
+      margin-bottom: 1.5rem;
+      width: 100%;
     }
-    
-    .stats-chart-container {
-      background: #fff;
-      border-radius: 16px;
-      padding: 16px;
-      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
-      margin-bottom: 24px;
+
+    #statsChartsContainer > .stats-chart-container {
       flex: 1;
       min-width: 0;
     }
-    
+
+    .stats-chart-container {
+      background: #fff;
+      border-radius: 12px;
+      padding: 1.25rem 1.5rem;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+      border: 1px solid #e5e7eb;
+      display: flex;
+      flex-direction: column;
+    }
+
     .stats-chart-container h5 {
       font-size: 1rem;
-      margin-bottom: 12px;
+      font-weight: 600;
+      color: #334155;
+      margin-bottom: 1rem;
+      flex-shrink: 0;
     }
-    
-    .stats-chart-container canvas {
-      max-height: 250px;
+
+    /* 固定高度容器，搭配 Chart.js maintainAspectRatio: false 避免圖表凸出 */
+    .stats-chart-canvas-wrap {
+      height: 250px;
+      min-height: 250px;
+      position: relative;
+      width: 100%;
     }
-    
+
+    .stats-chart-canvas-wrap canvas {
+      display: block;
+      width: 100% !important;
+      height: 100% !important;
+    }
+
     @media (max-width: 768px) {
       #statsChartsContainer {
         flex-wrap: wrap;
       }
-      .stats-chart-container {
+      #statsChartsContainer > .stats-chart-container {
         flex: 0 0 100%;
       }
     }
@@ -158,58 +416,74 @@
   </style>
 </head>
 
-<body>
+<body class="p-0">
   <header>
-    <div></div>
-    <div style="flex: 1; text-align: center;">學生履歷管理</div>
-    <div>
-      <a href="/ta_home" class="btn btn-outline-light" style="font-size: 1rem; padding: 0.5rem 1rem;">返回首頁</a>
-    </div>
+    <div class="header-inner">學生履歷管理</div>
   </header>
+  <div class="top-bar-left">
+    <div id="menu-btn" title="選單" role="button" tabindex="0">
+      <span></span><span></span><span></span>
+    </div>
+  </div>
+
+  <!-- 側邊選單（與 manage_companies 一致） -->
+  <nav id="side-menu">
+    <div class="menu-header">
+      <h2>功能選單</h2>
+      <button id="close-btn">×</button>
+    </div>
+    <a href="/ta_home">首頁</a>
+    <a href="/profile">個人資料</a>
+    <a href="/notifications">公告</a>
+    <a href="/ta/statistics/manage_companies">實習投遞流程管理</a>
+    <a href="/ta/interview_schedule">行事曆</a>
+    <a href="/final_results">媒合結果確認</a>
+    <a href="/admin/absence_default_range">缺勤預設學期範圍設定</a>
+    <a href="/ta/upload_standard_courses">專業核心科目管理</a>
+    <a href="/login">登出</a>
+  </nav>
+
   <div class="container">
-    <div class="filter-section">
-      <div class="row align-items-end">
-        <div class="col-md-2">
+    <div class="filter-section content-width-match">
+      <div class="row align-items-end g-3">
+        <div class="col-md-3">
           <label for="semesterSelect" class="form-label">選擇學年</label>
           <select id="semesterSelect" class="form-select">
             <option value="all" selected>所有學年</option>
           </select>
         </div>
-        <div class="col-md-2">
+        <div class="col-md-3">
           <label for="classSelect" class="form-label">選擇班級</label>
           <select id="classSelect" class="form-select">
             <option value="all" selected>所有班級</option>
           </select>
         </div>
-        <div class="col-md-2">
+        <div class="col-md-3">
           <button class="btn btn-primary w-100" id="loadBtn">學生資料</button>
         </div>
-        <div class="col-md-2">
+        <div class="col-md-3">
           <button class="btn btn-success w-100" id="exportBtn">匯出 Excel</button>
-        </div>
-        <div class="col-md-2">
-          <a href="/ta/statistics/manage_companies" class="btn btn-outline-secondary w-100">返回統計頁面</a>
         </div>
       </div>
     </div>
 
-    <!-- 統計圖表區域 -->
-    <div class="row g-4 mb-4" id="statsChartsContainer" style="display: none;">
-      <div class="col-md-4 col-sm-12">
-        <div class="stats-chart-container">
-          <h5 class="text-center">🏢 各公司被選志願次數</h5>
+    <!-- 統計圖表區域（三張卡片等寬，canvas 固定高度 250px） -->
+    <div id="statsChartsContainer" style="display: none;">
+      <div class="stats-chart-container">
+        <h5 class="text-center">🏢 各公司被選志願次數</h5>
+        <div class="stats-chart-canvas-wrap">
           <canvas id="companyChart"></canvas>
         </div>
       </div>
-      <div class="col-md-4 col-sm-12">
-        <div class="stats-chart-container">
-          <h5 class="text-center">📄 履歷繳交率</h5>
+      <div class="stats-chart-container">
+        <h5 class="text-center">📄 履歷繳交率</h5>
+        <div class="stats-chart-canvas-wrap">
           <canvas id="resumeChart"></canvas>
         </div>
       </div>
-      <div class="col-md-4 col-sm-12">
-        <div class="stats-chart-container">
-          <h5 class="text-center">🎯 志願序填寫率</h5>
+      <div class="stats-chart-container">
+        <h5 class="text-center">🎯 志願序填寫率</h5>
+        <div class="stats-chart-canvas-wrap">
           <canvas id="preferenceChart"></canvas>
         </div>
       </div>
@@ -220,25 +494,27 @@
       <p>請選擇一個班級以查看詳細實習統計圖表。</p>
     </div>
 
-    <div class="table-container">
-      <table class="table table-bordered table-striped table-hover align-middle">
-        <thead class="custom-header-blue">
-          <tr>
-            <th style="width: 50px;"></th>
-            <th>學號</th>
-            <th>姓名</th>
-            <th>Email</th>
-            <th>履歷上傳</th>
-            <th>志願填寫</th>
-            <th>操作</th>
-          </tr>
-        </thead>
-        <tbody id="studentsTableBody">
-          <tr>
-            <td colspan="7" class="text-center text-muted">請選擇班級並點擊「學生資料」</td>
-          </tr>
-        </tbody>
-      </table>
+    <div class="table-container content-width-match">
+      <div class="table-responsive">
+        <table class="table table-bordered table-striped table-hover align-middle">
+          <thead>
+            <tr>
+              <th style="width: 50px;"></th>
+              <th>學號</th>
+              <th>姓名</th>
+              <th>Email</th>
+              <th>履歷上傳</th>
+              <th>志願填寫</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody id="studentsTableBody">
+            <tr>
+              <td colspan="7" class="text-center text-muted">請先選擇學年</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
     </div>
   </div>
 
@@ -289,6 +565,25 @@
     let allClassesData = []; // 儲存所有班級資料
     let currentStudentsData = []; // 儲存當前顯示的學生資料
     let studentDetailModal = null; // Modal 實例
+
+    // 側邊選單開關（與 manage_companies 一致）
+    const menuBtn = document.getElementById("menu-btn");
+    const sideMenu = document.getElementById("side-menu");
+    const closeBtn = document.getElementById("close-btn");
+    if (menuBtn) menuBtn.addEventListener("click", () => {
+      sideMenu.classList.add("open");
+      sideMenu.setAttribute("aria-hidden", "false");
+    });
+    if (closeBtn) closeBtn.addEventListener("click", () => {
+      sideMenu.classList.remove("open");
+      sideMenu.setAttribute("aria-hidden", "true");
+    });
+    document.addEventListener("click", (e) => {
+      if (sideMenu && menuBtn && !sideMenu.contains(e.target) && !menuBtn.contains(e.target)) {
+        sideMenu.classList.remove("open");
+        sideMenu.setAttribute("aria-hidden", "true");
+      }
+    });
 
     // 固定載入 1132、1142 兩個學年（不自動選擇，保留「所有學年」選項）
     function loadSemesters() {
@@ -883,6 +1178,8 @@
               datasets: [{ label: "志願次數", data: [0], backgroundColor: "#cccccc" }]
             },
             options: { 
+              responsive: true,
+              maintainAspectRatio: false,
               scales: { y: { beginAtZero: true } },
               plugins: {
                 legend: { display: false }
@@ -899,7 +1196,7 @@
             },
             options: { 
               responsive: true,
-              maintainAspectRatio: true,
+              maintainAspectRatio: false,
               scales: { y: { beginAtZero: true } },
               plugins: {
                 legend: { display: false }
@@ -931,7 +1228,7 @@
           },
           options: {
             responsive: true,
-            maintainAspectRatio: true,
+            maintainAspectRatio: false,
             plugins: {
               legend: { 
                 position: 'bottom',
@@ -994,7 +1291,7 @@
           },
           options: {
             responsive: true,
-            maintainAspectRatio: true,
+            maintainAspectRatio: false,
             plugins: {
               legend: { 
                 position: 'bottom',
@@ -1048,7 +1345,7 @@
     document.getElementById("semesterSelect").addEventListener("change", function() {
       // 清空表格和圖表
       document.getElementById("studentsTableBody").innerHTML = 
-        '<tr><td colspan="7" class="text-center text-muted">請選擇班級並點擊「學生資料」</td></tr>';
+        '<tr><td colspan="7" class="text-center text-muted">請選擇班級</td></tr>';
       currentStudentsData = []; // 清空學生資料
       const chartContainer = document.getElementById("classChartContainer");
       if (chartContainer) chartContainer.style.display = 'none';
@@ -1078,7 +1375,7 @@
       } else {
         // 如果選擇「所有班級」，清空表格和圖表
         document.getElementById("studentsTableBody").innerHTML = 
-          '<tr><td colspan="7" class="text-center text-muted">請選擇班級並點擊「學生資料」</td></tr>';
+          '<tr><td colspan="7" class="text-center text-muted">請選擇班級</td></tr>';
         currentStudentsData = []; // 清空學生資料
         const chartContainer = document.getElementById("classChartContainer");
         chartContainer.style.display = 'none';

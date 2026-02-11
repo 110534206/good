@@ -66,11 +66,14 @@
       border-radius: 2px;
     }
 
+    /* 頂端列右側：通知鈴鐺、帳號選單（頭像已取消） */
     .top-bar-right {
       display: flex;
       align-items: center;
+      justify-content: flex-end;
       gap: 10px;
       font-weight: bold;
+      margin-left: auto;
     }
 
     .top-bar-right .btn-link {
@@ -272,6 +275,7 @@
       background-color: #fff;
       padding: 2rem;
       margin-bottom: 3rem;
+      padding-bottom: 5rem; /* 頁面最底下留空白 */
     }
 
     .page-title {
@@ -397,17 +401,17 @@
       color: white;
     }
 
-    /* 通知鈴鐺圖示 */
+    /* 通知鈴鐺：固定於頂端列右側 */
     .notification-bell {
       position: relative;
-      top: 3px; 
+      top: 2px;
       cursor: pointer;
       display: flex;
       align-items: center;
       justify-content: center;
       width: 40px;
       height: 40px;
-      margin-right: 10px;
+      margin-right: 6px;
       color: #333;
       font-size: 1.5rem;
       transition: color 0.3s ease;
@@ -659,11 +663,6 @@
           <a href="/look_company" role="link">上傳履歷</a>
         </div>
         <div class="card" role="listitem">
-          <h3>通知</h3>
-          <p>接收來自老師與平台的最新消息。</p>
-          <a href="/notifications" role="link">查看通知</a>
-        </div>
-        <div class="card" role="listitem">
           <h3>行事曆</h3>
           <p>查看與管理重要的日期和活動安排。</p>
           <a href="/interview_schedule" role="link">行事曆</a>
@@ -735,29 +734,6 @@
     
     // 每30秒更新一次未讀通知數量
     setInterval(loadUnreadNotificationCount, 30000);
-
-    // 載入用戶頭像
-    function loadUserAvatar() {
-      fetch('/api/profile')
-        .then(res => {
-          if (!res.ok) throw new Error('無法取得用戶資料');
-          return res.json();
-        })
-        .then(data => {
-          if (data.success && data.user && data.user.avatar_url) {
-            // 確保頭像URL是完整的路徑，並加上時間戳避免快取
-            const rawUrl = data.user.avatar_url.startsWith('http') ?
-              data.user.avatar_url :
-              window.location.origin + data.user.avatar_url;
-            const avatarUrl = rawUrl + (rawUrl.includes('?') ? '&' : '?') + 't=' + Date.now();
-            document.getElementById('login-avatar').src = avatarUrl;
-          }
-        })
-        .catch(err => {
-          console.log('載入頭像失敗:', err);
-          // 保持預設頭像
-        });
-    }
 
     // 輪播功能
     let currentSlide = 0;
@@ -831,9 +807,6 @@
 
     // 帳號下拉選單
     document.addEventListener("DOMContentLoaded", function () {
-      // 載入用戶頭像
-      loadUserAvatar();
-
       const dropdownBtn = document.getElementById("accountDropdownBtn");
       const dropdownMenu = document.getElementById("accountDropdownMenu");
 
