@@ -301,8 +301,10 @@ def get_students_by_class():
         query = """
             SELECT 
                 u.id, u.username, u.name, u.email, u.class_id, u.role,
+                u.admission_year AS admission_year,
                 c.name AS class_name,
-                c.department
+                c.department,
+                c.admission_year AS class_admission_year
             FROM users u
             LEFT JOIN classes c ON u.class_id = c.id
             WHERE u.role = 'student'
@@ -310,6 +312,13 @@ def get_students_by_class():
         """
         cursor.execute(query)
         all_students = cursor.fetchall()
+        # 入學屆數：與 profile / user_management 一致，無 admission_year 時用學號前 3 碼
+        for s in all_students:
+            if (s.get('admission_year') is None or str(s.get('admission_year', '')).strip() == '') and s.get('username') and len(str(s['username'])) >= 3:
+                try:
+                    s['admission_year'] = int(str(s['username'])[:3])
+                except (TypeError, ValueError):
+                    pass
         print(f"[DEBUG] 查詢到所有學生: {len(all_students)} 位")
         
         # 如果指定了班級，根據班級類型（忠/孝）過濾

@@ -5,6 +5,7 @@
   <meta charset="UTF-8" />
   <title>智慧實習平台 | 學生管理</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js" crossorigin="anonymous"></script>
   <style>
     * {
@@ -245,14 +246,20 @@
       vertical-align: middle;
     }
 
-    /* 欄寬：展開鈕｜學號｜姓名｜Email｜履歷上傳｜志願填寫｜操作（固定比例，志願填寫不凸出） */
-    .table-container .table thead th:nth-child(1) { width: 52px; }
-    .table-container .table thead th:nth-child(2) { width: 10%; }
-    .table-container .table thead th:nth-child(3) { width: 9%; }
-    .table-container .table thead th:nth-child(4) { width: 22%; }
-    .table-container .table thead th:nth-child(5) { width: 12%; }
-    .table-container .table thead th:nth-child(6) { width: 12%; }
-    .table-container .table thead th:nth-child(7) { width: 23%; }
+    /* 表格固定佈局，避免欄位被內容撐開 */
+    .table-container .table {
+      table-layout: fixed;
+      width: 100%;
+    }
+
+    /* 欄寬：學號｜班級｜姓名｜Email｜履歷上傳｜志願填寫｜操作 */
+    .table-container .table thead th:nth-child(1) { width: 10%; }
+    .table-container .table thead th:nth-child(2) { width: 12%; }
+    .table-container .table thead th:nth-child(3) { width: 8%; }
+    .table-container .table thead th:nth-child(4) { width: 30%; }
+    .table-container .table thead th:nth-child(5) { width: 11%; }
+    .table-container .table thead th:nth-child(6) { width: 11%; }
+    .table-container .table thead th:nth-child(7) { width: 10%; }
 
     .table-container .table tbody td {
       border-color: #e2e8f0;
@@ -260,6 +267,18 @@
       font-size: 1.05rem;
       text-align: center;
       vertical-align: middle;
+    }
+
+    /* Email 欄：過長時省略顯示，不跑到隔壁欄 */
+    .table-container .table tbody td:nth-child(4) {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .table-container .table tbody td:nth-child(4):hover {
+      white-space: normal;
+      overflow: visible;
+      word-break: break-all;
     }
 
     /* 履歷上傳、志願填寫欄：內容不凸出、與表頭對齊 */
@@ -321,6 +340,27 @@
     }
 
     /* 上中下區塊與中間圖表同寬 */
+    .semester-filter-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+    .semester-banner {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 16px;
+      background: rgba(0, 102, 204, 0.1);
+      border: 1px solid #dbe4f4;
+      border-radius: 8px;
+      font-size: 1rem;
+      color: #1f2937;
+    }
+    .semester-banner i {
+      color: #0066cc;
+    }
+
     .content-width-match {
       width: 100%;
     }
@@ -380,39 +420,6 @@
       }
     }
 
-    /* 詳細資訊樣式 */
-    .detail-row {
-      background-color: #f8f9fa;
-    }
-    
-    .detail-row td {
-      padding: 0 !important;
-    }
-    
-    .resume-details, .preference-details {
-      max-height: 400px;
-      overflow-y: auto;
-    }
-    
-    .resume-details .border, .preference-details .border {
-      background-color: white;
-    }
-    
-    .toggle-details {
-      border: none;
-      background: transparent;
-      padding: 0.25rem 0.5rem;
-    }
-    
-    .toggle-details:hover {
-      background-color: #e9ecef;
-      border-radius: 4px;
-    }
-    
-    .toggle-icon {
-      font-size: 0.75rem;
-      transition: transform 0.2s;
-    }
   </style>
 </head>
 
@@ -444,24 +451,25 @@
   </nav>
 
   <div class="container">
+    <!-- 學期橫幅：與科助工作台一致，顯示目前系統學期 -->
+    <div class="semester-filter-row">
+      <div id="semesterBanner" class="semester-banner" role="status" aria-live="polite" style="display: none;">
+        <i class="fa-solid fa-calendar-alt"></i>
+        <span id="semesterText">載入學期中…</span>
+      </div>
+    </div>
     <div class="filter-section content-width-match">
       <div class="row align-items-end g-3">
-        <div class="col-md-3">
-          <label for="semesterSelect" class="form-label">選擇學年</label>
-          <select id="semesterSelect" class="form-select">
-            <option value="all" selected>所有學年</option>
-          </select>
-        </div>
-        <div class="col-md-3">
+        <div class="col-md-4">
           <label for="classSelect" class="form-label">選擇班級</label>
           <select id="classSelect" class="form-select">
             <option value="all" selected>所有班級</option>
           </select>
         </div>
-        <div class="col-md-3">
+        <div class="col-md-4">
           <button class="btn btn-primary w-100" id="loadBtn">學生資料</button>
         </div>
-        <div class="col-md-3">
+        <div class="col-md-4">
           <button class="btn btn-success w-100" id="exportBtn">匯出 Excel</button>
         </div>
       </div>
@@ -499,8 +507,8 @@
         <table class="table table-bordered table-striped table-hover align-middle">
           <thead>
             <tr>
-              <th style="width: 50px;"></th>
               <th>學號</th>
+              <th>班級</th>
               <th>姓名</th>
               <th>Email</th>
               <th>履歷上傳</th>
@@ -510,7 +518,7 @@
           </thead>
           <tbody id="studentsTableBody">
             <tr>
-              <td colspan="7" class="text-center text-muted">請先選擇學年</td>
+              <td colspan="7" class="text-center text-muted">請選擇班級</td>
             </tr>
           </tbody>
         </table>
@@ -585,22 +593,7 @@
       }
     });
 
-    // 固定載入 1132、1142 兩個學年（不自動選擇，保留「所有學年」選項）
-    function loadSemesters() {
-      const semesterSelect = document.getElementById("semesterSelect");
-      const semesters = ['1132', '1142'];
-
-      // 保留「所有學年」選項，然後添加具體學年選項
-      semesterSelect.innerHTML = '<option value="all" selected>所有學年</option>';
-      semesters.forEach(code => {
-        const option = document.createElement("option");
-        option.value = code;
-        option.textContent = code;
-        semesterSelect.appendChild(option);
-      });
-      semesterSelect.disabled = false;
-      // 不自動選擇第一個，保持「所有學年」為預設值
-    }
+    // 學年由系統設定，已改為學期橫幅 + 固定使用目前學期，不再提供選擇學年
 
     // 從班級名稱中提取「忠」、「孝」等字
     function extractClassShortName(className) {
@@ -684,7 +677,10 @@
       // 提取班級名稱（忠、孝等）
       const classMap = new Map(); // 用來去重（同一個班級名稱可能有多個班級ID）
       
-      allClassesData.forEach(c => {
+      const dataToUse = currentSemesterCode
+        ? allClassesData.filter(c => (c.semester_code || '') === currentSemesterCode)
+        : allClassesData;
+      dataToUse.forEach(c => {
         const fullName = `${(c.department || '').replace('管科', '')}${c.name || ''}`;
         let classShortName = null;
         if (fullName.includes('忠')) {
@@ -858,17 +854,42 @@
       }
     }
 
+    // 目前系統學期（由學期橫幅 API 設定）
+    let currentSemesterCode = '';
+    let currentSemesterLabel = '';
+
+    // 載入學期橫幅（與科助工作台相同樣式：以下名單為 1132 學期（113學年第2學期））
+    async function loadCurrentSemesterBanner() {
+      const banner = document.getElementById('semesterBanner');
+      const textEl = document.getElementById('semesterText');
+      if (!banner || !textEl) return;
+      try {
+        const res = await fetch('/admission/api/ta_dashboard_stats');
+        const data = await res.json();
+        if (data.success && data.semester_code) {
+          currentSemesterCode = data.semester_code;
+          currentSemesterLabel = data.semester_label || data.semester_code;
+          textEl.innerHTML = '以下名單為 <strong>' + (currentSemesterCode.replace(/</g, '&lt;').replace(/>/g, '&gt;')) + '</strong> 學期' + (currentSemesterLabel !== currentSemesterCode ? '（' + (currentSemesterLabel.replace(/</g, '&lt;').replace(/>/g, '&gt;')) + '）' : '');
+          banner.style.display = 'inline-flex';
+        } else {
+          textEl.textContent = '目前系統學期（學期代碼：—）';
+          banner.style.display = 'inline-flex';
+        }
+      } catch (e) {
+        textEl.textContent = '無法載入學期';
+        banner.style.display = 'inline-flex';
+      }
+    }
+
     // 載入學生資料
     async function loadStudents() {
-      const semesterCode = document.getElementById("semesterSelect").value;
       const classId = document.getElementById("classSelect").value;
       const className = document.getElementById("classSelect").options[document.getElementById("classSelect").selectedIndex].text;
       const tbody = document.getElementById("studentsTableBody");
       tbody.innerHTML = `<tr><td colspan="7" class="text-center text-muted">載入中...</td></tr>`;
 
-      // 檢查是否已選擇學年和班級
-      if (semesterCode === 'all') {
-        tbody.innerHTML = `<tr><td colspan="7" class="text-center text-muted">請先選擇學年</td></tr>`;
+      if (!currentSemesterCode) {
+        tbody.innerHTML = `<tr><td colspan="7" class="text-center text-muted">請稍候，學期載入中…</td></tr>`;
         return;
       }
 
@@ -876,6 +897,7 @@
         tbody.innerHTML = `<tr><td colspan="7" class="text-center text-muted">請選擇班級</td></tr>`;
         return;
       }
+      const semesterCode = currentSemesterCode;
 
       try {
         console.log(`[DEBUG] 載入學生資料: class_id=${classId}, semester_code=${semesterCode}`);
@@ -984,84 +1006,35 @@
               `<span class="badge bg-success">已填寫 (${s.preference_count})</span>` : 
               '<span class="badge bg-danger">未填寫</span>';
             
-            // 履歷詳細資訊
-            const resumeDetails = s.resumes && s.resumes.length > 0 ? s.resumes.map(r => `
-              <div class="mb-2 p-2 border rounded">
-                <strong>履歷</strong><br>
-                <small>狀態: <span class="badge ${r.status === 'approved' ? 'bg-success' : r.status === 'rejected' ? 'bg-danger' : 'bg-warning'}">${r.status === 'approved' ? '已審核' : r.status === 'rejected' ? '已退件' : '待審核'}</span></small><br>
-                <small>上傳時間: ${r.created_at || 'N/A'}</small><br>
-                ${r.reviewed_at ? `<small>審核時間: ${r.reviewed_at}</small><br>` : ''}
-                ${r.reject_reason ? `<small class="text-danger">退件原因: ${r.reject_reason}</small><br>` : ''}
-                <a href="/api/download_resume/${r.id}" class="btn btn-primary btn-sm mt-2" download style="font-size: 0.875rem;">
-                  <i class="fas fa-download"></i> 下載履歷
-                </a>
-              </div>
-            `).join('') : '<p class="text-muted mb-0">無履歷資料</p>';
-            
-            // 志願序詳細資訊
-            const preferenceDetails = s.preferences && s.preferences.length > 0 ? s.preferences.map(p => `
-              <div class="mb-2 p-2 border rounded">
-                <strong>志願 #${p.preference_order}</strong><br>
-                <small>公司: ${p.company_name || 'N/A'}</small><br>
-                <small>職位: ${p.job_title || p.job_title_full || 'N/A'}</small><br>
-                <small>提交時間: ${p.submitted_at || 'N/A'}</small>
-              </div>
-            `).join('') : '<p class="text-muted mb-0">無志願序資料</p>';
-            
-            // 顯示學生的實際班級（如果有）
-            const studentClass = s.class_name ? `${s.department ? s.department.replace('管科', '') : ''}${s.class_name}` : '未分班';
+            // 班級顯示：資管科X孝/忠（與 profile / user_management 一致：用「目前學年」與「學生入學屆數」動態算年級）
+            const dept = (s.department || '').trim();
+            const cname = (s.class_name || '').trim();
+            let classDisplay = '—';
+            if (dept || cname) {
+              const ayRaw = s.admission_year != null && s.admission_year !== '' ? s.admission_year : null;
+              const ay = ayRaw != null ? parseInt(String(ayRaw), 10) : NaN;
+              const sy = currentSemesterCode && currentSemesterCode.length >= 3 ? parseInt(currentSemesterCode.substring(0, 3), 10) : NaN;
+              const gradeNum = (!isNaN(sy) && !isNaN(ay)) ? (sy - ay + 1) : NaN;
+              const gradeLabels = ['一', '二', '三', '四', '五', '六'];
+              const gradeChar = (gradeNum >= 1 && gradeNum <= 6) ? gradeLabels[gradeNum - 1] : (gradeNum > 0 ? String(gradeNum) : '');
+              classDisplay = dept + (gradeChar || '') + (cname || '');
+            }
             
             return `
               <tr class="student-row" data-student-id="${s.id}">
-                <td>
-                  <button class="btn btn-sm btn-outline-primary toggle-details" data-index="${index}" type="button">
-                    <span class="toggle-icon">▼</span>
-                  </button>
-                </td>
                 <td>${s.username}</td>
-                <td>${s.name}</td>
+                <td>${classDisplay}</td>
+                <td>${s.name || '—'}</td>
                 <td>${s.email || 'N/A'}</td>
                 <td>${resumeStatus}</td>
                 <td>${preferenceStatus}</td>
                 <td>
                   <button class="btn btn-sm btn-info view-details" data-index="${index}">查看詳情</button>
-                  ${studentClass !== '未分班' ? `<br><small class="text-muted">${studentClass}</small>` : ''}
-                </td>
-              </tr>
-              <tr class="detail-row" data-index="${index}" style="display: none;">
-                <td colspan="7">
-                  <div class="row p-3">
-                    <div class="col-md-6">
-                      <h6 class="text-primary">📄 履歷資訊</h6>
-                      <div class="resume-details">${resumeDetails}</div>
-                    </div>
-                    <div class="col-md-6">
-                      <h6 class="text-primary">🎯 志願序資訊</h6>
-                      <div class="preference-details">${preferenceDetails}</div>
-                    </div>
-                  </div>
                 </td>
               </tr>
             `;
             }).join("");
           }
-          
-          // 綁定展開/收合事件
-          document.querySelectorAll('.toggle-details').forEach(btn => {
-            btn.addEventListener('click', function() {
-              const index = this.getAttribute('data-index');
-              const detailRow = document.querySelector(`.detail-row[data-index="${index}"]`);
-              const icon = this.querySelector('.toggle-icon');
-              
-              if (detailRow.style.display === 'none') {
-                detailRow.style.display = 'table-row';
-                icon.textContent = '▲';
-              } else {
-                detailRow.style.display = 'none';
-                icon.textContent = '▼';
-              }
-            });
-          });
           
           // 綁定查看詳情按鈕 - 開啟 Modal
           document.querySelectorAll('.view-details').forEach(btn => {
@@ -1341,26 +1314,6 @@
     // 事件監聽
     document.getElementById("loadBtn").addEventListener("click", loadStudents);
     
-    // 當學年選擇改變時，只清空表格和圖表，不影響班級選單
-    document.getElementById("semesterSelect").addEventListener("change", function() {
-      // 清空表格和圖表
-      document.getElementById("studentsTableBody").innerHTML = 
-        '<tr><td colspan="7" class="text-center text-muted">請選擇班級</td></tr>';
-      currentStudentsData = []; // 清空學生資料
-      const chartContainer = document.getElementById("classChartContainer");
-      if (chartContainer) chartContainer.style.display = 'none';
-      if (myClassChart) { 
-        myClassChart.destroy(); 
-        myClassChart = null; 
-      }
-      // 清空統計圖表
-      const statsContainer = document.getElementById("statsChartsContainer");
-      if (statsContainer) statsContainer.style.display = 'none';
-      if (companyChart) { companyChart.destroy(); companyChart = null; }
-      if (resumeChart) { resumeChart.destroy(); resumeChart = null; }
-      if (preferenceChart) { preferenceChart.destroy(); preferenceChart = null; }
-    });
-    
     // 當班級選擇改變時自動載入資料
     document.getElementById("classSelect").addEventListener("change", function() {
       const classId = this.value;
@@ -1464,13 +1417,11 @@
       studentDetailModal.show();
     }
 
-    // 初始載入：先載入學年列表和所有班級資料
+    // 初始載入：先載入學期橫幅（取得目前系統學期），再載入班級選項
     async function initialize() {
+      await loadCurrentSemesterBanner();
       await loadAllClasses();
-      loadSemesters();
-      // 載入所有班級選項（不限學年）
       loadAllClassesOptions();
-      // 不預設載入統計圖表，等待用戶選擇後再載入
     }
     
     initialize();
