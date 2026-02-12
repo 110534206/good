@@ -613,9 +613,24 @@
         let matchesStatus = true;
         if (status) {
            // 指導老師使用 review_status，班導使用 display_status
-           const statusStr = (userRole === 'teacher' && r.review_status) 
-                             ? r.review_status 
-                             : (r.display_status || 'uploaded');
+           let statusStr;
+           if (userRole === 'teacher') {
+             const teacherStatus = r.review_status;
+             const isValidStatus = teacherStatus && 
+                                   teacherStatus !== 'undefined' && 
+                                   teacherStatus !== 'null' && 
+                                   ['uploaded', 'approved', 'rejected'].includes(teacherStatus);
+             if (isValidStatus) {
+               statusStr = teacherStatus;
+             } else if (r.status === 'approved' || (r.display_status && r.display_status.includes('approved'))) {
+               // 班導已通過，但指導老師還沒審核，應該顯示為待審核
+               statusStr = 'uploaded';
+             } else {
+               statusStr = r.display_status || 'uploaded';
+             }
+           } else {
+             statusStr = r.display_status || 'uploaded';
+           }
            matchesStatus = statusStr === status;  // 使用嚴格相等，確保精確匹配
         }
 
@@ -662,7 +677,25 @@
                               teacherStatus !== 'undefined' && 
                               teacherStatus !== 'null' && 
                               ['uploaded', 'approved', 'rejected'].includes(teacherStatus);
-        const st = (userRole === 'teacher' && isValidStatus) ? teacherStatus : (r.display_status || 'uploaded');
+        
+        // 指導老師的狀態邏輯：
+        // 1. 如果 review_status 有效，直接使用
+        // 2. 如果 review_status 無效但 status='approved'（班導已通過），則顯示為 'uploaded'（待指導老師審核）
+        // 3. 否則使用 display_status
+        let st;
+        if (userRole === 'teacher') {
+          if (isValidStatus) {
+            st = teacherStatus;
+          } else if (r.status === 'approved' || (r.display_status && r.display_status.includes('approved'))) {
+            // 班導已通過，但指導老師還沒審核，應該顯示為待審核
+            st = 'uploaded';
+          } else {
+            st = r.display_status || 'uploaded';
+          }
+        } else {
+          // 班導和其他角色：使用 display_status
+          st = r.display_status || 'uploaded';
+        }
         const cm = r.comment || '';
 
         // 狀態篩選
@@ -702,7 +735,17 @@
                                       teacherStatus !== 'undefined' && 
                                       teacherStatus !== 'null' && 
                                       ['uploaded', 'approved', 'rejected'].includes(teacherStatus);
-          statusForDisplay = isValidTeacherStatus ? teacherStatus : (row.display_status || 'uploaded');
+          if (isValidTeacherStatus) {
+            statusForDisplay = teacherStatus;
+          } else {
+            // 如果 review_status 無效，但 display_status 是 'approved'（班導已通過）
+            // 則指導老師應該看到 'uploaded'（待審核），因為還沒審核
+            if (row.status === 'approved' || (row.display_status && row.display_status.includes('approved'))) {
+              statusForDisplay = 'uploaded';
+            } else {
+              statusForDisplay = row.display_status || 'uploaded';
+            }
+          }
         } else {
           // 班導和其他角色：使用 display_status
           statusForDisplay = row.display_status || 'uploaded';
