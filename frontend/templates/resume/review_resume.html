@@ -234,7 +234,8 @@
   <script>
     let allResumes = [];
     let currentResumeId = null;
-    let currentPreferenceId = null; 
+    let currentPreferenceId = null;
+    let currentApplicationId = null;  // 指導老師審核用（投遞紀錄 id）
     let currentPage = 1;
     const rowsPerPage = 10;
     let userRole = null;
@@ -779,23 +780,25 @@
         const hasComment = row.comment && row.comment.trim() !== '';
         const btnClass = hasComment ? 'text-success' : '';
         const btnText = hasComment ? '已填寫' : '未填寫';
-        
+        const appId = row.application_id != null ? row.application_id : 'null';
+        const commentEsc = (row.comment || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/\r/g, '').replace(/\n/g, ' ');
         if (isViewOnly) {
             if (hasComment) {
-                return `<button class="btn btn-sm btn-outline-secondary text-success" onclick="openCommentModal(${row.id}, '${escapeHtml(row.comment)}', ${pid}, true)">已填寫</button>`;
+                return `<button class="btn btn-sm btn-outline-secondary text-success" onclick="openCommentModal(${row.id}, '${commentEsc}', ${pid}, ${appId}, true)">已填寫</button>`;
             } else {
                 return `<span style="color:#aaa; font-size:0.9em;">未填寫</span>`;
             }
         }
-        return `<button class="btn btn-sm btn-outline-secondary ${btnClass}" onclick="openCommentModal(${row.id}, '${escapeHtml(row.comment)}', ${pid}, false)">${btnText}</button>`;
+        return `<button class="btn btn-sm btn-outline-secondary ${btnClass}" onclick="openCommentModal(${row.id}, '${commentEsc}', ${pid}, ${appId}, false)">${btnText}</button>`;
     }
 
     function renderActionBtns(row, isViewOnly, pid, isDirectorMode = false) {
         const dlBtn = `<a href="/api/download_resume/${row.id}" class="btn btn-sm btn-outline-primary" target="_blank" style="margin-right:4px;">下載</a>`;
         if (isViewOnly) return dlBtn; 
 
-        const approveClick = `approveResume(${row.id}, ${pid ? `'${pid}'` : 'null'})`;
-        const rejectClick = `rejectResume(${row.id}, ${pid ? `'${pid}'` : 'null'})`;
+        const appId = row.application_id != null ? row.application_id : 'null';
+        const approveClick = `approveResume(${row.id}, ${pid ? `'${pid}'` : 'null'}, ${appId})`;
+        const rejectClick = `rejectResume(${row.id}, ${pid ? `'${pid}'` : 'null'}, ${appId})`;
 
         // 主任模式只顯示退件按鈕，不顯示通過按鈕
         // 根據截止時間狀態決定是否顯示退件按鈕
@@ -839,12 +842,13 @@
       }
     }
 
-    // 更新狀態函式
-    function approveResume(resumeId, preferenceId) {
+    // 更新狀態函式（指導老師請傳 applicationId，後端以投遞紀錄為單位審核）
+    function approveResume(resumeId, preferenceId, applicationId) {
       if (!confirm("確定要將此職缺申請標記為通過嗎？")) return;
       
       const body = { status: 'approved' };
       if (preferenceId) body.preference_id = preferenceId;
+      if (userRole === 'teacher' && applicationId != null) body.application_id = applicationId;
 
       fetch(`/api/review_resume/${resumeId}`, { 
           method: 'POST',
@@ -875,7 +879,7 @@
                     console.log('🔍 [DEBUG] 重新載入指導老師履歷資料:', allResumes.length, '筆');
                     // 調試：檢查特定履歷的狀態
                     if (allResumes.length > 0) {
-                      const updatedResume = allResumes.find(r => r.id === resumeId);
+                      const updatedResume = allResumes.find(r => r.id === resumeId || (applicationId != null && r.application_id === applicationId));
                       if (updatedResume) {
                         const displayStatus = updatedResume.display_status;
                         const status = updatedResume.status;
@@ -906,8 +910,7 @@
       });
     }
 
-    function rejectResume(resumeId, preferenceId) {
-       // 檢查截止時間（指導老師和廠商不受限制，班導和主任受限制）
+    function rejectResume(resumeId, preferenceId, applicationId) {
        if (userRole !== 'vendor' && userRole !== 'teacher' && isDeadlinePassed) {
          alert('⚠️ 已超過履歷提交截止時間，無法再退件履歷。未退件的履歷已自動通過並傳給指導老師審核。');
          return;
@@ -916,6 +919,7 @@
        if (!confirm("確定要退件此申請？")) return;
        currentResumeId = resumeId;
        currentPreferenceId = preferenceId;
+       currentApplicationId = applicationId != null ? applicationId : null;
        
        document.getElementById("commentInput").value = "";
        document.getElementById("commentModalLabel").textContent = "❌ 填寫退件原因";
@@ -930,6 +934,7 @@
            
            const body = { status: 'rejected', comment: reason };
            if (currentPreferenceId) body.preference_id = currentPreferenceId;
+           if (userRole === 'teacher' && currentApplicationId != null) body.application_id = currentApplicationId;
 
            fetch(`/api/review_resume/${currentResumeId}`, {
                method: 'POST',
@@ -958,7 +963,7 @@
        };
     }
 
-    function openCommentModal(id, comment, pid, readonly) {
+    function openCommentModal(id, comment, pid, applicationId, readonly) {
         document.getElementById("commentInput").value = comment;
         document.getElementById("commentInput").readOnly = readonly;
         document.getElementById("commentModalLabel").textContent = readonly ? "查看留言" : "編輯留言";
@@ -969,6 +974,7 @@
         if (!readonly) {
             currentResumeId = id;
             currentPreferenceId = pid;
+            currentApplicationId = applicationId != null && applicationId !== 'null' ? applicationId : null;
             saveBtn.onclick = saveComment; 
         }
         new bootstrap.Modal(document.getElementById("commentModal")).show();
@@ -976,8 +982,13 @@
 
     function saveComment() {
         const val = document.getElementById("commentInput").value.trim();
-        const body = { field: 'comment', value: val, resume_id: currentResumeId };
-        if(currentPreferenceId) body.preference_id = currentPreferenceId;
+        const body = { field: 'comment', value: val };
+        if (userRole === 'teacher' && currentApplicationId != null) {
+            body.application_id = currentApplicationId;
+        } else {
+            body.resume_id = currentResumeId;
+        }
+        if (currentPreferenceId) body.preference_id = currentPreferenceId;
 
         fetch("/api/update_resume_field", {
             method: "POST", headers: { "Content-Type": "application/json" },

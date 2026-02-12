@@ -3565,65 +3565,45 @@ def update_resume_status_after_deadline(cursor, conn):
             """)
             uploaded_to_approved_count = cursor.rowcount
             
-            # 截止時間後，所有班導已通過（status='approved'）的履歷需要同步到 resume_teacher 表
-            # 讓指導老師可以看到並審核
+            # 截止時間後，所有班導已通過（status='approved'）的投遞需要同步到 resume_teacher 表（以 application_id 為單位）
             if resume_teacher_table_exists:
-                # 查詢所有 approved 狀態的履歷及其對應的學生和公司（包括剛更新的和之前已存在的）
-                # 這樣可以確保所有已通過的履歷都會同步到 resume_teacher 表
                 cursor.execute("""
-                    SELECT DISTINCT 
-                        r.id AS resume_id,
-                        r.user_id AS student_id,
-                        ic.advisor_user_id
+                    SELECT sja.id AS application_id, ic.advisor_user_id
                     FROM resumes r
                     INNER JOIN student_job_applications sja ON sja.resume_id = r.id AND sja.student_id = r.user_id
                     JOIN internship_companies ic ON sja.company_id = ic.id
                     WHERE r.status = 'approved'
                       AND ic.advisor_user_id IS NOT NULL
                 """)
-                
-                resumes_to_sync = cursor.fetchall()
-                print(f"🔍 [DEBUG] 找到 {len(resumes_to_sync)} 筆 approved 履歷需要同步到 resume_teacher 表")
+                apps_to_sync = cursor.fetchall()
+                print(f"🔍 [DEBUG] 找到 {len(apps_to_sync)} 筆投遞需要同步到 resume_teacher 表")
                 synced_count = 0
-                
-                # 為每個履歷和對應的指導老師創建或更新 resume_teacher 記錄
-                for resume_info in resumes_to_sync:
-                    resume_id = resume_info['resume_id']
-                    advisor_user_id = resume_info['advisor_user_id']
-                    
-                    if resume_id and advisor_user_id:
-                        # 檢查是否已存在記錄
+                for app_info in apps_to_sync:
+                    application_id = app_info['application_id']
+                    advisor_user_id = app_info['advisor_user_id']
+                    if not application_id or not advisor_user_id:
+                        continue
+                    cursor.execute("SELECT id FROM resume_teacher WHERE application_id = %s AND teacher_id = %s", (application_id, advisor_user_id))
+                    existing = cursor.fetchone()
+                    if existing:
                         cursor.execute("""
-                            SELECT id FROM resume_teacher 
-                            WHERE resume_id = %s AND teacher_id = %s
-                        """, (resume_id, advisor_user_id))
-                        existing = cursor.fetchone()
-                        
-                        if existing:
-                            # 如果已存在，更新為 uploaded 狀態（讓指導老師可以審核）
-                            cursor.execute("""
-                                UPDATE resume_teacher SET 
-                                    review_status='uploaded',
-                                    reviewed_at=NULL
-                                WHERE resume_id = %s AND teacher_id = %s
-                            """, (resume_id, advisor_user_id))
-                        else:
-                            # 如果不存在，創建新記錄，狀態為 uploaded（待指導老師審核）
-                            cursor.execute("""
-                                INSERT INTO resume_teacher (resume_id, teacher_id, review_status, comment, reviewed_at, created_at)
-                                VALUES (%s, %s, 'uploaded', NULL, NULL, NOW())
-                            """, (resume_id, advisor_user_id))
-                        synced_count += 1
-                
+                            UPDATE resume_teacher SET review_status='uploaded', reviewed_at=NULL
+                            WHERE application_id = %s AND teacher_id = %s
+                        """, (application_id, advisor_user_id))
+                    else:
+                        cursor.execute("""
+                            INSERT INTO resume_teacher (application_id, teacher_id, review_status, comment, reviewed_at, created_at)
+                            VALUES (%s, %s, 'uploaded', NULL, NULL, NOW())
+                        """, (application_id, advisor_user_id))
+                    synced_count += 1
                 if synced_count > 0:
-                    conn.commit()  # 提交同步的數據
+                    conn.commit()
                     print(f"✅ 已同步 {synced_count} 筆履歷到 resume_teacher 表，等待指導老師審核")
                 else:
                     print(f"⚠️ [DEBUG] 未找到需要同步的履歷，可能原因：")
                     print(f"   - 沒有 approved 狀態的履歷")
                     print(f"   - 履歷對應的公司沒有設置 advisor_user_id")
                     print(f"   - student_job_applications 表中沒有對應的記錄")
-                    # 調試：檢查是否有 approved 履歷
                     cursor.execute("SELECT COUNT(*) as cnt FROM resumes WHERE status = 'approved'")
                     approved_count = cursor.fetchone()
                     print(f"   - 資料庫中 approved 狀態的履歷數量: {approved_count.get('cnt', 0) if approved_count else 0}")
@@ -3718,8 +3698,8 @@ def get_teacher_review_resumes():
             # 如果表存在，嘗試檢查表是否有必要的欄位
             if resume_teacher_table_exists:
                 try:
-                    # 檢查表是否有必要的欄位
-                    required_columns = ['resume_id', 'teacher_id', 'review_status']
+                    # 檢查表是否有必要的欄位（審核對象為投遞紀錄 application_id）
+                    required_columns = ['application_id', 'teacher_id', 'review_status']
                     # 先獲取當前資料庫名稱
                     cursor.execute("SELECT DATABASE() as db_name")
                     db_result = cursor.fetchone()
@@ -3730,7 +3710,7 @@ def get_teacher_review_resumes():
                         FROM INFORMATION_SCHEMA.COLUMNS 
                         WHERE TABLE_SCHEMA = %s
                         AND TABLE_NAME = 'resume_teacher' 
-                        AND COLUMN_NAME IN ('resume_id', 'teacher_id', 'review_status')
+                        AND COLUMN_NAME IN ('application_id', 'teacher_id', 'review_status')
                     """, (db_name,))
                     existing_columns = [row['COLUMN_NAME'] for row in cursor.fetchall()]
                     missing_columns = [col for col in required_columns if col not in existing_columns]
@@ -3745,118 +3725,46 @@ def get_teacher_review_resumes():
                         print(f"⚠️ resume_teacher 表缺少必要欄位: {', '.join(missing_columns)}")
                         print(f"   請執行以下 SQL 來修復表結構：")
                         for col in missing_columns:
-                            if col == 'resume_id':
-                                print(f"   ALTER TABLE resume_teacher ADD COLUMN resume_id INT NOT NULL AFTER id;")
+                            if col == 'application_id':
+                                print(f"   ALTER TABLE resume_teacher ADD COLUMN application_id INT NOT NULL AFTER id;")
                             elif col == 'teacher_id':
-                                print(f"   ALTER TABLE resume_teacher ADD COLUMN teacher_id INT NOT NULL AFTER resume_id;")
+                                print(f"   ALTER TABLE resume_teacher ADD COLUMN teacher_id INT NOT NULL AFTER application_id;")
                             elif col == 'review_status':
                                 print(f"   ALTER TABLE resume_teacher ADD COLUMN review_status ENUM('uploaded', 'approved', 'rejected') DEFAULT 'uploaded' AFTER teacher_id;")
                         resume_teacher_table_exists = False
                     else:
                         print(f"✅ resume_teacher 表結構正確，所有必要欄位都存在")
-                        # 表結構正確時，執行手動同步：將所有 approved 履歷同步到 resume_teacher 表
+                        # 表結構正確時，執行手動同步：以投遞紀錄(application_id)為單位同步到 resume_teacher
                         try:
-                            print(f"🔍 [DEBUG] 開始手動同步 approved 履歷到 resume_teacher 表...")
-                            
-                            # 先檢查所有履歷的狀態
-                            cursor.execute("SELECT id, status, user_id FROM resumes")
-                            all_resumes = cursor.fetchall()
-                            print(f"🔍 [DEBUG] 資料庫中所有履歷: {len(all_resumes)} 筆")
-                            for r in all_resumes:
-                                print(f"   - resume_id={r['id']}, status={r['status']}, user_id={r['user_id']}")
-                            
-                            # 查詢所有 approved 狀態的履歷
-                            cursor.execute("SELECT id, status, user_id FROM resumes WHERE status = 'approved'")
-                            approved_resumes = cursor.fetchall()
-                            print(f"🔍 [DEBUG] approved 狀態的履歷: {len(approved_resumes)} 筆")
-                            
-                            # 查詢需要同步的履歷（有 student_job_applications 和 advisor_user_id）
+                            print(f"🔍 [DEBUG] 開始手動同步 approved 投遞到 resume_teacher 表...")
                             cursor.execute("""
-                                SELECT DISTINCT 
-                                    r.id AS resume_id,
-                                    r.user_id AS student_id,
-                                    r.status AS resume_status,
-                                    ic.advisor_user_id,
-                                    ic.company_name,
-                                    sja.id AS application_id
+                                SELECT sja.id AS application_id, ic.advisor_user_id
                                 FROM resumes r
                                 INNER JOIN student_job_applications sja ON sja.resume_id = r.id AND sja.student_id = r.user_id
                                 JOIN internship_companies ic ON sja.company_id = ic.id
-                                WHERE r.status = 'approved'
-                                  AND ic.advisor_user_id IS NOT NULL
+                                WHERE r.status = 'approved' AND ic.advisor_user_id IS NOT NULL
                             """)
-                            resumes_to_sync = cursor.fetchall()
-                            print(f"🔍 [DEBUG] 找到 {len(resumes_to_sync)} 筆符合同步條件的履歷")
-                            for r in resumes_to_sync:
-                                print(f"   - resume_id={r['resume_id']}, student_id={r['student_id']}, advisor_user_id={r['advisor_user_id']}, company={r['company_name']}")
-                            
+                            apps_to_sync = cursor.fetchall()
                             synced_count = 0
-                            for resume_info in resumes_to_sync:
-                                resume_id = resume_info['resume_id']
-                                advisor_user_id = resume_info['advisor_user_id']
-                                
-                                if resume_id and advisor_user_id:
-                                    # 檢查是否已存在記錄（使用反引號處理可能的特殊欄位名稱）
-                                    try:
-                                        cursor.execute("""
-                                            SELECT id FROM resume_teacher 
-                                            WHERE `resume_id` = %s AND teacher_id = %s
-                                        """, (resume_id, advisor_user_id))
-                                    except:
-                                        # 如果失敗，嘗試使用 resume.id（帶點號）
-                                        try:
-                                            cursor.execute("""
-                                                SELECT id FROM resume_teacher 
-                                                WHERE `resume.id` = %s AND teacher_id = %s
-                                            """, (resume_id, advisor_user_id))
-                                        except Exception as e:
-                                            print(f"⚠️ 檢查 resume_teacher 記錄時發生錯誤: {e}")
-                                            continue
-                                    
-                                    existing = cursor.fetchone()
-                                    
-                                    if existing:
-                                        # 如果已存在，更新為 uploaded 狀態（讓指導老師可以審核）
-                                        try:
-                                            cursor.execute("""
-                                                UPDATE resume_teacher SET 
-                                                    review_status='uploaded',
-                                                    reviewed_at=NULL
-                                                WHERE `resume_id` = %s AND teacher_id = %s
-                                            """, (resume_id, advisor_user_id))
-                                        except:
-                                            cursor.execute("""
-                                                UPDATE resume_teacher SET 
-                                                    review_status='uploaded',
-                                                    reviewed_at=NULL
-                                                WHERE `resume.id` = %s AND teacher_id = %s
-                                            """, (resume_id, advisor_user_id))
-                                        print(f"   ✅ 更新 resume_teacher: resume_id={resume_id}, teacher_id={advisor_user_id}")
-                                    else:
-                                        # 如果不存在，創建新記錄
-                                        try:
-                                            cursor.execute("""
-                                                INSERT INTO resume_teacher (resume_id, teacher_id, review_status, comment, reviewed_at, created_at)
-                                                VALUES (%s, %s, 'uploaded', NULL, NULL, NOW())
-                                            """, (resume_id, advisor_user_id))
-                                        except:
-                                            # 如果失敗，嘗試使用 resume.id（帶點號）
-                                            cursor.execute("""
-                                                INSERT INTO resume_teacher (`resume.id`, teacher_id, review_status, comment, reviewed_at, created_at)
-                                                VALUES (%s, %s, 'uploaded', NULL, NULL, NOW())
-                                            """, (resume_id, advisor_user_id))
-                                        print(f"   ✅ 創建 resume_teacher: resume_id={resume_id}, teacher_id={advisor_user_id}")
-                                    synced_count += 1
-                            
+                            for app_info in apps_to_sync:
+                                application_id = app_info['application_id']
+                                advisor_user_id = app_info['advisor_user_id']
+                                if not application_id or not advisor_user_id:
+                                    continue
+                                cursor.execute("SELECT id FROM resume_teacher WHERE application_id = %s AND teacher_id = %s", (application_id, advisor_user_id))
+                                if cursor.fetchone():
+                                    cursor.execute("UPDATE resume_teacher SET review_status='uploaded', reviewed_at=NULL WHERE application_id = %s AND teacher_id = %s", (application_id, advisor_user_id))
+                                else:
+                                    cursor.execute("""
+                                        INSERT INTO resume_teacher (application_id, teacher_id, review_status, comment, reviewed_at, created_at)
+                                        VALUES (%s, %s, 'uploaded', NULL, NULL, NOW())
+                                    """, (application_id, advisor_user_id))
+                                synced_count += 1
                             if synced_count > 0:
                                 conn.commit()
-                                print(f"✅ 手動同步成功：已同步 {synced_count} 筆履歷到 resume_teacher 表")
+                                print(f"✅ 手動同步成功：已同步 {synced_count} 筆投遞到 resume_teacher 表")
                             else:
-                                print(f"⚠️ [DEBUG] 沒有需要同步的履歷")
-                                print(f"   可能原因：")
-                                print(f"   1. 履歷狀態不是 'approved'（當前 approved 履歷數: {len(approved_resumes)}）")
-                                print(f"   2. 履歷對應的公司沒有設置 advisor_user_id")
-                                print(f"   3. student_job_applications 表中沒有對應的記錄")
+                                print(f"⚠️ [DEBUG] 沒有需要同步的投遞")
                         except Exception as sync_error:
                             print(f"⚠️ 手動同步時發生錯誤: {sync_error}")
                             import traceback
@@ -3884,6 +3792,7 @@ def get_teacher_review_resumes():
                     r.original_filename,
                     r.status AS display_status,
                     rt.review_status AS review_status,
+                    rt.comment AS comment,
                     sja.id AS application_id,
                     sja.applied_at,
                     ic.company_name,
@@ -3892,7 +3801,7 @@ def get_teacher_review_resumes():
                 LEFT JOIN classes c ON u.class_id = c.id
                 INNER JOIN student_job_applications sja ON sja.student_id = u.id
                 LEFT JOIN resumes r ON r.id = sja.resume_id AND r.user_id = u.id
-                LEFT JOIN resume_teacher rt ON rt.resume_id = r.id AND rt.teacher_id = %s
+                LEFT JOIN resume_teacher rt ON rt.application_id = sja.id AND rt.teacher_id = %s
                 JOIN internship_companies ic ON sja.company_id = ic.id
                 LEFT JOIN internship_jobs ij ON sja.job_id = ij.id
                 WHERE u.role = 'student' 
@@ -4128,6 +4037,7 @@ def get_teacher_review_resumes():
                     'display_status': display_status_for_teacher,
                     'status': row.get('display_status'),  # resumes.status (class_review_resume.html 使用)
                     'review_status': row.get('review_status') if session_role == 'teacher' else None,
+                    'comment': row.get('comment') if session_role == 'teacher' else (row.get('comment') or ''),
                 })
         
         # 獲取履歷上傳截止時間資訊（與 update_resume_status_after_deadline 函數一致）
@@ -4194,6 +4104,7 @@ def review_resume(resume_id):
     
     status = data.get('status')
     comment = data.get('comment', '')  # 老師留言
+    application_id = data.get('application_id')  # 指導老師審核時傳投遞紀錄 id
 
     # 班導和主任只能退件，不能通過
     if user_role in ['class_teacher', 'director'] and status == 'approved':
@@ -4218,18 +4129,25 @@ def review_resume(resume_id):
         
         # 2. 查詢履歷並取得學生Email和姓名
         if user_role == 'teacher' and resume_teacher_table_exists:
-            # 指導老師：查詢 resume_teacher 表的舊狀態
+            if not application_id:
+                return jsonify({"success": False, "message": "指導老師審核請傳 application_id（投遞紀錄 id）"}), 400
+            try:
+                application_id_int = int(application_id)
+            except (TypeError, ValueError):
+                return jsonify({"success": False, "message": "無效的 application_id"}), 400
             cursor.execute("""
-                SELECT 
-                    r.user_id, r.original_filename, r.status AS old_status,
-                    rt.review_status AS old_teacher_review_status,
-                    r.comment,
+                SELECT r.id AS resume_id, r.user_id, r.original_filename, r.status AS old_status,
+                    rt.review_status AS old_teacher_review_status, r.comment,
                     u.email AS student_email, u.name AS student_name
-                FROM resumes r
-                JOIN users u ON r.user_id = u.id
-                LEFT JOIN resume_teacher rt ON rt.resume_id = r.id AND rt.teacher_id = %s
-                WHERE r.id=%s
-            """, (user_id, resume_id))
+                FROM student_job_applications sja
+                JOIN resumes r ON r.id = sja.resume_id AND r.user_id = sja.student_id
+                JOIN users u ON u.id = sja.student_id
+                LEFT JOIN resume_teacher rt ON rt.application_id = sja.id AND rt.teacher_id = %s
+                WHERE sja.id = %s
+            """, (user_id, application_id_int))
+            resume_data = cursor.fetchone()
+            if resume_data:
+                resume_id = resume_data['resume_id']
         else:
             # 班導和其他角色：只查詢 resumes 表
             cursor.execute("""
@@ -4242,11 +4160,10 @@ def review_resume(resume_id):
                 JOIN users u ON r.user_id = u.id
                 WHERE r.id=%s
             """, (resume_id,))
+            resume_data = cursor.fetchone()
         
-        resume_data = cursor.fetchone()
-
         if not resume_data:
-            return jsonify({"success": False, "message": "找不到履歷"}), 404
+            return jsonify({"success": False, "message": "找不到履歷或投遞紀錄"}), 404
 
         student_user_id = resume_data['user_id']
         student_email = resume_data['student_email'] 
@@ -4254,34 +4171,23 @@ def review_resume(resume_id):
         old_status = resume_data['old_status']
 
         # 3. 更新履歷狀態
-        # 根據角色決定更新哪個欄位：
-        # - 指導老師 (teacher)：更新 resume_teacher.review_status
-        # - 班導 (class_teacher)：更新 resumes.status
         if user_role == 'teacher' and resume_teacher_table_exists:
-            # 指導老師審核：更新或插入 resume_teacher 表
+            # 指導老師：更新 resume_teacher，以 application_id 為準（一筆投遞一筆審核）
             old_status_for_check = resume_data.get('old_teacher_review_status') or 'uploaded'
-            
-            # 先檢查 resume_teacher 記錄是否存在
-            cursor.execute("SELECT id FROM resume_teacher WHERE resume_id = %s AND teacher_id = %s", (resume_id, user_id))
-            existing_record = cursor.fetchone()
-            
-            if existing_record:
-                # 更新現有記錄
+            try:
+                application_id_int = int(application_id)
+            except (TypeError, ValueError):
+                return jsonify({"success": False, "message": "無效的 application_id"}), 400
+            cursor.execute("""
+                UPDATE resume_teacher SET review_status=%s, comment=%s, reviewed_at=NOW()
+                WHERE application_id=%s AND teacher_id=%s
+            """, (status, comment, application_id_int, user_id))
+            if cursor.rowcount == 0:
                 cursor.execute("""
-                    UPDATE resume_teacher SET 
-                        review_status=%s,
-                        comment=%s,
-                        reviewed_at=NOW()
-                    WHERE resume_id=%s AND teacher_id=%s
-                """, (status, comment, resume_id, user_id))
-            else:
-                # 插入新記錄
-                cursor.execute("""
-                    INSERT INTO resume_teacher (resume_id, teacher_id, review_status, comment, reviewed_at, created_at)
+                    INSERT INTO resume_teacher (application_id, teacher_id, review_status, comment, reviewed_at, created_at)
                     VALUES (%s, %s, %s, %s, NOW(), NOW())
-                """, (resume_id, user_id, status, comment))
-            
-            print(f"🔍 [DEBUG] 指導老師審核履歷: resume_id={resume_id}, review_status={status}, teacher_id={user_id}")
+                """, (application_id_int, user_id, status, comment))
+            print(f"🔍 [DEBUG] 指導老師審核投遞: application_id={application_id_int}, review_status={status}")
         else:
             # 班導和其他角色：更新 resumes.status
             old_status_for_check = old_status
@@ -4295,68 +4201,27 @@ def review_resume(resume_id):
                 WHERE id=%s
             """, (status, comment, user_id, resume_id))
             
-            # 如果班導將履歷狀態更新為 approved，需要同步到 resume_teacher 表
-            # 讓指導老師可以看到並審核
+            # 班導通過履歷時，該履歷的每筆投遞(sja)應已有 resume_teacher（學生投遞時已建）；僅確保狀態為 uploaded
             if user_role == 'class_teacher' and status == 'approved' and resume_teacher_table_exists:
-                print(f"🔍 [DEBUG] 班導通過履歷，開始同步到 resume_teacher 表: resume_id={resume_id}, student_user_id={student_user_id}")
-                # 查詢該履歷對應的學生申請的公司，找到對應的指導老師（advisor_user_id）
                 cursor.execute("""
-                    SELECT DISTINCT ic.advisor_user_id
+                    SELECT sja.id AS application_id, ic.advisor_user_id
                     FROM student_job_applications sja
                     JOIN internship_companies ic ON sja.company_id = ic.id
-                    WHERE sja.resume_id = %s 
-                      AND sja.student_id = %s
-                      AND ic.advisor_user_id IS NOT NULL
+                    WHERE sja.resume_id = %s AND sja.student_id = %s AND ic.advisor_user_id IS NOT NULL
                 """, (resume_id, student_user_id))
-                
-                advisor_teachers = cursor.fetchall()
-                print(f"🔍 [DEBUG] 找到 {len(advisor_teachers)} 位指導老師需要同步")
-                
-                # 為每個指導老師創建或更新 resume_teacher 記錄
-                synced_count = 0
-                for advisor in advisor_teachers:
-                    advisor_user_id = advisor['advisor_user_id']
-                    if advisor_user_id:
-                        # 檢查是否已存在記錄
+                for row in cursor.fetchall() or []:
+                    aid, advisor_user_id = row['application_id'], row['advisor_user_id']
+                    if not aid or not advisor_user_id:
+                        continue
+                    cursor.execute("SELECT id FROM resume_teacher WHERE application_id = %s AND teacher_id = %s", (aid, advisor_user_id))
+                    if cursor.fetchone():
+                        cursor.execute("UPDATE resume_teacher SET review_status='uploaded', reviewed_at=NULL WHERE application_id = %s AND teacher_id = %s", (aid, advisor_user_id))
+                    else:
                         cursor.execute("""
-                            SELECT id FROM resume_teacher 
-                            WHERE resume_id = %s AND teacher_id = %s
-                        """, (resume_id, advisor_user_id))
-                        existing = cursor.fetchone()
-                        
-                        if existing:
-                            # 如果已存在，更新為 uploaded 狀態（讓指導老師可以審核）
-                            cursor.execute("""
-                                UPDATE resume_teacher SET 
-                                    review_status='uploaded',
-                                    reviewed_at=NULL
-                                WHERE resume_id = %s AND teacher_id = %s
-                            """, (resume_id, advisor_user_id))
-                            print(f"🔍 [DEBUG] 更新 resume_teacher 記錄: resume_id={resume_id}, teacher_id={advisor_user_id}, review_status=uploaded")
-                            synced_count += 1
-                        else:
-                            # 如果不存在，創建新記錄，狀態為 uploaded（待指導老師審核）
-                            cursor.execute("""
-                                INSERT INTO resume_teacher (resume_id, teacher_id, review_status, comment, reviewed_at, created_at)
-                                VALUES (%s, %s, 'uploaded', NULL, NULL, NOW())
-                            """, (resume_id, advisor_user_id))
-                            print(f"🔍 [DEBUG] 創建 resume_teacher 記錄: resume_id={resume_id}, teacher_id={advisor_user_id}, review_status=uploaded")
-                            synced_count += 1
-                
-                if synced_count == 0:
-                    print(f"⚠️ [DEBUG] 警告：未找到對應的指導老師，無法同步到 resume_teacher 表")
-                    # 調試：檢查該履歷對應的公司
-                    cursor.execute("""
-                        SELECT sja.company_id, ic.company_name, ic.advisor_user_id
-                        FROM student_job_applications sja
-                        JOIN internship_companies ic ON sja.company_id = ic.id
-                        WHERE sja.resume_id = %s AND sja.student_id = %s
-                    """, (resume_id, student_user_id))
-                    company_info = cursor.fetchall()
-                    print(f"   - 該履歷對應的公司資訊: {company_info}")
-                else:
-                    conn.commit()  # 提交同步的數據
-                    print(f"✅ [DEBUG] 成功同步 {synced_count} 筆記錄到 resume_teacher 表")
+                            INSERT INTO resume_teacher (application_id, teacher_id, review_status, comment, reviewed_at, created_at)
+                            VALUES (%s, %s, 'uploaded', NULL, NULL, NOW())
+                        """, (aid, advisor_user_id))
+                conn.commit()
         
         # 4. 取得審核者姓名
         cursor.execute("SELECT name, role FROM users WHERE id = %s", (user_id,))
@@ -8781,8 +8646,8 @@ def get_teacher_review_resumes():
             # 如果表存在，嘗試檢查表是否有必要的欄位
             if resume_teacher_table_exists:
                 try:
-                    # 檢查表是否有必要的欄位
-                    required_columns = ['resume_id', 'teacher_id', 'review_status']
+                    # 檢查表是否有必要的欄位（審核對象為投遞紀錄 application_id）
+                    required_columns = ['application_id', 'teacher_id', 'review_status']
                     # 先獲取當前資料庫名稱
                     cursor.execute("SELECT DATABASE() as db_name")
                     db_result = cursor.fetchone()
@@ -8793,7 +8658,7 @@ def get_teacher_review_resumes():
                         FROM INFORMATION_SCHEMA.COLUMNS 
                         WHERE TABLE_SCHEMA = %s
                         AND TABLE_NAME = 'resume_teacher' 
-                        AND COLUMN_NAME IN ('resume_id', 'teacher_id', 'review_status')
+                        AND COLUMN_NAME IN ('application_id', 'teacher_id', 'review_status')
                     """, (db_name,))
                     existing_columns = [row['COLUMN_NAME'] for row in cursor.fetchall()]
                     missing_columns = [col for col in required_columns if col not in existing_columns]
@@ -8808,118 +8673,46 @@ def get_teacher_review_resumes():
                         print(f"⚠️ resume_teacher 表缺少必要欄位: {', '.join(missing_columns)}")
                         print(f"   請執行以下 SQL 來修復表結構：")
                         for col in missing_columns:
-                            if col == 'resume_id':
-                                print(f"   ALTER TABLE resume_teacher ADD COLUMN resume_id INT NOT NULL AFTER id;")
+                            if col == 'application_id':
+                                print(f"   ALTER TABLE resume_teacher ADD COLUMN application_id INT NOT NULL AFTER id;")
                             elif col == 'teacher_id':
-                                print(f"   ALTER TABLE resume_teacher ADD COLUMN teacher_id INT NOT NULL AFTER resume_id;")
+                                print(f"   ALTER TABLE resume_teacher ADD COLUMN teacher_id INT NOT NULL AFTER application_id;")
                             elif col == 'review_status':
                                 print(f"   ALTER TABLE resume_teacher ADD COLUMN review_status ENUM('uploaded', 'approved', 'rejected') DEFAULT 'uploaded' AFTER teacher_id;")
                         resume_teacher_table_exists = False
                     else:
                         print(f"✅ resume_teacher 表結構正確，所有必要欄位都存在")
-                        # 表結構正確時，執行手動同步：將所有 approved 履歷同步到 resume_teacher 表
+                        # 表結構正確時，執行手動同步：以投遞紀錄(application_id)為單位同步到 resume_teacher
                         try:
-                            print(f"🔍 [DEBUG] 開始手動同步 approved 履歷到 resume_teacher 表...")
-                            
-                            # 先檢查所有履歷的狀態
-                            cursor.execute("SELECT id, status, user_id FROM resumes")
-                            all_resumes = cursor.fetchall()
-                            print(f"🔍 [DEBUG] 資料庫中所有履歷: {len(all_resumes)} 筆")
-                            for r in all_resumes:
-                                print(f"   - resume_id={r['id']}, status={r['status']}, user_id={r['user_id']}")
-                            
-                            # 查詢所有 approved 狀態的履歷
-                            cursor.execute("SELECT id, status, user_id FROM resumes WHERE status = 'approved'")
-                            approved_resumes = cursor.fetchall()
-                            print(f"🔍 [DEBUG] approved 狀態的履歷: {len(approved_resumes)} 筆")
-                            
-                            # 查詢需要同步的履歷（有 student_job_applications 和 advisor_user_id）
+                            print(f"🔍 [DEBUG] 開始手動同步 approved 投遞到 resume_teacher 表...")
                             cursor.execute("""
-                                SELECT DISTINCT 
-                                    r.id AS resume_id,
-                                    r.user_id AS student_id,
-                                    r.status AS resume_status,
-                                    ic.advisor_user_id,
-                                    ic.company_name,
-                                    sja.id AS application_id
+                                SELECT sja.id AS application_id, ic.advisor_user_id
                                 FROM resumes r
                                 INNER JOIN student_job_applications sja ON sja.resume_id = r.id AND sja.student_id = r.user_id
                                 JOIN internship_companies ic ON sja.company_id = ic.id
-                                WHERE r.status = 'approved'
-                                  AND ic.advisor_user_id IS NOT NULL
+                                WHERE r.status = 'approved' AND ic.advisor_user_id IS NOT NULL
                             """)
-                            resumes_to_sync = cursor.fetchall()
-                            print(f"🔍 [DEBUG] 找到 {len(resumes_to_sync)} 筆符合同步條件的履歷")
-                            for r in resumes_to_sync:
-                                print(f"   - resume_id={r['resume_id']}, student_id={r['student_id']}, advisor_user_id={r['advisor_user_id']}, company={r['company_name']}")
-                            
+                            apps_to_sync = cursor.fetchall()
                             synced_count = 0
-                            for resume_info in resumes_to_sync:
-                                resume_id = resume_info['resume_id']
-                                advisor_user_id = resume_info['advisor_user_id']
-                                
-                                if resume_id and advisor_user_id:
-                                    # 檢查是否已存在記錄（使用反引號處理可能的特殊欄位名稱）
-                                    try:
-                                        cursor.execute("""
-                                            SELECT id FROM resume_teacher 
-                                            WHERE `resume_id` = %s AND teacher_id = %s
-                                        """, (resume_id, advisor_user_id))
-                                    except:
-                                        # 如果失敗，嘗試使用 resume.id（帶點號）
-                                        try:
-                                            cursor.execute("""
-                                                SELECT id FROM resume_teacher 
-                                                WHERE `resume.id` = %s AND teacher_id = %s
-                                            """, (resume_id, advisor_user_id))
-                                        except Exception as e:
-                                            print(f"⚠️ 檢查 resume_teacher 記錄時發生錯誤: {e}")
-                                            continue
-                                    
-                                    existing = cursor.fetchone()
-                                    
-                                    if existing:
-                                        # 如果已存在，更新為 uploaded 狀態（讓指導老師可以審核）
-                                        try:
-                                            cursor.execute("""
-                                                UPDATE resume_teacher SET 
-                                                    review_status='uploaded',
-                                                    reviewed_at=NULL
-                                                WHERE `resume_id` = %s AND teacher_id = %s
-                                            """, (resume_id, advisor_user_id))
-                                        except:
-                                            cursor.execute("""
-                                                UPDATE resume_teacher SET 
-                                                    review_status='uploaded',
-                                                    reviewed_at=NULL
-                                                WHERE `resume.id` = %s AND teacher_id = %s
-                                            """, (resume_id, advisor_user_id))
-                                        print(f"   ✅ 更新 resume_teacher: resume_id={resume_id}, teacher_id={advisor_user_id}")
-                                    else:
-                                        # 如果不存在，創建新記錄
-                                        try:
-                                            cursor.execute("""
-                                                INSERT INTO resume_teacher (resume_id, teacher_id, review_status, comment, reviewed_at, created_at)
-                                                VALUES (%s, %s, 'uploaded', NULL, NULL, NOW())
-                                            """, (resume_id, advisor_user_id))
-                                        except:
-                                            # 如果失敗，嘗試使用 resume.id（帶點號）
-                                            cursor.execute("""
-                                                INSERT INTO resume_teacher (`resume.id`, teacher_id, review_status, comment, reviewed_at, created_at)
-                                                VALUES (%s, %s, 'uploaded', NULL, NULL, NOW())
-                                            """, (resume_id, advisor_user_id))
-                                        print(f"   ✅ 創建 resume_teacher: resume_id={resume_id}, teacher_id={advisor_user_id}")
-                                    synced_count += 1
-                            
+                            for app_info in apps_to_sync:
+                                application_id = app_info['application_id']
+                                advisor_user_id = app_info['advisor_user_id']
+                                if not application_id or not advisor_user_id:
+                                    continue
+                                cursor.execute("SELECT id FROM resume_teacher WHERE application_id = %s AND teacher_id = %s", (application_id, advisor_user_id))
+                                if cursor.fetchone():
+                                    cursor.execute("UPDATE resume_teacher SET review_status='uploaded', reviewed_at=NULL WHERE application_id = %s AND teacher_id = %s", (application_id, advisor_user_id))
+                                else:
+                                    cursor.execute("""
+                                        INSERT INTO resume_teacher (application_id, teacher_id, review_status, comment, reviewed_at, created_at)
+                                        VALUES (%s, %s, 'uploaded', NULL, NULL, NOW())
+                                    """, (application_id, advisor_user_id))
+                                synced_count += 1
                             if synced_count > 0:
                                 conn.commit()
-                                print(f"✅ 手動同步成功：已同步 {synced_count} 筆履歷到 resume_teacher 表")
+                                print(f"✅ 手動同步成功：已同步 {synced_count} 筆投遞到 resume_teacher 表")
                             else:
-                                print(f"⚠️ [DEBUG] 沒有需要同步的履歷")
-                                print(f"   可能原因：")
-                                print(f"   1. 履歷狀態不是 'approved'（當前 approved 履歷數: {len(approved_resumes)}）")
-                                print(f"   2. 履歷對應的公司沒有設置 advisor_user_id")
-                                print(f"   3. student_job_applications 表中沒有對應的記錄")
+                                print(f"⚠️ [DEBUG] 沒有需要同步的投遞")
                         except Exception as sync_error:
                             print(f"⚠️ 手動同步時發生錯誤: {sync_error}")
                             import traceback
@@ -8947,6 +8740,7 @@ def get_teacher_review_resumes():
                     r.original_filename,
                     r.status AS display_status,
                     rt.review_status AS review_status,
+                    rt.comment AS comment,
                     sja.id AS application_id,
                     sja.applied_at,
                     ic.company_name,
@@ -8955,7 +8749,7 @@ def get_teacher_review_resumes():
                 LEFT JOIN classes c ON u.class_id = c.id
                 INNER JOIN student_job_applications sja ON sja.student_id = u.id
                 LEFT JOIN resumes r ON r.id = sja.resume_id AND r.user_id = u.id
-                LEFT JOIN resume_teacher rt ON rt.resume_id = r.id AND rt.teacher_id = %s
+                LEFT JOIN resume_teacher rt ON rt.application_id = sja.id AND rt.teacher_id = %s
                 JOIN internship_companies ic ON sja.company_id = ic.id
                 LEFT JOIN internship_jobs ij ON sja.job_id = ij.id
                 WHERE u.role = 'student' 
@@ -9169,6 +8963,7 @@ def update_resume_field():
 
         data = request.get_json() or {}
         resume_id = data.get('resume_id')
+        application_id = data.get('application_id')
         field = data.get('field')
         value = (data.get('value') or '').strip()
 
@@ -9177,18 +8972,34 @@ def update_resume_field():
             "note": "note"
         }
 
-        try:
-            resume_id = int(resume_id)
-        except (TypeError, ValueError):
-            return jsonify({"success": False, "message": "resume_id 必須是數字"}), 400
-
         if field not in allowed_fields:
             return jsonify({"success": False, "message": "參數錯誤"}), 400
 
+        role = session.get('role')
+        user_id = session['user_id']
         conn = get_db()
         cursor = conn.cursor(dictionary=True)
 
-        # 先找出 resume 的 owner
+        if role == "teacher" and application_id is not None and field == "comment":
+            try:
+                application_id_int = int(application_id)
+            except (TypeError, ValueError):
+                cursor.close()
+                conn.close()
+                return jsonify({"success": False, "message": "application_id 必須是數字"}), 400
+            cursor.execute("UPDATE resume_teacher SET comment = %s WHERE application_id = %s AND teacher_id = %s", (value, application_id_int, user_id))
+            conn.commit()
+            cursor.close()
+            conn.close()
+            return jsonify({"success": True, "field": field, "application_id": application_id_int})
+
+        try:
+            resume_id = int(resume_id)
+        except (TypeError, ValueError):
+            cursor.close()
+            conn.close()
+            return jsonify({"success": False, "message": "resume_id 必須是數字"}), 400
+
         cursor.execute("SELECT user_id FROM resumes WHERE id = %s", (resume_id,))
         r = cursor.fetchone()
         if not r:
@@ -9197,10 +9008,6 @@ def update_resume_field():
             return jsonify({"success": False, "message": "找不到該履歷"}), 404
 
         owner_id = r['user_id']
-
-        # 取得使用者角色與 id
-        role = session.get('role')
-        user_id = session['user_id']
 
         if role == "class_teacher":
             if not teacher_manages_class(cursor, user_id, get_user_by_id(cursor, owner_id)['class_id']):
@@ -13641,8 +13448,8 @@ def get_teacher_review_resumes():
             # 如果表存在，嘗試檢查表是否有必要的欄位
             if resume_teacher_table_exists:
                 try:
-                    # 檢查表是否有必要的欄位
-                    required_columns = ['resume_id', 'teacher_id', 'review_status']
+                    # 檢查表是否有必要的欄位（審核對象為投遞紀錄 application_id）
+                    required_columns = ['application_id', 'teacher_id', 'review_status']
                     # 先獲取當前資料庫名稱
                     cursor.execute("SELECT DATABASE() as db_name")
                     db_result = cursor.fetchone()
@@ -13653,7 +13460,7 @@ def get_teacher_review_resumes():
                         FROM INFORMATION_SCHEMA.COLUMNS 
                         WHERE TABLE_SCHEMA = %s
                         AND TABLE_NAME = 'resume_teacher' 
-                        AND COLUMN_NAME IN ('resume_id', 'teacher_id', 'review_status')
+                        AND COLUMN_NAME IN ('application_id', 'teacher_id', 'review_status')
                     """, (db_name,))
                     existing_columns = [row['COLUMN_NAME'] for row in cursor.fetchall()]
                     missing_columns = [col for col in required_columns if col not in existing_columns]
@@ -13668,118 +13475,46 @@ def get_teacher_review_resumes():
                         print(f"⚠️ resume_teacher 表缺少必要欄位: {', '.join(missing_columns)}")
                         print(f"   請執行以下 SQL 來修復表結構：")
                         for col in missing_columns:
-                            if col == 'resume_id':
-                                print(f"   ALTER TABLE resume_teacher ADD COLUMN resume_id INT NOT NULL AFTER id;")
+                            if col == 'application_id':
+                                print(f"   ALTER TABLE resume_teacher ADD COLUMN application_id INT NOT NULL AFTER id;")
                             elif col == 'teacher_id':
-                                print(f"   ALTER TABLE resume_teacher ADD COLUMN teacher_id INT NOT NULL AFTER resume_id;")
+                                print(f"   ALTER TABLE resume_teacher ADD COLUMN teacher_id INT NOT NULL AFTER application_id;")
                             elif col == 'review_status':
                                 print(f"   ALTER TABLE resume_teacher ADD COLUMN review_status ENUM('uploaded', 'approved', 'rejected') DEFAULT 'uploaded' AFTER teacher_id;")
                         resume_teacher_table_exists = False
                     else:
                         print(f"✅ resume_teacher 表結構正確，所有必要欄位都存在")
-                        # 表結構正確時，執行手動同步：將所有 approved 履歷同步到 resume_teacher 表
+                        # 表結構正確時，執行手動同步：以投遞紀錄(application_id)為單位同步到 resume_teacher
                         try:
-                            print(f"🔍 [DEBUG] 開始手動同步 approved 履歷到 resume_teacher 表...")
-                            
-                            # 先檢查所有履歷的狀態
-                            cursor.execute("SELECT id, status, user_id FROM resumes")
-                            all_resumes = cursor.fetchall()
-                            print(f"🔍 [DEBUG] 資料庫中所有履歷: {len(all_resumes)} 筆")
-                            for r in all_resumes:
-                                print(f"   - resume_id={r['id']}, status={r['status']}, user_id={r['user_id']}")
-                            
-                            # 查詢所有 approved 狀態的履歷
-                            cursor.execute("SELECT id, status, user_id FROM resumes WHERE status = 'approved'")
-                            approved_resumes = cursor.fetchall()
-                            print(f"🔍 [DEBUG] approved 狀態的履歷: {len(approved_resumes)} 筆")
-                            
-                            # 查詢需要同步的履歷（有 student_job_applications 和 advisor_user_id）
+                            print(f"🔍 [DEBUG] 開始手動同步 approved 投遞到 resume_teacher 表...")
                             cursor.execute("""
-                                SELECT DISTINCT 
-                                    r.id AS resume_id,
-                                    r.user_id AS student_id,
-                                    r.status AS resume_status,
-                                    ic.advisor_user_id,
-                                    ic.company_name,
-                                    sja.id AS application_id
+                                SELECT sja.id AS application_id, ic.advisor_user_id
                                 FROM resumes r
                                 INNER JOIN student_job_applications sja ON sja.resume_id = r.id AND sja.student_id = r.user_id
                                 JOIN internship_companies ic ON sja.company_id = ic.id
-                                WHERE r.status = 'approved'
-                                  AND ic.advisor_user_id IS NOT NULL
+                                WHERE r.status = 'approved' AND ic.advisor_user_id IS NOT NULL
                             """)
-                            resumes_to_sync = cursor.fetchall()
-                            print(f"🔍 [DEBUG] 找到 {len(resumes_to_sync)} 筆符合同步條件的履歷")
-                            for r in resumes_to_sync:
-                                print(f"   - resume_id={r['resume_id']}, student_id={r['student_id']}, advisor_user_id={r['advisor_user_id']}, company={r['company_name']}")
-                            
+                            apps_to_sync = cursor.fetchall()
                             synced_count = 0
-                            for resume_info in resumes_to_sync:
-                                resume_id = resume_info['resume_id']
-                                advisor_user_id = resume_info['advisor_user_id']
-                                
-                                if resume_id and advisor_user_id:
-                                    # 檢查是否已存在記錄（使用反引號處理可能的特殊欄位名稱）
-                                    try:
-                                        cursor.execute("""
-                                            SELECT id FROM resume_teacher 
-                                            WHERE `resume_id` = %s AND teacher_id = %s
-                                        """, (resume_id, advisor_user_id))
-                                    except:
-                                        # 如果失敗，嘗試使用 resume.id（帶點號）
-                                        try:
-                                            cursor.execute("""
-                                                SELECT id FROM resume_teacher 
-                                                WHERE `resume.id` = %s AND teacher_id = %s
-                                            """, (resume_id, advisor_user_id))
-                                        except Exception as e:
-                                            print(f"⚠️ 檢查 resume_teacher 記錄時發生錯誤: {e}")
-                                            continue
-                                    
-                                    existing = cursor.fetchone()
-                                    
-                                    if existing:
-                                        # 如果已存在，更新為 uploaded 狀態（讓指導老師可以審核）
-                                        try:
-                                            cursor.execute("""
-                                                UPDATE resume_teacher SET 
-                                                    review_status='uploaded',
-                                                    reviewed_at=NULL
-                                                WHERE `resume_id` = %s AND teacher_id = %s
-                                            """, (resume_id, advisor_user_id))
-                                        except:
-                                            cursor.execute("""
-                                                UPDATE resume_teacher SET 
-                                                    review_status='uploaded',
-                                                    reviewed_at=NULL
-                                                WHERE `resume.id` = %s AND teacher_id = %s
-                                            """, (resume_id, advisor_user_id))
-                                        print(f"   ✅ 更新 resume_teacher: resume_id={resume_id}, teacher_id={advisor_user_id}")
-                                    else:
-                                        # 如果不存在，創建新記錄
-                                        try:
-                                            cursor.execute("""
-                                                INSERT INTO resume_teacher (resume_id, teacher_id, review_status, comment, reviewed_at, created_at)
-                                                VALUES (%s, %s, 'uploaded', NULL, NULL, NOW())
-                                            """, (resume_id, advisor_user_id))
-                                        except:
-                                            # 如果失敗，嘗試使用 resume.id（帶點號）
-                                            cursor.execute("""
-                                                INSERT INTO resume_teacher (`resume.id`, teacher_id, review_status, comment, reviewed_at, created_at)
-                                                VALUES (%s, %s, 'uploaded', NULL, NULL, NOW())
-                                            """, (resume_id, advisor_user_id))
-                                        print(f"   ✅ 創建 resume_teacher: resume_id={resume_id}, teacher_id={advisor_user_id}")
-                                    synced_count += 1
-                            
+                            for app_info in apps_to_sync:
+                                application_id = app_info['application_id']
+                                advisor_user_id = app_info['advisor_user_id']
+                                if not application_id or not advisor_user_id:
+                                    continue
+                                cursor.execute("SELECT id FROM resume_teacher WHERE application_id = %s AND teacher_id = %s", (application_id, advisor_user_id))
+                                if cursor.fetchone():
+                                    cursor.execute("UPDATE resume_teacher SET review_status='uploaded', reviewed_at=NULL WHERE application_id = %s AND teacher_id = %s", (application_id, advisor_user_id))
+                                else:
+                                    cursor.execute("""
+                                        INSERT INTO resume_teacher (application_id, teacher_id, review_status, comment, reviewed_at, created_at)
+                                        VALUES (%s, %s, 'uploaded', NULL, NULL, NOW())
+                                    """, (application_id, advisor_user_id))
+                                synced_count += 1
                             if synced_count > 0:
                                 conn.commit()
-                                print(f"✅ 手動同步成功：已同步 {synced_count} 筆履歷到 resume_teacher 表")
+                                print(f"✅ 手動同步成功：已同步 {synced_count} 筆投遞到 resume_teacher 表")
                             else:
-                                print(f"⚠️ [DEBUG] 沒有需要同步的履歷")
-                                print(f"   可能原因：")
-                                print(f"   1. 履歷狀態不是 'approved'（當前 approved 履歷數: {len(approved_resumes)}）")
-                                print(f"   2. 履歷對應的公司沒有設置 advisor_user_id")
-                                print(f"   3. student_job_applications 表中沒有對應的記錄")
+                                print(f"⚠️ [DEBUG] 沒有需要同步的投遞")
                         except Exception as sync_error:
                             print(f"⚠️ 手動同步時發生錯誤: {sync_error}")
                             import traceback
@@ -13807,6 +13542,7 @@ def get_teacher_review_resumes():
                     r.original_filename,
                     r.status AS display_status,
                     rt.review_status AS review_status,
+                    rt.comment AS comment,
                     sja.id AS application_id,
                     sja.applied_at,
                     ic.company_name,
@@ -13815,7 +13551,7 @@ def get_teacher_review_resumes():
                 LEFT JOIN classes c ON u.class_id = c.id
                 INNER JOIN student_job_applications sja ON sja.student_id = u.id
                 LEFT JOIN resumes r ON r.id = sja.resume_id AND r.user_id = u.id
-                LEFT JOIN resume_teacher rt ON rt.resume_id = r.id AND rt.teacher_id = %s
+                LEFT JOIN resume_teacher rt ON rt.application_id = sja.id AND rt.teacher_id = %s
                 JOIN internship_companies ic ON sja.company_id = ic.id
                 LEFT JOIN internship_jobs ij ON sja.job_id = ij.id
                 WHERE u.role = 'student' 
@@ -14029,6 +13765,7 @@ def update_resume_field():
 
         data = request.get_json() or {}
         resume_id = data.get('resume_id')
+        application_id = data.get('application_id')
         field = data.get('field')
         value = (data.get('value') or '').strip()
 
@@ -14037,18 +13774,34 @@ def update_resume_field():
             "note": "note"
         }
 
-        try:
-            resume_id = int(resume_id)
-        except (TypeError, ValueError):
-            return jsonify({"success": False, "message": "resume_id 必須是數字"}), 400
-
         if field not in allowed_fields:
             return jsonify({"success": False, "message": "參數錯誤"}), 400
 
+        role = session.get('role')
+        user_id = session['user_id']
         conn = get_db()
         cursor = conn.cursor(dictionary=True)
 
-        # 先找出 resume 的 owner
+        if role == "teacher" and application_id is not None and field == "comment":
+            try:
+                application_id_int = int(application_id)
+            except (TypeError, ValueError):
+                cursor.close()
+                conn.close()
+                return jsonify({"success": False, "message": "application_id 必須是數字"}), 400
+            cursor.execute("UPDATE resume_teacher SET comment = %s WHERE application_id = %s AND teacher_id = %s", (value, application_id_int, user_id))
+            conn.commit()
+            cursor.close()
+            conn.close()
+            return jsonify({"success": True, "field": field, "application_id": application_id_int})
+
+        try:
+            resume_id = int(resume_id)
+        except (TypeError, ValueError):
+            cursor.close()
+            conn.close()
+            return jsonify({"success": False, "message": "resume_id 必須是數字"}), 400
+
         cursor.execute("SELECT user_id FROM resumes WHERE id = %s", (resume_id,))
         r = cursor.fetchone()
         if not r:
@@ -14057,10 +13810,6 @@ def update_resume_field():
             return jsonify({"success": False, "message": "找不到該履歷"}), 404
 
         owner_id = r['user_id']
-
-        # 取得使用者角色與 id
-        role = session.get('role')
-        user_id = session['user_id']
 
         if role == "class_teacher":
             if not teacher_manages_class(cursor, user_id, get_user_by_id(cursor, owner_id)['class_id']):
@@ -18501,8 +18250,8 @@ def get_teacher_review_resumes():
             # 如果表存在，嘗試檢查表是否有必要的欄位
             if resume_teacher_table_exists:
                 try:
-                    # 檢查表是否有必要的欄位
-                    required_columns = ['resume_id', 'teacher_id', 'review_status']
+                    # 檢查表是否有必要的欄位（審核對象為投遞紀錄 application_id）
+                    required_columns = ['application_id', 'teacher_id', 'review_status']
                     # 先獲取當前資料庫名稱
                     cursor.execute("SELECT DATABASE() as db_name")
                     db_result = cursor.fetchone()
@@ -18513,7 +18262,7 @@ def get_teacher_review_resumes():
                         FROM INFORMATION_SCHEMA.COLUMNS 
                         WHERE TABLE_SCHEMA = %s
                         AND TABLE_NAME = 'resume_teacher' 
-                        AND COLUMN_NAME IN ('resume_id', 'teacher_id', 'review_status')
+                        AND COLUMN_NAME IN ('application_id', 'teacher_id', 'review_status')
                     """, (db_name,))
                     existing_columns = [row['COLUMN_NAME'] for row in cursor.fetchall()]
                     missing_columns = [col for col in required_columns if col not in existing_columns]
@@ -18528,118 +18277,46 @@ def get_teacher_review_resumes():
                         print(f"⚠️ resume_teacher 表缺少必要欄位: {', '.join(missing_columns)}")
                         print(f"   請執行以下 SQL 來修復表結構：")
                         for col in missing_columns:
-                            if col == 'resume_id':
-                                print(f"   ALTER TABLE resume_teacher ADD COLUMN resume_id INT NOT NULL AFTER id;")
+                            if col == 'application_id':
+                                print(f"   ALTER TABLE resume_teacher ADD COLUMN application_id INT NOT NULL AFTER id;")
                             elif col == 'teacher_id':
-                                print(f"   ALTER TABLE resume_teacher ADD COLUMN teacher_id INT NOT NULL AFTER resume_id;")
+                                print(f"   ALTER TABLE resume_teacher ADD COLUMN teacher_id INT NOT NULL AFTER application_id;")
                             elif col == 'review_status':
                                 print(f"   ALTER TABLE resume_teacher ADD COLUMN review_status ENUM('uploaded', 'approved', 'rejected') DEFAULT 'uploaded' AFTER teacher_id;")
                         resume_teacher_table_exists = False
                     else:
                         print(f"✅ resume_teacher 表結構正確，所有必要欄位都存在")
-                        # 表結構正確時，執行手動同步：將所有 approved 履歷同步到 resume_teacher 表
+                        # 表結構正確時，執行手動同步：以投遞紀錄(application_id)為單位同步到 resume_teacher
                         try:
-                            print(f"🔍 [DEBUG] 開始手動同步 approved 履歷到 resume_teacher 表...")
-                            
-                            # 先檢查所有履歷的狀態
-                            cursor.execute("SELECT id, status, user_id FROM resumes")
-                            all_resumes = cursor.fetchall()
-                            print(f"🔍 [DEBUG] 資料庫中所有履歷: {len(all_resumes)} 筆")
-                            for r in all_resumes:
-                                print(f"   - resume_id={r['id']}, status={r['status']}, user_id={r['user_id']}")
-                            
-                            # 查詢所有 approved 狀態的履歷
-                            cursor.execute("SELECT id, status, user_id FROM resumes WHERE status = 'approved'")
-                            approved_resumes = cursor.fetchall()
-                            print(f"🔍 [DEBUG] approved 狀態的履歷: {len(approved_resumes)} 筆")
-                            
-                            # 查詢需要同步的履歷（有 student_job_applications 和 advisor_user_id）
+                            print(f"🔍 [DEBUG] 開始手動同步 approved 投遞到 resume_teacher 表...")
                             cursor.execute("""
-                                SELECT DISTINCT 
-                                    r.id AS resume_id,
-                                    r.user_id AS student_id,
-                                    r.status AS resume_status,
-                                    ic.advisor_user_id,
-                                    ic.company_name,
-                                    sja.id AS application_id
+                                SELECT sja.id AS application_id, ic.advisor_user_id
                                 FROM resumes r
                                 INNER JOIN student_job_applications sja ON sja.resume_id = r.id AND sja.student_id = r.user_id
                                 JOIN internship_companies ic ON sja.company_id = ic.id
-                                WHERE r.status = 'approved'
-                                  AND ic.advisor_user_id IS NOT NULL
+                                WHERE r.status = 'approved' AND ic.advisor_user_id IS NOT NULL
                             """)
-                            resumes_to_sync = cursor.fetchall()
-                            print(f"🔍 [DEBUG] 找到 {len(resumes_to_sync)} 筆符合同步條件的履歷")
-                            for r in resumes_to_sync:
-                                print(f"   - resume_id={r['resume_id']}, student_id={r['student_id']}, advisor_user_id={r['advisor_user_id']}, company={r['company_name']}")
-                            
+                            apps_to_sync = cursor.fetchall()
                             synced_count = 0
-                            for resume_info in resumes_to_sync:
-                                resume_id = resume_info['resume_id']
-                                advisor_user_id = resume_info['advisor_user_id']
-                                
-                                if resume_id and advisor_user_id:
-                                    # 檢查是否已存在記錄（使用反引號處理可能的特殊欄位名稱）
-                                    try:
-                                        cursor.execute("""
-                                            SELECT id FROM resume_teacher 
-                                            WHERE `resume_id` = %s AND teacher_id = %s
-                                        """, (resume_id, advisor_user_id))
-                                    except:
-                                        # 如果失敗，嘗試使用 resume.id（帶點號）
-                                        try:
-                                            cursor.execute("""
-                                                SELECT id FROM resume_teacher 
-                                                WHERE `resume.id` = %s AND teacher_id = %s
-                                            """, (resume_id, advisor_user_id))
-                                        except Exception as e:
-                                            print(f"⚠️ 檢查 resume_teacher 記錄時發生錯誤: {e}")
-                                            continue
-                                    
-                                    existing = cursor.fetchone()
-                                    
-                                    if existing:
-                                        # 如果已存在，更新為 uploaded 狀態（讓指導老師可以審核）
-                                        try:
-                                            cursor.execute("""
-                                                UPDATE resume_teacher SET 
-                                                    review_status='uploaded',
-                                                    reviewed_at=NULL
-                                                WHERE `resume_id` = %s AND teacher_id = %s
-                                            """, (resume_id, advisor_user_id))
-                                        except:
-                                            cursor.execute("""
-                                                UPDATE resume_teacher SET 
-                                                    review_status='uploaded',
-                                                    reviewed_at=NULL
-                                                WHERE `resume.id` = %s AND teacher_id = %s
-                                            """, (resume_id, advisor_user_id))
-                                        print(f"   ✅ 更新 resume_teacher: resume_id={resume_id}, teacher_id={advisor_user_id}")
-                                    else:
-                                        # 如果不存在，創建新記錄
-                                        try:
-                                            cursor.execute("""
-                                                INSERT INTO resume_teacher (resume_id, teacher_id, review_status, comment, reviewed_at, created_at)
-                                                VALUES (%s, %s, 'uploaded', NULL, NULL, NOW())
-                                            """, (resume_id, advisor_user_id))
-                                        except:
-                                            # 如果失敗，嘗試使用 resume.id（帶點號）
-                                            cursor.execute("""
-                                                INSERT INTO resume_teacher (`resume.id`, teacher_id, review_status, comment, reviewed_at, created_at)
-                                                VALUES (%s, %s, 'uploaded', NULL, NULL, NOW())
-                                            """, (resume_id, advisor_user_id))
-                                        print(f"   ✅ 創建 resume_teacher: resume_id={resume_id}, teacher_id={advisor_user_id}")
-                                    synced_count += 1
-                            
+                            for app_info in apps_to_sync:
+                                application_id = app_info['application_id']
+                                advisor_user_id = app_info['advisor_user_id']
+                                if not application_id or not advisor_user_id:
+                                    continue
+                                cursor.execute("SELECT id FROM resume_teacher WHERE application_id = %s AND teacher_id = %s", (application_id, advisor_user_id))
+                                if cursor.fetchone():
+                                    cursor.execute("UPDATE resume_teacher SET review_status='uploaded', reviewed_at=NULL WHERE application_id = %s AND teacher_id = %s", (application_id, advisor_user_id))
+                                else:
+                                    cursor.execute("""
+                                        INSERT INTO resume_teacher (application_id, teacher_id, review_status, comment, reviewed_at, created_at)
+                                        VALUES (%s, %s, 'uploaded', NULL, NULL, NOW())
+                                    """, (application_id, advisor_user_id))
+                                synced_count += 1
                             if synced_count > 0:
                                 conn.commit()
-                                print(f"✅ 手動同步成功：已同步 {synced_count} 筆履歷到 resume_teacher 表")
+                                print(f"✅ 手動同步成功：已同步 {synced_count} 筆投遞到 resume_teacher 表")
                             else:
-                                print(f"⚠️ [DEBUG] 沒有需要同步的履歷")
-                                print(f"   可能原因：")
-                                print(f"   1. 履歷狀態不是 'approved'（當前 approved 履歷數: {len(approved_resumes)}）")
-                                print(f"   2. 履歷對應的公司沒有設置 advisor_user_id")
-                                print(f"   3. student_job_applications 表中沒有對應的記錄")
+                                print(f"⚠️ [DEBUG] 沒有需要同步的投遞")
                         except Exception as sync_error:
                             print(f"⚠️ 手動同步時發生錯誤: {sync_error}")
                             import traceback
@@ -18667,6 +18344,7 @@ def get_teacher_review_resumes():
                     r.original_filename,
                     r.status AS display_status,
                     rt.review_status AS review_status,
+                    rt.comment AS comment,
                     sja.id AS application_id,
                     sja.applied_at,
                     ic.company_name,
@@ -18675,7 +18353,7 @@ def get_teacher_review_resumes():
                 LEFT JOIN classes c ON u.class_id = c.id
                 INNER JOIN student_job_applications sja ON sja.student_id = u.id
                 LEFT JOIN resumes r ON r.id = sja.resume_id AND r.user_id = u.id
-                LEFT JOIN resume_teacher rt ON rt.resume_id = r.id AND rt.teacher_id = %s
+                LEFT JOIN resume_teacher rt ON rt.application_id = sja.id AND rt.teacher_id = %s
                 JOIN internship_companies ic ON sja.company_id = ic.id
                 LEFT JOIN internship_jobs ij ON sja.job_id = ij.id
                 WHERE u.role = 'student' 
@@ -18889,6 +18567,7 @@ def update_resume_field():
 
         data = request.get_json() or {}
         resume_id = data.get('resume_id')
+        application_id = data.get('application_id')
         field = data.get('field')
         value = (data.get('value') or '').strip()
 
@@ -18897,18 +18576,34 @@ def update_resume_field():
             "note": "note"
         }
 
-        try:
-            resume_id = int(resume_id)
-        except (TypeError, ValueError):
-            return jsonify({"success": False, "message": "resume_id 必須是數字"}), 400
-
         if field not in allowed_fields:
             return jsonify({"success": False, "message": "參數錯誤"}), 400
 
+        role = session.get('role')
+        user_id = session['user_id']
         conn = get_db()
         cursor = conn.cursor(dictionary=True)
 
-        # 先找出 resume 的 owner
+        if role == "teacher" and application_id is not None and field == "comment":
+            try:
+                application_id_int = int(application_id)
+            except (TypeError, ValueError):
+                cursor.close()
+                conn.close()
+                return jsonify({"success": False, "message": "application_id 必須是數字"}), 400
+            cursor.execute("UPDATE resume_teacher SET comment = %s WHERE application_id = %s AND teacher_id = %s", (value, application_id_int, user_id))
+            conn.commit()
+            cursor.close()
+            conn.close()
+            return jsonify({"success": True, "field": field, "application_id": application_id_int})
+
+        try:
+            resume_id = int(resume_id)
+        except (TypeError, ValueError):
+            cursor.close()
+            conn.close()
+            return jsonify({"success": False, "message": "resume_id 必須是數字"}), 400
+
         cursor.execute("SELECT user_id FROM resumes WHERE id = %s", (resume_id,))
         r = cursor.fetchone()
         if not r:
@@ -18917,10 +18612,6 @@ def update_resume_field():
             return jsonify({"success": False, "message": "找不到該履歷"}), 404
 
         owner_id = r['user_id']
-
-        # 取得使用者角色與 id
-        role = session.get('role')
-        user_id = session['user_id']
 
         if role == "class_teacher":
             if not teacher_manages_class(cursor, user_id, get_user_by_id(cursor, owner_id)['class_id']):
@@ -23361,8 +23052,8 @@ def get_teacher_review_resumes():
             # 如果表存在，嘗試檢查表是否有必要的欄位
             if resume_teacher_table_exists:
                 try:
-                    # 檢查表是否有必要的欄位
-                    required_columns = ['resume_id', 'teacher_id', 'review_status']
+                    # 檢查表是否有必要的欄位（審核對象為投遞紀錄 application_id）
+                    required_columns = ['application_id', 'teacher_id', 'review_status']
                     # 先獲取當前資料庫名稱
                     cursor.execute("SELECT DATABASE() as db_name")
                     db_result = cursor.fetchone()
@@ -23373,7 +23064,7 @@ def get_teacher_review_resumes():
                         FROM INFORMATION_SCHEMA.COLUMNS 
                         WHERE TABLE_SCHEMA = %s
                         AND TABLE_NAME = 'resume_teacher' 
-                        AND COLUMN_NAME IN ('resume_id', 'teacher_id', 'review_status')
+                        AND COLUMN_NAME IN ('application_id', 'teacher_id', 'review_status')
                     """, (db_name,))
                     existing_columns = [row['COLUMN_NAME'] for row in cursor.fetchall()]
                     missing_columns = [col for col in required_columns if col not in existing_columns]
@@ -23388,118 +23079,46 @@ def get_teacher_review_resumes():
                         print(f"⚠️ resume_teacher 表缺少必要欄位: {', '.join(missing_columns)}")
                         print(f"   請執行以下 SQL 來修復表結構：")
                         for col in missing_columns:
-                            if col == 'resume_id':
-                                print(f"   ALTER TABLE resume_teacher ADD COLUMN resume_id INT NOT NULL AFTER id;")
+                            if col == 'application_id':
+                                print(f"   ALTER TABLE resume_teacher ADD COLUMN application_id INT NOT NULL AFTER id;")
                             elif col == 'teacher_id':
-                                print(f"   ALTER TABLE resume_teacher ADD COLUMN teacher_id INT NOT NULL AFTER resume_id;")
+                                print(f"   ALTER TABLE resume_teacher ADD COLUMN teacher_id INT NOT NULL AFTER application_id;")
                             elif col == 'review_status':
                                 print(f"   ALTER TABLE resume_teacher ADD COLUMN review_status ENUM('uploaded', 'approved', 'rejected') DEFAULT 'uploaded' AFTER teacher_id;")
                         resume_teacher_table_exists = False
                     else:
                         print(f"✅ resume_teacher 表結構正確，所有必要欄位都存在")
-                        # 表結構正確時，執行手動同步：將所有 approved 履歷同步到 resume_teacher 表
+                        # 表結構正確時，執行手動同步：以投遞紀錄(application_id)為單位同步到 resume_teacher
                         try:
-                            print(f"🔍 [DEBUG] 開始手動同步 approved 履歷到 resume_teacher 表...")
-                            
-                            # 先檢查所有履歷的狀態
-                            cursor.execute("SELECT id, status, user_id FROM resumes")
-                            all_resumes = cursor.fetchall()
-                            print(f"🔍 [DEBUG] 資料庫中所有履歷: {len(all_resumes)} 筆")
-                            for r in all_resumes:
-                                print(f"   - resume_id={r['id']}, status={r['status']}, user_id={r['user_id']}")
-                            
-                            # 查詢所有 approved 狀態的履歷
-                            cursor.execute("SELECT id, status, user_id FROM resumes WHERE status = 'approved'")
-                            approved_resumes = cursor.fetchall()
-                            print(f"🔍 [DEBUG] approved 狀態的履歷: {len(approved_resumes)} 筆")
-                            
-                            # 查詢需要同步的履歷（有 student_job_applications 和 advisor_user_id）
+                            print(f"🔍 [DEBUG] 開始手動同步 approved 投遞到 resume_teacher 表...")
                             cursor.execute("""
-                                SELECT DISTINCT 
-                                    r.id AS resume_id,
-                                    r.user_id AS student_id,
-                                    r.status AS resume_status,
-                                    ic.advisor_user_id,
-                                    ic.company_name,
-                                    sja.id AS application_id
+                                SELECT sja.id AS application_id, ic.advisor_user_id
                                 FROM resumes r
                                 INNER JOIN student_job_applications sja ON sja.resume_id = r.id AND sja.student_id = r.user_id
                                 JOIN internship_companies ic ON sja.company_id = ic.id
-                                WHERE r.status = 'approved'
-                                  AND ic.advisor_user_id IS NOT NULL
+                                WHERE r.status = 'approved' AND ic.advisor_user_id IS NOT NULL
                             """)
-                            resumes_to_sync = cursor.fetchall()
-                            print(f"🔍 [DEBUG] 找到 {len(resumes_to_sync)} 筆符合同步條件的履歷")
-                            for r in resumes_to_sync:
-                                print(f"   - resume_id={r['resume_id']}, student_id={r['student_id']}, advisor_user_id={r['advisor_user_id']}, company={r['company_name']}")
-                            
+                            apps_to_sync = cursor.fetchall()
                             synced_count = 0
-                            for resume_info in resumes_to_sync:
-                                resume_id = resume_info['resume_id']
-                                advisor_user_id = resume_info['advisor_user_id']
-                                
-                                if resume_id and advisor_user_id:
-                                    # 檢查是否已存在記錄（使用反引號處理可能的特殊欄位名稱）
-                                    try:
-                                        cursor.execute("""
-                                            SELECT id FROM resume_teacher 
-                                            WHERE `resume_id` = %s AND teacher_id = %s
-                                        """, (resume_id, advisor_user_id))
-                                    except:
-                                        # 如果失敗，嘗試使用 resume.id（帶點號）
-                                        try:
-                                            cursor.execute("""
-                                                SELECT id FROM resume_teacher 
-                                                WHERE `resume.id` = %s AND teacher_id = %s
-                                            """, (resume_id, advisor_user_id))
-                                        except Exception as e:
-                                            print(f"⚠️ 檢查 resume_teacher 記錄時發生錯誤: {e}")
-                                            continue
-                                    
-                                    existing = cursor.fetchone()
-                                    
-                                    if existing:
-                                        # 如果已存在，更新為 uploaded 狀態（讓指導老師可以審核）
-                                        try:
-                                            cursor.execute("""
-                                                UPDATE resume_teacher SET 
-                                                    review_status='uploaded',
-                                                    reviewed_at=NULL
-                                                WHERE `resume_id` = %s AND teacher_id = %s
-                                            """, (resume_id, advisor_user_id))
-                                        except:
-                                            cursor.execute("""
-                                                UPDATE resume_teacher SET 
-                                                    review_status='uploaded',
-                                                    reviewed_at=NULL
-                                                WHERE `resume.id` = %s AND teacher_id = %s
-                                            """, (resume_id, advisor_user_id))
-                                        print(f"   ✅ 更新 resume_teacher: resume_id={resume_id}, teacher_id={advisor_user_id}")
-                                    else:
-                                        # 如果不存在，創建新記錄
-                                        try:
-                                            cursor.execute("""
-                                                INSERT INTO resume_teacher (resume_id, teacher_id, review_status, comment, reviewed_at, created_at)
-                                                VALUES (%s, %s, 'uploaded', NULL, NULL, NOW())
-                                            """, (resume_id, advisor_user_id))
-                                        except:
-                                            # 如果失敗，嘗試使用 resume.id（帶點號）
-                                            cursor.execute("""
-                                                INSERT INTO resume_teacher (`resume.id`, teacher_id, review_status, comment, reviewed_at, created_at)
-                                                VALUES (%s, %s, 'uploaded', NULL, NULL, NOW())
-                                            """, (resume_id, advisor_user_id))
-                                        print(f"   ✅ 創建 resume_teacher: resume_id={resume_id}, teacher_id={advisor_user_id}")
-                                    synced_count += 1
-                            
+                            for app_info in apps_to_sync:
+                                application_id = app_info['application_id']
+                                advisor_user_id = app_info['advisor_user_id']
+                                if not application_id or not advisor_user_id:
+                                    continue
+                                cursor.execute("SELECT id FROM resume_teacher WHERE application_id = %s AND teacher_id = %s", (application_id, advisor_user_id))
+                                if cursor.fetchone():
+                                    cursor.execute("UPDATE resume_teacher SET review_status='uploaded', reviewed_at=NULL WHERE application_id = %s AND teacher_id = %s", (application_id, advisor_user_id))
+                                else:
+                                    cursor.execute("""
+                                        INSERT INTO resume_teacher (application_id, teacher_id, review_status, comment, reviewed_at, created_at)
+                                        VALUES (%s, %s, 'uploaded', NULL, NULL, NOW())
+                                    """, (application_id, advisor_user_id))
+                                synced_count += 1
                             if synced_count > 0:
                                 conn.commit()
-                                print(f"✅ 手動同步成功：已同步 {synced_count} 筆履歷到 resume_teacher 表")
+                                print(f"✅ 手動同步成功：已同步 {synced_count} 筆投遞到 resume_teacher 表")
                             else:
-                                print(f"⚠️ [DEBUG] 沒有需要同步的履歷")
-                                print(f"   可能原因：")
-                                print(f"   1. 履歷狀態不是 'approved'（當前 approved 履歷數: {len(approved_resumes)}）")
-                                print(f"   2. 履歷對應的公司沒有設置 advisor_user_id")
-                                print(f"   3. student_job_applications 表中沒有對應的記錄")
+                                print(f"⚠️ [DEBUG] 沒有需要同步的投遞")
                         except Exception as sync_error:
                             print(f"⚠️ 手動同步時發生錯誤: {sync_error}")
                             import traceback
@@ -23527,6 +23146,7 @@ def get_teacher_review_resumes():
                     r.original_filename,
                     r.status AS display_status,
                     rt.review_status AS review_status,
+                    rt.comment AS comment,
                     sja.id AS application_id,
                     sja.applied_at,
                     ic.company_name,
@@ -23535,7 +23155,7 @@ def get_teacher_review_resumes():
                 LEFT JOIN classes c ON u.class_id = c.id
                 INNER JOIN student_job_applications sja ON sja.student_id = u.id
                 LEFT JOIN resumes r ON r.id = sja.resume_id AND r.user_id = u.id
-                LEFT JOIN resume_teacher rt ON rt.resume_id = r.id AND rt.teacher_id = %s
+                LEFT JOIN resume_teacher rt ON rt.application_id = sja.id AND rt.teacher_id = %s
                 JOIN internship_companies ic ON sja.company_id = ic.id
                 LEFT JOIN internship_jobs ij ON sja.job_id = ij.id
                 WHERE u.role = 'student' 
@@ -23749,6 +23369,7 @@ def update_resume_field():
 
         data = request.get_json() or {}
         resume_id = data.get('resume_id')
+        application_id = data.get('application_id')
         field = data.get('field')
         value = (data.get('value') or '').strip()
 
@@ -23757,18 +23378,34 @@ def update_resume_field():
             "note": "note"
         }
 
-        try:
-            resume_id = int(resume_id)
-        except (TypeError, ValueError):
-            return jsonify({"success": False, "message": "resume_id 必須是數字"}), 400
-
         if field not in allowed_fields:
             return jsonify({"success": False, "message": "參數錯誤"}), 400
 
+        role = session.get('role')
+        user_id = session['user_id']
         conn = get_db()
         cursor = conn.cursor(dictionary=True)
 
-        # 先找出 resume 的 owner
+        if role == "teacher" and application_id is not None and field == "comment":
+            try:
+                application_id_int = int(application_id)
+            except (TypeError, ValueError):
+                cursor.close()
+                conn.close()
+                return jsonify({"success": False, "message": "application_id 必須是數字"}), 400
+            cursor.execute("UPDATE resume_teacher SET comment = %s WHERE application_id = %s AND teacher_id = %s", (value, application_id_int, user_id))
+            conn.commit()
+            cursor.close()
+            conn.close()
+            return jsonify({"success": True, "field": field, "application_id": application_id_int})
+
+        try:
+            resume_id = int(resume_id)
+        except (TypeError, ValueError):
+            cursor.close()
+            conn.close()
+            return jsonify({"success": False, "message": "resume_id 必須是數字"}), 400
+
         cursor.execute("SELECT user_id FROM resumes WHERE id = %s", (resume_id,))
         r = cursor.fetchone()
         if not r:
@@ -23777,10 +23414,6 @@ def update_resume_field():
             return jsonify({"success": False, "message": "找不到該履歷"}), 404
 
         owner_id = r['user_id']
-
-        # 取得使用者角色與 id
-        role = session.get('role')
-        user_id = session['user_id']
 
         if role == "class_teacher":
             if not teacher_manages_class(cursor, user_id, get_user_by_id(cursor, owner_id)['class_id']):
@@ -28221,8 +27854,8 @@ def get_teacher_review_resumes():
             # 如果表存在，嘗試檢查表是否有必要的欄位
             if resume_teacher_table_exists:
                 try:
-                    # 檢查表是否有必要的欄位
-                    required_columns = ['resume_id', 'teacher_id', 'review_status']
+                    # 檢查表是否有必要的欄位（審核對象為投遞紀錄 application_id）
+                    required_columns = ['application_id', 'teacher_id', 'review_status']
                     # 先獲取當前資料庫名稱
                     cursor.execute("SELECT DATABASE() as db_name")
                     db_result = cursor.fetchone()
@@ -28233,7 +27866,7 @@ def get_teacher_review_resumes():
                         FROM INFORMATION_SCHEMA.COLUMNS 
                         WHERE TABLE_SCHEMA = %s
                         AND TABLE_NAME = 'resume_teacher' 
-                        AND COLUMN_NAME IN ('resume_id', 'teacher_id', 'review_status')
+                        AND COLUMN_NAME IN ('application_id', 'teacher_id', 'review_status')
                     """, (db_name,))
                     existing_columns = [row['COLUMN_NAME'] for row in cursor.fetchall()]
                     missing_columns = [col for col in required_columns if col not in existing_columns]
@@ -28248,118 +27881,46 @@ def get_teacher_review_resumes():
                         print(f"⚠️ resume_teacher 表缺少必要欄位: {', '.join(missing_columns)}")
                         print(f"   請執行以下 SQL 來修復表結構：")
                         for col in missing_columns:
-                            if col == 'resume_id':
-                                print(f"   ALTER TABLE resume_teacher ADD COLUMN resume_id INT NOT NULL AFTER id;")
+                            if col == 'application_id':
+                                print(f"   ALTER TABLE resume_teacher ADD COLUMN application_id INT NOT NULL AFTER id;")
                             elif col == 'teacher_id':
-                                print(f"   ALTER TABLE resume_teacher ADD COLUMN teacher_id INT NOT NULL AFTER resume_id;")
+                                print(f"   ALTER TABLE resume_teacher ADD COLUMN teacher_id INT NOT NULL AFTER application_id;")
                             elif col == 'review_status':
                                 print(f"   ALTER TABLE resume_teacher ADD COLUMN review_status ENUM('uploaded', 'approved', 'rejected') DEFAULT 'uploaded' AFTER teacher_id;")
                         resume_teacher_table_exists = False
                     else:
                         print(f"✅ resume_teacher 表結構正確，所有必要欄位都存在")
-                        # 表結構正確時，執行手動同步：將所有 approved 履歷同步到 resume_teacher 表
+                        # 表結構正確時，執行手動同步：以投遞紀錄(application_id)為單位同步到 resume_teacher
                         try:
-                            print(f"🔍 [DEBUG] 開始手動同步 approved 履歷到 resume_teacher 表...")
-                            
-                            # 先檢查所有履歷的狀態
-                            cursor.execute("SELECT id, status, user_id FROM resumes")
-                            all_resumes = cursor.fetchall()
-                            print(f"🔍 [DEBUG] 資料庫中所有履歷: {len(all_resumes)} 筆")
-                            for r in all_resumes:
-                                print(f"   - resume_id={r['id']}, status={r['status']}, user_id={r['user_id']}")
-                            
-                            # 查詢所有 approved 狀態的履歷
-                            cursor.execute("SELECT id, status, user_id FROM resumes WHERE status = 'approved'")
-                            approved_resumes = cursor.fetchall()
-                            print(f"🔍 [DEBUG] approved 狀態的履歷: {len(approved_resumes)} 筆")
-                            
-                            # 查詢需要同步的履歷（有 student_job_applications 和 advisor_user_id）
+                            print(f"🔍 [DEBUG] 開始手動同步 approved 投遞到 resume_teacher 表...")
                             cursor.execute("""
-                                SELECT DISTINCT 
-                                    r.id AS resume_id,
-                                    r.user_id AS student_id,
-                                    r.status AS resume_status,
-                                    ic.advisor_user_id,
-                                    ic.company_name,
-                                    sja.id AS application_id
+                                SELECT sja.id AS application_id, ic.advisor_user_id
                                 FROM resumes r
                                 INNER JOIN student_job_applications sja ON sja.resume_id = r.id AND sja.student_id = r.user_id
                                 JOIN internship_companies ic ON sja.company_id = ic.id
-                                WHERE r.status = 'approved'
-                                  AND ic.advisor_user_id IS NOT NULL
+                                WHERE r.status = 'approved' AND ic.advisor_user_id IS NOT NULL
                             """)
-                            resumes_to_sync = cursor.fetchall()
-                            print(f"🔍 [DEBUG] 找到 {len(resumes_to_sync)} 筆符合同步條件的履歷")
-                            for r in resumes_to_sync:
-                                print(f"   - resume_id={r['resume_id']}, student_id={r['student_id']}, advisor_user_id={r['advisor_user_id']}, company={r['company_name']}")
-                            
+                            apps_to_sync = cursor.fetchall()
                             synced_count = 0
-                            for resume_info in resumes_to_sync:
-                                resume_id = resume_info['resume_id']
-                                advisor_user_id = resume_info['advisor_user_id']
-                                
-                                if resume_id and advisor_user_id:
-                                    # 檢查是否已存在記錄（使用反引號處理可能的特殊欄位名稱）
-                                    try:
-                                        cursor.execute("""
-                                            SELECT id FROM resume_teacher 
-                                            WHERE `resume_id` = %s AND teacher_id = %s
-                                        """, (resume_id, advisor_user_id))
-                                    except:
-                                        # 如果失敗，嘗試使用 resume.id（帶點號）
-                                        try:
-                                            cursor.execute("""
-                                                SELECT id FROM resume_teacher 
-                                                WHERE `resume.id` = %s AND teacher_id = %s
-                                            """, (resume_id, advisor_user_id))
-                                        except Exception as e:
-                                            print(f"⚠️ 檢查 resume_teacher 記錄時發生錯誤: {e}")
-                                            continue
-                                    
-                                    existing = cursor.fetchone()
-                                    
-                                    if existing:
-                                        # 如果已存在，更新為 uploaded 狀態（讓指導老師可以審核）
-                                        try:
-                                            cursor.execute("""
-                                                UPDATE resume_teacher SET 
-                                                    review_status='uploaded',
-                                                    reviewed_at=NULL
-                                                WHERE `resume_id` = %s AND teacher_id = %s
-                                            """, (resume_id, advisor_user_id))
-                                        except:
-                                            cursor.execute("""
-                                                UPDATE resume_teacher SET 
-                                                    review_status='uploaded',
-                                                    reviewed_at=NULL
-                                                WHERE `resume.id` = %s AND teacher_id = %s
-                                            """, (resume_id, advisor_user_id))
-                                        print(f"   ✅ 更新 resume_teacher: resume_id={resume_id}, teacher_id={advisor_user_id}")
-                                    else:
-                                        # 如果不存在，創建新記錄
-                                        try:
-                                            cursor.execute("""
-                                                INSERT INTO resume_teacher (resume_id, teacher_id, review_status, comment, reviewed_at, created_at)
-                                                VALUES (%s, %s, 'uploaded', NULL, NULL, NOW())
-                                            """, (resume_id, advisor_user_id))
-                                        except:
-                                            # 如果失敗，嘗試使用 resume.id（帶點號）
-                                            cursor.execute("""
-                                                INSERT INTO resume_teacher (`resume.id`, teacher_id, review_status, comment, reviewed_at, created_at)
-                                                VALUES (%s, %s, 'uploaded', NULL, NULL, NOW())
-                                            """, (resume_id, advisor_user_id))
-                                        print(f"   ✅ 創建 resume_teacher: resume_id={resume_id}, teacher_id={advisor_user_id}")
-                                    synced_count += 1
-                            
+                            for app_info in apps_to_sync:
+                                application_id = app_info['application_id']
+                                advisor_user_id = app_info['advisor_user_id']
+                                if not application_id or not advisor_user_id:
+                                    continue
+                                cursor.execute("SELECT id FROM resume_teacher WHERE application_id = %s AND teacher_id = %s", (application_id, advisor_user_id))
+                                if cursor.fetchone():
+                                    cursor.execute("UPDATE resume_teacher SET review_status='uploaded', reviewed_at=NULL WHERE application_id = %s AND teacher_id = %s", (application_id, advisor_user_id))
+                                else:
+                                    cursor.execute("""
+                                        INSERT INTO resume_teacher (application_id, teacher_id, review_status, comment, reviewed_at, created_at)
+                                        VALUES (%s, %s, 'uploaded', NULL, NULL, NOW())
+                                    """, (application_id, advisor_user_id))
+                                synced_count += 1
                             if synced_count > 0:
                                 conn.commit()
-                                print(f"✅ 手動同步成功：已同步 {synced_count} 筆履歷到 resume_teacher 表")
+                                print(f"✅ 手動同步成功：已同步 {synced_count} 筆投遞到 resume_teacher 表")
                             else:
-                                print(f"⚠️ [DEBUG] 沒有需要同步的履歷")
-                                print(f"   可能原因：")
-                                print(f"   1. 履歷狀態不是 'approved'（當前 approved 履歷數: {len(approved_resumes)}）")
-                                print(f"   2. 履歷對應的公司沒有設置 advisor_user_id")
-                                print(f"   3. student_job_applications 表中沒有對應的記錄")
+                                print(f"⚠️ [DEBUG] 沒有需要同步的投遞")
                         except Exception as sync_error:
                             print(f"⚠️ 手動同步時發生錯誤: {sync_error}")
                             import traceback
@@ -28387,6 +27948,7 @@ def get_teacher_review_resumes():
                     r.original_filename,
                     r.status AS display_status,
                     rt.review_status AS review_status,
+                    rt.comment AS comment,
                     sja.id AS application_id,
                     sja.applied_at,
                     ic.company_name,
@@ -28395,7 +27957,7 @@ def get_teacher_review_resumes():
                 LEFT JOIN classes c ON u.class_id = c.id
                 INNER JOIN student_job_applications sja ON sja.student_id = u.id
                 LEFT JOIN resumes r ON r.id = sja.resume_id AND r.user_id = u.id
-                LEFT JOIN resume_teacher rt ON rt.resume_id = r.id AND rt.teacher_id = %s
+                LEFT JOIN resume_teacher rt ON rt.application_id = sja.id AND rt.teacher_id = %s
                 JOIN internship_companies ic ON sja.company_id = ic.id
                 LEFT JOIN internship_jobs ij ON sja.job_id = ij.id
                 WHERE u.role = 'student' 
@@ -28609,6 +28171,7 @@ def update_resume_field():
 
         data = request.get_json() or {}
         resume_id = data.get('resume_id')
+        application_id = data.get('application_id')
         field = data.get('field')
         value = (data.get('value') or '').strip()
 
@@ -28617,18 +28180,34 @@ def update_resume_field():
             "note": "note"
         }
 
-        try:
-            resume_id = int(resume_id)
-        except (TypeError, ValueError):
-            return jsonify({"success": False, "message": "resume_id 必須是數字"}), 400
-
         if field not in allowed_fields:
             return jsonify({"success": False, "message": "參數錯誤"}), 400
 
+        role = session.get('role')
+        user_id = session['user_id']
         conn = get_db()
         cursor = conn.cursor(dictionary=True)
 
-        # 先找出 resume 的 owner
+        if role == "teacher" and application_id is not None and field == "comment":
+            try:
+                application_id_int = int(application_id)
+            except (TypeError, ValueError):
+                cursor.close()
+                conn.close()
+                return jsonify({"success": False, "message": "application_id 必須是數字"}), 400
+            cursor.execute("UPDATE resume_teacher SET comment = %s WHERE application_id = %s AND teacher_id = %s", (value, application_id_int, user_id))
+            conn.commit()
+            cursor.close()
+            conn.close()
+            return jsonify({"success": True, "field": field, "application_id": application_id_int})
+
+        try:
+            resume_id = int(resume_id)
+        except (TypeError, ValueError):
+            cursor.close()
+            conn.close()
+            return jsonify({"success": False, "message": "resume_id 必須是數字"}), 400
+
         cursor.execute("SELECT user_id FROM resumes WHERE id = %s", (resume_id,))
         r = cursor.fetchone()
         if not r:
@@ -28637,10 +28216,6 @@ def update_resume_field():
             return jsonify({"success": False, "message": "找不到該履歷"}), 404
 
         owner_id = r['user_id']
-
-        # 取得使用者角色與 id
-        role = session.get('role')
-        user_id = session['user_id']
 
         if role == "class_teacher":
             if not teacher_manages_class(cursor, user_id, get_user_by_id(cursor, owner_id)['class_id']):

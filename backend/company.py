@@ -1820,7 +1820,6 @@ def apply_company():
         """, (resume_id, user_id))
         
         # 插入投遞記錄到 student_job_applications 表（不再使用 student_preferences）
-        # 檢查是否已經投遞過（允許重複投遞，但可以記錄）
         cursor.execute("""
             INSERT INTO student_job_applications
             (student_id, company_id, job_id, resume_id, status, applied_at)
@@ -1833,9 +1832,47 @@ def apply_company():
             'submitted',
             datetime.now()
         ))
-        
-        # 注意：resume_applications 記錄將在指導老師審核通過時才創建
-        # 這裡只記錄學生的投遞意願到 student_job_applications 表
+        application_id = cursor.lastrowid
+
+        # 為該筆投遞建立指導老師審核紀錄（resume_teacher 以 application_id 關聯，一筆投遞一筆審核）
+        cursor.execute("SELECT advisor_user_id FROM internship_companies WHERE id = %s", (company_id,))
+        company_row = cursor.fetchone()
+        if company_row and company_row.get('advisor_user_id'):
+            try:
+                cursor.execute("""
+                    INSERT INTO resume_teacher (application_id, teacher_id, review_status, comment, reviewed_at, created_at)
+                    VALUES (%s, %s, 'uploaded', NULL, NULL, NOW())
+                """, (application_id, company_row['advisor_user_id']))
+            except Exception as rt_err:
+                traceback.print_exc()
+                print(f"⚠️ [resume_teacher] 寫入失敗 company_id={company_id}, application_id={application_id}, advisor_user_id={company_row['advisor_user_id']}: {rt_err}")
+        else:
+            if not company_row:
+                print(f"⚠️ [resume_teacher] 略過：找不到公司 company_id={company_id}")
+            else:
+                print(f"⚠️ [resume_teacher] 略過：公司未設定指導老師 (advisor_user_id 為空) company_id={company_id}，請在實習公司管理為該公司設定「指導老師」")
+
+        # 同時創建 resume_applications 記錄（給廠商審核用）
+        cursor.execute("""
+            SELECT id FROM resume_applications
+            WHERE resumes_id = %s AND internship_companies_id = %s
+        """, (resume_id, company_id))
+        existing_record = cursor.fetchone()
+        if not existing_record:
+            cursor.execute("""
+                INSERT INTO resume_applications
+                (resumes_id, internship_companies_id, apply_status, interview_status, interview_result, created_at)
+                VALUES (%s, %s, %s, %s, %s, NOW())
+            """, (resume_id, company_id, 'applied', 'none', 'pending'))
+        else:
+            cursor.execute("""
+                UPDATE resume_applications
+                SET apply_status = 'applied',
+                    interview_status = 'none',
+                    interview_result = 'pending',
+                    updated_at = NOW()
+                WHERE id = %s
+            """, (existing_record['id'],))
         
         conn.commit()
         return jsonify({"success": True, "message": "投遞成功"})

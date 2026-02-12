@@ -93,7 +93,7 @@
       color: white;
     }
 
-    /* 通知鈴鐺：固定於頂端列右側（與 student_home 一致） */
+    /* 通知鈴鐺：固定於頂端列右側，未讀數量顯示於鈴鐺右上角（與 student_home / notifications 一致） */
     .notification-bell {
       position: relative;
       top: 2px;
@@ -371,7 +371,7 @@
         window.location.href = "/login";
       });
 
-    // 未讀通知數量（與 student_home 一致）
+    // 載入未讀通知數量（與 student_home / notifications 一致，頂端列鈴鐺顯示未讀數字）
     function loadUnreadNotificationCount() {
       fetch('/api/my_notifications/unread_count')
         .then(response => response.json())
@@ -391,8 +391,12 @@
         })
         .catch(() => {});
     }
-    loadUnreadNotificationCount();
-    setInterval(loadUnreadNotificationCount, 30000);
+
+    // 頁面載入時獲取未讀通知數量；每 30 秒更新一次（與 student_home 一致）
+    document.addEventListener('DOMContentLoaded', function() {
+      loadUnreadNotificationCount();
+      setInterval(loadUnreadNotificationCount, 30000);
+    });
 
     // 選單開關邏輯
     const menuBtn = document.getElementById("menu-btn");
