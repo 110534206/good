@@ -4449,9 +4449,9 @@ def review_resume(resume_id):
                         print(f"✅ 班導通過履歷，已將 {updated_count} 筆學生志願序狀態更新為 'approved'，將同步到指導老師審核頁面")
                 elif user_role == 'teacher':
                     # 指導老師通過履歷：同步傳給對應的廠商
-                    # 1. 找到該學生投遞的所有公司（通過 student_job_applications 表）
+                    # 1. 找到該學生投遞的所有申請（通過 student_job_applications 表）
                     cursor.execute("""
-                        SELECT DISTINCT company_id, resume_id
+                        SELECT id, job_id, company_id, resume_id
                         FROM student_job_applications
                         WHERE student_id = %s AND resume_id = %s
                     """, (student_user_id, resume_id))
@@ -4461,15 +4461,16 @@ def review_resume(resume_id):
                         # 2. 更新對應的 resume_applications 記錄，確保廠商可以看到履歷
                         updated_companies = []
                         for app in applications:
+                            application_id = app['id']  # student_job_applications.id
+                            job_id = app['job_id']  # internship_jobs.id
                             company_id = app['company_id']
-                            app_resume_id = app['resume_id']
                             
                             # 檢查 resume_applications 表是否已有記錄
                             cursor.execute("""
                                 SELECT id, apply_status
                                 FROM resume_applications
-                                WHERE resumes_id = %s AND internship_companies_id = %s
-                            """, (app_resume_id, company_id))
+                                WHERE application_id = %s AND job_id = %s
+                            """, (application_id, job_id))
                             existing_ra = cursor.fetchone()
                             
                             if existing_ra:
@@ -4486,9 +4487,9 @@ def review_resume(resume_id):
                                 # 如果不存在，創建新記錄
                                 cursor.execute("""
                                     INSERT INTO resume_applications
-                                    (resumes_id, internship_companies_id, apply_status, interview_status, interview_result, created_at)
+                                    (application_id, job_id, apply_status, interview_status, interview_result, created_at)
                                     VALUES (%s, %s, %s, %s, %s, NOW())
-                                """, (app_resume_id, company_id, 'applied', 'none', 'pending'))
+                                """, (application_id, job_id, 'applied', 'none', 'pending'))
                                 updated_companies.append(company_id)
                         
                         if updated_companies:
