@@ -1302,6 +1302,10 @@ def get_vendor_resumes():
             # 如果存在志願序，則使用志願序的狀態和公司資訊。
             preference_order = None
             resume_id = row.get("id")
+            preference_id = None  # 初始化變數
+            job_id = None  # 初始化變數
+            company_id = None  # 初始化變數
+            company_name = ""  # 初始化變數
             
             if filtered_preferences:
                 # 簡單地取第一個志願序的狀態作為展示狀態。
@@ -1316,12 +1320,13 @@ def get_vendor_resumes():
                 job_slots = pref_to_show.get("job_slots") or 0
                 
                 # 優先從 resume_applications 表讀取狀態和留言
-                if resume_id and company_id:
+                # 使用 application_id (preference_id) 和 job_id 來查詢
+                if preference_id and job_id:
                     cursor.execute("""
                         SELECT apply_status, company_comment, interview_status, interview_time, interview_result
                         FROM resume_applications
-                        WHERE resumes_id = %s AND internship_companies_id = %s
-                    """, (resume_id, company_id))
+                        WHERE application_id = %s AND job_id = %s
+                    """, (preference_id, job_id))
                     ra_result = cursor.fetchone()
                     
                     if ra_result:
@@ -1383,12 +1388,13 @@ def get_vendor_resumes():
             interview_result = None  # 面試結果
             
             # 優先從 resume_applications 表讀取
-            if resume_id and company_id:
+            # 使用 application_id (preference_id) 和 job_id 來查詢
+            if preference_id and job_id:
                 cursor.execute("""
                     SELECT company_comment, interview_status, interview_time, interview_result
                     FROM resume_applications
-                    WHERE resumes_id = %s AND internship_companies_id = %s
-                """, (resume_id, company_id))
+                    WHERE application_id = %s AND job_id = %s
+                """, (preference_id, job_id))
                 ra_result = cursor.fetchone()
                 
                 if ra_result:
