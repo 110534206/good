@@ -11,6 +11,31 @@ import traceback
 
 admission_bp = Blueprint("admission_bp", __name__, url_prefix="/admission")
 
+def _get_active_semester_year(cursor):
+    """取得當前啟用學期學年（semesters 表 is_active=1 的 code 前三碼，如 1132->113）"""
+    cursor.execute("SELECT code FROM semesters WHERE is_active = 1 LIMIT 1")
+    row = cursor.fetchone()
+    if not row or row.get('code') is None:
+        cursor.execute("SELECT code FROM semesters WHERE code IS NOT NULL AND code != '' ORDER BY code DESC LIMIT 1")
+        row = cursor.fetchone()
+    if not row or row.get('code') is None:
+        cursor.execute("SELECT code FROM semesters ORDER BY id DESC LIMIT 1")
+        row = cursor.fetchone()
+    raw = row.get('code') if row else None
+    if raw is None:
+        return None
+    if isinstance(raw, int):
+        return raw // 10 if raw >= 100 else None
+    if isinstance(raw, bytes):
+        raw = raw.decode('utf-8', errors='ignore')
+    code = str(raw).strip()
+    if len(code) >= 3:
+        try:
+            return int(code[:3])
+        except (TypeError, ValueError):
+            pass
+    return None
+
 # =========================================================
 # 頁面路由：查看錄取結果
 # =========================================================
@@ -2072,6 +2097,213 @@ def director_matching_results():
         conn.close()
 
 # =========================================================
+# API: 查看主任確認後的媒合結果（供其他角色使用，如 TA、admin）
+# =========================================================
+@admission_bp.route("/api/final_matching_results", methods=["GET"])
+def final_matching_results():
+    """查看主任確認後的媒合結果（只顯示 Approved 狀態），允許 TA、admin、director 等角色訪問"""
+    if 'user_id' not in session:
+        return jsonify({"success": False, "message": "未登入"}), 401
+    
+    user_role = session.get('role')
+    # 允許 director、ta、admin、class_teacher、teacher 訪問
+    if user_role not in ['director', 'ta', 'admin', 'class_teacher', 'teacher']:
+        return jsonify({"success": False, "message": "未授權"}), 403
+    
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+    
+    try:
+        # 獲取當前學期ID和代碼
+        current_semester_id = get_current_semester_id(cursor)
+        current_semester_code = get_current_semester_code(cursor)
+        if not current_semester_id or not current_semester_code:
+            return jsonify({"success": False, "message": "無法取得當前學期"}), 500
+        
+        # 從 manage_director 表讀取資料，只顯示主任已確認（Approved）的記錄
+        query = """
+            SELECT 
+                md.match_id,
+                md.vendor_id,
+                md.student_id,
+                md.preference_id,
+                md.original_type,
+                md.original_rank,
+                md.director_decision,
+                md.final_rank,
+                md.updated_at,
+                COALESCE(sp.company_id, md.vendor_id) AS company_id,
+                sp.preference_order,
+                COALESCE(sp.job_id, (
+                    SELECT id FROM internship_jobs 
+                    WHERE company_id = COALESCE(sp.company_id, md.vendor_id) 
+                    ORDER BY id ASC LIMIT 1
+                )) AS job_id,
+                COALESCE(ic.company_name, v.name) AS company_name,
+                u.name AS student_name,
+                u.username AS student_number,
+                u.email AS student_email,
+                u.admission_year AS admission_year,
+                c.name AS class_name,
+                c.department AS class_department,
+                v.name AS vendor_name,
+                COALESCE(ij.title, (
+                    SELECT title FROM internship_jobs 
+                    WHERE company_id = COALESCE(sp.company_id, md.vendor_id) 
+                    ORDER BY id ASC LIMIT 1
+                )) AS job_title,
+                COALESCE(ij.slots, (
+                    SELECT slots FROM internship_jobs 
+                    WHERE company_id = COALESCE(sp.company_id, md.vendor_id) 
+                    ORDER BY id ASC LIMIT 1
+                )) AS job_slots
+            FROM manage_director md
+            LEFT JOIN student_preferences sp ON md.preference_id = sp.id
+            LEFT JOIN internship_companies ic ON COALESCE(sp.company_id, md.vendor_id) = ic.id
+            LEFT JOIN internship_jobs ij ON sp.job_id = ij.id
+            LEFT JOIN users u ON md.student_id = u.id
+            LEFT JOIN classes c ON u.class_id = c.id
+            LEFT JOIN users v ON md.vendor_id = v.id
+            WHERE md.semester_id = %s
+            AND md.director_decision = 'Approved'  -- 只顯示主任已確認的記錄
+            ORDER BY 
+                COALESCE(sp.company_id, md.vendor_id), 
+                COALESCE(sp.job_id, (
+                    SELECT id FROM internship_jobs 
+                    WHERE company_id = COALESCE(sp.company_id, md.vendor_id) 
+                    ORDER BY id ASC LIMIT 1
+                ), 0), 
+                CASE WHEN md.final_rank IS NOT NULL THEN 0 ELSE 1 END,
+                COALESCE(md.final_rank, 999) ASC,
+                md.original_rank ASC
+        """
+        cursor.execute(query, (current_semester_id,))
+        all_results = cursor.fetchall() or []
+        
+        # 獲取當前學年用於計算年級
+        active_semester_year = _get_active_semester_year(cursor)
+        
+        # 格式化結果並組織資料結構（與 director_matching_results 相同）
+        formatted_results = []
+        
+        for result in all_results:
+            # 判斷是否為正取或備取
+            is_reserve = False
+            slot_index = None
+            
+            if result.get("final_rank") is not None:
+                # 有 final_rank 表示正取
+                is_reserve = False
+                slot_index = result.get("final_rank")
+            else:
+                # 沒有 final_rank 表示備取
+                is_reserve = True
+            
+            # 計算年級
+            grade_display = ''
+            admission_year = result.get("admission_year")
+            class_name = result.get("class_name") or ''
+            
+            # 如果沒有 admission_year，嘗試從學號前3碼獲取
+            if admission_year is None or str(admission_year).strip() == '':
+                student_number = result.get("student_number")
+                if student_number and len(str(student_number)) >= 3:
+                    try:
+                        admission_year = int(str(student_number)[:3])
+                    except (TypeError, ValueError):
+                        pass
+            
+            # 計算年級
+            if active_semester_year is not None and admission_year is not None:
+                try:
+                    grade_num = active_semester_year - int(admission_year) + 1
+                    grade_labels = ('一', '二', '三', '四', '五', '六')
+                    if 1 <= grade_num <= 6:
+                        grade_char = grade_labels[grade_num - 1]
+                        # 從 class_name 中提取班級名稱（例如「孝」）
+                        class_char = ''
+                        if class_name:
+                            # 提取最後一個字作為班級名稱
+                            class_char = class_name[-1] if len(class_name) > 0 else ''
+                        grade_display = f"{grade_char}{class_char}" if class_char else f"{grade_char}年級"
+                    elif grade_num > 0:
+                        grade_display = f"{grade_num}年級"
+                except (TypeError, ValueError):
+                    pass
+            
+            formatted_result = {
+                "id": result.get("match_id"),
+                "student_id": result.get("student_id"),
+                "student_name": result.get("student_name"),
+                "student_number": result.get("student_number"),
+                "class_name": result.get("class_name"),
+                "grade_display": grade_display,
+                "company_id": result.get("company_id"),
+                "company_name": result.get("company_name"),
+                "job_id": result.get("job_id"),
+                "job_title": result.get("job_title"),
+                "job_slots": result.get("job_slots") or 1,
+                "preference_order": result.get("preference_order"),
+                "slot_index": slot_index,
+                "is_reserve": is_reserve
+            }
+            formatted_results.append(formatted_result)
+        
+        # 按公司和職缺組織資料
+        companies_data = {}
+        
+        for result in formatted_results:
+            company_id = result.get("company_id")
+            company_name = result.get("company_name")
+            job_id = result.get("job_id")
+            job_title = result.get("job_title") or "未指定職缺"
+            
+            if company_id not in companies_data:
+                companies_data[company_id] = {
+                    "company_id": company_id,
+                    "company_name": company_name,
+                    "jobs": {}
+                }
+            
+            if job_id not in companies_data[company_id]["jobs"]:
+                companies_data[company_id]["jobs"][job_id] = {
+                    "job_id": job_id,
+                    "job_title": job_title,
+                    "job_slots": result.get("job_slots", 1),
+                    "regulars": [],
+                    "reserves": []
+                }
+            
+            # 根據 is_reserve 分類
+            if result.get("is_reserve"):
+                companies_data[company_id]["jobs"][job_id]["reserves"].append(result)
+            else:
+                companies_data[company_id]["jobs"][job_id]["regulars"].append(result)
+        
+        # 轉換為列表格式
+        companies_list = []
+        for company_id, company_data in companies_data.items():
+            jobs_list = list(company_data["jobs"].values())
+            companies_list.append({
+                "company_id": company_id,
+                "company_name": company_data["company_name"],
+                "jobs": jobs_list
+            })
+        
+        return jsonify({
+            "success": True,
+            "companies": companies_list,
+            "total_matches": len(formatted_results)
+        })
+    
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"success": False, "message": f"查詢失敗: {str(e)}"}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+# =========================================================
 # API: 主任移除學生（從媒合結果中移除）
 # =========================================================
 @admission_bp.route("/api/director_remove_student", methods=["POST"])
@@ -3337,7 +3569,7 @@ def ta_export_matching_results_excel():
         if not current_semester_id:
             return jsonify({"success": False, "message": "無法取得當前學期"}), 500
         
-        # 獲取媒合結果數據（使用 student_preferences.semester_id 篩選）
+        # 獲取媒合結果數據（使用 manage_director.semester_id 篩選，與 final_matching_results 一致）
         query = """
             SELECT 
                 md.match_id,
@@ -3367,16 +3599,21 @@ def ta_export_matching_results_excel():
                     ORDER BY id ASC LIMIT 1
                 )) AS job_title
             FROM manage_director md
-            INNER JOIN student_preferences sp ON md.preference_id = sp.id AND sp.semester_id = %s
+            LEFT JOIN student_preferences sp ON md.preference_id = sp.id
             LEFT JOIN internship_companies ic ON COALESCE(sp.company_id, md.vendor_id) = ic.id
             LEFT JOIN internship_jobs ij ON sp.job_id = ij.id
             LEFT JOIN users u ON md.student_id = u.id
             LEFT JOIN classes c ON u.class_id = c.id
             LEFT JOIN users v ON md.vendor_id = v.id
-            WHERE md.director_decision IN ('Approved', 'Pending')
+            WHERE md.semester_id = %s
+            AND md.director_decision = 'Approved'
             ORDER BY COALESCE(sp.company_id, md.vendor_id), 
-                     COALESCE(sp.job_id, 0),
-                     CASE WHEN md.director_decision = 'Approved' AND md.final_rank IS NOT NULL THEN 0 ELSE 1 END,
+                     COALESCE(sp.job_id, (
+                         SELECT id FROM internship_jobs 
+                         WHERE company_id = COALESCE(sp.company_id, md.vendor_id) 
+                         ORDER BY id ASC LIMIT 1
+                     ), 0), 
+                     CASE WHEN md.final_rank IS NOT NULL THEN 0 ELSE 1 END,
                      COALESCE(md.final_rank, 999) ASC
         """
         cursor.execute(query, (current_semester_id,))
@@ -3567,6 +3804,206 @@ def ta_export_matching_results_excel():
             download_name=filename
         )
     
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"success": False, "message": f"匯出失敗: {str(e)}"}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+# =========================================================
+# API: 匯出未錄取學生名單 Excel（科助/主任/班導/管理員）
+# =========================================================
+@admission_bp.route("/api/ta/export_unadmitted_students_excel", methods=["GET"])
+def ta_export_unadmitted_students_excel():
+    """
+    匯出未錄取學生名單 Excel。
+    - 預設使用系統當前學期對應的學號前綴規則（與 get_all_students 一致）
+    - 支援 ?semester_id= 指定學期（可選）
+    - 支援 ?class_id= 指定班級（可選）
+    - 角色限制：ta / admin / director / class_teacher
+    """
+    if 'user_id' not in session or session.get('role') not in ['ta', 'admin', 'director', 'class_teacher']:
+        return jsonify({"success": False, "message": "未授權"}), 403
+
+    user_id = session.get('user_id')
+    user_role = session.get('role')
+
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+
+    try:
+        chosen_id = request.args.get('semester_id', type=int)
+        class_id = request.args.get('class_id', type=int)
+
+        if chosen_id:
+            cursor.execute("SELECT id, code FROM semesters WHERE id = %s", (chosen_id,))
+            row = cursor.fetchone()
+            if not row:
+                return jsonify({"success": False, "message": "找不到該學期"}), 400
+            current_semester_id = row['id']
+            current_semester_code = row.get('code') or ''
+        else:
+            current_semester_code = get_current_semester_code(cursor)
+            current_semester_id = get_current_semester_id(cursor)
+
+        if not current_semester_code:
+            return jsonify({"success": False, "message": "無法取得當前學期"}), 500
+        if not current_semester_id:
+            return jsonify({"success": False, "message": "無法取得當前學期"}), 500
+
+        # 已在媒合結果中的學生（Approved/Pending）- 使用 md.semester_id 篩選
+        cursor.execute("""
+            SELECT DISTINCT md.student_id
+            FROM manage_director md
+            WHERE md.semester_id = %s
+            AND md.director_decision IN ('Approved', 'Pending')
+        """, (current_semester_id,))
+        matched_student_ids = {row['student_id'] for row in cursor.fetchall()}
+
+        # 學期對應學號前綴（與 get_all_students 一致）
+        student_id_prefix = None
+        if current_semester_code and len(current_semester_code) >= 3:
+            try:
+                year_part = int(current_semester_code[:3])
+                student_id_prefix = str(year_part - 3)
+            except (ValueError, TypeError):
+                pass
+
+        # 基礎查詢：學生 + 班級
+        base_query = """
+            SELECT 
+                u.id AS student_id,
+                u.name AS student_name,
+                u.username AS student_number,
+                c.id AS class_id,
+                c.name AS class_name,
+                c.department
+            FROM users u
+            LEFT JOIN classes c ON u.class_id = c.id
+            WHERE u.role = 'student'
+        """
+        params = []
+
+        if student_id_prefix:
+            base_query += " AND u.username LIKE %s"
+            params.append(student_id_prefix + "%")
+
+        # 依角色限制範圍（與 get_all_students 一致）
+        if user_role == 'director':
+            cursor.execute("""
+                SELECT DISTINCT c.department
+                FROM classes c
+                JOIN classes_teacher ct ON ct.class_id = c.id
+                WHERE ct.teacher_id = %s
+                LIMIT 1
+            """, (user_id,))
+            dept_result = cursor.fetchone()
+            if dept_result and dept_result.get('department'):
+                base_query += " AND c.department = %s"
+                params.append(dept_result['department'])
+        elif user_role == 'class_teacher':
+            cursor.execute("""
+                SELECT class_id FROM classes_teacher 
+                WHERE teacher_id = %s
+            """, (user_id,))
+            teacher_classes = cursor.fetchall()
+            if teacher_classes:
+                class_ids = [tc['class_id'] for tc in teacher_classes]
+                placeholders = ','.join(['%s'] * len(class_ids))
+                base_query += f" AND u.class_id IN ({placeholders})"
+                params.extend(class_ids)
+            else:
+                # 沒有管理班級 → 匯出空檔（仍返回合法 Excel）
+                pass
+
+        if class_id:
+            base_query += " AND u.class_id = %s"
+            params.append(class_id)
+
+        base_query += " ORDER BY u.username ASC"
+        cursor.execute(base_query, params)
+        students = cursor.fetchall() or []
+
+        # 只匯出未錄取（未媒合）者
+        unadmitted_students = []
+        for s in students:
+            sid = s.get('student_id')
+            is_matched = (sid in matched_student_ids) if sid else False
+            if not is_matched:
+                unadmitted_students.append(s)
+
+        # 學期 label（與 get_all_students 一致）
+        semester_label = current_semester_code
+        if current_semester_code and len(current_semester_code) >= 4:
+            try:
+                year_part = current_semester_code[:3]
+                term_part = current_semester_code[-1]
+                term_name = "第1學期" if term_part == "1" else "第2學期"
+                semester_label = f"{year_part}學年{term_name}"
+            except Exception:
+                pass
+
+        # 建立 Excel
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "未錄取名單"
+
+        header_font = Font(bold=True)
+        header_fill = PatternFill(start_color="E6F0FF", end_color="E6F0FF", fill_type="solid")
+        thin_border = Border(
+            left=Side(style='thin'),
+            right=Side(style='thin'),
+            top=Side(style='thin'),
+            bottom=Side(style='thin')
+        )
+
+        title = f"未錄取學生名單（{current_semester_code} {semester_label}）"
+        ws["A1"].value = title
+        ws.merge_cells("A1:C1")
+        ws["A1"].font = Font(bold=True, size=14)
+        ws["A1"].alignment = Alignment(horizontal="left", vertical="center")
+
+        ws.append(["姓名", "學號", "班級"])
+        for cell in ws[2]:
+            cell.font = header_font
+            cell.fill = header_fill
+            cell.border = thin_border
+            cell.alignment = Alignment(horizontal="center", vertical="center")
+
+        for s in unadmitted_students:
+            dept = (s.get("department") or "").strip()
+            cls = (s.get("class_name") or "").strip()
+            class_label = (dept + cls) if (dept or cls) else ""
+            ws.append([
+                s.get("student_name") or "",
+                s.get("student_number") or "",
+                class_label
+            ])
+
+        # 套用基本格式
+        for row in ws.iter_rows(min_row=3, max_row=ws.max_row, min_col=1, max_col=3):
+            for cell in row:
+                cell.border = thin_border
+                cell.alignment = Alignment(horizontal="left", vertical="center")
+
+        ws.column_dimensions["A"].width = 14
+        ws.column_dimensions["B"].width = 16
+        ws.column_dimensions["C"].width = 22
+
+        output = io.BytesIO()
+        wb.save(output)
+        output.seek(0)
+
+        # 檔名（包含學期與時間）
+        filename = f"未錄取學生名單_{current_semester_code}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+
+        return send_file(
+            output,
+            mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            as_attachment=True,
+            download_name=filename
+        )
     except Exception as e:
         traceback.print_exc()
         return jsonify({"success": False, "message": f"匯出失敗: {str(e)}"}), 500
