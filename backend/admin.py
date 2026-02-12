@@ -247,6 +247,18 @@ def update_user(user_id):
         password = data.get("password")
         status = data.get("status")  # 新增：支援更新廠商狀態
 
+        # 如果是學生角色，將學號轉為純數字（移除所有非數字字符）
+        # 如果沒有傳遞 role，從資料庫獲取當前用戶的角色
+        if username:
+            if not role:
+                cursor.execute("SELECT role FROM users WHERE id = %s", (user_id,))
+                current_user = cursor.fetchone()
+                if current_user:
+                    role = current_user.get('role')
+            
+            if role == 'student':
+                username = ''.join(filter(str.isdigit, str(username)))
+
         update_fields = []
         params = []
 

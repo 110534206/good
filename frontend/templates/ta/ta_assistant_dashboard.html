@@ -474,7 +474,6 @@
         <ul>
           <li>接收主任核定後的名單</li>
           <li>確認並公告媒合結果</li>
-          <li>科助統整結果後，匯成 Excel 進行公告</li>
         </ul>
       </div>
       <div class="panel-actions">
@@ -502,7 +501,6 @@
         <ul>
           <li>媒合名單異常檢查</li>
           <li>統整未錄取學生名單</li>
-          <li>在一面結束後，會讓指導老師盡快詢問實習公司二面意願，繼續進行二面作業流程</li>
         </ul>
         <div class="process-flow" style="margin-top: 16px; padding: 16px; background: #f8f9fa; border-radius: 8px; border-left: 4px solid var(--brand-blue);">
           <div style="font-size: 0.85rem; font-weight: 600; color: var(--brand-blue-dark); margin-bottom: 12px;">
@@ -658,13 +656,15 @@
 
           // 取得檔案 blob
           const blob = await res.blob();
-          const url = window.URL.createObjectURL(blob);
-          const a = document.createElement('a');
-          a.href = url;
           
-          // 從 Content-Disposition header 取得檔名
+          // 創建下載連結
+          const url = window.URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.href = url;
+          
+          // 從 Content-Disposition header 取得檔名，如果沒有則使用預設檔名
           const contentDisposition = res.headers.get('Content-Disposition');
-          let filename = '媒合結果公告.xlsx';
+          let filename = `媒合結果_${new Date().toISOString().split('T')[0]}.xlsx`;
           if (contentDisposition) {
             const filenameMatch = contentDisposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
             if (filenameMatch && filenameMatch[1]) {
@@ -675,13 +675,11 @@
             }
           }
           
-          a.download = filename;
-          document.body.appendChild(a);
-          a.click();
-          document.body.removeChild(a);
+          link.download = filename;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
           window.URL.revokeObjectURL(url);
-
-          alert('✅ Excel 檔案匯出成功！\n\n檔案已下載，可用於公告。');
         } catch (err) {
           console.error('匯出 Excel 失敗:', err);
           alert('❌ 匯出失敗：' + (err.message || '未知錯誤'));

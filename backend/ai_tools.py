@@ -216,7 +216,27 @@ def revise_resume():
         # --- 步驟二：定義主要任務 (Task) ---
         
 
-        if edit_style == 'keyword_focus':
+
+        if edit_style == 'light_polish':
+
+            print(f"偵測任務: 輕度潤飾, 語氣: {tone_style}")
+
+            final_prompt = f"""[任務] 在最大程度保留原始結構與內容的前提下，對以下 [原始文本] 進行輕度潤飾。
+[嚴格規則]
+1. 不得大幅改寫內容
+2. 不得新增原文沒有的經驗或成就
+3. 保留原本段落順序
+4. 僅修正文法、語句不順與過於口語的表達
+5. 可微幅優化語氣，但不得改變原意
+6. 不得重組全文
+7. 修改比例不得超過原文字數的30%
+8. {tone_prompt}
+9. 只輸出修改後文本，不要任何說明
+[原始文本] {user_resume_text}
+[修改後的文本]"""
+
+        elif edit_style == 'keyword_focus':
+
 
             # --- 選項 1: 關鍵字導向 (兩步驟) ---
 
