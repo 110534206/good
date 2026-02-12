@@ -2935,6 +2935,55 @@ def ta_dashboard_stats():
         conn.close()
 
 # =========================================================
+# 輔助函數：簡化職缺名稱
+# =========================================================
+def simplify_job_title(job_title):
+    """
+    簡化職缺名稱，移除前綴，只保留簡短的核心名稱（不包含括號）
+    例如：
+    - "自動化開發 (軟體測試)" -> "軟體測試" 或 "測試"
+    - "線上技術客服" -> "客服"
+    """
+    if not job_title or job_title == "未指定職缺":
+        return job_title
+    
+    # 如果有括號，提取括號內的內容
+    import re
+    bracket_match = re.search(r'\(([^)]+)\)', job_title)
+    if bracket_match:
+        # 提取括號內的內容
+        content = bracket_match.group(1).strip()
+        # 如果括號內還有括號，提取最內層的內容
+        inner_bracket = re.search(r'\(([^)]+)\)', content)
+        if inner_bracket:
+            content = inner_bracket.group(1).strip()
+        # 移除所有括號，因為調用處會加上括號
+        content = content.replace('(', '').replace(')', '').strip()
+        return content
+    
+    # 如果沒有括號，移除常見前綴
+    # 移除 "自動化開發"、"線上技術"、"技術" 等前綴
+    prefixes_to_remove = [
+        "自動化開發",
+        "線上技術",
+        "技術",
+        "線上",
+        "自動化"
+    ]
+    
+    simplified = job_title
+    for prefix in prefixes_to_remove:
+        if simplified.startswith(prefix):
+            simplified = simplified[len(prefix):].strip()
+            # 移除可能的前導空格或標點
+            simplified = simplified.lstrip('：:、，,')
+            break
+    
+    # 移除所有括號，因為調用處會加上括號
+    simplified = simplified.replace('(', '').replace(')', '').strip()
+    return simplified if simplified else job_title
+
+# =========================================================
 # API: 匯出媒合結果 Excel（網格格式）
 # =========================================================
 @admission_bp.route("/api/export_matching_results_excel", methods=["GET"])
@@ -3057,9 +3106,24 @@ def export_matching_results_excel():
             company_name = company["company_name"]
             all_students = []
             
+            # 檢查該公司是否有兩個或更多職缺
+            num_jobs = len(company["jobs"])
+            has_multiple_jobs = num_jobs >= 2
+            
             # 收集該公司所有職缺的學生
             for job_title, students in company["jobs"].items():
-                all_students.extend(students)
+                # 如果公司有多個職缺，在學生姓名後面加上括號職缺名稱
+                for student in students:
+                    student_copy = student.copy()
+                    if has_multiple_jobs and job_title and job_title != "未指定職缺":
+                        student_name = student_copy.get('student_name') or ''
+                        # 職缺名稱
+                        simplified_job_title = simplify_job_title(job_title)
+                        # 如果簡化後的職缺名稱已經包含括號，移除最外層括號
+                        if simplified_job_title.startswith('(') and simplified_job_title.endswith(')'):
+                            simplified_job_title = simplified_job_title[1:-1].strip()
+                        student_copy['student_name'] = f"{student_name}({simplified_job_title})"
+                    all_students.append(student_copy)
             
             if all_students:
                 companies_list.append({
@@ -3093,11 +3157,13 @@ def export_matching_results_excel():
                 header_cell.fill = company_header_fill
                 header_cell.font = company_header_font
                 header_cell.border = thin_border
-                header_cell.alignment = Alignment(horizontal='center', vertical='center')
+                header_cell.alignment = Alignment(horizontal='center', vertical='center', wrap_text=False)
                 # 合併兩欄
                 ws.merge_cells(f"{col_letter_start}{current_row}:{col_letter_end}{current_row}")
                 # 確保合併後的單元格也有邊框
-                ws[f"{col_letter_end}{current_row}"].border = thin_border
+                end_cell = ws[f"{col_letter_end}{current_row}"]
+                end_cell.border = thin_border
+                end_cell.alignment = Alignment(horizontal='center', vertical='center', wrap_text=False)
                 # 右邊空一格（第三欄留空）
                 right_empty_cell = ws[f"{col_letter_right}{current_row}"]
                 right_empty_cell.value = ""
@@ -3109,24 +3175,36 @@ def export_matching_results_excel():
                     student_number = student.get('student_number') or ''
                     student_name = student.get('student_name') or ''
                     
+                    # 將學號轉為純數字（移除所有非數字字符）
+                    if student_number:
+                        student_number_clean = ''.join(filter(str.isdigit, str(student_number)))
+                        # 嘗試轉換為 int，讓 Excel 識別為數字類型
+                        try:
+                            student_number_value = int(student_number_clean) if student_number_clean else ''
+                        except (ValueError, TypeError):
+                            student_number_value = student_number_clean
+                    else:
+                        student_number_value = ''
+                    
                     # 學號欄位
                     number_cell = ws[f"{col_letter_start}{current_row}"]
-                    number_cell.value = student_number
+                    number_cell.value = student_number_value
                     number_cell.font = student_font
                     number_cell.border = thin_border
-                    number_cell.alignment = Alignment(horizontal='left', vertical='center')
+                    number_cell.alignment = Alignment(horizontal='center', vertical='center')
                     
                     # 姓名欄位
                     name_cell = ws[f"{col_letter_end}{current_row}"]
                     name_cell.value = student_name
                     name_cell.font = student_font
                     name_cell.border = thin_border
-                    name_cell.alignment = Alignment(horizontal='left', vertical='center')
+                    name_cell.alignment = Alignment(horizontal='center', vertical='center')
                     
                     # 右邊空一格（第三欄留空）
                     right_empty_cell = ws[f"{col_letter_right}{current_row}"]
                     right_empty_cell.value = ""
                     right_empty_cell.border = thin_border
+                    right_empty_cell.alignment = Alignment(horizontal='center', vertical='center')
                     
                     current_row += 1
                 
@@ -3134,11 +3212,12 @@ def export_matching_results_excel():
                 # 左欄留空
                 ws[f"{col_letter_start}{current_row}"].value = ""
                 ws[f"{col_letter_start}{current_row}"].border = thin_border
+                ws[f"{col_letter_start}{current_row}"].alignment = Alignment(horizontal='center', vertical='center')
                 # 右欄顯示總人數
                 total_text = f"{len(students)}人"
                 total_cell = ws[f"{col_letter_end}{current_row}"]
                 total_cell.value = total_text
-                total_cell.fill = total_fill
+                # 移除灰色背景
                 total_cell.font = total_font
                 total_cell.border = thin_border
                 total_cell.alignment = Alignment(horizontal='center', vertical='center')
@@ -3146,21 +3225,26 @@ def export_matching_results_excel():
                 right_empty_cell = ws[f"{col_letter_right}{current_row}"]
                 right_empty_cell.value = ""
                 right_empty_cell.border = thin_border
+                right_empty_cell.alignment = Alignment(horizontal='center', vertical='center')
                 current_row += 1  # 移到下一行
                 
                 # 公司與公司之間的間隔行（三欄都留空）
                 ws[f"{col_letter_start}{current_row}"].value = ""
                 ws[f"{col_letter_start}{current_row}"].border = thin_border
+                ws[f"{col_letter_start}{current_row}"].alignment = Alignment(horizontal='center', vertical='center')
                 ws[f"{col_letter_end}{current_row}"].value = ""
                 ws[f"{col_letter_end}{current_row}"].border = thin_border
+                ws[f"{col_letter_end}{current_row}"].alignment = Alignment(horizontal='center', vertical='center')
                 ws[f"{col_letter_right}{current_row}"].value = ""
                 ws[f"{col_letter_right}{current_row}"].border = thin_border
+                ws[f"{col_letter_right}{current_row}"].alignment = Alignment(horizontal='center', vertical='center')
                 current_row += 1  # 移到下一行
         
         # 設定列寬（每列佔用3個欄位，所以總共12欄）
+        # 增加列寬以確保公司名稱可以完整顯示（合併兩欄後寬度足夠）
         for col in range(1, COLUMNS * 3 + 1):
             col_letter = get_column_letter(col)
-            ws.column_dimensions[col_letter].width = COLUMN_WIDTH / 3  # 每欄寬度為原寬度的1/3
+            ws.column_dimensions[col_letter].width = 12  # 增加每欄寬度，確保公司名稱完整顯示
         
         # 設定行高
         for row in range(1, ws.max_row + 1):
@@ -3303,8 +3387,26 @@ def ta_export_matching_results_excel():
         for company in companies_data.values():
             company_name = company["company_name"]
             all_students = []
+            
+            # 檢查該公司是否有兩個或更多職缺
+            num_jobs = len(company["jobs"])
+            has_multiple_jobs = num_jobs >= 2
+            
+            # 收集該公司所有職缺的學生
             for job_title, students in company["jobs"].items():
-                all_students.extend(students)
+                # 如果公司有多個職缺，在學生姓名後面加上括號職缺名稱（簡化後）
+                for student in students:
+                    student_copy = student.copy()
+                    if has_multiple_jobs and job_title and job_title != "未指定職缺":
+                        student_name = student_copy.get('student_name') or ''
+                        # 簡化職缺名稱
+                        simplified_job_title = simplify_job_title(job_title)
+                        # 如果簡化後的職缺名稱已經包含括號，移除最外層括號
+                        if simplified_job_title.startswith('(') and simplified_job_title.endswith(')'):
+                            simplified_job_title = simplified_job_title[1:-1].strip()
+                        student_copy['student_name'] = f"{student_name}({simplified_job_title})"
+                    all_students.append(student_copy)
+            
             if all_students:
                 companies_list.append({
                     "name": company_name,
@@ -3332,9 +3434,11 @@ def ta_export_matching_results_excel():
                 header_cell.fill = company_header_fill
                 header_cell.font = company_header_font
                 header_cell.border = thin_border
-                header_cell.alignment = Alignment(horizontal='center', vertical='center')
+                header_cell.alignment = Alignment(horizontal='center', vertical='center', wrap_text=False)
                 ws.merge_cells(f"{col_letter_start}{current_row}:{col_letter_end}{current_row}")
-                ws[f"{col_letter_end}{current_row}"].border = thin_border
+                end_cell = ws[f"{col_letter_end}{current_row}"]
+                end_cell.border = thin_border
+                end_cell.alignment = Alignment(horizontal='center', vertical='center', wrap_text=False)
                 ws[f"{col_letter_right}{current_row}"].value = ""
                 ws[f"{col_letter_right}{current_row}"].border = thin_border
                 current_row += 1
@@ -3343,46 +3447,63 @@ def ta_export_matching_results_excel():
                     student_number = student.get('student_number') or ''
                     student_name = student.get('student_name') or ''
                     
+                    # 將學號轉為純數字（移除所有非數字字符）
+                    if student_number:
+                        student_number_clean = ''.join(filter(str.isdigit, str(student_number)))
+                        # 嘗試轉換為 int，讓 Excel 識別為數字類型
+                        try:
+                            student_number_value = int(student_number_clean) if student_number_clean else ''
+                        except (ValueError, TypeError):
+                            student_number_value = student_number_clean
+                    else:
+                        student_number_value = ''
+                    
                     number_cell = ws[f"{col_letter_start}{current_row}"]
-                    number_cell.value = student_number
+                    number_cell.value = student_number_value
                     number_cell.font = student_font
                     number_cell.border = thin_border
-                    number_cell.alignment = Alignment(horizontal='left', vertical='center')
+                    number_cell.alignment = Alignment(horizontal='center', vertical='center')
                     
                     name_cell = ws[f"{col_letter_end}{current_row}"]
                     name_cell.value = student_name
                     name_cell.font = student_font
                     name_cell.border = thin_border
-                    name_cell.alignment = Alignment(horizontal='left', vertical='center')
+                    name_cell.alignment = Alignment(horizontal='center', vertical='center')
                     
                     ws[f"{col_letter_right}{current_row}"].value = ""
                     ws[f"{col_letter_right}{current_row}"].border = thin_border
+                    ws[f"{col_letter_right}{current_row}"].alignment = Alignment(horizontal='center', vertical='center')
                     current_row += 1
                 
                 ws[f"{col_letter_start}{current_row}"].value = ""
                 ws[f"{col_letter_start}{current_row}"].border = thin_border
+                ws[f"{col_letter_start}{current_row}"].alignment = Alignment(horizontal='center', vertical='center')
                 total_text = f"{len(students)}人"
                 total_cell = ws[f"{col_letter_end}{current_row}"]
                 total_cell.value = total_text
-                total_cell.fill = total_fill
+                # 移除灰色背景
                 total_cell.font = total_font
                 total_cell.border = thin_border
                 total_cell.alignment = Alignment(horizontal='center', vertical='center')
                 ws[f"{col_letter_right}{current_row}"].value = ""
                 ws[f"{col_letter_right}{current_row}"].border = thin_border
+                ws[f"{col_letter_right}{current_row}"].alignment = Alignment(horizontal='center', vertical='center')
                 current_row += 1
                 
                 ws[f"{col_letter_start}{current_row}"].value = ""
                 ws[f"{col_letter_start}{current_row}"].border = thin_border
+                ws[f"{col_letter_start}{current_row}"].alignment = Alignment(horizontal='center', vertical='center')
                 ws[f"{col_letter_end}{current_row}"].value = ""
                 ws[f"{col_letter_end}{current_row}"].border = thin_border
+                ws[f"{col_letter_end}{current_row}"].alignment = Alignment(horizontal='center', vertical='center')
                 ws[f"{col_letter_right}{current_row}"].value = ""
                 ws[f"{col_letter_right}{current_row}"].border = thin_border
+                ws[f"{col_letter_right}{current_row}"].alignment = Alignment(horizontal='center', vertical='center')
                 current_row += 1
         
         for col in range(1, COLUMNS * 3 + 1):
             col_letter = get_column_letter(col)
-            ws.column_dimensions[col_letter].width = COLUMN_WIDTH / 3
+            ws.column_dimensions[col_letter].width = 12  # 增加每欄寬度，確保公司名稱完整顯示
         
         for row in range(1, ws.max_row + 1):
             ws.row_dimensions[row].height = 20
