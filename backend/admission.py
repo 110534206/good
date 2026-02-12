@@ -2716,9 +2716,11 @@ def director_confirm_matching():
         """)
         class_teachers = cursor.fetchall() or []
         for class_teacher in class_teachers:
-            notified_user_ids.add(class_teacher['teacher_id'])
+            teacher_id = class_teacher['teacher_id']
+            if teacher_id not in notified_user_ids:
+                notified_user_ids.add(teacher_id)
         
-        # 只發送一個通知給所有需要通知的用戶（指導老師和班導）
+        # 發送通知給所有需要通知的用戶（指導老師和班導）
         title = f"{semester_prefix} 媒合結果已出爐"
         message = f"{semester_prefix}媒合結果已出爐，請前往查看。"
         link_url = "/admission/results"
@@ -2731,6 +2733,30 @@ def director_confirm_matching():
                 category="matching",
                 link_url=link_url
             )
+        
+        # 2. 通知所有在媒合結果中的學生（Approved 狀態）
+        cursor.execute("""
+            SELECT DISTINCT md.student_id
+            FROM manage_director md
+            WHERE md.semester_id = %s
+            AND md.director_decision = 'Approved'
+        """, (current_semester_id,))
+        matched_students = cursor.fetchall() or []
+        
+        student_title = f"{semester_prefix} 媒合結果已出爐"
+        student_message = f"{semester_prefix}媒合結果已出爐，請前往查看您的媒合結果。"
+        student_link_url = "/student_home"  # 學生查看媒合結果的頁面
+        
+        for student in matched_students:
+            student_id = student.get('student_id')
+            if student_id:
+                create_notification(
+                    user_id=student_id,
+                    title=student_title,
+                    message=student_message,
+                    category="matching",
+                    link_url=student_link_url
+                )
         
         # 3. 通知所有廠商（role='vendor'）進行確認
         cursor.execute("SELECT id, name FROM users WHERE role = 'vendor'")
@@ -2773,6 +2799,7 @@ def director_confirm_matching():
             "message": "媒合結果確認成功，已通知相關人員",
             "notified": {
                 "teachers_and_class_teachers": len(notified_user_ids),
+                "students": len(matched_students),
                 "vendors": len(vendors),
                 "tas": len(tas)
             }

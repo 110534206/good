@@ -3377,6 +3377,12 @@
           body: JSON.stringify({})
         });
         
+        // 檢查響應狀態
+        if (!res.ok) {
+          const errorData = await res.json().catch(() => ({ message: '確認失敗' }));
+          throw new Error(errorData.message || `HTTP ${res.status}`);
+        }
+        
         const data = await res.json();
         
         // 恢復按鈕狀態
@@ -3388,9 +3394,16 @@
         if (data.success) {
           // 重新載入媒合結果（不顯示載入狀態）
           await loadMatchingResults(false);
+          
+          // 重新載入未匹配學生列表
+          await loadUnmatchedStudents();
+        } else {
+          showToast(data.message || '確認失敗', 'error');
         }
       } catch (error) {
         console.error('確認失敗:', error);
+        showToast('確認失敗：' + (error.message || '未知錯誤'), 'error');
+        
         // 恢復按鈕狀態
         const confirmBtn = document.getElementById('confirmBtn');
         if (confirmBtn) {
