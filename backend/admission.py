@@ -2947,8 +2947,9 @@ def simplify_job_title(job_title):
     if not job_title or job_title == "未指定職缺":
         return job_title
     
-    # 如果有括號，提取括號內的內容
+    # 如果有括號（半形或全形），提取括號內的內容
     import re
+    # 先處理半形括號
     bracket_match = re.search(r'\(([^)]+)\)', job_title)
     if bracket_match:
         # 提取括號內的內容
@@ -2957,8 +2958,20 @@ def simplify_job_title(job_title):
         inner_bracket = re.search(r'\(([^)]+)\)', content)
         if inner_bracket:
             content = inner_bracket.group(1).strip()
-        # 移除所有括號，因為調用處會加上括號
-        content = content.replace('(', '').replace(')', '').strip()
+        # 移除所有括號（半形和全形），因為調用處會加上括號
+        content = content.replace('(', '').replace(')', '').replace('（', '').replace('）', '').strip()
+        return content
+    
+    # 處理全形括號
+    bracket_match_full = re.search(r'（([^）]+)）', job_title)
+    if bracket_match_full:
+        content = bracket_match_full.group(1).strip()
+        # 如果括號內還有括號，提取最內層的內容
+        inner_bracket = re.search(r'（([^）]+)）', content)
+        if inner_bracket:
+            content = inner_bracket.group(1).strip()
+        # 移除所有括號（半形和全形），因為調用處會加上括號
+        content = content.replace('(', '').replace(')', '').replace('（', '').replace('）', '').strip()
         return content
     
     # 如果沒有括號，移除常見前綴
@@ -2979,8 +2992,8 @@ def simplify_job_title(job_title):
             simplified = simplified.lstrip('：:、，,')
             break
     
-    # 移除所有括號，因為調用處會加上括號
-    simplified = simplified.replace('(', '').replace(')', '').strip()
+    # 移除所有括號（半形和全形），因為調用處會加上括號
+    simplified = simplified.replace('(', '').replace(')', '').replace('（', '').replace('）', '').strip()
     return simplified if simplified else job_title
 
 # =========================================================
@@ -3119,9 +3132,8 @@ def export_matching_results_excel():
                         student_name = student_copy.get('student_name') or ''
                         # 職缺名稱
                         simplified_job_title = simplify_job_title(job_title)
-                        # 如果簡化後的職缺名稱已經包含括號，移除最外層括號
-                        if simplified_job_title.startswith('(') and simplified_job_title.endswith(')'):
-                            simplified_job_title = simplified_job_title[1:-1].strip()
+                        # 確保移除所有括號（半形和全形），因為調用處會加上括號
+                        simplified_job_title = simplified_job_title.replace('(', '').replace(')', '').replace('（', '').replace('）', '').strip()
                         student_copy['student_name'] = f"{student_name}({simplified_job_title})"
                     all_students.append(student_copy)
             
@@ -3198,7 +3210,7 @@ def export_matching_results_excel():
                     name_cell.value = student_name
                     name_cell.font = student_font
                     name_cell.border = thin_border
-                    name_cell.alignment = Alignment(horizontal='center', vertical='center')
+                    name_cell.alignment = Alignment(horizontal='center', vertical='center', wrap_text=False)
                     
                     # 右邊空一格（第三欄留空）
                     right_empty_cell = ws[f"{col_letter_right}{current_row}"]
@@ -3244,7 +3256,11 @@ def export_matching_results_excel():
         # 增加列寬以確保公司名稱可以完整顯示（合併兩欄後寬度足夠）
         for col in range(1, COLUMNS * 3 + 1):
             col_letter = get_column_letter(col)
-            ws.column_dimensions[col_letter].width = 12  # 增加每欄寬度，確保公司名稱完整顯示
+            # 姓名欄位（每列的第2個欄位：2, 5, 8, 11）增加寬度以確保姓名完整顯示
+            if (col - 2) % 3 == 0:
+                ws.column_dimensions[col_letter].width = 20  # 姓名欄位更寬，確保「姓名(職缺)」完整顯示
+            else:
+                ws.column_dimensions[col_letter].width = 12  # 其他欄位
         
         # 設定行高
         for row in range(1, ws.max_row + 1):
@@ -3401,9 +3417,8 @@ def ta_export_matching_results_excel():
                         student_name = student_copy.get('student_name') or ''
                         # 簡化職缺名稱
                         simplified_job_title = simplify_job_title(job_title)
-                        # 如果簡化後的職缺名稱已經包含括號，移除最外層括號
-                        if simplified_job_title.startswith('(') and simplified_job_title.endswith(')'):
-                            simplified_job_title = simplified_job_title[1:-1].strip()
+                        # 確保移除所有括號（半形和全形），因為調用處會加上括號
+                        simplified_job_title = simplified_job_title.replace('(', '').replace(')', '').replace('（', '').replace('）', '').strip()
                         student_copy['student_name'] = f"{student_name}({simplified_job_title})"
                     all_students.append(student_copy)
             
@@ -3468,7 +3483,7 @@ def ta_export_matching_results_excel():
                     name_cell.value = student_name
                     name_cell.font = student_font
                     name_cell.border = thin_border
-                    name_cell.alignment = Alignment(horizontal='center', vertical='center')
+                    name_cell.alignment = Alignment(horizontal='center', vertical='center', wrap_text=False)
                     
                     ws[f"{col_letter_right}{current_row}"].value = ""
                     ws[f"{col_letter_right}{current_row}"].border = thin_border
@@ -3503,7 +3518,11 @@ def ta_export_matching_results_excel():
         
         for col in range(1, COLUMNS * 3 + 1):
             col_letter = get_column_letter(col)
-            ws.column_dimensions[col_letter].width = 12  # 增加每欄寬度，確保公司名稱完整顯示
+            # 姓名欄位（每列的第2個欄位：2, 5, 8, 11）增加寬度以確保姓名完整顯示
+            if (col - 2) % 3 == 0:
+                ws.column_dimensions[col_letter].width = 20  # 姓名欄位更寬，確保「姓名(職缺)」完整顯示
+            else:
+                ws.column_dimensions[col_letter].width = 12  # 其他欄位
         
         for row in range(1, ws.max_row + 1):
             ws.row_dimensions[row].height = 20
