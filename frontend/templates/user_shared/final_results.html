@@ -1003,25 +1003,37 @@
           return false;
         }
         
-        // 只保留有符合條件的學生或職缺的公司
-        // 如果選擇了職缺，必須有該職缺或符合條件的學生
+        // 如果選擇了公司，必須匹配該公司
+        if (selectedCompany) {
+          const companyId = company.id || company.company_name;
+          if (companyId != selectedCompany) {
+            return false;
+          }
+        }
+        
+        // 如果選擇了職缺，檢查是否有該職缺
         if (selectedJob) {
           const hasMatchingJob = company.jobs && company.jobs.some(job => job.title === selectedJob);
-          const hasMatchingStudents = company.students && company.students.length > 0;
-          return hasMatchingJob || hasMatchingStudents;
+          // 即使沒有符合條件的學生，只要有該職缺就顯示
+          return hasMatchingJob;
         }
         
         // 如果只搜尋學生姓名，只要有符合的學生就顯示
+        // 但即使沒有符合的學生，如果選擇了公司，也要顯示該公司
         if (studentName) {
-          return company.students && company.students.length > 0;
+          // 如果有符合的學生，顯示
+          if (company.students && company.students.length > 0) {
+            return true;
+          }
+          // 如果選擇了公司，即使沒有符合的學生也顯示
+          if (selectedCompany) {
+            return true;
+          }
+          // 否則不顯示（因為沒有符合的學生且沒有選擇公司）
+          return false;
         }
         
-        // 如果只選擇了公司，顯示該公司（即使沒有學生或職缺）
-        if (selectedCompany) {
-          return true;
-        }
-        
-        // 沒有過濾條件時，顯示所有公司
+        // 沒有過濾條件時，顯示所有公司（即使沒有學生）
         return true;
       });
 
