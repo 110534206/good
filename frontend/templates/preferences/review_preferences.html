@@ -8,30 +8,40 @@
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
   <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet" />
   <style>
-    * {
-      box-sizing: border-box;
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: "Noto Sans TC", sans-serif;
+      background: #f5f7fb;
+      color: #1f2937;
       margin: 0;
       padding: 0;
     }
 
+    /* Header - 與 review_resume 一致 */
     header {
-      background: #0454a3;
-      color: white;
-      padding: 1rem 2rem;
-      text-align: center;
-      font-size: 1.5rem;
-      position: relative;
+      background: linear-gradient(135deg, #0055a8 0%, #006acb 50%, #004f94 100%);
+      border-bottom: none;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      box-shadow: 0 8px 20px rgba(0, 68, 148, 0.35);
     }
-
-    /* 選單按鈕樣式 */
-    .top-bar-left {
-      position: fixed;
-      top: 1rem;
-      left: 1rem;
-      z-index: 1000;
+    .topbar {
+      max-width: 1800px;
+      margin: 0 auto;
+      padding: 18px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      color: #fff;
     }
-
-    #menu-btn {
+    .topbar-left {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+    .topbar-left #menu-btn {
       width: 30px;
       height: 22px;
       cursor: pointer;
@@ -42,14 +52,20 @@
       border: none;
       padding: 0;
     }
-
-    #menu-btn span {
+    .topbar-left #menu-btn span {
       display: block;
       width: 100%;
       height: 3px;
       background-color: white;
       border-radius: 2px;
       transition: all 0.3s ease;
+    }
+    .topbar h1 {
+      font-size: 1.5rem;
+      margin: 0;
+      text-align: center;
+      color: #fff;
+      flex: 1;
     }
 
     /* 側邊選單 */
@@ -120,25 +136,108 @@
       color: white;
     }
 
-    body {
-      font-family: "Noto Sans TC", sans-serif;
-      background: #f7f9fc;
-      margin: 0;
-      padding: 0;
+    /* 統計卡片 */
+    .stat-card {
+      background: #fff;
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      padding: 16px;
+      text-align: center;
+    }
+    .stat-number {
+      font-size: 1.4rem;
+      font-weight: 700;
+      color: #1e3a8a;
+    }
+    .stat-label {
+      font-size: 0.85rem;
+      color: #6b7280;
+    }
+
+    /* 區塊標題 */
+    .section-title {
+      font-size: 0.9rem;
+      font-weight: 600;
+      color: #6b7280;
+      margin-bottom: 0.75rem;
+      letter-spacing: 0.5px;
+    }
+
+    /* 篩選列 */
+    .filter-row {
+      background: #fff;
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      padding: 16px;
+      margin-bottom: 1.5rem;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: flex-start;
+      gap: 1rem;
+    }
+    .filter-row .filter-actions { margin-left: auto; }
+    .filter-row .form-label { font-size: 0.85rem; color: #6b7280; margin-bottom: 0.35rem; }
+    .filter-row .form-select { min-width: 200px; }
+
+    /* 工具列 */
+    .toolbar {
+      background: #fff;
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      padding: 16px;
+      margin-bottom: 1.5rem;
     }
 
     /* 主體卡片 */
     .student-section {
       background: #fff;
-      margin-bottom: 1.5rem;
-      padding: 1rem 1.5rem;
-      border-radius: 10px;
-      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      padding: 20px;
+      margin-bottom: 16px;
+    }
+    .student-section:hover {
+      background: #f9fafb;
     }
 
     .student-section h3 {
-      color: #0066cc;
-      font-weight: bold;
+      color: #1e3a8a;
+      font-weight: 600;
+      font-size: 1.1rem;
+      margin: 0;
+    }
+
+    /* 狀態標籤 */
+    .badge-pending, .badge-approved, .badge-rejected {
+      padding: 0.35em 0.65em;
+      border-radius: 0.25rem;
+      font-size: 0.85em;
+      font-weight: 500;
+    }
+    .badge-pending {
+      background: #e5e7eb;
+      color: #374151;
+    }
+    .badge-approved {
+      background: #d1fae5;
+      color: #065f46;
+    }
+    .badge-rejected {
+      background: #fee2e2;
+      color: #991b1b;
+    }
+
+    /* 截止後退件按鈕唯讀樣式 */
+    /* 志願序 Modal 表格：不換行、加大寬度 */
+    #studentDetailModal .table-preferences-detail { white-space: nowrap; table-layout: auto; }
+    #studentDetailModal .table-preferences-detail th,
+    #studentDetailModal .table-preferences-detail td { white-space: nowrap; }
+
+    .reject-btn-disabled,
+    .reject-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      pointer-events: none;
     }
 
     .controls-bar {
@@ -156,63 +255,59 @@
       font-size: 0.95rem;
     }
 
-    /* --- 主要內容 --- */
-    h2 {
-      margin-top: 80px;
-      margin-bottom: 2rem;
-      color: #0066cc;
-      font-weight: 700;
-      font-size: 2rem;
-      text-align: center;
-      letter-spacing: 1px;
+    .btn-primary {
+      background: #1e3a8a;
+      border: 1px solid #1e3a8a;
+    }
+    .btn-primary:hover {
+      background: #16306b;
+      border-color: #16306b;
     }
 
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      margin-bottom: 30px;
+    .btn-outline-primary {
+      border: 1px solid #1e3a8a;
+      color: #1e3a8a;
+    }
+    .btn-outline-primary:hover {
+      background: #1e3a8a;
+      color: white;
     }
 
-    .preferences-table {
-      table-layout: fixed;
-    }
+    /* 表格 */
+    .preferences-table { table-layout: fixed; }
+    .preferences-table th:nth-child(1), .preferences-table td:nth-child(1) { width: 15%; }
+    .preferences-table th:nth-child(2), .preferences-table td:nth-child(2) { width: 55%; text-align: left; }
+    .preferences-table th:nth-child(3), .preferences-table td:nth-child(3) { width: 30%; }
 
-    .preferences-table th:nth-child(1),
-    .preferences-table td:nth-child(1) {
-      width: 15%;
-    }
-
-    .preferences-table th:nth-child(2),
-    .preferences-table td:nth-child(2) {
-      width: 55%;
-    }
-
-    .preferences-table th:nth-child(3),
-    .preferences-table td:nth-child(3) {
-      width: 30%;
-    }
-
-    th,
-    td {
+    .table thead { background: #f3f4f6; }
+    .table th {
+      font-weight: 600;
+      color: #374151;
       padding: 0.75rem;
-      border: 1px solid #e0e0e0;
+      border: 1px solid #e5e7eb;
       text-align: center;
     }
-
-    th {
-      background-color: #f1f4f8;
+    .table td {
+      padding: 0.75rem;
+      border: 1px solid #e5e7eb;
+      text-align: center;
     }
+    .table tbody tr { border-bottom: 1px solid #f1f5f9; }
 
-    /* 可收合按鈕樣式 */
-    .collapse-toggle-btn {
-      transition: all 0.3s ease;
+    /* 點擊學生姓名／學號區域可展開志願序 */
+    .student-header-clickable {
+      cursor: pointer;
+      padding: 4px 0;
+      border-radius: 4px;
     }
-
-    .collapse-toggle-btn[aria-expanded="true"] .fa-chevron-down {
+    .student-header-clickable:hover {
+      background: rgba(0, 0, 0, 0.03);
+    }
+    .student-section:has(.collapse.show) .collapse-chevron {
       transform: rotate(180deg);
     }
 
-    .collapse-toggle-btn .fa-chevron-down {
+    .collapse-chevron {
       transition: transform 0.3s ease;
       display: inline-block;
     }
@@ -226,9 +321,10 @@
       border-right: none;
     }
 
+    .search-input { border-radius: 6px; }
     #studentSearchInput:focus {
-      border-color: #0066cc;
-      box-shadow: 0 0 0 0.2rem rgba(0, 102, 204, 0.25);
+      border-color: #1e3a8a;
+      box-shadow: 0 0 0 0.2rem rgba(30, 58, 138, 0.25);
     }
 
     #searchStudentBtn {
@@ -237,14 +333,27 @@
       border-color: #ced4da;
     }
 
-    #searchStudentBtn:hover {
-      background-color: #e9ecef;
-      border-color: #adb5bd;
-    }
-
     #searchResult {
       margin-top: 0;
     }
+
+    /* 退件截止時間提示 */
+    .deadline-banner {
+      background: #eff6ff;
+      border: 1px solid #bfdbfe;
+      border-radius: 8px;
+      padding: 12px 20px;
+      margin-bottom: 1.5rem;
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+    .deadline-banner i { color: #1e40af; }
+    .deadline-banner.deadline-expired {
+      background: #fef2f2;
+      border-color: #fecaca;
+    }
+    .deadline-banner.deadline-expired i { color: #dc2626; }
 
     .alert {
       border-radius: 8px;
@@ -391,17 +500,22 @@
       transform: translateY(-2px);
       box-shadow: 0 4px 8px rgba(23, 162, 184, 0.3);
     }
+
   </style>
 </head>
 
 <body>
-  <header>學生志願序審核</header>
-
-  <div class="top-bar-left">
-    <div id="menu-btn" title="選單" role="button" tabindex="0" aria-label="開啟側邊選單">
-      <span></span><span></span><span></span>
+  <header>
+    <div class="topbar">
+      <div class="topbar-left">
+        <button id="menu-btn" title="選單" role="button" tabindex="0" aria-label="開啟側邊選單">
+          <span></span><span></span><span></span>
+        </button>
+      </div>
+      <h1>學生志願序審核</h1>
+      <div style="width: 30px;"></div>
     </div>
-  </div>
+  </header>
 
   <nav id="side-menu" aria-hidden="true" role="navigation" aria-label="功能選單">
     <button id="close-btn" aria-label="關閉功能選單">×</button>
@@ -497,78 +611,159 @@
     </div>
   </div>
 
-  <div class="container my-5 pt-1">
-    <div class="d-flex justify-content-center mb-3 controls-bar align-items-center">
-      <div class="input-group me-2" style="width: 300px;">
-        <input type="text" id="studentSearchInput" class="form-control" placeholder="輸入學生姓名查詢志願序">
-        <button id="searchStudentBtn" class="btn btn-outline-secondary">
-          <i class="fas fa-search"></i> 查詢
-        </button>
+  <div class="container my-4">
+    <!-- 退件截止時間 -->
+    <div id="deadlineBanner" class="deadline-banner" style="display:none;">
+      <i class="fas fa-clock fa-lg"></i>
+      <div>
+        <strong>退件截止時間：</strong>
+        <span id="deadlineText">載入中...</span>
+        <span id="deadlineStatus" class="ms-2"></span>
       </div>
-      <button id="generateChartBtn" class="btn btn-primary">生成圖表</button>
-      <div class="d-flex gap-2 ms-2">
-        <button id="exportPdfBtn" class="btn-export-pdf">
-          <i class="fas fa-file-pdf"></i> PDF
-        </button>
-        <button id="exportWordBtn" class="btn-export-word">
-          <i class="fas fa-file-word"></i> Word
-        </button>
-        <button id="exportExcelBtn" class="btn-export-excel">
-          <i class="fas fa-file-excel"></i> Excel
-        </button>
-      </div>
-    </div>
-    <div id="chartSection" class="mb-4" style="display:none;">
-      <canvas id="prefChart" height="120"></canvas>
     </div>
 
-    {% if student_data %}
-    <div class="d-flex flex-column align-items-center gap-3">
-    {% for student_name, student_info in student_data.items() %}
-    <div class="student-section w-100" data-student-id="{{ student_info.student_id }}" data-student-name="{{ student_name }}" style="max-width: 1100px;">
-      <div class="d-flex justify-content-between align-items-center mb-3">
-        <h3>{{ student_name }}</h3>
-        <div class="btn-group">
-          <button type="button" class="btn btn-danger btn-sm reject-btn" data-student-id="{{ student_info.student_id }}" data-student-name="{{ student_name }}">
-            <i class="fas fa-times"></i> 退件
-          </button>
-          <button class="btn btn-outline-primary btn-sm collapse-toggle-btn" type="button" data-bs-toggle="collapse" data-bs-target="#preferences-{{ student_info.student_id }}" aria-expanded="false" aria-controls="preferences-{{ student_info.student_id }}" title="查看志願序">
-            <i class="fas fa-chevron-down"></i>
-          </button>
-        </div>
-      </div>
-      <div class="collapse" id="preferences-{{ student_info.student_id }}">
-        <div class="table-responsive">
-          <table class="table table-striped table-hover align-middle preferences-table">
-            <thead>
-              <tr>
-                <th>志願序</th>
-                <th>公司名稱</th>
-                <th>送出時間</th>
-              </tr>
-            </thead>
-            <tbody>
-              {% for p in student_info.preferences %}
-              <tr>
-                <td>{{ p.order }}</td>
-                <td>{{ p.company }}</td>
-                <td>{{ p.submitted_at }}</td>
-              </tr>
-              {% endfor %}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-    {% endfor %}
+    <!-- 總覽區 -->
+    {% set total_filled = filled_student_list|length if filled_student_list is defined else 0 %}
+    {% set total_unfilled = unfilled_students|length if unfilled_students is defined else 0 %}
+    {% set total_students = total_filled + total_unfilled %}
+    {% set ns = namespace(approved=0, rejected=0) %}
+    {% if filled_student_list is defined %}
+      {% for s in filled_student_list %}
+        {% if s.status == 'approved' %}{% set ns.approved = ns.approved + 1 %}
+        {% elif s.status == 'rejected' %}{% set ns.rejected = ns.rejected + 1 %}{% endif %}
+      {% endfor %}
+    {% endif %}
+
+    {% if total_students == 0 %}
+    <div class="alert alert-light border text-center py-5 mb-4" role="alert">
+      <i class="fas fa-inbox fa-2x text-muted mb-3 d-block"></i>
+      <p class="text-muted mb-0">目前尚無學生資料</p>
     </div>
     {% else %}
-    <p class="text-muted text-center">目前尚無學生填寫志願。</p>
+    <p class="section-title mb-2">總覽</p>
+    <div class="row g-3 mb-3">
+      <div class="col-md-3">
+        <div class="stat-card">
+          <div class="stat-number">{{ total_students }}</div>
+          <div class="stat-label">總人數</div>
+        </div>
+      </div>
+      <div class="col-md-3">
+        <div class="stat-card">
+          <div class="stat-number">{{ total_filled }}</div>
+          <div class="stat-label">填寫人數</div>
+        </div>
+      </div>
+      <div class="col-md-3">
+        <div class="stat-card">
+          <div class="stat-number">{{ ns.rejected }}</div>
+          <div class="stat-label">已退件</div>
+        </div>
+      </div>
+      <div class="col-md-3">
+        <div class="stat-card">
+          <div class="stat-number">{{ ns.approved }}</div>
+          <div class="stat-label">已審核</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 分析表區（點擊生成圖表後顯示於篩選列上方） -->
+    <div id="chartSection" class="mb-4" style="display:none;">
+      <div class="chart-header mb-3">
+        <p id="chartSummary" class="mb-2 small text-muted"></p>
+      </div>
+      <div id="analysisTableContainer"></div>
+    </div>
+
+    <!-- 篩選列：選擇學生查詢 + 填寫狀態 + 按鈕 -->
+    <div class="filter-row">
+      <div>
+        <label class="form-label d-block">選擇學生查詢</label>
+        <select id="studentSelectDropdown" class="form-select">
+          <option value="">-- 請選擇學號／姓名 --</option>
+          {% if all_class_students is defined %}
+          {% for s in all_class_students %}
+          <option value="{{ s.student_id }}" data-name="{{ s.student_name }}" data-number="{{ s.student_number|default('') }}">{{ s.student_number }} {{ s.student_name }}</option>
+          {% endfor %}
+          {% endif %}
+        </select>
+      </div>
+      <div>
+        <label class="form-label d-block">填寫狀態</label>
+        <select id="fillingStatusDropdown" class="form-select">
+          <option value="all">全部</option>
+          <option value="unfilled">未填寫</option>
+          <option value="filled">已填寫</option>
+        </select>
+      </div>
+      <div id="reviewStatusFilterWrap" style="display:none;">
+        <label class="form-label d-block">審核狀態</label>
+        <select id="reviewStatusDropdown" class="form-select">
+          <option value="all">全部</option>
+          <option value="approved">已審核</option>
+          <option value="rejected">已退件</option>
+        </select>
+      </div>
+      <div class="filter-actions d-flex gap-2">
+        <button id="generateChartBtn" class="btn btn-primary">生成圖表</button>
+        <div class="dropdown">
+          <button class="btn btn-outline-primary dropdown-toggle" type="button" id="exportDropdown" data-bs-toggle="dropdown" aria-expanded="false">
+            <i class="fas fa-file-export"></i> 匯出檔案
+          </button>
+          <ul class="dropdown-menu" aria-labelledby="exportDropdown">
+            <li><a class="dropdown-item" href="/export_preferences_pdf" id="exportPdfLink"><i class="fas fa-file-pdf text-danger me-2"></i>PDF</a></li>
+            <li><a class="dropdown-item" href="/export_preferences_word" id="exportWordLink"><i class="fas fa-file-word text-primary me-2"></i>Word</a></li>
+            <li><a class="dropdown-item" href="/export_preferences_excel" id="exportExcelLink"><i class="fas fa-file-excel text-success me-2"></i>Excel</a></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- 學生資料表格 -->
+    <div id="studentTableSection" class="mb-4">
+      <div class="table-responsive">
+        <table class="table table-bordered" id="studentDataTable">
+          <thead>
+            <tr>
+              <th>班級</th>
+              <th>學號</th>
+              <th>姓名</th>
+              <th>填寫狀態</th>
+              <th>審核狀態</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody id="studentTableBody">
+          </tbody>
+        </table>
+      </div>
+      <div id="studentTableEmpty" class="text-center text-muted py-4 border rounded" style="display:none;">
+        <i class="fas fa-inbox fa-2x mb-2 d-block"></i>
+        <p class="mb-0">查無符合條件的學生</p>
+      </div>
+    </div>
     {% endif %}
+
+    <!-- 學生志願序詳情 Modal（點擊查看志願序後跳出） -->
+    <div class="modal fade" id="studentDetailModal" tabindex="-1">
+      <div class="modal-dialog modal-dialog-centered modal-xl">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="studentDetailModalTitle">學生志願序</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+          </div>
+          <div class="modal-body" id="studentDetailModalBody"></div>
+        </div>
+      </div>
+    </div>
+
+    <script type="application/json" id="filledStudentsData">{{ (filled_student_list|tojson) if filled_student_list is defined else '[]' }}</script>
+    <script type="application/json" id="unfilledStudentsData">{{ (unfilled_students|tojson) if unfilled_students is defined else '[]' }}</script>
+    <script type="application/json" id="allInternshipJobsData">{{ (all_internship_jobs|tojson) if all_internship_jobs is defined else '[]' }}</script>
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <script>
     // 初始化選單功能
     function initMenu() {
@@ -600,242 +795,380 @@
     }
 
     // 初始化可收合按鈕的圖標旋轉
-    document.addEventListener('DOMContentLoaded', function() {
-      initMenu();
-      // 為所有 collapse 按鈕添加事件監聽
-      document.querySelectorAll('.collapse-toggle-btn').forEach(btn => {
-        const targetId = btn.getAttribute('data-bs-target');
-        const collapseElement = document.querySelector(targetId);
-        
-        if (collapseElement) {
-          // 監聽 collapse 事件，更新 title 提示
-          collapseElement.addEventListener('shown.bs.collapse', function() {
-            btn.setAttribute('title', '收起志願序');
-          });
-          
-          collapseElement.addEventListener('hidden.bs.collapse', function() {
-            btn.setAttribute('title', '查看志願序');
-          });
+    // 載入並顯示退件截止時間
+    async function loadDeadlineBanner() {
+      const banner = document.getElementById('deadlineBanner');
+      const textEl = document.getElementById('deadlineText');
+      const statusEl = document.getElementById('deadlineStatus');
+      if (!banner || !textEl) return;
+      try {
+        const res = await fetch('/announcement/api/check_deadline?type=preference');
+        const result = await res.json();
+        if (result.success && result.has_deadline) {
+          banner.style.display = 'flex';
+          textEl.textContent = result.deadline || '已設定';
+          if (result.is_expired) {
+            banner.classList.add('deadline-expired');
+            statusEl.textContent = '(已過期)';
+            statusEl.style.color = '#dc2626';
+            // 截止時間已過，停用所有退件按鈕
+            window.deadlineExpired = true;
+            document.querySelectorAll('.reject-btn').forEach(btn => {
+              btn.disabled = true;
+              btn.classList.add('reject-btn-disabled');
+            });
+          } else {
+            statusEl.textContent = '(尚未過期)';
+            statusEl.style.color = '#059669';
+          }
         }
-      });
-    });
-
-    // 學生查詢功能
-    document.getElementById('searchStudentBtn')?.addEventListener('click', function () {
-      const searchInput = document.getElementById('studentSearchInput');
-      const searchTerm = searchInput.value.trim().toLowerCase();
-
-      if (!searchTerm) {
-        alert('請輸入學生姓名或學號');
-        return;
+      } catch (e) {
+        console.error('載入截止時間失敗:', e);
       }
-
-      // 隱藏所有學生區塊
-      const studentSections = document.querySelectorAll('.student-section');
-      let foundCount = 0;
-
-      studentSections.forEach(section => {
-        const studentName = section.querySelector('h3').textContent.trim().toLowerCase();
-        const studentId = section.getAttribute('data-student-id')?.toLowerCase() || '';
-
-        if (studentName.includes(searchTerm)) {
-          section.style.display = 'block';
-          foundCount++;
-        } else {
-          section.style.display = 'none';
-        }
-      });
-
-      // 顯示查詢結果
-      if (foundCount > 0) {
-        const resultDiv = document.getElementById('searchResult') || createSearchResultDiv();
-        resultDiv.innerHTML = `
-          <div class="alert alert-info alert-compact">
-            <i class="fas fa-info-circle"></i> 
-            找到 ${foundCount} 位符合條件的學生
-            <button type="button" class="btn-close" onclick="clearSearch()" aria-label="關閉"></button>
-          </div>
-        `;
-        resultDiv.style.display = 'block';
-      } else {
-        const resultDiv = document.getElementById('searchResult') || createSearchResultDiv();
-        resultDiv.innerHTML = `
-          <div class="alert alert-warning alert-compact">
-            <i class="fas fa-exclamation-triangle"></i> 
-            未找到符合條件的學生
-            <button type="button" class="btn-close" onclick="clearSearch()" aria-label="關閉"></button>
-          </div>
-        `;
-        resultDiv.style.display = 'block';
-      }
-    });
-
-    // 按 Enter 鍵查詢
-    document.getElementById('studentSearchInput')?.addEventListener('keypress', function (e) {
-      if (e.key === 'Enter') {
-        document.getElementById('searchStudentBtn').click();
-      }
-    });
-
-    // 創建查詢結果顯示區域
-    function createSearchResultDiv() {
-      const resultDiv = document.createElement('div');
-      resultDiv.id = 'searchResult';
-      resultDiv.style.display = 'none';
-
-      // 插入到按鈕組後面
-      const buttonGroup = document.querySelector('.btn-group');
-      buttonGroup.parentNode.insertBefore(resultDiv, buttonGroup.nextSibling);
-
-      return resultDiv;
     }
 
-    // 清除查詢結果
-    window.clearSearch = function () {
-      const searchInput = document.getElementById('studentSearchInput');
-      const resultDiv = document.getElementById('searchResult');
+    document.addEventListener('DOMContentLoaded', function() {
+      initMenu();
+      loadDeadlineBanner();
+    });
 
-      // 清空搜尋框
-      searchInput.value = '';
+    // 切換審核狀態下拉顯示（僅在填寫狀態=已填寫時顯示）
+    function toggleReviewStatusFilter() {
+      const wrap = document.getElementById('reviewStatusFilterWrap');
+      const fillingVal = document.getElementById('fillingStatusDropdown')?.value || 'all';
+      if (wrap) {
+        wrap.style.display = fillingVal === 'filled' ? 'block' : 'none';
+        if (fillingVal !== 'filled') {
+          const dd = document.getElementById('reviewStatusDropdown');
+          if (dd) dd.value = 'all';
+        }
+      }
+    }
 
-      // 隱藏結果提示
-      if (resultDiv) {
-        resultDiv.style.display = 'none';
+    // 依據篩選條件渲染學生表格
+    function renderStudentTable() {
+      const filled = JSON.parse(document.getElementById('filledStudentsData')?.textContent || '[]');
+      const unfilled = JSON.parse(document.getElementById('unfilledStudentsData')?.textContent || '[]');
+      const statusVal = document.getElementById('fillingStatusDropdown')?.value || 'all';
+      const reviewVal = document.getElementById('reviewStatusDropdown')?.value || 'all';
+      const studentVal = document.getElementById('studentSelectDropdown')?.value || '';
+
+      toggleReviewStatusFilter();
+
+      let list = [];
+      if (statusVal === 'unfilled') {
+        list = unfilled.map(s => ({ ...s, _type: 'unfilled' }));
+      } else if (statusVal === 'filled') {
+        list = filled.map(s => ({ ...s, _type: 'filled' }));
+        if (reviewVal === 'approved') {
+          list = list.filter(s => s.status === 'approved');
+        } else if (reviewVal === 'rejected') {
+          list = list.filter(s => s.status === 'rejected');
+        }
+      } else {
+        list = unfilled.map(s => ({ ...s, _type: 'unfilled' })).concat(filled.map(s => ({ ...s, _type: 'filled' })));
+      }
+      if (studentVal) {
+        const sid = parseInt(studentVal);
+        list = list.filter(s => s.student_id === sid);
       }
 
-      // 顯示所有學生區塊
-      const studentSections = document.querySelectorAll('.student-section');
-      studentSections.forEach(section => {
-        section.style.display = 'block';
-      });
-    };
+      const tbody = document.getElementById('studentTableBody');
+      const emptyEl = document.getElementById('studentTableEmpty');
+      const tableEl = document.getElementById('studentDataTable');
+      if (!tbody) return;
 
-    // 生成圖表：彙整所有學生表格中的公司名稱出現次數
+      if (list.length === 0) {
+        tableEl.closest('.table-responsive').style.display = 'none';
+        emptyEl.style.display = 'block';
+        emptyEl.querySelector('p').textContent = '查無符合條件的學生';
+        return;
+      }
+      tableEl.closest('.table-responsive').style.display = 'block';
+      emptyEl.style.display = 'none';
+
+      let html = '';
+      list.forEach(s => {
+        const num = s.student_number || '';
+        const cls = s.class_name || '—';
+        const name = s.student_name || '';
+        const fillLabel = s._type === 'filled' ? '<span class="badge bg-success">已填寫</span>' : '<span class="badge bg-secondary">未填寫</span>';
+        const reviewLabel = s._type === 'filled'
+          ? (s.status === 'approved' ? '<span class="badge badge-approved">已審核</span>' : s.status === 'rejected' ? '<span class="badge badge-rejected">已退件</span>' : '<span class="badge badge-pending">待審核</span>')
+          : '—';
+        let actionHtml = '';
+        if (s._type === 'filled') {
+          const canReview = (s.status !== 'approved' && s.status !== 'rejected');
+          const approveBtn = canReview ? `<button type="button" class="btn btn-success btn-sm approve-btn" data-student-id="${s.student_id}" data-student-name="${s.student_name}"><i class="fas fa-check"></i> 通過</button>` : '';
+          const rejectBtn = canReview ? `<button type="button" class="btn btn-danger btn-sm reject-btn ms-1" data-student-id="${s.student_id}" data-student-name="${s.student_name}"><i class="fas fa-times"></i> 退件</button>` : '';
+          actionHtml = `<button type="button" class="btn btn-outline-primary btn-sm btn-view-pref" data-student-id="${s.student_id}" data-student-number="${num}" data-student-name="${name}">查看志願序</button>${approveBtn}${rejectBtn}`;
+          html += `<tr><td>${cls}</td><td>${num}</td><td>${name}</td><td>${fillLabel}</td><td>${reviewLabel}</td><td>${actionHtml}</td></tr>`;
+        } else {
+          actionHtml = '—';
+          html += `<tr><td>${cls}</td><td>${num}</td><td>${name}</td><td>${fillLabel}</td><td>${reviewLabel}</td><td>${actionHtml}</td></tr>`;
+        }
+      });
+      tbody.innerHTML = html;
+
+      if (window.deadlineExpired) {
+        tbody.querySelectorAll('.reject-btn').forEach(btn => {
+          btn.disabled = true;
+          btn.classList.add('reject-btn-disabled');
+        });
+      }
+    }
+
+    document.getElementById('studentSelectDropdown')?.addEventListener('change', renderStudentTable);
+    document.getElementById('fillingStatusDropdown')?.addEventListener('change', renderStudentTable);
+    document.getElementById('reviewStatusDropdown')?.addEventListener('change', renderStudentTable);
+
+    // 點擊「查看志願序」開啟彈跳視窗
+    document.addEventListener('click', function(e) {
+      const btn = e.target.closest('.btn-view-pref');
+      if (!btn) return;
+      const studentId = parseInt(btn.dataset.studentId);
+      const studentNumber = btn.dataset.studentNumber || '';
+      const studentName = btn.dataset.studentName || '';
+      const filled = JSON.parse(document.getElementById('filledStudentsData')?.textContent || '[]');
+      const found = filled.find(f => f.student_id === studentId);
+      const modal = new bootstrap.Modal(document.getElementById('studentDetailModal'));
+      const titleEl = document.getElementById('studentDetailModalTitle');
+      const bodyEl = document.getElementById('studentDetailModalBody');
+      if (found) {
+        titleEl.textContent = `${studentNumber} ${studentName} - 志願序`;
+        const isApproved = found.status === 'approved';
+        const rejectDisabled = isApproved || window.deadlineExpired;
+        const rejectBtnAttrs = rejectDisabled
+          ? ' disabled class="btn btn-danger btn-sm reject-btn reject-btn-disabled"'
+          : ' class="btn btn-danger btn-sm reject-btn" data-student-id="' + found.student_id + '" data-student-name="' + (found.student_name || '') + '"';
+        let html = `<p class="mb-2"><strong>狀態：</strong>`;
+        if (found.status === 'approved') html += '<span class="badge badge-approved">已審核</span>';
+        else if (found.status === 'rejected') html += '<span class="badge badge-rejected">已退件</span>';
+        else html += '<span class="badge badge-pending">待審核</span>';
+        html += `</p><div class="table-responsive"><table class="table table-sm table-preferences-detail"><thead><tr><th>志願序</th><th>公司名稱</th><th>職稱</th><th>送出時間</th><th>操作</th></tr></thead><tbody>`;
+        const prefs = found.preferences || [];
+        prefs.forEach((p, i) => {
+          const opCell = i === 0
+            ? `<td rowspan="${prefs.length}" class="align-middle"><button type="button"${rejectBtnAttrs}><i class="fas fa-times"></i> 退件</button></td>`
+            : '';
+          html += `<tr><td>${p.order}</td><td>${p.company || ''}</td><td>${p.job_title || '—'}</td><td>${p.submitted_at || ''}</td>${opCell}</tr>`;
+        });
+        html += '</tbody></table></div>';
+        bodyEl.innerHTML = html;
+      } else {
+        titleEl.textContent = `${studentNumber} ${studentName}`;
+        bodyEl.innerHTML = '<p class="text-muted mb-0">找不到該學生志願序資料。</p>';
+      }
+      modal.show();
+    });
+
+    // 頁面載入時渲染
+    if (document.getElementById('studentTableBody')) {
+      renderStudentTable();
+    }
+
+    // 生成分析表：各公司職缺志願結構分析表
     (function initPreferenceChart() {
       const btn = document.getElementById('generateChartBtn');
       const section = document.getElementById('chartSection');
-      const canvas = document.getElementById('prefChart');
-      let chartInstance = null;
+      const summaryEl = document.getElementById('chartSummary');
+      const tableContainer = document.getElementById('analysisTableContainer');
 
-      function collectCompanyCounts() {
-        const counts = new Map();
-        // 遍歷所有表格的 tbody 中第2欄（公司名稱）
-        document.querySelectorAll('table tbody tr').forEach(tr => {
-          const companyCell = tr.children[1];
-          if (!companyCell) return;
-          const name = companyCell.textContent.trim();
-          if (!name) return;
-          counts.set(name, (counts.get(name) || 0) + 1);
-        });
-        return counts;
+      function collectDetailedCounts() {
+        const obj = {};
+        const meta = {};
+        try {
+          const allJobs = JSON.parse(document.getElementById('allInternshipJobsData')?.textContent || '[]');
+          allJobs.forEach(j => {
+            const company = (j.company_name || '').trim();
+            const job = (j.job_title || '').trim();
+            if (!company) return;
+            const key = job ? `${company} - ${job}` : company;
+            obj[key] = [0, 0, 0, 0, 0];
+            meta[key] = { company, job: job || '—' };
+          });
+          const filled = JSON.parse(document.getElementById('filledStudentsData')?.textContent || '[]');
+          filled.forEach(s => {
+            (s.preferences || []).forEach(p => {
+              const company = (p.company || '').trim();
+              const job = (p.job_title || '').trim();
+              if (!company) return;
+              const key = job ? `${company} - ${job}` : company;
+              const order = Math.min(5, Math.max(1, parseInt(p.order, 10) || 1));
+              if (!obj[key]) {
+                obj[key] = [0, 0, 0, 0, 0];
+                meta[key] = { company, job: job || '—' };
+              }
+              obj[key][order - 1] += 1;
+            });
+          });
+        } catch (e) { console.error(e); }
+        return { data: obj, meta };
       }
 
-      function buildChart() {
-        const counts = collectCompanyCounts();
-        const labels = Array.from(counts.keys());
-        const data = Array.from(counts.values());
-
-        if (chartInstance) {
-          chartInstance.destroy();
+      function buildCharts() {
+        const { data, meta } = collectDetailedCounts();
+        const keys = Object.keys(data);
+        if (keys.length === 0) {
+          if (summaryEl) summaryEl.textContent = '尚無實習職缺資料，請確認已建立公司與職缺。';
+          tableContainer.innerHTML = '';
+          return;
         }
 
-        chartInstance = new Chart(canvas, {
-          type: 'bar',
-          data: {
-            labels,
-            datasets: [{
-              label: '公司被選擇次數（所有志願）',
-              data,
-              backgroundColor: 'rgba(0, 102, 204, 0.25)',
-              borderColor: 'rgba(0, 102, 204, 1)',
-              borderWidth: 1.5,
-            }]
-          },
-          options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            scales: {
-              x: {
-                ticks: { maxRotation: 45, minRotation: 0 },
-                title: { display: true, text: '公司名稱' }
-              },
-              y: {
-                beginAtZero: true,
-                precision: 0,
-                title: { display: true, text: '次數' }
-              }
-            },
-            plugins: {
-              legend: { display: true },
-              tooltip: { enabled: true }
-            }
-          }
+        const getCompany = (k) => (meta[k]?.company ?? (k.includes(' - ') ? k.split(' - ')[0] : k));
+        const allCompanies = new Set(keys.map(k => getCompany(k)));
+        const companiesWithChoices = new Set();
+        keys.forEach(k => {
+          const total = data[k].reduce((a, b) => a + b, 0);
+          if (total > 0) companiesWithChoices.add(getCompany(k));
         });
+        const unfilledCount = allCompanies.size - companiesWithChoices.size;
+        if (summaryEl) summaryEl.textContent = `實習公司共 ${allCompanies.size} 家，目前有選填的公司共 ${companiesWithChoices.size} 家，未選填公司共 ${unfilledCount} 家`;
+
+        const sortedByTotal = [...keys].sort((a, b) => {
+          const ca = getCompany(a);
+          const cb = getCompany(b);
+          if (ca !== cb) return ca.localeCompare(cb);
+          const ta = data[a].reduce((x, y) => x + y, 0);
+          const tb = data[b].reduce((x, y) => x + y, 0);
+          return tb - ta;
+        });
+        const labelsFull = sortedByTotal;
+
+        const escape = (s) => String(s || '').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+        const tbody = labelsFull.map(k => {
+          const arr = data[k];
+          const m = meta[k] || { company: k, job: '—' };
+          const total = arr.reduce((a, b) => a + b, 0);
+          const top1Pct = total > 0 ? ((arr[0] / total) * 100).toFixed(1) : '—';
+          const cells = [m.company, m.job, ...arr, total, `${top1Pct}%`].map(v => `<td>${v}</td>`).join('');
+          const c = escape(m.company); const j = escape(m.job);
+          return `<tr class="analysis-row" data-total="${total}" data-company="${c}" data-job="${j}">${cells}</tr>`;
+        }).join('');
+        tableContainer.innerHTML = `
+          <h6 class="mb-2 fw-bold">各公司職缺志願結構分析表</h6>
+          <div class="analysis-filters mb-2 d-flex flex-wrap gap-2 align-items-end">
+            <div>
+              <label class="form-label small mb-0">填寫狀態</label>
+              <select id="analysisFilterStatus" class="form-select form-select-sm" style="width:auto;">
+                <option value="all">全部</option>
+                <option value="filled">有選填</option>
+                <option value="unfilled">未選填</option>
+              </select>
+            </div>
+            <div>
+              <label class="form-label small mb-0">搜尋公司／職缺</label>
+              <input type="text" id="analysisFilterSearch" class="form-control form-control-sm" placeholder="輸入關鍵字" style="width:180px;">
+            </div>
+            <button type="button" id="analysisFilterApply" class="btn btn-sm btn-outline-primary">套用</button>
+            <span id="analysisFilterCount" class="text-muted small align-self-center"></span>
+          </div>
+          <div class="table-responsive">
+            <table class="table table-sm table-hover table-bordered">
+              <thead><tr><th>公司名稱</th><th>職缺名稱</th><th>志願1</th><th>志願2</th><th>志願3</th><th>志願4</th><th>志願5</th><th>總計</th><th>第一志願佔比</th></tr></thead>
+              <tbody id="analysisTableBody">${tbody}</tbody>
+            </table>
+          </div>
+          <nav id="analysisPagination" class="mt-2" aria-label="分頁"></nav>`;
+        let analysisCurrentPage = 1;
+        const analysisPageSize = 10;
+        const renderAnalysisPagination = (totalVisible, totalRows) => {
+          const totalPages = Math.max(1, Math.ceil(totalVisible / analysisPageSize));
+          analysisCurrentPage = Math.min(analysisCurrentPage, totalPages);
+          const nav = document.getElementById('analysisPagination');
+          if (!nav) return;
+          if (totalVisible <= analysisPageSize) {
+            nav.innerHTML = `<span class="text-muted small">共 ${totalVisible} 筆</span>`;
+            return;
+          }
+          let html = '<ul class="pagination pagination-sm mb-0 flex-wrap">';
+          html += `<li class="page-item ${analysisCurrentPage <= 1 ? 'disabled' : ''}"><a class="page-link" href="#" data-page="prev">上一頁</a></li>`;
+          const start = Math.max(1, analysisCurrentPage - 2);
+          const end = Math.min(totalPages, analysisCurrentPage + 2);
+          if (start > 1) html += `<li class="page-item"><a class="page-link" href="#" data-page="1">1</a></li>`;
+          if (start > 2) html += `<li class="page-item disabled"><span class="page-link">...</span></li>`;
+          for (let i = start; i <= end; i++) {
+            html += `<li class="page-item ${i === analysisCurrentPage ? 'active' : ''}"><a class="page-link" href="#" data-page="${i}">${i}</a></li>`;
+          }
+          if (end < totalPages - 1) html += `<li class="page-item disabled"><span class="page-link">...</span></li>`;
+          if (end < totalPages) html += `<li class="page-item"><a class="page-link" href="#" data-page="${totalPages}">${totalPages}</a></li>`;
+          html += `<li class="page-item ${analysisCurrentPage >= totalPages ? 'disabled' : ''}"><a class="page-link" href="#" data-page="next">下一頁</a></li>`;
+          html += '</ul>';
+          nav.innerHTML = html;
+          nav.querySelectorAll('a[data-page]').forEach(a => {
+            a.addEventListener('click', (e) => {
+              e.preventDefault();
+              if (a.closest('.page-item.disabled')) return;
+              const p = a.dataset.page;
+              if (p === 'prev') analysisCurrentPage = Math.max(1, analysisCurrentPage - 1);
+              else if (p === 'next') analysisCurrentPage = Math.min(totalPages, analysisCurrentPage + 1);
+              else analysisCurrentPage = parseInt(p, 10);
+              applyAnalysisFilter();
+            });
+          });
+        };
+        const applyAnalysisFilter = () => {
+          const status = document.getElementById('analysisFilterStatus')?.value || 'all';
+          const search = (document.getElementById('analysisFilterSearch')?.value || '').trim().toLowerCase();
+          const rows = Array.from(tableContainer.querySelectorAll('.analysis-row'));
+          let visibleIndex = 0;
+          rows.forEach(tr => {
+            const total = parseInt(tr.dataset.total || '0', 10);
+            const company = (tr.dataset.company || '').toLowerCase();
+            const job = (tr.dataset.job || '').toLowerCase();
+            const hasFill = total > 0;
+            let ok = true;
+            if (status === 'filled' && !hasFill) ok = false;
+            if (status === 'unfilled' && hasFill) ok = false;
+            if (search && !company.includes(search) && !job.includes(search)) ok = false;
+            if (ok) {
+              tr._visibleIndex = visibleIndex++;
+              const lo = (analysisCurrentPage - 1) * analysisPageSize;
+              const hi = analysisCurrentPage * analysisPageSize;
+              tr.style.display = (tr._visibleIndex >= lo && tr._visibleIndex < hi) ? '' : 'none';
+            } else {
+              tr._visibleIndex = -1;
+              tr.style.display = 'none';
+            }
+          });
+          const visibleCount = visibleIndex;
+          renderAnalysisPagination(visibleCount, rows.length);
+          const cnt = document.getElementById('analysisFilterCount');
+          if (cnt) cnt.textContent = `顯示 ${Math.min(analysisPageSize, visibleCount)} / ${visibleCount} 筆`;
+        };
+        applyAnalysisFilter();
+        document.getElementById('analysisFilterApply')?.addEventListener('click', () => { analysisCurrentPage = 1; applyAnalysisFilter(); });
+        document.getElementById('analysisFilterSearch')?.addEventListener('keypress', (e) => { if (e.key === 'Enter') { analysisCurrentPage = 1; applyAnalysisFilter(); } });
       }
 
       btn?.addEventListener('click', () => {
         const isHidden = section.style.display === 'none';
         if (isHidden) {
           section.style.display = 'block';
-          buildChart();
+          buildCharts();
           btn.textContent = '隱藏圖表';
         } else {
           section.style.display = 'none';
-          if (chartInstance) {
-            chartInstance.destroy();
-            chartInstance = null;
-          }
+          tableContainer.innerHTML = '';
           btn.textContent = '生成圖表';
         }
       });
     })();
 
-    // Excel 導出功能
-    document.getElementById('exportExcelBtn')?.addEventListener('click', function () {
-      // 顯示載入狀態
-      const btn = this;
-      const originalText = btn.innerHTML;
-      btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 導出中...';
-      btn.disabled = true;
-
-      // 創建一個隱藏的 a 標籤來觸發下載
-      window.location.href = '/export_preferences_excel';
-
-      // 恢復按鈕狀態（延遲一下讓用戶看到載入效果）
-      setTimeout(() => {
-        btn.innerHTML = originalText;
-        btn.disabled = false;
-      }, 2000);
-    });
-
-    // Word 導出功能
-    document.getElementById('exportWordBtn')?.addEventListener('click', function () {
-      const btn = this;
-      const originalText = btn.innerHTML;
-      btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 導出中...';
-      btn.disabled = true;
-
-      window.location.href = '/export_preferences_word';
-
-      setTimeout(() => {
-        btn.innerHTML = originalText;
-        btn.disabled = false;
-      }, 2000);
-    });
-
-    // PDF 導出功能
-    document.getElementById('exportPdfBtn')?.addEventListener('click', function () {
-      const btn = this;
-      const originalText = btn.innerHTML;
-      btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 導出中...';
-      btn.disabled = true;
-
-      window.location.href = '/export_preferences_pdf';
-
-      setTimeout(() => {
-        btn.innerHTML = originalText;
-        btn.disabled = false;
-      }, 2000);
+    // 匯出檔案（下拉選單連結，直接使用 href 導向下載）
+    document.querySelectorAll('#exportPdfLink, #exportWordLink, #exportExcelLink').forEach(link => {
+      link?.addEventListener('click', function () {
+        const exportBtn = document.getElementById('exportDropdown');
+        if (exportBtn) {
+          const originalHtml = exportBtn.innerHTML;
+          exportBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 導出中...';
+          exportBtn.disabled = true;
+          setTimeout(() => {
+            exportBtn.innerHTML = '<i class="fas fa-file-export"></i> 匯出檔案';
+            exportBtn.disabled = false;
+          }, 2000);
+        }
+      });
     });
 
     // 志願序審核功能
@@ -907,6 +1240,7 @@
       // 處理退件按鈕
       if (e.target.closest('.reject-btn')) {
         const btn = e.target.closest('.reject-btn');
+        if (window.deadlineExpired || btn.disabled) return;
         const studentId = parseInt(btn.getAttribute('data-student-id'));
         const studentName = btn.getAttribute('data-student-name');
         rejectPreferences(studentId, studentName);
