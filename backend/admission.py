@@ -3055,7 +3055,7 @@ def director_confirm_matching():
         
         for ta in tas:
             title = f"{semester_prefix} 媒合結果待發布"
-            message = f"{semester_prefix}媒合結果已由主任確認，廠商確認後請進行最後發布。"
+            message = f"{semester_prefix}媒合結果已由主任確認，科助確認後請進行最後發布。"
             link_url = "/final_results"  # 科助查看最終結果的頁面
             create_notification(
                 user_id=ta['id'],

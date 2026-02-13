@@ -586,7 +586,7 @@
           panel1Stat.innerHTML = '已核定可公告媒合：<span class="num">' + matchingCount + '</span> 人';
         }
         if (panel2Stat) {
-          panel2Stat.innerHTML = '未錄取學生：<span class="num">' + unadmittedCount + '</span> 人（可進行二面流程）';
+          panel2Stat.innerHTML = '未錄取學生：<span class="num">' + unadmittedCount + '</span> 人';
         }
       } catch (err) {
         console.error('載入科助工作台統計失敗', err);
@@ -629,10 +629,6 @@
     const exportExcelBtn = document.getElementById('exportExcelBtn');
     if (exportExcelBtn) {
       exportExcelBtn.addEventListener('click', async function() {
-        if (!confirm('確定要匯出媒合結果 Excel 檔案嗎？\n\n匯出後可用於公告使用。')) {
-          return;
-        }
-
         exportExcelBtn.disabled = true;
         const originalText = exportExcelBtn.innerHTML;
         exportExcelBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> 匯出中...';
