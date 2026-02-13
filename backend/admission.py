@@ -8,6 +8,7 @@ from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
 from openpyxl.utils import get_column_letter
 import io
 import traceback
+import re
 
 admission_bp = Blueprint("admission_bp", __name__, url_prefix="/admission")
 
@@ -2249,36 +2250,78 @@ def final_matching_results():
             }
             formatted_results.append(formatted_result)
         
+        # 先獲取所有已審核的公司（即使沒有媒合結果也要顯示）
+        cursor.execute("""
+            SELECT DISTINCT ic.id AS company_id, ic.company_name
+            FROM internship_companies ic
+            WHERE ic.status = 'approved'
+            ORDER BY ic.company_name
+        """)
+        all_companies = cursor.fetchall() or []
+        
+        # 獲取所有已審核公司的職缺
+        cursor.execute("""
+            SELECT ij.id AS job_id, ij.company_id, ij.title AS job_title, ij.slots AS job_slots
+            FROM internship_jobs ij
+            JOIN internship_companies ic ON ij.company_id = ic.id
+            WHERE ic.status = 'approved' AND ij.is_active = 1
+            ORDER BY ij.company_id, ij.id
+        """)
+        all_jobs = cursor.fetchall() or []
+        
         # 按公司和職缺組織資料
         companies_data = {}
         
+        # 先初始化所有已審核的公司
+        for company in all_companies:
+            company_id = company["company_id"]
+            company_name = company["company_name"]
+            companies_data[company_id] = {
+                "company_id": company_id,
+                "company_name": company_name,
+                "jobs": {}
+            }
+        
+        # 為每個公司添加職缺（即使沒有媒合結果）
+        for job in all_jobs:
+            company_id = job["company_id"]
+            job_id = job["job_id"]
+            job_title = job["job_title"]
+            job_slots = job["job_slots"] or 1
+            
+            if company_id in companies_data:
+                if job_id not in companies_data[company_id]["jobs"]:
+                    companies_data[company_id]["jobs"][job_id] = {
+                        "job_id": job_id,
+                        "job_title": job_title,
+                        "job_slots": job_slots,
+                        "regulars": [],
+                        "reserves": []
+                    }
+        
+        # 添加媒合結果到對應的公司和職缺
         for result in formatted_results:
             company_id = result.get("company_id")
             company_name = result.get("company_name")
             job_id = result.get("job_id")
             job_title = result.get("job_title") or "未指定職缺"
             
-            if company_id not in companies_data:
-                companies_data[company_id] = {
-                    "company_id": company_id,
-                    "company_name": company_name,
-                    "jobs": {}
-                }
-            
-            if job_id not in companies_data[company_id]["jobs"]:
-                companies_data[company_id]["jobs"][job_id] = {
-                    "job_id": job_id,
-                    "job_title": job_title,
-                    "job_slots": result.get("job_slots", 1),
-                    "regulars": [],
-                    "reserves": []
-                }
-            
-            # 根據 is_reserve 分類
-            if result.get("is_reserve"):
-                companies_data[company_id]["jobs"][job_id]["reserves"].append(result)
-            else:
-                companies_data[company_id]["jobs"][job_id]["regulars"].append(result)
+            if company_id and company_id in companies_data:
+                # 如果職缺不存在，創建一個
+                if job_id not in companies_data[company_id]["jobs"]:
+                    companies_data[company_id]["jobs"][job_id] = {
+                        "job_id": job_id,
+                        "job_title": job_title,
+                        "job_slots": result.get("job_slots", 1),
+                        "regulars": [],
+                        "reserves": []
+                    }
+                
+                # 根據 is_reserve 分類
+                if result.get("is_reserve"):
+                    companies_data[company_id]["jobs"][job_id]["reserves"].append(result)
+                else:
+                    companies_data[company_id]["jobs"][job_id]["regulars"].append(result)
         
         # 轉換為列表格式
         companies_list = []
@@ -3012,7 +3055,7 @@ def director_confirm_matching():
         
         for ta in tas:
             title = f"{semester_prefix} 媒合結果待發布"
-            message = f"{semester_prefix}媒合結果已由主任確認，廠商確認後請進行最後發布。"
+            message = f"{semester_prefix}媒合結果已由主任確認，科助確認後請進行最後發布。"
             link_url = "/final_results"  # 科助查看最終結果的頁面
             create_notification(
                 user_id=ta['id'],
@@ -3876,6 +3919,7 @@ def ta_export_unadmitted_students_excel():
                 u.id AS student_id,
                 u.name AS student_name,
                 u.username AS student_number,
+                u.admission_year AS admission_year,
                 c.id AS class_id,
                 c.name AS class_name,
                 c.department
@@ -3958,11 +4002,12 @@ def ta_export_unadmitted_students_excel():
             bottom=Side(style='thin')
         )
 
-        title = f"未錄取學生名單（{current_semester_code} {semester_label}）"
+        title = f"未錄取學生名單\n（{current_semester_code} {semester_label}）"
         ws["A1"].value = title
         ws.merge_cells("A1:C1")
         ws["A1"].font = Font(bold=True, size=14)
-        ws["A1"].alignment = Alignment(horizontal="left", vertical="center")
+        ws["A1"].alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+        ws.row_dimensions[1].height = 50  # 增加第一行高度，確保兩行文字完整顯示不被切到
 
         ws.append(["姓名", "學號", "班級"])
         for cell in ws[2]:
@@ -3971,13 +4016,65 @@ def ta_export_unadmitted_students_excel():
             cell.border = thin_border
             cell.alignment = Alignment(horizontal="center", vertical="center")
 
+        # 計算當前學年（從學期代碼提取：1132 -> 113）
+        current_semester_year = None
+        if current_semester_code and len(current_semester_code) >= 3:
+            try:
+                current_semester_year = int(current_semester_code[:3])
+            except (ValueError, TypeError):
+                pass
+        
+        # 年級數字對應的中文
+        grade_labels = ('', '一', '二', '三', '四', '五', '六')
+        
         for s in unadmitted_students:
             dept = (s.get("department") or "").strip()
             cls = (s.get("class_name") or "").strip()
-            class_label = (dept + cls) if (dept or cls) else ""
+            base_class_label = (dept + cls) if (dept or cls) else ""
+            
+            # 計算年級並插入到班級名稱中
+            class_label = base_class_label
+            if base_class_label and current_semester_year is not None:
+                admission_year = s.get("admission_year")
+                # 如果沒有 admission_year，嘗試從學號前3碼獲取
+                if admission_year is None or str(admission_year).strip() == '':
+                    student_number = s.get("student_number")
+                    if student_number and len(str(student_number)) >= 3:
+                        try:
+                            admission_year = int(str(student_number)[:3])
+                        except (ValueError, TypeError):
+                            pass
+                
+                if admission_year is not None:
+                    try:
+                        grade_num = current_semester_year - int(admission_year) + 1
+                        if 1 <= grade_num <= 6:
+                            grade_char = grade_labels[grade_num]
+                            # 在「科」和「孝/忠」之間插入年級數字
+                            # 例如：「資管科孝」→「資管科四孝」
+                            match = re.match(r'^(.+科)(.+)$', base_class_label)
+                            if match:
+                                class_label = match.group(1) + grade_char + match.group(2)
+                            else:
+                                # 如果格式不符合，嘗試在最後插入
+                                class_label = base_class_label + grade_char
+                    except (ValueError, TypeError):
+                        pass
+            
+            # 處理學號：轉換為數字格式
+            student_number = s.get("student_number") or ""
+            student_number_value = student_number
+            if student_number:
+                try:
+                    # 嘗試轉換為整數，確保以數字格式儲存
+                    student_number_value = int(str(student_number))
+                except (ValueError, TypeError):
+                    # 如果無法轉換，保持原值
+                    student_number_value = student_number
+            
             ws.append([
                 s.get("student_name") or "",
-                s.get("student_number") or "",
+                student_number_value,
                 class_label
             ])
 
@@ -3985,11 +4082,16 @@ def ta_export_unadmitted_students_excel():
         for row in ws.iter_rows(min_row=3, max_row=ws.max_row, min_col=1, max_col=3):
             for cell in row:
                 cell.border = thin_border
-                cell.alignment = Alignment(horizontal="left", vertical="center")
+                cell.alignment = Alignment(horizontal="center", vertical="center")
+                # 學號欄位（B欄）設定為數字格式
+                if cell.column == 2:  # B欄是第2欄
+                    if isinstance(cell.value, (int, float)):
+                        cell.number_format = '0'  # 設定為整數格式，不顯示小數點
 
-        ws.column_dimensions["A"].width = 14
-        ws.column_dimensions["B"].width = 16
-        ws.column_dimensions["C"].width = 22
+        # 增加欄位寬度，確保標題完整顯示
+        ws.column_dimensions["A"].width = 18
+        ws.column_dimensions["B"].width = 18
+        ws.column_dimensions["C"].width = 24
 
         output = io.BytesIO()
         wb.save(output)

@@ -7,8 +7,8 @@
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
   <style>
     :root {
-      --brand-blue: #0066cc;
-      --brand-blue-dark: #024689;
+      --brand-blue:#0454a3;
+      --brand-blue-dark: #0454a3;
       --bg-light: #f5f8ff;
       --border-light: #dbe4f4;
       --text-dark: #1f2937;
@@ -425,7 +425,7 @@
     <a href="/ta/interview_schedule">行事曆</a>
     <a href="/admin/absence_default_range">缺勤預設學期範圍設定</a>
     <a href="/ta/upload_standard_courses">專業核心科目管理</a>
-    <a href="/ta/dashboard">媒合結果管理中心</a>
+    <a href="/ta_assistant_dashboard">媒合結果管理中心</a>
     <a href="/logout">登出</a>
   </nav>
 
@@ -776,8 +776,6 @@
           a.click();
           document.body.removeChild(a);
           window.URL.revokeObjectURL(url);
-
-          alert('✅ 未錄取學生名單已匯出。');
         } catch (err) {
           console.error('匯出未錄取名單失敗', err);
           alert('❌ 匯出失敗：' + (err.message || '未知錯誤'));
