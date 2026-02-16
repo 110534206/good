@@ -1041,13 +1041,27 @@ def get_vendor_resumes():
                 job_slots = pref_to_show.get("job_slots") or 0
                 
                 # 優先從 resume_applications 表讀取狀態和留言
-                # 使用 application_id (preference_id) 和 job_id 來查詢
-                if preference_id and job_id:
+                # 注意：resume_applications.application_id 對應的是 student_job_applications.id，不是 student_preferences.id
+                # 需要從 student_job_applications 表獲取正確的 application_id
+                application_id = None
+                if student_id and company_id and job_id:
+                    cursor.execute("""
+                        SELECT id FROM student_job_applications
+                        WHERE student_id = %s AND company_id = %s AND job_id = %s
+                        ORDER BY applied_at DESC
+                        LIMIT 1
+                    """, (student_id, company_id, job_id))
+                    sja_result = cursor.fetchone()
+                    if sja_result:
+                        application_id = sja_result['id']
+                
+                # 使用 application_id (student_job_applications.id) 和 job_id 來查詢 resume_applications
+                if application_id and job_id:
                     cursor.execute("""
                         SELECT apply_status, company_comment, interview_status, interview_time, interview_result
                         FROM resume_applications
                         WHERE application_id = %s AND job_id = %s
-                    """, (preference_id, job_id))
+                    """, (application_id, job_id))
                     ra_result = cursor.fetchone()
                     
                     if ra_result:

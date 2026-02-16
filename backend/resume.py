@@ -594,6 +594,7 @@ def review_resume(resume_id):
             
             print(f"✅ [DEBUG] 指導老師審核完成: application_id={application_id_int}, review_status={status}, teacher_id={user_id}")
         else:
+            # 班導或其他角色審核履歷（更新 resumes 表）
             old_status_for_check = old_status
             cursor.execute("""
                 UPDATE resumes SET 
@@ -604,6 +605,49 @@ def review_resume(resume_id):
                     updated_at=NOW()
                 WHERE id=%s
             """, (status, comment, user_id, resume_id))
+            
+            # 如果班導審核通過（status='approved'），創建 resume_teacher 記錄
+            if status == 'approved' and user_role == 'class_teacher' and resume_teacher_table_exists:
+                # 查詢該履歷對應的所有投遞記錄（student_job_applications）
+                cursor.execute("""
+                    SELECT sja.id AS application_id, sja.company_id, sja.job_id, ic.advisor_user_id
+                    FROM student_job_applications sja
+                    JOIN internship_companies ic ON sja.company_id = ic.id
+                    WHERE sja.student_id = %s AND sja.resume_id = %s
+                """, (student_user_id, resume_id))
+                applications = cursor.fetchall()
+                
+                if applications:
+                    created_count = 0
+                    for app in applications:
+                        application_id = app['application_id']
+                        advisor_user_id = app['advisor_user_id']
+                        
+                        if not advisor_user_id:
+                            print(f"⚠️ [resume_teacher] 公司 company_id={app['company_id']} 未設定指導老師，跳過創建 resume_teacher 記錄")
+                            continue
+                        
+                        # 檢查是否已存在 resume_teacher 記錄
+                        cursor.execute("""
+                            SELECT id FROM resume_teacher
+                            WHERE application_id = %s AND teacher_id = %s
+                        """, (application_id, advisor_user_id))
+                        existing = cursor.fetchone()
+                        
+                        if not existing:
+                            try:
+                                cursor.execute("""
+                                    INSERT INTO resume_teacher (application_id, teacher_id, review_status, comment, reviewed_at, created_at)
+                                    VALUES (%s, %s, 'uploaded', NULL, NULL, NOW())
+                                """, (application_id, advisor_user_id))
+                                created_count += 1
+                                print(f"✅ [resume_teacher] 班導審核通過後創建指導老師審核記錄: application_id={application_id}, teacher_id={advisor_user_id}, review_status='uploaded'")
+                            except Exception as rt_err:
+                                traceback.print_exc()
+                                print(f"⚠️ [resume_teacher] 創建失敗: application_id={application_id}, teacher_id={advisor_user_id}, error={rt_err}")
+                    
+                    if created_count > 0:
+                        print(f"✅ [resume_teacher] 班導審核通過，已創建 {created_count} 筆 resume_teacher 記錄，等待指導老師審核")
         
         # 4. 取得審核者姓名
         cursor.execute("SELECT name, role FROM users WHERE id = %s", (user_id,))
@@ -689,21 +733,33 @@ def review_resume(resume_id):
                             existing_ra = cursor.fetchone()
                             
                             if existing_ra:
-                                if existing_ra['apply_status'] not in ['applied', 'reviewing', 'accepted']:
+                                # 如果記錄已存在但狀態不是待審核，更新為 'uploaded'（待審核狀態）
+                                if existing_ra['apply_status'] not in ['uploaded', 'approved', 'rejected']:
                                     cursor.execute("""
                                         UPDATE resume_applications
-                                        SET apply_status = 'applied',
+                                        SET apply_status = 'uploaded',
+                                            updated_at = NOW()
+                                        WHERE id = %s
+                                    """, (existing_ra['id'],))
+                                    updated_companies.append(company_id)
+                                elif existing_ra['apply_status'] == 'rejected':
+                                    # 如果之前被退件，現在重新設為待審核
+                                    cursor.execute("""
+                                        UPDATE resume_applications
+                                        SET apply_status = 'uploaded',
                                             updated_at = NOW()
                                         WHERE id = %s
                                     """, (existing_ra['id'],))
                                     updated_companies.append(company_id)
                             else:
+                                # 創建新的 resume_applications 記錄，狀態設為 'uploaded'（待廠商審核）
                                 cursor.execute("""
                                     INSERT INTO resume_applications
                                     (application_id, job_id, apply_status, interview_status, interview_result, created_at)
                                     VALUES (%s, %s, %s, %s, %s, NOW())
-                                """, (application_id, job_id, 'applied', 'none', 'pending'))
+                                """, (application_id, job_id, 'uploaded', 'none', 'pending'))
                                 updated_companies.append(company_id)
+                                print(f"✅ [resume_applications] 指導老師通過後創建廠商審核記錄: application_id={application_id}, job_id={job_id}, apply_status='uploaded'")
                         
                         if updated_companies:
                             placeholders = ','.join(['%s'] * len(updated_companies))

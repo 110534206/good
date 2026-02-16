@@ -1834,23 +1834,10 @@ def apply_company():
         ))
         application_id = cursor.lastrowid
 
-        # 為該筆投遞建立指導老師審核紀錄（resume_teacher 以 application_id 關聯，一筆投遞一筆審核）
-        cursor.execute("SELECT advisor_user_id FROM internship_companies WHERE id = %s", (company_id,))
-        company_row = cursor.fetchone()
-        if company_row and company_row.get('advisor_user_id'):
-            try:
-                cursor.execute("""
-                    INSERT INTO resume_teacher (application_id, teacher_id, review_status, comment, reviewed_at, created_at)
-                    VALUES (%s, %s, 'uploaded', NULL, NULL, NOW())
-                """, (application_id, company_row['advisor_user_id']))
-            except Exception as rt_err:
-                traceback.print_exc()
-                print(f"⚠️ [resume_teacher] 寫入失敗 company_id={company_id}, application_id={application_id}, advisor_user_id={company_row['advisor_user_id']}: {rt_err}")
-        else:
-            if not company_row:
-                print(f"⚠️ [resume_teacher] 略過：找不到公司 company_id={company_id}")
-            else:
-                print(f"⚠️ [resume_teacher] 略過：公司未設定指導老師 (advisor_user_id 為空) company_id={company_id}，請在實習公司管理為該公司設定「指導老師」")
+        # 注意：不在此處創建 resume_teacher 記錄
+        # 流程：學生投遞 → 班導審核通過（resumes.status='approved'）→ 創建 resume_teacher 記錄 → 指導老師審核通過（review_status='approved'）→ 創建 resume_applications 記錄
+        print(f"✅ [student_apply] 學生投遞成功: application_id={application_id}, company_id={company_id}, job_id={job_id}, resume_id={resume_id}")
+        print(f"   等待班導審核通過後，才會創建 resume_teacher 記錄")
 
         # 同時創建 resume_applications 記錄（給廠商審核用）
         # 注意：resume_applications 記錄會在指導老師審核通過時自動創建（見 resume.py review_resume）
@@ -1871,12 +1858,16 @@ def apply_company():
                 existing_record = cursor.fetchone()
                 if not existing_record:
                     try:
+                        # 注意：apply_status 應該是 'uploaded'（待廠商審核），不是 'applied'
+                        # 因為學生投遞時，履歷還需要經過指導老師審核，通過後才會傳給廠商
+                        # 所以這裡不應該創建 resume_applications 記錄，應該等指導老師通過後再創建
+                        # 但為了向後兼容，如果外鍵約束允許，我們可以創建，狀態設為 'uploaded'
                         cursor.execute("""
                             INSERT INTO resume_applications
                             (application_id, job_id, apply_status, interview_status, interview_result, created_at)
                             VALUES (%s, %s, %s, %s, %s, NOW())
-                        """, (application_id, job_id, 'applied', 'none', 'pending'))
-                        print(f"✅ [resume_applications] 成功創建記錄: application_id={application_id}, job_id={job_id}")
+                        """, (application_id, job_id, 'uploaded', 'none', 'pending'))
+                        print(f"✅ [resume_applications] 成功創建記錄: application_id={application_id}, job_id={job_id}, apply_status='uploaded'")
                     except Exception as fk_err:
                         # 如果外鍵約束錯誤（例如 job_id 被錯誤地約束到 internship_companies.id），
                         # 記錄錯誤但不中斷流程，因為 resume_applications 會在指導老師審核通過時創建
@@ -1888,15 +1879,16 @@ def apply_company():
                         else:
                             print(f"⚠️ [resume_applications] 插入失敗: {fk_err}")
                 else:
+                    # 更新現有記錄，確保 apply_status 是有效的 enum 值
                     cursor.execute("""
                         UPDATE resume_applications
-                        SET apply_status = 'applied',
+                        SET apply_status = 'uploaded',
                             interview_status = 'none',
                             interview_result = 'pending',
                             updated_at = NOW()
                         WHERE id = %s
                     """, (existing_record['id'],))
-                    print(f"✅ [resume_applications] 成功更新記錄: id={existing_record['id']}")
+                    print(f"✅ [resume_applications] 成功更新記錄: id={existing_record['id']}, apply_status='uploaded'")
         except Exception as ra_err:
             # 如果 resume_applications 操作失敗，記錄錯誤但不中斷整個投遞流程
             # 因為 resume_applications 會在指導老師審核通過時自動創建
