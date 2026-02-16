@@ -4,8 +4,9 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>智慧實習平台 | 學生履歷審查</title>
+  <title>智慧實習平台 | 指導老師審核履歷</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     header {
@@ -46,16 +47,9 @@
     
     /* --- 狀態標籤樣式設定 --- */
     .status-badge { font-size: 0.9em; padding: 0.3em 0.6em; border-radius: 0.5rem; display: inline-block; font-weight: 600; }
-    
-    /* 通過：綠底白字 */
     .status-badge.bg-success { color: #fff; background-color: #198754; }
-    
-    /* 退件：紅底白字 */
     .status-badge.bg-danger { color: #fff; background-color: #dc3545; }
-    
-    /* 待審核：藍底白字 */
     .status-badge.bg-info { color: #fff; background-color: #0dcaf0; }
-    
     .status-badge.bg-secondary { color: #fff; background-color: #6c757d; }
     
     .alert-deadline {
@@ -143,7 +137,7 @@
           <span></span><span></span><span></span>
         </button>
       </div>
-      <h1>學生履歷審查</h1>
+      <h1>指導老師審核履歷</h1>
       <div style="width: 30px;"></div>
     </div>
   </header>
@@ -218,19 +212,15 @@
   <nav id="side-menu" aria-hidden="true" role="navigation" aria-label="功能選單">
     <button id="close-btn" aria-label="關閉功能選單">×</button>
     <h2>功能選單</h2>
-    <a href="/director_home">首頁</a>
+    <a href="/teacher_home">首頁</a>
     <a href="/profile">個人資料</a>
-    <a href="/notifications">公告</a>
-    <a href="/upload_company">建立實習機會</a>
-    <a href="/review_resume">學生履歷審核</a>
-    <a href="/manage_vendor">實習廠商管理</a>
-    <a href="/interview_schedule">行事曆</a>
-    <a href="/admission_results">查看錄取結果</a>
-    <a href="/review_experience">審核實習心得</a>
-    <a href="/login">登出</a>
+    <a href="/review_resume">審核履歷</a>
+    <a href="/review_preferences">審核志願序</a>
+    <a href="/admission/results">查詢學生錄取結果</a>
+    <a href="/notifications">通知</a>
+    <a href="/logout">登出</a>
   </nav>
 
-  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
   <script>
     let allResumes = [];
     let currentResumeId = null;
@@ -289,7 +279,7 @@
             const commentHeader = document.getElementById('commentHeader');
             if (commentHeader) commentHeader.textContent = '廠商留言';
           } else {
-            // 使用 /api/teacher_review_resumes API（與 class_review_resume.html 一致）
+            // 使用 /api/teacher_review_resumes API
             apiUrl = '/api/teacher_review_resumes';
           }
 
@@ -303,11 +293,10 @@
             }) : fetch('/api/public/positions').then(res => res.ok ? res.json() : {success:true, items:[]}))
           ]).then(([resumeResponse, companyData, positionData]) => {
             if (resumeResponse.success) {
-              // 處理履歷數據和截止時間信息（與 class_review_resume.html 一致）
+              // 處理履歷數據和截止時間信息
               const resumes = userRole === 'vendor' ? (resumeResponse.resumes || []) : (resumeResponse.data || []);
               
               // 如果是指導老師且截止時間未過，強制設置為空數組（即使後端返回了數據）
-              // 檢查條件：1. 當前角色是 teacher 2. 截止時間未過 3. 或者後端返回了提示訊息
               const isTeacherBeforeDeadline = userRole === 'teacher' && resumeResponse.is_deadline_passed === false;
               const hasBlockMessage = resumeResponse.message && resumeResponse.message.includes('無法查看');
               
@@ -473,7 +462,7 @@
       companyNameSelect.innerHTML = `<option value="">所有公司</option>`;
       const companySet = new Set();
       
-      // 使用已審核公司列表（與 class_review_resume.html 一致）
+      // 使用已審核公司列表
       if (companyData && companyData.companies && companyData.companies.length > 0) {
           companyData.companies.forEach(company => {
               const companyName = company.company_name || company.name || '';
@@ -517,12 +506,10 @@
       const jobSet = new Set();
       
       if (isDirectorMode || userRole === 'class_teacher') {
-          // 主任/班導模式：從已審核公司列表中提取所有職缺（與 class_review_resume.html 一樣）
+          // 主任/班導模式：從已審核公司列表中提取所有職缺
           if (companyData && companyData.companies && companyData.companies.length > 0) {
               companyData.companies.forEach(c => {
-                  // 篩選條件：已核准 (approved) 且本學期開放 (is_open_current_semester)
                   if (c.status === 'approved' && c.is_open_current_semester && Array.isArray(c.jobs)) {
-                      // 遍歷該公司的所有職缺
                       c.jobs.forEach(jobTitle => {
                           if (jobTitle && String(jobTitle).trim()) {
                               jobSet.add(String(jobTitle).trim());
@@ -552,10 +539,8 @@
           data.forEach(r => {
               const jobTitle = r.job_title || r.jobTitle || '';
               if (jobTitle && jobTitle.trim()) {
-                  // 處理多個職缺（用 | 分隔）
                   const titles = jobTitle.split(' | ');
                   titles.forEach(t => {
-                      // 處理 "公司名稱 - 職缺名稱" 格式
                       const parts = t.split(' - ');
                       if(parts.length > 1) {
                           jobSet.add(parts[1].trim());
@@ -848,7 +833,9 @@
       
       const body = { status: 'approved' };
       if (preferenceId) body.preference_id = preferenceId;
-      if (userRole === 'teacher' && applicationId != null) body.application_id = applicationId;
+      if (userRole === 'teacher' && applicationId != null && applicationId !== 'null' && !isNaN(applicationId)) {
+        body.application_id = parseInt(applicationId);
+      }
 
       fetch(`/api/review_resume/${resumeId}`, { 
           method: 'POST',
@@ -877,22 +864,6 @@
                   if(d.success) { 
                     allResumes=d.data || []; 
                     console.log('🔍 [DEBUG] 重新載入指導老師履歷資料:', allResumes.length, '筆');
-                    // 調試：檢查特定履歷的狀態
-                    if (allResumes.length > 0) {
-                      const updatedResume = allResumes.find(r => r.id === resumeId || (applicationId != null && r.application_id === applicationId));
-                      if (updatedResume) {
-                        const displayStatus = updatedResume.display_status;
-                        const status = updatedResume.status;
-                        console.log('🔍 [DEBUG] 更新後的履歷狀態:', {
-                          id: updatedResume.id,
-                          display_status: displayStatus || '(undefined/null)',
-                          status: status || '(undefined/null)',
-                          '原始 display_status 類型': typeof displayStatus
-                        });
-                      } else {
-                        console.log('⚠️ [DEBUG] 找不到更新後的履歷，resumeId:', resumeId);
-                      }
-                    }
                     applyFilters(); 
                   } else {
                     console.error('❌ [DEBUG] 重新載入失敗:', d);
@@ -919,7 +890,7 @@
        if (!confirm("確定要退件此申請？")) return;
        currentResumeId = resumeId;
        currentPreferenceId = preferenceId;
-       currentApplicationId = applicationId != null ? applicationId : null;
+       currentApplicationId = applicationId != null && applicationId !== 'null' && !isNaN(applicationId) ? parseInt(applicationId) : null;
        
        document.getElementById("commentInput").value = "";
        document.getElementById("commentModalLabel").textContent = "❌ 填寫退件原因";

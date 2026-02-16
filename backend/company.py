@@ -1853,26 +1853,56 @@ def apply_company():
                 print(f"⚠️ [resume_teacher] 略過：公司未設定指導老師 (advisor_user_id 為空) company_id={company_id}，請在實習公司管理為該公司設定「指導老師」")
 
         # 同時創建 resume_applications 記錄（給廠商審核用）
-        cursor.execute("""
-            SELECT id FROM resume_applications
-            WHERE resumes_id = %s AND internship_companies_id = %s
-        """, (resume_id, company_id))
-        existing_record = cursor.fetchone()
-        if not existing_record:
-            cursor.execute("""
-                INSERT INTO resume_applications
-                (resumes_id, internship_companies_id, apply_status, interview_status, interview_result, created_at)
-                VALUES (%s, %s, %s, %s, %s, NOW())
-            """, (resume_id, company_id, 'applied', 'none', 'pending'))
-        else:
-            cursor.execute("""
-                UPDATE resume_applications
-                SET apply_status = 'applied',
-                    interview_status = 'none',
-                    interview_result = 'pending',
-                    updated_at = NOW()
-                WHERE id = %s
-            """, (existing_record['id'],))
+        # 注意：resume_applications 記錄會在指導老師審核通過時自動創建（見 resume.py review_resume）
+        # 這裡嘗試創建，但如果失敗（例如外鍵約束問題）不會中斷投遞流程
+        # resume_applications 表使用 application_id 和 job_id
+        try:
+            # 先驗證 job_id 是否存在於 internship_jobs 表中
+            cursor.execute("SELECT id FROM internship_jobs WHERE id = %s", (job_id,))
+            job_exists = cursor.fetchone()
+            
+            if not job_exists:
+                print(f"⚠️ [resume_applications] job_id={job_id} 不存在於 internship_jobs 表中，跳過創建 resume_applications 記錄")
+            else:
+                cursor.execute("""
+                    SELECT id FROM resume_applications
+                    WHERE application_id = %s AND job_id = %s
+                """, (application_id, job_id))
+                existing_record = cursor.fetchone()
+                if not existing_record:
+                    try:
+                        cursor.execute("""
+                            INSERT INTO resume_applications
+                            (application_id, job_id, apply_status, interview_status, interview_result, created_at)
+                            VALUES (%s, %s, %s, %s, %s, NOW())
+                        """, (application_id, job_id, 'applied', 'none', 'pending'))
+                        print(f"✅ [resume_applications] 成功創建記錄: application_id={application_id}, job_id={job_id}")
+                    except Exception as fk_err:
+                        # 如果外鍵約束錯誤（例如 job_id 被錯誤地約束到 internship_companies.id），
+                        # 記錄錯誤但不中斷流程，因為 resume_applications 會在指導老師審核通過時創建
+                        error_msg = str(fk_err)
+                        if 'foreign key constraint' in error_msg.lower() or '1452' in error_msg:
+                            print(f"⚠️ [resume_applications] 外鍵約束錯誤，跳過創建（將在指導老師審核通過時自動創建）")
+                            print(f"   錯誤詳情: {error_msg}")
+                            print(f"   建議：檢查資料庫 resume_applications 表的外鍵約束，job_id 應關聯到 internship_jobs.id 而非 internship_companies.id")
+                        else:
+                            print(f"⚠️ [resume_applications] 插入失敗: {fk_err}")
+                else:
+                    cursor.execute("""
+                        UPDATE resume_applications
+                        SET apply_status = 'applied',
+                            interview_status = 'none',
+                            interview_result = 'pending',
+                            updated_at = NOW()
+                        WHERE id = %s
+                    """, (existing_record['id'],))
+                    print(f"✅ [resume_applications] 成功更新記錄: id={existing_record['id']}")
+        except Exception as ra_err:
+            # 如果 resume_applications 操作失敗，記錄錯誤但不中斷整個投遞流程
+            # 因為 resume_applications 會在指導老師審核通過時自動創建
+            print(f"⚠️ [resume_applications] 操作失敗（不影響投遞）: {ra_err}")
+            traceback.print_exc()
+            # 不拋出異常，讓投遞流程繼續
         
         conn.commit()
         return jsonify({"success": True, "message": "投遞成功"})
