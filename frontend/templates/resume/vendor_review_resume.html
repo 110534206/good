@@ -490,9 +490,12 @@
             }
             
             // 根據後端返回的資料初始化 interviewedSet
+            // 優先使用 interview_status 值（從 resume_applications 表讀取）
             interviewedSet.clear();
             allResumes.forEach(r => {
-              if (r.has_interview || r.interview_completed) {
+              const interviewStatus = r.interview_status || 'none';
+              // 如果 interview_status 不是 'none'，加入 interviewedSet
+              if (interviewStatus !== 'none' || r.has_interview || r.interview_completed) {
                 const key = String(r.preference_id || r.preferenceId || r.id);
                 interviewedSet.add(key);
               }
@@ -684,34 +687,47 @@
       companySelect.innerHTML = `<option value="">所有職缺</option>`;
       const jobSet = new Set();
       
-      // 從 API 返回的職缺資料中提取職缺（直接從 internship_companies 和 internship_jobs 資料表抓取）
-      // positionData.items 已經過濾了該廠商的公司，所以只會出現自己的職缺
-      if (positionData && positionData.items && positionData.items.length > 0) {
+      // 從 API 返回的職缺資料中提取職缺
+      // 注意：/vendor/api/positions API 已經過濾了該廠商可以查看的職缺
+      // （只返回該廠商關聯公司的職缺，且只顯示該廠商建立的職缺或老師建立的職缺）
+      // 所以不需要再用公司名稱來過濾，直接顯示所有返回的職缺即可
+      if (positionData && positionData.items && Array.isArray(positionData.items) && positionData.items.length > 0) {
+          console.log('📋 開始填充職缺下拉選單，職缺數量：', positionData.items.length);
           positionData.items.forEach(job => {
-              // 如果是廠商，需要過濾只顯示自己公司的職缺
-              if (userRole === 'vendor' && vendorCompanyName && vendorCompanyName.trim()) {
-                  const jobCompanyName = (job.company_name || job.companyName || '').trim();
-                  // 只添加公司名稱匹配的職缺
-                  if (jobCompanyName === vendorCompanyName.trim()) {
-                      const jobTitle = job.title || job.job_title || '';
-                      if (jobTitle && jobTitle.trim()) {
-                          jobSet.add(jobTitle.trim());
-                      }
-                  }
+              const jobTitle = job.title || job.job_title || '';
+              if (jobTitle && jobTitle.trim()) {
+                  jobSet.add(jobTitle.trim());
+                  console.log('  ✅ 添加職缺：', jobTitle.trim(), '公司：', job.company_name || job.companyName || '未知');
               } else {
-                  // 如果不是廠商或沒有公司名稱，顯示所有職缺（向後兼容）
-                  const jobTitle = job.title || job.job_title || '';
+                  console.warn('  ⚠️ 跳過職缺（無標題）：', job);
+              }
+          });
+          console.log('📋 職缺下拉選單填充完成，共', jobSet.size, '個職缺');
+      } else {
+          console.warn('⚠️ 沒有職缺資料或職缺資料格式錯誤：', positionData);
+          // 如果沒有職缺資料，嘗試從履歷資料中提取職缺名稱
+          if (data && Array.isArray(data) && data.length > 0) {
+              data.forEach(r => {
+                  const jobTitle = r.job_title || r.jobTitle || '';
                   if (jobTitle && jobTitle.trim()) {
                       jobSet.add(jobTitle.trim());
                   }
-              }
-          });
+              });
+              console.log('📋 從履歷資料中提取職缺，共', jobSet.size, '個職缺');
+          }
       }
       
       // 將所有職缺排序後加入選單
       Array.from(jobSet).sort().forEach(j => {
           companySelect.innerHTML += `<option value="${escapeHtml(j)}">${escapeHtml(j)}</option>`;
       });
+      
+      if (jobSet.size === 0) {
+          console.warn('⚠️ 職缺下拉選單為空，請檢查：');
+          console.warn('  1. /vendor/api/positions API 是否返回了職缺資料');
+          console.warn('  2. 職缺資料格式是否正確（應包含 items 陣列）');
+          console.warn('  3. 職缺是否屬於該廠商關聯的公司');
+      }
     }
 
     function applyFilters() {
@@ -751,19 +767,23 @@
         // 面試狀態篩選
         let matchesInterviewStatus = true;
         if (interviewStatus) {
+          // 優先使用 interview_status 值（從 resume_applications 表讀取）
+          const rInterviewStatus = r.interview_status || 'none';
+          
+          // 向後兼容：如果沒有 interview_status，使用 has_interview 和 interview_completed
           const key = (r.preference_id || r.preferenceId || r.id);
-          const hasInterviewed = interviewedSet.has(String(key)) || r.has_interview || false;
-          const isInterviewCompleted = r.interview_completed || false;
+          const hasInterviewed = rInterviewStatus !== 'none' || interviewedSet.has(String(key)) || r.has_interview || false;
+          const isInterviewCompleted = rInterviewStatus === 'finished' || r.interview_completed || false;
           
           if (interviewStatus === 'none') {
-            // 未面試：沒有面試記錄
-            matchesInterviewStatus = !hasInterviewed && !isInterviewCompleted;
+            // 未面試：interview_status = 'none'
+            matchesInterviewStatus = rInterviewStatus === 'none';
           } else if (interviewStatus === 'interviewing') {
-            // 面試中：有面試記錄但未完成
-            matchesInterviewStatus = hasInterviewed && !isInterviewCompleted;
+            // 面試中：interview_status = 'scheduled'
+            matchesInterviewStatus = rInterviewStatus === 'scheduled';
           } else if (interviewStatus === 'completed') {
-            // 已面試：已完成面試
-            matchesInterviewStatus = isInterviewCompleted;
+            // 已面試：interview_status = 'finished'
+            matchesInterviewStatus = rInterviewStatus === 'finished';
           }
         }
 
@@ -842,8 +862,14 @@
         const tr = document.createElement('tr');
         tr.style.borderBottom = '1px solid #e2e8f0';
         const key = (row.preference_id || row.preferenceId || row.id);
-        const hasInterviewed = interviewedSet.has(String(key)) || row.has_interview || false;
-        const isInterviewCompleted = row.interview_completed || false;
+        // 優先使用 interview_status 值（從 resume_applications 表讀取）
+        // interview_status: 'none' | 'scheduled' | 'finished'
+        const interviewStatus = row.interview_status || 'none';
+        
+        // 向後兼容：如果沒有 interview_status，使用 has_interview 和 interview_completed
+        const hasInterviewed = interviewStatus !== 'none' || interviewedSet.has(String(key)) || row.has_interview || false;
+        const isInterviewCompleted = interviewStatus === 'finished' || row.interview_completed || false;
+        
         const rowId = `checkbox-${row.id}-${pid || 'no-pid'}`;
         tr.innerHTML = `
            <td style="padding: 14px 16px; text-align: center;">
@@ -858,9 +884,9 @@
             <div style="display:flex; gap:6px; flex-wrap:wrap; align-items:center;">
               <span class="status-badge bg-${statusColor(row.display_status)}">${mapStatus(row.display_status)}</span>
               ${
-                isInterviewCompleted
+                interviewStatus === 'finished' || isInterviewCompleted
                   ? `<span class="status-badge bg-completed">已面試</span>`
-                  : (hasInterviewed || row.has_interview)
+                  : (interviewStatus === 'scheduled' || hasInterviewed)
                     ? `<span class="status-badge bg-interviewing">面試中</span>`
                     : `<span class="status-badge bg-secondary" style="background-color: #94a3b8;">未面試</span>`
               }
@@ -957,9 +983,11 @@
             if(d.success) { 
               allResumes=d.resumes;
               // 根據後端返回的資料更新 interviewedSet
+              // 優先使用 interview_status 值（從 resume_applications 表讀取）
               interviewedSet.clear();
               allResumes.forEach(r => {
-                if (r.has_interview || r.interview_completed) {
+                const interviewStatus = r.interview_status || 'none';
+                if (interviewStatus !== 'none' || r.has_interview || r.interview_completed) {
                   const key = String(r.preference_id || r.preferenceId || r.id);
                   interviewedSet.add(key);
                 }
@@ -1004,9 +1032,11 @@
             if(d.success) { 
               allResumes=d.resumes;
               // 根據後端返回的資料更新 interviewedSet
+              // 優先使用 interview_status 值（從 resume_applications 表讀取）
               interviewedSet.clear();
               allResumes.forEach(r => {
-                if (r.has_interview || r.interview_completed) {
+                const interviewStatus = r.interview_status || 'none';
+                if (interviewStatus !== 'none' || r.has_interview || r.interview_completed) {
                   const key = String(r.preference_id || r.preferenceId || r.id);
                   interviewedSet.add(key);
                 }
@@ -1104,9 +1134,11 @@
                        if(d.success) { 
                          allResumes=d.resumes;
                          // 根據後端返回的資料更新 interviewedSet
+                         // 優先使用 interview_status 值（從 resume_applications 表讀取）
                          interviewedSet.clear();
                          allResumes.forEach(r => {
-                           if (r.has_interview) {
+                           const interviewStatus = r.interview_status || 'none';
+                           if (interviewStatus !== 'none' || r.has_interview || r.interview_completed) {
                              const key = String(r.preference_id || r.preferenceId || r.id);
                              interviewedSet.add(key);
                            }
@@ -1446,9 +1478,11 @@
             if(d.success) { 
               allResumes = d.resumes;
               // 根據後端返回的資料更新 interviewedSet
+              // 優先使用 interview_status 值（從 resume_applications 表讀取）
               interviewedSet.clear();
               allResumes.forEach(r => {
-                if (r.has_interview || r.interview_completed) {
+                const interviewStatus = r.interview_status || 'none';
+                if (interviewStatus !== 'none' || r.has_interview || r.interview_completed) {
                   const key = String(r.preference_id || r.preferenceId || r.id);
                   interviewedSet.add(key);
                 }
@@ -2358,6 +2392,8 @@
               allResumes.forEach(resume => {
                 const resumeStudentId = String(resume.student_id || resume.id || '');
                 if (resumeStudentId === String(studentId)) {
+                  // 更新 interview_status 為 'scheduled'
+                  resume.interview_status = 'scheduled';
                   resume.has_interview = true;
                   const key = String(resume.preference_id || resume.preferenceId || resume.id);
                   interviewedSet.add(key);
@@ -2373,8 +2409,10 @@
               if(d.success) { 
                 allResumes = d.resumes;
                 interviewedSet.clear();
+                // 優先使用 interview_status 值（從 resume_applications 表讀取）
                 allResumes.forEach(r => {
-                  if (r.has_interview || r.interview_completed) {
+                  const interviewStatus = r.interview_status || 'none';
+                  if (interviewStatus !== 'none' || r.has_interview || r.interview_completed) {
                     const key = String(r.preference_id || r.preferenceId || r.id);
                     interviewedSet.add(key);
                   }

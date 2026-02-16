@@ -1020,167 +1020,206 @@ def get_vendor_resumes():
                 # 如果學生沒有選擇該廠商的任何公司，跳過此履歷
                 continue
             
-            # 如果存在志願序，則使用志願序的狀態和公司資訊。
-            preference_order = None
-            resume_id = row.get("id")
-            preference_id = None  # 初始化變數
-            job_id = None  # 初始化變數
-            company_id = None  # 初始化變數
-            company_name = ""  # 初始化變數
-            
+            # 如果存在志願序，為每個志願序創建單獨的履歷記錄
+            # 這樣每個職缺都會有自己獨立的面試狀態
             if filtered_preferences:
-                # 簡單地取第一個志願序的狀態作為展示狀態。
-                pref_to_show = filtered_preferences[0]
-                sp_status = pref_to_show.get('vendor_review_status')
-                preference_id = pref_to_show.get("preference_id")
-                preference_order = pref_to_show.get("preference_order")
-                company_id = pref_to_show.get("company_id")
-                company_name = pref_to_show.get("company_name") or ""
-                job_id = pref_to_show.get("job_id")
-                job_title = pref_to_show.get("job_title_display") or pref_to_show.get("job_title") or ""
-                job_slots = pref_to_show.get("job_slots") or 0
-                
-                # 優先從 resume_applications 表讀取狀態和留言
-                # 注意：resume_applications.application_id 對應的是 student_job_applications.id，不是 student_preferences.id
-                # 需要從 student_job_applications 表獲取正確的 application_id
-                application_id = None
-                if student_id and company_id and job_id:
-                    cursor.execute("""
-                        SELECT id FROM student_job_applications
-                        WHERE student_id = %s AND company_id = %s AND job_id = %s
-                        ORDER BY applied_at DESC
-                        LIMIT 1
-                    """, (student_id, company_id, job_id))
-                    sja_result = cursor.fetchone()
-                    if sja_result:
-                        application_id = sja_result['id']
-                
-                # 使用 application_id (student_job_applications.id) 和 job_id 來查詢 resume_applications
-                if application_id and job_id:
-                    cursor.execute("""
-                        SELECT apply_status, company_comment, interview_status, interview_time, interview_result
-                        FROM resume_applications
-                        WHERE application_id = %s AND job_id = %s
-                    """, (application_id, job_id))
-                    ra_result = cursor.fetchone()
+                # 為每個志願序創建單獨的履歷記錄
+                for pref_to_show in filtered_preferences:
+                    sp_status = pref_to_show.get('vendor_review_status')
+                    preference_id = pref_to_show.get("preference_id")
+                    preference_order = pref_to_show.get("preference_order")
+                    company_id = pref_to_show.get("company_id")
+                    company_name = pref_to_show.get("company_name") or ""
+                    job_id = pref_to_show.get("job_id")
+                    job_title = pref_to_show.get("job_title_display") or pref_to_show.get("job_title") or ""
+                    job_slots = pref_to_show.get("job_slots") or 0
                     
-                    if ra_result:
-                        # 從 resume_applications 表獲取狀態
-                        ra_status = ra_result.get('apply_status')
-                        # 映射狀態：uploaded -> uploaded, approved -> approved, rejected -> rejected
-                        # resume_applications.apply_status 和 student_preferences.status 現在使用相同的 enum
-                        status_map = {
-                            'uploaded': 'uploaded',
-                            'approved': 'approved',
-                            'rejected': 'rejected'
-                        }
-                        display_status = status_map.get(ra_status, 'uploaded')
-                        print(f"✅ 從 resume_applications 表讀取狀態: {ra_status} -> {display_status}")
+                    # 優先從 resume_applications 表讀取狀態和留言
+                    # 注意：resume_applications.application_id 對應的是 student_job_applications.id，不是 student_preferences.id
+                    # 需要從 student_job_applications 表獲取正確的 application_id
+                    application_id = None
+                    if student_id and company_id and job_id:
+                        cursor.execute("""
+                            SELECT id FROM student_job_applications
+                            WHERE student_id = %s AND company_id = %s AND job_id = %s
+                            ORDER BY applied_at DESC
+                            LIMIT 1
+                        """, (student_id, company_id, job_id))
+                        sja_result = cursor.fetchone()
+                        if sja_result:
+                            application_id = sja_result['id']
+                    
+                    # 使用 application_id (student_job_applications.id) 和 job_id 來查詢 resume_applications
+                    display_status = "uploaded"  # 預設狀態
+                    if application_id and job_id:
+                        cursor.execute("""
+                            SELECT apply_status, company_comment, interview_status, interview_time, interview_result
+                            FROM resume_applications
+                            WHERE application_id = %s AND job_id = %s
+                        """, (application_id, job_id))
+                        ra_result = cursor.fetchone()
+                        
+                        if ra_result:
+                            # 從 resume_applications 表獲取狀態
+                            ra_status = ra_result.get('apply_status')
+                            # 映射狀態：uploaded -> uploaded, approved -> approved, rejected -> rejected
+                            # resume_applications.apply_status 和 student_preferences.status 現在使用相同的 enum
+                            status_map = {
+                                'uploaded': 'uploaded',
+                                'approved': 'approved',
+                                'rejected': 'rejected'
+                            }
+                            display_status = status_map.get(ra_status, 'uploaded')
+                            print(f"✅ 從 resume_applications 表讀取狀態: application_id={application_id}, job_id={job_id}, ra_status={ra_status} -> {display_status}")
+                        else:
+                            # 如果 resume_applications 表沒有記錄，使用 student_preferences 的狀態（向後兼容）
+                            if sp_status and sp_status in STATUS_LABELS:
+                                display_status = sp_status
+                                print(f"⚠️ resume_applications 表無記錄，使用 student_preferences 狀態: {display_status}")
+                            else:
+                                display_status = "uploaded"
+                                print(f"⚠️ 狀態無效或為空，使用預設狀態: {display_status}")
                     else:
-                        # 如果 resume_applications 表沒有記錄，使用 student_preferences 的狀態（向後兼容）
+                        # 如果沒有 application_id 或 job_id，使用 student_preferences 的狀態（向後兼容）
                         if sp_status and sp_status in STATUS_LABELS:
                             display_status = sp_status
-                            print(f"⚠️ resume_applications 表無記錄，使用 student_preferences 狀態: {display_status}")
                         else:
                             display_status = "uploaded"
-                            print(f"⚠️ 狀態無效或為空，使用預設狀態: {display_status}")
-                else:
-                    # 如果沒有 resume_id 或 company_id，使用 student_preferences 的狀態（向後兼容）
-                    if sp_status and sp_status in STATUS_LABELS:
-                        display_status = sp_status
-                    else:
-                        display_status = "uploaded"
+                    
+                    # 狀態篩選：如果篩選器啟用，檢查是否匹配
+                    if status_filter:
+                        if status_filter == 'uploaded':
+                            # uploaded 篩選匹配 'uploaded' 狀態
+                            if display_status != 'uploaded':
+                                continue # 不匹配，跳過此志願序
+                        elif display_status != status_filter:
+                            continue # 不匹配，跳過此志願序
+                    
+                    # 公司篩選：如果前面已經根據 filtered_preferences 做了判斷
+                    # 這裡需要確保，如果進行了公司篩選 (company_filter)，那麼該履歷必須與之相關聯
+                    if company_filter:
+                        # 如果使用公司名稱篩選（前端可能傳遞公司名稱而非 ID）
+                        if isinstance(company_filter, str):
+                            if company_name != company_filter:
+                                continue # 不匹配，跳過此志願序
+                        elif company_id != company_filter:
+                            continue # 不匹配，跳過此志願序
+                    
+                    # 獲取廠商留言和面試資訊（優先從 resume_applications 表）
+                    vendor_comment = None
+                    has_interview = False  # 是否有面試記錄
+                    interview_completed = False  # 是否已完成面試
+                    interview_time = None  # 面試時間
+                    interview_result = None  # 面試結果
+                    
+                    # 優先從 resume_applications 表讀取
+                    # 注意：resume_applications.application_id 對應的是 student_job_applications.id，不是 student_preferences.id
+                    # 使用之前獲取的 application_id (student_job_applications.id) 和 job_id 來查詢
+                    if application_id and job_id:
+                        cursor.execute("""
+                            SELECT company_comment, interview_status, interview_time, interview_result
+                            FROM resume_applications
+                            WHERE application_id = %s AND job_id = %s
+                        """, (application_id, job_id))
+                        ra_result = cursor.fetchone()
+                        
+                        if ra_result:
+                            vendor_comment = ra_result.get('company_comment') or None
+                            interview_status = ra_result.get('interview_status')
+                            interview_time = ra_result.get('interview_time')
+                            interview_result = ra_result.get('interview_result')
+                            
+                            # 判斷是否有面試記錄
+                            # resume_applications.interview_status enum: ('none', 'scheduled', 'finished')
+                            if interview_status and interview_status != 'none':
+                                has_interview = True
+                                if interview_status == 'finished':
+                                    interview_completed = True
+                                elif interview_status == 'scheduled':
+                                    # 已排定面試但尚未完成
+                                    has_interview = True
+                            print(f"✅ 從 resume_applications 表讀取留言和面試資訊: application_id={application_id}, job_id={job_id}, interview_status={interview_status}, has_interview={has_interview}")
+                    
+                    # 如果 resume_applications 表沒有記錄，不再從 vendor_preference_history 讀取（表已移除）
+                    # 所有資訊都應該從 resume_applications 表讀取
+                    
+                    # 構建結果
+                    # 確保 interview_status 有預設值
+                    interview_status_value = interview_status if interview_status else 'none'
+                    
+                    resume = {
+                        "id": row.get("id"),
+                        "student_id": row.get("student_id"),
+                        "name": row.get("student_name"),
+                        "username": row.get("student_number"),
+                        "className": row.get("class_name") or "",
+                        "department": row.get("department") or "",
+                        "original_filename": row.get("original_filename"),
+                        "filepath": row.get("filepath"),
+                        "status": display_status,  # 顯示基於 resume_applications 或 student_preferences 的狀態
+                        "comment": vendor_comment or "", # 廠商的留言（優先從 resume_applications），如果沒有則為空
+                        "vendor_comment": vendor_comment or "", # 明確標記為廠商留言
+                        "note": row.get("note") or "",
+                        "upload_time": _format_datetime(row.get("created_at")),
+                        "reviewed_at": _format_datetime(row.get("reviewed_at")),
+                        "company_name": company_name,
+                        "company_id": company_id,
+                        "job_id": job_id,
+                        "job_title": job_title,
+                        "job_slots": job_slots, # 職缺名額
+                        "preference_id": preference_id, # 用於廠商審核操作，如果沒有填寫志願序則為 None
+                        "preference_order": preference_order, # 志願序（1=第一志願, 2=第二志願...）
+                        "interview_status": interview_status_value, # 面試狀態：'none', 'scheduled', 'finished'
+                        "has_interview": has_interview, # 是否有面試記錄（向後兼容）
+                        "interview_completed": interview_completed, # 是否已完成面試（向後兼容）
+                        "interview_time": _format_datetime(interview_time) if interview_time else None, # 面試時間
+                        "interview_result": interview_result, # 面試結果 (pending, pass, fail)
+                    }
+                    resumes.append(resume)
             elif company_ids:
                 # 如果沒有志願序，但廠商有關聯的公司，顯示第一個公司名稱
                 # 這種情況不應該出現（因為上面已經過濾掉了），但保留作為備用
                 if companies and len(companies) > 0:
                     company_name = companies[0].get("company_name", "")
-
-            # 狀態篩選：如果篩選器啟用，檢查是否匹配
-            if status_filter:
-                if status_filter == 'uploaded':
-                    # uploaded 篩選匹配 'uploaded' 狀態
-                    if display_status != 'uploaded':
-                        continue # 不匹配，跳過
-                elif display_status != status_filter:
-                    continue # 不匹配，跳過
-            
-            # 公司篩選：如果前面已經根據 filtered_preferences 做了判斷
-            # 這裡需要確保，如果進行了公司篩選 (company_filter)，那麼該履歷必須與之相關聯
-            if company_filter:
-                # 如果使用公司名稱篩選（前端可能傳遞公司名稱而非 ID）
-                if isinstance(company_filter, str):
-                    if company_name != company_filter:
-                        continue
-                elif company_id != company_filter:
-                    continue
-                
-            # 獲取廠商留言和面試資訊（優先從 resume_applications 表）
-            vendor_comment = None
-            has_interview = False  # 是否有面試記錄
-            interview_completed = False  # 是否已完成面試
-            interview_time = None  # 面試時間
-            interview_result = None  # 面試結果
-            
-            # 優先從 resume_applications 表讀取
-            # 使用 application_id (preference_id) 和 job_id 來查詢
-            if preference_id and job_id:
-                cursor.execute("""
-                    SELECT company_comment, interview_status, interview_time, interview_result
-                    FROM resume_applications
-                    WHERE application_id = %s AND job_id = %s
-                """, (preference_id, job_id))
-                ra_result = cursor.fetchone()
-                
-                if ra_result:
-                    vendor_comment = ra_result.get('company_comment') or None
-                    interview_status = ra_result.get('interview_status')
-                    interview_time = ra_result.get('interview_time')
-                    interview_result = ra_result.get('interview_result')
                     
-                    # 判斷是否有面試記錄
-                    # resume_applications.interview_status enum: ('none', 'scheduled', 'finished')
-                    if interview_status and interview_status != 'none':
-                        has_interview = True
-                        if interview_status == 'finished':
-                            interview_completed = True
-                        elif interview_status == 'scheduled':
-                            # 已排定面試但尚未完成
-                            has_interview = True
-                    print(f"✅ 從 resume_applications 表讀取留言和面試資訊")
-            
-            # 如果 resume_applications 表沒有記錄，不再從 vendor_preference_history 讀取（表已移除）
-            # 所有資訊都應該從 resume_applications 表讀取
-            
-            # 構建結果
-            resume = {
-                "id": row.get("id"),
-                "student_id": row.get("student_id"),
-                "name": row.get("student_name"),
-                "username": row.get("student_number"),
-                "className": row.get("class_name") or "",
-                "department": row.get("department") or "",
-                "original_filename": row.get("original_filename"),
-                "filepath": row.get("filepath"),
-                "status": display_status,  # 顯示基於 resume_applications 或 student_preferences 的狀態
-                "comment": vendor_comment or "", # 廠商的留言（優先從 resume_applications），如果沒有則為空
-                "vendor_comment": vendor_comment or "", # 明確標記為廠商留言
-                "note": row.get("note") or "",
-                "upload_time": _format_datetime(row.get("created_at")),
-                "reviewed_at": _format_datetime(row.get("reviewed_at")),
-                "company_name": company_name,
-                "company_id": company_id,
-                "job_id": job_id,
-                "job_title": job_title,
-                "job_slots": job_slots, # 職缺名額
-                "preference_id": preference_id, # 用於廠商審核操作，如果沒有填寫志願序則為 None
-                "preference_order": preference_order, # 志願序（1=第一志願, 2=第二志願...）
-                "has_interview": has_interview, # 是否有面試記錄
-                "interview_completed": interview_completed, # 是否已完成面試
-                "interview_time": _format_datetime(interview_time) if interview_time else None, # 面試時間
-                "interview_result": interview_result, # 面試結果 (pending, pass, fail)
-            }
-            resumes.append(resume)
+                    # 狀態篩選：如果篩選器啟用，檢查是否匹配
+                    if status_filter:
+                        if status_filter == 'uploaded':
+                            # uploaded 篩選匹配 'uploaded' 狀態
+                            display_status = "uploaded"
+                        elif display_status != status_filter:
+                            continue # 不匹配，跳過
+                    
+                    # 構建結果（沒有志願序的情況）
+                    resume = {
+                        "id": row.get("id"),
+                        "student_id": row.get("student_id"),
+                        "name": row.get("student_name"),
+                        "username": row.get("student_number"),
+                        "className": row.get("class_name") or "",
+                        "department": row.get("department") or "",
+                        "original_filename": row.get("original_filename"),
+                        "filepath": row.get("filepath"),
+                        "status": "uploaded",  # 預設狀態
+                        "comment": "", # 廠商的留言
+                        "vendor_comment": "", # 明確標記為廠商留言
+                        "note": row.get("note") or "",
+                        "upload_time": _format_datetime(row.get("created_at")),
+                        "reviewed_at": _format_datetime(row.get("reviewed_at")),
+                        "company_name": company_name,
+                        "company_id": None,
+                        "job_id": None,
+                        "job_title": "",
+                        "job_slots": 0,
+                        "preference_id": None,
+                        "preference_order": None,
+                        "interview_status": "none", # 面試狀態：'none', 'scheduled', 'finished'
+                        "has_interview": False,
+                        "interview_completed": False,
+                        "interview_time": None,
+                        "interview_result": None,
+                    }
+                    resumes.append(resume)
 
         # 構建公司列表
         # 此時 companies 已經包含了所有已審核通過的公司（如果沒有關聯公司，已在前面查詢過）
@@ -2757,30 +2796,26 @@ def schedule_interviews():
         
         for student_id in student_ids:
             try:
-                # 查找該學生對應的 preference_id（找到該廠商相關公司的志願序）
+                # 查找該學生對應的投遞記錄（student_job_applications）
+                # 注意：resume_applications.application_id 對應的是 student_job_applications.id，不是 student_preferences.id
                 cursor.execute("""
-                    SELECT sp.id AS preference_id
-                    FROM student_preferences sp
-                    WHERE sp.student_id = %s
-                    AND sp.company_id IN ({})
-                    ORDER BY sp.id DESC
+                    SELECT sja.id AS application_id, sja.job_id, sja.company_id
+                    FROM student_job_applications sja
+                    WHERE sja.student_id = %s
+                    AND sja.company_id IN ({})
+                    ORDER BY sja.applied_at DESC
                     LIMIT 1
                 """.format(','.join(['%s'] * len(company_ids))), [student_id] + company_ids)
                 
-                preference_row = cursor.fetchone()
+                application_row = cursor.fetchone()
                 
-                if preference_row:
-                    preference_id = preference_row.get("preference_id")
-                    # 記錄到 vendor_preference_history（包含 student_id）
-                    _record_history(cursor, preference_id, vendor_id, "in interview", interview_description, student_id)
+                if application_row:
+                    application_id = application_row.get("application_id")
+                    job_id = application_row.get("job_id")
+                    company_id = application_row.get("company_id")
                     
                     # 同時更新 resume_applications 表的 interview_status 為 'scheduled'
-                    cursor.execute("""
-                        SELECT job_id FROM student_preferences WHERE id = %s
-                    """, (preference_id,))
-                    pref_info = cursor.fetchone()
-                    if pref_info and pref_info.get('job_id'):
-                        job_id = pref_info.get('job_id')
+                    if application_id and job_id:
                         # 構建 interview_time（datetime 格式）
                         if time_info:
                             # 如果有時間，組合日期和時間
@@ -2795,14 +2830,48 @@ def schedule_interviews():
                             # 如果沒有時間，只使用日期（設為當天 00:00:00）
                             interview_datetime = f"{interview_date} 00:00:00"
                         
+                        # 檢查 resume_applications 記錄是否存在
                         cursor.execute("""
-                            UPDATE resume_applications
-                            SET interview_status = 'scheduled',
-                                interview_time = %s,
-                                interview_result = 'pending',
-                                updated_at = NOW()
+                            SELECT id FROM resume_applications
                             WHERE application_id = %s AND job_id = %s
-                        """, (interview_datetime, preference_id, job_id))
+                        """, (application_id, job_id))
+                        existing_ra = cursor.fetchone()
+                        
+                        if existing_ra:
+                            # 更新現有記錄
+                            cursor.execute("""
+                                UPDATE resume_applications
+                                SET interview_status = 'scheduled',
+                                    interview_time = %s,
+                                    interview_result = 'pending',
+                                    updated_at = NOW()
+                                WHERE application_id = %s AND job_id = %s
+                            """, (interview_datetime, application_id, job_id))
+                            print(f"✅ [schedule_interviews] 更新 resume_applications: application_id={application_id}, job_id={job_id}, interview_status='scheduled'")
+                        else:
+                            # 如果記錄不存在，創建新記錄
+                            cursor.execute("""
+                                INSERT INTO resume_applications
+                                (application_id, job_id, apply_status, interview_status, interview_time, interview_result, created_at)
+                                VALUES (%s, %s, 'uploaded', 'scheduled', %s, 'pending', NOW())
+                            """, (application_id, job_id, interview_datetime))
+                            print(f"✅ [schedule_interviews] 創建 resume_applications: application_id={application_id}, job_id={job_id}, interview_status='scheduled'")
+                    
+                    # 為了向後兼容，也嘗試從 student_preferences 獲取 preference_id（如果需要的話）
+                    cursor.execute("""
+                        SELECT sp.id AS preference_id
+                        FROM student_preferences sp
+                        WHERE sp.student_id = %s
+                        AND sp.company_id = %s
+                        ORDER BY sp.id DESC
+                        LIMIT 1
+                    """, (student_id, company_id))
+                    preference_row = cursor.fetchone()
+                    
+                    if preference_row:
+                        preference_id = preference_row.get("preference_id")
+                        # 記錄到 vendor_preference_history（包含 student_id）
+                        _record_history(cursor, preference_id, vendor_id, "in interview", interview_description, student_id)
                     
                     # 獲取學生資訊
                     cursor.execute("""
