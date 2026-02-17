@@ -1335,12 +1335,16 @@
       // 清空現有選項
       studentsContainer.innerHTML = '';
       
-      // 從 allResumes 中提取學生資料（去重）
+      // 從 allResumes 中提取學生資料（保留每個學生對應的 application_id 和 job_id）
+      // 重要：allResumes 應該只包含當前公司的學生記錄，但為了安全起見，我們優先使用有 application_id 的記錄
       const studentMap = new Map();
       allResumes.forEach(r => {
         const studentId = r.student_id || r.id;
         const studentName = r.name || r.student_name || '未知';
         const studentUsername = r.username || r.student_number || '';
+        const applicationId = r.application_id || null; // 只使用真正的 application_id，不使用 preference_id
+        const jobId = r.job_id || r.jobId || null;
+        const companyId = r.company_id || null; // 保存 company_id 以便驗證
         const key = String(studentId);
         
         // 如果該學生尚未加入，則加入
@@ -1349,8 +1353,24 @@
             id: studentId,
             name: studentName,
             username: studentUsername,
+            applicationId: applicationId,
+            jobId: jobId,
+            companyId: companyId,
             displayText: `${studentName} (${studentUsername})`
           });
+        } else if (studentMap.has(key)) {
+          // 如果已存在，優先使用有 application_id 的記錄
+          const existing = studentMap.get(key);
+          // 如果現有記錄沒有 application_id，但新記錄有，則更新
+          if (!existing.applicationId && applicationId) {
+            existing.applicationId = applicationId;
+            existing.jobId = jobId;
+            existing.companyId = companyId;
+          }
+          // 如果兩個都有 application_id，優先使用有 company_id 匹配的（雖然理論上應該都匹配）
+          else if (existing.applicationId && applicationId && companyId) {
+            // 保持現有的記錄（因為 allResumes 應該已經過濾了公司）
+          }
         }
       });
       
@@ -1368,6 +1388,13 @@
         checkbox.id = `student-checkbox-${student.id}`;
         checkbox.value = String(student.id);
         checkbox.className = 'student-checkbox';
+        // 保存 application_id 和 job_id 到 data 屬性
+        if (student.applicationId) {
+          checkbox.dataset.applicationId = String(student.applicationId);
+        }
+        if (student.jobId) {
+          checkbox.dataset.jobId = String(student.jobId);
+        }
         
         const label = document.createElement('label');
         label.htmlFor = `student-checkbox-${student.id}`;
@@ -2346,13 +2373,71 @@
       const notes = document.getElementById('interviewNotes').value.trim();
       const dateStr = formatDate(selectedInterviewDate);
       
-      // 獲取選中的學生 ID
+      // 獲取選中的學生 ID 及其對應的 application_id 和 job_id
       const studentsContainer = document.getElementById('interviewStudents');
       const selectedStudents = [];
+      const studentApplications = []; // 保存每個學生對應的 application_id 和 job_id
       if (studentsContainer) {
         const checkboxes = studentsContainer.querySelectorAll('.student-checkbox:checked');
         checkboxes.forEach(checkbox => {
-          selectedStudents.push(checkbox.value);
+          const studentId = checkbox.value;
+          selectedStudents.push(studentId);
+          
+          // 優先從 checkbox 的 data 屬性獲取 application_id 和 job_id
+          let applicationId = checkbox.dataset.applicationId || null;
+          let jobId = checkbox.dataset.jobId || null;
+          
+          // 如果 checkbox 上沒有這些信息，從 allResumes 中查找該學生的記錄
+          // 注意：allResumes 應該只包含當前公司的學生記錄
+          if (!applicationId || !jobId) {
+            // 從 allResumes 中查找該學生的記錄（優先使用有 application_id 的記錄）
+            const resumes = allResumes.filter(r => {
+              const resumeStudentId = String(r.student_id || r.id || '');
+              return resumeStudentId === String(studentId);
+            });
+            
+            // 優先使用有 application_id 的記錄（確保屬於當前公司）
+            // 如果有多條記錄，優先使用有 application_id 的
+            let resume = resumes.find(r => r.application_id);
+            if (!resume) {
+              resume = resumes[0];
+            }
+            
+            if (resume) {
+              applicationId = applicationId || resume.application_id || null;
+              jobId = jobId || resume.job_id || resume.jobId || null;
+              
+              // 驗證記錄是否屬於當前公司（如果有的話）
+              const resumeCompanyId = resume.company_id;
+              if (resumeCompanyId) {
+                const urlParams = new URLSearchParams(window.location.search);
+                const targetCompanyId = urlParams.get('company_id');
+                if (targetCompanyId && String(resumeCompanyId) !== String(targetCompanyId)) {
+                  console.warn(`⚠️ 學生 ${studentId} 的記錄屬於不同公司: resume.company_id=${resumeCompanyId}, targetCompanyId=${targetCompanyId}`);
+                  // 嘗試查找屬於當前公司的記錄
+                  const correctResume = resumes.find(r => r.company_id && String(r.company_id) === String(targetCompanyId) && r.application_id);
+                  if (correctResume) {
+                    applicationId = correctResume.application_id;
+                    jobId = correctResume.job_id || correctResume.jobId;
+                    console.log(`✅ 找到正確的公司記錄: application_id=${applicationId}, job_id=${jobId}`);
+                  }
+                }
+              }
+              
+              // 如果還是沒有，記錄警告
+              if (!applicationId || !jobId) {
+                console.warn(`⚠️ 學生 ${studentId} 找不到 application_id 或 job_id`, resume);
+              }
+            } else {
+              console.warn(`⚠️ 在 allResumes 中找不到學生 ${studentId} 的記錄`);
+            }
+          }
+          
+          studentApplications.push({
+            student_id: studentId,
+            application_id: applicationId,
+            job_id: jobId
+          });
         });
       }
       
@@ -2370,14 +2455,22 @@
       
       // 如果有選中學生，調用後端 API 記錄到 vendor_preference_history 資料表
       if (selectedStudents.length > 0) {
+        // 添加調試日誌
+        console.log('📋 準備發送面試排程數據：');
+        console.log('  - 選中的學生ID：', selectedStudents);
+        console.log('  - 學生申請信息：', studentApplications);
+        
         const interviewData = {
           student_ids: selectedStudents,
+          student_applications: studentApplications, // 傳遞每個學生對應的 application_id 和 job_id
           interview_date: dateStr,
           interview_time_start: timeStart,
           interview_time_end: timeEnd,
           interview_location: location,
           interview_notes: notes
         };
+        
+        console.log('📤 發送完整數據：', JSON.stringify(interviewData, null, 2));
         
         fetch("/vendor/api/schedule_interviews", {
           method: "POST",
@@ -2476,6 +2569,85 @@
       }, 100);
     }
 
+    // 刪除面試排程
+    async function deleteInterviewSchedule(dateKey) {
+      if (!confirm(`確定要刪除 ${dateKey} 的面試排程嗎？此操作將取消該日期所有學生的面試安排。`)) {
+        return;
+      }
+      
+      // 獲取該日期的排程信息
+      const schedule = interviewSchedules.get(dateKey);
+      if (!schedule) {
+        alert('找不到該日期的面試排程');
+        return;
+      }
+      
+      // 獲取該排程的學生列表
+      const studentIds = schedule.students || [];
+      
+      try {
+        // 調用後端 API 刪除面試排程
+        const response = await fetch("/vendor/api/delete_interview_schedule", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            interview_date: dateKey,
+            student_ids: studentIds
+          })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+          // 從本地存儲中刪除
+          interviewSchedules.delete(dateKey);
+          saveInterviewSchedulesToStorage();
+          
+          // 更新前端狀態
+          studentIds.forEach(studentId => {
+            allResumes.forEach(resume => {
+              const resumeStudentId = String(resume.student_id || resume.id || '');
+              if (resumeStudentId === String(studentId)) {
+                // 如果該日期的面試被刪除，且沒有其他日期的面試，則清除狀態
+                resume.interview_status = 'none';
+                resume.has_interview = false;
+                const key = String(resume.preference_id || resume.preferenceId || resume.id);
+                interviewedSet.delete(key);
+              }
+            });
+          });
+          
+          // 重新載入資料以確保狀態同步
+          fetch(getResumeApiUrl()).then(r=>r.json()).then(async d=>{
+            if(d.success) { 
+              allResumes = d.resumes;
+              interviewedSet.clear();
+              allResumes.forEach(r => {
+                const interviewStatus = r.interview_status || 'none';
+                if (interviewStatus !== 'none' || r.has_interview || r.interview_completed) {
+                  const key = String(r.preference_id || r.preferenceId || r.id);
+                  interviewedSet.add(key);
+                }
+              });
+              applyFilters();
+              
+              // 重新載入所有廠商的面試排程
+              await loadAllVendorSchedules();
+              // 重新渲染日曆
+              renderCalendar();
+            }
+          });
+          
+          alert('✅ 面試排程已刪除');
+        } else {
+          alert(`❌ 刪除失敗：${data.message || '未知錯誤'}`);
+        }
+      } catch (err) {
+        console.error("刪除面試排程失敗:", err);
+        alert('❌ 刪除面試排程時發生錯誤');
+      }
+    }
+
     // 渲染月曆
     function renderCalendar() {
       const calendar = document.getElementById("calendar");
@@ -2570,6 +2742,15 @@
             timeDisplay = ` ${startTime}`;
           }
           
+          // 創建面試排程容器
+          const interviewContainer = document.createElement("div");
+          interviewContainer.style.cssText = `
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            margin-top: 4px;
+          `;
+          
           const interviewBadge = document.createElement("div");
           interviewBadge.style.cssText = `
             font-size: 0.75rem;
@@ -2577,12 +2758,43 @@
             background-color: #0dcaf0;
             padding: 2px 6px;
             border-radius: 4px;
-            margin-top: 4px;
             display: inline-block;
             white-space: nowrap;
+            flex: 1;
           `;
           interviewBadge.textContent = `面試${timeDisplay}`;
-          dateCell.appendChild(interviewBadge);
+          interviewContainer.appendChild(interviewBadge);
+          
+          // 添加刪除按鈕
+          const deleteBtn = document.createElement("button");
+          deleteBtn.type = "button";
+          deleteBtn.textContent = "刪除";
+          deleteBtn.style.cssText = `
+            font-size: 0.7rem;
+            color: #dc3545;
+            background-color: transparent;
+            border: 1px solid #dc3545;
+            cursor: pointer;
+            padding: 2px 6px;
+            line-height: 1;
+            border-radius: 4px;
+            transition: background-color 0.2s;
+            white-space: nowrap;
+          `;
+          deleteBtn.title = "刪除面試排程";
+          deleteBtn.addEventListener('click', (e) => {
+            e.stopPropagation(); // 阻止觸發日期格子的點擊事件
+            deleteInterviewSchedule(dateKey);
+          });
+          deleteBtn.addEventListener('mouseenter', () => {
+            deleteBtn.style.backgroundColor = '#fee';
+          });
+          deleteBtn.addEventListener('mouseleave', () => {
+            deleteBtn.style.backgroundColor = 'transparent';
+          });
+          interviewContainer.appendChild(deleteBtn);
+          
+          dateCell.appendChild(interviewContainer);
         }
         
         // 顯示其他廠商已預約的時間段
