@@ -1263,6 +1263,18 @@
                   notes: '',
                   students: []
                 });
+              } else {
+                // 如果該日期已有排程，更新時間和地點（使用第一個非空值）
+                const scheduleData = ownSchedulesByDate.get(date);
+                if (!scheduleData.timeStart && schedule.time_start) {
+                  scheduleData.timeStart = schedule.time_start;
+                }
+                if (!scheduleData.timeEnd && schedule.time_end) {
+                  scheduleData.timeEnd = schedule.time_end;
+                }
+                if (!scheduleData.location && schedule.location) {
+                  scheduleData.location = schedule.location;
+                }
               }
               // 收集該日期的所有學生ID
               if (schedule.student_id) {
@@ -2246,12 +2258,40 @@
       populateStudentsDropdown();
       
       // 如果已有排程，載入現有資料
-      if (interviewSchedules.has(dateStr)) {
-        const schedule = interviewSchedules.get(dateStr);
+      // 優先從 allVendorSchedules 獲取最新的排程信息（更準確）
+      let schedule = null;
+      if (allVendorSchedules.has(dateStr)) {
+        const schedules = allVendorSchedules.get(dateStr);
+        const ownSchedule = schedules.find(s => s.is_own);
+        if (ownSchedule) {
+          // 從 allVendorSchedules 構建 schedule 對象
+          // 收集該日期所有自己的排程，合併信息（時間、地點、備註可能相同，但需要收集所有學生）
+          const allOwnSchedules = schedules.filter(s => s.is_own);
+          schedule = {
+            timeStart: ownSchedule.time_start || '',
+            timeEnd: ownSchedule.time_end || '',
+            location: ownSchedule.location || '',
+            notes: ownSchedule.notes || '',  // 從後端獲取備註
+            students: allOwnSchedules.filter(s => s.student_id).map(s => String(s.student_id))
+          };
+          console.log(`✅ 從 allVendorSchedules 載入排程資料: 時間=${schedule.timeStart}-${schedule.timeEnd}, 地點=${schedule.location}, 備註=${schedule.notes.substring(0, 30) || '無'}, 學生=${schedule.students.join(',')}`);
+        }
+      }
+      
+      // 如果 allVendorSchedules 中沒有，從 interviewSchedules 獲取（向後兼容）
+      if (!schedule && interviewSchedules.has(dateStr)) {
+        schedule = interviewSchedules.get(dateStr);
+        console.log(`✅ 從 interviewSchedules 載入排程資料: 時間=${schedule.timeStart}-${schedule.timeEnd}, 地點=${schedule.location}, 學生=${schedule.students?.join(',') || ''}`);
+      }
+      
+      if (schedule) {
         // 處理舊格式（單一時間）和新格式（開始/結束時間）
         if (schedule.timeStart && schedule.timeEnd) {
           document.getElementById('interviewTimeStart').value = schedule.timeStart || '';
           document.getElementById('interviewTimeEnd').value = schedule.timeEnd || '';
+        } else if (schedule.timeStart) {
+          // 只有開始時間
+          document.getElementById('interviewTimeStart').value = schedule.timeStart || '';
         } else if (schedule.time) {
           // 兼容舊格式：如果只有單一時間，設為開始時間
           document.getElementById('interviewTimeStart').value = schedule.time || '';
