@@ -1227,6 +1227,7 @@
     // 從後端載入所有廠商的面試排程
     async function loadAllVendorSchedules() {
       try {
+        console.log('🔄 開始載入所有廠商的面試排程...');
         const res = await fetch('/vendor/api/all_interview_schedules');
         const data = await res.json();
         
@@ -1234,9 +1235,16 @@
           // 清空現有資料
           allVendorSchedules.clear();
           
+          console.log(`📋 收到 ${data.schedules.length} 個排程記錄`);
+          
           // 按日期分組，同時將自己的排程也加入到 interviewSchedules
           data.schedules.forEach(schedule => {
             const date = schedule.date;
+            if (!date) {
+              console.warn('⚠️ 排程記錄缺少日期:', schedule);
+              return;
+            }
+            
             if (!allVendorSchedules.has(date)) {
               allVendorSchedules.set(date, []);
             }
@@ -1259,10 +1267,18 @@
           // 保存到本地存儲
           saveInterviewSchedulesToStorage();
           
-          console.log('✅ 已載入所有廠商的面試排程:', allVendorSchedules);
+          console.log('✅ 已載入所有廠商的面試排程，共', allVendorSchedules.size, '個日期有排程');
+          // 調試：打印每個排程的學生ID
+          allVendorSchedules.forEach((schedules, date) => {
+            schedules.forEach(schedule => {
+              console.log(`📅 ${date}: 學生ID=${schedule.student_id}, 公司=${schedule.company_name}, is_own=${schedule.is_own}, 時間=${schedule.time_start || ''}-${schedule.time_end || ''}`);
+            });
+          });
+        } else {
+          console.warn('⚠️ 載入排程失敗或沒有排程:', data);
         }
       } catch (err) {
-        console.error('載入所有廠商面試排程失敗:', err);
+        console.error('❌ 載入所有廠商面試排程失敗:', err);
       }
     }
     
@@ -1327,6 +1343,43 @@
       });
     }
     
+    // 檢查學生是否已經被其他廠商安排了面試
+    function isStudentScheduledByOtherVendor(studentId, selectedDate) {
+      if (!selectedDate) {
+        console.log('⚠️ isStudentScheduledByOtherVendor: 沒有選擇日期');
+        return null;
+      }
+      
+      if (!allVendorSchedules.has(selectedDate)) {
+        console.log(`⚠️ isStudentScheduledByOtherVendor: 日期 ${selectedDate} 沒有排程`);
+        return null;
+      }
+      
+      const schedules = allVendorSchedules.get(selectedDate);
+      console.log(`🔍 檢查學生 ${studentId} 在日期 ${selectedDate} 的排程狀態，共有 ${schedules.length} 個排程`);
+      
+      // 過濾掉自己的排程，只檢查其他廠商的排程
+      const otherVendorSchedules = schedules.filter(s => !s.is_own);
+      console.log(`🔍 其他廠商的排程數量: ${otherVendorSchedules.length}`);
+      
+      // 檢查該學生是否在其他廠商的排程中
+      for (const schedule of otherVendorSchedules) {
+        console.log(`🔍 檢查排程: student_id=${schedule.student_id}, 目標student_id=${studentId}, 匹配=${schedule.student_id && String(schedule.student_id) === String(studentId)}`);
+        if (schedule.student_id && String(schedule.student_id) === String(studentId)) {
+          console.log(`✅ 找到衝突: 學生 ${studentId} 已被 ${schedule.company_name} 安排在 ${schedule.time_start}-${schedule.time_end}`);
+          return {
+            date: schedule.date,
+            time_start: schedule.time_start,
+            time_end: schedule.time_end,
+            company_name: schedule.company_name || '其他廠商'
+          };
+        }
+      }
+      
+      console.log(`✅ 學生 ${studentId} 在日期 ${selectedDate} 沒有衝突`);
+      return null;
+    }
+    
     // 填充學生下拉選單（可複選）
     function populateStudentsDropdown() {
       const studentsContainer = document.getElementById('interviewStudents');
@@ -1334,6 +1387,9 @@
       
       // 清空現有選項
       studentsContainer.innerHTML = '';
+      
+      // 獲取當前選擇的日期
+      const selectedDateStr = selectedInterviewDate ? formatDate(selectedInterviewDate) : null;
       
       // 從 allResumes 中提取學生資料（保留每個學生對應的 application_id 和 job_id）
       // 重要：allResumes 應該只包含當前公司的學生記錄，但為了安全起見，我們優先使用有 application_id 的記錄
@@ -1383,11 +1439,22 @@
         const itemDiv = document.createElement('div');
         itemDiv.className = 'student-checkbox-item';
         
+        // 檢查該學生是否已經被其他廠商安排了面試
+        const otherVendorSchedule = selectedDateStr ? isStudentScheduledByOtherVendor(student.id, selectedDateStr) : null;
+        const isDisabled = otherVendorSchedule !== null;
+        
+        if (isDisabled) {
+          itemDiv.style.opacity = '0.6';
+          itemDiv.style.cursor = 'not-allowed';
+          itemDiv.title = `該學生已被 ${otherVendorSchedule.company_name} 安排在 ${otherVendorSchedule.time_start || ''}${otherVendorSchedule.time_end ? '-' + otherVendorSchedule.time_end : ''}`;
+        }
+        
         const checkbox = document.createElement('input');
         checkbox.type = 'checkbox';
         checkbox.id = `student-checkbox-${student.id}`;
         checkbox.value = String(student.id);
         checkbox.className = 'student-checkbox';
+        checkbox.disabled = isDisabled;
         // 保存 application_id 和 job_id 到 data 屬性
         if (student.applicationId) {
           checkbox.dataset.applicationId = String(student.applicationId);
@@ -1398,18 +1465,26 @@
         
         const label = document.createElement('label');
         label.htmlFor = `student-checkbox-${student.id}`;
-        label.textContent = student.displayText;
+        let labelText = student.displayText;
+        if (isDisabled) {
+          labelText += ` (已被 ${otherVendorSchedule.company_name} 安排)`;
+          label.style.color = '#dc3545';
+          label.style.fontWeight = '600';
+        }
+        label.textContent = labelText;
         
         itemDiv.appendChild(checkbox);
         itemDiv.appendChild(label);
         
-        // 點擊整個項目也可以切換 checkbox
-        itemDiv.addEventListener('click', function(e) {
-          if (e.target !== checkbox && e.target !== label) {
-            checkbox.checked = !checkbox.checked;
-            updateSelectedStudentsCount();
-          }
-        });
+        // 點擊整個項目也可以切換 checkbox（如果未禁用）
+        if (!isDisabled) {
+          itemDiv.addEventListener('click', function(e) {
+            if (e.target !== checkbox && e.target !== label) {
+              checkbox.checked = !checkbox.checked;
+              updateSelectedStudentsCount();
+            }
+          });
+        }
         
         // checkbox 改變時更新計數
         checkbox.addEventListener('change', updateSelectedStudentsCount);
@@ -2088,16 +2163,50 @@
     }
 
     // 改變月份
-    function changeMonth(direction) {
+    async function changeMonth(direction) {
       currentCalendarDate.setMonth(currentCalendarDate.getMonth() + direction);
+      // 重新載入所有廠商的面試排程，確保數據是最新的
+      await loadAllVendorSchedules();
       renderCalendar();
     }
     
     // 開啟面試表單
-    function openInterviewForm(date) {
+    async function openInterviewForm(date) {
       selectedInterviewDate = date;
       const dateStr = formatDate(date);
       const dateDisplay = formatDateDisplay(date);
+      
+      // 先重新載入所有廠商的面試排程，確保數據是最新的
+      console.log('🔄 重新載入所有廠商的面試排程...');
+      await loadAllVendorSchedules();
+      
+      // 檢查該日期是否只有其他廠商的排程（沒有自己的排程）
+      const hasOwnSchedule = interviewSchedules.has(dateStr);
+      const hasOtherVendorSchedule = allVendorSchedules.has(dateStr);
+      
+      if (!hasOwnSchedule && hasOtherVendorSchedule) {
+        // 檢查是否真的只有其他廠商的排程
+        const schedules = allVendorSchedules.get(dateStr);
+        const onlyOtherVendor = schedules && schedules.every(s => !s.is_own);
+        
+        if (onlyOtherVendor) {
+          // 獲取其他廠商的排程信息
+          const otherSchedules = schedules.filter(s => !s.is_own);
+          const companyNames = [...new Set(otherSchedules.map(s => s.company_name || '其他廠商'))];
+          const timeSlots = [];
+          otherSchedules.forEach(s => {
+            if (s.time_start && s.time_end) {
+              timeSlots.push(`${s.time_start}-${s.time_end}`);
+            } else if (s.time_start) {
+              timeSlots.push(s.time_start);
+            }
+          });
+          const uniqueTimeSlots = [...new Set(timeSlots)].sort();
+          
+          alert(`❌ 該日期已被其他廠商預約，您無法編輯此排程（唯讀）。\n\n已預約的廠商：${companyNames.join(', ')}\n已預約的時間：${uniqueTimeSlots.join(', ')}`);
+          return; // 阻止打開表單
+        }
+      }
       
       document.getElementById('interviewDate').value = dateDisplay;
       document.getElementById('interviewTimeStart').value = '';
@@ -2117,7 +2226,7 @@
       // 依照目前履歷資料重建地點下拉選單（包含公司名稱）
       populateLocationDropdown();
       
-      // 填充學生選單
+      // 填充學生選單（會根據選擇的日期檢查學生是否已被其他廠商安排）
       populateStudentsDropdown();
       
       // 如果已有排程，載入現有資料
@@ -2324,6 +2433,23 @@
         return;
       }
       
+      const dateStr = formatDate(selectedInterviewDate);
+      
+      // 檢查該日期是否只有其他廠商的排程（沒有自己的排程）
+      const hasOwnSchedule = interviewSchedules.has(dateStr);
+      const hasOtherVendorSchedule = allVendorSchedules.has(dateStr);
+      
+      if (!hasOwnSchedule && hasOtherVendorSchedule) {
+        // 檢查是否真的只有其他廠商的排程
+        const schedules = allVendorSchedules.get(dateStr);
+        const onlyOtherVendor = schedules && schedules.every(s => !s.is_own);
+        
+        if (onlyOtherVendor) {
+          alert('❌ 該日期已被其他廠商預約，您無法修改此排程。');
+          return; // 阻止保存
+        }
+      }
+      
       const timeStart = document.getElementById('interviewTimeStart').value.trim();
       const timeEnd = document.getElementById('interviewTimeEnd').value.trim();
       
@@ -2371,16 +2497,29 @@
       }
       
       const notes = document.getElementById('interviewNotes').value.trim();
-      const dateStr = formatDate(selectedInterviewDate);
       
       // 獲取選中的學生 ID 及其對應的 application_id 和 job_id
       const studentsContainer = document.getElementById('interviewStudents');
       const selectedStudents = [];
       const studentApplications = []; // 保存每個學生對應的 application_id 和 job_id
+      const conflictedStudents = []; // 記錄已被其他廠商安排面試的學生
+      
       if (studentsContainer) {
         const checkboxes = studentsContainer.querySelectorAll('.student-checkbox:checked');
         checkboxes.forEach(checkbox => {
           const studentId = checkbox.value;
+          
+          // 檢查該學生是否已經被其他廠商安排了面試
+          const otherVendorSchedule = isStudentScheduledByOtherVendor(studentId, dateStr);
+          if (otherVendorSchedule) {
+            conflictedStudents.push({
+              studentId: studentId,
+              company: otherVendorSchedule.company_name,
+              time: `${otherVendorSchedule.time_start || ''}${otherVendorSchedule.time_end ? '-' + otherVendorSchedule.time_end : ''}`
+            });
+            return; // 跳過已被其他廠商安排的學生
+          }
+          
           selectedStudents.push(studentId);
           
           // 優先從 checkbox 的 data 屬性獲取 application_id 和 job_id
@@ -2439,6 +2578,24 @@
             job_id: jobId
           });
         });
+      }
+      
+      // 如果有衝突的學生，顯示警告並阻止保存
+      if (conflictedStudents.length > 0) {
+        const conflictedNames = conflictedStudents.map(c => {
+          const student = allResumes.find(r => String(r.student_id || r.id) === String(c.studentId));
+          const studentName = student ? (student.name || student.student_name || '未知') : '未知';
+          return `${studentName} (已被 ${c.company} 安排在 ${c.time})`;
+        }).join('\n');
+        
+        alert(`❌ 以下學生已被其他廠商安排面試，無法重複安排：\n\n${conflictedNames}\n\n請取消選擇這些學生後再儲存。`);
+        return;
+      }
+      
+      // 如果沒有選中任何學生，提示用戶
+      if (selectedStudents.length === 0) {
+        alert('請至少選擇一位學生');
+        return;
       }
       
       // 保存到 Map（本地存儲）
@@ -2554,14 +2711,18 @@
         applyFilters();
       }
       
+      // 重新載入所有廠商的面試排程（包括自己的），確保其他廠商也能看到新排程
+      await loadAllVendorSchedules();
+      
       // 關閉表單模態框
       const formModal = bootstrap.Modal.getInstance(document.getElementById("interviewFormModal"));
       formModal.hide();
       
-      // 重新載入所有廠商的面試排程（包括自己的）
-      await loadAllVendorSchedules();
-      // 重新渲染月曆以顯示自己的排程
-      renderCalendar();
+      // 如果面試排程模態框是打開的，重新渲染月曆以顯示更新後的排程
+      const scheduleModal = bootstrap.Modal.getInstance(document.getElementById("interviewScheduleModal"));
+      if (scheduleModal && scheduleModal._isShown) {
+        renderCalendar();
+      }
       
       // 確保狀態更新後再顯示提示
       setTimeout(() => {
@@ -2721,8 +2882,28 @@
         
         // 檢查是否有面試安排（從本地存儲或後端獲取）
         const dateKey = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-        const hasOwnInterview = interviewSchedules.has(dateKey);
-        const hasOtherVendorInterviews = allVendorSchedules.has(dateKey);
+        
+        // 從 allVendorSchedules 中檢查是否有自己的排程（更準確）
+        let hasOwnInterview = false;
+        let hasOtherVendorInterviews = false;
+        if (allVendorSchedules.has(dateKey)) {
+          const schedules = allVendorSchedules.get(dateKey);
+          hasOwnInterview = schedules.some(s => s.is_own);
+          hasOtherVendorInterviews = schedules.some(s => !s.is_own);
+        } else {
+          // 如果 allVendorSchedules 中沒有，檢查本地存儲（向後兼容）
+          hasOwnInterview = interviewSchedules.has(dateKey);
+        }
+        
+        // 更嚴格地檢查：該日期是否只有其他廠商的排程（沒有自己的排程）
+        let onlyOtherVendorSchedules = false;
+        if (hasOtherVendorInterviews && !hasOwnInterview) {
+          const schedules = allVendorSchedules.get(dateKey);
+          if (schedules && schedules.length > 0) {
+            // 檢查是否所有排程都是其他廠商的（is_own = false）
+            onlyOtherVendorSchedules = schedules.every(s => !s.is_own);
+          }
+        }
         
         // 顯示自己的面試排程
         if (hasOwnInterview) {
@@ -2831,25 +3012,67 @@
                   margin-top: 4px;
                   display: inline-block;
                   white-space: nowrap;
+                  pointer-events: none;
                 `;
               otherVendorBadge.textContent = `已排面試 ${uniqueTimeSlots.join(', ')}`;
-              otherVendorBadge.title = `其他廠商已預約：${uniqueTimeSlots.join(', ')}`;
+              otherVendorBadge.title = `其他廠商已預約：${uniqueTimeSlots.join(', ')}（唯讀）`;
               dateCell.appendChild(otherVendorBadge);
             }
           }
         }
         
         // 添加點選事件（非過去的日期）
+        // 只有當該日期有自己的排程時，才能點擊編輯；如果只有其他廠商的排程，則不能編輯
         if (!isPast) {
-          dateCell.addEventListener('click', () => {
-            openInterviewForm(cellDate);
-          });
-          dateCell.addEventListener('mouseenter', () => {
-            dateCell.style.backgroundColor = '#f0f9ff';
-          });
-          dateCell.addEventListener('mouseleave', () => {
-            dateCell.style.backgroundColor = isToday ? '#e3f2fd' : '#ffffff';
-          });
+          // 更嚴格地檢查：該日期是否只有其他廠商的排程（沒有自己的排程）
+          let onlyOtherVendorSchedules = false;
+          if (hasOtherVendorInterviews && !hasOwnInterview) {
+            const schedules = allVendorSchedules.get(dateKey);
+            if (schedules && schedules.length > 0) {
+              // 檢查是否所有排程都是其他廠商的（is_own = false）
+              onlyOtherVendorSchedules = schedules.every(s => !s.is_own);
+              console.log(`🔍 [renderCalendar] 日期 ${dateKey}: hasOwnInterview=${hasOwnInterview}, hasOtherVendorInterviews=${hasOtherVendorInterviews}, onlyOtherVendorSchedules=${onlyOtherVendorSchedules}, schedules=`, schedules);
+            }
+          }
+          
+          if (onlyOtherVendorSchedules) {
+            console.log(`🚫 [renderCalendar] 日期 ${dateKey} 設置為唯讀（只有其他廠商的排程）`);
+            // 只有其他廠商的排程，完全不能點擊編輯（唯讀）
+            dateCell.style.cursor = 'not-allowed';
+            dateCell.style.pointerEvents = 'none'; // 完全禁用點擊事件
+            dateCell.title = '該日期已被其他廠商預約，無法編輯（唯讀）';
+            dateCell.style.opacity = '0.7'; // 降低透明度，表示不可編輯
+            // 不添加任何點擊事件監聽器
+            dateCell.addEventListener('mouseenter', () => {
+              dateCell.style.backgroundColor = '#fee';
+            });
+            dateCell.addEventListener('mouseleave', () => {
+              dateCell.style.backgroundColor = isToday ? '#e3f2fd' : '#ffffff';
+            });
+          } else if (hasOwnInterview) {
+            // 有自己的排程，可以點擊編輯
+            dateCell.addEventListener('click', (e) => {
+              e.stopPropagation();
+              openInterviewForm(cellDate);
+            });
+            dateCell.addEventListener('mouseenter', () => {
+              dateCell.style.backgroundColor = '#f0f9ff';
+            });
+            dateCell.addEventListener('mouseleave', () => {
+              dateCell.style.backgroundColor = isToday ? '#e3f2fd' : '#ffffff';
+            });
+          } else {
+            // 沒有排程，可以點擊新增
+            dateCell.addEventListener('click', () => {
+              openInterviewForm(cellDate);
+            });
+            dateCell.addEventListener('mouseenter', () => {
+              dateCell.style.backgroundColor = '#f0f9ff';
+            });
+            dateCell.addEventListener('mouseleave', () => {
+              dateCell.style.backgroundColor = isToday ? '#e3f2fd' : '#ffffff';
+            });
+          }
         } else {
           dateCell.style.opacity = '0.6';
         }

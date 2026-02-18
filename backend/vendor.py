@@ -894,6 +894,35 @@ def get_vendor_resumes():
             # 不再檢查 vendor_preference_history 表（已移除），直接使用 resume_applications 表
             preference_placeholders = ", ".join(["%s"] * len(company_ids))
             
+            # 根據 resume_teacher 表是否存在，選擇不同的 EXISTS 子查詢
+            if resume_teacher_exists:
+                # 使用 resume_teacher 表查詢（新架構）
+                exists_clause = """
+                    AND EXISTS (
+                        SELECT 1 FROM resumes r
+                        INNER JOIN student_job_applications sja ON sja.resume_id = r.id AND sja.student_id = r.user_id
+                        INNER JOIN resume_teacher rt ON rt.application_id = sja.id
+                        INNER JOIN users reviewer ON rt.teacher_id = reviewer.id
+                        WHERE r.user_id = sp.student_id
+                        AND rt.review_status = 'approved'
+                        AND reviewer.role = 'teacher'
+                    )
+                """
+            else:
+                # 使用舊架構（reviewed_by 欄位）
+                exists_clause = """
+                    AND EXISTS (
+                        SELECT 1 FROM resumes r
+                        WHERE r.user_id = sp.student_id
+                        AND r.reviewed_by IS NOT NULL
+                        AND EXISTS (
+                            SELECT 1 FROM users reviewer
+                            WHERE reviewer.id = r.reviewed_by
+                            AND reviewer.role = 'teacher'
+                        )
+                    )
+                """
+            
             # 直接使用查詢（不再檢查 vendor_preference_history 表）
             cursor.execute(f"""
                 SELECT 
@@ -916,16 +945,7 @@ def get_vendor_resumes():
                 AND (%s IN ('teacher', 'ta') OR ij.created_by_vendor_id = %s OR ij.created_by_vendor_id IS NULL)
                 -- 只顯示已經被指導老師審核通過的志願序
                 -- 必須等指導老師審核完後，才會給廠商學生的資料
-                    -- 檢查該學生的履歷是否已經被指導老師（role='teacher'）審核通過
-                    AND EXISTS (
-                        SELECT 1 FROM resumes r
-                        INNER JOIN student_job_applications sja ON sja.resume_id = r.id AND sja.student_id = r.user_id
-                        INNER JOIN resume_teacher rt ON rt.application_id = sja.id
-                        INNER JOIN users reviewer ON rt.teacher_id = reviewer.id
-                        WHERE r.user_id = sp.student_id
-                        AND rt.review_status = 'approved'
-                        AND reviewer.role = 'teacher'
-                    )
+                {exists_clause}
             """, tuple(company_ids) + (user_role, vendor_id))
             
             # 使用字典儲存學生的志願申請，鍵為 student_id
@@ -939,8 +959,36 @@ def get_vendor_resumes():
         else:
             # 如果沒有公司關聯，查詢所有志願序（用於顯示所有履歷，但這不是正常情況）
             print("⚠️ 廠商沒有關聯公司，顯示所有志願序")
+            # 根據 resume_teacher 表是否存在，選擇不同的 EXISTS 子查詢
+            if resume_teacher_exists:
+                # 使用 resume_teacher 表查詢（新架構）
+                exists_clause = """
+                    AND EXISTS (
+                        SELECT 1 FROM resumes r
+                        INNER JOIN student_job_applications sja ON sja.resume_id = r.id AND sja.student_id = r.user_id
+                        INNER JOIN resume_teacher rt ON rt.application_id = sja.id
+                        INNER JOIN users reviewer ON rt.teacher_id = reviewer.id
+                        WHERE r.user_id = sp.student_id
+                        AND rt.review_status = 'approved'
+                        AND reviewer.role = 'teacher'
+                    )
+                """
+            else:
+                # 使用舊架構（reviewed_by 欄位）
+                exists_clause = """
+                    AND EXISTS (
+                        SELECT 1 FROM resumes r
+                        WHERE r.user_id = sp.student_id
+                        AND r.reviewed_by IS NOT NULL
+                        AND EXISTS (
+                            SELECT 1 FROM users reviewer
+                            WHERE reviewer.id = r.reviewed_by
+                            AND reviewer.role = 'teacher'
+                        )
+                    )
+                """
             # 直接使用 resume_applications 表查詢（不再檢查 vendor_preference_history）
-            cursor.execute("""
+            cursor.execute(f"""
                 SELECT 
                     sp.student_id, 
                     sp.id AS preference_id,
@@ -956,15 +1004,7 @@ def get_vendor_resumes():
                 JOIN internship_companies ic ON sp.company_id = ic.id
                 LEFT JOIN internship_jobs ij ON sp.job_id = ij.id
                 WHERE (%s IN ('teacher', 'ta') OR ij.created_by_vendor_id = %s OR ij.created_by_vendor_id IS NULL)
-                AND EXISTS (
-                    SELECT 1 FROM resumes r
-                    INNER JOIN student_job_applications sja ON sja.resume_id = r.id AND sja.student_id = r.user_id
-                    INNER JOIN resume_teacher rt ON rt.application_id = sja.id
-                    INNER JOIN users reviewer ON rt.teacher_id = reviewer.id
-                    WHERE r.user_id = sp.student_id
-                    AND rt.review_status = 'approved'
-                    AND reviewer.role = 'teacher'
-                )
+                {exists_clause}
             """, (user_role, vendor_id))
             for pref in cursor.fetchall() or []:
                 student_id = pref['student_id']
@@ -1111,6 +1151,7 @@ def get_vendor_resumes():
                     interview_completed = False  # 是否已完成面試
                     interview_time = None  # 面試時間
                     interview_result = None  # 面試結果
+                    interview_status = None  # 初始化 interview_status
                     
                     # 優先從 resume_applications 表讀取
                     # 注意：resume_applications.application_id 對應的是 student_job_applications.id，不是 student_preferences.id
@@ -2639,23 +2680,34 @@ def get_all_interview_schedules():
     cursor = conn.cursor(dictionary=True)
     
     try:
+        # 獲取當前廠商關聯的公司ID列表
+        profile, companies, _ = _get_vendor_scope(cursor, vendor_id)
+        company_ids = [c["id"] for c in companies] if companies else []
+        
         # 查詢所有廠商的面試排程（從 resume_applications 表中）
         # 只查詢 interview_status = 'scheduled' 的記錄
+        # 注意：resume_applications.application_id 對應的是 student_job_applications.id，不是 student_preferences.id
+        # 注意：不使用 DISTINCT，因為每個學生的排程都是獨立的記錄
         cursor.execute("""
-            SELECT DISTINCT
+            SELECT
                 ra.company_comment AS comment,
                 ic.company_name,
+                ic.id AS company_id,
                 ra.updated_at AS created_at,
-                ra.interview_time
+                ra.interview_time,
+                sja.student_id,
+                ra.application_id,
+                ra.job_id
             FROM resume_applications ra
-            JOIN student_preferences sp ON ra.application_id = sp.id
-            LEFT JOIN internship_companies ic ON sp.company_id = ic.id
+            JOIN student_job_applications sja ON ra.application_id = sja.id
+            LEFT JOIN internship_companies ic ON sja.company_id = ic.id
             WHERE ra.interview_status = 'scheduled'
             AND ra.interview_time IS NOT NULL
             ORDER BY ra.updated_at DESC
         """)
         
         all_schedules = cursor.fetchall()
+        print(f"📋 [all_interview_schedules] 查詢到 {len(all_schedules)} 筆排程記錄")
         
         # 解析面試資訊
         import re
@@ -2664,7 +2716,11 @@ def get_all_interview_schedules():
         for schedule in all_schedules:
             comment = schedule.get('comment', '')
             company_name = schedule.get('company_name', '未知公司')
+            company_id = schedule.get('company_id')
             interview_time = schedule.get('interview_time')
+            
+            # 判斷是否為當前廠商的排程
+            is_own = company_id and company_id in company_ids
             
             # 從 interview_time 提取日期和時間
             if interview_time:
@@ -2683,14 +2739,21 @@ def get_all_interview_schedules():
                             interview_date = date_match.group(1)
                         else:
                             continue
-                        time_match = re.search(r'時間：(\d{2}:\d{2})', comment)
-                        time_start = time_match.group(1) if time_match else None
-                        time_end = None
+                        # 嘗試提取時間段（格式：時間：HH:MM-HH:MM 或 時間：HH:MM）
+                        time_match = re.search(r'時間：(\d{2}:\d{2})(?:-(\d{2}:\d{2}))?', comment)
+                        if time_match:
+                            time_start = time_match.group(1)
+                            time_end = time_match.group(2) if time_match.group(2) else None
+                        else:
+                            time_start = None
+                            time_end = None
                 else:
                     # 如果是 datetime 物件
                     interview_date = interview_time.strftime('%Y-%m-%d')
                     time_start = interview_time.strftime('%H:%M')
-                    time_end = None
+                    # 嘗試從 comment 中提取結束時間
+                    time_end_match = re.search(r'時間：\d{2}:\d{2}-(\d{2}:\d{2})', comment)
+                    time_end = time_end_match.group(1) if time_end_match else None
             else:
                 # 如果沒有 interview_time，嘗試從 comment 提取
                 date_match = re.search(r'面試日期：(\d{4}-\d{2}-\d{2})', comment)
@@ -2705,6 +2768,13 @@ def get_all_interview_schedules():
             location_match = re.search(r'地點：([^，]+)', comment)
             location = location_match.group(1) if location_match else ''
             
+            student_id = schedule.get('student_id')
+            # 確保 student_id 被正確提取
+            if student_id is None:
+                print(f"⚠️ [all_interview_schedules] 警告：排程記錄缺少 student_id: {schedule}")
+            
+            print(f"📅 [all_interview_schedules] 解析排程: 日期={interview_date}, 時間={time_start}-{time_end}, 學生ID={student_id}, 公司={company_name}, is_own={is_own}")
+            
             parsed_schedules.append({
                 'date': interview_date,
                 'time_start': time_start,
@@ -2713,8 +2783,13 @@ def get_all_interview_schedules():
                 'vendor_id': None,  # resume_applications 表沒有 reviewer_id
                 'vendor_name': None,
                 'company_name': company_name,
-                'is_own': False  # 無法判斷是否為當前廠商的排程
+                'is_own': is_own,  # 判斷是否為當前廠商的排程
+                'student_id': student_id,  # 添加學生ID
+                'application_id': schedule.get('application_id'),
+                'job_id': schedule.get('job_id')
             })
+        
+        print(f"✅ [all_interview_schedules] 最終返回 {len(parsed_schedules)} 個解析後的排程")
         
         return jsonify({
             "success": True,
