@@ -1238,6 +1238,9 @@
           console.log(`📋 收到 ${data.schedules.length} 個排程記錄`);
           
           // 按日期分組，同時將自己的排程也加入到 interviewSchedules
+          // 先收集每個日期自己的排程信息（包括學生列表）
+          const ownSchedulesByDate = new Map();
+          
           data.schedules.forEach(schedule => {
             const date = schedule.date;
             if (!date) {
@@ -1250,10 +1253,10 @@
             }
             allVendorSchedules.get(date).push(schedule);
             
-            // 如果是自己的排程，也加入到 interviewSchedules（確保顯示在日曆上）
+            // 如果是自己的排程，收集信息
             if (schedule.is_own) {
-              if (!interviewSchedules.has(date)) {
-                interviewSchedules.set(date, {
+              if (!ownSchedulesByDate.has(date)) {
+                ownSchedulesByDate.set(date, {
                   timeStart: schedule.time_start || '',
                   timeEnd: schedule.time_end || '',
                   location: schedule.location || '',
@@ -1261,7 +1264,20 @@
                   students: []
                 });
               }
+              // 收集該日期的所有學生ID
+              if (schedule.student_id) {
+                const scheduleData = ownSchedulesByDate.get(date);
+                if (!scheduleData.students.includes(String(schedule.student_id))) {
+                  scheduleData.students.push(String(schedule.student_id));
+                }
+              }
             }
+          });
+          
+          // 更新 interviewSchedules（覆蓋現有數據，確保編輯時能載入最新數據）
+          ownSchedulesByDate.forEach((scheduleData, date) => {
+            interviewSchedules.set(date, scheduleData);
+            console.log(`✅ 更新排程 ${date}: 時間=${scheduleData.timeStart}-${scheduleData.timeEnd}, 學生=${scheduleData.students.join(',')}`);
           });
           
           // 保存到本地存儲
