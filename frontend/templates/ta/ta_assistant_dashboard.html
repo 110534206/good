@@ -273,6 +273,91 @@
       color: var(--brand-blue-dark);
     }
 
+    /* 開關切換器樣式 */
+    .toggle-switch-container {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 20px;
+      background: #fff;
+      border: 2px solid var(--border-light);
+      border-radius: 10px;
+      transition: all 0.3s ease;
+    }
+
+    .toggle-switch-container.enabled {
+      border-color: var(--brand-blue);
+      background: rgba(0, 102, 204, 0.05);
+    }
+
+    .toggle-switch-label {
+      font-size: 0.95rem;
+      font-weight: 600;
+      color: var(--text-dark);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .toggle-switch-label i {
+      color: var(--brand-blue);
+    }
+
+    .toggle-switch {
+      position: relative;
+      width: 56px;
+      height: 32px;
+      background-color: #ccc;
+      border-radius: 16px;
+      cursor: pointer;
+      transition: background-color 0.3s ease;
+      flex-shrink: 0;
+    }
+
+    .toggle-switch.enabled {
+      background-color: var(--brand-blue);
+    }
+
+    .toggle-switch.disabled {
+      background-color: #ccc;
+    }
+
+    .toggle-switch::after {
+      content: '';
+      position: absolute;
+      width: 26px;
+      height: 26px;
+      border-radius: 50%;
+      background-color: white;
+      top: 3px;
+      left: 3px;
+      transition: transform 0.3s ease;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    }
+
+    .toggle-switch.enabled::after {
+      transform: translateX(24px);
+    }
+
+    .toggle-switch.disabled::after {
+      transform: translateX(0);
+    }
+
+    .toggle-switch:active::after {
+      width: 30px;
+    }
+
+    .toggle-switch-status {
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      min-width: 60px;
+    }
+
+    .toggle-switch-status.enabled {
+      color: var(--brand-blue);
+    }
+
     .badge {
       display: inline-flex;
       align-items: center;
@@ -522,6 +607,14 @@
         <a href="/admission/unadmitted_list" class="btn-primary">
           <i class="fa-solid fa-users"></i> 實習生／未錄取名單管理
         </a>
+        <div class="toggle-switch-container" id="toggleSwitchContainer">
+          <div class="toggle-switch-label">
+            <i class="fa-solid fa-calendar-check"></i>
+            <span>二面流程</span>
+          </div>
+          <div class="toggle-switch disabled" id="toggleSwitch"></div>
+          <div class="toggle-switch-status disabled" id="toggleSwitchStatus">關閉</div>
+        </div>
       </div>
     </section>
   </main>
@@ -686,6 +779,107 @@
         }
       });
     }
+
+    // 二面流程開關功能
+    let secondInterviewEnabled = false;
+    let isToggling = false;
+    const toggleSwitch = document.getElementById('toggleSwitch');
+    const toggleSwitchContainer = document.getElementById('toggleSwitchContainer');
+    const toggleSwitchStatus = document.getElementById('toggleSwitchStatus');
+
+    // 載入當前狀態
+    async function loadSecondInterviewStatus() {
+      try {
+        const res = await fetch('/admission/api/ta/second_interview_status', {
+          method: 'GET',
+          credentials: 'include'
+        });
+        const data = await res.json();
+        if (data.success) {
+          secondInterviewEnabled = data.is_enabled || false;
+          updateToggleState();
+        }
+      } catch (err) {
+        console.error('載入二面流程狀態失敗:', err);
+      }
+    }
+
+    // 更新開關狀態
+    function updateToggleState() {
+      if (toggleSwitch && toggleSwitchContainer && toggleSwitchStatus) {
+        if (secondInterviewEnabled) {
+          toggleSwitch.classList.remove('disabled');
+          toggleSwitch.classList.add('enabled');
+          toggleSwitchContainer.classList.add('enabled');
+          toggleSwitchStatus.textContent = '開啟';
+          toggleSwitchStatus.classList.remove('disabled');
+          toggleSwitchStatus.classList.add('enabled');
+        } else {
+          toggleSwitch.classList.remove('enabled');
+          toggleSwitch.classList.add('disabled');
+          toggleSwitchContainer.classList.remove('enabled');
+          toggleSwitchStatus.textContent = '關閉';
+          toggleSwitchStatus.classList.remove('enabled');
+          toggleSwitchStatus.classList.add('disabled');
+        }
+      }
+    }
+
+    // 切換二面流程
+    if (toggleSwitch) {
+      toggleSwitch.addEventListener('click', async function() {
+        if (isToggling) return; // 防止重複點擊
+
+        const action = secondInterviewEnabled ? '關閉' : '啟動';
+        const confirmMsg = secondInterviewEnabled 
+          ? '確定要關閉二面流程嗎？'
+          : '確定要啟動二面流程嗎？\n\n系統將自動通知所有指導老師、班導、未錄取學生和同意二面的廠商。';
+        
+        if (!confirm(confirmMsg)) {
+          return;
+        }
+
+        isToggling = true;
+        const newState = !secondInterviewEnabled;
+        
+        // 先更新 UI（樂觀更新）
+        secondInterviewEnabled = newState;
+        updateToggleState();
+
+        try {
+          const res = await fetch('/admission/api/ta/toggle_second_interview', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({ enable: newState })
+          });
+
+          const data = await res.json();
+
+          if (data.success) {
+            secondInterviewEnabled = data.is_enabled;
+            updateToggleState();
+            // 成功時不顯示 alert，開關狀態已更新
+          } else {
+            // 如果失敗，恢復原狀態
+            secondInterviewEnabled = !newState;
+            updateToggleState();
+            alert('❌ 操作失敗：' + (data.message || '未知錯誤'));
+          }
+        } catch (err) {
+          console.error('切換二面流程失敗:', err);
+          // 如果失敗，恢復原狀態
+          secondInterviewEnabled = !newState;
+          updateToggleState();
+          alert('❌ 操作失敗：' + (err.message || '未知錯誤'));
+        } finally {
+          isToggling = false;
+        }
+      });
+    }
+
+    // 頁面載入時查詢狀態
+    loadSecondInterviewStatus();
 
     // 直接載入儀表板統計（不使用學期下拉）
     (function() {

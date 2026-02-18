@@ -2281,7 +2281,7 @@ def final_matching_results():
                 "company_name": company_name,
                 "jobs": {}
             }
-        
+            
         # 為每個公司添加職缺（即使沒有媒合結果）
         for job in all_jobs:
             company_id = job["company_id"]
@@ -3083,6 +3083,287 @@ def director_confirm_matching():
     except Exception as e:
         traceback.print_exc()
         return jsonify({"success": False, "message": f"確認失敗: {str(e)}"}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+# =========================================================
+# API: 查詢二面流程狀態
+# =========================================================
+@admission_bp.route("/api/ta/second_interview_status", methods=["GET"])
+def get_second_interview_status():
+    """查詢當前學期的二面流程是否已啟動"""
+    if 'user_id' not in session or session.get('role') not in ['ta', 'admin']:
+        return jsonify({"success": False, "message": "未授權"}), 403
+    
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+    
+    try:
+        current_semester_id = get_current_semester_id(cursor)
+        if not current_semester_id:
+            return jsonify({"success": False, "message": "無法取得當前學期"}), 500
+        
+        # 查詢當前學期的二面流程狀態
+        # 嘗試使用 system_config 表，如果不存在則使用其他方式
+        is_enabled = False
+        try:
+            cursor.execute("""
+                SELECT value AS is_enabled
+                FROM system_config
+                WHERE config_key = 'second_interview_enabled' AND semester_id = %s
+            """, (current_semester_id,))
+            config = cursor.fetchone()
+            
+            if config and config.get('is_enabled'):
+                try:
+                    is_enabled = bool(int(config['is_enabled']))
+                except (ValueError, TypeError):
+                    is_enabled = False
+        except Exception:
+            # 如果 system_config 表不存在，嘗試使用其他方式或返回預設值
+            # 可以考慮使用 internship_configs 表或其他配置表
+            is_enabled = False
+        
+        return jsonify({
+            "success": True,
+            "is_enabled": is_enabled,
+            "semester_id": current_semester_id
+        })
+    
+    except Exception as e:
+        # 如果發生其他錯誤，返回預設值 False
+        return jsonify({
+            "success": True,
+            "is_enabled": False,
+            "semester_id": current_semester_id if 'current_semester_id' in locals() else None
+        })
+    finally:
+        cursor.close()
+        conn.close()
+
+# =========================================================
+# API: 科助啟動/關閉二面流程（開關功能）
+# =========================================================
+@admission_bp.route("/api/ta/toggle_second_interview", methods=["POST"])
+def ta_toggle_second_interview():
+    """
+    科助啟動/關閉二面流程（開關功能）：
+    1. 如果開啟：通知所有指導老師和班導、未錄取學生、同意二面的廠商
+    2. 如果關閉：只更新狀態，不發送通知
+    """
+    if 'user_id' not in session or session.get('role') not in ['ta', 'admin']:
+        return jsonify({"success": False, "message": "未授權"}), 403
+    
+    data = request.get_json(silent=True) or {}
+    enable = data.get('enable', True)  # 預設為開啟
+    
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+    
+    try:
+        # 獲取當前學期ID和學期代碼
+        current_semester_id = get_current_semester_id(cursor)
+        current_semester_code = get_current_semester_code(cursor)
+        if not current_semester_id or not current_semester_code:
+            return jsonify({"success": False, "message": "無法取得當前學期"}), 500
+        
+        # 更新或插入系統配置
+        # 嘗試使用 system_config 表，如果不存在則創建或使用其他方式
+        try:
+            cursor.execute("""
+                INSERT INTO system_config (config_key, value, semester_id, updated_at)
+                VALUES ('second_interview_enabled', %s, %s, NOW())
+                ON DUPLICATE KEY UPDATE value = %s, updated_at = NOW()
+            """, (1 if enable else 0, current_semester_id, 1 if enable else 0))
+        except Exception:
+            # 如果表不存在，嘗試創建表（需要適當的權限）
+            try:
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS system_config (
+                        id INT AUTO_INCREMENT PRIMARY KEY,
+                        config_key VARCHAR(100) NOT NULL,
+                        value VARCHAR(255),
+                        semester_id INT,
+                        updated_at DATETIME,
+                        UNIQUE KEY unique_config (config_key, semester_id)
+                    )
+                """)
+                cursor.execute("""
+                    INSERT INTO system_config (config_key, value, semester_id, updated_at)
+                    VALUES ('second_interview_enabled', %s, %s, NOW())
+                    ON DUPLICATE KEY UPDATE value = %s, updated_at = NOW()
+                """, (1 if enable else 0, current_semester_id, 1 if enable else 0))
+            except Exception as e:
+                # 如果創建表也失敗，記錄錯誤但繼續執行（通知功能仍可運作）
+                print(f"⚠️ 無法創建或更新 system_config 表: {e}")
+                # 不中斷流程，繼續發送通知
+        
+        # 如果只是關閉，不需要發送通知
+        if not enable:
+            conn.commit()
+            return jsonify({
+                "success": True,
+                "message": "二面流程已關閉",
+                "is_enabled": False
+            })
+        
+        # 如果開啟，發送通知
+        semester_prefix = f"{current_semester_code}學期" if current_semester_code else "本學期"
+        
+        # 1. 通知所有指導老師（role='teacher'）
+        cursor.execute("SELECT id FROM users WHERE role = 'teacher'")
+        teachers = cursor.fetchall() or []
+        for teacher in teachers:
+            title = f"{semester_prefix} 二面流程已啟動"
+            message = f"{semester_prefix}二面流程已由科助啟動，請協助詢問未錄取學生的二面意願。"
+            link_url = "/teacher/unadmitted_list"
+            create_notification(
+                user_id=teacher['id'],
+                title=title,
+                message=message,
+                category="matching",
+                link_url=link_url
+            )
+        
+        # 2. 通知所有班導（從 classes_teacher 表獲取）
+        cursor.execute("""
+            SELECT DISTINCT ct.teacher_id
+            FROM classes_teacher ct
+            JOIN users u ON ct.teacher_id = u.id
+            WHERE ct.role = '班導師'
+        """)
+        class_teachers = cursor.fetchall() or []
+        for class_teacher in class_teachers:
+            title = f"{semester_prefix} 二面流程已啟動"
+            message = f"{semester_prefix}二面流程已由科助啟動，請協助詢問未錄取學生的二面意願。"
+            link_url = "/teacher/unadmitted_list"
+            create_notification(
+                user_id=class_teacher['teacher_id'],
+                title=title,
+                message=message,
+                category="matching",
+                link_url=link_url
+            )
+        
+        # 3. 通知所有未錄取的學生
+        # 獲取當前學期對應的學號前綴
+        student_id_prefix = None
+        if current_semester_code and len(current_semester_code) >= 3:
+            try:
+                year_part = int(current_semester_code[:3])
+                student_id_prefix = str(year_part - 3)
+            except (ValueError, TypeError):
+                pass
+        
+        # 獲取所有學生
+        student_query = "SELECT id FROM users WHERE role = 'student'"
+        student_params = []
+        if student_id_prefix:
+            student_query += " AND username LIKE %s"
+            student_params.append(student_id_prefix + "%")
+        
+        cursor.execute(student_query, student_params)
+        all_students = cursor.fetchall() or []
+        
+        # 獲取已媒合的學生ID
+        cursor.execute("""
+            SELECT DISTINCT md.student_id
+            FROM manage_director md
+            WHERE md.semester_id = %s
+            AND md.director_decision IN ('Approved', 'Pending')
+        """, (current_semester_id,))
+        matched_student_ids = {row['student_id'] for row in cursor.fetchall()}
+        
+        # 只通知未錄取的學生
+        unadmitted_students = [s for s in all_students if s['id'] not in matched_student_ids]
+        
+        for student in unadmitted_students:
+            title = f"{semester_prefix} 二面流程已啟動"
+            message = f"{semester_prefix}二面流程已啟動，請留意相關面試通知。"
+            link_url = "/interview_schedule"
+            create_notification(
+                user_id=student['id'],
+                title=title,
+                message=message,
+                category="matching",
+                link_url=link_url
+            )
+        
+        # 4. 只通知同意二面的廠商
+        # 查詢所有同意二面的廠商（假設 internship_companies 表有 agree_second_interview 欄位）
+        vendors = []
+        try:
+            # 嘗試查詢有 agree_second_interview 欄位的公司對應的廠商
+            cursor.execute("""
+                SELECT DISTINCT u.id AS vendor_id
+                FROM internship_companies ic
+                JOIN users u ON u.role = 'vendor'
+                WHERE ic.status = 'approved'
+                AND ic.agree_second_interview = 1
+                AND (
+                    ic.vendor_id = u.id 
+                    OR EXISTS (
+                        SELECT 1 FROM company_vendor_relations cvr
+                        WHERE cvr.company_id = ic.id AND cvr.vendor_id = u.id
+                    )
+                )
+            """)
+            vendors = cursor.fetchall() or []
+        except Exception:
+            # 如果欄位不存在，嘗試其他方式查詢
+            try:
+                # 備用方案：查詢所有已審核通過的公司對應的廠商
+                cursor.execute("""
+                    SELECT DISTINCT u.id AS vendor_id
+                    FROM internship_companies ic
+                    JOIN users u ON u.role = 'vendor'
+                    WHERE ic.status = 'approved'
+                    AND (
+                        ic.vendor_id = u.id 
+                        OR EXISTS (
+                            SELECT 1 FROM company_vendor_relations cvr
+                            WHERE cvr.company_id = ic.id AND cvr.vendor_id = u.id
+                        )
+                    )
+                """)
+                vendors = cursor.fetchall() or []
+            except Exception:
+                # 最後備用：如果表結構不同，查詢所有廠商
+                cursor.execute("SELECT id AS vendor_id FROM users WHERE role = 'vendor'")
+                vendors = cursor.fetchall() or []
+        
+        for vendor in vendors:
+            vendor_id = vendor.get('vendor_id')
+            if vendor_id:
+                title = f"{semester_prefix} 二面流程已啟動"
+                message = f"{semester_prefix}二面流程已由科助啟動，可開始進行二面排程。"
+                link_url = "/vendor_review_resume"
+                create_notification(
+                    user_id=vendor_id,
+                    title=title,
+                    message=message,
+                    category="matching",
+                    link_url=link_url
+                )
+        
+        conn.commit()
+        
+        return jsonify({
+            "success": True,
+            "message": "二面流程已啟動，已通知相關人員",
+            "is_enabled": True,
+            "notified": {
+                "teachers_and_class_teachers": len(teachers) + len(class_teachers),
+                "unadmitted_students": len(unadmitted_students),
+                "vendors": len(vendors)
+            }
+        })
+    
+    except Exception as e:
+        traceback.print_exc()
+        conn.rollback()
+        return jsonify({"success": False, "message": f"操作失敗: {str(e)}"}), 500
     finally:
         cursor.close()
         conn.close()
@@ -4026,7 +4307,7 @@ def ta_export_unadmitted_students_excel():
         
         # 年級數字對應的中文
         grade_labels = ('', '一', '二', '三', '四', '五', '六')
-        
+
         for s in unadmitted_students:
             dept = (s.get("department") or "").strip()
             cls = (s.get("class_name") or "").strip()

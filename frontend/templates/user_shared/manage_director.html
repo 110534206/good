@@ -972,6 +972,29 @@
       box-shadow: 0 4px 8px rgba(220, 38, 38, 0.3);
     }
 
+    .btn-unadmitted {
+      background-color: #f59e0b;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      padding: 10px 20px;
+      font-size: 1rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      text-decoration: none;
+    }
+
+    .btn-unadmitted:hover {
+      background-color: #d97706;
+      color: #fff;
+      transform: translateY(-2px);
+      box-shadow: 0 4px 8px rgba(245, 158, 11, 0.3);
+    }
+
   
     .companies-container {
      display: grid;
@@ -1382,6 +1405,9 @@
         <input type="text" id="studentNameFilter" placeholder="輸入學生姓名或學號">
       </div>
       <div class="filter-buttons">
+        <a href="/admission/unadmitted_list" class="btn-unadmitted">
+          <i class="fas fa-users"></i> 統計未錄取學生名單
+        </a>
         <button id="exportExcelBtn" class="btn-excel">
           <i class="fas fa-file-excel"></i> Excel
         </button>
