@@ -1075,17 +1075,46 @@
       const body = { status: 'approved' };
       if (preferenceId && preferenceId !== 'null') body.preference_id = preferenceId;
 
-      fetch(`/api/review_resume/${resumeId}`, { 
+      console.log('📤 發送通過請求:', { resumeId, preferenceId, body });
+
+      fetch(`/vendor/api/review_resume/${resumeId}`, { 
           method: 'POST',
           headers: {'Content-Type': 'application/json'},
           body: JSON.stringify(body)
-      }).then(res => res.json()).then(data => {
+      })
+      .then(res => {
+          console.log('📥 收到響應:', res.status, res.statusText);
+          if (!res.ok) {
+              return res.text().then(text => {
+                  console.error('❌ 響應錯誤:', text);
+                  throw new Error(`HTTP ${res.status}: ${text}`);
+              });
+          }
+          return res.json();
+      })
+      .then(data => {
+          console.log('📋 響應數據:', data);
           if (data.success) {
               alert("✅ 狀態更新成功");
               // 重新載入資料
-              fetch(getResumeApiUrl()).then(r=>r.json()).then(d=>{
+              fetch(getResumeApiUrl())
+              .then(r => {
+                  if (!r.ok) {
+                      throw new Error(`HTTP ${r.status}`);
+                  }
+                  return r.json();
+              })
+              .then(d => {
                   if(d.success) { 
                     allResumes=d.resumes;
+                    console.log('✅ 重新載入資料成功，共', allResumes.length, '筆履歷');
+                    
+                    // 調試：檢查狀態是否正確更新
+                    allResumes.forEach((r, idx) => {
+                      const status = r.display_status || r.status || r.application_statuses || 'unknown';
+                      console.log(`履歷 ${idx + 1}: id=${r.id}, preference_id=${r.preference_id}, display_status=${status}, status=${r.status}`);
+                    });
+                    
                     // 根據後端返回的資料更新 interviewedSet
                     interviewedSet.clear();
                     allResumes.forEach(r => {
@@ -1095,11 +1124,22 @@
                       }
                     });
                     applyFilters(); 
+                  } else {
+                      console.error('❌ 重新載入資料失敗:', d.message);
+                      alert("狀態已更新，但重新載入資料失敗：" + (d.message || '未知錯誤'));
                   }
+              })
+              .catch(err => {
+                  console.error('❌ 重新載入資料時發生錯誤:', err);
+                  alert("狀態已更新，但重新載入資料時發生錯誤：" + err.message);
               });
           } else {
-              alert("失敗：" + data.message);
+              alert("失敗：" + (data.message || '未知錯誤'));
           }
+      })
+      .catch(err => {
+          console.error('❌ 請求失敗:', err);
+          alert("請求失敗：" + err.message);
       });
     }
 
@@ -1122,7 +1162,7 @@
            const body = { status: 'rejected', comment: reason };
            if (currentPreferenceId) body.preference_id = currentPreferenceId;
 
-           fetch(`/api/review_resume/${currentResumeId}`, {
+           fetch(`/vendor/api/review_resume/${currentResumeId}`, {
                method: 'POST',
                headers: {'Content-Type': 'application/json'},
                body: JSON.stringify(body)

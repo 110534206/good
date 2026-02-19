@@ -636,7 +636,7 @@ def get_vendor_resumes():
     keyword_filter = request.args.get("keyword", "").strip()
 
     conn = get_db()
-    cursor = conn.cursor(dictionary=True)
+    cursor = conn.cursor(dictionary=True, buffered=True)
     
     # 如果是老師，需要根據 company_id 找到對應的廠商
     if user_role in ["teacher", "ta"]:
@@ -833,59 +833,76 @@ def get_vendor_resumes():
                 student_name = r.get('student_name')
                 reviewed_by = r.get('reviewed_by')
                 # 查詢該履歷的詳細審核信息
-                if resume_teacher_exists:
-                    # 使用 resume_teacher 表查詢
-                    cursor.execute("""
-                        SELECT rt.review_status, rt.teacher_id, rt.reviewed_at
-                        FROM resumes r
-                        INNER JOIN student_job_applications sja ON sja.resume_id = r.id
-                        INNER JOIN resume_teacher rt ON rt.application_id = sja.id
-                        WHERE r.id = %s AND rt.review_status = 'approved'
-                        LIMIT 1
-                    """, (resume_id,))
-                    resume_detail = cursor.fetchone()
-                    if resume_detail:
-                        teacher_status = resume_detail.get('review_status')
-                        reviewed_by_id = resume_detail.get('teacher_id')
-                        reviewed_at = resume_detail.get('reviewed_at')
-                        # 檢查審核者角色
-                        if reviewed_by_id:
-                            cursor.execute("SELECT role, name FROM users WHERE id = %s", (reviewed_by_id,))
-                            reviewer_info = cursor.fetchone()
-                            reviewer_role = reviewer_info.get('role') if reviewer_info else 'unknown'
-                            reviewer_name = reviewer_info.get('name') if reviewer_info else 'unknown'
-                            print(f"   - 履歷 ID: {resume_id}, 學生: {student_name}")
-                            print(f"     review_status: {teacher_status}, teacher_id: {reviewed_by_id} ({reviewer_role}: {reviewer_name})")
-                            print(f"     reviewed_at: {reviewed_at}")
-                        else:
-                            print(f"   - 履歷 ID: {resume_id}, 學生: {student_name}, teacher_id 為 NULL（不應該顯示）")
-                else:
-                    # 使用舊架構（reviewed_by 欄位）
-                    cursor.execute("""
-                        SELECT reviewed_by, reviewed_at
-                        FROM resumes
-                        WHERE id = %s
-                    """, (resume_id,))
-                    resume_detail = cursor.fetchone()
-                    if resume_detail:
-                        reviewed_by_id = resume_detail.get('reviewed_by')
-                        reviewed_at = resume_detail.get('reviewed_at')
-                        # 檢查審核者角色
-                        if reviewed_by_id:
-                            cursor.execute("SELECT role, name FROM users WHERE id = %s", (reviewed_by_id,))
-                            reviewer_info = cursor.fetchone()
-                            reviewer_role = reviewer_info.get('role') if reviewer_info else 'unknown'
-                            reviewer_name = reviewer_info.get('name') if reviewer_info else 'unknown'
-                            print(f"   - 履歷 ID: {resume_id}, 學生: {student_name}")
-                            print(f"     reviewed_by: {reviewed_by_id} ({reviewer_role}: {reviewer_name})")
-                            print(f"     reviewed_at: {reviewed_at}")
-                        else:
-                            print(f"   - 履歷 ID: {resume_id}, 學生: {student_name}, reviewed_by 為 NULL（不應該顯示）")
+                try:
+                    if resume_teacher_exists:
+                        # 使用 resume_teacher 表查詢
+                        cursor.execute("""
+                            SELECT rt.review_status, rt.teacher_id, rt.reviewed_at
+                            FROM resumes r
+                            INNER JOIN student_job_applications sja ON sja.resume_id = r.id
+                            INNER JOIN resume_teacher rt ON rt.application_id = sja.id
+                            WHERE r.id = %s AND rt.review_status = 'approved'
+                            LIMIT 1
+                        """, (resume_id,))
+                        resume_detail = cursor.fetchone()
+                        # 確保結果被完全讀取（即使為 None）
+                        if resume_detail:
+                            teacher_status = resume_detail.get('review_status')
+                            reviewed_by_id = resume_detail.get('teacher_id')
+                            reviewed_at = resume_detail.get('reviewed_at')
+                            # 檢查審核者角色
+                            if reviewed_by_id:
+                                cursor.execute("SELECT role, name FROM users WHERE id = %s", (reviewed_by_id,))
+                                reviewer_info = cursor.fetchone()
+                                # 確保結果被完全讀取
+                                reviewer_role = reviewer_info.get('role') if reviewer_info else 'unknown'
+                                reviewer_name = reviewer_info.get('name') if reviewer_info else 'unknown'
+                                print(f"   - 履歷 ID: {resume_id}, 學生: {student_name}")
+                                print(f"     review_status: {teacher_status}, teacher_id: {reviewed_by_id} ({reviewer_role}: {reviewer_name})")
+                                print(f"     reviewed_at: {reviewed_at}")
+                            else:
+                                print(f"   - 履歷 ID: {resume_id}, 學生: {student_name}, teacher_id 為 NULL（不應該顯示）")
+                    else:
+                        # 使用舊架構（reviewed_by 欄位）
+                        cursor.execute("""
+                            SELECT reviewed_by, reviewed_at
+                            FROM resumes
+                            WHERE id = %s
+                        """, (resume_id,))
+                        resume_detail = cursor.fetchone()
+                        # 確保結果被完全讀取（即使為 None）
+                        if resume_detail:
+                            reviewed_by_id = resume_detail.get('reviewed_by')
+                            reviewed_at = resume_detail.get('reviewed_at')
+                            # 檢查審核者角色
+                            if reviewed_by_id:
+                                cursor.execute("SELECT role, name FROM users WHERE id = %s", (reviewed_by_id,))
+                                reviewer_info = cursor.fetchone()
+                                # 確保結果被完全讀取
+                                reviewer_role = reviewer_info.get('role') if reviewer_info else 'unknown'
+                                reviewer_name = reviewer_info.get('name') if reviewer_info else 'unknown'
+                                print(f"   - 履歷 ID: {resume_id}, 學生: {student_name}")
+                                print(f"     reviewed_by: {reviewed_by_id} ({reviewer_role}: {reviewer_name})")
+                                print(f"     reviewed_at: {reviewed_at}")
+                            else:
+                                print(f"   - 履歷 ID: {resume_id}, 學生: {student_name}, reviewed_by 為 NULL（不應該顯示）")
+                except Exception as debug_exc:
+                    # 如果調試代碼出錯，不影響主流程
+                    print(f"   ⚠️ 調試查詢出錯: {debug_exc}")
+                    continue
         else:
             if resume_teacher_exists:
                 print(f"   ✅ 沒有找到符合條件的履歷（review_status = 'approved' 且審核者是 teacher）")
             else:
                 print(f"   ✅ 沒有找到符合條件的履歷（reviewed_by 是 teacher）")
+        
+        # 確保所有未讀取的結果都被清空（防止 "Unread result found" 錯誤）
+        # 通過執行一個簡單的查詢來清空任何未讀取的結果
+        try:
+            cursor.fetchall()  # 嘗試讀取所有剩餘的結果
+        except:
+            # 如果沒有更多結果，忽略錯誤
+            pass
 
         # 步驟 3: 查詢學生對該廠商所屬公司填寫的志願序，並用來覆蓋狀態
         preferences_map = {}
@@ -1090,8 +1107,17 @@ def get_vendor_resumes():
                             application_id = sja_result['id']
                     
                     # 使用 application_id (student_job_applications.id) 和 job_id 來查詢 resume_applications
+                    # 一次性查詢所有需要的資料，避免重複查詢導致未讀取結果的問題
                     display_status = "uploaded"  # 預設狀態
+                    vendor_comment = None
+                    has_interview = False  # 是否有面試記錄
+                    interview_completed = False  # 是否已完成面試
+                    interview_time = None  # 面試時間
+                    interview_result = None  # 面試結果
+                    interview_status = None  # 初始化 interview_status
+                    
                     if application_id and job_id:
+                        # 一次性查詢所有需要的資料
                         cursor.execute("""
                             SELECT apply_status, company_comment, interview_status, interview_time, interview_result
                             FROM resume_applications
@@ -1110,7 +1136,23 @@ def get_vendor_resumes():
                                 'rejected': 'rejected'
                             }
                             display_status = status_map.get(ra_status, 'uploaded')
-                            print(f"✅ 從 resume_applications 表讀取狀態: application_id={application_id}, job_id={job_id}, ra_status={ra_status} -> {display_status}")
+                            
+                            # 同時獲取廠商留言和面試資訊（重用同一個查詢結果）
+                            vendor_comment = ra_result.get('company_comment') or None
+                            interview_status = ra_result.get('interview_status')
+                            interview_time = ra_result.get('interview_time')
+                            interview_result = ra_result.get('interview_result')
+                            
+                            # 判斷是否有面試記錄
+                            # resume_applications.interview_status enum: ('none', 'scheduled', 'finished')
+                            if interview_status and interview_status != 'none':
+                                has_interview = True
+                                if interview_status == 'finished':
+                                    interview_completed = True
+                                elif interview_status == 'scheduled':
+                                    # 已排定面試但尚未完成
+                                    has_interview = True
+                            print(f"✅ 從 resume_applications 表讀取所有資料: application_id={application_id}, job_id={job_id}, apply_status={ra_status}, interview_status={interview_status}")
                         else:
                             # 如果 resume_applications 表沒有記錄，使用 student_preferences 的狀態（向後兼容）
                             if sp_status and sp_status in STATUS_LABELS:
@@ -1145,42 +1187,6 @@ def get_vendor_resumes():
                         elif company_id != company_filter:
                             continue # 不匹配，跳過此志願序
                     
-                    # 獲取廠商留言和面試資訊（優先從 resume_applications 表）
-                    vendor_comment = None
-                    has_interview = False  # 是否有面試記錄
-                    interview_completed = False  # 是否已完成面試
-                    interview_time = None  # 面試時間
-                    interview_result = None  # 面試結果
-                    interview_status = None  # 初始化 interview_status
-                    
-                    # 優先從 resume_applications 表讀取
-                    # 注意：resume_applications.application_id 對應的是 student_job_applications.id，不是 student_preferences.id
-                    # 使用之前獲取的 application_id (student_job_applications.id) 和 job_id 來查詢
-                    if application_id and job_id:
-                        cursor.execute("""
-                            SELECT company_comment, interview_status, interview_time, interview_result
-                            FROM resume_applications
-                            WHERE application_id = %s AND job_id = %s
-                        """, (application_id, job_id))
-                        ra_result = cursor.fetchone()
-                        
-                        if ra_result:
-                            vendor_comment = ra_result.get('company_comment') or None
-                            interview_status = ra_result.get('interview_status')
-                            interview_time = ra_result.get('interview_time')
-                            interview_result = ra_result.get('interview_result')
-                            
-                            # 判斷是否有面試記錄
-                            # resume_applications.interview_status enum: ('none', 'scheduled', 'finished')
-                            if interview_status and interview_status != 'none':
-                                has_interview = True
-                                if interview_status == 'finished':
-                                    interview_completed = True
-                                elif interview_status == 'scheduled':
-                                    # 已排定面試但尚未完成
-                                    has_interview = True
-                            print(f"✅ 從 resume_applications 表讀取留言和面試資訊: application_id={application_id}, job_id={job_id}, interview_status={interview_status}, has_interview={has_interview}")
-                    
                     # 如果 resume_applications 表沒有記錄，不再從 vendor_preference_history 讀取（表已移除）
                     # 所有資訊都應該從 resume_applications 表讀取
                     
@@ -1198,6 +1204,7 @@ def get_vendor_resumes():
                         "original_filename": row.get("original_filename"),
                         "filepath": row.get("filepath"),
                         "status": display_status,  # 顯示基於 resume_applications 或 student_preferences 的狀態
+                        "display_status": display_status,  # 前端使用的顯示狀態欄位
                         "comment": vendor_comment or "", # 廠商的留言（優先從 resume_applications），如果沒有則為空
                         "vendor_comment": vendor_comment or "", # 明確標記為廠商留言
                         "note": row.get("note") or "",
@@ -1243,6 +1250,7 @@ def get_vendor_resumes():
                         "original_filename": row.get("original_filename"),
                         "filepath": row.get("filepath"),
                         "status": "uploaded",  # 預設狀態
+                        "display_status": "uploaded",  # 前端使用的顯示狀態欄位
                         "comment": "", # 廠商的留言
                         "vendor_comment": "", # 明確標記為廠商留言
                         "note": row.get("note") or "",
@@ -1297,6 +1305,167 @@ def get_vendor_resumes():
     except Exception as exc:
         traceback.print_exc()
         return jsonify({"success": False, "message": f"查詢失敗：{exc}"}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+
+@vendor_bp.route("/vendor/api/review_resume/<int:resume_id>", methods=["POST"])
+def vendor_review_resume(resume_id):
+    """廠商審核履歷（通過/退回）"""
+    if "user_id" not in session or session.get("role") != "vendor":
+        return jsonify({"success": False, "message": "未授權"}), 403
+    
+    data = request.get_json(silent=True) or {}
+    status = data.get("status")
+    preference_id = data.get("preference_id")
+    comment = data.get("comment", "").strip()
+    
+    if status not in ["approved", "rejected"]:
+        return jsonify({"success": False, "message": "無效的狀態碼"}), 400
+    
+    vendor_id = session["user_id"]
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True, buffered=True)
+    
+    try:
+        # 獲取廠商的公司列表
+        profile, companies, _ = _get_vendor_scope(cursor, vendor_id)
+        if not profile:
+            return jsonify({"success": False, "message": "帳號資料不完整"}), 403
+        
+        company_ids = [c["id"] for c in companies] if companies else []
+        if not company_ids:
+            return jsonify({"success": False, "message": "找不到該廠商關聯的公司"}), 404
+        
+        # 如果提供了 preference_id，直接使用
+        if preference_id:
+            # 確保 preference_id 是整數類型
+            try:
+                if isinstance(preference_id, str):
+                    preference_id = int(preference_id) if preference_id != 'null' else None
+                elif preference_id == 'null':
+                    preference_id = None
+            except (ValueError, TypeError):
+                return jsonify({"success": False, "message": "無效的 preference_id 格式"}), 400
+            
+            if not preference_id:
+                return jsonify({"success": False, "message": "請提供有效的 preference_id"}), 400
+            
+            # 驗證 preference_id 是否屬於該廠商的公司
+            cursor.execute("""
+                SELECT sp.id, sp.student_id, sp.company_id, sp.job_id, sp.preference_order
+                FROM student_preferences sp
+                WHERE sp.id = %s AND sp.company_id IN ({})
+            """.format(','.join(['%s'] * len(company_ids))), [preference_id] + company_ids)
+            pref_info = cursor.fetchone()
+            
+            if not pref_info:
+                return jsonify({"success": False, "message": "找不到該申請或無權限操作"}), 404
+            
+            student_id = pref_info.get('student_id')
+            company_id = pref_info.get('company_id')
+            job_id = pref_info.get('job_id')
+            preference_order = pref_info.get('preference_order')
+            
+            # 更新 student_preferences 表的狀態
+            cursor.execute("""
+                UPDATE student_preferences
+                SET status = %s
+                WHERE id = %s
+            """, (status, preference_id))
+            updated_pref_rows = cursor.rowcount
+            print(f"✅ [vendor_review_resume] 更新 student_preferences: preference_id={preference_id}, status={status}, updated_rows={updated_pref_rows}")
+            
+            # 更新 resume_applications 表的狀態
+            # 需要找到對應的 application_id（student_job_applications.id）
+            # 使用與 get_vendor_resumes 相同的查詢條件：student_id, company_id, job_id
+            if student_id and company_id and job_id:
+                cursor.execute("""
+                    SELECT sja.id AS application_id
+                    FROM student_job_applications sja
+                    WHERE sja.student_id = %s AND sja.company_id = %s AND sja.job_id = %s
+                    ORDER BY sja.applied_at DESC
+                    LIMIT 1
+                """, (student_id, company_id, job_id))
+                app_info = cursor.fetchone()
+                
+                if app_info:
+                    application_id = app_info.get('application_id')
+                    print(f"🔍 [vendor_review_resume] 找到 application_id: {application_id} (student_id={student_id}, company_id={company_id}, job_id={job_id})")
+                    
+                    # 先檢查是否存在記錄
+                    cursor.execute("""
+                        SELECT id, apply_status FROM resume_applications
+                        WHERE application_id = %s AND job_id = %s
+                    """, (application_id, job_id))
+                    existing_ra = cursor.fetchone()
+                    
+                    if existing_ra:
+                        # 更新現有記錄
+                        cursor.execute("""
+                            UPDATE resume_applications
+                            SET apply_status = %s,
+                                company_comment = %s,
+                                updated_at = NOW()
+                            WHERE application_id = %s AND job_id = %s
+                        """, (status, comment, application_id, job_id))
+                        updated_ra_rows = cursor.rowcount
+                        print(f"✅ [vendor_review_resume] 更新 resume_applications: id={existing_ra.get('id')}, application_id={application_id}, job_id={job_id}, apply_status={status} (舊值: {existing_ra.get('apply_status')}), updated_rows={updated_ra_rows}")
+                    else:
+                        # 創建新記錄
+                        cursor.execute("""
+                            INSERT INTO resume_applications
+                            (application_id, job_id, apply_status, company_comment, interview_status, interview_result, created_at)
+                            VALUES (%s, %s, %s, %s, 'none', 'pending', NOW())
+                        """, (application_id, job_id, status, comment))
+                        updated_ra_rows = cursor.rowcount
+                        print(f"✅ [vendor_review_resume] 創建 resume_applications: application_id={application_id}, job_id={job_id}, apply_status={status}, inserted_rows={updated_ra_rows}")
+                    
+                    # 驗證更新是否成功
+                    cursor.execute("""
+                        SELECT id, apply_status, company_comment FROM resume_applications
+                        WHERE application_id = %s AND job_id = %s
+                    """, (application_id, job_id))
+                    verify_result = cursor.fetchone()
+                    if verify_result:
+                        print(f"✅ [vendor_review_resume] 驗證成功: id={verify_result.get('id')}, apply_status={verify_result.get('apply_status')}, company_comment={verify_result.get('company_comment')}")
+                    else:
+                        print(f"⚠️ [vendor_review_resume] 驗證失敗: 找不到對應的記錄")
+                else:
+                    print(f"⚠️ [vendor_review_resume] 找不到 application_id (student_id={student_id}, job_id={job_id})")
+            
+            # 如果是通過操作，自動記錄錄取結果並綁定關係
+            if status == "approved":
+                admission_result = _record_admission_and_bind_relation(
+                    cursor,
+                    student_id,
+                    company_id,
+                    job_id,
+                    preference_order
+                )
+                if not admission_result.get("success"):
+                    print(f"⚠️ 錄取結果記錄失敗: {admission_result.get('message')}")
+            
+            # 發送通知給學生
+            title = "履歷審核結果"
+            status_label = STATUS_LABELS.get(status, status)
+            message = f"您的履歷申請已被更新為「{status_label}」。"
+            if comment:
+                message = f"{message}\n\n廠商備註：{comment}"
+            _notify_student(cursor, student_id, title, message)
+            
+            conn.commit()
+            return jsonify({"success": True, "message": f"已標記為{status_label}"})
+        else:
+            # 如果沒有提供 preference_id，嘗試從 resume_id 查找
+            # 但這需要知道 resume 對應的 preference，可能需要額外的邏輯
+            return jsonify({"success": False, "message": "請提供 preference_id"}), 400
+            
+    except Exception as exc:
+        conn.rollback()
+        traceback.print_exc()
+        return jsonify({"success": False, "message": f"操作失敗：{exc}"}), 500
     finally:
         cursor.close()
         conn.close()
@@ -3508,7 +3677,7 @@ def save_matching_sort():
             return jsonify({"success": False, "message": "請至少選擇一個學生"}), 400
         
         conn = get_db()
-        cursor = conn.cursor(dictionary=True)
+        cursor = conn.cursor(dictionary=True, buffered=True)
         
         # 獲取廠商關聯的公司
         profile, companies, _ = _get_vendor_scope(cursor, vendor_id)
@@ -3519,20 +3688,20 @@ def save_matching_sort():
         
         company_ids = [c["id"] for c in companies]
         
-        # 清除該廠商之前的媒合排序記錄（從 resume_applications 表的 company_comment 中清除）
+        # 清除該廠商之前的媒合排序記錄（將 is_reserve 和 slot_index 設為 NULL/0）
+        # 注意：resume_applications.application_id 對應的是 student_job_applications.id，不是 student_preferences.id
         try:
-            
-            # 清除該廠商之前的媒合排序記錄（將 is_reserve 和 slot_index 設為 NULL/0）
             cursor.execute("""
                 UPDATE resume_applications ra
-                JOIN student_preferences sp ON ra.application_id = sp.id
-                JOIN internship_companies ic ON sp.company_id = ic.id
+                JOIN student_job_applications sja ON ra.application_id = sja.id
+                JOIN internship_companies ic ON sja.company_id = ic.id
                 SET ra.is_reserve = 0,
                     ra.slot_index = NULL,
                     ra.updated_at = NOW()
                 WHERE ic.id IN ({})
                 AND (ra.is_reserve = 1 OR ra.slot_index IS NOT NULL)
             """.format(','.join(['%s'] * len(company_ids))), tuple(company_ids))
+            deleted_count = cursor.rowcount
             deleted_count = cursor.rowcount
             print(f"✅ 已清除 {deleted_count} 筆舊的媒合排序記錄")
         except Exception as delete_error:
@@ -3584,16 +3753,53 @@ def save_matching_sort():
                 continue
             
             # 將媒合排序資訊存儲在 resume_applications 表的 is_reserve 和 slot_index 欄位中
+            # 注意：resume_applications.application_id 對應的是 student_job_applications.id，不是 student_preferences.id
             try:
                 slot_index_val = student.get('slot_index')
                 is_reserve_val = student.get('is_reserve', False)
+                
+                # 從 preference_id 和 job_id 找到對應的 application_id（student_job_applications.id）
+                application_id = None
+                if preference_id and job_id and student_id:
+                    # 從 student_preferences 獲取 company_id（如果還沒有）
+                    if not company_id:
+                        cursor.execute("""
+                            SELECT company_id FROM student_preferences WHERE id = %s
+                        """, (preference_id,))
+                        pref_row = cursor.fetchone()
+                        # 確保結果被完全讀取
+                        if pref_row:
+                            company_id = pref_row.get('company_id')
+                        # 如果查詢返回 None，也要確保結果被讀取
+                        cursor.fetchall()  # 清空任何剩餘的結果
+                    
+                    # 查詢 student_job_applications 表獲取 application_id
+                    if company_id:
+                        cursor.execute("""
+                            SELECT id FROM student_job_applications
+                            WHERE student_id = %s AND company_id = %s AND job_id = %s
+                            ORDER BY applied_at DESC
+                            LIMIT 1
+                        """, (student_id, company_id, job_id))
+                        sja_result = cursor.fetchone()
+                        # 確保結果被完全讀取
+                        cursor.fetchall()  # 清空任何剩餘的結果
+                        if sja_result:
+                            application_id = sja_result['id']
+                            print(f"    🔍 找到 application_id: {application_id} (student_id={student_id}, company_id={company_id}, job_id={job_id})")
+                
+                if not application_id:
+                    print(f"    ⚠️ 跳過：找不到對應的 application_id (preference_id={preference_id}, job_id={job_id}, student_id={student_id})")
+                    continue
                 
                 # 更新或插入 resume_applications 記錄
                 cursor.execute("""
                     SELECT id FROM resume_applications
                     WHERE application_id = %s AND job_id = %s
-                """, (preference_id, job_id))
+                """, (application_id, job_id))
                 existing_ra = cursor.fetchone()
+                # 確保結果被完全讀取
+                cursor.fetchall()  # 清空任何剩餘的結果
                 
                 if existing_ra:
                     # 更新現有記錄的 is_reserve 和 slot_index
@@ -3602,18 +3808,20 @@ def save_matching_sort():
                         SET is_reserve = %s,
                             slot_index = %s,
                             updated_at = NOW()
-                        WHERE id = %s
-                    """, (1 if is_reserve_val else 0, slot_index_val, existing_ra['id']))
+                        WHERE application_id = %s AND job_id = %s
+                    """, (1 if is_reserve_val else 0, slot_index_val, application_id, job_id))
+                    print(f"    ✅ 更新 resume_applications: id={existing_ra['id']}, application_id={application_id}, job_id={job_id}, slot_index={slot_index_val}, is_reserve={is_reserve_val}")
                 else:
                     # 創建新記錄
                     cursor.execute("""
                         INSERT INTO resume_applications
                         (application_id, job_id, apply_status, interview_status, interview_result, is_reserve, slot_index, created_at)
                         VALUES (%s, %s, %s, %s, %s, %s, %s, NOW())
-                    """, (preference_id, job_id, 'uploaded', 'none', 'pending', 1 if is_reserve_val else 0, slot_index_val))
+                    """, (application_id, job_id, 'uploaded', 'none', 'pending', 1 if is_reserve_val else 0, slot_index_val))
+                    print(f"    ✅ 創建 resume_applications: application_id={application_id}, job_id={job_id}, slot_index={slot_index_val}, is_reserve={is_reserve_val}")
                 
                 inserted_count += 1
-                print(f"✅ 已保存媒合排序記錄到 resume_applications：preference_id={preference_id}, student_id={student_id}, slot_index={slot_index_val}, is_reserve={is_reserve_val}")
+                print(f"✅ 已保存媒合排序記錄到 resume_applications：preference_id={preference_id}, application_id={application_id}, student_id={student_id}, slot_index={slot_index_val}, is_reserve={is_reserve_val}")
             except Exception as insert_error:
                 print(f"❌ 保存媒合排序記錄失敗：{insert_error}")
                 traceback.print_exc()
@@ -3654,13 +3862,13 @@ def get_matching_sort():
         conn = get_db()
         cursor = conn.cursor(dictionary=True)
         
-        # 從 resume_applications 表讀取媒合排序資訊（存儲在 company_comment 中）
-        # 媒合排序資訊格式：'媒合排序：正取X' 或 '媒合排序：候補'
+        # 從 resume_applications 表讀取媒合排序資訊（存儲在 is_reserve 和 slot_index 欄位中）
+        # 注意：resume_applications.application_id 對應的是 student_job_applications.id，不是 student_preferences.id
         base_fields = """
                     ra.id,
-                    ra.application_id AS preference_id,
-                    sp.student_id,
-                    sp.company_id,
+                    ra.application_id,
+                    sja.student_id,
+                    sja.company_id,
                     ic.company_name,
                     ra.job_id,
                     ij.title AS job_title,
@@ -3669,15 +3877,17 @@ def get_matching_sort():
                     u.email AS student_email,
                     c.name AS class_name,
                     c.department AS class_department,
-                    ra.company_comment,
+                    ra.is_reserve,
+                    ra.slot_index,
+                    sp.id AS preference_id,
                     ra.updated_at AS created_at
         """
         
-        # 構建 WHERE 條件（從 resume_applications 表的 company_comment 讀取媒合排序資訊）
-        where_condition = "AND ra.company_comment LIKE '%媒合排序%'"
+        # 構建 WHERE 條件（從 resume_applications 表的 is_reserve 和 slot_index 讀取媒合排序資訊）
+        where_condition = "AND (ra.is_reserve = 1 OR ra.slot_index IS NOT NULL)"
         company_filter = request.args.get("company_id", type=int)
         if company_filter:
-            where_condition += f" AND sp.company_id = {company_filter}"
+            where_condition += f" AND sja.company_id = {company_filter}"
         
         # 如果是廠商，只返回該廠商相關公司的排序結果
         # 如果是老師/TA，返回所有廠商的排序結果
@@ -3688,19 +3898,22 @@ def get_matching_sort():
             company_ids = [c["id"] for c in companies] if companies else []
             if company_ids:
                 placeholders = ','.join(['%s'] * len(company_ids))
-                where_condition += f" AND sp.company_id IN ({placeholders})"
+                where_condition += f" AND sja.company_id IN ({placeholders})"
                 query = f"""
                     SELECT 
                         {base_fields}
                     FROM resume_applications ra
-                    JOIN student_preferences sp ON ra.application_id = sp.id
-                    LEFT JOIN internship_companies ic ON sp.company_id = ic.id
+                    JOIN student_job_applications sja ON ra.application_id = sja.id
+                    LEFT JOIN student_preferences sp ON sja.student_id = sp.student_id 
+                        AND sja.company_id = sp.company_id 
+                        AND sja.job_id = sp.job_id
+                    LEFT JOIN internship_companies ic ON sja.company_id = ic.id
                     LEFT JOIN internship_jobs ij ON ra.job_id = ij.id
-                    LEFT JOIN users u ON sp.student_id = u.id
+                    LEFT JOIN users u ON sja.student_id = u.id
                     LEFT JOIN classes c ON u.class_id = c.id
                     WHERE 1=1
                     {where_condition}
-                    ORDER BY sp.company_id, COALESCE(ra.job_id, 0), 
+                    ORDER BY sja.company_id, COALESCE(ra.job_id, 0), 
                         ra.is_reserve ASC,
                         ra.slot_index ASC,
                         ra.id ASC
@@ -3714,14 +3927,17 @@ def get_matching_sort():
                 SELECT 
                     {base_fields}
                 FROM resume_applications ra
-                JOIN student_preferences sp ON ra.application_id = sp.id
-                LEFT JOIN internship_companies ic ON sp.company_id = ic.id
+                JOIN student_job_applications sja ON ra.application_id = sja.id
+                LEFT JOIN student_preferences sp ON sja.student_id = sp.student_id 
+                    AND sja.company_id = sp.company_id 
+                    AND sja.job_id = sp.job_id
+                LEFT JOIN internship_companies ic ON sja.company_id = ic.id
                 LEFT JOIN internship_jobs ij ON ra.job_id = ij.id
-                LEFT JOIN users u ON sp.student_id = u.id
+                LEFT JOIN users u ON sja.student_id = u.id
                 LEFT JOIN classes c ON u.class_id = c.id
                 WHERE 1=1
                 {where_condition}
-                ORDER BY sp.company_id, COALESCE(ra.job_id, 0),
+                ORDER BY sja.company_id, COALESCE(ra.job_id, 0),
                     ra.is_reserve ASC,
                     ra.slot_index ASC,
                     ra.id ASC
