@@ -2695,6 +2695,7 @@ def get_all_interview_schedules():
                 ic.id AS company_id,
                 ra.updated_at AS created_at,
                 ra.interview_time,
+                ra.interview_timeEnd,
                 sja.student_id,
                 ra.application_id,
                 ra.job_id
@@ -2718,11 +2719,13 @@ def get_all_interview_schedules():
             company_name = schedule.get('company_name', '未知公司')
             company_id = schedule.get('company_id')
             interview_time = schedule.get('interview_time')
+            interview_timeEnd = schedule.get('interview_timeEnd')
             
             # 判斷是否為當前廠商的排程
             is_own = company_id and company_id in company_ids
             
-            # 從 interview_time 提取日期和時間
+            # 從 interview_time 提取日期和開始時間
+            # 從 interview_timeEnd 提取結束時間
             if interview_time:
                 if isinstance(interview_time, str):
                     # 解析 datetime 字串
@@ -2731,7 +2734,6 @@ def get_all_interview_schedules():
                         dt = datetime.strptime(interview_time, '%Y-%m-%d %H:%M:%S')
                         interview_date = dt.strftime('%Y-%m-%d')
                         time_start = dt.strftime('%H:%M')
-                        time_end = None
                     except:
                         # 如果解析失敗，嘗試從 comment 提取
                         date_match = re.search(r'面試日期：(\d{4}-\d{2}-\d{2})', comment)
@@ -2751,9 +2753,6 @@ def get_all_interview_schedules():
                     # 如果是 datetime 物件
                     interview_date = interview_time.strftime('%Y-%m-%d')
                     time_start = interview_time.strftime('%H:%M')
-                    # 嘗試從 comment 中提取結束時間
-                    time_end_match = re.search(r'時間：\d{2}:\d{2}-(\d{2}:\d{2})', comment)
-                    time_end = time_end_match.group(1) if time_end_match else None
             else:
                 # 如果沒有 interview_time，嘗試從 comment 提取
                 date_match = re.search(r'面試日期：(\d{4}-\d{2}-\d{2})', comment)
@@ -2762,24 +2761,48 @@ def get_all_interview_schedules():
                 interview_date = date_match.group(1)
                 time_match = re.search(r'時間：(\d{2}:\d{2})', comment)
                 time_start = time_match.group(1) if time_match else None
-                time_end = None
+            
+            # 從 interview_timeEnd 提取結束時間
+            time_end = None
+            if interview_timeEnd:
+                if isinstance(interview_timeEnd, str):
+                    try:
+                        from datetime import datetime
+                        dt_end = datetime.strptime(interview_timeEnd, '%Y-%m-%d %H:%M:%S')
+                        time_end = dt_end.strftime('%H:%M')
+                    except:
+                        # 如果解析失敗，嘗試從 comment 提取
+                        time_end_match = re.search(r'時間：\d{2}:\d{2}-(\d{2}:\d{2})', comment)
+                        time_end = time_end_match.group(1) if time_end_match else None
+                else:
+                    # 如果是 datetime 物件
+                    time_end = interview_timeEnd.strftime('%H:%M')
+            else:
+                # 如果沒有 interview_timeEnd，嘗試從 comment 提取
+                time_end_match = re.search(r'時間：\d{2}:\d{2}-(\d{2}:\d{2})', comment)
+                time_end = time_end_match.group(1) if time_end_match else None
             
             # 提取地點
             location_match = re.search(r'地點：([^，]+)', comment)
             location = location_match.group(1) if location_match else ''
+            
+            # 提取備註（備註可能在最後，也可能包含多行或特殊字符）
+            notes_match = re.search(r'備註：(.+)$', comment)
+            notes = notes_match.group(1).strip() if notes_match else ''
             
             student_id = schedule.get('student_id')
             # 確保 student_id 被正確提取
             if student_id is None:
                 print(f"⚠️ [all_interview_schedules] 警告：排程記錄缺少 student_id: {schedule}")
             
-            print(f"📅 [all_interview_schedules] 解析排程: 日期={interview_date}, 時間={time_start}-{time_end}, 學生ID={student_id}, 公司={company_name}, is_own={is_own}")
+            print(f"📅 [all_interview_schedules] 解析排程: 日期={interview_date}, 時間={time_start}-{time_end}, 學生ID={student_id}, 公司={company_name}, is_own={is_own}, 地點={location}, 備註={notes[:30] if notes else '無'}")
             
             parsed_schedules.append({
                 'date': interview_date,
                 'time_start': time_start,
                 'time_end': time_end,
                 'location': location,
+                'notes': notes,  # 添加備註
                 'vendor_id': None,  # resume_applications 表沒有 reviewer_id
                 'vendor_name': None,
                 'company_name': company_name,
@@ -2842,14 +2865,13 @@ def schedule_interviews():
         location_info = interview_location or ""
         notes_info = interview_notes or ""
         
-        # 構建面試描述，包含狀態資訊
-        interview_description = f"狀態：面試中，面試日期：{interview_date}"
-        if time_info:
-            interview_description += f"，時間：{time_info}"
+        # 構建面試描述，只包含地點和備註
+        comment_parts = []
         if location_info:
-            interview_description += f"，地點：{location_info}"
+            comment_parts.append(f"地點：{location_info}")
         if notes_info:
-            interview_description += f"，備註：{notes_info}"
+            comment_parts.append(f"備註：{notes_info}")
+        interview_description = "，".join(comment_parts) if comment_parts else ""
         
         success_count = 0
         failed_students = []
@@ -2966,9 +2988,9 @@ def schedule_interviews():
                 if application_id and job_id and company_id:
                     # 同時更新 resume_applications 表的 interview_status 為 'scheduled'
                     # 構建 interview_time（datetime 格式）
-                    if time_info:
-                        # 如果有時間，組合日期和時間
-                        interview_datetime_str = f"{interview_date} {time_info.split('-')[0].strip()}"  # 取開始時間
+                    if interview_time_start:
+                        # 如果有開始時間，組合日期和時間
+                        interview_datetime_str = f"{interview_date} {interview_time_start}"
                         try:
                             # 嘗試解析為 datetime 物件
                             interview_datetime = datetime.strptime(interview_datetime_str, '%Y-%m-%d %H:%M')
@@ -2979,6 +3001,18 @@ def schedule_interviews():
                         # 如果沒有時間，只使用日期（設為當天 00:00:00）
                         interview_datetime = f"{interview_date} 00:00:00"
                     
+                    # 構建 interview_timeEnd（datetime 格式）
+                    interview_datetime_end = None
+                    if interview_time_end:
+                        # 如果有結束時間，組合日期和時間
+                        interview_datetime_end_str = f"{interview_date} {interview_time_end}"
+                        try:
+                            # 嘗試解析為 datetime 物件
+                            interview_datetime_end = datetime.strptime(interview_datetime_end_str, '%Y-%m-%d %H:%M')
+                        except:
+                            # 如果解析失敗，使用字串格式
+                            interview_datetime_end = interview_datetime_end_str
+                    
                     # 檢查 resume_applications 記錄是否存在
                     cursor.execute("""
                         SELECT id FROM resume_applications
@@ -2988,23 +3022,44 @@ def schedule_interviews():
                     
                     if existing_ra:
                         # 更新現有記錄
-                        cursor.execute("""
-                            UPDATE resume_applications
-                            SET interview_status = 'scheduled',
-                                interview_time = %s,
-                                interview_result = 'pending',
-                                updated_at = NOW()
-                            WHERE application_id = %s AND job_id = %s
-                        """, (interview_datetime, application_id, job_id))
-                        print(f"✅ [schedule_interviews] 更新 resume_applications: application_id={application_id}, job_id={job_id}, interview_status='scheduled'")
+                        if interview_datetime_end:
+                            cursor.execute("""
+                                UPDATE resume_applications
+                                SET interview_status = 'scheduled',
+                                    interview_time = %s,
+                                    interview_timeEnd = %s,
+                                    company_comment = %s,
+                                    interview_result = 'pending',
+                                    updated_at = NOW()
+                                WHERE application_id = %s AND job_id = %s
+                            """, (interview_datetime, interview_datetime_end, interview_description, application_id, job_id))
+                        else:
+                            cursor.execute("""
+                                UPDATE resume_applications
+                                SET interview_status = 'scheduled',
+                                    interview_time = %s,
+                                    interview_timeEnd = NULL,
+                                    company_comment = %s,
+                                    interview_result = 'pending',
+                                    updated_at = NOW()
+                                WHERE application_id = %s AND job_id = %s
+                            """, (interview_datetime, interview_description, application_id, job_id))
+                        print(f"✅ [schedule_interviews] 更新 resume_applications: application_id={application_id}, job_id={job_id}, interview_status='scheduled', interview_timeEnd={interview_datetime_end}, company_comment={interview_description[:50]}")
                     else:
                         # 如果記錄不存在，創建新記錄
-                        cursor.execute("""
-                            INSERT INTO resume_applications
-                            (application_id, job_id, apply_status, interview_status, interview_time, interview_result, created_at)
-                            VALUES (%s, %s, 'uploaded', 'scheduled', %s, 'pending', NOW())
-                        """, (application_id, job_id, interview_datetime))
-                        print(f"✅ [schedule_interviews] 創建 resume_applications: application_id={application_id}, job_id={job_id}, interview_status='scheduled'")
+                        if interview_datetime_end:
+                            cursor.execute("""
+                                INSERT INTO resume_applications
+                                (application_id, job_id, apply_status, interview_status, interview_time, interview_timeEnd, company_comment, interview_result, created_at)
+                                VALUES (%s, %s, 'uploaded', 'scheduled', %s, %s, %s, 'pending', NOW())
+                            """, (application_id, job_id, interview_datetime, interview_datetime_end, interview_description))
+                        else:
+                            cursor.execute("""
+                                INSERT INTO resume_applications
+                                (application_id, job_id, apply_status, interview_status, interview_time, interview_timeEnd, company_comment, interview_result, created_at)
+                                VALUES (%s, %s, 'uploaded', 'scheduled', %s, NULL, %s, 'pending', NOW())
+                            """, (application_id, job_id, interview_datetime, interview_description))
+                        print(f"✅ [schedule_interviews] 創建 resume_applications: application_id={application_id}, job_id={job_id}, interview_status='scheduled', interview_timeEnd={interview_datetime_end}, company_comment={interview_description[:50]}")
                     
                     # 為了向後兼容，也嘗試從 student_preferences 獲取 preference_id（如果需要的話）
                     cursor.execute("""
@@ -3180,11 +3235,12 @@ def delete_interview_schedule():
                         application_id = application_row.get("application_id")
                         job_id = application_row.get("job_id")
                         
-                        # 更新 resume_applications 表，將 interview_status 設為 'none'，清除 interview_time
+                        # 更新 resume_applications 表，將 interview_status 設為 'none'，清除 interview_time 和 interview_timeEnd
                         cursor.execute("""
                             UPDATE resume_applications
                             SET interview_status = 'none',
                                 interview_time = NULL,
+                                interview_timeEnd = NULL,
                                 updated_at = NOW()
                             WHERE application_id = %s AND job_id = %s
                             AND interview_status = 'scheduled'
@@ -3211,6 +3267,7 @@ def delete_interview_schedule():
                 INNER JOIN student_job_applications sja ON ra.application_id = sja.id
                 SET ra.interview_status = 'none',
                     ra.interview_time = NULL,
+                    ra.interview_timeEnd = NULL,
                     ra.updated_at = NOW()
                 WHERE DATE(ra.interview_time) = %s
                 AND sja.company_id IN ({})
@@ -3287,20 +3344,47 @@ def mark_interview_completed():
         _record_history(cursor, preference_id, vendor_id, "done", "面試已完成")
         
         # 同時更新 resume_applications 表的 interview_status 為 'finished'
+        # 注意：resume_applications.application_id 對應的是 student_job_applications.id，不是 student_preferences.id
+        # 需要從 preference_id 找到對應的 student_id 和 job_id，然後找到 student_job_applications.id
         cursor.execute("""
-            SELECT job_id FROM student_preferences WHERE id = %s
+            SELECT sp.student_id, sp.job_id
+            FROM student_preferences sp
+            WHERE sp.id = %s
         """, (preference_id,))
         pref_info = cursor.fetchone()
-        if pref_info and pref_info.get('job_id'):
+        
+        if pref_info:
+            student_id = pref_info.get('student_id')
             job_id = pref_info.get('job_id')
-            # 面試完成時，interview_result 保持為 'pending'（除非有明確的通過/失敗結果）
-            # 如果需要設置為 'pass' 或 'fail'，應該在另一個 API 中處理
-            cursor.execute("""
-                UPDATE resume_applications
-                SET interview_status = 'finished',
-                    updated_at = NOW()
-                WHERE application_id = %s AND job_id = %s
-            """, (preference_id, job_id))
+            
+            if student_id and job_id:
+                # 查找對應的 student_job_applications.id（application_id）
+                cursor.execute("""
+                    SELECT sja.id AS application_id
+                    FROM student_job_applications sja
+                    WHERE sja.student_id = %s AND sja.job_id = %s
+                    ORDER BY sja.applied_at DESC
+                    LIMIT 1
+                """, (student_id, job_id))
+                app_info = cursor.fetchone()
+                
+                if app_info:
+                    application_id = app_info.get('application_id')
+                    # 更新 resume_applications 表
+                    # 面試完成時，interview_result 保持為 'pending'（除非有明確的通過/失敗結果）
+                    cursor.execute("""
+                        UPDATE resume_applications
+                        SET interview_status = 'finished',
+                            updated_at = NOW()
+                        WHERE application_id = %s AND job_id = %s
+                    """, (application_id, job_id))
+                    print(f"✅ [mark_interview_completed] 更新 resume_applications: application_id={application_id}, job_id={job_id}, interview_status='finished'")
+                else:
+                    print(f"⚠️ [mark_interview_completed] 找不到對應的 student_job_applications 記錄: student_id={student_id}, job_id={job_id}")
+            else:
+                print(f"⚠️ [mark_interview_completed] preference_id={preference_id} 缺少 student_id 或 job_id")
+        else:
+            print(f"⚠️ [mark_interview_completed] 找不到 preference_id={preference_id}")
         
         conn.commit()
         

@@ -2208,18 +2208,24 @@
       console.log('🔄 重新載入所有廠商的面試排程...');
       await loadAllVendorSchedules();
       
-      // 檢查該日期是否只有其他廠商的排程（沒有自己的排程）
-      const hasOwnSchedule = interviewSchedules.has(dateStr);
-      const hasOtherVendorSchedule = allVendorSchedules.has(dateStr);
-      
-      if (!hasOwnSchedule && hasOtherVendorSchedule) {
-        // 檢查是否真的只有其他廠商的排程
+      // 檢查該日期是否有自己的排程
+      // 優先從 allVendorSchedules 檢查（更準確）
+      let hasOwnSchedule = false;
+      if (allVendorSchedules.has(dateStr)) {
         const schedules = allVendorSchedules.get(dateStr);
-        const onlyOtherVendor = schedules && schedules.every(s => !s.is_own);
+        hasOwnSchedule = schedules.some(s => s.is_own);
+      } else {
+        // 如果 allVendorSchedules 中沒有，檢查本地存儲（向後兼容）
+        hasOwnSchedule = interviewSchedules.has(dateStr);
+      }
+      
+      // 如果有其他廠商的排程，顯示提示信息（但不阻止新增）
+      if (allVendorSchedules.has(dateStr)) {
+        const schedules = allVendorSchedules.get(dateStr);
+        const otherSchedules = schedules.filter(s => !s.is_own);
         
-        if (onlyOtherVendor) {
+        if (otherSchedules.length > 0 && !hasOwnSchedule) {
           // 獲取其他廠商的排程信息
-          const otherSchedules = schedules.filter(s => !s.is_own);
           const companyNames = [...new Set(otherSchedules.map(s => s.company_name || '其他廠商'))];
           const timeSlots = [];
           otherSchedules.forEach(s => {
@@ -2231,8 +2237,8 @@
           });
           const uniqueTimeSlots = [...new Set(timeSlots)].sort();
           
-          alert(`❌ 該日期已被其他廠商預約，您無法編輯此排程（唯讀）。\n\n已預約的廠商：${companyNames.join(', ')}\n已預約的時間：${uniqueTimeSlots.join(', ')}`);
-          return; // 阻止打開表單
+          // 顯示提示，但不阻止打開表單（允許新增自己的排程）
+          console.log(`ℹ️ 該日期已有其他廠商預約：${companyNames.join(', ')}，時間：${uniqueTimeSlots.join(', ')}。您可以在此日期新增自己的排程。`);
         }
       }
       
@@ -2361,6 +2367,12 @@
         scheduleModal.hide();
       }
       
+      // 更新模態框標題
+      const modalTitle = document.querySelector('#interviewFormModal .modal-title');
+      if (modalTitle) {
+        modalTitle.textContent = schedule ? '編輯面試排程' : '新增面試排程';
+      }
+      
       // 等待月曆模態框完全關閉後再打開表單模態框
       setTimeout(() => {
         const formModal = new bootstrap.Modal(document.getElementById("interviewFormModal"));
@@ -2383,6 +2395,24 @@
       const month = String(date.getMonth() + 1).padStart(2, '0');
       const day = String(date.getDate()).padStart(2, '0');
       return `${year}-${month}-${day}`;
+    }
+    
+    // 格式化時間為上午/下午格式
+    function formatTimeToAMPM(timeStr) {
+      if (!timeStr) return '';
+      const [hours, minutes] = timeStr.split(':');
+      const hour = parseInt(hours);
+      const min = minutes || '00';
+      if (hour === 0) {
+        return `上午 12:${min}`;
+      } else if (hour < 12) {
+        return `上午 ${hour}:${min}`;
+      } else if (hour === 12) {
+        return `下午 12:${min}`;
+      } else {
+        const displayHour = hour - 12;
+        return `下午 ${displayHour}:${min}`;
+      }
     }
     
     // 格式化日期顯示
@@ -2491,20 +2521,19 @@
       
       const dateStr = formatDate(selectedInterviewDate);
       
-      // 檢查該日期是否只有其他廠商的排程（沒有自己的排程）
-      const hasOwnSchedule = interviewSchedules.has(dateStr);
-      const hasOtherVendorSchedule = allVendorSchedules.has(dateStr);
-      
-      if (!hasOwnSchedule && hasOtherVendorSchedule) {
-        // 檢查是否真的只有其他廠商的排程
+      // 檢查該日期是否有自己的排程
+      // 優先從 allVendorSchedules 檢查（更準確）
+      let hasOwnSchedule = false;
+      if (allVendorSchedules.has(dateStr)) {
         const schedules = allVendorSchedules.get(dateStr);
-        const onlyOtherVendor = schedules && schedules.every(s => !s.is_own);
-        
-        if (onlyOtherVendor) {
-          alert('❌ 該日期已被其他廠商預約，您無法修改此排程。');
-          return; // 阻止保存
-        }
+        hasOwnSchedule = schedules.some(s => s.is_own);
+      } else {
+        // 如果 allVendorSchedules 中沒有，檢查本地存儲（向後兼容）
+        hasOwnSchedule = interviewSchedules.has(dateStr);
       }
+      
+      // 允許在同一天新增自己的排程，即使有其他廠商的排程
+      // 後端會確保不會覆蓋其他廠商的排程
       
       const timeStart = document.getElementById('interviewTimeStart').value.trim();
       const timeEnd = document.getElementById('interviewTimeEnd').value.trim();
@@ -2963,20 +2992,51 @@
         
         // 顯示自己的面試排程
         if (hasOwnInterview) {
-          const schedule = interviewSchedules.get(dateKey);
-          const timeStart = schedule.timeStart || '';
-          const timeEnd = schedule.timeEnd || '';
+          // 優先從 allVendorSchedules 獲取最新的排程信息（更準確）
+          let schedule = null;
+          let timeStart = '';
+          let timeEnd = '';
           
-          // 格式化時間顯示（只顯示時分，去掉秒）
+          if (allVendorSchedules.has(dateKey)) {
+            const schedules = allVendorSchedules.get(dateKey);
+            const ownSchedules = schedules.filter(s => s.is_own);
+            if (ownSchedules.length > 0) {
+              // 從所有自己的排程中找到有時間的記錄
+              for (const ownSchedule of ownSchedules) {
+                if (ownSchedule.time_start && !timeStart) {
+                  timeStart = ownSchedule.time_start;
+                }
+                if (ownSchedule.time_end && !timeEnd) {
+                  timeEnd = ownSchedule.time_end;
+                }
+                // 如果兩個時間都找到了，可以提前退出
+                if (timeStart && timeEnd) break;
+              }
+            }
+          }
+          
+          // 如果 allVendorSchedules 中沒有，從 interviewSchedules 獲取（向後兼容）
+          if (!timeStart && interviewSchedules.has(dateKey)) {
+            schedule = interviewSchedules.get(dateKey);
+            timeStart = schedule.timeStart || '';
+            timeEnd = schedule.timeEnd || '';
+          }
+          
+          // 格式化時間顯示（使用上午/下午格式）
           let timeDisplay = '';
-          if (timeStart && timeEnd) {
-            const startTime = timeStart.substring(0, 5); // 取 HH:MM
-            const endTime = timeEnd.substring(0, 5); // 取 HH:MM
-            timeDisplay = ` ${startTime}-${endTime}`;
-          } else if (timeStart) {
-            // 兼容舊格式
-            const startTime = timeStart.substring(0, 5);
-            timeDisplay = ` ${startTime}`;
+          // 調試：打印時間值
+          console.log(`🔍 [renderCalendar] 日期 ${dateKey}: timeStart="${timeStart}", timeEnd="${timeEnd}"`);
+          
+          if (timeStart) {
+            const startTime = formatTimeToAMPM(timeStart.substring(0, 5)); // 取 HH:MM 並轉換
+            if (timeEnd && timeEnd.trim() !== '') {
+              // 有結束時間，顯示範圍
+              const endTime = formatTimeToAMPM(timeEnd.substring(0, 5)); // 取 HH:MM 並轉換
+              timeDisplay = ` ${startTime}-${endTime}`;
+            } else {
+              // 只有開始時間，只顯示開始時間
+              timeDisplay = ` ${startTime}`;
+            }
           }
           
           // 創建面試排程容器
@@ -2998,8 +3058,22 @@
             display: inline-block;
             white-space: nowrap;
             flex: 1;
+            cursor: pointer;
+            transition: background-color 0.2s;
           `;
           interviewBadge.textContent = `面試${timeDisplay}`;
+          // 添加點擊事件，點擊時顯示面試排程的詳細資料
+          interviewBadge.addEventListener('click', (e) => {
+            e.stopPropagation(); // 阻止觸發日期格子的點擊事件
+            openInterviewForm(cellDate);
+          });
+          // 添加懸停效果
+          interviewBadge.addEventListener('mouseenter', () => {
+            interviewBadge.style.backgroundColor = '#0aa2c0';
+          });
+          interviewBadge.addEventListener('mouseleave', () => {
+            interviewBadge.style.backgroundColor = '#0dcaf0';
+          });
           interviewContainer.appendChild(interviewBadge);
           
           // 添加刪除按鈕
@@ -3091,21 +3165,9 @@
             }
           }
           
-          if (onlyOtherVendorSchedules) {
-            console.log(`🚫 [renderCalendar] 日期 ${dateKey} 設置為唯讀（只有其他廠商的排程）`);
-            // 只有其他廠商的排程，完全不能點擊編輯（唯讀）
-            dateCell.style.cursor = 'not-allowed';
-            dateCell.style.pointerEvents = 'none'; // 完全禁用點擊事件
-            dateCell.title = '該日期已被其他廠商預約，無法編輯（唯讀）';
-            dateCell.style.opacity = '0.7'; // 降低透明度，表示不可編輯
-            // 不添加任何點擊事件監聽器
-            dateCell.addEventListener('mouseenter', () => {
-              dateCell.style.backgroundColor = '#fee';
-            });
-            dateCell.addEventListener('mouseleave', () => {
-              dateCell.style.backgroundColor = isToday ? '#e3f2fd' : '#ffffff';
-            });
-          } else if (hasOwnInterview) {
+          // 即使有其他廠商的排程，也允許點擊新增自己的排程
+          // 但只能編輯自己的排程，不能編輯其他廠商的排程
+          if (hasOwnInterview) {
             // 有自己的排程，可以點擊編輯
             dateCell.addEventListener('click', (e) => {
               e.stopPropagation();
