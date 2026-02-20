@@ -3533,6 +3533,9 @@
         }
         
         if (data.success) {
+          // 顯示成功訊息
+          showToast(data.message || '確認成功', 'success');
+          
           // 重新載入媒合結果（不顯示載入狀態）
           await loadMatchingResults(false);
           

@@ -2240,6 +2240,8 @@ def final_matching_results():
             return jsonify({"success": False, "message": "無法取得當前學期"}), 500
         
         # 從 manage_director 表讀取資料，只顯示主任已確認（Approved）的記錄
+        # 注意：manage_director.preference_id 對應的是 resume_applications.application_id（即 student_job_applications.id）
+        # 需要通過 resume_applications 和 student_job_applications 來 JOIN 到 student_preferences
         query = """
             SELECT 
                 md.match_id,
@@ -2251,11 +2253,11 @@ def final_matching_results():
                 md.director_decision,
                 md.final_rank,
                 md.updated_at,
-                COALESCE(sp.company_id, md.vendor_id) AS company_id,
+                COALESCE(sp.company_id, sja.company_id, md.vendor_id) AS company_id,
                 sp.preference_order,
-                COALESCE(sp.job_id, (
+                COALESCE(sp.job_id, sja.job_id, (
                     SELECT id FROM internship_jobs 
-                    WHERE company_id = COALESCE(sp.company_id, md.vendor_id) 
+                    WHERE company_id = COALESCE(sp.company_id, sja.company_id, md.vendor_id) 
                     ORDER BY id ASC LIMIT 1
                 )) AS job_id,
                 COALESCE(ic.company_name, v.name) AS company_name,
@@ -2268,28 +2270,32 @@ def final_matching_results():
                 v.name AS vendor_name,
                 COALESCE(ij.title, (
                     SELECT title FROM internship_jobs 
-                    WHERE company_id = COALESCE(sp.company_id, md.vendor_id) 
+                    WHERE company_id = COALESCE(sp.company_id, sja.company_id, md.vendor_id) 
                     ORDER BY id ASC LIMIT 1
                 )) AS job_title,
                 COALESCE(ij.slots, (
                     SELECT slots FROM internship_jobs 
-                    WHERE company_id = COALESCE(sp.company_id, md.vendor_id) 
+                    WHERE company_id = COALESCE(sp.company_id, sja.company_id, md.vendor_id) 
                     ORDER BY id ASC LIMIT 1
                 )) AS job_slots
             FROM manage_director md
-            LEFT JOIN student_preferences sp ON md.preference_id = sp.id AND sp.semester_id = %s
-            LEFT JOIN internship_companies ic ON COALESCE(sp.company_id, md.vendor_id) = ic.id
-            LEFT JOIN internship_jobs ij ON sp.job_id = ij.id
+            LEFT JOIN student_job_applications sja ON md.preference_id = sja.id
+            LEFT JOIN student_preferences sp ON sja.student_id = sp.student_id 
+                AND sja.company_id = sp.company_id 
+                AND sja.job_id = sp.job_id
+                AND sp.semester_id = %s
+            LEFT JOIN internship_companies ic ON COALESCE(sp.company_id, sja.company_id, md.vendor_id) = ic.id
+            LEFT JOIN internship_jobs ij ON COALESCE(sp.job_id, sja.job_id) = ij.id
             LEFT JOIN users u ON md.student_id = u.id
             LEFT JOIN classes c ON u.class_id = c.id
             LEFT JOIN users v ON md.vendor_id = v.id
-            WHERE sp.semester_id = %s
-            AND md.director_decision = 'Approved'  -- 只顯示主任已確認的記錄
+            WHERE md.director_decision = 'Approved'  -- 只顯示主任已確認的記錄
+            AND (sp.semester_id = %s OR (sp.semester_id IS NULL AND sja.id IS NOT NULL))  -- 允許沒有 student_preferences 的記錄（通過 student_job_applications JOIN）
             ORDER BY 
-                COALESCE(sp.company_id, md.vendor_id), 
-                COALESCE(sp.job_id, (
+                COALESCE(sp.company_id, sja.company_id, md.vendor_id), 
+                COALESCE(sp.job_id, sja.job_id, (
                     SELECT id FROM internship_jobs 
-                    WHERE company_id = COALESCE(sp.company_id, md.vendor_id) 
+                    WHERE company_id = COALESCE(sp.company_id, sja.company_id, md.vendor_id) 
                     ORDER BY id ASC LIMIT 1
                 ), 0), 
                 CASE WHEN md.final_rank IS NOT NULL THEN 0 ELSE 1 END,
@@ -2307,16 +2313,28 @@ def final_matching_results():
         
         for result in all_results:
             # 判斷是否為正取或備取
+            # 邏輯：
+            # 因為查詢條件已經限制了 director_decision = 'Approved'，所以所有記錄都應該是正取
+            # 1. 如果有 final_rank，使用 final_rank 作為 slot_index（主任已設置最終排序）
+            # 2. 如果沒有 final_rank，但有 original_rank，使用 original_rank 作為 slot_index
+            # 3. 無論如何，都應該是正取（is_reserve = False）
             is_reserve = False
             slot_index = None
             
             if result.get("final_rank") is not None:
-                # 有 final_rank 表示正取
+                # 有 final_rank 表示正取（主任已設置最終排序）
                 is_reserve = False
                 slot_index = result.get("final_rank")
+            elif result.get("original_rank") is not None:
+                # 沒有 final_rank，但 original_rank 不為 NULL，使用 original_rank 作為 slot_index
+                # 主任已確認（Approved），所以是正取
+                is_reserve = False
+                slot_index = result.get("original_rank")
             else:
-                # 沒有 final_rank 表示備取
-                is_reserve = True
+                # 沒有 final_rank 也沒有 original_rank，但主任已確認（Approved），仍然是正取
+                # slot_index 為 None，但 is_reserve = False
+                is_reserve = False
+                slot_index = None
             
             # 計算年級
             grade_display = ''
@@ -3204,6 +3222,106 @@ def director_confirm_matching():
         current_semester_code = get_current_semester_code(cursor)
         semester_prefix = f"{current_semester_code}學期" if current_semester_code else "本學期"
         
+        # 0. 將所有 Pending 狀態的記錄更新為 Approved（主任確認後，所有待定的記錄都變為已確認）
+        cursor.execute("""
+            UPDATE manage_director md
+            INNER JOIN student_preferences sp ON md.preference_id = sp.id AND sp.semester_id = %s
+            SET md.director_decision = 'Approved',
+                md.updated_at = CURRENT_TIMESTAMP
+            WHERE md.director_decision = 'Pending'
+            AND md.director_decision != 'Rejected'
+        """, (current_semester_id,))
+        updated_count = cursor.rowcount
+        print(f"✅ 主任確認：已將 {updated_count} 筆 Pending 記錄更新為 Approved")
+        
+        # 0.1. 為來自 resume_applications 但還沒有 manage_director 記錄的學生創建記錄
+        # 這些學生是廠商已排序但主任還沒有處理的
+        # 先檢查 semester_id 欄位是否存在
+        cursor.execute("""
+            SELECT COLUMN_NAME
+            FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = 'manage_director'
+            AND COLUMN_NAME = 'semester_id'
+        """)
+        has_semester_id = cursor.fetchone() is not None
+        cursor.fetchall()
+        
+        if has_semester_id:
+            # 有 semester_id 欄位
+            cursor.execute("""
+                INSERT INTO manage_director (
+                    semester_id, vendor_id, student_id, preference_id,
+                    original_type, original_rank, is_conflict,
+                    director_decision, final_rank, is_adjusted, updated_at
+                )
+                SELECT 
+                    %s AS semester_id,
+                    sja.company_id AS vendor_id,
+                    sja.student_id,
+                    ra.application_id AS preference_id,
+                    CASE WHEN ra.is_reserve = 0 THEN 'Regular' ELSE 'Backup' END AS original_type,
+                    ra.slot_index AS original_rank,
+                    0 AS is_conflict,
+                    'Approved' AS director_decision,
+                    ra.slot_index AS final_rank,
+                    0 AS is_adjusted,
+                    CURRENT_TIMESTAMP AS updated_at
+                FROM resume_applications ra
+                INNER JOIN student_job_applications sja ON ra.application_id = sja.id
+                INNER JOIN student_preferences sp ON sja.student_id = sp.student_id 
+                    AND sja.company_id = sp.company_id 
+                    AND sja.job_id = sp.job_id
+                    AND sp.semester_id = %s
+                LEFT JOIN manage_director md ON ra.application_id = md.preference_id
+                LEFT JOIN internship_companies ic ON sja.company_id = ic.id
+                WHERE ra.apply_status = 'approved'
+                AND (ra.is_reserve IS NOT NULL OR ra.slot_index IS NOT NULL)
+                AND md.preference_id IS NULL  -- 還沒有 manage_director 記錄
+                AND ic.status = 'approved'
+                AND (SELECT COUNT(*) FROM manage_director md2 
+                     WHERE md2.preference_id = ra.application_id 
+                     AND md2.student_id = sja.student_id) = 0  -- 確保不會重複插入
+            """, (current_semester_id, current_semester_id))
+        else:
+            # 沒有 semester_id 欄位
+            cursor.execute("""
+                INSERT INTO manage_director (
+                    vendor_id, student_id, preference_id,
+                    original_type, original_rank, is_conflict,
+                    director_decision, final_rank, is_adjusted, updated_at
+                )
+                SELECT 
+                    sja.company_id AS vendor_id,
+                    sja.student_id,
+                    ra.application_id AS preference_id,
+                    CASE WHEN ra.is_reserve = 0 THEN 'Regular' ELSE 'Backup' END AS original_type,
+                    ra.slot_index AS original_rank,
+                    0 AS is_conflict,
+                    'Approved' AS director_decision,
+                    ra.slot_index AS final_rank,
+                    0 AS is_adjusted,
+                    CURRENT_TIMESTAMP AS updated_at
+                FROM resume_applications ra
+                INNER JOIN student_job_applications sja ON ra.application_id = sja.id
+                INNER JOIN student_preferences sp ON sja.student_id = sp.student_id 
+                    AND sja.company_id = sp.company_id 
+                    AND sja.job_id = sp.job_id
+                    AND sp.semester_id = %s
+                LEFT JOIN manage_director md ON ra.application_id = md.preference_id
+                LEFT JOIN internship_companies ic ON sja.company_id = ic.id
+                WHERE ra.apply_status = 'approved'
+                AND (ra.is_reserve IS NOT NULL OR ra.slot_index IS NOT NULL)
+                AND md.preference_id IS NULL  -- 還沒有 manage_director 記錄
+                AND ic.status = 'approved'
+                AND (SELECT COUNT(*) FROM manage_director md2 
+                     WHERE md2.preference_id = ra.application_id 
+                     AND md2.student_id = sja.student_id) = 0  -- 確保不會重複插入
+            """, (current_semester_id,))
+        
+        inserted_count = cursor.rowcount
+        print(f"✅ 主任確認：已為 {inserted_count} 筆來自 resume_applications 的記錄創建 manage_director 記錄")
+        
         # 1. 收集所有需要通知的指導老師和班導（去重，避免同一個人收到兩個通知）
         notified_user_ids = set()
         
@@ -3296,13 +3414,29 @@ def director_confirm_matching():
                 link_url=link_url
             )
         
-        # 5. 更新媒合結果狀態（可選：在 manage_director 表中添加狀態欄位，或創建新的狀態表）
-        # 這裡可以添加狀態更新的邏輯，例如標記為「已確認，待廠商確認」
-        # 目前先不更新資料庫狀態，只發送通知
+        # 5. 提交事務，確保所有更新都保存
+        conn.commit()
+        
+        # 6. 驗證更新後的記錄數量
+        cursor.execute("""
+            SELECT COUNT(*) as count
+            FROM manage_director md
+            LEFT JOIN student_job_applications sja ON md.preference_id = sja.id
+            LEFT JOIN student_preferences sp ON sja.student_id = sp.student_id 
+                AND sja.company_id = sp.company_id 
+                AND sja.job_id = sp.job_id
+                AND sp.semester_id = %s
+            WHERE md.director_decision = 'Approved'
+            AND (sp.semester_id = %s OR (sp.semester_id IS NULL AND sja.id IS NOT NULL))
+        """, (current_semester_id, current_semester_id))
+        verify_result = cursor.fetchone()
+        approved_count = verify_result.get('count', 0) if verify_result else 0
+        print(f"✅ 主任確認完成：共有 {approved_count} 筆 Approved 記錄可供科助查看")
         
         return jsonify({
             "success": True,
             "message": "媒合結果確認成功，已通知相關人員",
+            "approved_count": approved_count,
             "notified": {
                 "teachers_and_class_teachers": len(notified_user_ids),
                 "students": len(matched_students),
@@ -3313,6 +3447,146 @@ def director_confirm_matching():
     
     except Exception as e:
         traceback.print_exc()
+        return jsonify({"success": False, "message": f"確認失敗: {str(e)}"}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+# =========================================================
+# API: 科助確認媒合結果（主任確認後，科助進行最後確認）
+# =========================================================
+@admission_bp.route("/api/ta/confirm_matching", methods=["POST"])
+def ta_confirm_matching():
+    """
+    科助確認媒合結果後：
+    1. 標記媒合結果為已發布狀態
+    2. 通知相關人員媒合結果已發布
+    3. 準備進行二面流程
+    """
+    if 'user_id' not in session or session.get('role') not in ['ta', 'admin']:
+        return jsonify({"success": False, "message": "未授權"}), 403
+    
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+    
+    try:
+        # 獲取當前學期ID和學期代碼
+        current_semester_id = get_current_semester_id(cursor)
+        current_semester_code = get_current_semester_code(cursor)
+        if not current_semester_id:
+            return jsonify({"success": False, "message": "無法取得當前學期"}), 500
+        
+        semester_prefix = f"{current_semester_code}學期" if current_semester_code else "本學期"
+        
+        # 檢查是否有主任已確認的媒合結果
+        cursor.execute("""
+            SELECT COUNT(*) as count
+            FROM manage_director md
+            INNER JOIN student_preferences sp ON md.preference_id = sp.id AND sp.semester_id = %s
+            WHERE md.director_decision = 'Approved'
+        """, (current_semester_id,))
+        result = cursor.fetchone()
+        approved_count = result.get('count', 0) if result else 0
+        
+        if approved_count == 0:
+            return jsonify({"success": False, "message": "目前沒有主任已確認的媒合結果"}), 400
+        
+        # 1. 通知所有指導老師和班導媒合結果已發布
+        notified_user_ids = set()
+        
+        # 收集所有指導老師（role='teacher'）
+        cursor.execute("SELECT id FROM users WHERE role = 'teacher'")
+        teachers = cursor.fetchall() or []
+        for teacher in teachers:
+            notified_user_ids.add(teacher['id'])
+        
+        # 收集所有班導（從 classes_teacher 表獲取）
+        cursor.execute("""
+            SELECT DISTINCT ct.teacher_id
+            FROM classes_teacher ct
+            JOIN users u ON ct.teacher_id = u.id
+            WHERE ct.role = '班導師'
+        """)
+        class_teachers = cursor.fetchall() or []
+        for class_teacher in class_teachers:
+            teacher_id = class_teacher['teacher_id']
+            if teacher_id not in notified_user_ids:
+                notified_user_ids.add(teacher_id)
+        
+        # 發送通知給所有需要通知的用戶（指導老師和班導）
+        title = f"{semester_prefix} 媒合結果已發布"
+        message = f"{semester_prefix}媒合結果已由科助確認並發布，請前往查看。"
+        link_url = "/admission/results"
+        
+        for user_id in notified_user_ids:
+            create_notification(
+                user_id=user_id,
+                title=title,
+                message=message,
+                category="matching",
+                link_url=link_url
+            )
+        
+        # 2. 通知所有在媒合結果中的學生（Approved 狀態）
+        cursor.execute("""
+            SELECT DISTINCT md.student_id
+            FROM manage_director md
+            INNER JOIN student_preferences sp ON md.preference_id = sp.id AND sp.semester_id = %s
+            WHERE md.director_decision = 'Approved'
+        """, (current_semester_id,))
+        matched_students = cursor.fetchall() or []
+        
+        student_title = f"{semester_prefix} 媒合結果已發布"
+        student_message = f"{semester_prefix}媒合結果已發布，請前往查看您的媒合結果。"
+        student_link_url = "/student_home"
+        
+        for student in matched_students:
+            student_id = student.get('student_id')
+            if student_id:
+                create_notification(
+                    user_id=student_id,
+                    title=student_title,
+                    message=student_message,
+                    category="matching",
+                    link_url=student_link_url
+                )
+        
+        # 3. 通知所有廠商（role='vendor'）媒合結果已發布
+        cursor.execute("SELECT id, name FROM users WHERE role = 'vendor'")
+        vendors = cursor.fetchall() or []
+        
+        for vendor in vendors:
+            title = f"{semester_prefix} 媒合結果已發布"
+            message = f"{semester_prefix}媒合結果已由科助確認並發布，請前往查看您的實習生名單。"
+            link_url = "/vendor/matching_results"
+            create_notification(
+                user_id=vendor['id'],
+                title=title,
+                message=message,
+                category="matching",
+                link_url=link_url
+            )
+        
+        # 4. 可以在此處添加狀態更新的邏輯，例如標記為「已發布」
+        # 目前先不更新資料庫狀態，只發送通知
+        
+        conn.commit()
+        
+        return jsonify({
+            "success": True,
+            "message": "媒合結果確認成功，已通知相關人員，可以開始進行二面流程",
+            "notified": {
+                "teachers_and_class_teachers": len(notified_user_ids),
+                "students": len(matched_students),
+                "vendors": len(vendors)
+            },
+            "approved_count": approved_count
+        })
+    
+    except Exception as e:
+        traceback.print_exc()
+        if conn:
+            conn.rollback()
         return jsonify({"success": False, "message": f"確認失敗: {str(e)}"}), 500
     finally:
         cursor.close()
@@ -3682,23 +3956,35 @@ def ta_dashboard_stats():
             except (ValueError, TypeError):
                 pass
 
-        # 已核定／待公告的媒合人數（Approved + Pending，以「不重複學生」計）
+        # 已核定／待公告的媒合人數（只計算 Approved，因為主任確認後所有記錄都應該是 Approved）
         # 以 student_preferences.semester_id 篩選學期（不依賴 manage_director.semester_id，因該欄位可能不存在）
+        # 注意：manage_director.preference_id 可能是 student_job_applications.id（來自 resume_applications）或 student_preferences.id
+        # 使用與 final_matching_results 相同的 JOIN 邏輯
         if student_id_prefix:
             cursor.execute("""
                 SELECT COUNT(DISTINCT md.student_id) AS cnt
                 FROM manage_director md
-                INNER JOIN student_preferences sp ON md.preference_id = sp.id AND sp.semester_id = %s
+                LEFT JOIN student_job_applications sja ON md.preference_id = sja.id
+                LEFT JOIN student_preferences sp ON sja.student_id = sp.student_id
+                    AND sja.company_id = sp.company_id
+                    AND sja.job_id = sp.job_id
+                    AND sp.semester_id = %s
                 INNER JOIN users u ON md.student_id = u.id AND u.username LIKE %s
-                WHERE md.director_decision IN ('Approved', 'Pending')
-            """, (current_semester_id, student_id_prefix + "%"))
+                WHERE md.director_decision = 'Approved'
+                AND (sp.semester_id = %s OR sp.semester_id IS NULL)
+            """, (current_semester_id, student_id_prefix + "%", current_semester_id))
         else:
             cursor.execute("""
                 SELECT COUNT(DISTINCT md.student_id) AS cnt
                 FROM manage_director md
-                INNER JOIN student_preferences sp ON md.preference_id = sp.id AND sp.semester_id = %s
-                WHERE md.director_decision IN ('Approved', 'Pending')
-            """, (current_semester_id,))
+                LEFT JOIN student_job_applications sja ON md.preference_id = sja.id
+                LEFT JOIN student_preferences sp ON sja.student_id = sp.student_id
+                    AND sja.company_id = sp.company_id
+                    AND sja.job_id = sp.job_id
+                    AND sp.semester_id = %s
+                WHERE md.director_decision = 'Approved'
+                AND (sp.semester_id = %s OR sp.semester_id IS NULL)
+            """, (current_semester_id, current_semester_id,))
         row = cursor.fetchone()
         matching_approved_count = (row.get("cnt") or 0) if row else 0
 

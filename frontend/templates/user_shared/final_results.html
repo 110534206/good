@@ -746,7 +746,11 @@
         }
 
         const data = await res.json();
-        console.log('📊 獲取到的媒合結果數據:', data);
+        console.log('📊 獲取到的媒合結果數據:', {
+          success: data.success,
+          companiesCount: data.companies ? data.companies.length : 0,
+          message: data.message || '無訊息'
+        });
         
         if (!data.success) {
           console.error('❌ API 返回失敗:', data.message);
@@ -769,6 +773,15 @@
           `;
           return;
         }
+        
+        // 調試：檢查資料結構
+        console.log('📋 公司資料範例:', data.companies[0]);
+        const totalJobs = data.companies.reduce((sum, company) => sum + (company.jobs ? company.jobs.length : 0), 0);
+        const totalRegulars = data.companies.reduce((sum, company) => 
+          sum + (company.jobs ? company.jobs.reduce((jobSum, job) => jobSum + (job.regulars ? job.regulars.length : 0), 0) : 0), 0);
+        const totalReserves = data.companies.reduce((sum, company) => 
+          sum + (company.jobs ? company.jobs.reduce((jobSum, job) => jobSum + (job.reserves ? job.reserves.length : 0), 0) : 0), 0);
+        console.log(`📊 統計: ${data.companies.length} 家公司, ${totalJobs} 個職缺, ${totalRegulars} 個正取, ${totalReserves} 個備取`);
 
         // 轉換資料格式以符合現有的渲染邏輯
         const companiesWithStudents = data.companies.map(company => {
@@ -1122,8 +1135,15 @@
                       // 檢查是否有媒合排序結果
                       const matchingSort = student.matching_sort;
                       let sortLabel = '';
-                      if (matchingSort && matchingSort.is_reserve) {
-                        sortLabel = '<span style="background-color: #fbbf24; color: white; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; margin-left: 8px;">候補</span>';
+                      if (matchingSort) {
+                        if (matchingSort.is_reserve) {
+                          sortLabel = '<span style="background-color: #fbbf24; color: white; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; margin-left: 8px;">候補</span>';
+                        } else if (matchingSort.slot_index !== null && matchingSort.slot_index !== undefined) {
+                          sortLabel = `<span style="background-color: #10b981; color: white; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; margin-left: 8px;">正取${matchingSort.slot_index}</span>`;
+                        } else {
+                          // 沒有 slot_index 但也不是備取，顯示為正取（沒有序號）
+                          sortLabel = '<span style="background-color: #10b981; color: white; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; margin-left: 8px;">正取</span>';
+                        }
                       }
                       
                       return `
@@ -1197,8 +1217,15 @@
                       // 檢查是否有媒合排序結果
                       const matchingSort = student.matching_sort;
                       let sortLabel = '';
-                      if (matchingSort && matchingSort.is_reserve) {
-                        sortLabel = '<span style="background-color: #fbbf24; color: white; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; margin-left: 8px;">候補</span>';
+                      if (matchingSort) {
+                        if (matchingSort.is_reserve) {
+                          sortLabel = '<span style="background-color: #fbbf24; color: white; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; margin-left: 8px;">候補</span>';
+                        } else if (matchingSort.slot_index !== null && matchingSort.slot_index !== undefined) {
+                          sortLabel = `<span style="background-color: #10b981; color: white; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; margin-left: 8px;">正取${matchingSort.slot_index}</span>`;
+                        } else {
+                          // 沒有 slot_index 但也不是備取，顯示為正取（沒有序號）
+                          sortLabel = '<span style="background-color: #10b981; color: white; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; margin-left: 8px;">正取</span>';
+                        }
                       }
                       
                       return `
@@ -1286,12 +1313,48 @@
       }
     }
 
-    // 處理確認按鈕點擊
-    function handleFilterConfirm() {
-      // 執行過濾
-      filterCompanies();
-      // 跳轉到媒合結果管理中心
-      window.location.href = '/ta_assistant_dashboard';
+    // 處理確認按鈕點擊（科助確認媒合結果）
+    async function handleFilterConfirm() {
+      const confirmBtn = document.getElementById('confirmFilterBtn');
+      if (!confirmBtn) return;
+      
+      // 確認對話框
+      if (!confirm('確定要確認媒合結果嗎？\n\n確認後將通知相關人員，並可以開始進行二面流程。')) {
+        return;
+      }
+      
+      // 禁用按鈕並顯示載入狀態
+      const originalText = confirmBtn.innerHTML;
+      confirmBtn.disabled = true;
+      confirmBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> 確認中...';
+      
+      try {
+        // 調用科助確認 API
+        const res = await fetch('/admission/api/ta/confirm_matching', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include'
+        });
+        
+        const data = await res.json();
+        
+        if (data.success) {
+          // 顯示成功訊息
+          alert(`✅ ${data.message}`);
+          
+          // 跳轉到媒合結果管理中心，準備進行二面流程
+          window.location.href = '/ta_assistant_dashboard';
+        } else {
+          alert('❌ 確認失敗：' + (data.message || '未知錯誤'));
+          confirmBtn.disabled = false;
+          confirmBtn.innerHTML = originalText;
+        }
+      } catch (error) {
+        console.error('確認失敗:', error);
+        alert('❌ 確認失敗：' + (error.message || '未知錯誤'));
+        confirmBtn.disabled = false;
+        confirmBtn.innerHTML = originalText;
+      }
     }
 
     // 處理公司選擇改變
