@@ -1328,12 +1328,11 @@
 
     /* 已匹配學生樣式（刪除線） */
     .unmatched-student-item.matched {
-      opacity: 0.6;
-      background: #f3f4f6;
+      background: #f3f4f6 !important;
+      opacity: 0.8;
     }
 
     .unmatched-student-item.matched .unmatched-student-name {
-      text-decoration: line-through;
       color: var(--color-muted);
     }
 
@@ -1540,10 +1539,31 @@
         });
         const data = await res.json();
 
+        // 調試：檢查 API 返回的資料
+        console.log('📊 API 返回資料:', {
+          success: data.success,
+          companiesCount: data.companies ? data.companies.length : 0,
+          duplicateStudentsCount: data.duplicate_students ? data.duplicate_students.length : 0,
+          message: data.message || '無訊息'
+        });
+
         if (data.success) {
           allCompaniesData = data.companies || [];
           duplicateStudents = data.duplicate_students || [];
           currentCompanyIndex = 0;  // 重置到第一個廠商
+          
+          // 調試：檢查資料結構
+          if (allCompaniesData.length > 0) {
+            console.log('📋 公司資料範例:', allCompaniesData[0]);
+            const totalJobs = allCompaniesData.reduce((sum, company) => sum + (company.jobs ? company.jobs.length : 0), 0);
+            const totalRegulars = allCompaniesData.reduce((sum, company) => 
+              sum + (company.jobs ? company.jobs.reduce((jobSum, job) => jobSum + (job.regulars ? job.regulars.length : 0), 0) : 0), 0);
+            const totalReserves = allCompaniesData.reduce((sum, company) => 
+              sum + (company.jobs ? company.jobs.reduce((jobSum, job) => jobSum + (job.reserves ? job.reserves.length : 0), 0) : 0), 0);
+            console.log(`📊 統計: ${allCompaniesData.length} 家公司, ${totalJobs} 個職缺, ${totalRegulars} 個正取, ${totalReserves} 個備取`);
+          } else {
+            console.warn('⚠️ API 返回成功，但沒有公司資料');
+          }
           
           // 從媒合結果中的職缺資料自動帶入名額設定
           jobSlotsMap = {};
@@ -1752,9 +1772,42 @@
         let rightPageLabel = '孝班';
         
         // 將學生按照班級分類，並區分是否已媒合
+        // 檢查學生是否在媒合結果中（包括正取和備取）
         filteredStudents.forEach(student => {
           const className = (student.class_name || '').toString();
-          const isMatched = student.is_matched || false;
+          const studentId = student.student_id || student.id;
+          
+          // 檢查該學生是否在媒合結果中（從 allCompaniesData 檢查）
+          // 只根據實際顯示在媒合結果中的學生來判斷，不依賴後端的 is_matched 標記
+          let isMatched = false;
+          if (allCompaniesData && allCompaniesData.length > 0) {
+            for (const company of allCompaniesData) {
+              for (const job of company.jobs || []) {
+                // 檢查正取名單
+                const regulars = job.regulars || [];
+                const inRegulars = regulars.some(s => {
+                  const sId = s.student_id || s.id;
+                  return sId && sId.toString() === studentId.toString();
+                });
+                
+                // 檢查備取名單
+                const reserves = job.reserves || [];
+                const inReserves = reserves.some(s => {
+                  const sId = s.student_id || s.id;
+                  return sId && sId.toString() === studentId.toString();
+                });
+                
+                if (inRegulars || inReserves) {
+                  isMatched = true;
+                  break;
+                }
+              }
+              if (isMatched) break;
+            }
+          }
+          
+          // 更新學生的 is_matched 狀態（只根據實際顯示的媒合結果）
+          student.is_matched = isMatched;
           
           // 如果班級名稱包含「忠」，放在左側
           if (className.includes('忠')) {
@@ -1795,14 +1848,28 @@
           const className = escapeHtml(student.class_name || '—');
 
           const studentId = student.student_id || student.id;
-          const isMatched = student.is_matched || false;  // 檢查是否已在媒合結果中
+          // 使用已更新的 is_matched 狀態（已在排序前檢查過 allCompaniesData）
+          const isMatched = student.is_matched || false;
           
           // 檢查該學生是否在任何職缺的備取名單中
           let isReserve = false;
           let reserveInfo = null;
+          // 同時檢查是否在正取名單中
+          let isRegular = false;
           if (allCompaniesData && allCompaniesData.length > 0) {
             for (const company of allCompaniesData) {
               for (const job of company.jobs || []) {
+                // 檢查正取名單
+                const regulars = job.regulars || [];
+                const inRegulars = regulars.some(s => {
+                  const sId = s.student_id || s.id;
+                  return sId && sId.toString() === studentId.toString();
+                });
+                if (inRegulars) {
+                  isRegular = true;
+                }
+                
+                // 檢查備取名單
                 const reserves = job.reserves || [];
                 const reserveIndex = reserves.findIndex(s => {
                   const sId = s.student_id || s.id;
@@ -1818,7 +1885,7 @@
                   break;
                 }
               }
-              if (isReserve) break;
+              if (isReserve || isRegular) break;
             }
           }
           
@@ -2224,7 +2291,40 @@
         return '<div class="text-muted" style="padding: 12px;">尚無學生</div>';
       }
 
-      return students.map((student, index) => {
+      // 如果有重複中選的學生，按志願序排序（與後端邏輯一致）
+      const sortedStudents = [...students].sort((a, b) => {
+        const aIsDuplicate = duplicateStudents.includes(a.student_id);
+        const bIsDuplicate = duplicateStudents.includes(b.student_id);
+        
+        // 排序優先級：
+        // 1. 重複中選的學生排在前面
+        // 2. 如果是重複中選，按志願序排序（志願序小的在前）
+        // 3. 如果志願序相同，或都不是重複中選，按 slot_index 排序
+        
+        // 如果只有一個是重複中選，重複中選的排在前面
+        if (aIsDuplicate && !bIsDuplicate) return -1;
+        if (!aIsDuplicate && bIsDuplicate) return 1;
+        
+        // 如果兩個都是重複中選，按志願序排序
+        if (aIsDuplicate && bIsDuplicate) {
+          const aOrder = (a.preference_order && a.preference_order >= 1 && a.preference_order <= 5) ? a.preference_order : 999;
+          const bOrder = (b.preference_order && b.preference_order >= 1 && b.preference_order <= 5) ? b.preference_order : 999;
+          // 如果志願序相同，按 slot_index 排序
+          if (aOrder === bOrder) {
+            const aSlot = a.slot_index || 999;
+            const bSlot = b.slot_index || 999;
+            return aSlot - bSlot;
+          }
+          return aOrder - bOrder;
+        }
+        
+        // 如果都不是重複中選，按 slot_index 排序
+        const aSlot = a.slot_index || 999;
+        const bSlot = b.slot_index || 999;
+        return aSlot - bSlot;
+      });
+
+      return sortedStudents.map((student, index) => {
         const isDuplicate = duplicateStudents.includes(student.student_id);
         const badgeClass = type === 'regular' ? 'badge-regular' : 'badge-reserve';
         const badgeText = type === 'regular' 
@@ -2255,22 +2355,22 @@
             </div>
             <div class="student-actions">
               ${type === 'regular' ? `
-                <button class="btn btn-sm" onclick="movePosition(${student.id}, ${job.job_id}, 'up')" 
+                <button class="btn btn-sm" onclick="movePosition('${String(student.id || student.match_id || '')}', ${job.job_id}, 'up')" 
                         style="background: #f3f4f6; color: #374151; padding: 4px 8px; margin-right: 4px;"
                         title="向上移動">
                   <i class="fas fa-arrow-up"></i>
                 </button>
-                <button class="btn btn-sm" onclick="movePosition(${student.id}, ${job.job_id}, 'down')" 
+                <button class="btn btn-sm" onclick="movePosition('${String(student.id || student.match_id || '')}', ${job.job_id}, 'down')" 
                         style="background: #f3f4f6; color: #374151; padding: 4px 8px; margin-right: 8px;"
                         title="向下移動">
                   <i class="fas fa-arrow-down"></i>
                 </button>
               ` : ''}
-              <button class="btn btn-danger" onclick="removeStudent(${student.id}, '${escapeHtml(student.student_name)}')">
+              <button class="btn btn-danger" onclick="removeStudent('${String(student.id || student.match_id || '')}', '${escapeHtml(student.student_name)}')">
                 <i class="fas fa-times"></i> 移除
               </button>
               ${type === 'reserve' ? `
-                <button class="btn btn-success" onclick="promoteToRegular(${student.id}, ${job.job_id})">
+                <button class="btn btn-success" onclick="promoteToRegular('${String(student.id || student.match_id || '')}', ${job.job_id})">
                   <i class="fas fa-arrow-up"></i> 提升為正取
                 </button>
               ` : ''}
@@ -2287,11 +2387,15 @@
       }
 
       try {
+        // 支援 history_id 和 match_id 兩種參數名稱
         const res = await fetch('/admission/api/director_remove_student', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           credentials: 'include',
-          body: JSON.stringify({ history_id: historyId })
+          body: JSON.stringify({ 
+            history_id: historyId,
+            match_id: historyId  // 同時傳遞 match_id，確保後端能正確識別
+          })
         });
 
         const data = await res.json();
@@ -2532,10 +2636,27 @@
         });
       });
 
-      // 構建選擇列表：先顯示未錄取學生，再顯示備取名單
+      // 構建選擇列表：優先顯示該廠商的備取名單，再顯示未錄取學生
       let studentOptions = [];
       
-      // 添加未錄取學生（排除已經在媒合結果中的學生）
+      // 優先添加該廠商的備取名單學生（排除已經在媒合結果中的學生）
+      reserves.forEach((student, index) => {
+        const studentId = String(student.student_id || student.id);
+        // 如果學生已經在媒合結果中，則跳過
+        if (matchedStudentIds.has(studentId)) {
+          return;
+        }
+        // 顯示備取順序
+        const reserveOrder = index + 1;
+        studentOptions.push({
+          type: 'reserve',
+          index: index,
+          student: student,
+          displayText: `${student.student_name} (${student.student_number}) - 備取${reserveOrder}`
+        });
+      });
+      
+      // 然後添加未錄取學生（排除已經在媒合結果中的學生）
       if (unmatchedStudents && unmatchedStudents.length > 0) {
         unmatchedStudents.forEach((student, index) => {
           const studentId = String(student.student_id || student.id);
@@ -2551,21 +2672,6 @@
           });
         });
       }
-      
-      // 添加備取名單學生（排除已經在媒合結果中的學生）
-      reserves.forEach((student, index) => {
-        const studentId = String(student.student_id || student.id);
-        // 如果學生已經在媒合結果中，則跳過
-        if (matchedStudentIds.has(studentId)) {
-          return;
-        }
-        studentOptions.push({
-          type: 'reserve',
-          index: index,
-          student: student,
-          displayText: `${student.student_name} (${student.student_number}) - 備取`
-        });
-      });
 
       if (studentOptions.length === 0) {
         showToast('沒有可選擇的學生', 'info');
@@ -2574,6 +2680,15 @@
 
       // 構建選擇列表 HTML
       let optionsHtml = '<div style="max-height: 400px; overflow-y: auto; padding: 1em;">';
+      
+      // 如果有備取名單，添加標題
+      const hasReserves = reserves.length > 0;
+      if (hasReserves) {
+        optionsHtml += '<div style="margin-bottom: 12px; padding: 8px; background: #eff6ff; border-left: 4px solid #3b82f6; border-radius: 4px;">';
+        optionsHtml += '<strong style="color: #1e40af;"><i class="fas fa-info-circle"></i> 該廠商的備取名單（優先選擇）</strong>';
+        optionsHtml += '</div>';
+      }
+      
       studentOptions.forEach((option, idx) => {
         const studentId = option.student.student_id || option.student.id;
         const studentName = escapeHtml(option.student.student_name || option.student.name);
@@ -2600,7 +2715,7 @@
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; border-bottom: 2px solid #e2e8f0; padding-bottom: 12px;">
             <h3 style="margin: 0; color: var(--color-text);">
               <i class="fas fa-user-plus" style="margin-right: 8px; color: var(--color-primary);"></i>
-              選擇學生填入正取 ${slotIndex}
+              選擇學生填入正取 ${slotIndex}${hasReserves ? '（優先從備取名單選擇）' : ''}
             </h3>
             <button onclick="this.closest('.modal').remove()" style="background: none; border: none; font-size: 24px; cursor: pointer; color: #666; padding: 0; width: 30px; height: 30px; display: flex; align-items: center; justify-content: center;">&times;</button>
           </div>
@@ -3442,6 +3557,85 @@
     // 頁面載入時執行
     document.addEventListener('DOMContentLoaded', () => {
       loadMatchingResults();
+      
+      // 監聽廠商媒合排序更新通知（使用 BroadcastChannel 實現跨頁面通訊）
+      try {
+        const matchingSortChannel = new BroadcastChannel('matching_sort_updated');
+        matchingSortChannel.addEventListener('message', (event) => {
+          if (event.data && event.data.type === 'matching_sort_saved') {
+            console.log('📢 收到廠商媒合排序更新通知，自動刷新資料...');
+            // 顯示提示訊息
+            const notification = document.createElement('div');
+            notification.style.cssText = `
+              position: fixed;
+              top: 80px;
+              right: 20px;
+              background: #0dcaf0;
+              color: white;
+              padding: 12px 20px;
+              border-radius: 8px;
+              box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+              z-index: 10000;
+              font-size: 14px;
+              display: flex;
+              align-items: center;
+              gap: 8px;
+            `;
+            notification.innerHTML = `
+              <i class="fas fa-sync-alt fa-spin"></i>
+              <span>廠商媒合排序已更新，正在刷新資料...</span>
+            `;
+            document.body.appendChild(notification);
+            
+            // 自動刷新資料
+            loadMatchingResults(true).then(() => {
+              // 更新提示訊息為成功狀態
+              notification.style.background = '#16a34a';
+              notification.innerHTML = `
+                <i class="fas fa-check-circle"></i>
+                <span>資料已成功更新</span>
+              `;
+              
+              // 刷新完成後移除提示訊息
+              setTimeout(() => {
+                if (notification.parentNode) {
+                  notification.style.opacity = '0';
+                  notification.style.transition = 'opacity 0.3s';
+                  setTimeout(() => {
+                    notification.remove();
+                  }, 300);
+                }
+              }, 2000);
+            }).catch((error) => {
+              console.error('刷新資料失敗:', error);
+              // 更新提示訊息為錯誤狀態
+              notification.style.background = '#dc2626';
+              notification.innerHTML = `
+                <i class="fas fa-exclamation-circle"></i>
+                <span>資料更新失敗，請手動刷新</span>
+              `;
+              
+              setTimeout(() => {
+                if (notification.parentNode) {
+                  notification.style.opacity = '0';
+                  notification.style.transition = 'opacity 0.3s';
+                  setTimeout(() => {
+                    notification.remove();
+                  }, 300);
+                }
+              }, 3000);
+            });
+          }
+        });
+        
+        // 頁面卸載時關閉頻道
+        window.addEventListener('beforeunload', () => {
+          matchingSortChannel.close();
+        });
+      } catch (err) {
+        console.warn('⚠️ BroadcastChannel 不支援或初始化失敗:', err);
+        // 如果 BroadcastChannel 不支援，可以考慮使用其他方式（如輪詢）
+      }
       
       // 綁定過濾器事件（框架一直存在，所以事件綁定也要一直存在）
       const companyFilter = document.getElementById('companyFilter');

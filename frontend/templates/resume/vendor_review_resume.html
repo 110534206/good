@@ -1982,6 +1982,20 @@
             if (data.success) {
               alert('✅ ' + (data.message || '媒合排序已成功保存'));
               
+              // 使用 BroadcastChannel 通知其他頁面（如主任媒合頁面）刷新資料
+              try {
+                const channel = new BroadcastChannel('matching_sort_updated');
+                channel.postMessage({
+                  type: 'matching_sort_saved',
+                  timestamp: Date.now(),
+                  message: '廠商媒合排序已更新，請刷新資料'
+                });
+                channel.close();
+                console.log('📢 已發送媒合排序更新通知');
+              } catch (err) {
+                console.warn('⚠️ BroadcastChannel 不支援或發送失敗:', err);
+              }
+              
               // 關閉模態框
               const modal = bootstrap.Modal.getInstance(document.getElementById('matchingSortModal'));
               if (modal) {
