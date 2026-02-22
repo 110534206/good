@@ -269,14 +269,14 @@
       font-weight: 600;
       color: #495057;
       margin-bottom: 6px;
-      font-size: 0.9rem;
-      width: 100px;
+      font-size: 1rem;
+      width: 120px;
       display: inline-block;
     }
 
     .interview-detail-value {
       color: #212529;
-      font-size: 1rem;
+      font-size: 1.1rem;
       display: inline-block;
       white-space: pre-wrap;
     }
@@ -692,23 +692,63 @@
           const schedules = allVendorSchedules.get(dateKey);
           
           if (schedules && schedules.length > 0) {
-            // 為每個面試排程創建標籤
-            schedules.forEach((schedule, index) => {
+            // 按照「公司名稱 + 時間段」分組
+            const groupedSchedules = new Map();
+            
+            schedules.forEach(schedule => {
               const timeStart = schedule.time_start || '';
               const timeEnd = schedule.time_end || '';
               
-              // 格式化時間顯示
-              let timeDisplay = '';
+              // 格式化時間段作為分組鍵
+              let timeKey = '';
               if (timeStart && timeEnd) {
-                const startTime = timeStart.substring(0, 5); // 取 HH:MM
-                const endTime = timeEnd.substring(0, 5); // 取 HH:MM
-                timeDisplay = ` ${startTime}-${endTime}`;
-              } else if (timeStart) {
                 const startTime = timeStart.substring(0, 5);
-                timeDisplay = ` ${startTime}`;
+                const endTime = timeEnd.substring(0, 5);
+                timeKey = `${startTime}-${endTime}`;
+              } else if (timeStart) {
+                timeKey = timeStart.substring(0, 5);
               }
               
-              // 創建標籤（藍色表示面試，紅色表示已排面試）
+              const companyName = schedule.company_name || '未知公司';
+              const groupKey = `${companyName}|${timeKey}`;
+              
+              if (!groupedSchedules.has(groupKey)) {
+                groupedSchedules.set(groupKey, {
+                  companyName: companyName,
+                  timeStart: timeStart,
+                  timeEnd: timeEnd,
+                  timeKey: timeKey,
+                  students: [],
+                  schedules: []
+                });
+              }
+              
+              const group = groupedSchedules.get(groupKey);
+              const studentName = schedule.student_name || '';
+              if (studentName && !group.students.includes(studentName)) {
+                group.students.push(studentName);
+              }
+              group.schedules.push(schedule);
+            });
+            
+            // 為每個分組創建標籤
+            groupedSchedules.forEach((group, groupKey) => {
+              // 格式化時間顯示
+              let timeDisplay = '';
+              if (group.timeStart && group.timeEnd) {
+                const startTime = group.timeStart.substring(0, 5);
+                const endTime = group.timeEnd.substring(0, 5);
+                timeDisplay = ` ${startTime}-${endTime}`;
+              } else if (group.timeStart) {
+                timeDisplay = ` ${group.timeStart.substring(0, 5)}`;
+              }
+              
+              // 組合學生姓名
+              const studentsText = group.students.length > 0 
+                ? group.students.join('、') 
+                : '';
+              
+              // 創建標籤
               const interviewBadge = document.createElement("div");
               interviewBadge.style.cssText = `
                 font-size: 0.75rem;
@@ -725,17 +765,36 @@
                 transition: background-color 0.2s;
               `;
               
-              // 顯示公司名稱和時間
-              const companyName = schedule.company_name || '未知公司';
-              const studentName = schedule.student_name || '';
-              const displayText = studentName ? `${companyName} - ${studentName}${timeDisplay}` : `${companyName}${timeDisplay}`;
-              interviewBadge.textContent = displayText.length > 20 ? displayText.substring(0, 17) + '...' : displayText;
-              interviewBadge.title = `點擊查看詳情：${companyName} - ${studentName || '未知學生'}${timeDisplay}${schedule.location ? ' - ' + schedule.location : ''}`;
+              // 顯示公司名稱、學生姓名和時間
+              let displayText = '';
+              if (studentsText) {
+                displayText = `${group.companyName} - ${studentsText}${timeDisplay}`;
+              } else {
+                displayText = `${group.companyName}${timeDisplay}`;
+              }
               
-              // 添加點擊事件
+              interviewBadge.textContent = displayText.length > 20 ? displayText.substring(0, 17) + '...' : displayText;
+              
+              // 構建完整的提示文字
+              const fullTitle = studentsText 
+                ? `${group.companyName} - ${studentsText}${timeDisplay}`
+                : `${group.companyName}${timeDisplay}`;
+              interviewBadge.title = `點擊查看詳情：${fullTitle}`;
+              
+              // 添加點擊事件（顯示合併後的排程詳情，包含所有學生）
               interviewBadge.addEventListener('click', (e) => {
                 e.stopPropagation(); // 阻止事件冒泡到日期格子
-                showInterviewDetail(schedule);
+                // 顯示合併後的排程詳情（使用第一個排程作為基礎，但包含所有學生）
+                if (group.schedules.length > 0) {
+                  // 創建一個合併的排程物件，包含所有學生姓名
+                  const mergedSchedule = {
+                    ...group.schedules[0],
+                    student_name: group.students.join('、'), // 合併所有學生姓名
+                    all_students: group.students, // 保存所有學生姓名陣列
+                    all_schedules: group.schedules // 保存所有排程
+                  };
+                  showInterviewDetail(mergedSchedule);
+                }
               });
               
               // 添加懸停效果

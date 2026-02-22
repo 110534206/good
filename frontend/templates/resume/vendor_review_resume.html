@@ -2852,7 +2852,7 @@
         // 檢查開始時間是否已過期（必須是未來的時間）
         if (startMinutes <= currentMinutes) {
           const currentTimeDisplay = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-          alert(`無法儲存：選擇的開始時間（${timeStart}）已過期或已開始（當前時間：${currentTimeDisplay}），請選擇未來的時間`);
+          alert(`開始時間 ${timeStart} 已過期`);
           document.getElementById('interviewTimeStart').focus();
           return;
         }
@@ -2860,7 +2860,7 @@
         // 檢查結束時間是否已過期（必須是未來的時間）
         if (endMinutes <= currentMinutes) {
           const currentTimeDisplay = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-          alert(`無法儲存：選擇的結束時間（${timeEnd}）已過期（當前時間：${currentTimeDisplay}），請選擇未來的時間`);
+          alert(`結束時間 ${timeEnd} 已過期`);
           document.getElementById('interviewTimeEnd').focus();
           return;
         }
