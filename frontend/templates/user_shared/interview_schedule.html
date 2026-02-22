@@ -251,6 +251,46 @@
       gap: 8px;
     }
 
+    /* 面試排程詳情模態框樣式 */
+    #interviewDetailModal .modal-dialog {
+      max-width: 800px;
+    }
+
+    .interview-detail-row {
+      padding: 10px 0;
+      border-bottom: 1px solid #f0f0f0;
+    }
+
+    .interview-detail-row:last-child {
+      border-bottom: none;
+    }
+
+    .interview-detail-label {
+      font-weight: 600;
+      color: #495057;
+      margin-bottom: 6px;
+      font-size: 0.9rem;
+      width: 100px;
+      display: inline-block;
+    }
+
+    .interview-detail-value {
+      color: #212529;
+      font-size: 1rem;
+      display: inline-block;
+      white-space: pre-wrap;
+    }
+
+    .interview-detail-notes {
+      background: #ffffff;
+      padding: 12px;
+      border: 1px solid #dee2e6;
+      white-space: pre-wrap;
+      line-height: 1.6;
+      margin-top: 8px;
+      font-size: 0.95rem;
+    }
+
   </style>
 </head>
 
@@ -301,7 +341,7 @@
 
         <!-- 面試排程詳情模態框 -->
         <div class="modal fade" id="interviewDetailModal" tabindex="-1" aria-hidden="true">
-          <div class="modal-dialog modal-dialog-centered">
+          <div class="modal-dialog modal-dialog-centered modal-lg">
             <div class="modal-content">
               <div class="modal-header">
                 <h5 class="modal-title">面試排程詳情</h5>
@@ -743,6 +783,7 @@
       const timeStart = schedule.time_start || '';
       const timeEnd = schedule.time_end || '';
       const location = schedule.location || '未指定';
+      const notes = schedule.notes || '';  // 面試須知（備註）
       const createdAt = schedule.created_at || '';
       
       // 格式化時間顯示
@@ -767,35 +808,50 @@
         dateDisplay = `${year}年${month}月${day}日（${weekDay}）`;
       }
       
+      // 轉義 HTML 以防止 XSS
+      const escapeHtml = (text) => {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+      };
+
       content.innerHTML = `
-        <div class="mb-3">
-          <label class="form-label fw-bold">公司名稱</label>
-          <div class="form-control-plaintext">${companyName}</div>
+        <div class="interview-detail-row">
+          <span class="interview-detail-label">公司名稱</span>
+          <span class="interview-detail-value">${escapeHtml(companyName)}</span>
         </div>
-        <div class="mb-3">
-          <label class="form-label fw-bold">學生姓名</label>
-          <div class="form-control-plaintext">${studentName}</div>
+        <div class="interview-detail-row">
+          <span class="interview-detail-label">學生姓名</span>
+          <span class="interview-detail-value">${escapeHtml(studentName)}</span>
         </div>
-        <div class="mb-3">
-          <label class="form-label fw-bold">廠商聯絡人</label>
-          <div class="form-control-plaintext">${vendorName}</div>
+        ${vendorName && vendorName !== '未知廠商' ? `
+        <div class="interview-detail-row">
+          <span class="interview-detail-label">廠商聯絡人</span>
+          <span class="interview-detail-value">${escapeHtml(vendorName)}</span>
         </div>
-        <div class="mb-3">
-          <label class="form-label fw-bold">面試日期</label>
-          <div class="form-control-plaintext">${dateDisplay}</div>
+        ` : ''}
+        <div class="interview-detail-row">
+          <span class="interview-detail-label">面試日期</span>
+          <span class="interview-detail-value">${escapeHtml(dateDisplay)}</span>
         </div>
-        <div class="mb-3">
-          <label class="form-label fw-bold">面試時間</label>
-          <div class="form-control-plaintext">${timeDisplay}</div>
+        <div class="interview-detail-row">
+          <span class="interview-detail-label">面試時間</span>
+          <span class="interview-detail-value">${escapeHtml(timeDisplay)}</span>
         </div>
-        <div class="mb-3">
-          <label class="form-label fw-bold">面試地點</label>
-          <div class="form-control-plaintext">${location}</div>
+        <div class="interview-detail-row">
+          <span class="interview-detail-label">面試地點</span>
+          <span class="interview-detail-value">${escapeHtml(location)}</span>
         </div>
+        ${notes ? `
+        <div class="interview-detail-row">
+          <span class="interview-detail-label">面試須知</span>
+          <span class="interview-detail-value">${escapeHtml(notes)}</span>
+        </div>
+        ` : ''}
         ${createdAt ? `
-        <div class="mb-3">
-          <label class="form-label fw-bold">建立時間</label>
-          <div class="form-control-plaintext text-muted" style="font-size: 0.9rem;">${createdAt}</div>
+        <div class="interview-detail-row">
+          <span class="interview-detail-label">建立時間</span>
+          <span class="interview-detail-value" style="color: #6c757d; font-size: 0.9rem;">${escapeHtml(createdAt)}</span>
         </div>
         ` : ''}
       `;
@@ -803,6 +859,35 @@
       modal.show();
     }
 
+    // 自動刷新面試排程的定時器
+    let scheduleRefreshInterval = null;
+    
+    // 啟動自動刷新（每30秒刷新一次）
+    function startScheduleAutoRefresh() {
+      // 清除現有的定時器（如果有的話）
+      if (scheduleRefreshInterval) {
+        clearInterval(scheduleRefreshInterval);
+      }
+      
+      // 設置新的定時器
+      scheduleRefreshInterval = setInterval(async () => {
+        console.log('🔄 自動刷新面試排程...');
+        await loadAllVendorSchedules();
+        renderCalendar();
+      }, 30000); // 30秒刷新一次
+      
+      console.log('✅ 已啟動面試排程自動刷新（每30秒）');
+    }
+    
+    // 停止自動刷新
+    function stopScheduleAutoRefresh() {
+      if (scheduleRefreshInterval) {
+        clearInterval(scheduleRefreshInterval);
+        scheduleRefreshInterval = null;
+        console.log('已停止面試排程自動刷新');
+      }
+    }
+    
     // 初始化行事曆
     document.addEventListener('DOMContentLoaded', async function() {
       // 根據用戶角色載入側邊選單
@@ -814,9 +899,25 @@
       // 渲染行事曆
       renderCalendar();
       
+      // 啟動自動刷新
+      startScheduleAutoRefresh();
+      
       // 綁定月份切換按鈕
       document.getElementById('prevMonthBtn').addEventListener('click', () => changeMonth(-1));
       document.getElementById('nextMonthBtn').addEventListener('click', () => changeMonth(1));
+      
+      // 當頁面失去焦點時停止自動刷新，獲得焦點時重新啟動
+      document.addEventListener('visibilitychange', () => {
+        if (document.hidden) {
+          stopScheduleAutoRefresh();
+        } else {
+          // 頁面重新可見時，立即刷新一次，然後重新啟動自動刷新
+          loadAllVendorSchedules().then(() => {
+            renderCalendar();
+            startScheduleAutoRefresh();
+          });
+        }
+      });
     });
   </script>
 </body>

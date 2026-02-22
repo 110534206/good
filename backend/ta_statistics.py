@@ -1968,7 +1968,8 @@ def manage_students():
 # --------------------------------
 @ta_statistics_bp.route('/api/interview_schedules', methods=['GET'])
 def get_interview_schedules():
-    """獲取所有廠商的面試排程（用於 TA、主任、指導老師、班導、學生查看面試排程）"""
+    """獲取所有廠商的面試排程（用於 TA、主任、指導老師、班導、學生查看面試排程）
+    直接從 resume_applications 表讀取資料，與廠商 API 保持一致"""
     user_role = session.get('role')
     if 'user_id' not in session or user_role not in ['ta', 'admin', 'director', 'teacher', 'class_teacher', 'student']:
         return jsonify({"success": False, "message": "未授權"}), 403
@@ -1977,23 +1978,6 @@ def get_interview_schedules():
     cursor = conn.cursor(dictionary=True)
     
     try:
-        # 檢查 vendor_preference_history 表是否存在
-        cursor.execute("""
-            SELECT COUNT(*) as count
-            FROM information_schema.tables
-            WHERE table_schema = DATABASE()
-            AND table_name = 'vendor_preference_history'
-        """)
-        table_exists = cursor.fetchone().get('count', 0) > 0
-        
-        if not table_exists:
-            return jsonify({
-                "success": True,
-                "schedules": []
-            })
-        
-        # 查詢所有廠商的面試排程（從 vendor_preference_history 表中）
-        # 只查詢 interview_status = 'in interview' 的記錄（廠商新增面試排程時會記錄到此狀態）
         user_id = session.get('user_id')
         
         # 如果是指導老師，只顯示該老師管理的公司的面試排程
@@ -2016,112 +2000,134 @@ def get_interview_schedules():
             # 構建查詢，只包含該老師管理的公司
             placeholders = ','.join(['%s'] * len(company_ids))
             query = f"""
-                SELECT DISTINCT
-                    vph.id,
-                    vph.reviewer_id,
-                    vph.student_id,
-                    vph.preference_id,
-                    vph.comment,
-                    vph.created_at,
-                    u.name AS vendor_name,
+                SELECT
+                    ra.company_comment AS comment,
                     ic.company_name,
                     ic.id AS company_id,
-                    sp.student_id AS pref_student_id,
-                    su.name AS student_name
-                FROM vendor_preference_history vph
-                JOIN users u ON vph.reviewer_id = u.id
-                LEFT JOIN student_preferences sp ON vph.preference_id = sp.id
-                LEFT JOIN internship_companies ic ON sp.company_id = ic.id
-                LEFT JOIN users su ON COALESCE(vph.student_id, sp.student_id) = su.id
-                WHERE vph.interview_status = 'in interview'
-                AND vph.comment LIKE '%面試日期：%'
+                    ra.updated_at AS created_at,
+                    ra.interview_time,
+                    ra.interview_timeEnd,
+                    sja.student_id,
+                    u.name AS student_name,
+                    ra.application_id,
+                    ra.job_id
+                FROM resume_applications ra
+                JOIN student_job_applications sja ON ra.application_id = sja.id
+                LEFT JOIN internship_companies ic ON sja.company_id = ic.id
+                LEFT JOIN users u ON sja.student_id = u.id
+                WHERE ra.interview_status = 'scheduled'
+                AND ra.interview_time IS NOT NULL
                 AND ic.id IN ({placeholders})
-                ORDER BY vph.created_at DESC
+                ORDER BY ra.updated_at DESC
             """
             cursor.execute(query, tuple(company_ids))
         else:
-            # TA、主任、管理員可以看到所有面試排程
+            # TA、主任、管理員、班導、學生可以看到所有面試排程
+            # 直接從 resume_applications 表讀取（與廠商 API 保持一致）
             cursor.execute("""
-                SELECT DISTINCT
-                    vph.id,
-                    vph.reviewer_id,
-                    vph.student_id,
-                    vph.preference_id,
-                    vph.comment,
-                    vph.created_at,
-                    u.name AS vendor_name,
+                SELECT
+                    ra.company_comment AS comment,
                     ic.company_name,
                     ic.id AS company_id,
-                    sp.student_id AS pref_student_id,
-                    su.name AS student_name
-                FROM vendor_preference_history vph
-                JOIN users u ON vph.reviewer_id = u.id
-                LEFT JOIN student_preferences sp ON vph.preference_id = sp.id
-                LEFT JOIN internship_companies ic ON sp.company_id = ic.id
-                LEFT JOIN users su ON COALESCE(vph.student_id, sp.student_id) = su.id
-                WHERE vph.interview_status = 'in interview'
-                AND vph.comment LIKE '%面試日期：%'
-                ORDER BY vph.created_at DESC
+                    ra.updated_at AS created_at,
+                    ra.interview_time,
+                    ra.interview_timeEnd,
+                    sja.student_id,
+                    u.name AS student_name,
+                    ra.application_id,
+                    ra.job_id
+                FROM resume_applications ra
+                JOIN student_job_applications sja ON ra.application_id = sja.id
+                LEFT JOIN internship_companies ic ON sja.company_id = ic.id
+                LEFT JOIN users u ON sja.student_id = u.id
+                WHERE ra.interview_status = 'scheduled'
+                AND ra.interview_time IS NOT NULL
+                ORDER BY ra.updated_at DESC
             """)
         
         all_schedules = cursor.fetchall()
         
-        # 解析面試資訊
+        # 解析面試資訊（與廠商 API 的解析邏輯保持一致）
         import re
         parsed_schedules = []
         
         for schedule in all_schedules:
             comment = schedule.get('comment', '')
-            reviewer_id = schedule.get('reviewer_id')
-            vendor_name = schedule.get('vendor_name', '未知廠商')
+            company_name = schedule.get('company_name', '未知公司')
             company_id = schedule.get('company_id')
-            student_id = schedule.get('student_id') or schedule.get('pref_student_id')
+            interview_time = schedule.get('interview_time')
+            interview_timeEnd = schedule.get('interview_timeEnd')
+            student_id = schedule.get('student_id')
             student_name = schedule.get('student_name', '未知學生')
             
-            # 從 vendor 的 name 欄位提取公司名稱
-            # vendor name 格式通常是 "公司名稱 聯絡人姓名"，例如 "人人人 周建羽"
-            # 取第一個詞作為公司名稱
-            company_name = '未知公司'
-            if vendor_name:
-                # 如果包含空格，取第一個詞（公司名稱）
-                if ' ' in vendor_name:
-                    company_name = vendor_name.split()[0]
-                else:
-                    # 如果沒有空格，整個作為公司名稱
-                    company_name = vendor_name
-            
-            # 提取日期
-            date_match = re.search(r'面試日期：(\d{4}-\d{2}-\d{2})', comment)
-            if not date_match:
+            if not interview_time:
                 continue
             
-            interview_date = date_match.group(1)
-            
-            # 提取時間
-            time_match = re.search(r'時間：(\d{2}:\d{2})\s*-\s*(\d{2}:\d{2})', comment)
-            time_start = None
-            time_end = None
-            if time_match:
-                time_start = time_match.group(1)
-                time_end = time_match.group(2)
+            # 從 interview_time 提取日期和時間
+            if isinstance(interview_time, str):
+                # 如果是字串格式，解析它
+                try:
+                    from datetime import datetime
+                    interview_datetime = datetime.strptime(interview_time, '%Y-%m-%d %H:%M:%S')
+                except:
+                    try:
+                        interview_datetime = datetime.strptime(interview_time, '%Y-%m-%d %H:%M')
+                    except:
+                        continue
             else:
-                # 兼容只有開始時間的情況
-                time_match = re.search(r'時間：(\d{2}:\d{2})', comment)
-                if time_match:
-                    time_start = time_match.group(1)
+                interview_datetime = interview_time
             
-            # 提取地點
-            location_match = re.search(r'地點：([^，\n]+)', comment)
-            location = location_match.group(1).strip() if location_match else ''
+            interview_date = interview_datetime.strftime('%Y-%m-%d')
+            time_start = interview_datetime.strftime('%H:%M')
+            
+            # 從 interview_timeEnd 提取結束時間
+            time_end = None
+            if interview_timeEnd:
+                if isinstance(interview_timeEnd, str):
+                    try:
+                        from datetime import datetime
+                        end_datetime = datetime.strptime(interview_timeEnd, '%Y-%m-%d %H:%M:%S')
+                    except:
+                        try:
+                            end_datetime = datetime.strptime(interview_timeEnd, '%Y-%m-%d %H:%M')
+                        except:
+                            end_datetime = None
+                else:
+                    end_datetime = interview_timeEnd
+                
+                if end_datetime:
+                    time_end = end_datetime.strftime('%H:%M')
+            
+            # 從 company_comment 提取地點和備註（面試須知）
+            location = ''
+            notes = ''
+            if comment:
+                # 提取地點（格式：地點：XXX 或 地點:XXX）
+                location_match = re.search(r'地點[：:]([^，,\n]+)', comment)
+                if location_match:
+                    location = location_match.group(1).strip()
+                
+                # 提取備註（面試須知）
+                # 備註格式：備註：XXX 或 備註:XXX，可能在最後，也可能在中間
+                # 使用非貪婪匹配，直到結尾或遇到其他分隔符
+                notes_match = re.search(r'備註[：:](.+?)(?:，|,|$)', comment)
+                if notes_match:
+                    notes = notes_match.group(1).strip()
+                else:
+                    # 如果沒有找到，嘗試提取「備註：」之後的所有內容（直到結尾）
+                    notes_match = re.search(r'備註[：:](.+)', comment)
+                    if notes_match:
+                        notes = notes_match.group(1).strip()
             
             parsed_schedules.append({
-                'id': schedule.get('id'),
+                'id': schedule.get('application_id'),  # 使用 application_id 作為 id
                 'date': interview_date,
                 'time_start': time_start,
                 'time_end': time_end,
                 'location': location,
-                'vendor_id': reviewer_id,
-                'vendor_name': vendor_name,
+                'notes': notes,  # 添加備註（面試須知）
+                'vendor_id': None,  # resume_applications 表沒有 reviewer_id
+                'vendor_name': None,
                 'company_id': company_id,
                 'company_name': company_name,
                 'student_id': student_id,

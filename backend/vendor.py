@@ -200,7 +200,7 @@ def _fetch_job_for_vendor(cursor, job_id, vendor_id, allow_teacher_created=False
 
 
 def _record_history(cursor, preference_id, reviewer_id, action, comment, student_id=None):
-    """記錄廠商對志願申請的審核或備註歷史（更新 resume_applications 表）"""
+    """記錄廠商對志願申請的審核或備註歷史（更新 resume_applications 表，並插入到 vendor_preference_history 表）"""
     # action 映射到 resume_applications.interview_status
     # 直接使用 resume_applications 的 enum 值：'scheduled', 'finished'
     status_map = {
@@ -236,6 +236,31 @@ def _record_history(cursor, preference_id, reviewer_id, action, comment, student
         """, (new_status, comment, preference_id, job_id))
     except Exception as e:
         print(f"⚠️ 更新 resume_applications 失敗: {e}")
+    
+    # 同時插入到 vendor_preference_history 表（用於學生行事曆顯示）
+    # 只有當 action 是 "in interview" 或 "scheduled" 時才插入（面試排程）
+    if action in ["in interview", "scheduled"] and preference_id:
+        try:
+            # 檢查 vendor_preference_history 表是否存在
+            cursor.execute("""
+                SELECT COUNT(*) as count
+                FROM information_schema.tables
+                WHERE table_schema = DATABASE()
+                AND table_name = 'vendor_preference_history'
+            """)
+            table_exists = cursor.fetchone().get('count', 0) > 0
+            
+            if table_exists:
+                # 插入記錄到 vendor_preference_history
+                cursor.execute("""
+                    INSERT INTO vendor_preference_history
+                    (preference_id, reviewer_id, student_id, interview_status, comment, created_at)
+                    VALUES (%s, %s, %s, %s, %s, NOW())
+                """, (preference_id, reviewer_id, student_id, action, comment))
+                print(f"✅ 已插入記錄到 vendor_preference_history: preference_id={preference_id}, student_id={student_id}, action={action}")
+        except Exception as e:
+            # 如果插入失敗，不影響主要流程，只記錄錯誤
+            print(f"⚠️ 插入 vendor_preference_history 失敗（不影響主要流程）: {e}")
 
 
 def _notify_student(cursor, student_id, title, message, link_url="/vendor_review_resume", category="resume"):
@@ -3038,13 +3063,25 @@ def schedule_interviews():
         location_info = interview_location or ""
         notes_info = interview_notes or ""
         
-        # 構建面試描述，只包含地點和備註
+        # 構建面試描述，包含日期、時間、地點和備註（用於 vendor_preference_history）
+        # 注意：學生行事曆 API 需要從 comment 中解析日期和時間
         comment_parts = []
+        comment_parts.append(f"面試日期：{interview_date}")
+        if time_info:
+            comment_parts.append(f"時間：{time_info}")
         if location_info:
             comment_parts.append(f"地點：{location_info}")
         if notes_info:
             comment_parts.append(f"備註：{notes_info}")
         interview_description = "，".join(comment_parts) if comment_parts else ""
+        
+        # 構建簡化的描述（只用於 resume_applications 的 company_comment，只包含地點和備註）
+        resume_comment_parts = []
+        if location_info:
+            resume_comment_parts.append(f"地點：{location_info}")
+        if notes_info:
+            resume_comment_parts.append(f"備註：{notes_info}")
+        resume_comment = "，".join(resume_comment_parts) if resume_comment_parts else ""
         
         success_count = 0
         failed_students = []
@@ -3205,7 +3242,7 @@ def schedule_interviews():
                                     interview_result = 'pending',
                                     updated_at = NOW()
                                 WHERE application_id = %s AND job_id = %s
-                            """, (interview_datetime, interview_datetime_end, interview_description, application_id, job_id))
+                            """, (interview_datetime, interview_datetime_end, resume_comment, application_id, job_id))
                         else:
                             cursor.execute("""
                                 UPDATE resume_applications
@@ -3216,8 +3253,8 @@ def schedule_interviews():
                                     interview_result = 'pending',
                                     updated_at = NOW()
                                 WHERE application_id = %s AND job_id = %s
-                            """, (interview_datetime, interview_description, application_id, job_id))
-                        print(f"✅ [schedule_interviews] 更新 resume_applications: application_id={application_id}, job_id={job_id}, interview_status='scheduled', interview_timeEnd={interview_datetime_end}, company_comment={interview_description[:50]}")
+                            """, (interview_datetime, resume_comment, application_id, job_id))
+                        print(f"✅ [schedule_interviews] 更新 resume_applications: application_id={application_id}, job_id={job_id}, interview_status='scheduled', interview_timeEnd={interview_datetime_end}, company_comment={resume_comment[:50]}")
                     else:
                         # 如果記錄不存在，創建新記錄
                         if interview_datetime_end:
@@ -3225,14 +3262,14 @@ def schedule_interviews():
                                 INSERT INTO resume_applications
                                 (application_id, job_id, apply_status, interview_status, interview_time, interview_timeEnd, company_comment, interview_result, created_at)
                                 VALUES (%s, %s, 'uploaded', 'scheduled', %s, %s, %s, 'pending', NOW())
-                            """, (application_id, job_id, interview_datetime, interview_datetime_end, interview_description))
+                            """, (application_id, job_id, interview_datetime, interview_datetime_end, resume_comment))
                         else:
                             cursor.execute("""
                                 INSERT INTO resume_applications
                                 (application_id, job_id, apply_status, interview_status, interview_time, interview_timeEnd, company_comment, interview_result, created_at)
                                 VALUES (%s, %s, 'uploaded', 'scheduled', %s, NULL, %s, 'pending', NOW())
-                            """, (application_id, job_id, interview_datetime, interview_description))
-                        print(f"✅ [schedule_interviews] 創建 resume_applications: application_id={application_id}, job_id={job_id}, interview_status='scheduled', interview_timeEnd={interview_datetime_end}, company_comment={interview_description[:50]}")
+                            """, (application_id, job_id, interview_datetime, resume_comment))
+                        print(f"✅ [schedule_interviews] 創建 resume_applications: application_id={application_id}, job_id={job_id}, interview_status='scheduled', interview_timeEnd={interview_datetime_end}, company_comment={resume_comment[:50]}")
                     
                     # 為了向後兼容，也嘗試從 student_preferences 獲取 preference_id（如果需要的話）
                     cursor.execute("""
@@ -3245,10 +3282,35 @@ def schedule_interviews():
                     """, (student_id, company_id))
                     preference_row = cursor.fetchone()
                     
+                    preference_id = None
                     if preference_row:
                         preference_id = preference_row.get("preference_id")
-                        # 記錄到 vendor_preference_history（包含 student_id）
+                    
+                    # 記錄到 vendor_preference_history（包含 student_id）
+                    # 即使沒有 preference_id，也嘗試插入記錄（preference_id 可以為 NULL）
+                    if preference_id:
                         _record_history(cursor, preference_id, vendor_id, "in interview", interview_description, student_id)
+                    else:
+                        # 如果沒有 preference_id，直接插入到 vendor_preference_history（preference_id 為 NULL）
+                        try:
+                            cursor.execute("""
+                                SELECT COUNT(*) as count
+                                FROM information_schema.tables
+                                WHERE table_schema = DATABASE()
+                                AND table_name = 'vendor_preference_history'
+                            """)
+                            table_exists = cursor.fetchone().get('count', 0) > 0
+                            
+                            if table_exists:
+                                # 直接插入記錄，preference_id 為 NULL
+                                cursor.execute("""
+                                    INSERT INTO vendor_preference_history
+                                    (preference_id, reviewer_id, student_id, interview_status, comment, created_at)
+                                    VALUES (%s, %s, %s, %s, %s, NOW())
+                                """, (None, vendor_id, student_id, "in interview", interview_description))
+                                print(f"✅ [schedule_interviews] 已插入記錄到 vendor_preference_history (無 preference_id): student_id={student_id}, vendor_id={vendor_id}")
+                        except Exception as e:
+                            print(f"⚠️ [schedule_interviews] 插入 vendor_preference_history 失敗（無 preference_id）: {e}")
                     
                     # 獲取學生資訊
                     cursor.execute("""
