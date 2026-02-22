@@ -303,6 +303,11 @@
       margin-bottom: 16px;
       overflow: visible;  /* 讓空位框格可以超出列表範圍 */
     }
+    
+    /* 確保備取名單內的學生項目不會溢出 */
+    .reserve-list .student-item {
+      overflow: visible; /* 允許按鈕顯示，但確保在框格內 */
+    }
 
     .list-label {
       font-weight: 600;
@@ -319,9 +324,11 @@
       padding: 12px 16px;
       margin-bottom: 8px;
       display: flex;
-      align-items: center;
+      align-items: center; /* 保持垂直居中 */
       justify-content: space-between;
       transition: all 0.2s ease;
+      min-width: 0; /* 允許 flex 項目縮小 */
+      overflow: visible; /* 改為 visible，確保標籤完整顯示 */
     }
 
     .student-item:hover {
@@ -335,6 +342,8 @@
 
     .student-info {
       flex: 1;
+      min-width: 0; /* 允許 flex 項目縮小 */
+      overflow: visible; /* 改為 visible，確保標籤完整顯示 */
     }
 
     .student-name {
@@ -344,8 +353,10 @@
       display: flex;
       align-items: center;
       gap: 8px;
-      flex-wrap: nowrap;
-      white-space: nowrap;
+      flex-wrap: nowrap; /* 不換行 */
+      white-space: nowrap; /* 不換行 */
+      min-width: 0; /* 允許 flex 項目縮小 */
+      overflow: visible; /* 確保標籤完整顯示 */
     }
 
     .student-details {
@@ -374,6 +385,8 @@
       font-size: 0.75rem;
       font-weight: 600;
       margin-left: 8px;
+      white-space: nowrap; /* 確保標籤文字不換行 */
+      flex-shrink: 0; /* 確保標籤不會被壓縮 */
     }
 
     .badge-regular {
@@ -399,6 +412,8 @@
     .student-actions {
       display: flex;
       gap: 8px;
+      align-items: center;
+      flex-shrink: 0; /* 確保按鈕不會被壓縮 */
     }
 
     .btn {
@@ -413,6 +428,8 @@
       gap: 4px;
       font-weight: 500;
       transition: all 0.2s ease;
+      flex-shrink: 0; /* 確保按鈕不會被壓縮 */
+      box-sizing: border-box; /* 確保 padding 包含在寬度內 */
     }
 
     .btn-danger {
@@ -1772,32 +1789,26 @@
         let rightPageLabel = '孝班';
         
         // 將學生按照班級分類，並區分是否已媒合
-        // 檢查學生是否在媒合結果中（包括正取和備取）
+        // 檢查學生是否在媒合結果中（只檢查正取，備取不等於錄取）
         filteredStudents.forEach(student => {
           const className = (student.class_name || '').toString();
           const studentId = student.student_id || student.id;
           
           // 檢查該學生是否在媒合結果中（從 allCompaniesData 檢查）
-          // 只根據實際顯示在媒合結果中的學生來判斷，不依賴後端的 is_matched 標記
+          // 只根據實際顯示在媒合結果中的正取學生來判斷，不依賴後端的 is_matched 標記
+          // 備取學生不應該被視為已錄取，所以他們仍然可以拖移和選取
           let isMatched = false;
           if (allCompaniesData && allCompaniesData.length > 0) {
             for (const company of allCompaniesData) {
               for (const job of company.jobs || []) {
-                // 檢查正取名單
+                // 只檢查正取名單，備取不等於錄取
                 const regulars = job.regulars || [];
                 const inRegulars = regulars.some(s => {
                   const sId = s.student_id || s.id;
                   return sId && sId.toString() === studentId.toString();
                 });
                 
-                // 檢查備取名單
-                const reserves = job.reserves || [];
-                const inReserves = reserves.some(s => {
-                  const sId = s.student_id || s.id;
-                  return sId && sId.toString() === studentId.toString();
-                });
-                
-                if (inRegulars || inReserves) {
+                if (inRegulars) {
                   isMatched = true;
                   break;
                 }
@@ -1806,7 +1817,8 @@
             }
           }
           
-          // 更新學生的 is_matched 狀態（只根據實際顯示的媒合結果）
+          // 更新學生的 is_matched 狀態（只根據實際顯示的正取結果）
+          // 備取學生不應該被標記為 is_matched，所以他們仍然可以拖移和選取
           student.is_matched = isMatched;
           
           // 如果班級名稱包含「忠」，放在左側
@@ -1894,14 +1906,17 @@
             ? `<span class="badge badge-reserve" style="margin-left: 8px;">備取${reserveInfo.reserveOrder}</span>`
             : '';
           
-          // 如果學生已在媒合結果中，添加 matched class 並禁用拖放
+          // 如果學生已在媒合結果中（正取），添加 matched class 並禁用拖放
+          // 備取學生不應該被視為已錄取，所以他們仍然可以拖放和選取
           const matchedClass = isMatched ? 'matched' : '';
           const draggableAttr = isMatched ? 'draggable="false"' : 'draggable="true"';
           const dragStartHandler = isMatched ? '' : 'ondragstart="handleDragStart(event)"';
           const dragEndHandler = isMatched ? '' : 'ondragend="handleDragEnd(event)"';
           const titleText = isMatched 
-            ? '此學生已在媒合結果中' 
-            : '點擊查看志願序，拖放此學生到公司職缺中';
+            ? '此學生已在媒合結果中（正取）' 
+            : (isReserve 
+              ? '點擊查看志願序，拖放此學生到公司職缺中（備取不等於錄取）' 
+              : '點擊查看志願序，拖放此學生到公司職缺中');
           
           return `
             <div class="unmatched-student-item ${matchedClass}" 
@@ -2553,7 +2568,8 @@
         const data = await res.json();
         if (data.success) {
           showToast('已調整位置', 'success');
-          loadMatchingResults();
+          await loadMatchingResults(false);
+          await loadUnmatchedStudents();
         } else {
           showToast(data.message || '調整失敗', 'error');
         }
@@ -2589,7 +2605,8 @@
         const data = await res.json();
         if (data.success) {
           showToast('已提升為正取', 'success');
-          loadMatchingResults();
+          await loadMatchingResults(false);
+          await loadUnmatchedStudents();
         } else {
           showToast(data.message || '提升失敗', 'error');
         }
@@ -2615,24 +2632,19 @@
         }
       });
 
-      // 收集已經在媒合結果中的所有學生ID（所有公司的所有職缺的正取和備取）
+      // 收集已經在媒合結果中的正取學生ID（只排除正取學生，備取學生仍然可以選取）
+      // 備取不等於錄取，所以備取學生應該仍然可以選取
       const matchedStudentIds = new Set();
       allCompaniesData.forEach(company => {
         company.jobs.forEach(job => {
-          // 收集正取學生
+          // 只收集正取學生，備取學生不應該被排除
           if (job.regulars && job.regulars.length > 0) {
             job.regulars.forEach(student => {
               const studentId = student.student_id || student.id;
               if (studentId) matchedStudentIds.add(String(studentId));
             });
           }
-          // 收集備取學生
-          if (job.reserves && job.reserves.length > 0) {
-            job.reserves.forEach(student => {
-              const studentId = student.student_id || student.id;
-              if (studentId) matchedStudentIds.add(String(studentId));
-            });
-          }
+          // 不收集備取學生，因為備取不等於錄取，備取學生仍然可以選取
         });
       });
 
@@ -2769,8 +2781,12 @@
 
           const data = await res.json();
           if (data.success) {
-            loadMatchingResults();
-            loadUnmatchedStudents();
+            // 先載入媒合結果，確保 allCompaniesData 更新
+            await loadMatchingResults(false); // 不顯示載入動畫，避免閃爍
+            // 然後載入學生列表，此時 allCompaniesData 已經是最新的
+            await loadUnmatchedStudents();
+            // 顯示成功提示
+            showToast('學生已成功添加到媒合結果', 'success');
           } else {
             showToast(data.message || '添加失敗', 'error');
           }
@@ -2808,7 +2824,8 @@
             const data = await res.json();
             if (data.success) {
               showToast('已從備取名單補上', 'success');
-              loadMatchingResults();
+              await loadMatchingResults(false);
+              await loadUnmatchedStudents();
             } else {
               showToast(data.message || '提升失敗', 'error');
             }
@@ -2869,7 +2886,8 @@
         const data = await res.json();
         if (data.success) {
           showToast('已從備取名單補上', 'success');
-          loadMatchingResults();
+          await loadMatchingResults(false);
+          await loadUnmatchedStudents();
         } else {
           showToast(data.message || '補上失敗', 'error');
         }
@@ -2880,13 +2898,13 @@
     }
 
     // 顯示提示訊息
-    function showToast(message, type = 'info') {
+    function showToast(message, type = 'info', duration = 3000) {
       const toast = document.getElementById('toast');
       toast.textContent = message;
       toast.className = `toast ${type} show`;
       setTimeout(() => {
         toast.classList.remove('show');
-      }, 3000);
+      }, duration);
     }
 
     // 顯示名額已滿的彈跳視窗
@@ -3454,8 +3472,12 @@
         
         if (data.success) {
           // 重新載入媒合結果和未匹配學生列表，確保資料同步
-          await loadMatchingResults();
+          // 先載入媒合結果，確保 allCompaniesData 更新
+          await loadMatchingResults(false); // 不顯示載入動畫，避免閃爍
+          // 然後載入學生列表，此時 allCompaniesData 已經是最新的
           await loadUnmatchedStudents();
+          // 顯示成功提示
+          showToast('學生已成功添加到媒合結果', 'success');
         } else {
           showToast(data.message || '添加失敗', 'error');
         }

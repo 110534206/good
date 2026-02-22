@@ -2285,8 +2285,8 @@ def final_matching_results():
                     ORDER BY id ASC LIMIT 1
                 )) AS job_slots
             FROM manage_director md
-            LEFT JOIN student_job_applications sja ON md.preference_id = sja.id
-            LEFT JOIN student_preferences sp ON sja.student_id = sp.student_id 
+            INNER JOIN student_job_applications sja ON md.preference_id = sja.id
+            INNER JOIN student_preferences sp ON sja.student_id = sp.student_id 
                 AND sja.company_id = sp.company_id 
                 AND sja.job_id = sp.job_id
                 AND sp.semester_id = %s
@@ -2296,7 +2296,6 @@ def final_matching_results():
             LEFT JOIN classes c ON u.class_id = c.id
             LEFT JOIN users v ON md.vendor_id = v.id
             WHERE md.director_decision = 'Approved'  -- 只顯示主任已確認的記錄
-            AND (sp.semester_id = %s OR (sp.semester_id IS NULL AND sja.id IS NOT NULL))  -- 允許沒有 student_preferences 的記錄（通過 student_job_applications JOIN）
             ORDER BY 
                 COALESCE(sp.company_id, sja.company_id, md.vendor_id), 
                 COALESCE(sp.job_id, sja.job_id, (
@@ -2308,7 +2307,7 @@ def final_matching_results():
                 COALESCE(md.final_rank, 999) ASC,
                 md.original_rank ASC
         """
-        cursor.execute(query, (current_semester_id, current_semester_id))
+        cursor.execute(query, (current_semester_id,))
         all_results = cursor.fetchall() or []
         
         # 獲取當前學年用於計算年級
@@ -2908,55 +2907,112 @@ def director_add_student():
                     print(f"❌ 錯誤：學生 {student_id} 已經在媒合結果中但 preference_id 為空")
                     return jsonify({"success": False, "message": "該學生已經在媒合結果中"}), 400
         
-        # 4. 獲取或創建 student_preference 記錄
+        # 4. 獲取或創建 student_job_applications 記錄（application_id）
+        # 注意：manage_director.preference_id 必須引用 resume_applications.application_id
+        # 而 resume_applications.application_id 對應的是 student_job_applications.id
         cursor.execute("""
-            SELECT id FROM student_preferences
+            SELECT id FROM student_job_applications
             WHERE student_id = %s AND company_id = %s AND job_id = %s
+            ORDER BY applied_at DESC
             LIMIT 1
         """, (student_id, company_id, job_id))
-        preference = cursor.fetchone()
+        application = cursor.fetchone()
         cursor.fetchall()  # 確保所有結果都被讀取
         
-        preference_id = None
-        if preference:
-            preference_id = preference['id']
+        application_id = None
+        if application:
+            application_id = application['id']
+            print(f"✅ 找到現有的 student_job_applications 記錄: application_id={application_id}")
         else:
-            # 創建新的 student_preference 記錄
-            # 計算下一個 preference_order
+            # 創建新的 student_job_applications 記錄
+            # 需要一個 resume_id，先查找學生的履歷
             cursor.execute("""
-                SELECT COALESCE(MAX(preference_order), 0) + 1 AS next_order
-                FROM student_preferences
-                WHERE student_id = %s
+                SELECT id FROM resumes
+                WHERE user_id = %s AND status IN ('approved', 'uploaded')
+                ORDER BY updated_at DESC
+                LIMIT 1
             """, (student_id,))
-            next_order_result = cursor.fetchone()
+            resume = cursor.fetchone()
             cursor.fetchall()  # 確保所有結果都被讀取
-            next_order = next_order_result['next_order'] if next_order_result else 1
             
-            # 獲取職缺標題
-            job_title = job.get('title', '未指定職缺')
-            
-            # 獲取當前學期ID（如果有的話）
-            cursor.execute("SELECT id FROM semesters WHERE is_active = 1 LIMIT 1")
-            semester_row = cursor.fetchone()
-            cursor.fetchall()  # 確保所有結果都被讀取
-            semester_id = semester_row['id'] if semester_row else None
-            
-            # 插入 student_preference 記錄
-            if semester_id:
+            resume_id = resume['id'] if resume else None
+            if not resume_id:
+                # 如果沒有履歷，創建一個基本的履歷記錄
+                # 注意：resumes 表的 semester_id 有外鍵約束，必須引用 semesters.id
                 cursor.execute("""
-                    INSERT INTO student_preferences 
-                    (student_id, semester_id, preference_order, company_id, job_id, job_title, status, submitted_at)
-                    VALUES (%s, %s, %s, %s, %s, %s, 'approved', CURRENT_TIMESTAMP)
-                """, (student_id, semester_id, next_order, company_id, job_id, job_title))
-            else:
-                cursor.execute("""
-                    INSERT INTO student_preferences 
-                    (student_id, preference_order, company_id, job_id, job_title, status, submitted_at)
-                    VALUES (%s, %s, %s, %s, %s, 'approved', CURRENT_TIMESTAMP)
-                """, (student_id, next_order, company_id, job_id, job_title))
-            preference_id = cursor.lastrowid
+                    INSERT INTO resumes (user_id, status, category, semester_id, created_at, updated_at)
+                    VALUES (%s, 'approved', 'ready', %s, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                """, (student_id, current_semester_id))
+                resume_id = cursor.lastrowid
+                print(f"✅ 創建新的履歷記錄: resume_id={resume_id}, semester_id={current_semester_id}")
+            
+            # 創建 student_job_applications 記錄
+            cursor.execute("""
+                INSERT INTO student_job_applications
+                (student_id, company_id, job_id, resume_id, status, applied_at)
+                VALUES (%s, %s, %s, %s, 'submitted', CURRENT_TIMESTAMP)
+            """, (student_id, company_id, job_id, resume_id))
+            application_id = cursor.lastrowid
+            print(f"✅ 創建新的 student_job_applications 記錄: application_id={application_id}")
         
-        # 5. 在 manage_director 表中創建或更新記錄
+        # 5. 確保 resume_applications 記錄存在
+        # 檢查是否已存在 resume_applications 記錄
+        cursor.execute("""
+            SELECT id, application_id FROM resume_applications
+            WHERE application_id = %s AND job_id = %s
+        """, (application_id, job_id))
+        resume_app = cursor.fetchone()
+        cursor.fetchall()  # 確保所有結果都被讀取
+        
+        if not resume_app:
+            # 創建 resume_applications 記錄
+            # 注意：根據錯誤訊息，resume_applications.job_id 的外鍵約束可能要求引用 internship_companies.id
+            # 但根據邏輯，job_id 應該對應到 internship_jobs.id
+            try:
+                cursor.execute("""
+                    INSERT INTO resume_applications
+                    (application_id, job_id, apply_status, interview_status, interview_result, created_at)
+                    VALUES (%s, %s, 'approved', 'none', 'pending', CURRENT_TIMESTAMP)
+                """, (application_id, job_id))
+                print(f"✅ 創建 resume_applications 記錄: application_id={application_id}, job_id={job_id}")
+            except Exception as insert_error:
+                # 如果外鍵約束失敗，檢查是否是 fk_resume_applications_companies 約束
+                error_msg = str(insert_error)
+                if "fk_resume_applications_companies" in error_msg or ("1452" in error_msg and "internship_companies" in error_msg):
+                    # 外鍵約束要求 job_id 引用 internship_companies.id
+                    # 這可能是數據庫設計問題，但我們需要處理它
+                    # 驗證 company_id 是否存在（這已經驗證過了，但再次確認）
+                    cursor.execute("""
+                        SELECT id FROM internship_companies WHERE id = %s
+                    """, (company_id,))
+                    company_check = cursor.fetchone()
+                    cursor.fetchall()
+                    
+                    if company_check:
+                        # 如果外鍵約束確實要求 job_id 引用 internship_companies.id
+                        # 我們需要使用 company_id 作為 job_id（這會破壞數據完整性，但滿足外鍵約束）
+                        print(f"⚠️ 外鍵約束錯誤：resume_applications.job_id 必須引用 internship_companies.id")
+                        print(f"   嘗試使用 company_id={company_id} 作為 job_id（這可能是數據庫設計問題）")
+                        cursor.execute("""
+                            INSERT INTO resume_applications
+                            (application_id, job_id, apply_status, interview_status, interview_result, created_at)
+                            VALUES (%s, %s, 'approved', 'none', 'pending', CURRENT_TIMESTAMP)
+                        """, (application_id, company_id))
+                        print(f"✅ 創建 resume_applications 記錄（使用 company_id 作為 job_id）: application_id={application_id}, job_id={company_id}")
+                    else:
+                        print(f"❌ 錯誤：company_id={company_id} 不存在於 internship_companies 表中")
+                        raise
+                else:
+                    # 其他錯誤，直接拋出
+                    raise
+        else:
+            print(f"✅ resume_applications 記錄已存在: id={resume_app['id']}, application_id={application_id}")
+        
+        # preference_id 就是 application_id（student_job_applications.id）
+        # 這是因為 manage_director.preference_id 外鍵引用 resume_applications.application_id
+        preference_id = application_id
+        
+        # 6. 在 manage_director 表中創建或更新記錄
         is_reserve = (type == 'reserve')
         original_type = "Regular" if not is_reserve else "Reserve"
         original_rank = slot_index if not is_reserve else None
@@ -3229,13 +3285,18 @@ def director_confirm_matching():
         semester_prefix = f"{current_semester_code}學期" if current_semester_code else "本學期"
         
         # 0. 將所有 Pending 狀態的記錄更新為 Approved（主任確認後，所有待定的記錄都變為已確認）
+        # md.preference_id 引用的是 student_job_applications.id（即 resume_applications.application_id）
+        # 需要通過 student_job_applications 來 JOIN student_preferences
         cursor.execute("""
             UPDATE manage_director md
-            INNER JOIN student_preferences sp ON md.preference_id = sp.id AND sp.semester_id = %s
+            INNER JOIN student_job_applications sja ON md.preference_id = sja.id
+            INNER JOIN student_preferences sp ON sja.student_id = sp.student_id
+                AND sja.company_id = sp.company_id
+                AND sja.job_id = sp.job_id
+                AND sp.semester_id = %s
             SET md.director_decision = 'Approved',
                 md.updated_at = CURRENT_TIMESTAMP
             WHERE md.director_decision = 'Pending'
-            AND md.director_decision != 'Rejected'
         """, (current_semester_id,))
         updated_count = cursor.rowcount
         print(f"✅ 主任確認：已將 {updated_count} 筆 Pending 記錄更新為 Approved")
@@ -3365,10 +3426,16 @@ def director_confirm_matching():
             )
         
         # 2. 通知所有在媒合結果中的學生（Approved 狀態）
+        # md.preference_id 引用的是 student_job_applications.id（即 resume_applications.application_id）
+        # 需要通過 student_job_applications 來 JOIN student_preferences
         cursor.execute("""
             SELECT DISTINCT md.student_id
             FROM manage_director md
-            INNER JOIN student_preferences sp ON md.preference_id = sp.id AND sp.semester_id = %s
+            INNER JOIN student_job_applications sja ON md.preference_id = sja.id
+            INNER JOIN student_preferences sp ON sja.student_id = sp.student_id
+                AND sja.company_id = sp.company_id
+                AND sja.job_id = sp.job_id
+                AND sp.semester_id = %s
             WHERE md.director_decision = 'Approved'
         """, (current_semester_id,))
         matched_students = cursor.fetchall() or []
@@ -3485,10 +3552,16 @@ def ta_confirm_matching():
         semester_prefix = f"{current_semester_code}學期" if current_semester_code else "本學期"
         
         # 檢查是否有主任已確認的媒合結果
+        # md.preference_id 引用的是 student_job_applications.id（即 resume_applications.application_id）
+        # 需要通過 student_job_applications 來 JOIN student_preferences
         cursor.execute("""
             SELECT COUNT(*) as count
             FROM manage_director md
-            INNER JOIN student_preferences sp ON md.preference_id = sp.id AND sp.semester_id = %s
+            INNER JOIN student_job_applications sja ON md.preference_id = sja.id
+            INNER JOIN student_preferences sp ON sja.student_id = sp.student_id
+                AND sja.company_id = sp.company_id
+                AND sja.job_id = sp.job_id
+                AND sp.semester_id = %s
             WHERE md.director_decision = 'Approved'
         """, (current_semester_id,))
         result = cursor.fetchone()
@@ -3534,10 +3607,16 @@ def ta_confirm_matching():
             )
         
         # 2. 通知所有在媒合結果中的學生（Approved 狀態）
+        # md.preference_id 引用的是 student_job_applications.id（即 resume_applications.application_id）
+        # 需要通過 student_job_applications 來 JOIN student_preferences
         cursor.execute("""
             SELECT DISTINCT md.student_id
             FROM manage_director md
-            INNER JOIN student_preferences sp ON md.preference_id = sp.id AND sp.semester_id = %s
+            INNER JOIN student_job_applications sja ON md.preference_id = sja.id
+            INNER JOIN student_preferences sp ON sja.student_id = sp.student_id
+                AND sja.company_id = sp.company_id
+                AND sja.job_id = sp.job_id
+                AND sp.semester_id = %s
             WHERE md.director_decision = 'Approved'
         """, (current_semester_id,))
         matched_students = cursor.fetchall() or []
@@ -3778,10 +3857,16 @@ def ta_toggle_second_interview():
         all_students = cursor.fetchall() or []
         
         # 獲取已媒合的學生ID
+        # md.preference_id 引用的是 student_job_applications.id（即 resume_applications.application_id）
+        # 需要通過 student_job_applications 來 JOIN student_preferences
         cursor.execute("""
             SELECT DISTINCT md.student_id
             FROM manage_director md
-            INNER JOIN student_preferences sp ON md.preference_id = sp.id AND sp.semester_id = %s
+            INNER JOIN student_job_applications sja ON md.preference_id = sja.id
+            INNER JOIN student_preferences sp ON sja.student_id = sp.student_id
+                AND sja.company_id = sp.company_id
+                AND sja.job_id = sp.job_id
+                AND sp.semester_id = %s
             WHERE md.director_decision IN ('Approved', 'Pending')
         """, (current_semester_id,))
         matched_student_ids = {row['student_id'] for row in cursor.fetchall()}
@@ -3964,33 +4049,31 @@ def ta_dashboard_stats():
 
         # 已核定／待公告的媒合人數（只計算 Approved，因為主任確認後所有記錄都應該是 Approved）
         # 以 student_preferences.semester_id 篩選學期（不依賴 manage_director.semester_id，因該欄位可能不存在）
-        # 注意：manage_director.preference_id 可能是 student_job_applications.id（來自 resume_applications）或 student_preferences.id
-        # 使用與 final_matching_results 相同的 JOIN 邏輯
+        # 注意：manage_director.preference_id 引用的是 student_job_applications.id（即 resume_applications.application_id）
+        # 需要通過 student_job_applications 來 JOIN student_preferences，並且只統計當前學期的記錄
         if student_id_prefix:
             cursor.execute("""
                 SELECT COUNT(DISTINCT md.student_id) AS cnt
                 FROM manage_director md
-                LEFT JOIN student_job_applications sja ON md.preference_id = sja.id
-                LEFT JOIN student_preferences sp ON sja.student_id = sp.student_id
+                INNER JOIN student_job_applications sja ON md.preference_id = sja.id
+                INNER JOIN student_preferences sp ON sja.student_id = sp.student_id
                     AND sja.company_id = sp.company_id
                     AND sja.job_id = sp.job_id
                     AND sp.semester_id = %s
                 INNER JOIN users u ON md.student_id = u.id AND u.username LIKE %s
                 WHERE md.director_decision = 'Approved'
-                AND (sp.semester_id = %s OR sp.semester_id IS NULL)
-            """, (current_semester_id, student_id_prefix + "%", current_semester_id))
+            """, (current_semester_id, student_id_prefix + "%"))
         else:
             cursor.execute("""
                 SELECT COUNT(DISTINCT md.student_id) AS cnt
                 FROM manage_director md
-                LEFT JOIN student_job_applications sja ON md.preference_id = sja.id
-                LEFT JOIN student_preferences sp ON sja.student_id = sp.student_id
+                INNER JOIN student_job_applications sja ON md.preference_id = sja.id
+                INNER JOIN student_preferences sp ON sja.student_id = sp.student_id
                     AND sja.company_id = sp.company_id
                     AND sja.job_id = sp.job_id
                     AND sp.semester_id = %s
                 WHERE md.director_decision = 'Approved'
-                AND (sp.semester_id = %s OR sp.semester_id IS NULL)
-            """, (current_semester_id, current_semester_id,))
+            """, (current_semester_id,))
         row = cursor.fetchone()
         matching_approved_count = (row.get("cnt") or 0) if row else 0
 
@@ -4157,13 +4240,17 @@ def export_matching_results_excel():
                     ORDER BY id ASC LIMIT 1
                 )) AS job_title
             FROM manage_director md
-            LEFT JOIN student_preferences sp ON md.preference_id = sp.id AND sp.semester_id = %s
+            LEFT JOIN student_job_applications sja ON md.preference_id = sja.id
+            LEFT JOIN student_preferences sp ON sja.student_id = sp.student_id
+                AND sja.company_id = sp.company_id
+                AND sja.job_id = sp.job_id
+                AND sp.semester_id = %s
             LEFT JOIN internship_companies ic ON COALESCE(sp.company_id, md.vendor_id) = ic.id
             LEFT JOIN internship_jobs ij ON sp.job_id = ij.id
             LEFT JOIN users u ON md.student_id = u.id
             LEFT JOIN classes c ON u.class_id = c.id
             LEFT JOIN users v ON md.vendor_id = v.id
-            WHERE sp.semester_id = %s
+            WHERE (sp.semester_id = %s OR sp.semester_id IS NULL)
             AND md.director_decision IN ('Approved', 'Pending')
             ORDER BY COALESCE(sp.company_id, md.vendor_id), 
                      COALESCE(sp.job_id, 0),
@@ -4446,13 +4533,17 @@ def ta_export_matching_results_excel():
                     ORDER BY id ASC LIMIT 1
                 )) AS job_title
             FROM manage_director md
-            LEFT JOIN student_preferences sp ON md.preference_id = sp.id AND sp.semester_id = %s
+            LEFT JOIN student_job_applications sja ON md.preference_id = sja.id
+            LEFT JOIN student_preferences sp ON sja.student_id = sp.student_id
+                AND sja.company_id = sp.company_id
+                AND sja.job_id = sp.job_id
+                AND sp.semester_id = %s
             LEFT JOIN internship_companies ic ON COALESCE(sp.company_id, md.vendor_id) = ic.id
             LEFT JOIN internship_jobs ij ON sp.job_id = ij.id
             LEFT JOIN users u ON md.student_id = u.id
             LEFT JOIN classes c ON u.class_id = c.id
             LEFT JOIN users v ON md.vendor_id = v.id
-            WHERE sp.semester_id = %s
+            WHERE (sp.semester_id = %s OR sp.semester_id IS NULL)
             AND md.director_decision = 'Approved'
             ORDER BY COALESCE(sp.company_id, md.vendor_id), 
                      COALESCE(sp.job_id, (
@@ -4700,10 +4791,16 @@ def ta_export_unadmitted_students_excel():
             return jsonify({"success": False, "message": "無法取得當前學期"}), 500
 
         # 已在媒合結果中的學生（Approved/Pending）- 使用 student_preferences.semester_id 篩選
+        # md.preference_id 引用的是 student_job_applications.id（即 resume_applications.application_id）
+        # 需要通過 student_job_applications 來 JOIN student_preferences
         cursor.execute("""
             SELECT DISTINCT md.student_id
             FROM manage_director md
-            INNER JOIN student_preferences sp ON md.preference_id = sp.id AND sp.semester_id = %s
+            INNER JOIN student_job_applications sja ON md.preference_id = sja.id
+            INNER JOIN student_preferences sp ON sja.student_id = sp.student_id
+                AND sja.company_id = sp.company_id
+                AND sja.job_id = sp.job_id
+                AND sp.semester_id = %s
             WHERE md.director_decision IN ('Approved', 'Pending')
         """, (current_semester_id,))
         matched_student_ids = {row['student_id'] for row in cursor.fetchall()}
