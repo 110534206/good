@@ -1,0 +1,797 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>智慧實習平台 | 實習生／未錄取名單管理</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <style>
+    :root {
+      --brand-blue: #0066cc;
+      --brand-blue-dark: #024689;
+      --bg-light: #f5f8ff;
+      --border-light: #dbe4f4;
+      --text-dark: #1f2937;
+      --text-muted: #6b7280;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: "Noto Sans TC", "Segoe UI", sans-serif;
+      background: var(--bg-light);
+      color: var(--text-dark);
+      min-height: 100vh;
+    }
+
+    header {
+      background: linear-gradient(135deg, #0055a8 0%, #006acb 50%, #004f94 100%);
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      box-shadow: 0 8px 20px rgba(0, 68, 148, 0.35);
+    }
+
+    .topbar {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 18px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #fff;
+      position: relative;
+    }
+
+    .topbar h1 {
+      font-size: 1.5rem;
+      margin: 0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      color: #fff;
+      flex: 1;
+    }
+
+    .topbar h1 .header-title {
+      flex: 1;
+      text-align: center;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+    }
+
+    .topbar h1 i { color: #ffe27a; }
+
+    #menu-btn {
+      width: 30px;
+      height: 22px;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      background: none;
+      border: none;
+      padding: 0;
+    }
+
+    #menu-btn span {
+      display: block;
+      width: 100%;
+      height: 3px;
+      background-color: white;
+      border-radius: 2px;
+    }
+
+    #side-menu {
+      position: fixed;
+      top: 0;
+      left: 0;
+      height: 100vh;
+      width: 320px;
+      max-width: 80vw;
+      background-color: rgba(10, 10, 10, 0.95);
+      backdrop-filter: blur(6px);
+      box-shadow: 3px 0 12px rgba(0, 0, 0, 0.6);
+      padding: 2rem 1.5rem;
+      transform: translateX(-100%);
+      transition: transform 0.3s ease-in-out;
+      z-index: 1300;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      color: #fff;
+      user-select: none;
+    }
+
+    #side-menu.open { transform: translateX(0); }
+
+    #close-btn {
+      position: absolute;
+      top: 2rem;
+      right: 1.6rem;
+      font-size: 2.8rem;
+      background: none;
+      border: none;
+      color: #fff;
+      cursor: pointer;
+      line-height: 2.4rem;
+      height: 2.5rem;
+      width: 2.5rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 10;
+    }
+
+    #side-menu h2 { margin: 0 0 1.5rem 0; font-weight: 700; font-size: 1.6rem; color: #fff; }
+    #side-menu a {
+      display: block;
+      width: 100%;
+      padding: 0.6rem 0;
+      font-size: 1.1rem;
+      color: #e2e8f0;
+      text-decoration: none;
+      border-radius: 4px;
+      transition: background-color 0.2s ease;
+    }
+    #side-menu a:hover { background-color: rgba(255, 255, 255, 0.18); color: #fff; }
+
+    main {
+      max-width: 1100px;
+      margin: 24px auto 60px;
+      padding: 0 24px;
+    }
+
+    .page-intro {
+      text-align: center;
+      margin-bottom: 24px;
+    }
+
+    .page-intro h2 {
+      font-size: 1.5rem;
+      color: var(--brand-blue-dark);
+      margin: 0 0 8px 0;
+    }
+
+    .page-intro p {
+      color: var(--text-muted);
+      font-size: 1rem;
+      margin: 0;
+    }
+
+    .panel {
+      background: #fff;
+      border-radius: 16px;
+      padding: 24px;
+      box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
+      border: 1px solid var(--border-light);
+      margin-bottom: 24px;
+    }
+
+    .panel-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 16px;
+      padding-bottom: 12px;
+      border-bottom: 2px solid var(--bg-light);
+    }
+
+    .panel-header h3 {
+      font-size: 1.2rem;
+      margin: 0;
+      color: var(--brand-blue-dark);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .panel-header h3 i { color: var(--brand-blue); }
+
+    .stats-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 16px;
+      margin-bottom: 20px;
+    }
+
+    .stat-card {
+      background: var(--bg-light);
+      border: 1px solid var(--border-light);
+      border-radius: 12px;
+      padding: 16px 20px;
+      min-width: 140px;
+    }
+
+    .stat-card .label {
+      font-size: 0.9rem;
+      color: var(--text-muted);
+      margin-bottom: 4px;
+    }
+
+    .stat-card .value {
+      font-size: 1.5rem;
+      font-weight: 700;
+      color: var(--brand-blue-dark);
+    }
+
+    .filter-bar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      align-items: center;
+      margin-bottom: 16px;
+    }
+
+    .filter-bar input {
+      padding: 10px 14px;
+      border: 1px solid var(--border-light);
+      border-radius: 10px;
+      font-size: 0.95rem;
+      min-width: 200px;
+    }
+
+    .filter-bar select {
+      padding: 10px 14px;
+      border: 1px solid var(--border-light);
+      border-radius: 10px;
+      font-size: 0.95rem;
+      min-width: 200px;
+      background: #fff;
+    }
+
+    .table-wrapper {
+      overflow-x: auto;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    th, td {
+      padding: 12px 14px;
+      text-align: left;
+      border-bottom: 1px solid var(--border-light);
+      font-size: 0.95rem;
+    }
+
+    th {
+      background: rgba(0, 102, 204, 0.08);
+      font-weight: 600;
+      color: var(--brand-blue-dark);
+    }
+
+    tbody tr:hover {
+      background: rgba(0, 102, 204, 0.04);
+    }
+
+    .badge-matched {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      background: rgba(34, 197, 94, 0.15);
+      color: #15803d;
+    }
+
+    .badge-unmatched {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      background: rgba(234, 179, 8, 0.2);
+      color: #a16207;
+    }
+
+    .loading {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 32px;
+      color: var(--text-muted);
+      font-size: 0.95rem;
+    }
+
+    .loading .spinner {
+      width: 20px;
+      height: 20px;
+      border: 2px solid rgba(0, 102, 204, 0.2);
+      border-top-color: var(--brand-blue);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .empty-state {
+      text-align: center;
+      padding: 40px 24px;
+      color: var(--text-muted);
+    }
+
+    .empty-state i {
+      font-size: 2.5rem;
+      margin-bottom: 12px;
+      color: rgba(0, 102, 204, 0.35);
+    }
+
+    .error-msg {
+      color: #b91c1c;
+      font-size: 0.95rem;
+      padding: 16px;
+    }
+
+    .semester-banner {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 12px;
+      padding: 8px 16px;
+      background: rgba(0, 102, 204, 0.1);
+      border: 1px solid var(--border-light);
+      border-radius: 8px;
+      font-size: 0.95rem;
+      color: var(--brand-blue-dark);
+      font-weight: 600;
+    }
+    .semester-banner i {
+      color: var(--brand-blue);
+    }
+    .semester-filter-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+    .semester-filter-row .semester-filter-label {
+      font-weight: 600;
+      color: var(--brand-blue-dark);
+    }
+    .semester-filter-row #semesterSelect {
+      padding: 6px 12px;
+      border: 1px solid var(--border-light);
+      border-radius: 8px;
+      font-size: 1rem;
+      font-weight: 600;
+      color: var(--brand-blue-dark);
+      background: #fff;
+      min-width: 90px;
+      cursor: pointer;
+    }
+    .semester-filter-row #semesterSelect:disabled {
+      cursor: default;
+      opacity: 0.9;
+    }
+    .btn-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 18px;
+      background: var(--brand-blue);
+      color: #fff;
+      border: none;
+      border-radius: 10px;
+      font-size: 0.95rem;
+      font-weight: 600;
+      text-decoration: none;
+      cursor: pointer;
+      transition: all 0.3s ease;
+    }
+
+    .btn-link:hover {
+      background: var(--brand-blue-dark);
+      transform: translateY(-1px);
+    }
+
+    @media (max-width: 768px) {
+      main { padding: 0 16px; }
+      .panel { padding: 18px; }
+      .filter-bar input, .filter-bar select { min-width: 100%; }
+      th, td { padding: 10px 8px; font-size: 0.9rem; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="topbar">
+      <h1>
+        <button id="menu-btn" title="選單" role="button" tabindex="0" aria-label="開啟側邊選單">
+          <span></span><span></span><span></span>
+        </button>
+        <div class="header-title">實習生／未錄取名單管理</div>
+        <div style="width: 30px;"></div>
+      </h1>
+    </div>
+  </header>
+
+  <nav id="side-menu" aria-hidden="true" role="navigation" aria-label="功能選單">
+    <button id="close-btn" aria-label="關閉功能選單">×</button>
+     <h2>功能選單</h2>
+    <a href="/ta_home">首頁</a>
+    <a href="/profile">個人資料</a>
+    <a href="/notifications">公告</a>
+    <a href="/ta/statistics/manage_companies">實習投遞流程管理</a>
+    <a href="/ta/interview_schedule">行事曆</a>
+    <a href="/admin/absence_default_range">缺勤預設學期範圍設定</a>
+    <a href="/ta/upload_standard_courses">專業核心科目管理</a>
+    <a href="/ta_assistant_dashboard">媒合結果管理中心</a>
+    <a href="/logout">登出</a>
+  </nav>
+
+    <main>
+    <div class="page-intro">
+      <!-- 顯示固定學期：1132（移除下拉選單） -->
+      <div class="semester-filter-row">
+        <div class="semester-banner" role="status" aria-live="polite" style="display: inline-flex;">
+          <i class="fa-solid fa-calendar-alt"></i>
+          <span id="semesterText">以下名單為 1132 學期（113學年第2學期）</span>
+        </div>
+      </div>
+    </div>
+
+    <section class="panel" aria-label="統計與名單">
+      <div class="panel-header">
+        <h3><i class="fa-solid fa-list"></i> 未錄取學生名單</h3>
+      </div>
+
+      <div id="statsRow" class="stats-row">
+        <div class="stat-card">
+          <div class="label">學生總數</div>
+          <div id="statTotal" class="value">-</div>
+        </div>
+        <div class="stat-card">
+          <div class="label">未錄取人數</div>
+          <div id="statUnadmitted" class="value">-</div>
+        </div>
+      </div>
+
+      <div class="filter-bar">
+        <input type="search" id="searchInput" placeholder="搜尋姓名或學號..." aria-label="搜尋學生">
+        <select id="classSelect" aria-label="選擇班級">
+          <option value="">全部班級</option>
+        </select>
+        <button id="exportUnadmittedBtn" class="btn-link" type="button" style="margin-left:auto;">
+          <i class="fa-solid fa-file-excel"></i> 匯出未錄取名單 (Excel)
+        </button>
+      </div>
+
+      <div id="tableContainer" class="table-wrapper">
+        <div class="loading" id="loadingState">
+          <span class="spinner"></span>
+          <span>載入名單中...</span>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const sideMenu = document.getElementById('side-menu');
+    const menuBtn = document.getElementById('menu-btn');
+    const closeBtn = document.getElementById('close-btn');
+    const statsRow = document.getElementById('statsRow');
+    const statTotal = document.getElementById('statTotal');
+    const statUnadmitted = document.getElementById('statUnadmitted');
+    const tableContainer = document.getElementById('tableContainer');
+    const loadingState = document.getElementById('loadingState');
+    const searchInput = document.getElementById('searchInput');
+    const classSelect = document.getElementById('classSelect');
+    const exportUnadmittedBtn = document.getElementById('exportUnadmittedBtn');
+
+    let allStudents = [];
+    let currentSemesterId = null;
+    let currentSemesterCode = null; // 當前學期代碼（用於計算年級）
+    let currentSemesterYear = null; // 當前學年（用於計算年級）
+
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text == null ? '' : text;
+      return div.innerHTML;
+    }
+
+    // 計算年級數字：根據當前學年和入學屆數
+    function calculateGradeNum(admissionYear, semesterCode) {
+      if (!admissionYear || !semesterCode) return null;
+      try {
+        const ay = parseInt(admissionYear, 10);
+        if (isNaN(ay)) return null;
+        // 從學期代碼提取學年：1132 -> 113
+        const sy = parseInt(semesterCode.substring(0, 3), 10);
+        if (isNaN(sy)) return null;
+        const gradeNum = sy - ay + 1;
+        if (gradeNum >= 1 && gradeNum <= 6) {
+          return gradeNum;
+        }
+        return null;
+      } catch (e) {
+        return null;
+      }
+    }
+
+    function getClassLabel(s) {
+      const dept = ((s && s.department) || '').trim();
+      const cls = ((s && s.class_name) || '').trim();
+      return (dept + cls).trim();
+    }
+
+    // 獲取班級顯示（將年級數字插入班級名稱中，例如：資管科四孝）
+    function getClassDisplayWithGrade(s, semesterCode) {
+      const classLabel = getClassLabel(s);
+      if (!classLabel) return '';
+      
+      const gradeNum = calculateGradeNum(s.admission_year, semesterCode);
+      if (!gradeNum) return classLabel;
+      
+      // 年級數字對應的中文
+      const gradeChars = ['', '一', '二', '三', '四', '五', '六'];
+      const gradeChar = gradeChars[gradeNum];
+      if (!gradeChar) return classLabel;
+      
+      // 在「科」和「孝/忠」之間插入年級數字
+      // 例如：「資管科孝」→「資管科四孝」
+      const match = classLabel.match(/^(.+科)(.+)$/);
+      if (match) {
+        return match[1] + gradeChar + match[2];
+      }
+      
+      // 如果格式不符合，嘗試在最後插入
+      return classLabel + gradeChar;
+    }
+
+    function populateClassOptions(students) {
+      if (!classSelect) return;
+      const prevValue = classSelect.value || '';
+
+      const map = new Map();
+      (students || []).forEach(s => {
+        if (!s) return;
+        if (!s.class_id) return;
+        const id = String(s.class_id);
+        const label = getClassLabel(s);
+        if (!label) return;
+        if (!map.has(id)) map.set(id, label);
+      });
+
+      const entries = Array.from(map.entries()).sort((a, b) => {
+        return (a[1] || '').localeCompare((b[1] || ''), 'zh-Hant');
+      });
+
+      classSelect.innerHTML =
+        '<option value="">全部班級</option>' +
+        entries
+          .map(([id, label]) => '<option value="' + escapeHtml(id) + '">' + escapeHtml(label) + '</option>')
+          .join('');
+
+      if (prevValue && map.has(prevValue)) classSelect.value = prevValue;
+      else classSelect.value = '';
+    }
+
+    function renderTable(students) {
+      if (!students.length) {
+        tableContainer.innerHTML = '<div class="empty-state"><i class="fa-solid fa-inbox"></i><div>目前沒有學生資料或無未錄取學生</div></div>';
+        return;
+      }
+
+      const rows = students.map(s => {
+        const statusClass = s.is_matched ? 'badge-matched' : 'badge-unmatched';
+        const statusText = s.is_matched ? '已媒合' : '未錄取';
+        const name = escapeHtml(s.student_name || '-');
+        const number = escapeHtml(s.student_number || '-');
+        // 班級顯示（包含年級）
+        const className = escapeHtml(getClassDisplayWithGrade(s, currentSemesterCode));
+        return '<tr><td>' + name + '</td><td>' + number + '</td><td>' + className + '</td><td><span class="' + statusClass + '">' + statusText + '</span></td></tr>';
+      }).join('');
+
+      tableContainer.innerHTML = '<table><thead><tr><th>姓名</th><th>學號</th><th>班級</th><th>狀態</th></tr></thead><tbody>' + rows + '</tbody></table>';
+    }
+
+    function updateStats(students) {
+      const list = students || [];
+      const unadmitted = list.filter(function(s) { return s && !s.is_matched; });
+      statTotal.textContent = list.length;
+      statUnadmitted.textContent = unadmitted.length;
+    }
+
+    function applyFilter() {
+      const q = (searchInput && searchInput.value.trim()) || '';
+      const lower = q.toLowerCase();
+      const classId = (classSelect && classSelect.value) ? String(classSelect.value) : '';
+
+      let filtered = allStudents;
+      if (classId) {
+        filtered = filtered.filter(s => String((s && s.class_id) || '') === classId);
+      }
+      if (q) {
+        filtered = filtered.filter(s => {
+          const name = ((s && s.student_name) || '').toLowerCase();
+          const num = ((s && s.student_number) || '').toLowerCase();
+          return name.includes(lower) || num.includes(lower);
+        });
+      }
+
+      updateStats(filtered);
+      renderTable(filtered);
+    }
+
+    // 僅顯示並鎖定學期為 1132（若 API 可取得對應 id，則帶入該 id）
+    // 已移除學期下拉，改為固定顯示 1132，故不需載入學期選項的函式。
+
+    async function loadStudents(semesterId) {
+      if (!tableContainer) return;
+      loadingState.style.display = 'flex';
+      tableContainer.innerHTML = '';
+      tableContainer.appendChild(loadingState);
+
+      try {
+        var url = '/admission/api/get_all_students';
+        if (semesterId) url += '?semester_id=' + encodeURIComponent(semesterId);
+        const res = await fetch(url, {
+          method: 'GET',
+          headers: { 'Accept': 'application/json' },
+          credentials: 'include'
+        });
+        const data = await res.json();
+
+        loadingState.style.display = 'none';
+
+        if (!res.ok || !data.success) {
+          tableContainer.innerHTML = '<div class="error-msg">無法載入名單：' + escapeHtml(data.message || res.statusText) + '</div>';
+          statTotal.textContent = '-';
+          statUnadmitted.textContent = '-';
+          var sb = document.getElementById('semesterBanner');
+          if (sb) sb.style.display = 'none';
+          return;
+        }
+
+        var semesterCode = data.semester_code || '';
+        var semesterLabel = data.semester_label || semesterCode;
+        // 從學期代碼提取學年：1132 -> 113
+        if (semesterCode && semesterCode.length >= 3) {
+          try {
+            currentSemesterYear = parseInt(semesterCode.substring(0, 3), 10);
+          } catch (e) {
+            currentSemesterYear = null;
+          }
+        }
+        var semesterSelect = document.getElementById('semesterSelect');
+        if (semesterSelect && data.semester_id) semesterSelect.value = String(data.semester_id);
+        var semesterBanner = document.getElementById('semesterBanner');
+        var semesterText = document.getElementById('semesterText');
+        if (semesterBanner && semesterText) {
+          semesterBanner.style.display = 'inline-flex';
+          if (semesterCode) {
+            var part = '以下名單為 <strong>' + escapeHtml(semesterCode) + '</strong> 學期';
+            if (semesterLabel !== semesterCode) part += '（' + escapeHtml(semesterLabel) + '）';
+            semesterText.innerHTML = part;
+          } else {
+            semesterText.textContent = '以下名單為目前系統學期（學期代碼：—）';
+          }
+        }
+
+        allStudents = data.students || [];
+        currentSemesterId = data.semester_id || null;
+        currentSemesterCode = semesterCode; // 保存當前學期代碼
+        populateClassOptions(allStudents);
+
+        applyFilter();
+      } catch (err) {
+        console.error('載入學生名單失敗', err);
+        loadingState.style.display = 'none';
+        tableContainer.innerHTML = '<div class="error-msg">載入失敗，請稍後再試</div>';
+        statTotal.textContent = '-';
+        statUnadmitted.textContent = '-';
+      }
+    }
+
+    if (menuBtn) {
+      menuBtn.addEventListener('click', () => {
+        sideMenu.classList.add('open');
+        sideMenu.setAttribute('aria-hidden', 'false');
+      });
+    }
+    if (closeBtn) {
+      closeBtn.addEventListener('click', () => {
+        sideMenu.classList.remove('open');
+        sideMenu.setAttribute('aria-hidden', 'true');
+      });
+    }
+    document.addEventListener('click', (e) => {
+      if (sideMenu && !sideMenu.contains(e.target) && menuBtn && !menuBtn.contains(e.target)) {
+        sideMenu.classList.remove('open');
+        sideMenu.setAttribute('aria-hidden', 'true');
+      }
+    });
+
+    if (searchInput) searchInput.addEventListener('input', applyFilter);
+    if (classSelect) classSelect.addEventListener('change', applyFilter);
+
+    // 匯出未錄取名單 Excel
+    if (exportUnadmittedBtn) {
+      exportUnadmittedBtn.addEventListener('click', async function () {
+        if (!allStudents.length) {
+          alert('目前沒有學生資料可匯出。');
+          return;
+        }
+
+        if (!confirm('確定要匯出「未錄取學生名單」的 Excel 檔案嗎？')) {
+          return;
+        }
+
+        exportUnadmittedBtn.disabled = true;
+        const originalText = exportUnadmittedBtn.innerHTML;
+        exportUnadmittedBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> 匯出中...';
+
+        try {
+          var exportUrl = '/admission/api/ta/export_unadmitted_students_excel';
+          const params = new URLSearchParams();
+          if (currentSemesterId) params.set('semester_id', String(currentSemesterId));
+          const classId = (classSelect && classSelect.value) ? String(classSelect.value) : '';
+          if (classId) params.set('class_id', classId);
+          const qs = params.toString();
+          if (qs) exportUrl += '?' + qs;
+
+          const res = await fetch(exportUrl, {
+            method: 'GET',
+            credentials: 'include'
+          });
+
+          if (!res.ok) {
+            let msg = res.statusText;
+            try {
+              const data = await res.json();
+              if (data && data.message) msg = data.message;
+            } catch (e) {}
+            throw new Error(msg || '匯出失敗');
+          }
+
+          const blob = await res.blob();
+          const url = window.URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+
+          const cd = res.headers.get('Content-Disposition');
+          let filename = '未錄取學生名單.xlsx';
+          if (cd) {
+            const m = cd.match(/filename[^;=\n]*=((['\"]).*?\2|[^;\n]*)/);
+            if (m && m[1]) {
+              filename = m[1].replace(/['"]/g, '');
+              if (filename.startsWith("UTF-8''")) {
+                filename = decodeURIComponent(filename.replace("UTF-8''", ''));
+              }
+            }
+          }
+
+          a.download = filename;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          window.URL.revokeObjectURL(url);
+
+          alert('✅ 未錄取學生名單已匯出。');
+        } catch (err) {
+          console.error('匯出未錄取名單失敗', err);
+          alert('❌ 匯出失敗：' + (err.message || '未知錯誤'));
+        } finally {
+          exportUnadmittedBtn.disabled = false;
+          exportUnadmittedBtn.innerHTML = originalText;
+        }
+      });
+    }
+
+    // 直接載入學生列表（後端會以系統預設學期處理），不顯示或依賴任何學期下拉選單
+    (function() {
+      loadStudents();
+    })();
+  </script>
+</body>
+</html>
