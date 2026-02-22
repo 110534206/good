@@ -2866,11 +2866,13 @@ def get_all_interview_schedules():
                 ra.interview_time,
                 ra.interview_timeEnd,
                 sja.student_id,
+                u.name AS student_name,
                 ra.application_id,
                 ra.job_id
             FROM resume_applications ra
             JOIN student_job_applications sja ON ra.application_id = sja.id
             LEFT JOIN internship_companies ic ON sja.company_id = ic.id
+            LEFT JOIN users u ON sja.student_id = u.id
             WHERE ra.interview_status = 'scheduled'
             AND ra.interview_time IS NOT NULL
             ORDER BY ra.updated_at DESC
@@ -2960,11 +2962,12 @@ def get_all_interview_schedules():
             notes = notes_match.group(1).strip() if notes_match else ''
             
             student_id = schedule.get('student_id')
+            student_name = schedule.get('student_name', '')
             # 確保 student_id 被正確提取
             if student_id is None:
                 print(f"⚠️ [all_interview_schedules] 警告：排程記錄缺少 student_id: {schedule}")
             
-            print(f"📅 [all_interview_schedules] 解析排程: 日期={interview_date}, 時間={time_start}-{time_end}, 學生ID={student_id}, 公司={company_name}, is_own={is_own}, 地點={location}, 備註={notes[:30] if notes else '無'}")
+            print(f"📅 [all_interview_schedules] 解析排程: 日期={interview_date}, 時間={time_start}-{time_end}, 學生ID={student_id}, 學生姓名={student_name}, 公司={company_name}, is_own={is_own}, 地點={location}, 備註={notes[:30] if notes else '無'}")
             
             parsed_schedules.append({
                 'date': interview_date,
@@ -2977,6 +2980,7 @@ def get_all_interview_schedules():
                 'company_name': company_name,
                 'is_own': is_own,  # 判斷是否為當前廠商的排程
                 'student_id': student_id,  # 添加學生ID
+                'student_name': student_name,  # 添加學生姓名
                 'application_id': schedule.get('application_id'),
                 'job_id': schedule.get('job_id')
             })

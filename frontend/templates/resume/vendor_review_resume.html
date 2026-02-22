@@ -2315,7 +2315,15 @@
       // 如果有其他廠商的排程，顯示提示信息（但不阻止新增）
       if (allVendorSchedules.has(dateStr)) {
         const schedules = allVendorSchedules.get(dateStr);
-        const otherSchedules = schedules.filter(s => !s.is_own);
+        // 過濾其他廠商的排程：優先通過公司名稱判斷
+        const otherSchedules = schedules.filter(s => {
+          // 優先通過公司名稱判斷（最準確）
+          if (vendorCompanyName && s.company_name) {
+            return s.company_name.trim() !== vendorCompanyName.trim();
+          }
+          // 如果沒有公司名稱信息，則使用 is_own 判斷
+          return s.is_own === false;
+        });
         
         if (otherSchedules.length > 0 && !hasOwnSchedule) {
           // 獲取其他廠商的排程信息
@@ -2365,13 +2373,22 @@
         console.log('📝 編輯模式：載入自己的排程資料');
         if (allVendorSchedules.has(dateStr)) {
           const schedules = allVendorSchedules.get(dateStr);
-          // 只過濾自己的排程：優先使用 is_own，如果沒有則通過公司名稱判斷
+          // 只過濾自己的排程：優先通過公司名稱判斷（最準確），然後檢查 is_own
           const ownSchedules = schedules.filter(s => {
+            // 優先通過公司名稱判斷（最準確）
+            if (vendorCompanyName && s.company_name) {
+              const isOwn = s.company_name.trim() === vendorCompanyName.trim();
+              // 如果公司名稱匹配，就是自己的排程（即使 is_own=false）
+              if (isOwn) return true;
+              // 如果公司名稱不匹配，即使 is_own=true 也不是自己的排程
+              if (!isOwn && s.is_own === true) {
+                console.warn(`⚠️ [openInterviewForm 編輯模式] 警告：排程 is_own=true 但公司名稱不匹配，過濾掉`);
+                return false;
+              }
+            }
+            // 如果沒有公司名稱信息，則使用 is_own 判斷
             if (s.is_own === true) return true;
             if (s.is_own === false) return false;
-            if (vendorCompanyName && s.company_name) {
-              return s.company_name.trim() === vendorCompanyName.trim();
-            }
             return false;
           });
           
@@ -2552,29 +2569,83 @@
       // 檢查是否有其他廠商已預約的時間段
       if (allVendorSchedules.has(dateStr)) {
         const schedules = allVendorSchedules.get(dateStr);
-        // 過濾掉自己的排程
-        const otherVendorSchedules = schedules.filter(s => !s.is_own);
+        // 過濾掉自己的排程：優先通過公司名稱判斷
+        const otherVendorSchedules = schedules.filter(s => {
+          // 優先通過公司名稱判斷（最準確）
+          if (vendorCompanyName && s.company_name) {
+            return s.company_name.trim() !== vendorCompanyName.trim();
+          }
+          // 如果沒有公司名稱信息，則使用 is_own 判斷
+          return s.is_own === false;
+        });
         
         if (otherVendorSchedules.length > 0) {
-          // 收集所有其他廠商的時間段
-          const timeSlots = [];
+          // 收集所有其他廠商的時間段（包含公司名稱、學生信息和完整時間信息）
+          const timeSlotsMap = new Map(); // 使用 Map 來合併相同公司和時間段的排程
+          
           otherVendorSchedules.forEach(schedule => {
+            const companyName = schedule.company_name || '其他廠商';
+            
+            // 獲取學生姓名（優先使用後端返回的 student_name，如果沒有則從 allResumes 查找）
+            let studentName = '';
+            if (schedule.student_name) {
+              // 後端已經返回學生姓名，直接使用
+              studentName = schedule.student_name;
+            } else if (schedule.student_id) {
+              // 如果後端沒有返回學生姓名，從 allResumes 查找
+              const student = allResumes.find(r => String(r.student_id || r.id) === String(schedule.student_id));
+              studentName = student ? (student.name || student.student_name || `學生${schedule.student_id}`) : `學生${schedule.student_id}`;
+            }
+            
+            if (!studentName) return; // 如果沒有學生姓名，跳過
+            
+            let timeKey = '';
+            let timeDisplay = '';
             if (schedule.time_start && schedule.time_end) {
               const startTime = schedule.time_start.substring(0, 5);
               const endTime = schedule.time_end.substring(0, 5);
-              timeSlots.push(`${startTime}-${endTime}`);
+              timeKey = `${startTime}-${endTime}`;
+              timeDisplay = timeKey;
             } else if (schedule.time_start) {
               const startTime = schedule.time_start.substring(0, 5);
-              timeSlots.push(startTime);
+              timeKey = startTime;
+              timeDisplay = startTime;
+            } else {
+              return; // 如果沒有時間，跳過
+            }
+            
+            // 使用「公司名稱 + 時間段」作為 key
+            const mapKey = `${companyName}|${timeKey}`;
+            
+            if (!timeSlotsMap.has(mapKey)) {
+              // 如果這個組合不存在，創建新條目
+              timeSlotsMap.set(mapKey, {
+                company: companyName,
+                time: timeDisplay,
+                students: [studentName],
+                time_start: schedule.time_start,
+                time_end: schedule.time_end
+              });
+            } else {
+              // 如果已存在，將學生姓名加入列表（避免重複）
+              const existing = timeSlotsMap.get(mapKey);
+              if (!existing.students.includes(studentName)) {
+                existing.students.push(studentName);
+              }
             }
           });
           
-          if (timeSlots.length > 0) {
-            // 去重並排序
-            const uniqueTimeSlots = [...new Set(timeSlots)].sort();
-            
-            // 顯示警告
-            timeSlotsList.innerHTML = uniqueTimeSlots.map(slot => `<div>• ${slot}</div>`).join('');
+          // 轉換為數組並排序（按時間）
+          const timeSlotsWithCompany = Array.from(timeSlotsMap.values()).sort((a, b) => {
+            return (a.time_start || '').localeCompare(b.time_start || '');
+          });
+          
+          if (timeSlotsWithCompany.length > 0) {
+            // 顯示警告（包含公司名稱和學生姓名，同一公司同一時間段的學生合併顯示）
+            timeSlotsList.innerHTML = timeSlotsWithCompany.map(slot => {
+              const studentsText = slot.students.length > 0 ? ` - ${slot.students.join('、')}` : '';
+              return `<div>• ${slot.time} (${slot.company}${studentsText})</div>`;
+            }).join('');
             warningDiv.style.display = 'block';
             
             // 添加時間驗證事件
@@ -2585,14 +2656,14 @@
               if (!selectedStart || !selectedEnd) return;
               
               // 檢查是否與已預約的時間段重疊
-              const isConflict = uniqueTimeSlots.some(slot => {
-                if (slot.includes('-')) {
-                  const [slotStart, slotEnd] = slot.split('-');
+              const isConflict = timeSlotsWithCompany.some(slot => {
+                if (slot.time.includes('-')) {
+                  const [slotStart, slotEnd] = slot.time.split('-');
                   // 時間重疊的條件：新開始時間 < 舊結束時間 且 新結束時間 > 舊開始時間
                   return selectedStart < slotEnd && selectedEnd > slotStart;
                 } else {
                   // 只有開始時間的情況，檢查是否在該時間點
-                  return selectedStart <= slot && selectedEnd > slot;
+                  return selectedStart <= slot.time && selectedEnd > slot.time;
                 }
               });
               
@@ -2702,22 +2773,81 @@
       const studentsContainer = document.getElementById('interviewStudents');
       const selectedStudents = [];
       const studentApplications = []; // 保存每個學生對應的 application_id 和 job_id
-      const conflictedStudents = []; // 記錄已被其他廠商安排面試的學生
+      const conflictedStudents = []; // 記錄已被其他廠商安排面試的學生（同一時間段）
       
       if (studentsContainer) {
         const checkboxes = studentsContainer.querySelectorAll('.student-checkbox:checked');
         checkboxes.forEach(checkbox => {
           const studentId = checkbox.value;
           
-          // 檢查該學生是否已經被其他廠商安排了面試
-          const otherVendorSchedule = isStudentScheduledByOtherVendor(studentId, dateStr);
-          if (otherVendorSchedule) {
-            conflictedStudents.push({
-              studentId: studentId,
-              company: otherVendorSchedule.company_name,
-              time: `${otherVendorSchedule.time_start || ''}${otherVendorSchedule.time_end ? '-' + otherVendorSchedule.time_end : ''}`
+          // 檢查該學生是否已經被其他廠商在同一時間段安排了面試
+          if (allVendorSchedules.has(dateStr)) {
+            const schedules = allVendorSchedules.get(dateStr);
+            // 過濾其他廠商的排程：優先通過公司名稱判斷
+            const otherVendorSchedules = schedules.filter(s => {
+              // 優先通過公司名稱判斷（最準確）
+              if (vendorCompanyName && s.company_name) {
+                return s.company_name.trim() !== vendorCompanyName.trim();
+              }
+              // 如果沒有公司名稱信息，則使用 is_own 判斷
+              return s.is_own === false;
             });
-            return; // 跳過已被其他廠商安排的學生
+            
+            console.log(`🔍 [saveInterviewSchedule] 檢查學生 ${studentId} 在時間段 ${timeStart}-${timeEnd} 的衝突，其他廠商排程數量: ${otherVendorSchedules.length}`);
+            
+            // 檢查該學生是否在該時間段已被其他廠商安排
+            const conflictingSchedule = otherVendorSchedules.find(schedule => {
+              // 檢查學生ID是否匹配
+              const scheduleStudentId = String(schedule.student_id || '');
+              const currentStudentId = String(studentId);
+              const studentMatch = scheduleStudentId === currentStudentId;
+              
+              console.log(`🔍 [saveInterviewSchedule] 檢查排程: schedule.student_id=${schedule.student_id}, 目標studentId=${studentId}, 匹配=${studentMatch}`);
+              
+              if (!studentMatch) {
+                return false;
+              }
+              
+              // 檢查時間段是否重疊
+              const otherStart = schedule.time_start || '';
+              const otherEnd = schedule.time_end || '';
+              
+              console.log(`🔍 [saveInterviewSchedule] 檢查時間段: 新時間=${timeStart}-${timeEnd}, 舊時間=${otherStart}-${otherEnd}`);
+              
+              if (otherStart && otherEnd) {
+                // 時間重疊的條件：新開始時間 < 舊結束時間 且 新結束時間 > 舊開始時間
+                const isTimeOverlap = timeStart < otherEnd && timeEnd > otherStart;
+                console.log(`🔍 [saveInterviewSchedule] 時間段重疊檢查: ${timeStart} < ${otherEnd} && ${timeEnd} > ${otherStart} => ${isTimeOverlap}`);
+                return isTimeOverlap;
+              } else if (otherStart) {
+                // 只有開始時間的情況，檢查是否在該時間點
+                const isTimeOverlap = timeStart <= otherStart && timeEnd > otherStart;
+                console.log(`🔍 [saveInterviewSchedule] 時間點重疊檢查: ${timeStart} <= ${otherStart} && ${timeEnd} > ${otherStart} => ${isTimeOverlap}`);
+                return isTimeOverlap;
+              }
+              
+              return false;
+            });
+            
+            if (conflictingSchedule) {
+              const student = allResumes.find(r => String(r.student_id || r.id) === String(studentId));
+              const studentName = student ? (student.name || student.student_name || '未知') : '未知';
+              const timeDisplay = conflictingSchedule.time_end ? 
+                `${conflictingSchedule.time_start}-${conflictingSchedule.time_end}` : 
+                conflictingSchedule.time_start;
+              
+              console.log(`⚠️ [saveInterviewSchedule] 發現學生衝突: ${studentName} 已被 ${conflictingSchedule.company_name} 安排在 ${timeDisplay}`);
+              
+              conflictedStudents.push({
+                studentId: studentId,
+                studentName: studentName,
+                company: conflictingSchedule.company_name || '其他廠商',
+                time: timeDisplay
+              });
+              return; // 跳過已被其他廠商在同一時間段安排的學生
+            } else {
+              console.log(`✅ [saveInterviewSchedule] 學生 ${studentId} 在時間段 ${timeStart}-${timeEnd} 沒有衝突`);
+            }
           }
           
           selectedStudents.push(studentId);
@@ -2780,15 +2910,13 @@
         });
       }
       
-      // 如果有衝突的學生，顯示警告並阻止保存
+      // 如果有衝突的學生（同一時間段），顯示警告並阻止保存
       if (conflictedStudents.length > 0) {
         const conflictedNames = conflictedStudents.map(c => {
-          const student = allResumes.find(r => String(r.student_id || r.id) === String(c.studentId));
-          const studentName = student ? (student.name || student.student_name || '未知') : '未知';
-          return `${studentName} (已被 ${c.company} 安排在 ${c.time})`;
+          return `${c.studentName} (已被 ${c.company} 安排在 ${c.time})`;
         }).join('\n');
         
-        alert(`❌ 以下學生已被其他廠商安排面試，無法重複安排：\n\n${conflictedNames}\n\n請取消選擇這些學生後再儲存。`);
+        alert(`❌ 以下學生在該時間段已被其他廠商安排面試，無法重複安排：\n\n${conflictedNames}\n\n請取消選擇這些學生或選擇其他時間段後再儲存。`);
         return;
       }
       
@@ -2797,6 +2925,9 @@
         alert('請至少選擇一位學生');
         return;
       }
+      
+      // 注意：只檢查學生衝突（同一學生在同一時間段），不檢查純時間段衝突
+      // 如果時間段相同但學生不同，允許新增（不同學生可以在同一時間段面試）
       
       // 保存到 Map（本地存儲）
       interviewSchedules.set(dateStr, {
@@ -3107,35 +3238,47 @@
           })));
           console.log(`🔍 [renderCalendar] 當前廠商公司名稱: ${vendorCompanyName}`);
           
-          // 判斷是否為自己的排程：優先使用 is_own，如果沒有或不可靠，則通過公司名稱判斷
+          // 判斷是否為自己的排程：優先通過公司名稱判斷（最準確），然後檢查 is_own
           hasOwnInterview = schedules.some(s => {
-            // 如果 is_own 明確為 true，直接返回
-            if (s.is_own === true) return true;
-            // 如果 is_own 為 false，明確不是自己的
-            if (s.is_own === false) return false;
-            // 如果 is_own 為 undefined 或 null，通過公司名稱判斷
+            // 優先通過公司名稱判斷（最準確）
             if (vendorCompanyName && s.company_name) {
               const isOwn = s.company_name.trim() === vendorCompanyName.trim();
               console.log(`🔍 [renderCalendar] 通過公司名稱判斷: ${s.company_name} === ${vendorCompanyName} => ${isOwn}`);
-              return isOwn;
+              // 如果公司名稱匹配，就是自己的排程
+              if (isOwn) return true;
+              // 如果公司名稱不匹配，即使 is_own=true 也不是自己的排程
+              if (!isOwn && s.is_own === true) {
+                console.warn(`⚠️ [renderCalendar] 警告：排程 is_own=true 但公司名稱不匹配，視為其他廠商的排程`);
+                return false;
+              }
             }
-            // 如果沒有公司名稱信息，默認不是自己的（安全起見）
+            // 如果沒有公司名稱信息，則使用 is_own 判斷
+            if (s.is_own === true) return true;
+            if (s.is_own === false) return false;
+            // 如果 is_own 為 undefined 或 null，且沒有公司名稱信息，默認不是自己的（安全起見）
             return false;
           });
           
-          // 判斷是否有其他廠商的排程：is_own 為 false，或公司名稱不匹配
+          // 判斷是否有其他廠商的排程：優先通過公司名稱判斷（最準確），然後檢查 is_own
           hasOtherVendorInterviews = schedules.some(s => {
-            // 如果 is_own 明確為 false，直接返回
-            if (s.is_own === false) return true;
-            // 如果 is_own 為 true，明確是自己的
-            if (s.is_own === true) return false;
-            // 如果 is_own 為 undefined 或 null，通過公司名稱判斷
+            // 優先通過公司名稱判斷（最準確）
             if (vendorCompanyName && s.company_name) {
               const isOther = s.company_name.trim() !== vendorCompanyName.trim();
               console.log(`🔍 [renderCalendar] 通過公司名稱判斷其他廠商: ${s.company_name} !== ${vendorCompanyName} => ${isOther}`);
-              return isOther;
+              // 如果公司名稱不匹配，就是其他廠商的排程（即使 is_own=true）
+              if (isOther) {
+                if (s.is_own === true) {
+                  console.warn(`⚠️ [renderCalendar] 警告：排程 is_own=true 但公司名稱不匹配，視為其他廠商的排程`);
+                }
+                return true;
+              }
+              // 如果公司名稱匹配，即使 is_own=false 也是自己的排程
+              return false;
             }
-            // 如果沒有公司名稱信息，且 is_own 不是 true，則視為其他廠商（安全起見）
+            // 如果沒有公司名稱信息，則使用 is_own 判斷
+            if (s.is_own === false) return true;
+            if (s.is_own === true) return false;
+            // 如果 is_own 為 undefined 或 null，且沒有公司名稱信息，視為其他廠商（安全起見）
             return s.is_own !== true;
           });
           
@@ -3155,102 +3298,166 @@
           }
         }
         
-        // 顯示自己的面試排程
+        // 顯示自己的面試排程（可以有多個排程）
         if (hasOwnInterview) {
-          // 優先從 allVendorSchedules 獲取最新的排程信息（更準確）
-          let schedule = null;
-          let timeStart = '';
-          let timeEnd = '';
+          // 創建面試排程容器（垂直排列多個排程）
+          const interviewContainer = document.createElement("div");
+          interviewContainer.style.cssText = `
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            margin-top: 4px;
+          `;
           
+          // 獲取所有自己的排程
+          let ownSchedules = [];
           if (allVendorSchedules.has(dateKey)) {
             const schedules = allVendorSchedules.get(dateKey);
-            const ownSchedules = schedules.filter(s => s.is_own);
-            if (ownSchedules.length > 0) {
-              // 從所有自己的排程中找到有時間的記錄
-              for (const ownSchedule of ownSchedules) {
-                if (ownSchedule.time_start && !timeStart) {
-                  timeStart = ownSchedule.time_start;
+            // 過濾自己的排程：優先通過公司名稱判斷（最準確），然後檢查 is_own
+            ownSchedules = schedules.filter(s => {
+              // 優先通過公司名稱判斷（最準確）
+              if (vendorCompanyName && s.company_name) {
+                const isOwn = s.company_name.trim() === vendorCompanyName.trim();
+                // 如果公司名稱匹配，就是自己的排程（即使 is_own=false）
+                if (isOwn) return true;
+                // 如果公司名稱不匹配，即使 is_own=true 也不是自己的排程
+                if (!isOwn && s.is_own === true) {
+                  console.warn(`⚠️ [renderCalendar] 警告：排程 is_own=true 但公司名稱不匹配，過濾掉`);
+                  return false;
                 }
-                if (ownSchedule.time_end && !timeEnd) {
-                  timeEnd = ownSchedule.time_end;
-                }
-                // 如果兩個時間都找到了，可以提前退出
-                if (timeStart && timeEnd) break;
               }
-            }
+              // 如果沒有公司名稱信息，則使用 is_own 判斷
+              if (s.is_own === true) return true;
+              if (s.is_own === false) return false;
+              return false;
+            });
           }
           
           // 如果 allVendorSchedules 中沒有，從 interviewSchedules 獲取（向後兼容）
-          if (!timeStart && interviewSchedules.has(dateKey)) {
-            schedule = interviewSchedules.get(dateKey);
-            timeStart = schedule.timeStart || '';
-            timeEnd = schedule.timeEnd || '';
-          }
-          
-          // 格式化時間顯示（使用上午/下午格式）
-          let timeDisplay = '';
-          // 調試：打印時間值
-          console.log(`🔍 [renderCalendar] 日期 ${dateKey}: timeStart="${timeStart}", timeEnd="${timeEnd}"`);
-          
-          if (timeStart) {
-            const startTime = formatTimeToAMPM(timeStart.substring(0, 5)); // 取 HH:MM 並轉換
-            if (timeEnd && timeEnd.trim() !== '') {
-              // 有結束時間，顯示範圍
-              const endTime = formatTimeToAMPM(timeEnd.substring(0, 5)); // 取 HH:MM 並轉換
-              timeDisplay = ` ${startTime}-${endTime}`;
-            } else {
-              // 只有開始時間，只顯示開始時間
-              timeDisplay = ` ${startTime}`;
+          if (ownSchedules.length === 0 && interviewSchedules.has(dateKey)) {
+            const schedule = interviewSchedules.get(dateKey);
+            // 將單一排程轉換為數組格式
+            if (schedule.timeStart || schedule.timeEnd) {
+              ownSchedules = [{
+                time_start: schedule.timeStart || '',
+                time_end: schedule.timeEnd || '',
+                student_id: schedule.students?.[0] || null
+              }];
             }
           }
           
-          // 創建面試排程標籤（刪除按鈕已移至表單 modal 中）
-          const interviewBadge = document.createElement("div");
-          interviewBadge.style.cssText = `
-            font-size: 0.75rem;
-            color: #fff;
-            background-color: #0dcaf0;
-            padding: 2px 6px;
-            border-radius: 4px;
-            display: inline-block;
-            white-space: nowrap;
-            cursor: pointer;
-            transition: background-color 0.2s;
-            margin-top: 4px;
-          `;
-          interviewBadge.textContent = `面試${timeDisplay}`;
-          // 添加點擊事件，點擊藍色標籤時載入該廠商的排程資料（編輯模式）
-          interviewBadge.addEventListener('click', (e) => {
-            e.stopPropagation(); // 阻止觸發日期格子的點擊事件
-            // 明確標記為編輯模式，載入自己的排程
-            openInterviewForm(cellDate, true); // true 表示強制編輯模式
+          // 按時間分組排程（相同時間段的排程合併顯示）
+          const schedulesByTime = new Map();
+          ownSchedules.forEach(schedule => {
+            const timeKey = `${schedule.time_start || ''}-${schedule.time_end || ''}`;
+            if (!schedulesByTime.has(timeKey)) {
+              schedulesByTime.set(timeKey, {
+                time_start: schedule.time_start || '',
+                time_end: schedule.time_end || '',
+                student_ids: []
+              });
+            }
+            if (schedule.student_id) {
+              const scheduleData = schedulesByTime.get(timeKey);
+              if (!scheduleData.student_ids.includes(String(schedule.student_id))) {
+                scheduleData.student_ids.push(String(schedule.student_id));
+              }
+            }
           });
-          // 添加懸停效果
-          interviewBadge.addEventListener('mouseenter', () => {
-            interviewBadge.style.backgroundColor = '#0aa2c0';
+          
+          // 為每個時間段創建一個藍色標籤
+          schedulesByTime.forEach((scheduleData, timeKey) => {
+            const timeStart = scheduleData.time_start;
+            const timeEnd = scheduleData.time_end;
+            
+            // 格式化時間顯示（使用上午/下午格式）
+            let timeDisplay = '';
+            if (timeStart) {
+              const startTime = formatTimeToAMPM(timeStart.substring(0, 5)); // 取 HH:MM 並轉換
+              if (timeEnd && timeEnd.trim() !== '') {
+                // 有結束時間，顯示範圍
+                const endTime = formatTimeToAMPM(timeEnd.substring(0, 5)); // 取 HH:MM 並轉換
+                timeDisplay = ` ${startTime}-${endTime}`;
+              } else {
+                // 只有開始時間，只顯示開始時間
+                timeDisplay = ` ${startTime}`;
+              }
+            }
+            
+            // 獲取學生姓名（如果有多個學生，顯示第一個）
+            let studentName = '';
+            if (scheduleData.student_ids.length > 0) {
+              const studentId = scheduleData.student_ids[0];
+              const student = allResumes.find(r => String(r.student_id || r.id) === String(studentId));
+              if (student) {
+                studentName = student.name || student.student_name || '';
+              }
+              // 如果有多個學生，顯示數量
+              if (scheduleData.student_ids.length > 1) {
+                studentName = studentName ? `${studentName}等${scheduleData.student_ids.length}人` : `${scheduleData.student_ids.length}位學生`;
+              }
+            }
+            
+            // 創建面試排程標籤
+            const interviewBadge = document.createElement("div");
+            interviewBadge.style.cssText = `
+              font-size: 0.75rem;
+              color: #fff;
+              background-color: #0dcaf0;
+              padding: 2px 6px;
+              border-radius: 4px;
+              display: inline-block;
+              white-space: nowrap;
+              cursor: pointer;
+              transition: background-color 0.2s;
+            `;
+            interviewBadge.textContent = studentName ? `${studentName}${timeDisplay}` : `面試${timeDisplay}`;
+            interviewBadge.title = `${studentName || '面試'}${timeDisplay}`;
+            
+            // 添加點擊事件，點擊藍色標籤時載入該廠商的排程資料（編輯模式）
+            interviewBadge.addEventListener('click', (e) => {
+              e.stopPropagation(); // 阻止觸發日期格子的點擊事件
+              // 明確標記為編輯模式，載入自己的排程
+              openInterviewForm(cellDate, true); // true 表示強制編輯模式
+            });
+            
+            // 添加懸停效果
+            interviewBadge.addEventListener('mouseenter', () => {
+              interviewBadge.style.backgroundColor = '#0aa2c0';
+            });
+            interviewBadge.addEventListener('mouseleave', () => {
+              interviewBadge.style.backgroundColor = '#0dcaf0';
+            });
+            
+            interviewContainer.appendChild(interviewBadge);
           });
-          interviewBadge.addEventListener('mouseleave', () => {
-            interviewBadge.style.backgroundColor = '#0dcaf0';
-          });
-          dateCell.appendChild(interviewBadge);
+          
+          dateCell.appendChild(interviewContainer);
         }
         
         // 顯示其他廠商已預約的時間段
         if (hasOtherVendorInterviews) {
           const otherSchedules = allVendorSchedules.get(dateKey);
-          // 過濾掉自己的排程：優先使用 is_own，如果沒有則通過公司名稱判斷
+          // 過濾掉自己的排程：優先通過公司名稱判斷（最準確），然後檢查 is_own
           const otherVendorSchedules = otherSchedules.filter(s => {
-            // 如果 is_own 明確為 false，直接返回
-            if (s.is_own === false) return true;
-            // 如果 is_own 明確為 true，直接過濾掉
-            if (s.is_own === true) return false;
-            // 如果 is_own 為 undefined 或 null，通過公司名稱判斷
+            // 優先通過公司名稱判斷（最準確）
             if (vendorCompanyName && s.company_name) {
               const isOther = s.company_name.trim() !== vendorCompanyName.trim();
               console.log(`🔍 [renderCalendar] 過濾其他廠商排程: ${s.company_name} !== ${vendorCompanyName} => ${isOther}`);
-              return isOther;
+              // 如果公司名稱不匹配，就是其他廠商的排程（即使 is_own=true）
+              if (isOther) {
+                if (s.is_own === true) {
+                  console.warn(`⚠️ [renderCalendar] 警告：排程 is_own=true 但公司名稱不匹配，視為其他廠商的排程`);
+                }
+                return true;
+              }
+              // 如果公司名稱匹配，即使 is_own=false 也是自己的排程，過濾掉
+              return false;
             }
-            // 如果沒有公司名稱信息，且 is_own 不是 true，則視為其他廠商
+            // 如果沒有公司名稱信息，則使用 is_own 判斷
+            if (s.is_own === false) return true;
+            if (s.is_own === true) return false;
+            // 如果 is_own 為 undefined 或 null，視為其他廠商（安全起見）
             return s.is_own !== true;
           });
           
