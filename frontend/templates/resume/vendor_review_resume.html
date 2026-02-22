@@ -359,6 +359,7 @@
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+          <button type="button" class="btn btn-danger" id="deleteInterviewBtn" style="display: none;">刪除</button>
           <button type="button" class="btn btn-primary" id="saveInterviewBtn">儲存</button>
         </div>
       </div>
@@ -392,6 +393,8 @@
     let interviewCompanyNames = [];
     // 從 profile API 獲取的廠商公司名稱
     let vendorCompanyName = null;
+    // 面試排程自動刷新 interval ID
+    let scheduleRefreshInterval = null;
 
     // 定義狀態顏色，approved 對應 success (綠色)
     function statusColor(status) {
@@ -568,6 +571,29 @@
       document.getElementById("prevMonthBtn").addEventListener("click", () => changeMonth(-1));
       document.getElementById("nextMonthBtn").addEventListener("click", () => changeMonth(1));
       document.getElementById("saveInterviewBtn").addEventListener("click", saveInterviewSchedule);
+      
+      // 刪除面試排程按鈕事件
+      const deleteInterviewBtn = document.getElementById("deleteInterviewBtn");
+      if (deleteInterviewBtn) {
+        deleteInterviewBtn.addEventListener("click", function() {
+          if (selectedInterviewDate) {
+            const dateStr = formatDate(selectedInterviewDate);
+            deleteInterviewSchedule(dateStr);
+          }
+        });
+      }
+      
+      // 監聽面試排程月曆 modal 的關閉事件，清除自動刷新
+      const interviewScheduleModal = document.getElementById("interviewScheduleModal");
+      if (interviewScheduleModal) {
+        interviewScheduleModal.addEventListener('hidden.bs.modal', function() {
+          if (scheduleRefreshInterval) {
+            clearInterval(scheduleRefreshInterval);
+            scheduleRefreshInterval = null;
+            console.log('🛑 已停止面試排程自動刷新');
+          }
+        });
+      }
       
       // 全選/取消全選功能
       const selectAllCheckbox = document.getElementById("selectAllCheckbox");
@@ -1336,10 +1362,12 @@
           saveInterviewSchedulesToStorage();
           
           console.log('✅ 已載入所有廠商的面試排程，共', allVendorSchedules.size, '個日期有排程');
-          // 調試：打印每個排程的學生ID
+          // 調試：打印每個排程的詳細信息，包括公司名稱比較
           allVendorSchedules.forEach((schedules, date) => {
             schedules.forEach(schedule => {
-              console.log(`📅 ${date}: 學生ID=${schedule.student_id}, 公司=${schedule.company_name}, is_own=${schedule.is_own}, 時間=${schedule.time_start || ''}-${schedule.time_end || ''}`);
+              const companyMatch = vendorCompanyName && schedule.company_name ? 
+                (schedule.company_name.trim() === vendorCompanyName.trim()) : '無法比較';
+              console.log(`📅 ${date}: 學生ID=${schedule.student_id}, 公司=${schedule.company_name}, is_own=${schedule.is_own}, 當前廠商=${vendorCompanyName}, 公司名稱匹配=${companyMatch}, 時間=${schedule.time_start || ''}-${schedule.time_end || ''}`);
             });
           });
         } else {
@@ -2242,6 +2270,16 @@
       renderCalendar();
       const modal = new bootstrap.Modal(document.getElementById("interviewScheduleModal"));
       modal.show();
+      
+      // 啟動定期自動刷新（每30秒刷新一次，確保看到其他廠商新增的排程）
+      if (scheduleRefreshInterval) {
+        clearInterval(scheduleRefreshInterval);
+      }
+      scheduleRefreshInterval = setInterval(async () => {
+        console.log('🔄 定期自動刷新面試排程...');
+        await loadAllVendorSchedules();
+        renderCalendar();
+      }, 30000); // 每30秒刷新一次
     }
 
     // 改變月份
@@ -2253,7 +2291,8 @@
     }
     
     // 開啟面試表單
-    async function openInterviewForm(date) {
+    // forceEditMode: true 表示強制編輯模式（點擊藍色標籤時），false 表示新增模式（點擊日期格子時）
+    async function openInterviewForm(date, forceEditMode = false) {
       selectedInterviewDate = date;
       const dateStr = formatDate(date);
       const dateDisplay = formatDateDisplay(date);
@@ -2320,28 +2359,44 @@
       // 如果已有排程，載入現有資料
       // 優先從 allVendorSchedules 獲取最新的排程信息（更準確）
       let schedule = null;
-      if (allVendorSchedules.has(dateStr)) {
-        const schedules = allVendorSchedules.get(dateStr);
-        const ownSchedule = schedules.find(s => s.is_own);
-        if (ownSchedule) {
-          // 從 allVendorSchedules 構建 schedule 對象
-          // 收集該日期所有自己的排程，合併信息（時間、地點、備註可能相同，但需要收集所有學生）
-          const allOwnSchedules = schedules.filter(s => s.is_own);
-          schedule = {
-            timeStart: ownSchedule.time_start || '',
-            timeEnd: ownSchedule.time_end || '',
-            location: ownSchedule.location || '',
-            notes: ownSchedule.notes || '',  // 從後端獲取備註
-            students: allOwnSchedules.filter(s => s.student_id).map(s => String(s.student_id))
-          };
-          console.log(`✅ 從 allVendorSchedules 載入排程資料: 時間=${schedule.timeStart}-${schedule.timeEnd}, 地點=${schedule.location}, 備註=${schedule.notes.substring(0, 30) || '無'}, 學生=${schedule.students.join(',')}`);
-        }
-      }
       
-      // 如果 allVendorSchedules 中沒有，從 interviewSchedules 獲取（向後兼容）
-      if (!schedule && interviewSchedules.has(dateStr)) {
-        schedule = interviewSchedules.get(dateStr);
-        console.log(`✅ 從 interviewSchedules 載入排程資料: 時間=${schedule.timeStart}-${schedule.timeEnd}, 地點=${schedule.location}, 學生=${schedule.students?.join(',') || ''}`);
+      // 如果是強制編輯模式（點擊藍色標籤），只載入自己的排程
+      if (forceEditMode) {
+        console.log('📝 編輯模式：載入自己的排程資料');
+        if (allVendorSchedules.has(dateStr)) {
+          const schedules = allVendorSchedules.get(dateStr);
+          // 只過濾自己的排程：優先使用 is_own，如果沒有則通過公司名稱判斷
+          const ownSchedules = schedules.filter(s => {
+            if (s.is_own === true) return true;
+            if (s.is_own === false) return false;
+            if (vendorCompanyName && s.company_name) {
+              return s.company_name.trim() === vendorCompanyName.trim();
+            }
+            return false;
+          });
+          
+          if (ownSchedules.length > 0) {
+            const ownSchedule = ownSchedules[0];
+            schedule = {
+              timeStart: ownSchedule.time_start || '',
+              timeEnd: ownSchedule.time_end || '',
+              location: ownSchedule.location || '',
+              notes: ownSchedule.notes || '',
+              students: ownSchedules.filter(s => s.student_id).map(s => String(s.student_id))
+            };
+            console.log(`✅ [編輯模式] 從 allVendorSchedules 載入自己的排程資料: 時間=${schedule.timeStart}-${schedule.timeEnd}, 地點=${schedule.location}, 備註=${schedule.notes.substring(0, 30) || '無'}, 學生=${schedule.students.join(',')}`);
+          }
+        }
+        
+        // 如果 allVendorSchedules 中沒有，從 interviewSchedules 獲取（向後兼容）
+        if (!schedule && interviewSchedules.has(dateStr)) {
+          schedule = interviewSchedules.get(dateStr);
+          console.log(`✅ [編輯模式] 從 interviewSchedules 載入排程資料: 時間=${schedule.timeStart}-${schedule.timeEnd}, 地點=${schedule.location}, 學生=${schedule.students?.join(',') || ''}`);
+        }
+      } else {
+        // 新增模式（點擊日期格子時）：不載入任何現有排程，一律視為新增
+        console.log('➕ 新增模式：點擊日期格子，不載入現有排程');
+        // schedule 保持為 null，不載入任何資料
       }
       
       if (schedule) {
@@ -2425,6 +2480,12 @@
       const modalTitle = document.querySelector('#interviewFormModal .modal-title');
       if (modalTitle) {
         modalTitle.textContent = schedule ? '編輯面試排程' : '新增面試排程';
+      }
+      
+      // 顯示/隱藏刪除按鈕（只在編輯模式時顯示）
+      const deleteBtn = document.getElementById('deleteInterviewBtn');
+      if (deleteBtn) {
+        deleteBtn.style.display = schedule ? 'inline-block' : 'none';
       }
       
       // 等待月曆模態框完全關閉後再打開表單模態框
@@ -2938,7 +2999,16 @@
             }
           });
           
-          alert('✅ 面試排程已刪除');
+          // 關閉表單模態框（如果打開的話）
+          const formModal = bootstrap.Modal.getInstance(document.getElementById("interviewFormModal"));
+          if (formModal) {
+            formModal.hide();
+          }
+          
+          // 確保狀態更新後再顯示提示
+          setTimeout(() => {
+            alert('✅ 面試排程已刪除');
+          }, 100);
         } else {
           alert(`❌ 刪除失敗：${data.message || '未知錯誤'}`);
         }
@@ -3027,8 +3097,49 @@
         let hasOtherVendorInterviews = false;
         if (allVendorSchedules.has(dateKey)) {
           const schedules = allVendorSchedules.get(dateKey);
-          hasOwnInterview = schedules.some(s => s.is_own);
-          hasOtherVendorInterviews = schedules.some(s => !s.is_own);
+          
+          // 調試：打印該日期的所有排程信息
+          console.log(`🔍 [renderCalendar] 日期 ${dateKey} 的排程:`, schedules.map(s => ({
+            company: s.company_name,
+            student_id: s.student_id,
+            is_own: s.is_own,
+            time: `${s.time_start || ''}-${s.time_end || ''}`
+          })));
+          console.log(`🔍 [renderCalendar] 當前廠商公司名稱: ${vendorCompanyName}`);
+          
+          // 判斷是否為自己的排程：優先使用 is_own，如果沒有或不可靠，則通過公司名稱判斷
+          hasOwnInterview = schedules.some(s => {
+            // 如果 is_own 明確為 true，直接返回
+            if (s.is_own === true) return true;
+            // 如果 is_own 為 false，明確不是自己的
+            if (s.is_own === false) return false;
+            // 如果 is_own 為 undefined 或 null，通過公司名稱判斷
+            if (vendorCompanyName && s.company_name) {
+              const isOwn = s.company_name.trim() === vendorCompanyName.trim();
+              console.log(`🔍 [renderCalendar] 通過公司名稱判斷: ${s.company_name} === ${vendorCompanyName} => ${isOwn}`);
+              return isOwn;
+            }
+            // 如果沒有公司名稱信息，默認不是自己的（安全起見）
+            return false;
+          });
+          
+          // 判斷是否有其他廠商的排程：is_own 為 false，或公司名稱不匹配
+          hasOtherVendorInterviews = schedules.some(s => {
+            // 如果 is_own 明確為 false，直接返回
+            if (s.is_own === false) return true;
+            // 如果 is_own 為 true，明確是自己的
+            if (s.is_own === true) return false;
+            // 如果 is_own 為 undefined 或 null，通過公司名稱判斷
+            if (vendorCompanyName && s.company_name) {
+              const isOther = s.company_name.trim() !== vendorCompanyName.trim();
+              console.log(`🔍 [renderCalendar] 通過公司名稱判斷其他廠商: ${s.company_name} !== ${vendorCompanyName} => ${isOther}`);
+              return isOther;
+            }
+            // 如果沒有公司名稱信息，且 is_own 不是 true，則視為其他廠商（安全起見）
+            return s.is_own !== true;
+          });
+          
+          console.log(`🔍 [renderCalendar] 日期 ${dateKey}: hasOwnInterview=${hasOwnInterview}, hasOtherVendorInterviews=${hasOtherVendorInterviews}`);
         } else {
           // 如果 allVendorSchedules 中沒有，檢查本地存儲（向後兼容）
           hasOwnInterview = interviewSchedules.has(dateKey);
@@ -3093,15 +3204,7 @@
             }
           }
           
-          // 創建面試排程容器
-          const interviewContainer = document.createElement("div");
-          interviewContainer.style.cssText = `
-            display: flex;
-            align-items: center;
-            gap: 4px;
-            margin-top: 4px;
-          `;
-          
+          // 創建面試排程標籤（刪除按鈕已移至表單 modal 中）
           const interviewBadge = document.createElement("div");
           interviewBadge.style.cssText = `
             font-size: 0.75rem;
@@ -3111,15 +3214,16 @@
             border-radius: 4px;
             display: inline-block;
             white-space: nowrap;
-            flex: 1;
             cursor: pointer;
             transition: background-color 0.2s;
+            margin-top: 4px;
           `;
           interviewBadge.textContent = `面試${timeDisplay}`;
-          // 添加點擊事件，點擊時顯示面試排程的詳細資料
+          // 添加點擊事件，點擊藍色標籤時載入該廠商的排程資料（編輯模式）
           interviewBadge.addEventListener('click', (e) => {
             e.stopPropagation(); // 阻止觸發日期格子的點擊事件
-            openInterviewForm(cellDate);
+            // 明確標記為編輯模式，載入自己的排程
+            openInterviewForm(cellDate, true); // true 表示強制編輯模式
           });
           // 添加懸停效果
           interviewBadge.addEventListener('mouseenter', () => {
@@ -3128,45 +3232,33 @@
           interviewBadge.addEventListener('mouseleave', () => {
             interviewBadge.style.backgroundColor = '#0dcaf0';
           });
-          interviewContainer.appendChild(interviewBadge);
-          
-          // 添加刪除按鈕
-          const deleteBtn = document.createElement("button");
-          deleteBtn.type = "button";
-          deleteBtn.textContent = "刪除";
-          deleteBtn.style.cssText = `
-            font-size: 0.7rem;
-            color: #dc3545;
-            background-color: transparent;
-            border: 1px solid #dc3545;
-            cursor: pointer;
-            padding: 2px 6px;
-            line-height: 1;
-            border-radius: 4px;
-            transition: background-color 0.2s;
-            white-space: nowrap;
-          `;
-          deleteBtn.title = "刪除面試排程";
-          deleteBtn.addEventListener('click', (e) => {
-            e.stopPropagation(); // 阻止觸發日期格子的點擊事件
-            deleteInterviewSchedule(dateKey);
-          });
-          deleteBtn.addEventListener('mouseenter', () => {
-            deleteBtn.style.backgroundColor = '#fee';
-          });
-          deleteBtn.addEventListener('mouseleave', () => {
-            deleteBtn.style.backgroundColor = 'transparent';
-          });
-          interviewContainer.appendChild(deleteBtn);
-          
-          dateCell.appendChild(interviewContainer);
+          dateCell.appendChild(interviewBadge);
         }
         
         // 顯示其他廠商已預約的時間段
         if (hasOtherVendorInterviews) {
           const otherSchedules = allVendorSchedules.get(dateKey);
-          // 過濾掉自己的排程
-          const otherVendorSchedules = otherSchedules.filter(s => !s.is_own);
+          // 過濾掉自己的排程：優先使用 is_own，如果沒有則通過公司名稱判斷
+          const otherVendorSchedules = otherSchedules.filter(s => {
+            // 如果 is_own 明確為 false，直接返回
+            if (s.is_own === false) return true;
+            // 如果 is_own 明確為 true，直接過濾掉
+            if (s.is_own === true) return false;
+            // 如果 is_own 為 undefined 或 null，通過公司名稱判斷
+            if (vendorCompanyName && s.company_name) {
+              const isOther = s.company_name.trim() !== vendorCompanyName.trim();
+              console.log(`🔍 [renderCalendar] 過濾其他廠商排程: ${s.company_name} !== ${vendorCompanyName} => ${isOther}`);
+              return isOther;
+            }
+            // 如果沒有公司名稱信息，且 is_own 不是 true，則視為其他廠商
+            return s.is_own !== true;
+          });
+          
+          console.log(`🔍 [renderCalendar] 日期 ${dateKey} 的其他廠商排程:`, otherVendorSchedules.map(s => ({
+            company: s.company_name,
+            student_id: s.student_id,
+            time: `${s.time_start || ''}-${s.time_end || ''}`
+          })));
           
           if (otherVendorSchedules.length > 0) {
             // 收集所有其他廠商的時間段
@@ -3219,32 +3311,21 @@
             }
           }
           
-          // 即使有其他廠商的排程，也允許點擊新增自己的排程
-          // 但只能編輯自己的排程，不能編輯其他廠商的排程
-          if (hasOwnInterview) {
-            // 有自己的排程，可以點擊編輯
-            dateCell.addEventListener('click', (e) => {
-              e.stopPropagation();
-              openInterviewForm(cellDate);
-            });
-            dateCell.addEventListener('mouseenter', () => {
-              dateCell.style.backgroundColor = '#f0f9ff';
-            });
-            dateCell.addEventListener('mouseleave', () => {
-              dateCell.style.backgroundColor = isToday ? '#e3f2fd' : '#ffffff';
-            });
-          } else {
-            // 沒有排程，可以點擊新增
-            dateCell.addEventListener('click', () => {
-              openInterviewForm(cellDate);
-            });
-            dateCell.addEventListener('mouseenter', () => {
-              dateCell.style.backgroundColor = '#f0f9ff';
-            });
-            dateCell.addEventListener('mouseleave', () => {
-              dateCell.style.backgroundColor = isToday ? '#e3f2fd' : '#ffffff';
-            });
-          }
+          // 點擊日期格子（藍色標籤以外的地方）一律視為新增面試排程
+          // 只有點擊藍色標籤才會進入編輯模式
+          dateCell.addEventListener('click', (e) => {
+            // 如果點擊的是藍色標籤，事件會被阻止冒泡，不會觸發這裡
+            // 只有點擊日期格子的其他區域才會觸發
+            e.stopPropagation();
+            // 新增模式：不載入現有排程
+            openInterviewForm(cellDate, false);
+          });
+          dateCell.addEventListener('mouseenter', () => {
+            dateCell.style.backgroundColor = '#f0f9ff';
+          });
+          dateCell.addEventListener('mouseleave', () => {
+            dateCell.style.backgroundColor = isToday ? '#e3f2fd' : '#ffffff';
+          });
         } else {
           dateCell.style.opacity = '0.6';
         }
