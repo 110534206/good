@@ -1405,31 +1405,19 @@ def get_all_students():
         if not current_semester_id:
             return jsonify({"success": False, "message": "無法取得當前學期"}), 500
         
-        # 獲取所有已在媒合結果中的學生 ID
-        # 包括：1. manage_director 表中的記錄（Approved 或 Pending）
-        #       2. resume_applications 表中有廠商排序資料的記錄（is_reserve 或 slot_index 不為 NULL）
-        # 注意：manage_director.preference_id 對應的是 student_job_applications.id（即 resume_applications.application_id）
+        # 獲取所有已在媒合結果中的學生 ID（只統計主任已確認的學生）
+        # 注意：manage_director.preference_id 引用的是 student_job_applications.id（即 resume_applications.application_id）
+        # 需要通過 student_job_applications 來 JOIN student_preferences，並且只統計當前學期的記錄
         cursor.execute("""
             SELECT DISTINCT md.student_id
             FROM manage_director md
-            LEFT JOIN student_job_applications sja ON md.preference_id = sja.id
-            LEFT JOIN student_preferences sp ON sja.student_id = sp.student_id 
-                AND sja.company_id = sp.company_id 
+            INNER JOIN student_job_applications sja ON md.preference_id = sja.id
+            INNER JOIN student_preferences sp ON sja.student_id = sp.student_id
+                AND sja.company_id = sp.company_id
                 AND sja.job_id = sp.job_id
                 AND sp.semester_id = %s
-            WHERE md.director_decision IN ('Approved', 'Pending')
-                AND (sp.semester_id = %s OR (sp.semester_id IS NULL AND sja.id IS NOT NULL))
-            UNION
-            SELECT DISTINCT sja.student_id
-            FROM resume_applications ra
-            INNER JOIN student_job_applications sja ON ra.application_id = sja.id
-            INNER JOIN student_preferences sp ON sja.student_id = sp.student_id 
-                AND sja.company_id = sp.company_id 
-                AND sja.job_id = sp.job_id
-                AND sp.semester_id = %s
-            WHERE ra.apply_status = 'approved'  -- 廠商必須已通過履歷審核
-            AND (ra.is_reserve IS NOT NULL OR ra.slot_index IS NOT NULL)  -- 必須已完成媒合排序
-        """, (current_semester_id, current_semester_id, current_semester_id))
+            WHERE md.director_decision = 'Approved'  -- 只統計主任已確認的學生
+        """, (current_semester_id,))
         matched_student_ids = {row['student_id'] for row in cursor.fetchall()}
         
         # 學期對應學號邏輯：1132→110xxx，1141/1142→111xxx（學號前3碼 = 學年前3碼 - 3）
@@ -3873,6 +3861,50 @@ def ta_toggle_second_interview():
         
         # 只通知未錄取的學生
         unadmitted_students = [s for s in all_students if s['id'] not in matched_student_ids]
+        
+        # 為未錄取的學生重置面試狀態，讓他們可以重新參與二次面試
+        unadmitted_student_ids = [s['id'] for s in unadmitted_students]
+        if unadmitted_student_ids:
+            # 找到這些學生的所有申請記錄（通過 student_job_applications 和 student_preferences）
+            placeholders = ','.join(['%s'] * len(unadmitted_student_ids))
+            cursor.execute(f"""
+                SELECT DISTINCT ra.id, ra.application_id, ra.job_id, ra.apply_status, ra.interview_status
+                FROM resume_applications ra
+                INNER JOIN student_job_applications sja ON ra.application_id = sja.id
+                INNER JOIN student_preferences sp ON sja.student_id = sp.student_id
+                    AND sja.company_id = sp.company_id
+                    AND sja.job_id = sp.job_id
+                    AND sp.semester_id = %s
+                WHERE sja.student_id IN ({placeholders})
+            """, [current_semester_id] + unadmitted_student_ids)
+            
+            resume_apps = cursor.fetchall() or []
+            
+            # 為每個申請記錄重置面試狀態
+            for ra in resume_apps:
+                application_id = ra.get('application_id')
+                job_id = ra.get('job_id')
+                current_apply_status = ra.get('apply_status')
+                current_interview_status = ra.get('interview_status')
+                
+                # 重置面試狀態為 'none'，讓廠商可以重新安排面試
+                # 如果 apply_status 是 'rejected'，更新為 'approved'，讓學生可以重新參與面試
+                new_apply_status = 'approved' if current_apply_status == 'rejected' else current_apply_status
+                
+                try:
+                    cursor.execute("""
+                        UPDATE resume_applications
+                        SET interview_status = 'none',
+                            interview_time = NULL,
+                            interview_timeEnd = NULL,
+                            interview_result = 'pending',
+                            apply_status = %s,
+                            updated_at = NOW()
+                        WHERE application_id = %s AND job_id = %s
+                    """, (new_apply_status, application_id, job_id))
+                    print(f"✅ [二面流程] 重置學生面試狀態: application_id={application_id}, job_id={job_id}, apply_status={current_apply_status}->{new_apply_status}, interview_status={current_interview_status}->none")
+                except Exception as e:
+                    print(f"⚠️ [二面流程] 重置面試狀態失敗: application_id={application_id}, job_id={job_id}, error={e}")
         
         for student in unadmitted_students:
             title = f"{semester_prefix} 二面流程已啟動"

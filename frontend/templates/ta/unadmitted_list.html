@@ -584,7 +584,7 @@
 
       const rows = students.map(s => {
         const statusClass = s.is_matched ? 'badge-matched' : 'badge-unmatched';
-        const statusText = s.is_matched ? '已媒合' : '未錄取';
+        const statusText = s.is_matched ? '已媒合' : '未媒合';
         const name = escapeHtml(s.student_name || '-');
         const number = escapeHtml(s.student_number || '-');
         // 班級顯示（包含年級）
