@@ -1405,31 +1405,19 @@ def get_all_students():
         if not current_semester_id:
             return jsonify({"success": False, "message": "無法取得當前學期"}), 500
         
-        # 獲取所有已在媒合結果中的學生 ID
-        # 包括：1. manage_director 表中的記錄（Approved 或 Pending）
-        #       2. resume_applications 表中有廠商排序資料的記錄（is_reserve 或 slot_index 不為 NULL）
-        # 注意：manage_director.preference_id 對應的是 student_job_applications.id（即 resume_applications.application_id）
+        # 獲取所有已在媒合結果中的學生 ID（只統計主任已確認的學生）
+        # 注意：manage_director.preference_id 引用的是 student_job_applications.id（即 resume_applications.application_id）
+        # 需要通過 student_job_applications 來 JOIN student_preferences，並且只統計當前學期的記錄
         cursor.execute("""
             SELECT DISTINCT md.student_id
             FROM manage_director md
-            LEFT JOIN student_job_applications sja ON md.preference_id = sja.id
-            LEFT JOIN student_preferences sp ON sja.student_id = sp.student_id 
-                AND sja.company_id = sp.company_id 
+            INNER JOIN student_job_applications sja ON md.preference_id = sja.id
+            INNER JOIN student_preferences sp ON sja.student_id = sp.student_id
+                AND sja.company_id = sp.company_id
                 AND sja.job_id = sp.job_id
                 AND sp.semester_id = %s
-            WHERE md.director_decision IN ('Approved', 'Pending')
-                AND (sp.semester_id = %s OR (sp.semester_id IS NULL AND sja.id IS NOT NULL))
-            UNION
-            SELECT DISTINCT sja.student_id
-            FROM resume_applications ra
-            INNER JOIN student_job_applications sja ON ra.application_id = sja.id
-            INNER JOIN student_preferences sp ON sja.student_id = sp.student_id 
-                AND sja.company_id = sp.company_id 
-                AND sja.job_id = sp.job_id
-                AND sp.semester_id = %s
-            WHERE ra.apply_status = 'approved'  -- 廠商必須已通過履歷審核
-            AND (ra.is_reserve IS NOT NULL OR ra.slot_index IS NOT NULL)  -- 必須已完成媒合排序
-        """, (current_semester_id, current_semester_id, current_semester_id))
+            WHERE md.director_decision = 'Approved'  -- 只統計主任已確認的學生
+        """, (current_semester_id,))
         matched_student_ids = {row['student_id'] for row in cursor.fetchall()}
         
         # 學期對應學號邏輯：1132→110xxx，1141/1142→111xxx（學號前3碼 = 學年前3碼 - 3）
