@@ -3862,6 +3862,50 @@ def ta_toggle_second_interview():
         # 只通知未錄取的學生
         unadmitted_students = [s for s in all_students if s['id'] not in matched_student_ids]
         
+        # 為未錄取的學生重置面試狀態，讓他們可以重新參與二次面試
+        unadmitted_student_ids = [s['id'] for s in unadmitted_students]
+        if unadmitted_student_ids:
+            # 找到這些學生的所有申請記錄（通過 student_job_applications 和 student_preferences）
+            placeholders = ','.join(['%s'] * len(unadmitted_student_ids))
+            cursor.execute(f"""
+                SELECT DISTINCT ra.id, ra.application_id, ra.job_id, ra.apply_status, ra.interview_status
+                FROM resume_applications ra
+                INNER JOIN student_job_applications sja ON ra.application_id = sja.id
+                INNER JOIN student_preferences sp ON sja.student_id = sp.student_id
+                    AND sja.company_id = sp.company_id
+                    AND sja.job_id = sp.job_id
+                    AND sp.semester_id = %s
+                WHERE sja.student_id IN ({placeholders})
+            """, [current_semester_id] + unadmitted_student_ids)
+            
+            resume_apps = cursor.fetchall() or []
+            
+            # 為每個申請記錄重置面試狀態
+            for ra in resume_apps:
+                application_id = ra.get('application_id')
+                job_id = ra.get('job_id')
+                current_apply_status = ra.get('apply_status')
+                current_interview_status = ra.get('interview_status')
+                
+                # 重置面試狀態為 'none'，讓廠商可以重新安排面試
+                # 如果 apply_status 是 'rejected'，更新為 'approved'，讓學生可以重新參與面試
+                new_apply_status = 'approved' if current_apply_status == 'rejected' else current_apply_status
+                
+                try:
+                    cursor.execute("""
+                        UPDATE resume_applications
+                        SET interview_status = 'none',
+                            interview_time = NULL,
+                            interview_timeEnd = NULL,
+                            interview_result = 'pending',
+                            apply_status = %s,
+                            updated_at = NOW()
+                        WHERE application_id = %s AND job_id = %s
+                    """, (new_apply_status, application_id, job_id))
+                    print(f"✅ [二面流程] 重置學生面試狀態: application_id={application_id}, job_id={job_id}, apply_status={current_apply_status}->{new_apply_status}, interview_status={current_interview_status}->none")
+                except Exception as e:
+                    print(f"⚠️ [二面流程] 重置面試狀態失敗: application_id={application_id}, job_id={job_id}, error={e}")
+        
         for student in unadmitted_students:
             title = f"{semester_prefix} 二面流程已啟動"
             message = f"{semester_prefix}二面流程已啟動，請留意相關面試通知。"
