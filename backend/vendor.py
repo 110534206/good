@@ -2879,7 +2879,7 @@ def get_all_interview_schedules():
         company_ids = [c["id"] for c in companies] if companies else []
         
         # 查詢所有廠商的面試排程（從 resume_applications 表中）
-        # 只查詢 interview_status = 'scheduled' 的記錄
+        # 查詢 interview_status = 'scheduled' 或 'finished' 的記錄（已面試的排程也要保留）
         # 注意：resume_applications.application_id 對應的是 student_job_applications.id，不是 student_preferences.id
         # 注意：不使用 DISTINCT，因為每個學生的排程都是獨立的記錄
         cursor.execute("""
@@ -2898,7 +2898,7 @@ def get_all_interview_schedules():
             JOIN student_job_applications sja ON ra.application_id = sja.id
             LEFT JOIN internship_companies ic ON sja.company_id = ic.id
             LEFT JOIN users u ON sja.student_id = u.id
-            WHERE ra.interview_status = 'scheduled'
+            WHERE ra.interview_status IN ('scheduled', 'finished')
             AND ra.interview_time IS NOT NULL
             ORDER BY ra.updated_at DESC
         """)
