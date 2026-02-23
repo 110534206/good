@@ -909,7 +909,7 @@ def download_resume(resume_id):
     
     try:
         cursor.execute("""
-            SELECT file_path, original_filename
+            SELECT filepath, original_filename
             FROM resumes
             WHERE id = %s
         """, (resume_id,))
@@ -918,14 +918,21 @@ def download_resume(resume_id):
         if not resume:
             return jsonify({"success": False, "message": "找不到履歷"}), 404
         
-        file_path = resume['file_path']
+        file_path = resume['filepath']
         original_filename = resume['original_filename']
         
-        if not file_path or not os.path.exists(file_path):
+        if not file_path:
+            return jsonify({"success": False, "message": "履歷檔案不存在"}), 404
+        # 資料庫可能存相對路徑 (uploads/resumes/...)，需對應專案根目錄
+        if os.path.isabs(file_path):
+            full_path = file_path
+        else:
+            full_path = os.path.normpath(os.path.join(BASE_UPLOAD_DIR, file_path.replace("\\", "/")))
+        if not os.path.exists(full_path):
             return jsonify({"success": False, "message": "履歷檔案不存在"}), 404
         
         return send_file(
-            file_path,
+            full_path,
             as_attachment=True,
             download_name=original_filename or 'resume.pdf'
         )
