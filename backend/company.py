@@ -819,7 +819,7 @@ def api_get_reviewed_companies():
         conn = get_db()
         cursor = conn.cursor(dictionary=True)
 
-        # 指導老師不等於上傳老師，一律設為主任：未指派或指導老師＝上傳老師的已審核公司，改為主任（優先嚴竹華）
+        # 只有「未指派」指導老師的已審核公司才自動設為主任；已指派的不改動，尊重手動選擇（避免重新整理後覆蓋成主任）
         cursor.execute("SELECT id FROM users WHERE role = 'director' AND name = %s LIMIT 1", ('嚴竹華',))
         director_row = cursor.fetchone()
         if not director_row:
@@ -830,8 +830,7 @@ def api_get_reviewed_companies():
             cursor.execute("""
                 UPDATE internship_companies
                 SET advisor_user_id = %s
-                WHERE status = 'approved'
-                  AND (advisor_user_id IS NULL OR advisor_user_id = uploaded_by_user_id)
+                WHERE status = 'approved' AND advisor_user_id IS NULL
             """, (director_id,))
             if cursor.rowcount:
                 conn.commit()
