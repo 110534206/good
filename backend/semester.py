@@ -3,6 +3,7 @@ from config import get_db
 from datetime import datetime, date, timedelta
 import traceback
 import time
+import re
 
 semester_bp = Blueprint("semester_bp", __name__, url_prefix="/semester")
 
@@ -64,14 +65,31 @@ def is_student_in_current_internship(cursor, user_id):
             admission_year_val = int(row["username"][:3])
         except (TypeError, ValueError):
             pass
-    cursor.execute(
-        """SELECT 1 FROM internship_configs
-           WHERE semester_id = %s
-             AND (user_id = %s OR (user_id IS NULL AND admission_year = %s))
-           ORDER BY user_id DESC
-           LIMIT 1""",
-        (current_semester_id, user_id, admission_year_val)
-    )
+    # 若仍無（例如 username 為 "s110123" 非數字開頭），從 username 中擷取 110/111/112 等屆別
+    if admission_year_val is None and row.get("username"):
+        m = re.search(r"(110|111|112|113|114)", str(row["username"]))
+        if m:
+            try:
+                admission_year_val = int(m.group(1))
+            except (TypeError, ValueError):
+                pass
+    # 有 user_id 的個人設定優先；若無則用 admission_year 匹配公版（admission_year_val 為 None 時僅匹配 user_id）
+    if admission_year_val is not None:
+        cursor.execute(
+            """SELECT 1 FROM internship_configs
+               WHERE semester_id = %s
+                 AND (user_id = %s OR (user_id IS NULL AND admission_year = %s))
+               ORDER BY user_id DESC
+               LIMIT 1""",
+            (current_semester_id, user_id, admission_year_val)
+        )
+    else:
+        cursor.execute(
+            """SELECT 1 FROM internship_configs
+               WHERE semester_id = %s AND user_id = %s
+               LIMIT 1""",
+            (current_semester_id, user_id)
+        )
     return cursor.fetchone() is not None
 
 # =========================================================

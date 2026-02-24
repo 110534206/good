@@ -2,6 +2,7 @@ from flask import Blueprint, render_template, session, redirect, url_for, reques
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 from config import get_db
+from semester import is_student_in_current_internship
 import os
 import re 
 
@@ -782,7 +783,17 @@ def confirm_matching_page():
 # 使用者首頁（學生前台）
 @users_bp.route('/student_home')
 def student_home():
-    return render_template('user_shared/student_home.html')
+    in_internship_semester = True  # 非學生或無法判斷時預設顯示全部
+    if session.get('role') == 'student' and session.get('user_id'):
+        try:
+            conn = get_db()
+            cursor = conn.cursor(dictionary=True)
+            in_internship_semester = is_student_in_current_internship(cursor, session['user_id'])
+            cursor.close()
+            conn.close()
+        except Exception:
+            pass
+    return render_template('user_shared/student_home.html', in_internship_semester=in_internship_semester)
 
 # 功能操作說明頁面
 @users_bp.route('/operation_manual')

@@ -3632,79 +3632,9 @@
 
 
     // =========================================================================
-    // 檢查作業截止時間
-    // =========================================================================
-    async function checkDeadlineAndDisableForm() {
-      try {
-        const res = await fetch("/announcement/api/check_deadline?type=resume");
-        const result = await res.json();
-
-        if (result.success && result.has_deadline && result.is_expired) {
-          // 截止時間已過，禁用表單
-          const form = document.getElementById("resumeForm");
-          if (form) {
-            // 禁用所有輸入欄位和按鈕
-            form.querySelectorAll('input, select, textarea, button').forEach(element => {
-              element.disabled = true;
-            });
-
-            // 禁用提交按鈕
-            const submitBtn = document.getElementById("submitResumeBtn");
-            if (submitBtn) {
-              submitBtn.disabled = true;
-              submitBtn.textContent = '已超過截止時間';
-            }
-
-            // 禁用修改按鈕
-            const editBtn = document.getElementById("editResumeBtn");
-            if (editBtn) {
-              editBtn.disabled = true;
-            }
-            
-            // 禁用所有動態生成的按鈕（如證照相關按鈕）
-            document.querySelectorAll('.btn, button').forEach(btn => {
-              if (!btn.closest('.alert')) { // 保留 alert 中的關閉按鈕
-                btn.disabled = true;
-              }
-            });
-            
-            // 顯示提示訊息
-            const container = document.querySelector(".container");
-            if (container) {
-              const alertDiv = document.createElement("div");
-              alertDiv.className = "alert alert-danger alert-dismissible fade show";
-              alertDiv.setAttribute("role", "alert");
-              alertDiv.innerHTML = `
-                <strong>⚠️ 已超過截止時間</strong><br>
-                上傳履歷的截止時間為：${result.deadline}<br>
-                目前無法再修改或提交履歷。
-                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-              `;
-              container.insertBefore(alertDiv, container.firstChild);
-            }
-
-            // 設置全局標記，防止後續操作
-            window.deadlineExpired = true;
-            isEditing = false; // 強制設為非編輯模式
-          }
-        }
-      } catch (error) {
-        console.error("檢查截止時間失敗:", error);
-      }
-    }
-
-    // =========================================================================
     // 事件綁定和初始化
     // =========================================================================
     document.addEventListener("DOMContentLoaded", async () => {
-      // 首先檢查截止時間
-      await checkDeadlineAndDisableForm();
-
-      // 如果已過期，直接返回，不進行後續初始化
-      if (window.deadlineExpired) {
-        return;
-      }
-
       // 綁定Excel相關按鈕
       const downloadTemplateBtn = document.getElementById('download-excel-template-btn');
       const uploadExcelBtn = document.getElementById('upload-excel-btn');
@@ -3929,29 +3859,6 @@
     const editResumeBtn = document.getElementById("editResumeBtn");
     if (editResumeBtn) {
       editResumeBtn.addEventListener("click", async function () {
-        // 檢查截止時間
-        if (window.deadlineExpired) {
-          return Swal.fire({ 
-            icon: 'error', 
-            title: '已超過截止時間', 
-            text: '無法再修改履歷。' 
-          });
-        }
-
-        try {
-          const deadlineCheck = await fetch("/announcement/api/check_deadline?type=resume");
-          const deadlineResult = await deadlineCheck.json();
-          if (deadlineResult.success && deadlineResult.has_deadline && deadlineResult.is_expired) {
-            return Swal.fire({ 
-              icon: 'error', 
-              title: '已超過截止時間', 
-              text: `上傳履歷的截止時間為：${deadlineResult.deadline}，無法再修改。` 
-            });
-          }
-        } catch (error) {
-          console.error("檢查截止時間失敗:", error);
-        }
-
         // 切換編輯狀態
         isEditing = !isEditing;
 
@@ -4026,29 +3933,6 @@
     // 🧩 表單送出 (提交成功後清除 LocalStorage 並切換頁籤)
     document.getElementById("resumeForm").addEventListener("submit", async e => {
       e.preventDefault();
-
-      // 再次檢查截止時間（防止用戶繞過前端檢查）
-      if (window.deadlineExpired) {
-        return Swal.fire({ 
-          icon: 'error', 
-          title: '已超過截止時間', 
-          text: '無法再提交履歷。' 
-        });
-      }
-
-      try {
-        const deadlineCheck = await fetch("/announcement/api/check_deadline?type=resume");
-        const deadlineResult = await deadlineCheck.json();
-        if (deadlineResult.success && deadlineResult.has_deadline && deadlineResult.is_expired) {
-          return Swal.fire({ 
-            icon: 'error', 
-            title: '已超過截止時間', 
-            text: `上傳履歷的截止時間為：${deadlineResult.deadline}，無法再提交。` 
-          });
-        }
-      } catch (error) {
-        console.error("檢查截止時間失敗:", error);
-      }
 
       const submitBtn = e.submitter;
       const originalText = submitBtn.textContent;
