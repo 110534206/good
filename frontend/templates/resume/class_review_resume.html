@@ -185,7 +185,7 @@
               <th style="padding: 14px 16px; font-weight: 600;">姓名</th>
               <th style="padding: 14px 16px; font-weight: 600;">上傳時間</th>
               <th style="padding: 14px 16px; font-weight: 600;">檔案名稱</th>
-              <th style="padding: 14px 16px; font-weight: 600;">選擇公司</th>
+              <th style="padding: 14px 16px; font-weight: 600;">公司</th>
               <th style="padding: 14px 16px; font-weight: 600;">職缺</th>
               <th id="statusHeader" style="padding: 14px 16px; font-weight: 600; display: none;">狀態</th>
               <th style="padding: 14px 16px; font-weight: 600;" id="commentHeader">留言</th>
@@ -197,7 +197,6 @@
           </tbody>
         </table>
       </div>
-      <nav><ul class="pagination justify-content-center mt-3" id="pagination"></ul></nav>
     </section>
   </main>
 
@@ -234,8 +233,6 @@
     let allResumes = [];
     let currentResumeId = null;
     let currentPreferenceId = null; 
-    let currentPage = 1;
-    const rowsPerPage = 10;
     let userRole = null;
     let isHomeroom = false;
     let currentUserId = null;
@@ -511,7 +508,6 @@
     }
 
     function applyFilters() {
-      currentPage = 1;
       const dept = document.getElementById("departmentFilter").value.trim();
       const cls = document.getElementById("classFilter").value.trim();
       const companyName = document.getElementById("companyNameFilter").value.trim();
@@ -571,7 +567,6 @@
       if (resumes.length === 0) {
         const colspan = isDirectorMode ? 8 : 9;
         tbody.innerHTML = `<tr><td colspan="${colspan}" style="text-align: center; color: #64748b; padding: 16px;">目前沒有資料</td></tr>`;
-        document.getElementById("pagination").innerHTML = "";
         return;
       } 
 
@@ -624,11 +619,7 @@
         });
       });
 
-      const start = (currentPage - 1) * rowsPerPage;
-      const end = start + rowsPerPage;
-      const pageData = allRowsData.slice(start, end);
-
-      pageData.forEach(row => {
+      allRowsData.forEach(row => {
         const pid = row.preference_id || null;
         
         // 渲染每一行，statusColor(row.display_status) 會決定背景色，mapStatus 決定文字
@@ -655,8 +646,6 @@
         `;
         tbody.appendChild(tr);
       });
-
-      renderPagination(allRowsData.length);
     }
 
     function renderCommentBtn(row, isViewOnly, pid) {
@@ -704,20 +693,6 @@
         btns += rejectBtn;
         btns += `</div>`;
         return btns;
-    }
-
-    function renderPagination(totalItems) {
-      const totalPages = Math.ceil(totalItems / rowsPerPage);
-      const pagination = document.getElementById("pagination");
-      pagination.innerHTML = "";
-      if (totalPages <= 1) return;
-      for (let i = 1; i <= totalPages; i++) {
-        const li = document.createElement("li");
-        li.className = `page-item ${i === currentPage ? "active" : ""}`;
-        li.innerHTML = `<a class="page-link" href="#">${i}</a>`;
-        li.onclick = (e) => { e.preventDefault(); currentPage = i; applyFilters(); }; 
-        pagination.appendChild(li);
-      }
     }
 
     // 更新狀態函式
