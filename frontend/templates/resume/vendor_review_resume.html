@@ -682,23 +682,14 @@
       companyNameSelect.innerHTML = `<option value="">所有公司</option>`;
       const companySet = new Set();
       
-      // 只從實際有履歷資料的公司中提取公司名稱，確保下拉選單中的每個公司都有對應的履歷資料
-      // 如果是廠商，優先從 profile API 獲取的公司名稱（但也要確保該公司有履歷資料）
+      // 如果是廠商，直接從 profile API 獲取的公司名稱加入下拉選單
+      // 即使目前沒有履歷資料，也應該顯示該廠商的公司名稱
       if (userRole === 'vendor' && vendorCompanyName && vendorCompanyName.trim()) {
-        // 檢查該公司是否有對應的履歷資料
-        const hasResumesForCompany = data.some(r => {
-          const companyName = (r.company_name || '').trim();
-          return companyName === vendorCompanyName.trim();
-        });
-        if (hasResumesForCompany) {
-          companySet.add(vendorCompanyName.trim());
-          console.log('✅ 使用 profile API 的公司名稱（有履歷資料）：', vendorCompanyName);
-        } else {
-          console.log('⚠️ profile API 的公司名稱沒有對應的履歷資料，跳過：', vendorCompanyName);
-        }
+        companySet.add(vendorCompanyName.trim());
+        console.log('✅ 從 profile API 添加公司名稱（廠商）：', vendorCompanyName);
       }
       
-      // 從履歷資料中提取公司名稱（確保每個公司都有對應的履歷資料）
+      // 從履歷資料中提取公司名稱（作為補充，確保所有有履歷的公司都顯示）
       data.forEach(r => { 
         if(r.company_name && r.company_name.trim()) {
           companySet.add(r.company_name.trim());
