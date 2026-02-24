@@ -593,6 +593,79 @@ def review_resume(resume_id):
                 print(f"🔍 [DEBUG] 插入新記錄到 resume_teacher: application_id={application_id_int}, teacher_id={user_id}, review_status={status}")
             
             print(f"✅ [DEBUG] 指導老師審核完成: application_id={application_id_int}, review_status={status}, teacher_id={user_id}")
+            
+            # 如果指導老師審核通過（status='approved'），創建 resume_applications 記錄
+            if status == 'approved':
+                # 查詢該 application_id 對應的 job_id 和 company_id
+                cursor.execute("""
+                    SELECT job_id, company_id
+                    FROM student_job_applications
+                    WHERE id = %s
+                """, (application_id_int,))
+                app_data = cursor.fetchone()
+                
+                if app_data:
+                    job_id = app_data['job_id']
+                    company_id = app_data['company_id']
+                    
+                    # 檢查是否已存在 resume_applications 記錄
+                    cursor.execute("""
+                        SELECT id, apply_status
+                        FROM resume_applications
+                        WHERE application_id = %s AND job_id = %s
+                    """, (application_id_int, job_id))
+                    existing_ra = cursor.fetchone()
+                    
+                    if existing_ra:
+                        # 如果記錄已存在，更新為 'uploaded'（待廠商審核）
+                        if existing_ra['apply_status'] != 'uploaded':
+                            cursor.execute("""
+                                UPDATE resume_applications
+                                SET apply_status = 'uploaded',
+                                    updated_at = NOW()
+                                WHERE id = %s
+                            """, (existing_ra['id'],))
+                            print(f"✅ [resume_applications] 指導老師通過後更新廠商審核記錄: application_id={application_id_int}, job_id={job_id}, apply_status='uploaded'")
+                    else:
+                        # 創建新的 resume_applications 記錄，狀態設為 'uploaded'（待廠商審核）
+                        cursor.execute("""
+                            INSERT INTO resume_applications
+                            (application_id, job_id, apply_status, interview_status, interview_result, created_at)
+                            VALUES (%s, %s, %s, %s, %s, NOW())
+                        """, (application_id_int, job_id, 'uploaded', 'none', 'pending'))
+                        print(f"✅ [resume_applications] 指導老師通過後創建廠商審核記錄: application_id={application_id_int}, job_id={job_id}, apply_status='uploaded'")
+                    
+                    # 通知廠商
+                    cursor.execute("""
+                        SELECT advisor_user_id, company_name
+                        FROM internship_companies
+                        WHERE id = %s
+                    """, (company_id,))
+                    company_data = cursor.fetchone()
+                    
+                    if company_data and company_data.get('advisor_user_id'):
+                        advisor_user_id = company_data['advisor_user_id']
+                        company_name = company_data.get('company_name', '公司')
+                        cursor.execute("""
+                            SELECT id, name FROM users
+                            WHERE role = 'vendor' AND teacher_id = %s
+                        """, (advisor_user_id,))
+                        vendors = cursor.fetchall()
+                        
+                        for vendor in vendors:
+                            vendor_id = vendor['id']
+                            create_notification(
+                                user_id=vendor_id,
+                                title="新履歷待審核",
+                                message=(
+                                    f"學生 {student_name} 的履歷已由指導老師審核通過，"
+                                    f"已投遞至「{company_name}」，請前往審核。"
+                                ),
+                                category="resume",
+                                link_url="/vendor/resumes"
+                            )
+                        if vendors:
+                            print(f"✅ 指導老師通過履歷，已通知 {len(vendors)} 位廠商")
         else:
             # 班導或其他角色審核履歷（更新 resumes 表）
             old_status_for_check = old_status
@@ -709,103 +782,8 @@ def review_resume(resume_id):
                     category="resume"
                 )
                 
-                # 指導老師通過履歷：同步傳給對應的廠商
-                if user_role == 'teacher':
-                    cursor.execute("""
-                        SELECT id, job_id, company_id, resume_id
-                        FROM student_job_applications
-                        WHERE student_id = %s AND resume_id = %s
-                    """, (student_user_id, resume_id))
-                    applications = cursor.fetchall()
-                    
-                    if applications:
-                        updated_companies = []
-                        for app in applications:
-                            application_id = app['id']
-                            job_id = app['job_id']
-                            company_id = app['company_id']
-                            
-                            cursor.execute("""
-                                SELECT id, apply_status
-                                FROM resume_applications
-                                WHERE application_id = %s AND job_id = %s
-                            """, (application_id, job_id))
-                            existing_ra = cursor.fetchone()
-                            
-                            if existing_ra:
-                                # 如果記錄已存在但狀態不是待審核，更新為 'uploaded'（待審核狀態）
-                                if existing_ra['apply_status'] not in ['uploaded', 'approved', 'rejected']:
-                                    cursor.execute("""
-                                        UPDATE resume_applications
-                                        SET apply_status = 'uploaded',
-                                            updated_at = NOW()
-                                        WHERE id = %s
-                                    """, (existing_ra['id'],))
-                                    updated_companies.append(company_id)
-                                elif existing_ra['apply_status'] == 'rejected':
-                                    # 如果之前被退件，現在重新設為待審核
-                                    cursor.execute("""
-                                        UPDATE resume_applications
-                                        SET apply_status = 'uploaded',
-                                            updated_at = NOW()
-                                        WHERE id = %s
-                                    """, (existing_ra['id'],))
-                                    updated_companies.append(company_id)
-                            else:
-                                # 創建新的 resume_applications 記錄，狀態設為 'uploaded'（待廠商審核）
-                                cursor.execute("""
-                                    INSERT INTO resume_applications
-                                    (application_id, job_id, apply_status, interview_status, interview_result, created_at)
-                                    VALUES (%s, %s, %s, %s, %s, NOW())
-                                """, (application_id, job_id, 'uploaded', 'none', 'pending'))
-                                updated_companies.append(company_id)
-                                print(f"✅ [resume_applications] 指導老師通過後創建廠商審核記錄: application_id={application_id}, job_id={job_id}, apply_status='uploaded'")
-                        
-                        if updated_companies:
-                            placeholders = ','.join(['%s'] * len(updated_companies))
-                            cursor.execute(f"""
-                                SELECT id, company_name, advisor_user_id
-                                FROM internship_companies
-                                WHERE id IN ({placeholders})
-                            """, tuple(updated_companies))
-                            companies = cursor.fetchall()
-                            company_names = [c['company_name'] for c in companies]
-                            
-                            notified_vendors = set()
-                            for company in companies:
-                                advisor_user_id = company.get('advisor_user_id')
-                                if advisor_user_id:
-                                    cursor.execute("""
-                                        SELECT id, name FROM users 
-                                        WHERE id = %s AND role IN ('teacher', 'director')
-                                    """, (advisor_user_id,))
-                                    advisor = cursor.fetchone()
-                                    if advisor and advisor.get('id'):
-                                        cursor.execute("""
-                                            SELECT id, name FROM users
-                                            WHERE role = 'vendor' AND teacher_id = %s
-                                        """, (advisor_user_id,))
-                                        vendors = cursor.fetchall()
-                                        
-                                        for vendor in vendors:
-                                            vendor_id = vendor['id']
-                                            if vendor_id not in notified_vendors:
-                                                create_notification(
-                                                    user_id=vendor_id,
-                                                    title="新履歷待審核",
-                                                    message=(
-                                                        f"學生 {student_name} 的履歷已由指導老師審核通過，"
-                                                        f"已投遞至「{company['company_name']}」，請前往審核。"
-                                                    ),
-                                                    category="resume",
-                                                    link_url="/vendor/resumes"
-                                                )
-                                                notified_vendors.add(vendor_id)
-                            
-                            if notified_vendors:
-                                print(f"✅ 指導老師通過履歷，已同步傳給 {len(updated_companies)} 家公司，並通知 {len(notified_vendors)} 位廠商")
-                            else:
-                                print(f"✅ 指導老師通過履歷，已同步傳給 {len(updated_companies)} 家公司")
+                # 注意：resume_applications 記錄只在指導老師審核通過時創建（見上面的邏輯）
+                # 這裡不再處理 resume_applications，因為已經在指導老師審核通過時處理了
 
         conn.commit()
 

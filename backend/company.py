@@ -1820,66 +1820,11 @@ def apply_company():
         ))
         application_id = cursor.lastrowid
 
-        # 注意：不在此處創建 resume_teacher 記錄
+        # 注意：不在此處創建 resume_teacher 和 resume_applications 記錄
         # 流程：學生投遞 → 班導審核通過（resumes.status='approved'）→ 創建 resume_teacher 記錄 → 指導老師審核通過（review_status='approved'）→ 創建 resume_applications 記錄
         print(f"✅ [student_apply] 學生投遞成功: application_id={application_id}, company_id={company_id}, job_id={job_id}, resume_id={resume_id}")
         print(f"   等待班導審核通過後，才會創建 resume_teacher 記錄")
-
-        # 同時創建 resume_applications 記錄（給廠商審核用）
-        # 注意：resume_applications 記錄會在指導老師審核通過時自動創建（見 resume.py review_resume）
-        # 這裡嘗試創建，但如果失敗（例如外鍵約束問題）不會中斷投遞流程
-        # resume_applications 表使用 application_id 和 job_id
-        try:
-            # 先驗證 job_id 是否存在於 internship_jobs 表中
-            cursor.execute("SELECT id FROM internship_jobs WHERE id = %s", (job_id,))
-            job_exists = cursor.fetchone()
-            
-            if not job_exists:
-                print(f"⚠️ [resume_applications] job_id={job_id} 不存在於 internship_jobs 表中，跳過創建 resume_applications 記錄")
-            else:
-                cursor.execute("""
-                    SELECT id FROM resume_applications
-                    WHERE application_id = %s AND job_id = %s
-                """, (application_id, job_id))
-                existing_record = cursor.fetchone()
-                if not existing_record:
-                    try:
-                        # 注意：apply_status 應該是 'uploaded'（待廠商審核），不是 'applied'
-                        # 因為學生投遞時，履歷還需要經過指導老師審核，通過後才會傳給廠商
-                        # 所以這裡不應該創建 resume_applications 記錄，應該等指導老師通過後再創建
-                        # 但為了向後兼容，如果外鍵約束允許，我們可以創建，狀態設為 'uploaded'
-                        cursor.execute("""
-                            INSERT INTO resume_applications
-                            (application_id, job_id, apply_status, interview_status, interview_result, created_at)
-                            VALUES (%s, %s, %s, %s, %s, NOW())
-                        """, (application_id, job_id, 'uploaded', 'none', 'pending'))
-                        print(f"✅ [resume_applications] 成功創建記錄: application_id={application_id}, job_id={job_id}, apply_status='uploaded'")
-                    except Exception as fk_err:
-                        # 如果外鍵約束錯誤（例如 job_id 被錯誤地約束到 internship_companies.id），
-                        # 記錄錯誤但不中斷流程，因為 resume_applications 會在指導老師審核通過時創建
-                        error_msg = str(fk_err)
-                        if 'foreign key constraint' in error_msg.lower() or '1452' in error_msg:
-                            print(f"⚠️ [resume_applications] 外鍵約束錯誤，跳過創建（將在指導老師審核通過時自動創建）")
-                            print(f"   錯誤詳情: {error_msg}")
-                            print(f"   建議：檢查資料庫 resume_applications 表的外鍵約束，job_id 應關聯到 internship_jobs.id 而非 internship_companies.id")
-                        else:
-                            print(f"⚠️ [resume_applications] 插入失敗: {fk_err}")
-                else:
-                    # 更新現有記錄，確保 apply_status 是有效的 enum 值
-                    cursor.execute("""
-                        UPDATE resume_applications
-                        SET apply_status = 'uploaded',
-                            interview_status = 'none',
-                            interview_result = 'pending',
-                            updated_at = NOW()
-                        WHERE id = %s
-                    """, (existing_record['id'],))
-                    print(f"✅ [resume_applications] 成功更新記錄: id={existing_record['id']}, apply_status='uploaded'")
-        except Exception as ra_err:
-            # 如果 resume_applications 操作失敗，記錄錯誤但不中斷整個投遞流程
-            # 因為 resume_applications 會在指導老師審核通過時自動創建
-            print(f"⚠️ [resume_applications] 操作失敗（不影響投遞）: {ra_err}")
-            traceback.print_exc()
+        print(f"   等待指導老師審核通過後，才會創建 resume_applications 記錄")
             # 不拋出異常，讓投遞流程繼續
         
         conn.commit()
