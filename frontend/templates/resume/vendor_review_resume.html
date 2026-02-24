@@ -794,7 +794,13 @@
         let matchesStatus = true;
         if (status) {
            const statusStr = r.application_statuses || r.display_status || r.status || '';
-           matchesStatus = statusStr === status;  // 使用嚴格相等，確保精確匹配
+           // 廠商的「待審核」對應 uploaded 狀態
+           if (status === 'pending') {
+             matchesStatus = statusStr === 'uploaded';
+           } else {
+             // 其他狀態使用嚴格相等匹配
+             matchesStatus = statusStr === status;
+           }
         }
 
         // 面試狀態篩選
@@ -864,11 +870,19 @@
         const comp = r.company_name || '—';
         const job = r.job_title || r.jobTitle || '—';
         const pid = r.preference_id || null;
-        const st = r.application_statuses || r.display_status || r.status || 'pending';
+        const st = r.application_statuses || r.display_status || r.status || 'uploaded';
         const cm = r.comment || '';
 
-        // 狀態篩選
-        if (filterStatus && st !== filterStatus) return;
+        // 狀態篩選（與 applyFilters 中的邏輯保持一致）
+        if (filterStatus) {
+          // 廠商的「待審核」對應 uploaded 狀態
+          if (filterStatus === 'pending') {
+            if (st !== 'uploaded') return;
+          } else {
+            // 其他狀態使用嚴格相等匹配
+            if (st !== filterStatus) return;
+          }
+        }
         
         // 職缺篩選
         if (filterJob && !job.includes(filterJob) && filterJob !== (r.job_id ? String(r.job_id) : '')) return;
