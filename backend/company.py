@@ -393,41 +393,43 @@ def upload_company():
             status = 'pending'
             reviewed_at = None
         else:
-            # 如果是老師或主任，預設上傳教師為指導老師
-            updated_vendor_username = None  # 初始化變數
-            if role in ['teacher', 'director']:
+            # 指導老師不等於上傳老師，一律設為主任。主任上傳則指導老師為自己；老師上傳則指導老師為主任
+            updated_vendor_username = None
+            if role == 'director':
                 advisor_user_id = user_id
-                
-                # 取得上傳者的名字（用於更新廠商的 teacher_name）
                 cursor.execute("SELECT name FROM users WHERE id = %s", (user_id,))
                 teacher_info = cursor.fetchone()
                 teacher_name = teacher_info[0] if teacher_info and teacher_info[0] else None
-                
-                # 檢查公司名稱是否匹配廠商對應的公司名稱
-                # 如果匹配，則更新該廠商的 teacher_name 為該指導老師的名字
-                vendor_company_map = {
-                    'vendor': '人人人',
-                    'vendora': '嘻嘻嘻'
-                }
-                
-                # 檢查公司名稱是否在 vendor_company_map 的值中
+            elif role == 'teacher':
+                cursor.execute("SELECT id, name FROM users WHERE role = 'director' AND name = %s LIMIT 1", ('嚴竹華',))
+                director_row = cursor.fetchone()
+                if not director_row:
+                    cursor.execute("SELECT id, name FROM users WHERE role = 'director' ORDER BY id ASC LIMIT 1")
+                    director_row = cursor.fetchone()
+                if director_row:
+                    advisor_user_id = director_row[0]
+                    teacher_name = director_row[1] if director_row[1] else None
+                else:
+                    advisor_user_id = None
+                    teacher_name = None
+            else:
+                advisor_user_id = None
+                teacher_name = None
+
+            if role in ['teacher', 'director'] and teacher_name:
+                vendor_company_map = {'vendor': '人人人', 'vendora': '嘻嘻嘻'}
                 matched_vendor_username = None
                 for vendor_username, mapped_company_name in vendor_company_map.items():
                     if company_name == mapped_company_name:
                         matched_vendor_username = vendor_username
                         break
-                
-                # 如果找到匹配的廠商，更新該廠商的 teacher_name 為該指導老師的名字
-                if matched_vendor_username and teacher_name:
+                if matched_vendor_username:
                     cursor.execute("""
-                        UPDATE users 
-                        SET teacher_name = %s 
+                        UPDATE users SET teacher_name = %s
                         WHERE username = %s AND role = 'vendor'
                     """, (teacher_name, matched_vendor_username))
-                    # 記錄更新的廠商資訊（用於後續的成功訊息）
                     updated_vendor_username = matched_vendor_username
-            else:
-                advisor_user_id = None
+
             reviewed_by_user_id = None
             status = 'pending'
             reviewed_at = None
@@ -816,6 +818,23 @@ def api_get_reviewed_companies():
     try:
         conn = get_db()
         cursor = conn.cursor(dictionary=True)
+
+        # 指導老師不等於上傳老師，一律設為主任：未指派或指導老師＝上傳老師的已審核公司，改為主任（優先嚴竹華）
+        cursor.execute("SELECT id FROM users WHERE role = 'director' AND name = %s LIMIT 1", ('嚴竹華',))
+        director_row = cursor.fetchone()
+        if not director_row:
+            cursor.execute("SELECT id FROM users WHERE role = 'director' ORDER BY id ASC LIMIT 1")
+            director_row = cursor.fetchone()
+        if director_row:
+            director_id = director_row['id']
+            cursor.execute("""
+                UPDATE internship_companies
+                SET advisor_user_id = %s
+                WHERE status = 'approved'
+                  AND (advisor_user_id IS NULL OR advisor_user_id = uploaded_by_user_id)
+            """, (director_id,))
+            if cursor.rowcount:
+                conn.commit()
 
         # 取得當前學期代碼
         current_semester_code = get_current_semester_code(cursor)
