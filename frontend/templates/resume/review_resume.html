@@ -463,7 +463,11 @@
       const companySet = new Set();
       
       // 使用已審核公司列表
+      console.log('🔍 [DEBUG] populateFilters - currentUserId:', currentUserId, 'userRole:', userRole);
+      console.log('🔍 [DEBUG] populateFilters - companyData:', companyData);
+      
       if (companyData && companyData.companies && companyData.companies.length > 0) {
+          console.log('🔍 [DEBUG] 找到', companyData.companies.length, '家公司');
           companyData.companies.forEach(company => {
               const companyName = company.company_name || company.name || '';
               let shouldInclude = false;
@@ -475,15 +479,39 @@
                                   company.is_open_current_semester;
               } else {
                   // 一般模式（指導老師）：只顯示該指導老師管理的公司
+                  // 不管 is_open_current_semester 是否為 true，都應該顯示（一開始就要有資料）
+                  const advisorId = company.advisor_user_id;
+                  const matchesUserId = advisorId && String(advisorId) === String(currentUserId);
+                  console.log('🔍 [DEBUG] 公司:', companyName, 'advisor_user_id:', advisorId, 'currentUserId:', currentUserId, '匹配:', matchesUserId);
                   shouldInclude = companyName && companyName.trim() && 
-                                  company.advisor_user_id && 
-                                  String(company.advisor_user_id) === String(currentUserId) &&
-                                  company.status === 'approved' && 
-                                  company.is_open_current_semester;
+                                  advisorId && 
+                                  matchesUserId &&
+                                  company.status === 'approved';
               }
               
               if (shouldInclude) {
                   companySet.add(companyName.trim());
+                  console.log('✅ [DEBUG] 添加公司:', companyName);
+              }
+          });
+      } else {
+          console.warn('⚠️ [DEBUG] companyData 為空或沒有 companies');
+      }
+      
+      // 也從職缺 API 中提取公司名稱（作為補充，確保有資料顯示）
+      if (positionData && positionData.companies && Array.isArray(positionData.companies)) {
+          positionData.companies.forEach(company => {
+              const companyName = company.name || company.company_name || '';
+              if (companyName && companyName.trim()) {
+                  // 對於指導老師，只顯示該指導老師管理的公司
+                  if (userRole === 'teacher' && currentUserId) {
+                      if (company.advisor_user_id && String(company.advisor_user_id) === String(currentUserId)) {
+                          companySet.add(companyName.trim());
+                          console.log('✅ [DEBUG] 從職缺 API 添加公司:', companyName);
+                      }
+                  } else {
+                      companySet.add(companyName.trim());
+                  }
               }
           });
       }
@@ -535,7 +563,25 @@
               }
           });
       } else {
-          // 一般模式：優先從履歷資料中提取所有職缺
+          // 一般模式（指導老師）：從已審核公司列表中提取職缺（如果該公司是該指導老師管理的）
+          // 不管 is_open_current_semester 是否為 true，都應該顯示（一開始就要有資料）
+          if (companyData && companyData.companies && companyData.companies.length > 0) {
+              companyData.companies.forEach(c => {
+                  // 只顯示該指導老師管理的公司的職缺
+                  if (c.status === 'approved' && 
+                      c.advisor_user_id && 
+                      String(c.advisor_user_id) === String(currentUserId) &&
+                      Array.isArray(c.jobs)) {
+                      c.jobs.forEach(jobTitle => {
+                          if (jobTitle && String(jobTitle).trim()) {
+                              jobSet.add(String(jobTitle).trim());
+                          }
+                      });
+                  }
+              });
+          }
+          
+          // 從履歷資料中提取職缺（作為補充）
           data.forEach(r => {
               const jobTitle = r.job_title || r.jobTitle || '';
               if (jobTitle && jobTitle.trim()) {
