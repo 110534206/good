@@ -218,6 +218,7 @@
               <th style="padding: 14px 16px; font-weight: 600;">姓名</th>
               <th style="padding: 14px 16px; font-weight: 600;">上傳時間</th>
               <th style="padding: 14px 16px; font-weight: 600;">檔案名稱</th>
+              <th style="padding: 14px 16px; font-weight: 600;">公司</th>
               <th style="padding: 14px 16px; font-weight: 600;">職缺</th>
               <th style="padding: 14px 16px; font-weight: 600;">狀態</th>
               <th style="padding: 14px 16px; font-weight: 600;" id="commentHeader">廠商留言</th>
@@ -681,33 +682,38 @@
       companyNameSelect.innerHTML = `<option value="">所有公司</option>`;
       const companySet = new Set();
       
-      // 如果是廠商，優先從 profile API 獲取的公司名稱
+      // 只從實際有履歷資料的公司中提取公司名稱，確保下拉選單中的每個公司都有對應的履歷資料
+      // 如果是廠商，優先從 profile API 獲取的公司名稱（但也要確保該公司有履歷資料）
       if (userRole === 'vendor' && vendorCompanyName && vendorCompanyName.trim()) {
-        companySet.add(vendorCompanyName.trim());
-        console.log('✅ 使用 profile API 的公司名稱：', vendorCompanyName);
-      } else {
-        // 如果不是廠商或沒有從 profile 獲取到，從履歷資料中提取公司名稱
-        data.forEach(r => { 
-          if(r.company_name && r.company_name.trim()) {
-            companySet.add(r.company_name.trim());
-          }
+        // 檢查該公司是否有對應的履歷資料
+        const hasResumesForCompany = data.some(r => {
+          const companyName = (r.company_name || '').trim();
+          return companyName === vendorCompanyName.trim();
         });
-        
-        // 如果履歷資料中沒有公司名稱，嘗試從職缺資料中提取
-        if (companySet.size === 0 && positionData && positionData.items && Array.isArray(positionData.items)) {
-          positionData.items.forEach(job => {
-            const companyName = job.company_name || job.companyName || '';
-            if (companyName && companyName.trim()) {
-              companySet.add(companyName.trim());
-            }
-          });
+        if (hasResumesForCompany) {
+          companySet.add(vendorCompanyName.trim());
+          console.log('✅ 使用 profile API 的公司名稱（有履歷資料）：', vendorCompanyName);
+        } else {
+          console.log('⚠️ profile API 的公司名稱沒有對應的履歷資料，跳過：', vendorCompanyName);
         }
       }
+      
+      // 從履歷資料中提取公司名稱（確保每個公司都有對應的履歷資料）
+      data.forEach(r => { 
+        if(r.company_name && r.company_name.trim()) {
+          companySet.add(r.company_name.trim());
+        }
+      });
+      
+      // 不再從職缺資料中提取公司名稱，因為職缺可能沒有對應的履歷資料
+      // 這樣可以確保下拉選單中的每個公司都有對應的履歷資料
       
       // 按公司名稱排序後加入選單
       Array.from(companySet).sort().forEach(company => {
         companyNameSelect.innerHTML += `<option value="${escapeHtml(company)}">${escapeHtml(company)}</option>`;
       });
+      
+      console.log(`📋 公司下拉選單填充完成，共 ${companySet.size} 個公司（都有對應的履歷資料）`);
 
       const companySelect = document.getElementById("companyFilter");
       companySelect.innerHTML = `<option value="">所有職缺</option>`;
@@ -775,6 +781,7 @@
         let matchesCompanyName = true;
         if (companyNameFilter) {
           const companyName = (r.company_name || '').trim();
+          // 使用嚴格相等匹配，確保精確匹配公司名稱
           matchesCompanyName = companyName === companyNameFilter;
         }
         
@@ -905,6 +912,7 @@
            <td style="padding: 14px 16px;">${escapeHtml(row.name || row.student_name || '—')}</td>
            <td style="padding: 14px 16px;">${row.upload_time || '—'}</td>
            <td style="padding: 14px 16px; max-width: 200px; overflow: hidden; text-overflow: ellipsis;">${escapeHtml(row.original_filename || '—')}</td>
+           <td style="padding: 14px 16px;">${escapeHtml(row.display_company || row.company_name || '—')}</td>
           <td style="padding: 14px 16px;">${escapeHtml(row.display_job)}</td>
           <td style="padding: 14px 16px;">
             <div style="display:flex; gap:6px; flex-wrap:wrap; align-items:center;">
