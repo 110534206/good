@@ -1,7 +1,7 @@
 from flask import Blueprint, request, jsonify, session,render_template,redirect, send_file
 from config import get_db
 from datetime import datetime
-from semester import get_current_semester_code
+from semester import get_current_semester_code, get_current_semester_id
 from werkzeug.utils import secure_filename
 from openpyxl import Workbook, load_workbook
 import traceback
@@ -1961,7 +1961,104 @@ def manage_students():
     if 'user_id' not in session or session.get('role') not in ['ta', 'admin']:
         from flask import redirect, url_for
         return redirect(url_for('auth_bp.login_page'))
-    return render_template('user_shared/manage_students.html')               
+    return render_template('user_shared/manage_students.html')
+
+# --------------------------------
+# API: 實習流程期限（internship_flows）— 科助時間管理
+# --------------------------------
+@ta_statistics_bp.route('/api/internship_flows/current', methods=['GET'])
+def get_internship_flows_current():
+    """取得當前學期的實習流程期限（履歷/志願序/指導老師/廠商截止），科助、管理員可呼叫"""
+    if 'user_id' not in session or session.get('role') not in ['ta', 'admin']:
+        return jsonify({"success": False, "message": "未授權"}), 403
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        current_semester_id = get_current_semester_id(cursor)
+        if not current_semester_id:
+            return jsonify({"success": True, "semester_id": None, "semester_code": None, "flow": None, "message": "尚未設定當前學期"})
+        cursor.execute("SELECT code FROM semesters WHERE id = %s", (current_semester_id,))
+        row = cursor.fetchone()
+        semester_code = row['code'] if row else None
+        cursor.execute("""
+            SELECT id, semester_id, resume_deadline, preference_deadline, advisor_deadline, vendor_deadline, updated_at
+            FROM internship_flows
+            WHERE semester_id = %s
+            LIMIT 1
+        """, (current_semester_id,))
+        flow = cursor.fetchone()
+        if flow:
+            for k in ('resume_deadline', 'preference_deadline', 'advisor_deadline', 'vendor_deadline'):
+                if flow.get(k) and hasattr(flow[k], 'strftime'):
+                    flow[k] = flow[k].strftime('%Y-%m-%dT%H:%M')
+            if flow.get('updated_at') and hasattr(flow['updated_at'], 'strftime'):
+                flow['updated_at'] = flow['updated_at'].strftime('%Y-%m-%d %H:%M:%S')
+            flow['resume_deadline_display'] = flow.get('resume_deadline') or '—'
+            flow['preference_deadline_display'] = flow.get('preference_deadline') or '—'
+            flow['advisor_deadline_display'] = flow.get('advisor_deadline') or '—'
+            flow['vendor_deadline_display'] = flow.get('vendor_deadline') or '—'
+        return jsonify({
+            "success": True,
+            "semester_id": current_semester_id,
+            "semester_code": semester_code,
+            "flow": flow
+        })
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"success": False, "message": str(e)}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+@ta_statistics_bp.route('/api/internship_flows/current', methods=['PUT'])
+def save_internship_flows_current():
+    """儲存當前學期的實習流程期限，科助、管理員可呼叫"""
+    if 'user_id' not in session or session.get('role') not in ['ta', 'admin']:
+        return jsonify({"success": False, "message": "未授權"}), 403
+    data = request.get_json() or {}
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        current_semester_id = get_current_semester_id(cursor)
+        if not current_semester_id:
+            return jsonify({"success": False, "message": "尚未設定當前學期"}), 400
+        resume_deadline = data.get('resume_deadline')
+        preference_deadline = data.get('preference_deadline')
+        advisor_deadline = data.get('advisor_deadline')
+        vendor_deadline = data.get('vendor_deadline')
+        def parse_dt(s):
+            if not s: return None
+            s = s.strip().replace('T', ' ').rstrip('Z')
+            if len(s) <= 16 and ':' in s: s = s + ':00'
+            return s
+        resume_dt = parse_dt(resume_deadline)
+        pref_dt = parse_dt(preference_deadline)
+        advisor_dt = parse_dt(advisor_deadline)
+        vendor_dt = parse_dt(vendor_deadline)
+        cursor.execute("SELECT id FROM internship_flows WHERE semester_id = %s LIMIT 1", (current_semester_id,))
+        existing = cursor.fetchone()
+        now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        user_id = session.get('user_id')
+        if existing:
+            cursor.execute("""
+                UPDATE internship_flows
+                SET resume_deadline=%s, preference_deadline=%s, advisor_deadline=%s, vendor_deadline=%s, updated_by=%s, updated_at=%s
+                WHERE semester_id=%s
+            """, (resume_dt, pref_dt, advisor_dt, vendor_dt, user_id, now, current_semester_id))
+        else:
+            cursor.execute("""
+                INSERT INTO internship_flows (semester_id, resume_deadline, preference_deadline, advisor_deadline, vendor_deadline, updated_by, updated_at)
+                VALUES (%s,%s,%s,%s,%s,%s,%s)
+            """, (current_semester_id, resume_dt, pref_dt, advisor_dt, vendor_dt, user_id, now))
+        conn.commit()
+        return jsonify({"success": True, "message": "已儲存本學期流程期限"})
+    except Exception as e:
+        traceback.print_exc()
+        conn.rollback()
+        return jsonify({"success": False, "message": str(e)}), 500
+    finally:
+        cursor.close()
+        conn.close()
 
 # --------------------------------
 # API: 獲取所有面試排程（從 vendor_preference_history）

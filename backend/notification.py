@@ -133,15 +133,15 @@ def get_my_notifications():
         conn = get_db()
         cursor = conn.cursor(dictionary=True)
         
-        # 1. 直接從 notifications 讀取資料（公告已經在發佈時同步寫入）
-        #    不再另外「補齊」公告，避免把不該收到的公告推給其他角色
+        # 1. 從 notifications 讀取；若為公告連結(/view_announcement/N)則只保留「公告 N 仍存在」的筆數，避免孤兒通知
         if category_filter and category_filter != "all":
             cursor.execute("""
                 SELECT n.id, n.title, n.message, n.category, n.link_url, n.is_read, n.created_at,
-                       a.start_time
+                       a.start_time, a.end_time
                 FROM notifications n
                 LEFT JOIN announcement a ON n.link_url = CONCAT('/view_announcement/', a.id)
                 WHERE n.user_id = %s AND n.category = %s
+                  AND (n.link_url NOT LIKE '/view_announcement/%%' OR a.id IS NOT NULL)
                 ORDER BY n.created_at DESC
             """, (user_id, category_filter))
         else:
@@ -151,6 +151,7 @@ def get_my_notifications():
                 FROM notifications n
                 LEFT JOIN announcement a ON n.link_url = CONCAT('/view_announcement/', a.id)
                 WHERE n.user_id = %s
+                  AND (n.link_url NOT LIKE '/view_announcement/%%' OR a.id IS NOT NULL)
                 ORDER BY n.created_at DESC
             """, (user_id,))
         
@@ -255,6 +256,7 @@ def get_visible_unread_count():
             FROM notifications n
             LEFT JOIN announcement a ON n.link_url = CONCAT('/view_announcement/', CAST(a.id AS CHAR))
             WHERE n.user_id = %s
+              AND (n.link_url NOT LIKE '/view_announcement/%%' OR a.id IS NOT NULL)
         """, (user_id,))
         rows = cursor.fetchall() or []
         cursor.close()

@@ -674,12 +674,12 @@
         {% endif %}
       {% endwith %}
       <h2 class="page-title">請選擇你要使用的功能</h2>
-        {% if not in_internship_semester %}
+        {% if not in_application_phase %}
         <div class="internship-notice">
           <i class="bi bi-info-circle-fill" aria-hidden="true"></i>
           <div>
             <strong>溫馨提醒</strong><br>
-            實習學期尚未開始，目前可先<strong>新增履歷</strong>與<strong>查看通知</strong>；待實習學期開始後，填寫志願序、投遞履歷、行事曆等功能將自動開放。
+            實習流程尚未開始，目前可先<strong>新增履歷</strong>與<strong>查看通知</strong>；待流程學期開始後，填寫志願序、投遞履歷、行事曆等功能將自動開放。
           </div>
         </div>
         {% endif %}
@@ -689,14 +689,14 @@
           <p>建立個人化履歷模板。</p>
           <a href="/resume_folders" role="link">新增履歷</a>
         </div>
-        {% if not in_internship_semester %}
+        {% if not in_application_phase %}
         <div class="card" role="listitem">
           <h3>通知</h3>
           <p>查看系統公告與個人通知。</p>
           <a href="/notifications" role="link">前往通知</a>
         </div>
         {% endif %}
-        {% if in_internship_semester %}
+        {% if in_application_phase %}
         <div class="card" role="listitem">
           <h3>填寫志願序</h3>
           <p>選擇你心儀的實習廠商與排序。</p>
@@ -717,6 +717,7 @@
           <p>查看錄取公司、期間、最終錄取志願、指導老師 。</p>
           <a href="/intern_achievement" role="link">上傳成果</a>
         </div>
+        {% if show_intern_experience %}
         <div class="card" role="listitem">
           <h3>實習心得</h3>
           <p>瀏覽學長姐的實習經驗或分享你的心得。</p>
@@ -728,6 +729,7 @@
           <a href="/image_recognize" role="link">成績 AI 識別</a>
         </div>
         {% endif %}
+        {% endif %}
       </section>
   </main>
 
@@ -738,12 +740,14 @@
     <a href="/profile">個人資料</a>
     <a href="/resume_folders">履歷管理</a>
     <a href="/notifications">通知</a>
-    {% if in_internship_semester %}
+    {% if in_application_phase %}
     <a href="/fill_preferences">填寫志願序</a>
     <a href="/look_company">投遞履歷</a>
     <a href="/interview_schedule">行事曆</a>
     <a href="/intern_achievement">學生媒合結果</a>
+    {% if show_intern_experience %}
     <a href="/intern_experience">實習心得</a>
+    {% endif %}
     {% endif %}
   </nav>
 

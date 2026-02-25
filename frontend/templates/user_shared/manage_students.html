@@ -12,142 +12,20 @@
       box-sizing: border-box;
     }
 
-    header {
-      position: sticky;
-      top: 0;
-      z-index: 1100;
-      background: #0454a3;
-      color: white;
-      padding: 1rem 0;
-      text-align: center;
-      font-size: 1.5rem;
-      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
-    }
-
-    /* 頂端列內容與底下 table 同寬（max-width 1200px） */
-    header .header-inner {
-      max-width: 1200px;
-      margin: 0 auto;
-      padding: 0 0.5rem;
-    }
-
-    /* 三條線選單按鈕 */
-    .top-bar-left {
-      position: fixed;
-      top: 1.5rem;
-      left: 7rem;
-      z-index: 1300;
-    }
-
-    .top-bar-left #menu-btn {
-      width: 30px;
-      height: 22px;
-      cursor: pointer;
-      display: flex;
-      flex-direction: column;
-      justify-content: space-between;
-      background: none;
-      border: none;
-      padding: 0;
-    }
-
-    .top-bar-left #menu-btn span {
-      display: block;
-      width: 100%;
-      height: 3px;
-      background-color: white;
-      border-radius: 2px;
-      transition: all 0.3s ease;
-    }
-
-    #side-menu {
-      position: fixed;
-      top: 0;
-      left: 0;
-      height: 100vh;
-      width: 320px;
-      max-width: 80vw;
-      background-color: rgba(10, 10, 10, 0.95);
-      backdrop-filter: blur(6px);
-      box-shadow: 3px 0 12px rgb(0 0 0 / 0.7);
-      padding: 2rem 1.5rem;
-      transform: translateX(-100%);
-      transition: transform 0.3s ease-in-out;
-      z-index: 1400;
-      display: flex;
-      flex-direction: column;
-      align-items: flex-start;
-      color: white;
-      user-select: none;
-    }
-
-    #side-menu.open {
-      transform: translateX(0);
-    }
-
-    #side-menu .menu-header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      width: 100%;
-      margin-bottom: 1.5rem;
-    }
-
-    #side-menu h2 {
-      margin: 0;
-      font-weight: 700;
-      font-size: 1.5rem;
-      text-align: left;
-      flex: 1;
-      color: white;
-    }
-
-    #side-menu #close-btn {
-      font-size: 1.5rem;
-      background: none;
-      border: none;
-      color: white;
-      cursor: pointer;
-      line-height: 1;
-      width: auto;
-      height: auto;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      padding: 0;
-      margin: 0;
-    }
-
-    #side-menu a {
-      display: block;
-      width: 100%;
-      padding: 0.5rem 0;
-      font-size: 1.1rem;
-      color: #ddd;
-      text-decoration: none;
-      border-radius: 4px;
-      transition: background-color 0.2s ease;
-    }
-
-    #side-menu a:hover {
-      background-color: rgba(255, 255, 255, 0.15);
-      color: white;
-    }
-
     body {
       font-family: "Noto Sans TC", sans-serif;
       background: #f1f5f9;
       margin: 0;
       padding: 0;
+      overflow: hidden; /* 嵌入 iframe 時不顯示滾輪 */
     }
 
-    /* 與 student_home 同寬：width 100%、max-width 1200px、左右 padding 0.5rem */
+    /* 與 student_home 同寬：width 100%、max-width 1200px、左右 padding 0.5rem（嵌入時無頂端列） */
     .container {
       width: 100%;
       max-width: 1200px;
       margin: 0 auto;
-      padding: 2rem 0.5rem;
-      margin-top: 2rem;
+      padding: 1rem 0.5rem;
     }
 
     /* 篩選區卡片 */
@@ -424,32 +302,6 @@
 </head>
 
 <body class="p-0">
-  <header>
-    <div class="header-inner">學生履歷管理</div>
-  </header>
-  <div class="top-bar-left">
-    <div id="menu-btn" title="選單" role="button" tabindex="0">
-      <span></span><span></span><span></span>
-    </div>
-  </div>
-
-  <!-- 側邊選單（與 manage_companies 一致） -->
-  <nav id="side-menu">
-    <div class="menu-header">
-      <h2>功能選單</h2>
-      <button id="close-btn">×</button>
-    </div>
-    <a href="/ta_home">首頁</a>
-    <a href="/profile">個人資料</a>
-    <a href="/notifications">公告</a>
-    <a href="/ta/statistics/manage_companies">實習投遞流程管理</a>
-    <a href="/ta/interview_schedule">行事曆</a>
-    <a href="/admin/absence_default_range">缺勤預設學期範圍設定</a>
-    <a href="/ta/upload_standard_courses">專業核心科目管理</a>
-    <a href="/ta_assistant_dashboard">媒合結果管理中心</a>
-    <a href="/login">登出</a>
-  </nav>
-
   <div class="container">
     <!-- 學期橫幅：與科助工作台一致，顯示目前系統學期 -->
     <div class="semester-filter-row">
@@ -574,24 +426,6 @@
     let currentStudentsData = []; // 儲存當前顯示的學生資料
     let studentDetailModal = null; // Modal 實例
 
-    // 側邊選單開關（與 manage_companies 一致）
-    const menuBtn = document.getElementById("menu-btn");
-    const sideMenu = document.getElementById("side-menu");
-    const closeBtn = document.getElementById("close-btn");
-    if (menuBtn) menuBtn.addEventListener("click", () => {
-      sideMenu.classList.add("open");
-      sideMenu.setAttribute("aria-hidden", "false");
-    });
-    if (closeBtn) closeBtn.addEventListener("click", () => {
-      sideMenu.classList.remove("open");
-      sideMenu.setAttribute("aria-hidden", "true");
-    });
-    document.addEventListener("click", (e) => {
-      if (sideMenu && menuBtn && !sideMenu.contains(e.target) && !menuBtn.contains(e.target)) {
-        sideMenu.classList.remove("open");
-        sideMenu.setAttribute("aria-hidden", "true");
-      }
-    });
 
     // 學年由系統設定，已改為學期橫幅 + 固定使用目前學期，不再提供選擇學年
 
@@ -665,6 +499,14 @@
       }
     }
 
+    // 學期代碼對應「班級列表」用：投遞/志願在 1131 完成，班級資料以實習學期 1132 表示，故 1131 時要顯示 1132 的班級
+    function getEffectiveSemesterForClassList() {
+      if (!currentSemesterCode || currentSemesterCode.length < 4) return currentSemesterCode;
+      const last = currentSemesterCode.slice(-1);
+      if (last === '1') return currentSemesterCode.slice(0, 3) + '2'; // 上學期 1131 → 用 1132 的班級
+      return currentSemesterCode;
+    }
+
     // 載入所有班級選項（不限學年，只顯示忠、孝兩班）
     function loadAllClassesOptions() {
       const classSelect = document.getElementById("classSelect");
@@ -676,9 +518,10 @@
       
       // 提取班級名稱（忠、孝等）
       const classMap = new Map(); // 用來去重（同一個班級名稱可能有多個班級ID）
-      
-      const dataToUse = currentSemesterCode
-        ? allClassesData.filter(c => (c.semester_code || '') === currentSemesterCode)
+      // 1131 時班級 API 只回傳 1132/1142，故用「對應實習學期」篩選班級
+      const effectiveSemester = getEffectiveSemesterForClassList();
+      const dataToUse = effectiveSemester
+        ? allClassesData.filter(c => (c.semester_code || '') === effectiveSemester)
         : allClassesData;
       dataToUse.forEach(c => {
         const fullName = `${(c.department || '').replace('管科', '')}${c.name || ''}`;
@@ -893,10 +736,7 @@
         return;
       }
 
-      if (classId === 'all') {
-        tbody.innerHTML = `<tr><td colspan="7" class="text-center text-muted">請選擇班級</td></tr>`;
-        return;
-      }
+      // 「所有班級」時仍呼叫 API（class_id=all），後端會回傳全部學生
       const semesterCode = currentSemesterCode;
 
       try {
@@ -1064,10 +904,14 @@
         // 載入統計圖表（三個圖表）
         loadStatsCharts(classId, semesterCode);
 
+        // 內容更新後通知父層高度，讓 iframe 擴張
+        setTimeout(notifyParentHeight, 200);
+        setTimeout(notifyParentHeight, 1000);
       } catch (error) {
         console.error("載入學生資料失敗:", error);
         tbody.innerHTML = `<tr><td colspan="7" class="text-center text-danger">伺服器錯誤，載入失敗。</td></tr>`;
       }
+      setTimeout(notifyParentHeight, 300);
     }
 
     // 載入統計圖表（三個圖表：各公司被選志願次數、履歷繳交率、志願序填寫率）
@@ -1417,11 +1261,31 @@
       studentDetailModal.show();
     }
 
+    // 通知父層（iframe 嵌入時）內容高度，讓 iframe 擴張以完整呈現、無需滾輪
+    function notifyParentHeight() {
+      try {
+        const h = Math.max(document.documentElement.scrollHeight, document.body.scrollHeight);
+        if (window.parent !== window) {
+          window.parent.postMessage({ type: 'iframe-resize', height: h }, '*');
+        }
+      } catch (e) {}
+    }
+    function setupHeightNotify() {
+      notifyParentHeight();
+      setTimeout(notifyParentHeight, 400);
+      setTimeout(notifyParentHeight, 1200);
+      try {
+        const ro = new ResizeObserver(() => notifyParentHeight());
+        ro.observe(document.body);
+      } catch (e) {}
+    }
+
     // 初始載入：先載入學期橫幅（取得目前系統學期），再載入班級選項
     async function initialize() {
       await loadCurrentSemesterBanner();
       await loadAllClasses();
       loadAllClassesOptions();
+      setupHeightNotify();
     }
     
     initialize();

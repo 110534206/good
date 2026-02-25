@@ -15,7 +15,7 @@ from reportlab.lib import colors
 from docx import Document
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.enum.table import WD_TABLE_ALIGNMENT
-from semester import get_current_semester_code, get_current_semester_id, is_student_in_current_internship
+from semester import get_current_semester_code, get_current_semester_id, get_semester_code_for_company_openings, is_student_in_application_phase
 
 
 def _get_active_semester_year(cursor):
@@ -69,32 +69,29 @@ def update_preference_status_after_deadline(cursor, conn):
     返回: (is_deadline_passed: bool, updated_count: int)
     """
     try:
-        # 檢查志願序填寫截止時間
+        from semester import get_current_semester_deadline
+        # 檢查志願序填寫截止時間：優先學期流程表 internship_flows，無則 fallback 公告
         now = datetime.now()
-        preference_deadline = None
-        is_preference_deadline_passed = False
-        
-        # 查詢志願序填寫截止時間
-        cursor.execute("""
-            SELECT end_time 
-            FROM announcement 
-            WHERE title LIKE '[作業]%填寫志願序截止時間' AND is_published = 1
-            ORDER BY created_at DESC 
-            LIMIT 1
-        """)
-        deadline_result = cursor.fetchone()
-        
-        if deadline_result and deadline_result.get('end_time'):
-            deadline = deadline_result['end_time']
-            if isinstance(deadline, datetime):
-                preference_deadline = deadline
-            else:
-                try:
-                    preference_deadline = datetime.strptime(str(deadline), '%Y-%m-%d %H:%M:%S')
-                except:
-                    preference_deadline = datetime.strptime(str(deadline), '%Y-%m-%d %H:%M')
-            
-            is_preference_deadline_passed = now > preference_deadline
+        preference_deadline = get_current_semester_deadline(cursor, 'preference')
+        if preference_deadline is None:
+            cursor.execute("""
+                SELECT end_time 
+                FROM announcement 
+                WHERE title LIKE '[作業]%填寫志願序截止時間' AND is_published = 1
+                ORDER BY created_at DESC 
+                LIMIT 1
+            """)
+            deadline_result = cursor.fetchone()
+            if deadline_result and deadline_result.get('end_time'):
+                deadline = deadline_result['end_time']
+                if isinstance(deadline, datetime):
+                    preference_deadline = deadline
+                else:
+                    try:
+                        preference_deadline = datetime.strptime(str(deadline), '%Y-%m-%d %H:%M:%S')
+                    except Exception:
+                        preference_deadline = datetime.strptime(str(deadline), '%Y-%m-%d %H:%M')
+        is_preference_deadline_passed = preference_deadline is not None and now > preference_deadline
         
         # 如果已經過了截止時間，執行狀態更新
         if is_preference_deadline_passed:
@@ -162,14 +159,13 @@ def fill_preferences_page():
     conn = get_db()
     cursor = conn.cursor(dictionary=True)
     try:
-        if is_student and student_id and not is_student_in_current_internship(cursor, student_id):
-            flash("您本學期非實習學期，無法使用填寫志願序功能。", "warning")
+        if is_student and student_id and not is_student_in_application_phase(cursor, student_id):
+            flash("您尚未進入實習流程學期，無法使用填寫志願序功能。", "warning")
             return redirect(url_for("users_bp.student_home"))
-        # 1) 取得本學期開放的公司（id, name）
-        # 只顯示已審核通過且在當前學期開放的公司
-        current_semester_code = get_current_semester_code(cursor)
+        # 1) 取得開放學期開放的公司（下學期沿用上學期，故 1132 時仍以 1131 開放為準）
+        openings_semester_code = get_semester_code_for_company_openings(cursor)
         
-        if current_semester_code:
+        if openings_semester_code:
             cursor.execute("""
                 SELECT DISTINCT ic.id, ic.company_name AS name
                 FROM internship_companies ic
@@ -178,7 +174,7 @@ def fill_preferences_page():
                   AND co.semester = %s
                   AND co.is_open = TRUE
                 ORDER BY ic.company_name
-            """, (current_semester_code,))
+            """, (openings_semester_code,))
         else:
             # 如果沒有設定當前學期，返回空列表
             cursor.execute("SELECT id, company_name AS name FROM internship_companies WHERE 1=0")
@@ -273,8 +269,8 @@ def get_my_preferences():
     conn = get_db()
     cursor = conn.cursor(dictionary=True)
     try:
-        if not is_student_in_current_internship(cursor, student_id):
-            return jsonify({"success": False, "message": "您本學期非實習學期，無法使用此功能"}), 403
+        if not is_student_in_application_phase(cursor, student_id):
+            return jsonify({"success": False, "message": "您尚未進入實習流程學期，無法使用此功能"}), 403
         cursor.execute("""
             SELECT 
                 sp.id,
@@ -326,8 +322,8 @@ def save_preferences():
     conn = get_db()
     cursor = conn.cursor(dictionary=True)
     try:
-        if not is_student_in_current_internship(cursor, student_id):
-            return jsonify({"success": False, "message": "您本學期非實習學期，無法填寫志願序"}), 403
+        if not is_student_in_application_phase(cursor, student_id):
+            return jsonify({"success": False, "message": "您尚未進入實習流程學期，無法填寫志願序"}), 403
         # 1) 檢查公司是否重複 - 移除此邏輯，以配合前端的「公司可重複選，職缺互斥」
         selected_job_ids = set() # 用來檢查職缺是否重複，以防萬一
         for p in preferences:
@@ -461,7 +457,7 @@ def save_preferences():
                     cursor.execute("""
                         SELECT teacher_id
                         FROM classes_teacher
-                        WHERE class_id = %s AND role = '班導師'
+                        WHERE class_id = %s AND role = 'classteacher'
                         LIMIT 1
                     """, (class_id,))
                     teacher_row = cursor.fetchone()
@@ -564,7 +560,7 @@ def review_preferences():
         cursor.execute("""
             SELECT ct.class_id
             FROM classes_teacher ct
-            WHERE ct.teacher_id = %s AND ct.role = '班導師'
+            WHERE ct.teacher_id = %s AND ct.role = 'classteacher'
         """, (user_id,))
         class_rows = cursor.fetchall()
         if not class_rows:
@@ -1057,7 +1053,7 @@ def export_preferences_excel():
         SELECT c.id AS class_id, c.name AS class_name
         FROM classes c
         JOIN classes_teacher ct ON c.id = ct.class_id
-        WHERE ct.teacher_id = %s AND ct.role = '班導師'
+        WHERE ct.teacher_id = %s AND ct.role = 'classteacher'
         """, (user_id,))
         class_rows = cursor.fetchall()
         class_info = class_rows[0] if class_rows else None
@@ -1266,7 +1262,7 @@ def export_preferences_pdf():
         SELECT c.id AS class_id, c.name AS class_name
         FROM classes c
         JOIN classes_teacher ct ON c.id = ct.class_id
-        WHERE ct.teacher_id = %s AND ct.role = '班導師'
+        WHERE ct.teacher_id = %s AND ct.role = 'classteacher'
         """, (user_id,))
         class_rows = cursor.fetchall()
         class_info = class_rows[0] if class_rows else None
@@ -1525,7 +1521,7 @@ def export_preferences_docx():
         SELECT c.id AS class_id, c.name AS class_name
         FROM classes c
         JOIN classes_teacher ct ON c.id = ct.class_id
-        WHERE ct.teacher_id = %s AND ct.role = '班導師'
+        WHERE ct.teacher_id = %s AND ct.role = 'classteacher'
         """, (user_id,))
         class_rows = cursor.fetchall()
         class_info = class_rows[0] if class_rows else None

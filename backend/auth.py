@@ -12,16 +12,14 @@ auth_bp = Blueprint("auth_bp", __name__)
 # 輔助函式：檢查是否為班導師
 # =========================================================
 def check_is_homeroom(user_id):
-    """查詢用戶是否在 classes_teacher 中擔任 '班導師' 角色"""
+    """查詢用戶是否在 classes_teacher 中擔任班導師角色（role = 'classteacher'）"""
     conn = get_db()
     cursor = conn.cursor()
     is_homeroom = False
     try:
-        # 查詢 classes_teacher 表中是否有該 user_id 且 role 為 '班導師' 的記錄
-        # 使用 COUNT(*) 避免 Unread result found 錯誤（當老師帶多個班級時）
         cursor.execute("""
             SELECT COUNT(*) as count FROM classes_teacher 
-            WHERE teacher_id = %s AND role = '班導師'
+            WHERE teacher_id = %s AND role = 'classteacher'
         """, (user_id,))
         result = cursor.fetchone()
         is_homeroom = result[0] > 0 if result else False

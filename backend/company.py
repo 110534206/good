@@ -11,7 +11,7 @@ from docx.enum.table import WD_CELL_VERTICAL_ALIGNMENT
 from docx.oxml.ns import qn
 from docx.oxml import OxmlElement
 from notification import create_notification
-from semester import get_current_semester_code, is_student_in_current_internship
+from semester import get_current_semester_code, get_semester_code_for_company_openings, is_student_in_application_phase
 
 company_bp = Blueprint("company_bp", __name__)
 
@@ -393,43 +393,41 @@ def upload_company():
             status = 'pending'
             reviewed_at = None
         else:
-            # 指導老師不等於上傳老師，一律設為主任。主任上傳則指導老師為自己；老師上傳則指導老師為主任
-            updated_vendor_username = None
-            if role == 'director':
+            # 如果是老師或主任，預設上傳教師為指導老師
+            updated_vendor_username = None  # 初始化變數
+            if role in ['teacher', 'director']:
                 advisor_user_id = user_id
+                
+                # 取得上傳者的名字（用於更新廠商的 teacher_name）
                 cursor.execute("SELECT name FROM users WHERE id = %s", (user_id,))
                 teacher_info = cursor.fetchone()
                 teacher_name = teacher_info[0] if teacher_info and teacher_info[0] else None
-            elif role == 'teacher':
-                cursor.execute("SELECT id, name FROM users WHERE role = 'director' AND name = %s LIMIT 1", ('嚴竹華',))
-                director_row = cursor.fetchone()
-                if not director_row:
-                    cursor.execute("SELECT id, name FROM users WHERE role = 'director' ORDER BY id ASC LIMIT 1")
-                    director_row = cursor.fetchone()
-                if director_row:
-                    advisor_user_id = director_row[0]
-                    teacher_name = director_row[1] if director_row[1] else None
-                else:
-                    advisor_user_id = None
-                    teacher_name = None
-            else:
-                advisor_user_id = None
-                teacher_name = None
-
-            if role in ['teacher', 'director'] and teacher_name:
-                vendor_company_map = {'vendor': '人人人', 'vendora': '嘻嘻嘻'}
+                
+                # 檢查公司名稱是否匹配廠商對應的公司名稱
+                # 如果匹配，則更新該廠商的 teacher_name 為該指導老師的名字
+                vendor_company_map = {
+                    'vendor': '人人人',
+                    'vendora': '嘻嘻嘻'
+                }
+                
+                # 檢查公司名稱是否在 vendor_company_map 的值中
                 matched_vendor_username = None
                 for vendor_username, mapped_company_name in vendor_company_map.items():
                     if company_name == mapped_company_name:
                         matched_vendor_username = vendor_username
                         break
-                if matched_vendor_username:
+                
+                # 如果找到匹配的廠商，更新該廠商的 teacher_name 為該指導老師的名字
+                if matched_vendor_username and teacher_name:
                     cursor.execute("""
-                        UPDATE users SET teacher_name = %s
+                        UPDATE users 
+                        SET teacher_name = %s 
                         WHERE username = %s AND role = 'vendor'
                     """, (teacher_name, matched_vendor_username))
+                    # 記錄更新的廠商資訊（用於後續的成功訊息）
                     updated_vendor_username = matched_vendor_username
-
+            else:
+                advisor_user_id = None
             reviewed_by_user_id = None
             status = 'pending'
             reviewed_at = None
@@ -819,27 +817,12 @@ def api_get_reviewed_companies():
         conn = get_db()
         cursor = conn.cursor(dictionary=True)
 
-        # 只有「未指派」指導老師的已審核公司才自動設為主任；已指派的不改動，尊重手動選擇（避免重新整理後覆蓋成主任）
-        cursor.execute("SELECT id FROM users WHERE role = 'director' AND name = %s LIMIT 1", ('嚴竹華',))
-        director_row = cursor.fetchone()
-        if not director_row:
-            cursor.execute("SELECT id FROM users WHERE role = 'director' ORDER BY id ASC LIMIT 1")
-            director_row = cursor.fetchone()
-        if director_row:
-            director_id = director_row['id']
-            cursor.execute("""
-                UPDATE internship_companies
-                SET advisor_user_id = %s
-                WHERE status = 'approved' AND advisor_user_id IS NULL
-            """, (director_id,))
-            if cursor.rowcount:
-                conn.commit()
-
-        # 取得當前學期代碼
+        # 取得當前學期代碼（顯示用）與公司開放用學期（下學期沿用上學期開放狀態）
         current_semester_code = get_current_semester_code(cursor)
+        openings_semester_code = get_semester_code_for_company_openings(cursor)
 
         # 如果沒有設定當前學期，仍然可以顯示公司列表，但無法顯示開放狀態
-        if current_semester_code:
+        if openings_semester_code:
             cursor.execute("""
                 SELECT 
                     ic.id,
@@ -871,7 +854,7 @@ def api_get_reviewed_companies():
                     CASE WHEN ic.reviewed_at IS NULL THEN 1 ELSE 0 END,
                     ic.reviewed_at DESC,
                     ic.submitted_at DESC
-            """, (current_semester_code,))
+            """, (openings_semester_code,))
         else:
             cursor.execute("""
                 SELECT 
@@ -1251,9 +1234,9 @@ def api_set_company_open_status():
         conn = get_db()
         cursor = conn.cursor(dictionary=True)
         
-        # 取得當前學期代碼
-        current_semester_code = get_current_semester_code(cursor)
-        if not current_semester_code:
+        # 公司開放使用「開放學期」（下學期時沿用上學期，寫入同一學期以便 1132 維持 1131 結果）
+        openings_semester_code = get_semester_code_for_company_openings(cursor)
+        if not openings_semester_code:
             return jsonify({"success": False, "message": "目前沒有設定當前學期"}), 400
 
         # 檢查公司是否存在且已審核通過
@@ -1269,11 +1252,11 @@ def api_set_company_open_status():
         # 目前操作者（科助/管理員）寫入 opened_by_id，對應 users.id
         opened_by_id = session.get("user_id")
 
-        # 檢查是否已存在該公司該學期的記錄
+        # 檢查是否已存在該公司該學期的記錄（使用開放學期，如 1132 時寫入 1131）
         cursor.execute("""
             SELECT id FROM company_openings 
             WHERE company_id = %s AND semester = %s
-        """, (company_id, current_semester_code))
+        """, (company_id, openings_semester_code))
         existing = cursor.fetchone()
 
         if existing:
@@ -1282,13 +1265,13 @@ def api_set_company_open_status():
                 UPDATE company_openings 
                 SET is_open = %s, opened_at = %s, opened_by_id = %s
                 WHERE company_id = %s AND semester = %s
-            """, (is_open, datetime.now(), opened_by_id, company_id, current_semester_code))
+            """, (is_open, datetime.now(), opened_by_id, company_id, openings_semester_code))
         else:
             # 建立新記錄（含 opened_by_id）
             cursor.execute("""
                 INSERT INTO company_openings (company_id, semester, is_open, opened_at, opened_by_id)
                 VALUES (%s, %s, %s, %s, %s)
-            """, (company_id, current_semester_code, is_open, datetime.now(), opened_by_id))
+            """, (company_id, openings_semester_code, is_open, datetime.now(), opened_by_id))
 
         conn.commit()
         
@@ -1350,23 +1333,12 @@ def api_get_all_teachers():
 @company_bp.route("/api/update_company_advisor", methods=["POST"])
 def api_update_company_advisor():
     """更新公司的指導老師"""
-    data = request.get_json() or {}
+    data = request.get_json()
     company_id = data.get("company_id")
     advisor_user_id = data.get("advisor_user_id")  # 可以是 None
     
     if not company_id:
         return jsonify({"success": False, "message": "缺少 company_id"}), 400
-    try:
-        company_id = int(company_id)
-    except (TypeError, ValueError):
-        return jsonify({"success": False, "message": "company_id 格式錯誤"}), 400
-    # 前端下拉「請選擇」會送空字串，要當成 None，否則寫入 DB 會 500
-    if advisor_user_id == "" or advisor_user_id is None:
-        advisor_user_id = None
-    elif isinstance(advisor_user_id, str) and advisor_user_id.isdigit():
-        advisor_user_id = int(advisor_user_id)
-    elif isinstance(advisor_user_id, (int, float)):
-        advisor_user_id = int(advisor_user_id)
     
     conn = None
     cursor = None
@@ -1402,28 +1374,71 @@ def api_update_company_advisor():
             if advisor:
                 advisor_name = advisor['name']
         
+        # 更新所有相關廠商的 teacher_name
+        updated_vendor_count = 0
+        # 取得公司的 uploaded_by_user_id 和 contact_email
+        cursor.execute("""
+            SELECT uploaded_by_user_id, contact_email 
+            FROM internship_companies 
+            WHERE id = %s
+        """, (company_id,))
+        company_info = cursor.fetchone()
+        
+        vendor_ids_to_update = []
+        
+        # 1. 如果上傳者是廠商，更新該廠商的 teacher_name
+        if company_info and company_info.get('uploaded_by_user_id'):
+            cursor.execute("""
+                SELECT id FROM users 
+                WHERE id = %s AND role = 'vendor'
+            """, (company_info['uploaded_by_user_id'],))
+            vendor = cursor.fetchone()
+            if vendor:
+                vendor_ids_to_update.append(vendor['id'])
+        
+        # 2. 如果公司有 contact_email，查找所有匹配該 email 的廠商
+        if company_info and company_info.get('contact_email'):
+            cursor.execute("""
+                SELECT id FROM users 
+                WHERE email = %s AND role = 'vendor'
+            """, (company_info['contact_email'],))
+            vendors_by_email = cursor.fetchall()
+            for vendor in vendors_by_email:
+                if vendor['id'] not in vendor_ids_to_update:
+                    vendor_ids_to_update.append(vendor['id'])
+        
+        # 3. 更新所有找到的廠商的 teacher_name
+        # 如果 advisor_user_id 為 None，則清除 teacher_name（設為 NULL）
+        # 如果 advisor_user_id 有值，則設定為指導老師的名稱
+        teacher_name_value = advisor_name if advisor_user_id and advisor_name else None
+        for vendor_id in vendor_ids_to_update:
+            cursor.execute("""
+                UPDATE users 
+                SET teacher_name = %s 
+                WHERE id = %s AND role = 'vendor'
+            """, (teacher_name_value, vendor_id))
+            updated_vendor_count += 1
+        
         conn.commit()
         
         message = f"公司「{company['company_name']}」的指導老師已更新"
+        # 如果更新了廠商的 teacher_name，在訊息中提示
+        if updated_vendor_count > 0:
+            message += f" 已自動更新 {updated_vendor_count} 個相關廠商的指導老師關聯。"
         
         return jsonify({
             "success": True,
             "message": message,
-            "advisor_name": advisor_name
+            "advisor_name": advisor_name,
+            "updated_vendor_count": updated_vendor_count
         })
     except Exception:
         print("❌ 更新公司指導老師錯誤：", traceback.format_exc())
-        if conn:
-            try:
-                conn.rollback()
-            except Exception:
-                pass
+        conn.rollback()
         return jsonify({"success": False, "message": "伺服器錯誤"}), 500
     finally:
-        if cursor:
-            cursor.close()
-        if conn:
-            conn.close()
+        if cursor: cursor.close()
+        if conn: conn.close()
 
 # =========================================================
 # 📥 導出公司審核數據
@@ -1621,13 +1636,13 @@ def get_student_companies():
     conn = get_db()
     cursor = conn.cursor(dictionary=True)
     try:
-        if not is_student_in_current_internship(cursor, session["user_id"]):
-            return jsonify({"success": False, "message": "您本學期非實習學期，無法使用此功能"}), 403
-        # 取得當前學期代碼（用於標記哪些公司是當前學期開放的）
-        current_semester_code = get_current_semester_code(cursor)
+        if not is_student_in_application_phase(cursor, session["user_id"]):
+            return jsonify({"success": False, "message": "您尚未進入實習流程學期，無法使用此功能"}), 403
+        # 公司開放學期（下學期沿用上學期，故 1132 時仍以 1131 開放狀態為準）
+        openings_semester_code = get_semester_code_for_company_openings(cursor)
         
-        # 查詢所有已審核通過的公司，並標記當前學期是否開放
-        if current_semester_code:
+        # 查詢所有已審核通過的公司，並標記是否開放（依開放學期）
+        if openings_semester_code:
             cursor.execute("""
                 SELECT
                     ic.id,
@@ -1646,7 +1661,7 @@ def get_student_companies():
                 WHERE ic.status = 'approved'
                 GROUP BY ic.id, co.is_open
                 ORDER BY ic.company_name
-            """, (current_semester_code,))
+            """, (openings_semester_code,))
         else:
             # 如果沒有設定當前學期，只顯示公司基本信息
             cursor.execute("""
@@ -1706,8 +1721,8 @@ def look_company_page():
         conn = get_db()
         cursor = conn.cursor(dictionary=True)
         try:
-            if not is_student_in_current_internship(cursor, session["user_id"]):
-                flash("您本學期非實習學期，無法使用投遞履歷功能。", "warning")
+            if not is_student_in_application_phase(cursor, session["user_id"]):
+                flash("您尚未進入實習流程學期，無法使用投遞履歷功能。", "warning")
                 return redirect(url_for("users_bp.student_home"))
         finally:
             cursor.close()
@@ -1726,8 +1741,8 @@ def apply_company():
     conn = get_db()
     cursor = conn.cursor(dictionary=True)
     try:
-        if not is_student_in_current_internship(cursor, user_id):
-            return jsonify({"success": False, "message": "您本學期非實習學期，無法投遞履歷"}), 403
+        if not is_student_in_application_phase(cursor, user_id):
+            return jsonify({"success": False, "message": "您尚未進入實習流程學期，無法投遞履歷"}), 403
         data = request.get_json()
         company_id = data.get('company_id')
         job_id = data.get('job_id')
@@ -1905,8 +1920,8 @@ def get_my_applications():
     conn = get_db()
     cursor = conn.cursor(dictionary=True)
     try:
-        if not is_student_in_current_internship(cursor, user_id):
-            return jsonify({"success": False, "message": "您本學期非實習學期，無法使用此功能"}), 403
+        if not is_student_in_application_phase(cursor, user_id):
+            return jsonify({"success": False, "message": "您尚未進入實習流程學期，無法使用此功能"}), 403
         cursor.execute("""
             SELECT 
                 sja.id,

@@ -2,7 +2,7 @@ from flask import Blueprint, render_template, session, redirect, url_for, reques
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 from config import get_db
-from semester import is_student_in_current_internship
+from semester import is_student_in_application_phase, should_show_intern_experience
 import os
 import re 
 from docx import Document
@@ -315,7 +315,7 @@ def get_profile():
         if active_role in ("teacher", "director", "class_teacher") and original_role_from_db in ("teacher", "director"):
             homeroom_class_names = []
             if is_homeroom and classes:
-                homeroom_classes = [c for c in classes if c.get("role") == "班導師"]
+                homeroom_classes = [c for c in classes if c.get("role") == "classteacher"]
                 homeroom_class_names = [_class_display_row(c.get('department'), c.get('name'), c.get('admission_year')) for c in homeroom_classes]
             user["homeroom_class_display"] = "、".join(homeroom_class_names) if homeroom_class_names else ""
 
@@ -519,7 +519,7 @@ def save_profile():
         if role in ("teacher", "director"):
             cursor.execute("""
                 SELECT COUNT(*) as count FROM classes_teacher 
-                WHERE teacher_id = %s AND role = '班導師'
+                WHERE teacher_id = %s AND role = 'classteacher'
             """, (user_id,))
             result = cursor.fetchone()
             is_homeroom = result[0] > 0 if result else False
@@ -687,7 +687,7 @@ def change_password():
             check_cursor = conn.cursor() 
             check_cursor.execute("""
                 SELECT COUNT(*) as count FROM classes_teacher 
-                WHERE teacher_id = %s AND role = '班導師'
+                WHERE teacher_id = %s AND role = 'classteacher'
             """, (user_id,))
             result = check_cursor.fetchone()
             is_homeroom = result[0] > 0 if result else False
@@ -784,17 +784,22 @@ def confirm_matching_page():
 # 使用者首頁（學生前台）
 @users_bp.route('/student_home')
 def student_home():
-    in_internship_semester = True  # 非學生或無法判斷時預設顯示全部
+    # 流程學期／實習學期：投遞、志願、行事曆、媒合結果在「實習學期或上一學期」顯示；實習心得僅實習學期結束前兩週
+    in_application_phase = True
+    show_intern_experience = True
     if session.get('role') == 'student' and session.get('user_id'):
         try:
             conn = get_db()
             cursor = conn.cursor(dictionary=True)
-            in_internship_semester = is_student_in_current_internship(cursor, session['user_id'])
+            in_application_phase = is_student_in_application_phase(cursor, session['user_id'])
+            show_intern_experience = should_show_intern_experience(cursor, session['user_id'])
             cursor.close()
             conn.close()
         except Exception:
             pass
-    return render_template('user_shared/student_home.html', in_internship_semester=in_internship_semester)
+    return render_template('user_shared/student_home.html',
+                          in_application_phase=in_application_phase,
+                          show_intern_experience=show_intern_experience)
 
 
 @users_bp.route('/image_recognize')

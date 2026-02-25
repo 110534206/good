@@ -62,32 +62,29 @@ def update_resume_status_after_deadline(cursor, conn):
     返回: (is_deadline_passed: bool, updated_count: dict)
     """
     try:
-        # 檢查履歷上傳截止時間
+        from semester import get_current_semester_deadline
+        # 檢查履歷上傳截止時間：優先學期流程表 internship_flows，無則 fallback 公告
         now = datetime.now()
-        resume_deadline = None
-        is_resume_deadline_passed = False
-        
-        # 查詢履歷上傳截止時間
-        cursor.execute("""
-            SELECT end_time 
-            FROM announcement 
-            WHERE title LIKE '[作業]%上傳履歷截止時間' AND is_published = 1
-            ORDER BY created_at DESC 
-            LIMIT 1
-        """)
-        deadline_result = cursor.fetchone()
-        
-        if deadline_result and deadline_result.get('end_time'):
-            deadline = deadline_result['end_time']
-            if isinstance(deadline, datetime):
-                resume_deadline = deadline
-            else:
-                try:
-                    resume_deadline = datetime.strptime(str(deadline), '%Y-%m-%d %H:%M:%S')
-                except:
-                    resume_deadline = datetime.strptime(str(deadline), '%Y-%m-%d %H:%M')
-            
-            is_resume_deadline_passed = now > resume_deadline
+        resume_deadline = get_current_semester_deadline(cursor, 'resume')
+        if resume_deadline is None:
+            cursor.execute("""
+                SELECT end_time 
+                FROM announcement 
+                WHERE title LIKE '[作業]%上傳履歷截止時間' AND is_published = 1
+                ORDER BY created_at DESC 
+                LIMIT 1
+            """)
+            deadline_result = cursor.fetchone()
+            if deadline_result and deadline_result.get('end_time'):
+                deadline = deadline_result['end_time']
+                if isinstance(deadline, datetime):
+                    resume_deadline = deadline
+                else:
+                    try:
+                        resume_deadline = datetime.strptime(str(deadline), '%Y-%m-%d %H:%M:%S')
+                    except Exception:
+                        resume_deadline = datetime.strptime(str(deadline), '%Y-%m-%d %H:%M')
+        is_resume_deadline_passed = resume_deadline is not None and now > resume_deadline
         
         # 如果已經過了截止時間，執行狀態更新
         if is_resume_deadline_passed:

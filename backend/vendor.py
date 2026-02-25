@@ -2292,8 +2292,10 @@ def comment_application(application_id):
 
 @vendor_bp.route("/publish_announcements")
 def publish_announcements_page():
-    """廠商發布公告頁面"""
-    if "user_id" not in session or session.get("role") != "vendor":
+    """發布公告頁面（科助、管理員、廠商均可使用）"""
+    if "user_id" not in session:
+        return render_template("auth/login.html")
+    if session.get("role") not in ("vendor", "ta", "admin"):
         return render_template("auth/login.html")
     return render_template("user_shared/publish_announcements.html")
 
