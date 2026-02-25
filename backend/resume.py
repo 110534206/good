@@ -468,12 +468,41 @@ def get_teacher_review_resumes():
                         except:
                             deadline_info = str(deadline)
         except Exception as e:
-            print(f"⚠️ 無法獲取截止時間資訊: {e}")
+            print(f"⚠️ 無法獲取履歷上傳截止時間資訊: {e}")
+        
+        # 獲取指導老師審核履歷截止時間資訊
+        teacher_review_deadline_info = None
+        try:
+            cursor.execute("""
+                SELECT end_time 
+                FROM announcement 
+                WHERE title LIKE '[作業]%指導老師審核履歷截止時間' AND is_published = 1
+                ORDER BY created_at DESC 
+                LIMIT 1
+            """)
+            teacher_review_result = cursor.fetchone()
+            if teacher_review_result and teacher_review_result.get('end_time'):
+                teacher_review_deadline = teacher_review_result['end_time']
+                if isinstance(teacher_review_deadline, datetime):
+                    teacher_review_deadline_info = teacher_review_deadline.strftime('%Y/%m/%d %H:%M')
+                else:
+                    try:
+                        deadline_dt = datetime.strptime(str(teacher_review_deadline), '%Y-%m-%d %H:%M:%S')
+                        teacher_review_deadline_info = deadline_dt.strftime('%Y/%m/%d %H:%M')
+                    except:
+                        try:
+                            deadline_dt = datetime.strptime(str(teacher_review_deadline), '%Y-%m-%d %H:%M')
+                            teacher_review_deadline_info = deadline_dt.strftime('%Y/%m/%d %H:%M')
+                        except:
+                            teacher_review_deadline_info = str(teacher_review_deadline)
+        except Exception as e:
+            print(f"⚠️ 無法獲取指導老師審核截止時間資訊: {e}")
         
         return jsonify({
             "success": True, 
             "data": result_data,
             "deadline": deadline_info,
+            "teacher_review_deadline": teacher_review_deadline_info,
             "is_deadline_passed": is_resume_deadline_passed
         })
 

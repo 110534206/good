@@ -165,6 +165,9 @@
           <option value="approved">通過</option>
         </select>
         <input type="text" id="searchBox" style="padding: 10px 12px; border-radius: 8px; border: 1px solid #e2e8f0; min-width: 200px; flex: 1;" placeholder="搜尋帳號/檔案" />
+        <button id="sendToVendorBtn" class="btn btn-primary" style="padding: 10px 20px; border-radius: 8px; white-space: nowrap;" disabled>
+          傳送給廠商
+        </button>
       </div>
 
       <div class="table-wrapper">
@@ -315,7 +318,9 @@
               }
               
               // 顯示截止時間提示（僅非 vendor 角色）
-              if (userRole !== 'vendor' && resumeResponse.deadline) {
+              // 如果履歷提交截止時間已過（班導已傳資料），顯示指導老師審核截止時間（與班導一樣）
+              // 否則顯示履歷提交截止時間
+              if (userRole !== 'vendor') {
                 isDeadlinePassed = resumeResponse.is_deadline_passed || false;
                 const deadlineAlert = document.getElementById('deadlineAlert');
                 if (deadlineAlert) {
@@ -330,6 +335,28 @@
                       目前無法查看學生履歷。請等待截止時間到達後，履歷將自動通過並傳給您審核。
                     `;
                     deadlineAlert.style.display = 'block';
+                  } else if (isExpired && resumeResponse.teacher_review_deadline) {
+                    // 履歷提交截止時間已過（班導已傳資料），顯示指導老師審核截止時間（與班導一樣）
+                    const now = new Date();
+                    const teacherDeadline = new Date(resumeResponse.teacher_review_deadline.replace(/\//g, '-'));
+                    const isTeacherDeadlinePassed = now > teacherDeadline;
+                    
+                    if (isTeacherDeadlinePassed) {
+                      deadlineAlert.className = 'alert alert-warning alert-deadline';
+                      deadlineAlert.innerHTML = `
+                        <strong>⚠️ 指導老師審核截止時間已過</strong><br>
+                        指導老師審核截止時間：${resumeResponse.teacher_review_deadline}<br>
+                        已超過截止時間，請盡快完成審核。
+                      `;
+                    } else {
+                      deadlineAlert.className = 'alert alert-info alert-deadline';
+                      deadlineAlert.innerHTML = `
+                        <strong>📅 指導老師審核截止時間提醒</strong><br>
+                        指導老師審核截止時間：${resumeResponse.teacher_review_deadline}<br>
+                        請在截止時間前完成審核。
+                      `;
+                    }
+                    deadlineAlert.style.display = 'block';
                   } else if (isExpired) {
                     deadlineAlert.className = 'alert alert-warning alert-deadline';
                     deadlineAlert.innerHTML = `
@@ -338,7 +365,7 @@
                       已超過截止時間，履歷已自動通過並傳給指導老師審核。
                     `;
                     deadlineAlert.style.display = 'block';
-                  } else {
+                  } else if (resumeResponse.deadline) {
                     deadlineAlert.className = 'alert alert-info alert-deadline';
                     deadlineAlert.innerHTML = `
                       <strong>📅 履歷提交截止時間提醒</strong><br>
@@ -375,9 +402,17 @@
               }
 
               applyFilters();
+              
+              // 初始化傳送給廠商按鈕顯示狀態
+              setTimeout(() => {
+                updateSendToVendorButtonVisibility();
+              }, 100);
             } else {
               allResumes = [];
               renderTable([]);
+              setTimeout(() => {
+                updateSendToVendorButtonVisibility();
+              }, 100);
             }
           });
         });
@@ -388,6 +423,19 @@
       document.getElementById("statusFilter").addEventListener("change", applyFilters);
       document.getElementById("searchBox").addEventListener("input", applyFilters);
       document.getElementById("saveCommentBtn").addEventListener("click", saveComment);
+      
+      // 傳送給廠商按鈕事件
+      const sendToVendorBtn = document.getElementById("sendToVendorBtn");
+      if (sendToVendorBtn) {
+        sendToVendorBtn.addEventListener("click", sendSelectedToVendor);
+      }
+      
+      // 當 checkbox 改變時，顯示/隱藏傳送給廠商按鈕（僅指導老師可見）
+      document.addEventListener("change", function(e) {
+        if (e.target.classList.contains("row-checkbox") || e.target.id === "selectAllCheckbox") {
+          updateSendToVendorButtonVisibility();
+        }
+      });
 
       // 全選/取消全選功能
       document.getElementById("selectAllCheckbox").addEventListener("change", function(e) {
@@ -395,6 +443,7 @@
         checkboxes.forEach(cb => {
           cb.checked = e.target.checked;
         });
+        updateSendToVendorButtonVisibility();
       });
 
       // 當個別 checkbox 改變時，更新全選 checkbox 狀態
@@ -408,8 +457,27 @@
             selectAllCheckbox.checked = allChecked;
             selectAllCheckbox.indeterminate = someChecked && !allChecked;
           }
+          updateSendToVendorButtonVisibility();
         }
       });
+      
+      // 更新傳送給廠商按鈕的顯示狀態
+      function updateSendToVendorButtonVisibility() {
+        const sendToVendorBtn = document.getElementById("sendToVendorBtn");
+        if (!sendToVendorBtn) return;
+        
+        // 僅指導老師可以看到此按鈕
+        if (userRole === 'teacher') {
+          const checkedBoxes = document.querySelectorAll(".row-checkbox:checked");
+          // 指導老師角色下，按鈕一直顯示
+          sendToVendorBtn.style.display = 'block';
+          // 有勾選至少一筆資料時才啟用按鈕，否則禁用
+          sendToVendorBtn.disabled = checkedBoxes.length === 0;
+        } else {
+          // 非指導老師角色，隱藏按鈕
+          sendToVendorBtn.style.display = 'none';
+        }
+      }
 
       // 側邊選單控制
       const menuBtn = document.getElementById('menu-btn');
@@ -812,7 +880,11 @@
            </td>`;
         tr.innerHTML = `
            <td style="padding: 14px 16px; text-align: center;">
-             <input type="checkbox" class="row-checkbox" data-resume-id="${row.id}" style="cursor: pointer; width: 18px; height: 18px;">
+             <input type="checkbox" class="row-checkbox" 
+                    data-resume-id="${row.id}" 
+                    data-preference-id="${row.preference_id || ''}" 
+                    data-application-id="${row.application_id || ''}" 
+                    style="cursor: pointer; width: 18px; height: 18px;">
            </td>
            <td style="padding: 14px 16px;">${row.username}</td>
            <td style="padding: 14px 16px;">${escapeHtml(row.name)}</td>
@@ -832,6 +904,9 @@
       });
 
       renderPagination(allRowsData.length);
+      
+      // 更新傳送給廠商按鈕的顯示狀態
+      updateSendToVendorButtonVisibility();
     }
 
     function renderCommentBtn(row, isViewOnly, pid) {
@@ -987,6 +1062,125 @@
                  alert("失敗");
              }
         });
+    }
+
+    // 批量傳送選中的履歷給廠商
+    async function sendSelectedToVendor() {
+      const checkedBoxes = document.querySelectorAll(".row-checkbox:checked");
+      
+      if (checkedBoxes.length === 0) {
+        alert("請至少選擇一筆履歷");
+        return;
+      }
+      
+      if (!confirm(`確定要將選中的 ${checkedBoxes.length} 筆履歷標記為通過並傳送給廠商嗎？`)) {
+        return;
+      }
+      
+      const sendToVendorBtn = document.getElementById("sendToVendorBtn");
+      if (sendToVendorBtn) {
+        sendToVendorBtn.disabled = true;
+        sendToVendorBtn.textContent = "處理中...";
+      }
+      
+      const promises = [];
+      let successCount = 0;
+      let failCount = 0;
+      
+      checkedBoxes.forEach(checkbox => {
+        const resumeId = checkbox.getAttribute("data-resume-id");
+        const preferenceId = checkbox.getAttribute("data-preference-id");
+        const applicationId = checkbox.getAttribute("data-application-id");
+        
+        const body = { status: 'approved' };
+        if (preferenceId && preferenceId !== '') {
+          body.preference_id = preferenceId;
+        }
+        if (userRole === 'teacher' && applicationId && applicationId !== '' && applicationId !== 'null' && !isNaN(applicationId)) {
+          body.application_id = parseInt(applicationId);
+        }
+        
+        const promise = fetch(`/api/review_resume/${resumeId}`, {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify(body)
+        })
+        .then(res => res.json())
+        .then(data => {
+          if (data.success) {
+            successCount++;
+          } else {
+            failCount++;
+            console.error(`履歷 ${resumeId} 審核失敗:`, data.message);
+          }
+        })
+        .catch(err => {
+          failCount++;
+          console.error(`履歷 ${resumeId} 審核錯誤:`, err);
+        });
+        
+        promises.push(promise);
+      });
+      
+      try {
+        await Promise.all(promises);
+        
+        if (sendToVendorBtn) {
+          sendToVendorBtn.disabled = false;
+          sendToVendorBtn.textContent = "傳送給廠商";
+        }
+        
+        if (failCount === 0) {
+          alert(`✅ 成功將 ${successCount} 筆履歷標記為通過並傳送給廠商`);
+        } else {
+          alert(`⚠️ 完成處理：${successCount} 筆成功，${failCount} 筆失敗`);
+        }
+        
+        // 清除所有 checkbox 的選中狀態
+        checkedBoxes.forEach(cb => cb.checked = false);
+        const selectAllCheckbox = document.getElementById("selectAllCheckbox");
+        if (selectAllCheckbox) {
+          selectAllCheckbox.checked = false;
+          selectAllCheckbox.indeterminate = false;
+        }
+        updateSendToVendorButtonVisibility();
+        
+        // 清除狀態篩選器和搜尋框，確保更新後的履歷可見
+        const statusFilter = document.getElementById('statusFilter');
+        if (statusFilter) {
+          statusFilter.value = '';
+        }
+        const searchBox = document.getElementById('searchBox');
+        if (searchBox) {
+          searchBox.value = '';
+        }
+        
+        // 重新載入資料
+        if (userRole === 'vendor') {
+          fetch('/vendor/api/resumes').then(r=>r.json()).then(d=>{
+            if(d.success) { allResumes=d.resumes || []; applyFilters(); }
+          });
+        } else {
+          fetch('/api/teacher_review_resumes').then(r=>r.json()).then(d=>{
+            if(d.success) { 
+              allResumes=d.data || []; 
+              console.log('🔍 [DEBUG] 重新載入指導老師履歷資料:', allResumes.length, '筆');
+              applyFilters(); 
+            } else {
+              console.error('❌ [DEBUG] 重新載入失敗:', d);
+            }
+          }).catch(err => {
+            console.error('❌ [DEBUG] 重新載入錯誤:', err);
+          });
+        }
+      } catch (error) {
+        console.error('批量處理錯誤:', error);
+        if (sendToVendorBtn) {
+          sendToVendorBtn.disabled = false;
+          sendToVendorBtn.textContent = "傳送給廠商";
+        }
+        alert("處理過程中發生錯誤，請稍後再試");
+      }
     }
 
   </script>
