@@ -228,22 +228,133 @@
             margin-top: 28px;
         }
 
-        .info-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-            gap: 18px 16px;
-            align-items: stretch;
-        }
-
-        .info-row {
-            padding: 16px 18px;
-            height: 100%;
+        .accordion-container {
             display: flex;
             flex-direction: column;
+            gap: 12px;
+        }
+
+        .accordion-item {
             border-radius: 16px;
             background: rgba(255,255,255,0.85);
             border: 1px solid rgba(220, 227, 239, 0.8);
             box-shadow: var(--shadow-soft);
+            overflow: hidden;
+            transition: all 0.3s ease;
+        }
+
+        .accordion-item:hover {
+            box-shadow: 0 20px 40px rgba(15, 23, 42, 0.12);
+            border-color: rgba(37, 99, 235, 0.3);
+        }
+
+        .accordion-header {
+            padding: 18px 20px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            user-select: none;
+            transition: background-color 0.2s ease;
+        }
+
+        .accordion-header:hover {
+            background-color: rgba(37, 99, 235, 0.05);
+        }
+
+        .accordion-header.active {
+            background-color: rgba(37, 99, 235, 0.08);
+        }
+
+        .accordion-title {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            flex: 1;
+        }
+
+        .accordion-icon {
+            width: 4px;
+            height: 4px;
+            border-radius: 50%;
+            background: var(--primary-blue);
+            transition: all 0.3s ease;
+            flex-shrink: 0;
+        }
+
+        .accordion-item.active .accordion-icon {
+            width: 6px;
+            height: 6px;
+            background: var(--primary-purple);
+        }
+
+        .accordion-label {
+            font-size: 1rem;
+            letter-spacing: 0.02em;
+            color: var(--text);
+            font-weight: 600;
+        }
+
+        .accordion-item.active .accordion-label {
+            color: var(--primary-blue);
+        }
+
+        .accordion-toggle {
+            width: 20px;
+            height: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--muted);
+            transition: transform 0.3s ease, color 0.3s ease;
+            position: relative;
+            flex-shrink: 0;
+        }
+
+        .accordion-toggle::before {
+            content: '';
+            width: 8px;
+            height: 8px;
+            border-right: 2px solid currentColor;
+            border-bottom: 2px solid currentColor;
+            transform: rotate(45deg);
+            transition: transform 0.3s ease;
+            margin-top: -2px;
+        }
+
+        .accordion-item.active .accordion-toggle {
+            color: var(--primary-blue);
+        }
+
+        .accordion-item.active .accordion-toggle::before {
+            transform: rotate(225deg);
+            margin-top: 2px;
+        }
+
+        .accordion-toggle:hover {
+            color: var(--primary-blue);
+        }
+
+        .accordion-content {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.3s ease, padding 0.3s ease;
+            padding: 0 20px;
+        }
+
+        .accordion-item.active .accordion-content {
+            max-height: 1000px;
+            padding: 0 20px 20px;
+        }
+
+        .accordion-body {
+            padding-top: 16px;
+        }
+
+        .info-row {
+            padding: 0;
+            display: flex;
+            flex-direction: column;
         }
 
         .info-label {
@@ -311,49 +422,145 @@
             <span class="status" id="statusChip">資料載入中…</span>
 
             <section aria-live="polite">
-                <div class="info-grid">
-                    <div class="info-row">
-                        <span class="info-label">錄取公司</span>
-                        <div class="info-value" id="companyName">—</div>
-                        <p class="assist" id="companyAddress"></p>
-                        <p class="assist" id="contactBlock"></p>
+                <div class="accordion-container">
+                    <div class="accordion-item active">
+                        <div class="accordion-header" onclick="toggleAccordion(this)">
+                            <div class="accordion-title">
+                                <div class="accordion-icon"></div>
+                                <span class="accordion-label">錄取公司</span>
+                            </div>
+                             <div class="accordion-toggle"></div>
+                        </div>
+                        <div class="accordion-content">
+                            <div class="accordion-body">
+                                <div class="info-row">
+                                    <div class="info-value" id="companyName">—</div>
+                                    <p class="assist" id="companyAddress"></p>
+                                    <p class="assist" id="contactBlock"></p>
+                                </div>
+                            </div>
+                        </div>
                     </div>
 
-                    <div class="info-row">
-                        <span class="info-label">錄取職缺</span>
-                        <div class="info-value" id="jobTitle">—</div>
+                    <div class="accordion-item">
+                        <div class="accordion-header" onclick="toggleAccordion(this)">
+                            <div class="accordion-title">
+                                <div class="accordion-icon"></div>
+                                <span class="accordion-label">錄取職缺</span>
+                            </div>
+                             <div class="accordion-toggle"></div>
+                        </div>
+                        <div class="accordion-content">
+                            <div class="accordion-body">
+                                <div class="info-row">
+                                    <div class="info-value" id="jobTitle">—</div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
 
-                    <div class="info-row">
-                        <span class="info-label">職缺描述</span>
-                        <div class="info-value" id="jobDescription" style="white-space: pre-wrap; line-height: 1.6;">—</div>
+                    <div class="accordion-item">
+                        <div class="accordion-header" onclick="toggleAccordion(this)">
+                            <div class="accordion-title">
+                                <div class="accordion-icon"></div>
+                                <span class="accordion-label">職缺描述</span>
+                            </div>
+                             <div class="accordion-toggle"></div>
+                        </div>
+                        <div class="accordion-content">
+                            <div class="accordion-body">
+                                <div class="info-row">
+                                    <div class="info-value" id="jobDescription" style="white-space: pre-wrap; line-height: 1.6;">—</div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
 
-                    <div class="info-row">
-                        <span class="info-label">實習地址</span>
-                        <div class="info-value" id="companyAddressDisplay">—</div>
+                    <div class="accordion-item">
+                        <div class="accordion-header" onclick="toggleAccordion(this)">
+                            <div class="accordion-title">
+                                <div class="accordion-icon"></div>
+                                <span class="accordion-label">實習地址</span>
+                            </div>
+                             <div class="accordion-toggle"></div>
+                        </div>
+                        <div class="accordion-content">
+                            <div class="accordion-body">
+                                <div class="info-row">
+                                    <div class="info-value" id="companyAddressDisplay">—</div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
 
-                    <div class="info-row">
-                        <span class="info-label">實習薪水</span>
-                        <div class="info-value" id="salaryDisplay">—</div>
+                    <div class="accordion-item">
+                        <div class="accordion-header" onclick="toggleAccordion(this)">
+                            <div class="accordion-title">
+                                <div class="accordion-icon"></div>
+                                <span class="accordion-label">實習薪水</span>
+                            </div>
+                             <div class="accordion-toggle"></div>
+                        </div>
+                        <div class="accordion-content">
+                            <div class="accordion-body">
+                                <div class="info-row">
+                                    <div class="info-value" id="salaryDisplay">—</div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
 
-                    <div class="info-row">
-                        <span class="info-label">上班時間</span>
-                        <div class="info-value" id="workTimeDisplay">—</div>
+                    <div class="accordion-item">
+                        <div class="accordion-header" onclick="toggleAccordion(this)">
+                            <div class="accordion-title">
+                                <div class="accordion-icon"></div>
+                                <span class="accordion-label">上班時間</span>
+                            </div>
+                             <div class="accordion-toggle"></div>
+                        </div>
+                        <div class="accordion-content">
+                            <div class="accordion-body">
+                                <div class="info-row">
+                                    <div class="info-value" id="workTimeDisplay">—</div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
 
-                    <div class="info-row">
-                        <span class="info-label">實習期間</span>
-                        <div class="info-value" id="internPeriod">—</div>
-                        <p class="assist" id="internSemester"></p>
-                        <p class="assist" id="admitDate"></p>
+                    <div class="accordion-item">
+                        <div class="accordion-header" onclick="toggleAccordion(this)">
+                            <div class="accordion-title">
+                                <div class="accordion-icon"></div>
+                                <span class="accordion-label">實習期間</span>
+                            </div>
+                             <div class="accordion-toggle"></div>
+                        </div>
+                        <div class="accordion-content">
+                            <div class="accordion-body">
+                                <div class="info-row">
+                                    <div class="info-value" id="internPeriod">—</div>
+                                    <p class="assist" id="internSemester"></p>
+                                    <p class="assist" id="admitDate"></p>
+                                </div>
+                            </div>
+                        </div>
                     </div>
 
-                    <div class="info-row">
-                        <span class="info-label">指導老師</span>
-                        <div class="info-value" id="teacherInfo">—</div>
+                    <div class="accordion-item">
+                        <div class="accordion-header" onclick="toggleAccordion(this)">
+                            <div class="accordion-title">
+                                <div class="accordion-icon"></div>
+                                <span class="accordion-label">指導老師</span>
+                            </div>
+                             <div class="accordion-toggle"></div>
+                        </div>
+                        <div class="accordion-content">
+                            <div class="accordion-body">
+                                <div class="info-row">
+                                    <div class="info-value" id="teacherInfo">—</div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </section>
@@ -520,11 +727,25 @@
 
             } catch (error) {
                 console.error(error);
-                statusChip.textContent = "載入失敗";
+                statusChip.textContent = "尚未錄取";
             }
         }
 
         init();
+
+        // 手風琴展開/收合功能
+        function toggleAccordion(header) {
+            const item = header.closest('.accordion-item');
+            const isActive = item.classList.contains('active');
+            
+            // 如果點擊的是已展開的項目，則收合
+            if (isActive) {
+                item.classList.remove('active');
+            } else {
+                // 展開點擊的項目
+                item.classList.add('active');
+            }
+        }
 
         // 選單開關邏輯
         document.addEventListener("DOMContentLoaded", () => {

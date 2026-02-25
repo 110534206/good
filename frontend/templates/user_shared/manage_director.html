@@ -1506,8 +1506,6 @@
     <a href="/admin_statistics">查詢統計資料</a>
     <a href="/manage_director_confirm">媒合結果</a>
     <a href="/login">登出</a>
-
-
   </nav>
 
   <div id="toast" class="toast"></div>
@@ -1515,6 +1513,7 @@
   <script>
     let allCompaniesData = [];
     let duplicateStudents = [];
+    let duplicateStudentsPreferences = {};  // 儲存重複學生的完整志願序 {studentId: [{preference_order, company_id, job_id, ...}]}
     let currentCompanyIndex = 0;  // 當前顯示的廠商索引
     let jobSlotsMap = {};  // 儲存每個職缺的名額設定 {companyId_jobId: slots}，從職缺資料自動帶入
     let unmatchedStudents = [];  // 所有學生列表
@@ -1595,10 +1594,21 @@
             });
           });
           
+          // 如果有重複學生，批量獲取他們的完整志願序（5個）
+          if (duplicateStudents && duplicateStudents.length > 0) {
+            console.log(`🔄 檢測到 ${duplicateStudents.length} 位重複中選學生，正在獲取完整志願序...`);
+            await loadDuplicateStudentsPreferences();
+            
+            // 自動解決重複學生：根據第一志願序自動保留在第一志願的公司，從其他公司移除
+            await autoResolveDuplicateStudents();
+          } else {
+            duplicateStudentsPreferences = {};
+          }
+          
           // 填充過濾器選項
           populateFilters();
           
-          // 渲染結果
+          // 渲染結果（會自動按照第一志願序排序）
           renderCompanies();
           renderDuplicateAlert();
           
@@ -1644,6 +1654,226 @@
           <div>載入失敗：${error.message}</div>
         `;
       }
+    }
+
+    // 批量獲取重複學生的完整志願序（5個）
+    async function loadDuplicateStudentsPreferences() {
+      duplicateStudentsPreferences = {};
+      
+      if (!duplicateStudents || duplicateStudents.length === 0) {
+        return;
+      }
+      
+      try {
+        // 並行獲取所有重複學生的志願序
+        const preferencePromises = duplicateStudents.map(async (studentId) => {
+          try {
+            const res = await fetch(`/admission/api/get_student_preferences?student_id=${studentId}`, {
+              credentials: 'include'
+            });
+            const data = await res.json();
+            
+            if (data.success && data.preferences) {
+              // 只保留 preference_order 在 1-5 範圍內的志願序
+              const validPreferences = data.preferences.filter(p => 
+                p.preference_order >= 1 && p.preference_order <= 5
+              ).sort((a, b) => a.preference_order - b.preference_order);
+              
+              return {
+                studentId: studentId,
+                preferences: validPreferences
+              };
+            }
+            return {
+              studentId: studentId,
+              preferences: []
+            };
+          } catch (error) {
+            console.error(`獲取學生 ${studentId} 的志願序失敗:`, error);
+            return {
+              studentId: studentId,
+              preferences: []
+            };
+          }
+        });
+        
+        const results = await Promise.all(preferencePromises);
+        
+        // 將結果存入 duplicateStudentsPreferences
+        results.forEach(result => {
+          duplicateStudentsPreferences[result.studentId] = result.preferences;
+        });
+        
+        console.log(`✅ 已獲取 ${results.length} 位重複學生的完整志願序`);
+        
+        // 調試：顯示重複學生的第一志願序
+        results.forEach(result => {
+          if (result.preferences.length > 0) {
+            const firstPreference = result.preferences[0];
+            console.log(`  學生 ${result.studentId}: 第一志願序 = ${firstPreference.preference_order}, 公司 = ${firstPreference.company_name}, 職缺 = ${firstPreference.job_title}`);
+          }
+        });
+      } catch (error) {
+        console.error('批量獲取重複學生志願序失敗:', error);
+        duplicateStudentsPreferences = {};
+      }
+    }
+    
+    // 獲取學生的第一志願序（用於排序）
+    function getFirstPreferenceOrder(studentId) {
+      const preferences = duplicateStudentsPreferences[studentId];
+      if (preferences && preferences.length > 0) {
+        // 返回第一志願序（已經按 preference_order 排序）
+        return preferences[0].preference_order;
+      }
+      // 如果沒有完整志願序，嘗試使用當前職缺的志願序
+      // 這需要從 allCompaniesData 中查找
+      for (const company of allCompaniesData) {
+        for (const job of company.jobs || []) {
+          for (const student of [...(job.regulars || []), ...(job.reserves || [])]) {
+            if (student.student_id && student.student_id.toString() === studentId.toString()) {
+              const order = student.preference_order;
+              if (order && order >= 1 && order <= 5) {
+                return order;
+              }
+            }
+          }
+        }
+      }
+      return 999;  // 沒有志願序的排在最後
+    }
+
+    // 自動解決重複學生：根據第一志願序自動保留在第一志願的公司，從其他公司移除
+    async function autoResolveDuplicateStudents() {
+      if (!duplicateStudents || duplicateStudents.length === 0) {
+        return { resolved: 0, skipped: 0 };
+      }
+
+      console.log(`🔧 開始自動解決 ${duplicateStudents.length} 位重複中選學生...`);
+
+      let resolvedCount = 0;
+      let skippedCount = 0;
+      const resolvedDetails = [];
+
+      for (const studentId of duplicateStudents) {
+        try {
+          // 找出該學生出現在哪些公司的正取名單中
+          const studentMatches = [];
+          for (const company of allCompaniesData) {
+            for (const job of company.jobs || []) {
+              // 只檢查正取名單（regulars），不檢查備取名單
+              const regularIndex = (job.regulars || []).findIndex(s => 
+                s.student_id && s.student_id.toString() === studentId.toString()
+              );
+              if (regularIndex !== -1) {
+                studentMatches.push({
+                  company_id: company.company_id,
+                  company_name: company.company_name,
+                  job_id: job.job_id,
+                  job_title: job.job_title,
+                  student: job.regulars[regularIndex],
+                  match_id: job.regulars[regularIndex].id || job.regulars[regularIndex].match_id
+                });
+              }
+            }
+          }
+
+          // 如果該學生只出現在一個公司，不需要處理
+          if (studentMatches.length <= 1) {
+            continue;
+          }
+
+          // 獲取該學生的第一志願
+          const preferences = duplicateStudentsPreferences[studentId] || [];
+          let targetMatch = null;
+
+          if (preferences.length > 0) {
+            // 有第一志願，找出第一志願的公司
+            const firstPreference = preferences[0];
+            targetMatch = studentMatches.find(match => 
+              match.company_id.toString() === firstPreference.company_id.toString() &&
+              match.job_id.toString() === firstPreference.job_id.toString()
+            );
+          }
+
+          // 如果第一志願的公司不在匹配列表中，使用第一個匹配的公司
+          if (!targetMatch) {
+            targetMatch = studentMatches[0];
+            console.log(`⚠️ 學生 ${studentId} 的第一志願公司不在匹配列表中，保留在第一個匹配的公司：${targetMatch.company_name}`);
+          }
+
+          // 從其他公司移除該學生
+          const matchesToRemove = studentMatches.filter(match => 
+            match.match_id !== targetMatch.match_id
+          );
+
+          if (matchesToRemove.length > 0) {
+            console.log(`🔧 學生 ${studentId} 的第一志願：${targetMatch.company_name} / ${targetMatch.job_title}`);
+            console.log(`   將從以下公司移除：${matchesToRemove.map(m => `${m.company_name} / ${m.job_title}`).join('、')}`);
+
+            // 並行移除所有非第一志願的匹配
+            const removePromises = matchesToRemove.map(async (match) => {
+              try {
+                const res = await fetch('/admission/api/director_remove_student', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  credentials: 'include',
+                  body: JSON.stringify({ 
+                    history_id: match.match_id,
+                    match_id: match.match_id
+                  })
+                });
+                const data = await res.json();
+                if (data.success) {
+                  console.log(`   ✅ 已從 ${match.company_name} / ${match.job_title} 移除`);
+                  return true;
+                } else {
+                  console.error(`   ❌ 從 ${match.company_name} / ${match.job_title} 移除失敗：${data.message}`);
+                  return false;
+                }
+              } catch (error) {
+                console.error(`   ❌ 從 ${match.company_name} / ${match.job_title} 移除失敗：`, error);
+                return false;
+              }
+            });
+
+            const results = await Promise.all(removePromises);
+            const successCount = results.filter(r => r === true).length;
+            
+            if (successCount > 0) {
+              resolvedCount++;
+              // 獲取學生姓名
+              const studentName = targetMatch.student.student_name || `學生 ${studentId}`;
+              resolvedDetails.push({
+                studentName: studentName,
+                studentId: studentId,
+                keptCompany: targetMatch.company_name,
+                removedCount: successCount
+              });
+              console.log(`   ✅ 已成功移除 ${successCount} 個重複匹配`);
+            } else {
+              skippedCount++;
+              console.log(`   ⚠️ 移除失敗，跳過`);
+            }
+          }
+        } catch (error) {
+          console.error(`處理重複學生 ${studentId} 時發生錯誤:`, error);
+          skippedCount++;
+        }
+      }
+
+      if (resolvedCount > 0) {
+        console.log(`✅ 自動解決完成：成功解決 ${resolvedCount} 位重複學生`);
+        // 重新載入媒合結果以反映變更
+        console.log('🔄 重新載入媒合結果...');
+        await loadMatchingResults(false); // 不顯示載入動畫，避免閃爍
+      } else if (skippedCount > 0) {
+        console.log(`⚠️ 自動解決完成：跳過 ${skippedCount} 位重複學生（可能已解決或處理失敗）`);
+      } else {
+        console.log(`ℹ️ 沒有需要解決的重複學生`);
+      }
+
+      return { resolved: resolvedCount, skipped: skippedCount };
     }
 
     // 填充過濾器選項
@@ -2038,11 +2268,18 @@
               if (existing) {
                 existing.companies.push(company.company_name);
               } else {
+                // 獲取第一志願序資訊
+                const firstPreferenceOrder = getFirstPreferenceOrder(student.student_id);
+                const preferences = duplicateStudentsPreferences[student.student_id] || [];
+                const firstPreference = preferences.length > 0 ? preferences[0] : null;
+                
                 duplicateInfo.push({
                   student_id: student.student_id,
                   student_name: student.student_name,
                   student_number: student.student_number,
-                  companies: [company.company_name]
+                  companies: [company.company_name],
+                  firstPreferenceOrder: firstPreferenceOrder,
+                  firstPreference: firstPreference
                 });
               }
             }
@@ -2050,9 +2287,25 @@
         });
       });
 
+      // 按照第一志願序排序重複學生資訊（與顯示順序一致）
+      duplicateInfo.sort((a, b) => {
+        const aOrder = a.firstPreferenceOrder || 999;
+        const bOrder = b.firstPreferenceOrder || 999;
+        if (aOrder === bOrder) {
+          return a.student_name.localeCompare(b.student_name);
+        }
+        return aOrder - bOrder;
+      });
+
       duplicateInfo.forEach(info => {
         const li = document.createElement('li');
-        li.innerHTML = `<strong>${info.student_name}</strong> (${info.student_number}) 被以下公司選中：${info.companies.join('、')}`;
+        let preferenceText = '';
+        if (info.firstPreference) {
+          preferenceText = `（第一志願序：${info.firstPreferenceOrder} - ${info.firstPreference.company_name} / ${info.firstPreference.job_title}）`;
+        } else if (info.firstPreferenceOrder && info.firstPreferenceOrder < 999) {
+          preferenceText = `（第一志願序：${info.firstPreferenceOrder}）`;
+        }
+        li.innerHTML = `<strong>${info.student_name}</strong> (${info.student_number}) 被以下公司選中：${info.companies.join('、')}${preferenceText}`;
         list.appendChild(li);
       });
     }
@@ -2309,31 +2562,34 @@
         return '<div class="text-muted" style="padding: 12px;">尚無學生</div>';
       }
 
-      // 如果有重複中選的學生，按志願序排序（與後端邏輯一致）
+      // 如果有重複中選的學生，按第一志願序排序（系統自動排序）
       const sortedStudents = [...students].sort((a, b) => {
         const aIsDuplicate = duplicateStudents.includes(a.student_id);
         const bIsDuplicate = duplicateStudents.includes(b.student_id);
         
         // 排序優先級：
         // 1. 重複中選的學生排在前面
-        // 2. 如果是重複中選，按志願序排序（志願序小的在前）
-        // 3. 如果志願序相同，或都不是重複中選，按 slot_index 排序
+        // 2. 如果是重複中選，按第一志願序排序（第一志願序小的在前）
+        // 3. 如果第一志願序相同，按 slot_index 排序
+        // 4. 如果都不是重複中選，按 slot_index 排序
         
         // 如果只有一個是重複中選，重複中選的排在前面
         if (aIsDuplicate && !bIsDuplicate) return -1;
         if (!aIsDuplicate && bIsDuplicate) return 1;
         
-        // 如果兩個都是重複中選，按志願序排序
+        // 如果兩個都是重複中選，按第一志願序排序
         if (aIsDuplicate && bIsDuplicate) {
-          const aOrder = (a.preference_order && a.preference_order >= 1 && a.preference_order <= 5) ? a.preference_order : 999;
-          const bOrder = (b.preference_order && b.preference_order >= 1 && b.preference_order <= 5) ? b.preference_order : 999;
-          // 如果志願序相同，按 slot_index 排序
-          if (aOrder === bOrder) {
+          // 獲取第一志願序（從完整志願序列表中獲取）
+          const aFirstOrder = getFirstPreferenceOrder(a.student_id);
+          const bFirstOrder = getFirstPreferenceOrder(b.student_id);
+          
+          // 如果第一志願序相同，按 slot_index 排序
+          if (aFirstOrder === bFirstOrder) {
             const aSlot = a.slot_index || 999;
             const bSlot = b.slot_index || 999;
             return aSlot - bSlot;
           }
-          return aOrder - bOrder;
+          return aFirstOrder - bFirstOrder;
         }
         
         // 如果都不是重複中選，按 slot_index 排序
@@ -3561,11 +3817,10 @@
           // 顯示成功訊息
           showToast(data.message || '確認成功', 'success');
           
-          // 重新載入媒合結果（不顯示載入狀態）
-          await loadMatchingResults(false);
-          
-          // 重新載入未匹配學生列表
-          await loadUnmatchedStudents();
+          // 確認成功後跳轉到科助工作台
+          setTimeout(() => {
+            window.location.href = '/ta_assistant_dashboard';
+          }, 1000); // 1秒後跳轉，讓用戶看到成功訊息
         } else {
           showToast(data.message || '確認失敗', 'error');
         }
@@ -3589,9 +3844,10 @@
       // 監聽廠商媒合排序更新通知（使用 BroadcastChannel 實現跨頁面通訊）
       try {
         const matchingSortChannel = new BroadcastChannel('matching_sort_updated');
-        matchingSortChannel.addEventListener('message', (event) => {
+        matchingSortChannel.addEventListener('message', async (event) => {
           if (event.data && event.data.type === 'matching_sort_saved') {
-            console.log('📢 收到廠商媒合排序更新通知，自動刷新資料...');
+            console.log('📢 收到廠商媒合排序更新通知，自動刷新資料並重新排序...');
+            
             // 顯示提示訊息
             const notification = document.createElement('div');
             notification.style.cssText = `
@@ -3615,14 +3871,35 @@
             `;
             document.body.appendChild(notification);
             
-            // 自動刷新資料
-            loadMatchingResults(true).then(() => {
+            try {
+              // 自動刷新資料（會自動檢測重複學生、獲取志願序、自動解決並應用排序）
+              await loadMatchingResults(true);
+              
+              // 檢查是否有過濾條件，如果有則重新應用過濾器
+              const companyFilter = document.getElementById('companyFilter');
+              const jobFilter = document.getElementById('jobFilter');
+              const studentNameFilter = document.getElementById('studentNameFilter');
+              
+              const hasFilters = (companyFilter && companyFilter.value) || 
+                                (jobFilter && jobFilter.value) || 
+                                (studentNameFilter && studentNameFilter.value.trim());
+              
+              if (hasFilters) {
+                // 如果有過濾條件，重新應用過濾器（會自動重新排序）
+                const filteredData = filterCompanies();
+                renderCompanies(filteredData);
+                renderUnmatchedStudents();
+                console.log('✅ 已重新應用過濾條件並排序');
+              }
+              
               // 更新提示訊息為成功狀態
               notification.style.background = '#16a34a';
               notification.innerHTML = `
                 <i class="fas fa-check-circle"></i>
                 <span>資料已成功更新</span>
               `;
+              
+              console.log('✅ 廠商媒合排序更新完成，資料已重新載入，重複學生已自動解決並應用排序');
               
               // 刷新完成後移除提示訊息
               setTimeout(() => {
@@ -3634,7 +3911,7 @@
                   }, 300);
                 }
               }, 2000);
-            }).catch((error) => {
+            } catch (error) {
               console.error('刷新資料失敗:', error);
               // 更新提示訊息為錯誤狀態
               notification.style.background = '#dc2626';
@@ -3652,7 +3929,7 @@
                   }, 300);
                 }
               }, 3000);
-            });
+            }
           }
         });
         

@@ -2100,16 +2100,22 @@
             if (data.success) {
               alert('✅ ' + (data.message || '媒合排序已成功保存'));
               
-              // 使用 BroadcastChannel 通知其他頁面（如主任媒合頁面）刷新資料
+              // 使用 BroadcastChannel 通知其他頁面（如主任媒合頁面）刷新資料並重新排序
               try {
                 const channel = new BroadcastChannel('matching_sort_updated');
-                channel.postMessage({
+                const message = {
                   type: 'matching_sort_saved',
                   timestamp: Date.now(),
-                  message: '廠商媒合排序已更新，請刷新資料'
-                });
-                channel.close();
-                console.log('📢 已發送媒合排序更新通知');
+                  message: '廠商媒合排序已更新，請刷新資料並重新排序'
+                };
+                channel.postMessage(message);
+                
+                // 延遲關閉頻道，確保消息有足夠時間傳遞
+                setTimeout(() => {
+                  channel.close();
+                }, 100);
+                
+                console.log('📢 已發送媒合排序更新通知:', message);
               } catch (err) {
                 console.warn('⚠️ BroadcastChannel 不支援或發送失敗:', err);
               }

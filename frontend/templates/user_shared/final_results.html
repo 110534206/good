@@ -1318,10 +1318,7 @@
       const confirmBtn = document.getElementById('confirmFilterBtn');
       if (!confirmBtn) return;
       
-      // 確認對話框
-      if (!confirm('確定要確認媒合結果嗎？\n\n確認後將通知相關人員，並可以開始進行二面流程。')) {
-        return;
-      }
+   
       
       // 禁用按鈕並顯示載入狀態
       const originalText = confirmBtn.innerHTML;
