@@ -3659,7 +3659,7 @@ def director_confirm_matching():
             SELECT DISTINCT ct.teacher_id
             FROM classes_teacher ct
             JOIN users u ON ct.teacher_id = u.id
-            WHERE ct.role = '班導師'
+            WHERE ct.role = 'classteacher'
         """)
         class_teachers = cursor.fetchall() or []
         for class_teacher in class_teachers:
@@ -3905,7 +3905,7 @@ def ta_confirm_matching():
             SELECT DISTINCT ct.teacher_id
             FROM classes_teacher ct
             JOIN users u ON ct.teacher_id = u.id
-            WHERE ct.role = '班導師'
+            WHERE ct.role = 'classteacher'
         """)
         class_teachers = cursor.fetchall() or []
         for class_teacher in class_teachers:
@@ -4207,7 +4207,7 @@ def ta_toggle_second_interview():
             SELECT DISTINCT ct.teacher_id
             FROM classes_teacher ct
             JOIN users u ON ct.teacher_id = u.id
-            WHERE ct.role = '班導師'
+            WHERE ct.role = 'classteacher'
         """)
         class_teachers = cursor.fetchall() or []
         for class_teacher in class_teachers:

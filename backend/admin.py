@@ -37,13 +37,20 @@ def _get_active_semester_year(cursor):
 
 
 def _post_process_users(users, active_semester_year=None):
-    """共用：補齊 role_display、admission_year（優先 DB）、created_at、動態 grade_display（不讀 users.grade）。"""
-    role_map = {'ta': '科助', 'teacher': '教師', 'student': '學生', 'director': '主任', 'admin': '管理員', 'vendor': '廠商'}
+    """共用：補齊 role_display（指導老師/班導）、admission_year、created_at、動態 grade_display。"""
+    role_map = {'ta': '科助', 'teacher': '指導老師', 'student': '學生', 'director': '主任', 'admin': '管理員', 'vendor': '廠商'}
     grade_labels = {1: '一年級', 2: '二年級', 3: '三年級', 4: '四年級', 5: '五年級', 6: '六年級'}
     for user in users:
         if user.get('created_at'):
             user['created_at'] = user['created_at'].strftime("%Y-%m-%d %H:%M:%S")
-        user['role_display'] = role_map.get(user['role'], user['role'])
+        is_homeroom = (user.get('is_homeroom_count') or 0) > 0
+        user['is_homeroom'] = is_homeroom
+        if user['role'] == 'teacher':
+            user['role_display'] = '指導老師' + ('、班導' if is_homeroom else '')
+        elif user['role'] == 'director':
+            user['role_display'] = '主任、指導老師' + ('、班導' if is_homeroom else '')
+        else:
+            user['role_display'] = role_map.get(user['role'], user['role'])
         # 入學年度：優先使用資料庫 u.admission_year，其次學生 username 前三碼
         if user['role'] == 'student':
             db_ay = user.get('admission_year')  # 已從 SELECT 取得 u.admission_year
@@ -128,11 +135,22 @@ def get_all_users():
                 c.department,
                 c.admission_year AS class_admission_year,
                 (
+                    SELECT COUNT(*) FROM classes_teacher ct_h
+                    WHERE ct_h.teacher_id = u.id AND ct_h.role = 'classteacher'
+                ) AS is_homeroom_count,
+                (
                     SELECT GROUP_CONCAT(CONCAT(c2.admission_year, '屆', c2.department, c2.name) SEPARATOR ', ')
                     FROM classes_teacher ct2
                     JOIN classes c2 ON ct2.class_id = c2.id
                     WHERE ct2.teacher_id = u.id
                 ) AS teaching_classes,
+                (
+                    SELECT GROUP_CONCAT(DISTINCT CONCAT(c3.admission_year, '屆', c3.department, c3.name) ORDER BY c3.admission_year, c3.department, c3.name SEPARATOR ', ')
+                    FROM teacher_student_relations tsr
+                    JOIN users u2 ON u2.id = tsr.student_id AND u2.role = 'student'
+                    JOIN classes c3 ON c3.id = u2.class_id
+                    WHERE tsr.teacher_id = u.id
+                ) AS guided_classes,
                 u.created_at
             FROM users u
             LEFT JOIN classes c ON u.class_id = c.id
@@ -176,8 +194,12 @@ def search_users():
             search_term = f"%{username_or_name_or_email}%"
             params.extend([search_term, search_term, search_term])
         if role:
-            conditions.append("u.role = %s")
-            params.append(role)
+            if role == 'homeroom':
+                conditions.append("u.role IN ('teacher', 'director')")
+                conditions.append("EXISTS (SELECT 1 FROM classes_teacher ct WHERE ct.teacher_id = u.id AND ct.role = 'classteacher')")
+            else:
+                conditions.append("u.role = %s")
+                params.append(role)
         if filename:
             conditions.append("EXISTS (SELECT 1 FROM resumes r WHERE r.user_id = u.id AND r.original_filename LIKE %s)")
             params.append(f"%{filename}%")
@@ -195,11 +217,22 @@ def search_users():
                 c.department,
                 c.admission_year AS class_admission_year,
                 (
+                    SELECT COUNT(*) FROM classes_teacher ct_h
+                    WHERE ct_h.teacher_id = u.id AND ct_h.role = 'classteacher'
+                ) AS is_homeroom_count,
+                (
                     SELECT GROUP_CONCAT(CONCAT(c2.admission_year, '屆', c2.department, c2.name) SEPARATOR ', ')
                     FROM classes_teacher ct2
                     JOIN classes c2 ON ct2.class_id = c2.id
                     WHERE ct2.teacher_id = u.id
                 ) AS teaching_classes,
+                (
+                    SELECT GROUP_CONCAT(DISTINCT CONCAT(c3.admission_year, '屆', c3.department, c3.name) ORDER BY c3.admission_year, c3.department, c3.name SEPARATOR ', ')
+                    FROM teacher_student_relations tsr
+                    JOIN users u2 ON u2.id = tsr.student_id AND u2.role = 'student'
+                    JOIN classes c3 ON c3.id = u2.class_id
+                    WHERE tsr.teacher_id = u.id
+                ) AS guided_classes,
                 u.created_at
             FROM users u
             LEFT JOIN classes c ON u.class_id = c.id
@@ -444,7 +477,11 @@ def assign_teacher_class(teacher_id):
     try:
         data = request.get_json()
         class_ids = data.get("class_ids", [])
-        role = data.get("role", "班導師")  # 預設為班導師
+        role = data.get("role", "classteacher")  # DB 使用 classteacher / subjectteacher
+        if role == "班導師":
+            role = "classteacher"
+        elif role == "任課老師":
+            role = "subjectteacher"
 
         if not class_ids:
             return jsonify({"success": False, "message": "未提供班級資料"}), 400

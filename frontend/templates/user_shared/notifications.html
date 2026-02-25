@@ -591,6 +591,211 @@
     #publishTypeModal .option-btn:active {
       transform: translateY(0);
     }
+
+    /* ========== 通知詳情彈窗美化 ========== */
+    #notifModal .modal-content {
+      border: none;
+      border-radius: 16px;
+      box-shadow: 0 20px 60px rgba(13, 52, 122, 0.15);
+      overflow: hidden;
+    }
+    #notifModal .modal-header {
+      background: linear-gradient(135deg, #0454a3 0%, #0b6bb3 100%);
+      color: #fff;
+      padding: 1rem 1.25rem;
+      border-bottom: none;
+    }
+    #notifModal .modal-header .modal-title {
+      font-weight: 600;
+      font-size: 1.1rem;
+    }
+    #notifModal .modal-header .btn-close {
+      filter: brightness(0) invert(1);
+      opacity: 0.9;
+    }
+    #notifModal .modal-body {
+      padding: 1.25rem 1.5rem;
+      background: #fafbfd;
+      min-height: 80px;
+    }
+    #notifModal .notif-meta {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      color: var(--muted);
+      font-size: 0.85rem;
+      margin-bottom: 1rem;
+      padding-bottom: 0.75rem;
+      border-bottom: 1px solid #e8eef5;
+    }
+    #notifModal .notif-meta i { font-size: 1rem; }
+    #notifModal .notif-content {
+      background: #fff;
+      border-radius: 10px;
+      padding: 1rem 1.25rem;
+      border: 1px solid #e8eef5;
+      white-space: pre-wrap;
+      word-wrap: break-word;
+      line-height: 1.6;
+      color: #1e293b;
+    }
+    #notifModal .notif-attachments {
+      margin-top: 1rem;
+    }
+    #notifModal .notif-attachments-title {
+      font-size: 0.9rem;
+      font-weight: 600;
+      color: #334155;
+      margin-bottom: 0.75rem;
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+    }
+    #notifModal .notif-attachments-imgs {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+      margin-bottom: 0.75rem;
+    }
+    #notifModal .notif-attach-img-wrap {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 0.4rem;
+      padding: 0.5rem;
+      background: #fff;
+      border-radius: 10px;
+      border: 1px solid #e2e8f0;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+    }
+    #notifModal .notif-attach-img-wrap img {
+      max-width: 200px;
+      max-height: 160px;
+      object-fit: contain;
+      border-radius: 6px;
+      display: block;
+    }
+    #notifModal .notif-download-img {
+      font-size: 0.8rem;
+      padding: 0.35rem 0.6rem;
+    }
+    #notifModal .notif-attachments-files {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+    }
+    #notifModal .notif-download-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      padding: 0.5rem 0.9rem;
+      font-size: 0.875rem;
+      color: #0454a3;
+      background: #eff6ff;
+      border: 1px solid #bfdbfe;
+      border-radius: 8px;
+      text-decoration: none;
+      transition: background 0.2s, color 0.2s;
+    }
+    #notifModal .notif-download-btn:hover {
+      background: #0454a3;
+      color: #fff;
+      border-color: #0454a3;
+    }
+    #notifModal .modal-footer {
+      padding: 0.9rem 1.5rem;
+      background: #fff;
+      border-top: 1px solid #e8eef5;
+      gap: 0.5rem;
+    }
+
+    /* ========== 新增公告表單彈窗美化 ========== */
+    #annModal .modal-content {
+      border: none;
+      border-radius: 16px;
+      box-shadow: 0 20px 60px rgba(13, 52, 122, 0.12);
+      overflow: hidden;
+    }
+    #annModal .modal-header {
+      background: linear-gradient(135deg, #0454a3 0%, #0b6bb3 100%);
+      color: #fff;
+      padding: 1rem 1.25rem;
+      border-bottom: none;
+    }
+    #annModal .modal-header .modal-title {
+      font-weight: 600;
+      font-size: 1.15rem;
+    }
+    #annModal .modal-header .btn-close { filter: brightness(0) invert(1); opacity: 0.9; }
+    #annModal .modal-body {
+      padding: 1.25rem 1.5rem;
+      background: #f8fafc;
+      max-height: 75vh;
+      overflow-y: auto;
+    }
+    #annModal .form-label {
+      font-weight: 500;
+      color: #334155;
+      margin-bottom: 0.35rem;
+    }
+    #annModal .form-control, #annModal .form-select {
+      border-radius: 8px;
+      border: 1px solid #cbd5e1;
+    }
+    #annModal .form-control:focus, #annModal .form-select:focus {
+      border-color: #0454a3;
+      box-shadow: 0 0 0 3px rgba(4, 84, 163, 0.15);
+    }
+    #annModal .ann-form-section {
+      background: #fff;
+      border-radius: 12px;
+      padding: 1rem 1.25rem;
+      margin-bottom: 1rem;
+      border: 1px solid #e2e8f0;
+    }
+    #annModal .ann-form-section-title {
+      font-size: 0.95rem;
+      font-weight: 600;
+      color: #0454a3;
+      margin-bottom: 0.75rem;
+      padding-bottom: 0.5rem;
+      border-bottom: 1px solid #e2e8f0;
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+    }
+    #annModal .ann-upload-zone {
+      border: 2px dashed #cbd5e1;
+      border-radius: 10px;
+      padding: 0.75rem;
+      background: #f8fafc;
+      transition: border-color 0.2s, background 0.2s;
+    }
+    #annModal .ann-upload-zone:hover {
+      border-color: #0454a3;
+      background: #eff6ff;
+    }
+    #annModal .ann-upload-zone input[type="file"] {
+      font-size: 0.875rem;
+    }
+    #annModal .ann-time-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
+    }
+    #annModal .modal-footer {
+      padding: 0.9rem 1.5rem;
+      background: #fff;
+      border-top: 1px solid #e2e8f0;
+      gap: 0.5rem;
+    }
+    #annModal .btn-primary {
+      background: linear-gradient(135deg, #0454a3 0%, #0b6bb3 100%);
+      border: none;
+      border-radius: 8px;
+      padding: 0.5rem 1.25rem;
+      font-weight: 500;
+    }
   </style>
 </head>
 
@@ -615,7 +820,7 @@
 
         <!-- 科助專用按鈕區域（在搜尋框上方靠右對齊） -->
         <div id="ta-actions" style="display: none; justify-content: flex-end; gap: 8px; margin-bottom: 8px; flex-wrap: wrap;">
-          <button id="btn-publish" class="btn btn-primary">➕ 發布公告與截止時間</button>
+          <button id="btn-publish" class="btn btn-primary">➕ 發布公告</button>
         </div>
 
         <div class="search-filter-row">
@@ -697,9 +902,9 @@
           <div id="modalBody"></div>
         </div>
         <div class="modal-footer">
-          <a class="btn btn-primary" id="modalLink" href="#" target="_blank" style="display:none;">前往內容</a>
-          <button class="btn btn-outline-secondary" data-bs-dismiss="modal">關閉</button>
-          <button class="btn btn-danger" id="modalDelete">刪除</button>
+          <a class="btn btn-primary btn-sm" id="modalLink" href="#" target="_blank" style="display:none;"><i class="bi bi-box-arrow-up-right me-1"></i>前往內容</a>
+          <button class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal"><i class="bi bi-x-lg me-1"></i>關閉</button>
+          <button class="btn btn-danger btn-sm" id="modalDelete"><i class="bi bi-trash me-1"></i>刪除</button>
         </div>
       </div>
     </div>
@@ -771,62 +976,69 @@
     </div>
   </div>
 
-  <!-- 科助專用 Modal：選擇發布類型 -->
-  <div class="modal fade" id="publishTypeModal" tabindex="-1">
-    <div class="modal-dialog modal-dialog-centered">
+  <!-- 科助專用 Modal：新增公告（點「發布公告」直接開啟） -->
+  <div class="modal fade" id="annModal" tabindex="-1">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
       <div class="modal-content">
         <div class="modal-header">
-          <h5 class="modal-title">選擇發布類型</h5>
+          <h5 class="modal-title" id="annModalTitle"><i class="bi bi-megaphone me-2"></i>新增公告</h5>
           <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="關閉"></button>
         </div>
         <div class="modal-body">
-          <div class="d-grid gap-3">
-            <button type="button" class="option-btn announcement" data-bs-dismiss="modal" id="btn-select-announcement">
-              <span class="icon">📢</span>
-              <span class="text">新增公告</span>
-            </button>
-            <button type="button" class="option-btn deadline" data-bs-dismiss="modal" id="btn-select-pref-deadline">
-              <span class="icon">📝</span>
-              <span class="text">填寫志願序截止時間</span>
-            </button>
-            <button type="button" class="option-btn deadline" data-bs-dismiss="modal" id="btn-select-resume-deadline">
-              <span class="icon">📝</span>
-              <span class="text">上傳履歷截止時間</span>
-            </button>
+          <div class="ann-form-section">
+            <div class="ann-form-section-title"><i class="bi bi-text-paragraph"></i>基本資訊</div>
+            <div class="mb-3">
+              <label class="form-label">標題</label>
+              <input id="ann-title" class="form-control" placeholder="請輸入公告標題">
+            </div>
+            <div class="mb-3">
+              <label class="form-label">內容</label>
+              <textarea id="ann-content" class="form-control" rows="4" placeholder="請輸入公告內容（純文字）"></textarea>
+            </div>
           </div>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- 科助專用 Modal：新增公告 -->
-  <div class="modal fade" id="annModal" tabindex="-1">
-    <div class="modal-dialog">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h5 class="modal-title" id="annModalTitle" style="font-weight: bold;">新增公告</h5>
-          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-        </div>
-        <div class="modal-body">
-          <div class="mb-3"><label class="form-label">標題</label><input id="ann-title" class="form-control"></div>
-          <div class="mb-3"><label class="form-label">內容</label><textarea id="ann-content" class="form-control" rows="4"></textarea></div>
-          <div class="mb-3"><label class="form-label">發送對象</label>
-            <select id="ann-target-roles" class="form-select">
-              <option value="">請選擇發送對象</option>
-              <option value="all">全部使用者</option>
-              <option value="student">學生</option>
-              <option value="vendor">廠商</option>
-              <option value="class_teacher">班導</option>
-              <option value="teacher">指導老師</option>
-              <option value="director">主任</option>
-            </select>
+          <div class="ann-form-section">
+            <div class="ann-form-section-title"><i class="bi bi-images"></i>上傳圖片</div>
+            <div class="ann-upload-zone">
+              <input type="file" id="ann-upload-image" class="form-control form-control-sm" accept="image/*" multiple>
+              <div id="ann-image-list" class="mt-2 d-flex flex-wrap gap-2"></div>
+            </div>
           </div>
-          <div class="mb-3"><label class="form-label">開始時間</label><input id="ann-start" type="datetime-local" class="form-control"></div>
-          <div class="mb-3"><label class="form-label">結束時間</label><input id="ann-end" type="datetime-local" class="form-control"></div>
+          <div class="ann-form-section">
+            <div class="ann-form-section-title"><i class="bi bi-file-earmark-arrow-up"></i>上傳檔案</div>
+            <div class="ann-upload-zone">
+              <input type="file" id="ann-upload-file" class="form-control form-control-sm" multiple>
+              <div id="ann-file-list" class="mt-2 small text-muted"></div>
+            </div>
+          </div>
+          <div class="ann-form-section">
+            <div class="ann-form-section-title"><i class="bi bi-people"></i>發送對象與時間</div>
+            <div class="mb-3">
+              <label class="form-label">發送對象</label>
+              <select id="ann-target-roles" class="form-select">
+                <option value="">請選擇發送對象</option>
+                <option value="all">全部使用者</option>
+                <option value="student">學生</option>
+                <option value="vendor">廠商</option>
+                <option value="class_teacher">班導</option>
+                <option value="teacher">指導老師</option>
+                <option value="director">主任</option>
+              </select>
+            </div>
+            <div class="ann-time-row">
+              <div class="mb-3">
+                <label class="form-label">開始時間</label>
+                <input id="ann-start" type="datetime-local" class="form-control">
+              </div>
+              <div class="mb-3">
+                <label class="form-label">結束時間</label>
+                <input id="ann-end" type="datetime-local" class="form-control">
+              </div>
+            </div>
+          </div>
         </div>
         <div class="modal-footer">
-          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
-          <button id="btn-save-ann" type="button" class="btn btn-primary">儲存</button>
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">取消</button>
+          <button id="btn-save-ann" type="button" class="btn btn-primary"><i class="bi bi-check-lg me-1"></i>儲存</button>
         </div>
       </div>
     </div>
@@ -836,7 +1048,8 @@
 
   <script>
     // ---------- 初始狀態 ----------
-    let allNotifications = [];
+    let allNotifications = [];   // 系統自動通知（來自 notifications 表）
+    let announcementList = [];   // 科助新增的公告（來自 announcement 表，僅在「公告」頁籤顯示）
     let visibleNotifications = [];
     let pinnedSet = new Set(JSON.parse(localStorage.getItem('notif_pinned') || '[]'));
     let currentCategoryFilter = 'all';
@@ -897,7 +1110,37 @@
       return '更早之前';
     }
 
-    // fetch notifications
+    // 載入科助新增的公告（announcement 表），僅在「公告」頁籤使用
+    async function loadAnnouncements() {
+      try {
+        const res = await fetch('/announcement/api/list');
+        const data = await res.json();
+        if (!data.success || !Array.isArray(data.data)) {
+          announcementList = [];
+          return;
+        }
+        announcementList = (data.data || []).map(a => ({
+          id: 'ann_' + a.id,
+          title: a.title || '(無標題)',
+          message: (a.content || '').slice(0, 200),
+          category: 'announcement',
+          link_url: '/view_announcement/' + a.id,
+          url: '/view_announcement/' + a.id,
+          start_time: a.start_time || null,
+          end_time: a.end_time || null,
+          created_at: a.created_at || new Date().toISOString(),
+          is_read: true,
+          pinned: false,
+          tags: []
+        }));
+        announcementList.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+      } catch (err) {
+        console.error('載入公告列表失敗:', err);
+        announcementList = [];
+      }
+    }
+
+    // fetch notifications（系統自動通知，來自 notifications 表）
     async function loadNotifications() {
       try {
         const res = await fetch('/api/my_notifications');
@@ -977,13 +1220,35 @@
     // render list with grouping
     function render() {
       const keyword = (searchInput.value || '').trim().toLowerCase();
-
-      // 1. 篩選
       const now = new Date();
-      // 判斷是否為科助
       const isTA = document.getElementById('ta-actions')?.style.display === 'flex';
-      
-      visibleNotifications = allNotifications.filter(n => {
+
+      // 1. 篩選：「公告」頁籤只顯示 announcement 表（科助新增）；其餘頁籤顯示 notifications 表
+      if (currentCategoryFilter === 'announcement') {
+        visibleNotifications = announcementList.filter(n => {
+          let isStarted = true;
+          if (n.start_time) {
+            try { isStarted = new Date(n.start_time) <= now; } catch (e) { isStarted = true; }
+          }
+          let isEnded = false;
+          if (n.end_time) {
+            try { isEnded = new Date(n.end_time) < now; } catch (e) { isEnded = false; }
+          }
+          if (isTA) {
+            if (currentStatusFilter === 'ongoing') { if (!isStarted || isEnded) return false; }
+            else if (currentStatusFilter === 'not-started') { if (isStarted) return false; }
+            else if (currentStatusFilter === 'ended') { if (!isEnded) return false; }
+          } else {
+            if (!isStarted || isEnded) return false;
+          }
+          if (keyword) {
+            const hay = (n.title + ' ' + (n.message || '')).toLowerCase();
+            if (!hay.includes(keyword)) return false;
+          }
+          return true;
+        });
+      } else {
+        visibleNotifications = allNotifications.filter(n => {
         // 判斷公告是否已開始
         let isStarted = true;  // 預設為已開始
         if (n.start_time) {
@@ -1100,6 +1365,7 @@
         }
         return true;
       });
+      }
 
       // 2. 分組
       const groups = {};
@@ -1340,6 +1606,25 @@
 
     async function deleteNotif(id) {
       if (!confirm('確定要刪除這則通知？')) return;
+      // 公告頁籤的項目來自 announcement 表，刪除時呼叫公告 API
+      if (String(id).startsWith('ann_')) {
+        const annId = id.replace(/^ann_/, '');
+        try {
+          const res = await fetch(`/announcement/api/delete/${annId}`, { method: 'DELETE' });
+          const data = await res.json();
+          if (data.success) {
+            await loadAnnouncements();
+            render();
+            notifModal.hide();
+          } else {
+            alert('刪除失敗：' + (data.message || '未知錯誤'));
+          }
+        } catch (err) {
+          console.warn('delete announcement failed', err);
+          alert('刪除失敗');
+        }
+        return;
+      }
       allNotifications = allNotifications.filter(x => String(x.id) !== String(id));
       render();
       try { await fetch(`/api/notification/delete/${id}`, { method: 'DELETE' }); } catch (err) { console.warn('delete api failed', err); }
@@ -1348,13 +1633,31 @@
 
     // 【修改】show bootstrap modal
     async function showModal(n) {
-      // 【需求】點開 Modal 時自動標為已讀
-      if (!n.is_read) markRead(n.id);
+      // 【需求】點開 Modal 時自動標為已讀（僅系統通知；公告表無讀取狀態）
+      if (!String(n.id).startsWith('ann_') && !n.is_read) markRead(n.id);
 
       modalTitle.innerText = n.title;
       
       // 處理消息內容，修復不完整的時間格式
       let messageText = n.message || '';
+      let annAttachments = [];  // 公告附件（來自 announcement_attachments），供下方顯示
+      // 若此則通知對應一則公告（公告頁籤的 ann_ 或 全部通知裡 link_url=/view_announcement/XX），向 API 取得完整內容與附件
+      let annId = null;
+      if (String(n.id).startsWith('ann_')) annId = n.id.replace(/^ann_/, '');
+      else if (n.url || n.link_url) {
+        const m = (n.url || n.link_url).match(/\/view_announcement\/(\d+)/);
+        if (m) annId = m[1];
+      }
+      if (annId) {
+        try {
+          const res = await fetch(`/announcement/api/get/${annId}`);
+          const result = await res.json();
+          if (result.success && result.data) {
+            if (result.data.content != null) messageText = result.data.content;
+            if (result.data.attachments && Array.isArray(result.data.attachments)) annAttachments = result.data.attachments;
+          }
+        } catch (e) { /* 保留 n.message */ }
+      }
       
       // 如果是履歷或志願序相關的公告，嘗試從公告詳情獲取完整的截止時間
       const isResumeOrPrefAnnouncement = (n.title && (
@@ -1430,19 +1733,48 @@
         }
       }
       
-      // 顯示通知內容，確保完整顯示時間與文字
-      // 使用 textContent 避免 XSS，然後用 innerHTML 設置格式
+      // 顯示通知內容（美化解構）；若有附件則以圖片區＋下載按鈕呈現，且不顯示「前往內容」
       messageText = messageText.replace(/\n/g, '<br>');
+      const hasAttachments = annAttachments.length > 0;
+      const imgAtt = hasAttachments ? annAttachments.filter(a => (a.file_type || '').toLowerCase() === 'image' || /\.(png|jpg|jpeg|gif|webp)$/i.test(a.file_path || a.file_name || '')) : [];
+      const fileAtt = hasAttachments ? annAttachments.filter(a => !imgAtt.includes(a)) : [];
+      let attachmentsBlock = '';
+      if (hasAttachments) {
+        attachmentsBlock = '<div class="notif-attachments"><div class="notif-attachments-title"><i class="bi bi-paperclip"></i>附件</div>';
+        if (imgAtt.length) {
+          attachmentsBlock += '<div class="notif-attachments-imgs">';
+          imgAtt.forEach(a => {
+            const path = (a.file_path || a.url || '').replace(/"/g, '&quot;');
+            const name = (a.file_name || a.filename || '圖片').replace(/</g, '&lt;').replace(/"/g, '&quot;');
+            attachmentsBlock += `<div class="notif-attach-img-wrap"><img src="${path}" alt="${name}" title="${name}"><a href="${path}" download="${name}" target="_blank" rel="noopener" class="notif-download-btn notif-download-img"><i class="bi bi-download"></i>${name}</a></div>`;
+          });
+          attachmentsBlock += '</div>';
+        }
+        if (fileAtt.length) {
+          attachmentsBlock += '<div class="notif-attachments-files">';
+          fileAtt.forEach(a => {
+            const path = (a.file_path || a.url || '').replace(/"/g, '&quot;');
+            const name = (a.file_name || a.filename || '下載檔案').replace(/</g, '&lt;').replace(/"/g, '&quot;');
+            attachmentsBlock += `<a href="${path}" download="${name}" target="_blank" rel="noopener" class="notif-download-btn"><i class="bi bi-download"></i>${name}</a>`;
+          });
+          attachmentsBlock += '</div>';
+        }
+        attachmentsBlock += '</div>';
+      }
+      const metaLabel = getCategoryLabel(n.category, n.title);
       modalBody.innerHTML = `
-        <div class="small muted mb-2">時間: ${formatDateTime(n.created_at)} | 類別: ${getCategoryLabel(n.category, n.title)}</div>
-        <p style="white-space:pre-wrap; word-wrap:break-word; overflow-wrap:break-word;">${messageText}</p>
+        <div class="notif-meta">
+          <i class="bi bi-clock"></i><span>${formatDateTime(n.created_at)}</span>
+          <i class="bi bi-tag"></i><span>${metaLabel}</span>
+        </div>
+        <div class="notif-content">${messageText || '<span class="text-muted">無文字內容</span>'}</div>
+        ${attachmentsBlock}
       `;
 
-      // 處理「前往內容」按鈕
-      if (n.url) {
+      // 有圖片/檔案時不顯示「前往內容」，改由附件下載按鈕操作
+      if (!hasAttachments && n.url) {
         modalLink.href = n.url;
-        modalLink.style.display = 'inline-block';
-        // 點擊前往後關閉 Modal
+        modalLink.style.display = 'inline-flex';
         modalLink.onclick = () => { notifModal.hide(); };
       } else {
         modalLink.style.display = 'none';
@@ -1613,6 +1945,7 @@
     // ---------- 科助專用功能：公告管理 ----------
     let prefDeadlineModal, resumeDeadlineModal, annModal;
     let editId = null;
+    let annUploadedList = [];  // [{ url, filename, is_image }] 本次公告已上傳的圖片/檔案
 
     // 從通知編輯截止時間公告（全局函數，可在渲染時調用）
     async function editDeadlineFromNotification(notification, type) {
@@ -1795,7 +2128,7 @@
         
         const ann = result.data;
         editId = annId;
-        document.getElementById('annModalTitle').innerText = '編輯公告';
+        document.getElementById('annModalTitle').innerHTML = '<i class="bi bi-pencil-square me-2"></i>編輯公告';
         document.getElementById('ann-title').value = ann.title || '';
         document.getElementById('ann-content').value = ann.content || '';
         
@@ -1839,6 +2172,22 @@
           }
         }
         
+        // 編輯時載入既有附件到 annUploadedList（來自 announcement_attachments）
+        annUploadedList = [];
+        if (ann.attachments && Array.isArray(ann.attachments)) {
+          ann.attachments.forEach(a => {
+            const fpath = a.file_path || a.url || '';
+            const fname = a.file_name || a.filename || '';
+            const isImg = (a.file_type || '').toLowerCase() === 'image' || /\.(png|jpg|jpeg|gif|webp)$/i.test(fpath || fname);
+            annUploadedList.push({ url: fpath, filename: fname, is_image: !!isImg });
+          });
+        }
+        document.getElementById('ann-image-list').innerHTML = '';
+        document.getElementById('ann-file-list').innerHTML = '';
+        document.getElementById('ann-upload-image').value = '';
+        document.getElementById('ann-upload-file').value = '';
+        if (typeof window.renderAnnUploadedList === 'function') window.renderAnnUploadedList();
+        
         // 顯示 Modal
         annModal.show();
       } catch (error) {
@@ -1849,63 +2198,78 @@
 
     function initTAActions() {
       // 初始化 Modal
-      const publishTypeModal = new bootstrap.Modal(document.getElementById('publishTypeModal'));
       prefDeadlineModal = new bootstrap.Modal(document.getElementById('prefDeadlineModal'));
       resumeDeadlineModal = new bootstrap.Modal(document.getElementById('resumeDeadlineModal'));
       annModal = new bootstrap.Modal(document.getElementById('annModal'));
 
-      // 發布公告與截止時間按鈕
+      // 發布公告按鈕：直接在本頁開啟「新增公告」彈窗，發布後會出現在公告頁籤
       document.getElementById('btn-publish').onclick = () => {
-        publishTypeModal.show();
-      };
-
-      // 選擇新增公告
-      document.getElementById('btn-select-announcement').onclick = () => {
-        publishTypeModal.hide();
         editId = null;
-        document.getElementById('annModalTitle').innerText = '新增公告';
+        annUploadedList = [];
+        document.getElementById('annModalTitle').innerHTML = '<i class="bi bi-megaphone me-2"></i>新增公告';
         document.querySelectorAll('#annModal input:not([type=checkbox]), textarea').forEach(i => i.value = '');
-        // 重置發送對象下拉選單
         const annTargetRoles = document.getElementById('ann-target-roles');
-        Array.from(annTargetRoles.options).forEach(opt => opt.selected = false);
-        setTimeout(() => {
-          annModal.show();
-        }, 300);
+        if (annTargetRoles) annTargetRoles.value = '';
+        document.getElementById('ann-image-list').innerHTML = '';
+        document.getElementById('ann-file-list').innerHTML = '';
+        document.getElementById('ann-upload-image').value = '';
+        document.getElementById('ann-upload-file').value = '';
+        annModal.show();
       };
 
-      // 選擇填寫志願序截止時間
-      document.getElementById('btn-select-pref-deadline').onclick = () => {
-        publishTypeModal.hide();
-        // 清除編輯 ID（新增模式）
-        window.currentEditDeadlineId = null;
-        document.getElementById('pref-title').value = '[作業]填寫志願序截止時間';
-        document.getElementById('pref-content').value = '請注意!填寫志願序的截止時間為:請選擇結束時間,請務必在截止時間前完成志願序填寫。';
-        document.getElementById('pref-start').value = '';
-        document.getElementById('pref-end').value = '';
-        // 重置發送對象下拉選單
-        const prefTargetRoles = document.getElementById('pref-target-roles');
-        if (prefTargetRoles) prefTargetRoles.value = '';
-        setTimeout(() => {
-          prefDeadlineModal.show();
-        }, 300);
-      };
+      // 渲染公告已上傳的圖片／檔案列表（掛到 window 供編輯時載入附件後呼叫）
+      window.renderAnnUploadedList = function renderAnnUploadedList() {
+        const imageList = document.getElementById('ann-image-list');
+        const fileList = document.getElementById('ann-file-list');
+        const images = annUploadedList.filter(x => x.is_image);
+        const files = annUploadedList.filter(x => !x.is_image);
+        imageList.innerHTML = images.map((x, i) => {
+          const idx = annUploadedList.indexOf(x);
+          return `<span class="d-inline-block position-relative"><img src="${x.url}" alt="" style="max-width:120px;max-height:80px;object-fit:contain;border:1px solid #ddd;border-radius:6px;"><button type="button" class="btn btn-sm btn-danger position-absolute top-0 end-0" style="transform:translate(50%,-50%);" data-remove-idx="${idx}" aria-label="移除">×</button></span>`;
+        }).join('');
+        fileList.innerHTML = files.map((x, i) => {
+          const idx = annUploadedList.indexOf(x);
+          return `<span class="me-2"><a href="${x.url}" target="_blank">${x.filename}</a> <button type="button" class="btn btn-link btn-sm text-danger p-0" data-remove-idx="${idx}">移除</button></span>`;
+        }).join('');
+        imageList.querySelectorAll('[data-remove-idx]').forEach(btn => {
+          btn.addEventListener('click', () => { annUploadedList.splice(parseInt(btn.getAttribute('data-remove-idx')), 1); renderAnnUploadedList(); });
+        });
+        fileList.querySelectorAll('[data-remove-idx]').forEach(btn => {
+          btn.addEventListener('click', () => { annUploadedList.splice(parseInt(btn.getAttribute('data-remove-idx')), 1); renderAnnUploadedList(); });
+        });
+      }
 
-      // 選擇上傳履歷截止時間
-      document.getElementById('btn-select-resume-deadline').onclick = () => {
-        publishTypeModal.hide();
-        // 清除編輯 ID（新增模式）
-        window.currentEditDeadlineId = null;
-        document.getElementById('resume-title').value = '[作業]上傳履歷截止時間';
-        document.getElementById('resume-content').value = '請注意!上傳履歷的截止時間為:請選擇結束時間,請務必在截止時間前完成履歷上傳。';
-        document.getElementById('resume-start').value = '';
-        document.getElementById('resume-end').value = '';
-        // 重置發送對象下拉選單
-        const resumeTargetRoles = document.getElementById('resume-target-roles');
-        if (resumeTargetRoles) resumeTargetRoles.value = '';
-        setTimeout(() => {
-          resumeDeadlineModal.show();
-        }, 300);
-      };
+      // 上傳圖片（顯示名稱使用使用者選擇的原檔名）
+      document.getElementById('ann-upload-image').addEventListener('change', async function() {
+        const files = Array.from(this.files || []);
+        for (const file of files) {
+          const fd = new FormData();
+          fd.append('image', file);
+          try {
+            const res = await fetch('/announcement/api/upload', { method: 'POST', body: fd });
+            const data = await res.json();
+            if (data.success) annUploadedList.push({ url: data.url, filename: file.name || data.filename, is_image: true });
+          } catch (e) { console.error(e); }
+        }
+        this.value = '';
+        renderAnnUploadedList();
+      });
+
+      // 上傳檔案（顯示名稱使用使用者選擇的原檔名）
+      document.getElementById('ann-upload-file').addEventListener('change', async function() {
+        const files = Array.from(this.files || []);
+        for (const file of files) {
+          const fd = new FormData();
+          fd.append('file', file);
+          try {
+            const res = await fetch('/announcement/api/upload', { method: 'POST', body: fd });
+            const data = await res.json();
+            if (data.success) annUploadedList.push({ url: data.url, filename: file.name || data.filename, is_image: false });
+          } catch (e) { console.error(e); }
+        }
+        this.value = '';
+        renderAnnUploadedList();
+      });
 
       // 當結束時間改變時，自動更新內容中的截止時間
       document.getElementById('pref-end').addEventListener('change', function() {
@@ -1977,8 +2341,8 @@
             document.querySelectorAll('.dropdown-menu a').forEach(i => i.classList.remove('active'));
             document.querySelector('.dropdown-menu a[data-filter="all"]')?.classList.add('active');
             currentFilterLabel.innerText = '全部';
-            // 重新載入通知列表
-            await loadNotifications();
+            // 重新載入通知與公告列表（公告頁籤顯示 announcement 表）
+            await Promise.all([loadNotifications(), loadAnnouncements()]);
             alert(editId ? '更新成功！截止時間已更新。' : '儲存成功！新通知已出現在列表中。');
           } else {
             alert('儲存失敗：' + (result.message || '未知錯誤'));
@@ -2040,8 +2404,8 @@
             document.querySelectorAll('.dropdown-menu a').forEach(i => i.classList.remove('active'));
             document.querySelector('.dropdown-menu a[data-filter="all"]')?.classList.add('active');
             currentFilterLabel.innerText = '全部';
-            // 重新載入通知列表
-            await loadNotifications();
+            // 重新載入通知與公告列表（公告頁籤顯示 announcement 表）
+            await Promise.all([loadNotifications(), loadAnnouncements()]);
             alert(editId ? '更新成功！截止時間已更新。' : '儲存成功！新通知已出現在列表中。');
           } else {
             alert('儲存失敗：' + (result.message || '未知錯誤'));
@@ -2064,13 +2428,22 @@
           target_roles = [targetRole];
         }
         
+        // 內容只存純文字，圖片與檔案改存 announcement_attachments 表
+        const content = document.getElementById('ann-content').value.trim();
+        const attachments = annUploadedList.map(x => ({
+          file_name: x.filename || '',
+          file_path: x.url || '',
+          file_type: x.is_image ? 'image' : (x.filename ? (x.filename.split('.').pop() || '') : '')
+        }));
+
         const payload = {
           title: document.getElementById('ann-title').value,
-          content: document.getElementById('ann-content').value,
+          content: content,
           start_time: document.getElementById('ann-start').value.replace('T', ' '),
           end_time: document.getElementById('ann-end').value.replace('T', ' '),
           is_published: 1,  // 新增/編輯公告時預設為已發布，立即同步到通知列表
-          target_roles: target_roles
+          target_roles: target_roles,
+          attachments: attachments
         };
         
         if (!payload.title || !payload.start_time || !payload.end_time) {
@@ -2111,8 +2484,8 @@
             // 重置編輯 ID
             editId = null;
             
-            // 重新載入通知列表
-            await loadNotifications();
+            // 重新載入通知與公告列表（公告頁籤顯示 announcement 表）
+            await Promise.all([loadNotifications(), loadAnnouncements()]);
             alert('儲存成功！' + (isEditing ? '公告已更新。' : '新通知已出現在列表中。'));
           } else {
             alert('儲存失敗：' + (result.message || '未知錯誤'));
@@ -2286,11 +2659,10 @@
               { href: '/login', text: '登出' }
             ];
           } else if (userRole === 'admin') {
-            // 管理員選單
+            // 管理員選單（公告於通知頁發布與查看）
             menuItems = [
               { href: '/admin_home', text: '首頁' },
               { href: '/profile', text: '個人資料' },
-              { href: '/announcement/manage_announcements', text: '公告管理' },
               { href: '/ta/statistics/manage_companies', text: '實習廠商管理' },
               { href: '/final_results', text: '志願序結果' },
               { href: '/notifications', text: '通知' },
@@ -2318,7 +2690,7 @@
 
     // init
     (async function init() {
-      await loadNotifications();
+      await Promise.all([loadNotifications(), loadAnnouncements()]);
       // 【移除】refreshTagList();
 
       // 動態生成選單

@@ -1,10 +1,11 @@
-from flask import Blueprint, render_template, session, redirect, url_for, request, jsonify, current_app
+from flask import Blueprint, render_template, session, redirect, url_for, request, jsonify, current_app, send_file
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 from config import get_db
-from semester import is_student_in_current_internship
+from semester import is_student_in_application_phase, should_show_intern_experience
 import os
 import re 
+from docx import Document
 
 users_bp = Blueprint("users_bp", __name__)
 
@@ -314,7 +315,7 @@ def get_profile():
         if active_role in ("teacher", "director", "class_teacher") and original_role_from_db in ("teacher", "director"):
             homeroom_class_names = []
             if is_homeroom and classes:
-                homeroom_classes = [c for c in classes if c.get("role") == "班導師"]
+                homeroom_classes = [c for c in classes if c.get("role") == "classteacher"]
                 homeroom_class_names = [_class_display_row(c.get('department'), c.get('name'), c.get('admission_year')) for c in homeroom_classes]
             user["homeroom_class_display"] = "、".join(homeroom_class_names) if homeroom_class_names else ""
 
@@ -518,7 +519,7 @@ def save_profile():
         if role in ("teacher", "director"):
             cursor.execute("""
                 SELECT COUNT(*) as count FROM classes_teacher 
-                WHERE teacher_id = %s AND role = '班導師'
+                WHERE teacher_id = %s AND role = 'classteacher'
             """, (user_id,))
             result = cursor.fetchone()
             is_homeroom = result[0] > 0 if result else False
@@ -686,7 +687,7 @@ def change_password():
             check_cursor = conn.cursor() 
             check_cursor.execute("""
                 SELECT COUNT(*) as count FROM classes_teacher 
-                WHERE teacher_id = %s AND role = '班導師'
+                WHERE teacher_id = %s AND role = 'classteacher'
             """, (user_id,))
             result = check_cursor.fetchone()
             is_homeroom = result[0] > 0 if result else False
@@ -783,17 +784,243 @@ def confirm_matching_page():
 # 使用者首頁（學生前台）
 @users_bp.route('/student_home')
 def student_home():
-    in_internship_semester = True  # 非學生或無法判斷時預設顯示全部
+    # 流程學期／實習學期：投遞、志願、行事曆、媒合結果在「實習學期或上一學期」顯示；實習心得僅實習學期結束前兩週
+    in_application_phase = True
+    show_intern_experience = True
     if session.get('role') == 'student' and session.get('user_id'):
         try:
             conn = get_db()
             cursor = conn.cursor(dictionary=True)
-            in_internship_semester = is_student_in_current_internship(cursor, session['user_id'])
+            in_application_phase = is_student_in_application_phase(cursor, session['user_id'])
+            show_intern_experience = should_show_intern_experience(cursor, session['user_id'])
             cursor.close()
             conn.close()
         except Exception:
             pass
-    return render_template('user_shared/student_home.html', in_internship_semester=in_internship_semester)
+    return render_template('user_shared/student_home.html',
+                          in_application_phase=in_application_phase,
+                          show_intern_experience=show_intern_experience)
+
+
+@users_bp.route('/image_recognize')
+def image_recognize_page():
+    """學生圖片識別頁面（從學生首頁卡片進入）"""
+    if 'user_id' not in session or session.get('role') != 'student':
+        return redirect(url_for('auth_bp.login_page'))
+    return render_template('user_shared/image_recognize.html')
+
+
+@users_bp.route('/api/student/image_recognize', methods=['POST'])
+def api_student_image_recognize():
+    """
+    成績 AI 識別：支援圖片（OCR）與 PDF（文字抽取）。
+    """
+    if 'user_id' not in session or session.get('role') != 'student':
+        return jsonify({"success": False, "message": "請先以學生身分登入"}), 401
+
+    image_file = request.files.get('image')
+    if not image_file or image_file.filename == '':
+        return jsonify({"success": False, "message": "請選擇一張圖片"}), 400
+
+    # 不存檔，只回傳檔名與大小（KB）與辨識結果
+    image_file.stream.seek(0, os.SEEK_END)
+    size_bytes = image_file.stream.tell()
+    image_file.stream.seek(0)
+
+    size_kb = round(size_bytes / 1024, 1) if size_bytes is not None else 0
+
+    filename = image_file.filename or ""
+    ext = os.path.splitext(filename)[1].lower()
+
+    # PDF：直接抽取文字，不走圖片 OCR
+    if ext == ".pdf":
+        try:
+            import io
+            from PyPDF2 import PdfReader
+        except Exception:
+            return jsonify({
+                "success": True,
+                "filename": filename,
+                "size_kb": size_kb,
+                "text": "",
+                "confidence": None,
+                "message": "伺服器尚未安裝 PyPDF2，無法解析 PDF 文字，目前僅回傳檔案資訊。"
+            })
+
+        try:
+            image_file.stream.seek(0)
+            pdf_bytes = image_file.stream.read()
+            reader = PdfReader(io.BytesIO(pdf_bytes))
+            texts = []
+            for page in reader.pages:
+                page_text = page.extract_text() or ""
+                if page_text.strip():
+                    texts.append(page_text.strip())
+            full_text = "\n\n".join(texts)
+        except Exception:
+            full_text = ""
+
+        return jsonify({
+            "success": True,
+            "filename": filename,
+            "size_kb": size_kb,
+            "text": full_text,
+            "confidence": None,
+            "message": "PDF 已完成文字抽取（非影像 OCR）。"
+        })
+
+    # 圖片：使用 OCR（Pillow + pytesseract）
+    try:
+        from PIL import Image
+        import pytesseract
+        from pytesseract import Output
+    except Exception:
+        # 伺服器尚未安裝 OCR 套件時，仍回傳檔案資訊
+        return jsonify({
+            "success": True,
+            "filename": filename,
+            "size_kb": size_kb,
+            "text": "",
+            "confidence": None,
+            "message": "伺服器尚未安裝 OCR 套件（Pillow / pytesseract），目前僅回傳檔案資訊。"
+        })
+
+    ocr_text = ""
+    avg_conf = None
+    try:
+        image = Image.open(image_file.stream).convert("RGB")
+        data = pytesseract.image_to_data(image, output_type=Output.DICT, config="--oem 3 --psm 6")
+        texts = []
+        confs = []
+        for txt, conf in zip(data.get("text", []), data.get("conf", [])):
+            txt = (txt or "").strip()
+            try:
+                c = float(conf)
+            except Exception:
+                c = -1
+            if txt and c >= 0:
+                texts.append(txt)
+                confs.append(c)
+        if texts:
+            ocr_text = " ".join(texts)
+        if confs:
+            avg_conf = round(sum(confs) / len(confs), 1)
+    except Exception:
+        # OCR 失敗時，不中斷整個流程
+        pass
+
+    return jsonify({
+        "success": True,
+        "filename": filename,
+        "size_kb": size_kb,
+        "text": ocr_text,
+        "confidence": avg_conf
+    })
+
+
+@users_bp.route('/api/student/image_to_docx', methods=['POST'])
+def api_student_image_to_docx():
+    """
+    將圖片透過 OCR 文字識別後，產生一份 Word 檔並提供下載。
+    """
+    if 'user_id' not in session or session.get('role') != 'student':
+        return jsonify({"success": False, "message": "請先以學生身分登入"}), 401
+
+    image_file = request.files.get('image')
+    if not image_file or image_file.filename == '':
+        return jsonify({"success": False, "message": "請選擇一張圖片"}), 400
+
+    # 先取得 OCR / 文字抽取結果（重複利用上面的邏輯）
+    image_file.stream.seek(0, os.SEEK_END)
+    size_bytes = image_file.stream.tell()
+    image_file.stream.seek(0)
+
+    size_kb = round(size_bytes / 1024, 1) if size_bytes is not None else 0
+
+    filename = image_file.filename or ""
+    ext = os.path.splitext(filename)[1].lower()
+
+    ocr_text = ""
+    avg_conf = None
+    ocr_available = False
+
+    # PDF：使用 PyPDF2 直接抽取文字
+    if ext == ".pdf":
+        try:
+            import io
+            from PyPDF2 import PdfReader
+            ocr_available = True
+            image_file.stream.seek(0)
+            pdf_bytes = image_file.stream.read()
+            reader = PdfReader(io.BytesIO(pdf_bytes))
+            texts = []
+            for page in reader.pages:
+                page_text = page.extract_text() or ""
+                if page_text.strip():
+                    texts.append(page_text.strip())
+            ocr_text = "\n\n".join(texts)
+        except Exception:
+            ocr_available = False
+    else:
+        # 圖片：使用 OCR
+        try:
+            from PIL import Image
+            import pytesseract
+            from pytesseract import Output
+            ocr_available = True
+        except Exception:
+            ocr_available = False
+
+        if ocr_available:
+            try:
+                image = Image.open(image_file.stream).convert("RGB")
+                data = pytesseract.image_to_data(image, output_type=Output.DICT, config="--oem 3 --psm 6")
+                texts = []
+                confs = []
+                for txt, conf in zip(data.get("text", []), data.get("conf", [])):
+                    txt = (txt or "").strip()
+                    try:
+                        c = float(conf)
+                    except Exception:
+                        c = -1
+                    if txt and c >= 0:
+                        texts.append(txt)
+                        confs.append(c)
+                if texts:
+                    ocr_text = " ".join(texts)
+                if confs:
+                    avg_conf = round(sum(confs) / len(confs), 1)
+            except Exception:
+                ocr_available = False
+
+    # 建立 Word 檔（成績 AI 識別報告）
+    doc = Document()
+    doc.add_heading('成績 AI 識別結果', level=1)
+    doc.add_paragraph(f"檔名：{image_file.filename}")
+    doc.add_paragraph(f"檔案大小：約 {size_kb} KB")
+
+    if ocr_available and ocr_text:
+        doc.add_paragraph("")
+        doc.add_heading('辨識文字', level=2)
+        doc.add_paragraph(ocr_text)
+        if avg_conf is not None:
+            doc.add_paragraph(f"平均信心度：約 {avg_conf}%")
+    elif ocr_available and not ocr_text:
+        doc.add_paragraph("")
+        doc.add_paragraph("OCR 已執行，但未偵測到明顯文字或成績資訊，請確認成績單是否清晰。")
+    else:
+        doc.add_paragraph("")
+        doc.add_paragraph("伺服器目前尚未安裝或無法使用 OCR 套件（Pillow / pytesseract），僅產生包含成績檔案資訊的報告。")
+
+    # 儲存到暫存目錄
+    tmp_dir = os.path.join(current_app.root_path, 'tmp')
+    os.makedirs(tmp_dir, exist_ok=True)
+    safe_name = secure_filename(os.path.splitext(image_file.filename)[0] or "score")
+    docx_filename = f"{safe_name}_score_ocr.docx"
+    docx_path = os.path.join(tmp_dir, docx_filename)
+    doc.save(docx_path)
+
+    return send_file(docx_path, as_attachment=True, download_name=docx_filename)
 
 # 功能操作說明頁面
 @users_bp.route('/operation_manual')

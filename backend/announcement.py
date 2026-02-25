@@ -40,11 +40,7 @@ def check_assignment_status():
     except Exception as e:
         return jsonify({"success": False, "message": str(e)}), 500
 
-# 確保其他的 API 路由也使用 @announcement_bp
-@announcement_bp.route('/api/list', methods=['GET'])
-def list_announcements():
-    # 這裡放原本的 list 邏輯
-    return jsonify({"success": True, "data": []})
+# /api/list 實作在下方（查詢 announcement 表）
 
 
 announcement_bp = Blueprint("announcement_bp", __name__)
@@ -67,18 +63,10 @@ def clean_announcement_content(content_str, end_time_str=None):
     if not content_str:
         return content_str
     
-    # 首先，移除所有位置的 P 前綴（無論大小寫）
-    # 匹配任何位置的 P 或 p 後面跟著兩年份日期格式
-    content_str = re.sub(
-        r'[Pp](\d{2}-\d{2}-\d{2}\s+\d{2}:\d{2})',
-        r'\1',  # 只保留日期時間部分，移除 P 前綴
-        content_str
-    )
-    
-    # 移除錯誤的時間格式前綴 P（匹配 "上傳履歷的P26-01-21 21:39" 這樣的格式）
-    # 先處理帶P前綴的錯誤格式，直接替換為正確格式
+    # 首先處理帶關鍵字和P前綴的錯誤格式（必須在移除所有P前綴之前處理）
+    # 匹配 "上傳履歷的P26-01-21 21:39" 或 "指導老師審核履歷的P26-02-27 10:15" 這樣的格式
     def replace_p_format(match):
-        keyword = match.group(1)  # "上傳履歷的" 或 "填寫志願序的"
+        keyword = match.group(1)  # "上傳履歷的" 或 "填寫志願序的" 或 "指導老師審核履歷的"
         wrong_time = match.group(2)  # "26-01-21 21:39"
         if end_time_str:
             # 轉換時間格式
@@ -86,15 +74,41 @@ def clean_announcement_content(content_str, end_time_str=None):
                 formatted_time = end_time_str.replace('T', ' ').strip()
             else:
                 formatted_time = end_time_str.strip()
-            # 如果格式正確（YYYY-MM-DD HH:mm），使用它
-            if re.match(r'\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}', formatted_time):
+            # 移除秒數部分（如果有的話），保持與上傳履歷截止時間一致的格式
+            formatted_time = re.sub(r':\d{2}$', '', formatted_time)
+            # 檢查格式是否正確（YYYY-MM-DD HH:mm 或 YYYY-MM-DD HH:mm:ss）
+            if re.match(r'\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}(:\d{2})?', formatted_time):
+                # 確保格式為 YYYY-MM-DD HH:mm（不含秒數）
+                formatted_time = re.sub(r':\d{2}$', '', formatted_time)
                 return f"{keyword}截止時間為:{formatted_time}"
-        # 如果沒有有效的結束時間，移除整個錯誤格式（不插入佔位符）
+        # 如果沒有有效的結束時間，嘗試將兩年份轉換為四年份
+        # 匹配 "26-02-27 10:15" 格式，轉換為 "2026-02-27 10:15"
+        time_match = re.match(r'(\d{2})-(\d{2})-(\d{2})\s+(\d{2}):(\d{2})', wrong_time)
+        if time_match:
+            year = time_match.group(1)
+            month = time_match.group(2)
+            day = time_match.group(3)
+            hour = time_match.group(4)
+            minute = time_match.group(5)
+            # 假設年份在 00-99 範圍內，轉換為 2000-2099
+            full_year = f"20{year}" if int(year) < 100 else year
+            formatted_time = f"{full_year}-{month}-{day} {hour}:{minute}"
+            return f"{keyword}截止時間為:{formatted_time}"
+        # 如果無法轉換，移除整個錯誤格式（不插入佔位符）
         return keyword
     
+    # 先處理帶關鍵字和P前綴的錯誤格式
     content_str = re.sub(
-        r'(上傳履歷的|填寫志願序的)\s*[Pp](\d{2}-\d{2}-\d{2}\s+\d{2}:\d{2})',
+        r'(上傳履歷的|填寫志願序的|指導老師審核履歷的)\s*[Pp](\d{2}-\d{2}-\d{2}\s+\d{2}:\d{2})',
         replace_p_format,
+        content_str
+    )
+    
+    # 然後，移除其他位置的 P 前綴（無論大小寫）
+    # 匹配任何位置的 P 或 p 後面跟著兩年份日期格式（但不在關鍵字後面）
+    content_str = re.sub(
+        r'[Pp](\d{2}-\d{2}-\d{2}\s+\d{2}:\d{2})',
+        r'\1',  # 只保留日期時間部分，移除 P 前綴
         content_str
     )
     
@@ -105,18 +119,24 @@ def clean_announcement_content(content_str, end_time_str=None):
             formatted_time = end_time_str.replace('T', ' ').strip()
         else:
             formatted_time = end_time_str.strip()
-        # 如果格式正確（YYYY-MM-DD HH:mm），使用它
-        if re.match(r'\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}', formatted_time):
+        # 移除秒數部分（如果有的話），保持與上傳履歷截止時間一致的格式
+        formatted_time = re.sub(r':\d{2}$', '', formatted_time)
+        # 檢查格式是否正確（YYYY-MM-DD HH:mm 或 YYYY-MM-DD HH:mm:ss）
+        if re.match(r'\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}(:\d{2})?', formatted_time):
+            # 確保格式為 YYYY-MM-DD HH:mm（不含秒數）
+            formatted_time = re.sub(r':\d{2}$', '', formatted_time)
             # 替換錯誤格式為正確格式（匹配不帶P前綴的兩年份格式）
+            # 先處理帶關鍵字的格式
             content_str = re.sub(
-                r'(上傳履歷的|填寫志願序的)\s*(\d{2}-\d{2}-\d{2}\s+\d{2}:\d{2})',
+                r'(上傳履歷的|填寫志願序的|指導老師審核履歷的)\s*(\d{2}-\d{2}-\d{2}\s+\d{2}:\d{2})',
                 r'\1截止時間為:' + formatted_time,
                 content_str
             )
-            # 確保有「截止時間為:」格式
-            if '截止時間為:' not in content_str and ('上傳履歷的' in content_str or '填寫志願序的' in content_str):
+            # 確保有「截止時間為:」格式（如果內容中有關鍵字但沒有正確格式）
+            if '截止時間為:' not in content_str and ('上傳履歷的' in content_str or '填寫志願序的' in content_str or '指導老師審核履歷的' in content_str):
+                # 匹配 "指導老師審核履歷的" 後面跟著任何內容（直到逗號、句號或換行）
                 content_str = re.sub(
-                    r'(上傳履歷的|填寫志願序的)([^,，。\n]*)',
+                    r'(上傳履歷的|填寫志願序的|指導老師審核履歷的)([^,，。\n]*)',
                     r'\1截止時間為:' + formatted_time,
                     content_str,
                     count=1
@@ -124,7 +144,7 @@ def clean_announcement_content(content_str, end_time_str=None):
     else:
         # 沒有結束時間，移除錯誤格式（不插入佔位符）
         content_str = re.sub(
-            r'(上傳履歷的|填寫志願序的)\s*(\d{2}-\d{2}-\d{2}\s+\d{2}:\d{2})',
+            r'(上傳履歷的|填寫志願序的|指導老師審核履歷的)\s*(\d{2}-\d{2}-\d{2}\s+\d{2}:\d{2})',
             r'\1',
             content_str
         )
@@ -714,10 +734,11 @@ def save_deadlines():
         data = request.json
         pref_deadline = data.get("pref_deadline")  # 志願序截止時間
         resume_deadline = data.get("resume_deadline")  # 履歷上傳截止時間
+        teacher_review_deadline = data.get("teacher_review_deadline")  # 指導老師審核履歷截止時間
         target_roles = data.get("target_roles") or []
         
         # 檢查是否至少有一個截止時間
-        if not pref_deadline and not resume_deadline:
+        if not pref_deadline and not resume_deadline and not teacher_review_deadline:
             return jsonify({"success": False, "message": "請填寫至少一個截止時間"}), 400
         
         conn = get_db()
@@ -850,6 +871,70 @@ def save_deadlines():
                 cursor.execute("""
                     SELECT id FROM announcement 
                     WHERE title LIKE '[作業]%上傳履歷截止時間' AND is_published = 1
+                    ORDER BY created_at DESC
+                    LIMIT 1
+                """)
+                existing = cursor.fetchone()
+                
+                if existing:
+                    # 更新現有公告
+                    ann_id = existing[0]
+                    cursor.execute("""
+                        UPDATE announcement 
+                        SET title=%s, content=%s, start_time=%s, end_time=%s, is_published=%s
+                        WHERE id=%s
+                    """, (title, content, start_dt, end_dt, 1, ann_id))
+                    conn.commit()
+                else:
+                    # 創建新公告
+                    cursor.execute("""
+                        INSERT INTO announcement (title, content, start_time, end_time, is_published, created_by, created_at)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s)
+                    """, (title, content, start_dt, end_dt, 1, created_by, now))
+                    ann_id = cursor.lastrowid
+                    conn.commit()
+            
+            # 發送通知給指定角色（若未指定則維持原本行為：所有使用者）
+            push_announcement_notifications(conn, title, content, ann_id, target_roles=target_roles)
+        
+        # 處理指導老師審核履歷截止時間
+        if teacher_review_deadline:
+            # 如果前端提供了完整的公告資訊，使用前端的資訊
+            if title and content and start_time and end_time:
+                # 清理內容中的錯誤格式
+                content = clean_announcement_content(content, end_time)
+                start_dt = convert_datetime(start_time)
+                end_dt = convert_datetime(end_time)
+            else:
+                # 否則使用舊的邏輯（向後兼容）
+                teacher_review_dt = convert_datetime(teacher_review_deadline)
+                title = "[作業] 指導老師審核履歷截止時間"
+                content = f"請注意！指導老師審核履歷的截止時間為：{teacher_review_dt.replace(':00', '')}，請務必在截止時間前完成履歷審核。"
+                start_dt = now
+                end_dt = teacher_review_dt
+            
+            # 驗證時間格式
+            try:
+                datetime.strptime(start_dt, '%Y-%m-%d %H:%M:%S')
+                datetime.strptime(end_dt, '%Y-%m-%d %H:%M:%S')
+            except ValueError as e:
+                return jsonify({"success": False, "message": f"時間格式錯誤：{str(e)}"}), 400
+            
+            # 檢查是否已存在相同類型的公告（通過標題匹配）
+            if edit_id:
+                # 編輯模式：更新現有公告
+                cursor.execute("""
+                    UPDATE announcement 
+                    SET title=%s, content=%s, start_time=%s, end_time=%s, is_published=%s
+                    WHERE id=%s
+                """, (title, content, start_dt, end_dt, 1, edit_id))
+                ann_id = edit_id
+                conn.commit()
+            else:
+                # 檢查是否已存在相同類型的公告
+                cursor.execute("""
+                    SELECT id FROM announcement 
+                    WHERE title LIKE '[作業]%指導老師審核履歷截止時間' AND is_published = 1
                     ORDER BY created_at DESC
                     LIMIT 1
                 """)
