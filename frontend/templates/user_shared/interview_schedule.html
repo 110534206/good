@@ -951,7 +951,7 @@
     document.addEventListener('DOMContentLoaded', async function() {
       // 根據用戶角色載入側邊選單
       await loadMenuByRole();
-      // 載入截止時間
+      // 載入截止時間（用於在日期格子中顯示標記）
       await loadDeadlines();
       // 載入所有廠商的面試排程
       await loadAllVendorSchedules();

@@ -1,7 +1,7 @@
 from flask import Blueprint, request, jsonify, session,render_template,redirect, send_file
 from config import get_db
 from datetime import datetime
-from semester import get_current_semester_code, get_current_semester_id
+from semester import get_current_semester_code, get_current_semester_id, get_current_semester_deadline
 from werkzeug.utils import secure_filename
 from openpyxl import Workbook, load_workbook
 import traceback
@@ -2263,25 +2263,48 @@ def get_deadlines():
     cursor = conn.cursor(dictionary=True)
     
     try:
-        # 查詢志願序截止時間（最新的公告）
-        cursor.execute("""
-            SELECT end_time 
-            FROM announcement 
-            WHERE title LIKE '[作業]%填寫志願序截止時間' AND is_published = 1
-            ORDER BY created_at DESC 
-            LIMIT 1
-        """)
-        preference_result = cursor.fetchone()
+        # 優先從 internship_flows 表讀取截止時間（科助在時間管理頁面設定的）
+        preference_deadline_dt = get_current_semester_deadline(cursor, 'preference')
+        resume_deadline_dt = get_current_semester_deadline(cursor, 'resume')
         
-        # 查詢履歷截止時間（最新的公告）
-        cursor.execute("""
-            SELECT end_time 
-            FROM announcement 
-            WHERE title LIKE '[作業]%上傳履歷截止時間' AND is_published = 1
-            ORDER BY created_at DESC 
-            LIMIT 1
-        """)
-        resume_result = cursor.fetchone()
+        # 如果 internship_flows 中沒有，則從 announcement 表查找（向後兼容）
+        if preference_deadline_dt is None:
+            cursor.execute("""
+                SELECT end_time 
+                FROM announcement 
+                WHERE title LIKE '[作業]%填寫志願序截止時間' AND is_published = 1
+                ORDER BY created_at DESC 
+                LIMIT 1
+            """)
+            preference_result = cursor.fetchone()
+            if preference_result and preference_result.get('end_time'):
+                deadline = preference_result['end_time']
+                if isinstance(deadline, datetime):
+                    preference_deadline_dt = deadline
+                else:
+                    try:
+                        preference_deadline_dt = datetime.strptime(str(deadline), '%Y-%m-%d %H:%M:%S')
+                    except:
+                        preference_deadline_dt = datetime.strptime(str(deadline), '%Y-%m-%d %H:%M')
+        
+        if resume_deadline_dt is None:
+            cursor.execute("""
+                SELECT end_time 
+                FROM announcement 
+                WHERE title LIKE '[作業]%上傳履歷截止時間' AND is_published = 1
+                ORDER BY created_at DESC 
+                LIMIT 1
+            """)
+            resume_result = cursor.fetchone()
+            if resume_result and resume_result.get('end_time'):
+                deadline = resume_result['end_time']
+                if isinstance(deadline, datetime):
+                    resume_deadline_dt = deadline
+                else:
+                    try:
+                        resume_deadline_dt = datetime.strptime(str(deadline), '%Y-%m-%d %H:%M:%S')
+                    except:
+                        resume_deadline_dt = datetime.strptime(str(deadline), '%Y-%m-%d %H:%M')
         
         # 格式化日期和時間
         preference_deadline_date = None
@@ -2289,31 +2312,13 @@ def get_deadlines():
         resume_deadline_date = None
         resume_deadline_time = None
         
-        if preference_result and preference_result.get('end_time'):
-            deadline = preference_result['end_time']
-            if isinstance(deadline, datetime):
-                deadline_dt = deadline
-            else:
-                # 如果是字符串，解析
-                try:
-                    deadline_dt = datetime.strptime(str(deadline), '%Y-%m-%d %H:%M:%S')
-                except:
-                    deadline_dt = datetime.strptime(str(deadline), '%Y-%m-%d %H:%M')
-            preference_deadline_date = deadline_dt.strftime('%Y-%m-%d')
-            preference_deadline_time = deadline_dt.strftime('%H:%M')
+        if preference_deadline_dt:
+            preference_deadline_date = preference_deadline_dt.strftime('%Y-%m-%d')
+            preference_deadline_time = preference_deadline_dt.strftime('%H:%M')
         
-        if resume_result and resume_result.get('end_time'):
-            deadline = resume_result['end_time']
-            if isinstance(deadline, datetime):
-                deadline_dt = deadline
-            else:
-                # 如果是字符串，解析
-                try:
-                    deadline_dt = datetime.strptime(str(deadline), '%Y-%m-%d %H:%M:%S')
-                except:
-                    deadline_dt = datetime.strptime(str(deadline), '%Y-%m-%d %H:%M')
-            resume_deadline_date = deadline_dt.strftime('%Y-%m-%d')
-            resume_deadline_time = deadline_dt.strftime('%H:%M')
+        if resume_deadline_dt:
+            resume_deadline_date = resume_deadline_dt.strftime('%Y-%m-%d')
+            resume_deadline_time = resume_deadline_dt.strftime('%H:%M')
         
         return jsonify({
             "success": True,
