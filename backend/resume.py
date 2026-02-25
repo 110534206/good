@@ -487,7 +487,7 @@ def get_teacher_review_resumes():
 
 
 # -------------------------
-# API - 審核履歷 (退件/通過)
+# API - 審核履歷 (通過)
 # -------------------------
 @resume_bp.route('/api/review_resume/<int:resume_id>', methods=['POST'])
 def review_resume(resume_id):
@@ -507,8 +507,9 @@ def review_resume(resume_id):
     comment = data.get('comment', '')
     application_id = data.get('application_id')
 
-    if status not in ['approved', 'rejected']:
-        return jsonify({"success": False, "message": "無效的狀態碼"}), 400
+    # 只允許通過，不允許退件
+    if status != 'approved':
+        return jsonify({"success": False, "message": "無效的狀態碼，只允許通過"}), 400
 
     conn = get_db()
     cursor = conn.cursor(dictionary=True)
@@ -733,32 +734,7 @@ def review_resume(resume_id):
         # 5. 處理 Email 寄送與通知 (僅在狀態改變時處理)
         status_changed = (old_status_for_check != status) if old_status_for_check is not None else True
         if status_changed:
-            if status == 'rejected':
-                # 嘗試發送郵件
-                try:
-                    from email_service import send_resume_rejection_email
-                    email_success, email_message, log_id = send_resume_rejection_email(
-                        student_email, student_name, reviewer_name, comment or "無"
-                    )
-                    print(f"📧 履歷退件 Email: {email_success}, {email_message}, Log ID: {log_id}")
-                except ImportError:
-                    print("⚠️ email_service 模組不存在，跳過郵件發送")
-
-                # 建立退件通知
-                notification_content = (
-                    f"您的履歷已被 {reviewer_name} 老師退件。\n\n"
-                    f"退件原因：{comment if comment else '請查看老師留言'}\n\n"
-                    f"請根據老師的建議修改後重新上傳。"
-                )
-
-                create_notification(
-                    user_id=student_user_id,
-                    title="履歷退件通知",
-                    message=notification_content,
-                    category="resume"
-                )
-
-            elif status == 'approved':
+            if status == 'approved':
                 # 嘗試發送郵件
                 try:
                     from email_service import send_resume_approval_email

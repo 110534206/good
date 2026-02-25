@@ -163,7 +163,6 @@
           <option value="">所有狀態</option>
           <option value="uploaded">待審核</option>
           <option value="approved">通過</option>
-          <option value="rejected">退件</option>
         </select>
         <input type="text" id="searchBox" style="padding: 10px 12px; border-radius: 8px; border: 1px solid #e2e8f0; min-width: 200px; flex: 1;" placeholder="搜尋帳號/檔案" />
       </div>
@@ -172,6 +171,9 @@
         <table style="width: 100%; border-collapse: collapse;">
           <thead style="background: #f1f5f9;">
             <tr>
+              <th style="padding: 14px 16px; font-weight: 600; width: 50px;">
+                <input type="checkbox" id="selectAllCheckbox" style="cursor: pointer; width: 18px; height: 18px;" title="全選/取消全選">
+              </th>
               <th style="padding: 14px 16px; font-weight: 600;">學生帳號</th>
               <th style="padding: 14px 16px; font-weight: 600;">姓名</th>
               <th style="padding: 14px 16px; font-weight: 600;">上傳時間</th>
@@ -184,7 +186,7 @@
             </tr>
           </thead>
           <tbody id="resumeTableBody">
-            <tr><td colspan="8" style="padding: 14px 16px; text-align: center; color: #64748b;">載入中...</td></tr>
+            <tr><td colspan="10" style="padding: 14px 16px; text-align: center; color: #64748b;">載入中...</td></tr>
           </tbody>
         </table>
       </div>
@@ -325,7 +327,7 @@
                     deadlineAlert.innerHTML = `
                       <strong>⏰ 履歷提交截止時間提醒</strong><br>
                       履歷提交截止時間：${resumeResponse.deadline}<br>
-                      目前無法查看學生履歷。請等待截止時間到達後，未被退件的履歷將自動通過並傳給您審核。
+                      目前無法查看學生履歷。請等待截止時間到達後，履歷將自動通過並傳給您審核。
                     `;
                     deadlineAlert.style.display = 'block';
                   } else if (isExpired) {
@@ -333,7 +335,7 @@
                     deadlineAlert.innerHTML = `
                       <strong>⚠️ 履歷提交截止時間已過</strong><br>
                       履歷提交截止時間：${resumeResponse.deadline}<br>
-                      已超過截止時間，未退件的履歷已自動通過並傳給指導老師審核。
+                      已超過截止時間，履歷已自動通過並傳給指導老師審核。
                     `;
                     deadlineAlert.style.display = 'block';
                   } else {
@@ -341,7 +343,7 @@
                     deadlineAlert.innerHTML = `
                       <strong>📅 履歷提交截止時間提醒</strong><br>
                       履歷提交截止時間：${resumeResponse.deadline}<br>
-                      請在截止時間前完成履歷退件，否則將自動通過並傳給指導老師審核。
+                      請在截止時間前完成審核，否則將自動通過並傳給指導老師審核。
                     `;
                     deadlineAlert.style.display = 'block';
                   }
@@ -386,6 +388,28 @@
       document.getElementById("statusFilter").addEventListener("change", applyFilters);
       document.getElementById("searchBox").addEventListener("input", applyFilters);
       document.getElementById("saveCommentBtn").addEventListener("click", saveComment);
+
+      // 全選/取消全選功能
+      document.getElementById("selectAllCheckbox").addEventListener("change", function(e) {
+        const checkboxes = document.querySelectorAll(".row-checkbox");
+        checkboxes.forEach(cb => {
+          cb.checked = e.target.checked;
+        });
+      });
+
+      // 當個別 checkbox 改變時，更新全選 checkbox 狀態
+      document.addEventListener("change", function(e) {
+        if (e.target.classList.contains("row-checkbox")) {
+          const checkboxes = document.querySelectorAll(".row-checkbox");
+          const allChecked = Array.from(checkboxes).every(cb => cb.checked);
+          const someChecked = Array.from(checkboxes).some(cb => cb.checked);
+          const selectAllCheckbox = document.getElementById("selectAllCheckbox");
+          if (selectAllCheckbox) {
+            selectAllCheckbox.checked = allChecked;
+            selectAllCheckbox.indeterminate = someChecked && !allChecked;
+          }
+        }
+      });
 
       // 側邊選單控制
       const menuBtn = document.getElementById('menu-btn');
@@ -689,7 +713,7 @@
       }
       
       if (resumes.length === 0) {
-        const colspan = isDirectorMode ? 8 : 9;
+        const colspan = isDirectorMode ? 9 : 10;
         tbody.innerHTML = `<tr><td colspan="${colspan}" style="text-align: center; color: #64748b; padding: 16px;">目前沒有資料</td></tr>`;
         document.getElementById("pagination").innerHTML = "";
         return;
@@ -787,6 +811,9 @@
              <span class="status-badge bg-${statusColor(statusForDisplay)}">${mapStatus(statusForDisplay)}</span>
            </td>`;
         tr.innerHTML = `
+           <td style="padding: 14px 16px; text-align: center;">
+             <input type="checkbox" class="row-checkbox" data-resume-id="${row.id}" style="cursor: pointer; width: 18px; height: 18px;">
+           </td>
            <td style="padding: 14px 16px;">${row.username}</td>
            <td style="padding: 14px 16px;">${escapeHtml(row.name)}</td>
            <td style="padding: 14px 16px;">${row.upload_time}</td>
@@ -827,31 +854,15 @@
         const dlBtn = `<a href="/api/download_resume/${row.id}" class="btn btn-sm btn-outline-primary" target="_blank" style="margin-right:4px;">下載</a>`;
         if (isViewOnly) return dlBtn; 
 
+        // 指導老師只顯示下載按鈕
+        if (userRole === 'teacher') {
+            return `<div style="display:flex; align-items:center;">${dlBtn}</div>`;
+        }
+
         const appId = row.application_id != null ? row.application_id : 'null';
         const approveClick = `approveResume(${row.id}, ${pid ? `'${pid}'` : 'null'}, ${appId})`;
-        const rejectClick = `rejectResume(${row.id}, ${pid ? `'${pid}'` : 'null'}, ${appId})`;
-
-        // 主任模式只顯示退件按鈕，不顯示通過按鈕
-        // 根據截止時間狀態決定是否顯示退件按鈕
-        // 注意：指導老師（teacher）可以隨時退件，不受截止時間限制
-        const isRejected = row.display_status === 'rejected';
-        // 指導老師和廠商可以隨時退件，班導和主任受截止時間限制
-        const canReject = !isDeadlinePassed || userRole === 'vendor' || userRole === 'teacher';
-        
-        // 退件按鈕顯示邏輯：
-        // 1. 已退件的履歷：不顯示退件按鈕（已退件）
-        // 2. 可以退件的情況（指導老師、廠商、或截止時間前）：顯示可用的退件按鈕
-        // 3. 截止時間後（班導/主任）：顯示禁用的退件按鈕，表示無法再退件
-        const rejectBtn = isRejected 
-          ? '' // 已退件的履歷不顯示退件按鈕
-          : canReject 
-          ? `<button class="btn btn-sm btn-outline-danger" style="margin-right:4px;" onclick="${rejectClick}">退件</button>`
-          : (isDeadlinePassed && (userRole === 'class_teacher' || userRole === 'director'))
-          ? `<button class="btn btn-sm btn-outline-secondary" style="margin-right:4px;" disabled title="已過截止時間，無法退件">退件</button>`
-          : '';
         
         let btns = `<div style="display:flex; align-items:center;">${dlBtn}`;
-        btns += rejectBtn;
         if (!isDirectorMode) {
             btns += `<button class="btn btn-sm btn-outline-success" onclick="${approveClick}">通過</button>`;
         }
@@ -927,58 +938,6 @@
       });
     }
 
-    function rejectResume(resumeId, preferenceId, applicationId) {
-       if (userRole !== 'vendor' && userRole !== 'teacher' && isDeadlinePassed) {
-         alert('⚠️ 已超過履歷提交截止時間，無法再退件履歷。未退件的履歷已自動通過並傳給指導老師審核。');
-         return;
-       }
-       
-       if (!confirm("確定要退件此申請？")) return;
-       currentResumeId = resumeId;
-       currentPreferenceId = preferenceId;
-       currentApplicationId = applicationId != null && applicationId !== 'null' && !isNaN(applicationId) ? parseInt(applicationId) : null;
-       
-       document.getElementById("commentInput").value = "";
-       document.getElementById("commentModalLabel").textContent = "❌ 填寫退件原因";
-       document.getElementById("saveCommentBtn").textContent = "確認退件";
-       const modal = new bootstrap.Modal(document.getElementById("commentModal"));
-       modal.show();
-       
-       const saveBtn = document.getElementById("saveCommentBtn");
-       saveBtn.onclick = () => {
-           const reason = document.getElementById("commentInput").value.trim();
-           if(!reason) { alert("請填寫退件原因"); return; }
-           
-           const body = { status: 'rejected', comment: reason };
-           if (currentPreferenceId) body.preference_id = currentPreferenceId;
-           if (userRole === 'teacher' && currentApplicationId != null) body.application_id = currentApplicationId;
-
-           fetch(`/api/review_resume/${currentResumeId}`, {
-               method: 'POST',
-               headers: {'Content-Type': 'application/json'},
-               body: JSON.stringify(body)
-           }).then(res => res.json()).then(data => {
-               if(data.success) {
-                   alert("✅ 已退件");
-                   modal.hide();
-                   // 重新載入數據
-                   const urlParams = new URLSearchParams(window.location.search);
-                   const targetCompanyId = urlParams.get('company_id');
-                   if (userRole === 'vendor') {
-                     fetch('/vendor/api/resumes').then(r=>r.json()).then(d=>{
-                       if(d.success) { allResumes=d.resumes || []; applyFilters(); }
-                     });
-                   } else {
-                     fetch('/api/teacher_review_resumes').then(r=>r.json()).then(d=>{
-                       if(d.success) { allResumes=d.data || []; applyFilters(); }
-                     });
-                   }
-               } else {
-                   alert("失敗：" + data.message);
-               }
-           });
-       };
-    }
 
     function openCommentModal(id, comment, pid, applicationId, readonly) {
         document.getElementById("commentInput").value = comment;
