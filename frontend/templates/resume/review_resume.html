@@ -166,7 +166,7 @@
         </select>
         <input type="text" id="searchBox" style="padding: 10px 12px; border-radius: 8px; border: 1px solid #e2e8f0; min-width: 200px; flex: 1;" placeholder="搜尋帳號/檔案" />
         <button id="sendToVendorBtn" class="btn btn-primary" style="padding: 10px 20px; border-radius: 8px; white-space: nowrap;" disabled>
-          傳送給廠商
+          標記為通過
         </button>
       </div>
 
@@ -251,6 +251,24 @@
     function escapeHtml(text) {
       if (text === null || text === undefined) return '';
       return String(text).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+    }
+
+    // 更新傳送給廠商按鈕的顯示狀態（全局函數）
+    function updateSendToVendorButtonVisibility() {
+      const sendToVendorBtn = document.getElementById("sendToVendorBtn");
+      if (!sendToVendorBtn) return;
+      
+      // 僅指導老師可以看到此按鈕
+      if (userRole === 'teacher') {
+        const checkedBoxes = document.querySelectorAll(".row-checkbox:checked");
+        // 指導老師角色下，按鈕一直顯示
+        sendToVendorBtn.style.display = 'block';
+        // 有勾選至少一筆資料時才啟用按鈕，否則禁用
+        sendToVendorBtn.disabled = checkedBoxes.length === 0;
+      } else {
+        // 非指導老師角色，隱藏按鈕
+        sendToVendorBtn.style.display = 'none';
+      }
     }
 
     document.addEventListener("DOMContentLoaded", () => {
@@ -460,24 +478,6 @@
           updateSendToVendorButtonVisibility();
         }
       });
-      
-      // 更新傳送給廠商按鈕的顯示狀態
-      function updateSendToVendorButtonVisibility() {
-        const sendToVendorBtn = document.getElementById("sendToVendorBtn");
-        if (!sendToVendorBtn) return;
-        
-        // 僅指導老師可以看到此按鈕
-        if (userRole === 'teacher') {
-          const checkedBoxes = document.querySelectorAll(".row-checkbox:checked");
-          // 指導老師角色下，按鈕一直顯示
-          sendToVendorBtn.style.display = 'block';
-          // 有勾選至少一筆資料時才啟用按鈕，否則禁用
-          sendToVendorBtn.disabled = checkedBoxes.length === 0;
-        } else {
-          // 非指導老師角色，隱藏按鈕
-          sendToVendorBtn.style.display = 'none';
-        }
-      }
 
       // 側邊選單控制
       const menuBtn = document.getElementById('menu-btn');
@@ -1064,7 +1064,7 @@
         });
     }
 
-    // 批量傳送選中的履歷給廠商
+    // 批量標記選中的履歷為通過（等待截止時間後統一傳送給廠商）
     async function sendSelectedToVendor() {
       const checkedBoxes = document.querySelectorAll(".row-checkbox:checked");
       
@@ -1073,7 +1073,7 @@
         return;
       }
       
-      if (!confirm(`確定要將選中的 ${checkedBoxes.length} 筆履歷標記為通過並傳送給廠商嗎？`)) {
+      if (!confirm(`確定要將選中的 ${checkedBoxes.length} 筆履歷標記為通過嗎？\n\n注意：履歷將在審核截止時間後統一傳送給廠商。`)) {
         return;
       }
       
@@ -1131,7 +1131,7 @@
         }
         
         if (failCount === 0) {
-          alert(`✅ 成功將 ${successCount} 筆履歷標記為通過並傳送給廠商`);
+          alert(`✅ 成功將 ${successCount} 筆履歷標記為通過\n\n履歷將在審核截止時間後統一傳送給廠商。`);
         } else {
           alert(`⚠️ 完成處理：${successCount} 筆成功，${failCount} 筆失敗`);
         }

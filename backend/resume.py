@@ -51,6 +51,132 @@ resume_bp = Blueprint("resume_bp", __name__)
 def require_login():
     return 'user_id' in session and 'role' in session
 
+# 輔助函數：處理指導老師審核截止時間後，統一傳送已通過的履歷給廠商
+def send_approved_resumes_to_vendors_after_deadline(cursor, conn):
+    """
+    指導老師審核截止時間後，統一傳送所有已通過的履歷給廠商
+    1. 檢查指導老師審核截止時間
+    2. 找出所有已通過但尚未傳送給廠商的履歷（resume_teacher.review_status='approved' 但沒有 resume_applications 記錄）
+    3. 創建 resume_applications 記錄並通知廠商
+    """
+    try:
+        now = datetime.now()
+        teacher_review_deadline = None
+        is_teacher_deadline_passed = False
+        
+        # 查詢指導老師審核截止時間
+        cursor.execute("""
+            SELECT end_time 
+            FROM announcement 
+            WHERE title LIKE '[作業]%指導老師審核履歷截止時間' AND is_published = 1
+            ORDER BY created_at DESC 
+            LIMIT 1
+        """)
+        deadline_result = cursor.fetchone()
+        
+        if deadline_result and deadline_result.get('end_time'):
+            deadline = deadline_result['end_time']
+            if isinstance(deadline, datetime):
+                teacher_review_deadline = deadline
+            else:
+                try:
+                    teacher_review_deadline = datetime.strptime(str(deadline), '%Y-%m-%d %H:%M:%S')
+                except:
+                    teacher_review_deadline = datetime.strptime(str(deadline), '%Y-%m-%d %H:%M')
+            
+            is_teacher_deadline_passed = now > teacher_review_deadline
+        
+        if not is_teacher_deadline_passed:
+            return 0  # 尚未到截止時間，不處理
+        
+        # 檢查 resume_teacher 表是否存在
+        resume_teacher_table_exists = False
+        try:
+            cursor.execute("SHOW TABLES LIKE 'resume_teacher'")
+            resume_teacher_table_exists = cursor.fetchone() is not None
+        except Exception as e:
+            print(f"⚠️ 檢查 resume_teacher 表時發生錯誤: {e}")
+            resume_teacher_table_exists = False
+        
+        if not resume_teacher_table_exists:
+            return 0
+        
+        # 找出所有已通過但尚未傳送給廠商的履歷
+        cursor.execute("""
+            SELECT rt.application_id, rt.teacher_id, sja.job_id, sja.company_id, sja.student_id
+            FROM resume_teacher rt
+            INNER JOIN student_job_applications sja ON rt.application_id = sja.id
+            LEFT JOIN resume_applications ra ON ra.application_id = rt.application_id AND ra.job_id = sja.job_id
+            WHERE rt.review_status = 'approved'
+              AND ra.id IS NULL
+        """)
+        approved_resumes = cursor.fetchall()
+        
+        if not approved_resumes:
+            return 0
+        
+        sent_count = 0
+        for resume_info in approved_resumes:
+            application_id = resume_info['application_id']
+            job_id = resume_info['job_id']
+            company_id = resume_info['company_id']
+            student_id = resume_info['student_id']
+            
+            # 創建 resume_applications 記錄
+            cursor.execute("""
+                INSERT INTO resume_applications
+                (application_id, job_id, apply_status, interview_status, interview_result, created_at)
+                VALUES (%s, %s, %s, %s, %s, NOW())
+            """, (application_id, job_id, 'uploaded', 'none', 'pending'))
+            
+            # 獲取學生姓名
+            cursor.execute("SELECT name FROM users WHERE id = %s", (student_id,))
+            student_data = cursor.fetchone()
+            student_name = student_data['name'] if student_data else '學生'
+            
+            # 通知廠商
+            cursor.execute("""
+                SELECT advisor_user_id, company_name
+                FROM internship_companies
+                WHERE id = %s
+            """, (company_id,))
+            company_data = cursor.fetchone()
+            
+            if company_data and company_data.get('advisor_user_id'):
+                advisor_user_id = company_data['advisor_user_id']
+                company_name = company_data.get('company_name', '公司')
+                cursor.execute("""
+                    SELECT id, name FROM users
+                    WHERE role = 'vendor' AND teacher_id = %s
+                """, (advisor_user_id,))
+                vendors = cursor.fetchall()
+                
+                for vendor in vendors:
+                    vendor_id = vendor['id']
+                    create_notification(
+                        user_id=vendor_id,
+                        title="新履歷待審核",
+                        message=(
+                            f"學生 {student_name} 的履歷已由指導老師審核通過，"
+                            f"已投遞至「{company_name}」，請前往審核。"
+                        ),
+                        category="resume",
+                        link_url="/vendor/resumes"
+                    )
+                if vendors:
+                    sent_count += 1
+                    print(f"✅ [統一傳送] 已將履歷傳送給廠商: application_id={application_id}, company={company_name}, 通知了 {len(vendors)} 位廠商")
+        
+        if sent_count > 0:
+            conn.commit()
+            print(f"✅ [統一傳送] 指導老師審核截止時間已過，已統一傳送 {sent_count} 筆履歷給廠商")
+        
+        return sent_count
+    except Exception as e:
+        print(f"❌ 統一傳送履歷給廠商錯誤: {e}")
+        traceback.print_exc()
+        return 0
+
 # 輔助函數：處理履歷上傳截止時間後的狀態自動更新
 def update_resume_status_after_deadline(cursor, conn):
     """
@@ -192,6 +318,9 @@ def get_teacher_review_resumes():
     try:
         # 檢查履歷上傳截止時間並自動更新狀態
         is_resume_deadline_passed, update_counts = update_resume_status_after_deadline(cursor, conn)
+        
+        # 檢查指導老師審核截止時間並統一傳送已通過的履歷給廠商
+        send_approved_resumes_to_vendors_after_deadline(cursor, conn)
         
         # 在截止時間之前，指導老師（包括主任切換身份）不能看到任何履歷，直接返回空結果
         if session_role == 'teacher' and not is_resume_deadline_passed:
@@ -624,78 +753,115 @@ def review_resume(resume_id):
             
             print(f"✅ [DEBUG] 指導老師審核完成: application_id={application_id_int}, review_status={status}, teacher_id={user_id}")
             
-            # 如果指導老師審核通過（status='approved'），創建 resume_applications 記錄
+            # 如果指導老師審核通過（status='approved'），檢查是否在截止時間內
+            # 如果在截止時間內，只更新狀態，不立即傳送給廠商；等截止時間後統一傳送
             if status == 'approved':
-                # 查詢該 application_id 對應的 job_id 和 company_id
-                cursor.execute("""
-                    SELECT job_id, company_id
-                    FROM student_job_applications
-                    WHERE id = %s
-                """, (application_id_int,))
-                app_data = cursor.fetchone()
+                # 檢查指導老師審核截止時間
+                now = datetime.now()
+                teacher_review_deadline = None
+                is_teacher_deadline_passed = False
                 
-                if app_data:
-                    job_id = app_data['job_id']
-                    company_id = app_data['company_id']
-                    
-                    # 檢查是否已存在 resume_applications 記錄
+                try:
                     cursor.execute("""
-                        SELECT id, apply_status
-                        FROM resume_applications
-                        WHERE application_id = %s AND job_id = %s
-                    """, (application_id_int, job_id))
-                    existing_ra = cursor.fetchone()
+                        SELECT end_time 
+                        FROM announcement 
+                        WHERE title LIKE '[作業]%指導老師審核履歷截止時間' AND is_published = 1
+                        ORDER BY created_at DESC 
+                        LIMIT 1
+                    """)
+                    deadline_result = cursor.fetchone()
                     
-                    if existing_ra:
-                        # 如果記錄已存在，更新為 'uploaded'（待廠商審核）
-                        if existing_ra['apply_status'] != 'uploaded':
-                            cursor.execute("""
-                                UPDATE resume_applications
-                                SET apply_status = 'uploaded',
-                                    updated_at = NOW()
-                                WHERE id = %s
-                            """, (existing_ra['id'],))
-                            print(f"✅ [resume_applications] 指導老師通過後更新廠商審核記錄: application_id={application_id_int}, job_id={job_id}, apply_status='uploaded'")
-                    else:
-                        # 創建新的 resume_applications 記錄，狀態設為 'uploaded'（待廠商審核）
-                        cursor.execute("""
-                            INSERT INTO resume_applications
-                            (application_id, job_id, apply_status, interview_status, interview_result, created_at)
-                            VALUES (%s, %s, %s, %s, %s, NOW())
-                        """, (application_id_int, job_id, 'uploaded', 'none', 'pending'))
-                        print(f"✅ [resume_applications] 指導老師通過後創建廠商審核記錄: application_id={application_id_int}, job_id={job_id}, apply_status='uploaded'")
-                    
-                    # 通知廠商
-                    cursor.execute("""
-                        SELECT advisor_user_id, company_name
-                        FROM internship_companies
-                        WHERE id = %s
-                    """, (company_id,))
-                    company_data = cursor.fetchone()
-                    
-                    if company_data and company_data.get('advisor_user_id'):
-                        advisor_user_id = company_data['advisor_user_id']
-                        company_name = company_data.get('company_name', '公司')
-                        cursor.execute("""
-                            SELECT id, name FROM users
-                            WHERE role = 'vendor' AND teacher_id = %s
-                        """, (advisor_user_id,))
-                        vendors = cursor.fetchall()
+                    if deadline_result and deadline_result.get('end_time'):
+                        deadline = deadline_result['end_time']
+                        if isinstance(deadline, datetime):
+                            teacher_review_deadline = deadline
+                        else:
+                            try:
+                                teacher_review_deadline = datetime.strptime(str(deadline), '%Y-%m-%d %H:%M:%S')
+                            except:
+                                teacher_review_deadline = datetime.strptime(str(deadline), '%Y-%m-%d %H:%M')
                         
-                        for vendor in vendors:
-                            vendor_id = vendor['id']
-                            create_notification(
-                                user_id=vendor_id,
-                                title="新履歷待審核",
-                                message=(
-                                    f"學生 {student_name} 的履歷已由指導老師審核通過，"
-                                    f"已投遞至「{company_name}」，請前往審核。"
-                                ),
-                                category="resume",
-                                link_url="/vendor/resumes"
-                            )
-                        if vendors:
-                            print(f"✅ 指導老師通過履歷，已通知 {len(vendors)} 位廠商")
+                        is_teacher_deadline_passed = now > teacher_review_deadline
+                except Exception as e:
+                    print(f"⚠️ 檢查指導老師審核截止時間時發生錯誤: {e}")
+                    # 如果無法獲取截止時間，預設為已過期（立即傳送）
+                    is_teacher_deadline_passed = True
+                
+                # 只有在截止時間已過後，才創建 resume_applications 記錄並通知廠商
+                if is_teacher_deadline_passed:
+                    # 查詢該 application_id 對應的 job_id 和 company_id
+                    cursor.execute("""
+                        SELECT job_id, company_id
+                        FROM student_job_applications
+                        WHERE id = %s
+                    """, (application_id_int,))
+                    app_data = cursor.fetchone()
+                    
+                    if app_data:
+                        job_id = app_data['job_id']
+                        company_id = app_data['company_id']
+                        
+                        # 檢查是否已存在 resume_applications 記錄
+                        cursor.execute("""
+                            SELECT id, apply_status
+                            FROM resume_applications
+                            WHERE application_id = %s AND job_id = %s
+                        """, (application_id_int, job_id))
+                        existing_ra = cursor.fetchone()
+                        
+                        if existing_ra:
+                            # 如果記錄已存在，更新為 'uploaded'（待廠商審核）
+                            if existing_ra['apply_status'] != 'uploaded':
+                                cursor.execute("""
+                                    UPDATE resume_applications
+                                    SET apply_status = 'uploaded',
+                                        updated_at = NOW()
+                                    WHERE id = %s
+                                """, (existing_ra['id'],))
+                                print(f"✅ [resume_applications] 指導老師通過後更新廠商審核記錄: application_id={application_id_int}, job_id={job_id}, apply_status='uploaded'")
+                        else:
+                            # 創建新的 resume_applications 記錄，狀態設為 'uploaded'（待廠商審核）
+                            cursor.execute("""
+                                INSERT INTO resume_applications
+                                (application_id, job_id, apply_status, interview_status, interview_result, created_at)
+                                VALUES (%s, %s, %s, %s, %s, NOW())
+                            """, (application_id_int, job_id, 'uploaded', 'none', 'pending'))
+                            print(f"✅ [resume_applications] 指導老師通過後創建廠商審核記錄: application_id={application_id_int}, job_id={job_id}, apply_status='uploaded'")
+                        
+                        # 通知廠商
+                        cursor.execute("""
+                            SELECT advisor_user_id, company_name
+                            FROM internship_companies
+                            WHERE id = %s
+                        """, (company_id,))
+                        company_data = cursor.fetchone()
+                        
+                        if company_data and company_data.get('advisor_user_id'):
+                            advisor_user_id = company_data['advisor_user_id']
+                            company_name = company_data.get('company_name', '公司')
+                            cursor.execute("""
+                                SELECT id, name FROM users
+                                WHERE role = 'vendor' AND teacher_id = %s
+                            """, (advisor_user_id,))
+                            vendors = cursor.fetchall()
+                            
+                            for vendor in vendors:
+                                vendor_id = vendor['id']
+                                create_notification(
+                                    user_id=vendor_id,
+                                    title="新履歷待審核",
+                                    message=(
+                                        f"學生 {student_name} 的履歷已由指導老師審核通過，"
+                                        f"已投遞至「{company_name}」，請前往審核。"
+                                    ),
+                                    category="resume",
+                                    link_url="/vendor/resumes"
+                                )
+                            if vendors:
+                                print(f"✅ 指導老師通過履歷，已通知 {len(vendors)} 位廠商")
+                else:
+                    # 截止時間未過，只更新狀態，不立即傳送給廠商
+                    print(f"⏰ 指導老師審核通過，但尚未到截止時間，履歷將在截止時間後統一傳送給廠商: application_id={application_id_int}")
         else:
             # 班導或其他角色審核履歷（更新 resumes 表）
             old_status_for_check = old_status
@@ -2907,6 +3073,9 @@ def get_class_resumes():
     try:
         # 檢查履歷上傳截止時間並自動更新狀態
         is_resume_deadline_passed, update_counts = update_resume_status_after_deadline(cursor, conn)
+        
+        # 檢查指導老師審核截止時間並統一傳送已通過的履歷給廠商
+        send_approved_resumes_to_vendors_after_deadline(cursor, conn)
         
         resumes = []  # 初始化結果列表
         sql_query = ""
