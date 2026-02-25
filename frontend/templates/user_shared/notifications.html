@@ -771,6 +771,39 @@
     </div>
   </div>
 
+  <!-- 科助專用 Modal：指導老師審核履歷截止時間 -->
+  <div class="modal fade" id="teacherReviewDeadlineModal" tabindex="-1">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" style="font-weight: bold;">新增作業截止時間</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div class="mb-3"><label class="form-label">標題</label><input id="teacher-review-title" class="form-control"></div>
+          <div class="mb-3"><label class="form-label">內容</label><textarea id="teacher-review-content" class="form-control" rows="4"></textarea></div>
+          <div class="mb-3"><label class="form-label">發送對象</label>
+            <select id="teacher-review-target-roles" class="form-select">
+              <option value="">請選擇發送對象</option>
+              <option value="all">全部使用者</option>
+              <option value="student">學生</option>
+              <option value="vendor">廠商</option>
+              <option value="class_teacher">班導</option>
+              <option value="teacher">指導老師</option>
+              <option value="director">主任</option>
+            </select>
+          </div>
+          <div class="mb-3"><label class="form-label">開始時間</label><input id="teacher-review-start" type="datetime-local" class="form-control"></div>
+          <div class="mb-3"><label class="form-label">結束時間</label><input id="teacher-review-end" type="datetime-local" class="form-control"></div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+          <button id="btn-save-teacher-review-deadline" type="button" class="btn btn-primary">儲存</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- 科助專用 Modal：選擇發布類型 -->
   <div class="modal fade" id="publishTypeModal" tabindex="-1">
     <div class="modal-dialog modal-dialog-centered">
@@ -792,6 +825,10 @@
             <button type="button" class="option-btn deadline" data-bs-dismiss="modal" id="btn-select-resume-deadline">
               <span class="icon">📝</span>
               <span class="text">上傳履歷截止時間</span>
+            </button>
+            <button type="button" class="option-btn deadline" data-bs-dismiss="modal" id="btn-select-teacher-review-deadline">
+              <span class="icon">📝</span>
+              <span class="text">指導老師審核履歷截止時間</span>
             </button>
           </div>
         </div>
@@ -1279,6 +1316,8 @@
                 await editDeadlineFromNotification(n, 'resume');
               } else if (isPrefDeadline) {
                 await editDeadlineFromNotification(n, 'pref');
+              } else if (isTeacherReviewDeadline) {
+                await editDeadlineFromNotification(n, 'teacher_review');
               } else {
                 // 其他公告使用一般編輯函數
                 await editAnnouncementFromNotification(n);
@@ -1361,10 +1400,12 @@
         n.title.includes('上傳履歷截止時間') || 
         n.title.includes('履歷截止時間') ||
         n.title.includes('填寫志願序截止時間') ||
-        n.title.includes('志願序截止時間')
+        n.title.includes('志願序截止時間') ||
+        n.title.includes('指導老師審核履歷截止時間')
       )) || (messageText && (
         messageText.includes('上傳履歷') || 
-        messageText.includes('填寫志願序')
+        messageText.includes('填寫志願序') ||
+        messageText.includes('指導老師審核履歷')
       ));
       
       if (isResumeOrPrefAnnouncement) {
@@ -1400,14 +1441,14 @@
                 
                 // 替換消息中的不完整時間格式
                 messageText = messageText.replace(
-                  /(上傳履歷的|填寫志願序的)\s*[Pp]?\d{2}-\d{2}-\d{2}\s+\d{2}:\d{2}/,
+                  /(上傳履歷的|填寫志願序的|指導老師審核履歷的)\s*[Pp]?\d{2}-\d{2}-\d{2}\s+\d{2}:\d{2}/,
                   `$1截止時間為:${formattedTime}`
                 );
                 
                 // 如果替換後仍然沒有「截止時間為:」，則添加
                 if (!messageText.includes('截止時間為:')) {
                   messageText = messageText.replace(
-                    /(上傳履歷的|填寫志願序的)([^,，。\n]*)/,
+                    /(上傳履歷的|填寫志願序的|指導老師審核履歷的)([^,，。\n]*)/,
                     `$1截止時間為:${formattedTime}$2`
                   );
                 }
@@ -1416,14 +1457,14 @@
               console.error('獲取公告詳情失敗:', error);
               // 即使獲取失敗，也嘗試修復明顯的格式問題
               messageText = messageText.replace(
-                /(上傳履歷的|填寫志願序的)\s*[Pp]?(\d{2}-\d{2}-\d{2}\s+\d{2}:\d{2})/,
+                /(上傳履歷的|填寫志願序的|指導老師審核履歷的)\s*[Pp]?(\d{2}-\d{2}-\d{2}\s+\d{2}:\d{2})/,
                 '$1截止時間為:20$2'
               );
             }
           } else {
             // 如果無法獲取公告ID，嘗試修復明顯的格式問題
             messageText = messageText.replace(
-              /(上傳履歷的|填寫志願序的)\s*[Pp]?(\d{2}-\d{2}-\d{2}\s+\d{2}:\d{2})/,
+              /(上傳履歷的|填寫志願序的|指導老師審核履歷的)\s*[Pp]?(\d{2}-\d{2}-\d{2}\s+\d{2}:\d{2})/,
               '$1截止時間為:20$2'
             );
           }
@@ -1611,7 +1652,7 @@
     // 【移除】close drawer when clicking outside 相關事件
 
     // ---------- 科助專用功能：公告管理 ----------
-    let prefDeadlineModal, resumeDeadlineModal, annModal;
+    let prefDeadlineModal, resumeDeadlineModal, teacherReviewDeadlineModal, annModal;
     let editId = null;
 
     // 從通知編輯截止時間公告（全局函數，可在渲染時調用）
@@ -1752,6 +1793,59 @@
           
           // 顯示 Modal
           prefDeadlineModal.show();
+        } else if (type === 'teacher_review') {
+          // 確保 Modal 已初始化
+          if (!teacherReviewDeadlineModal) {
+            teacherReviewDeadlineModal = new bootstrap.Modal(document.getElementById('teacherReviewDeadlineModal'));
+          }
+          
+          // 設置編輯 ID（全局變量，用於保存時識別）
+          window.currentEditDeadlineId = annId;
+          
+          // 填充表單
+          document.getElementById('teacher-review-title').value = ann.title || '[作業]指導老師審核履歷截止時間';
+          document.getElementById('teacher-review-content').value = ann.content || '';
+          
+          // 格式化時間為 datetime-local 格式
+          if (ann.start_time) {
+            let startTimeStr = ann.start_time;
+            if (startTimeStr.includes(' ')) {
+              startTimeStr = startTimeStr.replace(' ', 'T').substring(0, 16);
+            } else if (startTimeStr.includes('T')) {
+              startTimeStr = startTimeStr.substring(0, 16);
+            }
+            document.getElementById('teacher-review-start').value = startTimeStr;
+          } else {
+            document.getElementById('teacher-review-start').value = '';
+          }
+          
+          if (ann.end_time) {
+            let endTimeStr = ann.end_time;
+            if (endTimeStr.includes(' ')) {
+              endTimeStr = endTimeStr.replace(' ', 'T').substring(0, 16);
+            } else if (endTimeStr.includes('T')) {
+              endTimeStr = endTimeStr.substring(0, 16);
+            }
+            document.getElementById('teacher-review-end').value = endTimeStr;
+          } else {
+            document.getElementById('teacher-review-end').value = '';
+          }
+          
+          // 載入發送對象
+          const teacherReviewTargetRoles = document.getElementById('teacher-review-target-roles');
+          if (teacherReviewTargetRoles) {
+            teacherReviewTargetRoles.value = '';
+            if (ann.target_roles && Array.isArray(ann.target_roles) && ann.target_roles.length > 0) {
+              const firstRole = ann.target_roles[0];
+              const option = Array.from(teacherReviewTargetRoles.options).find(opt => opt.value === firstRole);
+              if (option) {
+                teacherReviewTargetRoles.value = firstRole;
+              }
+            }
+          }
+          
+          // 顯示 Modal
+          teacherReviewDeadlineModal.show();
         }
       } catch (error) {
         console.error('載入截止時間公告詳情失敗:', error);
@@ -1852,6 +1946,7 @@
       const publishTypeModal = new bootstrap.Modal(document.getElementById('publishTypeModal'));
       prefDeadlineModal = new bootstrap.Modal(document.getElementById('prefDeadlineModal'));
       resumeDeadlineModal = new bootstrap.Modal(document.getElementById('resumeDeadlineModal'));
+      const teacherReviewDeadlineModal = new bootstrap.Modal(document.getElementById('teacherReviewDeadlineModal'));
       annModal = new bootstrap.Modal(document.getElementById('annModal'));
 
       // 發布公告與截止時間按鈕
@@ -1907,6 +2002,23 @@
         }, 300);
       };
 
+      // 選擇指導老師審核履歷截止時間
+      document.getElementById('btn-select-teacher-review-deadline').onclick = () => {
+        publishTypeModal.hide();
+        // 清除編輯 ID（新增模式）
+        window.currentEditDeadlineId = null;
+        document.getElementById('teacher-review-title').value = '[作業]指導老師審核履歷截止時間';
+        document.getElementById('teacher-review-content').value = '請注意!指導老師審核履歷的截止時間為:請選擇結束時間,請務必在截止時間前完成履歷審核。';
+        document.getElementById('teacher-review-start').value = '';
+        document.getElementById('teacher-review-end').value = '';
+        // 重置發送對象下拉選單
+        const teacherReviewTargetRoles = document.getElementById('teacher-review-target-roles');
+        if (teacherReviewTargetRoles) teacherReviewTargetRoles.value = '';
+        setTimeout(() => {
+          teacherReviewDeadlineModal.show();
+        }, 300);
+      };
+
       // 當結束時間改變時，自動更新內容中的截止時間
       document.getElementById('pref-end').addEventListener('change', function() {
         const endTime = this.value;
@@ -1923,6 +2035,16 @@
           const formattedTime = endTime.replace('T', ' ');
           const content = document.getElementById('resume-content');
           content.value = `請注意!上傳履歷的截止時間為:${formattedTime},請務必在截止時間前完成履歷上傳。`;
+        }
+      });
+
+      document.getElementById('teacher-review-end').addEventListener('change', function() {
+        const endTime = this.value;
+        if (endTime) {
+          // 將 datetime-local 格式 (YYYY-MM-DDTHH:mm) 轉換為 YYYY-MM-DD HH:mm（與上傳履歷截止時間一致）
+          const formattedTime = endTime.replace('T', ' ');
+          const content = document.getElementById('teacher-review-content');
+          content.value = `請注意!指導老師審核履歷的截止時間為:${formattedTime},請務必在截止時間前完成履歷審核。`;
         }
       });
 
@@ -2030,6 +2152,69 @@
           
           if (result.success) {
             resumeDeadlineModal.hide();
+            // 清除編輯 ID
+            window.currentEditDeadlineId = null;
+            // 重置篩選條件，確保新通知可見
+            currentCategoryFilter = 'all';
+            currentReadFilter = 'all';
+            document.querySelectorAll('#categoryFilter .chip').forEach(b => b.classList.remove('active'));
+            document.querySelector('#categoryFilter .chip[data-category="all"]')?.classList.add('active');
+            document.querySelectorAll('.dropdown-menu a').forEach(i => i.classList.remove('active'));
+            document.querySelector('.dropdown-menu a[data-filter="all"]')?.classList.add('active');
+            currentFilterLabel.innerText = '全部';
+            // 重新載入通知列表
+            await loadNotifications();
+            alert(editId ? '更新成功！截止時間已更新。' : '儲存成功！新通知已出現在列表中。');
+          } else {
+            alert('儲存失敗：' + (result.message || '未知錯誤'));
+          }
+        } catch (error) {
+          console.error('儲存截止時間失敗:', error);
+          alert('儲存失敗，請稍後再試');
+        }
+      };
+
+      // 儲存指導老師審核履歷截止時間
+      document.getElementById('btn-save-teacher-review-deadline').onclick = async () => {
+        const title = document.getElementById('teacher-review-title').value;
+        const content = document.getElementById('teacher-review-content').value;
+        const startTime = document.getElementById('teacher-review-start').value;
+        const endTime = document.getElementById('teacher-review-end').value;
+        const teacherReviewTargetSelect = document.getElementById('teacher-review-target-roles');
+        const targetRole = teacherReviewTargetSelect ? teacherReviewTargetSelect.value : '';
+        
+        if (!title || !startTime || !endTime) {
+          alert('請完整填寫標題、開始時間與結束時間');
+          return;
+        }
+        
+        if (!targetRole) {
+          alert('請選擇發送對象');
+          return;
+        }
+
+        // 檢查是否為編輯模式
+        const editId = window.currentEditDeadlineId || null;
+
+        try {
+          const res = await fetch('/announcement/api/save_deadlines', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              teacher_review_deadline: endTime,
+              title: title,
+              content: content,
+              start_time: startTime.replace('T', ' '),
+              end_time: endTime.replace('T', ' '),
+              target_roles: [targetRole],
+              edit_id: editId  // 如果是編輯模式，傳遞 edit_id
+            })
+          });
+
+          const result = await res.json();
+          
+          if (result.success) {
+            teacherReviewDeadlineModal.hide();
             // 清除編輯 ID
             window.currentEditDeadlineId = null;
             // 重置篩選條件，確保新通知可見
