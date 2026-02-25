@@ -625,7 +625,28 @@
         async function checkDeadlineAndDisableApply() {
             try {
                 const res = await fetch("/announcement/api/check_deadline?type=resume");
+                
+                if (!res.ok) {
+                    console.error("API 請求失敗:", res.status, res.statusText);
+                    return;
+                }
+                
                 const result = await res.json();
+                console.log("截止時間檢查結果:", result);
+                
+                // 如果有調試信息，顯示詳細信息
+                if (result.debug) {
+                    console.log("調試信息:", result.debug);
+                    console.log("當前學期ID:", result.debug.current_semester_id);
+                    console.log("所有 internship_flows 記錄:", result.debug.all_internship_flows);
+                    console.log("internship_flows 表是否存在記錄:", result.debug.internship_flows_exists);
+                    if (result.debug.resume_deadline_in_db !== undefined) {
+                        console.log("資料庫中的 resume_deadline:", result.debug.resume_deadline_in_db);
+                    }
+                    if (result.debug.error) {
+                        console.error("錯誤:", result.debug.error);
+                    }
+                }
 
                 if (result.success && result.has_deadline) {
                     const deadlineAlert = document.getElementById('deadlineAlert');
@@ -664,9 +685,20 @@
                     // 沒有設定截止時間，隱藏提示
                     const deadlineAlert = document.getElementById('deadlineAlert');
                     deadlineAlert.classList.add('d-none');
+                    console.log("未設定截止時間或 API 返回:", result.message || "無截止時間");
                 }
             } catch (error) {
                 console.error("檢查截止時間失敗:", error);
+                // 顯示錯誤提示給用戶
+                const deadlineAlert = document.getElementById('deadlineAlert');
+                if (deadlineAlert) {
+                    deadlineAlert.className = 'alert alert-warning alert-deadline';
+                    deadlineAlert.innerHTML = `
+                        <strong>⚠️ 無法載入截止時間資訊</strong><br>
+                        請重新整理頁面或聯繫管理員。
+                    `;
+                    deadlineAlert.classList.remove('d-none');
+                }
             }
         }
 

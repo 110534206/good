@@ -1,8 +1,9 @@
 from flask import Blueprint, request, jsonify, render_template, session
 from config import get_db
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 import traceback
 import re
+from semester import get_current_semester_deadline
 
 
 # 註：此處需根據你的資料庫實作匯入模型，例如：from models import Announcement
@@ -983,48 +984,179 @@ def check_deadline():
         if assignment_type not in ["resume", "preference"]:
             return jsonify({"success": False, "message": "無效的作業類型"}), 400
         
-        # 根據類型確定標題模式（兼容有無空格的格式）
-        if assignment_type == "resume":
-            title_pattern = "[作業]%上傳履歷截止時間"
-        else:  # preference
-            title_pattern = "[作業]%填寫志願序截止時間"
-        
         conn = get_db()
         cursor = conn.cursor(dictionary=True)
         now = get_taiwan_time()
         
-        # 查詢最新的截止時間公告（按創建時間降序，使用 LIKE 匹配標題）
-        cursor.execute("""
-            SELECT id, title, end_time, created_at 
-            FROM announcement 
-            WHERE title LIKE %s AND is_published = 1
-            ORDER BY created_at DESC 
-            LIMIT 1
-        """, (title_pattern,))
+        # 優先從 internship_flows 表讀取截止時間（科助在時間管理頁面設定的）
+        deadline_dt = None
+        deadline_source = None
+        debug_info = {}
         
-        result = cursor.fetchone()
+        # 檢查當前學期
+        from semester import get_current_semester_id
+        current_semester_id = get_current_semester_id(cursor)
+        debug_info['current_semester_id'] = current_semester_id
+        
+        # 調試：檢查所有 internship_flows 記錄
+        cursor.execute("SELECT semester_id, resume_deadline FROM internship_flows")
+        all_flows = cursor.fetchall()
+        debug_info['all_internship_flows'] = [
+            {'semester_id': f.get('semester_id'), 'resume_deadline': str(f.get('resume_deadline')) if f.get('resume_deadline') else None}
+            for f in all_flows
+        ]
+        
+        if assignment_type == "resume":
+            # 直接查詢 internship_flows 表，而不是使用 get_current_semester_deadline
+            # 這樣可以更好地控制調試信息
+            if current_semester_id:
+                cursor.execute("""
+                    SELECT resume_deadline, preference_deadline 
+                    FROM internship_flows 
+                    WHERE semester_id = %s 
+                    LIMIT 1
+                """, (current_semester_id,))
+                flow_row = cursor.fetchone()
+                debug_info['internship_flows_exists'] = flow_row is not None
+                
+                if flow_row and flow_row.get('resume_deadline'):
+                    deadline_raw = flow_row.get('resume_deadline')
+                    debug_info['resume_deadline_in_db'] = str(deadline_raw)
+                    debug_info['resume_deadline_type'] = str(type(deadline_raw))
+                    
+                    # 轉換為 datetime
+                    if isinstance(deadline_raw, datetime):
+                        deadline_dt = deadline_raw
+                    elif isinstance(deadline_raw, date) and not isinstance(deadline_raw, datetime):
+                        deadline_dt = datetime.combine(deadline_raw, datetime.min.time())
+                    else:
+                        # 字串轉換
+                        try:
+                            deadline_dt = datetime.strptime(str(deadline_raw).strip()[:19], '%Y-%m-%d %H:%M:%S')
+                        except (ValueError, TypeError):
+                            try:
+                                deadline_dt = datetime.strptime(str(deadline_raw).strip()[:16], '%Y-%m-%d %H:%M')
+                            except (ValueError, TypeError):
+                                deadline_dt = None
+                                debug_info['error'] = f"無法解析 resume_deadline: {deadline_raw}"
+                    
+                    if deadline_dt:
+                        deadline_source = "internship_flows"
+                else:
+                    debug_info['resume_deadline_in_db'] = None
+                    if not flow_row:
+                        debug_info['error'] = f"找不到 semester_id={current_semester_id} 的 internship_flows 記錄"
+                    else:
+                        debug_info['error'] = f"semester_id={current_semester_id} 的 resume_deadline 為 NULL"
+            else:
+                debug_info['error'] = "沒有當前學期（is_active=1 的學期）"
+            
+            # 如果上面的查詢失敗，嘗試使用 get_current_semester_deadline 作為備用
+            if deadline_dt is None:
+                deadline_dt = get_current_semester_deadline(cursor, 'resume')
+                if deadline_dt:
+                    deadline_source = "internship_flows"
+                    debug_info['used_fallback'] = True
+        else:  # preference
+            # 直接查詢 internship_flows 表，而不是使用 get_current_semester_deadline
+            # 這樣可以更好地控制調試信息
+            if current_semester_id:
+                cursor.execute("""
+                    SELECT resume_deadline, preference_deadline 
+                    FROM internship_flows 
+                    WHERE semester_id = %s 
+                    LIMIT 1
+                """, (current_semester_id,))
+                flow_row = cursor.fetchone()
+                debug_info['internship_flows_exists'] = flow_row is not None
+                
+                if flow_row and flow_row.get('preference_deadline'):
+                    deadline_raw = flow_row.get('preference_deadline')
+                    debug_info['preference_deadline_in_db'] = str(deadline_raw)
+                    debug_info['preference_deadline_type'] = str(type(deadline_raw))
+                    
+                    # 轉換為 datetime
+                    if isinstance(deadline_raw, datetime):
+                        deadline_dt = deadline_raw
+                    elif isinstance(deadline_raw, date) and not isinstance(deadline_raw, datetime):
+                        deadline_dt = datetime.combine(deadline_raw, datetime.min.time())
+                    else:
+                        # 字串轉換
+                        try:
+                            deadline_dt = datetime.strptime(str(deadline_raw).strip()[:19], '%Y-%m-%d %H:%M:%S')
+                        except (ValueError, TypeError):
+                            try:
+                                deadline_dt = datetime.strptime(str(deadline_raw).strip()[:16], '%Y-%m-%d %H:%M')
+                            except (ValueError, TypeError):
+                                deadline_dt = None
+                                debug_info['error'] = f"無法解析 preference_deadline: {deadline_raw}"
+                    
+                    if deadline_dt:
+                        deadline_source = "internship_flows"
+                else:
+                    debug_info['preference_deadline_in_db'] = None
+                    if not flow_row:
+                        debug_info['error'] = f"找不到 semester_id={current_semester_id} 的 internship_flows 記錄"
+                    else:
+                        debug_info['error'] = f"semester_id={current_semester_id} 的 preference_deadline 為 NULL"
+            else:
+                debug_info['error'] = "沒有當前學期（is_active=1 的學期）"
+            
+            # 如果上面的查詢失敗，嘗試使用 get_current_semester_deadline 作為備用
+            if deadline_dt is None:
+                deadline_dt = get_current_semester_deadline(cursor, 'preference')
+                if deadline_dt:
+                    deadline_source = "internship_flows"
+                    debug_info['used_fallback'] = True
+        
+        # 如果 internship_flows 中沒有，則從 announcement 表查找（向後兼容）
+        if deadline_dt is None:
+            # 根據類型確定標題模式（兼容有無空格的格式）
+            if assignment_type == "resume":
+                title_pattern = "[作業]%上傳履歷截止時間"
+            else:  # preference
+                title_pattern = "[作業]%填寫志願序截止時間"
+            
+            # 查詢最新的截止時間公告（按創建時間降序，使用 LIKE 匹配標題）
+            cursor.execute("""
+                SELECT id, title, end_time, created_at 
+                FROM announcement 
+                WHERE title LIKE %s AND is_published = 1
+                ORDER BY created_at DESC 
+                LIMIT 1
+            """, (title_pattern,))
+            
+            result = cursor.fetchone()
+            
+            if result:
+                deadline = result['end_time']
+                if isinstance(deadline, datetime):
+                    deadline_dt = deadline
+                else:
+                    # 如果是字符串，轉換為 datetime
+                    try:
+                        deadline_dt = datetime.strptime(str(deadline), '%Y-%m-%d %H:%M:%S')
+                    except:
+                        deadline_dt = datetime.strptime(str(deadline), '%Y-%m-%d %H:%M')
+                deadline_source = "announcement"
+        
         cursor.close()
         conn.close()
         
-        if not result:
+        if deadline_dt is None:
             # 沒有設定截止時間，允許操作
-            return jsonify({
+            # 返回調試信息（僅在開發環境或需要時）
+            response = {
                 "success": True,
                 "has_deadline": False,
                 "is_expired": False,
                 "deadline": None,
                 "message": "尚未設定截止時間"
-            })
-        
-        deadline = result['end_time']
-        if isinstance(deadline, datetime):
-            deadline_dt = deadline
-        else:
-            # 如果是字符串，轉換為 datetime
-            try:
-                deadline_dt = datetime.strptime(str(deadline), '%Y-%m-%d %H:%M:%S')
-            except:
-                deadline_dt = datetime.strptime(str(deadline), '%Y-%m-%d %H:%M')
+            }
+            # 添加調試信息（可以幫助排查問題）
+            if debug_info:
+                response["debug"] = debug_info
+            return jsonify(response)
         
         is_expired = now > deadline_dt
         
@@ -1032,8 +1164,9 @@ def check_deadline():
             "success": True,
             "has_deadline": True,
             "is_expired": is_expired,
-            "deadline": deadline_dt.strftime('%Y-%m-%d %H:%M:%S') if isinstance(deadline_dt, datetime) else str(deadline),
-            "message": "已過期" if is_expired else "尚未過期"
+            "deadline": deadline_dt.strftime('%Y-%m-%d %H:%M:%S') if isinstance(deadline_dt, datetime) else str(deadline_dt),
+            "message": "已過期" if is_expired else "尚未過期",
+            "source": deadline_source  # 可選：標記截止時間來源
         })
         
     except Exception as e:

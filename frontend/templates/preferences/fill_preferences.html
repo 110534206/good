@@ -278,6 +278,9 @@
         </div>
     </div>
     <div class="container">
+        <!-- 截止時間提示 -->
+        <div id="deadlineAlert" class="alert alert-deadline d-none" role="alert" style="max-width: 900px; margin: 0 auto 2rem auto;"></div>
+
         {% if preview %}
         <div class="alert alert-warning text-center" role="alert" style="max-width: 900px;">
             <i class="bi bi-eye-fill me-2"></i>
@@ -377,86 +380,124 @@
         async function checkDeadlineAndDisableForm() {
             try {
                 const res = await fetch("/announcement/api/check_deadline?type=preference");
-                const result = await res.json();
                 
-                if (result.success && result.has_deadline && result.is_expired) {
-                    // 截止時間已過，禁用表單
-                    const form = document.getElementById("preferencesForm");
-                    if (form) {
-                        // 禁用所有輸入欄位
-                        form.querySelectorAll('input, select, textarea, button').forEach(element => {
-                            element.disabled = true;
-                        });
-                        
-                        // 禁用所有按鈕
-                        const saveBtn = document.getElementById("saveBtn");
-                        const toggleEditBtn = document.getElementById("toggleEditBtn");
-                        const aiRecommendBtn = document.getElementById("aiRecommendBtnNew");
-                        
-                        if (saveBtn) {
-                            saveBtn.disabled = true;
-                            saveBtn.textContent = '已超過截止時間';
-                        }
-                        if (toggleEditBtn) {
-                            toggleEditBtn.disabled = true;
-                        }
-                        if (aiRecommendBtn) {
-                            aiRecommendBtn.disabled = true;
-                        }
-                        
-                        // 顯示提示訊息
-                        const container = document.querySelector(".container");
-                        if (container) {
-                            const alertDiv = document.createElement("div");
-                            alertDiv.className = "alert alert-danger alert-dismissible fade show";
-                            alertDiv.setAttribute("role", "alert");
-                            alertDiv.innerHTML = `
-                                <strong>⚠️ 已超過截止時間</strong><br>
+                if (!res.ok) {
+                    console.error("API 請求失敗:", res.status, res.statusText);
+                    return;
+                }
+                
+                const result = await res.json();
+                console.log("截止時間檢查結果:", result);
+                
+                // 如果有調試信息，顯示詳細信息
+                if (result.debug) {
+                    console.log("調試信息:", result.debug);
+                    console.log("當前學期ID:", result.debug.current_semester_id);
+                    console.log("所有 internship_flows 記錄:", result.debug.all_internship_flows);
+                    if (result.debug.error) {
+                        console.error("錯誤:", result.debug.error);
+                    }
+                }
+                
+                const deadlineAlert = document.getElementById('deadlineAlert');
+                
+                if (result.success && result.has_deadline) {
+                    if (result.is_expired) {
+                        // 截止時間已過，禁用表單
+                        const form = document.getElementById("preferencesForm");
+                        if (form) {
+                            // 禁用所有輸入欄位
+                            form.querySelectorAll('input, select, textarea, button').forEach(element => {
+                                element.disabled = true;
+                            });
+                            
+                            // 禁用所有按鈕
+                            const saveBtn = document.getElementById("saveBtn");
+                            const toggleEditBtn = document.getElementById("toggleEditBtn");
+                            const aiRecommendBtn = document.getElementById("aiRecommendBtnNew");
+                            
+                            if (saveBtn) {
+                                saveBtn.disabled = true;
+                                saveBtn.textContent = '已超過截止時間';
+                            }
+                            if (toggleEditBtn) {
+                                toggleEditBtn.disabled = true;
+                            }
+                            if (aiRecommendBtn) {
+                                aiRecommendBtn.disabled = true;
+                            }
+                            
+                            // 顯示警告訊息
+                            deadlineAlert.className = 'alert alert-danger alert-deadline';
+                            deadlineAlert.innerHTML = `
+                                <strong>⚠️ 已超過填寫志願序截止時間</strong><br>
                                 填寫志願序的截止時間為：${result.deadline}<br>
                                 目前無法再修改或提交志願序。
-                                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
                             `;
-                            container.insertBefore(alertDiv, container.firstChild);
-                        }
-                        
-                        // 設置全局標記，防止後續操作
-                        window.deadlineExpired = true;
-                        isEditing = false; // 強制設為非編輯模式
-                        
-                        // 更新所有 preference card 的 badge 顯示狀態
-                        // 確保已選擇公司和職缺的 badge 顯示正確
-                        const allPreferenceCards = form.querySelectorAll(".preference-card");
-                        allPreferenceCards.forEach(card => {
-                            const companySelect = card.querySelector(".company-select");
-                            const jobSelect = card.querySelector(".job-select");
-                            const badge = card.querySelector(".badge-remaining");
+                            deadlineAlert.classList.remove('d-none');
                             
-                            if (companySelect && badge) {
-                                const selectedCompany = companySelect.value;
-                                const selectedJob = jobSelect ? jobSelect.value : '';
+                            // 設置全局標記，防止後續操作
+                            window.deadlineExpired = true;
+                            isEditing = false; // 強制設為非編輯模式
+                            
+                            // 更新所有 preference card 的 badge 顯示狀態
+                            // 確保已選擇公司和職缺的 badge 顯示正確
+                            const allPreferenceCards = form.querySelectorAll(".preference-card");
+                            allPreferenceCards.forEach(card => {
+                                const companySelect = card.querySelector(".company-select");
+                                const jobSelect = card.querySelector(".job-select");
+                                const badge = card.querySelector(".badge-remaining");
                                 
-                                // 如果已選擇公司和職缺，顯示"已選擇公司和職缺"
-                                // 如果只選擇了公司，顯示"已選擇公司"
-                                // 否則顯示"尚未選擇公司"
-                                if (selectedCompany && selectedJob) {
-                                    badge.textContent = "已選擇公司和職缺";
-                                    badge.classList.remove("bg-secondary");
-                                    badge.classList.add("bg-primary");
-                                } else if (selectedCompany) {
-                                    badge.textContent = "已選擇公司";
-                                    badge.classList.remove("bg-secondary");
-                                    badge.classList.add("bg-primary");
-                                } else {
-                                    badge.textContent = "尚未選擇公司";
-                                    badge.classList.remove("bg-primary");
-                                    badge.classList.add("bg-secondary");
+                                if (companySelect && badge) {
+                                    const selectedCompany = companySelect.value;
+                                    const selectedJob = jobSelect ? jobSelect.value : '';
+                                    
+                                    // 如果已選擇公司和職缺，顯示"已選擇公司和職缺"
+                                    // 如果只選擇了公司，顯示"已選擇公司"
+                                    // 否則顯示"尚未選擇公司"
+                                    if (selectedCompany && selectedJob) {
+                                        badge.textContent = "已選擇公司和職缺";
+                                        badge.classList.remove("bg-secondary");
+                                        badge.classList.add("bg-primary");
+                                    } else if (selectedCompany) {
+                                        badge.textContent = "已選擇公司";
+                                        badge.classList.remove("bg-secondary");
+                                        badge.classList.add("bg-primary");
+                                    } else {
+                                        badge.textContent = "尚未選擇公司";
+                                        badge.classList.remove("bg-primary");
+                                        badge.classList.add("bg-secondary");
+                                    }
                                 }
-                            }
-                        });
+                            });
+                        }
+                    } else {
+                        // 尚未過期，顯示提醒
+                        deadlineAlert.className = 'alert alert-info alert-deadline';
+                        deadlineAlert.innerHTML = `
+                            <strong>📅 填寫志願序截止時間提醒</strong><br>
+                            填寫志願序的截止時間為：${result.deadline}<br>
+                            請在截止時間前完成填寫。
+                        `;
+                        deadlineAlert.classList.remove('d-none');
                     }
+                } else {
+                    // 沒有設定截止時間，隱藏提示
+                    deadlineAlert.classList.add('d-none');
+                    console.log("未設定截止時間或 API 返回:", result.message || "無截止時間");
                 }
             } catch (error) {
                 console.error("檢查截止時間失敗:", error);
+                // 顯示錯誤提示給用戶
+                const deadlineAlert = document.getElementById('deadlineAlert');
+                if (deadlineAlert) {
+                    deadlineAlert.className = 'alert alert-warning alert-deadline';
+                    deadlineAlert.innerHTML = `
+                        <strong>⚠️ 無法載入截止時間資訊</strong><br>
+                        請重新整理頁面或聯繫管理員。
+                    `;
+                    deadlineAlert.classList.remove('d-none');
+                }
             }
         }
 
