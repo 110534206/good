@@ -237,6 +237,7 @@
     let isHomeroom = false;
     let currentUserId = null;
     let isDeadlinePassed = false; // 截止時間是否已過
+    let isTeacherReviewDeadlinePassed = false; // 指導老師審核截止時間是否已過
 
     // 定義狀態顏色，approved 對應 success (綠色)
     function statusColor(status) {
@@ -253,10 +254,45 @@
       return String(text).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
     }
 
+    // 禁用所有勾選框和按鈕（當指導老師審核截止時間已過時）
+    function disableCheckboxesAndButtons() {
+      // 禁用所有行勾選框
+      const rowCheckboxes = document.querySelectorAll(".row-checkbox");
+      rowCheckboxes.forEach(cb => {
+        cb.disabled = true;
+        cb.style.cursor = 'not-allowed';
+        cb.style.opacity = '0.5';
+      });
+      
+      // 禁用全選勾選框
+      const selectAllCheckbox = document.getElementById("selectAllCheckbox");
+      if (selectAllCheckbox) {
+        selectAllCheckbox.disabled = true;
+        selectAllCheckbox.style.cursor = 'not-allowed';
+        selectAllCheckbox.style.opacity = '0.5';
+      }
+      
+      // 禁用「標記為通過」按鈕
+      const sendToVendorBtn = document.getElementById("sendToVendorBtn");
+      if (sendToVendorBtn) {
+        sendToVendorBtn.disabled = true;
+        sendToVendorBtn.style.cursor = 'not-allowed';
+        sendToVendorBtn.style.opacity = '0.5';
+      }
+    }
+
     // 更新傳送給廠商按鈕的顯示狀態（全局函數）
     function updateSendToVendorButtonVisibility() {
       const sendToVendorBtn = document.getElementById("sendToVendorBtn");
       if (!sendToVendorBtn) return;
+      
+      // 如果指導老師審核截止時間已過，禁用按鈕
+      if (isTeacherReviewDeadlinePassed && userRole === 'teacher') {
+        sendToVendorBtn.disabled = true;
+        sendToVendorBtn.style.cursor = 'not-allowed';
+        sendToVendorBtn.style.opacity = '0.5';
+        return;
+      }
       
       // 僅指導老師可以看到此按鈕
       if (userRole === 'teacher') {
@@ -265,6 +301,8 @@
         sendToVendorBtn.style.display = 'block';
         // 有勾選至少一筆資料時才啟用按鈕，否則禁用
         sendToVendorBtn.disabled = checkedBoxes.length === 0;
+        sendToVendorBtn.style.cursor = checkedBoxes.length === 0 ? 'not-allowed' : 'pointer';
+        sendToVendorBtn.style.opacity = checkedBoxes.length === 0 ? '0.5' : '1';
       } else {
         // 非指導老師角色，隱藏按鈕
         sendToVendorBtn.style.display = 'none';
@@ -357,15 +395,17 @@
                     // 履歷提交截止時間已過（班導已傳資料），顯示指導老師審核截止時間（與班導一樣）
                     const now = new Date();
                     const teacherDeadline = new Date(resumeResponse.teacher_review_deadline.replace(/\//g, '-'));
-                    const isTeacherDeadlinePassed = now > teacherDeadline;
+                    isTeacherReviewDeadlinePassed = now > teacherDeadline;
                     
-                    if (isTeacherDeadlinePassed) {
+                    if (isTeacherReviewDeadlinePassed) {
                       deadlineAlert.className = 'alert alert-warning alert-deadline';
                       deadlineAlert.innerHTML = `
                         <strong>⚠️ 指導老師審核截止時間已過</strong><br>
                         指導老師審核截止時間：${resumeResponse.teacher_review_deadline}<br>
-                        已超過截止時間，請盡快完成審核。
+                        已超過審核截止時間，無法再勾選或審核履歷。<br>通過的履歷將統一傳給廠商。
                       `;
+                      // 禁用所有勾選框和按鈕
+                      disableCheckboxesAndButtons();
                     } else {
                       deadlineAlert.className = 'alert alert-info alert-deadline';
                       deadlineAlert.innerHTML = `
@@ -424,6 +464,10 @@
               // 初始化傳送給廠商按鈕顯示狀態
               setTimeout(() => {
                 updateSendToVendorButtonVisibility();
+                // 如果指導老師審核截止時間已過，禁用所有勾選框
+                if (isTeacherReviewDeadlinePassed && userRole === 'teacher') {
+                  disableCheckboxesAndButtons();
+                }
               }, 100);
             } else {
               allResumes = [];
@@ -450,6 +494,11 @@
       
       // 當 checkbox 改變時，顯示/隱藏傳送給廠商按鈕（僅指導老師可見）
       document.addEventListener("change", function(e) {
+        // 如果指導老師審核截止時間已過，阻止勾選
+        if (isTeacherReviewDeadlinePassed && userRole === 'teacher' && e.target.classList.contains("row-checkbox")) {
+          e.target.checked = false;
+          return;
+        }
         if (e.target.classList.contains("row-checkbox") || e.target.id === "selectAllCheckbox") {
           updateSendToVendorButtonVisibility();
         }
@@ -457,9 +506,16 @@
 
       // 全選/取消全選功能
       document.getElementById("selectAllCheckbox").addEventListener("change", function(e) {
+        // 如果指導老師審核截止時間已過，阻止勾選
+        if (isTeacherReviewDeadlinePassed && userRole === 'teacher') {
+          e.target.checked = false;
+          return;
+        }
         const checkboxes = document.querySelectorAll(".row-checkbox");
         checkboxes.forEach(cb => {
-          cb.checked = e.target.checked;
+          if (!cb.disabled) {
+            cb.checked = e.target.checked;
+          }
         });
         updateSendToVendorButtonVisibility();
       });
@@ -878,13 +934,21 @@
            <td style="padding: 14px 16px;">
              <span class="status-badge bg-${statusColor(statusForDisplay)}">${mapStatus(statusForDisplay)}</span>
            </td>`;
+        // 檢查是否應該禁用勾選框（指導老師審核截止時間已過）
+        const isCheckboxDisabled = isTeacherReviewDeadlinePassed && userRole === 'teacher';
+        const checkboxDisabledAttr = isCheckboxDisabled ? 'disabled' : '';
+        const checkboxStyle = isCheckboxDisabled 
+          ? 'cursor: not-allowed; width: 18px; height: 18px; opacity: 0.5;' 
+          : 'cursor: pointer; width: 18px; height: 18px;';
+        
         tr.innerHTML = `
            <td style="padding: 14px 16px; text-align: center;">
              <input type="checkbox" class="row-checkbox" 
                     data-resume-id="${row.id}" 
                     data-preference-id="${row.preference_id || ''}" 
                     data-application-id="${row.application_id || ''}" 
-                    style="cursor: pointer; width: 18px; height: 18px;">
+                    ${checkboxDisabledAttr}
+                    style="${checkboxStyle}">
            </td>
            <td style="padding: 14px 16px;">${row.username}</td>
            <td style="padding: 14px 16px;">${escapeHtml(row.name)}</td>
@@ -907,6 +971,16 @@
       
       // 更新傳送給廠商按鈕的顯示狀態
       updateSendToVendorButtonVisibility();
+      
+      // 如果指導老師審核截止時間已過，禁用全選勾選框
+      if (isTeacherReviewDeadlinePassed && userRole === 'teacher') {
+        const selectAllCheckbox = document.getElementById("selectAllCheckbox");
+        if (selectAllCheckbox) {
+          selectAllCheckbox.disabled = true;
+          selectAllCheckbox.style.cursor = 'not-allowed';
+          selectAllCheckbox.style.opacity = '0.5';
+        }
+      }
     }
 
     function renderCommentBtn(row, isViewOnly, pid) {
@@ -1066,6 +1140,12 @@
 
     // 批量標記選中的履歷為通過（等待截止時間後統一傳送給廠商）
     async function sendSelectedToVendor() {
+      // 如果指導老師審核截止時間已過，阻止操作
+      if (isTeacherReviewDeadlinePassed && userRole === 'teacher') {
+        alert("⚠️ 指導老師審核截止時間已過，無法再審核履歷。履歷將自動傳給廠商。");
+        return;
+      }
+      
       const checkedBoxes = document.querySelectorAll(".row-checkbox:checked");
       
       if (checkedBoxes.length === 0) {
