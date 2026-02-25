@@ -40,11 +40,7 @@ def check_assignment_status():
     except Exception as e:
         return jsonify({"success": False, "message": str(e)}), 500
 
-# 確保其他的 API 路由也使用 @announcement_bp
-@announcement_bp.route('/api/list', methods=['GET'])
-def list_announcements():
-    # 這裡放原本的 list 邏輯
-    return jsonify({"success": True, "data": []})
+# /api/list 實作在下方（查詢 announcement 表）
 
 
 announcement_bp = Blueprint("announcement_bp", __name__)

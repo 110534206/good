@@ -199,6 +199,11 @@
         }
 
         /* 橙色 */
+        .role-homeroom {
+            background-color: #198754;
+        }
+
+        /* 班導：綠色 */
 
         .badge {
             font-size: 0.8em;
@@ -333,10 +338,12 @@
                     <select id="filterRole" class="form-select">
                         <option value="">所有角色</option>
                         <option value="student">學生</option>
-                        <option value="teacher">教師</option>
+                        <option value="teacher">指導老師</option>
                         <option value="director">主任</option>
+                        <option value="homeroom">班導</option>
                         <option value="ta">科助</option>
                         <option value="admin">管理員</option>
+                        <option value="vendor">廠商</option>
                     </select>
                 </div>
                 <div class="d-flex gap-2">
@@ -749,6 +756,10 @@
                         <span class="detail-label">帶班列表</span>
                         <p class="detail-value" id="detailTeachingClasses">-</p>
                     </div>
+                    <div class="detail-item" id="detailGuidedClassesRow" style="display: none;">
+                        <span class="detail-label">指導學生所屬班級</span>
+                        <p class="detail-value" id="detailGuidedClasses">-</p>
+                    </div>
                     <div class="detail-item">
                         <span class="detail-label">建立日期</span>
                         <p class="detail-value" id="detailCreatedAt">-</p>
@@ -772,10 +783,10 @@
                 return div.innerHTML;
             }
 
-            // 角色名稱映射
+            // 角色名稱映射（與後端 role_display 一致：教師→指導老師；班導由 API 回傳 role_display 含「、班導」）
             const roleMap = {
                 student: '學生',
-                teacher: '教師',
+                teacher: '指導老師',
                 director: '主任',
                 ta: '科助',
                 admin: '管理員',
@@ -789,8 +800,30 @@
                 director: 'role-director',
                 ta: 'role-ta',
                 admin: 'role-admin',
-                vendor: 'role-vendor'
+                vendor: 'role-vendor',
+                homeroom: 'role-homeroom'
             };
+
+            /**
+             * 依用戶角色與是否班導，回傳多個獨立標籤 { label, class } 陣列（每個角色一個標籤，不合併）
+             */
+            function getRoleBadges(user) {
+                const badges = [];
+                if (user.role === 'teacher') {
+                    badges.push({ label: '指導老師', class: 'role-teacher' });
+                } else if (user.role === 'director') {
+                    badges.push({ label: '主任', class: 'role-director' });
+                    badges.push({ label: '指導老師', class: 'role-teacher' });
+                } else {
+                    const label = roleMap[user.role] || user.role;
+                    const cls = roleClassMap[user.role] || '';
+                    if (label) badges.push({ label: label, class: cls });
+                }
+                if (user.is_homeroom) {
+                    badges.push({ label: '班導', class: 'role-homeroom' });
+                }
+                return badges;
+            }
 
             // 儲存用戶詳細資料，用於查看詳情 Modal
             let usersDetailData = {};
@@ -879,9 +912,10 @@
                 }
 
                 users.forEach(user => {
-                    // 以本地 roleMap 為準，與篩選按鈕「教師」一致，不依賴後端 role_display
-                    const roleDisplay = roleMap[user.role] || user.role_display || user.role;
-                    const roleClass = roleClassMap[user.role] || '';
+                    const roleBadges = getRoleBadges(user);
+                    const roleBadgesHtml = roleBadges.length
+                        ? roleBadges.map(b => `<span class="badge ${b.class}">${escapeHtml(b.label)}</span>`).join(' ')
+                        : '<span class="text-muted">-</span>';
 
                     // 根據角色決定顯示的內容，將空值替換為 '-'
                     const classDisplay = user.role === 'student'
@@ -893,6 +927,9 @@
                     const admissionYear = user.role === 'student' ? (user.admission_year || '-') : '-';
                     const teachingClasses = ['teacher', 'director'].includes(user.role) ?
                         (user.teaching_classes || '-') :
+                        '-';
+                    const guidedClasses = ['teacher', 'director'].includes(user.role) ?
+                        (user.guided_classes || '-') :
                         '-';
 
                     // 簡化 Email 顯示
@@ -938,13 +975,12 @@
                     const approveButton = (user.role === 'vendor' && (user.status || 'pending') === 'pending') ?
                         `<button class="btn btn-sm btn-success" onclick="approveVendor(${user.id})" title="審核通過"><i class="bi bi-check-circle"></i> 審核</button>` : '';
 
-                    // 儲存用戶詳細資料，用於查看詳情 Modal
+                    // 儲存用戶詳細資料，用於查看詳情 Modal（角色為多個獨立標籤）
                     usersDetailData[user.id] = {
                         username: user.username || '-',
                         name: user.name || '-',
                         email: user.email || '-',
-                        role: roleDisplay,
-                        roleClass: roleClass, // 用於詳情 Modal 角色徽章
+                        roleBadges: roleBadges,
                         originalRole: user.role, // 保存原始角色，用於判斷是否顯示字段
                         status: statusDisplay,
                         statusBadgeClass: statusBadgeClass,
@@ -952,6 +988,7 @@
                         admissionYear: admissionYear,
                         gradeDisplay: resolveGradeDisplay(user),
                         teachingClasses: teachingClasses,
+                        guidedClasses: guidedClasses,
                         displayCreatedAt: displayCreatedAt
                     };
 
@@ -964,7 +1001,7 @@
                         <td class="text-truncate" title="${escapeHtml(user.username)}">${escapeHtml(user.username)}</td>
                         <td>${escapeHtml(user.name || '-')}</td>
                         <td class="text-truncate" title="${escapeHtml(user.email || '-')}">${escapeHtml(displayEmail)}</td>
-                        <td><span class="badge ${roleClass}">${roleDisplay}</span></td>
+                        <td class="d-flex flex-wrap gap-1">${roleBadgesHtml}</td>
                         <td>${statusDisplay !== '-' ? `<span class="${statusBadgeClass}">${statusDisplay}</span>` : statusDisplay}</td>
                         <td class="action-btns">
                           <div class="d-flex gap-1 justify-content-start">
@@ -1263,12 +1300,12 @@
                 document.getElementById('detailName').textContent = userDetail.name || '-';
                 document.getElementById('detailEmail').textContent = userDetail.email || '-';
 
-                // 角色：有 roleClass 時顯示徽章
+                // 角色：多個獨立標籤
                 const roleEl = document.getElementById('detailRole');
-                if (userDetail.roleClass && userDetail.role && userDetail.role !== '-') {
-                    roleEl.innerHTML = `<span class="badge ${userDetail.roleClass}">${userDetail.role}</span>`;
+                if (userDetail.roleBadges && userDetail.roleBadges.length > 0) {
+                    roleEl.innerHTML = userDetail.roleBadges.map(b => `<span class="badge ${b.class}">${escapeHtml(b.label)}</span>`).join(' ');
                 } else {
-                    roleEl.textContent = userDetail.role || '-';
+                    roleEl.textContent = '-';
                 }
 
                 // 顯示狀態（使用徽章）
@@ -1363,13 +1400,18 @@
                     classDeptRow.style.display = 'none';
                 }
 
-                // 帶班列表：只有教師或主任才顯示，且值不為空或'-'
+                // 帶班列表、指導學生所屬班級：只有教師或主任才顯示
                 const teachingClassesRow = document.getElementById('detailTeachingClassesRow');
+                const guidedClassesRow = document.getElementById('detailGuidedClassesRow');
                 if (['teacher', 'director'].includes(originalRole)) {
                     const teachingClassesValue = userDetail.teachingClasses &&
                         userDetail.teachingClasses.trim() !== '-' &&
                         userDetail.teachingClasses.trim() !== '' ?
                         userDetail.teachingClasses.trim() : null;
+                    const guidedClassesValue = userDetail.guidedClasses &&
+                        userDetail.guidedClasses.trim() !== '-' &&
+                        userDetail.guidedClasses.trim() !== '' ?
+                        userDetail.guidedClasses.trim() : null;
 
                     if (teachingClassesValue) {
                         teachingClassesRow.style.display = '';
@@ -1377,9 +1419,15 @@
                     } else {
                         teachingClassesRow.style.display = 'none';
                     }
+                    if (guidedClassesValue) {
+                        guidedClassesRow.style.display = '';
+                        document.getElementById('detailGuidedClasses').textContent = guidedClassesValue;
+                    } else {
+                        guidedClassesRow.style.display = 'none';
+                    }
                 } else {
-                    // 非教師/主任角色，隱藏帶班列表
                     teachingClassesRow.style.display = 'none';
+                    guidedClassesRow.style.display = 'none';
                 }
 
                 document.getElementById('detailCreatedAt').textContent = userDetail.displayCreatedAt || '-';

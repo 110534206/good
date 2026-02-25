@@ -92,6 +92,202 @@ def is_student_in_current_internship(cursor, user_id):
         )
     return cursor.fetchone() is not None
 
+
+# =========================================================
+# Helper: 取得「上一學期」id（流程學期：投遞/志願/媒合在實習學期的前一學期完成）
+# =========================================================
+def get_previous_semester_id(cursor, semester_id):
+    """依學期代碼排序，回傳比給定學期早一學期的 id，若無則 None。例：1132 → 1131，1131 → 1122。"""
+    if not semester_id:
+        return None
+    cursor.execute(
+        """SELECT s2.id FROM semesters s2
+           WHERE s2.code < (SELECT s1.code FROM semesters s1 WHERE s1.id = %s LIMIT 1)
+           ORDER BY s2.code DESC LIMIT 1""",
+        (semester_id,)
+    )
+    row = cursor.fetchone()
+    return row['id'] if row else None
+
+
+# =========================================================
+# Helper: 取得「上一學期」代碼（例：當前 1132 → 1131）
+# =========================================================
+def get_previous_semester_code(cursor):
+    """依學期代碼排序，回傳當前學期的上一學期代碼；若無則 None。"""
+    current = get_current_semester(cursor)
+    if not current:
+        return None
+    prev_id = get_previous_semester_id(cursor, current['id'])
+    if not prev_id:
+        return None
+    cursor.execute("SELECT code FROM semesters WHERE id = %s", (prev_id,))
+    row = cursor.fetchone()
+    return row['code'] if row else None
+
+
+# =========================================================
+# Helper: 公司開放狀態使用的學期代碼（實習在下學期，媒合在上學期完成，故下學期沿用上學期開放）
+# =========================================================
+def get_semester_code_for_company_openings(cursor):
+    """
+    回傳用於查詢/寫入 company_openings 的學期代碼。
+    實習學期為下學期（1132），投遞／志願／媒合在上學期（1131）完成；
+    當系統當前學期為下學期時，沿用上學期的開放狀態，不需重新開放。
+    例：當前 1131 → 1131；當前 1132 → 1131。
+    """
+    code = get_current_semester_code(cursor)
+    if not code:
+        return None
+    # 學期代碼末位 2 表示下學期（1132、1142…）
+    if str(code).strip()[-1] == '2':
+        return get_previous_semester_code(cursor) or code
+    return code
+
+
+# =========================================================
+# Helper: 取得該生的實習設定（semester_id, intern_end_date）
+# =========================================================
+def get_student_internship_config(cursor, user_id):
+    """回傳該生 internship_config 一筆：含 semester_id, intern_end_date；非學生或無設定則 None。"""
+    if not user_id:
+        return None
+    cursor.execute(
+        "SELECT role, admission_year, username FROM users WHERE id = %s",
+        (user_id,)
+    )
+    row = cursor.fetchone()
+    if not row or row.get("role") != "student":
+        return None
+    admission_year_val = None
+    if row.get("admission_year") is not None and str(row.get("admission_year", "")).strip() != "":
+        try:
+            admission_year_val = int(row["admission_year"])
+        except (TypeError, ValueError):
+            pass
+    if admission_year_val is None and row.get("username") and len(row.get("username", "")) >= 3:
+        try:
+            admission_year_val = int(row["username"][:3])
+        except (TypeError, ValueError):
+            pass
+    if admission_year_val is None and row.get("username"):
+        m = re.search(r"(110|111|112|113|114)", str(row["username"]))
+        if m:
+            try:
+                admission_year_val = int(m.group(1))
+            except (TypeError, ValueError):
+                pass
+    if admission_year_val is not None:
+        cursor.execute(
+            """SELECT semester_id, intern_end_date FROM internship_configs
+               WHERE (user_id = %s OR (user_id IS NULL AND admission_year = %s))
+               ORDER BY user_id DESC
+               LIMIT 1""",
+            (user_id, admission_year_val)
+        )
+    else:
+        cursor.execute(
+            """SELECT semester_id, intern_end_date FROM internship_configs WHERE user_id = %s LIMIT 1""",
+            (user_id,)
+        )
+    return cursor.fetchone()
+
+
+# =========================================================
+# Helper: 是否在「流程學期」或「實習學期」（顯示投遞/志願/行事曆/媒合結果）
+# =========================================================
+def is_student_in_application_phase(cursor, user_id):
+    """
+    投遞履歷、填寫志願序、確認媒合結果在「實習學期的上一學期」就要完成。
+    當當前學期 = 該生實習學期 或 當前學期 = 該生流程學期（上一學期）時，回傳 True。
+    """
+    current_semester_id = get_current_semester_id(cursor)
+    if not current_semester_id:
+        return False
+    config = get_student_internship_config(cursor, user_id)
+    if not config:
+        return False
+    internship_semester_id = config.get("semester_id")
+    if not internship_semester_id:
+        return False
+    if current_semester_id == internship_semester_id:
+        return True
+    prev_id = get_previous_semester_id(cursor, internship_semester_id)
+    return prev_id is not None and current_semester_id == prev_id
+
+
+# =========================================================
+# Helper: 是否顯示「實習心得」（僅實習學期結束前兩週才開始）
+# =========================================================
+def should_show_intern_experience(cursor, user_id):
+    """實習心得：當前學期為該生實習學期，且今天 >= 實習結束日 - 14 天時才顯示。"""
+    current_semester_id = get_current_semester_id(cursor)
+    if not current_semester_id:
+        return False
+    config = get_student_internship_config(cursor, user_id)
+    if not config:
+        return False
+    if config.get("semester_id") != current_semester_id:
+        return False
+    end_date = config.get("intern_end_date")
+    if not end_date:
+        return True
+    if isinstance(end_date, date) and not isinstance(end_date, datetime):
+        end_date = datetime.combine(end_date, datetime.min.time())
+    elif isinstance(end_date, str):
+        try:
+            end_date = datetime.strptime(end_date[:10], "%Y-%m-%d")
+        except (TypeError, ValueError):
+            return True
+    cutoff = end_date - timedelta(days=14)
+    now = datetime.now()
+    return now >= cutoff
+
+
+# =========================================================
+# Helper: 從 internship_flows 取得當前學期之繳交/審核截止（供 check_deadline、履歷/志願序邏輯使用）
+# =========================================================
+def get_current_semester_deadline(cursor, deadline_type):
+    """
+    查詢當前學期（is_active=1）在 internship_flows 的截止時間。
+    deadline_type: 'resume' | 'preference' | 'advisor' | 'vendor'
+    回傳: datetime 或 None（若無該學期或無該欄位則 None）
+    """
+    current_semester_id = get_current_semester_id(cursor)
+    if not current_semester_id:
+        return None
+    col = {
+        'resume': 'resume_deadline',
+        'preference': 'preference_deadline',
+        'advisor': 'advisor_deadline',
+        'vendor': 'vendor_deadline',
+    }.get(deadline_type)
+    if not col:
+        return None
+    try:
+        cursor.execute(
+            "SELECT " + col + " FROM internship_flows WHERE semester_id = %s LIMIT 1",
+            (current_semester_id,)
+        )
+        row = cursor.fetchone()
+        if not row or row.get(col) is None:
+            return None
+        v = row[col]
+        if isinstance(v, datetime):
+            return v
+        if isinstance(v, date) and not isinstance(v, datetime):
+            return datetime.combine(v, datetime.min.time())
+        # 字串
+        for fmt in ('%Y-%m-%d %H:%M:%S', '%Y-%m-%d %H:%M', '%Y-%m-%d'):
+            try:
+                return datetime.strptime(str(v).strip()[:19], fmt)
+            except (ValueError, TypeError):
+                continue
+        return None
+    except Exception:
+        return None
+
+
 # =========================================================
 # API: 取得當前學期
 # =========================================================
