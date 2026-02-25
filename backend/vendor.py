@@ -663,6 +663,15 @@ def get_vendor_resumes():
     conn = get_db()
     cursor = conn.cursor(dictionary=True, buffered=True)
     
+    # 檢查指導老師審核截止時間並自動將已通過的履歷傳給廠商
+    try:
+        from resume import update_resume_applications_after_advisor_deadline
+        is_advisor_deadline_passed, advisor_update_count = update_resume_applications_after_advisor_deadline(cursor, conn)
+        if advisor_update_count > 0:
+            print(f"✅ [get_vendor_resumes] 指導老師審核截止時間後，已將 {advisor_update_count} 筆履歷傳給廠商")
+    except Exception as e:
+        print(f"⚠️ [get_vendor_resumes] 檢查指導老師審核截止時間時發生錯誤: {e}")
+    
     # 如果是老師，需要根據 company_id 找到對應的廠商
     if user_role in ["teacher", "ta"]:
         if not company_filter:
