@@ -3294,7 +3294,7 @@
           return `${c.studentName} (已被 ${c.company} 安排在 ${c.time}${gapInfo})`;
         }).join('\n');
         
-        alert(`❌ 以下學生無法安排面試：\n\n${conflictedNames}\n\n原因：\n1. 時間段重疊，或\n2. 與其他廠商的面試時間間隔不足2小時\n\n請取消選擇這些學生或選擇其他時間段（與現有排程間隔至少2小時）後再儲存。`);
+        alert(`❌ 以下學生無法安排面試：\n\n${conflictedNames}\n\n需與現有排程間隔至少2小時，後再儲存。`);
         return;
       }
       
