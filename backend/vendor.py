@@ -1018,83 +1018,136 @@ def get_vendor_resumes():
         # 這部分資料是通過 update_resume_applications_after_advisor_deadline() 創建的
         resume_applications_map = {}  # 鍵為 (student_id, company_id, job_id)
         if company_ids:
+            # 獲取廠商的 teacher_id（用於過濾公司）
+            vendor_teacher_id = None
+            if user_role == 'vendor':
+                cursor.execute("SELECT teacher_id FROM users WHERE id = %s", (vendor_id,))
+                vendor_teacher_row = cursor.fetchone()
+                vendor_teacher_id = vendor_teacher_row.get("teacher_id") if vendor_teacher_row else None
+                print(f"🔍 [DEBUG] 廠商 {vendor_id} 的 teacher_id: {vendor_teacher_id}")
+                print(f"🔍 [DEBUG] 廠商可查看的公司 ID 列表: {company_ids}")
+            
             # 查詢 resume_applications 表，找出已通過指導老師審核的履歷
             application_placeholders = ", ".join(["%s"] * len(company_ids))
             
             # 根據 resume_teacher 表是否存在，選擇不同的查詢方式
             if resume_teacher_exists:
                 # 使用 resume_teacher 表查詢（新架構）
-                cursor.execute(f"""
-                    SELECT DISTINCT
-                        sja.student_id,
-                        sja.company_id,
-                        sja.job_id,
-                        ra.application_id,
-                        ra.apply_status,
-                        ra.company_comment,
-                        ra.interview_status,
-                        ra.interview_time,
-                        ra.interview_result,
-                        ic.company_name,
-                        COALESCE(ij.title, '') AS job_title,
-                        COALESCE(ij.slots, 0) AS job_slots
-                    FROM resume_applications ra
-                    INNER JOIN student_job_applications sja ON sja.id = ra.application_id
-                    INNER JOIN internship_companies ic ON sja.company_id = ic.id
-                    LEFT JOIN internship_jobs ij ON sja.job_id = ij.id
-                    WHERE sja.company_id IN ({application_placeholders})
-                    AND (%s IN ('teacher', 'ta') OR ij.created_by_vendor_id = %s OR ij.created_by_vendor_id IS NULL)
-                    AND EXISTS (
-                        SELECT 1 FROM resumes r
-                        INNER JOIN student_job_applications sja2 ON sja2.resume_id = r.id AND sja2.student_id = r.user_id
-                        INNER JOIN resume_teacher rt ON rt.application_id = sja2.id
-                        INNER JOIN users reviewer ON rt.teacher_id = reviewer.id
-                        WHERE r.user_id = sja.student_id
-                        AND rt.review_status = 'approved'
-                        AND reviewer.role = 'teacher'
-                        AND sja2.id = sja.id
-                    )
-                """, tuple(company_ids) + (user_role, vendor_id))
+                # 添加 ic.advisor_user_id 檢查，確保只查詢該廠商指導老師的公司
+                # 注意：resume_applications 記錄的創建本身就要求 resume_teacher.review_status = 'approved'
+                # 所以不需要再檢查 EXISTS 子查詢，直接查詢 resume_applications 即可
+                if vendor_teacher_id:
+                    cursor.execute(f"""
+                        SELECT DISTINCT
+                            sja.student_id,
+                            sja.company_id,
+                            sja.job_id,
+                            ra.application_id,
+                            ra.apply_status,
+                            ra.company_comment,
+                            ra.interview_status,
+                            ra.interview_time,
+                            ra.interview_result,
+                            ic.company_name,
+                            COALESCE(ij.title, '') AS job_title,
+                            COALESCE(ij.slots, 0) AS job_slots
+                        FROM resume_applications ra
+                        INNER JOIN student_job_applications sja ON sja.id = ra.application_id
+                        INNER JOIN internship_companies ic ON sja.company_id = ic.id
+                        LEFT JOIN internship_jobs ij ON sja.job_id = ij.id
+                        WHERE sja.company_id IN ({application_placeholders})
+                        AND ic.advisor_user_id = %s
+                        AND (%s IN ('teacher', 'ta') OR ij.created_by_vendor_id = %s OR ij.created_by_vendor_id IS NULL)
+                    """, tuple(company_ids) + (vendor_teacher_id,) + (user_role, vendor_id))
+                else:
+                    # 如果沒有 teacher_id，使用原來的查詢（向後兼容）
+                    # 注意：resume_applications 記錄的創建本身就要求 resume_teacher.review_status = 'approved'
+                    # 所以不需要再檢查 EXISTS 子查詢
+                    cursor.execute(f"""
+                        SELECT DISTINCT
+                            sja.student_id,
+                            sja.company_id,
+                            sja.job_id,
+                            ra.application_id,
+                            ra.apply_status,
+                            ra.company_comment,
+                            ra.interview_status,
+                            ra.interview_time,
+                            ra.interview_result,
+                            ic.company_name,
+                            COALESCE(ij.title, '') AS job_title,
+                            COALESCE(ij.slots, 0) AS job_slots
+                        FROM resume_applications ra
+                        INNER JOIN student_job_applications sja ON sja.id = ra.application_id
+                        INNER JOIN internship_companies ic ON sja.company_id = ic.id
+                        LEFT JOIN internship_jobs ij ON sja.job_id = ij.id
+                        WHERE sja.company_id IN ({application_placeholders})
+                        AND (%s IN ('teacher', 'ta') OR ij.created_by_vendor_id = %s OR ij.created_by_vendor_id IS NULL)
+                    """, tuple(company_ids) + (user_role, vendor_id))
             else:
                 # 使用舊架構（reviewed_by 欄位）
-                cursor.execute(f"""
-                    SELECT DISTINCT
-                        sja.student_id,
-                        sja.company_id,
-                        sja.job_id,
-                        ra.application_id,
-                        ra.apply_status,
-                        ra.company_comment,
-                        ra.interview_status,
-                        ra.interview_time,
-                        ra.interview_result,
-                        ic.company_name,
-                        COALESCE(ij.title, '') AS job_title,
-                        COALESCE(ij.slots, 0) AS job_slots
-                    FROM resume_applications ra
-                    INNER JOIN student_job_applications sja ON sja.id = ra.application_id
-                    INNER JOIN internship_companies ic ON sja.company_id = ic.id
-                    LEFT JOIN internship_jobs ij ON sja.job_id = ij.id
-                    WHERE sja.company_id IN ({application_placeholders})
-                    AND (%s IN ('teacher', 'ta') OR ij.created_by_vendor_id = %s OR ij.created_by_vendor_id IS NULL)
-                    AND EXISTS (
-                        SELECT 1 FROM resumes r
-                        WHERE r.user_id = sja.student_id
-                        AND r.reviewed_by IS NOT NULL
-                        AND EXISTS (
-                            SELECT 1 FROM users reviewer
-                            WHERE reviewer.id = r.reviewed_by
-                            AND reviewer.role = 'teacher'
-                        )
-                    )
-                """, tuple(company_ids) + (user_role, vendor_id))
+                # 添加 ic.advisor_user_id 檢查，確保只查詢該廠商指導老師的公司
+                # 注意：resume_applications 記錄的創建本身就要求指導老師已審核通過
+                # 所以不需要再檢查 EXISTS 子查詢
+                if vendor_teacher_id:
+                    cursor.execute(f"""
+                        SELECT DISTINCT
+                            sja.student_id,
+                            sja.company_id,
+                            sja.job_id,
+                            ra.application_id,
+                            ra.apply_status,
+                            ra.company_comment,
+                            ra.interview_status,
+                            ra.interview_time,
+                            ra.interview_result,
+                            ic.company_name,
+                            COALESCE(ij.title, '') AS job_title,
+                            COALESCE(ij.slots, 0) AS job_slots
+                        FROM resume_applications ra
+                        INNER JOIN student_job_applications sja ON sja.id = ra.application_id
+                        INNER JOIN internship_companies ic ON sja.company_id = ic.id
+                        LEFT JOIN internship_jobs ij ON sja.job_id = ij.id
+                        WHERE sja.company_id IN ({application_placeholders})
+                        AND ic.advisor_user_id = %s
+                        AND (%s IN ('teacher', 'ta') OR ij.created_by_vendor_id = %s OR ij.created_by_vendor_id IS NULL)
+                    """, tuple(company_ids) + (vendor_teacher_id,) + (user_role, vendor_id))
+                else:
+                    # 如果沒有 teacher_id，使用原來的查詢（向後兼容）
+                    # 注意：resume_applications 記錄的創建本身就要求指導老師已審核通過
+                    # 所以不需要再檢查 EXISTS 子查詢
+                    cursor.execute(f"""
+                        SELECT DISTINCT
+                            sja.student_id,
+                            sja.company_id,
+                            sja.job_id,
+                            ra.application_id,
+                            ra.apply_status,
+                            ra.company_comment,
+                            ra.interview_status,
+                            ra.interview_time,
+                            ra.interview_result,
+                            ic.company_name,
+                            COALESCE(ij.title, '') AS job_title,
+                            COALESCE(ij.slots, 0) AS job_slots
+                        FROM resume_applications ra
+                        INNER JOIN student_job_applications sja ON sja.id = ra.application_id
+                        INNER JOIN internship_companies ic ON sja.company_id = ic.id
+                        LEFT JOIN internship_jobs ij ON sja.job_id = ij.id
+                        WHERE sja.company_id IN ({application_placeholders})
+                        AND (%s IN ('teacher', 'ta') OR ij.created_by_vendor_id = %s OR ij.created_by_vendor_id IS NULL)
+                    """, tuple(company_ids) + (user_role, vendor_id))
             
-            for ra_row in cursor.fetchall() or []:
+            ra_rows = cursor.fetchall() or []
+            print(f"🔍 [DEBUG] 查詢 resume_applications 表，找到 {len(ra_rows)} 筆記錄")
+            for ra_row in ra_rows:
                 student_id = ra_row['student_id']
                 company_id = ra_row['company_id']
+                company_name = ra_row.get('company_name', '')
                 job_id = ra_row['job_id']
                 key = (student_id, company_id, job_id)
                 resume_applications_map[key] = ra_row
+                print(f"  ✅ 找到履歷: student_id={student_id}, company_id={company_id}, company_name={company_name}, job_id={job_id}")
             
             print(f"📋 從 resume_applications 表找到 {len(resume_applications_map)} 筆已通過指導老師審核的履歷")
         else:

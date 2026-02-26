@@ -808,20 +808,8 @@
       }
 
       async function loadProfile() {
-        try {
-          const response = await fetch('/api/profile', {
-            headers: { 'Accept': 'application/json' },
-            credentials: 'include'
-          });
-          const result = await response.json();
-          if (result.success && result.user && result.user.role === 'vendor') {
-            // 如果是廠商，從 profile API 獲取公司名稱
-            state.vendorCompanyName = result.user.name || null;
-            console.log('📋 從 profile API 獲取的公司名稱：', state.vendorCompanyName);
-          }
-        } catch (error) {
-          console.error('載入 profile 資料失敗：', error);
-        }
+        // 不再需要從 profile API 獲取公司名稱，改為從職缺 API 返回的 companies 列表中獲取
+        // 這樣可以確保公司名稱與職缺資料中的 company_name 一致
       }
 
       async function loadPositions() {
@@ -838,16 +826,13 @@
           state.companies = result.companies || [];
           const allJobs = result.items || [];
 
-          // 如果已經從 profile 獲取到公司名稱，只顯示該公司的職缺
-          if (state.vendorCompanyName && state.vendorCompanyName.trim()) {
-            state.jobs = allJobs.filter(job => {
-              const jobCompanyName = (job.company_name || '').trim();
-              return jobCompanyName === state.vendorCompanyName.trim();
-            });
-            console.log(`✅ 過濾後，只顯示「${state.vendorCompanyName}」的職缺：${state.jobs.length} 筆`);
-          } else {
-            // 如果沒有獲取到公司名稱，顯示所有職缺（向後兼容）
-            state.jobs = allJobs;
+          // 後端已經根據廠商的權限過濾了職缺，所以直接顯示所有返回的職缺
+          // 不需要再根據公司名稱過濾，因為後端已經確保只返回該廠商有權限查看的職缺
+          state.jobs = allJobs;
+          console.log(`✅ 載入職缺資料：共 ${state.jobs.length} 筆職缺`);
+          console.log(`📋 公司列表：`, state.companies.map(c => c.name));
+          if (state.jobs.length > 0) {
+            console.log(`📋 職缺公司名稱：`, state.jobs.map(j => j.company_name));
           }
 
           updateCompaniesControls();
@@ -938,9 +923,7 @@
       async function init() {
         initMenu();
         bindEvents();
-        // 先載入 profile 資料以獲取公司名稱
-        await loadProfile();
-        // 然後載入職缺資料（會自動過濾只顯示該公司的職缺）
+        // 直接載入職缺資料（後端已經根據權限過濾了職缺）
         await loadPositions();
       }
 

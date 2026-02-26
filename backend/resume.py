@@ -788,6 +788,73 @@ def review_resume(resume_id):
                 print(f"🔍 [DEBUG] 插入新記錄到 resume_teacher: application_id={application_id_int}, teacher_id={user_id}, review_status={status}")
             
             print(f"✅ [DEBUG] 指導老師審核完成: application_id={application_id_int}, review_status={status}, teacher_id={user_id}")
+            
+            # 如果指導老師通過履歷，立即創建 resume_applications 記錄，讓廠商能立即看到
+            if status == 'approved':
+                try:
+                    # 查詢該 application_id 對應的 job_id 和 company_id
+                    cursor.execute("""
+                        SELECT sja.job_id, sja.company_id, sja.student_id,
+                               u.name AS student_name, ic.company_name, ic.advisor_user_id
+                        FROM student_job_applications sja
+                        INNER JOIN users u ON sja.student_id = u.id
+                        INNER JOIN internship_companies ic ON sja.company_id = ic.id
+                        WHERE sja.id = %s
+                    """, (application_id_int,))
+                    app_info = cursor.fetchone()
+                    
+                    if app_info and app_info.get('job_id'):
+                        job_id = app_info['job_id']
+                        company_id = app_info['company_id']
+                        student_name = app_info.get('student_name', '')
+                        company_name = app_info.get('company_name', '')
+                        advisor_user_id = app_info.get('advisor_user_id')
+                        
+                        # 檢查是否已存在 resume_applications 記錄
+                        cursor.execute("""
+                            SELECT id FROM resume_applications
+                            WHERE application_id = %s AND job_id = %s
+                        """, (application_id_int, job_id))
+                        existing_ra = cursor.fetchone()
+                        
+                        if not existing_ra:
+                            # 創建 resume_applications 記錄
+                            cursor.execute("""
+                                INSERT INTO resume_applications
+                                (application_id, job_id, apply_status, interview_status, interview_result, created_at)
+                                VALUES (%s, %s, %s, %s, %s, NOW())
+                            """, (application_id_int, job_id, 'uploaded', 'none', 'pending'))
+                            print(f"✅ [resume_applications] 指導老師通過履歷後立即創建廠商審核記錄: application_id={application_id_int}, job_id={job_id}, apply_status='uploaded'")
+                            
+                            # 通知對應的廠商
+                            if advisor_user_id:
+                                from notification import create_notification
+                                cursor.execute("""
+                                    SELECT id, name FROM users
+                                    WHERE role = 'vendor' AND teacher_id = %s
+                                """, (advisor_user_id,))
+                                vendors = cursor.fetchall()
+                                
+                                for vendor in vendors:
+                                    vendor_id = vendor['id']
+                                    create_notification(
+                                        user_id=vendor_id,
+                                        title="新履歷待審核",
+                                        message=(
+                                            f"學生 {student_name} 的履歷已由指導老師審核通過，"
+                                            f"已投遞至「{company_name}」，請前往審核。"
+                                        ),
+                                        category="resume",
+                                        link_url="/vendor_review_resume"
+                                    )
+                                    print(f"✅ [通知] 已通知廠商 ID={vendor_id} 有新履歷待審核")
+                        else:
+                            print(f"ℹ️ [resume_applications] 記錄已存在，跳過創建: application_id={application_id_int}, job_id={job_id}")
+                    else:
+                        print(f"⚠️ [resume_applications] 找不到對應的投遞記錄: application_id={application_id_int}")
+                except Exception as e:
+                    print(f"⚠️ [resume_applications] 創建記錄時發生錯誤: {e}")
+                    traceback.print_exc()
         else:
             # 班導或其他角色審核履歷（更新 resumes 表）
             old_status_for_check = old_status
@@ -904,10 +971,10 @@ def review_resume(resume_id):
                     category="resume"
                 )
                 
-                # 指導老師通過履歷：不立即傳給廠商，等到審核截止時間後才自動傳給廠商
-                # 注意：resume_applications 記錄會在指導老師審核截止時間後自動創建（見 update_resume_applications_after_advisor_deadline）
+                # 指導老師通過履歷：已在上面的邏輯中立即創建 resume_applications 記錄並傳給廠商
+                # 注意：update_resume_applications_after_advisor_deadline 函數仍然保留，用於處理批量傳送（如果截止時間已過但還有未傳送的履歷）
                 if user_role == 'teacher':
-                    print(f"✅ 指導老師通過履歷，等待審核截止時間後自動傳給廠商")
+                    print(f"✅ 指導老師通過履歷，已立即傳給廠商")
 
         conn.commit()
 
