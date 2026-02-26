@@ -3765,41 +3765,70 @@ def delete_interview_schedule():
         if student_ids and isinstance(student_ids, list) and len(student_ids) > 0:
             for student_id in student_ids:
                 try:
-                    # 查找該學生對應的投遞記錄
+                    # 直接根據 interview_date 和 student_id 查找 resume_applications 表中的記錄
+                    # 這樣可以確保刪除的是指定日期的面試排程
                     cursor.execute("""
-                        SELECT sja.id AS application_id, sja.job_id, sja.company_id
-                        FROM student_job_applications sja
+                        SELECT ra.application_id, ra.job_id, ra.interview_status, ra.interview_time, ra.interview_timeEnd
+                        FROM resume_applications ra
+                        INNER JOIN student_job_applications sja ON ra.application_id = sja.id
                         WHERE sja.student_id = %s
                         AND sja.company_id IN ({})
-                        ORDER BY sja.applied_at DESC
+                        AND DATE(ra.interview_time) = %s
+                        AND ra.interview_status = 'scheduled'
+                        ORDER BY ra.updated_at DESC
                         LIMIT 1
-                    """.format(','.join(['%s'] * len(company_ids))), [student_id] + company_ids)
+                    """.format(','.join(['%s'] * len(company_ids))), [student_id] + company_ids + [interview_date])
                     
-                    application_row = cursor.fetchone()
+                    target_record = cursor.fetchone()
                     
-                    if application_row:
-                        application_id = application_row.get("application_id")
-                        job_id = application_row.get("job_id")
+                    if target_record:
+                        application_id = target_record.get("application_id")
+                        job_id = target_record.get("job_id")
+                        current_interview_status = target_record.get("interview_status")
+                        current_interview_time = target_record.get("interview_time")
                         
-                        # 更新 resume_applications 表，將 interview_status 設為 'none'，清除 interview_time 和 interview_timeEnd
-                        cursor.execute("""
-                            UPDATE resume_applications
-                            SET interview_status = 'none',
-                                interview_time = NULL,
-                                interview_timeEnd = NULL,
-                                updated_at = NOW()
-                            WHERE application_id = %s AND job_id = %s
-                            AND interview_status = 'scheduled'
-                        """, (application_id, job_id))
-                        
-                        if cursor.rowcount > 0:
-                            print(f"✅ [delete_interview_schedule] 已刪除學生 {student_id} 的面試排程: application_id={application_id}, job_id={job_id}")
-                            success_count += 1
+                        # 確認狀態是 'scheduled'（查詢條件已經過濾，但再次確認）
+                        if current_interview_status == 'scheduled' and current_interview_time:
+                            # 執行刪除（同時清除面試相關的備註）
+                            cursor.execute("""
+                                UPDATE resume_applications
+                                SET interview_status = 'none',
+                                    interview_time = NULL,
+                                    interview_timeEnd = NULL,
+                                    company_comment = NULL,
+                                    updated_at = NOW()
+                                WHERE application_id = %s AND job_id = %s
+                                AND interview_status = 'scheduled'
+                                AND DATE(interview_time) = %s
+                            """, (application_id, job_id, interview_date))
+                            
+                            if cursor.rowcount > 0:
+                                print(f"✅ [delete_interview_schedule] 已刪除學生 {student_id} 在 {interview_date} 的面試排程: application_id={application_id}, job_id={job_id}")
+                                success_count += 1
+                            else:
+                                print(f"⚠️ [delete_interview_schedule] 學生 {student_id} 更新失敗（狀態可能已變更）: application_id={application_id}, job_id={job_id}, 日期={interview_date}")
+                                failed_students.append(str(student_id))
                         else:
-                            print(f"⚠️ [delete_interview_schedule] 學生 {student_id} 沒有找到 scheduled 狀態的面試排程")
+                            print(f"⚠️ [delete_interview_schedule] 學生 {student_id} 在 {interview_date} 的面試狀態不是 'scheduled': 狀態={current_interview_status}, 時間={current_interview_time}")
                             failed_students.append(str(student_id))
                     else:
-                        print(f"⚠️ [delete_interview_schedule] 找不到學生 {student_id} 的投遞記錄")
+                        # 沒有找到該日期和學生的 scheduled 狀態記錄
+                        # 檢查是否有其他狀態的記錄
+                        cursor.execute("""
+                            SELECT ra.interview_status, ra.interview_time
+                            FROM resume_applications ra
+                            INNER JOIN student_job_applications sja ON ra.application_id = sja.id
+                            WHERE sja.student_id = %s
+                            AND sja.company_id IN ({})
+                            AND DATE(ra.interview_time) = %s
+                            LIMIT 1
+                        """.format(','.join(['%s'] * len(company_ids))), [student_id] + company_ids + [interview_date])
+                        
+                        other_status = cursor.fetchone()
+                        if other_status:
+                            print(f"⚠️ [delete_interview_schedule] 學生 {student_id} 在 {interview_date} 的面試狀態為 '{other_status.get('interview_status')}'，不是 'scheduled'")
+                        else:
+                            print(f"⚠️ [delete_interview_schedule] 找不到學生 {student_id} 在 {interview_date} 的面試排程記錄")
                         failed_students.append(str(student_id))
                 except Exception as e:
                     print(f"⚠️ 刪除學生 {student_id} 的面試排程失敗：{e}")
@@ -3814,6 +3843,7 @@ def delete_interview_schedule():
                 SET ra.interview_status = 'none',
                     ra.interview_time = NULL,
                     ra.interview_timeEnd = NULL,
+                    ra.company_comment = NULL,
                     ra.updated_at = NOW()
                 WHERE DATE(ra.interview_time) = %s
                 AND sja.company_id IN ({})
@@ -3828,10 +3858,15 @@ def delete_interview_schedule():
         if success_count > 0:
             message = f"已成功刪除 {success_count} 筆面試排程"
             if failed_students:
-                message += f"，{len(failed_students)} 筆刪除失敗"
-            return jsonify({"success": True, "message": message, "success_count": success_count, "failed_count": len(failed_students)})
+                message += f"，{len(failed_students)} 筆刪除失敗（可能因為狀態不是 'scheduled' 或已被刪除）"
+            return jsonify({"success": True, "message": message, "success_count": success_count, "failed_count": len(failed_students), "failed_students": failed_students})
         else:
-            return jsonify({"success": False, "message": "找不到要刪除的面試排程"}), 404
+            # 提供更詳細的錯誤訊息
+            if failed_students:
+                message = f"無法刪除面試排程：所有 {len(failed_students)} 筆記錄的狀態都不是 'scheduled'（可能已被刪除或已完成面試）"
+            else:
+                message = "找不到要刪除的面試排程"
+            return jsonify({"success": False, "message": message, "failed_students": failed_students}), 404
             
     except Exception as exc:
         conn.rollback()

@@ -3436,7 +3436,16 @@
             alert('✅ 面試排程已刪除');
           }, 100);
         } else {
-          alert(`❌ 刪除失敗：${data.message || '未知錯誤'}`);
+          // 顯示更詳細的錯誤訊息
+          let errorMsg = `❌ 刪除失敗：${data.message || '未知錯誤'}`;
+          if (data.failed_students && data.failed_students.length > 0) {
+            errorMsg += `\n\n無法刪除的學生 ID: ${data.failed_students.join(', ')}`;
+            errorMsg += `\n\n可能原因：`;
+            errorMsg += `\n- 面試狀態不是 'scheduled'（可能是 'none' 或 'finished'）`;
+            errorMsg += `\n- 面試排程已被刪除`;
+            errorMsg += `\n- 找不到對應的投遞記錄`;
+          }
+          alert(errorMsg);
         }
       } catch (err) {
         console.error("刪除面試排程失敗:", err);
