@@ -3814,13 +3814,10 @@
         }
         
         if (data.success) {
-          // 顯示成功訊息
+          // 顯示成功訊息，留在當前頁（主任無科助工作台權限，不跳轉以免被導向登入頁）
           showToast(data.message || '確認成功', 'success');
-          
-          // 確認成功後跳轉到科助工作台
-          setTimeout(() => {
-            window.location.href = '/ta_assistant_dashboard';
-          }, 1000); // 1秒後跳轉，讓用戶看到成功訊息
+          // 重新載入本頁資料以更新畫面（不顯示載入中）
+          setTimeout(() => { loadMatchingResults(false); }, 800);
         } else {
           showToast(data.message || '確認失敗', 'error');
         }

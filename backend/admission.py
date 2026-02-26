@@ -256,271 +256,7 @@ def get_my_admission():
     cursor = conn.cursor(dictionary=True)
     
     try:
-        # 優先從 student_match_results 表獲取錄取資料（正式錄取結果表）
-        # 這是主要的資料來源，代表最終確認的媒合結果
-        # 優先從 student_match_results 表獲取錄取資料（正式錄取結果表）
-        # 這是主要的資料來源，代表最終確認的媒合結果
-        try:
-            cursor.execute("""
-                SELECT 
-                    smr.id,
-                    smr.semester_id,
-                    smr.student_id,
-                    smr.vendor_id,
-                    smr.match_status,
-                    smr.arrival_instructions,
-                    smr.notified_date
-                FROM student_match_results smr
-                WHERE smr.student_id = %s
-                  AND smr.match_status IN ('Approved', 'Stay')
-                ORDER BY smr.notified_date DESC, smr.id DESC
-                LIMIT 1
-            """, (student_id,))
-            match_result = cursor.fetchone()
-            
-            # 調試：打印查詢結果
-            print(f"🔍 [DEBUG] get_my_admission - student_id={student_id}")
-            print(f"🔍 [DEBUG] match_result from student_match_results: {match_result}")
-        except Exception as e:
-            print(f"⚠️ [WARNING] 查詢 student_match_results 失敗: {str(e)}")
-            match_result = None
-        
-        # 如果從 student_match_results 獲取到資料，使用它
-        if match_result:
-            print(f"✅ [DEBUG] 找到 student_match_results 記錄")
-            print(f"    vendor_id={match_result.get('vendor_id')}, match_status={match_result.get('match_status')}")
-            
-            vendor_id = match_result.get('vendor_id')
-            admission = None
-            final_preference = None
-            
-            print(f"🔍 [DEBUG] vendor_id={vendor_id}")
-            
-            # 根據 vendor_id 查詢公司資訊
-            if vendor_id:
-                # 從 users 表獲取廠商的 teacher_id
-                cursor.execute("""
-                    SELECT id, name, teacher_id
-                    FROM users
-                    WHERE id = %s AND role = 'vendor'
-                """, (vendor_id,))
-                vendor_user = cursor.fetchone()
-                
-                vendor_info = None
-                if vendor_user and vendor_user.get('teacher_id'):
-                    teacher_id = vendor_user.get('teacher_id')
-                    # 通過 teacher_id 找到對應的公司（advisor_user_id = teacher_id）
-                    cursor.execute("""
-                        SELECT 
-                            id AS company_id,
-                            company_name,
-                            location AS company_address,
-                            contact_person AS contact_name,
-                            contact_email,
-                            contact_phone,
-                            advisor_user_id
-                        FROM internship_companies
-                        WHERE advisor_user_id = %s AND status = 'approved'
-                        ORDER BY company_name
-                        LIMIT 1
-                    """, (teacher_id,))
-                    vendor_info = cursor.fetchone()
-                    
-                    if vendor_info:
-                        vendor_info['vendor_id'] = vendor_id
-                        vendor_info['vendor_name'] = vendor_user.get('name')
-                        print(f"✅ [DEBUG] 通過 teacher_id={teacher_id} 找到公司: {vendor_info.get('company_name')}")
-                
-                # 如果還是沒有找到，嘗試其他方式（向後兼容）
-                if not vendor_info:
-                    cursor.execute("""
-                        SELECT 
-                            ic.id AS company_id,
-                            ic.company_name,
-                            ic.location AS company_address,
-                            ic.contact_person AS contact_name,
-                            ic.contact_email,
-                            ic.contact_phone,
-                            ic.advisor_user_id
-                        FROM users u
-                        LEFT JOIN internship_companies ic ON u.teacher_id = ic.advisor_user_id
-                        WHERE u.id = %s AND u.role = 'vendor' AND ic.status = 'approved'
-                        LIMIT 1
-                    """, (vendor_id,))
-                    vendor_info = cursor.fetchone()
-                    if vendor_info:
-                        vendor_info['vendor_id'] = vendor_id
-                
-                if vendor_info:
-                    company_id = vendor_info.get('company_id')
-                    print(f"🔍 [DEBUG] 找到公司資訊: company_id={company_id}, company_name={vendor_info.get('company_name')}")
-                    
-                    # 獲取該廠商/公司的職缺資訊
-                    # 先從 student_preferences 查找該學生對該公司的志願
-                    cursor.execute("""
-                        SELECT 
-                            sp.job_id,
-                            sp.preference_order,
-                            sp.status,
-                            ij.title AS job_title,
-                            ij.description AS job_description,
-                            ij.period AS internship_period,
-                            ij.work_time AS internship_time,
-                            ij.salary
-                        FROM student_preferences sp
-                        LEFT JOIN internship_jobs ij ON sp.job_id = ij.id
-                        WHERE sp.student_id = %s 
-                          AND sp.company_id = %s
-                          AND sp.status = 'approved'
-                        ORDER BY sp.preference_order ASC
-                        LIMIT 1
-                    """, (student_id, company_id))
-                    job_pref = cursor.fetchone()
-                    print(f"🔍 [DEBUG] 查詢已通過的志願: job_pref={job_pref}")
-                    
-                    # 如果沒有找到已通過的志願，嘗試查找所有志願
-                    if not job_pref:
-                        cursor.execute("""
-                            SELECT 
-                                sp.job_id,
-                                sp.preference_order,
-                                sp.status,
-                                ij.title AS job_title,
-                                ij.description AS job_description,
-                                ij.period AS internship_period,
-                                ij.work_time AS internship_time,
-                                ij.salary
-                            FROM student_preferences sp
-                            LEFT JOIN internship_jobs ij ON sp.job_id = ij.id
-                            WHERE sp.student_id = %s 
-                              AND sp.company_id = %s
-                            ORDER BY sp.preference_order ASC
-                            LIMIT 1
-                        """, (student_id, company_id))
-                        job_pref = cursor.fetchone()
-                        print(f"🔍 [DEBUG] 查詢所有志願: job_pref={job_pref}")
-                    
-                    # 如果還是沒有找到，嘗試從 manage_director 表查找（主任確認的媒合結果）
-                    if not job_pref:
-                        cursor.execute("""
-                            SELECT DISTINCT
-                                sja.job_id,
-                                ij.title AS job_title,
-                                ij.description AS job_description,
-                                ij.period AS internship_period,
-                                ij.work_time AS internship_time,
-                                ij.salary
-                            FROM manage_director md
-                            INNER JOIN student_job_applications sja ON md.preference_id = sja.id
-                            INNER JOIN internship_jobs ij ON sja.job_id = ij.id
-                            WHERE md.student_id = %s
-                              AND sja.company_id = %s
-                              AND md.director_decision = 'Approved'
-                            LIMIT 1
-                        """, (student_id, company_id))
-                        job_pref = cursor.fetchone()
-                        print(f"🔍 [DEBUG] 從 manage_director 查詢: job_pref={job_pref}")
-                    
-                    # 獲取指導老師資訊
-                    teacher_id = vendor_info.get('advisor_user_id')
-                    teacher_name = None
-                    teacher_email = None
-                    if teacher_id:
-                        cursor.execute("""
-                            SELECT id, name, email
-                            FROM users
-                            WHERE id = %s AND role IN ('teacher', 'director')
-                        """, (teacher_id,))
-                        teacher_info = cursor.fetchone()
-                        if teacher_info:
-                            teacher_name = teacher_info.get('name')
-                            teacher_email = teacher_info.get('email')
-                    
-                    # 獲取學期資訊
-                    semester_id = match_result.get('semester_id')
-                    semester_code = None
-                    semester_start_date = None
-                    semester_end_date = None
-                    if semester_id:
-                        cursor.execute("""
-                            SELECT code, start_date, end_date
-                            FROM semesters
-                            WHERE id = %s
-                        """, (semester_id,))
-                        semester_info = cursor.fetchone()
-                        if semester_info:
-                            semester_code = semester_info.get('code')
-                            semester_start_date = semester_info.get('start_date')
-                            semester_end_date = semester_info.get('end_date')
-                            if isinstance(semester_start_date, datetime):
-                                semester_start_date = semester_start_date.strftime("%Y-%m-%d")
-                            if isinstance(semester_end_date, datetime):
-                                semester_end_date = semester_end_date.strftime("%Y-%m-%d")
-                    
-                    # 構建 admission 物件
-                    admission = {
-                        'company_id': vendor_info.get('company_id'),
-                        'company_name': vendor_info.get('company_name'),
-                        'company_address': vendor_info.get('company_address'),
-                        'contact_name': vendor_info.get('contact_name'),
-                        'contact_email': vendor_info.get('contact_email'),
-                        'contact_phone': vendor_info.get('contact_phone'),
-                        'admitted_at': match_result.get('notified_date'),
-                        'teacher_id': teacher_id,
-                        'teacher_name': teacher_name,
-                        'teacher_email': teacher_email,
-                        'semester': semester_code,
-                        'semester_start_date': semester_start_date,
-                        'semester_end_date': semester_end_date,
-                        'arrival_instructions': match_result.get('arrival_instructions')
-                    }
-                    
-                    # 構建 final_preference 物件
-                    if job_pref:
-                        final_preference = {
-                            'job_id': job_pref.get('job_id'),
-                            'job_title': job_pref.get('job_title'),
-                            'job_description': job_pref.get('job_description'),
-                            'internship_period': job_pref.get('internship_period'),
-                            'internship_time': job_pref.get('internship_time'),
-                            'salary': job_pref.get('salary'),
-                            'preference_order': job_pref.get('preference_order')
-                        }
-                    else:
-                        final_preference = None
-                        print(f"⚠️ [WARNING] 未找到職缺資訊，但已找到公司資訊")
-                else:
-                    print(f"⚠️ [WARNING] 未找到公司資訊，vendor_id={vendor_id}")
-            else:
-                print(f"⚠️ [WARNING] student_match_results 中 vendor_id 為空")
-            
-            # 如果成功構建了 admission，直接返回（即使 final_preference 為 None）
-            if admission:
-                print(f"✅ [DEBUG] 從 student_match_results 成功構建錄取資料")
-                print(f"    company_name={admission.get('company_name')}")
-                
-                # 查詢實習心得（如果有的話）
-                experiences = []
-                try:
-                    cursor.execute("""
-                        SELECT id, title, content, created_at
-                        FROM intern_experiences
-                        WHERE student_id = %s
-                        ORDER BY created_at DESC
-                    """, (student_id,))
-                    experiences = cursor.fetchall() or []
-                except Exception as e:
-                    print(f"⚠️ [WARNING] 查詢實習心得失敗: {str(e)}")
-                
-                return jsonify({
-                    "success": True,
-                    "admission": admission,
-                    "final_preference": final_preference,
-                    "experiences": experiences
-                })
-        
-        # 如果沒有從 student_match_results 獲取到資料，回退到原有的邏輯
-        # 優先從 internship_offers 表獲取錄取資料（廠商選擇學生時記錄的）
+        # 從 internship_offers 表獲取錄取資料（正式錄取結果）
         cursor.execute("""
             SELECT 
                 io.id AS offer_id,
@@ -624,22 +360,8 @@ def get_my_admission():
                     teacher_name = teacher_info.get('name')
                     teacher_email = teacher_info.get('email')
             
-            # 獲取學期代碼（從 teacher_student_relations 表）
-            semester_code = None
-            cursor.execute("""
-                SELECT semester
-                FROM teacher_student_relations
-                WHERE student_id = %s
-                ORDER BY created_at DESC
-                LIMIT 1
-            """, (student_id,))
-            tsr_result = cursor.fetchone()
-            if tsr_result and tsr_result.get('semester'):
-                semester_code = tsr_result.get('semester')
-            
-            # 如果沒有從 teacher_student_relations 獲取到，嘗試使用當前學期
-            if not semester_code:
-                semester_code = get_current_semester_code(cursor)
+            # 獲取學期代碼（使用當前學期；若需依錄取學期可改從 student_preferences + semesters 取得）
+            semester_code = get_current_semester_code(cursor)
             
             # 從 semesters 表獲取學期的開始和結束日期
             semester_start_date = None
@@ -1087,8 +809,7 @@ def get_my_admission():
             if isinstance(exp.get('created_at'), datetime):
                 exp['created_at'] = exp['created_at'].strftime("%Y-%m-%d %H:%M:%S")
         
-        # 注意：錄取資料已統一寫入 student_match_results 表
-        # placement_results 表已不再使用，相關功能已由 student_match_results 表取代
+        # 錄取資料來源：internship_offers 表
         
         # 調試：打印最終返回的資料
         print(f"🔍 [DEBUG] 最終返回的 admission: {admission}")
@@ -1104,110 +825,6 @@ def get_my_admission():
     except Exception as e:
         traceback.print_exc()
         return jsonify({"success": False, "message": f"查詢失敗: {str(e)}"}), 500
-    finally:
-        cursor.close()
-        conn.close()
-
-# =========================================================
-# API: 同步現有錄取資料到 student_match_results 表
-# =========================================================
-@admission_bp.route("/api/sync_student_match_results", methods=["POST"])
-def sync_student_match_results():
-    """將現有的錄取資料同步到 student_match_results 表"""
-    if 'user_id' not in session or session.get('role') not in ['ta', 'admin', 'director']:
-        return jsonify({"success": False, "message": "未授權"}), 403
-    
-    conn = get_db()
-    cursor = conn.cursor(dictionary=True)
-    
-    try:
-        # 獲取當前學期ID
-        current_semester_id = get_current_semester_id(cursor)
-        if not current_semester_id:
-            return jsonify({"success": False, "message": "無法取得當前學期"}), 500
-        
-        # 從 manage_director 表獲取所有已確認的錄取結果
-        cursor.execute("""
-            SELECT DISTINCT
-                md.student_id,
-                md.vendor_id,
-                sja.company_id,
-                %s AS semester_id,
-                'Approved' AS match_status,
-                NULL AS arrival_instructions,
-                CURRENT_TIMESTAMP AS notified_date
-            FROM manage_director md
-            INNER JOIN student_job_applications sja ON md.preference_id = sja.id
-            INNER JOIN student_preferences sp ON sja.student_id = sp.student_id
-                AND sja.company_id = sp.company_id
-                AND sja.job_id = sp.job_id
-                AND sp.semester_id = %s
-            WHERE md.director_decision = 'Approved'
-        """, (current_semester_id, current_semester_id))
-        match_results = cursor.fetchall() or []
-        
-        inserted_count = 0
-        updated_count = 0
-        skipped_count = 0
-        
-        for match_result in match_results:
-            student_id = match_result.get('student_id')
-            vendor_id = match_result.get('vendor_id')
-            semester_id = match_result.get('semester_id')
-            
-            if not student_id or not semester_id:
-                skipped_count += 1
-                continue
-            
-            # 檢查是否已存在記錄
-            cursor.execute("""
-                SELECT id FROM student_match_results
-                WHERE student_id = %s AND semester_id = %s
-            """, (student_id, semester_id))
-            existing = cursor.fetchone()
-            
-            if existing:
-                # 更新現有記錄
-                cursor.execute("""
-                    UPDATE student_match_results
-                    SET vendor_id = %s,
-                        match_status = %s,
-                        notified_date = CURRENT_TIMESTAMP
-                    WHERE id = %s
-                """, (vendor_id, match_result.get('match_status'), existing['id']))
-                updated_count += 1
-            else:
-                # 插入新記錄
-                cursor.execute("""
-                    INSERT INTO student_match_results
-                    (semester_id, student_id, vendor_id, match_status, arrival_instructions, notified_date)
-                    VALUES (%s, %s, %s, %s, %s, %s)
-                """, (
-                    semester_id,
-                    student_id,
-                    vendor_id,
-                    match_result.get('match_status'),
-                    match_result.get('arrival_instructions'),
-                    match_result.get('notified_date')
-                ))
-                inserted_count += 1
-        
-        conn.commit()
-        
-        return jsonify({
-            "success": True,
-            "message": f"同步完成：新增 {inserted_count} 筆，更新 {updated_count} 筆，跳過 {skipped_count} 筆",
-            "inserted": inserted_count,
-            "updated": updated_count,
-            "skipped": skipped_count,
-            "total": len(match_results)
-        })
-    
-    except Exception as e:
-        traceback.print_exc()
-        if conn:
-            conn.rollback()
-        return jsonify({"success": False, "message": f"同步失敗: {str(e)}"}), 500
     finally:
         cursor.close()
         conn.close()
@@ -3743,16 +3360,14 @@ def director_confirm_matching():
                 link_url=link_url
             )
         
-        # 5. 將已確認的媒合結果寫入 student_match_results 表（主任確認時先寫入，狀態為 'Approved'）
+        # 5. 將已確認的媒合結果寫入 internship_offers 表（主任確認時寫入，狀態為 accepted）
         cursor.execute("""
             SELECT DISTINCT
                 md.student_id,
                 md.vendor_id,
+                sja.job_id,
                 sja.company_id,
-                %s AS semester_id,
-                'Approved' AS match_status,
-                NULL AS arrival_instructions,
-                CURRENT_TIMESTAMP AS notified_date
+                %s AS semester_id
             FROM manage_director md
             INNER JOIN student_job_applications sja ON md.preference_id = sja.id
             INNER JOIN student_preferences sp ON sja.student_id = sp.student_id
@@ -3765,48 +3380,35 @@ def director_confirm_matching():
         
         inserted_count = 0
         updated_count = 0
+        now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         for match_result in match_results:
             student_id = match_result.get('student_id')
-            vendor_id = match_result.get('vendor_id')
-            semester_id = match_result.get('semester_id')
-            
-            if not student_id or not semester_id:
+            job_id = match_result.get('job_id')
+            if not student_id or not job_id:
                 continue
             
-            # 檢查是否已存在記錄
             cursor.execute("""
-                SELECT id FROM student_match_results
-                WHERE student_id = %s AND semester_id = %s
-            """, (student_id, semester_id))
+                SELECT id FROM internship_offers
+                WHERE student_id = %s AND job_id = %s
+            """, (student_id, job_id))
             existing = cursor.fetchone()
             
             if existing:
-                # 更新現有記錄
                 cursor.execute("""
-                    UPDATE student_match_results
-                    SET vendor_id = %s,
-                        match_status = %s,
-                        notified_date = CURRENT_TIMESTAMP
+                    UPDATE internship_offers
+                    SET status = 'accepted', offered_at = %s, responded_at = %s
                     WHERE id = %s
-                """, (vendor_id, match_result.get('match_status'), existing['id']))
+                """, (now_str, now_str, existing['id']))
                 updated_count += 1
             else:
-                # 插入新記錄
                 cursor.execute("""
-                    INSERT INTO student_match_results
-                    (semester_id, student_id, vendor_id, match_status, arrival_instructions, notified_date)
-                    VALUES (%s, %s, %s, %s, %s, %s)
-                """, (
-                    semester_id,
-                    student_id,
-                    vendor_id,
-                    match_result.get('match_status'),
-                    match_result.get('arrival_instructions'),
-                    match_result.get('notified_date')
-                ))
+                    INSERT INTO internship_offers
+                    (student_id, job_id, status, offered_at, responded_at)
+                    VALUES (%s, %s, 'accepted', %s, %s)
+                """, (student_id, job_id, now_str, now_str))
                 inserted_count += 1
         
-        print(f"✅ [DEBUG] 主任確認時寫入 student_match_results: 新增 {inserted_count} 筆，更新 {updated_count} 筆")
+        print(f"✅ [DEBUG] 主任確認時寫入 internship_offers: 新增 {inserted_count} 筆，更新 {updated_count} 筆")
         
         # 6. 提交事務，確保所有更新都保存
         conn.commit()
@@ -3973,17 +3575,14 @@ def ta_confirm_matching():
                 link_url=link_url
             )
         
-        # 4. 將已確認的媒合結果寫入 student_match_results 表
-        # 從 manage_director 表獲取所有已確認的錄取結果
+        # 4. 將已確認的媒合結果寫入 internship_offers 表
         cursor.execute("""
             SELECT DISTINCT
                 md.student_id,
                 md.vendor_id,
+                sja.job_id,
                 sja.company_id,
-                %s AS semester_id,
-                'Approved' AS match_status,
-                NULL AS arrival_instructions,
-                CURRENT_TIMESTAMP AS notified_date
+                %s AS semester_id
             FROM manage_director md
             INNER JOIN student_job_applications sja ON md.preference_id = sja.id
             INNER JOIN student_preferences sp ON sja.student_id = sp.student_id
@@ -3996,45 +3595,35 @@ def ta_confirm_matching():
         
         inserted_count = 0
         updated_count = 0
+        now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         for match_result in match_results:
             student_id = match_result.get('student_id')
-            vendor_id = match_result.get('vendor_id')
-            semester_id = match_result.get('semester_id')
+            job_id = match_result.get('job_id')
+            if not student_id or not job_id:
+                continue
             
-            # 檢查是否已存在記錄
             cursor.execute("""
-                SELECT id FROM student_match_results
-                WHERE student_id = %s AND semester_id = %s
-            """, (student_id, semester_id))
+                SELECT id FROM internship_offers
+                WHERE student_id = %s AND job_id = %s
+            """, (student_id, job_id))
             existing = cursor.fetchone()
             
             if existing:
-                # 更新現有記錄
                 cursor.execute("""
-                    UPDATE student_match_results
-                    SET vendor_id = %s,
-                        match_status = %s,
-                        notified_date = CURRENT_TIMESTAMP
+                    UPDATE internship_offers
+                    SET status = 'accepted', offered_at = %s, responded_at = %s
                     WHERE id = %s
-                """, (vendor_id, match_result.get('match_status'), existing['id']))
+                """, (now_str, now_str, existing['id']))
                 updated_count += 1
             else:
-                # 插入新記錄
                 cursor.execute("""
-                    INSERT INTO student_match_results
-                    (semester_id, student_id, vendor_id, match_status, arrival_instructions, notified_date)
-                    VALUES (%s, %s, %s, %s, %s, %s)
-                """, (
-                    semester_id,
-                    student_id,
-                    vendor_id,
-                    match_result.get('match_status'),
-                    match_result.get('arrival_instructions'),
-                    match_result.get('notified_date')
-                ))
+                    INSERT INTO internship_offers
+                    (student_id, job_id, status, offered_at, responded_at)
+                    VALUES (%s, %s, 'accepted', %s, %s)
+                """, (student_id, job_id, now_str, now_str))
                 inserted_count += 1
         
-        print(f"✅ [DEBUG] 寫入 student_match_results: 新增 {inserted_count} 筆，更新 {updated_count} 筆")
+        print(f"✅ [DEBUG] 寫入 internship_offers: 新增 {inserted_count} 筆，更新 {updated_count} 筆")
         
         # 5. 提交事務，確保所有更新都保存
         conn.commit()
