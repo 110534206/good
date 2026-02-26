@@ -2996,35 +2996,107 @@
             
             console.log(`🔍 [saveInterviewSchedule] 檢查學生 ${studentId} 在時間段 ${timeStart}-${timeEnd} 的衝突，其他廠商排程數量: ${otherVendorSchedules.length}`);
             
-            // 檢查該學生是否在該時間段已被其他廠商安排
-            const conflictingSchedule = otherVendorSchedules.find(schedule => {
-              // 檢查學生ID是否匹配
+            // 檢查該學生是否在該時間段已被其他廠商安排，或間隔不足2小時
+            // 將時間轉換為分鐘數的輔助函數
+            const timeToMinutes = (timeStr) => {
+              if (!timeStr) return null;
+              const [hours, minutes] = timeStr.split(':').map(Number);
+              return hours * 60 + (minutes || 0);
+            };
+            
+            // 將新時間段轉換為分鐘數
+            const newStartMinutes = timeToMinutes(timeStart);
+            const newEndMinutes = timeToMinutes(timeEnd);
+            
+            if (newStartMinutes === null || newEndMinutes === null) {
+              console.warn(`⚠️ [saveInterviewSchedule] 無法解析時間: ${timeStart}-${timeEnd}`);
+            }
+            
+            // 找到該學生在同一天的所有其他廠商排程
+            const studentOtherSchedules = otherVendorSchedules.filter(schedule => {
               const scheduleStudentId = String(schedule.student_id || '');
               const currentStudentId = String(studentId);
-              const studentMatch = scheduleStudentId === currentStudentId;
-              
-              console.log(`🔍 [saveInterviewSchedule] 檢查排程: schedule.student_id=${schedule.student_id}, 目標studentId=${studentId}, 匹配=${studentMatch}`);
-              
-              if (!studentMatch) {
-                return false;
-              }
-              
-              // 檢查時間段是否重疊
+              return scheduleStudentId === currentStudentId;
+            });
+            
+            console.log(`🔍 [saveInterviewSchedule] 學生 ${studentId} 在同一天的其他廠商排程數量: ${studentOtherSchedules.length}`);
+            
+            // 檢查是否有衝突（時間重疊或間隔不足2小時）
+            const conflictingSchedule = studentOtherSchedules.find(schedule => {
               const otherStart = schedule.time_start || '';
               const otherEnd = schedule.time_end || '';
               
-              console.log(`🔍 [saveInterviewSchedule] 檢查時間段: 新時間=${timeStart}-${timeEnd}, 舊時間=${otherStart}-${otherEnd}`);
+              console.log(`🔍 [saveInterviewSchedule] 檢查排程: 新時間=${timeStart}-${timeEnd}, 舊時間=${otherStart}-${otherEnd}`);
               
               if (otherStart && otherEnd) {
-                // 時間重疊的條件：新開始時間 < 舊結束時間 且 新結束時間 > 舊開始時間
-                const isTimeOverlap = timeStart < otherEnd && timeEnd > otherStart;
-                console.log(`🔍 [saveInterviewSchedule] 時間段重疊檢查: ${timeStart} < ${otherEnd} && ${timeEnd} > ${otherStart} => ${isTimeOverlap}`);
-                return isTimeOverlap;
+                const otherStartMinutes = timeToMinutes(otherStart);
+                const otherEndMinutes = timeToMinutes(otherEnd);
+                
+                if (otherStartMinutes === null || otherEndMinutes === null) {
+                  console.warn(`⚠️ [saveInterviewSchedule] 無法解析舊時間: ${otherStart}-${otherEnd}`);
+                  return false;
+                }
+                
+                // 檢查時間段是否重疊
+                const isTimeOverlap = newStartMinutes < otherEndMinutes && newEndMinutes > otherStartMinutes;
+                
+                if (isTimeOverlap) {
+                  console.log(`🔍 [saveInterviewSchedule] 時間段重疊: ${timeStart}-${timeEnd} 與 ${otherStart}-${otherEnd} 重疊`);
+                  return true;
+                }
+                
+                // 檢查間隔是否不足2小時（120分鐘）
+                // 情況1：新時間段在舊時間段之前
+                const gapBefore = otherStartMinutes - newEndMinutes;
+                // 情況2：新時間段在舊時間段之後
+                const gapAfter = newStartMinutes - otherEndMinutes;
+                
+                // 如果間隔不足2小時（120分鐘），視為衝突
+                const minGap = 120; // 2小時 = 120分鐘
+                const isGapTooShort = (gapBefore >= 0 && gapBefore < minGap) || (gapAfter >= 0 && gapAfter < minGap);
+                
+                if (isGapTooShort) {
+                  const actualGap = gapBefore >= 0 ? gapBefore : gapAfter;
+                  const gapHours = Math.floor(actualGap / 60);
+                  const gapMins = actualGap % 60;
+                  console.log(`🔍 [saveInterviewSchedule] 時間間隔不足2小時: 間隔=${gapHours}小時${gapMins}分鐘 (需要至少2小時)`);
+                  return true;
+                }
+                
+                console.log(`✅ [saveInterviewSchedule] 時間間隔足夠: 間隔=${gapBefore >= 0 ? gapBefore : gapAfter}分鐘`);
+                return false;
               } else if (otherStart) {
-                // 只有開始時間的情況，檢查是否在該時間點
-                const isTimeOverlap = timeStart <= otherStart && timeEnd > otherStart;
-                console.log(`🔍 [saveInterviewSchedule] 時間點重疊檢查: ${timeStart} <= ${otherStart} && ${timeEnd} > ${otherStart} => ${isTimeOverlap}`);
-                return isTimeOverlap;
+                // 只有開始時間的情況
+                const otherStartMinutes = timeToMinutes(otherStart);
+                
+                if (otherStartMinutes === null) {
+                  console.warn(`⚠️ [saveInterviewSchedule] 無法解析舊時間: ${otherStart}`);
+                  return false;
+                }
+                
+                // 檢查時間點是否重疊
+                const isTimeOverlap = newStartMinutes <= otherStartMinutes && newEndMinutes > otherStartMinutes;
+                
+                if (isTimeOverlap) {
+                  console.log(`🔍 [saveInterviewSchedule] 時間點重疊: ${timeStart}-${timeEnd} 與 ${otherStart} 重疊`);
+                  return true;
+                }
+                
+                // 檢查間隔是否不足2小時
+                const gapBefore = otherStartMinutes - newEndMinutes;
+                const gapAfter = newStartMinutes - otherStartMinutes;
+                const minGap = 120; // 2小時 = 120分鐘
+                const isGapTooShort = (gapBefore >= 0 && gapBefore < minGap) || (gapAfter >= 0 && gapAfter < minGap);
+                
+                if (isGapTooShort) {
+                  const actualGap = gapBefore >= 0 ? gapBefore : gapAfter;
+                  const gapHours = Math.floor(actualGap / 60);
+                  const gapMins = actualGap % 60;
+                  console.log(`🔍 [saveInterviewSchedule] 時間間隔不足2小時: 間隔=${gapHours}小時${gapMins}分鐘 (需要至少2小時)`);
+                  return true;
+                }
+                
+                return false;
               }
               
               return false;
@@ -3039,15 +3111,41 @@
               
               console.log(`⚠️ [saveInterviewSchedule] 發現學生衝突: ${studentName} 已被 ${conflictingSchedule.company_name} 安排在 ${timeDisplay}`);
               
+              // 計算實際間隔時間（用於提示訊息）
+              const timeToMinutesForGap = (timeStr) => {
+                if (!timeStr) return null;
+                const [hours, minutes] = timeStr.split(':').map(Number);
+                return hours * 60 + (minutes || 0);
+              };
+              const newStartMins = timeToMinutesForGap(timeStart);
+              const newEndMins = timeToMinutesForGap(timeEnd);
+              const otherStartMins = timeToMinutesForGap(conflictingSchedule.time_start);
+              const otherEndMins = timeToMinutesForGap(conflictingSchedule.time_end || conflictingSchedule.time_start);
+              
+              let gapInfo = '';
+              if (newStartMins !== null && newEndMins !== null && otherStartMins !== null && otherEndMins !== null) {
+                const gapBefore = otherStartMins - newEndMins;
+                const gapAfter = newStartMins - otherEndMins;
+                const actualGap = gapBefore >= 0 ? gapBefore : gapAfter;
+                if (actualGap >= 0 && actualGap < 120) {
+                  const gapHours = Math.floor(actualGap / 60);
+                  const gapMins = actualGap % 60;
+                  gapInfo = `（間隔僅${gapHours}小時${gapMins}分鐘，需要至少2小時）`;
+                }
+              }
+              
+              console.log(`⚠️ [saveInterviewSchedule] 發現學生衝突: ${studentName} 已被 ${conflictingSchedule.company_name} 安排在 ${timeDisplay}${gapInfo}`);
+              
               conflictedStudents.push({
                 studentId: studentId,
                 studentName: studentName,
                 company: conflictingSchedule.company_name || '其他廠商',
-                time: timeDisplay
+                time: timeDisplay,
+                gapInfo: gapInfo
               });
-              return; // 跳過已被其他廠商在同一時間段安排的學生
+              return; // 跳過已被其他廠商安排且間隔不足2小時的學生
             } else {
-              console.log(`✅ [saveInterviewSchedule] 學生 ${studentId} 在時間段 ${timeStart}-${timeEnd} 沒有衝突`);
+              console.log(`✅ [saveInterviewSchedule] 學生 ${studentId} 在時間段 ${timeStart}-${timeEnd} 沒有衝突，間隔足夠`);
             }
           }
           
@@ -3111,13 +3209,14 @@
         });
       }
       
-      // 如果有衝突的學生（同一時間段），顯示警告並阻止保存
+      // 如果有衝突的學生（時間重疊或間隔不足2小時），顯示警告並阻止保存
       if (conflictedStudents.length > 0) {
         const conflictedNames = conflictedStudents.map(c => {
-          return `${c.studentName} (已被 ${c.company} 安排在 ${c.time})`;
+          const gapInfo = c.gapInfo || '';
+          return `${c.studentName} (已被 ${c.company} 安排在 ${c.time}${gapInfo})`;
         }).join('\n');
         
-        alert(`❌ 以下學生在該時間段已被其他廠商安排面試，無法重複安排：\n\n${conflictedNames}\n\n請取消選擇這些學生或選擇其他時間段後再儲存。`);
+        alert(`❌ 以下學生無法安排面試：\n\n${conflictedNames}\n\n原因：\n1. 時間段重疊，或\n2. 與其他廠商的面試時間間隔不足2小時\n\n請取消選擇這些學生或選擇其他時間段（與現有排程間隔至少2小時）後再儲存。`);
         return;
       }
       
