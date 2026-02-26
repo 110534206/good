@@ -1041,6 +1041,7 @@ def get_vendor_resumes():
                             sja.student_id,
                             sja.company_id,
                             sja.job_id,
+                            sja.applied_at,
                             ra.application_id,
                             ra.apply_status,
                             ra.company_comment,
@@ -1059,7 +1060,7 @@ def get_vendor_resumes():
                         AND ic.advisor_user_id = %s
                         AND rt.review_status = 'approved'
                         AND (%s IN ('teacher', 'ta') OR ij.created_by_vendor_id = %s OR ij.created_by_vendor_id IS NULL)
-                        GROUP BY sja.student_id, sja.company_id, sja.job_id, ra.application_id, ra.apply_status, ra.company_comment, ra.interview_status, ra.interview_time, ra.interview_result, ic.company_name, ij.title, ij.slots
+                        GROUP BY sja.student_id, sja.company_id, sja.job_id, sja.applied_at, ra.application_id, ra.apply_status, ra.company_comment, ra.interview_status, ra.interview_time, ra.interview_result, ic.company_name, ij.title, ij.slots
                     """, tuple([vendor_teacher_id] + list(company_ids) + [vendor_teacher_id]) + (user_role, vendor_id))
                 else:
                     # 如果沒有 teacher_id，使用原來的查詢（向後兼容）
@@ -1069,6 +1070,7 @@ def get_vendor_resumes():
                             sja.student_id,
                             sja.company_id,
                             sja.job_id,
+                            sja.applied_at,
                             ra.application_id,
                             ra.apply_status,
                             ra.company_comment,
@@ -1087,7 +1089,7 @@ def get_vendor_resumes():
                         AND rt.review_status = 'approved'
                         AND rt.teacher_id IS NOT NULL
                         AND (%s IN ('teacher', 'ta') OR ij.created_by_vendor_id = %s OR ij.created_by_vendor_id IS NULL)
-                        GROUP BY sja.student_id, sja.company_id, sja.job_id, ra.application_id, ra.apply_status, ra.company_comment, ra.interview_status, ra.interview_time, ra.interview_result, ic.company_name, ij.title, ij.slots
+                        GROUP BY sja.student_id, sja.company_id, sja.job_id, sja.applied_at, ra.application_id, ra.apply_status, ra.company_comment, ra.interview_status, ra.interview_time, ra.interview_result, ic.company_name, ij.title, ij.slots
                     """, tuple(company_ids) + (user_role, vendor_id))
             else:
                 # 使用舊架構（reviewed_by 欄位）
@@ -1099,6 +1101,7 @@ def get_vendor_resumes():
                             sja.student_id,
                             sja.company_id,
                             sja.job_id,
+                            sja.applied_at,
                             ra.application_id,
                             ra.apply_status,
                             ra.company_comment,
@@ -1131,6 +1134,7 @@ def get_vendor_resumes():
                             sja.student_id,
                             sja.company_id,
                             sja.job_id,
+                            sja.applied_at,
                             ra.application_id,
                             ra.apply_status,
                             ra.company_comment,
@@ -1319,6 +1323,8 @@ def get_vendor_resumes():
                         continue
                     processed_student_resume_keys.add(resume_key)
                     
+                    # 上傳時間：以該筆投遞紀錄的投遞時間 (sja.applied_at) 顯示，與 student_job_applications 一致
+                    upload_time_val = ra_data.get("applied_at") or row.get("created_at")
                     # 構建結果
                     resume = {
                         "id": row.get("id"),
@@ -1334,7 +1340,7 @@ def get_vendor_resumes():
                         "comment": vendor_comment or "",
                         "vendor_comment": vendor_comment or "",
                         "note": row.get("note") or "",
-                        "upload_time": _format_datetime(row.get("created_at")),
+                        "upload_time": _format_datetime(upload_time_val),
                         "reviewed_at": _format_datetime(row.get("reviewed_at")),
                         "company_name": company_name,
                         "company_id": company_id,
@@ -1371,9 +1377,10 @@ def get_vendor_resumes():
                     # 注意：resume_applications.application_id 對應的是 student_job_applications.id，不是 student_preferences.id
                     # 需要從 student_job_applications 表獲取正確的 application_id
                     application_id = None
+                    sja_applied_at = None
                     if student_id and company_id and job_id:
                         cursor.execute("""
-                            SELECT id FROM student_job_applications
+                            SELECT id, applied_at FROM student_job_applications
                             WHERE student_id = %s AND company_id = %s AND job_id = %s
                             ORDER BY applied_at DESC
                             LIMIT 1
@@ -1381,6 +1388,7 @@ def get_vendor_resumes():
                         sja_result = cursor.fetchone()
                         if sja_result:
                             application_id = sja_result['id']
+                            sja_applied_at = sja_result.get('applied_at')
                     
                     # 使用 application_id (student_job_applications.id) 和 job_id 來查詢 resume_applications
                     # 一次性查詢所有需要的資料，避免重複查詢導致未讀取結果的問題
@@ -1466,10 +1474,9 @@ def get_vendor_resumes():
                     # 如果 resume_applications 表沒有記錄，不再從 vendor_preference_history 讀取（表已移除）
                     # 所有資訊都應該從 resume_applications 表讀取
                     
-                    # 構建結果
-                    # 確保 interview_status 有預設值
+                    # 構建結果；上傳時間以該筆投遞的 applied_at 為準（與 student_job_applications 一致）
                     interview_status_value = interview_status if interview_status else 'none'
-                    
+                    upload_time_val = sja_applied_at if sja_applied_at is not None else row.get("created_at")
                     resume = {
                         "id": row.get("id"),
                         "student_id": row.get("student_id"),
@@ -1484,7 +1491,7 @@ def get_vendor_resumes():
                         "comment": vendor_comment or "", # 廠商的留言（優先從 resume_applications），如果沒有則為空
                         "vendor_comment": vendor_comment or "", # 明確標記為廠商留言
                         "note": row.get("note") or "",
-                        "upload_time": _format_datetime(row.get("created_at")),
+                        "upload_time": _format_datetime(upload_time_val),
                         "reviewed_at": _format_datetime(row.get("reviewed_at")),
                         "company_name": company_name,
                         "company_id": company_id,

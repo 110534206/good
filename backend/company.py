@@ -1779,8 +1779,7 @@ def apply_company():
         if not job:
             return jsonify({"success": False, "message": "職缺不存在或公司未審核通過"}), 400
         
-        # 允許重複投遞：移除重複投遞檢查，允許同一版本的履歷可以重複投遞到同一職缺
-        
+        # 允許重複投遞：不限制同一公司／同一職缺筆數，學生可自由投遞多筆
         # 獲取當前學期
         from semester import get_current_semester_id
         current_semester_id = get_current_semester_id(cursor)
@@ -1810,16 +1809,9 @@ def apply_company():
         # 否則使用最大 order + 1
         preference_order = 100 if max_order < 100 else max_order + 1
         
-        # 當投遞履歷時，確保 status='uploaded'（審核中）
-        # category 保持 'ready'（正式版本），審核狀態用 status 表示
-        cursor.execute("""
-            UPDATE resumes 
-            SET status = 'uploaded',
-                updated_at = NOW()
-            WHERE id = %s AND user_id = %s
-            AND category = 'ready'
-        """, (resume_id, user_id))
-        
+        # 不在此處更新 resumes.status，避免同一份履歷已審核通過後，因投遞到別間公司而把狀態改回「審核中」
+        # 審核狀態改為以「每筆投遞」(application) 為單位，由 get_my_applications 從 resume_teacher / resumes 取 per-application 狀態
+
         # 插入投遞記錄到 student_job_applications 表（不再使用 student_preferences）
         cursor.execute("""
             INSERT INTO student_job_applications
@@ -1850,6 +1842,13 @@ def apply_company():
         
     except Exception as e:
         conn.rollback()
+        err_str = str(e)
+        # 資料庫唯一鍵衝突（同一學生同一公司同一職缺已有一筆）：顯示可讀訊息，不暴露 1062 / uniq_student_job
+        if "1062" in err_str or "Duplicate entry" in err_str or "uniq_student_job" in err_str:
+            return jsonify({
+                "success": False,
+                "message": "此公司此職缺已投遞過，無法重複投遞。若要改投其他履歷，請先刪除該筆投遞紀錄後再重新投遞。"
+            }), 400
         traceback.print_exc()
         return jsonify({"success": False, "message": f"投遞失敗: {str(e)}"}), 500
     finally:
@@ -1861,36 +1860,99 @@ def apply_company():
 # =========================================================
 @company_bp.route('/api/student/my_applications', methods=['GET'])
 def get_my_applications():
-    """學生查看自己的投遞記錄（僅當前實習學期學生）"""
+    """學生查看自己的投遞記錄（僅需登入為學生；截止後仍可查看歷史紀錄，避免審核中/通過筆數被清空）"""
     if 'user_id' not in session or session.get('role') != 'student':
         return jsonify({"success": False, "message": "未授權"}), 403
     user_id = session['user_id']
     conn = get_db()
     cursor = conn.cursor(dictionary=True)
     try:
-        if not is_student_in_application_phase(cursor, user_id):
-            return jsonify({"success": False, "message": "您尚未進入實習流程學期，無法使用此功能"}), 403
-        cursor.execute("""
-            SELECT 
-                sja.id,
-                sja.resume_id,
-                sja.company_id,
-                sja.job_id,
-                sja.status AS application_status,
-                sja.applied_at,
-                ic.company_name,
-                ij.title AS job_title,
-                r.status AS resume_status,
-                r.comment
-            FROM student_job_applications sja
-            JOIN internship_companies ic ON sja.company_id = ic.id
-            LEFT JOIN internship_jobs ij ON sja.job_id = ij.id
-            LEFT JOIN resumes r ON sja.resume_id = r.id
-            WHERE sja.student_id = %s
-            ORDER BY sja.applied_at DESC
-        """, (user_id,))
-        
-        applications = cursor.fetchall() or []
+        # 不再因「未在實習流程學期」而 403，讓截止後學生仍能看見自己的投遞與審核狀態
+        # 審核狀態以「每筆投遞」為單位：同一份履歷投不同公司分開紀錄。優先順序：指導老師審核 → 班導審核 → 審核中
+        try:
+            cursor.execute("""
+                SELECT 
+                    sja.id,
+                    sja.resume_id,
+                    sja.company_id,
+                    sja.job_id,
+                    sja.status AS application_status,
+                    sja.applied_at,
+                    ic.company_name,
+                    ij.title AS job_title,
+                    COALESCE(
+                        (SELECT rt.review_status FROM resume_teacher rt
+                         JOIN internship_companies ic2 ON ic2.id = sja.company_id AND ic2.advisor_user_id = rt.teacher_id
+                         WHERE rt.application_id = sja.id LIMIT 1),
+                        (SELECT rt2.review_status FROM resume_teacher rt2
+                         JOIN classes_teacher ct ON ct.teacher_id = rt2.teacher_id
+                         JOIN users u2 ON u2.id = sja.student_id AND u2.class_id = ct.class_id
+                         WHERE rt2.application_id = sja.id LIMIT 1),
+                        'uploaded'
+                    ) AS resume_status,
+                    COALESCE(
+                        (SELECT rt.comment FROM resume_teacher rt
+                         JOIN internship_companies ic2 ON ic2.id = sja.company_id AND ic2.advisor_user_id = rt.teacher_id
+                         WHERE rt.application_id = sja.id LIMIT 1),
+                        (SELECT rt2.comment FROM resume_teacher rt2
+                         JOIN classes_teacher ct ON ct.teacher_id = rt2.teacher_id
+                         JOIN users u2 ON u2.id = sja.student_id AND u2.class_id = ct.class_id
+                         WHERE rt2.application_id = sja.id LIMIT 1),
+                        r.comment
+                    ) AS comment
+                FROM student_job_applications sja
+                JOIN internship_companies ic ON sja.company_id = ic.id
+                LEFT JOIN internship_jobs ij ON sja.job_id = ij.id
+                LEFT JOIN resumes r ON sja.resume_id = r.id AND r.user_id = sja.student_id
+                WHERE sja.student_id = %s
+                ORDER BY sja.applied_at DESC
+            """, (user_id,))
+            applications = cursor.fetchall() or []
+        except Exception:
+            # 若 resume_teacher / classes_teacher 不存在則 fallback：單一 JOIN resume_teacher 再 resumes.status
+            try:
+                cursor.execute("""
+                    SELECT 
+                        sja.id,
+                        sja.resume_id,
+                        sja.company_id,
+                        sja.job_id,
+                        sja.status AS application_status,
+                        sja.applied_at,
+                        ic.company_name,
+                        ij.title AS job_title,
+                        COALESCE(rt.review_status, r.status) AS resume_status,
+                        COALESCE(rt.comment, r.comment) AS comment
+                    FROM student_job_applications sja
+                    JOIN internship_companies ic ON sja.company_id = ic.id
+                    LEFT JOIN internship_jobs ij ON sja.job_id = ij.id
+                    LEFT JOIN resumes r ON sja.resume_id = r.id AND r.user_id = sja.student_id
+                    LEFT JOIN resume_teacher rt ON rt.application_id = sja.id
+                    WHERE sja.student_id = %s
+                    ORDER BY sja.applied_at DESC
+                """, (user_id,))
+                applications = cursor.fetchall() or []
+            except Exception:
+                cursor.execute("""
+                    SELECT 
+                        sja.id,
+                        sja.resume_id,
+                        sja.company_id,
+                        sja.job_id,
+                        sja.status AS application_status,
+                        sja.applied_at,
+                        ic.company_name,
+                        ij.title AS job_title,
+                        r.status AS resume_status,
+                        r.comment
+                    FROM student_job_applications sja
+                    JOIN internship_companies ic ON sja.company_id = ic.id
+                    LEFT JOIN internship_jobs ij ON sja.job_id = ij.id
+                    LEFT JOIN resumes r ON sja.resume_id = r.id AND r.user_id = sja.student_id
+                    WHERE sja.student_id = %s
+                    ORDER BY sja.applied_at DESC
+                """, (user_id,))
+                applications = cursor.fetchall() or []
         
         # 格式化日期
         for app in applications:
@@ -1901,6 +1963,75 @@ def get_my_applications():
     except Exception as e:
         traceback.print_exc()
         return jsonify({"success": False, "message": f"查詢失敗: {str(e)}"}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+
+# =========================================================
+# 🗑️ 學生刪除投遞紀錄（僅履歷截止前可刪除；刪除後主任/班導/指導老師端同步消失）
+# =========================================================
+@company_bp.route('/api/student/delete_application', methods=['POST'])
+def delete_application():
+    """學生刪除一筆投遞紀錄；僅在履歷繳交截止前可刪除。會同步刪除 resume_teacher、resume_applications。"""
+    if 'user_id' not in session or session.get('role') != 'student':
+        return jsonify({"success": False, "message": "未授權"}), 403
+    user_id = session['user_id']
+    data = request.get_json() or {}
+    application_id = data.get('application_id')
+    if not application_id:
+        return jsonify({"success": False, "message": "缺少 application_id"}), 400
+    try:
+        application_id = int(application_id)
+    except (TypeError, ValueError):
+        return jsonify({"success": False, "message": "無效的 application_id"}), 400
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        # 檢查是否為本人的投遞
+        cursor.execute("""
+            SELECT id FROM student_job_applications
+            WHERE id = %s AND student_id = %s
+        """, (application_id, user_id))
+        row = cursor.fetchone()
+        if not row:
+            return jsonify({"success": False, "message": "找不到該筆投遞紀錄或無權限"}), 404
+        # 檢查履歷截止時間：僅截止前可刪除
+        from semester import get_current_semester_deadline
+        now = datetime.now()
+        resume_deadline = get_current_semester_deadline(cursor, 'resume')
+        if resume_deadline is None:
+            cursor.execute("""
+                SELECT end_time FROM announcement
+                WHERE title LIKE '[作業]%%上傳履歷截止時間' AND is_published = 1
+                ORDER BY created_at DESC LIMIT 1
+            """)
+            r = cursor.fetchone()
+            if r and r.get('end_time'):
+                resume_deadline = r['end_time'] if isinstance(r['end_time'], datetime) else datetime.strptime(str(r['end_time'])[:19], '%Y-%m-%d %H:%M:%S')
+        if resume_deadline is not None and now > resume_deadline:
+            return jsonify({
+                "success": False,
+                "message": "已超過履歷繳交截止時間，無法刪除投遞紀錄。"
+            }), 400
+        # 同步刪除：resume_applications → resume_teacher → student_job_applications
+        try:
+            cursor.execute("DELETE FROM resume_applications WHERE application_id = %s", (application_id,))
+        except Exception:
+            pass
+        try:
+            cursor.execute("DELETE FROM resume_teacher WHERE application_id = %s", (application_id,))
+        except Exception:
+            pass
+        cursor.execute("DELETE FROM student_job_applications WHERE id = %s AND student_id = %s", (application_id, user_id))
+        if cursor.rowcount == 0:
+            return jsonify({"success": False, "message": "刪除失敗"}), 500
+        conn.commit()
+        return jsonify({"success": True, "message": "已刪除該筆投遞紀錄，主任／班導／指導老師端也會同步移除。"})
+    except Exception as e:
+        conn.rollback()
+        traceback.print_exc()
+        return jsonify({"success": False, "message": f"刪除失敗: {str(e)}"}), 500
     finally:
         cursor.close()
         conn.close()

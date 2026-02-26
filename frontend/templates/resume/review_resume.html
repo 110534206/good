@@ -179,7 +179,7 @@
               </th>
               <th style="padding: 14px 16px; font-weight: 600;">學生帳號</th>
               <th style="padding: 14px 16px; font-weight: 600;">姓名</th>
-              <th style="padding: 14px 16px; font-weight: 600;">上傳時間</th>
+              <th style="padding: 14px 16px; font-weight: 600;">投遞時間</th>
               <th style="padding: 14px 16px; font-weight: 600;">檔案名稱</th>
               <th style="padding: 14px 16px; font-weight: 600;">選擇公司</th>
               <th style="padding: 14px 16px; font-weight: 600;">職缺</th>
@@ -315,24 +315,20 @@
       const targetStatus = urlParams.get('status');
       const isDirectorMode = urlParams.get('mode') === 'director';
 
-      // 如果是主任模式，隱藏狀態篩選器和狀態欄位
-      if (isDirectorMode) {
-        const statusFilter = document.getElementById('statusFilter');
-        if (statusFilter) {
-          statusFilter.style.display = 'none';
-        }
-        const statusHeader = document.getElementById('statusHeader');
-        if (statusHeader) {
-          statusHeader.style.display = 'none';
-        }
-      }
-
       fetch('/api/profile')
         .then(res => res.json())
         .then(profileData => {
           userRole = profileData.success && profileData.user ? profileData.user.role : 'teacher';
           currentUserId = profileData.success && profileData.user ? profileData.user.id : null;
           isHomeroom = profileData.success && profileData.user ? profileData.user.is_homeroom : false;
+
+          // 主任模式或班導：僅能下載、查看，隱藏狀態篩選器和狀態欄位
+          if (isDirectorMode || userRole === 'class_teacher') {
+            const statusFilter = document.getElementById('statusFilter');
+            if (statusFilter) statusFilter.style.display = 'none';
+            const statusHeader = document.getElementById('statusHeader');
+            if (statusHeader) statusHeader.style.display = 'none';
+          }
 
           let apiUrl;
           if (userRole === 'vendor') {
@@ -827,17 +823,18 @@
       const urlParams = new URLSearchParams(window.location.search);
       const isDirectorMode = urlParams.get('mode') === 'director';
       const isViewOnly = !!urlParams.get('company_id'); 
+      const isViewOnlyMode = isDirectorMode || userRole === 'class_teacher'; // 主任或班導：僅能下載、查看
       const filterStatus = document.getElementById("statusFilter").value.trim(); 
       const filterJob = document.getElementById("companyFilter").value.trim();
       
-      // 如果是主任模式，隱藏狀態欄位
+      // 主任或班導模式：隱藏狀態欄位
       const statusHeader = document.getElementById("statusHeader");
       if (statusHeader) {
-        statusHeader.style.display = isDirectorMode ? 'none' : '';
+        statusHeader.style.display = isViewOnlyMode ? 'none' : '';
       }
       
       if (resumes.length === 0) {
-        const colspan = isDirectorMode ? 9 : 10;
+        const colspan = isViewOnlyMode ? 9 : 10;
         tbody.innerHTML = `<tr><td colspan="${colspan}" style="text-align: center; color: #64748b; padding: 16px;">目前沒有資料</td></tr>`;
         document.getElementById("pagination").innerHTML = "";
         return;
@@ -930,7 +927,7 @@
           // 班導和其他角色：使用 display_status
           statusForDisplay = row.display_status || 'uploaded';
         }
-        const statusCell = isDirectorMode ? '' : `
+        const statusCell = isViewOnlyMode ? '' : `
            <td style="padding: 14px 16px;">
              <span class="status-badge bg-${statusColor(statusForDisplay)}">${mapStatus(statusForDisplay)}</span>
            </td>`;
@@ -961,7 +958,7 @@
              ${ renderCommentBtn(row, isViewOnly, pid) }
            </td>
            <td style="padding: 14px 16px;">
-             ${ renderActionBtns(row, isViewOnly, pid, isDirectorMode) }
+             ${ renderActionBtns(row, isViewOnly, pid, isViewOnlyMode) }
            </td>
         `;
         tbody.appendChild(tr);
@@ -996,10 +993,12 @@
                 return `<span style="color:#aaa; font-size:0.9em;">未填寫</span>`;
             }
         }
-        return `<button class="btn btn-sm btn-outline-secondary ${btnClass}" onclick="openCommentModal(${row.id}, '${commentEsc}', ${pid}, ${appId}, false)">${btnText}</button>`;
+        // 班導僅能查看留言，不可編輯
+        const commentReadonly = userRole === 'class_teacher';
+        return `<button class="btn btn-sm btn-outline-secondary ${btnClass}" onclick="openCommentModal(${row.id}, '${commentEsc}', ${pid}, ${appId}, ${commentReadonly})">${btnText}</button>`;
     }
 
-    function renderActionBtns(row, isViewOnly, pid, isDirectorMode = false) {
+    function renderActionBtns(row, isViewOnly, pid, isViewOnlyMode = false) {
         const dlBtn = `<a href="/api/download_resume/${row.id}" class="btn btn-sm btn-outline-primary" target="_blank" style="margin-right:4px;">下載</a>`;
         if (isViewOnly) return dlBtn; 
 
@@ -1008,13 +1007,16 @@
             return `<div style="display:flex; align-items:center;">${dlBtn}</div>`;
         }
 
+        // 主任或班導：僅能下載、查看，不顯示通過/退件
+        if (isViewOnlyMode) {
+            return `<div style="display:flex; align-items:center;">${dlBtn}</div>`;
+        }
+
         const appId = row.application_id != null ? row.application_id : 'null';
         const approveClick = `approveResume(${row.id}, ${pid ? `'${pid}'` : 'null'}, ${appId})`;
         
         let btns = `<div style="display:flex; align-items:center;">${dlBtn}`;
-        if (!isDirectorMode) {
-            btns += `<button class="btn btn-sm btn-outline-success" onclick="${approveClick}">通過</button>`;
-        }
+        btns += `<button class="btn btn-sm btn-outline-success" onclick="${approveClick}">通過</button>`;
         btns += `</div>`;
         return btns;
     }
@@ -1033,13 +1035,13 @@
       }
     }
 
-    // 更新狀態函式（指導老師請傳 applicationId，後端以投遞紀錄為單位審核）
+    // 更新狀態函式（指導老師與班導皆傳 applicationId，後端以「每筆投遞」為單位審核，同一份履歷不同公司分開紀錄）
     function approveResume(resumeId, preferenceId, applicationId) {
       if (!confirm("確定要將此職缺申請標記為通過嗎？")) return;
       
       const body = { status: 'approved' };
       if (preferenceId) body.preference_id = preferenceId;
-      if (userRole === 'teacher' && applicationId != null && applicationId !== 'null' && !isNaN(applicationId)) {
+      if ((userRole === 'teacher' || userRole === 'class_teacher') && applicationId != null && applicationId !== 'null' && !isNaN(applicationId)) {
         body.application_id = parseInt(applicationId);
       }
 
@@ -1108,7 +1110,7 @@
     function saveComment() {
         const val = document.getElementById("commentInput").value.trim();
         const body = { field: 'comment', value: val };
-        if (userRole === 'teacher' && currentApplicationId != null) {
+        if ((userRole === 'teacher' || userRole === 'class_teacher') && currentApplicationId != null) {
             body.application_id = currentApplicationId;
         } else {
             body.resume_id = currentResumeId;
@@ -1176,7 +1178,7 @@
         if (preferenceId && preferenceId !== '') {
           body.preference_id = preferenceId;
         }
-        if (userRole === 'teacher' && applicationId && applicationId !== '' && applicationId !== 'null' && !isNaN(applicationId)) {
+        if ((userRole === 'teacher' || userRole === 'class_teacher') && applicationId && applicationId !== '' && applicationId !== 'null' && !isNaN(applicationId)) {
           body.application_id = parseInt(applicationId);
         }
         
