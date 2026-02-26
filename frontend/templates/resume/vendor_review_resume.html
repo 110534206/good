@@ -47,7 +47,7 @@
     /* 通過：綠底白字 */
     .status-badge.bg-success { color: #fff; background-color: #198754; }
     
-    /* 退件：紅底白字 */
+    /* 未通過：紅底白字 */
     .status-badge.bg-danger { color: #fff; background-color: #dc3545; }
     
     /* 待審核：藍底白字 */
@@ -62,6 +62,13 @@
     .status-badge.bg-completed { color: #fff; background-color: #4a9eff; }
     
     #commentInput { width: 100%; height: 180px; resize: vertical; padding: 0.5rem; font-size: 1rem; line-height: 1.4; }
+    
+    /* 截止時間公告樣式 */
+    .alert-deadline {
+      margin-bottom: 16px;
+      border-radius: 8px;
+      padding: 12px 16px;
+    }
     
     /* 學生選單樣式 */
     #interviewStudents {
@@ -167,6 +174,9 @@
   </header>
   <main>
     <section class="panel" aria-label="履歷列表">
+      <!-- 截止時間提示 -->
+      <div id="deadlineAlert" class="alert alert-deadline" style="display: none; margin-bottom: 16px;"></div>
+      
       <div class="panel-header">
       </div>
       <div style="display: flex; flex-wrap: wrap; gap: 16px; align-items: center; margin-bottom: 16px;">
@@ -186,7 +196,7 @@
           <option value="">所有狀態</option>
           <option value="pending">待審核</option>
           <option value="approved">通過</option>
-          <option value="rejected">退件</option>
+          <option value="rejected">未通過</option>
         </select>
         <select id="interviewStatusFilter" style="padding: 10px 12px; border-radius: 8px; border: 1px solid #e2e8f0; min-width: 150px;">
           <option value="">所有面試狀態</option>
@@ -404,7 +414,7 @@
 
     // 定義狀態文字，approved 對應 "通過"
     function mapStatus(status) {
-      return { 'pending': '待審核', 'approved': '通過', 'rejected': '退件', 'submitted': '待審核', 'uploaded': '待審核' }[status] || '待審核';
+      return { 'pending': '待審核', 'approved': '通過', 'rejected': '未通過', 'submitted': '待審核', 'uploaded': '待審核' }[status] || '待審核';
     }
 
     function escapeHtml(text) {
@@ -479,6 +489,35 @@
           if (resumeData.success) {
             allResumes = resumeData.resumes || [];
             
+            // 顯示廠商審核截止時間提示
+            if (resumeData.vendor_review_deadline) {
+              const deadlineAlert = document.getElementById('deadlineAlert');
+              if (deadlineAlert) {
+                const isExpired = resumeData.is_vendor_review_deadline_passed || false;
+                const now = new Date();
+                const vendorDeadline = new Date(resumeData.vendor_review_deadline.replace(/\//g, '-'));
+                const isVendorReviewDeadlinePassed = now > vendorDeadline || isExpired;
+                
+                if (isVendorReviewDeadlinePassed) {
+                  deadlineAlert.className = 'alert alert-warning alert-deadline';
+                  deadlineAlert.innerHTML = `
+                    <strong>⚠️ 廠商審核截止時間已過</strong><br>
+                    廠商審核截止時間：${resumeData.vendor_review_deadline}<br>
+                    已超過審核截止時間，無法再審核履歷。
+                  `;
+                  deadlineAlert.style.display = 'block';
+                } else {
+                  deadlineAlert.className = 'alert alert-info alert-deadline';
+                  deadlineAlert.innerHTML = `
+                    <strong>📅 廠商審核截止時間提醒</strong><br>
+                    廠商審核截止時間：${resumeData.vendor_review_deadline}<br>
+                    請在截止時間前完成履歷審核。
+                  `;
+                  deadlineAlert.style.display = 'block';
+                }
+              }
+            }
+            
             // 儲存職缺資料（包含名額）
             if (positionData && positionData.items && Array.isArray(positionData.items)) {
               allPositions = positionData.items;
@@ -523,6 +562,26 @@
             }
 
             applyFilters();
+            
+            // 如果廠商審核截止時間已過，禁用所有審核按鈕
+            if (resumeData.is_vendor_review_deadline_passed) {
+              setTimeout(() => {
+                const rejectButtons = document.querySelectorAll('button[onclick*="rejectResume"]');
+                const approveButtons = document.querySelectorAll('button[onclick*="approveResume"]');
+                rejectButtons.forEach(btn => {
+                  btn.disabled = true;
+                  btn.title = '已超過審核截止時間，無法再審核履歷';
+                  btn.classList.add('btn-secondary');
+                  btn.classList.remove('btn-outline-danger');
+                });
+                approveButtons.forEach(btn => {
+                  btn.disabled = true;
+                  btn.title = '已超過審核截止時間，無法再審核履歷';
+                  btn.classList.add('btn-secondary');
+                  btn.classList.remove('btn-outline-success');
+                });
+              }, 100);
+            }
           } else {
             allResumes = [];
             renderTable([]);
@@ -982,7 +1041,7 @@
 
         // 無論狀態為何，保留按鈕
         let btns = `<div style="display:flex; align-items:center; flex-wrap:wrap; gap:4px;">${dlBtn}`;
-        btns += `<button class="btn btn-sm btn-outline-danger" style="margin-right:4px;" onclick="${rejectClick}">退件</button>`;
+        btns += `<button class="btn btn-sm btn-outline-danger" style="margin-right:4px;" onclick="${rejectClick}">未通過</button>`;
         btns += `<button class="btn btn-sm btn-outline-success" onclick="${approveClick}">通過</button>`;
         btns += `</div>`;
         return btns;
@@ -1183,20 +1242,20 @@
     }
 
     function rejectResume(resumeId, preferenceId) {
-       if (!confirm("確定要退件此申請？")) return;
+       if (!confirm("確定要標記此申請為未通過？")) return;
        currentResumeId = resumeId;
        currentPreferenceId = preferenceId && preferenceId !== 'null' ? preferenceId : null;
        
        document.getElementById("commentInput").value = "";
-       document.getElementById("commentModalLabel").textContent = "❌ 填寫退件原因";
-       document.getElementById("saveCommentBtn").textContent = "確認退件";
+       document.getElementById("commentModalLabel").textContent = "❌ 填寫未通過原因";
+       document.getElementById("saveCommentBtn").textContent = "確認未通過";
        const modal = new bootstrap.Modal(document.getElementById("commentModal"));
        modal.show();
        
        const saveBtn = document.getElementById("saveCommentBtn");
        saveBtn.onclick = () => {
            const reason = document.getElementById("commentInput").value.trim();
-           if(!reason) { alert("請填寫退件原因"); return; }
+           if(!reason) { alert("請填寫未通過原因"); return; }
            
            const body = { status: 'rejected', comment: reason };
            if (currentPreferenceId) body.preference_id = currentPreferenceId;
@@ -1207,7 +1266,7 @@
                body: JSON.stringify(body)
            }).then(res => res.json()).then(data => {
                if(data.success) {
-                   alert("✅ 已退件");
+                   alert("✅ 已標記為未通過");
                    modal.hide();
                    fetch(getResumeApiUrl()).then(r=>r.json()).then(d=>{
                        if(d.success) { 

@@ -736,10 +736,11 @@ def save_deadlines():
         pref_deadline = data.get("pref_deadline")  # 志願序截止時間
         resume_deadline = data.get("resume_deadline")  # 履歷上傳截止時間
         teacher_review_deadline = data.get("teacher_review_deadline")  # 指導老師審核履歷截止時間
+        vendor_review_deadline = data.get("vendor_review_deadline")  # 廠商審核履歷截止時間
         target_roles = data.get("target_roles") or []
         
         # 檢查是否至少有一個截止時間
-        if not pref_deadline and not resume_deadline and not teacher_review_deadline:
+        if not pref_deadline and not resume_deadline and not teacher_review_deadline and not vendor_review_deadline:
             return jsonify({"success": False, "message": "請填寫至少一個截止時間"}), 400
         
         conn = get_db()
@@ -936,6 +937,70 @@ def save_deadlines():
                 cursor.execute("""
                     SELECT id FROM announcement 
                     WHERE title LIKE '[作業]%指導老師審核履歷截止時間' AND is_published = 1
+                    ORDER BY created_at DESC
+                    LIMIT 1
+                """)
+                existing = cursor.fetchone()
+                
+                if existing:
+                    # 更新現有公告
+                    ann_id = existing[0]
+                    cursor.execute("""
+                        UPDATE announcement 
+                        SET title=%s, content=%s, start_time=%s, end_time=%s, is_published=%s
+                        WHERE id=%s
+                    """, (title, content, start_dt, end_dt, 1, ann_id))
+                    conn.commit()
+                else:
+                    # 創建新公告
+                    cursor.execute("""
+                        INSERT INTO announcement (title, content, start_time, end_time, is_published, created_by, created_at)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s)
+                    """, (title, content, start_dt, end_dt, 1, created_by, now))
+                    ann_id = cursor.lastrowid
+                    conn.commit()
+            
+            # 發送通知給指定角色（若未指定則維持原本行為：所有使用者）
+            push_announcement_notifications(conn, title, content, ann_id, target_roles=target_roles)
+        
+        # 處理廠商審核履歷截止時間
+        if vendor_review_deadline:
+            # 如果前端提供了完整的公告資訊，使用前端的資訊
+            if title and content and start_time and end_time:
+                # 清理內容中的錯誤格式
+                content = clean_announcement_content(content, end_time)
+                start_dt = convert_datetime(start_time)
+                end_dt = convert_datetime(end_time)
+            else:
+                # 否則使用舊的邏輯（向後兼容）
+                vendor_review_dt = convert_datetime(vendor_review_deadline)
+                title = "[作業] 廠商審核履歷截止時間"
+                content = f"請注意！廠商審核履歷的截止時間為：{vendor_review_dt.replace(':00', '')}，請務必在截止時間前完成履歷審核。"
+                start_dt = now
+                end_dt = vendor_review_dt
+            
+            # 驗證時間格式
+            try:
+                datetime.strptime(start_dt, '%Y-%m-%d %H:%M:%S')
+                datetime.strptime(end_dt, '%Y-%m-%d %H:%M:%S')
+            except ValueError as e:
+                return jsonify({"success": False, "message": f"時間格式錯誤：{str(e)}"}), 400
+            
+            # 檢查是否已存在相同類型的公告（通過標題匹配）
+            if edit_id:
+                # 編輯模式：更新現有公告
+                cursor.execute("""
+                    UPDATE announcement 
+                    SET title=%s, content=%s, start_time=%s, end_time=%s, is_published=%s
+                    WHERE id=%s
+                """, (title, content, start_dt, end_dt, 1, edit_id))
+                ann_id = edit_id
+                conn.commit()
+            else:
+                # 檢查是否已存在相同類型的公告
+                cursor.execute("""
+                    SELECT id FROM announcement 
+                    WHERE title LIKE '[作業]%廠商審核履歷截止時間' AND is_published = 1
                     ORDER BY created_at DESC
                     LIMIT 1
                 """)

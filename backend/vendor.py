@@ -13,7 +13,7 @@ vendor_bp = Blueprint('vendor', __name__)
 STATUS_LABELS = {
     "uploaded": "待審核",  # 對應資料庫 enum，與 resume_applications.apply_status 一致
     "approved": "已通過",
-    "rejected": "已退回",
+    "rejected": "未通過",
 }
 
 # interview_status 欄位只用於存儲面試狀態
@@ -1489,11 +1489,56 @@ def get_vendor_resumes():
             print(f"📋 公司列表: {[c['name'] for c in companies_payload]}")
         else:
             print("⚠️ 警告：最終公司列表為空，可能資料庫中沒有任何已審核通過的公司")
+        
+        # 獲取廠商審核截止時間（優先從 internship_flows 表讀取）
+        vendor_review_deadline_info = None
+        is_vendor_review_deadline_passed = False
+        try:
+            from semester import get_current_semester_deadline
+            vendor_deadline_dt = get_current_semester_deadline(cursor, 'vendor')
+            if vendor_deadline_dt:
+                vendor_review_deadline_info = vendor_deadline_dt.strftime('%Y/%m/%d %H:%M')
+                now = datetime.now()
+                is_vendor_review_deadline_passed = now > vendor_deadline_dt
+            else:
+                # 如果 internship_flows 中沒有，則從 announcement 表查找（向後兼容）
+                cursor.execute("""
+                    SELECT end_time 
+                    FROM announcement 
+                    WHERE title LIKE '[作業]%廠商審核履歷截止時間' AND is_published = 1
+                    ORDER BY created_at DESC 
+                    LIMIT 1
+                """)
+                vendor_deadline_result = cursor.fetchone()
+                if vendor_deadline_result and vendor_deadline_result.get('end_time'):
+                    vendor_deadline = vendor_deadline_result['end_time']
+                    if isinstance(vendor_deadline, datetime):
+                        vendor_review_deadline_info = vendor_deadline.strftime('%Y/%m/%d %H:%M')
+                        now = datetime.now()
+                        is_vendor_review_deadline_passed = now > vendor_deadline
+                    else:
+                        try:
+                            vendor_deadline_dt = datetime.strptime(str(vendor_deadline), '%Y-%m-%d %H:%M:%S')
+                            vendor_review_deadline_info = vendor_deadline_dt.strftime('%Y/%m/%d %H:%M')
+                            now = datetime.now()
+                            is_vendor_review_deadline_passed = now > vendor_deadline_dt
+                        except:
+                            try:
+                                vendor_deadline_dt = datetime.strptime(str(vendor_deadline), '%Y-%m-%d %H:%M')
+                                vendor_review_deadline_info = vendor_deadline_dt.strftime('%Y/%m/%d %H:%M')
+                                now = datetime.now()
+                                is_vendor_review_deadline_passed = now > vendor_deadline_dt
+                            except:
+                                vendor_review_deadline_info = str(vendor_deadline)
+        except Exception as e:
+            print(f"⚠️ 獲取廠商審核截止時間時發生錯誤: {e}")
 
         return jsonify({
             "success": True,
             "resumes": resumes,
-            "companies": companies_payload
+            "companies": companies_payload,
+            "vendor_review_deadline": vendor_review_deadline_info,
+            "is_vendor_review_deadline_passed": is_vendor_review_deadline_passed
         })
 
     except Exception as exc:
@@ -1512,7 +1557,7 @@ def get_vendor_resumes():
 
 @vendor_bp.route("/vendor/api/review_resume/<int:resume_id>", methods=["POST"])
 def vendor_review_resume(resume_id):
-    """廠商審核履歷（通過/退回）"""
+    """廠商審核履歷（通過/未通過）"""
     if "user_id" not in session or session.get("role") != "vendor":
         return jsonify({"success": False, "message": "未授權"}), 403
     
