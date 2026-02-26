@@ -1034,8 +1034,7 @@ def get_vendor_resumes():
             if resume_teacher_exists:
                 # 使用 resume_teacher 表查詢（新架構）
                 # 添加 ic.advisor_user_id 檢查，確保只查詢該廠商指導老師的公司
-                # 注意：resume_applications 記錄的創建本身就要求 resume_teacher.review_status = 'approved'
-                # 所以不需要再檢查 EXISTS 子查詢，直接查詢 resume_applications 即可
+                # 必須檢查 resume_teacher.review_status = 'approved'，確保只顯示已通過指導老師審核的履歷
                 if vendor_teacher_id:
                     cursor.execute(f"""
                         SELECT DISTINCT
@@ -1055,14 +1054,16 @@ def get_vendor_resumes():
                         INNER JOIN student_job_applications sja ON sja.id = ra.application_id
                         INNER JOIN internship_companies ic ON sja.company_id = ic.id
                         LEFT JOIN internship_jobs ij ON sja.job_id = ij.id
+                        INNER JOIN resume_teacher rt ON rt.application_id = sja.id AND rt.teacher_id = %s
                         WHERE sja.company_id IN ({application_placeholders})
                         AND ic.advisor_user_id = %s
+                        AND rt.review_status = 'approved'
                         AND (%s IN ('teacher', 'ta') OR ij.created_by_vendor_id = %s OR ij.created_by_vendor_id IS NULL)
-                    """, tuple(company_ids) + (vendor_teacher_id,) + (user_role, vendor_id))
+                        GROUP BY sja.student_id, sja.company_id, sja.job_id, ra.application_id, ra.apply_status, ra.company_comment, ra.interview_status, ra.interview_time, ra.interview_result, ic.company_name, ij.title, ij.slots
+                    """, tuple([vendor_teacher_id] + list(company_ids) + [vendor_teacher_id]) + (user_role, vendor_id))
                 else:
                     # 如果沒有 teacher_id，使用原來的查詢（向後兼容）
-                    # 注意：resume_applications 記錄的創建本身就要求 resume_teacher.review_status = 'approved'
-                    # 所以不需要再檢查 EXISTS 子查詢
+                    # 必須檢查 resume_teacher.review_status = 'approved'，確保只顯示已通過指導老師審核的履歷
                     cursor.execute(f"""
                         SELECT DISTINCT
                             sja.student_id,
@@ -1081,14 +1082,17 @@ def get_vendor_resumes():
                         INNER JOIN student_job_applications sja ON sja.id = ra.application_id
                         INNER JOIN internship_companies ic ON sja.company_id = ic.id
                         LEFT JOIN internship_jobs ij ON sja.job_id = ij.id
+                        INNER JOIN resume_teacher rt ON rt.application_id = sja.id
                         WHERE sja.company_id IN ({application_placeholders})
+                        AND rt.review_status = 'approved'
+                        AND rt.teacher_id IS NOT NULL
                         AND (%s IN ('teacher', 'ta') OR ij.created_by_vendor_id = %s OR ij.created_by_vendor_id IS NULL)
+                        GROUP BY sja.student_id, sja.company_id, sja.job_id, ra.application_id, ra.apply_status, ra.company_comment, ra.interview_status, ra.interview_time, ra.interview_result, ic.company_name, ij.title, ij.slots
                     """, tuple(company_ids) + (user_role, vendor_id))
             else:
                 # 使用舊架構（reviewed_by 欄位）
                 # 添加 ic.advisor_user_id 檢查，確保只查詢該廠商指導老師的公司
-                # 注意：resume_applications 記錄的創建本身就要求指導老師已審核通過
-                # 所以不需要再檢查 EXISTS 子查詢
+                # 必須檢查 resumes.reviewed_by 是 teacher 角色，確保只顯示已通過指導老師審核的履歷
                 if vendor_teacher_id:
                     cursor.execute(f"""
                         SELECT DISTINCT
@@ -1108,14 +1112,20 @@ def get_vendor_resumes():
                         INNER JOIN student_job_applications sja ON sja.id = ra.application_id
                         INNER JOIN internship_companies ic ON sja.company_id = ic.id
                         LEFT JOIN internship_jobs ij ON sja.job_id = ij.id
+                        INNER JOIN resumes r ON r.id = sja.resume_id AND r.user_id = sja.student_id
                         WHERE sja.company_id IN ({application_placeholders})
                         AND ic.advisor_user_id = %s
+                        AND r.reviewed_by IS NOT NULL
+                        AND EXISTS (
+                            SELECT 1 FROM users reviewer
+                            WHERE reviewer.id = r.reviewed_by
+                            AND reviewer.role = 'teacher'
+                        )
                         AND (%s IN ('teacher', 'ta') OR ij.created_by_vendor_id = %s OR ij.created_by_vendor_id IS NULL)
                     """, tuple(company_ids) + (vendor_teacher_id,) + (user_role, vendor_id))
                 else:
                     # 如果沒有 teacher_id，使用原來的查詢（向後兼容）
-                    # 注意：resume_applications 記錄的創建本身就要求指導老師已審核通過
-                    # 所以不需要再檢查 EXISTS 子查詢
+                    # 必須檢查 resumes.reviewed_by 是 teacher 角色，確保只顯示已通過指導老師審核的履歷
                     cursor.execute(f"""
                         SELECT DISTINCT
                             sja.student_id,
@@ -1134,7 +1144,14 @@ def get_vendor_resumes():
                         INNER JOIN student_job_applications sja ON sja.id = ra.application_id
                         INNER JOIN internship_companies ic ON sja.company_id = ic.id
                         LEFT JOIN internship_jobs ij ON sja.job_id = ij.id
+                        INNER JOIN resumes r ON r.id = sja.resume_id AND r.user_id = sja.student_id
                         WHERE sja.company_id IN ({application_placeholders})
+                        AND r.reviewed_by IS NOT NULL
+                        AND EXISTS (
+                            SELECT 1 FROM users reviewer
+                            WHERE reviewer.id = r.reviewed_by
+                            AND reviewer.role = 'teacher'
+                        )
                         AND (%s IN ('teacher', 'ta') OR ij.created_by_vendor_id = %s OR ij.created_by_vendor_id IS NULL)
                     """, tuple(company_ids) + (user_role, vendor_id))
             
@@ -1209,6 +1226,7 @@ def get_vendor_resumes():
         # 步驟 4: 整合資料並應用狀態與公司篩選
         # 重點：優先使用 resume_applications 表的資料，這是唯一來源
         resumes = []
+        processed_student_resume_keys = set()  # 用於追蹤已處理的 (student_id, company_id, job_id) 組合，避免重複
         for row in latest_resumes:
             student_id = row["student_id"]
             
@@ -1224,9 +1242,13 @@ def get_vendor_resumes():
             # 檢查 resume_applications 表中是否有該學生的記錄
             # 這是唯一顯示履歷的條件：必須有 resume_applications 記錄
             student_resume_applications = []
+            processed_keys = set()  # 用於追蹤已處理的 (student_id, company_id, job_id) 組合
             for key, ra_data in resume_applications_map.items():
                 if key[0] == student_id:  # key[0] 是 student_id
-                    student_resume_applications.append(ra_data)
+                    # 使用 key 來去重，確保每個 (student_id, company_id, job_id) 組合只處理一次
+                    if key not in processed_keys:
+                        student_resume_applications.append(ra_data)
+                        processed_keys.add(key)
             
             # 檢查是否有對該廠商公司的志願序（用於顯示 preference_id 和 preference_order）
             student_preferences = preferences_map.get(student_id, [])
@@ -1289,6 +1311,13 @@ def get_vendor_resumes():
                                 continue
                         elif display_status != status_filter:
                             continue
+                    
+                    # 檢查是否已經處理過這個 (student_id, company_id, job_id) 組合，避免重複
+                    resume_key = (student_id, company_id, job_id)
+                    if resume_key in processed_student_resume_keys:
+                        print(f"⚠️ 跳過重複的履歷記錄: student_id={student_id}, company_id={company_id}, job_id={job_id}")
+                        continue
+                    processed_student_resume_keys.add(resume_key)
                     
                     # 構建結果
                     resume = {
