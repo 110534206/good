@@ -1739,12 +1739,13 @@ def director_matching_results():
         # 優先從 resume_applications 讀取廠商的媒合排序資料
         # 如果 manage_director 表有資料，則合併兩者的資料
         # 這樣即使 manage_director 表為空，也能顯示廠商的排序結果
+        # 注意：使用 LEFT JOIN 確保即使 student_job_applications 或 student_preferences 沒有記錄也能顯示
         query = """
             SELECT 
                 COALESCE(md.match_id, CONCAT('ra_', ra.id)) AS match_id,
-                COALESCE(md.vendor_id, NULL) AS vendor_id,
-                sja.student_id,
-                sp.id AS preference_id,
+                COALESCE(md.vendor_id, sja.company_id) AS vendor_id,
+                COALESCE(md.student_id, sja.student_id) AS student_id,
+                COALESCE(sp.id, NULL) AS preference_id,
                 COALESCE(md.original_type, CASE WHEN ra.is_reserve = 0 THEN 'Regular' ELSE 'Backup' END) AS original_type,
                 COALESCE(md.original_rank, ra.slot_index) AS original_rank,
                 COALESCE(md.is_conflict, 0) AS is_conflict,
@@ -1752,9 +1753,9 @@ def director_matching_results():
                 md.final_rank,
                 COALESCE(md.is_adjusted, 0) AS is_adjusted,
                 COALESCE(md.updated_at, ra.updated_at, ra.created_at) AS updated_at,
-                sja.company_id AS company_id,
+                COALESCE(sp.company_id, sja.company_id, md.vendor_id, ra.job_id) AS company_id,
                 sp.preference_order,
-                sja.job_id AS job_id,
+                COALESCE(sp.job_id, sja.job_id, ra.job_id) AS job_id,
                 ic.company_name,
                 u.name AS student_name,
                 u.username AS student_number,
@@ -1767,21 +1768,24 @@ def director_matching_results():
                 ra.is_reserve AS vendor_is_reserve,
                 ra.slot_index AS vendor_slot_index
             FROM resume_applications ra
-            INNER JOIN student_job_applications sja ON ra.application_id = sja.id
-            INNER JOIN student_preferences sp ON sja.student_id = sp.student_id 
+            LEFT JOIN student_job_applications sja ON ra.application_id = sja.id
+            LEFT JOIN student_preferences sp ON (sja.student_id = sp.student_id 
                 AND sja.company_id = sp.company_id 
                 AND sja.job_id = sp.job_id
-                AND sp.semester_id = %s
+                AND (sp.semester_id = %s OR sp.semester_id IS NULL))
             LEFT JOIN manage_director md ON ra.application_id = md.preference_id
-            LEFT JOIN internship_companies ic ON sja.company_id = ic.id
-            LEFT JOIN internship_jobs ij ON sja.job_id = ij.id
-            LEFT JOIN users u ON sja.student_id = u.id
+            LEFT JOIN internship_companies ic ON COALESCE(sp.company_id, sja.company_id, md.vendor_id) = ic.id
+            LEFT JOIN internship_jobs ij ON COALESCE(sp.job_id, sja.job_id, ra.job_id) = ij.id
+            LEFT JOIN users u ON COALESCE(md.student_id, sja.student_id) = u.id
             LEFT JOIN classes c ON u.class_id = c.id
             LEFT JOIN users v ON md.vendor_id = v.id
             WHERE ra.apply_status = 'approved'  -- 廠商必須已通過履歷審核
-            AND (ra.is_reserve IS NOT NULL OR ra.slot_index IS NOT NULL)  -- 必須已完成媒合排序
+            AND (
+                (ra.is_reserve = 0 AND ra.slot_index IS NOT NULL)  -- 正取學生：is_reserve=0且slot_index有值
+                OR (ra.is_reserve = 1)  -- 候補學生：is_reserve=1
+            )  -- 必須已完成媒合排序
             AND (md.director_decision IS NULL OR md.director_decision != 'Rejected')  -- 排除已被主任移除的記錄（如果 manage_director 中有記錄且是 Rejected，則不顯示）
-            AND ic.status = 'approved'
+            AND (ic.status = 'approved' OR ic.status IS NULL)  -- 公司狀態必須是已審核（如果公司不存在則也顯示）
             ORDER BY 
                 CASE COALESCE(md.director_decision, 'Pending')
                     WHEN 'Approved' THEN 1 
@@ -1789,10 +1793,10 @@ def director_matching_results():
                     WHEN 'Rejected' THEN 3 
                     ELSE 4 
                 END,
-                sja.company_id, 
-                sja.job_id, 
+                COALESCE(sp.company_id, sja.company_id, md.vendor_id), 
+                COALESCE(sp.job_id, sja.job_id, ra.job_id), 
                 CASE WHEN md.director_decision = 'Approved' AND md.final_rank IS NOT NULL THEN 0 ELSE 1 END,
-                COALESCE(md.final_rank, ra.slot_index, 999) ASC,
+                COALESCE(md.final_rank, md.original_rank, ra.slot_index, 999) ASC,
                 COALESCE(md.original_rank, ra.slot_index, 999) ASC
         """
         cursor.execute(query, (current_semester_id,))
@@ -1802,26 +1806,111 @@ def director_matching_results():
         vendor_sort_count = sum(1 for r in all_results if r.get("vendor_is_reserve") is not None or r.get("vendor_slot_index") is not None)
         print(f"📊 director_matching_results: 總記錄數={len(all_results)}, 有廠商排序資料的記錄數={vendor_sort_count}")
         
-        # 調試：如果沒有資料，檢查可能的原因
+        # 調試：檢查查詢參數
+        print(f"📊 查詢參數: current_semester_id={current_semester_id}")
+        
+        # 調試：如果沒有結果，檢查每個 JOIN 條件
         if len(all_results) == 0:
-            # 檢查 resume_applications 中是否有符合條件的記錄（不考慮 manage_director）
-            debug_query = """
+            # 檢查是否有 student_job_applications 記錄
+            debug_query_sja = """
                 SELECT COUNT(*) as count
                 FROM resume_applications ra
                 INNER JOIN student_job_applications sja ON ra.application_id = sja.id
-                INNER JOIN student_preferences sp ON sja.student_id = sp.student_id 
-                    AND sja.company_id = sp.company_id 
-                    AND sja.job_id = sp.job_id
-                    AND sp.semester_id = %s
+                WHERE ra.apply_status = 'approved'
+                AND (
+                    (ra.is_reserve = 0 AND ra.slot_index IS NOT NULL)
+                    OR (ra.is_reserve = 1)
+                )
+            """
+            cursor.execute(debug_query_sja)
+            debug_result_sja = cursor.fetchone()
+            print(f"⚠️ 加上 student_job_applications JOIN 後的記錄數: {debug_result_sja.get('count', 0) if debug_result_sja else 0}")
+            
+            # 檢查具體的 resume_applications 記錄
+            debug_query_ra = """
+                SELECT ra.id, ra.application_id, ra.job_id, ra.apply_status, ra.is_reserve, ra.slot_index,
+                       sja.id as sja_id, sja.student_id, sja.company_id, sja.job_id as sja_job_id
+                FROM resume_applications ra
+                LEFT JOIN student_job_applications sja ON ra.application_id = sja.id
+                WHERE ra.apply_status = 'approved'
+                AND (
+                    (ra.is_reserve = 0 AND ra.slot_index IS NOT NULL)
+                    OR (ra.is_reserve = 1)
+                )
+                LIMIT 5
+            """
+            cursor.execute(debug_query_ra)
+            debug_ra_results = cursor.fetchall()
+            print(f"⚠️ resume_applications 記錄詳情（前5筆）:")
+            for ra_record in debug_ra_results:
+                print(f"   - ra.id={ra_record.get('id')}, application_id={ra_record.get('application_id')}, sja_id={ra_record.get('sja_id')}, student_id={ra_record.get('student_id')}, is_reserve={ra_record.get('is_reserve')}, slot_index={ra_record.get('slot_index')}")
+            
+            # 檢查 manage_director 表的記錄
+            debug_query_md = """
+                SELECT md.match_id, md.preference_id, md.student_id, md.director_decision
+                FROM manage_director md
+                LIMIT 5
+            """
+            cursor.execute(debug_query_md)
+            debug_md_results = cursor.fetchall()
+            print(f"⚠️ manage_director 記錄詳情（前5筆）:")
+            for md_record in debug_md_results:
+                print(f"   - match_id={md_record.get('match_id')}, preference_id={md_record.get('preference_id')}, student_id={md_record.get('student_id')}, director_decision={md_record.get('director_decision')}")
+        
+        # 調試：如果沒有資料，檢查可能的原因
+        if len(all_results) == 0:
+            # 檢查 resume_applications 中是否有符合條件的記錄（不考慮 manage_director 和 student_preferences）
+            debug_query1 = """
+                SELECT COUNT(*) as count
+                FROM resume_applications ra
+                INNER JOIN student_job_applications sja ON ra.application_id = sja.id
                 LEFT JOIN internship_companies ic ON sja.company_id = ic.id
                 WHERE ra.apply_status = 'approved'
-                AND (ra.is_reserve IS NOT NULL OR ra.slot_index IS NOT NULL)
-                AND ic.status = 'approved'
+                AND (
+                    (ra.is_reserve = 0 AND ra.slot_index IS NOT NULL)
+                    OR (ra.is_reserve = 1)
+                )
             """
-            cursor.execute(debug_query, (current_semester_id,))
-            debug_result = cursor.fetchone()
-            total_eligible = debug_result.get('count', 0) if debug_result else 0
-            print(f"⚠️ 沒有符合條件的記錄。resume_applications 中符合基本條件的記錄數: {total_eligible}")
+            cursor.execute(debug_query1)
+            debug_result1 = cursor.fetchone()
+            total_with_sort = debug_result1.get('count', 0) if debug_result1 else 0
+            print(f"⚠️ 沒有符合條件的記錄。resume_applications 中有媒合排序的記錄數: {total_with_sort}")
+            
+            # 檢查公司狀態
+            debug_query2 = """
+                SELECT COUNT(*) as count
+                FROM resume_applications ra
+                INNER JOIN student_job_applications sja ON ra.application_id = sja.id
+                LEFT JOIN internship_companies ic ON sja.company_id = ic.id
+                WHERE ra.apply_status = 'approved'
+                AND (
+                    (ra.is_reserve = 0 AND ra.slot_index IS NOT NULL)
+                    OR (ra.is_reserve = 1)
+                )
+                AND (ic.status = 'approved' OR ic.status IS NULL)
+            """
+            cursor.execute(debug_query2)
+            debug_result2 = cursor.fetchone()
+            total_with_company = debug_result2.get('count', 0) if debug_result2 else 0
+            print(f"⚠️ 加上公司狀態條件後的記錄數: {total_with_company}")
+            
+            # 檢查是否有 apply_status = 'approved' 的記錄
+            debug_query3 = """
+                SELECT COUNT(*) as count, 
+                       SUM(CASE WHEN is_reserve = 0 AND slot_index IS NOT NULL THEN 1 ELSE 0 END) as regular_count,
+                       SUM(CASE WHEN is_reserve = 1 THEN 1 ELSE 0 END) as reserve_count
+                FROM resume_applications
+                WHERE apply_status = 'approved'
+                AND (
+                    (is_reserve = 0 AND slot_index IS NOT NULL)
+                    OR (is_reserve = 1)
+                )
+            """
+            cursor.execute(debug_query3)
+            debug_result3 = cursor.fetchone()
+            if debug_result3:
+                print(f"⚠️ resume_applications 中 apply_status='approved' 且有媒合排序的記錄數: {debug_result3.get('count', 0)}")
+                print(f"   - 正取: {debug_result3.get('regular_count', 0)}, 候補: {debug_result3.get('reserve_count', 0)}")
         
         # 格式化結果並組織資料結構
         formatted_results = []
@@ -1870,26 +1959,31 @@ def director_matching_results():
             # 優先使用廠商的媒合排序資料
             vendor_is_reserve = result.get("vendor_is_reserve")
             vendor_slot_index = result.get("vendor_slot_index")
+            original_rank = result.get("original_rank")
+            original_type = result.get("original_type")
             
             # 如果 resume_applications 表中有記錄（vendor_is_reserve 或 vendor_slot_index 不是 NULL），表示廠商已經排序
             if vendor_is_reserve is not None or vendor_slot_index is not None:
                 # 有廠商的媒合排序資料，優先使用
                 # is_reserve: 0=正取, 1=備取
                 is_reserve = bool(vendor_is_reserve) if vendor_is_reserve is not None else False
-                slot_index = vendor_slot_index if vendor_slot_index is not None else None
+                # 優先使用 original_rank（如果存在），否則使用 vendor_slot_index
+                slot_index = original_rank if original_rank is not None else (vendor_slot_index if vendor_slot_index is not None else None)
             elif result.get("director_decision") == "Approved" and result.get("final_rank") is not None:
                 # 主任已核定為正取
                 is_reserve = False
                 slot_index = result.get("final_rank")
             elif result.get("director_decision") == "Pending":
                 # 待定狀態，根據原始設定判斷
-                if result.get("original_type") == "Regular" and result.get("original_rank") is not None:
+                if original_type == "Regular" and original_rank is not None:
                     is_reserve = False
-                    slot_index = result.get("original_rank")
+                    slot_index = original_rank
                 else:
                     is_reserve = True
+                    slot_index = None
             else:
                 is_reserve = True
+                slot_index = None
             
             formatted_result = {
                 "id": result.get("match_id"),  # 使用 match_id 作為識別符
@@ -2032,38 +2126,42 @@ def director_matching_results():
         for company_id, company_data in companies_data.items():
             jobs_list = []
             for job_id, job_data in company_data["jobs"].items():
-                # 對正取名單排序：重複中選的學生優先按志願序排序，然後按 slot_index 排序
+                # 對正取名單排序：重複中選的學生優先按志願序排序，然後按 original_rank 或 slot_index 排序
                 def sort_key_regulars(x):
                     student_id = x.get("student_id")
                     is_duplicate = student_id in duplicate_students
                     preference_order = x.get("preference_order")
+                    # 優先使用 original_rank（廠商的排序），如果沒有則使用 slot_index
+                    rank_value = x.get("original_rank") if x.get("original_rank") is not None else x.get("slot_index")
                     
                     # 排序優先級：
                     # 1. 重複中選的學生排在前面（False < True，所以 not is_duplicate 會讓重複中選的排在前面）
                     # 2. 如果是重複中選，按志願序排序（志願序小的在前）
-                    # 3. 如果不是重複中選，或志願序相同，按 slot_index 排序
+                    # 3. 如果不是重複中選，或志願序相同，按 original_rank 或 slot_index 排序
                     return (
                         not is_duplicate,  # 重複中選的排在前面（False < True）
                         preference_order is None if is_duplicate else False,  # 重複中選但沒有志願序的排在後面
                         preference_order if (is_duplicate and preference_order is not None) else 999,  # 重複中選的按志願序排序
-                        x.get("slot_index") is None,  # None 值排在後面
-                        x.get("slot_index") or 999  # 按 slot_index 排序
+                        rank_value is None,  # None 值排在後面
+                        rank_value or 999  # 按 original_rank 或 slot_index 排序
                     )
                 
                 regulars = sorted(job_data["regulars"], key=sort_key_regulars)
                 
-                # 對備取名單排序：重複中選的學生優先按志願序排序，然後按 slot_index 排序
+                # 對備取名單排序：重複中選的學生優先按志願序排序，然後按 original_rank 或 slot_index 排序
                 def sort_key_reserves(x):
                     student_id = x.get("student_id")
                     is_duplicate = student_id in duplicate_students
                     preference_order = x.get("preference_order")
+                    # 優先使用 original_rank（廠商的排序），如果沒有則使用 slot_index
+                    rank_value = x.get("original_rank") if x.get("original_rank") is not None else x.get("slot_index")
                     
                     return (
                         not is_duplicate,  # 重複中選的排在前面
                         preference_order is None if is_duplicate else False,  # 重複中選但沒有志願序的排在後面
                         preference_order if (is_duplicate and preference_order is not None) else 999,  # 重複中選的按志願序排序
-                        x.get("slot_index") is None,  # None 值排在後面
-                        x.get("slot_index") or 999  # 按 slot_index 排序
+                        rank_value is None,  # None 值排在後面
+                        rank_value or 999  # 按 original_rank 或 slot_index 排序
                     )
                 
                 reserves = sorted(job_data["reserves"], key=sort_key_reserves)
@@ -3070,49 +3168,111 @@ def director_swap_positions():
     cursor = conn.cursor(dictionary=True)
     
     try:
-        # 獲取兩個記錄的當前 final_rank
-        cursor.execute("""
-            SELECT match_id, final_rank, director_decision
-            FROM manage_director
-            WHERE match_id IN (%s, %s)
-        """, (match_id1, match_id2))
-        records = cursor.fetchall()
+        # 獲取兩個記錄的當前 final_rank 和 original_rank
+        # 如果 match_id 以 'ra_' 開頭，則從 resume_applications 表讀取
+        # 否則從 manage_director 表讀取
+        records = []
+        
+        for match_id in [match_id1, match_id2]:
+            if isinstance(match_id, str) and match_id.startswith('ra_'):
+                # 從 resume_applications 表讀取
+                ra_id = match_id.replace('ra_', '')
+                cursor.execute("""
+                    SELECT CONCAT('ra_', ra.id) AS match_id, ra.slot_index AS final_rank, 
+                           ra.slot_index AS original_rank, 'Pending' AS director_decision
+                    FROM resume_applications ra
+                    WHERE ra.id = %s AND ra.apply_status = 'approved'
+                """, (ra_id,))
+                record = cursor.fetchone()
+                if record:
+                    records.append(record)
+            else:
+                # 從 manage_director 表讀取
+                cursor.execute("""
+                    SELECT match_id, final_rank, original_rank, director_decision
+                    FROM manage_director
+                    WHERE match_id = %s
+                """, (match_id,))
+                record = cursor.fetchone()
+                if record:
+                    records.append(record)
         
         if len(records) != 2:
             return jsonify({"success": False, "message": "找不到指定的記錄"}), 404
         
-        record1 = next((r for r in records if r['match_id'] == match_id1), None)
-        record2 = next((r for r in records if r['match_id'] == match_id2), None)
+        record1 = next((r for r in records if str(r['match_id']) == str(match_id1)), None)
+        record2 = next((r for r in records if str(r['match_id']) == str(match_id2)), None)
         
         if not record1 or not record2:
             return jsonify({"success": False, "message": "找不到指定的記錄"}), 404
         
-        # 確保兩個記錄都是正取狀態
-        if record1.get('director_decision') != 'Approved' or record2.get('director_decision') != 'Approved':
-            return jsonify({"success": False, "message": "只能調整正取學生的順序"}), 400
-        
-        rank1 = record1.get('final_rank')
-        rank2 = record2.get('final_rank')
+        # 獲取 rank（優先使用 final_rank，如果沒有則使用 original_rank）
+        rank1 = record1.get('final_rank') if record1.get('final_rank') is not None else record1.get('original_rank')
+        rank2 = record2.get('final_rank') if record2.get('final_rank') is not None else record2.get('original_rank')
         
         if rank1 is None or rank2 is None:
             return jsonify({"success": False, "message": "學生必須有正取位置才能調整順序"}), 400
         
-        # 交換兩個學生的 final_rank
-        cursor.execute("""
-            UPDATE manage_director
-            SET final_rank = %s,
-                is_adjusted = TRUE,
-                updated_at = CURRENT_TIMESTAMP
-            WHERE match_id = %s
-        """, (rank2, match_id1))
-        
-        cursor.execute("""
-            UPDATE manage_director
-            SET final_rank = %s,
-                is_adjusted = TRUE,
-                updated_at = CURRENT_TIMESTAMP
-            WHERE match_id = %s
-        """, (rank1, match_id2))
+        # 交換兩個學生的 rank
+        # 需要同時更新 resume_applications 和 manage_director 表
+        for match_id, new_rank in [(match_id1, rank2), (match_id2, rank1)]:
+            if isinstance(match_id, str) and match_id.startswith('ra_'):
+                # 從 resume_applications 表更新
+                ra_id = match_id.replace('ra_', '')
+                cursor.execute("""
+                    UPDATE resume_applications
+                    SET slot_index = %s,
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE id = %s
+                """, (new_rank, ra_id))
+                
+                # 同時更新 manage_director 表（如果存在）
+                cursor.execute("""
+                    SELECT application_id FROM resume_applications WHERE id = %s
+                """, (ra_id,))
+                ra_record = cursor.fetchone()
+                if ra_record:
+                    cursor.execute("""
+                        UPDATE manage_director
+                        SET original_rank = %s,
+                            final_rank = %s,
+                            is_adjusted = TRUE,
+                            updated_at = CURRENT_TIMESTAMP
+                        WHERE preference_id = %s
+                    """, (new_rank, new_rank, ra_record['application_id']))
+            else:
+                # 從 manage_director 表更新
+                # 先獲取 preference_id，以便更新 resume_applications
+                cursor.execute("""
+                    SELECT preference_id FROM manage_director WHERE match_id = %s
+                """, (match_id,))
+                md_record = cursor.fetchone()
+                
+                # 更新 manage_director 表
+                cursor.execute("""
+                    UPDATE manage_director
+                    SET final_rank = %s,
+                        is_adjusted = TRUE,
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE match_id = %s
+                """, (new_rank, match_id))
+                
+                # 如果 original_rank 為 NULL 或需要更新，也更新它
+                cursor.execute("""
+                    UPDATE manage_director
+                    SET original_rank = %s,
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE match_id = %s AND (original_rank IS NULL OR original_rank != %s)
+                """, (new_rank, match_id, new_rank))
+                
+                # 同時更新 resume_applications 表的 slot_index
+                if md_record and md_record.get('preference_id'):
+                    cursor.execute("""
+                        UPDATE resume_applications
+                        SET slot_index = %s,
+                            updated_at = CURRENT_TIMESTAMP
+                        WHERE application_id = %s
+                    """, (new_rank, md_record['preference_id']))
         
         conn.commit()
         

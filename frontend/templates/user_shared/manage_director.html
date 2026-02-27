@@ -2432,34 +2432,111 @@
         // 確保 jobs 陣列存在
         const jobs = company.jobs || [];
         const jobsHtml = jobs.map(job => {
-          const regularsHtml = renderStudentList(job.regulars, 'regular', job);
-          const reservesHtml = renderStudentList(job.reserves, 'reserve', job);
-          
           // 獲取該職缺的名額設定（可手動調整）
           const key = `${company.company_id}_${job.job_id}`;
           const maxSlots = jobSlotsMap[key] || job.job_slots || 1;
-          const filledSlots = job.regulars.length;
-          const emptySlots = [];
           
-          // 根據職缺名額計算空位
-          for (let i = filledSlots + 1; i <= maxSlots; i++) {
-            emptySlots.push(i);
-          }
-
-          const emptySlotsHtml = emptySlots.map(slotIndex => `
-            <div class="empty-slot" 
-                 data-company-id="${company.company_id}"
-                 data-job-id="${job.job_id}"
-                 data-type="regular"
-                 data-slot-index="${slotIndex}"
-                 onclick="selectStudentForSlot(${company.company_id}, ${job.job_id}, ${slotIndex})"
-                 ondrop="handleDrop(event)"
-                 ondragover="handleDragOver(event)"
-                 ondragleave="handleDragLeave(event)">
-              <i class="fas fa-plus-circle"></i>
-              <div>正取 ${slotIndex}（點擊或拖放學生至此）</div>
-            </div>
-          `).join('');
+          // 根據 original_rank 或 slot_index 將學生分配到對應位置
+          // 創建一個映射：位置 -> 學生
+          const slotToStudent = {};
+          // 先按 original_rank 或 slot_index 排序，確保相同位置時優先保留第一個
+          const sortedRegulars = [...job.regulars].sort((a, b) => {
+            const aRank = a.original_rank !== null && a.original_rank !== undefined 
+              ? a.original_rank 
+              : (a.slot_index || 999);
+            const bRank = b.original_rank !== null && b.original_rank !== undefined 
+              ? b.original_rank 
+              : (b.slot_index || 999);
+            return aRank - bRank;
+          });
+          
+          sortedRegulars.forEach(student => {
+            // 優先使用 original_rank（廠商的排序），如果沒有則使用 slot_index
+            const rankValue = student.original_rank !== null && student.original_rank !== undefined 
+              ? student.original_rank 
+              : (student.slot_index || null);
+            
+            // 如果該位置還沒有學生，才分配
+            if (rankValue !== null && rankValue !== undefined && rankValue >= 1 && rankValue <= maxSlots && !slotToStudent[rankValue]) {
+              slotToStudent[rankValue] = student;
+            }
+          });
+          
+          // 為每個位置（1 到 maxSlots）渲染格子
+          const regularSlotsHtml = Array.from({ length: maxSlots }, (_, i) => {
+            const slotIndex = i + 1;
+            const student = slotToStudent[slotIndex];
+            
+            if (student) {
+              // 該位置有學生，渲染學生項目（使用與原本 renderStudentList 相同的結構）
+              const isDuplicate = duplicateStudents.includes(student.student_id);
+              const badgeClass = 'badge-regular';
+              const rankValue = student.original_rank !== null && student.original_rank !== undefined 
+                ? student.original_rank 
+                : (student.slot_index || slotIndex);
+              const badgeText = `正取${rankValue}`;
+              
+              return `
+                <div class="student-item ${isDuplicate ? 'duplicate' : ''}">
+                  <div class="student-info">
+                    <div class="student-name">
+                      ${escapeHtml(student.student_name)}
+                      <span class="badge ${badgeClass}">${badgeText}</span>
+                      ${isDuplicate ? '<span class="badge badge-duplicate">重複中選</span>' : ''}
+                    </div>
+                    <div class="student-details">
+                      <div class="student-details-row">
+                        <span><i class="fas fa-id-card"></i> ${escapeHtml(student.student_number || '—')}</span>
+                      </div>
+                      <div class="student-details-row">
+                        <span><i class="fas fa-users"></i> ${escapeHtml(student.class_name || '—')}</span>
+                      </div>
+                      <div class="student-details-row">
+                        <span class="preference-order">
+                          <i class="fas fa-list-ol"></i> 志願序：${(student.preference_order && student.preference_order >= 1 && student.preference_order <= 5) ? student.preference_order : '—'}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="student-actions">
+                    <button class="btn btn-sm" onclick="movePosition('${String(student.id || student.match_id || '')}', ${job.job_id}, 'up')" 
+                            style="background: #f3f4f6; color: #374151; padding: 4px 8px; margin-right: 4px;"
+                            title="向上移動">
+                      <i class="fas fa-arrow-up"></i>
+                    </button>
+                    <button class="btn btn-sm" onclick="movePosition('${String(student.id || student.match_id || '')}', ${job.job_id}, 'down')" 
+                            style="background: #f3f4f6; color: #374151; padding: 4px 8px; margin-right: 8px;"
+                            title="向下移動">
+                      <i class="fas fa-arrow-down"></i>
+                    </button>
+                    <button class="btn btn-danger" onclick="removeStudent('${String(student.id || student.match_id || '')}', '${escapeHtml(student.student_name)}')">
+                      <i class="fas fa-times"></i> 移除
+                    </button>
+                  </div>
+                </div>
+              `;
+            } else {
+              // 該位置沒有學生，渲染空位
+              return `
+                <div class="empty-slot" 
+                     data-company-id="${company.company_id}"
+                     data-job-id="${job.job_id}"
+                     data-type="regular"
+                     data-slot-index="${slotIndex}"
+                     onclick="selectStudentForSlot(${company.company_id}, ${job.job_id}, ${slotIndex})"
+                     ondrop="handleDrop(event)"
+                     ondragover="handleDragOver(event)"
+                     ondragleave="handleDragLeave(event)">
+                  <i class="fas fa-plus-circle"></i>
+                  <div>正取 ${slotIndex}（點擊或拖放學生至此）</div>
+                </div>
+              `;
+            }
+          }).join('');
+          
+          const reservesHtml = renderStudentList(job.reserves, 'reserve', job);
+          
+          const filledSlots = Object.keys(slotToStudent).length;
 
           return `
             <div class="job-section" 
@@ -2484,8 +2561,7 @@
                    ondragover="handleDragOver(event)"
                    ondragleave="handleDragLeave(event)">
                 <div class="list-label">正取名單</div>
-                ${regularsHtml}
-                ${emptySlotsHtml}
+                ${regularSlotsHtml}
               </div>
               ${job.reserves.length > 0 ? `
                 <div class="reserve-list"
@@ -2567,11 +2643,24 @@
         const aIsDuplicate = duplicateStudents.includes(a.student_id);
         const bIsDuplicate = duplicateStudents.includes(b.student_id);
         
+        // 獲取排序值：優先使用 original_rank（廠商的排序），如果沒有則使用 slot_index
+        const getRankValue = (student) => {
+          // 優先使用 original_rank（廠商的排序資料）
+          if (student.original_rank !== null && student.original_rank !== undefined) {
+            return student.original_rank;
+          }
+          // 如果沒有 original_rank，使用 slot_index
+          return student.slot_index || 999;
+        };
+        
+        const aRank = getRankValue(a);
+        const bRank = getRankValue(b);
+        
         // 排序優先級：
         // 1. 重複中選的學生排在前面
         // 2. 如果是重複中選，按第一志願序排序（第一志願序小的在前）
-        // 3. 如果第一志願序相同，按 slot_index 排序
-        // 4. 如果都不是重複中選，按 slot_index 排序
+        // 3. 如果第一志願序相同，按 original_rank 或 slot_index 排序
+        // 4. 如果都不是重複中選，按 original_rank 或 slot_index 排序
         
         // 如果只有一個是重複中選，重複中選的排在前面
         if (aIsDuplicate && !bIsDuplicate) return -1;
@@ -2583,26 +2672,26 @@
           const aFirstOrder = getFirstPreferenceOrder(a.student_id);
           const bFirstOrder = getFirstPreferenceOrder(b.student_id);
           
-          // 如果第一志願序相同，按 slot_index 排序
+          // 如果第一志願序相同，按 original_rank 或 slot_index 排序
           if (aFirstOrder === bFirstOrder) {
-            const aSlot = a.slot_index || 999;
-            const bSlot = b.slot_index || 999;
-            return aSlot - bSlot;
+            return aRank - bRank;
           }
           return aFirstOrder - bFirstOrder;
         }
         
-        // 如果都不是重複中選，按 slot_index 排序
-        const aSlot = a.slot_index || 999;
-        const bSlot = b.slot_index || 999;
-        return aSlot - bSlot;
+        // 如果都不是重複中選，按 original_rank 或 slot_index 排序
+        return aRank - bRank;
       });
 
       return sortedStudents.map((student, index) => {
         const isDuplicate = duplicateStudents.includes(student.student_id);
         const badgeClass = type === 'regular' ? 'badge-regular' : 'badge-reserve';
+        // 優先使用 original_rank（廠商的排序），如果沒有則使用 slot_index
+        const rankValue = student.original_rank !== null && student.original_rank !== undefined 
+          ? student.original_rank 
+          : (student.slot_index || '');
         const badgeText = type === 'regular' 
-          ? `正取${student.slot_index || ''}` 
+          ? `正取${rankValue}` 
           : `備取${index + 1}`;
         
         return `
@@ -2767,30 +2856,65 @@
 
     // 調整正取名單中學生的位置
     async function movePosition(historyId, jobId, direction) {
+      console.log('🔍 movePosition 被調用:', { historyId, jobId, direction });
+      
       // 找到該職缺的所有正取學生
       let regulars = [];
       let currentStudent = null;
       
       allCompaniesData.forEach(company => {
         company.jobs.forEach(job => {
-          if (job.job_id === jobId) {
+          // 使用字符串比較確保類型匹配
+          if (String(job.job_id) === String(jobId)) {
             regulars = job.regulars || [];
-            currentStudent = regulars.find(s => s.id === historyId);
+            console.log('📋 找到職缺的正取學生:', regulars.length, regulars);
+            // 同時檢查 id 和 match_id
+            currentStudent = regulars.find(s => {
+              const idMatch = s.id && String(s.id) === String(historyId);
+              const matchIdMatch = s.match_id && String(s.match_id) === String(historyId);
+              return idMatch || matchIdMatch;
+            });
+            if (currentStudent) {
+              console.log('✅ 找到當前學生:', currentStudent);
+            }
           }
         });
       });
       
       if (!currentStudent) {
+        console.error('❌ 找不到該學生:', historyId);
         showToast('找不到該學生', 'error');
         return;
       }
       
-      // 按 slot_index 排序
-      regulars.sort((a, b) => (a.slot_index || 999) - (b.slot_index || 999));
+      // 按照實際顯示的位置（slot_index）排序，這樣才能正確交換相鄰位置的學生
+      // 創建一個副本，避免修改原始陣列
+      const sortedRegulars = [...regulars].sort((a, b) => {
+        // 優先使用 slot_index（實際顯示的位置），如果沒有則使用 original_rank
+        const aRank = a.slot_index !== null && a.slot_index !== undefined ? a.slot_index : (a.original_rank || 999);
+        const bRank = b.slot_index !== null && b.slot_index !== undefined ? b.slot_index : (b.original_rank || 999);
+        return aRank - bRank;
+      });
       
-      // 找到當前學生的索引
-      const currentIndex = regulars.findIndex(s => s.id === historyId);
+      console.log('📊 排序後的學生列表:', sortedRegulars.map(s => ({ 
+        name: s.student_name, 
+        id: s.id, 
+        match_id: s.match_id,
+        original_rank: s.original_rank,
+        slot_index: s.slot_index 
+      })));
+      
+      // 找到當前學生的索引（同時檢查 id 和 match_id）
+      const currentIndex = sortedRegulars.findIndex(s => {
+        const idMatch = s.id && String(s.id) === String(historyId);
+        const matchIdMatch = s.match_id && String(s.match_id) === String(historyId);
+        return idMatch || matchIdMatch;
+      });
+      
+      console.log('📍 當前學生索引:', currentIndex);
+      
       if (currentIndex === -1) {
+        console.error('❌ 找不到該學生在排序列表中的位置');
         showToast('找不到該學生', 'error');
         return;
       }
@@ -2805,13 +2929,28 @@
         }
       } else {
         targetIndex = currentIndex + 1;
-        if (targetIndex >= regulars.length) {
+        if (targetIndex >= sortedRegulars.length) {
           showToast('已經是最後一個', 'info');
           return;
         }
       }
       
-      const targetStudent = regulars[targetIndex];
+      const targetStudent = sortedRegulars[targetIndex];
+      console.log('🎯 目標學生:', targetStudent);
+      
+      if (!targetStudent) {
+        console.error('❌ 找不到目標學生');
+        showToast('找不到目標學生', 'error');
+        return;
+      }
+      
+      const targetId = targetStudent.id || targetStudent.match_id;
+      console.log('🔄 準備交換:', { 
+        from: historyId, 
+        to: targetId,
+        fromStudent: currentStudent.student_name,
+        toStudent: targetStudent.student_name
+      });
       
       try {
         const res = await fetch('/admission/api/director_swap_positions', {
@@ -2819,12 +2958,14 @@
           headers: { 'Content-Type': 'application/json' },
           credentials: 'include',
           body: JSON.stringify({
-            match_id1: historyId,
-            match_id2: targetStudent.id
+            match_id1: String(historyId),
+            match_id2: String(targetId)
           })
         });
         
         const data = await res.json();
+        console.log('📡 API 回應:', data);
+        
         if (data.success) {
           showToast('已調整位置', 'success');
           await loadMatchingResults(false);
@@ -2833,7 +2974,7 @@
           showToast(data.message || '調整失敗', 'error');
         }
       } catch (error) {
-        console.error('調整位置失敗:', error);
+        console.error('❌ 調整位置失敗:', error);
         showToast('調整位置失敗', 'error');
       }
     }

@@ -4267,6 +4267,10 @@ def save_matching_sort():
                 slot_index_val = student.get('slot_index')
                 is_reserve_val = student.get('is_reserve', False)
                 
+                # 調試：打印接收到的資料
+                print(f"    📋 接收到的學生資料：student_id={student_id}, job_id={job_id}, preference_id={preference_id}")
+                print(f"    📋 slot_index={slot_index_val}, is_reserve={is_reserve_val}")
+                
                 # 從 preference_id 和 job_id 找到對應的 application_id（student_job_applications.id）
                 application_id = None
                 if preference_id and job_id and student_id:
@@ -4312,25 +4316,105 @@ def save_matching_sort():
                 
                 if existing_ra:
                     # 更新現有記錄的 is_reserve 和 slot_index
+                    # 同時確保 apply_status 是 'approved'（只有通過審核的學生才會出現在媒合排序中）
                     cursor.execute("""
                         UPDATE resume_applications
                         SET is_reserve = %s,
                             slot_index = %s,
+                            apply_status = 'approved',
                             updated_at = NOW()
                         WHERE application_id = %s AND job_id = %s
                     """, (1 if is_reserve_val else 0, slot_index_val, application_id, job_id))
-                    print(f"    ✅ 更新 resume_applications: id={existing_ra['id']}, application_id={application_id}, job_id={job_id}, slot_index={slot_index_val}, is_reserve={is_reserve_val}")
+                    print(f"    ✅ 更新 resume_applications: id={existing_ra['id']}, application_id={application_id}, job_id={job_id}, apply_status='approved', slot_index={slot_index_val}, is_reserve={is_reserve_val}")
                 else:
                     # 創建新記錄
+                    # 注意：只有通過審核的學生才會出現在媒合排序中，所以 apply_status 應該是 'approved'
                     cursor.execute("""
                         INSERT INTO resume_applications
                         (application_id, job_id, apply_status, interview_status, interview_result, is_reserve, slot_index, created_at)
                         VALUES (%s, %s, %s, %s, %s, %s, %s, NOW())
-                    """, (application_id, job_id, 'uploaded', 'none', 'pending', 1 if is_reserve_val else 0, slot_index_val))
-                    print(f"    ✅ 創建 resume_applications: application_id={application_id}, job_id={job_id}, slot_index={slot_index_val}, is_reserve={is_reserve_val}")
+                    """, (application_id, job_id, 'approved', 'none', 'pending', 1 if is_reserve_val else 0, slot_index_val))
+                    print(f"    ✅ 創建 resume_applications: application_id={application_id}, job_id={job_id}, apply_status='approved', slot_index={slot_index_val}, is_reserve={is_reserve_val}")
+                
+                # 同時更新或創建 manage_director 記錄，將廠商的排序資料同步過去
+                try:
+                    # 檢查 manage_director 表中是否已有記錄
+                    cursor.execute("""
+                        SELECT match_id, director_decision FROM manage_director
+                        WHERE preference_id = %s
+                    """, (application_id,))
+                    existing_md = cursor.fetchone()
+                    cursor.fetchall()  # 清空任何剩餘的結果
+                    
+                    # 確定 original_type 和 original_rank
+                    original_type = 'Regular' if not is_reserve_val else 'Backup'
+                    original_rank = slot_index_val if not is_reserve_val else None
+                    
+                    if existing_md:
+                        # 如果已有記錄，更新 original_rank（但保留 director_decision，除非是 Rejected）
+                        # 如果 director_decision 是 Rejected，則更新為 Pending，讓主任可以重新看到
+                        if existing_md.get('director_decision') == 'Rejected':
+                            cursor.execute("""
+                                UPDATE manage_director
+                                SET original_type = %s,
+                                    original_rank = %s,
+                                    director_decision = 'Pending',
+                                    updated_at = NOW()
+                                WHERE preference_id = %s
+                            """, (original_type, original_rank, application_id))
+                            print(f"    ✅ 更新 manage_director（從 Rejected 改為 Pending）: preference_id={application_id}, original_rank={original_rank}, original_type={original_type}")
+                        else:
+                            # 如果不是 Rejected，只更新 original_rank，保留 director_decision
+                            cursor.execute("""
+                                UPDATE manage_director
+                                SET original_type = %s,
+                                    original_rank = %s,
+                                    updated_at = NOW()
+                                WHERE preference_id = %s
+                            """, (original_type, original_rank, application_id))
+                            print(f"    ✅ 更新 manage_director: preference_id={application_id}, original_rank={original_rank}, original_type={original_type}")
+                    else:
+                        # 如果沒有記錄，創建新記錄
+                        # 獲取當前學期ID
+                        current_semester_id = None
+                        try:
+                            current_semester_id = get_current_semester_id(cursor)
+                        except:
+                            pass
+                        
+                        # 檢查 manage_director 表是否有 semester_id 欄位
+                        cursor.execute("""
+                            SELECT COLUMN_NAME
+                            FROM information_schema.COLUMNS
+                            WHERE TABLE_SCHEMA = DATABASE()
+                            AND TABLE_NAME = 'manage_director'
+                            AND COLUMN_NAME = 'semester_id'
+                        """)
+                        has_semester_id = cursor.fetchone() is not None
+                        cursor.fetchall()
+                        
+                        if has_semester_id and current_semester_id:
+                            cursor.execute("""
+                                INSERT INTO manage_director
+                                (semester_id, vendor_id, student_id, preference_id, original_type, original_rank, 
+                                 is_conflict, director_decision, final_rank, is_adjusted, created_at, updated_at)
+                                VALUES (%s, %s, %s, %s, %s, %s, 0, 'Pending', %s, 0, NOW(), NOW())
+                            """, (current_semester_id, company_id, student_id, application_id, original_type, original_rank, original_rank))
+                        else:
+                            cursor.execute("""
+                                INSERT INTO manage_director
+                                (vendor_id, student_id, preference_id, original_type, original_rank, 
+                                 is_conflict, director_decision, final_rank, is_adjusted, created_at, updated_at)
+                                VALUES (%s, %s, %s, %s, %s, 0, 'Pending', %s, 0, NOW(), NOW())
+                            """, (company_id, student_id, application_id, original_type, original_rank, original_rank))
+                        print(f"    ✅ 創建 manage_director: preference_id={application_id}, student_id={student_id}, original_rank={original_rank}, original_type={original_type}")
+                except Exception as md_error:
+                    print(f"    ⚠️ 更新 manage_director 失敗（不影響 resume_applications 的保存）: {md_error}")
+                    traceback.print_exc()
+                    # 不中斷流程，繼續處理下一個學生
                 
                 inserted_count += 1
-                print(f"✅ 已保存媒合排序記錄到 resume_applications：preference_id={preference_id}, application_id={application_id}, student_id={student_id}, slot_index={slot_index_val}, is_reserve={is_reserve_val}")
+                print(f"✅ 已保存媒合排序記錄到 resume_applications 和 manage_director：preference_id={preference_id}, application_id={application_id}, student_id={student_id}, slot_index={slot_index_val}, is_reserve={is_reserve_val}")
             except Exception as insert_error:
                 print(f"❌ 保存媒合排序記錄失敗：{insert_error}")
                 traceback.print_exc()
