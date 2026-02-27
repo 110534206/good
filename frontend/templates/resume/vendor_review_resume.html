@@ -1796,7 +1796,8 @@
     
     // 填充學生下拉選單（可複選）
     // isEditMode: true 表示編輯模式，false 表示新增模式
-    function populateStudentsDropdown(isEditMode = false) {
+    // currentScheduleStudents: 當前編輯排程的學生ID列表（編輯模式下使用）
+    function populateStudentsDropdown(isEditMode = false, currentScheduleStudents = []) {
       const studentsContainer = document.getElementById('interviewStudents');
       if (!studentsContainer) return;
       
@@ -1854,13 +1855,15 @@
         const itemDiv = document.createElement('div');
         itemDiv.className = 'student-checkbox-item';
         
-        // 檢查該學生是否已經被當前廠商安排了面試（在同一天）
+        // 檢查該學生是否已經被當前廠商安排了面試（不管在哪一天）
         // 注意：只有被自己安排的學生才設為唯讀，被其他廠商安排的學生不設為唯讀（保存時會檢查衝突）
         // 但在編輯模式下，即使是自己安排的學生也不設為唯讀（因為這是編輯現有排程）
         let ownSchedule = null;
-        if (selectedDateStr && allVendorSchedules.has(selectedDateStr)) {
-          const schedules = allVendorSchedules.get(selectedDateStr);
-          ownSchedule = schedules.find(s => {
+        let scheduleDate = null;
+        
+        // 遍歷所有日期的排程，檢查該學生是否已被自己安排
+        for (const [date, schedules] of allVendorSchedules.entries()) {
+          const foundSchedule = schedules.find(s => {
             // 檢查是否為自己的排程且學生ID匹配
             if (String(s.student_id) !== String(student.id)) {
               return false;
@@ -1872,20 +1875,29 @@
             // 如果沒有公司名稱信息，則使用 is_own 判斷
             return s.is_own === true;
           });
+          
+          if (foundSchedule) {
+            ownSchedule = foundSchedule;
+            scheduleDate = date;
+            break; // 找到第一個就停止
+          }
         }
         
-        // 只有被自己安排的學生才設為唯讀，且只在新增模式下（編輯模式下不設為唯讀）
-        const isDisabled = !isEditMode && ownSchedule !== null && ownSchedule !== undefined;
+        // 只有被自己安排的學生才設為唯讀，且只在新增模式下
+        // 在編輯模式下，如果該學生已經在當前編輯的排程中，則不設為唯讀（因為這是編輯現有排程）
+        const isInCurrentSchedule = isEditMode && currentScheduleStudents.includes(String(student.id));
+        const isDisabled = !isEditMode && ownSchedule !== null && ownSchedule !== undefined && !isInCurrentSchedule;
         
         if (isDisabled && ownSchedule) {
           itemDiv.style.opacity = '0.6';
           itemDiv.style.cursor = 'not-allowed';
           
-          // 已被自己安排
+          // 已被自己安排（顯示日期和時間）
           const timeDisplay = ownSchedule.time_end 
             ? `${ownSchedule.time_start || ''}-${ownSchedule.time_end}`
             : ownSchedule.time_start || '';
-          itemDiv.title = `該學生已被您安排在 ${timeDisplay}`;
+          const dateDisplay = scheduleDate || '某日期';
+          itemDiv.title = `該學生已被您安排在 ${dateDisplay} ${timeDisplay}`;
         }
         
         const checkbox = document.createElement('input');
@@ -1906,11 +1918,12 @@
         label.htmlFor = `student-checkbox-${student.id}`;
         let labelText = student.displayText;
         if (isDisabled && ownSchedule) {
-          // 已被自己安排
+          // 已被自己安排（顯示日期和時間）
           const timeDisplay = ownSchedule.time_end 
             ? `${ownSchedule.time_start || ''}-${ownSchedule.time_end}`
             : ownSchedule.time_start || '';
-          labelText += ` (已安排 ${timeDisplay})`;
+          const dateDisplay = scheduleDate || '某日期';
+          labelText += ` (已安排 ${dateDisplay} ${timeDisplay})`;
           label.style.color = '#6c757d'; // 使用灰色表示唯讀狀態
           label.style.fontWeight = '600';
         }
@@ -2798,11 +2811,7 @@
       // 依照目前履歷資料重建地點下拉選單（包含公司名稱）
       populateLocationDropdown();
       
-      // 填充學生選單（會根據選擇的日期檢查學生是否已被其他廠商安排）
-      // 傳遞編輯模式標記：如果是強制編輯模式，傳遞 true；否則傳遞 false（新增模式）
-      populateStudentsDropdown(forceEditMode);
-      
-      // 如果已有排程，載入現有資料
+      // 先載入現有排程資料（如果有的話），以便傳遞給 populateStudentsDropdown
       // 優先從 allVendorSchedules 獲取最新的排程信息（更準確）
       let schedule = null;
       
@@ -2849,44 +2858,10 @@
         // 不再從 interviewSchedules（本地存儲）獲取，完全依賴 allVendorSchedules（資料庫）
         // 如果 allVendorSchedules 中沒有，schedule 保持為 null（新增模式）
       } else {
-        // 新增模式（點擊日期格子時）：也要載入現有排程（如果有的話）
-        console.log('➕ 新增模式：點擊日期格子，嘗試載入現有排程');
-        if (allVendorSchedules.has(dateStr)) {
-          const schedules = allVendorSchedules.get(dateStr);
-          // 只過濾自己的排程：優先通過公司名稱判斷（最準確），然後檢查 is_own
-          const ownSchedules = schedules.filter(s => {
-            // 優先通過公司名稱判斷（最準確）
-            if (vendorCompanyName && s.company_name) {
-              // 使用寬鬆的公司名稱匹配（處理「有限公司」和「股份有限公司」等差異）
-              const isOwn = isCompanyNameMatch(s.company_name, vendorCompanyName);
-              // 如果公司名稱匹配，就是自己的排程（即使 is_own=false）
-              if (isOwn) return true;
-              // 如果公司名稱不匹配，即使 is_own=true 也不是自己的排程
-              if (!isOwn && s.is_own === true) {
-                console.warn(`⚠️ [openInterviewForm 新增模式] 警告：排程 is_own=true 但公司名稱不匹配，過濾掉`);
-                return false;
-              }
-            }
-            // 如果沒有公司名稱信息，則使用 is_own 判斷
-            if (s.is_own === true) return true;
-            if (s.is_own === false) return false;
-            return false;
-          });
-          
-          if (ownSchedules.length > 0) {
-            // 合併所有自己的排程（可能有多個學生）
-            // 使用第一個排程的時間和地點，但收集所有學生
-            const firstSchedule = ownSchedules[0];
-            schedule = {
-              timeStart: firstSchedule.time_start || '',
-              timeEnd: firstSchedule.time_end || '',
-              location: firstSchedule.location || '',
-              notes: firstSchedule.notes || '', // 確保 notes 被正確載入
-              students: ownSchedules.filter(s => s.student_id).map(s => String(s.student_id))
-            };
-            console.log(`✅ [新增模式] 從 allVendorSchedules 載入自己的排程資料: 時間=${schedule.timeStart}-${schedule.timeEnd}, 地點=${schedule.location}, 備註=${schedule.notes ? schedule.notes.substring(0, 30) : '無'}, 學生=${schedule.students.join(',')}`);
-          }
-        }
+        // 新增模式（點擊日期格子時）：不載入現有排程，保持 schedule 為 null
+        // 這樣可以確保標題顯示為「新增面試排程」，而不是「編輯面試排程」
+        console.log('➕ 新增模式：點擊日期格子，不載入現有排程');
+        schedule = null; // 明確設置為 null，確保是新增模式
       }
       
       if (schedule) {
@@ -2932,32 +2907,23 @@
         const notesValue = schedule.notes || '';
         document.getElementById('interviewNotes').value = notesValue;
         console.log(`📝 [編輯模式] 設置面試須知: ${notesValue ? notesValue.substring(0, 50) + '...' : '（空）'}`);
-        
-        // 恢復選中的學生
+      }
+      
+      // 填充學生選單（會根據選擇的日期檢查學生是否已被其他廠商安排）
+      // 傳遞編輯模式標記和當前排程的學生列表
+      const currentScheduleStudents = schedule && schedule.students ? schedule.students.map(s => String(s)) : [];
+      populateStudentsDropdown(forceEditMode, currentScheduleStudents);
+      
+      // 如果已有排程，恢復選中的學生
+      if (schedule && schedule.students && Array.isArray(schedule.students)) {
         const studentsContainer = document.getElementById('interviewStudents');
-        if (studentsContainer && schedule.students && Array.isArray(schedule.students)) {
-          // 清除所有選中狀態
-          const checkboxes = studentsContainer.querySelectorAll('.student-checkbox');
-          checkboxes.forEach(checkbox => {
-            checkbox.checked = false;
-          });
-          
+        if (studentsContainer) {
           // 恢復選中的學生
           schedule.students.forEach(studentId => {
-            const checkbox = studentsContainer.querySelector(`.student-checkbox[value="${studentId}"]`);
+            const checkbox = studentsContainer.querySelector(`.student-checkbox[value="${String(studentId)}"]`);
             if (checkbox) {
               checkbox.checked = true;
             }
-          });
-          updateSelectedStudentsCount();
-        }
-      } else {
-        // 如果沒有排程，清除所有選中狀態
-        const studentsContainer = document.getElementById('interviewStudents');
-        if (studentsContainer) {
-          const checkboxes = studentsContainer.querySelectorAll('.student-checkbox');
-          checkboxes.forEach(checkbox => {
-            checkbox.checked = false;
           });
           updateSelectedStudentsCount();
         }
@@ -3118,10 +3084,10 @@
           });
           
           if (timeSlotsWithCompany.length > 0) {
-            // 顯示警告（包含公司名稱和學生姓名，同一公司同一時間段的學生合併顯示）
+            // 顯示警告（只顯示時間和學生姓名，不顯示公司名稱）
             timeSlotsList.innerHTML = timeSlotsWithCompany.map(slot => {
               const studentsText = slot.students.length > 0 ? ` - ${slot.students.join('、')}` : '';
-              return `<div>• ${slot.time} (${slot.company}${studentsText})</div>`;
+              return `<div>• ${slot.time}${studentsText}</div>`;
             }).join('');
             warningDiv.style.display = 'block';
             
@@ -3613,8 +3579,8 @@
                 // 重新渲染日曆以顯示自己的排程
                 renderCalendar();
                 // 重新載入學生列表（新增模式下，已安排的學生會變成唯讀）
-                // 注意：保存成功後，表單可能還在編輯模式，所以傳遞 false（新增模式）
-                populateStudentsDropdown(false);
+                // 注意：保存成功後，表單可能還在編輯模式，所以傳遞 false（新增模式）和空陣列
+                populateStudentsDropdown(false, []);
               }
             });
           } else {
