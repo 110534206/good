@@ -1038,15 +1038,131 @@
         const interviewStatus = row.interview_status || 'none';
         
         // 檢查面試時間是否已結束（用於判斷是否可以標記為已面試）
-        const interviewTimeEnd = row.interview_timeEnd || row.interview_time_end;
+        // 需要同時檢查：1. 面試日期是否為今天或過去 2. 面試結束時間是否已過
         let canMarkCompleted = false;
-        if (interviewStatus === 'scheduled' && interviewTimeEnd) {
+        
+        if (interviewStatus === 'scheduled') {
           try {
-            const endTime = new Date(interviewTimeEnd);
             const now = new Date();
-            canMarkCompleted = now >= endTime;
+            const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+            
+            // 方法1: 從 allVendorSchedules 中查找面試時間（最準確）
+            let interviewDateStr = null;
+            let interviewTimeEnd = null;
+            const studentId = String(row.student_id || row.id || '');
+            
+            // 遍歷 allVendorSchedules 查找該學生的面試排程
+            for (const [dateKey, schedules] of allVendorSchedules.entries()) {
+              for (const schedule of schedules) {
+                const scheduleStudentId = String(schedule.student_id || '');
+                // 檢查是否為自己的排程且學生ID匹配
+                let isOwnSchedule = false;
+                if (vendorCompanyName && schedule.company_name) {
+                  isOwnSchedule = isCompanyNameMatch(schedule.company_name, vendorCompanyName);
+                } else {
+                  isOwnSchedule = schedule.is_own === true;
+                }
+                
+                if (isOwnSchedule && scheduleStudentId === studentId) {
+                  interviewDateStr = dateKey;
+                  interviewTimeEnd = schedule.time_end || null;
+                  break;
+                }
+              }
+              if (interviewDateStr) break;
+            }
+            
+            // 方法2: 如果 allVendorSchedules 中沒有，嘗試從 interview_time 解析
+            if (!interviewDateStr && row.interview_time) {
+              try {
+                const interviewTime = new Date(row.interview_time);
+                if (!isNaN(interviewTime.getTime())) {
+                  const year = interviewTime.getFullYear();
+                  const month = String(interviewTime.getMonth() + 1).padStart(2, '0');
+                  const day = String(interviewTime.getDate()).padStart(2, '0');
+                  interviewDateStr = `${year}-${month}-${day}`;
+                  
+                  // 從 allVendorSchedules 中查找該日期的結束時間
+                  if (allVendorSchedules.has(interviewDateStr)) {
+                    const schedules = allVendorSchedules.get(interviewDateStr);
+                    for (const schedule of schedules) {
+                      const scheduleStudentId = String(schedule.student_id || '');
+                      let isOwnSchedule = false;
+                      if (vendorCompanyName && schedule.company_name) {
+                        isOwnSchedule = isCompanyNameMatch(schedule.company_name, vendorCompanyName);
+                      } else {
+                        isOwnSchedule = schedule.is_own === true;
+                      }
+                      
+                      if (isOwnSchedule && scheduleStudentId === studentId) {
+                        interviewTimeEnd = schedule.time_end || null;
+                        break;
+                      }
+                    }
+                  }
+                }
+              } catch (e) {
+                console.warn('解析 interview_time 失敗:', e);
+              }
+            }
+            
+            // 如果找到了面試日期，進行檢查
+            if (interviewDateStr) {
+              // 解析面試日期
+              const dateParts = interviewDateStr.split('-');
+              const interviewDateObj = new Date(parseInt(dateParts[0]), parseInt(dateParts[1]) - 1, parseInt(dateParts[2]));
+              interviewDateObj.setHours(0, 0, 0, 0);
+              
+              // 檢查面試日期是否為今天或過去
+              const isTodayOrPast = interviewDateObj <= today;
+              
+              if (interviewTimeEnd) {
+                // 如果有結束時間，檢查時間是否已過
+                const timeParts = interviewTimeEnd.split(':');
+                let endTime;
+                if (timeParts.length >= 2) {
+                  endTime = new Date(interviewDateObj);
+                  endTime.setHours(parseInt(timeParts[0]), parseInt(timeParts[1]), 0, 0);
+                } else {
+                  endTime = new Date(interviewTimeEnd);
+                }
+                
+                const isTimePassed = now >= endTime;
+                canMarkCompleted = isTodayOrPast && isTimePassed;
+                
+                // 調試日誌
+                console.log(`🔍 [renderActionBtns] 學生 ${row.name || row.student_name || '未知'}:`, {
+                  interviewDateStr: interviewDateStr,
+                  interviewTimeEnd: interviewTimeEnd,
+                  isTodayOrPast: isTodayOrPast,
+                  isTimePassed: isTimePassed,
+                  canMarkCompleted: canMarkCompleted,
+                  now: now.toISOString(),
+                  endTime: endTime.toISOString(),
+                  studentId: studentId
+                });
+              } else {
+                // 如果沒有結束時間，但面試日期是今天或過去，則允許標記為已面試
+                // 這是為了處理舊資料或資料不完整的情況
+                canMarkCompleted = isTodayOrPast;
+                
+                console.log(`🔍 [renderActionBtns] 學生 ${row.name || row.student_name || '未知'}: 沒有結束時間，但日期是今天或過去`, {
+                  interviewDateStr: interviewDateStr,
+                  isTodayOrPast: isTodayOrPast,
+                  canMarkCompleted: canMarkCompleted,
+                  studentId: studentId
+                });
+              }
+            } else {
+              // 如果找不到面試日期，記錄警告
+              console.warn(`⚠️ [renderActionBtns] 找不到學生 ${row.name || row.student_name || '未知'} (ID: ${studentId}) 的面試日期`, {
+                interview_time: row.interview_time,
+                interview_status: interviewStatus,
+                allVendorSchedules_keys: Array.from(allVendorSchedules.keys()).slice(0, 5)
+              });
+            }
           } catch (e) {
-            console.error('解析面試結束時間失敗:', e);
+            console.error('解析面試時間失敗:', e, { row });
           }
         }
         
