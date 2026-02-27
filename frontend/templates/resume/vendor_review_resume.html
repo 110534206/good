@@ -226,7 +226,7 @@
               </th>
               <th style="padding: 14px 16px; font-weight: 600;">學生帳號</th>
               <th style="padding: 14px 16px; font-weight: 600;">姓名</th>
-              <th style="padding: 14px 16px; font-weight: 600;">上傳時間</th>
+              <th style="padding: 14px 16px; font-weight: 600;">投遞時間</th>
               <th style="padding: 14px 16px; font-weight: 600;">檔案名稱</th>
               <th style="padding: 14px 16px; font-weight: 600;">公司</th>
               <th style="padding: 14px 16px; font-weight: 600;">職缺</th>
@@ -1032,6 +1032,142 @@
         const key = (pid || row.preference_id || row.preferenceId || row.id);
         const hasInterviewed = interviewedSet.has(String(key)) || row.has_interview || false;
         const isInterviewCompleted = row.interview_completed || false;
+        
+        // 優先使用 interview_status 值（從 resume_applications 表讀取）
+        // interview_status: 'none' | 'scheduled' | 'finished'
+        const interviewStatus = row.interview_status || 'none';
+        
+        // 檢查面試時間是否已結束（用於判斷是否可以標記為已面試）
+        // 需要同時檢查：1. 面試日期是否為今天或過去 2. 面試結束時間是否已過
+        let canMarkCompleted = false;
+        
+        if (interviewStatus === 'scheduled') {
+          try {
+            const now = new Date();
+            const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+            
+            // 方法1: 從 allVendorSchedules 中查找面試時間（最準確）
+            let interviewDateStr = null;
+            let interviewTimeEnd = null;
+            const studentId = String(row.student_id || row.id || '');
+            
+            // 遍歷 allVendorSchedules 查找該學生的面試排程
+            for (const [dateKey, schedules] of allVendorSchedules.entries()) {
+              for (const schedule of schedules) {
+                const scheduleStudentId = String(schedule.student_id || '');
+                // 檢查是否為自己的排程且學生ID匹配
+                let isOwnSchedule = false;
+                if (vendorCompanyName && schedule.company_name) {
+                  isOwnSchedule = isCompanyNameMatch(schedule.company_name, vendorCompanyName);
+                } else {
+                  isOwnSchedule = schedule.is_own === true;
+                }
+                
+                if (isOwnSchedule && scheduleStudentId === studentId) {
+                  interviewDateStr = dateKey;
+                  interviewTimeEnd = schedule.time_end || null;
+                  break;
+                }
+              }
+              if (interviewDateStr) break;
+            }
+            
+            // 方法2: 如果 allVendorSchedules 中沒有，嘗試從 interview_time 解析
+            if (!interviewDateStr && row.interview_time) {
+              try {
+                const interviewTime = new Date(row.interview_time);
+                if (!isNaN(interviewTime.getTime())) {
+                  const year = interviewTime.getFullYear();
+                  const month = String(interviewTime.getMonth() + 1).padStart(2, '0');
+                  const day = String(interviewTime.getDate()).padStart(2, '0');
+                  interviewDateStr = `${year}-${month}-${day}`;
+                  
+                  // 從 allVendorSchedules 中查找該日期的結束時間
+                  if (allVendorSchedules.has(interviewDateStr)) {
+                    const schedules = allVendorSchedules.get(interviewDateStr);
+                    for (const schedule of schedules) {
+                      const scheduleStudentId = String(schedule.student_id || '');
+                      let isOwnSchedule = false;
+                      if (vendorCompanyName && schedule.company_name) {
+                        isOwnSchedule = isCompanyNameMatch(schedule.company_name, vendorCompanyName);
+                      } else {
+                        isOwnSchedule = schedule.is_own === true;
+                      }
+                      
+                      if (isOwnSchedule && scheduleStudentId === studentId) {
+                        interviewTimeEnd = schedule.time_end || null;
+                        break;
+                      }
+                    }
+                  }
+                }
+              } catch (e) {
+                console.warn('解析 interview_time 失敗:', e);
+              }
+            }
+            
+            // 如果找到了面試日期，進行檢查
+            if (interviewDateStr) {
+              // 解析面試日期
+              const dateParts = interviewDateStr.split('-');
+              const interviewDateObj = new Date(parseInt(dateParts[0]), parseInt(dateParts[1]) - 1, parseInt(dateParts[2]));
+              interviewDateObj.setHours(0, 0, 0, 0);
+              
+              // 檢查面試日期是否為今天或過去
+              const isTodayOrPast = interviewDateObj <= today;
+              
+              if (interviewTimeEnd) {
+                // 如果有結束時間，檢查時間是否已過
+                const timeParts = interviewTimeEnd.split(':');
+                let endTime;
+                if (timeParts.length >= 2) {
+                  endTime = new Date(interviewDateObj);
+                  endTime.setHours(parseInt(timeParts[0]), parseInt(timeParts[1]), 0, 0);
+                } else {
+                  endTime = new Date(interviewTimeEnd);
+                }
+                
+                const isTimePassed = now >= endTime;
+                canMarkCompleted = isTodayOrPast && isTimePassed;
+                
+                // 調試日誌
+                console.log(`🔍 [renderActionBtns] 學生 ${row.name || row.student_name || '未知'}:`, {
+                  interviewDateStr: interviewDateStr,
+                  interviewTimeEnd: interviewTimeEnd,
+                  isTodayOrPast: isTodayOrPast,
+                  isTimePassed: isTimePassed,
+                  canMarkCompleted: canMarkCompleted,
+                  now: now.toISOString(),
+                  endTime: endTime.toISOString(),
+                  studentId: studentId
+                });
+              } else {
+                // 如果沒有結束時間，但面試日期是今天或過去，則允許標記為已面試
+                // 這是為了處理舊資料或資料不完整的情況
+                canMarkCompleted = isTodayOrPast;
+                
+                console.log(`🔍 [renderActionBtns] 學生 ${row.name || row.student_name || '未知'}: 沒有結束時間，但日期是今天或過去`, {
+                  interviewDateStr: interviewDateStr,
+                  isTodayOrPast: isTodayOrPast,
+                  canMarkCompleted: canMarkCompleted,
+                  studentId: studentId
+                });
+              }
+            } else {
+              // 如果找不到面試日期，記錄警告
+              console.warn(`⚠️ [renderActionBtns] 找不到學生 ${row.name || row.student_name || '未知'} (ID: ${studentId}) 的面試日期`, {
+                interview_time: row.interview_time,
+                interview_status: interviewStatus,
+                allVendorSchedules_keys: Array.from(allVendorSchedules.keys()).slice(0, 5)
+              });
+            }
+          } catch (e) {
+            console.error('解析面試時間失敗:', e, { row });
+          }
+        }
+        
+        // 檢查是否已面試完成（用於判斷是否可以審核為通過/未通過）
+        const canReview = interviewStatus === 'finished';
 
         // 廠商可以進行審核操作
         const approveClick = `approveResume(${row.id}, ${pid ? `'${pid}'` : 'null'})`;
@@ -1039,10 +1175,25 @@
         const interviewClick = `sendInterview(${row.student_id || 'null'}, ${row.company_id || 'null'}, ${row.id}, ${pid ? `'${pid}'` : 'null'})`;
         const markCompletedClick = `markInterviewCompleted(${row.id}, ${pid ? `'${pid}'` : 'null'})`;
 
-        // 無論狀態為何，保留按鈕
+        // 根據狀態顯示按鈕
         let btns = `<div style="display:flex; align-items:center; flex-wrap:wrap; gap:4px;">${dlBtn}`;
-        btns += `<button class="btn btn-sm btn-outline-danger" style="margin-right:4px;" onclick="${rejectClick}">未通過</button>`;
-        btns += `<button class="btn btn-sm btn-outline-success" onclick="${approveClick}">通過</button>`;
+        
+        // 如果已面試完成，顯示通過/未通過按鈕
+        if (canReview) {
+          btns += `<button class="btn btn-sm btn-outline-danger" style="margin-right:4px;" onclick="${rejectClick}">未通過</button>`;
+          btns += `<button class="btn btn-sm btn-outline-success" onclick="${approveClick}">通過</button>`;
+        } else if (interviewStatus === 'scheduled') {
+          // 如果面試時間已結束，顯示「已面試」按鈕
+          if (canMarkCompleted) {
+            btns += `<button class="btn btn-sm btn-outline-info" onclick="${markCompletedClick}" title="標記為已面試">已面試</button>`;
+          } else {
+            btns += `<button class="btn btn-sm btn-outline-secondary" disabled title="面試時間尚未結束">已面試</button>`;
+          }
+        } else {
+          // 未面試時，只顯示未通過按鈕
+          btns += `<button class="btn btn-sm btn-outline-danger" style="margin-right:4px;" onclick="${rejectClick}">未通過</button>`;
+        }
+        
         btns += `</div>`;
         return btns;
     }
@@ -1110,6 +1261,34 @@
         return;
       }
       
+      // 查找對應的履歷資料
+      const resume = allResumes.find(r => r.id === resumeId);
+      if (resume) {
+        const interviewStatus = resume.interview_status || 'none';
+        if (interviewStatus !== 'scheduled') {
+          if (interviewStatus === 'finished') {
+            alert("此履歷已經標記為已面試");
+          } else {
+            alert("此履歷尚未安排面試，無法標記為已面試");
+          }
+          return;
+        }
+        
+        const interviewTimeEnd = resume.interview_timeEnd || resume.interview_time_end;
+        if (interviewTimeEnd) {
+          try {
+            const endTime = new Date(interviewTimeEnd);
+            const now = new Date();
+            if (now < endTime) {
+              alert(`面試時間尚未結束，無法標記為已面試。\n面試結束時間：${endTime.toLocaleString('zh-TW')}`);
+              return;
+            }
+          } catch (e) {
+            console.error('解析面試結束時間失敗:', e);
+          }
+        }
+      }
+      
       if (!confirm("確定要標記為已面試嗎？")) {
         return;
       }
@@ -1168,6 +1347,20 @@
 
     // 更新狀態函式
     function approveResume(resumeId, preferenceId) {
+      // 檢查是否已面試完成
+      const resume = allResumes.find(r => r.id === resumeId);
+      if (resume) {
+        const interviewStatus = resume.interview_status || 'none';
+        if (interviewStatus !== 'finished') {
+          if (interviewStatus === 'scheduled') {
+            alert("此履歷尚未完成面試，請先標記為已面試後才能進行審核");
+          } else {
+            alert("此履歷尚未安排面試，無法進行審核");
+          }
+          return;
+        }
+      }
+      
       if (!confirm("確定要將此職缺申請標記為通過嗎？")) return;
       
       const body = { status: 'approved' };
@@ -1242,6 +1435,7 @@
     }
 
     function rejectResume(resumeId, preferenceId) {
+       // 「未通過」可以在任何狀態下進行，不需要檢查面試狀態
        if (!confirm("確定要標記此申請為未通過？")) return;
        currentResumeId = resumeId;
        currentPreferenceId = preferenceId && preferenceId !== 'null' ? preferenceId : null;
@@ -3216,7 +3410,7 @@
           return `${c.studentName} (已被 ${c.company} 安排在 ${c.time}${gapInfo})`;
         }).join('\n');
         
-        alert(`❌ 以下學生無法安排面試：\n\n${conflictedNames}\n\n原因：\n1. 時間段重疊，或\n2. 與其他廠商的面試時間間隔不足2小時\n\n請取消選擇這些學生或選擇其他時間段（與現有排程間隔至少2小時）後再儲存。`);
+        alert(`❌ 以下學生無法安排面試：\n\n${conflictedNames}\n\n需與現有排程間隔至少2小時，後再儲存。`);
         return;
       }
       
@@ -3436,7 +3630,16 @@
             alert('✅ 面試排程已刪除');
           }, 100);
         } else {
-          alert(`❌ 刪除失敗：${data.message || '未知錯誤'}`);
+          // 顯示更詳細的錯誤訊息
+          let errorMsg = `❌ 刪除失敗：${data.message || '未知錯誤'}`;
+          if (data.failed_students && data.failed_students.length > 0) {
+            errorMsg += `\n\n無法刪除的學生 ID: ${data.failed_students.join(', ')}`;
+            errorMsg += `\n\n可能原因：`;
+            errorMsg += `\n- 面試狀態不是 'scheduled'（可能是 'none' 或 'finished'）`;
+            errorMsg += `\n- 面試排程已被刪除`;
+            errorMsg += `\n- 找不到對應的投遞記錄`;
+          }
+          alert(errorMsg);
         }
       } catch (err) {
         console.error("刪除面試排程失敗:", err);

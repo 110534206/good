@@ -433,8 +433,9 @@
             border-radius: 0.25rem !important;
         }
 
-        /* 下載按鈕樣式 */
-        .download-resume-btn {
+        /* 下載／刪除按鈕樣式（操作欄按鈕大小一致） */
+        .download-resume-btn,
+        .delete-resume-btn {
             padding: 0.25rem 0.6rem !important;
             font-size: 0.85rem !important;
             border-radius: 0.25rem !important;
@@ -1180,10 +1181,44 @@
                             <a href="/api/download_resume/${resume.id}" class="btn btn-sm btn-outline-primary download-resume-btn" target="_blank" style="margin-right:4px;">
                                 下載
                             </a>
+                            ${!deadlineExpired && resume.application_id ? `
+                            <button type="button" class="btn btn-sm btn-outline-danger delete-resume-btn" onclick="deleteApplication(this)" data-application-id="${resume.application_id}" data-company-name="${String(resume.company_name || '').replace(/"/g, '&quot;')}" title="刪除後主任／班導／指導老師端也會同步移除" style="margin-right:4px;">
+                                刪除
+                            </button>
+                            ` : ''}
                         </td>
                     </tr>
                 `;
             }).join('');
+        }
+
+        /* 刪除投遞紀錄（僅履歷截止前可刪除；會同步自主任/班導/指導老師列表移除） */
+        async function deleteApplication(btnOrId, companyName) {
+            const applicationId = typeof btnOrId === 'object' && btnOrId && btnOrId.dataset
+                ? parseInt(btnOrId.dataset.applicationId, 10)
+                : parseInt(btnOrId, 10);
+            const name = (typeof btnOrId === 'object' && btnOrId && btnOrId.dataset
+                ? (btnOrId.dataset.companyName || '')
+                : (companyName || '')).trim();
+            if (!applicationId || isNaN(applicationId)) return;
+            if (!confirm('確定要刪除此筆投遞紀錄' + (name ? '（' + name + '）' : '') + '嗎？\n\n刪除後，主任、班導、指導老師端也會同步移除該筆資料。')) return;
+            try {
+                const res = await fetch('/api/student/delete_application', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ application_id: applicationId })
+                });
+                const result = await res.json();
+                if (result.success) {
+                    alert('已刪除該筆投遞紀錄。');
+                    await loadResumeStatuses();
+                } else {
+                    alert(result.message || '刪除失敗');
+                }
+            } catch (e) {
+                console.error(e);
+                alert('刪除失敗，請稍後再試。');
+            }
         }
 
         /* ===============================

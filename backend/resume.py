@@ -169,6 +169,29 @@ def update_resume_status_after_deadline(cursor, conn):
         return False, {'uploaded_to_approved': 0, 'teacher_review_status_updated': 0}
 
 
+# 輔助函數：當指導老師通過時，確保 resume_applications 有一筆記錄（廠商才能看到）
+def ensure_resume_application_for_teacher_approved(cursor, conn, application_id, job_id):
+    """若尚無記錄則新增一筆 resume_applications，使廠商可見該履歷。"""
+    try:
+        cursor.execute("""
+            SELECT 1 FROM resume_applications
+            WHERE application_id = %s AND job_id = %s
+        """, (application_id, job_id))
+        if cursor.fetchone():
+            return True
+        cursor.execute("""
+            INSERT INTO resume_applications
+            (application_id, job_id, apply_status, interview_status, interview_result, company_comment, created_at)
+            VALUES (%s, %s, 'uploaded', 'none', 'pending', '', NOW())
+        """, (application_id, job_id))
+        print(f"✅ [resume_applications] 指導老師通過後立即建立廠商審核記錄: application_id={application_id}, job_id={job_id}")
+        return True
+    except Exception as e:
+        print(f"⚠️ 建立 resume_applications 失敗 (application_id={application_id}, job_id={job_id}): {e}")
+        traceback.print_exc()
+        return False
+
+
 # 輔助函數：處理指導老師審核截止時間後的狀態自動更新
 def update_resume_applications_after_advisor_deadline(cursor, conn):
     """
@@ -269,12 +292,12 @@ def update_resume_applications_after_advisor_deadline(cursor, conn):
                 advisor_user_id = app['advisor_user_id']
                 
                 try:
-                    # 創建 resume_applications 記錄
+                    # 創建 resume_applications 記錄（含 company_comment 以符合 NOT NULL）
                     cursor.execute("""
                         INSERT INTO resume_applications
-                        (application_id, job_id, apply_status, interview_status, interview_result, created_at)
-                        VALUES (%s, %s, %s, %s, %s, NOW())
-                    """, (application_id, job_id, 'uploaded', 'none', 'pending'))
+                        (application_id, job_id, apply_status, interview_status, interview_result, company_comment, created_at)
+                        VALUES (%s, %s, 'uploaded', 'none', 'pending', '', NOW())
+                    """, (application_id, job_id))
                     created_count += 1
                     updated_companies.add(company_id)
                     print(f"✅ [resume_applications] 指導老師審核截止時間後自動創建廠商審核記錄: application_id={application_id}, job_id={job_id}, apply_status='uploaded'")
@@ -454,7 +477,7 @@ def get_teacher_review_resumes():
             """
             params = [session_user_id, session_user_id]
         else:
-            # 班導和其他角色：不使用 resume_teacher 表
+            # 班導和其他角色：不使用 resume_teacher 表；依投遞時間與履歷上傳時間排序，讓「最新投遞／最新上傳」的履歷紀錄排在最前
             sql = """
                 SELECT 
                     u.id AS user_id,
@@ -491,6 +514,10 @@ def get_teacher_review_resumes():
                     )
                 """
                 params.append(session_user_id)
+            # 依班級、學號、投遞時間與履歷上傳時間排序，讓「最新投遞／最新上傳」的履歷紀錄排在最前（主任、班導查看）
+            sql += """
+                ORDER BY c.name, u.username, sja.applied_at DESC, r.created_at DESC
+            """
         
         try:
             cursor.execute(sql, tuple(params))
@@ -581,12 +608,20 @@ def get_teacher_review_resumes():
                 else:
                     display_status_for_teacher = row.get('display_status') or 'uploaded'
                 
+                # 上傳時間：以該筆投遞紀錄的投遞時間 (sja.applied_at) 顯示，與 student_job_applications 一致，主任/班導/指導老師看到的即為「此筆投遞」的時間
+                applied_at = row.get('applied_at')
+                if applied_at is not None and isinstance(applied_at, datetime):
+                    display_upload_time = applied_at.strftime('%Y/%m/%d %H:%M')
+                elif applied_at is not None:
+                    display_upload_time = str(applied_at)[:16] if len(str(applied_at)) >= 16 else str(applied_at)
+                else:
+                    display_upload_time = row['upload_time'].strftime('%Y/%m/%d %H:%M') if isinstance(row.get('upload_time'), datetime) else (row['upload_time'] if row.get('upload_time') else 'N/A')
                 result_data.append({
                     'id': row['resume_id'],
                     'username': student_id,
                     'name': row['name'],
                     'className': row['class_name'] or '—',
-                    'upload_time': row['upload_time'].strftime('%Y/%m/%d %H:%M') if isinstance(row['upload_time'], datetime) else (row['upload_time'] if row['upload_time'] else 'N/A'),
+                    'upload_time': display_upload_time,
                     'original_filename': row['original_filename'] or 'N/A',
                     'company_name': row.get('company_name') or '—',
                     'job_title': row.get('job_title') or '—',
@@ -705,6 +740,10 @@ def review_resume(resume_id):
     if status not in ['approved', 'rejected']:
         return jsonify({"success": False, "message": "無效的狀態碼"}), 400
 
+    # 班導僅能下載、查看，不能進行審核（通過/退件），與主任設定一致
+    if user_role == 'class_teacher':
+        return jsonify({"success": False, "message": "班導僅能下載與查看履歷，無法進行審核（通過/退件）。"}), 403
+
     conn = get_db()
     cursor = conn.cursor(dictionary=True)
 
@@ -718,10 +757,12 @@ def review_resume(resume_id):
             print(f"⚠️ 檢查 resume_teacher 表時發生錯誤: {e}")
             resume_teacher_table_exists = False
         
-        # 2. 查詢履歷並取得學生Email和姓名
-        if user_role == 'teacher' and resume_teacher_table_exists:
+        # 2. 查詢履歷並取得學生Email和姓名（指導老師與班導皆需 application_id，以「每筆投遞」為單位審核）
+        application_id_int = None
+        if resume_teacher_table_exists and (user_role == 'teacher' or user_role == 'class_teacher'):
             if not application_id or application_id == 'null' or str(application_id).strip() == '':
-                return jsonify({"success": False, "message": "指導老師審核請傳 application_id（投遞紀錄 id）"}), 400
+                msg = "指導老師審核請傳 application_id（投遞紀錄 id）" if user_role == 'teacher' else "班導審核請傳 application_id（投遞紀錄 id），以分開紀錄每間公司的狀態"
+                return jsonify({"success": False, "message": msg}), 400
             try:
                 application_id_int = int(application_id)
             except (TypeError, ValueError):
@@ -730,7 +771,8 @@ def review_resume(resume_id):
             cursor.execute("""
                 SELECT r.id AS resume_id, r.user_id, r.original_filename, r.status AS old_status,
                     rt.review_status AS old_teacher_review_status, r.comment,
-                    u.email AS student_email, u.name AS student_name
+                    u.email AS student_email, u.name AS student_name,
+                    sja.company_id, sja.job_id
                 FROM student_job_applications sja
                 JOIN resumes r ON r.id = sja.resume_id AND r.user_id = sja.student_id
                 JOIN users u ON u.id = sja.student_id
@@ -761,35 +803,63 @@ def review_resume(resume_id):
         student_name = resume_data['student_name']  
         old_status = resume_data['old_status']
 
-        # 3. 更新履歷狀態
-        if user_role == 'teacher' and resume_teacher_table_exists:
+        # 3. 更新履歷狀態（同一份履歷投遞不同公司分開紀錄：以 application_id 為單位，不共用 resumes.status）
+        if user_role == 'teacher' and resume_teacher_table_exists and application_id_int is not None:
             old_status_for_check = resume_data.get('old_teacher_review_status') or 'uploaded'
-            try:
-                application_id_int = int(application_id)
-            except (TypeError, ValueError):
-                print(f"⚠️ [DEBUG] 無效的 application_id: {application_id} (type: {type(application_id)})")
-                return jsonify({"success": False, "message": f"無效的 application_id: {application_id}"}), 400
-            
-            # 更新 resume_teacher 表的審核狀態
+            # 指導老師：更新 resume_teacher 表該筆投遞的審核狀態
             cursor.execute("""
                 UPDATE resume_teacher SET review_status=%s, comment=%s, reviewed_at=NOW()
                 WHERE application_id=%s AND teacher_id=%s
             """, (status, comment, application_id_int, user_id))
-            
             updated_rows = cursor.rowcount
-            print(f"🔍 [DEBUG] 更新 resume_teacher: application_id={application_id_int}, teacher_id={user_id}, review_status={status}, updated_rows={updated_rows}")
-            
             if updated_rows == 0:
-                # 如果沒有找到對應的記錄，創建新記錄
                 cursor.execute("""
                     INSERT INTO resume_teacher (application_id, teacher_id, review_status, comment, reviewed_at, created_at)
                     VALUES (%s, %s, %s, %s, NOW(), NOW())
                 """, (application_id_int, user_id, status, comment))
-                print(f"🔍 [DEBUG] 插入新記錄到 resume_teacher: application_id={application_id_int}, teacher_id={user_id}, review_status={status}")
-            
-            print(f"✅ [DEBUG] 指導老師審核完成: application_id={application_id_int}, review_status={status}, teacher_id={user_id}")
+            print(f"✅ [DEBUG] 指導老師審核完成: application_id={application_id_int}, review_status={status}")
+            # 指導老師通過時立即建立 resume_applications，讓廠商可見該履歷
+            if status == 'approved':
+                job_id = resume_data.get('job_id')
+                if job_id is not None:
+                    ensure_resume_application_for_teacher_approved(cursor, conn, application_id_int, job_id)
+        elif user_role == 'class_teacher' and resume_teacher_table_exists and application_id_int is not None:
+            # 班導：只更新「這一筆投遞」的狀態（寫入 resume_teacher，不更新 resumes 表，避免同一份履歷其他公司跟著變）
+            old_status_for_check = resume_data.get('old_teacher_review_status') or 'uploaded'
+            cursor.execute("""
+                SELECT id, review_status FROM resume_teacher
+                WHERE application_id = %s AND teacher_id = %s
+            """, (application_id_int, user_id))
+            existing_ct = cursor.fetchone()
+            if existing_ct:
+                cursor.execute("""
+                    UPDATE resume_teacher SET review_status=%s, comment=%s, reviewed_at=NOW()
+                    WHERE application_id=%s AND teacher_id=%s
+                """, (status, comment, application_id_int, user_id))
+            else:
+                cursor.execute("""
+                    INSERT INTO resume_teacher (application_id, teacher_id, review_status, comment, reviewed_at, created_at)
+                    VALUES (%s, %s, %s, %s, NOW(), NOW())
+                """, (application_id_int, user_id, status, comment))
+            if status == 'approved':
+                company_id = resume_data.get('company_id')
+                cursor.execute("""
+                    SELECT advisor_user_id FROM internship_companies WHERE id = %s
+                """, (company_id,))
+                ic = cursor.fetchone()
+                advisor_user_id = ic.get('advisor_user_id') if ic else None
+                if advisor_user_id:
+                    cursor.execute("""
+                        SELECT id FROM resume_teacher WHERE application_id = %s AND teacher_id = %s
+                    """, (application_id_int, advisor_user_id))
+                    if not cursor.fetchone():
+                        cursor.execute("""
+                            INSERT INTO resume_teacher (application_id, teacher_id, review_status, comment, reviewed_at, created_at)
+                            VALUES (%s, %s, 'uploaded', NULL, NULL, NOW())
+                        """, (application_id_int, advisor_user_id))
+            print(f"✅ [DEBUG] 班導審核完成（僅此筆投遞）: application_id={application_id_int}, review_status={status}")
         else:
-            # 班導或其他角色審核履歷（更新 resumes 表）
+            # 非班導/指導老師或無 resume_teacher 表：沿用舊邏輯更新 resumes 表
             old_status_for_check = old_status
             cursor.execute("""
                 UPDATE resumes SET 
@@ -800,49 +870,23 @@ def review_resume(resume_id):
                     updated_at=NOW()
                 WHERE id=%s
             """, (status, comment, user_id, resume_id))
-            
-            # 如果班導審核通過（status='approved'），創建 resume_teacher 記錄
+            # 班導審核通過且未傳 application_id 時，為該履歷所有投遞建立指導老師審核記錄（向後相容）
             if status == 'approved' and user_role == 'class_teacher' and resume_teacher_table_exists:
-                # 查詢該履歷對應的所有投遞記錄（student_job_applications）
                 cursor.execute("""
-                    SELECT sja.id AS application_id, sja.company_id, sja.job_id, ic.advisor_user_id
+                    SELECT sja.id AS application_id, ic.advisor_user_id
                     FROM student_job_applications sja
                     JOIN internship_companies ic ON sja.company_id = ic.id
-                    WHERE sja.student_id = %s AND sja.resume_id = %s
+                    WHERE sja.student_id = %s AND sja.resume_id = %s AND ic.advisor_user_id IS NOT NULL
                 """, (student_user_id, resume_id))
-                applications = cursor.fetchall()
-                
-                if applications:
-                    created_count = 0
-                    for app in applications:
-                        application_id = app['application_id']
-                        advisor_user_id = app['advisor_user_id']
-                        
-                        if not advisor_user_id:
-                            print(f"⚠️ [resume_teacher] 公司 company_id={app['company_id']} 未設定指導老師，跳過創建 resume_teacher 記錄")
-                            continue
-                        
-                        # 檢查是否已存在 resume_teacher 記錄
+                for app in cursor.fetchall() or []:
+                    cursor.execute("""
+                        SELECT id FROM resume_teacher WHERE application_id = %s AND teacher_id = %s
+                    """, (app['application_id'], app['advisor_user_id']))
+                    if not cursor.fetchone():
                         cursor.execute("""
-                            SELECT id FROM resume_teacher
-                            WHERE application_id = %s AND teacher_id = %s
-                        """, (application_id, advisor_user_id))
-                        existing = cursor.fetchone()
-                        
-                        if not existing:
-                            try:
-                                cursor.execute("""
-                                    INSERT INTO resume_teacher (application_id, teacher_id, review_status, comment, reviewed_at, created_at)
-                                    VALUES (%s, %s, 'uploaded', NULL, NULL, NOW())
-                                """, (application_id, advisor_user_id))
-                                created_count += 1
-                                print(f"✅ [resume_teacher] 班導審核通過後創建指導老師審核記錄: application_id={application_id}, teacher_id={advisor_user_id}, review_status='uploaded'")
-                            except Exception as rt_err:
-                                traceback.print_exc()
-                                print(f"⚠️ [resume_teacher] 創建失敗: application_id={application_id}, teacher_id={advisor_user_id}, error={rt_err}")
-                    
-                    if created_count > 0:
-                        print(f"✅ [resume_teacher] 班導審核通過，已創建 {created_count} 筆 resume_teacher 記錄，等待指導老師審核")
+                            INSERT INTO resume_teacher (application_id, teacher_id, review_status, comment, reviewed_at, created_at)
+                            VALUES (%s, %s, 'uploaded', NULL, NULL, NOW())
+                        """, (app['application_id'], app['advisor_user_id']))
         
         # 4. 取得審核者姓名
         cursor.execute("SELECT name, role FROM users WHERE id = %s", (user_id,))
@@ -904,10 +948,9 @@ def review_resume(resume_id):
                     category="resume"
                 )
                 
-                # 指導老師通過履歷：不立即傳給廠商，等到審核截止時間後才自動傳給廠商
-                # 注意：resume_applications 記錄會在指導老師審核截止時間後自動創建（見 update_resume_applications_after_advisor_deadline）
+                # 指導老師通過履歷：已在更新 resume_teacher 時立即建立 resume_applications（見 ensure_resume_application_for_teacher_approved）
                 if user_role == 'teacher':
-                    print(f"✅ 指導老師通過履歷，等待審核截止時間後自動傳給廠商")
+                    print(f"✅ 指導老師通過履歷，已寫入 resume_applications 供廠商審核")
 
         conn.commit()
 
@@ -945,6 +988,10 @@ def update_resume_field():
     
     if field != 'comment':
         return jsonify({"success": False, "message": "不支援的欄位"}), 400
+
+    # 班導僅能下載、查看，不能編輯留言（與主任設定一致）
+    if user_role == 'class_teacher':
+        return jsonify({"success": False, "message": "班導僅能下載與查看履歷，無法編輯留言。"}), 403
     
     conn = get_db()
     cursor = conn.cursor(dictionary=True)

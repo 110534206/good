@@ -1041,6 +1041,7 @@ def get_vendor_resumes():
                             sja.student_id,
                             sja.company_id,
                             sja.job_id,
+                            sja.applied_at,
                             ra.application_id,
                             ra.apply_status,
                             ra.company_comment,
@@ -1059,7 +1060,7 @@ def get_vendor_resumes():
                         AND ic.advisor_user_id = %s
                         AND rt.review_status = 'approved'
                         AND (%s IN ('teacher', 'ta') OR ij.created_by_vendor_id = %s OR ij.created_by_vendor_id IS NULL)
-                        GROUP BY sja.student_id, sja.company_id, sja.job_id, ra.application_id, ra.apply_status, ra.company_comment, ra.interview_status, ra.interview_time, ra.interview_result, ic.company_name, ij.title, ij.slots
+                        GROUP BY sja.student_id, sja.company_id, sja.job_id, sja.applied_at, ra.application_id, ra.apply_status, ra.company_comment, ra.interview_status, ra.interview_time, ra.interview_result, ic.company_name, ij.title, ij.slots
                     """, tuple([vendor_teacher_id] + list(company_ids) + [vendor_teacher_id]) + (user_role, vendor_id))
                 else:
                     # 如果沒有 teacher_id，使用原來的查詢（向後兼容）
@@ -1069,6 +1070,7 @@ def get_vendor_resumes():
                             sja.student_id,
                             sja.company_id,
                             sja.job_id,
+                            sja.applied_at,
                             ra.application_id,
                             ra.apply_status,
                             ra.company_comment,
@@ -1087,7 +1089,7 @@ def get_vendor_resumes():
                         AND rt.review_status = 'approved'
                         AND rt.teacher_id IS NOT NULL
                         AND (%s IN ('teacher', 'ta') OR ij.created_by_vendor_id = %s OR ij.created_by_vendor_id IS NULL)
-                        GROUP BY sja.student_id, sja.company_id, sja.job_id, ra.application_id, ra.apply_status, ra.company_comment, ra.interview_status, ra.interview_time, ra.interview_result, ic.company_name, ij.title, ij.slots
+                        GROUP BY sja.student_id, sja.company_id, sja.job_id, sja.applied_at, ra.application_id, ra.apply_status, ra.company_comment, ra.interview_status, ra.interview_time, ra.interview_result, ic.company_name, ij.title, ij.slots
                     """, tuple(company_ids) + (user_role, vendor_id))
             else:
                 # 使用舊架構（reviewed_by 欄位）
@@ -1099,6 +1101,7 @@ def get_vendor_resumes():
                             sja.student_id,
                             sja.company_id,
                             sja.job_id,
+                            sja.applied_at,
                             ra.application_id,
                             ra.apply_status,
                             ra.company_comment,
@@ -1131,6 +1134,7 @@ def get_vendor_resumes():
                             sja.student_id,
                             sja.company_id,
                             sja.job_id,
+                            sja.applied_at,
                             ra.application_id,
                             ra.apply_status,
                             ra.company_comment,
@@ -1319,6 +1323,8 @@ def get_vendor_resumes():
                         continue
                     processed_student_resume_keys.add(resume_key)
                     
+                    # 上傳時間：以該筆投遞紀錄的投遞時間 (sja.applied_at) 顯示，與 student_job_applications 一致
+                    upload_time_val = ra_data.get("applied_at") or row.get("created_at")
                     # 構建結果
                     resume = {
                         "id": row.get("id"),
@@ -1334,7 +1340,7 @@ def get_vendor_resumes():
                         "comment": vendor_comment or "",
                         "vendor_comment": vendor_comment or "",
                         "note": row.get("note") or "",
-                        "upload_time": _format_datetime(row.get("created_at")),
+                        "upload_time": _format_datetime(upload_time_val),
                         "reviewed_at": _format_datetime(row.get("reviewed_at")),
                         "company_name": company_name,
                         "company_id": company_id,
@@ -1371,9 +1377,10 @@ def get_vendor_resumes():
                     # 注意：resume_applications.application_id 對應的是 student_job_applications.id，不是 student_preferences.id
                     # 需要從 student_job_applications 表獲取正確的 application_id
                     application_id = None
+                    sja_applied_at = None
                     if student_id and company_id and job_id:
                         cursor.execute("""
-                            SELECT id FROM student_job_applications
+                            SELECT id, applied_at FROM student_job_applications
                             WHERE student_id = %s AND company_id = %s AND job_id = %s
                             ORDER BY applied_at DESC
                             LIMIT 1
@@ -1381,6 +1388,7 @@ def get_vendor_resumes():
                         sja_result = cursor.fetchone()
                         if sja_result:
                             application_id = sja_result['id']
+                            sja_applied_at = sja_result.get('applied_at')
                     
                     # 使用 application_id (student_job_applications.id) 和 job_id 來查詢 resume_applications
                     # 一次性查詢所有需要的資料，避免重複查詢導致未讀取結果的問題
@@ -1466,10 +1474,9 @@ def get_vendor_resumes():
                     # 如果 resume_applications 表沒有記錄，不再從 vendor_preference_history 讀取（表已移除）
                     # 所有資訊都應該從 resume_applications 表讀取
                     
-                    # 構建結果
-                    # 確保 interview_status 有預設值
+                    # 構建結果；上傳時間以該筆投遞的 applied_at 為準（與 student_job_applications 一致）
                     interview_status_value = interview_status if interview_status else 'none'
-                    
+                    upload_time_val = sja_applied_at if sja_applied_at is not None else row.get("created_at")
                     resume = {
                         "id": row.get("id"),
                         "student_id": row.get("student_id"),
@@ -1484,7 +1491,7 @@ def get_vendor_resumes():
                         "comment": vendor_comment or "", # 廠商的留言（優先從 resume_applications），如果沒有則為空
                         "vendor_comment": vendor_comment or "", # 明確標記為廠商留言
                         "note": row.get("note") or "",
-                        "upload_time": _format_datetime(row.get("created_at")),
+                        "upload_time": _format_datetime(upload_time_val),
                         "reviewed_at": _format_datetime(row.get("reviewed_at")),
                         "company_name": company_name,
                         "company_id": company_id,
@@ -1721,14 +1728,58 @@ def vendor_review_resume(resume_id):
                     application_id = app_info.get('application_id')
                     print(f"🔍 [vendor_review_resume] 找到 application_id: {application_id} (student_id={student_id}, company_id={company_id}, job_id={job_id})")
                     
-                    # 先檢查是否存在記錄
+                    # 先檢查是否存在記錄，並讀取現有的 company_comment 和 interview_status
                     cursor.execute("""
-                        SELECT id, apply_status FROM resume_applications
+                        SELECT id, apply_status, company_comment, interview_status FROM resume_applications
                         WHERE application_id = %s AND job_id = %s
                     """, (application_id, job_id))
                     existing_ra = cursor.fetchone()
                     
                     if existing_ra:
+                        # 檢查面試狀態
+                        # - 「通過」需要已面試完成（interview_status = 'finished'）
+                        # - 「未通過」可以在未面試狀態下進行（interview_status = 'none' 或 'finished'）
+                        interview_status = existing_ra.get("interview_status")
+                        
+                        # 如果是「通過」操作，必須已面試完成
+                        if status == "approved" and interview_status != 'finished':
+                            cursor.close()
+                            conn.close()
+                            if interview_status == 'scheduled':
+                                return jsonify({
+                                    "success": False, 
+                                    "message": "此履歷尚未完成面試，請先標記為已面試後才能標記為通過"
+                                }), 400
+                            elif interview_status == 'none':
+                                return jsonify({
+                                    "success": False, 
+                                    "message": "此履歷尚未安排面試，無法標記為通過"
+                                }), 400
+                            else:
+                                return jsonify({
+                                    "success": False, 
+                                    "message": f"此履歷的面試狀態為 '{interview_status}'，無法標記為通過"
+                                }), 400
+                        
+                        # 「未通過」可以在未面試狀態下進行，不需要檢查面試狀態
+                        # 保留現有的面試排程備註（包含「地點：」和「備註：」）
+                        existing_comment = existing_ra.get("company_comment") or ""
+                        final_comment = existing_comment
+                        
+                        # 如果現有備註包含面試排程信息（地點或備註），且前端有傳入新的審核備註
+                        if existing_comment and ("地點：" in existing_comment or "備註：" in existing_comment):
+                            # 如果前端傳入的審核備註不為空，則追加到現有備註後面
+                            if comment:
+                                # 檢查現有備註是否已經包含這個審核備註，避免重複
+                                if comment not in existing_comment:
+                                    final_comment = f"{existing_comment}\n審核備註：{comment}"
+                            # 如果前端傳入的審核備註為空，則保留現有備註不變
+                        else:
+                            # 如果現有備註不包含面試排程信息，則使用前端傳入的備註（或保留現有備註）
+                            if comment:
+                                final_comment = comment
+                            # 如果 comment 為空，則保留 existing_comment
+                        
                         # 更新現有記錄
                         cursor.execute("""
                             UPDATE resume_applications
@@ -1736,7 +1787,7 @@ def vendor_review_resume(resume_id):
                                 company_comment = %s,
                                 updated_at = NOW()
                             WHERE application_id = %s AND job_id = %s
-                        """, (status, comment, application_id, job_id))
+                        """, (status, final_comment, application_id, job_id))
                         updated_ra_rows = cursor.rowcount
                         print(f"✅ [vendor_review_resume] 更新 resume_applications: id={existing_ra.get('id')}, application_id={application_id}, job_id={job_id}, apply_status={status} (舊值: {existing_ra.get('apply_status')}), updated_rows={updated_ra_rows}")
                     else:
@@ -3758,41 +3809,70 @@ def delete_interview_schedule():
         if student_ids and isinstance(student_ids, list) and len(student_ids) > 0:
             for student_id in student_ids:
                 try:
-                    # 查找該學生對應的投遞記錄
+                    # 直接根據 interview_date 和 student_id 查找 resume_applications 表中的記錄
+                    # 這樣可以確保刪除的是指定日期的面試排程
                     cursor.execute("""
-                        SELECT sja.id AS application_id, sja.job_id, sja.company_id
-                        FROM student_job_applications sja
+                        SELECT ra.application_id, ra.job_id, ra.interview_status, ra.interview_time, ra.interview_timeEnd
+                        FROM resume_applications ra
+                        INNER JOIN student_job_applications sja ON ra.application_id = sja.id
                         WHERE sja.student_id = %s
                         AND sja.company_id IN ({})
-                        ORDER BY sja.applied_at DESC
+                        AND DATE(ra.interview_time) = %s
+                        AND ra.interview_status = 'scheduled'
+                        ORDER BY ra.updated_at DESC
                         LIMIT 1
-                    """.format(','.join(['%s'] * len(company_ids))), [student_id] + company_ids)
+                    """.format(','.join(['%s'] * len(company_ids))), [student_id] + company_ids + [interview_date])
                     
-                    application_row = cursor.fetchone()
+                    target_record = cursor.fetchone()
                     
-                    if application_row:
-                        application_id = application_row.get("application_id")
-                        job_id = application_row.get("job_id")
+                    if target_record:
+                        application_id = target_record.get("application_id")
+                        job_id = target_record.get("job_id")
+                        current_interview_status = target_record.get("interview_status")
+                        current_interview_time = target_record.get("interview_time")
                         
-                        # 更新 resume_applications 表，將 interview_status 設為 'none'，清除 interview_time 和 interview_timeEnd
-                        cursor.execute("""
-                            UPDATE resume_applications
-                            SET interview_status = 'none',
-                                interview_time = NULL,
-                                interview_timeEnd = NULL,
-                                updated_at = NOW()
-                            WHERE application_id = %s AND job_id = %s
-                            AND interview_status = 'scheduled'
-                        """, (application_id, job_id))
-                        
-                        if cursor.rowcount > 0:
-                            print(f"✅ [delete_interview_schedule] 已刪除學生 {student_id} 的面試排程: application_id={application_id}, job_id={job_id}")
-                            success_count += 1
+                        # 確認狀態是 'scheduled'（查詢條件已經過濾，但再次確認）
+                        if current_interview_status == 'scheduled' and current_interview_time:
+                            # 執行刪除（同時清除面試相關的備註）
+                            cursor.execute("""
+                                UPDATE resume_applications
+                                SET interview_status = 'none',
+                                    interview_time = NULL,
+                                    interview_timeEnd = NULL,
+                                    company_comment = NULL,
+                                    updated_at = NOW()
+                                WHERE application_id = %s AND job_id = %s
+                                AND interview_status = 'scheduled'
+                                AND DATE(interview_time) = %s
+                            """, (application_id, job_id, interview_date))
+                            
+                            if cursor.rowcount > 0:
+                                print(f"✅ [delete_interview_schedule] 已刪除學生 {student_id} 在 {interview_date} 的面試排程: application_id={application_id}, job_id={job_id}")
+                                success_count += 1
+                            else:
+                                print(f"⚠️ [delete_interview_schedule] 學生 {student_id} 更新失敗（狀態可能已變更）: application_id={application_id}, job_id={job_id}, 日期={interview_date}")
+                                failed_students.append(str(student_id))
                         else:
-                            print(f"⚠️ [delete_interview_schedule] 學生 {student_id} 沒有找到 scheduled 狀態的面試排程")
+                            print(f"⚠️ [delete_interview_schedule] 學生 {student_id} 在 {interview_date} 的面試狀態不是 'scheduled': 狀態={current_interview_status}, 時間={current_interview_time}")
                             failed_students.append(str(student_id))
                     else:
-                        print(f"⚠️ [delete_interview_schedule] 找不到學生 {student_id} 的投遞記錄")
+                        # 沒有找到該日期和學生的 scheduled 狀態記錄
+                        # 檢查是否有其他狀態的記錄
+                        cursor.execute("""
+                            SELECT ra.interview_status, ra.interview_time
+                            FROM resume_applications ra
+                            INNER JOIN student_job_applications sja ON ra.application_id = sja.id
+                            WHERE sja.student_id = %s
+                            AND sja.company_id IN ({})
+                            AND DATE(ra.interview_time) = %s
+                            LIMIT 1
+                        """.format(','.join(['%s'] * len(company_ids))), [student_id] + company_ids + [interview_date])
+                        
+                        other_status = cursor.fetchone()
+                        if other_status:
+                            print(f"⚠️ [delete_interview_schedule] 學生 {student_id} 在 {interview_date} 的面試狀態為 '{other_status.get('interview_status')}'，不是 'scheduled'")
+                        else:
+                            print(f"⚠️ [delete_interview_schedule] 找不到學生 {student_id} 在 {interview_date} 的面試排程記錄")
                         failed_students.append(str(student_id))
                 except Exception as e:
                     print(f"⚠️ 刪除學生 {student_id} 的面試排程失敗：{e}")
@@ -3807,6 +3887,7 @@ def delete_interview_schedule():
                 SET ra.interview_status = 'none',
                     ra.interview_time = NULL,
                     ra.interview_timeEnd = NULL,
+                    ra.company_comment = NULL,
                     ra.updated_at = NOW()
                 WHERE DATE(ra.interview_time) = %s
                 AND sja.company_id IN ({})
@@ -3821,10 +3902,15 @@ def delete_interview_schedule():
         if success_count > 0:
             message = f"已成功刪除 {success_count} 筆面試排程"
             if failed_students:
-                message += f"，{len(failed_students)} 筆刪除失敗"
-            return jsonify({"success": True, "message": message, "success_count": success_count, "failed_count": len(failed_students)})
+                message += f"，{len(failed_students)} 筆刪除失敗（可能因為狀態不是 'scheduled' 或已被刪除）"
+            return jsonify({"success": True, "message": message, "success_count": success_count, "failed_count": len(failed_students), "failed_students": failed_students})
         else:
-            return jsonify({"success": False, "message": "找不到要刪除的面試排程"}), 404
+            # 提供更詳細的錯誤訊息
+            if failed_students:
+                message = f"無法刪除面試排程：所有 {len(failed_students)} 筆記錄的狀態都不是 'scheduled'（可能已被刪除或已完成面試）"
+            else:
+                message = "找不到要刪除的面試排程"
+            return jsonify({"success": False, "message": message, "failed_students": failed_students}), 404
             
     except Exception as exc:
         conn.rollback()
@@ -3909,6 +3995,52 @@ def mark_interview_completed():
                 
                 if app_info:
                     application_id = app_info.get('application_id')
+                    
+                    # 檢查面試時間是否已結束
+                    cursor.execute("""
+                        SELECT interview_time, interview_timeEnd, interview_status
+                        FROM resume_applications
+                        WHERE application_id = %s AND job_id = %s
+                    """, (application_id, job_id))
+                    interview_info = cursor.fetchone()
+                    
+                    if not interview_info:
+                        cursor.close()
+                        conn.close()
+                        return jsonify({"success": False, "message": "找不到面試排程記錄"}), 404
+                    
+                    interview_time_end = interview_info.get('interview_timeEnd')
+                    current_status = interview_info.get('interview_status')
+                    
+                    # 檢查是否已有面試排程
+                    if current_status != 'scheduled':
+                        cursor.close()
+                        conn.close()
+                        if current_status == 'finished':
+                            return jsonify({"success": False, "message": "此面試已經標記為已完成"}), 400
+                        else:
+                            return jsonify({"success": False, "message": "此履歷尚未安排面試"}), 400
+                    
+                    # 檢查面試時間是否已結束
+                    if interview_time_end:
+                        from datetime import datetime
+                        try:
+                            end_time = interview_time_end
+                            if isinstance(end_time, str):
+                                end_time = datetime.strptime(end_time, '%Y-%m-%d %H:%M:%S')
+                            now = datetime.now()
+                            
+                            if now < end_time:
+                                cursor.close()
+                                conn.close()
+                                return jsonify({
+                                    "success": False, 
+                                    "message": f"面試時間尚未結束，無法標記為已面試。面試結束時間：{end_time.strftime('%Y-%m-%d %H:%M:%S')}"
+                                }), 400
+                        except Exception as e:
+                            print(f"⚠️ [mark_interview_completed] 時間檢查失敗：{e}")
+                            # 如果時間解析失敗，仍然允許標記（向後兼容）
+                    
                     # 更新 resume_applications 表
                     # 面試完成時，interview_result 保持為 'pending'（除非有明確的通過/失敗結果）
                     cursor.execute("""
@@ -3916,7 +4048,14 @@ def mark_interview_completed():
                         SET interview_status = 'finished',
                             updated_at = NOW()
                         WHERE application_id = %s AND job_id = %s
+                        AND interview_status = 'scheduled'
                     """, (application_id, job_id))
+                    
+                    if cursor.rowcount == 0:
+                        cursor.close()
+                        conn.close()
+                        return jsonify({"success": False, "message": "更新失敗，面試狀態可能已變更"}), 400
+                    
                     print(f"✅ [mark_interview_completed] 更新 resume_applications: application_id={application_id}, job_id={job_id}, interview_status='finished'")
                 else:
                     print(f"⚠️ [mark_interview_completed] 找不到對應的 student_job_applications 記錄: student_id={student_id}, job_id={job_id}")

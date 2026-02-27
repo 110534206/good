@@ -181,6 +181,9 @@
         <table style="width: 100%; border-collapse: collapse;">
           <thead style="background: #f1f5f9;">
             <tr>
+              <th style="padding: 14px 16px; font-weight: 600; width: 50px;">
+                <input type="checkbox" id="selectAllCheckbox" style="cursor: pointer; width: 18px; height: 18px;" title="全選/取消全選">
+              </th>
               <th style="padding: 14px 16px; font-weight: 600;">學生帳號</th>
               <th style="padding: 14px 16px; font-weight: 600;">姓名</th>
               <th style="padding: 14px 16px; font-weight: 600;">上傳時間</th>
@@ -193,7 +196,7 @@
             </tr>
           </thead>
           <tbody id="resumeTableBody">
-            <tr><td colspan="8" style="padding: 14px 16px; text-align: center; color: #64748b;">載入中...</td></tr>
+            <tr><td colspan="10" style="padding: 14px 16px; text-align: center; color: #64748b;">載入中...</td></tr>
           </tbody>
         </table>
       </div>
@@ -259,24 +262,20 @@
       const targetStatus = urlParams.get('status');
       const isDirectorMode = urlParams.get('mode') === 'director';
 
-      // 如果是主任模式，隱藏狀態篩選器和狀態欄位
-      if (isDirectorMode) {
-        const statusFilter = document.getElementById('statusFilter');
-        if (statusFilter) {
-          statusFilter.style.display = 'none';
-        }
-        const statusHeader = document.getElementById('statusHeader');
-        if (statusHeader) {
-          statusHeader.style.display = 'none';
-        }
-      }
-
       fetch('/api/profile')
         .then(res => res.json())
         .then(profileData => {
           userRole = profileData.success && profileData.user ? profileData.user.role : 'class_teacher';
           currentUserId = profileData.success && profileData.user ? profileData.user.id : null;
           isHomeroom = profileData.success && profileData.user ? profileData.user.is_homeroom : false;
+
+          // 主任或班導：隱藏狀態篩選器和狀態欄位（與主任頁面一致）
+          if (isDirectorMode || userRole === 'class_teacher') {
+            const statusFilter = document.getElementById('statusFilter');
+            if (statusFilter) statusFilter.style.display = 'none';
+            const statusHeader = document.getElementById('statusHeader');
+            if (statusHeader) statusHeader.style.display = 'none';
+          }
 
           // 使用 /api/teacher_review_resumes API（與 review_resume.html 一致）
           const apiUrl = '/api/teacher_review_resumes';
@@ -344,6 +343,24 @@
       document.getElementById("statusFilter").addEventListener("change", applyFilters);
       document.getElementById("searchBox").addEventListener("input", applyFilters);
       document.getElementById("saveCommentBtn").addEventListener("click", saveComment);
+
+      // 全選/取消全選（與主任頁面一致）
+      document.addEventListener("change", function(e) {
+        if (e.target.id === "selectAllCheckbox") {
+          const checkboxes = document.querySelectorAll(".row-checkbox");
+          checkboxes.forEach(cb => { if (!cb.disabled) cb.checked = e.target.checked; });
+        }
+        if (e.target.classList.contains("row-checkbox")) {
+          const checkboxes = document.querySelectorAll(".row-checkbox");
+          const allChecked = Array.from(checkboxes).every(cb => cb.checked);
+          const someChecked = Array.from(checkboxes).some(cb => cb.checked);
+          const selectAll = document.getElementById("selectAllCheckbox");
+          if (selectAll) {
+            selectAll.checked = allChecked;
+            selectAll.indeterminate = someChecked && !allChecked;
+          }
+        }
+      });
 
       // 側邊選單控制
       const menuBtn = document.getElementById('menu-btn');
@@ -554,18 +571,19 @@
       
       const urlParams = new URLSearchParams(window.location.search);
       const isDirectorMode = urlParams.get('mode') === 'director';
+      const isViewOnlyMode = isDirectorMode || userRole === 'class_teacher'; // 主任或班導：僅能下載、查看
       const isViewOnly = !!urlParams.get('company_id'); 
       const filterStatus = document.getElementById("statusFilter").value.trim(); 
       const filterJob = document.getElementById("companyFilter").value.trim();
       
-      // 如果是主任模式，隱藏狀態欄位
+      // 主任或班導模式：隱藏狀態欄位
       const statusHeader = document.getElementById("statusHeader");
       if (statusHeader) {
-        statusHeader.style.display = isDirectorMode ? 'none' : '';
+        statusHeader.style.display = isViewOnlyMode ? 'none' : '';
       }
       
       if (resumes.length === 0) {
-        const colspan = isDirectorMode ? 8 : 9;
+        const colspan = isViewOnlyMode ? 9 : 10;
         tbody.innerHTML = `<tr><td colspan="${colspan}" style="text-align: center; color: #64748b; padding: 16px;">目前沒有資料</td></tr>`;
         return;
       } 
@@ -625,11 +643,14 @@
         // 渲染每一行，statusColor(row.display_status) 會決定背景色，mapStatus 決定文字
         const tr = document.createElement('tr');
         tr.style.borderBottom = '1px solid #e2e8f0';
-        const statusCell = isDirectorMode ? '' : `
+        const statusCell = isViewOnlyMode ? '' : `
            <td style="padding: 14px 16px;">
              <span class="status-badge bg-${statusColor(row.display_status)}">${mapStatus(row.display_status)}</span>
            </td>`;
         tr.innerHTML = `
+           <td style="padding: 14px 16px; text-align: center;">
+             <input type="checkbox" class="row-checkbox" data-resume-id="${row.id}" data-preference-id="${row.preference_id || ''}" style="cursor: pointer; width: 18px; height: 18px;">
+           </td>
            <td style="padding: 14px 16px;">${row.username}</td>
            <td style="padding: 14px 16px;">${escapeHtml(row.name)}</td>
            <td style="padding: 14px 16px;">${row.upload_time}</td>
@@ -641,7 +662,7 @@
              ${ renderCommentBtn(row, isViewOnly, pid) }
            </td>
            <td style="padding: 14px 16px;">
-             ${ renderActionBtns(row, isViewOnly, pid, isDirectorMode) }
+             ${ renderActionBtns(row, isViewOnly, pid, isViewOnlyMode) }
            </td>
         `;
         tbody.appendChild(tr);
@@ -665,30 +686,22 @@
 
     function renderActionBtns(row, isViewOnly, pid, isDirectorMode = false) {
         const dlBtn = `<a href="/api/download_resume/${row.id}" class="btn btn-sm btn-outline-primary" target="_blank" style="margin-right:4px;">下載</a>`;
-        if (isViewOnly) return dlBtn; 
+        if (isViewOnly) return dlBtn;
 
-        const approveClick = `approveResume(${row.id}, ${pid ? `'${pid}'` : 'null'})`;
+        // 班導與主任：僅能下載、查看，不顯示退件按鈕（與主任設定一致）
+        if (isDirectorMode || userRole === 'class_teacher') {
+            return `<div style="display:flex; align-items:center;">${dlBtn}</div>`;
+        }
+
         const rejectClick = `rejectResume(${row.id}, ${pid ? `'${pid}'` : 'null'})`;
-
-        // 主任模式只顯示退件按鈕，不顯示通過按鈕
-        // 根據截止時間狀態決定是否顯示退件按鈕
-        // 注意：截止時間後，班導和主任仍能看到履歷，但退件按鈕會被禁用
         const isRejected = row.display_status === 'rejected';
         const canReject = !isDeadlinePassed || userRole === 'vendor';
-        
-        // 退件按鈕顯示邏輯：
-        // 1. 已退件的履歷：不顯示退件按鈕（已退件）
-        // 2. 截止時間前：顯示可用的退件按鈕
-        // 3. 截止時間後（班導/主任）：顯示禁用的退件按鈕，表示無法再退件
-        const rejectBtn = isRejected 
-          ? '' // 已退件的履歷不顯示退件按鈕
-          : canReject 
+        const rejectBtn = isRejected
+          ? ''
+          : canReject
           ? `<button class="btn btn-sm btn-outline-danger" style="margin-right:4px;" onclick="${rejectClick}">退件</button>`
-          : (isDeadlinePassed && (userRole === 'class_teacher' || userRole === 'director'))
-          ? `<button class="btn btn-sm btn-outline-secondary" style="margin-right:4px;" disabled title="已過截止時間，無法退件">退件</button>`
           : '';
         
-        // class_review_resume.html 只顯示下載和退件按鈕，不顯示完成按鈕
         let btns = `<div style="display:flex; align-items:center;">${dlBtn}`;
         btns += rejectBtn;
         btns += `</div>`;
