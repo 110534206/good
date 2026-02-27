@@ -439,15 +439,31 @@
       return String(text).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
     }
 
-    // 獲取包含 company_id 的 API URL
+    // 獲取包含 company_id 和 status 的 API URL
     function getResumeApiUrl() {
       // 從 URL 路徑中獲取 company_id（格式：/teacher/company/72/resumes）
       const pathParts = window.location.pathname.split('/');
       const companyId = parseInt(pathParts[pathParts.length - 2]);
+      const urlParams = new URLSearchParams(window.location.search);
+      const status = urlParams.get('status');
+      
       let apiUrl = '/vendor/api/resumes';
+      const params = [];
+      
       if (companyId && !isNaN(companyId)) {
-        apiUrl += `?company_id=${companyId}`;
+        params.push(`company_id=${companyId}`);
       }
+      
+      // 如果有 status 參數，傳遞給後端 API
+      // 注意：後端使用 'uploaded' 表示待審核狀態
+      if (status) {
+        params.push(`status=${status}`);
+      }
+      
+      if (params.length > 0) {
+        apiUrl += '?' + params.join('&');
+      }
+      
       return apiUrl;
     }
 
@@ -499,8 +515,20 @@
             positionsPromise = Promise.resolve({success:true, items:[]});
           }
           
+          console.log('🔍 調用 API URL:', apiUrl);
           return Promise.all([
-            fetch(apiUrl).then(res => res.ok ? res.json() : {success:false}),
+            fetch(apiUrl).then(res => {
+              console.log('📡 API 響應狀態:', res.status, res.statusText);
+              return res.ok ? res.json() : {success:false};
+            }).then(data => {
+              console.log('📦 API 返回資料:', data);
+              if (data.success) {
+                console.log('✅ 成功獲取履歷資料，數量:', data.resumes ? data.resumes.length : 0);
+              } else {
+                console.error('❌ API 返回失敗:', data.message || '未知錯誤');
+              }
+              return data;
+            }),
             Promise.resolve({success:true, companies:[]}),
             positionsPromise
           ]);
@@ -508,6 +536,16 @@
         .then(([resumeData, companyData, positionData]) => {
           if (resumeData.success) {
             allResumes = resumeData.resumes || [];
+            console.log('📋 載入的履歷資料:', allResumes.length, '筆');
+            if (allResumes.length > 0) {
+              console.log('📝 前3筆履歷資料:', allResumes.slice(0, 3).map(r => ({
+                id: r.id,
+                name: r.name,
+                status: r.status || r.display_status,
+                company_id: r.company_id,
+                job_id: r.job_id
+              })));
+            }
             
             // 儲存職缺資料（包含名額）
             if (positionData && positionData.items && Array.isArray(positionData.items)) {
@@ -671,6 +709,12 @@
       const interviewStatus = document.getElementById("interviewStatusFilter").value.trim();
       const keyword = document.getElementById("searchBox").value.trim().toLowerCase();
 
+      console.log('🔍 開始過濾履歷資料:');
+      console.log('  - 總履歷數:', allResumes.length);
+      console.log('  - 過濾條件: status=', JSON.stringify(status), '(長度:', status.length, ')', 'interviewStatus=', interviewStatus, 'companyNameFilter=', companyNameFilter, 'jobFilter=', jobFilter);
+      console.log('  - status === "pending":', status === 'pending');
+      console.log('  - status === "uploaded":', status === 'uploaded');
+
       const filtered = allResumes.filter(r => {
         const matchesDept = !dept || r.department === dept;
         const matchesClass = !cls || r.className === cls;
@@ -692,7 +736,24 @@
         let matchesStatus = true;
         if (status) {
           const statusStr = r.application_statuses || r.display_status || r.status || '';
-          matchesStatus = statusStr === status;
+          // 下拉選單的 'pending' 對應後端的 'uploaded' 狀態
+          if (status === 'pending') {
+            matchesStatus = statusStr === 'uploaded';
+            if (allResumes.indexOf(r) < 3) {
+              console.log(`  🔍 狀態檢查: 履歷 ${r.name || r.id}, 過濾條件='${status}', 履歷狀態='${statusStr}', 匹配=${matchesStatus}`);
+            }
+          } else {
+            matchesStatus = statusStr === status;
+            if (allResumes.indexOf(r) < 3) {
+              console.log(`  🔍 狀態檢查: 履歷 ${r.name || r.id}, 過濾條件='${status}', 履歷狀態='${statusStr}', 匹配=${matchesStatus}`);
+            }
+          }
+        } else {
+          // 如果沒有狀態過濾條件，記錄一下
+          if (allResumes.indexOf(r) < 3) {
+            const statusStr = r.application_statuses || r.display_status || r.status || '';
+            console.log(`  🔍 狀態檢查: 履歷 ${r.name || r.id}, 無狀態過濾, 履歷狀態='${statusStr}'`);
+          }
         }
 
         // 面試狀態篩選
@@ -714,8 +775,38 @@
           }
         }
 
-        return matchesDept && matchesClass && matchesCompanyName && matchesJob && matchesStatus && matchesInterviewStatus && matchesKeyword;
+        const finalMatch = matchesDept && matchesClass && matchesCompanyName && matchesJob && matchesStatus && matchesInterviewStatus && matchesKeyword;
+        
+        // 對於前3筆履歷，顯示詳細的過濾結果
+        if (allResumes.indexOf(r) < 3) {
+          console.log(`  📊 履歷 ${r.name || r.id} 過濾結果:`, {
+            matchesDept,
+            matchesClass,
+            matchesCompanyName,
+            matchesJob,
+            matchesStatus,
+            matchesInterviewStatus,
+            matchesKeyword,
+            finalMatch
+          });
+        }
+        
+        return finalMatch;
       });
+
+      console.log('✅ 過濾完成:');
+      console.log('  - 過濾後履歷數:', filtered.length);
+      if (filtered.length === 0 && allResumes.length > 0) {
+        console.warn('⚠️ 所有履歷都被過濾掉了！');
+        console.log('  - 前3筆履歷的狀態:', allResumes.slice(0, 3).map(r => ({
+          name: r.name,
+          status: r.status || r.display_status || r.application_statuses,
+          company_id: r.company_id,
+          job_id: r.job_id,
+          company_name: r.company_name,
+          job_title: r.job_title
+        })));
+      }
 
       renderTable(filtered);
     }
