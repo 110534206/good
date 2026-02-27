@@ -3136,10 +3136,7 @@ def director_swap_positions():
 @admission_bp.route("/api/director_confirm_matching", methods=["POST"])
 def director_confirm_matching():
     """
-    主任確認媒合結果後：
-    1. 通知指導老師與班導最後結果已經出來
-    2. 傳給廠商做確認
-    3. 由科助進行最後發布
+    主任確認媒合結果後：只通知科助，由科助進行最後發布並通知所有使用者。
     """
     if 'user_id' not in session or session.get('role') != 'director':
         return jsonify({"success": False, "message": "未授權"}), 403
@@ -3262,96 +3259,14 @@ def director_confirm_matching():
         inserted_count = cursor.rowcount
         print(f"✅ 主任確認：已為 {inserted_count} 筆來自 resume_applications 的記錄創建 manage_director 記錄")
         
-        # 1. 收集所有需要通知的指導老師和班導（去重，避免同一個人收到兩個通知）
-        notified_user_ids = set()
-        
-        # 收集所有指導老師（role='teacher'）
-        cursor.execute("SELECT id FROM users WHERE role = 'teacher'")
-        teachers = cursor.fetchall() or []
-        for teacher in teachers:
-            notified_user_ids.add(teacher['id'])
-        
-        # 收集所有班導（從 classes_teacher 表獲取）
-        cursor.execute("""
-            SELECT DISTINCT ct.teacher_id
-            FROM classes_teacher ct
-            JOIN users u ON ct.teacher_id = u.id
-            WHERE ct.role = 'classteacher'
-        """)
-        class_teachers = cursor.fetchall() or []
-        for class_teacher in class_teachers:
-            teacher_id = class_teacher['teacher_id']
-            if teacher_id not in notified_user_ids:
-                notified_user_ids.add(teacher_id)
-        
-        # 發送通知給所有需要通知的用戶（指導老師和班導）
-        title = f"{semester_prefix} 媒合結果已出爐"
-        message = f"{semester_prefix}媒合結果已出爐，請前往查看。"
-        link_url = "/admission/results"
-        
-        for user_id in notified_user_ids:
-            create_notification(
-                user_id=user_id,
-                title=title,
-                message=message,
-                category="matching",
-                link_url=link_url
-            )
-        
-        # 2. 通知所有在媒合結果中的學生（Approved 狀態）
-        # md.preference_id 引用的是 student_job_applications.id（即 resume_applications.application_id）
-        # 需要通過 student_job_applications 來 JOIN student_preferences
-        cursor.execute("""
-            SELECT DISTINCT md.student_id
-            FROM manage_director md
-            INNER JOIN student_job_applications sja ON md.preference_id = sja.id
-            INNER JOIN student_preferences sp ON sja.student_id = sp.student_id
-                AND sja.company_id = sp.company_id
-                AND sja.job_id = sp.job_id
-                AND sp.semester_id = %s
-            WHERE md.director_decision = 'Approved'
-        """, (current_semester_id,))
-        matched_students = cursor.fetchall() or []
-        
-        student_title = f"{semester_prefix} 媒合結果已出爐"
-        student_message = f"{semester_prefix}媒合結果已出爐，請前往查看您的媒合結果。"
-        student_link_url = "/student_home"  # 學生查看媒合結果的頁面
-        
-        for student in matched_students:
-            student_id = student.get('student_id')
-            if student_id:
-                create_notification(
-                    user_id=student_id,
-                    title=student_title,
-                    message=student_message,
-                    category="matching",
-                    link_url=student_link_url
-                )
-        
-        # 3. 通知所有廠商（role='vendor'）進行確認
-        cursor.execute("SELECT id, name FROM users WHERE role = 'vendor'")
-        vendors = cursor.fetchall() or []
-        
-        for vendor in vendors:
-            title = f"{semester_prefix} 媒合結果待確認"
-            message = f"{semester_prefix}媒合結果已由主任確認，請前往確認您的實習生名單。"
-            link_url = "/vendor/matching_results"  # 廠商查看媒合結果的頁面
-            create_notification(
-                user_id=vendor['id'],
-                title=title,
-                message=message,
-                category="approval",
-                link_url=link_url
-            )
-        
-        # 4. 通知所有科助（role='ta'）進行最後發布
+        # 主任確認：只通知科助（指導老師、班導、學生、廠商由科助確認時一併通知）
         cursor.execute("SELECT id, name FROM users WHERE role = 'ta'")
         tas = cursor.fetchall() or []
         
         for ta in tas:
             title = f"{semester_prefix} 媒合結果待發布"
-            message = f"{semester_prefix}媒合結果已由主任確認，科助確認後請進行最後發布。"
-            link_url = "/final_results"  # 科助查看最終結果的頁面
+            message = f"{semester_prefix}媒合結果已由主任確認，請進行最後發布。"
+            link_url = "/final_results"
             create_notification(
                 user_id=ta['id'],
                 title=title,
@@ -3360,7 +3275,7 @@ def director_confirm_matching():
                 link_url=link_url
             )
         
-        # 5. 將已確認的媒合結果寫入 internship_offers 表（主任確認時寫入，狀態為 accepted）
+        # 2. 將已確認的媒合結果寫入 internship_offers 表（主任確認時寫入，狀態為 accepted）
         cursor.execute("""
             SELECT DISTINCT
                 md.student_id,
@@ -3431,14 +3346,9 @@ def director_confirm_matching():
         
         return jsonify({
             "success": True,
-            "message": "確認成功",
+            "message": "確認成功，已通知科助",
             "approved_count": approved_count,
-            "notified": {
-                "teachers_and_class_teachers": len(notified_user_ids),
-                "students": len(matched_students),
-                "vendors": len(vendors),
-                "tas": len(tas)
-            }
+            "notified": {"tas": len(tas)}
         })
     
     except Exception as e:
@@ -3449,15 +3359,12 @@ def director_confirm_matching():
         conn.close()
 
 # =========================================================
-# API: 科助確認媒合結果（主任確認後，科助進行最後確認）
+# API: 科助確認媒合結果（主任確認後，科助進行最後確認；通知所有使用者）
 # =========================================================
 @admission_bp.route("/api/ta/confirm_matching", methods=["POST"])
 def ta_confirm_matching():
     """
-    科助確認媒合結果後：
-    1. 標記媒合結果為已發布狀態
-    2. 通知相關人員媒合結果已發布
-    3. 準備進行二面流程
+    科助確認媒合結果後：通知所有使用者（指導老師、班導、學生、廠商、管理員、主任）。
     """
     if 'user_id' not in session or session.get('role') not in ['ta', 'admin']:
         return jsonify({"success": False, "message": "未授權"}), 403
@@ -3575,7 +3482,22 @@ def ta_confirm_matching():
                 link_url=link_url
             )
         
-        # 4. 將已確認的媒合結果寫入 internship_offers 表
+        # 4. 通知管理員與主任（科助確認時通知所有使用者）
+        cursor.execute("SELECT id FROM users WHERE role IN ('admin', 'director')")
+        admins_directors = cursor.fetchall() or []
+        admin_title = f"{semester_prefix} 媒合結果已發布"
+        admin_message = f"{semester_prefix}媒合結果已由科助確認並發布，請前往查看。"
+        admin_link_url = "/admission/results"
+        for u in admins_directors:
+            create_notification(
+                user_id=u['id'],
+                title=admin_title,
+                message=admin_message,
+                category="matching",
+                link_url=admin_link_url
+            )
+        
+        # 5. 將已確認的媒合結果寫入 internship_offers 表
         cursor.execute("""
             SELECT DISTINCT
                 md.student_id,
@@ -3630,11 +3552,12 @@ def ta_confirm_matching():
         
         return jsonify({
             "success": True,
-            "message": "確認成功",
+            "message": "確認成功，已通知所有相關使用者",
             "notified": {
                 "teachers_and_class_teachers": len(notified_user_ids),
                 "students": len(matched_students),
-                "vendors": len(vendors)
+                "vendors": len(vendors),
+                "admins_directors": len(admins_directors)
             },
             "approved_count": approved_count,
             "match_results": {
