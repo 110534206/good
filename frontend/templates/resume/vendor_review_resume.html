@@ -1640,11 +1640,11 @@
                   timeStart: schedule.time_start || '',
                   timeEnd: schedule.time_end || '',
                   location: schedule.location || '',
-                  notes: '',
+                  notes: schedule.notes || '', // 確保 notes 被正確載入
                   students: []
                 });
               } else {
-                // 如果該日期已有排程，更新時間和地點（使用第一個非空值）
+                // 如果該日期已有排程，更新時間、地點和備註（使用第一個非空值）
                 const scheduleData = ownSchedulesByDate.get(date);
                 if (!scheduleData.timeStart && schedule.time_start) {
                   scheduleData.timeStart = schedule.time_start;
@@ -1654,6 +1654,10 @@
                 }
                 if (!scheduleData.location && schedule.location) {
                   scheduleData.location = schedule.location;
+                }
+                // 確保 notes 被正確載入（使用第一個非空值）
+                if (!scheduleData.notes && schedule.notes) {
+                  scheduleData.notes = schedule.notes;
                 }
               }
               // 收集該日期的所有學生ID
@@ -1669,7 +1673,7 @@
           // 更新 interviewSchedules（覆蓋現有數據，確保編輯時能載入最新數據）
           ownSchedulesByDate.forEach((scheduleData, date) => {
             interviewSchedules.set(date, scheduleData);
-            console.log(`✅ 更新排程 ${date}: 時間=${scheduleData.timeStart}-${scheduleData.timeEnd}, 學生=${scheduleData.students.join(',')}`);
+            console.log(`✅ 更新排程 ${date}: 時間=${scheduleData.timeStart}-${scheduleData.timeEnd}, 地點=${scheduleData.location}, 備註=${scheduleData.notes ? scheduleData.notes.substring(0, 30) + '...' : '無'}, 學生=${scheduleData.students.join(',')}`);
           });
           
           // 不再保存到本地存儲，完全依賴資料庫
@@ -2038,10 +2042,46 @@
     }
     
     // 按媒合順序排序並顯示
-    function sortByMatchingOrder() {
+    async function sortByMatchingOrder() {
       console.log('📊 開始媒合排序');
       console.log('📋 職缺資料數量：', allPositions.length);
       console.log('📋 履歷資料數量：', allResumes.length);
+      
+      // 0. 先載入已保存的媒合排序資料
+      let savedSortMap = new Map(); // key: job_id, value: { regulars: [{student_id, slot_index}], reserves: [{student_id}] }
+      try {
+        const res = await fetch('/vendor/api/get_matching_sort');
+        const data = await res.json();
+        if (data.success && data.results) {
+          console.log('✅ 載入已保存的媒合排序資料:', data.results);
+          // 將資料轉換為 Map 格式，方便查找
+          data.results.forEach(item => {
+            const jobId = String(item.job_id);
+            if (!savedSortMap.has(jobId)) {
+              savedSortMap.set(jobId, {
+                regulars: [],
+                reserves: []
+              });
+            }
+            const jobData = savedSortMap.get(jobId);
+            if (item.is_reserve === 0 || item.is_reserve === false) {
+              // 正取學生
+              jobData.regulars.push({
+                student_id: item.student_id,
+                slot_index: item.slot_index
+              });
+            } else {
+              // 候補學生
+              jobData.reserves.push({
+                student_id: item.student_id
+              });
+            }
+          });
+          console.log('📋 已保存的媒合排序資料:', savedSortMap);
+        }
+      } catch (err) {
+        console.error('❌ 載入已保存的媒合排序資料失敗:', err);
+      }
       
       // 1. 從職缺資料（allPositions）建立職缺映射表，使用廠商設定的名額
       const jobsMap = new Map(); // key: job_id, value: { job_title, slots, students: [] }
@@ -2193,8 +2233,30 @@
             option.value = `${jobKey}_${index}`;
             option.textContent = displayText;
             option.dataset.resumeIndex = index;
+            option.dataset.studentId = resume.student_id || resume.id || '';
             dropdown.appendChild(option);
           });
+          
+          // 根據已保存的資料預選學生
+          const savedJobData = savedSortMap.get(jobKey);
+          if (savedJobData && savedJobData.regulars) {
+            // 找到該位置（slot_index）對應的學生
+            const savedRegular = savedJobData.regulars.find(r => r.slot_index === (i + 1));
+            if (savedRegular) {
+              // 找到對應的學生選項
+              const studentId = String(savedRegular.student_id);
+              const matchingOption = Array.from(dropdown.options).find(opt => {
+                return opt.dataset.studentId === studentId;
+              });
+              if (matchingOption) {
+                dropdown.value = matchingOption.value;
+                console.log(`✅ 預選學生: 職缺=${jobTitle}, 位置=正取${i + 1}, 學生ID=${studentId}`);
+                
+                // 觸發 change 事件以顯示學生詳細資訊
+                dropdown.dispatchEvent(new Event('change'));
+              }
+            }
+          }
           
           // 下拉選單變更事件
           dropdown.addEventListener('change', (e) => {
@@ -2251,6 +2313,16 @@
         reserveContainer.appendChild(reserveList);
         
         lettersContainer.appendChild(reserveContainer);
+        
+        // 根據已保存的資料載入候補學生
+        const savedJobData = savedSortMap.get(jobKey);
+        if (savedJobData && savedJobData.reserves && savedJobData.reserves.length > 0) {
+          console.log(`📋 載入已保存的候補學生: 職缺=${jobTitle}, 數量=${savedJobData.reserves.length}`);
+          savedJobData.reserves.forEach((reserve, reserveIndex) => {
+            // 為每個候補學生創建下拉選單
+            addReserveStudent(jobKey, reserve.student_id);
+          });
+        }
       });
       
       // 將 jobsMap 存儲到全域變數，以便在 addReserveStudent 函數中使用
@@ -2397,7 +2469,7 @@
     }
     
     // 新增候補學生下拉選單
-    function addReserveStudent(jobKey) {
+    function addReserveStudent(jobKey, preSelectedStudentId = null) {
       const reserveList = document.getElementById(`reserve-list-${jobKey}`);
       if (!reserveList) return;
       
@@ -2443,8 +2515,24 @@
         option.value = `${jobKey}_${index}`;
         option.textContent = displayText;
         option.dataset.resumeIndex = index;
+        option.dataset.studentId = resume.student_id || resume.id || '';
         dropdown.appendChild(option);
       });
+      
+      // 如果有預選的學生ID，則預選該學生
+      if (preSelectedStudentId) {
+        const studentIdStr = String(preSelectedStudentId);
+        const matchingOption = Array.from(dropdown.options).find(opt => {
+          return opt.dataset.studentId === studentIdStr;
+        });
+        if (matchingOption) {
+          dropdown.value = matchingOption.value;
+          console.log(`✅ 預選候補學生: 職缺=${jobData.job_title}, 學生ID=${studentIdStr}`);
+          
+          // 觸發 change 事件以顯示學生詳細資訊
+          dropdown.dispatchEvent(new Event('change'));
+        }
+      }
       
       // 下拉選單變更事件
       dropdown.addEventListener('change', (e) => {
@@ -2761,9 +2849,44 @@
         // 不再從 interviewSchedules（本地存儲）獲取，完全依賴 allVendorSchedules（資料庫）
         // 如果 allVendorSchedules 中沒有，schedule 保持為 null（新增模式）
       } else {
-        // 新增模式（點擊日期格子時）：不載入任何現有排程，一律視為新增
-        console.log('➕ 新增模式：點擊日期格子，不載入現有排程');
-        // schedule 保持為 null，不載入任何資料
+        // 新增模式（點擊日期格子時）：也要載入現有排程（如果有的話）
+        console.log('➕ 新增模式：點擊日期格子，嘗試載入現有排程');
+        if (allVendorSchedules.has(dateStr)) {
+          const schedules = allVendorSchedules.get(dateStr);
+          // 只過濾自己的排程：優先通過公司名稱判斷（最準確），然後檢查 is_own
+          const ownSchedules = schedules.filter(s => {
+            // 優先通過公司名稱判斷（最準確）
+            if (vendorCompanyName && s.company_name) {
+              // 使用寬鬆的公司名稱匹配（處理「有限公司」和「股份有限公司」等差異）
+              const isOwn = isCompanyNameMatch(s.company_name, vendorCompanyName);
+              // 如果公司名稱匹配，就是自己的排程（即使 is_own=false）
+              if (isOwn) return true;
+              // 如果公司名稱不匹配，即使 is_own=true 也不是自己的排程
+              if (!isOwn && s.is_own === true) {
+                console.warn(`⚠️ [openInterviewForm 新增模式] 警告：排程 is_own=true 但公司名稱不匹配，過濾掉`);
+                return false;
+              }
+            }
+            // 如果沒有公司名稱信息，則使用 is_own 判斷
+            if (s.is_own === true) return true;
+            if (s.is_own === false) return false;
+            return false;
+          });
+          
+          if (ownSchedules.length > 0) {
+            // 合併所有自己的排程（可能有多個學生）
+            // 使用第一個排程的時間和地點，但收集所有學生
+            const firstSchedule = ownSchedules[0];
+            schedule = {
+              timeStart: firstSchedule.time_start || '',
+              timeEnd: firstSchedule.time_end || '',
+              location: firstSchedule.location || '',
+              notes: firstSchedule.notes || '', // 確保 notes 被正確載入
+              students: ownSchedules.filter(s => s.student_id).map(s => String(s.student_id))
+            };
+            console.log(`✅ [新增模式] 從 allVendorSchedules 載入自己的排程資料: 時間=${schedule.timeStart}-${schedule.timeEnd}, 地點=${schedule.location}, 備註=${schedule.notes ? schedule.notes.substring(0, 30) : '無'}, 學生=${schedule.students.join(',')}`);
+          }
+        }
       }
       
       if (schedule) {
