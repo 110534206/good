@@ -813,7 +813,7 @@ def review_preferences():
         # 如果沒有資料，並且有設定當前學期，嘗試查詢所有學期的資料作為備用
         if len(student_data) == 0 and current_semester_id:
             print(f"🔄 嘗試查詢該班級在所有學期的志願序（作為診斷）...")
-            cursor.execute("""
+            cursor.execute(f"""
                 SELECT 
                     u.id AS student_id,
                     u.name AS student_name,
@@ -830,7 +830,7 @@ def review_preferences():
                 FROM student_preferences sp
                 JOIN users u ON sp.student_id = u.id
                 LEFT JOIN internship_companies ic ON sp.company_id = ic.id
-                WHERE u.class_id = %s 
+                WHERE u.class_id IN ({placeholders})
                   AND u.role = 'student'
                 ORDER BY u.name, sp.preference_order
             """, tuple(class_ids))
