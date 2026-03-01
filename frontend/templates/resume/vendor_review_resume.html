@@ -683,6 +683,15 @@
         });
       }
       
+      // 監聽面試表單 modal 的關閉事件，重置編輯模式標記
+      const interviewFormModal = document.getElementById("interviewFormModal");
+      if (interviewFormModal) {
+        interviewFormModal.addEventListener('hidden.bs.modal', function() {
+          isEditingInterviewSchedule = false;
+          selectedInterviewDate = null;
+        });
+      }
+      
       // 全選/取消全選功能
       const selectAllCheckbox = document.getElementById("selectAllCheckbox");
       if (selectAllCheckbox) {
@@ -1684,6 +1693,7 @@
     // 月曆相關變數
     let currentCalendarDate = new Date();
     let selectedInterviewDate = null;
+    let isEditingInterviewSchedule = false; // 追蹤當前是否處於編輯模式
     // 存儲面試排程（格式：'YYYY-MM-DD' => {timeStart: 'HH:MM', timeEnd: 'HH:MM', location: '...', notes: '...', isOwn: true/false}）
     const interviewSchedules = new Map();
     // 存儲所有廠商的面試排程（用於顯示其他廠商已預約的時間）
@@ -2891,21 +2901,25 @@
     // 開啟面試表單
     // forceEditMode: true 表示強制編輯模式（點擊藍色標籤時），false 表示新增模式（點擊日期格子時）
     async function openInterviewForm(date, forceEditMode = false) {
-      // 如果是新增模式，檢查日期是否至少提前一天
+      // 如果是新增模式，檢查日期和時間是否至少提前24小時
       if (!forceEditMode) {
         const now = new Date();
-        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-        const tomorrow = new Date(today);
-        tomorrow.setDate(tomorrow.getDate() + 1); // 明天（最早可選擇的日期）
-        
         const selectedDate = new Date(date);
         selectedDate.setHours(0, 0, 0, 0);
         
-        if (selectedDate < tomorrow) {
-          if (selectedDate < today) {
-            alert('新增面試排程至少要在一天前，請選擇至少一天後的日期');
+        // 計算24小時後的時間
+        const minDateTime = new Date(now);
+        minDateTime.setHours(minDateTime.getHours() + 24);
+        
+        // 檢查選擇的日期是否至少是24小時後
+        if (selectedDate < minDateTime) {
+          const hoursDiff = (selectedDate - now) / (1000 * 60 * 60);
+          if (hoursDiff < 0) {
+            alert('無法選擇過去的日期，請選擇至少24小時後的日期');
           } else {
-            alert('新增面試排程至少要在一天前，請選擇明天或未來的日期');
+            const remainingHours = Math.floor(hoursDiff);
+            const remainingMinutes = Math.floor((hoursDiff - remainingHours) * 60);
+            alert(`新增面試排程必須在至少24小時前進行。距離選擇的日期還有約 ${remainingHours} 小時 ${remainingMinutes} 分鐘，無法新增。`);
           }
           return;
         }
@@ -3127,16 +3141,17 @@
         scheduleModal.hide();
       }
       
-      // 更新模態框標題
+      // 更新模態框標題並設置編輯模式標記
       const modalTitle = document.querySelector('#interviewFormModal .modal-title');
+      isEditingInterviewSchedule = schedule !== null; // 如果有現有排程，則為編輯模式
       if (modalTitle) {
-        modalTitle.textContent = schedule ? '編輯面試排程' : '新增面試排程';
+        modalTitle.textContent = isEditingInterviewSchedule ? '編輯面試排程' : '新增面試排程';
       }
       
       // 顯示/隱藏刪除按鈕（只在編輯模式時顯示）
       const deleteBtn = document.getElementById('deleteInterviewBtn');
       if (deleteBtn) {
-        deleteBtn.style.display = schedule ? 'inline-block' : 'none';
+        deleteBtn.style.display = isEditingInterviewSchedule ? 'inline-block' : 'none';
       }
       
       // 等待月曆模態框完全關閉後再打開表單模態框
@@ -3378,20 +3393,42 @@
         return;
       }
       
-      // 檢查日期：必須至少提前一天新增面試排程
+      // 檢查日期和時間：根據編輯/新增模式執行不同的時間限制檢查
       const now = new Date();
       const selectedDate = new Date(selectedInterviewDate);
-      selectedDate.setHours(0, 0, 0, 0); // 設置為當天的 00:00:00
-      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-      const tomorrow = new Date(today);
-      tomorrow.setDate(tomorrow.getDate() + 1); // 明天
+      selectedDate.setHours(0, 0, 0, 0);
       
-      // 檢查日期：不能選擇今天或過去的日期，最早只能選擇明天
-      if (selectedDate < tomorrow) {
-        if (selectedDate < today) {
-          alert('無法儲存：選擇的日期已過期，請選擇至少一天後的日期');
+      // 解析面試開始時間（格式：HH:MM）
+      const [hours, minutes] = timeStart.split(':').map(Number);
+      const interviewStartTime = new Date(selectedDate);
+      interviewStartTime.setHours(hours, minutes, 0, 0);
+      
+      // 根據編輯/新增模式設置不同的時間限制
+      const isEditMode = isEditingInterviewSchedule;
+      const requiredHours = isEditMode ? 12 : 24; // 編輯模式12小時，新增模式24小時
+      
+      // 計算所需時間後的時間點
+      const minDateTime = new Date(now);
+      minDateTime.setHours(minDateTime.getHours() + requiredHours);
+      
+      // 檢查面試開始時間是否符合時間限制
+      if (interviewStartTime < minDateTime) {
+        const timeDiff = interviewStartTime - now;
+        const hoursDiff = timeDiff / (1000 * 60 * 60);
+        if (hoursDiff < 0) {
+          if (isEditMode) {
+            alert('無法儲存：選擇的面試時間已過期，無法編輯已開始或已結束的面試排程');
+          } else {
+            alert('無法儲存：選擇的面試時間已過期，請選擇至少24小時後的時間');
+          }
         } else {
-          alert('無法儲存：新增面試排程至少要在一天前，請選擇明天或未來的日期');
+          const remainingHours = Math.floor(hoursDiff);
+          const remainingMinutes = Math.floor((hoursDiff - remainingHours) * 60);
+          if (isEditMode) {
+            alert(`編輯面試排程必須在面試開始前至少12小時進行。距離面試開始還有約 ${remainingHours} 小時 ${remainingMinutes} 分鐘，無法編輯。`);
+          } else {
+            alert(`新增面試排程必須在至少24小時前進行。距離面試開始還有約 ${remainingHours} 小時 ${remainingMinutes} 分鐘，無法新增。`);
+          }
         }
         return;
       }
@@ -3946,8 +3983,12 @@
       // 添加日期格子
       const today = new Date();
       today.setHours(0, 0, 0, 0);
-      const tomorrow = new Date(today);
-      tomorrow.setDate(tomorrow.getDate() + 1); // 明天（最早可選擇的日期）
+      const now = new Date();
+      // 計算24小時後的日期（用於判斷是否可選擇）
+      const minDateTime = new Date(now);
+      minDateTime.setHours(minDateTime.getHours() + 24);
+      const minDate = new Date(minDateTime);
+      minDate.setHours(0, 0, 0, 0);
       
       for (let day = 1; day <= daysInMonth; day++) {
         const dateCell = document.createElement("div");
@@ -3956,8 +3997,9 @@
         
         const isToday = cellDate.getTime() === today.getTime();
         const isPast = cellDate < today;
-        // 檢查是否為今天或過去（至少提前一天，所以今天也不能選擇）
-        const isDisabled = cellDate < tomorrow;
+        // 檢查是否為今天或過去（至少提前24小時，所以今天也不能選擇）
+        // 如果選擇的日期小於24小時後的日期，則禁用
+        const isDisabled = cellDate < minDate;
         
         dateCell.style.cssText = `
           padding: 12px;
@@ -4323,9 +4365,16 @@
             // 如果點擊的是藍色標籤，事件會被阻止冒泡，不會觸發這裡
             // 只有點擊日期格子的其他區域才會觸發
             e.stopPropagation();
-            // 再次檢查日期（至少提前一天）
-            if (cellDate < tomorrow) {
-              alert('新增面試排程至少要在一天前，請選擇明天或未來的日期');
+            // 再次檢查日期（至少提前24小時）
+            if (cellDate < minDate) {
+              const hoursDiff = (cellDate - now) / (1000 * 60 * 60);
+              if (hoursDiff < 0) {
+                alert('無法選擇過去的日期，請選擇至少24小時後的日期');
+              } else {
+                const remainingHours = Math.floor(hoursDiff);
+                const remainingMinutes = Math.floor((hoursDiff - remainingHours) * 60);
+                alert(`新增面試排程必須在至少24小時前進行。距離選擇的日期還有約 ${remainingHours} 小時 ${remainingMinutes} 分鐘，無法新增。`);
+              }
               return;
             }
             // 新增模式：不載入現有排程
