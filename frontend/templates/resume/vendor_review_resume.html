@@ -1076,6 +1076,7 @@
             
             // 方法1: 從 allVendorSchedules 中查找面試時間（最準確）
             let interviewDateStr = null;
+            let interviewTimeStart = null;
             let interviewTimeEnd = null;
             const studentId = String(row.student_id || row.id || '');
             
@@ -1093,6 +1094,7 @@
                 
                 if (isOwnSchedule && scheduleStudentId === studentId) {
                   interviewDateStr = dateKey;
+                  interviewTimeStart = schedule.time_start || null;
                   interviewTimeEnd = schedule.time_end || null;
                   break;
                 }
@@ -1110,7 +1112,7 @@
                   const day = String(interviewTime.getDate()).padStart(2, '0');
                   interviewDateStr = `${year}-${month}-${day}`;
                   
-                  // 從 allVendorSchedules 中查找該日期的結束時間
+                  // 從 allVendorSchedules 中查找該日期的開始時間和結束時間
                   if (allVendorSchedules.has(interviewDateStr)) {
                     const schedules = allVendorSchedules.get(interviewDateStr);
                     for (const schedule of schedules) {
@@ -1123,6 +1125,7 @@
                       }
                       
                       if (isOwnSchedule && scheduleStudentId === studentId) {
+                        interviewTimeStart = schedule.time_start || null;
                         interviewTimeEnd = schedule.time_end || null;
                         break;
                       }
@@ -1142,44 +1145,66 @@
               interviewDateObj.setHours(0, 0, 0, 0);
               
               // 檢查面試日期是否為今天或過去
-              const isTodayOrPast = interviewDateObj <= today;
+              const isToday = interviewDateObj.getTime() === today.getTime();
+              const isPast = interviewDateObj < today;
               
-              if (interviewTimeEnd) {
-                // 如果有結束時間，檢查時間是否已過
-                const timeParts = interviewTimeEnd.split(':');
-                let endTime;
+              if (interviewTimeStart) {
+                // 如果有開始時間，檢查開始時間是否已過
+                const timeParts = interviewTimeStart.split(':');
+                let startTime;
                 if (timeParts.length >= 2) {
-                  endTime = new Date(interviewDateObj);
-                  endTime.setHours(parseInt(timeParts[0]), parseInt(timeParts[1]), 0, 0);
+                  startTime = new Date(interviewDateObj);
+                  startTime.setHours(parseInt(timeParts[0]), parseInt(timeParts[1]), 0, 0);
                 } else {
-                  endTime = new Date(interviewTimeEnd);
+                  startTime = new Date(interviewTimeStart);
                 }
                 
-                const isTimePassed = now >= endTime;
-                canMarkCompleted = isTodayOrPast && isTimePassed;
+                const isStartTimePassed = now >= startTime;
+                // 只要面試開始時間已過就可以標記為已面試
+                canMarkCompleted = isStartTimePassed;
                 
                 // 調試日誌
                 console.log(`🔍 [renderActionBtns] 學生 ${row.name || row.student_name || '未知'}:`, {
                   interviewDateStr: interviewDateStr,
+                  interviewTimeStart: interviewTimeStart,
                   interviewTimeEnd: interviewTimeEnd,
-                  isTodayOrPast: isTodayOrPast,
-                  isTimePassed: isTimePassed,
+                  isToday: isToday,
+                  isPast: isPast,
+                  isStartTimePassed: isStartTimePassed,
                   canMarkCompleted: canMarkCompleted,
                   now: now.toISOString(),
-                  endTime: endTime.toISOString(),
+                  startTime: startTime.toISOString(),
                   studentId: studentId
                 });
               } else {
-                // 如果沒有結束時間，但面試日期是今天或過去，則允許標記為已面試
-                // 這是為了處理舊資料或資料不完整的情況
-                canMarkCompleted = isTodayOrPast;
-                
-                console.log(`🔍 [renderActionBtns] 學生 ${row.name || row.student_name || '未知'}: 沒有結束時間，但日期是今天或過去`, {
-                  interviewDateStr: interviewDateStr,
-                  isTodayOrPast: isTodayOrPast,
-                  canMarkCompleted: canMarkCompleted,
-                  studentId: studentId
-                });
+                // 如果沒有開始時間
+                if (isPast) {
+                  // 如果面試日期是過去，允許標記為已面試（處理舊資料）
+                  canMarkCompleted = true;
+                  console.log(`🔍 [renderActionBtns] 學生 ${row.name || row.student_name || '未知'}: 沒有開始時間，但日期是過去，允許標記`, {
+                    interviewDateStr: interviewDateStr,
+                    isPast: isPast,
+                    canMarkCompleted: canMarkCompleted,
+                    studentId: studentId
+                  });
+                } else if (isToday) {
+                  // 如果面試日期是今天但沒有開始時間，允許標記（假設已經開始）
+                  canMarkCompleted = true;
+                  console.log(`🔍 [renderActionBtns] 學生 ${row.name || row.student_name || '未知'}: 沒有開始時間，但日期是今天，允許標記`, {
+                    interviewDateStr: interviewDateStr,
+                    isToday: isToday,
+                    canMarkCompleted: canMarkCompleted,
+                    studentId: studentId
+                  });
+                } else {
+                  // 如果面試日期是未來，不允許標記
+                  canMarkCompleted = false;
+                  console.log(`🔍 [renderActionBtns] 學生 ${row.name || row.student_name || '未知'}: 面試日期是未來，不允許標記`, {
+                    interviewDateStr: interviewDateStr,
+                    canMarkCompleted: canMarkCompleted,
+                    studentId: studentId
+                  });
+                }
               }
             } else {
               // 如果找不到面試日期，記錄警告
@@ -1318,17 +1343,96 @@
           return;
         }
         
-        const interviewTimeEnd = resume.interview_timeEnd || resume.interview_time_end;
-        if (interviewTimeEnd) {
+        // 優先從 allVendorSchedules 中查找面試開始時間（最準確）
+        const studentId = String(resume.student_id || resume.id || '');
+        let interviewTimeStart = null;
+        let interviewDateStr = null;
+        
+        // 遍歷 allVendorSchedules 查找該學生的面試排程
+        for (const [dateKey, schedules] of allVendorSchedules.entries()) {
+          for (const schedule of schedules) {
+            const scheduleStudentId = String(schedule.student_id || '');
+            // 檢查是否為自己的排程且學生ID匹配
+            let isOwnSchedule = false;
+            if (vendorCompanyName && schedule.company_name) {
+              isOwnSchedule = isCompanyNameMatch(schedule.company_name, vendorCompanyName);
+            } else {
+              isOwnSchedule = schedule.is_own === true;
+            }
+            
+            if (isOwnSchedule && scheduleStudentId === studentId) {
+              interviewDateStr = dateKey;
+              interviewTimeStart = schedule.time_start || null;
+              break;
+            }
+          }
+          if (interviewTimeStart) break;
+        }
+        
+        // 如果 allVendorSchedules 中沒有，嘗試從履歷資料中獲取
+        if (!interviewTimeStart) {
+          interviewTimeStart = resume.interview_timeStart || resume.interview_time_start || resume.interview_time || null;
+        }
+        
+        // 如果有開始時間，檢查開始時間是否已過
+        if (interviewTimeStart) {
           try {
-            const endTime = new Date(interviewTimeEnd);
             const now = new Date();
-            if (now < endTime) {
-              alert(`面試時間尚未結束，無法標記為已面試。\n面試結束時間：${endTime.toLocaleString('zh-TW')}`);
+            let startTime;
+            
+            // 解析開始時間
+            if (interviewDateStr) {
+              // 如果有日期，組合日期和時間
+              const dateParts = interviewDateStr.split('-');
+              const interviewDateObj = new Date(parseInt(dateParts[0]), parseInt(dateParts[1]) - 1, parseInt(dateParts[2]));
+              const timeParts = interviewTimeStart.split(':');
+              if (timeParts.length >= 2) {
+                startTime = new Date(interviewDateObj);
+                startTime.setHours(parseInt(timeParts[0]), parseInt(timeParts[1]), 0, 0);
+              } else {
+                startTime = new Date(interviewTimeStart);
+              }
+            } else {
+              // 如果沒有日期，直接解析時間字符串
+              startTime = new Date(interviewTimeStart);
+            }
+            
+            if (now < startTime) {
+              alert(`面試尚未開始，無法標記為已面試。\n面試開始時間：${startTime.toLocaleString('zh-TW')}`);
               return;
             }
           } catch (e) {
-            console.error('解析面試結束時間失敗:', e);
+            console.error('解析面試開始時間失敗:', e);
+            // 如果解析失敗，為了安全起見，不允許標記
+            alert('無法解析面試開始時間，請稍後再試');
+            return;
+          }
+        } else {
+          // 如果沒有開始時間，檢查面試日期
+          const now = new Date();
+          const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+          
+          if (interviewDateStr) {
+            // 如果有日期，檢查是否為今天或過去
+            const dateParts = interviewDateStr.split('-');
+            const interviewDateObj = new Date(parseInt(dateParts[0]), parseInt(dateParts[1]) - 1, parseInt(dateParts[2]));
+            interviewDateObj.setHours(0, 0, 0, 0);
+            
+            const isToday = interviewDateObj.getTime() === today.getTime();
+            const isPast = interviewDateObj < today;
+            
+            if (isToday) {
+              // 如果面試日期是今天但沒有開始時間，允許標記（假設已經開始）
+              // 不阻止，繼續執行
+            } else if (!isPast) {
+              // 如果面試日期是未來，不允許標記
+              alert('面試尚未開始，無法標記為已面試');
+              return;
+            }
+            // 如果面試日期是過去，允許標記（處理舊資料）
+          } else {
+            // 如果既沒有日期也沒有開始時間，為了安全起見，允許標記（假設已經開始）
+            // 不阻止，繼續執行
           }
         }
       }
@@ -2787,6 +2891,26 @@
     // 開啟面試表單
     // forceEditMode: true 表示強制編輯模式（點擊藍色標籤時），false 表示新增模式（點擊日期格子時）
     async function openInterviewForm(date, forceEditMode = false) {
+      // 如果是新增模式，檢查日期是否至少提前一天
+      if (!forceEditMode) {
+        const now = new Date();
+        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        const tomorrow = new Date(today);
+        tomorrow.setDate(tomorrow.getDate() + 1); // 明天（最早可選擇的日期）
+        
+        const selectedDate = new Date(date);
+        selectedDate.setHours(0, 0, 0, 0);
+        
+        if (selectedDate < tomorrow) {
+          if (selectedDate < today) {
+            alert('新增面試排程至少要在一天前，請選擇至少一天後的日期');
+          } else {
+            alert('新增面試排程至少要在一天前，請選擇明天或未來的日期');
+          }
+          return;
+        }
+      }
+      
       selectedInterviewDate = date;
       const dateStr = formatDate(date);
       const dateDisplay = formatDateDisplay(date);
@@ -2896,6 +3020,30 @@
               students: ownSchedules.filter(s => s.student_id).map(s => String(s.student_id))
             };
             console.log(`✅ [編輯模式] 從 allVendorSchedules 載入自己的排程資料: 時間=${schedule.timeStart}-${schedule.timeEnd}, 地點=${schedule.location}, 備註=${schedule.notes ? schedule.notes.substring(0, 30) : '無'}, 學生=${schedule.students.join(',')}`);
+            
+            // 檢查編輯時間限制：必須在面試開始前至少12小時編輯
+            if (schedule.timeStart) {
+              const now = new Date();
+              // 解析面試開始時間（格式：HH:MM）
+              const [hours, minutes] = schedule.timeStart.split(':').map(Number);
+              const interviewStartTime = new Date(date);
+              interviewStartTime.setHours(hours, minutes, 0, 0);
+              
+              // 計算時間差（毫秒）
+              const timeDiff = interviewStartTime - now;
+              const hoursDiff = timeDiff / (1000 * 60 * 60);
+              
+              if (hoursDiff < 12) {
+                const remainingHours = Math.floor(hoursDiff);
+                const remainingMinutes = Math.floor((hoursDiff - remainingHours) * 60);
+                if (hoursDiff < 0) {
+                  alert('無法編輯已開始或已結束的面試排程');
+                } else {
+                  alert(`編輯面試排程必須在面試開始前至少12小時進行。距離面試開始還有約 ${remainingHours} 小時 ${remainingMinutes} 分鐘，無法編輯。`);
+                }
+                return;
+              }
+            }
           }
         }
         
@@ -3230,45 +3378,22 @@
         return;
       }
       
-      // 檢查日期和時間是否已過期
+      // 檢查日期：必須至少提前一天新增面試排程
       const now = new Date();
       const selectedDate = new Date(selectedInterviewDate);
       selectedDate.setHours(0, 0, 0, 0); // 設置為當天的 00:00:00
       const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const tomorrow = new Date(today);
+      tomorrow.setDate(tomorrow.getDate() + 1); // 明天
       
-      // 檢查日期是否已過期
-      if (selectedDate < today) {
-        alert('無法儲存：選擇的日期已過期，請選擇今天或未來的日期');
+      // 檢查日期：不能選擇今天或過去的日期，最早只能選擇明天
+      if (selectedDate < tomorrow) {
+        if (selectedDate < today) {
+          alert('無法儲存：選擇的日期已過期，請選擇至少一天後的日期');
+        } else {
+          alert('無法儲存：新增面試排程至少要在一天前，請選擇明天或未來的日期');
+        }
         return;
-      }
-      
-      // 如果選擇的是今天，檢查時間是否已過期
-      if (selectedDate.getTime() === today.getTime()) {
-        // 將時間轉換為分鐘數進行準確比較
-        const timeToMinutes = (timeStr) => {
-          const [hours, minutes] = timeStr.split(':').map(Number);
-          return hours * 60 + (minutes || 0);
-        };
-        
-        const currentMinutes = now.getHours() * 60 + now.getMinutes();
-        const startMinutes = timeToMinutes(timeStart);
-        const endMinutes = timeToMinutes(timeEnd);
-        
-        // 檢查開始時間是否已過期（必須是未來的時間）
-        if (startMinutes <= currentMinutes) {
-          const currentTimeDisplay = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-          alert(`開始時間 ${timeStart} 已過期`);
-          document.getElementById('interviewTimeStart').focus();
-          return;
-        }
-        
-        // 檢查結束時間是否已過期（必須是未來的時間）
-        if (endMinutes <= currentMinutes) {
-          const currentTimeDisplay = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-          alert(`結束時間 ${timeEnd} 已過期`);
-          document.getElementById('interviewTimeEnd').focus();
-          return;
-        }
       }
       
       const locationSelect = document.getElementById('interviewLocation');
@@ -3821,6 +3946,8 @@
       // 添加日期格子
       const today = new Date();
       today.setHours(0, 0, 0, 0);
+      const tomorrow = new Date(today);
+      tomorrow.setDate(tomorrow.getDate() + 1); // 明天（最早可選擇的日期）
       
       for (let day = 1; day <= daysInMonth; day++) {
         const dateCell = document.createElement("div");
@@ -3829,15 +3956,18 @@
         
         const isToday = cellDate.getTime() === today.getTime();
         const isPast = cellDate < today;
+        // 檢查是否為今天或過去（至少提前一天，所以今天也不能選擇）
+        const isDisabled = cellDate < tomorrow;
         
         dateCell.style.cssText = `
           padding: 12px;
           min-height: 80px;
           border: 1px solid #e2e8f0;
           border-radius: 8px;
-          background-color: ${isToday ? '#e3f2fd' : isPast ? '#f9fafb' : '#ffffff'};
-          cursor: ${isPast ? 'not-allowed' : 'pointer'};
+          background-color: ${isDisabled ? '#f9fafb' : '#ffffff'};
+          cursor: ${isDisabled ? 'not-allowed' : 'pointer'};
           transition: background-color 0.2s;
+          opacity: ${isDisabled ? '0.6' : '1'};
         `;
         
         // 日期數字
@@ -3845,7 +3975,7 @@
         dayNumber.style.cssText = `
           font-weight: ${isToday ? '700' : '600'};
           font-size: 1rem;
-          color: ${isToday ? '#0055a8' : isPast ? '#94a3b8' : '#1e293b'};
+          color: ${isDisabled ? '#94a3b8' : '#1e293b'};
           margin-bottom: 4px;
         `;
         dayNumber.textContent = day;
@@ -4173,9 +4303,9 @@
           }
         }
         
-        // 添加點選事件（非過去的日期）
+        // 添加點選事件（至少提前一天的日期才能選擇）
         // 只有當該日期有自己的排程時，才能點擊編輯；如果只有其他廠商的排程，則不能編輯
-        if (!isPast) {
+        if (!isDisabled) {
           // 更嚴格地檢查：該日期是否只有其他廠商的排程（沒有自己的排程）
           let onlyOtherVendorSchedules = false;
           if (hasOtherVendorInterviews && !hasOwnInterview) {
@@ -4193,6 +4323,11 @@
             // 如果點擊的是藍色標籤，事件會被阻止冒泡，不會觸發這裡
             // 只有點擊日期格子的其他區域才會觸發
             e.stopPropagation();
+            // 再次檢查日期（至少提前一天）
+            if (cellDate < tomorrow) {
+              alert('新增面試排程至少要在一天前，請選擇明天或未來的日期');
+              return;
+            }
             // 新增模式：不載入現有排程
             openInterviewForm(cellDate, false);
           });
@@ -4200,10 +4335,11 @@
             dateCell.style.backgroundColor = '#f0f9ff';
           });
           dateCell.addEventListener('mouseleave', () => {
-            dateCell.style.backgroundColor = isToday ? '#e3f2fd' : '#ffffff';
+            dateCell.style.backgroundColor = '#ffffff';
           });
         } else {
-          dateCell.style.opacity = '0.6';
+          // 如果是今天或過去的日期，添加提示
+          dateCell.title = '新增面試排程至少要在一天前，請選擇明天或未來的日期';
         }
         
         calendar.appendChild(dateCell);
