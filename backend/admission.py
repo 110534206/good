@@ -3507,7 +3507,7 @@ def director_confirm_matching():
         
         return jsonify({
             "success": True,
-            "message": "確認成功，已通知科助",
+            "message": "確認成功",
             "approved_count": approved_count,
             "notified": {"tas": len(tas)}
         })
@@ -3708,7 +3708,103 @@ def ta_confirm_matching():
         
         print(f"✅ [DEBUG] 寫入 internship_offers: 新增 {inserted_count} 筆，更新 {updated_count} 筆")
         
-        # 5. 提交事務，確保所有更新都保存
+        # 5.1 一併寫入 teacher_student_relations，讓「查看錄取結果」頁（班導／指導老師／主任／科助）有資料
+        cursor.execute("""
+            SELECT COLUMN_NAME FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'teacher_student_relations'
+            AND COLUMN_NAME IN ('semester_id', 'semester', 'company_id')
+        """)
+        tsr_columns = {row['COLUMN_NAME'] for row in cursor.fetchall()}
+        has_semester_id = 'semester_id' in tsr_columns
+        has_semester = 'semester' in tsr_columns
+        has_company_id = 'company_id' in tsr_columns
+        
+        tsr_inserted = 0
+        tsr_updated = 0
+        for match_result in match_results:
+            student_id = match_result.get('student_id')
+            company_id = match_result.get('company_id')
+            if not student_id or not company_id:
+                continue
+            cursor.execute("""
+                SELECT id, advisor_user_id FROM internship_companies WHERE id = %s
+            """, (company_id,))
+            company_row = cursor.fetchone()
+            if not company_row or not company_row.get('advisor_user_id'):
+                continue
+            advisor_user_id = company_row['advisor_user_id']
+            cursor.execute("""
+                SELECT id, name FROM users WHERE id = %s AND role IN ('teacher', 'director')
+            """, (advisor_user_id,))
+            if not cursor.fetchone():
+                continue
+            if has_semester_id:
+                cursor.execute("""
+                    SELECT id FROM teacher_student_relations
+                    WHERE teacher_id = %s AND student_id = %s AND semester_id = %s
+                """, (advisor_user_id, student_id, current_semester_id))
+                existing_tsr = cursor.fetchone()
+                if existing_tsr:
+                    if has_company_id:
+                        cursor.execute("""
+                            UPDATE teacher_student_relations SET company_id = %s, updated_at = NOW()
+                            WHERE id = %s
+                        """, (company_id, existing_tsr['id']))
+                    else:
+                        cursor.execute("""
+                            UPDATE teacher_student_relations SET updated_at = NOW()
+                            WHERE id = %s
+                        """, (existing_tsr['id'],))
+                    tsr_updated += 1
+                else:
+                    if has_company_id:
+                        cursor.execute("""
+                            INSERT INTO teacher_student_relations
+                            (teacher_id, student_id, company_id, semester_id, role, created_at)
+                            VALUES (%s, %s, %s, %s, '指導老師', NOW())
+                        """, (advisor_user_id, student_id, company_id, current_semester_id))
+                    else:
+                        cursor.execute("""
+                            INSERT INTO teacher_student_relations
+                            (teacher_id, student_id, semester_id, role, created_at)
+                            VALUES (%s, %s, %s, '指導老師', NOW())
+                        """, (advisor_user_id, student_id, current_semester_id))
+                    tsr_inserted += 1
+            elif has_semester:
+                cursor.execute("""
+                    SELECT id FROM teacher_student_relations
+                    WHERE teacher_id = %s AND student_id = %s AND semester = %s
+                """, (advisor_user_id, student_id, current_semester_code or ''))
+                existing_tsr = cursor.fetchone()
+                if existing_tsr:
+                    if has_company_id:
+                        cursor.execute("""
+                            UPDATE teacher_student_relations SET company_id = %s, updated_at = NOW()
+                            WHERE id = %s
+                        """, (company_id, existing_tsr['id']))
+                    else:
+                        cursor.execute("""
+                            UPDATE teacher_student_relations SET updated_at = NOW()
+                            WHERE id = %s
+                        """, (existing_tsr['id'],))
+                    tsr_updated += 1
+                else:
+                    if has_company_id:
+                        cursor.execute("""
+                            INSERT INTO teacher_student_relations
+                            (teacher_id, student_id, company_id, semester, role, created_at)
+                            VALUES (%s, %s, %s, %s, '指導老師', NOW())
+                        """, (advisor_user_id, student_id, company_id, current_semester_code or ''))
+                    else:
+                        cursor.execute("""
+                            INSERT INTO teacher_student_relations
+                            (teacher_id, student_id, semester, role, created_at)
+                            VALUES (%s, %s, %s, '指導老師', NOW())
+                        """, (advisor_user_id, student_id, current_semester_code or ''))
+                    tsr_inserted += 1
+        print(f"✅ [DEBUG] 寫入 teacher_student_relations: 新增 {tsr_inserted} 筆，更新 {tsr_updated} 筆")
+        
+        # 6. 提交事務，確保所有更新都保存
         conn.commit()
         
         return jsonify({
