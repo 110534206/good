@@ -988,9 +988,23 @@ def review_resume(resume_id):
                             comment = VALUES(comment),
                             reviewed_at = NOW()
                     """, (application_id_int, user_id, status, comment))
-                    print(f"✅ [DEBUG] 指導老師審核完成: application_id={application_id_int}, review_status={status}, teacher_id={user_id}, updated_rows={cursor.rowcount if hasattr(cursor, 'rowcount') else 'N/A'}")
+                    affected_rows = cursor.rowcount if hasattr(cursor, 'rowcount') else 'N/A'
+                    print(f"✅ [DEBUG] 指導老師審核完成: application_id={application_id_int}, review_status={status}, teacher_id={user_id}, affected_rows={affected_rows}")
                     # 立即提交事務，確保查詢時能看到最新變更
                     conn.commit()
+                    # 驗證更新是否成功
+                    try:
+                        cursor.execute("""
+                            SELECT review_status, reviewed_at FROM resume_teacher 
+                            WHERE application_id = %s AND teacher_id = %s
+                        """, (application_id_int, user_id))
+                        verify_record = cursor.fetchone()
+                        if verify_record:
+                            print(f"  ✅ [DEBUG] 驗證更新成功: application_id={application_id_int}, review_status={verify_record.get('review_status')}, reviewed_at={verify_record.get('reviewed_at')}")
+                        else:
+                            print(f"  ⚠️ [DEBUG] 驗證失敗: application_id={application_id_int} 在 resume_teacher 表中找不到記錄")
+                    except Exception as verify_error:
+                        print(f"  ❌ [DEBUG] 驗證查詢失敗: {verify_error}")
                     break
                 except Exception as e:
                     error_str = str(e)
@@ -1274,20 +1288,10 @@ def review_resume(resume_id):
         else:
             reviewer_name = "審核者"
 
-        # 5. 處理 Email 寄送與通知 (僅在狀態改變時處理)
+        # 5. 處理通知 (僅在狀態改變時處理)
         status_changed = (old_status_for_check != status) if old_status_for_check is not None else True
         if status_changed:
             if status == 'rejected':
-                # 嘗試發送郵件
-                try:
-                    from email_service import send_resume_rejection_email
-                    email_success, email_message, log_id = send_resume_rejection_email(
-                        student_email, student_name, reviewer_name, comment or "無"
-                    )
-                    print(f"📧 履歷退件 Email: {email_success}, {email_message}, Log ID: {log_id}")
-                except ImportError:
-                    print("⚠️ email_service 模組不存在，跳過郵件發送")
-
                 # 建立退件通知
                 notification_content = (
                     f"您的履歷已被 {reviewer_name} 老師退件。\n\n"
@@ -1303,16 +1307,6 @@ def review_resume(resume_id):
                 )
 
             elif status == 'approved':
-                # 嘗試發送郵件
-                try:
-                    from email_service import send_resume_approval_email
-                    email_success, email_message, log_id = send_resume_approval_email(
-                        student_email, student_name, reviewer_name
-                    )
-                    print(f"📧 履歷通過 Email: {email_success}, {email_message}, Log ID: {log_id}")
-                except ImportError:
-                    print("⚠️ email_service 模組不存在，跳過郵件發送")
-
                 # 建立通過通知
                 notification_content = (
                     f"恭喜您！您的履歷已由 {reviewer_name} 老師審核通過。\n"
