@@ -1114,7 +1114,7 @@ def get_all_admissions():
         base_query = """
             SELECT 
                 tsr.id AS relation_id,
-                tsr.semester,
+                COALESCE(s.code, '') AS semester,
                 tsr.created_at AS admitted_at,
                 u_student.id AS student_id,
                 u_student.name AS student_name,
@@ -1131,6 +1131,7 @@ def get_all_admissions():
                 sp.preference_order,
                 sp.status AS preference_status
             FROM teacher_student_relations tsr
+            LEFT JOIN semesters s ON s.id = tsr.semester_id
             JOIN users u_student ON tsr.student_id = u_student.id
             LEFT JOIN classes c ON u_student.class_id = c.id
             LEFT JOIN student_preferences sp ON tsr.student_id = sp.student_id
@@ -1207,7 +1208,7 @@ def get_all_admissions():
             params.append(class_id)
         
         if semester:
-            base_query += " AND tsr.semester = %s"
+            base_query += " AND tsr.semester_id = (SELECT id FROM semesters WHERE code = %s LIMIT 1)"
             params.append(semester)
         
         if company_id:
