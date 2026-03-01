@@ -973,38 +973,44 @@ def review_resume(resume_id):
             except:
                 pass
             
-            # 指導老師：使用 INSERT ... ON DUPLICATE KEY UPDATE 來原子性地更新 resume_teacher 表
-            # 這避免了先 UPDATE 再 INSERT 可能導致的死鎖問題
+            # 指導老師：先嘗試 UPDATE，如果沒有記錄則 INSERT
+            # 這樣可以避免因為缺少唯一索引導致 ON DUPLICATE KEY UPDATE 無法工作的問題
             max_retries = 3
             retry_delay = 0.1  # 100ms
             
             for attempt in range(max_retries):
                 try:
+                    # 確保清除任何未讀取的結果（防止 "Unread result found" 錯誤）
+                    try:
+                        cursor.fetchall()
+                    except:
+                        pass
+                    
+                    # 先嘗試 UPDATE
                     cursor.execute("""
-                        INSERT INTO resume_teacher (application_id, teacher_id, review_status, comment, reviewed_at, created_at)
-                        VALUES (%s, %s, %s, %s, NOW(), NOW())
-                        ON DUPLICATE KEY UPDATE
-                            review_status = VALUES(review_status),
-                            comment = VALUES(comment),
-                            reviewed_at = NOW()
-                    """, (application_id_int, user_id, status, comment))
-                    affected_rows = cursor.rowcount if hasattr(cursor, 'rowcount') else 'N/A'
-                    print(f"✅ [DEBUG] 指導老師審核完成: application_id={application_id_int}, review_status={status}, teacher_id={user_id}, affected_rows={affected_rows}")
+                        UPDATE resume_teacher SET review_status=%s, comment=%s, reviewed_at=NOW()
+                        WHERE application_id=%s AND teacher_id=%s
+                    """, (status, comment, application_id_int, user_id))
+                    updated_rows = cursor.rowcount
+                    
+                    if updated_rows == 0:
+                        # 如果沒有記錄被更新，則 INSERT
+                        # 確保清除任何未讀取的結果
+                        try:
+                            cursor.fetchall()
+                        except:
+                            pass
+                        
+                        cursor.execute("""
+                            INSERT INTO resume_teacher (application_id, teacher_id, review_status, comment, reviewed_at, created_at)
+                            VALUES (%s, %s, %s, %s, NOW(), NOW())
+                        """, (application_id_int, user_id, status, comment))
+                        print(f"✅ [DEBUG] 指導老師審核完成（INSERT）: application_id={application_id_int}, review_status={status}, teacher_id={user_id}")
+                    else:
+                        print(f"✅ [DEBUG] 指導老師審核完成（UPDATE）: application_id={application_id_int}, review_status={status}, teacher_id={user_id}, updated_rows={updated_rows}")
+                    
                     # 立即提交事務，確保查詢時能看到最新變更
                     conn.commit()
-                    # 驗證更新是否成功
-                    try:
-                        cursor.execute("""
-                            SELECT review_status, reviewed_at FROM resume_teacher 
-                            WHERE application_id = %s AND teacher_id = %s
-                        """, (application_id_int, user_id))
-                        verify_record = cursor.fetchone()
-                        if verify_record:
-                            print(f"  ✅ [DEBUG] 驗證更新成功: application_id={application_id_int}, review_status={verify_record.get('review_status')}, reviewed_at={verify_record.get('reviewed_at')}")
-                        else:
-                            print(f"  ⚠️ [DEBUG] 驗證失敗: application_id={application_id_int} 在 resume_teacher 表中找不到記錄")
-                    except Exception as verify_error:
-                        print(f"  ❌ [DEBUG] 驗證查詢失敗: {verify_error}")
                     break
                 except Exception as e:
                     error_str = str(e)
@@ -1102,16 +1108,9 @@ def review_resume(resume_id):
                                 else:
                                     raise
                         break
-            # 指導老師通過時立即建立 resume_applications，讓廠商可見該履歷
-            if status == 'approved':
-                job_id = resume_data.get('job_id')
-                if job_id is not None:
-                    ensure_resume_application_for_teacher_approved(cursor, conn, application_id_int, job_id)
-                    # 確保清除任何未讀取的結果（防止 "Unread result found" 錯誤）
-                    try:
-                        cursor.fetchall()
-                    except:
-                        pass
+            # 指導老師通過履歷時，只更新 resume_teacher 表的狀態
+            # 不立即建立 resume_applications，等到審核截止時間後才統一傳給廠商
+            # （見 update_resume_applications_after_advisor_deadline 函數）
         elif user_role == 'class_teacher' and resume_teacher_table_exists and application_id_int is not None:
             # 班導：只更新「這一筆投遞」的狀態（寫入 resume_teacher，不更新 resumes 表，避免同一份履歷其他公司跟著變）
             old_status_for_check = resume_data.get('old_teacher_review_status') or 'uploaded'
@@ -1281,6 +1280,12 @@ def review_resume(resume_id):
                         """, (app['application_id'], app['advisor_user_id']))
         
         # 4. 取得審核者姓名
+        # 確保清除任何未讀取的結果（防止 "Unread result found" 錯誤）
+        try:
+            cursor.fetchall()
+        except:
+            pass
+        
         cursor.execute("SELECT name, role FROM users WHERE id = %s", (user_id,))
         reviewer = cursor.fetchone()
         if reviewer:
@@ -1320,9 +1325,10 @@ def review_resume(resume_id):
                     category="resume"
                 )
                 
-                # 指導老師通過履歷：已在更新 resume_teacher 時立即建立 resume_applications（見 ensure_resume_application_for_teacher_approved）
+                # 指導老師通過履歷：只更新 resume_teacher 表的狀態
+                # 等到審核截止時間後，會由 update_resume_applications_after_advisor_deadline 函數統一傳給廠商
                 if user_role == 'teacher':
-                    print(f"✅ 指導老師通過履歷，已寫入 resume_applications 供廠商審核")
+                    print(f"✅ 指導老師通過履歷，狀態已更新，將在審核截止時間後統一傳給廠商")
 
         conn.commit()
 
