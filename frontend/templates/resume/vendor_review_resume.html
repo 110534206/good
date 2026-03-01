@@ -916,6 +916,19 @@
         return matchesDept && matchesClass && matchesCompanyName && matchesJob && matchesStatus && matchesInterviewStatus && matchesKeyword;
       });
 
+      // 按學生帳號排序（由小到大）
+      filtered.sort((a, b) => {
+        const usernameA = (a.username || a.student_number || '').toString();
+        const usernameB = (b.username || b.student_number || '').toString();
+        // 如果都是數字，按數值排序；否則按字串排序
+        const numA = parseInt(usernameA);
+        const numB = parseInt(usernameB);
+        if (!isNaN(numA) && !isNaN(numB)) {
+          return numA - numB;
+        }
+        return usernameA.localeCompare(usernameB, 'zh-TW', { numeric: true });
+      });
+
       renderTable(filtered);
     }
 
