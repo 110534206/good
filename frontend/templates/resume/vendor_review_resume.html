@@ -61,6 +61,20 @@
     /* 已面試：中藍色底白字 */
     .status-badge.bg-completed { color: #fff; background-color: #4a9eff; }
     
+    /* 唯讀按鈕樣式（審核截止時間過後） */
+    .btn-readonly {
+      background-color: #e9ecef !important;
+      border-color: #ced4da !important;
+      color: #6c757d !important;
+      cursor: not-allowed !important;
+      opacity: 0.7;
+    }
+    .btn-readonly:hover {
+      background-color: #e9ecef !important;
+      border-color: #ced4da !important;
+      color: #6c757d !important;
+    }
+    
     #commentInput { width: 100%; height: 180px; resize: vertical; padding: 0.5rem; font-size: 1rem; line-height: 1.4; }
     
     /* 截止時間公告樣式 */
@@ -406,6 +420,8 @@
     let vendorCompanyName = null;
     // 面試排程自動刷新 interval ID
     let scheduleRefreshInterval = null;
+    // 廠商審核截止時間是否已過
+    let isVendorReviewDeadlinePassed = false;
 
     // 定義狀態顏色，approved 對應 success (綠色)
     function statusColor(status) {
@@ -496,7 +512,7 @@
                 const isExpired = resumeData.is_vendor_review_deadline_passed || false;
                 const now = new Date();
                 const vendorDeadline = new Date(resumeData.vendor_review_deadline.replace(/\//g, '-'));
-                const isVendorReviewDeadlinePassed = now > vendorDeadline || isExpired;
+                isVendorReviewDeadlinePassed = now > vendorDeadline || isExpired;
                 
                 if (isVendorReviewDeadlinePassed) {
                   deadlineAlert.className = 'alert alert-warning alert-deadline';
@@ -516,6 +532,9 @@
                   deadlineAlert.style.display = 'block';
                 }
               }
+            } else {
+              // 如果沒有截止時間資料，檢查後端返回的狀態
+              isVendorReviewDeadlinePassed = resumeData.is_vendor_review_deadline_passed || false;
             }
             
             // 儲存職缺資料（包含名額）
@@ -563,22 +582,31 @@
 
             applyFilters();
             
-            // 如果廠商審核截止時間已過，禁用所有審核按鈕
+            // 如果廠商審核截止時間已過，禁用所有審核按鈕（包括「已面試」按鈕）
             if (resumeData.is_vendor_review_deadline_passed) {
               setTimeout(() => {
                 const rejectButtons = document.querySelectorAll('button[onclick*="rejectResume"]');
                 const approveButtons = document.querySelectorAll('button[onclick*="approveResume"]');
+                const markCompletedButtons = document.querySelectorAll('button[onclick*="markInterviewCompleted"]');
+                
                 rejectButtons.forEach(btn => {
                   btn.disabled = true;
                   btn.title = '已超過審核截止時間，無法再審核履歷';
-                  btn.classList.add('btn-secondary');
+                  btn.classList.add('btn-readonly');
                   btn.classList.remove('btn-outline-danger');
                 });
                 approveButtons.forEach(btn => {
                   btn.disabled = true;
                   btn.title = '已超過審核截止時間，無法再審核履歷';
-                  btn.classList.add('btn-secondary');
+                  btn.classList.add('btn-readonly');
                   btn.classList.remove('btn-outline-success');
+                });
+                // 禁用「已面試」按鈕
+                markCompletedButtons.forEach(btn => {
+                  btn.disabled = true;
+                  btn.title = '已超過審核截止時間，無法標記為已面試';
+                  btn.classList.add('btn-readonly');
+                  btn.classList.remove('btn-outline-info');
                 });
               }, 100);
             }
@@ -1178,20 +1206,30 @@
         // 根據狀態顯示按鈕
         let btns = `<div style="display:flex; align-items:center; flex-wrap:wrap; gap:4px;">${dlBtn}`;
         
+        // 如果審核截止時間已過，所有按鈕都設為禁用狀態（唯讀）
+        const disabledAttr = isVendorReviewDeadlinePassed ? 'disabled' : '';
+        const disabledTitle = isVendorReviewDeadlinePassed ? ' title="已超過審核截止時間，無法進行操作"' : '';
+        const disabledClass = isVendorReviewDeadlinePassed ? ' btn-readonly' : '';
+        
         // 如果已面試完成，顯示通過/未通過按鈕
         if (canReview) {
-          btns += `<button class="btn btn-sm btn-outline-danger" style="margin-right:4px;" onclick="${rejectClick}">未通過</button>`;
-          btns += `<button class="btn btn-sm btn-outline-success" onclick="${approveClick}">通過</button>`;
+          btns += `<button class="btn btn-sm btn-outline-danger${disabledClass}" style="margin-right:4px;" ${disabledAttr}${disabledTitle} onclick="${rejectClick}">未通過</button>`;
+          btns += `<button class="btn btn-sm btn-outline-success${disabledClass}" ${disabledAttr}${disabledTitle} onclick="${approveClick}">通過</button>`;
         } else if (interviewStatus === 'scheduled') {
           // 如果面試時間已結束，顯示「已面試」按鈕
           if (canMarkCompleted) {
-            btns += `<button class="btn btn-sm btn-outline-info" onclick="${markCompletedClick}" title="標記為已面試">已面試</button>`;
+            // 如果審核截止時間已過，按鈕設為禁用（唯讀）
+            const interviewDisabledAttr = isVendorReviewDeadlinePassed ? 'disabled' : '';
+            const interviewDisabledTitle = isVendorReviewDeadlinePassed ? ' title="已超過審核截止時間，無法標記為已面試"' : ' title="標記為已面試"';
+            const interviewDisabledClass = isVendorReviewDeadlinePassed ? ' btn-readonly' : '';
+            const interviewOnclick = isVendorReviewDeadlinePassed ? '' : `onclick="${markCompletedClick}"`;
+            btns += `<button class="btn btn-sm btn-outline-info${interviewDisabledClass}" ${interviewDisabledAttr}${interviewDisabledTitle} ${interviewOnclick}>已面試</button>`;
           } else {
             btns += `<button class="btn btn-sm btn-outline-secondary" disabled title="面試時間尚未結束">已面試</button>`;
           }
         } else {
           // 未面試時，只顯示未通過按鈕
-          btns += `<button class="btn btn-sm btn-outline-danger" style="margin-right:4px;" onclick="${rejectClick}">未通過</button>`;
+          btns += `<button class="btn btn-sm btn-outline-danger${disabledClass}" style="margin-right:4px;" ${disabledAttr}${disabledTitle} onclick="${rejectClick}">未通過</button>`;
         }
         
         btns += `</div>`;
@@ -1256,6 +1294,12 @@
 
     // 標記面試已完成
     function markInterviewCompleted(resumeId, preferenceId) {
+      // 如果審核截止時間已過，阻止操作
+      if (isVendorReviewDeadlinePassed) {
+        alert('已超過審核截止時間，無法標記為已面試');
+        return;
+      }
+      
       if (!preferenceId || preferenceId === 'null') {
         alert("找不到志願序資料，無法標記面試完成");
         return;
