@@ -1207,6 +1207,9 @@
       try {
         await Promise.all(promises);
         
+        // 等待一小段時間，確保後端事務已提交
+        await new Promise(resolve => setTimeout(resolve, 500));
+        
         if (sendToVendorBtn) {
           sendToVendorBtn.disabled = false;
           sendToVendorBtn.textContent = "傳送給廠商";
@@ -1237,16 +1240,24 @@
           searchBox.value = '';
         }
         
-        // 重新載入資料
+        // 重新載入資料（添加時間戳防止緩存）
+        const timestamp = new Date().getTime();
         if (userRole === 'vendor') {
-          fetch('/vendor/api/resumes').then(r=>r.json()).then(d=>{
+          fetch(`/vendor/api/resumes?t=${timestamp}`).then(r=>r.json()).then(d=>{
             if(d.success) { allResumes=d.resumes || []; applyFilters(); }
           });
         } else {
-          fetch('/api/teacher_review_resumes').then(r=>r.json()).then(d=>{
+          fetch(`/api/teacher_review_resumes?t=${timestamp}`).then(r=>r.json()).then(d=>{
             if(d.success) { 
               allResumes=d.data || []; 
               console.log('🔍 [DEBUG] 重新載入指導老師履歷資料:', allResumes.length, '筆');
+              // 調試：記錄所有履歷的審核狀態
+              console.log('[DEBUG] 所有履歷的審核狀態:');
+              allResumes.forEach(r => {
+                console.log(`  履歷 ID: ${r.id}, application_id: ${r.application_id}, review_status: ${r.review_status}, display_status: ${r.display_status}`);
+              });
+              const approvedCount = allResumes.filter(r => r.review_status === 'approved').length;
+              console.log(`[DEBUG] 已通過的履歷數量: ${approvedCount}`);
               applyFilters(); 
             } else {
               console.error('❌ [DEBUG] 重新載入失敗:', d);

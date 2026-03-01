@@ -190,37 +190,50 @@ def update_resume_status_after_deadline(cursor, conn):
 # 輔助函數：當指導老師通過時，確保 resume_applications 有一筆記錄（廠商才能看到）
 def ensure_resume_application_for_teacher_approved(cursor, conn, application_id, job_id):
     """若尚無記錄則新增一筆 resume_applications，使廠商可見該履歷。"""
-    try:
-        # 確保清除任何未讀取的結果（防止 "Unread result found" 錯誤）
+    max_retries = 3
+    retry_delay = 0.1  # 100ms
+    
+    for attempt in range(max_retries):
         try:
-            cursor.fetchall()
-        except:
-            pass
-        
-        cursor.execute("""
-            SELECT 1 FROM resume_applications
-            WHERE application_id = %s AND job_id = %s
-        """, (application_id, job_id))
-        if cursor.fetchone():
+            # 確保清除任何未讀取的結果（防止 "Unread result found" 錯誤）
+            try:
+                cursor.fetchall()
+            except:
+                pass
+            
+            # 使用 INSERT IGNORE 來避免死鎖：如果記錄已存在則忽略，不存在則插入
+            # 這比先 SELECT 再 INSERT 更安全，因為是原子操作
+            cursor.execute("""
+                INSERT IGNORE INTO resume_applications
+                (application_id, job_id, apply_status, interview_status, interview_result, company_comment, created_at)
+                VALUES (%s, %s, 'uploaded', 'none', 'pending', '', NOW())
+            """, (application_id, job_id))
+            
+            # 檢查是否成功插入（rowcount > 0 表示插入了新記錄）
+            if cursor.rowcount > 0:
+                print(f"✅ [resume_applications] 指導老師通過後立即建立廠商審核記錄: application_id={application_id}, job_id={job_id}")
+            else:
+                # 記錄已存在，這是正常的（可能是並發請求或其他原因）
+                print(f"ℹ️ [resume_applications] 記錄已存在（可能由並發請求創建）: application_id={application_id}, job_id={job_id}")
+            
             return True
-        
-        # 確保清除任何未讀取的結果
-        try:
-            cursor.fetchall()
-        except:
-            pass
-        
-        cursor.execute("""
-            INSERT INTO resume_applications
-            (application_id, job_id, apply_status, interview_status, interview_result, company_comment, created_at)
-            VALUES (%s, %s, 'uploaded', 'none', 'pending', '', NOW())
-        """, (application_id, job_id))
-        print(f"✅ [resume_applications] 指導老師通過後立即建立廠商審核記錄: application_id={application_id}, job_id={job_id}")
-        return True
-    except Exception as e:
-        print(f"⚠️ 建立 resume_applications 失敗 (application_id={application_id}, job_id={job_id}): {e}")
-        traceback.print_exc()
-        return False
+            
+        except Exception as e:
+            error_str = str(e)
+            # 檢查是否為死鎖錯誤
+            if ("Deadlock" in error_str or "1213" in error_str or "40001" in error_str) and attempt < max_retries - 1:
+                # 等待一小段時間後重試
+                import time
+                time.sleep(retry_delay * (attempt + 1))  # 遞增延遲
+                print(f"⚠️ [resume_applications] 檢測到死鎖，重試中 (嘗試 {attempt + 2}/{max_retries}): application_id={application_id}, job_id={job_id}")
+                continue
+            else:
+                # 其他類型的錯誤
+                print(f"⚠️ 建立 resume_applications 失敗 (application_id={application_id}, job_id={job_id}): {e}")
+                traceback.print_exc()
+                return False
+    
+    return False
 
 
 # 輔助函數：處理指導老師審核截止時間後的狀態自動更新
@@ -427,8 +440,21 @@ def get_teacher_review_resumes():
             # 獲取履歷上傳截止時間資訊（優先從 internship_flows 表讀取）
             deadline_info = None
             try:
+                # 確保清除任何未讀取的結果（防止 "Unread result found" 錯誤）
+                try:
+                    cursor.fetchall()
+                except:
+                    pass
+                
                 from semester import get_current_semester_deadline
                 resume_deadline_dt = get_current_semester_deadline(cursor, 'resume')
+                
+                # 確保清除任何未讀取的結果（get_current_semester_deadline 可能留下未讀取的結果）
+                try:
+                    cursor.fetchall()
+                except:
+                    pass
+                
                 if resume_deadline_dt:
                     deadline_info = resume_deadline_dt.strftime('%Y/%m/%d %H:%M')
                 else:
@@ -575,8 +601,68 @@ def get_teacher_review_resumes():
             """
         
         try:
+            # 確保查詢時能看到最新提交的變更（刷新連接）
+            # 這對於確保能看到剛提交的 resume_teacher 記錄很重要
+            try:
+                conn.commit()  # 提交任何未提交的變更
+            except:
+                pass
+            
             cursor.execute(sql, tuple(params))
             rows = cursor.fetchall()
+            # 調試：記錄查詢結果
+            if session_role == 'teacher' and resume_teacher_table_exists:
+                print(f"🔍 [DEBUG] 查詢結果: 共 {len(rows)} 筆履歷, session_user_id={session_user_id}")
+                for row in rows[:5]:  # 只記錄前5筆
+                    app_id = row.get('application_id')
+                    review_status = row.get('review_status')
+                    resume_id = row.get('resume_id')
+                    print(f"  - application_id={app_id}, resume_id={resume_id}, review_status={review_status}")
+                
+                # 調試：驗證特定 application_id 在 resume_teacher 表中的實際狀態
+                # 確保清除任何未讀取的結果（防止 "Unread result found" 錯誤）
+                try:
+                    cursor.fetchall()
+                except:
+                    pass
+                
+                test_app_ids = [28, 45, 37]  # 從日誌中看到的 application_id
+                for test_app_id in test_app_ids:
+                    try:
+                        # 確保清除任何未讀取的結果
+                        try:
+                            cursor.fetchall()
+                        except:
+                            pass
+                        
+                        cursor.execute("""
+                            SELECT application_id, teacher_id, review_status, reviewed_at 
+                            FROM resume_teacher 
+                            WHERE application_id = %s AND teacher_id = %s
+                        """, (test_app_id, session_user_id))
+                        rt_record = cursor.fetchone()
+                        if rt_record:
+                            print(f"  🔍 [DEBUG] resume_teacher 表實際狀態: application_id={test_app_id}, teacher_id={rt_record.get('teacher_id')}, review_status={rt_record.get('review_status')}, reviewed_at={rt_record.get('reviewed_at')}")
+                        else:
+                            print(f"  ⚠️ [DEBUG] resume_teacher 表中找不到: application_id={test_app_id}, teacher_id={session_user_id}")
+                        # 確保清除任何未讀取的結果
+                        try:
+                            cursor.fetchall()
+                        except:
+                            pass
+                    except Exception as e:
+                        print(f"  ❌ [DEBUG] 查詢 resume_teacher 表失敗: {e}")
+                        # 確保清除任何未讀取的結果
+                        try:
+                            cursor.fetchall()
+                        except:
+                            pass
+                
+                # 調試代碼結束後，確保清除所有未讀取的結果
+                try:
+                    cursor.fetchall()
+                except:
+                    pass
         except Exception as sql_error:
             if session_role == 'teacher' and 'resume_teacher' in str(sql_error).lower():
                 print(f"⚠️ SQL 執行失敗，嘗試使用不包含 resume_teacher 的查詢: {sql_error}")
@@ -654,7 +740,11 @@ def get_teacher_review_resumes():
                 
                 # 根據角色決定顯示的狀態
                 if session_role == 'teacher' and resume_teacher_table_exists:
-                    teacher_status = row.get('review_status') or 'uploaded'
+                    teacher_status = row.get('review_status')
+                    # 調試：記錄審核狀態
+                    if application_id:
+                        print(f"🔍 [DEBUG] 查詢結果: application_id={application_id}, resume_id={row['resume_id']}, review_status={teacher_status}, session_user_id={session_user_id}")
+                    teacher_status = teacher_status or 'uploaded'
                     if teacher_status in ['uploaded', 'approved', 'rejected']:
                         status = teacher_status
                     else:
@@ -765,10 +855,26 @@ def get_teacher_review_resumes():
     except Exception as e:
         traceback.print_exc()
         print("❌ 取得待審核履歷列表錯誤:", e)
+        # 確保清除所有未讀取的結果（防止 "Unread result found" 錯誤）
+        try:
+            cursor.fetchall()
+        except:
+            pass
         return jsonify({"success": False, "message": f"伺服器錯誤: {str(e)}"}), 500
     finally:
-        cursor.close()
-        conn.close()
+        # 確保清除所有未讀取的結果（防止 "Unread result found" 錯誤）
+        try:
+            cursor.fetchall()
+        except:
+            pass
+        try:
+            cursor.close()
+        except:
+            pass
+        try:
+            conn.close()
+        except:
+            pass
 
 
 # -------------------------
@@ -867,24 +973,121 @@ def review_resume(resume_id):
             except:
                 pass
             
-            # 指導老師：更新 resume_teacher 表該筆投遞的審核狀態
-            cursor.execute("""
-                UPDATE resume_teacher SET review_status=%s, comment=%s, reviewed_at=NOW()
-                WHERE application_id=%s AND teacher_id=%s
-            """, (status, comment, application_id_int, user_id))
-            updated_rows = cursor.rowcount
-            if updated_rows == 0:
-                # 確保清除任何未讀取的結果
+            # 指導老師：使用 INSERT ... ON DUPLICATE KEY UPDATE 來原子性地更新 resume_teacher 表
+            # 這避免了先 UPDATE 再 INSERT 可能導致的死鎖問題
+            max_retries = 3
+            retry_delay = 0.1  # 100ms
+            
+            for attempt in range(max_retries):
                 try:
-                    cursor.fetchall()
-                except:
-                    pass
-                
-                cursor.execute("""
-                    INSERT INTO resume_teacher (application_id, teacher_id, review_status, comment, reviewed_at, created_at)
-                    VALUES (%s, %s, %s, %s, NOW(), NOW())
-                """, (application_id_int, user_id, status, comment))
-            print(f"✅ [DEBUG] 指導老師審核完成: application_id={application_id_int}, review_status={status}")
+                    cursor.execute("""
+                        INSERT INTO resume_teacher (application_id, teacher_id, review_status, comment, reviewed_at, created_at)
+                        VALUES (%s, %s, %s, %s, NOW(), NOW())
+                        ON DUPLICATE KEY UPDATE
+                            review_status = VALUES(review_status),
+                            comment = VALUES(comment),
+                            reviewed_at = NOW()
+                    """, (application_id_int, user_id, status, comment))
+                    print(f"✅ [DEBUG] 指導老師審核完成: application_id={application_id_int}, review_status={status}, teacher_id={user_id}, updated_rows={cursor.rowcount if hasattr(cursor, 'rowcount') else 'N/A'}")
+                    # 立即提交事務，確保查詢時能看到最新變更
+                    conn.commit()
+                    break
+                except Exception as e:
+                    error_str = str(e)
+                    # 檢查是否為死鎖錯誤
+                    if ("Deadlock" in error_str or "1213" in error_str or "40001" in error_str) and attempt < max_retries - 1:
+                        import time
+                        time.sleep(retry_delay * (attempt + 1))
+                        print(f"⚠️ [DEBUG] 檢測到死鎖，重試中 (嘗試 {attempt + 2}/{max_retries}): application_id={application_id_int}")
+                        continue
+                    # 如果沒有唯一索引導致 ON DUPLICATE KEY UPDATE 失敗，回退到 UPDATE/INSERT 方法
+                    elif "Duplicate entry" not in error_str and "ON DUPLICATE KEY" not in error_str:
+                        print(f"⚠️ [DEBUG] INSERT ... ON DUPLICATE KEY UPDATE 失敗，回退到 UPDATE/INSERT 方法: {e}")
+                        # 確保清除任何未讀取的結果
+                        try:
+                            cursor.fetchall()
+                        except:
+                            pass
+                        
+                        # 使用帶重試的 UPDATE/INSERT 方法
+                        for retry_attempt in range(max_retries):
+                            try:
+                                cursor.execute("""
+                                    UPDATE resume_teacher SET review_status=%s, comment=%s, reviewed_at=NOW()
+                                    WHERE application_id=%s AND teacher_id=%s
+                                """, (status, comment, application_id_int, user_id))
+                                updated_rows = cursor.rowcount
+                                if updated_rows == 0:
+                                    # 確保清除任何未讀取的結果
+                                    try:
+                                        cursor.fetchall()
+                                    except:
+                                        pass
+                                    
+                                    cursor.execute("""
+                                        INSERT INTO resume_teacher (application_id, teacher_id, review_status, comment, reviewed_at, created_at)
+                                        VALUES (%s, %s, %s, %s, NOW(), NOW())
+                                    """, (application_id_int, user_id, status, comment))
+                                print(f"✅ [DEBUG] 指導老師審核完成（回退方法）: application_id={application_id_int}, review_status={status}")
+                                break
+                            except Exception as retry_error:
+                                retry_error_str = str(retry_error)
+                                if ("Deadlock" in retry_error_str or "1213" in retry_error_str or "40001" in retry_error_str) and retry_attempt < max_retries - 1:
+                                    import time
+                                    time.sleep(retry_delay * (retry_attempt + 1))
+                                    print(f"⚠️ [DEBUG] 回退方法檢測到死鎖，重試中 (嘗試 {retry_attempt + 2}/{max_retries})")
+                                    continue
+                                else:
+                                    raise
+                        break
+                    else:
+                        # 其他錯誤（如唯一約束衝突），也回退到 UPDATE/INSERT 方法
+                        print(f"⚠️ [DEBUG] INSERT ... ON DUPLICATE KEY UPDATE 遇到錯誤，回退到 UPDATE/INSERT 方法: {e}")
+                        # 確保清除任何未讀取的結果
+                        try:
+                            cursor.fetchall()
+                        except:
+                            pass
+                        
+                        # 使用帶重試的 UPDATE/INSERT 方法
+                        for retry_attempt in range(max_retries):
+                            try:
+                                cursor.execute("""
+                                    UPDATE resume_teacher SET review_status=%s, comment=%s, reviewed_at=NOW()
+                                    WHERE application_id=%s AND teacher_id=%s
+                                """, (status, comment, application_id_int, user_id))
+                                updated_rows = cursor.rowcount
+                                if updated_rows == 0:
+                                    # 確保清除任何未讀取的結果
+                                    try:
+                                        cursor.fetchall()
+                                    except:
+                                        pass
+                                    
+                                    try:
+                                        cursor.execute("""
+                                            INSERT INTO resume_teacher (application_id, teacher_id, review_status, comment, reviewed_at, created_at)
+                                            VALUES (%s, %s, %s, %s, NOW(), NOW())
+                                        """, (application_id_int, user_id, status, comment))
+                                    except Exception as insert_error:
+                                        # 如果 INSERT 也失敗（可能是唯一約束），嘗試再次 UPDATE
+                                        print(f"⚠️ [DEBUG] INSERT 失敗，可能是唯一約束衝突: {insert_error}")
+                                        cursor.execute("""
+                                            UPDATE resume_teacher SET review_status=%s, comment=%s, reviewed_at=NOW()
+                                            WHERE application_id=%s AND teacher_id=%s
+                                        """, (status, comment, application_id_int, user_id))
+                                print(f"✅ [DEBUG] 指導老師審核完成（回退方法）: application_id={application_id_int}, review_status={status}")
+                                break
+                            except Exception as retry_error:
+                                retry_error_str = str(retry_error)
+                                if ("Deadlock" in retry_error_str or "1213" in retry_error_str or "40001" in retry_error_str) and retry_attempt < max_retries - 1:
+                                    import time
+                                    time.sleep(retry_delay * (retry_attempt + 1))
+                                    print(f"⚠️ [DEBUG] 回退方法檢測到死鎖，重試中 (嘗試 {retry_attempt + 2}/{max_retries})")
+                                    continue
+                                else:
+                                    raise
+                        break
             # 指導老師通過時立即建立 resume_applications，讓廠商可見該履歷
             if status == 'approved':
                 job_id = resume_data.get('job_id')
@@ -904,33 +1107,88 @@ def review_resume(resume_id):
             except:
                 pass
             
-            cursor.execute("""
-                SELECT id, review_status FROM resume_teacher
-                WHERE application_id = %s AND teacher_id = %s
-            """, (application_id_int, user_id))
-            existing_ct = cursor.fetchone()
-            if existing_ct:
-                # 確保清除任何未讀取的結果
+            # 使用 INSERT ... ON DUPLICATE KEY UPDATE 來原子性地更新 resume_teacher 表
+            # 這避免了先 SELECT 再 UPDATE/INSERT 可能導致的死鎖問題
+            max_retries = 3
+            retry_delay = 0.1  # 100ms
+            
+            for attempt in range(max_retries):
                 try:
-                    cursor.fetchall()
-                except:
-                    pass
-                
-                cursor.execute("""
-                    UPDATE resume_teacher SET review_status=%s, comment=%s, reviewed_at=NOW()
-                    WHERE application_id=%s AND teacher_id=%s
-                """, (status, comment, application_id_int, user_id))
-            else:
-                # 確保清除任何未讀取的結果
-                try:
-                    cursor.fetchall()
-                except:
-                    pass
-                
-                cursor.execute("""
-                    INSERT INTO resume_teacher (application_id, teacher_id, review_status, comment, reviewed_at, created_at)
-                    VALUES (%s, %s, %s, %s, NOW(), NOW())
-                """, (application_id_int, user_id, status, comment))
+                    cursor.execute("""
+                        INSERT INTO resume_teacher (application_id, teacher_id, review_status, comment, reviewed_at, created_at)
+                        VALUES (%s, %s, %s, %s, NOW(), NOW())
+                        ON DUPLICATE KEY UPDATE
+                            review_status = VALUES(review_status),
+                            comment = VALUES(comment),
+                            reviewed_at = NOW()
+                    """, (application_id_int, user_id, status, comment))
+                    break
+                except Exception as e:
+                    error_str = str(e)
+                    # 檢查是否為死鎖錯誤
+                    if ("Deadlock" in error_str or "1213" in error_str or "40001" in error_str) and attempt < max_retries - 1:
+                        import time
+                        time.sleep(retry_delay * (attempt + 1))
+                        print(f"⚠️ [DEBUG] 班導審核檢測到死鎖，重試中 (嘗試 {attempt + 2}/{max_retries}): application_id={application_id_int}")
+                        continue
+                    # 如果沒有唯一索引導致 ON DUPLICATE KEY UPDATE 失敗，回退到 SELECT/UPDATE/INSERT 方法
+                    elif "Duplicate entry" not in error_str and "ON DUPLICATE KEY" not in error_str:
+                        print(f"⚠️ [DEBUG] 班導審核 INSERT ... ON DUPLICATE KEY UPDATE 失敗，回退到 SELECT/UPDATE/INSERT 方法: {e}")
+                        # 確保清除任何未讀取的結果
+                        try:
+                            cursor.fetchall()
+                        except:
+                            pass
+                        
+                        # 使用帶重試的 SELECT/UPDATE/INSERT 方法
+                        for retry_attempt in range(max_retries):
+                            try:
+                                cursor.execute("""
+                                    SELECT id, review_status FROM resume_teacher
+                                    WHERE application_id = %s AND teacher_id = %s
+                                """, (application_id_int, user_id))
+                                existing_ct = cursor.fetchone()
+                                if existing_ct:
+                                    # 確保清除任何未讀取的結果
+                                    try:
+                                        cursor.fetchall()
+                                    except:
+                                        pass
+                                    
+                                    cursor.execute("""
+                                        UPDATE resume_teacher SET review_status=%s, comment=%s, reviewed_at=NOW()
+                                        WHERE application_id=%s AND teacher_id=%s
+                                    """, (status, comment, application_id_int, user_id))
+                                else:
+                                    # 確保清除任何未讀取的結果
+                                    try:
+                                        cursor.fetchall()
+                                    except:
+                                        pass
+                                    
+                                    cursor.execute("""
+                                        INSERT INTO resume_teacher (application_id, teacher_id, review_status, comment, reviewed_at, created_at)
+                                        VALUES (%s, %s, %s, %s, NOW(), NOW())
+                                    """, (application_id_int, user_id, status, comment))
+                                break
+                            except Exception as retry_error:
+                                retry_error_str = str(retry_error)
+                                if ("Deadlock" in retry_error_str or "1213" in retry_error_str or "40001" in retry_error_str) and retry_attempt < max_retries - 1:
+                                    import time
+                                    time.sleep(retry_delay * (retry_attempt + 1))
+                                    print(f"⚠️ [DEBUG] 班導審核回退方法檢測到死鎖，重試中 (嘗試 {retry_attempt + 2}/{max_retries})")
+                                    continue
+                                else:
+                                    raise
+                        break
+                    elif ("Deadlock" in error_str or "1213" in error_str or "40001" in error_str) and attempt < max_retries - 1:
+                        # 死鎖錯誤，重試
+                        import time
+                        time.sleep(retry_delay * (attempt + 1))
+                        print(f"⚠️ [DEBUG] 班導審核檢測到死鎖，重試中 (嘗試 {attempt + 2}/{max_retries})")
+                        continue
+                    else:
+                        raise
             if status == 'approved':
                 company_id = resume_data.get('company_id')
                 # 確保清除任何未讀取的結果
