@@ -124,6 +124,12 @@ def update_resume_status_after_deadline(cursor, conn):
                     advisor_user_id = app_info['advisor_user_id']
                     if not application_id or not advisor_user_id:
                         continue
+                    # 確保清除任何未讀取的結果（防止 "Unread result found" 錯誤）
+                    try:
+                        cursor.fetchall()
+                    except:
+                        pass
+                    
                     cursor.execute("""
                         SELECT id, review_status FROM resume_teacher 
                         WHERE application_id = %s AND teacher_id = %s
@@ -133,6 +139,12 @@ def update_resume_status_after_deadline(cursor, conn):
                         # 只更新狀態為 'uploaded' 的記錄，不要覆蓋已經審核過的記錄（'approved' 或 'rejected'）
                         current_status = existing.get('review_status')
                         if current_status == 'uploaded' or current_status is None:
+                            # 確保清除任何未讀取的結果
+                            try:
+                                cursor.fetchall()
+                            except:
+                                pass
+                            
                             cursor.execute("""
                                 UPDATE resume_teacher SET review_status='uploaded', reviewed_at=NULL
                                 WHERE application_id = %s AND teacher_id = %s
@@ -140,6 +152,12 @@ def update_resume_status_after_deadline(cursor, conn):
                             synced_count += 1
                         # 如果已經是 'approved' 或 'rejected'，跳過（不重置）
                     else:
+                        # 確保清除任何未讀取的結果
+                        try:
+                            cursor.fetchall()
+                        except:
+                            pass
+                        
                         cursor.execute("""
                             INSERT INTO resume_teacher (application_id, teacher_id, review_status, comment, reviewed_at, created_at)
                             VALUES (%s, %s, 'uploaded', NULL, NULL, NOW())
@@ -173,12 +191,25 @@ def update_resume_status_after_deadline(cursor, conn):
 def ensure_resume_application_for_teacher_approved(cursor, conn, application_id, job_id):
     """若尚無記錄則新增一筆 resume_applications，使廠商可見該履歷。"""
     try:
+        # 確保清除任何未讀取的結果（防止 "Unread result found" 錯誤）
+        try:
+            cursor.fetchall()
+        except:
+            pass
+        
         cursor.execute("""
             SELECT 1 FROM resume_applications
             WHERE application_id = %s AND job_id = %s
         """, (application_id, job_id))
         if cursor.fetchone():
             return True
+        
+        # 確保清除任何未讀取的結果
+        try:
+            cursor.fetchall()
+        except:
+            pass
+        
         cursor.execute("""
             INSERT INTO resume_applications
             (application_id, job_id, apply_status, interview_status, interview_result, company_comment, created_at)
@@ -292,6 +323,12 @@ def update_resume_applications_after_advisor_deadline(cursor, conn):
                 advisor_user_id = app['advisor_user_id']
                 
                 try:
+                    # 確保清除任何未讀取的結果（防止 "Unread result found" 錯誤）
+                    try:
+                        cursor.fetchall()
+                    except:
+                        pass
+                    
                     # 創建 resume_applications 記錄（含 company_comment 以符合 NOT NULL）
                     cursor.execute("""
                         INSERT INTO resume_applications
@@ -304,6 +341,12 @@ def update_resume_applications_after_advisor_deadline(cursor, conn):
                     
                     # 通知對應的廠商
                     if advisor_user_id:
+                        # 確保清除任何未讀取的結果
+                        try:
+                            cursor.fetchall()
+                        except:
+                            pass
+                        
                         cursor.execute("""
                             SELECT id, name FROM users
                             WHERE role = 'vendor' AND teacher_id = %s
@@ -364,8 +407,20 @@ def get_teacher_review_resumes():
         # 檢查履歷上傳截止時間並自動更新狀態
         is_resume_deadline_passed, update_counts = update_resume_status_after_deadline(cursor, conn)
         
+        # 確保清除任何未讀取的結果（防止 "Unread result found" 錯誤）
+        try:
+            cursor.fetchall()
+        except:
+            pass
+        
         # 檢查指導老師審核截止時間並自動將已通過的履歷傳給廠商
         is_advisor_deadline_passed, advisor_update_count = update_resume_applications_after_advisor_deadline(cursor, conn)
+        
+        # 確保清除任何未讀取的結果（防止 "Unread result found" 錯誤）
+        try:
+            cursor.fetchall()
+        except:
+            pass
         
         # 在截止時間之前，指導老師（包括主任切換身份）不能看到任何履歷，直接返回空結果
         if session_role == 'teacher' and not is_resume_deadline_passed:
@@ -806,6 +861,12 @@ def review_resume(resume_id):
         # 3. 更新履歷狀態（同一份履歷投遞不同公司分開紀錄：以 application_id 為單位，不共用 resumes.status）
         if user_role == 'teacher' and resume_teacher_table_exists and application_id_int is not None:
             old_status_for_check = resume_data.get('old_teacher_review_status') or 'uploaded'
+            # 確保清除任何未讀取的結果（防止 "Unread result found" 錯誤）
+            try:
+                cursor.fetchall()
+            except:
+                pass
+            
             # 指導老師：更新 resume_teacher 表該筆投遞的審核狀態
             cursor.execute("""
                 UPDATE resume_teacher SET review_status=%s, comment=%s, reviewed_at=NOW()
@@ -813,6 +874,12 @@ def review_resume(resume_id):
             """, (status, comment, application_id_int, user_id))
             updated_rows = cursor.rowcount
             if updated_rows == 0:
+                # 確保清除任何未讀取的結果
+                try:
+                    cursor.fetchall()
+                except:
+                    pass
+                
                 cursor.execute("""
                     INSERT INTO resume_teacher (application_id, teacher_id, review_status, comment, reviewed_at, created_at)
                     VALUES (%s, %s, %s, %s, NOW(), NOW())
@@ -823,36 +890,77 @@ def review_resume(resume_id):
                 job_id = resume_data.get('job_id')
                 if job_id is not None:
                     ensure_resume_application_for_teacher_approved(cursor, conn, application_id_int, job_id)
+                    # 確保清除任何未讀取的結果（防止 "Unread result found" 錯誤）
+                    try:
+                        cursor.fetchall()
+                    except:
+                        pass
         elif user_role == 'class_teacher' and resume_teacher_table_exists and application_id_int is not None:
             # 班導：只更新「這一筆投遞」的狀態（寫入 resume_teacher，不更新 resumes 表，避免同一份履歷其他公司跟著變）
             old_status_for_check = resume_data.get('old_teacher_review_status') or 'uploaded'
+            # 確保清除任何未讀取的結果（防止 "Unread result found" 錯誤）
+            try:
+                cursor.fetchall()
+            except:
+                pass
+            
             cursor.execute("""
                 SELECT id, review_status FROM resume_teacher
                 WHERE application_id = %s AND teacher_id = %s
             """, (application_id_int, user_id))
             existing_ct = cursor.fetchone()
             if existing_ct:
+                # 確保清除任何未讀取的結果
+                try:
+                    cursor.fetchall()
+                except:
+                    pass
+                
                 cursor.execute("""
                     UPDATE resume_teacher SET review_status=%s, comment=%s, reviewed_at=NOW()
                     WHERE application_id=%s AND teacher_id=%s
                 """, (status, comment, application_id_int, user_id))
             else:
+                # 確保清除任何未讀取的結果
+                try:
+                    cursor.fetchall()
+                except:
+                    pass
+                
                 cursor.execute("""
                     INSERT INTO resume_teacher (application_id, teacher_id, review_status, comment, reviewed_at, created_at)
                     VALUES (%s, %s, %s, %s, NOW(), NOW())
                 """, (application_id_int, user_id, status, comment))
             if status == 'approved':
                 company_id = resume_data.get('company_id')
+                # 確保清除任何未讀取的結果
+                try:
+                    cursor.fetchall()
+                except:
+                    pass
+                
                 cursor.execute("""
                     SELECT advisor_user_id FROM internship_companies WHERE id = %s
                 """, (company_id,))
                 ic = cursor.fetchone()
                 advisor_user_id = ic.get('advisor_user_id') if ic else None
                 if advisor_user_id:
+                    # 確保清除任何未讀取的結果
+                    try:
+                        cursor.fetchall()
+                    except:
+                        pass
+                    
                     cursor.execute("""
                         SELECT id FROM resume_teacher WHERE application_id = %s AND teacher_id = %s
                     """, (application_id_int, advisor_user_id))
                     if not cursor.fetchone():
+                        # 確保清除任何未讀取的結果
+                        try:
+                            cursor.fetchall()
+                        except:
+                            pass
+                        
                         cursor.execute("""
                             INSERT INTO resume_teacher (application_id, teacher_id, review_status, comment, reviewed_at, created_at)
                             VALUES (%s, %s, 'uploaded', NULL, NULL, NOW())
@@ -879,10 +987,22 @@ def review_resume(resume_id):
                     WHERE sja.student_id = %s AND sja.resume_id = %s AND ic.advisor_user_id IS NOT NULL
                 """, (student_user_id, resume_id))
                 for app in cursor.fetchall() or []:
+                    # 確保清除任何未讀取的結果（防止 "Unread result found" 錯誤）
+                    try:
+                        cursor.fetchall()
+                    except:
+                        pass
+                    
                     cursor.execute("""
                         SELECT id FROM resume_teacher WHERE application_id = %s AND teacher_id = %s
                     """, (app['application_id'], app['advisor_user_id']))
                     if not cursor.fetchone():
+                        # 確保清除任何未讀取的結果
+                        try:
+                            cursor.fetchall()
+                        except:
+                            pass
+                        
                         cursor.execute("""
                             INSERT INTO resume_teacher (application_id, teacher_id, review_status, comment, reviewed_at, created_at)
                             VALUES (%s, %s, 'uploaded', NULL, NULL, NOW())
