@@ -10,10 +10,6 @@ from docx import Document
 from PIL import Image, ImageEnhance
 import io
 
-try:
-    from PyPDF2 import PdfReader
-except ImportError:
-    PdfReader = None
 
 
 
@@ -868,45 +864,14 @@ def perform_ocr_on_file(file_storage):
     
     # 1. PDF 處理：直接抽取文字
     if ext == ".pdf":
-        if PdfReader is None:
-            return {
-                "success": True, # 仍視為成功，但回傳警告
-                "filename": filename,
-                "size_kb": size_kb,
-                "text": "",
-                "confidence": None,
-                "message": "伺服器尚未安裝 PyPDF2，無法解析 PDF 文字，目前僅回傳檔案資訊。"
-            }
-            
-        try:
-            reader = PdfReader(io.BytesIO(file_storage.read()))
-            file_storage.stream.seek(0) # 重置指標
-            
-            texts = []
-            for page in reader.pages:
-                page_text = page.extract_text() or ""
-                if page_text.strip():
-                    texts.append(page_text.strip())
-            full_text = "\n\n".join(texts)
-            
-            return {
-                "success": True,
-                "filename": filename,
-                "size_kb": size_kb,
-                "text": full_text,
-                "confidence": None,
-                "message": "PDF 已完成文字抽取（非影像 OCR）。"
-            }
-        except Exception as e:
-            file_storage.stream.seek(0)
-            return {
-                "success": True,
-                "filename": filename,
-                "size_kb": size_kb,
-                "text": "",
-                "confidence": None,
-                "message": f"PDF 解析失敗: {str(e)}"
-            }
+        return {
+            "success": False, # 改為 False 以明確告知失敗
+            "filename": filename,
+            "size_kb": size_kb,
+            "text": "",
+            "confidence": None,
+            "message": "伺服器未安裝 PDF 解析套件，無法處理 PDF 檔案。"
+        }
 
     # 2. 圖片處理：優先使用 Google Gemini AI
     gemini_text = ""
