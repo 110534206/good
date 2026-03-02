@@ -472,6 +472,7 @@
       const pathParts = window.location.pathname.split('/');
       const targetCompanyId = parseInt(pathParts[pathParts.length - 2]);
       const targetStatus = urlParams.get('status');
+      const targetInterviewStatus = urlParams.get('interviewStatus');
 
       initMenu();
 
@@ -584,6 +585,11 @@
                const statusSelect = document.getElementById('statusFilter');
                const mapped = (targetStatus === 'submitted' || targetStatus === 'uploaded') ? 'pending' : targetStatus;
                if(statusSelect) statusSelect.value = mapped;
+            }
+
+            if (targetInterviewStatus) {
+               const interviewStatusSelect = document.getElementById('interviewStatusFilter');
+               if(interviewStatusSelect) interviewStatusSelect.value = targetInterviewStatus;
             }
 
             applyFilters();
