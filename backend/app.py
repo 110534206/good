@@ -3,6 +3,19 @@ from flask_cors import CORS
 from jinja2 import ChoiceLoader, FileSystemLoader
 from dotenv import load_dotenv
 import os
+import pytesseract
+
+# 全域設定 Tesseract 路徑 (優先讀取環境變數，若無則嘗試預設路徑)
+tesseract_env_path = os.getenv('TESSERACT_CMD')
+if tesseract_env_path:
+    pytesseract.pytesseract.tesseract_cmd = tesseract_env_path
+elif os.name == 'nt':
+    # Windows 預設路徑檢查
+    default_win_path = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+    if os.path.exists(default_win_path):
+        pytesseract.pytesseract.tesseract_cmd = default_win_path
+# 若非 Windows 或路徑不存在，則假設 tesseract 在系統 PATH 中
+
 
 # -------------------------
 # 建立 Flask app

@@ -579,8 +579,22 @@
                   <div class="image-preview-box" id="transcriptPreviewBox">
                     <span class="placeholder-text">選擇或上傳後顯示預覽</span>
                   </div>
-                  <input type="file" id="transcript_file" name="transcript_file" class="form-control mt-2" accept="image/jpeg, image/png"
-                    required />
+                  
+                  <div class="input-group mt-2">
+                    <input type="file" id="transcript_file" name="transcript_file" class="form-control" accept="image/jpeg, image/png" required />
+                    <button type="button" class="btn btn-outline-primary" id="btn-transcript-ocr">
+                      <i class="bi bi-magic"></i> AI 辨識
+                    </button>
+                  </div>
+                  <div class="form-text">💡 提示：上傳後可點擊「AI 辨識」來自動讀取成績單內容。</div>
+
+                  <!-- OCR 結果顯示區域 -->
+                  <div id="transcript-ocr-result-container" class="mt-3 d-none">
+                      <div class="card card-body bg-light border-0">
+                          <h6 class="card-title fw-bold text-primary mb-3"><i class="bi bi-file-text"></i> AI 辨識結果 (僅供參考)</h6>
+                          <div id="transcript-ocr-content" class="markdown-body" style="font-size: 0.9rem; background: white; padding: 15px; border-radius: 8px; border: 1px solid #dee2e6;"></div>
+                      </div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -750,6 +764,7 @@
 
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
   <script>
     // ==========================================================
     // 免責聲明 Modal 控制邏輯
@@ -4382,6 +4397,151 @@
         alert('❌ 無法找到自傳欄位，請確認表單已正確載入。');
       }
     }
+
+    // 成績單 AI 辨識邏輯
+    document.addEventListener('DOMContentLoaded', function() {
+        // 表格分頁工具函數
+        function paginateTable(table, rowsPerPage = 10) {
+            const tbody = table.querySelector('tbody');
+            if (!tbody) return;
+            
+            const rows = Array.from(tbody.querySelectorAll('tr'));
+            if (rows.length <= rowsPerPage) return;
+            
+            const pageCount = Math.ceil(rows.length / rowsPerPage);
+            let currentPage = 1;
+            
+            // 包裹表格以支援 RWD，如果已經包裹則略過
+            if (!table.parentElement.classList.contains('table-responsive')) {
+                const wrapper = document.createElement('div');
+                wrapper.className = 'table-responsive';
+                table.parentNode.insertBefore(wrapper, table);
+                wrapper.appendChild(table);
+            }
+
+            const nav = document.createElement('nav');
+            nav.className = 'mt-2 d-flex justify-content-center';
+            
+            const ul = document.createElement('ul');
+            ul.className = 'pagination pagination-sm mb-0';
+            nav.appendChild(ul);
+            
+            function renderPagination() {
+                ul.innerHTML = '';
+                
+                // 上一頁
+                const prevLi = document.createElement('li');
+                prevLi.className = `page-item ${currentPage === 1 ? 'disabled' : ''}`;
+                prevLi.innerHTML = `<a class="page-link" href="#" aria-label="Previous">&laquo;</a>`;
+                prevLi.onclick = (e) => { e.preventDefault(); if(currentPage > 1) { currentPage--; update(); } };
+                ul.appendChild(prevLi);
+                
+                // 頁碼顯示 (最多顯示 5 個頁碼按鈕)
+                let start = Math.max(1, currentPage - 2);
+                let end = Math.min(pageCount, start + 4);
+                if (end - start < 4) start = Math.max(1, end - 4);
+                
+                for(let i = start; i <= end; i++) {
+                    const li = document.createElement('li');
+                    li.className = `page-item ${i === currentPage ? 'active' : ''}`;
+                    li.innerHTML = `<a class="page-link" href="#">${i}</a>`;
+                    li.onclick = (e) => { e.preventDefault(); currentPage = i; update(); };
+                    ul.appendChild(li);
+                }
+                
+                // 下一頁
+                const nextLi = document.createElement('li');
+                nextLi.className = `page-item ${currentPage === pageCount ? 'disabled' : ''}`;
+                nextLi.innerHTML = `<a class="page-link" href="#" aria-label="Next">&raquo;</a>`;
+                nextLi.onclick = (e) => { e.preventDefault(); if(currentPage < pageCount) { currentPage++; update(); } };
+                ul.appendChild(nextLi);
+            }
+            
+            function update() {
+                const start = (currentPage - 1) * rowsPerPage;
+                const end = start + rowsPerPage;
+                rows.forEach((row, i) => {
+                    row.style.display = (i >= start && i < end) ? '' : 'none';
+                });
+                renderPagination();
+            }
+            
+            // 插入分頁控制項到表格容器之後
+            const container = table.closest('.table-responsive') || table;
+            container.parentNode.insertBefore(nav, container.nextSibling);
+            
+            update();
+        }
+
+        const transcriptFile = document.getElementById('transcript_file');
+        const btnTranscriptOcr = document.getElementById('btn-transcript-ocr');
+        const resultContainer = document.getElementById('transcript-ocr-result-container');
+        const resultContent = document.getElementById('transcript-ocr-content');
+
+        if(btnTranscriptOcr) {
+            btnTranscriptOcr.addEventListener('click', async function() {
+                if (!transcriptFile.files || transcriptFile.files.length === 0) {
+                    Swal.fire('提示', '請先選擇成績單圖片', 'warning');
+                    return;
+                }
+
+                const file = transcriptFile.files[0];
+                const formData = new FormData();
+                formData.append('image', file);
+
+                // 顯示 Loading
+                const originalBtnContent = btnTranscriptOcr.innerHTML;
+                btnTranscriptOcr.disabled = true;
+                btnTranscriptOcr.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> 辨識中...';
+                resultContainer.classList.add('d-none');
+
+                try {
+                    const response = await fetch('/api/student/image_recognize', {
+                        method: 'POST',
+                        body: formData
+                    });
+
+                    const data = await response.json();
+
+                    if (data.success) {
+                        resultContainer.classList.remove('d-none');
+                        
+                        let msg = '';
+                        if (data.text && data.text.trim()) {
+                             msg = data.text;
+                        } else {
+                             msg = '(未偵測到明顯文字)';
+                        }
+                        
+                        // 使用 marked 解析 Markdown
+                        if (typeof marked !== 'undefined') {
+                             resultContent.innerHTML = marked.parse(msg);
+                        } else {
+                             resultContent.innerText = msg; // Fallback
+                        }
+                        
+                        // 簡單的表格樣式美化與分頁
+                        const tables = resultContent.querySelectorAll('table');
+                        tables.forEach(table => {
+                            table.classList.add('table', 'table-bordered', 'table-sm', 'table-striped', 'mt-2');
+                            // 套用分頁，每頁 10 筆
+                            paginateTable(table, 10);
+                        });
+
+                    } else {
+                        Swal.fire('錯誤', data.message || '辨識失敗', 'error');
+                    }
+
+                } catch (error) {
+                    console.error('OCR Error:', error);
+                    Swal.fire('錯誤', '發生錯誤，請稍後再試', 'error');
+                } finally {
+                    btnTranscriptOcr.disabled = false;
+                    btnTranscriptOcr.innerHTML = originalBtnContent;
+                }
+            });
+        }
+    });
 
   </script>
 
