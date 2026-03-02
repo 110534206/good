@@ -723,7 +723,17 @@
           <p>瀏覽學長姐的實習經驗或分享你的心得。</p>
           <a href="/intern_experience" role="link">前往查看</a>
         </div>
+<<<<<<< HEAD
+=======
         {% endif %}
+        {% endif %}
+        {% if show_image_recognize %}
+        <div class="card" role="listitem">
+          <h3>成績 AI 識別</h3>
+          <p>上傳成績單圖片，讓系統自動讀取科目與分數並輸出報告。</p>
+          <a href="/image_recognize" role="link">成績 AI 識別</a>
+        </div>
+>>>>>>> d72d01b9a75866772953f05cfbb0ee2bb85b6e5d
         {% endif %}
       </section>
   </main>
@@ -743,6 +753,9 @@
     {% if show_intern_experience %}
     <a href="/intern_experience">實習心得</a>
     {% endif %}
+    {% endif %}
+    {% if show_image_recognize %}
+    <a href="/image_recognize">成績 AI 識別</a>
     {% endif %}
   </nav>
 

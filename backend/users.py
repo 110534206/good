@@ -2,7 +2,7 @@ from flask import Blueprint, render_template, session, redirect, url_for, reques
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 from config import get_db
-from semester import is_student_in_application_phase, should_show_intern_experience
+from semester import is_student_in_application_phase, should_show_intern_experience, should_show_image_recognize
 import os
 import re 
 # from docx import Document  <-- Removed
@@ -789,22 +789,25 @@ def confirm_matching_page():
 # 使用者首頁（學生前台）
 @users_bp.route('/student_home')
 def student_home():
-    # 流程學期／實習學期：投遞、志願、行事曆、媒合結果在「實習學期或上一學期」顯示；實習心得僅實習學期結束前兩週
+    # 流程學期／實習學期：投遞、志願、行事曆、媒合結果在「實習學期或上一學期」顯示；實習心得學期 1132 時顯示；成績 AI 識別 1131 即顯示
     in_application_phase = True
     show_intern_experience = True
+    show_image_recognize = True
     if session.get('role') == 'student' and session.get('user_id'):
         try:
             conn = get_db()
             cursor = conn.cursor(dictionary=True)
             in_application_phase = is_student_in_application_phase(cursor, session['user_id'])
             show_intern_experience = should_show_intern_experience(cursor, session['user_id'])
+            show_image_recognize = should_show_image_recognize(cursor, session['user_id'])
             cursor.close()
             conn.close()
         except Exception:
             pass
     return render_template('user_shared/student_home.html',
                           in_application_phase=in_application_phase,
-                          show_intern_experience=show_intern_experience)
+                          show_intern_experience=show_intern_experience,
+                          show_image_recognize=show_image_recognize)
 
 
 @users_bp.route('/image_recognize')
@@ -1297,7 +1300,7 @@ def get_vendor_reviewed_students(company_id):
         # 查詢所有選擇該公司的學生履歷（包括已審核和未審核的）
         # 返回廠商審核狀態和留言（如果有的話）
         # 只顯示有廠商審核記錄的學生，每個學生只顯示一筆（最新的審核記錄）
-        # 注意：審核狀態從 student_preferences.status 獲取，vendor_preference_history 只用於檢查是否有審核記錄
+        # 使用 resume_applications 表獲取廠商審核狀態（不再使用 vendor_preference_history 表）
         cursor.execute("""
             SELECT 
                 u.id AS student_id,
@@ -1308,34 +1311,22 @@ def get_vendor_reviewed_students(company_id):
                 r.original_filename,
                 r.status AS resume_status,
                 r.created_at AS resume_uploaded_at,
-                sp.id AS preference_id,
-                sp.preference_order,
+                sja.id AS application_id,
                 ij.title AS job_title,
-                -- 審核狀態從 student_preferences.status 獲取
-                COALESCE(sp.status, 'pending') AS vendor_review_status,
-                (SELECT vph.comment 
-                 FROM vendor_preference_history vph 
-                 WHERE vph.preference_id = sp.id 
-                 ORDER BY vph.created_at DESC 
-                 LIMIT 1) AS vendor_comment,
-                (SELECT vph.created_at 
-                 FROM vendor_preference_history vph 
-                 WHERE vph.preference_id = sp.id 
-                 ORDER BY vph.created_at DESC 
-                 LIMIT 1) AS vendor_reviewed_at
-            FROM student_preferences sp
-            JOIN users u ON sp.student_id = u.id
+                -- 審核狀態從 resume_applications.apply_status 獲取
+                COALESCE(ra.apply_status, 'uploaded') AS vendor_review_status,
+                ra.company_comment AS vendor_comment,
+                ra.updated_at AS vendor_reviewed_at
+            FROM student_job_applications sja
+            JOIN users u ON sja.student_id = u.id
             LEFT JOIN classes c ON u.class_id = c.id
-            LEFT JOIN resumes r ON r.user_id = u.id
-            LEFT JOIN internship_jobs ij ON sp.job_id = ij.id
-            WHERE sp.company_id = %s
-            AND EXISTS (
-                -- 只顯示有廠商審核記錄的學生（檢查 vendor_preference_history 表中是否有記錄）
-                SELECT 1 FROM vendor_preference_history vph 
-                WHERE vph.preference_id = sp.id
-            )
-            AND sp.status IN ('approved', 'rejected')
-            ORDER BY u.id, vendor_reviewed_at DESC
+            LEFT JOIN resumes r ON sja.resume_id = r.id AND r.user_id = u.id
+            LEFT JOIN internship_jobs ij ON sja.job_id = ij.id
+            LEFT JOIN resume_applications ra ON ra.application_id = sja.id AND ra.job_id = sja.job_id
+            WHERE sja.company_id = %s
+            AND ra.id IS NOT NULL
+            AND ra.apply_status IN ('approved', 'rejected')
+            ORDER BY u.id, ra.updated_at DESC
         """, (company_id,))
         
         students = cursor.fetchall() or []

@@ -2320,12 +2320,34 @@ def get_deadlines():
             resume_deadline_date = resume_deadline_dt.strftime('%Y-%m-%d')
             resume_deadline_time = resume_deadline_dt.strftime('%H:%M')
         
+        # 媒合結果通知日（行事曆顯示用）：取 internship_offers 最近一筆 offered_at 的日期
+        matching_result_date = None
+        matching_result_time = None
+        try:
+            cursor.execute("""
+                SELECT MAX(offered_at) AS latest_offered_at
+                FROM internship_offers
+                WHERE offered_at IS NOT NULL
+            """)
+            row = cursor.fetchone()
+            if row and row.get('latest_offered_at'):
+                dt = row['latest_offered_at']
+                if hasattr(dt, 'strftime'):
+                    matching_result_date = dt.strftime('%Y-%m-%d')
+                    matching_result_time = dt.strftime('%H:%M')
+                else:
+                    matching_result_date = str(dt)[:10]
+        except Exception:
+            pass
+        
         return jsonify({
             "success": True,
             "preference_deadline_date": preference_deadline_date,
             "preference_deadline_time": preference_deadline_time,
             "resume_deadline_date": resume_deadline_date,
-            "resume_deadline_time": resume_deadline_time
+            "resume_deadline_time": resume_deadline_time,
+            "matching_result_date": matching_result_date,
+            "matching_result_time": matching_result_time
         })
     
     except Exception as e:

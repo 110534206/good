@@ -332,11 +332,12 @@
       if (menuBtn) menuBtn.addEventListener('click', () => { sideMenu.classList.add('open'); sideMenu.setAttribute('aria-hidden', 'false'); });
       if (closeBtn) closeBtn.addEventListener('click', () => { sideMenu.classList.remove('open'); sideMenu.setAttribute('aria-hidden', 'true'); });
 
-      /** 依角色與是否班導回傳首頁路徑 */
+      /** 依角色回傳首頁路徑（主任→主任主頁、指導老師→指導老師主頁、班導→班導主頁） */
       function getHomeUrl(role, isHomeroom) {
         if (role === 'student') return '/student_home';
         if (role === 'ta') return '/ta_home';
-        if (role === 'teacher' || role === 'director') return isHomeroom ? '/class_teacher_home' : '/' + role + '_home';
+        if (role === 'director') return '/director_home';
+        if (role === 'teacher') return '/teacher_home';
         if (role === 'admin') return '/admin_home';
         if (role === 'vendor') return '/vendor_home';
         if (role === 'class_teacher') return '/class_teacher_home';
@@ -630,8 +631,12 @@
               finalRedirectUrl = '/student_home';
             } else if (roleValue === 'ta') {
               finalRedirectUrl = '/ta_home';
-            } else if (roleValue === 'teacher' || roleValue === 'director') {
-              finalRedirectUrl = isHomeroom ? '/class_teacher_home' : `/${roleValue}_home`;
+            } else if (roleValue === 'director') {
+              finalRedirectUrl = '/director_home';
+            } else if (roleValue === 'teacher') {
+              finalRedirectUrl = '/teacher_home';
+            } else if (roleValue === 'class_teacher') {
+              finalRedirectUrl = '/class_teacher_home';
             } else if (roleValue === 'admin') {
               finalRedirectUrl = '/admin_home';
             } else if (roleValue === 'vendor') {
