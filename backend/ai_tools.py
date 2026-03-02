@@ -7,7 +7,6 @@ import json
 import traceback
 from werkzeug.utils import secure_filename
 from docx import Document
-import pytesseract
 from PIL import Image, ImageEnhance
 import io
 
@@ -16,16 +15,6 @@ try:
 except ImportError:
     PdfReader = None
 
-# 指定本機 Tesseract 安裝路徑（若路徑不同請改成你的實際路徑）
-tesseract_env_path = os.getenv('TESSERACT_CMD')
-if tesseract_env_path:
-    pytesseract.pytesseract.tesseract_cmd = tesseract_env_path
-else:
-    # 預設 Windows 路徑，若不是 Windows 或路徑不同，請設定環境變數 TESSERACT_CMD
-    default_win_path = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
-    if os.path.exists(default_win_path):
-        pytesseract.pytesseract.tesseract_cmd = default_win_path
-    # 若以上皆無，則假設 tesseract 已在系統 PATH 中
 
 
 # --- 初始化 AI Blueprint ---
@@ -967,9 +956,9 @@ def perform_ocr_on_file(file_storage):
                 print("❌ 所有 Gemini 模型皆嘗試失敗")
 
         except Exception as e:
-            print(f"⚠️ Gemini OCR 系統性錯誤，將降級使用 Tesseract: {e}")
+            print(f"⚠️ Gemini OCR 系統性錯誤: {e}")
             file_storage.stream.seek(0)
-
+            
     if use_gemini and gemini_text:
         return {
             "success": True,
@@ -979,9 +968,7 @@ def perform_ocr_on_file(file_storage):
             "confidence": gemini_conf
         }
 
-    # 3. 圖片處理：降級使用 Tesseract OCR (已停用)
-    # 根據使用者指示，若 AI 辨識失敗則直接回傳錯誤，不再嘗試使用 Tesseract
-    
+    # 3. 圖片處理：AI 辨識失敗
     return {
         "success": False, 
         "filename": filename,

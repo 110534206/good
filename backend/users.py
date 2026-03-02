@@ -5,12 +5,8 @@ from config import get_db
 from semester import is_student_in_application_phase, should_show_intern_experience, should_show_image_recognize
 import os
 import re 
-# from docx import Document  <-- Removed
-# import pytesseract         <-- Removed
 from ai_tools import perform_ocr_on_file, create_ocr_docx # Import new helpers
 
-# 指定本機 Tesseract 安裝路徑（已移至 ai_tools.py 或 app.py）
-# pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
 
 users_bp = Blueprint("users_bp", __name__)
 
