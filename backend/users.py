@@ -2,7 +2,7 @@ from flask import Blueprint, render_template, session, redirect, url_for, reques
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 from config import get_db
-from semester import is_student_in_application_phase, should_show_intern_experience
+from semester import is_student_in_application_phase, should_show_intern_experience, should_show_image_recognize
 import os
 import re 
 from docx import Document
@@ -784,22 +784,25 @@ def confirm_matching_page():
 # 使用者首頁（學生前台）
 @users_bp.route('/student_home')
 def student_home():
-    # 流程學期／實習學期：投遞、志願、行事曆、媒合結果在「實習學期或上一學期」顯示；實習心得僅實習學期結束前兩週
+    # 流程學期／實習學期：投遞、志願、行事曆、媒合結果在「實習學期或上一學期」顯示；實習心得學期 1132 時顯示；成績 AI 識別 1131 即顯示
     in_application_phase = True
     show_intern_experience = True
+    show_image_recognize = True
     if session.get('role') == 'student' and session.get('user_id'):
         try:
             conn = get_db()
             cursor = conn.cursor(dictionary=True)
             in_application_phase = is_student_in_application_phase(cursor, session['user_id'])
             show_intern_experience = should_show_intern_experience(cursor, session['user_id'])
+            show_image_recognize = should_show_image_recognize(cursor, session['user_id'])
             cursor.close()
             conn.close()
         except Exception:
             pass
     return render_template('user_shared/student_home.html',
                           in_application_phase=in_application_phase,
-                          show_intern_experience=show_intern_experience)
+                          show_intern_experience=show_intern_experience,
+                          show_image_recognize=show_image_recognize)
 
 
 @users_bp.route('/image_recognize')
