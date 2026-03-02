@@ -446,7 +446,6 @@
         jobs: [],
         resumeStats: {
           approved: 0,
-          rejected: 0,
           pending: 0
         },
         isEditing: false,
@@ -563,7 +562,7 @@
             <div class="info-card" style="cursor: pointer;">
               <a href="/teacher/company/${COMPANY_ID}/resumes" style="display: block; text-decoration: none; color: inherit;">
                 <span class="info-label">廠商審核狀態</span>
-                <span class="info-value" style="color: var(--color-muted);">總筆數<span id="totalCount" style="margin-left: 4px;">${state.resumeStats.pending + state.resumeStats.approved + state.resumeStats.rejected}</span></span>
+                <span class="info-value" style="color: var(--color-muted);">總筆數<span id="totalCount" style="margin-left: 4px;">${state.resumeStats.pending + state.resumeStats.approved}</span></span>
               </a>
             </div>
             <div class="info-card" style="cursor: pointer;">
@@ -576,12 +575,6 @@
               <a href="/teacher/company/${COMPANY_ID}/resumes?status=approved" style="display: block; text-decoration: none; color: inherit;">
                 <span class="info-label">廠商審核狀態</span>
                 <span class="info-value" style="color: var(--color-success);">通過<span id="approvedCount" style="margin-left: 4px;">${state.resumeStats.approved}</span></span>
-              </a>
-            </div>
-            <div class="info-card" style="cursor: pointer;">
-              <a href="/teacher/company/${COMPANY_ID}/resumes?status=rejected" style="display: block; text-decoration: none; color: inherit;">
-                <span class="info-label">廠商審核狀態</span>
-                <span class="info-value" style="color: var(--color-danger);">退件<span id="rejectedCount" style="margin-left: 4px;">${state.resumeStats.rejected}</span></span>
               </a>
             </div>
           </div>
@@ -726,10 +719,9 @@
 
       async function loadResumeStats() {
         try {
-          // 重置統計
+          // 重置統計（已移除退件統計）
           state.resumeStats = {
             approved: 0,
-            rejected: 0,
             pending: 0
           };
           
@@ -742,15 +734,13 @@
           const result = await response.json();
           
           if (response.ok && result.success && result.resumes) {
-            // 根據廠商審核狀態統計
+            // 根據廠商審核狀態統計（退件狀態也算作待審核，因為已移除退件卡片）
             result.resumes.forEach(r => {
               const status = r.status || r.application_statuses || r.display_status || 'pending';
               if (status === 'approved') {
                 state.resumeStats.approved++;
-              } else if (status === 'rejected') {
-                state.resumeStats.rejected++;
               } else {
-                // pending 或其他狀態都算作待審核
+                // pending、rejected 或其他狀態都算作待審核
                 state.resumeStats.pending++;
               }
             });
@@ -764,14 +754,12 @@
         // 更新顯示的數量
         const totalEl = document.getElementById('totalCount');
         const approvedEl = document.getElementById('approvedCount');
-        const rejectedEl = document.getElementById('rejectedCount');
         const pendingEl = document.getElementById('pendingCount');
         
-        // 計算總筆數
-        const total = state.resumeStats.pending + state.resumeStats.approved + state.resumeStats.rejected;
+        // 計算總筆數（不包含退件）
+        const total = state.resumeStats.pending + state.resumeStats.approved;
         if (totalEl) totalEl.textContent = total;
         if (approvedEl) approvedEl.textContent = state.resumeStats.approved;
-        if (rejectedEl) rejectedEl.textContent = state.resumeStats.rejected;
         if (pendingEl) pendingEl.textContent = state.resumeStats.pending;
       }
 

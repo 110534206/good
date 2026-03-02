@@ -205,7 +205,6 @@
           <option value="">所有狀態</option>
           <option value="pending">待審核</option>
           <option value="approved">通過</option>
-          <option value="rejected">退件</option>
         </select>
         <select id="interviewStatusFilter" style="padding: 10px 12px; border-radius: 8px; border: 1px solid #e2e8f0; min-width: 150px;">
           <option value="">所有面試狀態</option>
@@ -630,7 +629,7 @@
       });
     }
 
-    function populateFilters(data, positionData) {
+    function populateFilters(data, companyData, positionData) {
       const deptSelect = document.getElementById("departmentFilter");
       deptSelect.innerHTML = `<option value="">所有學年</option><option value="1132">1132</option><option value="1142">1142</option>`;
       
@@ -673,7 +672,8 @@
       companySelect.innerHTML = `<option value="">所有職缺</option>`;
       const jobSet = new Set();
       
-      // 從 API 返回的職缺資料中提取職缺（直接從 internship_jobs 資料表抓取）
+      // 優先從 API 返回的職缺資料中提取職缺（直接從 internship_jobs 資料表抓取）
+      // 這確保即使某個職缺沒有履歷，也會顯示在選單中
       if (positionData && positionData.items && positionData.items.length > 0) {
         positionData.items.forEach(job => {
           const jobTitle = job.title || job.job_title || '';
@@ -681,9 +681,20 @@
             jobSet.add(jobTitle.trim());
           }
         });
+        console.log('從 API 職缺資料中提取:', Array.from(jobSet));
+      } else if (positionData && positionData.jobs && Array.isArray(positionData.jobs)) {
+        // 如果 API 返回的格式是 {success: true, company: {...}, jobs: [...]}
+        positionData.jobs.forEach(job => {
+          const jobTitle = job.title || job.job_title || '';
+          if (jobTitle && jobTitle.trim()) {
+            jobSet.add(jobTitle.trim());
+          }
+        });
+        console.log('從 API jobs 欄位中提取:', Array.from(jobSet));
       }
       
       // 也從履歷數據中提取職缺（作為備用，確保所有出現的職缺都被包含）
+      // 但這不應該影響職缺選單的顯示，因為職缺選單應該顯示所有職缺，不管是否有履歷
       data.forEach(r => {
         const jobTitle = r.job_title || r.jobTitle || '';
         if (jobTitle && jobTitle.trim()) {
@@ -691,7 +702,7 @@
         }
       });
       
-      console.log('職缺選單資料:', Array.from(jobSet));
+      console.log('職缺選單資料（最終）:', Array.from(jobSet));
       
       // 將所有職缺排序後加入選單
       Array.from(jobSet).sort().forEach(j => {
@@ -833,8 +844,15 @@
         const st = r.application_statuses || r.display_status || r.status || 'pending';
         const cm = r.comment || '';
 
-        // 狀態篩選
-        if (filterStatus && st !== filterStatus) return;
+        // 狀態篩選（與 applyFilters 中的邏輯一致）
+        if (filterStatus) {
+          // 下拉選單的 'pending' 對應後端的 'uploaded' 狀態
+          if (filterStatus === 'pending') {
+            if (st !== 'uploaded') return;
+          } else {
+            if (st !== filterStatus) return;
+          }
+        }
         
         // 職缺篩選
         if (filterJob && !job.includes(filterJob) && filterJob !== (r.job_id ? String(r.job_id) : '')) return;
@@ -929,13 +947,11 @@
 
         // 廠商可以進行審核操作
         const approveClick = `approveResume(${row.id}, ${pid ? `'${pid}'` : 'null'})`;
-        const rejectClick = `rejectResume(${row.id}, ${pid ? `'${pid}'` : 'null'})`;
         const interviewClick = `sendInterview(${row.student_id || 'null'}, ${row.company_id || 'null'}, ${row.id}, ${pid ? `'${pid}'` : 'null'})`;
         const markCompletedClick = `markInterviewCompleted(${row.id}, ${pid ? `'${pid}'` : 'null'})`;
 
         // 無論狀態為何，保留按鈕
         let btns = `<div style="display:flex; align-items:center; flex-wrap:wrap; gap:4px;">${dlBtn}`;
-        btns += `<button class="btn btn-sm btn-outline-danger" style="margin-right:4px;" onclick="${rejectClick}">退件</button>`;
         btns += `<button class="btn btn-sm btn-outline-success" onclick="${approveClick}">通過</button>`;
         btns += `</div>`;
         return btns;
