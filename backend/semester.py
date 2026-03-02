@@ -217,10 +217,17 @@ def is_student_in_application_phase(cursor, user_id):
 
 
 # =========================================================
-# Helper: 是否顯示「實習心得」（僅實習學期結束前兩週才開始）
+# Helper: 是否顯示「實習心得」（學期切換為 1132 時顯示；或該生實習學期=當前學期且結束前兩週）
 # =========================================================
 def should_show_intern_experience(cursor, user_id):
-    """實習心得：當前學期為該生實習學期，且今天 >= 實習結束日 - 14 天時才顯示。"""
+    """
+    實習心得顯示條件（二擇一）：
+    1. 當前學期代碼為 1132（學期切換為 1132 時即顯示給所有學生）
+    2. 否則：當前學期為該生實習學期，且今天 >= 實習結束日 - 14 天
+    """
+    current_semester_code = get_current_semester_code(cursor)
+    if current_semester_code == '1132':
+        return True
     current_semester_id = get_current_semester_id(cursor)
     if not current_semester_id:
         return False
@@ -242,6 +249,20 @@ def should_show_intern_experience(cursor, user_id):
     cutoff = end_date - timedelta(days=14)
     now = datetime.now()
     return now >= cutoff
+
+
+# =========================================================
+# Helper: 是否顯示「成績 AI 識別」（與投遞履歷一樣：1131 學期即顯示，或流程學期內顯示）
+# =========================================================
+def should_show_image_recognize(cursor, user_id):
+    """
+    成績 AI 識別：當前學期為 1131 時即顯示（讓 1132 實習的學生在 1131 學期就能使用）；
+    或當學生在流程學期／實習學期（in_application_phase）時顯示。
+    """
+    current_semester_code = get_current_semester_code(cursor)
+    if current_semester_code == '1131':
+        return True
+    return is_student_in_application_phase(cursor, user_id)
 
 
 # =========================================================
