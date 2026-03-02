@@ -446,8 +446,12 @@
         jobs: [],
         resumeStats: {
           approved: 0,
-          rejected: 0,
           pending: 0
+        },
+        interviewStats: {
+          notInterviewed: 0,
+          interviewing: 0,
+          completed: 0
         },
         isEditing: false,
         originalData: null
@@ -563,7 +567,7 @@
             <div class="info-card" style="cursor: pointer;">
               <a href="/teacher/company/${COMPANY_ID}/resumes" style="display: block; text-decoration: none; color: inherit;">
                 <span class="info-label">廠商審核狀態</span>
-                <span class="info-value" style="color: var(--color-muted);">總筆數<span id="totalCount" style="margin-left: 4px;">${state.resumeStats.pending + state.resumeStats.approved + state.resumeStats.rejected}</span></span>
+                <span class="info-value" style="color: var(--color-muted);">總筆數<span id="totalCount" style="margin-left: 4px;">${state.resumeStats.pending + state.resumeStats.approved}</span></span>
               </a>
             </div>
             <div class="info-card" style="cursor: pointer;">
@@ -578,10 +582,24 @@
                 <span class="info-value" style="color: var(--color-success);">通過<span id="approvedCount" style="margin-left: 4px;">${state.resumeStats.approved}</span></span>
               </a>
             </div>
+          </div>
+          <div class="info-grid" style="margin-top: 16px;">
             <div class="info-card" style="cursor: pointer;">
-              <a href="/teacher/company/${COMPANY_ID}/resumes?status=rejected" style="display: block; text-decoration: none; color: inherit;">
-                <span class="info-label">廠商審核狀態</span>
-                <span class="info-value" style="color: var(--color-danger);">退件<span id="rejectedCount" style="margin-left: 4px;">${state.resumeStats.rejected}</span></span>
+              <a href="/teacher/company/${COMPANY_ID}/resumes?interviewStatus=not_interviewed" style="display: block; text-decoration: none; color: inherit;">
+                <span class="info-label">面試狀態</span>
+                <span class="info-value" style="color: #94a3b8;">未面試<span id="notInterviewedCount" style="margin-left: 4px;">${state.interviewStats.notInterviewed}</span></span>
+              </a>
+            </div>
+            <div class="info-card" style="cursor: pointer;">
+              <a href="/teacher/company/${COMPANY_ID}/resumes?interviewStatus=interviewing" style="display: block; text-decoration: none; color: inherit;">
+                <span class="info-label">面試狀態</span>
+                <span class="info-value" style="color: #ff8c42;">面試中<span id="interviewingCount" style="margin-left: 4px;">${state.interviewStats.interviewing}</span></span>
+              </a>
+            </div>
+            <div class="info-card" style="cursor: pointer;">
+              <a href="/teacher/company/${COMPANY_ID}/resumes?interviewStatus=completed" style="display: block; text-decoration: none; color: inherit;">
+                <span class="info-label">面試狀態</span>
+                <span class="info-value" style="color: #4a9eff;">已面試<span id="completedCount" style="margin-left: 4px;">${state.interviewStats.completed}</span></span>
               </a>
             </div>
           </div>
@@ -726,11 +744,16 @@
 
       async function loadResumeStats() {
         try {
-          // 重置統計
+          // 重置統計（已移除退件統計）
           state.resumeStats = {
             approved: 0,
-            rejected: 0,
             pending: 0
+          };
+          // 重置面試統計
+          state.interviewStats = {
+            notInterviewed: 0,
+            interviewing: 0,
+            completed: 0
           };
           
           // 使用和 vendor_review_resume 頁面相同的 API 來獲取數據
@@ -742,16 +765,31 @@
           const result = await response.json();
           
           if (response.ok && result.success && result.resumes) {
-            // 根據廠商審核狀態統計
+            // 根據廠商審核狀態統計（退件狀態也算作待審核，因為已移除退件卡片）
             result.resumes.forEach(r => {
               const status = r.status || r.application_statuses || r.display_status || 'pending';
               if (status === 'approved') {
                 state.resumeStats.approved++;
-              } else if (status === 'rejected') {
-                state.resumeStats.rejected++;
               } else {
-                // pending 或其他狀態都算作待審核
+                // pending、rejected 或其他狀態都算作待審核
                 state.resumeStats.pending++;
+              }
+              
+              // 根據面試狀態統計（與 company_resume_review.html 的邏輯一致）
+              const hasInterviewed = r.has_interview || false;
+              const isInterviewCompleted = r.interview_completed || false;
+              const interviewStatus = r.interview_status || 'none';
+              
+              // 優先使用 interview_status，如果沒有則使用 has_interview 和 interview_completed
+              if (interviewStatus === 'finished' || isInterviewCompleted) {
+                // 已面試：interview_status = 'finished' 或 interview_completed = true
+                state.interviewStats.completed++;
+              } else if (interviewStatus === 'scheduled' || hasInterviewed) {
+                // 面試中：interview_status = 'scheduled' 或 has_interview = true
+                state.interviewStats.interviewing++;
+              } else {
+                // 未面試：其他情況
+                state.interviewStats.notInterviewed++;
               }
             });
           }
@@ -764,15 +802,22 @@
         // 更新顯示的數量
         const totalEl = document.getElementById('totalCount');
         const approvedEl = document.getElementById('approvedCount');
-        const rejectedEl = document.getElementById('rejectedCount');
         const pendingEl = document.getElementById('pendingCount');
         
-        // 計算總筆數
-        const total = state.resumeStats.pending + state.resumeStats.approved + state.resumeStats.rejected;
+        // 計算總筆數（不包含退件）
+        const total = state.resumeStats.pending + state.resumeStats.approved;
         if (totalEl) totalEl.textContent = total;
         if (approvedEl) approvedEl.textContent = state.resumeStats.approved;
-        if (rejectedEl) rejectedEl.textContent = state.resumeStats.rejected;
         if (pendingEl) pendingEl.textContent = state.resumeStats.pending;
+        
+        // 更新面試統計
+        const notInterviewedEl = document.getElementById('notInterviewedCount');
+        const interviewingEl = document.getElementById('interviewingCount');
+        const completedEl = document.getElementById('completedCount');
+        
+        if (notInterviewedEl) notInterviewedEl.textContent = state.interviewStats.notInterviewed;
+        if (interviewingEl) interviewingEl.textContent = state.interviewStats.interviewing;
+        if (completedEl) completedEl.textContent = state.interviewStats.completed;
       }
 
       async function loadVendorReviewedStudents() {
