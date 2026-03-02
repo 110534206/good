@@ -1458,7 +1458,7 @@ def get_vendor_reviewed_students(company_id):
         # 查詢所有選擇該公司的學生履歷（包括已審核和未審核的）
         # 返回廠商審核狀態和留言（如果有的話）
         # 只顯示有廠商審核記錄的學生，每個學生只顯示一筆（最新的審核記錄）
-        # 注意：審核狀態從 student_preferences.status 獲取，vendor_preference_history 只用於檢查是否有審核記錄
+        # 使用 resume_applications 表獲取廠商審核狀態（不再使用 vendor_preference_history 表）
         cursor.execute("""
             SELECT 
                 u.id AS student_id,
@@ -1469,34 +1469,22 @@ def get_vendor_reviewed_students(company_id):
                 r.original_filename,
                 r.status AS resume_status,
                 r.created_at AS resume_uploaded_at,
-                sp.id AS preference_id,
-                sp.preference_order,
+                sja.id AS application_id,
                 ij.title AS job_title,
-                -- 審核狀態從 student_preferences.status 獲取
-                COALESCE(sp.status, 'pending') AS vendor_review_status,
-                (SELECT vph.comment 
-                 FROM vendor_preference_history vph 
-                 WHERE vph.preference_id = sp.id 
-                 ORDER BY vph.created_at DESC 
-                 LIMIT 1) AS vendor_comment,
-                (SELECT vph.created_at 
-                 FROM vendor_preference_history vph 
-                 WHERE vph.preference_id = sp.id 
-                 ORDER BY vph.created_at DESC 
-                 LIMIT 1) AS vendor_reviewed_at
-            FROM student_preferences sp
-            JOIN users u ON sp.student_id = u.id
+                -- 審核狀態從 resume_applications.apply_status 獲取
+                COALESCE(ra.apply_status, 'uploaded') AS vendor_review_status,
+                ra.company_comment AS vendor_comment,
+                ra.updated_at AS vendor_reviewed_at
+            FROM student_job_applications sja
+            JOIN users u ON sja.student_id = u.id
             LEFT JOIN classes c ON u.class_id = c.id
-            LEFT JOIN resumes r ON r.user_id = u.id
-            LEFT JOIN internship_jobs ij ON sp.job_id = ij.id
-            WHERE sp.company_id = %s
-            AND EXISTS (
-                -- 只顯示有廠商審核記錄的學生（檢查 vendor_preference_history 表中是否有記錄）
-                SELECT 1 FROM vendor_preference_history vph 
-                WHERE vph.preference_id = sp.id
-            )
-            AND sp.status IN ('approved', 'rejected')
-            ORDER BY u.id, vendor_reviewed_at DESC
+            LEFT JOIN resumes r ON sja.resume_id = r.id AND r.user_id = u.id
+            LEFT JOIN internship_jobs ij ON sja.job_id = ij.id
+            LEFT JOIN resume_applications ra ON ra.application_id = sja.id AND ra.job_id = sja.job_id
+            WHERE sja.company_id = %s
+            AND ra.id IS NOT NULL
+            AND ra.apply_status IN ('approved', 'rejected')
+            ORDER BY u.id, ra.updated_at DESC
         """, (company_id,))
         
         students = cursor.fetchall() or []
