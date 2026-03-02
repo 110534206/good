@@ -1719,6 +1719,86 @@ def vendor_matching_results():
         conn.close()
 
 # =========================================================
+# API: 主任查看「尚未排序」的廠商列表（含：有學生但未排序、或沒有學生之廠商）
+# =========================================================
+@admission_bp.route("/api/director_unsorted_companies", methods=["GET"])
+def director_unsorted_companies():
+    """回傳尚未完成媒合排序的廠商：含 (1) 有已審核學生但尚未排序 (2) 有職缺但尚無任何學生（已選:0）的公司。"""
+    if 'user_id' not in session or session.get('role') != 'director':
+        return jsonify({"success": False, "message": "未授權"}), 403
+    
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+    
+    try:
+        current_semester_id = get_current_semester_id(cursor)
+        if not current_semester_id:
+            return jsonify({"success": False, "message": "無法取得當前學期"}), 500
+        
+        # (1) 有已審核申請且屬當前學期，但該公司底下沒有任何一筆已設定 is_reserve/slot_index
+        query_part1 = """
+            SELECT DISTINCT ic.id AS company_id, ic.company_name
+            FROM internship_companies ic
+            INNER JOIN student_job_applications sja ON sja.company_id = ic.id
+            INNER JOIN resume_applications ra ON ra.application_id = sja.id
+                AND ra.apply_status = 'approved'
+            LEFT JOIN resumes r ON r.id = sja.resume_id AND r.user_id = sja.student_id
+            LEFT JOIN student_preferences sp ON sp.student_id = sja.student_id
+                AND sp.company_id = sja.company_id AND sp.job_id = sja.job_id
+                AND sp.semester_id = %s
+            WHERE (ic.status = 'approved' OR ic.status IS NULL)
+            AND (r.semester_id = %s OR sp.student_id IS NOT NULL)
+            AND NOT EXISTS (
+                SELECT 1 FROM resume_applications ra2
+                INNER JOIN student_job_applications sja2 ON ra2.application_id = sja2.id
+                WHERE sja2.company_id = ic.id
+                AND ra2.apply_status = 'approved'
+                AND (ra2.is_reserve IS NOT NULL OR ra2.slot_index IS NOT NULL)
+            )
+        """
+        # (2) 有職缺但尚無任何已審核學生（已選:0）的廠商，例如人人人公司
+        query_part2 = """
+            SELECT DISTINCT ic.id AS company_id, ic.company_name
+            FROM internship_companies ic
+            INNER JOIN internship_jobs ij ON ij.company_id = ic.id AND ij.is_active = 1
+            WHERE ic.status = 'approved'
+            AND NOT EXISTS (
+                SELECT 1 FROM resume_applications ra
+                INNER JOIN student_job_applications sja ON ra.application_id = sja.id
+                WHERE sja.company_id = ic.id AND ra.apply_status = 'approved'
+            )
+        """
+        cursor.execute(query_part1, (current_semester_id, current_semester_id))
+        rows1 = cursor.fetchall() or []
+        cursor.execute(query_part2)
+        rows2 = cursor.fetchall() or []
+        # 合併並依公司名稱排序、去重（同一公司可能同時符合兩種條件）
+        seen = {}
+        for r in rows1 + rows2:
+            cid = r["company_id"]
+            if cid not in seen:
+                seen[cid] = r["company_name"]
+        unsorted = [{"company_id": cid, "company_name": name} for cid, name in sorted(seen.items(), key=lambda x: x[1])]
+        cursor.close()
+        conn.close()
+        
+        return jsonify({
+            "success": True,
+            "unsorted_companies": unsorted
+        })
+    except Exception as exc:
+        if conn:
+            try:
+                cursor.close()
+                conn.close()
+            except Exception:
+                pass
+        import traceback
+        traceback.print_exc()
+        return jsonify({"success": False, "message": str(exc)}), 500
+
+
+# =========================================================
 # API: 主任查看所有廠商媒合結果（包含重複中選檢測）
 # =========================================================
 @admission_bp.route("/api/director_matching_results", methods=["GET"])
