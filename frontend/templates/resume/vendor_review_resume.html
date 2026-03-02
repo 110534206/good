@@ -1181,9 +1181,17 @@
                   startTime = new Date(interviewTimeStart);
                 }
                 
+                // 只要面試日期是今天或過去，且當前時間大於或等於面試開始時間（8:00），就可以標記為已面試
+                // 例如：8:00~10:00的面試，在8:00時按鈕就會啟用，不需要等到面試結束
+                // 在面試開始或中途都可以按「已面試」按鈕
                 const isStartTimePassed = now >= startTime;
-                // 只要面試開始時間已過就可以標記為已面試
-                canMarkCompleted = isStartTimePassed;
+                if (isPast || isToday) {
+                  // 面試日期是過去或今天，只要當前時間 >= 開始時間，就可以標記
+                  canMarkCompleted = isStartTimePassed;
+                } else {
+                  // 面試日期是未來，不允許標記
+                  canMarkCompleted = false;
+                }
                 
                 // 調試日誌
                 console.log(`🔍 [renderActionBtns] 學生 ${row.name || row.student_name || '未知'}:`, {

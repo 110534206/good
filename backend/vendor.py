@@ -3813,7 +3813,7 @@ def mark_interview_completed():
                 if app_info:
                     application_id = app_info.get('application_id')
                     
-                    # 檢查面試時間是否已結束
+                    # 檢查面試時間是否已開始（允許在面試開始或中途標記為已面試）
                     cursor.execute("""
                         SELECT interview_time, interview_timeEnd, interview_status
                         FROM resume_applications
@@ -3826,6 +3826,7 @@ def mark_interview_completed():
                         conn.close()
                         return jsonify({"success": False, "message": "找不到面試排程記錄"}), 404
                     
+                    interview_time_start = interview_info.get('interview_time')
                     interview_time_end = interview_info.get('interview_timeEnd')
                     current_status = interview_info.get('interview_status')
                     
@@ -3838,21 +3839,21 @@ def mark_interview_completed():
                         else:
                             return jsonify({"success": False, "message": "此履歷尚未安排面試"}), 400
                     
-                    # 檢查面試時間是否已結束
-                    if interview_time_end:
+                    # 檢查面試時間是否已開始（只要開始時間到達，就可以標記為已面試，不需要等到結束）
+                    if interview_time_start:
                         from datetime import datetime
                         try:
-                            end_time = interview_time_end
-                            if isinstance(end_time, str):
-                                end_time = datetime.strptime(end_time, '%Y-%m-%d %H:%M:%S')
+                            start_time = interview_time_start
+                            if isinstance(start_time, str):
+                                start_time = datetime.strptime(start_time, '%Y-%m-%d %H:%M:%S')
                             now = datetime.now()
                             
-                            if now < end_time:
+                            if now < start_time:
                                 cursor.close()
                                 conn.close()
                                 return jsonify({
                                     "success": False, 
-                                    "message": f"面試時間尚未結束，無法標記為已面試。面試結束時間：{end_time.strftime('%Y-%m-%d %H:%M:%S')}"
+                                    "message": f"面試尚未開始，無法標記為已面試。面試開始時間：{start_time.strftime('%Y-%m-%d %H:%M:%S')}"
                                 }), 400
                         except Exception as e:
                             print(f"⚠️ [mark_interview_completed] 時間檢查失敗：{e}")
