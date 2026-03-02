@@ -723,17 +723,7 @@
           <p>瀏覽學長姐的實習經驗或分享你的心得。</p>
           <a href="/intern_experience" role="link">前往查看</a>
         </div>
-<<<<<<< HEAD
-=======
         {% endif %}
-        {% endif %}
-        {% if show_image_recognize %}
-        <div class="card" role="listitem">
-          <h3>成績 AI 識別</h3>
-          <p>上傳成績單圖片，讓系統自動讀取科目與分數並輸出報告。</p>
-          <a href="/image_recognize" role="link">成績 AI 識別</a>
-        </div>
->>>>>>> d72d01b9a75866772953f05cfbb0ee2bb85b6e5d
         {% endif %}
       </section>
   </main>
@@ -753,9 +743,6 @@
     {% if show_intern_experience %}
     <a href="/intern_experience">實習心得</a>
     {% endif %}
-    {% endif %}
-    {% if show_image_recognize %}
-    <a href="/image_recognize">成績 AI 識別</a>
     {% endif %}
   </nav>
 
@@ -890,59 +877,6 @@
         });
       }
 
-      // 圖片識別表單處理
-      const imageForm = document.getElementById('imageAiForm');
-      const imageFileInput = document.getElementById('imageAiFile');
-      const imagePreview = document.getElementById('imageAiPreview');
-      const imageResult = document.getElementById('imageAiResult');
-
-      if (imageFileInput && imagePreview) {
-        imageFileInput.addEventListener('change', function () {
-          const file = this.files && this.files[0];
-          if (file) {
-            const reader = new FileReader();
-            reader.onload = function (e) {
-              imagePreview.src = e.target.result;
-              imagePreview.style.display = 'block';
-            };
-            reader.readAsDataURL(file);
-          } else {
-            imagePreview.src = '';
-            imagePreview.style.display = 'none';
-          }
-        });
-      }
-
-      if (imageForm) {
-        imageForm.addEventListener('submit', async function (e) {
-          e.preventDefault();
-          imageResult.textContent = '上傳中，請稍候...';
-          const file = imageFileInput.files && imageFileInput.files[0];
-          if (!file) {
-            imageResult.textContent = '請先選擇一張圖片。';
-            return;
-          }
-
-          const formData = new FormData();
-          formData.append('image', file);
-
-          try {
-            const res = await fetch('/api/student/image_recognize', {
-              method: 'POST',
-              body: formData
-            });
-            const data = await res.json();
-            if (!data.success) {
-              imageResult.textContent = data.message || '圖片處理失敗。';
-            } else {
-              imageResult.textContent = `檔名：${data.filename}，大小：約 ${data.size_kb} KB`;
-            }
-          } catch (err) {
-            console.error('圖片上傳錯誤', err);
-            imageResult.textContent = '上傳或辨識時發生錯誤，請稍後再試。';
-          }
-        });
-      }
     });
   </script>
 </body>
