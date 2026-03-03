@@ -245,8 +245,7 @@
       <h2>功能選單</h2>
       <button type="button" id="close-btn" aria-label="關閉選單">×</button>
     </div>
-    <a href="#" id="side-menu-home">首頁</a>
-    <a href="/login" id="side-menu-logout">登出</a>
+    <div id="menu-content"></div>
   </nav>
 
   <div class="container" style="margin-top: 80px;">
@@ -342,6 +341,109 @@
         if (role === 'vendor') return '/vendor_home';
         if (role === 'class_teacher') return '/class_teacher_home';
         return '/student_home';
+      }
+
+      /** 根據角色動態生成側邊選單 */
+      function renderMenu(role, isHomeroom) {
+        const menuContent = document.getElementById('menu-content');
+        if (!menuContent) return;
+
+        let menuItems = [];
+
+        if (role === 'student') {
+          menuItems = [
+            { href: '/student_home', text: '首頁' },
+            { href: '/profile', text: '個人資料' },
+            { href: '/resume_folders', text: '履歷管理' },
+            { href: '/fill_preferences', text: '填寫志願序' },
+            { href: '/look_company', text: '投遞履歷' },
+            { href: '/notifications', text: '通知' },
+            { href: '/interview_schedule', text: '行事曆' },
+            { href: '/intern_achievement', text: '學生媒合結果' },
+            { href: '/intern_experience', text: '實習心得' },
+            { href: '/login', text: '登出' }
+          ];
+        } else if (role === 'vendor') {
+          menuItems = [
+            { href: '/vendor_home', text: '首頁' },
+            { href: '/profile', text: '個人資料' },
+            { href: '/vendor_review_resume', text: '學生履歷審核' },
+            { href: '/manage_positions', text: '職位需求管理' },
+            { href: '/manage_positions/new', text: '新增職缺' },
+            { href: '/confirm_matching', text: '媒合結果' },
+            { href: '/publish_announcements', text: '發布公告' },
+            { href: '/notifications', text: '通知' },
+            { href: '/login', text: '登出' }
+          ];
+        } else if (role === 'class_teacher') {
+          menuItems = [
+            { href: '/class_teacher_home', text: '首頁' },
+            { href: '/profile', text: '個人資料' },
+            { href: '/review_resume', text: '查看學生履歷' },
+            { href: '/review_preferences', text: '審核志願序' },
+            { href: '/admission/results', text: '查詢學生錄取結果' },
+            { href: '/notifications', text: '通知' },
+            { href: '/login', text: '登出' }
+          ];
+        } else if (role === 'director') {
+          menuItems = [
+            { href: '/director_home', text: '首頁' },
+            { href: '/profile', text: '個人資料' },
+            { href: '/review_resume', text: '學生履歷審核' },
+            { href: '/upload_company', text: '建立實習機會' },
+            { href: '/admission_results', text: '查看錄取結果' },
+            { href: '/manage_vendor', text: '實習廠商管理' },
+            { href: '/notifications', text: '通知' },
+            { href: '/login', text: '登出' }
+          ];
+        } else if (role === 'teacher') {
+          menuItems = [
+            { href: '/teacher_home', text: '首頁' },
+            { href: '/profile', text: '個人資料' },
+            { href: '/notifications', text: '公告' },
+            { href: '/upload_company', text: '建立實習機會' },
+            { href: '/review_resume', text: '學生履歷審核' },
+            { href: '/manage_vendor', text: '實習廠商管理' },
+            { href: '/interview_schedule', text: '行事曆' },
+            { href: '/admission_results', text: '查看錄取結果' },
+            { href: '/review_experience', text: '審核實習心得' },
+            { href: '/login', text: '登出' }
+          ];
+        } else if (role === 'ta') {
+          menuItems = [
+            { href: '/ta_home', text: '首頁' },
+            { href: '/profile', text: '個人資料' },
+            { href: '/notifications', text: '通知' },
+            { href: '/ta/statistics/manage_companies', text: '實習廠商管理' },
+            { href: '/ta/interview_schedule', text: '行事曆' },
+            { href: '/admin/absence_default_range', text: '缺勤預設學期範圍設定' },
+            { href: '/ta/upload_standard_courses', text: '專業核心科目管理' },
+            { href: '/ta_assistant_dashboard', text: '媒合結果管理中心' },
+            { href: '/login', text: '登出' }
+          ];
+        } else if (role === 'admin') {
+          menuItems = [
+            { href: '/admin_home', text: '首頁' },
+            { href: '/profile', text: '個人資料' },
+            { href: '/ta/statistics/manage_companies', text: '實習廠商管理' },
+            { href: '/final_results', text: '志願序結果' },
+            { href: '/notifications', text: '通知' },
+            { href: '/admin/absence_default_range', text: '缺勤預設學期範圍設定' },
+            { href: '/ta/upload_standard_courses', text: '專業核心科目管理' },
+            { href: '/login', text: '登出' }
+          ];
+        } else {
+          // 預設選單
+          menuItems = [
+            { href: getHomeUrl(role, isHomeroom), text: '首頁' },
+            { href: '/profile', text: '個人資料' },
+            { href: '/login', text: '登出' }
+          ];
+        }
+
+        menuContent.innerHTML = menuItems.map(item => 
+          `<a href="${item.href}">${item.text}</a>`
+        ).join('');
       }
 
       const prevBtn = document.getElementById('prevBtn');
@@ -526,9 +628,8 @@
           // 根據使用者身分顯示相應的欄位
           showRoleSpecificFields(userRole, isHomeroom);
 
-          // 側拉選單：依角色設定首頁連結
-          const homeLink = document.getElementById('side-menu-home');
-          if (homeLink) homeLink.href = getHomeUrl(userRole, isHomeroom);
+          // 動態生成側邊選單
+          renderMenu(userRole, isHomeroom);
           
           // 如果是廠商，再次確認指導老師欄位已顯示
           if (userRole === 'vendor') {
