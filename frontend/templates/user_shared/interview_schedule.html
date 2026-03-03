@@ -659,27 +659,6 @@
         const isResumeDeadline = resumeDeadlineDate === dateKey;
         const isMatchingResultDate = matchingResultDate === dateKey;
         
-        // 顯示媒合結果通知標記
-        if (isMatchingResultDate) {
-          const matchingBadge = document.createElement("div");
-          matchingBadge.style.cssText = `
-            font-size: 0.7rem;
-            color: #fff;
-            background-color: #198754;
-            padding: 2px 6px;
-            border-radius: 4px;
-            margin-top: 4px;
-            display: block;
-            width: 100%;
-            margin-bottom: 2px;
-            font-weight: 600;
-          `;
-          matchingBadge.textContent = matchingResultTime 
-            ? `媒合結果 ${matchingResultTime}`
-            : '媒合結果';
-          matchingBadge.title = '媒合結果已公告，可至通知或學生首頁查看';
-          dateCell.appendChild(matchingBadge);
-        }
         
         // 顯示截止時間標記（分成兩列顯示）
         if (isPreferenceDeadline || isResumeDeadline) {
