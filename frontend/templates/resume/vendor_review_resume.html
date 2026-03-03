@@ -171,6 +171,19 @@
       background-color: rgba(0, 0, 0, 0.6) !important;
       opacity: 1 !important;
     }
+    
+    /* 面試排程模態框 - 增加寬度 */
+    #interviewScheduleModal .modal-dialog {
+      max-width: 95vw !important;
+      width: 95vw !important;
+    }
+    
+    @media (min-width: 1400px) {
+      #interviewScheduleModal .modal-dialog {
+        max-width: 1400px !important;
+        width: 1400px !important;
+      }
+    }
   </style>
 </head>
 
@@ -1989,6 +2002,7 @@
       
       // 從 allResumes 中提取學生資料（保留每個學生對應的 application_id 和 job_id）
       // 重要：allResumes 應該只包含當前公司的學生記錄，但為了安全起見，我們優先使用有 application_id 的記錄
+      // 修改：收集每個學生的所有職缺信息
       const studentMap = new Map();
       allResumes.forEach(r => {
         const studentId = r.student_id || r.id;
@@ -1996,6 +2010,7 @@
         const studentUsername = r.username || r.student_number || '';
         const applicationId = r.application_id || null; // 只使用真正的 application_id，不使用 preference_id
         const jobId = r.job_id || r.jobId || null;
+        const jobTitle = r.job_title || r.jobTitle || '未指定職缺';
         const companyId = r.company_id || null; // 保存 company_id 以便驗證
         const key = String(studentId);
         
@@ -2005,105 +2020,251 @@
             id: studentId,
             name: studentName,
             username: studentUsername,
-            applicationId: applicationId,
-            jobId: jobId,
-            companyId: companyId,
-            displayText: `${studentName} (${studentUsername})`
+            jobs: [], // 職缺列表
+            companyId: companyId
           });
-        } else if (studentMap.has(key)) {
-          // 如果已存在，優先使用有 application_id 的記錄
-          const existing = studentMap.get(key);
-          // 如果現有記錄沒有 application_id，但新記錄有，則更新
-          if (!existing.applicationId && applicationId) {
-            existing.applicationId = applicationId;
-            existing.jobId = jobId;
-            existing.companyId = companyId;
-          }
-          // 如果兩個都有 application_id，優先使用有 company_id 匹配的（雖然理論上應該都匹配）
-          else if (existing.applicationId && applicationId && companyId) {
-            // 保持現有的記錄（因為 allResumes 應該已經過濾了公司）
+        }
+        
+        // 將職缺信息添加到學生的職缺列表中
+        if (studentMap.has(key)) {
+          const student = studentMap.get(key);
+          // 添加職缺信息（避免重複）
+          const jobExists = student.jobs.some(j => 
+            (j.jobId && jobId && String(j.jobId) === String(jobId)) ||
+            (!j.jobId && !jobId && j.jobTitle === jobTitle)
+          );
+          
+          if (!jobExists) {
+            student.jobs.push({
+              applicationId: applicationId,
+              jobId: jobId,
+              jobTitle: jobTitle
+            });
+          } else if (applicationId) {
+            // 如果職缺已存在但沒有 applicationId，更新它
+            const existingJob = student.jobs.find(j => 
+              (j.jobId && jobId && String(j.jobId) === String(jobId)) ||
+              (!j.jobId && !jobId && j.jobTitle === jobTitle)
+            );
+            if (existingJob && !existingJob.applicationId) {
+              existingJob.applicationId = applicationId;
+            }
           }
         }
       });
       
-      // 按姓名排序後加入選單
-      const sortedStudents = Array.from(studentMap.values()).sort((a, b) => {
-        return a.name.localeCompare(b.name, 'zh-Hant');
+      // 將學生和職缺展開為獨立的選項（一個職缺對一個人）
+      const studentJobItems = [];
+      studentMap.forEach((student, studentId) => {
+        // 如果學生有職缺，為每個職缺創建一個獨立的選項
+        if (student.jobs && student.jobs.length > 0) {
+          student.jobs.forEach(job => {
+            studentJobItems.push({
+              studentId: student.id,
+              studentName: student.name,
+              studentUsername: student.username,
+              job: job,
+              companyId: student.companyId
+            });
+          });
+        } else {
+          // 如果學生沒有職缺信息，至少創建一個選項
+          studentJobItems.push({
+            studentId: student.id,
+            studentName: student.name,
+            studentUsername: student.username,
+            job: { applicationId: null, jobId: null, jobTitle: '未指定職缺' },
+            companyId: student.companyId
+          });
+        }
       });
       
-      sortedStudents.forEach(student => {
+      // 按學生姓名和職缺名稱排序
+      studentJobItems.sort((a, b) => {
+        const nameCompare = a.studentName.localeCompare(b.studentName, 'zh-Hant');
+        if (nameCompare !== 0) return nameCompare;
+        return (a.job.jobTitle || '').localeCompare(b.job.jobTitle || '', 'zh-Hant');
+      });
+      
+      studentJobItems.forEach(item => {
         const itemDiv = document.createElement('div');
         itemDiv.className = 'student-checkbox-item';
         
-        // 檢查該學生是否已經被當前廠商安排了面試（不管在哪一天）
-        // 注意：只有被自己安排的學生才設為唯讀，被其他廠商安排的學生不設為唯讀（保存時會檢查衝突）
-        // 但在編輯模式下，即使是自己安排的學生也不設為唯讀（因為這是編輯現有排程）
+        // 檢查該職缺是否已經被當前廠商安排了面試（不管在哪一天）
+        // 注意：只有該職缺被安排了面試才設為唯讀，不是該職缺的即使學生有其他職缺已安排也不設為唯讀
+        // 但在編輯模式下，即使是已安排的職缺也不設為唯讀（因為這是編輯現有排程）
         let ownSchedule = null;
         let scheduleDate = null;
         
-        // 遍歷所有日期的排程，檢查該學生是否已被自己安排
-        for (const [date, schedules] of allVendorSchedules.entries()) {
-          const foundSchedule = schedules.find(s => {
-            // 檢查是否為自己的排程且學生ID匹配
-            if (String(s.student_id) !== String(student.id)) {
-              return false;
-            }
-            // 使用寬鬆的公司名稱匹配
-            if (vendorCompanyName && s.company_name) {
-              return isCompanyNameMatch(s.company_name, vendorCompanyName);
-            }
-            // 如果沒有公司名稱信息，則使用 is_own 判斷
-            return s.is_own === true;
-          });
+        // 方法1: 從 allResumes 中檢查該職缺的 interview_status
+        // 如果該職缺的 interview_status 是 'scheduled' 或 'finished'，表示已被安排
+        let isJobScheduled = false;
+        const resumeForThisJob = allResumes.find(r => {
+          const resumeStudentId = String(r.student_id || r.id || '');
+          const resumeJobId = r.job_id || r.jobId || null;
+          const resumeApplicationId = r.application_id || null;
           
-          if (foundSchedule) {
-            ownSchedule = foundSchedule;
-            scheduleDate = date;
-            break; // 找到第一個就停止
+          // 檢查學生ID是否匹配
+          if (resumeStudentId !== String(item.studentId)) {
+            return false;
+          }
+          
+          // 檢查職缺ID或application_id是否匹配
+          if (item.job.jobId && resumeJobId && String(resumeJobId) === String(item.job.jobId)) {
+            return true;
+          }
+          if (item.job.applicationId && resumeApplicationId && String(resumeApplicationId) === String(item.job.applicationId)) {
+            return true;
+          }
+          
+          return false;
+        });
+        
+        if (resumeForThisJob) {
+          const interviewStatus = resumeForThisJob.interview_status || 'none';
+          isJobScheduled = interviewStatus === 'scheduled' || interviewStatus === 'finished';
+        }
+        
+        // 方法2: 從 allVendorSchedules 中檢查該職缺是否已被安排（如果排程數據包含職缺信息）
+        // 注意：如果 allVendorSchedules 中的排程數據包含 job_id 或 application_id，可以更精確地匹配
+        if (!isJobScheduled) {
+          for (const [date, schedules] of allVendorSchedules.entries()) {
+            const foundSchedule = schedules.find(s => {
+              // 檢查是否為自己的排程且學生ID匹配
+              if (String(s.student_id) !== String(item.studentId)) {
+                return false;
+              }
+              
+              // 如果排程數據包含 job_id 或 application_id，進行精確匹配
+              if (s.job_id && item.job.jobId && String(s.job_id) === String(item.job.jobId)) {
+                // 使用寬鬆的公司名稱匹配
+                if (vendorCompanyName && s.company_name) {
+                  return isCompanyNameMatch(s.company_name, vendorCompanyName);
+                }
+                return s.is_own === true;
+              }
+              if (s.application_id && item.job.applicationId && String(s.application_id) === String(item.job.applicationId)) {
+                // 使用寬鬆的公司名稱匹配
+                if (vendorCompanyName && s.company_name) {
+                  return isCompanyNameMatch(s.company_name, vendorCompanyName);
+                }
+                return s.is_own === true;
+              }
+              
+              // 如果排程數據沒有職缺信息，只檢查學生ID（向後兼容）
+              // 但這種情況下，我們不設為唯讀，因為無法確定是哪個職缺
+              return false;
+            });
+            
+            if (foundSchedule) {
+              ownSchedule = foundSchedule;
+              scheduleDate = date;
+              isJobScheduled = true;
+              break; // 找到第一個就停止
+            }
           }
         }
         
-        // 只有被自己安排的學生才設為唯讀，且只在新增模式下
+        // 只有該職缺被安排了面試才設為唯讀，且只在新增模式下
         // 在編輯模式下，如果該學生已經在當前編輯的排程中，則不設為唯讀（因為這是編輯現有排程）
-        const isInCurrentSchedule = isEditMode && currentScheduleStudents.includes(String(student.id));
-        const isDisabled = !isEditMode && ownSchedule !== null && ownSchedule !== undefined && !isInCurrentSchedule;
+        const isInCurrentSchedule = isEditMode && currentScheduleStudents.includes(String(item.studentId));
+        const isDisabled = !isEditMode && isJobScheduled && !isInCurrentSchedule;
         
-        if (isDisabled && ownSchedule) {
+        // 獲取面試日期和時間信息（用於顯示）
+        let interviewDateDisplay = null;
+        let interviewTimeDisplay = null;
+        
+        if (isJobScheduled) {
+          // 優先從 ownSchedule 獲取（如果有的話）
+          if (ownSchedule && scheduleDate) {
+            const timeDisplay = ownSchedule.time_end 
+              ? `${ownSchedule.time_start || ''}-${ownSchedule.time_end}`
+              : ownSchedule.time_start || '';
+            interviewDateDisplay = scheduleDate;
+            interviewTimeDisplay = timeDisplay;
+          } else if (resumeForThisJob) {
+            // 如果 ownSchedule 沒有，嘗試從 resumeForThisJob 獲取
+            if (resumeForThisJob.interview_time) {
+              try {
+                const interviewTime = new Date(resumeForThisJob.interview_time);
+                if (!isNaN(interviewTime.getTime())) {
+                  const year = interviewTime.getFullYear();
+                  const month = interviewTime.getMonth() + 1;
+                  const day = interviewTime.getDate();
+                  interviewDateDisplay = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+                  
+                  // 從 allVendorSchedules 中查找該日期的時間
+                  if (allVendorSchedules.has(interviewDateDisplay)) {
+                    const schedules = allVendorSchedules.get(interviewDateDisplay);
+                    const foundSchedule = schedules.find(s => {
+                      if (String(s.student_id) !== String(item.studentId)) return false;
+                      if (vendorCompanyName && s.company_name) {
+                        return isCompanyNameMatch(s.company_name, vendorCompanyName);
+                      }
+                      return s.is_own === true;
+                    });
+                    if (foundSchedule) {
+                      interviewTimeDisplay = foundSchedule.time_end 
+                        ? `${foundSchedule.time_start || ''}-${foundSchedule.time_end}`
+                        : foundSchedule.time_start || '';
+                    }
+                  }
+                }
+              } catch (e) {
+                console.warn('解析面試時間失敗:', e);
+              }
+            }
+          }
+        }
+        
+        // 如果已安排，設置唯讀樣式（不依賴 ownSchedule）
+        if (isDisabled) {
           itemDiv.style.opacity = '0.6';
           itemDiv.style.cursor = 'not-allowed';
           
-          // 已被自己安排（顯示日期和時間）
-          const timeDisplay = ownSchedule.time_end 
-            ? `${ownSchedule.time_start || ''}-${ownSchedule.time_end}`
-            : ownSchedule.time_start || '';
-          const dateDisplay = scheduleDate || '某日期';
-          itemDiv.title = `該學生已被您安排在 ${dateDisplay} ${timeDisplay}`;
+          // 設置提示信息
+          if (interviewDateDisplay && interviewTimeDisplay) {
+            itemDiv.title = `該職缺已被您安排在 ${interviewDateDisplay} ${interviewTimeDisplay}`;
+          } else if (interviewDateDisplay) {
+            itemDiv.title = `該職缺已被您安排在 ${interviewDateDisplay}`;
+          } else {
+            itemDiv.title = `該職缺已被安排面試`;
+          }
         }
         
+        // 創建唯一的 checkbox ID（使用學生ID和職缺ID組合）
+        const checkboxId = `student-checkbox-${item.studentId}-${item.job.jobId || 'no-job'}`;
         const checkbox = document.createElement('input');
         checkbox.type = 'checkbox';
-        checkbox.id = `student-checkbox-${student.id}`;
-        checkbox.value = String(student.id);
+        checkbox.id = checkboxId;
+        checkbox.value = String(item.studentId);
         checkbox.className = 'student-checkbox';
         checkbox.disabled = isDisabled;
-        // 保存 application_id 和 job_id 到 data 屬性
-        if (student.applicationId) {
-          checkbox.dataset.applicationId = String(student.applicationId);
+        
+        // 保存該職缺的 application_id 和 job_id 到 data 屬性
+        if (item.job.applicationId) {
+          checkbox.dataset.applicationId = String(item.job.applicationId);
         }
-        if (student.jobId) {
-          checkbox.dataset.jobId = String(student.jobId);
+        if (item.job.jobId) {
+          checkbox.dataset.jobId = String(item.job.jobId);
         }
+        // 保存職缺信息到 data 屬性（JSON格式，單個職缺）
+        checkbox.dataset.jobs = JSON.stringify([item.job]);
         
         const label = document.createElement('label');
-        label.htmlFor = `student-checkbox-${student.id}`;
-        let labelText = student.displayText;
-        if (isDisabled && ownSchedule) {
-          // 已被自己安排（顯示日期和時間）
-          const timeDisplay = ownSchedule.time_end 
-            ? `${ownSchedule.time_start || ''}-${ownSchedule.time_end}`
-            : ownSchedule.time_start || '';
-          const dateDisplay = scheduleDate || '某日期';
-          labelText += ` (已安排 ${dateDisplay} ${timeDisplay})`;
+        label.htmlFor = checkboxId;
+        // 構建顯示文字：學生姓名 (帳號) - 職缺名稱
+        let labelText = `${item.studentName} (${item.studentUsername}) - ${escapeHtml(item.job.jobTitle || '未指定職缺')}`;
+        
+        // 如果已安排，顯示日期和時間（不依賴 ownSchedule）
+        if (isDisabled) {
+          if (interviewDateDisplay && interviewTimeDisplay) {
+            labelText += ` (已安排 ${interviewDateDisplay} ${interviewTimeDisplay})`;
+          } else if (interviewDateDisplay) {
+            labelText += ` (已安排 ${interviewDateDisplay})`;
+          } else {
+            labelText += ` (已安排)`;
+          }
           label.style.color = '#6c757d'; // 使用灰色表示唯讀狀態
           label.style.fontWeight = '600';
         }
@@ -3662,56 +3823,45 @@
           
           selectedStudents.push(studentId);
           
-          // 優先從 checkbox 的 data 屬性獲取 application_id 和 job_id
+          // 從 checkbox 的 data 屬性獲取職缺信息（現在每個checkbox只對應一個職缺）
           let applicationId = checkbox.dataset.applicationId || null;
           let jobId = checkbox.dataset.jobId || null;
           
-          // 如果 checkbox 上沒有這些信息，從 allResumes 中查找該學生的記錄
-          // 注意：allResumes 應該只包含當前公司的學生記錄
-          if (!applicationId || !jobId) {
-            // 從 allResumes 中查找該學生的記錄（優先使用有 application_id 的記錄）
+          // 如果沒有職缺信息，嘗試從 data-jobs 屬性獲取（JSON格式）
+          if (!applicationId && !jobId && checkbox.dataset.jobs) {
+            try {
+              const jobs = JSON.parse(checkbox.dataset.jobs);
+              if (jobs.length > 0) {
+                applicationId = jobs[0].applicationId || null;
+                jobId = jobs[0].jobId || null;
+              }
+            } catch (e) {
+              console.warn(`⚠️ 無法解析職缺信息:`, checkbox.dataset.jobs);
+            }
+          }
+          
+          // 如果還是沒有職缺信息，從 allResumes 中查找該學生的記錄
+          if (!applicationId && !jobId) {
             const resumes = allResumes.filter(r => {
               const resumeStudentId = String(r.student_id || r.id || '');
               return resumeStudentId === String(studentId);
             });
             
-            // 優先使用有 application_id 的記錄（確保屬於當前公司）
-            // 如果有多條記錄，優先使用有 application_id 的
+            // 優先使用有 application_id 的記錄
             let resume = resumes.find(r => r.application_id);
             if (!resume) {
               resume = resumes[0];
             }
             
             if (resume) {
-              applicationId = applicationId || resume.application_id || null;
-              jobId = jobId || resume.job_id || resume.jobId || null;
-              
-              // 驗證記錄是否屬於當前公司（如果有的話）
-              const resumeCompanyId = resume.company_id;
-              if (resumeCompanyId) {
-                const urlParams = new URLSearchParams(window.location.search);
-                const targetCompanyId = urlParams.get('company_id');
-                if (targetCompanyId && String(resumeCompanyId) !== String(targetCompanyId)) {
-                  console.warn(`⚠️ 學生 ${studentId} 的記錄屬於不同公司: resume.company_id=${resumeCompanyId}, targetCompanyId=${targetCompanyId}`);
-                  // 嘗試查找屬於當前公司的記錄
-                  const correctResume = resumes.find(r => r.company_id && String(r.company_id) === String(targetCompanyId) && r.application_id);
-                  if (correctResume) {
-                    applicationId = correctResume.application_id;
-                    jobId = correctResume.job_id || correctResume.jobId;
-                    console.log(`✅ 找到正確的公司記錄: application_id=${applicationId}, job_id=${jobId}`);
-                  }
-                }
-              }
-              
-              // 如果還是沒有，記錄警告
-              if (!applicationId || !jobId) {
-                console.warn(`⚠️ 學生 ${studentId} 找不到 application_id 或 job_id`, resume);
-              }
+              applicationId = resume.application_id || null;
+              jobId = resume.job_id || resume.jobId || null;
             } else {
               console.warn(`⚠️ 在 allResumes 中找不到學生 ${studentId} 的記錄`);
             }
           }
           
+          // 為該職缺創建一條申請記錄（一個職缺對一個人）
           studentApplications.push({
             student_id: studentId,
             application_id: applicationId,
