@@ -10,7 +10,9 @@
     body {
       font-family: Arial, sans-serif;
       background: #f0f4f8;
-      padding: 20px;
+      margin: 0;
+      padding: 0;
+      min-height: 100vh;
     }
 
     .container {
@@ -103,36 +105,48 @@
     }
 
   /* 頂端列 */
-    .profile-top-bar {
-      position: fixed;
+    header {
+      background: linear-gradient(135deg, #0055a8 0%, #006acb 50%, #004f94 100%);
+      border-bottom: none;
+      position: sticky;
       top: 0;
-      left: 0;
-      width: 100%;
-      height: 56px;
-      background:  #0454a3;
+      z-index: 10;
+      box-shadow: 0 8px 20px rgba(0, 68, 148, 0.35);
+    }
+
+    .topbar {
+      max-width: 1800px;
+      margin: 0 auto;
+      padding: 18px 24px;
       display: flex;
       align-items: center;
-      padding: 0 1rem;
-      z-index: 1000;
-      box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+      justify-content: center;
+      color: #fff;
+      position: relative;
     }
 
-    .profile-top-bar .title {
+    .topbar h1 {
+      font-size: 1.5rem;
+      margin: 0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      color: #fff;
+      flex: 1;
+    }
+
+    .topbar h1 .header-title {
       flex: 1;
       text-align: center;
-      padding-right: 20px; 
-      font-size: 1.5rem;
-      color: white;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
     }
 
-    /* 三條線選單按鈕樣式 */
-    .top-bar-left {
-      position: absolute;
-      left: 12rem;
-      z-index: 1300;
-    }
-
-    .top-bar-left #menu-btn {
+    /* 選單按鈕樣式 */
+    #menu-btn {
       width: 30px;
       height: 22px;
       cursor: pointer;
@@ -144,7 +158,7 @@
       padding: 0;
     }
 
-    .top-bar-left #menu-btn span {
+    #menu-btn span {
       display: block;
       width: 100%;
       height: 3px;
@@ -231,14 +245,19 @@
 </head>
 
 <body>
-  <div class="profile-top-bar">
-    <div class="top-bar-left">
-      <button type="button" id="menu-btn" aria-label="開啟選單">
-        <span></span><span></span><span></span>
-      </button>
+  <header>
+    <div class="topbar">
+      <h1>
+        <button id="menu-btn" title="選單" role="button" tabindex="0" aria-label="開啟側邊選單">
+          <span></span>
+          <span></span>
+          <span></span>
+        </button>
+        <div class="header-title">個人資料</div>
+        <div style="width: 30px;"></div> <!-- 佔位元素，保持標題置中 -->
+      </h1>
     </div>
-    <span class="title">個人資料</span>
-  </div>
+  </header>
 
   <nav id="side-menu" aria-hidden="true">
     <div class="menu-header">
@@ -248,7 +267,7 @@
     <div id="menu-content"></div>
   </nav>
 
-  <div class="container" style="margin-top: 80px;">
+  <div class="container" style="margin-top: 24px;">
 
     <img id="avatarPreview" class="avatar-preview" src="https://via.placeholder.com/100?text=頭像" alt="頭像預覽" />
     <input type="hidden" id="isHomeroom" value="false" />
