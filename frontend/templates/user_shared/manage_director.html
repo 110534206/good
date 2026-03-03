@@ -340,6 +340,32 @@
       background: #fffbeb;
     }
 
+    /* 失效保留：卡片變灰、縮小、置底 */
+    .student-item.invalid-retained {
+      background: #f1f5f9;
+      border-color: #e2e8f0;
+      opacity: 0.92;
+      padding: 8px 12px;
+      margin-top: 4px;
+    }
+    .student-item.invalid-retained .student-name { font-size: 0.9rem; }
+    .student-item.invalid-retained .student-details { font-size: 0.8rem; }
+    .student-item.invalid-retained .student-details { display: none; }
+    .student-item.invalid-retained .student-actions { flex-shrink: 0; }
+    .invalid-retained-label {
+      font-size: 0.8rem;
+      color: var(--color-muted);
+      margin-left: 8px;
+    }
+
+    /* 衝突警告標示 */
+    .conflict-warning {
+      color: var(--color-danger);
+      font-size: 0.8rem;
+      font-weight: 600;
+      margin-left: 6px;
+    }
+
     .student-info {
       flex: 1;
       min-width: 0; /* 允許 flex 項目縮小 */
@@ -400,6 +426,20 @@
     }
 
     .badge-duplicate {
+      background: var(--color-danger);
+      color: #fff;
+    }
+
+    /* 正取學生狀態標籤：已錄取 / 遞補中 / 衝突中 */
+    .badge-admitted {
+      background: #16a34a;
+      color: #fff;
+    }
+    .badge-supplement {
+      background: #ea580c;
+      color: #fff;
+    }
+    .badge-conflict {
       background: var(--color-danger);
       color: #fff;
     }
@@ -2532,53 +2572,64 @@
           const key = `${company.company_id}_${job.job_id}`;
           const maxSlots = jobSlotsMap[key] || job.job_slots || 1;
           
-          // 根據 original_rank 或 slot_index 將學生分配到對應位置
-          // 創建一個映射：位置 -> 學生
+          // 區分「有效正取」與「失效保留」：第一志願在別家者為失效保留，置底顯示
+          const firstChoiceHere = (s) => {
+            const prefs = duplicateStudentsPreferences[s.student_id];
+            if (!prefs || prefs.length === 0) return true;
+            const first = prefs[0];
+            return String(first.company_id) === String(company.company_id) && String(first.job_id) === String(job.job_id);
+          };
+          const effectiveRegulars = (job.regulars || []).filter(s => !duplicateStudents.includes(s.student_id) || firstChoiceHere(s));
+          const invalidRetained = (job.regulars || []).filter(s => duplicateStudents.includes(s.student_id) && !firstChoiceHere(s));
+          
+          // 根據 original_rank 將「有效正取」分配到位置 1..maxSlots
           const slotToStudent = {};
-          // 先按 original_rank 或 slot_index 排序，確保相同位置時優先保留第一個
-          const sortedRegulars = [...job.regulars].sort((a, b) => {
-            const aRank = a.original_rank !== null && a.original_rank !== undefined 
-              ? a.original_rank 
-              : (a.slot_index || 999);
-            const bRank = b.original_rank !== null && b.original_rank !== undefined 
-              ? b.original_rank 
-              : (b.slot_index || 999);
+          const sortedEffective = [...effectiveRegulars].sort((a, b) => {
+            const aRank = a.original_rank !== null && a.original_rank !== undefined ? a.original_rank : (a.slot_index || 999);
+            const bRank = b.original_rank !== null && b.original_rank !== undefined ? b.original_rank : (b.slot_index || 999);
             return aRank - bRank;
           });
-          
-          sortedRegulars.forEach(student => {
-            // 優先使用 original_rank（廠商的排序），如果沒有則使用 slot_index
-            const rankValue = student.original_rank !== null && student.original_rank !== undefined 
-              ? student.original_rank 
-              : (student.slot_index || null);
-            
-            // 如果該位置還沒有學生，才分配
-            if (rankValue !== null && rankValue !== undefined && rankValue >= 1 && rankValue <= maxSlots && !slotToStudent[rankValue]) {
-              slotToStudent[rankValue] = student;
+          sortedEffective.forEach((student) => {
+            const rankValue = student.original_rank !== null && student.original_rank !== undefined
+              ? student.original_rank
+              : (student.slot_index != null ? student.slot_index : 999);
+            const slot = (rankValue >= 1 && rankValue <= maxSlots && !slotToStudent[rankValue]) ? rankValue : null;
+            if (slot) {
+              slotToStudent[slot] = student;
+            } else {
+              for (let k = 1; k <= maxSlots; k++) {
+                if (!slotToStudent[k]) { slotToStudent[k] = student; break; }
+              }
             }
           });
           
-          // 為每個位置（1 到 maxSlots）渲染格子
-          const regularSlotsHtml = Array.from({ length: maxSlots }, (_, i) => {
-            const slotIndex = i + 1;
-            const student = slotToStudent[slotIndex];
-            
-            if (student) {
-              // 該位置有學生，渲染學生項目（使用與原本 renderStudentList 相同的結構）
-              const isDuplicate = duplicateStudents.includes(student.student_id);
-              const badgeClass = 'badge-regular';
-              const rankValue = student.original_rank !== null && student.original_rank !== undefined 
-                ? student.original_rank 
-                : (student.slot_index || slotIndex);
-              const badgeText = `正取${rankValue}`;
-              
-              return `
+          // 渲染每個正取格子的輔助函式
+          const renderRegularCard = (student, slotIndex) => {
+            const isDuplicate = duplicateStudents.includes(student.student_id);
+            const prefOrder = (student.preference_order >= 1 && student.preference_order <= 5) ? student.preference_order : null;
+            const rankValue = student.original_rank !== null && student.original_rank !== undefined
+              ? student.original_rank
+              : (student.slot_index || slotIndex);
+            const rankNum = typeof rankValue === 'number' ? rankValue : parseInt(rankValue, 10) || slotIndex;
+            // 正常錄取：正取 1 且第一志願相符 → 綠色 [正取 1]
+            const isNormalAdmit = (prefOrder === 1 && rankNum === 1) || (!isDuplicate && rankNum === 1 && prefOrder === 1);
+            // 自動遞補：正取 2 以上 → [遞補錄取] (原正取 N)
+            const isSupplement = rankNum >= 2;
+            const conflictWarning = isDuplicate ? '<span class="conflict-warning">⚠️ 多方爭奪中</span>' : '';
+            let badgeHtml = '';
+            if (isNormalAdmit) {
+              badgeHtml = '<span class="badge badge-admitted">正取 1</span>' + conflictWarning;
+            } else if (isSupplement) {
+              badgeHtml = '<span class="badge badge-supplement">遞補錄取</span><span class="invalid-retained-label">(原正取 ' + rankNum + ')</span>' + conflictWarning;
+            } else {
+              badgeHtml = '<span class="badge badge-regular">正取' + rankNum + '</span>' + conflictWarning;
+            }
+            return `
                 <div class="student-item ${isDuplicate ? 'duplicate' : ''}">
                   <div class="student-info">
                     <div class="student-name">
                       ${escapeHtml(student.student_name)}
-                      <span class="badge ${badgeClass}">${badgeText}</span>
-                      ${isDuplicate ? '<span class="badge badge-duplicate">重複中選</span>' : ''}
+                      ${badgeHtml}
                     </div>
                     <div class="student-details">
                       <div class="student-details-row">
@@ -2589,7 +2640,7 @@
                       </div>
                       <div class="student-details-row">
                         <span class="preference-order">
-                          <i class="fas fa-list-ol"></i> 志願序：${(student.preference_order && student.preference_order >= 1 && student.preference_order <= 5) ? student.preference_order : '—'}
+                          <i class="fas fa-list-ol"></i> 志願序：${(student.preference_order >= 1 && student.preference_order <= 5) ? student.preference_order : '—'}
                         </span>
                       </div>
                     </div>
@@ -2611,6 +2662,15 @@
                   </div>
                 </div>
               `;
+          };
+          
+          // 為每個位置（1 到 maxSlots）渲染格子
+          const regularSlotsHtml = Array.from({ length: maxSlots }, (_, i) => {
+            const slotIndex = i + 1;
+            const student = slotToStudent[slotIndex];
+            
+            if (student) {
+              return renderRegularCard(student, slotIndex);
             } else {
               // 該位置沒有學生，渲染空位
               return `
@@ -2628,6 +2688,28 @@
                 </div>
               `;
             }
+          }).join('');
+          
+          // 失效保留：第一志願在別家，卡片變灰、縮小、置底，顯示「已錄取：XX公司」
+          const invalidRetainedHtml = invalidRetained.map(student => {
+            const prefs = duplicateStudentsPreferences[student.student_id] || [];
+            const first = prefs[0];
+            const acceptedCompany = first ? (first.company_name || '其他公司') : '其他公司';
+            return `
+                <div class="student-item invalid-retained">
+                  <div class="student-info">
+                    <div class="student-name">
+                      ${escapeHtml(student.student_name)}
+                      <span class="invalid-retained-label">(已錄取：${escapeHtml(acceptedCompany)})</span>
+                    </div>
+                    <div class="student-details"></div>
+                  </div>
+                  <div class="student-actions">
+                    <button class="btn btn-danger" onclick="removeStudent('${String(student.id || student.match_id || '')}', '${escapeHtml(student.student_name)}')">
+                      <i class="fas fa-times"></i> 移除
+                    </button>
+                  </div>
+                </div>`;
           }).join('');
           
           const reservesHtml = renderStudentList(job.reserves, 'reserve', job);
@@ -2658,6 +2740,7 @@
                    ondragleave="handleDragLeave(event)">
                 <div class="list-label">正取名單</div>
                 ${regularSlotsHtml}
+                ${invalidRetainedHtml}
               </div>
               ${job.reserves.length > 0 ? `
                 <div class="reserve-list"
@@ -2789,6 +2872,18 @@
         const badgeText = type === 'regular' 
           ? `正取${rankValue}` 
           : `備取${index + 1}`;
+        // 正取狀態標籤：已錄取(綠) / 遞補中(橘) / 衝突中(紅)（僅正取名單顯示）
+        const prefOrder = (student.preference_order >= 1 && student.preference_order <= 5) ? student.preference_order : null;
+        const rankNum = (typeof rankValue === 'number' ? rankValue : parseInt(rankValue, 10)) || 0;
+        const statusBadge = type === 'regular'
+          ? (isDuplicate
+              ? '<span class="badge badge-conflict">衝突中</span>'
+              : (prefOrder === 1 && rankNum === 1)
+                ? '<span class="badge badge-admitted">已錄取</span>'
+                : (rankNum >= 2)
+                  ? '<span class="badge badge-supplement">遞補中</span>'
+                  : '')
+          : '';
         
         return `
           <div class="student-item ${isDuplicate ? 'duplicate' : ''}">
@@ -2796,7 +2891,7 @@
               <div class="student-name">
                 ${escapeHtml(student.student_name)}
                 <span class="badge ${badgeClass}">${badgeText}</span>
-                ${isDuplicate ? '<span class="badge badge-duplicate">重複中選</span>' : ''}
+                ${statusBadge}
               </div>
               <div class="student-details">
                 <div class="student-details-row">
