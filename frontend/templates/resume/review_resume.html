@@ -74,7 +74,7 @@
       padding: 2rem 1.5rem;
       transform: translateX(-100%);
       transition: transform 0.3s ease-in-out;
-      z-index: 1200;
+      z-index: 1100;
       display: flex;
       flex-direction: column;
       align-items: flex-start;
@@ -90,41 +90,46 @@
       position: absolute;
       top: 2rem;
       right: 1.6rem;
-      font-size: 2.2rem;
+      font-size: 2.8rem;
       background: none;
       border: none;
-      color: white;
+      color: #fff;
       cursor: pointer;
-      line-height: 1;
-      width: 2.5rem;
+      line-height: 2.4rem;
       height: 2.5rem;
+      width: 2.5rem;
       display: flex;
       align-items: center;
       justify-content: center;
+      z-index: 10;
     }
 
     #side-menu h2 {
-      width: 100%;
-      margin-bottom: 1.5rem;
+      margin: 0 0 1.5rem 0;
       font-weight: 700;
-      font-size: 1.5rem;
-      text-align: left;
+      font-size: 1.6rem;
+      color: #fff;
+      padding: 0;
+      line-height: 2.4rem;
+      height: 2.4rem;
+      display: flex;
+      align-items: center;
     }
 
     #side-menu a {
       display: block;
       width: 100%;
-      padding: 0.5rem 0;
+      padding: 0.6rem 0;
       font-size: 1.1rem;
-      color: #ddd;
+      color: #e2e8f0;
       text-decoration: none;
       border-radius: 4px;
       transition: background-color 0.2s ease;
     }
 
     #side-menu a:hover {
-      background-color: rgba(255, 255, 255, 0.15);
-      color: white;
+      background-color: rgba(255, 255, 255, 0.18);
+      color: #fff;
     }
   </style>
 </head>
@@ -214,8 +219,8 @@
   </div>
 
   <!-- 側邊選單（指導老師預設；主任由 JS 依角色替換為 director 選單） -->
-  <nav id="side-menu" aria-hidden="true" role="navigation" aria-label="功能選單">
-    <button id="close-btn" aria-label="關閉功能選單">×</button>
+  <nav id="side-menu" aria-hidden="true">
+    <button id="close-btn" aria-label="關閉選單">×</button>
     <h2>功能選單</h2>
     <div id="side-menu-links">
       <a href="/teacher_home">首頁</a>
@@ -325,15 +330,21 @@
           isHomeroom = profileData.success && profileData.user ? profileData.user.is_homeroom : false;
           const isDirector = isDirectorMode || userRole === 'director';
 
-          // 主任：隱藏側邊欄和菜單按鈕
+          // 主任：使用 director_home 的側邊選單項目
           if (isDirector) {
-            const sideMenu = document.getElementById('side-menu');
-            const menuBtn = document.getElementById('menu-btn');
-            if (sideMenu) {
-              sideMenu.style.display = 'none';
-            }
-            if (menuBtn) {
-              menuBtn.style.display = 'none';
+            const container = document.getElementById('side-menu-links');
+            if (container) {
+              container.innerHTML = `
+                <a href="/director_home">首頁</a>
+                <a href="/profile">個人資料</a>
+                <a href="/approve_company">審核實習單位</a>
+                <a href="/review_resume?mode=director">審核實習履歷</a>
+                <a href="/interview_schedule">行事曆</a>
+                <a href="/notifications">管理公告</a>
+                <a href="/admin_statistics">查詢統計資料</a>
+                <a href="/admission/manage_director">媒合結果</a>
+                <a href="/login">登出</a>
+              `;
             }
           }
 
