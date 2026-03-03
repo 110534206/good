@@ -3495,9 +3495,21 @@ def schedule_interviews():
                     if student_info:
                         student_name = student_info.get("name", "同學")
                         
+                        # 根據該學生的 company_id 獲取正確的公司名稱
+                        student_company_name = company_name  # 預設使用全局公司名稱
+                        if company_id:
+                            cursor.execute("""
+                                SELECT company_name 
+                                FROM internship_companies 
+                                WHERE id = %s
+                            """, (company_id,))
+                            company_row = cursor.fetchone()
+                            if company_row and company_row.get("company_name"):
+                                student_company_name = company_row.get("company_name")
+                        
                         # 構建通知內容
-                        notification_title = f"{company_name} 面試通知"
-                        notification_message = f"您已收到來自 {company_name} 的面試通知。\n\n"
+                        notification_title = f"{student_company_name} 面試通知"
+                        notification_message = f"您已收到來自 {student_company_name} 的面試通知。\n\n"
                         notification_message += f"面試日期：{interview_date}\n"
                         if time_info:
                             notification_message += f"面試時間：{time_info}\n"
@@ -3538,8 +3550,8 @@ def schedule_interviews():
                                 
                                 if teacher_row and teacher_row.get("teacher_id"):
                                     teacher_id = teacher_row.get("teacher_id")
-                                    teacher_notification_title = f"{company_name} 學生面試通知"
-                                    teacher_notification_message = f"您的學生 {student_name} 已收到來自 {company_name} 的面試通知。\n\n"
+                                    teacher_notification_title = f"{student_company_name} 學生面試通知"
+                                    teacher_notification_message = f"您的學生 {student_name} 已收到來自 {student_company_name} 的面試通知。\n\n"
                                     teacher_notification_message += f"面試日期：{interview_date}\n"
                                     if time_info:
                                         teacher_notification_message += f"面試時間：{time_info}\n"
