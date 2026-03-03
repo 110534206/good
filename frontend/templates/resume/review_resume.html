@@ -325,21 +325,15 @@
           isHomeroom = profileData.success && profileData.user ? profileData.user.is_homeroom : false;
           const isDirector = isDirectorMode || userRole === 'director';
 
-          // 主任：使用 director_home 的側邊選單項目
+          // 主任：隱藏側邊欄和菜單按鈕
           if (isDirector) {
-            const container = document.getElementById('side-menu-links');
-            if (container) {
-              container.innerHTML = `
-                <a href="/director_home">首頁</a>
-                <a href="/profile">個人資料</a>
-                <a href="/approve_company">審核實習單位</a>
-                <a href="/review_resume?mode=director">審核實習履歷</a>
-                <a href="/interview_schedule">行事曆</a>
-                <a href="/notifications">管理公告</a>
-                <a href="/admin_statistics">查詢統計資料</a>
-                <a href="/manage_director_confirm">媒合結果</a>
-                <a href="/login">登出</a>
-              `;
+            const sideMenu = document.getElementById('side-menu');
+            const menuBtn = document.getElementById('menu-btn');
+            if (sideMenu) {
+              sideMenu.style.display = 'none';
+            }
+            if (menuBtn) {
+              menuBtn.style.display = 'none';
             }
           }
 
