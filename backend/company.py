@@ -1779,10 +1779,45 @@ def apply_company():
         if not job:
             return jsonify({"success": False, "message": "職缺不存在或公司未審核通過"}), 400
         
-        # 允許重複投遞：不限制同一公司／同一職缺筆數，學生可自由投遞多筆
-        # 獲取當前學期
         from semester import get_current_semester_id
         current_semester_id = get_current_semester_id(cursor)
+        
+        # 情況四：最多 5 筆投遞，超過則提示「志願序投放名額已滿，請勿多筆上傳」
+        cursor.execute("""
+            SELECT COUNT(*) AS cnt FROM student_job_applications WHERE student_id = %s
+        """, (user_id,))
+        apply_count_row = cursor.fetchone()
+        apply_count = (apply_count_row.get('cnt') or 0) if apply_count_row else 0
+        if apply_count >= 5:
+            return jsonify({
+                "success": False,
+                "message": "志願序投放名額已滿，請勿多筆上傳。",
+                "code": "SLOT_FULL"
+            }), 400
+        
+        # 檢查是否已有志願序；若有，則只允許投遞志願序內的公司／職缺
+        if current_semester_id:
+            cursor.execute("""
+                SELECT company_id, job_id FROM student_preferences
+                WHERE student_id = %s AND semester_id = %s
+            """, (user_id, current_semester_id))
+        else:
+            cursor.execute("""
+                SELECT company_id, job_id FROM student_preferences
+                WHERE student_id = %s
+            """, (user_id,))
+        prefs = cursor.fetchall() or []
+        preference_pairs = {(int(p['company_id']), int(p['job_id'])) for p in prefs if p.get('company_id') and p.get('job_id')}
+        
+        if preference_pairs:
+            # 情況二：已填寫志願序，投遞的公司／職缺必須在志願序中
+            if (int(company_id), int(job_id)) not in preference_pairs:
+                return jsonify({
+                    "success": False,
+                    "message": "您投遞的公司或職缺不在志願序中，請先至志願序頁面修改排序。",
+                    "code": "NOT_IN_PREFERENCE"
+                }), 400
+        # 若無志願序（preference_pairs 為空），允許投遞，之後會同步寫入志願序（情況一）
         
         # 獲取職缺名稱
         cursor.execute("SELECT title FROM internship_jobs WHERE id = %s", (job_id,))
@@ -1834,11 +1869,42 @@ def apply_company():
 
         # 注意：不在此處創建 resume_applications 記錄
         # 流程：學生投遞 → 班導審核通過（resumes.status='approved'）→ 創建 resume_teacher 記錄 → 指導老師審核通過（review_status='approved'）→ 等待指導老師審核截止時間後 → 自動創建 resume_applications 記錄
-        # resume_applications 記錄會在指導老師審核截止時間後自動創建（見 resume.py update_resume_applications_after_advisor_deadline）
         print(f"✅ [student_apply] 學生投遞成功，等待指導老師審核截止時間後才會創建 resume_applications 記錄")
         
+        # 情況一：原本無志願序時，依投遞紀錄同步寫入 student_preferences（最多 5 筆），並請學生至志願序頁查看排序
+        need_go_preference = False
+        if not preference_pairs and current_semester_id:
+            cursor.execute("""
+                SELECT sja.company_id, sja.job_id, sja.applied_at
+                FROM student_job_applications sja
+                WHERE sja.student_id = %s
+                ORDER BY sja.applied_at ASC
+            """, (user_id,))
+            apps = cursor.fetchall() or []
+            # 只取前 5 筆，並取得職缺名稱
+            for idx, app in enumerate(apps[:5]):
+                cid = app.get('company_id')
+                jid = app.get('job_id')
+                if not cid or not jid:
+                    continue
+                cursor.execute("SELECT title FROM internship_jobs WHERE id = %s", (jid,))
+                jrow = cursor.fetchone()
+                jtitle = (jrow.get('title') or '') if jrow else ''
+                cursor.execute("""
+                    INSERT INTO student_preferences
+                    (student_id, semester_id, preference_order, company_id, job_id, job_title, status, submitted_at)
+                    VALUES (%s, %s, %s, %s, %s, %s, 'submitted', NOW())
+                """, (user_id, current_semester_id, idx + 1, cid, jid, jtitle))
+            if apps:
+                need_go_preference = True
+                print(f"✅ [student_apply] 已依投遞紀錄同步志願序，共 {min(len(apps), 5)} 筆，請學生至志願序頁查看排序")
+        
         conn.commit()
-        return jsonify({"success": True, "message": "投遞成功"})
+        return jsonify({
+            "success": True,
+            "message": "投遞成功",
+            "need_go_preference": need_go_preference
+        })
         
     except Exception as e:
         conn.rollback()

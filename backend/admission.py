@@ -3874,30 +3874,15 @@ def ta_confirm_matching():
                 """, (advisor_user_id, student_id, current_semester_id))
                 existing_tsr = cursor.fetchone()
                 if existing_tsr:
-                    if has_company_id:
-                        cursor.execute("""
-                            UPDATE teacher_student_relations SET company_id = %s, updated_at = NOW()
-                            WHERE id = %s
-                        """, (company_id, existing_tsr['id']))
-                    else:
-                        cursor.execute("""
-                            UPDATE teacher_student_relations SET updated_at = NOW()
-                            WHERE id = %s
-                        """, (existing_tsr['id'],))
+                    # teacher_student_relations 表無 updated_at 欄位，已有紀錄則不更新
                     tsr_updated += 1
                 else:
-                    if has_company_id:
-                        cursor.execute("""
-                            INSERT INTO teacher_student_relations
-                            (teacher_id, student_id, company_id, semester_id, role, created_at)
-                            VALUES (%s, %s, %s, %s, '指導老師', NOW())
-                        """, (advisor_user_id, student_id, company_id, current_semester_id))
-                    else:
-                        cursor.execute("""
-                            INSERT INTO teacher_student_relations
-                            (teacher_id, student_id, semester_id, role, created_at)
-                            VALUES (%s, %s, %s, '指導老師', NOW())
-                        """, (advisor_user_id, student_id, current_semester_id))
+                    # 表結構僅有 teacher_id, student_id, role, semester_id, created_at（無 company_id）
+                    cursor.execute("""
+                        INSERT INTO teacher_student_relations
+                        (teacher_id, student_id, semester_id, role, created_at)
+                        VALUES (%s, %s, %s, '指導老師', NOW())
+                    """, (advisor_user_id, student_id, current_semester_id))
                     tsr_inserted += 1
             elif has_semester:
                 cursor.execute("""
@@ -3906,30 +3891,13 @@ def ta_confirm_matching():
                 """, (advisor_user_id, student_id, current_semester_code or ''))
                 existing_tsr = cursor.fetchone()
                 if existing_tsr:
-                    if has_company_id:
-                        cursor.execute("""
-                            UPDATE teacher_student_relations SET company_id = %s, updated_at = NOW()
-                            WHERE id = %s
-                        """, (company_id, existing_tsr['id']))
-                    else:
-                        cursor.execute("""
-                            UPDATE teacher_student_relations SET updated_at = NOW()
-                            WHERE id = %s
-                        """, (existing_tsr['id'],))
                     tsr_updated += 1
                 else:
-                    if has_company_id:
-                        cursor.execute("""
-                            INSERT INTO teacher_student_relations
-                            (teacher_id, student_id, company_id, semester, role, created_at)
-                            VALUES (%s, %s, %s, %s, '指導老師', NOW())
-                        """, (advisor_user_id, student_id, company_id, current_semester_code or ''))
-                    else:
-                        cursor.execute("""
-                            INSERT INTO teacher_student_relations
-                            (teacher_id, student_id, semester, role, created_at)
-                            VALUES (%s, %s, %s, '指導老師', NOW())
-                        """, (advisor_user_id, student_id, current_semester_code or ''))
+                    cursor.execute("""
+                        INSERT INTO teacher_student_relations
+                        (teacher_id, student_id, semester, role, created_at)
+                        VALUES (%s, %s, %s, '指導老師', NOW())
+                    """, (advisor_user_id, student_id, current_semester_code or ''))
                     tsr_inserted += 1
         print(f"✅ [DEBUG] 寫入 teacher_student_relations: 新增 {tsr_inserted} 筆，更新 {tsr_updated} 筆")
         
