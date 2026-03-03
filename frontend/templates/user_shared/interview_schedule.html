@@ -163,7 +163,7 @@
 
 
     .main-content {
-      max-width: 1400px;
+      max-width: 1800px;
       margin: 0 auto;
       padding: 0 60px;
       margin-top: 2rem;
@@ -249,6 +249,13 @@
       display: grid;
       grid-template-columns: repeat(7, 1fr);
       gap: 8px;
+      width: 100%;
+    }
+
+    #calendar > div {
+      min-width: 0;
+      width: 100%;
+      box-sizing: border-box;
     }
 
     /* 面試排程詳情模態框樣式 */
@@ -594,7 +601,7 @@
       const weekDays = ["日", "一", "二", "三", "四", "五", "六"];
       weekDays.forEach(day => {
         const dayHeader = document.createElement("div");
-        dayHeader.style.cssText = "padding: 12px; text-align: center; font-weight: 600; background-color: #f1f5f9; border-radius: 8px;";
+        dayHeader.style.cssText = "padding: 12px; text-align: center; font-weight: 600; background-color: #f1f5f9; border-radius: 8px; min-width: 0; width: 100%; box-sizing: border-box;";
         dayHeader.textContent = day;
         calendar.appendChild(dayHeader);
       });
@@ -602,7 +609,7 @@
       // 添加空白格子（月初）
       for (let i = 0; i < startingDayOfWeek; i++) {
         const emptyCell = document.createElement("div");
-        emptyCell.style.cssText = "padding: 12px; min-height: 80px; border: 1px solid #e2e8f0; border-radius: 8px; background-color: #f9fafb;";
+        emptyCell.style.cssText = "padding: 16px; min-height: 120px; border: 1px solid #e2e8f0; border-radius: 8px; background-color: #f9fafb; min-width: 0; width: 100%; box-sizing: border-box;";
         calendar.appendChild(emptyCell);
       }
       
@@ -619,13 +626,16 @@
         const isPast = cellDate < today;
         
         dateCell.style.cssText = `
-          padding: 12px;
-          min-height: 80px;
+          padding: 16px;
+          min-height: 120px;
           border: 1px solid #e2e8f0;
           border-radius: 8px;
           background-color: ${isToday ? '#e3f2fd' : isPast ? '#f9fafb' : '#ffffff'};
           cursor: ${isPast ? 'not-allowed' : 'pointer'};
           transition: background-color 0.2s;
+          min-width: 0;
+          width: 100%;
+          box-sizing: border-box;
         `;
         
         // 日期數字
@@ -874,6 +884,31 @@
       const notes = schedule.notes || '';  // 面試須知（備註）
       const createdAt = schedule.created_at || '';
       
+      // 收集所有職缺（如果有多個排程，可能有多個職缺）
+      let jobTitles = [];
+      if (schedule.all_schedules && schedule.all_schedules.length > 0) {
+        // 如果有多個排程，收集所有不同的職缺
+        const jobTitleSet = new Set();
+        schedule.all_schedules.forEach(s => {
+          const jobTitle = s.job_title || s.jobTitle || null;
+          if (jobTitle && !jobTitleSet.has(jobTitle)) {
+            jobTitleSet.add(jobTitle);
+            jobTitles.push(jobTitle);
+          }
+        });
+      } else {
+        // 單個排程，使用當前排程的職缺
+        const jobTitle = schedule.job_title || schedule.jobTitle || null;
+        if (jobTitle) {
+          jobTitles.push(jobTitle);
+        }
+      }
+      
+      // 格式化職缺顯示
+      const jobTitleDisplay = jobTitles.length > 0 
+        ? jobTitles.join('、') 
+        : '未指定職缺';
+      
       // 格式化時間顯示
       let timeDisplay = '';
       if (timeStart && timeEnd) {
@@ -907,6 +942,10 @@
         <div class="interview-detail-row">
           <span class="interview-detail-label">公司名稱</span>
           <span class="interview-detail-value">${escapeHtml(companyName)}</span>
+        </div>
+        <div class="interview-detail-row">
+          <span class="interview-detail-label">面試職缺</span>
+          <span class="interview-detail-value">${escapeHtml(jobTitleDisplay)}</span>
         </div>
         <div class="interview-detail-row">
           <span class="interview-detail-label">學生姓名</span>

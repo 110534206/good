@@ -410,6 +410,13 @@
               </div>
             </div>
             <div class="mb-3">
+              <label for="interviewJob" class="form-label" style="font-weight: 600;">面試職缺</label>
+              <select class="form-control" id="interviewJob">
+                <option value="">所有職缺</option>
+                <!-- 職缺選項將由 JavaScript 動態填充 -->
+              </select>
+            </div>
+            <div class="mb-3">
               <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
                 <label for="interviewStudents" class="form-label" style="font-weight: 600; margin: 0;">面試學生</label>
                 <button type="button" class="btn btn-sm btn-outline-secondary" id="selectAllStudentsBtn" style="font-size: 0.85rem; padding: 4px 12px;">全選</button>
@@ -1943,6 +1950,82 @@
     // 注意：不再從 localStorage 載入，完全依賴資料庫
     loadAllVendorSchedules(); // 載入所有廠商的面試排程
 
+    // 填充職缺下拉選單
+    function populateJobDropdown() {
+      const jobSelect = document.getElementById('interviewJob');
+      if (!jobSelect) return;
+      
+      // 清空現有選項（保留第一個「所有職缺」選項）
+      jobSelect.innerHTML = '<option value="">所有職缺</option>';
+      
+      // 從 allPositions 獲取職缺列表（使用 job_id 作為值）
+      if (allPositions && allPositions.length > 0) {
+        // 使用 Map 避免重複 job_id，並保存職缺名稱
+        const jobMap = new Map();
+        allPositions.forEach(position => {
+          const jobId = position.id || position.job_id || null;
+          const jobTitle = position.title || position.job_title || '';
+          if (jobId && jobTitle && jobTitle.trim() && !jobMap.has(String(jobId))) {
+            jobMap.set(String(jobId), jobTitle.trim());
+            const opt = document.createElement('option');
+            opt.value = String(jobId); // 使用 job_id 作為值
+            opt.textContent = jobTitle.trim(); // 顯示職缺名稱
+            jobSelect.appendChild(opt);
+          }
+        });
+      } else {
+        // 如果沒有職缺資料，嘗試從履歷資料中提取職缺（使用 job_id）
+        const jobMap = new Map();
+        allResumes.forEach(r => {
+          const jobId = r.job_id || r.jobId || null;
+          const jobTitle = r.job_title || r.jobTitle || '';
+          if (jobId && jobTitle && jobTitle.trim() && !jobMap.has(String(jobId))) {
+            jobMap.set(String(jobId), jobTitle.trim());
+            const opt = document.createElement('option');
+            opt.value = String(jobId); // 使用 job_id 作為值
+            opt.textContent = jobTitle.trim(); // 顯示職缺名稱
+            jobSelect.appendChild(opt);
+          }
+        });
+      }
+      
+      // 監聽職缺選擇變化，過濾學生列表
+      // 使用 once 選項或先移除舊監聽器再添加新監聽器
+      const jobSelectChangeHandler = function() {
+        // 重新填充學生列表（根據選擇的職缺過濾）
+        const isEditMode = isEditingInterviewSchedule;
+        const dateStr = selectedInterviewDate ? formatDate(selectedInterviewDate) : '';
+        const schedule = dateStr ? interviewSchedules.get(dateStr) : null;
+        const currentScheduleStudents = schedule && schedule.students ? schedule.students.map(s => String(s)) : [];
+        populateStudentsDropdown(isEditMode, currentScheduleStudents, this.value);
+        
+        // 如果是編輯模式且有排程資料，在學生列表填充完成後恢復選中的學生
+        if (isEditMode && schedule && schedule.students && Array.isArray(schedule.students)) {
+          setTimeout(() => {
+            const studentsContainer = document.getElementById('interviewStudents');
+            if (studentsContainer) {
+              // 恢復選中的學生
+              schedule.students.forEach(studentId => {
+                const checkbox = studentsContainer.querySelector(`.student-checkbox[value="${String(studentId)}"]`);
+                if (checkbox) {
+                  checkbox.checked = true;
+                }
+              });
+              updateSelectedStudentsCount();
+              console.log(`✅ [職缺change事件] 恢復選中的學生: ${schedule.students.join(',')}`);
+            }
+          }, 50); // 等待學生列表填充完成
+        }
+      };
+      
+      // 移除舊的事件監聽器（通過克隆節點）
+      const newJobSelect = jobSelect.cloneNode(true);
+      jobSelect.parentNode.replaceChild(newJobSelect, jobSelect);
+      
+      // 添加新的事件監聽器
+      newJobSelect.addEventListener('change', jobSelectChangeHandler);
+    }
+    
     // 填充面試地點下拉選單（包含固定地點與公司名稱）
     function populateLocationDropdown() {
       const locationSelect = document.getElementById('interviewLocation');
@@ -2031,7 +2114,8 @@
     // 填充學生下拉選單（可複選）
     // isEditMode: true 表示編輯模式，false 表示新增模式
     // currentScheduleStudents: 當前編輯排程的學生ID列表（編輯模式下使用）
-    function populateStudentsDropdown(isEditMode = false, currentScheduleStudents = []) {
+    // selectedJobId: 選中的職缺ID（用於過濾學生列表）
+    function populateStudentsDropdown(isEditMode = false, currentScheduleStudents = [], selectedJobId = '') {
       const studentsContainer = document.getElementById('interviewStudents');
       if (!studentsContainer) return;
       
@@ -2100,6 +2184,13 @@
         // 如果學生有職缺，為每個職缺創建一個獨立的選項
         if (student.jobs && student.jobs.length > 0) {
           student.jobs.forEach(job => {
+            // 如果選擇了職缺，只顯示該職缺的學生（使用 job_id 匹配）
+            if (selectedJobId && selectedJobId.trim() !== '') {
+              const jobId = job.jobId || null;
+              if (!jobId || String(jobId) !== String(selectedJobId)) {
+                return; // 跳過不匹配的職缺
+              }
+            }
             studentJobItems.push({
               studentId: student.id,
               studentName: student.name,
@@ -2109,14 +2200,16 @@
             });
           });
         } else {
-          // 如果學生沒有職缺信息，至少創建一個選項
-          studentJobItems.push({
-            studentId: student.id,
-            studentName: student.name,
-            studentUsername: student.username,
-            job: { applicationId: null, jobId: null, jobTitle: '未指定職缺' },
-            companyId: student.companyId
-          });
+          // 如果學生沒有職缺信息，且沒有選擇職缺過濾，才顯示
+          if (!selectedJobId || selectedJobId.trim() === '') {
+            studentJobItems.push({
+              studentId: student.id,
+              studentName: student.name,
+              studentUsername: student.username,
+              job: { applicationId: null, jobId: null, jobTitle: '未指定職缺' },
+              companyId: student.companyId
+            });
+          }
         }
       });
       
@@ -2294,8 +2387,8 @@
         
         const label = document.createElement('label');
         label.htmlFor = checkboxId;
-        // 構建顯示文字：學生姓名 (帳號) - 職缺名稱
-        let labelText = `${item.studentName} (${item.studentUsername}) - ${escapeHtml(item.job.jobTitle || '未指定職缺')}`;
+        // 構建顯示文字：學生姓名 (帳號)
+        let labelText = `${item.studentName} (${item.studentUsername})`;
         
         // 如果已安排，顯示日期和時間（不依賴 ownSchedule）
         if (isDisabled) {
@@ -3202,6 +3295,10 @@
       document.getElementById('interviewDate').value = dateDisplay;
       document.getElementById('interviewTimeStart').value = '';
       document.getElementById('interviewTimeEnd').value = '';
+      const jobSelect = document.getElementById('interviewJob');
+      if (jobSelect) {
+        jobSelect.value = ''; // 重置為「所有職缺」
+      }
       document.getElementById('interviewLocation').value = '';
       const locationOtherInput = document.getElementById('interviewLocationOther');
       if (locationOtherInput) {
@@ -3250,14 +3347,24 @@
             // 合併所有自己的排程（可能有多個學生）
             // 使用第一個排程的時間和地點，但收集所有學生
             const firstSchedule = ownSchedules[0];
+            
+            // 收集所有排程中的職缺ID（job_id），用於設置職缺下拉選單
+            const jobIds = new Set();
+            ownSchedules.forEach(s => {
+              if (s.job_id) {
+                jobIds.add(String(s.job_id));
+              }
+            });
+            
             schedule = {
               timeStart: firstSchedule.time_start || '',
               timeEnd: firstSchedule.time_end || '',
               location: firstSchedule.location || '',
               notes: firstSchedule.notes || '', // 確保 notes 被正確載入
-              students: ownSchedules.filter(s => s.student_id).map(s => String(s.student_id))
+              students: ownSchedules.filter(s => s.student_id).map(s => String(s.student_id)),
+              jobIds: Array.from(jobIds) // 保存所有職缺ID
             };
-            console.log(`✅ [編輯模式] 從 allVendorSchedules 載入自己的排程資料: 時間=${schedule.timeStart}-${schedule.timeEnd}, 地點=${schedule.location}, 備註=${schedule.notes ? schedule.notes.substring(0, 30) : '無'}, 學生=${schedule.students.join(',')}`);
+            console.log(`✅ [編輯模式] 從 allVendorSchedules 載入自己的排程資料: 時間=${schedule.timeStart}-${schedule.timeEnd}, 地點=${schedule.location}, 備註=${schedule.notes ? schedule.notes.substring(0, 30) : '無'}, 學生=${schedule.students.join(',')}, 職缺=${schedule.jobIds.join(',')}`);
             
             // 檢查編輯時間限制：必須在面試開始前至少12小時編輯
             if (schedule.timeStart) {
@@ -3337,12 +3444,62 @@
         const notesValue = schedule.notes || '';
         document.getElementById('interviewNotes').value = notesValue;
         console.log(`📝 [編輯模式] 設置面試須知: ${notesValue ? notesValue.substring(0, 50) + '...' : '（空）'}`);
+        
+      }
+      
+      // 填充職缺下拉選單（在設置其他字段之後，以便在編輯模式下設置職缺值）
+      // 注意：這裡需要重新填充，因為之前可能已經填充過了
+      populateJobDropdown();
+      
+      // 在編輯模式下，設置職缺下拉選單的值
+      if (schedule && schedule.jobIds && schedule.jobIds.length > 0) {
+        const jobSelect = document.getElementById('interviewJob');
+        if (jobSelect) {
+          // 使用第一個職缺ID（如果有多個職缺，使用第一個）
+          const firstJobId = schedule.jobIds[0];
+          // 等待職缺下拉選單填充完成後再設置值
+          setTimeout(() => {
+            const option = Array.from(jobSelect.options).find(opt => opt.value === firstJobId);
+            if (option) {
+              jobSelect.value = firstJobId;
+              console.log(`✅ [編輯模式] 設置職缺下拉選單: job_id=${firstJobId}`);
+              // 觸發 change 事件以過濾學生列表（change 事件處理函數會自動恢復選中的學生）
+              jobSelect.dispatchEvent(new Event('change'));
+            } else {
+              console.warn(`⚠️ [編輯模式] 找不到職缺ID ${firstJobId} 的選項`);
+              // 如果找不到職缺選項，仍然需要恢復選中的學生
+              if (schedule && schedule.students && Array.isArray(schedule.students)) {
+                setTimeout(() => {
+                  const studentsContainer = document.getElementById('interviewStudents');
+                  if (studentsContainer) {
+                    schedule.students.forEach(studentId => {
+                      const checkbox = studentsContainer.querySelector(`.student-checkbox[value="${String(studentId)}"]`);
+                      if (checkbox) {
+                        checkbox.checked = true;
+                      }
+                    });
+                    updateSelectedStudentsCount();
+                    console.log(`✅ [編輯模式] 恢復選中的學生（找不到職缺選項）: ${schedule.students.join(',')}`);
+                  }
+                }, 100);
+              }
+            }
+          }, 150); // 延遲150ms確保職缺下拉選單已填充
+        }
       }
       
       // 填充學生選單（會根據選擇的日期檢查學生是否已被其他廠商安排）
       // 傳遞編輯模式標記和當前排程的學生列表
       const currentScheduleStudents = schedule && schedule.students ? schedule.students.map(s => String(s)) : [];
-      populateStudentsDropdown(forceEditMode, currentScheduleStudents);
+      // 從排程中獲取職缺ID，如果沒有則從下拉選單獲取
+      let selectedJobId = '';
+      if (schedule && schedule.jobIds && schedule.jobIds.length > 0) {
+        selectedJobId = schedule.jobIds[0]; // 使用第一個職缺ID
+      } else {
+        const jobSelect = document.getElementById('interviewJob');
+        selectedJobId = jobSelect ? jobSelect.value : '';
+      }
+      populateStudentsDropdown(forceEditMode, currentScheduleStudents, selectedJobId);
       
       // 如果已有排程，恢復選中的學生
       if (schedule && schedule.students && Array.isArray(schedule.students)) {
@@ -3999,7 +4156,8 @@
                 renderCalendar();
                 // 重新載入學生列表（新增模式下，已安排的學生會變成唯讀）
                 // 注意：保存成功後，表單可能還在編輯模式，所以傳遞 false（新增模式）和空陣列
-                populateStudentsDropdown(false, []);
+                const selectedJobId = document.getElementById('interviewJob') ? document.getElementById('interviewJob').value : '';
+                populateStudentsDropdown(false, [], selectedJobId);
               }
             });
           } else {
