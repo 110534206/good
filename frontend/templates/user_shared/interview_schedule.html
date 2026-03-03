@@ -659,6 +659,27 @@
         const isResumeDeadline = resumeDeadlineDate === dateKey;
         const isMatchingResultDate = matchingResultDate === dateKey;
         
+        // 顯示媒合結果通知標記
+        if (isMatchingResultDate) {
+          const matchingBadge = document.createElement("div");
+          matchingBadge.style.cssText = `
+            font-size: 0.7rem;
+            color: #fff;
+            background-color: #198754;
+            padding: 2px 6px;
+            border-radius: 4px;
+            margin-top: 4px;
+            display: block;
+            width: 100%;
+            margin-bottom: 2px;
+            font-weight: 600;
+          `;
+          matchingBadge.textContent = matchingResultTime 
+            ? `媒合結果 ${matchingResultTime}`
+            : '媒合結果';
+          matchingBadge.title = '媒合結果已公告，可至通知或學生首頁查看';
+          dateCell.appendChild(matchingBadge);
+        }
         
         // 顯示截止時間標記（分成兩列顯示）
         if (isPreferenceDeadline || isResumeDeadline) {
@@ -710,10 +731,18 @@
           const schedules = allVendorSchedules.get(dateKey);
           
           if (schedules && schedules.length > 0) {
+            // 先對排程進行排序：已審核通過的排程放在前面
+            const sortedSchedules = [...schedules].sort((a, b) => {
+              const aApproved = (a.apply_status === 'approved') ? 1 : 0;
+              const bApproved = (b.apply_status === 'approved') ? 1 : 0;
+              // 已審核通過的排程優先（降序排序）
+              return bApproved - aApproved;
+            });
+            
             // 按照「公司名稱 + 時間段」分組
             const groupedSchedules = new Map();
             
-            schedules.forEach(schedule => {
+            sortedSchedules.forEach(schedule => {
               const timeStart = schedule.time_start || '';
               const timeEnd = schedule.time_end || '';
               
@@ -749,8 +778,19 @@
               group.schedules.push(schedule);
             });
             
+            // 將分組轉換為數組並排序：已審核通過的排程組放在前面
+            const sortedGroups = Array.from(groupedSchedules.entries()).sort((a, b) => {
+              const groupA = a[1];
+              const groupB = b[1];
+              // 檢查每個組中是否有已審核通過的排程
+              const aHasApproved = groupA.schedules.some(s => s.apply_status === 'approved');
+              const bHasApproved = groupB.schedules.some(s => s.apply_status === 'approved');
+              // 已審核通過的組優先（降序排序）
+              return (bHasApproved ? 1 : 0) - (aHasApproved ? 1 : 0);
+            });
+            
             // 為每個分組創建標籤
-            groupedSchedules.forEach((group, groupKey) => {
+            sortedGroups.forEach(([groupKey, group]) => {
               // 格式化時間顯示
               let timeDisplay = '';
               if (group.timeStart && group.timeEnd) {
