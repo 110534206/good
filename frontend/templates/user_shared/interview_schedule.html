@@ -825,12 +825,22 @@
                 e.stopPropagation(); // 阻止事件冒泡到日期格子
                 // 顯示合併後的排程詳情（使用第一個排程作為基礎，但包含所有學生）
                 if (group.schedules.length > 0) {
-                  // 創建一個合併的排程物件，包含所有學生姓名
+                  // 收集所有職缺信息
+                  const jobTitles = new Set();
+                  group.schedules.forEach(s => {
+                    const jobTitle = s.job_title || s.jobTitle || s.job_name || null;
+                    if (jobTitle && jobTitle.trim()) {
+                      jobTitles.add(jobTitle.trim());
+                    }
+                  });
+                  
+                  // 創建一個合併的排程物件，包含所有學生姓名和職缺信息
                   const mergedSchedule = {
                     ...group.schedules[0],
                     student_name: group.students.join('、'), // 合併所有學生姓名
                     all_students: group.students, // 保存所有學生姓名陣列
-                    all_schedules: group.schedules // 保存所有排程
+                    all_schedules: group.schedules, // 保存所有排程
+                    job_title: Array.from(jobTitles).join('、') || group.schedules[0].job_title || group.schedules[0].jobTitle || null // 合併所有職缺名稱
                   };
                   showInterviewDetail(mergedSchedule);
                 }
@@ -890,15 +900,17 @@
         // 如果有多個排程，收集所有不同的職缺
         const jobTitleSet = new Set();
         schedule.all_schedules.forEach(s => {
-          const jobTitle = s.job_title || s.jobTitle || null;
-          if (jobTitle && !jobTitleSet.has(jobTitle)) {
-            jobTitleSet.add(jobTitle);
-            jobTitles.push(jobTitle);
+          // 嘗試多種可能的字段名稱
+          const jobTitle = s.job_title || s.jobTitle || s.job_name || s.title || null;
+          if (jobTitle && jobTitle.trim() && !jobTitleSet.has(jobTitle.trim())) {
+            jobTitleSet.add(jobTitle.trim());
+            jobTitles.push(jobTitle.trim());
           }
         });
       } else {
         // 單個排程，使用當前排程的職缺
-        const jobTitle = schedule.job_title || schedule.jobTitle || null;
+        // 嘗試多種可能的字段名稱
+        const jobTitle = schedule.job_title || schedule.jobTitle || schedule.job_name || schedule.title || null;
         if (jobTitle) {
           jobTitles.push(jobTitle);
         }

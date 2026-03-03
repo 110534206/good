@@ -2132,11 +2132,13 @@ def get_interview_schedules():
                     sja.student_id,
                     u.name AS student_name,
                     ra.application_id,
-                    ra.job_id
+                    ra.job_id,
+                    ij.title AS job_title
                 FROM resume_applications ra
                 JOIN student_job_applications sja ON ra.application_id = sja.id
                 LEFT JOIN internship_companies ic ON sja.company_id = ic.id
                 LEFT JOIN users u ON sja.student_id = u.id
+                LEFT JOIN internship_jobs ij ON ra.job_id = ij.id
                 WHERE ra.interview_status = 'scheduled'
                 AND ra.interview_time IS NOT NULL
                 ORDER BY ra.updated_at DESC
@@ -2229,6 +2231,8 @@ def get_interview_schedules():
                 'company_name': company_name,
                 'student_id': student_id,
                 'student_name': student_name,
+                'job_id': schedule.get('job_id'),  # 添加 job_id
+                'job_title': schedule.get('job_title'),  # 添加 job_title
                 'created_at': schedule.get('created_at').strftime('%Y-%m-%d %H:%M:%S') if schedule.get('created_at') else None
             })
         

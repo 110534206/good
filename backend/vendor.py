@@ -3065,11 +3065,13 @@ def get_all_interview_schedules():
                 sja.student_id,
                 u.name AS student_name,
                 ra.application_id,
-                ra.job_id
+                ra.job_id,
+                ij.title AS job_title
             FROM resume_applications ra
             JOIN student_job_applications sja ON ra.application_id = sja.id
             LEFT JOIN internship_companies ic ON sja.company_id = ic.id
             LEFT JOIN users u ON sja.student_id = u.id
+            LEFT JOIN internship_jobs ij ON ra.job_id = ij.id
             WHERE ra.interview_status IN ('scheduled', 'finished')
             AND ra.interview_time IS NOT NULL
             ORDER BY ra.updated_at DESC
@@ -3179,7 +3181,8 @@ def get_all_interview_schedules():
                 'student_id': student_id,  # 添加學生ID
                 'student_name': student_name,  # 添加學生姓名
                 'application_id': schedule.get('application_id'),
-                'job_id': schedule.get('job_id')
+                'job_id': schedule.get('job_id'),
+                'job_title': schedule.get('job_title')  # 添加職缺名稱
             })
         
         print(f"✅ [all_interview_schedules] 最終返回 {len(parsed_schedules)} 個解析後的排程")
