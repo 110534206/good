@@ -82,7 +82,7 @@ def unadmitted_list_page():
     if user_role not in ['ta', 'admin', 'director', 'teacher']:
         return "無權限訪問此頁面", 403
     
-    return render_template('ta/unadmitted_list.html')
+    return render_template('ta/unadmitted_list.html', user_role=user_role or '')
 
 # =========================================================
 # 頁面路由：主任媒合

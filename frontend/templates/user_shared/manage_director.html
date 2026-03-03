@@ -37,14 +37,14 @@
       border-bottom: none;
       position: sticky;
       top: 0;
-      z-index: 10;
+      z-index: 1020;
       box-shadow: 0 8px 20px rgba(0, 68, 148, 0.35);
     }
 
     .topbar {
-      max-width: 1200px;
+      max-width: 1400px;
       margin: 0 auto;
-      padding: 18px 24px;
+      padding: 18px 24px 18px 6px;
       display: flex;
       align-items: center;
       justify-content: center;
@@ -82,6 +82,8 @@
       background: none;
       border: none;
       padding: 0;
+      margin-left: -8px;
+      margin-right: 8px;
     }
 
     #menu-btn span {
@@ -93,16 +95,16 @@
       transition: all 0.3s ease;
     }
 
+    /* 與頂端列 .topbar 同寬對齊，整體區塊加寬 */
     main.management-container {
-      max-width: 100%;
+      max-width: 1400px;
       margin: 24px auto 60px auto;
-      padding: 0 24px;
+      padding: 0 24px 0 6px;
     }
     
-    /* 確保過濾器容器置中 */
+    /* 過濾器與底下雙欄同寬，不另限制 */
     #filtersContainer {
-      margin-left: auto;
-      margin-right: auto;
+      width: 100%;
     }
 
     .panel {
@@ -232,7 +234,7 @@
     }
 
     .company-header {
-      background: linear-gradient(135deg, #0055a8 0%, #006acb 100%);
+      background: linear-gradient(135deg, #334155 0%, #475569 100%);
       color: #fff;
       padding: 18px 24px;
       border-bottom: none;
@@ -244,12 +246,20 @@
       justify-content: space-between;
       user-select: none;
       transition: background 0.2s ease;
-      position: relative;  /* 確保標題可以正確接收拖放事件 */
-      z-index: 2;  /* 確保標題在卡片內容之上 */
+      position: relative;
+      z-index: 2;
+      min-width: 0;
+    }
+    .company-header > span:first-child {
+      min-width: 0;
+      flex: 1;
+      word-wrap: break-word;
+      overflow-wrap: break-word;
+      white-space: normal;
     }
 
     .company-header:hover {
-      background: linear-gradient(135deg, #004a94 0%, #005bb8 100%);
+      background: linear-gradient(135deg, #475569 0%, #64748b 100%);
     }
 
     .company-header .toggle-icon {
@@ -279,11 +289,29 @@
     .job-section {
       padding: 20px;
       border-bottom: 1px solid var(--color-border);
-      overflow: visible;  /* 讓內容可以超出區塊 */
+      overflow: visible;
     }
 
     .job-section:last-child {
       border-bottom: none;
+    }
+
+    .job-section .job-title {
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .job-section .job-title .job-toggle-icon {
+      margin-left: 8px;
+      transition: transform 0.2s ease;
+    }
+
+    .job-section.job-section-collapsed .job-title .job-toggle-icon {
+      transform: rotate(-90deg);
+    }
+
+    .job-section.job-section-collapsed .job-section-body {
+      display: none;
     }
 
     .job-title {
@@ -527,12 +555,12 @@
       top: 0;
       left: 0;
       height: 100vh;
-      width: 320px;
-      max-width: 80vw;
+      width: 280px;
+      max-width: 75vw;
       background-color: rgba(10, 10, 10, 0.95);
       backdrop-filter: blur(6px);
       box-shadow: 3px 0 12px rgba(0, 0, 0, 0.6);
-      padding: 2rem 1.5rem;
+      padding: 2rem 1.25rem;
       transform: translateX(-100%);
       transition: transform 0.3s ease-in-out;
       z-index: 1300;
@@ -945,6 +973,16 @@
       font-size: 1.05em;
       opacity: 0.95;
     }
+    .unsorted-companies-block .unsorted-summary {
+      font-size: 0.95rem;
+      color: #1e293b;
+      margin-bottom: 10px;
+      line-height: 1.5;
+    }
+    .unsorted-companies-block .unsorted-summary .summary-highlight {
+      font-weight: 600;
+      color: #9a4a0e;
+    }
     .unsorted-companies-block .unsorted-list {
       font-size: 0.9rem;
       color: var(--color-text);
@@ -952,6 +990,16 @@
       display: flex;
       flex-wrap: wrap;
       gap: 10px 12px;
+    }
+    .unsorted-companies-block .unsorted-list::before {
+      content: attr(data-label);
+      width: 100%;
+      font-size: 0.85rem;
+      color: var(--color-muted);
+      margin-bottom: 4px;
+    }
+    .unsorted-companies-block .unsorted-list.empty::before {
+      content: none;
     }
     .unsorted-companies-block .unsorted-list.empty {
       color: #64748b;
@@ -973,19 +1021,26 @@
       color: #1e293b;
     }
 
-    /* 媒合結果過濾器和卡片樣式（與 final_results.html 相同） */
+    /* 媒合結果過濾器：寬度與底下雙欄內容同寬，避免與分頁／內容重疊 */
     .filters-container {
       display: flex;
       gap: 16px;
-      margin: 0 auto 24px auto;
+      margin: 0 0 24px 0;
       padding: 20px;
       background: #ffffff;
       border-radius: 12px;
       box-shadow: 0 2px 8px rgba(15, 23, 42, 0.06);
       align-items: flex-end;
       flex-wrap: wrap;
-      justify-content: center;
-      max-width: 900px;
+      justify-content: flex-start;
+      width: 100%;
+      box-sizing: border-box;
+      position: relative;
+      z-index: 100;
+    }
+    .filters-container select {
+      position: relative;
+      z-index: 101;
     }
 
     .filter-group {
@@ -1109,18 +1164,20 @@
   
     .companies-container {
      display: grid;
-     grid-template-columns: repeat(2, 1fr);
+     grid-template-columns: 1fr;
      gap: 16px;
      padding: 20px;
      align-items: start;
      overflow: visible;
+     width: 100%;
+     min-width: 0;
+     box-sizing: border-box;
      }
 
-    /* 響應式調整：在小螢幕上改為單列 */
-    @media (max-width: 900px) {
-      .companies-container {
-        grid-template-columns: 1fr;
-      }
+    /* 主任排序結果內容寬度與廠商排序結果一致（單公司時皆為單欄全寬） */
+    .split-view-col .col-body.companies-container {
+      grid-template-columns: 1fr;
+      width: 100%;
     }
 
     .company-card {
@@ -1169,7 +1226,7 @@
     /* 主雙頁面容器：左側學生名單，右側公司列表 */
     .dual-page-container {
       display: flex;
-      gap: 24px;
+      gap: 40px;
       width: 100%;
       align-items: flex-start;
       margin-left: 0;
@@ -1184,7 +1241,6 @@
     .dual-page-right {
       flex: 1;
       min-width: 0;
-      margin-left: auto;
     }
 
     .dual-page-left .panel,
@@ -1221,7 +1277,16 @@
       flex-direction: column;
       overflow: visible;
       min-height: 0;
-      padding: 0;
+      padding: 0 12px;
+    }
+
+    /* 所有學生名單底下的區塊（標題、忠孝班、學生名單）統一往左移 */
+    .dual-page-left .panel-header,
+    .dual-page-left .panel-body {
+      padding-left: 0;
+    }
+    .dual-page-left .panel-body {
+      padding-right: 12px;
     }
 
     .dual-page-left #unmatchedStudentsContainer {
@@ -1229,34 +1294,45 @@
       min-height: 0;
     }
 
-    .dual-page-right #companiesContainer {
+    .dual-page-right #directorContainer,
+    .dual-page-right #vendorContainer {
       overflow: visible;
       min-height: 0;
     }
 
-    /* 未被錄取學生列表樣式 - 雙欄顯示 */
+    /* 未被錄取學生列表樣式 - 雙欄顯示，忠班／孝班明顯分開，區塊與內容對齊不凸出 */
     #unmatchedStudentsContainer {
       display: flex;
-      gap: 16px;
+      gap: 24px;
       width: 100%;
+      min-width: 0;
+      overflow: hidden;
     }
 
     .student-page-column {
       flex: 1;
-      min-width: 0;  /* 允許 flex 項目縮小 */
+      min-width: 0;
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
       gap: 12px;
       align-content: start;
+      padding: 12px;
+      border-radius: 10px;
+      background: rgba(248, 250, 252, 0.8);
+      border: 1px solid var(--color-border);
+      box-sizing: border-box;
+      overflow: hidden;
     }
 
     .student-page-column:first-child {
-      border-right: 2px solid var(--color-border);
-      padding-right: 8px;
+      border-right: none;
+      padding-right: 12px;
+      margin-right: 0;
     }
 
     .student-page-column:last-child {
-      padding-left: 8px;
+      padding-left: 12px;
+      margin-left: 0;
     }
 
     .unmatched-student-item {
@@ -1459,6 +1535,211 @@
       cursor: not-allowed;
       opacity: 0.5;
     }
+
+    /* ========== 雙欄對照：廠商排序 | 主任排序 + 分頁 ========== */
+    .split-view-wrapper {
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+      width: 100%;
+      margin-top: 8px;
+    }
+    .split-view-header {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 16px;
+      padding: 12px 0;
+      border-bottom: 2px solid var(--color-border);
+      margin-bottom: 16px;
+    }
+    .split-view-header .split-view-header-nav {
+      margin-left: auto;
+    }
+    .split-view-header h2 {
+      margin: 0;
+      font-size: 1.15rem;
+      font-weight: 600;
+      color: var(--color-text);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .split-view-tabs {
+      display: flex;
+      gap: 4px;
+      align-items: center;
+    }
+    .split-view-tab {
+      padding: 10px 20px;
+      border: 2px solid var(--color-border);
+      border-radius: 8px;
+      background: #fff;
+      color: var(--color-muted);
+      font-weight: 600;
+      font-size: 0.95rem;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .split-view-tab:hover {
+      border-color: var(--color-primary);
+      color: var(--color-primary);
+    }
+    .split-view-tab.active {
+      background: #fff;
+      border-color: #eab308;
+      color: #713f12;
+    }
+    .split-view-tab.vendor-tab.active {
+      background: #fff;
+      border-color: #22c55e;
+      color: #14532d;
+    }
+    .split-view-columns {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 24px;
+      align-items: start;
+      min-height: 400px;
+    }
+    .split-view-columns.tab-vendor .vendor-col { grid-column: 1 / -1; }
+    .split-view-columns.tab-vendor .director-col { display: none !important; }
+    .split-view-columns.tab-director .director-col { grid-column: 1 / -1; }
+    .split-view-columns.tab-director .vendor-col { display: none !important; }
+    @media (max-width: 1100px) {
+      .split-view-columns {
+        grid-template-columns: 1fr;
+      }
+    }
+    .split-view-col {
+      background: var(--color-card);
+      border-radius: 12px;
+      box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+      border: 1px solid var(--color-border);
+      overflow: visible;
+      display: flex;
+      flex-direction: column;
+    }
+    .split-view-col.hidden-tab-panel {
+      display: none !important;
+    }
+    .split-view-col.vendor-col .col-title {
+      background: #fff;
+      color: #14532d;
+      border-left: 4px solid #22c55e;
+    }
+    .split-view-col.director-col .col-title {
+      background: #fff;
+      color: #713f12;
+      border-left: 4px solid #eab308;
+    }
+    .split-view-col .col-title {
+      padding: 14px 20px;
+      font-size: 1.05rem;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .company-navigation-inline {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .company-navigation-inline .nav-btn {
+      padding: 6px 12px;
+      font-size: 0.85rem;
+    }
+    .company-navigation-inline .company-counter {
+      font-size: 0.9rem;
+      color: var(--color-muted);
+    }
+    .split-view-col .col-body {
+      padding: 0;
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+    }
+    /* 左公司列表 + 右職缺與媒合區：雙欄固定高度 */
+    .two-col-layout {
+      display: flex;
+      flex: 1;
+      min-height: 0;
+      height: 60vh;
+      overflow: hidden;
+    }
+    .company-list-panel {
+      width: 220px;
+      flex-shrink: 0;
+      border-right: 1px solid var(--color-border);
+      overflow-y: auto;
+      background: #fafafa;
+    }
+    .company-list-panel .company-list-item {
+      padding: 12px 16px;
+      cursor: pointer;
+      border-bottom: 1px solid var(--color-border);
+      font-size: 0.95rem;
+      transition: background 0.15s ease;
+    }
+    .company-list-panel .company-list-item:hover {
+      background: #f1f5f9;
+    }
+    .company-list-panel .company-list-item.active {
+      background: #e0f2fe;
+      border-left: 4px solid var(--color-primary);
+      font-weight: 600;
+    }
+    .job-match-panel {
+      flex: 1;
+      min-width: 0;
+      overflow-y: auto;
+      overflow-x: visible;
+      padding: 20px;
+    }
+    .split-view-col .col-body.read-only .student-item .student-actions,
+    .split-view-col .col-body.read-only .empty-slot,
+    .split-view-col .col-body.read-only .btn {
+      display: none !important;
+    }
+    .split-view-col .col-body.read-only .company-card {
+      cursor: default;
+    }
+    .split-view-col .col-body .company-card {
+      min-width: 0;
+      max-width: none;
+      width: 100%;
+    }
+    .split-view-col .col-body .company-header > span:first-child {
+      min-width: 0;
+      word-wrap: break-word;
+      overflow-wrap: break-word;
+      white-space: normal;
+    }
+    .split-view-pagination {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 16px;
+      margin-top: 24px;
+      padding: 18px 20px;
+      background: #f1f5f9;
+      border-radius: 10px;
+      border: 1px solid var(--color-border);
+      position: relative;
+      z-index: 10;
+      flex-shrink: 0;
+    }
+    .split-view-pagination .pagination-info {
+      font-size: 0.95rem;
+      color: var(--color-muted);
+      font-weight: 500;
+    }
   </style>
 </head>
 <body>
@@ -1477,11 +1758,12 @@
   </header>
 
   <main class="management-container">
-    <!-- 尚未排序的廠商（第一個、橫向全寬） -->
+    <!-- 廠商排序狀態：共有 X 間、已填寫 X 間、未填寫 X 間 -->
     <div id="unsortedCompaniesBlock" class="unsorted-companies-block">
       <div class="unsorted-title">
         <i class="fas fa-clock"></i> 尚未排序的廠商
       </div>
+      <div id="unsortedCompaniesSummary" class="unsorted-summary">載入中...</div>
       <div id="unsortedCompaniesList" class="unsorted-list empty">載入中...</div>
     </div>
 
@@ -1489,19 +1771,6 @@
     <div id="duplicateAlert" class="duplicate-alert" style="display: none;">
       <h4><i class="fas fa-exclamation-triangle"></i> 發現重複中選學生</h4>
       <ul id="duplicateList"></ul>
-    </div>
-
-    <!-- 廠商導航（一個一個顯示） -->
-    <div id="companyNavigation" class="company-navigation" style="display: none;">
-      <div class="nav-buttons">
-        <button id="prevBtn" class="nav-btn" onclick="showPreviousCompany()" disabled>
-          <i class="fas fa-chevron-left"></i> 上一個
-        </button>
-        <button id="nextBtn" class="nav-btn" onclick="showNextCompany()">
-          下一個 <i class="fas fa-chevron-right"></i>
-        </button>
-      </div>
-      <div id="companyCounter" class="company-counter">1 / 1</div>
     </div>
 
     <!-- 媒合結果過濾器（框架一直存在） -->
@@ -1567,22 +1836,55 @@
         </div>
       </div>
 
-      <!-- 右側：公司列表 -->
+      <!-- 右側：廠商排序 vs 主任排序（雙欄對照 + 分頁） -->
       <div class="dual-page-right">
         <div class="panel" id="companiesPanel" style="display: block;">
-          <div class="panel-header">
-            <i class="fas fa-building"></i> 公司列表
+          <div class="split-view-header">
+            <h2><i class="fas fa-columns"></i> 媒合排序對照</h2>
+            <div class="split-view-tabs">
+              <button type="button" class="split-view-tab vendor-tab" id="tabVendor" onclick="setMatchingTab('vendor')">
+                <i class="fas fa-store"></i> 廠商排序結果
+              </button>
+              <button type="button" class="split-view-tab active" id="tabDirector" onclick="setMatchingTab('director')">
+                <i class="fas fa-user-edit"></i> 主任排序結果
+              </button>
+            </div>
+            <div id="companyNavigation" class="company-navigation-inline split-view-header-nav" style="display: none;">
+              <button id="prevBtn" class="nav-btn" onclick="showPreviousCompany()" disabled>
+                <i class="fas fa-chevron-left"></i> 上一間
+              </button>
+              <button id="nextBtn" class="nav-btn" onclick="showNextCompany()">
+                下一間 <i class="fas fa-chevron-right"></i>
+              </button>
+              <span id="companyCounter" class="company-counter">1 / 1</span>
+            </div>
           </div>
           <div class="panel-body">
-            <!-- 媒合結果載入狀態 -->
-            <div id="loadingState" class="loading" style="display: none;">
+            <!-- 媒合結果載入狀態（右側面板內） -->
+            <div id="loadingStateRight" class="loading" style="display: none;">
               <span class="spinner"></span>
               <span>載入中...</span>
             </div>
 
-            <!-- 媒合結果公司卡片容器 -->
-            <div id="companiesContainer" class="companies-container" style="display: grid;">
-              <!-- 廠商卡片將動態生成 -->
+            <div id="splitViewWrapper" class="split-view-wrapper" style="display: none;">
+              <div class="split-view-columns">
+                <div class="split-view-col vendor-col">
+                  <div class="col-title">
+                    <i class="fas fa-store"></i> 廠商排序結果
+                  </div>
+                  <div id="vendorContainer" class="col-body read-only">
+                    <!-- 廠商原始排序（唯讀） -->
+                  </div>
+                </div>
+                <div class="split-view-col director-col">
+                  <div class="col-title">
+                    <i class="fas fa-user-edit"></i> 主任排序結果
+                  </div>
+                  <div id="directorContainer" class="col-body companies-container">
+                    <!-- 主任調整後（可編輯） -->
+                  </div>
+                </div>
+              </div>
             </div>
 
             <!-- 媒合結果空狀態 -->
@@ -1614,13 +1916,17 @@
 
   <script>
     let allCompaniesData = [];
+    let vendorOriginalCompaniesData = [];  // 廠商原始排序（唯讀對照用），載入時深拷貝
     let duplicateStudents = [];
     let duplicateStudentsPreferences = {};  // 儲存重複學生的完整志願序 {studentId: [{preference_order, company_id, job_id, ...}]}
-    let currentCompanyIndex = 0;  // 當前顯示的廠商索引
+    let currentCompanyIndex = 0;  // 當前顯示的廠商索引（單公司切換模式）
+    let expandedJobId = null;     // 當前展開的職缺 ID，一次只能展開一個
     let jobSlotsMap = {};  // 儲存每個職缺的名額設定 {companyId_jobId: slots}，從職缺資料自動帶入
     let unmatchedStudents = [];  // 所有學生列表
     let currentPage = 1;  // 當前頁碼
     let studentsPerPage = 20;  // 每頁顯示的學生數量
+    let directorPage = 1;  // 主任／廠商對照分頁
+    let companiesPerPage = 5;  // 每頁顯示幾家公司（雙欄共用，分頁顯示完整公司列表）
 
     // 側邊選單控制
     const menuBtn = document.getElementById('menu-btn');
@@ -1635,9 +1941,44 @@
       sideMenu.classList.remove('open');
     });
 
-    // 載入「尚未排序的廠商」並顯示在上方區塊（區塊始終顯示，無資料時顯示「目前沒有尚未排序的廠商」）
+    function setMatchingTab(tab) {
+      const cols = document.querySelector('.split-view-columns');
+      const tabVendor = document.getElementById('tabVendor');
+      const tabDirector = document.getElementById('tabDirector');
+      if (!cols || !tabVendor || !tabDirector) return;
+      cols.classList.remove('tab-vendor', 'tab-director');
+      tabVendor.classList.remove('active');
+      tabDirector.classList.remove('active');
+      if (tab === 'vendor') {
+        cols.classList.add('tab-vendor');
+        tabVendor.classList.add('active');
+      } else {
+        cols.classList.add('tab-director');
+        tabDirector.classList.add('active');
+      }
+    }
+
+    let unsortedCompaniesData = [];  // 尚未排序的廠商名單，供統計與列表顯示
+
+    // 更新「尚未排序的廠商」區塊的統計說明（共有 X 間、已填寫 X 間、未填寫 X 間）
+    function updateUnsortedBlockSummary() {
+      const summaryEl = document.getElementById('unsortedCompaniesSummary');
+      const listEl = document.getElementById('unsortedCompaniesList');
+      if (!summaryEl || !listEl) return;
+      const unsetCount = unsortedCompaniesData.length;
+      const sortedCount = (allCompaniesData && allCompaniesData.length) ? getCompaniesWithCompletedSorting(allCompaniesData).length : 0;
+      const totalCount = sortedCount + unsetCount;
+      if (totalCount === 0 && unsetCount === 0) {
+        summaryEl.innerHTML = '目前沒有廠商資料。';
+        return;
+      }
+      summaryEl.innerHTML = `共有 <span class="summary-highlight">${totalCount}</span> 間公司。已填寫 <span class="summary-highlight">${sortedCount}</span> 間、未填寫 <span class="summary-highlight">${unsetCount}</span> 間。`;
+    }
+
+    // 載入「尚未排序的廠商」並顯示在上方區塊（區塊始終顯示，統計：共有 X 間、已填寫 X 間、未填寫 X 間）
     async function loadUnsortedCompanies() {
       const block = document.getElementById('unsortedCompaniesBlock');
+      const summaryEl = document.getElementById('unsortedCompaniesSummary');
       const listEl = document.getElementById('unsortedCompaniesList');
       if (!block || !listEl) return;
       try {
@@ -1645,44 +1986,49 @@
         const data = await res.json();
         block.style.display = 'block';
         if (data.success && Array.isArray(data.unsorted_companies)) {
-          if (data.unsorted_companies.length === 0) {
+          unsortedCompaniesData = data.unsorted_companies;
+          if (unsortedCompaniesData.length === 0) {
             listEl.classList.add('empty');
+            listEl.removeAttribute('data-label');
             listEl.innerHTML = '目前沒有尚未排序的廠商';
           } else {
             listEl.classList.remove('empty');
-            listEl.innerHTML = data.unsorted_companies
+            listEl.setAttribute('data-label', '未填寫公司：');
+            listEl.innerHTML = unsortedCompaniesData
               .map(c => `<span class="company-tag">${escapeHtml(c.company_name || '')}</span>`)
               .join('');
           }
+          updateUnsortedBlockSummary();
         } else {
+          unsortedCompaniesData = [];
           listEl.classList.add('empty');
           listEl.innerHTML = '無法載入，請稍後再試';
+          if (summaryEl) summaryEl.innerHTML = '';
         }
       } catch (e) {
         console.warn('載入尚未排序廠商失敗', e);
         block.style.display = 'block';
+        unsortedCompaniesData = [];
         listEl.classList.add('empty');
         listEl.innerHTML = '無法載入，請稍後再試';
+        if (summaryEl) summaryEl.innerHTML = '';
       }
     }
 
     // 載入媒合結果
     async function loadMatchingResults(showLoading = true) {
-      const loadingState = document.getElementById('loadingState');
-      const companiesContainer = document.getElementById('companiesContainer');
+      const loadingStateRight = document.getElementById('loadingStateRight');
+      const splitViewWrapper = document.getElementById('splitViewWrapper');
       const emptyState = document.getElementById('emptyState');
       const filtersContainer = document.getElementById('filtersContainer');
       
-      // 確保框架一直存在
-      filtersContainer.style.display = 'flex';  // 過濾器框架一直顯示
-      
-      // 根據參數決定是否顯示載入狀態
+      filtersContainer.style.display = 'flex';
       if (showLoading) {
-      loadingState.style.display = 'flex';
+        if (loadingStateRight) loadingStateRight.style.display = 'flex';
+        if (splitViewWrapper) splitViewWrapper.style.display = 'none';
       } else {
-        loadingState.style.display = 'none';
+        if (loadingStateRight) loadingStateRight.style.display = 'none';
       }
-      companiesContainer.style.display = 'grid';  // 框架一直存在，即使沒有內容
       emptyState.style.display = 'none';
       
       try {
@@ -1701,10 +2047,12 @@
 
         if (data.success) {
           allCompaniesData = data.companies || [];
+          vendorOriginalCompaniesData = JSON.parse(JSON.stringify(allCompaniesData || []));
           duplicateStudents = data.duplicate_students || [];
-          currentCompanyIndex = 0;  // 重置到第一個廠商
+          currentCompanyIndex = 0;
+          expandedJobId = null;
+          directorPage = 1;
           
-          // 調試：檢查資料結構
           if (allCompaniesData.length > 0) {
             console.log('📋 公司資料範例:', allCompaniesData[0]);
             const totalJobs = allCompaniesData.reduce((sum, company) => sum + (company.jobs ? company.jobs.length : 0), 0);
@@ -1720,9 +2068,8 @@
           // 從媒合結果中的職缺資料自動帶入名額設定
           jobSlotsMap = {};
           allCompaniesData.forEach(company => {
-            company.jobs.forEach(job => {
+            (company.jobs || []).forEach(job => {
               const key = `${company.company_id}_${job.job_id}`;
-              // 使用職缺的名額（從資料庫直接取得）
               jobSlotsMap[key] = job.job_slots || 1;
             });
           });
@@ -1741,27 +2088,21 @@
           // 填充過濾器選項
           populateFilters();
           
-          // 渲染結果（會自動按照第一志願序排序）
           renderCompanies();
           renderDuplicateAlert();
           
-          // 載入未被錄取的學生
           await loadUnmatchedStudents();
-          
-          // 更新上方「尚未排序的廠商」區塊
           await loadUnsortedCompanies();
           
-          // 隱藏載入狀態，但保持框架存在
-          loadingState.style.display = 'none';
-          
-          // 根據是否有資料顯示對應的內容，但框架一直存在
+          if (loadingStateRight) loadingStateRight.style.display = 'none';
           if (allCompaniesData.length === 0) {
-            companiesContainer.style.display = 'grid';  // 框架存在
-            companiesContainer.innerHTML = '';  // 清空內容
+            if (splitViewWrapper) splitViewWrapper.style.display = 'none';
             emptyState.style.display = 'block';
           } else {
-            companiesContainer.style.display = 'grid';  // 框架存在
+            if (splitViewWrapper) splitViewWrapper.style.display = 'block';
             emptyState.style.display = 'none';
+            setMatchingTab('director');
+            renderVendorSide();
           }
           
           // 確保學生名單面板顯示
@@ -1770,9 +2111,8 @@
             unmatchedPanel.style.display = 'block';
           }
         } else {
-          loadingState.style.display = 'none';
-          companiesContainer.style.display = 'grid';  // 框架一直存在
-          companiesContainer.innerHTML = '';  // 清空內容
+          if (loadingStateRight) loadingStateRight.style.display = 'none';
+          if (splitViewWrapper) splitViewWrapper.style.display = 'none';
           emptyState.style.display = 'block';
           emptyState.innerHTML = `
             <i class="fa-solid fa-triangle-exclamation"></i>
@@ -1781,9 +2121,10 @@
         }
       } catch (error) {
         console.error('載入失敗:', error);
-        loadingState.style.display = 'none';
-        companiesContainer.style.display = 'grid';  // 框架一直存在
-        companiesContainer.innerHTML = '';  // 清空內容
+        const loadingStateRight = document.getElementById('loadingStateRight');
+        const splitViewWrapper = document.getElementById('splitViewWrapper');
+        if (loadingStateRight) loadingStateRight.style.display = 'none';
+        if (splitViewWrapper) splitViewWrapper.style.display = 'none';
         emptyState.style.display = 'block';
         emptyState.innerHTML = `
           <i class="fa-solid fa-triangle-exclamation"></i>
@@ -2446,51 +2787,95 @@
       });
     }
 
-    // 顯示上一個廠商
+    // 單公司切換：上一間
     function showPreviousCompany() {
+      const list = getFilteredCompanies(getCompaniesWithCompletedSorting(allCompaniesData));
+      if (list.length === 0) return;
       if (currentCompanyIndex > 0) {
         currentCompanyIndex--;
+        expandedJobId = null;
         renderCompanies();
         updateNavigation();
       }
     }
 
-    // 顯示下一個廠商
+    // 單公司切換：下一間
     function showNextCompany() {
-      if (currentCompanyIndex < allCompaniesData.length - 1) {
+      const list = getFilteredCompanies(getCompaniesWithCompletedSorting(allCompaniesData));
+      if (list.length === 0) return;
+      if (currentCompanyIndex < list.length - 1) {
         currentCompanyIndex++;
+        expandedJobId = null;
         renderCompanies();
         updateNavigation();
       }
     }
 
-    // 更新導航按鈕狀態（水平排列時隱藏導航）
+    // 點擊左側公司列表切換公司
+    function selectCompanyByIndex(idx) {
+      const list = getFilteredCompanies(getCompaniesWithCompletedSorting(allCompaniesData));
+      if (idx < 0 || idx >= list.length) return;
+      currentCompanyIndex = idx;
+      expandedJobId = null;
+      renderCompanies();
+      renderVendorSide();
+      updateNavigation();
+    }
+
+    // 單職缺展開：點擊職缺標題切換，一次只展開一個
+    function toggleJob(jobId) {
+      expandedJobId = (expandedJobId === jobId) ? null : jobId;
+      renderCompanies();
+    }
+
+    // 更新導航：顯示 3 / 15、上一間/下一間 按鈕狀態
     function updateNavigation() {
       const nav = document.getElementById('companyNavigation');
-      
-      // 水平排列時隱藏導航按鈕
-      if (nav) {
+      const counterEl = document.getElementById('companyCounter');
+      const prevBtn = document.getElementById('prevBtn');
+      const nextBtn = document.getElementById('nextBtn');
+      const list = getFilteredCompanies(getCompaniesWithCompletedSorting(allCompaniesData));
+      if (!nav) return;
+      if (list.length === 0) {
         nav.style.display = 'none';
+        return;
       }
+      nav.style.display = 'flex';
+      if (counterEl) counterEl.textContent = (currentCompanyIndex + 1) + ' / ' + list.length;
+      if (prevBtn) prevBtn.disabled = currentCompanyIndex <= 0;
+      if (nextBtn) nextBtn.disabled = currentCompanyIndex >= list.length - 1;
     }
 
     // 過濾公司數據
     function filterCompanies() {
+      return getFilteredCompanies(getCompaniesWithCompletedSorting(allCompaniesData));
+    }
+
+    // 只保留「有排序完成」的公司（至少一個職缺有正取或備取學生）
+    function getCompaniesWithCompletedSorting(source) {
+      const data = source || [];
+      return data.filter(company => {
+        const jobs = company.jobs || [];
+        return jobs.some(job => {
+          const regulars = job.regulars || [];
+          const reserves = job.reserves || [];
+          return regulars.length > 0 || reserves.length > 0;
+        });
+      });
+    }
+
+    function getFilteredCompanies(source) {
       const companyFilter = document.getElementById('companyFilter');
       const jobFilter = document.getElementById('jobFilter');
       const studentNameFilter = document.getElementById('studentNameFilter');
-      
       const selectedCompanyId = companyFilter ? companyFilter.value : '';
       const selectedJobTitle = jobFilter ? jobFilter.value : '';
       const searchKeyword = studentNameFilter ? studentNameFilter.value.trim().toLowerCase() : '';
-      
-      // 如果沒有任何過濾條件，返回所有數據
       if (!selectedCompanyId && !selectedJobTitle && !searchKeyword) {
-        return allCompaniesData;
+        return source || [];
       }
-      
-      // 過濾數據
-      return allCompaniesData.map(company => {
+      const data = source || [];
+      return data.map(company => {
         // 公司過濾：如果選擇了公司，且不匹配則跳過整個公司
         if (selectedCompanyId && company.company_id.toString() !== selectedCompanyId) {
           return null;
@@ -2540,31 +2925,33 @@
       }).filter(company => company !== null);
     }
 
-    // 渲染公司列表（水平排列顯示所有廠商）
+    // 渲染公司列表：主任排序（可編輯），寫入 directorContainer，分頁顯示
     function renderCompanies(filteredData = null) {
-      const container = document.getElementById('companiesContainer');
-      const loadingState = document.getElementById('loadingState');
+      const container = document.getElementById('directorContainer');
       const emptyState = document.getElementById('emptyState');
-      
-      // 確保框架一直存在
-      loadingState.style.display = 'none';
-      container.style.display = 'grid';  // 框架一直存在
-      
-      // 使用過濾後的數據或原始數據
-      const companiesToRender = filteredData !== null ? filteredData : allCompaniesData;
-      
+      if (!container) return;
+      const companiesToRender = filteredData !== null ? filteredData : getFilteredCompanies(getCompaniesWithCompletedSorting(allCompaniesData));
+      if (filteredData !== null) {
+        currentCompanyIndex = 0;
+        expandedJobId = null;
+      }
       if (companiesToRender.length === 0) {
-        container.innerHTML = '';  // 清空內容，但框架存在
-        emptyState.style.display = 'block';
+        container.innerHTML = '';
+        const vc = document.getElementById('vendorContainer');
+        if (vc) vc.innerHTML = '';
+        if (emptyState) emptyState.style.display = 'block';
+        const sw = document.getElementById('splitViewWrapper');
+        if (sw) sw.style.display = 'none';
         updateNavigation();
         return;
       }
-
-      // 顯示內容，隱藏空狀態
-      emptyState.style.display = 'none';
+      currentCompanyIndex = Math.max(0, Math.min(currentCompanyIndex, companiesToRender.length - 1));
+      const company = companiesToRender[currentCompanyIndex];
+      if (emptyState) emptyState.style.display = 'none';
+      const sw = document.getElementById('splitViewWrapper');
+      if (sw) sw.style.display = 'block';
       
-      // 渲染所有廠商，水平排列（即使沒有資料也顯示框架）
-      container.innerHTML = companiesToRender.map(company => {
+      const rightPanelHtml = (function renderSingleCompany(company) {
         // 確保 jobs 陣列存在
         const jobs = company.jobs || [];
         const jobsHtml = jobs.map(job => {
@@ -2718,22 +3105,26 @@
           const reservesHtml = renderStudentList(job.reserves, 'reserve', job);
           
           const filledSlots = Object.keys(slotToStudent).length;
+          const isJobExpanded = expandedJobId === job.job_id;
+          const jobSectionClass = isJobExpanded ? 'job-section-expanded' : 'job-section-collapsed';
 
           return `
-            <div class="job-section" 
+            <div class="job-section ${jobSectionClass}" 
                  data-company-id="${company.company_id}"
                  data-job-id="${job.job_id}"
                  ondrop="handleDrop(event)"
                  ondragover="handleDragOver(event)"
                  ondragleave="handleDragLeave(event)">
-              <div class="job-title">
+              <div class="job-title" onclick="toggleJob(${job.job_id})" role="button">
                 <div style="display: flex; align-items: center; justify-content: space-between;">
                   <span>${job.job_title || '未指定職缺'}</span>
+                  <span class="job-toggle-icon"><i class="fas fa-chevron-down"></i></span>
                   <span style="font-size: 0.85rem; color: var(--color-muted);">
                     （已選：${filledSlots} / 名額：${maxSlots}）
                   </span>
                 </div>
               </div>
+              <div class="job-section-body">
               <div class="regular-list"
                    data-company-id="${company.company_id}"
                    data-job-id="${job.job_id}"
@@ -2764,6 +3155,8 @@
                 </div>
               `}
             </div>
+              </div>
+            </div>
           `;
         }).join('');
 
@@ -2783,9 +3176,9 @@
           return filledSlots >= maxSlots && hasReserves;
         });
         
-        // 如果有正取名單，則自動展開（不添加 collapsed class）
+        // 單公司模式：公司卡片一律展開，收合僅在職缺層級
         const companyCardId = `company-card-${company.company_id}`;
-        const collapsedClass = hasRegulars ? '' : 'collapsed';
+        const collapsedClass = '';
         const fullClass = isCompanyFull ? 'full' : '';
         
         return `
@@ -2797,21 +3190,120 @@
                ondragleave="handleDragLeave(event)">
             <div class="company-header" 
                  data-company-id="${company.company_id}"
-                 onclick="toggleCompanyCard('${companyCardId}')"
                  ondrop="handleDrop(event)"
                  ondragover="handleDragOver(event)"
                  ondragleave="handleDragLeave(event)">
-              <span>${company.company_name}</span>
-              <i class="fas fa-chevron-down toggle-icon"></i>
+              <span>${escapeHtml(company.company_name || '')}</span>
             </div>
             <div class="company-content">
               ${jobsContent}
             </div>
           </div>
         `;
-      }).join('');
-      
+      })(company);
+      const leftListHtml = companiesToRender.map((c, i) =>
+        `<div class="company-list-item ${i === currentCompanyIndex ? 'active' : ''}" onclick="selectCompanyByIndex(${i})" role="button">${escapeHtml(c.company_name || '')}</div>`
+      ).join('');
+      container.innerHTML = `
+        <div class="two-col-layout">
+          <div class="company-list-panel" id="directorCompanyList">${leftListHtml}</div>
+          <div class="job-match-panel" id="directorJobPanel">${rightPanelHtml}</div>
+        </div>`;
+
       updateNavigation();
+      renderVendorSide();
+    }
+
+    // 廠商排序結果（唯讀）：左公司列表 + 右職缺與媒合區，雙欄固定高度
+    function renderVendorSide() {
+      const container = document.getElementById('vendorContainer');
+      if (!container) return;
+      const list = getFilteredCompanies(getCompaniesWithCompletedSorting(vendorOriginalCompaniesData || []));
+      if (list.length === 0) {
+        container.innerHTML = '<div class="empty-state" style="padding:24px;text-align:center;color:var(--color-muted);"><i class="fas fa-inbox"></i><div>本頁無資料</div></div>';
+        return;
+      }
+      const idx = Math.max(0, Math.min(currentCompanyIndex, list.length - 1));
+      const company = list[idx];
+      const jobs = company.jobs || [];
+      const leftListHtml = list.map((c, i) =>
+        `<div class="company-list-item ${i === idx ? 'active' : ''}" onclick="selectCompanyByIndex(${i})" role="button">${escapeHtml(c.company_name || '')}</div>`
+      ).join('');
+      const jobsHtml = jobs.map(job => {
+        const regulars = (job.regulars || []).slice(0, 10);
+        const reserves = (job.reserves || []).slice(0, 5);
+        const key = `${company.company_id}_${job.job_id}`;
+        const maxSlots = jobSlotsMap[key] != null ? jobSlotsMap[key] : (job.job_slots != null ? job.job_slots : 1);
+        const filledSlots = regulars.length;
+        const regularsHtml = regulars.map((s, i) => `
+            <div class="student-item">
+              <div class="student-info">
+                <div class="student-name">${escapeHtml(s.student_name || '')} <span class="badge badge-regular">正取${i + 1}</span></div>
+                <div class="student-details"><span>${escapeHtml(s.student_number || '')} · ${escapeHtml(s.class_name || '')}</span></div>
+              </div>
+            </div>`).join('');
+        const reservesHtml = reserves.length ? reserves.map((s, i) => `
+            <div class="student-item">
+              <div class="student-info">
+                <div class="student-name">${escapeHtml(s.student_name || '')} <span class="badge badge-reserve">備取${i + 1}</span></div>
+              </div>
+            </div>`).join('') : '<div class="text-muted" style="padding:8px 0;">尚無備取</div>';
+        const isJobExpanded = expandedJobId === job.job_id;
+        const jobSectionClass = isJobExpanded ? 'job-section-expanded' : 'job-section-collapsed';
+        return `
+            <div class="job-section ${jobSectionClass}">
+              <div class="job-title" onclick="toggleJob(${job.job_id})" role="button">
+                <div style="display: flex; align-items: center; justify-content: space-between;">
+                  <span>${escapeHtml(job.job_title || '未指定職缺')}</span>
+                  <span class="job-toggle-icon"><i class="fas fa-chevron-down"></i></span>
+                  <span style="font-size: 0.85rem; color: var(--color-muted);">（已選：${filledSlots} / 名額：${maxSlots}）</span>
+                </div>
+              </div>
+              <div class="job-section-body">
+                <div class="regular-list"><div class="list-label">正取名單</div>${regularsHtml || '<div class="text-muted" style="padding:8px 0;">尚無</div>'}</div>
+                <div class="reserve-list"><div class="list-label">備取名單</div>${reservesHtml}</div>
+              </div>
+            </div>`;
+      }).join('');
+      const rightPanelHtml = `
+        <div class="company-card" style="cursor:default;box-shadow:none;border:none;">
+          <div class="company-header" style="cursor:default;margin-bottom:12px;">
+            <span>${escapeHtml(company.company_name || '')}</span>
+          </div>
+          <div class="company-content">${jobsHtml || '<div class="job-section"><div class="text-muted">目前沒有職缺</div></div>'}</div>
+        </div>`;
+      container.innerHTML = `
+        <div class="two-col-layout">
+          <div class="company-list-panel" id="vendorCompanyList">${leftListHtml}</div>
+          <div class="job-match-panel" id="vendorJobPanel">${rightPanelHtml}</div>
+        </div>`;
+    }
+
+    function updateSplitViewPagination(totalFiltered) {
+      const wrap = document.getElementById('splitViewPagination');
+      const info = document.getElementById('splitPageInfo');
+      const prevBtn = document.getElementById('splitPrevBtn');
+      const nextBtn = document.getElementById('splitNextBtn');
+      if (!wrap || !info) return;
+      const totalPages = Math.max(1, Math.ceil(totalFiltered / companiesPerPage));
+      wrap.style.display = totalFiltered > 0 ? 'flex' : 'none';
+      info.textContent = `第 ${directorPage} 頁，共 ${totalPages} 頁`;
+      if (prevBtn) prevBtn.disabled = directorPage <= 1;
+      if (nextBtn) nextBtn.disabled = directorPage >= totalPages;
+    }
+
+    function splitViewPrevPage() {
+      if (directorPage <= 1) return;
+      directorPage--;
+      renderCompanies();
+    }
+
+    function splitViewNextPage() {
+      const filtered = getFilteredCompanies(getCompaniesWithCompletedSorting(allCompaniesData));
+      const totalPages = Math.max(1, Math.ceil(filtered.length / companiesPerPage));
+      if (directorPage >= totalPages) return;
+      directorPage++;
+      renderCompanies();
     }
 
     // 渲染學生列表
