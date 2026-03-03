@@ -124,7 +124,7 @@ def admission_results_redirect():
     if user_role not in ['class_teacher', 'teacher', 'director', 'ta', 'admin']:
         return "無權限訪問此頁面", 403
     
-    return render_template('user_shared/admission_results.html')
+    return render_template('user_shared/admission_results.html', user_role=user_role or '')
 
 # -------------------------
 # TA 頁面：上傳核心科目

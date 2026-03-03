@@ -3840,19 +3840,17 @@ def mark_interview_completed():
                     
                     interview_time_start = interview_info.get('interview_time')
                     interview_time_end = interview_info.get('interview_timeEnd')
-                    current_status = interview_info.get('interview_status')
+                    current_status = interview_info.get('interview_status') or 'none'
                     
-                    # 檢查是否已有面試排程
-                    if current_status != 'scheduled':
+                    # 已完成的不可重複標記
+                    if current_status == 'finished':
                         cursor.close()
                         conn.close()
-                        if current_status == 'finished':
-                            return jsonify({"success": False, "message": "此面試已經標記為已完成"}), 400
-                        else:
-                            return jsonify({"success": False, "message": "此履歷尚未安排面試"}), 400
+                        return jsonify({"success": False, "message": "此面試已經標記為已完成"}), 400
                     
-                    # 檢查面試時間是否已開始（只要開始時間到達，就可以標記為已面試，不需要等到結束）
-                    if interview_time_start:
+                    # 允許從 'none'（未排程）或 'scheduled'（已排程）標記為已面試，方便廠商彈性操作
+                    # 僅當狀態為 'scheduled' 且有設定開始時間時，才檢查面試時間是否已開始
+                    if current_status == 'scheduled' and interview_time_start:
                         from datetime import datetime
                         try:
                             start_time = interview_time_start
@@ -3871,14 +3869,14 @@ def mark_interview_completed():
                             print(f"⚠️ [mark_interview_completed] 時間檢查失敗：{e}")
                             # 如果時間解析失敗，仍然允許標記（向後兼容）
                     
-                    # 更新 resume_applications 表
+                    # 更新 resume_applications 表（允許從 none 或 scheduled 標記為 finished）
                     # 面試完成時，interview_result 保持為 'pending'（除非有明確的通過/失敗結果）
                     cursor.execute("""
                         UPDATE resume_applications
                         SET interview_status = 'finished',
                             updated_at = NOW()
                         WHERE application_id = %s AND job_id = %s
-                        AND interview_status = 'scheduled'
+                        AND interview_status IN ('scheduled', 'none')
                     """, (application_id, job_id))
                     
                     if cursor.rowcount == 0:

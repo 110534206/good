@@ -51,7 +51,7 @@ def admission_results_page():
     if user_role not in ['class_teacher', 'teacher', 'director', 'ta', 'admin']:
         return "無權限訪問此頁面", 403
     
-    return render_template('user_shared/admission_results.html')
+    return render_template('user_shared/admission_results.html', user_role=user_role or '')
 
 # =========================================================
 # 頁面路由：實習生管理
@@ -257,6 +257,7 @@ def get_my_admission():
     
     try:
         # 從 internship_offers 表獲取錄取資料（正式錄取結果）
+        # 若已執行 migration 新增 semester_id，可於 SELECT 中加入 io.semester_id AS offer_semester_id，以對應實習學期
         cursor.execute("""
             SELECT 
                 io.id AS offer_id,
@@ -360,28 +361,60 @@ def get_my_admission():
                     teacher_name = teacher_info.get('name')
                     teacher_email = teacher_info.get('email')
             
-            # 獲取學期代碼（使用當前學期；若需依錄取學期可改從 student_preferences + semesters 取得）
-            semester_code = get_current_semester_code(cursor)
-            
-            # 從 semesters 表獲取學期的開始和結束日期
+            # 實習期間：依 internship_configs 取得（作業在 1131、實習在 1132，應顯示 1132 的實習起訖）
+            # 若有 internship_offers.semester_id 則用該實習學期；否則依學生屆別取一筆 config
+            semester_code = None
             semester_start_date = None
             semester_end_date = None
-            if semester_code:
+            offer_semester_id = offer_info.get('offer_semester_id') if isinstance(offer_info.get('offer_semester_id'), int) else None
+            cursor.execute("SELECT role, admission_year, username FROM users WHERE id = %s", (student_id,))
+            user_row = cursor.fetchone()
+            admission_year_val = None
+            if user_row:
+                if user_row.get('admission_year') is not None and str(user_row.get('admission_year', '')).strip() != '':
+                    try:
+                        admission_year_val = int(user_row['admission_year'])
+                    except (TypeError, ValueError):
+                        pass
+                if admission_year_val is None and user_row.get('username') and len(str(user_row.get('username', ''))) >= 3:
+                    try:
+                        admission_year_val = int(str(user_row['username'])[:3])
+                    except (TypeError, ValueError):
+                        pass
+            if admission_year_val is not None:
                 cursor.execute("""
-                    SELECT start_date, end_date
-                    FROM semesters
-                    WHERE code = %s
+                    SELECT ic.intern_start_date, ic.intern_end_date, s.code AS semester_code
+                    FROM internship_configs ic
+                    LEFT JOIN semesters s ON s.id = ic.semester_id
+                    WHERE (ic.user_id = %s OR (ic.user_id IS NULL AND ic.admission_year = %s))
+                      AND (ic.semester_id = %s OR %s IS NULL)
+                    ORDER BY ic.user_id DESC, ic.semester_id DESC
                     LIMIT 1
-                """, (semester_code,))
-                semester_info = cursor.fetchone()
-                if semester_info:
-                    semester_start_date = semester_info.get('start_date')
-                    semester_end_date = semester_info.get('end_date')
-                    # 格式化日期
+                """, (student_id, admission_year_val, offer_semester_id, offer_semester_id))
+                ic_row = cursor.fetchone()
+                if ic_row:
+                    semester_start_date = ic_row.get('intern_start_date')
+                    semester_end_date = ic_row.get('intern_end_date')
+                    semester_code = ic_row.get('semester_code')
                     if isinstance(semester_start_date, datetime):
                         semester_start_date = semester_start_date.strftime("%Y-%m-%d")
                     if isinstance(semester_end_date, datetime):
                         semester_end_date = semester_end_date.strftime("%Y-%m-%d")
+            if not semester_code:
+                semester_code = get_current_semester_code(cursor)
+            if not semester_start_date or not semester_end_date:
+                if semester_code:
+                    cursor.execute("SELECT start_date, end_date FROM semesters WHERE code = %s LIMIT 1", (semester_code,))
+                    sem_row = cursor.fetchone()
+                    if sem_row:
+                        if not semester_start_date:
+                            semester_start_date = sem_row.get('start_date')
+                            if isinstance(semester_start_date, datetime):
+                                semester_start_date = semester_start_date.strftime("%Y-%m-%d")
+                        if not semester_end_date:
+                            semester_end_date = sem_row.get('end_date')
+                            if isinstance(semester_end_date, datetime):
+                                semester_end_date = semester_end_date.strftime("%Y-%m-%d")
             
             # 構建 admission 物件
             admission = {
@@ -539,34 +572,63 @@ def get_my_admission():
             """, (student_id,))
             admission = cursor.fetchone()
             
-            # 從 semesters 表獲取學期的開始和結束日期
+            # 實習期間：優先從 internship_configs 取得（實習學期 1132 的起訖），否則用 semesters
             semester_code = admission.get('semester') if admission else None
-            if not semester_code:
-                semester_code = get_current_semester_code(cursor)
-            
             semester_start_date = None
             semester_end_date = None
-            if semester_code:
+            cursor.execute("SELECT role, admission_year, username FROM users WHERE id = %s", (student_id,))
+            user_row = cursor.fetchone()
+            ay_val = None
+            if user_row and (user_row.get('admission_year') or user_row.get('username')):
+                if user_row.get('admission_year') is not None and str(user_row.get('admission_year', '')).strip() != '':
+                    try:
+                        ay_val = int(user_row['admission_year'])
+                    except (TypeError, ValueError):
+                        pass
+                if ay_val is None and user_row.get('username') and len(str(user_row.get('username', ''))) >= 3:
+                    try:
+                        ay_val = int(str(user_row['username'])[:3])
+                    except (TypeError, ValueError):
+                        pass
+            if ay_val is not None:
                 cursor.execute("""
-                    SELECT start_date, end_date
-                    FROM semesters
-                    WHERE code = %s
+                    SELECT ic.intern_start_date, ic.intern_end_date, s.code AS semester_code
+                    FROM internship_configs ic
+                    LEFT JOIN semesters s ON s.id = ic.semester_id
+                    WHERE (ic.user_id = %s OR (ic.user_id IS NULL AND ic.admission_year = %s))
+                    ORDER BY ic.user_id DESC, ic.semester_id DESC
                     LIMIT 1
-                """, (semester_code,))
-                semester_info = cursor.fetchone()
-                if semester_info:
-                    semester_start_date = semester_info.get('start_date')
-                    semester_end_date = semester_info.get('end_date')
-                    # 格式化日期
+                """, (student_id, ay_val))
+                ic_row = cursor.fetchone()
+                if ic_row:
+                    semester_start_date = ic_row.get('intern_start_date')
+                    semester_end_date = ic_row.get('intern_end_date')
+                    if not semester_code:
+                        semester_code = ic_row.get('semester_code')
                     if isinstance(semester_start_date, datetime):
                         semester_start_date = semester_start_date.strftime("%Y-%m-%d")
                     if isinstance(semester_end_date, datetime):
                         semester_end_date = semester_end_date.strftime("%Y-%m-%d")
+            if not semester_code:
+                semester_code = get_current_semester_code(cursor)
+            if (not semester_start_date or not semester_end_date) and semester_code:
+                cursor.execute("SELECT start_date, end_date FROM semesters WHERE code = %s LIMIT 1", (semester_code,))
+                sem_row = cursor.fetchone()
+                if sem_row:
+                    if not semester_start_date:
+                        semester_start_date = sem_row.get('start_date')
+                        if isinstance(semester_start_date, datetime):
+                            semester_start_date = semester_start_date.strftime("%Y-%m-%d")
+                    if not semester_end_date:
+                        semester_end_date = sem_row.get('end_date')
+                        if isinstance(semester_end_date, datetime):
+                            semester_end_date = semester_end_date.strftime("%Y-%m-%d")
             
-            # 將學期日期資訊添加到 admission 物件
             if admission:
                 admission['semester_start_date'] = semester_start_date
                 admission['semester_end_date'] = semester_end_date
+                if semester_code:
+                    admission['semester'] = semester_code
             
             if not admission:
                 return jsonify({
@@ -1090,10 +1152,11 @@ def withdraw_student():
 
 # =========================================================
 # API: 獲取所有學生的錄取結果列表（支援篩選）
+# 以 internship_offers 為單一真相來源，一學生一筆錄取結果
 # =========================================================
 @admission_bp.route("/api/get_all_admissions", methods=["GET"])
 def get_all_admissions():
-    """獲取所有學生的錄取結果列表，支援按班級、學期、公司等篩選"""
+    """獲取所有學生的錄取結果列表，支援按班級、學期、公司等篩選。資料來源：internship_offers（一學生一筆）。"""
     if 'user_id' not in session:
         return jsonify({"success": False, "message": "未授權"}), 403
     
@@ -1110,12 +1173,12 @@ def get_all_admissions():
     cursor = conn.cursor(dictionary=True)
     
     try:
-        # 根據角色決定查詢範圍
+        # 以 internship_offers 為主表，一學生一筆錄取；學期由 student_preferences 取得（同學生同職缺取一筆，避免重複）
         base_query = """
             SELECT 
-                tsr.id AS relation_id,
+                io.id AS relation_id,
                 COALESCE(s.code, '') AS semester,
-                tsr.created_at AS admitted_at,
+                io.offered_at AS admitted_at,
                 u_student.id AS student_id,
                 u_student.name AS student_name,
                 u_student.username AS student_number,
@@ -1129,22 +1192,30 @@ def get_all_admissions():
                 u_teacher.id AS teacher_id,
                 u_teacher.name AS teacher_name,
                 sp.preference_order,
-                sp.status AS preference_status
-            FROM teacher_student_relations tsr
-            LEFT JOIN semesters s ON s.id = tsr.semester_id
-            JOIN users u_student ON tsr.student_id = u_student.id
+                COALESCE(sp.status, 'approved') AS preference_status
+            FROM internship_offers io
+            JOIN users u_student ON io.student_id = u_student.id
             LEFT JOIN classes c ON u_student.class_id = c.id
-            LEFT JOIN student_preferences sp ON tsr.student_id = sp.student_id
-            LEFT JOIN internship_companies ic ON sp.company_id = ic.id
-            LEFT JOIN internship_jobs ij ON sp.job_id = ij.id
-            LEFT JOIN users u_teacher ON tsr.teacher_id = u_teacher.id
+            JOIN internship_jobs ij ON io.job_id = ij.id
+            JOIN internship_companies ic ON ij.company_id = ic.id
+            LEFT JOIN users u_teacher ON ic.advisor_user_id = u_teacher.id
+            LEFT JOIN (
+                SELECT sp0.student_id, sp0.job_id, sp0.semester_id, sp0.preference_order, sp0.status
+                FROM student_preferences sp0
+                INNER JOIN (
+                    SELECT student_id, job_id, MAX(semester_id) AS semester_id
+                    FROM student_preferences
+                    GROUP BY student_id, job_id
+                ) sp1 ON sp0.student_id = sp1.student_id AND sp0.job_id = sp1.job_id AND sp0.semester_id = sp1.semester_id
+            ) sp ON sp.student_id = io.student_id AND sp.job_id = io.job_id
+            LEFT JOIN semesters s ON s.id = sp.semester_id
             WHERE 1=1
         """
         params = []
         
         # 根據角色限制查詢範圍
         if user_role == 'class_teacher':
-            # 班導只能看到自己管理的班級的學生（所有公司）
+            # 班導只能看到自己管理的班級的學生
             cursor.execute("""
                 SELECT class_id FROM classes_teacher 
                 WHERE teacher_id = %s
@@ -1156,39 +1227,17 @@ def get_all_admissions():
                 base_query += f" AND u_student.class_id IN ({placeholders})"
                 params.extend(class_ids)
             else:
-                # 如果沒有管理的班級，返回空結果
                 return jsonify({
                     "success": True,
                     "students": [],
                     "count": 0
                 })
         elif user_role == 'teacher':
-            # 指導老師只能看到自己指導的學生（通過 teacher_student_relations）
-            # 並且這些學生錄取的必須是自己管理的公司
-            cursor.execute("""
-                SELECT id FROM internship_companies 
-                WHERE advisor_user_id = %s AND status = 'approved'
-            """, (user_id,))
-            teacher_companies = cursor.fetchall()
-            if teacher_companies:
-                company_ids = [tc['id'] for tc in teacher_companies]
-                # 限制：1. teacher_student_relations 中的 teacher_id 必須是當前老師
-                #       2. 學生選擇的公司必須是該老師管理的公司
-                base_query += " AND tsr.teacher_id = %s"
-                params.append(user_id)
-                placeholders = ','.join(['%s'] * len(company_ids))
-                base_query += f" AND sp.company_id IN ({placeholders})"
-                params.extend(company_ids)
-            else:
-                # 如果沒有管理的公司，返回空結果
-                return jsonify({
-                    "success": True,
-                    "students": [],
-                    "count": 0
-                })
+            # 指導老師只能看到「錄取公司」為自己擔任顧問的公司（該公司 advisor_user_id = 當前老師）
+            base_query += " AND ic.advisor_user_id = %s"
+            params.append(user_id)
         elif user_role == 'director':
             # 主任可以看到自己科系的學生
-            # 透過 classes_teacher 和 classes 表取得主任所屬科系
             cursor.execute("""
                 SELECT DISTINCT c.department
                 FROM classes c
@@ -1200,7 +1249,7 @@ def get_all_admissions():
             if dept_result and dept_result.get('department'):
                 base_query += " AND c.department = %s"
                 params.append(dept_result['department'])
-        # ta 和 admin 可以看到所有學生，不需要額外限制
+        # ta 和 admin 不額外限制
         
         # 應用篩選條件
         if class_id:
@@ -1208,11 +1257,11 @@ def get_all_admissions():
             params.append(class_id)
         
         if semester:
-            base_query += " AND tsr.semester_id = (SELECT id FROM semesters WHERE code = %s LIMIT 1)"
+            base_query += " AND EXISTS (SELECT 1 FROM student_preferences sp2 WHERE sp2.student_id = io.student_id AND sp2.job_id = io.job_id AND sp2.semester_id = (SELECT id FROM semesters WHERE code = %s LIMIT 1))"
             params.append(semester)
         
         if company_id:
-            base_query += " AND sp.company_id = %s"
+            base_query += " AND ic.id = %s"
             params.append(company_id)
         
         if keyword:
@@ -1220,7 +1269,7 @@ def get_all_admissions():
             keyword_pattern = f"%{keyword}%"
             params.extend([keyword_pattern, keyword_pattern, keyword_pattern, keyword_pattern])
         
-        base_query += " ORDER BY tsr.created_at DESC, u_student.name ASC"
+        base_query += " ORDER BY io.offered_at DESC, u_student.name ASC"
         
         cursor.execute(base_query, params)
         students = cursor.fetchall()
