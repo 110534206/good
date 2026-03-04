@@ -147,33 +147,77 @@ def record_admission():
         if not advisor:
             return jsonify({"success": False, "message": "找不到該指導老師"}), 404
         
-        # 3. 獲取當前學期代碼
+        # 3. 獲取當前學期（代碼與 ID）
         semester_code = get_current_semester_code(cursor)
-        if not semester_code:
+        current_semester_id = get_current_semester_id(cursor)
+        if not semester_code and not current_semester_id:
             return jsonify({"success": False, "message": "目前沒有設定當前學期"}), 400
         current_datetime_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         
-        # 4. 檢查是否已經存在該關係（避免重複）
+        # 3.1 偵測 teacher_student_relations 表是否有 semester_id 或 semester 欄位
         cursor.execute("""
-            SELECT id FROM teacher_student_relations 
-            WHERE teacher_id = %s AND student_id = %s AND semester = %s
-        """, (advisor_user_id, student_id, semester_code))
+            SELECT COLUMN_NAME FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'teacher_student_relations'
+            AND COLUMN_NAME IN ('semester_id', 'semester', 'company_id')
+        """)
+        tsr_columns = {row['COLUMN_NAME'] for row in cursor.fetchall()}
+        has_semester_id = 'semester_id' in tsr_columns
+        has_semester = 'semester' in tsr_columns
+        has_company_id = 'company_id' in tsr_columns
+        
+        # 4. 檢查是否已經存在該關係（避免重複）
+        if has_semester_id and current_semester_id:
+            cursor.execute("""
+                SELECT id FROM teacher_student_relations
+                WHERE teacher_id = %s AND student_id = %s AND semester_id = %s
+            """, (advisor_user_id, student_id, current_semester_id))
+        elif has_semester and semester_code:
+            cursor.execute("""
+                SELECT id FROM teacher_student_relations
+                WHERE teacher_id = %s AND student_id = %s AND semester = %s
+            """, (advisor_user_id, student_id, semester_code))
+        else:
+            cursor.execute("""
+                SELECT id FROM teacher_student_relations
+                WHERE teacher_id = %s AND student_id = %s
+            """, (advisor_user_id, student_id))
         existing_relation = cursor.fetchone()
         
         if existing_relation:
-            # 如果已存在，更新公司ID（可能學生換了公司）
-            cursor.execute("""
-                UPDATE teacher_student_relations
-                SET company_id = %s, updated_at = NOW()
-                WHERE id = %s
-            """, (company_id, existing_relation['id']))
+            # 如果已存在，更新公司ID（可能學生換了公司，僅當表有 company_id 時）
+            if has_company_id:
+                cursor.execute("""
+                    UPDATE teacher_student_relations
+                    SET company_id = %s, updated_at = NOW()
+                    WHERE id = %s
+                """, (company_id, existing_relation['id']))
         else:
             # 5. 創建師生關係記錄
-            cursor.execute("""
-                INSERT INTO teacher_student_relations 
-                (teacher_id, student_id, company_id, semester, role, created_at)
-                VALUES (%s, %s, %s, %s, '指導老師', NOW())
-            """, (advisor_user_id, student_id, company_id, semester_code))
+            if has_semester_id and current_semester_id:
+                cols = "(teacher_id, student_id, semester_id, role, created_at)"
+                vals = "(%s, %s, %s, '指導老師', NOW())"
+                args = (advisor_user_id, student_id, current_semester_id)
+                if has_company_id:
+                    cols = "(teacher_id, student_id, company_id, semester_id, role, created_at)"
+                    vals = "(%s, %s, %s, %s, '指導老師', NOW())"
+                    args = (advisor_user_id, student_id, company_id, current_semester_id)
+                cursor.execute("""
+                    INSERT INTO teacher_student_relations """ + cols + """ VALUES """ + vals, args)
+            elif has_semester and semester_code:
+                cols = "(teacher_id, student_id, semester, role, created_at)"
+                vals = "(%s, %s, %s, '指導老師', NOW())"
+                args = (advisor_user_id, student_id, semester_code)
+                if has_company_id:
+                    cols = "(teacher_id, student_id, company_id, semester, role, created_at)"
+                    vals = "(%s, %s, %s, %s, '指導老師', NOW())"
+                    args = (advisor_user_id, student_id, company_id, semester_code)
+                cursor.execute("""
+                    INSERT INTO teacher_student_relations """ + cols + """ VALUES """ + vals, args)
+            else:
+                cursor.execute("""
+                    INSERT INTO teacher_student_relations (teacher_id, student_id, role, created_at)
+                    VALUES (%s, %s, '指導老師', NOW())
+                """, (advisor_user_id, student_id))
         
         # 6. 在 internship_offers 表中記錄錄取結果 (新增的邏輯)
         # 這是 get_my_admission API 優先讀取的資料來源

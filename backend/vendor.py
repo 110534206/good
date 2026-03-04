@@ -5,7 +5,7 @@ import traceback
 from flask import Blueprint, jsonify, render_template, request, session
 
 from config import get_db
-from semester import get_current_semester_id
+from semester import get_current_semester_id, get_current_semester_code
 
 vendor_bp = Blueprint('vendor', __name__)
 
@@ -2290,14 +2290,36 @@ def _record_admission_and_bind_relation(cursor, student_id, company_id, job_id=N
                     cursor.execute("SELECT id, name FROM users WHERE id = %s AND role IN ('teacher', 'director')", (advisor_user_id,))
                     advisor = cursor.fetchone()
         
-        # 4. 設置學期代碼為 1132（固定值）
-        semester_code = '1132'
+        # 4. 取得當前學期（ID 或代碼）
+        current_semester_id = get_current_semester_id(cursor)
+        semester_code = get_current_semester_code(cursor) or '1132'
+        
+        # 4.1 偵測 teacher_student_relations 表是否有 semester_id 或 semester 欄位
+        cursor.execute("""
+            SELECT COLUMN_NAME FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'teacher_student_relations'
+            AND COLUMN_NAME IN ('semester_id', 'semester')
+        """)
+        tsr_columns = {row['COLUMN_NAME'] for row in cursor.fetchall()}
+        has_semester_id = 'semester_id' in tsr_columns
+        has_semester = 'semester' in tsr_columns
         
         # 5. 檢查是否已經存在該關係（避免重複）
-        cursor.execute("""
-            SELECT id FROM teacher_student_relations 
-            WHERE teacher_id = %s AND student_id = %s AND semester = %s
-        """, (advisor_user_id, student_id, semester_code))
+        if has_semester_id and current_semester_id:
+            cursor.execute("""
+                SELECT id FROM teacher_student_relations
+                WHERE teacher_id = %s AND student_id = %s AND semester_id = %s
+            """, (advisor_user_id, student_id, current_semester_id))
+        elif has_semester:
+            cursor.execute("""
+                SELECT id FROM teacher_student_relations
+                WHERE teacher_id = %s AND student_id = %s AND semester = %s
+            """, (advisor_user_id, student_id, semester_code))
+        else:
+            cursor.execute("""
+                SELECT id FROM teacher_student_relations
+                WHERE teacher_id = %s AND student_id = %s
+            """, (advisor_user_id, student_id))
         existing_relation = cursor.fetchone()
         
         if existing_relation:
@@ -2309,11 +2331,23 @@ def _record_admission_and_bind_relation(cursor, student_id, company_id, job_id=N
             """, (existing_relation['id'],))
         else:
             # 6. 創建師生關係記錄
-            cursor.execute("""
-                INSERT INTO teacher_student_relations 
-                (teacher_id, student_id, semester, role, created_at)
-                VALUES (%s, %s, %s, '指導老師', CURDATE())
-            """, (advisor_user_id, student_id, semester_code))
+            if has_semester_id and current_semester_id:
+                cursor.execute("""
+                    INSERT INTO teacher_student_relations
+                    (teacher_id, student_id, semester_id, role, created_at)
+                    VALUES (%s, %s, %s, '指導老師', CURDATE())
+                """, (advisor_user_id, student_id, current_semester_id))
+            elif has_semester:
+                cursor.execute("""
+                    INSERT INTO teacher_student_relations
+                    (teacher_id, student_id, semester, role, created_at)
+                    VALUES (%s, %s, %s, '指導老師', CURDATE())
+                """, (advisor_user_id, student_id, semester_code))
+            else:
+                cursor.execute("""
+                    INSERT INTO teacher_student_relations (teacher_id, student_id, role, created_at)
+                    VALUES (%s, %s, '指導老師', CURDATE())
+                """, (advisor_user_id, student_id))
         
         # 7. 更新學生的第一志願狀態為 approved（如果 preference_order = 1 且尚未被錄取）
         if preference_order == 1:
@@ -4477,3 +4511,209 @@ def test_email():
         import traceback
         traceback.print_exc()
         return jsonify({"success": False, "message": f"發生錯誤：{str(e)}"}), 500
+
+
+def _get_vendor_own_company_ids(cursor, vendor_id):
+    """
+    取得「廠商自己所屬公司」的 company_id，只回傳一間公司，僅顯示該公司實習生。
+    優先：internship_companies.vendor_id = vendor_id 或 company_vendor_relations；
+    若無則不沿用多公司，回傳空（請在後台設定公司與廠商對應，否則不顯示名單）。
+    """
+    try:
+        cursor.execute("""
+            SELECT id FROM internship_companies
+            WHERE status = 'approved' AND vendor_id = %s
+        """, (vendor_id,))
+        rows = cursor.fetchall()
+        if rows:
+            return [r["id"] for r in rows]
+    except Exception:
+        pass
+    try:
+        cursor.execute("""
+            SELECT company_id FROM company_vendor_relations WHERE vendor_id = %s
+        """, (vendor_id,))
+        rows = cursor.fetchall()
+        if rows:
+            return [r["company_id"] for r in rows]
+    except Exception:
+        pass
+    # 若未設定 vendor_id / company_vendor_relations，僅取指導老師底下「第一間」公司，只顯示該公司實習生（不顯示其他公司）
+    _, companies, _ = _get_vendor_scope(cursor, vendor_id)
+    if companies:
+        return [companies[0]["id"]]
+    return []
+
+
+# =========================================================
+# 廠商退實習生：取得目前實習生名單（供無 student_id 時選擇）
+# =========================================================
+@vendor_bp.route("/vendor/api/withdraw_intern_list", methods=["GET"])
+def get_withdraw_intern_list():
+    """取得廠商「自己所屬公司」目前錄取之實習生名單，供退實習頁選擇學生（僅顯示自己公司的實習生）"""
+    if "user_id" not in session or session.get("role") != "vendor":
+        return jsonify({"success": False, "message": "未授權"}), 403
+    try:
+        vendor_id = session.get("user_id")
+        conn = get_db()
+        cursor = conn.cursor(dictionary=True)
+        company_ids = _get_vendor_own_company_ids(cursor, vendor_id)
+        if not company_ids:
+            cursor.close()
+            conn.close()
+            return jsonify({"success": False, "message": "找不到廠商所屬的公司"}), 403
+        placeholders = ",".join(["%s"] * len(company_ids))
+        cursor.execute("""
+            SELECT io.student_id,
+                   u.name AS student_name, u.username AS student_number,
+                   ic.company_name, ij.title AS job_title
+            FROM internship_offers io
+            JOIN users u ON u.id = io.student_id
+            JOIN internship_jobs ij ON ij.id = io.job_id
+            JOIN internship_companies ic ON ic.id = ij.company_id
+            WHERE ij.company_id IN (""" + placeholders + """)
+            ORDER BY ic.company_name, ij.title, u.name
+        """, company_ids)
+        rows = cursor.fetchall()
+        cursor.close()
+        conn.close()
+        return jsonify({"success": True, "data": rows})
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"success": False, "message": str(e)}), 500
+
+
+# =========================================================
+# 廠商退實習生：取得單一學生資訊（供表單顯示）
+# =========================================================
+@vendor_bp.route("/vendor/api/withdraw_intern_info", methods=["GET"])
+def get_withdraw_intern_info():
+    """取得欲退實習之學生資訊（僅限廠商自己所屬公司的實習生）"""
+    if "user_id" not in session or session.get("role") != "vendor":
+        return jsonify({"success": False, "message": "未授權"}), 403
+    student_id = request.args.get("student_id")
+    if not student_id:
+        return jsonify({"success": False, "message": "缺少 student_id"}), 400
+    try:
+        vendor_id = session.get("user_id")
+        conn = get_db()
+        cursor = conn.cursor(dictionary=True)
+        company_ids = _get_vendor_own_company_ids(cursor, vendor_id)
+        if not company_ids:
+            cursor.close()
+            conn.close()
+            return jsonify({"success": False, "message": "找不到廠商所屬的公司"}), 403
+        placeholders = ",".join(["%s"] * len(company_ids))
+        # 查詢該學生是否為廠商旗下公司之錄取生（internship_offers）
+        cursor.execute("""
+            SELECT io.student_id, io.job_id,
+                   u.name AS student_name, u.username AS student_number,
+                   ic.company_name, ij.title AS job_title
+            FROM internship_offers io
+            JOIN users u ON u.id = io.student_id
+            JOIN internship_jobs ij ON ij.id = io.job_id
+            JOIN internship_companies ic ON ic.id = ij.company_id
+            WHERE io.student_id = %s AND ij.company_id IN (""" + placeholders + """)
+            LIMIT 1
+        """, [int(student_id)] + company_ids)
+        row = cursor.fetchone()
+        if not row:
+            cursor.close()
+            conn.close()
+            return jsonify({"success": False, "message": "該學生不在您的實習生名單中"}), 404
+        cursor.close()
+        conn.close()
+        return jsonify({
+            "success": True,
+            "data": {
+                "student_name": row.get("student_name"),
+                "student_number": row.get("student_number"),
+                "company_name": row.get("company_name"),
+                "job_title": row.get("job_title"),
+            },
+        })
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"success": False, "message": str(e)}), 500
+
+
+# =========================================================
+# 廠商退實習生：送出退實習申請（學生狀態標記為「退出處理中」）
+# 送出後需隱藏該學生的「新增日誌」按鈕（由學生端依 status 判斷）
+# =========================================================
+@vendor_bp.route("/vendor/api/withdraw_intern", methods=["POST"])
+def submit_withdraw_intern():
+    """廠商送出退實習申請：寫入原因、最終時數，並將學生標記為退出處理中"""
+    if "user_id" not in session or session.get("role") != "vendor":
+        return jsonify({"success": False, "message": "未授權"}), 403
+    data = request.get_json() or {}
+    student_id = data.get("student_id")
+    reason_category = (data.get("reason_category") or "").strip()
+    reason_detail = (data.get("reason_detail") or "").strip()
+    if not student_id:
+        return jsonify({"success": False, "message": "缺少學生 ID"}), 400
+    if not reason_category:
+        return jsonify({"success": False, "message": "請選擇原因類別"}), 400
+    if not reason_detail:
+        return jsonify({"success": False, "message": "請填寫具體說明"}), 400
+    try:
+        vendor_id = session.get("user_id")
+        conn = get_db()
+        cursor = conn.cursor(dictionary=True)
+        company_ids = _get_vendor_own_company_ids(cursor, vendor_id)
+        if not company_ids:
+            cursor.close()
+            conn.close()
+            return jsonify({"success": False, "message": "找不到廠商所屬的公司"}), 403
+        placeholders = ",".join(["%s"] * len(company_ids))
+        cursor.execute("""
+            SELECT io.id AS offer_id, io.student_id, io.job_id, ij.company_id
+            FROM internship_offers io
+            JOIN internship_jobs ij ON ij.id = io.job_id
+            WHERE io.student_id = %s AND ij.company_id IN (""" + placeholders + """)
+            LIMIT 1
+        """, [int(student_id)] + company_ids)
+        offer = cursor.fetchone()
+        if not offer:
+            cursor.close()
+            conn.close()
+            return jsonify({"success": False, "message": "該學生不在您的實習生名單中"}), 404
+        company_id = offer["company_id"]
+        # 寫入退實習記錄至 vendor_remove_intern（欄位：semester_id, vendor_id, company_id, student_id, reason_category, reason_detail, final_hours, status, created_at）
+        current_semester_id = get_current_semester_id(cursor)
+        if not current_semester_id:
+            cursor.close()
+            conn.close()
+            return jsonify({"success": False, "message": "目前沒有設定當前學期，無法寫入退實習記錄"}), 400
+        try:
+            cursor.execute("""
+                INSERT INTO vendor_remove_intern
+                (semester_id, vendor_id, company_id, student_id, reason_category, reason_detail, final_hours, status, created_at)
+                VALUES (%s, %s, %s, %s, %s, %s, 0, 'withdrawing', NOW())
+            """, (current_semester_id, vendor_id, company_id, int(student_id), reason_category, reason_detail))
+            conn.commit()
+        except Exception as create_err:
+            if "doesn't exist" in str(create_err).lower() or "1146" in str(create_err):
+                return jsonify({
+                    "success": False,
+                    "message": "系統尚未建立退實習記錄表（vendor_remove_intern），請聯絡管理員。",
+                }), 500
+            raise create_err
+        # 可選：更新 internship_offers 狀態欄位為「退出處理中」（若表有 status 欄）
+        try:
+            cursor.execute("""
+                UPDATE internship_offers SET status = 'withdrawing'
+                WHERE student_id = %s AND id = %s
+            """, (int(student_id), offer["offer_id"]))
+            conn.commit()
+        except Exception:
+            pass
+        cursor.close()
+        conn.close()
+        return jsonify({
+            "success": True,
+            "message": "已送出。學生的「新增日誌」將隱藏，狀態為「退出處理中」。此內容將同步給老師。",
+        })
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"success": False, "message": str(e)}), 500

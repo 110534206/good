@@ -734,7 +734,15 @@ def vendor_home():
     # 權限檢查：必須是已登入的用戶，且角色為 'vendor'
     if 'username' not in session or session.get('role') != 'vendor':
         return redirect(url_for('auth_bp.login_page'))
-    return render_template('user_shared/vendor_home.html') 
+    return render_template('user_shared/vendor_home.html')
+
+
+@users_bp.route('/vendor_remove_intern')
+def vendor_remove_intern_page():
+    """廠商退實習生頁面（需帶 query: student_id=, 可選 match_id=）"""
+    if 'username' not in session or session.get('role') != 'vendor':
+        return redirect(url_for('auth_bp.login_page'))
+    return render_template('user_shared/vendor_remove_Intern.html') 
 
 
 @users_bp.route('/manage_positions')
@@ -1265,7 +1273,7 @@ def get_vendor_reviewed_students(company_id):
     if 'username' not in session:
         return jsonify({"success": False, "message": "未登入"}), 401
 
-    allowed_roles = ['teacher', 'ta']
+    allowed_roles = ['teacher', 'ta', 'vendor']
     role = session.get('role')
     if role not in allowed_roles:
         return jsonify({"success": False, "message": "無權限"}), 403
@@ -1275,12 +1283,19 @@ def get_vendor_reviewed_students(company_id):
     conn = get_db()
     cursor = conn.cursor(dictionary=True)
     try:
-        # 驗證公司是否屬於該指導老師
+        # 驗證公司是否屬於該使用者（老師=自己為 advisor；廠商=公司之 advisor 為自己的指導老師）
         company_conditions = ["ic.id = %s", "ic.status = 'approved'"]
         params = [company_id]
         if role == 'teacher':
             company_conditions.append("ic.advisor_user_id = %s")
             params.append(user_id)
+        elif role == 'vendor':
+            cursor.execute("SELECT teacher_id FROM users WHERE id = %s", (user_id,))
+            vendor_row = cursor.fetchone()
+            if not vendor_row or not vendor_row.get('teacher_id'):
+                return jsonify({"success": False, "message": "廠商未設定指導老師"}), 403
+            company_conditions.append("ic.advisor_user_id = %s")
+            params.append(vendor_row['teacher_id'])
 
         cursor.execute(f"""
             SELECT ic.id, ic.company_name

@@ -1,0 +1,716 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>智慧實習平台 | 廠商退實習生</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Inter', 'Noto Sans TC', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: linear-gradient(160deg, #eef4fc 0%, #f0f4f8 50%, #e8f0fa 100%);
+      color: #1e293b;
+      min-height: 100vh;
+    }
+    /* 藍色標題列 */
+    header.page-header {
+      background: linear-gradient(135deg, #0454a3 0%, #0369a1 100%);
+      color: white;
+      padding: 1.25rem 2rem;
+      text-align: center;
+      font-size: 1.5rem;
+      font-weight: 600;
+      box-shadow: 0 2px 12px rgba(4, 84, 163, 0.25);
+    }
+    .top-bar-left {
+      position: fixed;
+      top: 1rem;
+      left: 1rem;
+      z-index: 1100;
+    }
+    .top-bar-left #menu-btn {
+      width: 30px;
+      height: 22px;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      background: none;
+      border: none;
+      padding: 0;
+    }
+    .top-bar-left #menu-btn span {
+      display: block;
+      width: 100%;
+      height: 3px;
+      background-color: white;
+      border-radius: 2px;
+      transition: all 0.3s ease;
+    }
+    #side-menu {
+      position: fixed;
+      top: 0;
+      left: 0;
+      height: 100vh;
+      width: 320px;
+      max-width: 80vw;
+      background-color: rgba(10, 10, 10, 0.95);
+      backdrop-filter: blur(6px);
+      box-shadow: 3px 0 12px rgb(0 0 0 / 0.7);
+      padding: 2rem 1.5rem;
+      transform: translateX(-100%);
+      transition: transform 0.3s ease-in-out;
+      z-index: 1200;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      color: white;
+      user-select: none;
+    }
+    #side-menu.open { transform: translateX(0); }
+    #side-menu .menu-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      width: 100%;
+      margin-bottom: 1.5rem;
+    }
+    #side-menu h2 { margin: 0; font-weight: 700; font-size: 1.5rem; color: white; flex: 1; text-align: left; }
+    #side-menu #close-btn {
+      font-size: 1.5rem; background: none; border: none; color: white; cursor: pointer;
+      padding: 0; margin: 0; line-height: 1; display: flex; align-items: center; justify-content: center;
+    }
+    #side-menu a {
+      display: block; width: 100%; padding: 0.5rem 0; font-size: 1.1rem; color: #ddd;
+      text-decoration: none; border-radius: 4px; transition: background-color 0.2s ease;
+    }
+    #side-menu a:hover { background-color: rgba(255,255,255,0.15); color: white; }
+    .container {
+      max-width: 1160px;
+      margin: 0 auto;
+      padding: 24px 24px 32px;
+      margin-top: 1.5rem;
+    }
+    .card {
+      background: #fff;
+      border-radius: 16px;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.06), 0 1px 3px rgba(0,0,0,0.04);
+      padding: 32px;
+      margin-bottom: 24px;
+      border: 1px solid rgba(255,255,255,0.8);
+    }
+    .card h2 {
+      font-size: 1.2rem;
+      color: #0f172a;
+      margin-bottom: 12px;
+      padding-bottom: 12px;
+      border-bottom: 2px solid #e2e8f0;
+      font-weight: 700;
+    }
+    .card .card-desc {
+      color: #64748b;
+      font-size: 0.95rem;
+      margin-bottom: 20px;
+      line-height: 1.5;
+    }
+    .student-info {
+      background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+      border-radius: 12px;
+      padding: 18px 20px;
+      margin-bottom: 24px;
+      font-size: 0.95rem;
+      border: 1px solid #e2e8f0;
+    }
+    .student-info strong { color: #334155; }
+    .student-info-row { margin-bottom: 10px; }
+    .student-info-row:last-child { margin-bottom: 0; }
+    .student-info .label { display: inline-block; width: 5.5em; color: #64748b; font-size: 0.9rem; }
+    .student-info .label + span { color: #1e293b; font-weight: 500; }
+    .section-label { font-size: 1rem; color: #64748b; margin-bottom: 8px; }
+    .submit-hint {
+      font-size: 0.85rem; color: #64748b; margin-bottom: 14px; line-height: 1.5;
+    }
+    /* 實習生名單：可點選卡片 */
+    .intern-list {
+      list-style: none; padding: 0; margin: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .intern-list li { margin: 0; }
+    .intern-list a {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      padding: 18px 20px;
+      background: linear-gradient(135deg, #fafbfd 0%, #f1f5f9 100%);
+      border-radius: 12px;
+      color: inherit;
+      text-decoration: none;
+      border: 1px solid #e2e8f0;
+      transition: all 0.25s ease;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+    }
+    .intern-list a:hover {
+      background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
+      border-color: #93c5fd;
+      box-shadow: 0 4px 16px rgba(59, 130, 246, 0.15);
+      transform: translateY(-2px);
+    }
+    .intern-list a:active { transform: translateY(0); }
+    .intern-list .intern-avatar {
+      width: 48px;
+      height: 48px;
+      border-radius: 12px;
+      background: linear-gradient(145deg, #0454a3 0%, #0ea5e9 100%);
+      color: white;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.25rem;
+      flex-shrink: 0;
+    }
+    .intern-list .intern-body { flex: 1; min-width: 0; }
+    .intern-list .intern-name {
+      font-weight: 700;
+      font-size: 1.05rem;
+      color: #0f172a;
+      display: block;
+      margin-bottom: 6px;
+    }
+    .intern-list .intern-meta {
+      font-size: 0.875rem;
+      color: #64748b;
+      line-height: 1.4;
+    }
+    .intern-list .intern-arrow {
+      color: #94a3b8;
+      font-size: 1.25rem;
+      flex-shrink: 0;
+      transition: transform 0.2s ease;
+    }
+    .intern-list a:hover .intern-arrow {
+      color: #0454a3;
+      transform: translateX(4px);
+    }
+    .intern-list .intern-empty {
+      text-align: center;
+      padding: 32px 20px;
+      color: #64748b;
+      font-size: 0.95rem;
+      background: #f8fafc;
+      border-radius: 12px;
+      border: 1px dashed #cbd5e1;
+    }
+    .form-group {
+      margin-bottom: 20px;
+    }
+    .form-group label {
+      display: block;
+      font-weight: 600;
+      color: #334155;
+      margin-bottom: 8px;
+      font-size: 0.95rem;
+    }
+    .form-group label .hint {
+      font-weight: 400;
+      color: #64748b;
+      font-size: 0.85rem;
+    }
+    .form-group select,
+    .form-group input[type="number"],
+    .form-group textarea {
+      width: 100%;
+      padding: 12px 14px;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      font-size: 1rem;
+      color: #1e293b;
+      background: #fff;
+      transition: border-color 0.2s;
+    }
+    .form-group select:focus,
+    .form-group input:focus,
+    .form-group textarea:focus {
+      outline: none;
+      border-color: #0066cc;
+      box-shadow: 0 0 0 3px rgba(0, 102, 204, 0.1);
+    }
+    .form-group textarea {
+      min-height: 140px;
+      resize: vertical;
+    }
+    .form-group .field-hint {
+      font-size: 0.8rem;
+      color: #64748b;
+      margin-top: 6px;
+    }
+    .btn-submit {
+      width: 100%;
+      padding: 14px 24px;
+      background: #dc2626;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    .btn-submit:hover { background: #b91c1c; }
+    .btn-submit:disabled {
+      background: #94a3b8;
+      cursor: not-allowed;
+    }
+    .alert {
+      padding: 14px 16px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+      font-size: 0.95rem;
+    }
+    .alert-danger { background: #fef2f2; border: 1px solid #fecaca; color: #b91c1c; }
+    .alert-info { background: #eff6ff; border: 1px solid #bfdbfe; color: #1e40af; }
+    /* 管理實習生表格樣式 */
+    .intern-table-wrapper {
+      margin-top: 8px;
+      overflow-x: auto;
+    }
+    .intern-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.9rem;
+      min-width: 520px;
+    }
+    .intern-table thead {
+      background: #f8fafc;
+    }
+    .intern-table th,
+    .intern-table td {
+      padding: 10px 12px;
+      border-bottom: 1px solid #e2e8f0;
+      text-align: left;
+      white-space: nowrap;
+    }
+    .intern-table th {
+      font-weight: 600;
+      color: #475569;
+      border-top: 1px solid #e2e8f0;
+    }
+    .intern-table tbody tr:hover {
+      background-color: #f1f5f9;
+    }
+    .intern-table .col-name { width: 22%; }
+    .intern-table .col-number { width: 18%; }
+    .intern-table .col-company { width: 26%; }
+    .intern-table .col-title { width: 20%; }
+    .intern-table .col-action { width: 14%; text-align: right; }
+    .intern-table .btn-link {
+      padding: 6px 12px;
+      border-radius: 999px;
+      border: 1px solid #dc2626;
+      background: white;
+      color: #b91c1c;
+      font-size: 0.8rem;
+      cursor: pointer;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .intern-table .btn-link:hover {
+      background: #fee2e2;
+    }
+    .intern-table-empty {
+      text-align: center;
+      padding: 24px 12px;
+      color: #64748b;
+    }
+    .intern-search-wrap {
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .intern-search-wrap label {
+      font-weight: 600;
+      color: #334155;
+      font-size: 0.95rem;
+    }
+    .intern-search-wrap input {
+      flex: 1;
+      max-width: 280px;
+      padding: 10px 14px 10px 36px;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      font-size: 1rem;
+      background: #fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='%2394a3b8' viewBox='0 0 16 16'%3E%3Cpath d='M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001c.03.04.062.078.098.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1.007 1.007 0 0 0-.115-.1zM12 6.5a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0z'/%3E%3C/svg%3E") no-repeat 12px center;
+    }
+    .intern-search-wrap input:focus {
+      outline: none;
+      border-color: #0454a3;
+      box-shadow: 0 0 0 2px rgba(4, 84, 163, 0.2);
+    }
+    /* 成功彈跳視窗 */
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(15, 23, 42, 0.45);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 1300;
+    }
+    .modal-backdrop.show { display: flex; }
+    .modal-card {
+      background: #ffffff;
+      border-radius: 18px;
+      padding: 24px 26px 22px;
+      max-width: 460px;
+      width: 90vw;
+      border: 1px solid #e2e8f0;
+      box-shadow: 0 18px 45px rgba(15, 23, 42, 0.3);
+      color: #14532d;
+    }
+    .modal-card-header {
+      display: flex;
+      align-items: center;
+      margin-bottom: 10px;
+      font-weight: 700;
+      font-size: 1.05rem;
+    }
+    .modal-card-header i {
+      font-size: 1.4rem;
+      margin-right: 8px;
+      color: #dc2626;
+    }
+    .modal-card-body {
+      font-size: 0.95rem;
+      line-height: 1.6;
+      margin-bottom: 16px;
+    }
+    .modal-card-footer {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+    }
+    .btn-outline {
+      padding: 8px 14px;
+      border-radius: 8px;
+      border: 1px solid #dc2626;
+      background: white;
+      color: #b91c1c;
+      font-size: 0.9rem;
+      cursor: pointer;
+    }
+    .btn-primary-green {
+      padding: 8px 16px;
+      border-radius: 8px;
+      border: none;
+      background: linear-gradient(135deg, #dc2626, #f97373);
+      color: #fef2f2;
+      font-size: 0.9rem;
+      font-weight: 600;
+      cursor: pointer;
+      box-shadow: 0 8px 20px rgba(220, 38, 38, 0.35);
+    }
+    .btn-primary-green:hover {
+      filter: brightness(1.02);
+    }
+  </style>
+</head>
+<body>
+  <header class="page-header">廠商退實習生</header>
+  <div class="top-bar-left">
+    <div id="menu-btn" title="選單" role="button" tabindex="0" aria-label="開啟側邊選單">
+      <span></span><span></span><span></span>
+    </div>
+  </div>
+
+  <nav id="side-menu" aria-hidden="true" role="navigation" aria-label="廠商功能選單">
+    <div class="menu-header">
+      <h2>功能選單</h2>
+      <button id="close-btn" aria-label="關閉功能選單">×</button>
+    </div>
+    <a href="/vendor_home">首頁</a>
+    <a href="/profile">個人資料</a>
+    <a href="/vendor_review_resume">學生履歷審核</a>
+    <a href="/manage_positions">職位需求管理</a>
+    <a href="/confirm_matching">媒合結果</a>
+    <a href="/publish_announcements">發布公告</a>
+    <a href="/notifications">通知</a>
+    <a href="/logout">登出</a>
+  </nav>
+
+  <div class="container">
+    <div id="errorMessage" class="alert alert-danger" style="display: none;" role="alert"></div>
+
+    <div id="formCard" class="card" style="display: none;">
+      <h2 class="section-label">被退實習生資訊</h2>
+      <div class="student-info" id="studentInfo">
+        載入中…
+      </div>
+      <h2>填寫退實習原因</h2>
+      <form id="withdrawForm">
+        <div class="form-group">
+          <label>原因類別 <span class="hint">（必填）</span></label>
+          <select name="reason_category" id="reasonCategory" required>
+            <option value="">請選擇</option>
+            <option value="表現不佳">表現不佳</option>
+            <option value="個人因素">個人因素</option>
+            <option value="其他">其他</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>具體說明 <span class="hint">（必填）</span></label>
+          <textarea name="reason_detail" id="reasonDetail" required placeholder="請簡述退實習原因，供老師與校方了解。"></textarea>
+        </div>
+        <button type="submit" class="btn-submit" id="submitBtn">送出</button>
+      </form>
+    </div>
+
+    <!-- 本公司目前實習生列表（表格，點「退實習」進入填寫頁） -->
+    <div id="allInternCard" class="card" style="display: none;">
+      <h2><i class="bi bi-people-fill" style="margin-right: 8px; color: #0454a3;"></i>本公司目前實習生</h2>
+      <div class="intern-search-wrap">
+        <label for="internSearchInput">搜尋</label>
+        <input type="text" id="internSearchInput" placeholder="輸入姓名或學號" autocomplete="off" aria-label="搜尋學生姓名或學號">
+      </div>
+      <div class="intern-table-wrapper">
+        <table class="intern-table">
+          <thead>
+            <tr>
+              <th class="col-name">學生姓名</th>
+              <th class="col-number">學號</th>
+              <th class="col-company">實習單位</th>
+              <th class="col-title">職稱</th>
+              <th class="col-action">操作</th>
+            </tr>
+          </thead>
+          <tbody id="allInternTbody">
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- 成功送出：彈跳視窗 -->
+  <div id="successModal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="successModalTitle" aria-hidden="true">
+    <div class="modal-card">
+      <div class="modal-card-header">
+        <i class="bi bi-check-circle-fill"></i>
+        <span id="successModalTitle">已送出退實習申請</span>
+      </div>
+      <div class="modal-card-body">
+        學生狀態已標記為「退出處理中」，此內容將同步給老師。
+      </div>
+      <div class="modal-card-footer">
+        <button type="button" class="btn-primary-green" id="successCloseBtn">確定</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // 側邊選單開關（與媒合結果確認頁相同）
+    (function () {
+      const menuBtn = document.getElementById('menu-btn');
+      const sideMenu = document.getElementById('side-menu');
+      const closeBtn = document.getElementById('close-btn');
+      if (menuBtn) menuBtn.addEventListener('click', function () {
+        sideMenu.classList.add('open');
+        sideMenu.setAttribute('aria-hidden', 'false');
+      });
+      if (closeBtn) closeBtn.addEventListener('click', function () {
+        sideMenu.classList.remove('open');
+        sideMenu.setAttribute('aria-hidden', 'true');
+      });
+    })();
+
+    (function () {
+      const params = new URLSearchParams(window.location.search);
+      const studentId = params.get('student_id');
+      const matchId = params.get('match_id') || params.get('history_id');
+
+      const studentInfo = document.getElementById('studentInfo');
+      const withdrawForm = document.getElementById('withdrawForm');
+      const submitBtn = document.getElementById('submitBtn');
+      const errorMessage = document.getElementById('errorMessage');
+      const formCard = document.getElementById('formCard');
+      const allInternCard = document.getElementById('allInternCard');
+      const allInternTbody = document.getElementById('allInternTbody');
+      const internSearchInput = document.getElementById('internSearchInput');
+      var allInternRows = [];
+
+      function escapeHtml(s) {
+        if (!s) return '';
+        var div = document.createElement('div');
+        div.textContent = s;
+        return div.innerHTML;
+      }
+
+      function renderInternTable(targetTbody, rows) {
+        if (!targetTbody) return;
+        if (!rows || rows.length === 0) {
+          targetTbody.innerHTML = '<tr><td class="intern-table-empty" colspan="5">目前沒有實習生名單。</td></tr>';
+          return;
+        }
+        targetTbody.innerHTML = rows.map(function (row) {
+          const name = (row.student_name || '—');
+          const num = row.student_number || '—';
+          const unit = row.company_name || '—';
+          const title = row.job_title || '—';
+          const url = '/vendor_remove_intern?student_id=' + row.student_id;
+          return '<tr>' +
+            '<td>' + escapeHtml(name) + '</td>' +
+            '<td>' + escapeHtml(num) + '</td>' +
+            '<td>' + escapeHtml(unit) + '</td>' +
+            '<td>' + escapeHtml(title) + '</td>' +
+            '<td class="col-action"><a class="btn-link" href="' + url + '"><i class="bi bi-box-arrow-in-right"></i><span>退出</span></a></td>' +
+            '</tr>';
+        }).join('');
+      }
+
+      function applyInternSearch() {
+        var q = (internSearchInput && internSearchInput.value) ? internSearchInput.value.trim().toLowerCase() : '';
+        if (!q) {
+          renderInternTable(allInternTbody, allInternRows);
+          return;
+        }
+        var filtered = allInternRows.filter(function (row) {
+          var name = (row.student_name || '').toLowerCase();
+          var num = (row.student_number || '').toLowerCase();
+          var unit = (row.company_name || '').toLowerCase();
+          var title = (row.job_title || '').toLowerCase();
+          return name.indexOf(q) !== -1 || num.indexOf(q) !== -1 || unit.indexOf(q) !== -1 || title.indexOf(q) !== -1;
+        });
+        renderInternTable(allInternTbody, filtered);
+      }
+
+      if (internSearchInput) internSearchInput.addEventListener('input', applyInternSearch);
+
+      if (!studentId) {
+        formCard.style.display = 'none';
+        if (allInternCard) allInternCard.style.display = 'block';
+        (async function () {
+          try {
+            const res = await fetch('/vendor/api/withdraw_intern_list', { credentials: 'same-origin' });
+            const data = await res.json();
+            if (data.success && Array.isArray(data.data)) {
+              allInternRows = data.data;
+              renderInternTable(allInternTbody, data.data);
+            } else {
+              allInternRows = [];
+              if (allInternTbody) allInternTbody.innerHTML = '<tr><td class="intern-table-empty" colspan="5">無法載入名單，請稍後再試。</td></tr>';
+            }
+          } catch (e) {
+            allInternRows = [];
+            if (allInternTbody) allInternTbody.innerHTML = '<tr><td class="intern-table-empty" colspan="5">載入失敗，請重新整理。</td></tr>';
+          }
+        })();
+        return;
+      }
+
+      const successModal = document.getElementById('successModal');
+      const successCloseBtn = document.getElementById('successCloseBtn');
+
+      function showError(msg) {
+        errorMessage.textContent = msg || '發生錯誤';
+        errorMessage.style.display = 'block';
+      }
+      function showSuccess() {
+        // 保留背景內容，只顯示彈跳視窗
+        errorMessage.style.display = 'none';
+        if (successModal) {
+          successModal.classList.add('show');
+          successModal.setAttribute('aria-hidden', 'false');
+        }
+      }
+      function hideError() {
+        errorMessage.style.display = 'none';
+      }
+
+      // 成功彈跳視窗按鈕
+      if (successCloseBtn) {
+        successCloseBtn.addEventListener('click', function () {
+          window.location.href = '/vendor_remove_intern';
+        });
+      }
+
+      async function loadInternInfo() {
+        try {
+          const res = await fetch('/vendor/api/withdraw_intern_info?student_id=' + encodeURIComponent(studentId));
+          const data = await res.json();
+          if (data.success && data.data) {
+            const d = data.data;
+            studentInfo.innerHTML =
+              '<div class="student-info-row"><span class="label">學生姓名</span><span>' + escapeHtml(d.student_name || '—') + '</span></div>' +
+              '<div class="student-info-row"><span class="label">學號</span><span>' + escapeHtml(d.student_number || '—') + '</span></div>' +
+              '<div class="student-info-row"><span class="label">實習單位</span><span>' + escapeHtml(d.company_name || '—') + '</span></div>' +
+              '<div class="student-info-row"><span class="label">職稱</span><span>' + escapeHtml(d.job_title || '—') + '</span></div>';
+          } else {
+            studentInfo.textContent = '無法載入學生資訊。';
+          }
+        } catch (e) {
+          studentInfo.textContent = '載入失敗，請重新整理。';
+        }
+      }
+
+      formCard.style.display = 'block';
+      if (allInternCard) allInternCard.style.display = 'none';
+      loadInternInfo();
+
+      if (allInternTbody) {
+        (async function () {
+          try {
+            const res = await fetch('/vendor/api/withdraw_intern_list', { credentials: 'same-origin' });
+            const data = await res.json();
+            if (data.success && Array.isArray(data.data)) {
+              allInternRows = data.data;
+              renderInternTable(allInternTbody, data.data);
+            } else {
+              allInternRows = [];
+              allInternTbody.innerHTML = '<tr><td class="intern-table-empty" colspan="5">無法載入名單，請稍後再試。</td></tr>';
+            }
+          } catch (e) {
+            allInternRows = [];
+            allInternTbody.innerHTML = '<tr><td class="intern-table-empty" colspan="5">載入失敗，請重新整理。</td></tr>';
+          }
+        })();
+      }
+
+      withdrawForm.addEventListener('submit', async function (e) {
+        e.preventDefault();
+        hideError();
+        submitBtn.disabled = true;
+        submitBtn.textContent = '送出中…';
+        try {
+          const body = {
+            student_id: parseInt(studentId, 10),
+            reason_category: document.getElementById('reasonCategory').value.trim(),
+            reason_detail: document.getElementById('reasonDetail').value.trim()
+          };
+          if (matchId) body.match_id = matchId;
+          const res = await fetch('/vendor/api/withdraw_intern', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+            credentials: 'same-origin'
+          });
+          const data = await res.json();
+          if (data.success) {
+            showSuccess();
+          } else {
+            showError(data.message || '送出失敗');
+            submitBtn.disabled = false;
+            submitBtn.textContent = '送出';
+          }
+        } catch (err) {
+          showError('網路錯誤，請稍後再試');
+          submitBtn.disabled = false;
+          submitBtn.textContent = '送出';
+        }
+      });
+    })();
+  </script>
+</body>
+</html>
