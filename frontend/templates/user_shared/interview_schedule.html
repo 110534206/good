@@ -88,7 +88,7 @@
       max-width: 80vw;
       background-color: rgba(10, 10, 10, 0.95);
       backdrop-filter: blur(6px);
-      box-shadow: 3px 0 12px rgba(0, 0, 0, 0.6);
+      box-shadow: 3px 0 12px rgb(0 0 0 / 0.7);
       padding: 2rem 1.5rem;
       transform: translateX(-100%);
       transition: transform 0.3s ease-in-out;
@@ -96,10 +96,8 @@
       display: flex;
       flex-direction: column;
       align-items: flex-start;
-      color: #fff;
+      color: white;
       user-select: none;
-      border-top-right-radius: 24px;
-      border-bottom-right-radius: 24px;
     }
 
     #side-menu.open {
@@ -107,12 +105,15 @@
     }
 
     #side-menu h2 {
-      margin: 0;
+      margin: 0 0 1.5rem 0;
       font-weight: 700;
-      font-size: 1.5rem;
-      text-align: left;
-      flex: 1;
-      color: white;
+      font-size: 1.6rem;
+      color: #fff;
+      padding: 0;
+      line-height: 2.4rem;
+      height: 2.4rem;
+      display: flex;
+      align-items: center;
     }
 
     #side-menu .menu-header {
@@ -124,17 +125,22 @@
     }
 
     #close-btn {
-      font-size: 1.5rem;
+      position: absolute;
+      top: 2rem;
+      right: 1.6rem;
+      font-size: 1.6rem;
+      font-weight: bold;
       background: none;
       border: none;
-      color: white;
+      color: #fff;
       cursor: pointer;
-      line-height: 1;
-      width: auto;
-      height: auto;
+      line-height: 2.4rem;
+      height: 2.4rem;
+      width: 1.6rem;
       display: flex;
       align-items: center;
       justify-content: center;
+      z-index: 10;
       padding: 0;
       margin: 0;
     }
@@ -157,7 +163,7 @@
     }
 
     #side-menu a:hover {
-      background: rgba(255, 255, 255, 0.18);
+      background-color: rgba(255, 255, 255, 0.18);
       color: #fff;
     }
 
@@ -392,6 +398,7 @@
             <a href="/interview_schedule">行事曆</a>
             <a href="/notifications">管理公告</a>
             <a href="/admin_statistics">統計資料</a>
+            <a href="/admission/manage_director">媒合結果</a>
             <a href="/login">登出</a>
           `;
         } else if (role === 'teacher') {
