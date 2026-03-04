@@ -2203,8 +2203,8 @@
         });
 
         if (data.success) {
-          allCompaniesData = data.companies || [];
-          vendorOriginalCompaniesData = JSON.parse(JSON.stringify(allCompaniesData || []));
+          allCompaniesData = data.companies || [];  // 主任排序結果（已過濾重複學生）
+          vendorOriginalCompaniesData = data.vendor_companies || data.companies || [];  // 廠商原始排序（不過濾，保持原樣）
           duplicateStudents = data.duplicate_students || [];
           currentCompanyIndex = 0;
           expandedJobId = null;
@@ -2233,11 +2233,12 @@
           
           // 如果有重複學生，批量獲取他們的完整志願序（5個）
           if (duplicateStudents && duplicateStudents.length > 0) {
-            console.log(`🔄 檢測到 ${duplicateStudents.length} 位重複中選學生，正在獲取完整志願序...`);
+            // 已移除控制台日誌訊息
             await loadDuplicateStudentsPreferences();
             
-            // 自動解決重複學生：根據第一志願序自動保留在第一志願的公司，從其他公司移除
-            await autoResolveDuplicateStudents();
+            // ⚠️ 暫時停用自動解決重複學生功能，避免誤判導致記錄被自動標記為 Rejected
+            // 用戶需要手動處理重複學生
+            // await autoResolveDuplicateStudents();
           } else {
             duplicateStudentsPreferences = {};
           }
@@ -2338,15 +2339,7 @@
           duplicateStudentsPreferences[result.studentId] = result.preferences;
         });
         
-        console.log(`✅ 已獲取 ${results.length} 位重複學生的完整志願序`);
-        
-        // 調試：顯示重複學生的第一志願序
-        results.forEach(result => {
-          if (result.preferences.length > 0) {
-            const firstPreference = result.preferences[0];
-            console.log(`  學生 ${result.studentId}: 第一志願序 = ${firstPreference.preference_order}, 公司 = ${firstPreference.company_name}, 職缺 = ${firstPreference.job_title}`);
-          }
-        });
+        // 已移除控制台日誌訊息
       } catch (error) {
         console.error('批量獲取重複學生志願序失敗:', error);
         duplicateStudentsPreferences = {};
@@ -2392,6 +2385,7 @@
       for (const studentId of duplicateStudents) {
         try {
           // 找出該學生出現在哪些公司的正取名單中
+          // 注意：只收集 director_decision 不是 'Rejected' 的記錄
           const studentMatches = [];
           for (const company of allCompaniesData) {
             for (const job of company.jobs || []) {
@@ -2400,13 +2394,19 @@
                 s.student_id && s.student_id.toString() === studentId.toString()
               );
               if (regularIndex !== -1) {
+                const studentRecord = job.regulars[regularIndex];
+                // 跳過已經是 Rejected 的記錄（避免重複處理）
+                if (studentRecord.director_decision === 'Rejected') {
+                  console.log(`   ⚠️ 跳過學生 ${studentId} 在 ${company.company_name} 的 Rejected 記錄`);
+                  continue;
+                }
                 studentMatches.push({
                   company_id: company.company_id,
                   company_name: company.company_name,
                   job_id: job.job_id,
                   job_title: job.job_title,
-                  student: job.regulars[regularIndex],
-                  match_id: job.regulars[regularIndex].id || job.regulars[regularIndex].match_id
+                  student: studentRecord,
+                  match_id: studentRecord.id || studentRecord.match_id
                 });
               }
             }
@@ -2437,8 +2437,10 @@
           }
 
           // 從其他公司移除該學生
+          // 再次過濾掉已經是 Rejected 的記錄，避免重複處理
           const matchesToRemove = studentMatches.filter(match => 
-            match.match_id !== targetMatch.match_id
+            match.match_id !== targetMatch.match_id &&
+            match.student.director_decision !== 'Rejected'
           );
 
           if (matchesToRemove.length > 0) {
@@ -2448,6 +2450,12 @@
             // 並行移除所有非第一志願的匹配
             const removePromises = matchesToRemove.map(async (match) => {
               try {
+                // 再次確認記錄狀態（避免在非同步處理期間狀態已改變）
+                if (match.student.director_decision === 'Rejected') {
+                  console.log(`   ⚠️ 跳過學生 ${studentId} 在 ${match.company_name} 的 Rejected 記錄（狀態已改變）`);
+                  return false;
+                }
+                
                 const res = await fetch('/admission/api/director_remove_student', {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
@@ -2872,9 +2880,17 @@
       }
     }
 
-    // 渲染重複中選警告
+    // 渲染重複中選警告（已停用，不顯示）
     function renderDuplicateAlert() {
       const alert = document.getElementById('duplicateAlert');
+      // 直接隱藏警告區塊，不顯示重複中選提示
+      if (alert) {
+        alert.style.display = 'none';
+      }
+      return;
+      
+      // 以下程式碼已停用
+      /*
       const list = document.getElementById('duplicateList');
       
       if (duplicateStudents.length === 0) {
@@ -2935,6 +2951,7 @@
         li.innerHTML = `<strong>${info.student_name}</strong> (${info.student_number}) 被以下公司選中：${info.companies.join('、')}${preferenceText}`;
         list.appendChild(li);
       });
+      */
     }
 
     // 單公司切換：上一間
@@ -3110,38 +3127,63 @@
           const maxSlots = jobSlotsMap[key] || job.job_slots || 1;
           
           // 區分「有效正取」與「失效保留」：第一志願在別家者為失效保留，置底顯示
+          // 但如果第一志願公司還沒做媒合排序（不在查詢結果中），則視為有效正取（即時排序）
           const firstChoiceHere = (s) => {
             const prefs = duplicateStudentsPreferences[s.student_id];
             if (!prefs || prefs.length === 0) return true;
             const first = prefs[0];
             return String(first.company_id) === String(company.company_id) && String(first.job_id) === String(job.job_id);
           };
-          const effectiveRegulars = (job.regulars || []).filter(s => !duplicateStudents.includes(s.student_id) || firstChoiceHere(s));
-          const invalidRetained = (job.regulars || []).filter(s => duplicateStudents.includes(s.student_id) && !firstChoiceHere(s));
           
-          // 根據 original_rank 將「有效正取」分配到位置 1..maxSlots
+          // 檢查第一志願公司是否在查詢結果中（是否有媒合排序）
+          const firstChoiceHasSorting = (s) => {
+            const prefs = duplicateStudentsPreferences[s.student_id];
+            if (!prefs || prefs.length === 0) return false;
+            const first = prefs[0];
+            // 檢查第一志願公司是否在 allCompaniesData 中
+            if (!allCompaniesData || allCompaniesData.length === 0) return false;
+            for (const c of allCompaniesData) {
+              if (String(c.company_id) === String(first.company_id)) {
+                // 檢查該公司是否有該職缺的媒合結果
+                for (const j of c.jobs || []) {
+                  if (String(j.job_id) === String(first.job_id)) {
+                    // 檢查是否有該學生的記錄
+                    const hasStudent = [...(j.regulars || []), ...(j.reserves || [])].some(
+                      st => String(st.student_id) === String(s.student_id)
+                    );
+                    return hasStudent;
+                  }
+                }
+              }
+            }
+            return false;
+          };
+          
+          const effectiveRegulars = (job.regulars || []).filter(s => {
+            if (!duplicateStudents.includes(s.student_id)) return true;
+            // 如果是重複學生，檢查第一志願是否在當前公司，或第一志願公司還沒做媒合排序
+            return firstChoiceHere(s) || !firstChoiceHasSorting(s);
+          });
+          const invalidRetained = (job.regulars || []).filter(s => {
+            if (!duplicateStudents.includes(s.student_id)) return false;
+            // 只有當第一志願不在當前公司，且第一志願公司已經做媒合排序時，才視為失效保留
+            return !firstChoiceHere(s) && firstChoiceHasSorting(s);
+          });
+          
+          // 根據 original_rank 將「有效正取」排序後，依序塞進 1..maxSlots（中間不留空，才能形成「往前遞補」效果）
           const slotToStudent = {};
           const sortedEffective = [...effectiveRegulars].sort((a, b) => {
             const aRank = a.original_rank !== null && a.original_rank !== undefined ? a.original_rank : (a.slot_index || 999);
             const bRank = b.original_rank !== null && b.original_rank !== undefined ? b.original_rank : (b.slot_index || 999);
             return aRank - bRank;
           });
-          sortedEffective.forEach((student) => {
-            const rankValue = student.original_rank !== null && student.original_rank !== undefined
-              ? student.original_rank
-              : (student.slot_index != null ? student.slot_index : 999);
-            const slot = (rankValue >= 1 && rankValue <= maxSlots && !slotToStudent[rankValue]) ? rankValue : null;
-            if (slot) {
+          sortedEffective.forEach((student, index) => {
+            // index 從 0 開始，slotIndex 從 1 開始 → 自動往前遞補
+            const slot = Math.min(index + 1, maxSlots);
+            if (!slotToStudent[slot]) {
               slotToStudent[slot] = student;
-            } else {
-              for (let k = 1; k <= maxSlots; k++) {
-                if (!slotToStudent[k]) { slotToStudent[k] = student; break; }
-              }
             }
           });
-          
-          // 僅當「原本正取1 已被前面的志願移走」（此職缺有失效保留）時，才顯示遞補(原正取2)
-          const hasOriginalRank1MovedAway = invalidRetained.length > 0;
           
           // 渲染每個正取格子的輔助函式
           const renderRegularCard = (student, slotIndex) => {
@@ -3153,14 +3195,15 @@
             const rankNum = typeof rankValue === 'number' ? rankValue : parseInt(rankValue, 10) || slotIndex;
             // 正常錄取：正取 1 且第一志願相符 → 綠色 [正取 1]
             const isNormalAdmit = (prefOrder === 1 && rankNum === 1) || (!isDuplicate && rankNum === 1 && prefOrder === 1);
-            // 自動遞補：僅當原本正取1 被移走後，才顯示 [遞補] (原正取 N)
-            const isSupplement = rankNum >= 2 && hasOriginalRank1MovedAway;
-            const conflictWarning = isDuplicate ? '<span class="conflict-warning">⚠️ 多方爭奪中</span>' : '';
+            // 自動遞補：若目前顯示的位置（slotIndex）在原始排序之前，表示前面有人被移走 → 顯示 [遞補錄取] (原正取 N)
+            const isSupplement = rankNum > slotIndex;
+            // 已移除「⚠️ 多方爭奪中」警告訊息
+            const conflictWarning = '';
             let badgeHtml = '';
             if (isNormalAdmit) {
               badgeHtml = '<span class="badge badge-admitted">正取 1</span>' + conflictWarning;
             } else if (isSupplement) {
-              badgeHtml = '<span class="badge badge-supplement">遞補錄取</span><span class="invalid-retained-label">(原正取 ' + rankNum + ')</span>' + conflictWarning;
+              badgeHtml = '<span class="badge badge-supplement">遞補</span><span class="invalid-retained-label">(原正取 ' + rankNum + ')</span>' + conflictWarning;
             } else {
               badgeHtml = '<span class="badge badge-regular">正取' + rankNum + '</span>' + conflictWarning;
             }
