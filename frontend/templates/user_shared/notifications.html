@@ -372,7 +372,7 @@
       max-width: 80vw;
       background-color: rgba(10, 10, 10, 0.95);
       backdrop-filter: blur(6px);
-      box-shadow: 3px 0 12px rgba(0, 0, 0, 0.6);
+      box-shadow: 3px 0 12px rgb(0 0 0 / 0.7);
       padding: 2rem 1.5rem;
       transform: translateX(-100%);
       transition: transform 0.3s ease-in-out;
@@ -380,7 +380,7 @@
       display: flex;
       flex-direction: column;
       align-items: flex-start;
-      color: #fff;
+      color: white;
       user-select: none;
     }
 
@@ -399,24 +399,32 @@
     #side-menu h2 {
       margin: 0;
       font-weight: 700;
-      font-size: 1.5rem;
-      text-align: left;
-      flex: 1;
-      color: white;
+      font-size: 1.6rem;
+      color: #fff;
+      padding: 0;
+      line-height: 2.4rem;
+      height: 2.4rem;
+      display: flex;
+      align-items: center;
     }
 
     #close-btn {
-      font-size: 1.5rem;
+      position: absolute;
+      top: 2rem;
+      right: 1.6rem;
+      font-size: 1.6rem;
+      font-weight: bold;
       background: none;
       border: none;
-      color: white;
+      color: #fff;
       cursor: pointer;
-      line-height: 1;
-      width: auto;
-      height: auto;
+      line-height: 2.4rem;
+      height: 2.4rem;
+      width: 1.6rem;
       display: flex;
       align-items: center;
       justify-content: center;
+      z-index: 10;
       padding: 0;
       margin: 0;
     }
@@ -2624,11 +2632,12 @@
             menuItems = [
               { href: '/director_home', text: '首頁' },
               { href: '/profile', text: '個人資料' },
-              { href: '/review_resume', text: '學生履歷審核' },
-              { href: '/upload_company', text: '建立實習機會' },
-              { href: '/admission_results', text: '查看錄取結果' },
-              { href: '/manage_vendor', text: '實習廠商管理' },
-              { href: '/notifications', text: '通知' },
+              { href: '/approve_company', text: '審核實習單位' },
+              { href: '/review_resume?mode=director', text: '審核實習履歷' },
+              { href: '/interview_schedule', text: '行事曆' },
+              { href: '/notifications', text: '管理公告' },
+              { href: '/admin_statistics', text: '查詢統計資料' },
+              { href: '/admission/manage_director', text: '媒合結果' },
               { href: '/login', text: '登出' }
             ];
           } else if (userRole === 'teacher') {
