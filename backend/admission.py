@@ -2184,6 +2184,7 @@ def director_matching_results():
                 "is_conflict": bool(result.get("is_conflict")),
                 "original_type": result.get("original_type"),
                 "original_rank": result.get("original_rank"),
+                "vendor_slot_index": result.get("vendor_slot_index"),  # 廠商的排序索引，用於判斷是否有媒合排序
                 "updated_at": result.get("updated_at").strftime("%Y-%m-%d %H:%M:%S") if isinstance(result.get("updated_at"), datetime) else str(result.get("updated_at", ""))
             }
             formatted_results.append(formatted_result)
@@ -2252,10 +2253,138 @@ def director_matching_results():
                 }
         
         # 將媒合結果分配到對應的公司和職缺
-        # 使用集合追蹤已添加的學生，確保同一學生在同一公司/職缺只出現一次
-        added_students = {}  # key: (company_id, job_id, student_id)
+        # 對於重複中選的學生，優先選擇「有媒合排序結果」且「志願序最高」的記錄
+        # 如果第一志願的公司還沒做媒合排序，選擇其他有媒合排序的公司中志願序最高的
+        student_best_match_id = {}  # key: student_id, value: (match_id, preference_order, has_sorting)
         
         for result in formatted_results:
+            student_id = result.get("student_id")
+            if student_id in duplicate_students:
+                # 這是重複中選的學生，需要選擇最合適的記錄
+                preference_order = result.get("preference_order")
+                if preference_order is None:
+                    preference_order = 999  # 沒有志願序的排在最後
+                
+                # 判斷是否有媒合排序結果（廠商已排序）
+                # 如果有 vendor_slot_index 或 original_rank，表示有媒合排序
+                # vendor_slot_index 來自 resume_applications.slot_index，是最直接的判斷方式
+                has_sorting = (result.get("vendor_slot_index") is not None) or (result.get("original_rank") is not None)
+                
+                match_id = result.get("match_id") or result.get("id")
+                # 確保 match_id 是字符串，以便正確比較
+                match_id_str = str(match_id) if match_id is not None else None
+                
+                if student_id not in student_best_match_id:
+                    student_best_match_id[student_id] = (match_id_str, preference_order, has_sorting)
+                else:
+                    # 優先考慮志願序（志願序越小，優先級越高）
+                    # 只有在志願序相同時，才優先選擇有媒合排序的記錄
+                    current_has_sorting = student_best_match_id[student_id][2]
+                    current_order = student_best_match_id[student_id][1]
+                    
+                    # 如果當前記錄的志願序更小（優先級更高），則替換
+                    if preference_order < current_order:
+                        student_best_match_id[student_id] = (match_id_str, preference_order, has_sorting)
+                    # 如果志願序相同，則優先選擇有媒合排序的記錄
+                    elif preference_order == current_order:
+                        if has_sorting and not current_has_sorting:
+                            student_best_match_id[student_id] = (match_id_str, preference_order, has_sorting)
+                    # 如果當前記錄的志願序更大（優先級更低），則不替換
+        
+        # 即時排序：對於重複中選的學生，優先選擇志願序最高的記錄（preference_order 最小的）
+        # 不需要等待第一志願完成媒合排序，只要廠商有做媒合排序並選擇了該學生，就應該顯示
+        # 邏輯已在上面完成：優先考慮志願序，如果志願序相同則優先選擇有媒合排序的記錄
+        
+        # 先建立廠商原始排序的資料（不過濾重複學生，保持原樣）
+        # 使用集合追蹤已添加的學生，確保同一學生在同一公司/職缺只出現一次
+        added_students_vendor = {}  # key: (company_id, job_id, student_id)
+        companies_data_vendor = {}
+        
+        # 初始化所有已審核的公司（廠商原始排序）
+        for company in all_companies:
+            company_id = company["company_id"]
+            company_name = company["company_name"]
+            companies_data_vendor[company_id] = {
+                "company_id": company_id,
+                "company_name": company_name,
+                "jobs": {}
+            }
+        
+        # 為每個公司添加職缺（廠商原始排序）
+        for job in all_jobs:
+            company_id = job["company_id"]
+            job_id = job["job_id"]
+            job_title = job["job_title"] or "未指定職缺"
+            job_slots = job["job_slots"] or 1
+            
+            if company_id in companies_data_vendor:
+                companies_data_vendor[company_id]["jobs"][job_id] = {
+                    "job_id": job_id,
+                    "job_title": job_title,
+                    "job_slots": job_slots,
+                    "regulars": [],
+                    "reserves": []
+                }
+        
+        # 將所有媒合結果分配到廠商原始排序（不過濾）
+        for result in formatted_results:
+            company_id = result["company_id"]
+            job_id = result.get("job_id") or 0
+            job_title = result.get("job_title") or "未指定職缺"
+            student_id = result.get("student_id")
+            
+            key = (company_id, job_id, student_id)
+            if key in added_students_vendor:
+                continue
+            
+            if company_id not in companies_data_vendor:
+                companies_data_vendor[company_id] = {
+                    "company_id": company_id,
+                    "company_name": result["company_name"],
+                    "jobs": {}
+                }
+            
+            if job_id not in companies_data_vendor[company_id]["jobs"]:
+                job_slots = result.get("job_slots") or 1
+                companies_data_vendor[company_id]["jobs"][job_id] = {
+                    "job_id": job_id,
+                    "job_title": job_title,
+                    "job_slots": job_slots,
+                    "regulars": [],
+                    "reserves": []
+                }
+            
+            if result["is_reserve"]:
+                companies_data_vendor[company_id]["jobs"][job_id]["reserves"].append(result)
+            else:
+                companies_data_vendor[company_id]["jobs"][job_id]["regulars"].append(result)
+            
+            added_students_vendor[key] = True
+        
+        # 過濾 formatted_results：重複中選的學生只保留志願序最高的記錄（主任排序結果）
+        filtered_results = []
+        for result in formatted_results:
+            student_id = result.get("student_id")
+            if student_id in duplicate_students:
+                # 只保留志願序最高的記錄
+                match_id = result.get("match_id") or result.get("id")
+                match_id_str = str(match_id) if match_id is not None else None
+                if student_id in student_best_match_id and student_best_match_id[student_id][0] == match_id_str:
+                    # 調試：記錄選擇的記錄
+                    selected_order = student_best_match_id[student_id][1]
+                    selected_has_sorting = student_best_match_id[student_id][2]
+                    current_order = result.get("preference_order")
+                    current_company = result.get("company_name")
+                    print(f"✅ 重複中選學生 {student_id}：選擇公司 {current_company}，志願序={current_order}（已選擇的志願序={selected_order}，有媒合排序={selected_has_sorting}）")
+                    filtered_results.append(result)
+            else:
+                # 不是重複中選的學生，直接保留
+                filtered_results.append(result)
+        
+        # 使用集合追蹤已添加的學生，確保同一學生在同一公司/職缺只出現一次（主任排序結果）
+        added_students = {}  # key: (company_id, job_id, student_id)
+        
+        for result in filtered_results:
             company_id = result["company_id"]
             job_id = result.get("job_id") or 0
             job_title = result.get("job_title") or "未指定職缺"
@@ -2352,9 +2481,38 @@ def director_matching_results():
                 "jobs": jobs_list
             })
         
+        # 建立廠商原始排序的列表格式（不過濾重複學生）
+        companies_list_vendor = []
+        for company_id, company_data in companies_data_vendor.items():
+            jobs_list_vendor = []
+            for job_id, job_data in company_data["jobs"].items():
+                # 對正取名單排序（按 original_rank 或 slot_index）
+                regulars_vendor = sorted(job_data["regulars"], key=lambda x: (
+                    x.get("original_rank") is None,
+                    x.get("original_rank") or x.get("slot_index") or 999
+                ))
+                # 對備取名單排序
+                reserves_vendor = sorted(job_data["reserves"], key=lambda x: (
+                    x.get("original_rank") is None,
+                    x.get("original_rank") or x.get("slot_index") or 999
+                ))
+                jobs_list_vendor.append({
+                    "job_id": job_data["job_id"],
+                    "job_title": job_data["job_title"],
+                    "job_slots": job_data["job_slots"],
+                    "regulars": regulars_vendor,
+                    "reserves": reserves_vendor
+                })
+            companies_list_vendor.append({
+                "company_id": company_id,
+                "company_name": company_data["company_name"],
+                "jobs": jobs_list_vendor
+            })
+        
         return jsonify({
             "success": True,
-            "companies": companies_list,
+            "companies": companies_list,  # 主任排序結果（已過濾重複學生）
+            "vendor_companies": companies_list_vendor,  # 廠商原始排序（不過濾，保持原樣）
             "duplicate_students": list(duplicate_students.keys()),
             "total_matches": len(formatted_results)
         })
@@ -3024,16 +3182,22 @@ def director_add_student():
                 # 繼續處理，後續會更新或創建新記錄
             else:
                 # 檢查是否是要更新到同一個公司/職缺
+                # 注意：manage_director.preference_id 對應的是 student_job_applications.id
+                # 需要從 student_job_applications 表查詢 company_id 和 job_id
                 existing_preference_id = existing.get('preference_id')
+                existing_vendor_id = existing.get('vendor_id')
+                
                 if existing_preference_id:
+                    # 從 student_job_applications 表查詢（因為 preference_id = student_job_applications.id）
                     cursor.execute("""
-                        SELECT company_id, job_id FROM student_preferences WHERE id = %s
+                        SELECT company_id, job_id FROM student_job_applications WHERE id = %s
                     """, (existing_preference_id,))
-                    existing_pref = cursor.fetchone()
+                    existing_sja = cursor.fetchone()
                     cursor.fetchall()  # 確保所有結果都被讀取
-                    if existing_pref:
-                        existing_company_id = existing_pref.get('company_id')
-                        existing_job_id = existing_pref.get('job_id')
+                    
+                    if existing_sja:
+                        existing_company_id = existing_sja.get('company_id')
+                        existing_job_id = existing_sja.get('job_id')
                         # 如果是同一個公司/職缺，允許更新
                         if existing_company_id == company_id and existing_job_id == job_id:
                             print(f"ℹ️ 學生 {student_id} 已存在於相同公司/職缺，將更新記錄")
@@ -3048,9 +3212,41 @@ def director_add_student():
                                 WHERE match_id = %s
                             """, (existing.get('match_id'),))
                             print(f"✅ 已將舊記錄 (match_id: {existing.get('match_id')}) 標記為 Rejected")
+                    elif existing_vendor_id:
+                        # 如果查不到 student_job_applications，但 vendor_id 存在，使用 vendor_id 判斷
+                        if existing_vendor_id == company_id:
+                            print(f"ℹ️ 學生 {student_id} 已存在於相同公司（vendor_id={existing_vendor_id}），將更新記錄")
+                            # 繼續處理，後續會更新記錄
+                        else:
+                            # 不同的公司，自動將舊記錄標記為 Rejected
+                            print(f"ℹ️ 學生 {student_id} 已存在於其他公司 (vendor_id: {existing_vendor_id})，將自動移除舊記錄")
+                            cursor.execute("""
+                                UPDATE manage_director
+                                SET director_decision = 'Rejected',
+                                    updated_at = CURRENT_TIMESTAMP
+                                WHERE match_id = %s
+                            """, (existing.get('match_id'),))
+                            print(f"✅ 已將舊記錄 (match_id: {existing.get('match_id')}) 標記為 Rejected")
+                    else:
+                        print(f"⚠️ 警告：學生 {student_id} 的現有記錄無法確定公司/職缺，跳過自動移除邏輯")
                 else:
-                    print(f"❌ 錯誤：學生 {student_id} 已經在媒合結果中但 preference_id 為空")
-                    return jsonify({"success": False, "message": "該學生已經在媒合結果中"}), 400
+                    # preference_id 為空，但可能有 vendor_id
+                    if existing_vendor_id:
+                        if existing_vendor_id == company_id:
+                            print(f"ℹ️ 學生 {student_id} 已存在於相同公司（vendor_id={existing_vendor_id}），將更新記錄")
+                        else:
+                            # 不同的公司，自動將舊記錄標記為 Rejected
+                            print(f"ℹ️ 學生 {student_id} 已存在於其他公司 (vendor_id: {existing_vendor_id})，將自動移除舊記錄")
+                            cursor.execute("""
+                                UPDATE manage_director
+                                SET director_decision = 'Rejected',
+                                    updated_at = CURRENT_TIMESTAMP
+                                WHERE match_id = %s
+                            """, (existing.get('match_id'),))
+                            print(f"✅ 已將舊記錄 (match_id: {existing.get('match_id')}) 標記為 Rejected")
+                    else:
+                        print(f"❌ 錯誤：學生 {student_id} 已經在媒合結果中但 preference_id 和 vendor_id 都為空")
+                        return jsonify({"success": False, "message": "該學生已經在媒合結果中"}), 400
         
         # 4. 獲取或創建 student_job_applications 記錄（application_id）
         # 注意：manage_director.preference_id 必須引用 resume_applications.application_id
