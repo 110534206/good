@@ -364,41 +364,46 @@
       position: absolute;
       top: 2rem;
       right: 1.6rem;
-      font-size: 2.2rem;
+      font-size: 2.8rem;
       background: none;
       border: none;
-      color: white;
+      color: #fff;
       cursor: pointer;
-      line-height: 1;
-      width: 2.5rem;
+      line-height: 2.4rem;
       height: 2.5rem;
+      width: 2.5rem;
       display: flex;
       align-items: center;
       justify-content: center;
+      z-index: 10;
     }
 
     #side-menu h2 {
-      width: 100%;
-      margin-bottom: 1.5rem;
+      margin: 0 0 1.5rem 0;
       font-weight: 700;
-      font-size: 1.5rem;
-      text-align: left;
+      font-size: 1.6rem;
+      color: #fff;
+      padding: 0;
+      line-height: 2.4rem;
+      height: 2.4rem;
+      display: flex;
+      align-items: center;
     }
 
     #side-menu a {
       display: block;
       width: 100%;
-      padding: 0.5rem 0;
+      padding: 0.6rem 0;
       font-size: 1.1rem;
-      color: #ddd;
+      color: #e2e8f0;
       text-decoration: none;
       border-radius: 4px;
       transition: background-color 0.2s ease;
     }
 
     #side-menu a:hover {
-      background-color: rgba(255, 255, 255, 0.15);
-      color: white;
+      background-color: rgba(255, 255, 255, 0.18);
+      color: #fff;
     }
 
     /* 通知鈴鐺：固定於頂端列右側，未讀數量顯示於鈴鐺右上角 */
@@ -734,14 +739,14 @@
     <a href="/student_home">首頁</a>
     <a href="/profile">個人資料</a>
     <a href="/resume_folders">履歷管理</a>
-    <a href="/notifications">通知</a>
     {% if in_application_phase %}
     <a href="/fill_preferences">填寫志願序</a>
     <a href="/look_company">投遞履歷</a>
     <a href="/interview_schedule">行事曆</a>
     <a href="/intern_achievement">學生媒合結果</a>
-    {% if show_intern_experience %}
+    <a href="/notifications">通知</a>
     <a href="/intern_experience">實習心得</a>
+    {% if show_intern_experience %}
     {% endif %}
     {% endif %}
   </nav>
