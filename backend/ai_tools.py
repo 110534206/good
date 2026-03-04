@@ -900,7 +900,21 @@ def perform_ocr_on_file(file_storage):
                     print(f"OCR 嘗試使用模型: {model_name}")
                     model_instance = genai.GenerativeModel(model_name)
                     
-                    prompt = "請辨識這張圖片中的所有文字。如果是成績單，請務必將內容整理成 Markdown 表格格式輸出（包含欄位如：科目名稱、學分、成績等），並去除不相關的雜訊。如果不是成績單，則直接輸出文字內容。"
+                    prompt = """
+請嚴格辨識圖片中的文字，並將「課程名稱」、「學分」、「成績」整理成 Markdown 表格。
+
+【重要規則】
+1. **絕對不可無中生有**：只能輸出圖片上真正存在的文字，禁止預測或補全沒看到的課程。
+2. **精確提取**：科目名稱、學分、成績必須與圖片內容完全一致。
+3. **格式統一**：表格欄位請固定為 `| 科目名稱 | 學分 | 成績 |`。
+4. **排除雜訊**：
+   - **只抓取科目成績和學分，其他不抓。**
+   - 請忽略學校名稱、個人資料、蓋章、頁碼、排名、總學分、平均成績、操行成績、備註欄位等所有非課程本身的內容。
+   - 若表格中包含「必修/選修」、「學期」、「教師」等其他欄位，請直接忽略，不要放入輸出表格。
+5. **清晰度與可信度判斷**：
+   - 如果圖片模糊、無法辨識文字或根本不是成績單，請輸出：「[無法辨識] 請重新拍攝更清晰的圖片上傳。」
+   - **請在輸出的最後一行（單獨一行）評估本次辨識的準確率（信心度），格式為：「信心度：[0-100]」**
+"""
                     
                     response = model_instance.generate_content([
                         {'mime_type': file_storage.mimetype or 'image/jpeg', 'data': img_data},
@@ -909,7 +923,18 @@ def perform_ocr_on_file(file_storage):
                     
                     if response and response.text:
                         gemini_text = response.text.strip()
-                        gemini_conf = 95.0 
+                        gemini_conf = 95.0 # 預設值，若無法提取則使用此值
+                        
+                        # 嘗試提取最後一行的信心度
+                        confidence_match = re.search(r'信心度：\s*(\d+)', gemini_text.split('\n')[-1])
+                        if confidence_match:
+                            try:
+                                gemini_conf = float(confidence_match.group(1))
+                                # 移除信心度這行，避免顯示在前端的 Markdown 中
+                                gemini_text = '\n'.join(gemini_text.split('\n')[:-1]).strip()
+                            except ValueError:
+                                pass
+                        
                         use_gemini = True
                         print(f"✅ 使用 Gemini AI ({model_name}) 完成圖片辨識")
                         break
