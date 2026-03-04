@@ -555,19 +555,19 @@
       top: 0;
       left: 0;
       height: 100vh;
-      width: 280px;
-      max-width: 75vw;
+      width: 320px;
+      max-width: 80vw;
       background-color: rgba(10, 10, 10, 0.95);
       backdrop-filter: blur(6px);
-      box-shadow: 3px 0 12px rgba(0, 0, 0, 0.6);
-      padding: 2rem 1.25rem;
+      box-shadow: 3px 0 12px rgb(0 0 0 / 0.7);
+      padding: 2rem 1.5rem;
       transform: translateX(-100%);
       transition: transform 0.3s ease-in-out;
       z-index: 1300;
       display: flex;
       flex-direction: column;
       align-items: flex-start;
-      color: #fff;
+      color: white;
       user-select: none;
     }
 
@@ -577,25 +577,34 @@
 
     #close-btn {
       position: absolute;
-      top: 2rem;
+      top: 3.2rem;
       right: 1.6rem;
-      font-size: 2.2rem;
+      font-size: 1.6rem;
+      font-weight: bold;
       background: none;
       border: none;
       color: #fff;
       cursor: pointer;
       line-height: 1;
-      width: 2.4rem;
-      height: 2.4rem;
+      height: 1.6rem;
+      width: 1.6rem;
       display: flex;
       align-items: center;
       justify-content: center;
+      z-index: 10;
+      transform: translateY(-50%);
     }
 
     #side-menu h2 {
-      margin: 0.5rem 0 1.5rem;
+      margin: 0 0 1.5rem 0;
       font-weight: 700;
       font-size: 1.6rem;
+      color: #fff;
+      padding: 0;
+      line-height: 2.4rem;
+      height: 2.4rem;
+      display: flex;
+      align-items: center;
     }
 
     #side-menu a {
@@ -2064,10 +2073,23 @@
 
     menuBtn.addEventListener('click', () => {
       sideMenu.classList.add('open');
+      sideMenu.setAttribute('aria-hidden', 'false');
     });
 
     closeBtn.addEventListener('click', () => {
       sideMenu.classList.remove('open');
+      sideMenu.setAttribute('aria-hidden', 'true');
+    });
+
+    // 如果點擊 menu 以外的地方就關閉選單
+    document.addEventListener('click', (e) => {
+      if (
+        !sideMenu.contains(e.target) &&
+        !menuBtn.contains(e.target)
+      ) {
+        sideMenu.classList.remove('open');
+        sideMenu.setAttribute('aria-hidden', 'true');
+      }
     });
 
     function setMatchingTab(tab) {
