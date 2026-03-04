@@ -330,11 +330,11 @@
     </div>
   </div>
 
-  <!-- 側邊選單 -->
+  <!-- 側邊選單（依身分顯示對應首頁連結） -->
   <nav id="side-menu" aria-hidden="true" role="navigation" aria-label="功能選單">
     <button id="close-btn" aria-label="關閉功能選單">×</button>
     <h2>功能選單</h2>
-    <a href="/class_teacher_home">首頁</a>
+    <a id="menu-link-home" href="{% if user_role == 'teacher' %}/teacher_home{% elif user_role == 'director' %}/director_home{% elif user_role == 'ta' %}/ta_home{% elif user_role == 'admin' %}/admin_home{% else %}/class_teacher_home{% endif %}">首頁</a>
     <a href="/profile">個人資料</a>
     <a href="/notifications">公告</a>
     <a href="/upload_company">建立實習機會</a>
@@ -353,8 +353,22 @@
     let allCompanies = [];
     let allSemesters = [];
 
+    // 依身分回傳對應首頁 URL（與側邊選單「首頁」一致）
+    function getHomeUrlByRole(role) {
+      var map = { teacher: '/teacher_home', director: '/director_home', ta: '/ta_home', admin: '/admin_home', class_teacher: '/class_teacher_home' };
+      return map[role] || '/class_teacher_home';
+    }
+
     // 頁面載入時初始化
     document.addEventListener('DOMContentLoaded', function() {
+      // 依目前登入身分設定側邊選單「首頁」連結（指導老師→/teacher_home，班導→/class_teacher_home 等）
+      fetch('/api/profile').then(function(r) { return r.json(); }).then(function(data) {
+        if (data.success && data.user && data.user.role) {
+          var link = document.getElementById('menu-link-home');
+          if (link) link.href = getHomeUrlByRole(data.user.role);
+        }
+      }).catch(function() {});
+
       initSemesterFilter();
       loadClasses();
       loadOpenCompanies();

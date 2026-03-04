@@ -2095,6 +2095,7 @@ def get_interview_schedules():
                 })
             
             # 構建查詢，只包含該老師管理的公司
+            # 包含已排程的（scheduled）和已完成但已審核通過的（finished + approved）
             placeholders = ','.join(['%s'] * len(company_ids))
             query = f"""
                 SELECT
@@ -2107,20 +2108,27 @@ def get_interview_schedules():
                     sja.student_id,
                     u.name AS student_name,
                     ra.application_id,
-                    ra.job_id
+                    ra.job_id,
+                    ij.title AS job_title,
+                    ra.apply_status
                 FROM resume_applications ra
                 JOIN student_job_applications sja ON ra.application_id = sja.id
                 LEFT JOIN internship_companies ic ON sja.company_id = ic.id
                 LEFT JOIN users u ON sja.student_id = u.id
-                WHERE ra.interview_status = 'scheduled'
+                LEFT JOIN internship_jobs ij ON ra.job_id = ij.id
+                WHERE (ra.interview_status = 'scheduled' 
+                       OR (ra.interview_status = 'finished' AND ra.apply_status = 'approved'))
                 AND ra.interview_time IS NOT NULL
                 AND ic.id IN ({placeholders})
-                ORDER BY ra.updated_at DESC
+                ORDER BY 
+                    CASE WHEN ra.apply_status = 'approved' THEN 0 ELSE 1 END,
+                    ra.updated_at DESC
             """
             cursor.execute(query, tuple(company_ids))
         else:
             # TA、主任、管理員、班導、學生可以看到所有面試排程
             # 直接從 resume_applications 表讀取（與廠商 API 保持一致）
+            # 包含已排程的（scheduled）和已完成但已審核通過的（finished + approved）
             cursor.execute("""
                 SELECT
                     ra.company_comment AS comment,
@@ -2132,14 +2140,20 @@ def get_interview_schedules():
                     sja.student_id,
                     u.name AS student_name,
                     ra.application_id,
-                    ra.job_id
+                    ra.job_id,
+                    ij.title AS job_title,
+                    ra.apply_status
                 FROM resume_applications ra
                 JOIN student_job_applications sja ON ra.application_id = sja.id
                 LEFT JOIN internship_companies ic ON sja.company_id = ic.id
                 LEFT JOIN users u ON sja.student_id = u.id
-                WHERE ra.interview_status = 'scheduled'
+                LEFT JOIN internship_jobs ij ON ra.job_id = ij.id
+                WHERE (ra.interview_status = 'scheduled' 
+                       OR (ra.interview_status = 'finished' AND ra.apply_status = 'approved'))
                 AND ra.interview_time IS NOT NULL
-                ORDER BY ra.updated_at DESC
+                ORDER BY 
+                    CASE WHEN ra.apply_status = 'approved' THEN 0 ELSE 1 END,
+                    ra.updated_at DESC
             """)
         
         all_schedules = cursor.fetchall()
@@ -2229,6 +2243,9 @@ def get_interview_schedules():
                 'company_name': company_name,
                 'student_id': student_id,
                 'student_name': student_name,
+                'job_id': schedule.get('job_id'),  # 添加 job_id
+                'job_title': schedule.get('job_title'),  # 添加 job_title
+                'apply_status': schedule.get('apply_status'),  # 添加審核狀態
                 'created_at': schedule.get('created_at').strftime('%Y-%m-%d %H:%M:%S') if schedule.get('created_at') else None
             })
         

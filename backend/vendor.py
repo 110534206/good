@@ -3065,11 +3065,13 @@ def get_all_interview_schedules():
                 sja.student_id,
                 u.name AS student_name,
                 ra.application_id,
-                ra.job_id
+                ra.job_id,
+                ij.title AS job_title
             FROM resume_applications ra
             JOIN student_job_applications sja ON ra.application_id = sja.id
             LEFT JOIN internship_companies ic ON sja.company_id = ic.id
             LEFT JOIN users u ON sja.student_id = u.id
+            LEFT JOIN internship_jobs ij ON ra.job_id = ij.id
             WHERE ra.interview_status IN ('scheduled', 'finished')
             AND ra.interview_time IS NOT NULL
             ORDER BY ra.updated_at DESC
@@ -3179,7 +3181,8 @@ def get_all_interview_schedules():
                 'student_id': student_id,  # 添加學生ID
                 'student_name': student_name,  # 添加學生姓名
                 'application_id': schedule.get('application_id'),
-                'job_id': schedule.get('job_id')
+                'job_id': schedule.get('job_id'),
+                'job_title': schedule.get('job_title')  # 添加職缺名稱
             })
         
         print(f"✅ [all_interview_schedules] 最終返回 {len(parsed_schedules)} 個解析後的排程")
@@ -3495,9 +3498,21 @@ def schedule_interviews():
                     if student_info:
                         student_name = student_info.get("name", "同學")
                         
+                        # 根據該學生的 company_id 獲取正確的公司名稱
+                        student_company_name = company_name  # 預設使用全局公司名稱
+                        if company_id:
+                            cursor.execute("""
+                                SELECT company_name 
+                                FROM internship_companies 
+                                WHERE id = %s
+                            """, (company_id,))
+                            company_row = cursor.fetchone()
+                            if company_row and company_row.get("company_name"):
+                                student_company_name = company_row.get("company_name")
+                        
                         # 構建通知內容
-                        notification_title = f"{company_name} 面試通知"
-                        notification_message = f"您已收到來自 {company_name} 的面試通知。\n\n"
+                        notification_title = f"{student_company_name} 面試通知"
+                        notification_message = f"您已收到來自 {student_company_name} 的面試通知。\n\n"
                         notification_message += f"面試日期：{interview_date}\n"
                         if time_info:
                             notification_message += f"面試時間：{time_info}\n"
@@ -3538,8 +3553,8 @@ def schedule_interviews():
                                 
                                 if teacher_row and teacher_row.get("teacher_id"):
                                     teacher_id = teacher_row.get("teacher_id")
-                                    teacher_notification_title = f"{company_name} 學生面試通知"
-                                    teacher_notification_message = f"您的學生 {student_name} 已收到來自 {company_name} 的面試通知。\n\n"
+                                    teacher_notification_title = f"{student_company_name} 學生面試通知"
+                                    teacher_notification_message = f"您的學生 {student_name} 已收到來自 {student_company_name} 的面試通知。\n\n"
                                     teacher_notification_message += f"面試日期：{interview_date}\n"
                                     if time_info:
                                         teacher_notification_message += f"面試時間：{time_info}\n"
@@ -3828,19 +3843,17 @@ def mark_interview_completed():
                     
                     interview_time_start = interview_info.get('interview_time')
                     interview_time_end = interview_info.get('interview_timeEnd')
-                    current_status = interview_info.get('interview_status')
+                    current_status = interview_info.get('interview_status') or 'none'
                     
-                    # 檢查是否已有面試排程
-                    if current_status != 'scheduled':
+                    # 已完成的不可重複標記
+                    if current_status == 'finished':
                         cursor.close()
                         conn.close()
-                        if current_status == 'finished':
-                            return jsonify({"success": False, "message": "此面試已經標記為已完成"}), 400
-                        else:
-                            return jsonify({"success": False, "message": "此履歷尚未安排面試"}), 400
+                        return jsonify({"success": False, "message": "此面試已經標記為已完成"}), 400
                     
-                    # 檢查面試時間是否已開始（只要開始時間到達，就可以標記為已面試，不需要等到結束）
-                    if interview_time_start:
+                    # 允許從 'none'（未排程）或 'scheduled'（已排程）標記為已面試，方便廠商彈性操作
+                    # 僅當狀態為 'scheduled' 且有設定開始時間時，才檢查面試時間是否已開始
+                    if current_status == 'scheduled' and interview_time_start:
                         from datetime import datetime
                         try:
                             start_time = interview_time_start
@@ -3859,14 +3872,14 @@ def mark_interview_completed():
                             print(f"⚠️ [mark_interview_completed] 時間檢查失敗：{e}")
                             # 如果時間解析失敗，仍然允許標記（向後兼容）
                     
-                    # 更新 resume_applications 表
+                    # 更新 resume_applications 表（允許從 none 或 scheduled 標記為 finished）
                     # 面試完成時，interview_result 保持為 'pending'（除非有明確的通過/失敗結果）
                     cursor.execute("""
                         UPDATE resume_applications
                         SET interview_status = 'finished',
                             updated_at = NOW()
                         WHERE application_id = %s AND job_id = %s
-                        AND interview_status = 'scheduled'
+                        AND interview_status IN ('scheduled', 'none')
                     """, (application_id, job_id))
                     
                     if cursor.rowcount == 0:

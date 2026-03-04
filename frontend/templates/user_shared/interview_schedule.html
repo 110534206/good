@@ -163,7 +163,7 @@
 
 
     .main-content {
-      max-width: 1400px;
+      max-width: 1800px;
       margin: 0 auto;
       padding: 0 60px;
       margin-top: 2rem;
@@ -249,6 +249,13 @@
       display: grid;
       grid-template-columns: repeat(7, 1fr);
       gap: 8px;
+      width: 100%;
+    }
+
+    #calendar > div {
+      min-width: 0;
+      width: 100%;
+      box-sizing: border-box;
     }
 
     /* 面試排程詳情模態框樣式 */
@@ -594,7 +601,7 @@
       const weekDays = ["日", "一", "二", "三", "四", "五", "六"];
       weekDays.forEach(day => {
         const dayHeader = document.createElement("div");
-        dayHeader.style.cssText = "padding: 12px; text-align: center; font-weight: 600; background-color: #f1f5f9; border-radius: 8px;";
+        dayHeader.style.cssText = "padding: 12px; text-align: center; font-weight: 600; background-color: #f1f5f9; border-radius: 8px; min-width: 0; width: 100%; box-sizing: border-box;";
         dayHeader.textContent = day;
         calendar.appendChild(dayHeader);
       });
@@ -602,7 +609,7 @@
       // 添加空白格子（月初）
       for (let i = 0; i < startingDayOfWeek; i++) {
         const emptyCell = document.createElement("div");
-        emptyCell.style.cssText = "padding: 12px; min-height: 80px; border: 1px solid #e2e8f0; border-radius: 8px; background-color: #f9fafb;";
+        emptyCell.style.cssText = "padding: 16px; min-height: 120px; border: 1px solid #e2e8f0; border-radius: 8px; background-color: #f9fafb; min-width: 0; width: 100%; box-sizing: border-box;";
         calendar.appendChild(emptyCell);
       }
       
@@ -619,13 +626,16 @@
         const isPast = cellDate < today;
         
         dateCell.style.cssText = `
-          padding: 12px;
-          min-height: 80px;
+          padding: 16px;
+          min-height: 120px;
           border: 1px solid #e2e8f0;
           border-radius: 8px;
           background-color: ${isToday ? '#e3f2fd' : isPast ? '#f9fafb' : '#ffffff'};
           cursor: ${isPast ? 'not-allowed' : 'pointer'};
           transition: background-color 0.2s;
+          min-width: 0;
+          width: 100%;
+          box-sizing: border-box;
         `;
         
         // 日期數字
@@ -721,10 +731,18 @@
           const schedules = allVendorSchedules.get(dateKey);
           
           if (schedules && schedules.length > 0) {
+            // 先對排程進行排序：已審核通過的排程放在前面
+            const sortedSchedules = [...schedules].sort((a, b) => {
+              const aApproved = (a.apply_status === 'approved') ? 1 : 0;
+              const bApproved = (b.apply_status === 'approved') ? 1 : 0;
+              // 已審核通過的排程優先（降序排序）
+              return bApproved - aApproved;
+            });
+            
             // 按照「公司名稱 + 時間段」分組
             const groupedSchedules = new Map();
             
-            schedules.forEach(schedule => {
+            sortedSchedules.forEach(schedule => {
               const timeStart = schedule.time_start || '';
               const timeEnd = schedule.time_end || '';
               
@@ -760,8 +778,19 @@
               group.schedules.push(schedule);
             });
             
+            // 將分組轉換為數組並排序：已審核通過的排程組放在前面
+            const sortedGroups = Array.from(groupedSchedules.entries()).sort((a, b) => {
+              const groupA = a[1];
+              const groupB = b[1];
+              // 檢查每個組中是否有已審核通過的排程
+              const aHasApproved = groupA.schedules.some(s => s.apply_status === 'approved');
+              const bHasApproved = groupB.schedules.some(s => s.apply_status === 'approved');
+              // 已審核通過的組優先（降序排序）
+              return (bHasApproved ? 1 : 0) - (aHasApproved ? 1 : 0);
+            });
+            
             // 為每個分組創建標籤
-            groupedSchedules.forEach((group, groupKey) => {
+            sortedGroups.forEach(([groupKey, group]) => {
               // 格式化時間顯示
               let timeDisplay = '';
               if (group.timeStart && group.timeEnd) {
@@ -815,12 +844,22 @@
                 e.stopPropagation(); // 阻止事件冒泡到日期格子
                 // 顯示合併後的排程詳情（使用第一個排程作為基礎，但包含所有學生）
                 if (group.schedules.length > 0) {
-                  // 創建一個合併的排程物件，包含所有學生姓名
+                  // 收集所有職缺信息
+                  const jobTitles = new Set();
+                  group.schedules.forEach(s => {
+                    const jobTitle = s.job_title || s.jobTitle || s.job_name || null;
+                    if (jobTitle && jobTitle.trim()) {
+                      jobTitles.add(jobTitle.trim());
+                    }
+                  });
+                  
+                  // 創建一個合併的排程物件，包含所有學生姓名和職缺信息
                   const mergedSchedule = {
                     ...group.schedules[0],
                     student_name: group.students.join('、'), // 合併所有學生姓名
                     all_students: group.students, // 保存所有學生姓名陣列
-                    all_schedules: group.schedules // 保存所有排程
+                    all_schedules: group.schedules, // 保存所有排程
+                    job_title: Array.from(jobTitles).join('、') || group.schedules[0].job_title || group.schedules[0].jobTitle || null // 合併所有職缺名稱
                   };
                   showInterviewDetail(mergedSchedule);
                 }
@@ -874,6 +913,33 @@
       const notes = schedule.notes || '';  // 面試須知（備註）
       const createdAt = schedule.created_at || '';
       
+      // 收集所有職缺（如果有多個排程，可能有多個職缺）
+      let jobTitles = [];
+      if (schedule.all_schedules && schedule.all_schedules.length > 0) {
+        // 如果有多個排程，收集所有不同的職缺
+        const jobTitleSet = new Set();
+        schedule.all_schedules.forEach(s => {
+          // 嘗試多種可能的字段名稱
+          const jobTitle = s.job_title || s.jobTitle || s.job_name || s.title || null;
+          if (jobTitle && jobTitle.trim() && !jobTitleSet.has(jobTitle.trim())) {
+            jobTitleSet.add(jobTitle.trim());
+            jobTitles.push(jobTitle.trim());
+          }
+        });
+      } else {
+        // 單個排程，使用當前排程的職缺
+        // 嘗試多種可能的字段名稱
+        const jobTitle = schedule.job_title || schedule.jobTitle || schedule.job_name || schedule.title || null;
+        if (jobTitle) {
+          jobTitles.push(jobTitle);
+        }
+      }
+      
+      // 格式化職缺顯示
+      const jobTitleDisplay = jobTitles.length > 0 
+        ? jobTitles.join('、') 
+        : '未指定職缺';
+      
       // 格式化時間顯示
       let timeDisplay = '';
       if (timeStart && timeEnd) {
@@ -907,6 +973,10 @@
         <div class="interview-detail-row">
           <span class="interview-detail-label">公司名稱</span>
           <span class="interview-detail-value">${escapeHtml(companyName)}</span>
+        </div>
+        <div class="interview-detail-row">
+          <span class="interview-detail-label">面試職缺</span>
+          <span class="interview-detail-value">${escapeHtml(jobTitleDisplay)}</span>
         </div>
         <div class="interview-detail-row">
           <span class="interview-detail-label">學生姓名</span>

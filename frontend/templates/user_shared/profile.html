@@ -10,7 +10,9 @@
     body {
       font-family: Arial, sans-serif;
       background: #f0f4f8;
-      padding: 20px;
+      margin: 0;
+      padding: 0;
+      min-height: 100vh;
     }
 
     .container {
@@ -103,36 +105,48 @@
     }
 
   /* 頂端列 */
-    .profile-top-bar {
-      position: fixed;
+    header {
+      background: linear-gradient(135deg, #0055a8 0%, #006acb 50%, #004f94 100%);
+      border-bottom: none;
+      position: sticky;
       top: 0;
-      left: 0;
-      width: 100%;
-      height: 56px;
-      background:  #0454a3;
+      z-index: 10;
+      box-shadow: 0 8px 20px rgba(0, 68, 148, 0.35);
+    }
+
+    .topbar {
+      max-width: 1800px;
+      margin: 0 auto;
+      padding: 18px 24px;
       display: flex;
       align-items: center;
-      padding: 0 1rem;
-      z-index: 1000;
-      box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+      justify-content: center;
+      color: #fff;
+      position: relative;
     }
 
-    .profile-top-bar .title {
+    .topbar h1 {
+      font-size: 1.5rem;
+      margin: 0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      color: #fff;
+      flex: 1;
+    }
+
+    .topbar h1 .header-title {
       flex: 1;
       text-align: center;
-      padding-right: 20px; 
-      font-size: 1.5rem;
-      color: white;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
     }
 
-    /* 三條線選單按鈕樣式 */
-    .top-bar-left {
-      position: absolute;
-      left: 12rem;
-      z-index: 1300;
-    }
-
-    .top-bar-left #menu-btn {
+    /* 選單按鈕樣式 */
+    #menu-btn {
       width: 30px;
       height: 22px;
       cursor: pointer;
@@ -144,7 +158,7 @@
       padding: 0;
     }
 
-    .top-bar-left #menu-btn span {
+    #menu-btn span {
       display: block;
       width: 100%;
       height: 3px;
@@ -231,25 +245,29 @@
 </head>
 
 <body>
-  <div class="profile-top-bar">
-    <div class="top-bar-left">
-      <button type="button" id="menu-btn" aria-label="開啟選單">
-        <span></span><span></span><span></span>
-      </button>
+  <header>
+    <div class="topbar">
+      <h1>
+        <button id="menu-btn" title="選單" role="button" tabindex="0" aria-label="開啟側邊選單">
+          <span></span>
+          <span></span>
+          <span></span>
+        </button>
+        <div class="header-title">個人資料</div>
+        <div style="width: 30px;"></div> <!-- 佔位元素，保持標題置中 -->
+      </h1>
     </div>
-    <span class="title">個人資料</span>
-  </div>
+  </header>
 
   <nav id="side-menu" aria-hidden="true">
     <div class="menu-header">
       <h2>功能選單</h2>
       <button type="button" id="close-btn" aria-label="關閉選單">×</button>
     </div>
-    <a href="#" id="side-menu-home">首頁</a>
-    <a href="/login" id="side-menu-logout">登出</a>
+    <div id="menu-content"></div>
   </nav>
 
-  <div class="container" style="margin-top: 80px;">
+  <div class="container" style="margin-top: 24px;">
 
     <img id="avatarPreview" class="avatar-preview" src="https://via.placeholder.com/100?text=頭像" alt="頭像預覽" />
     <input type="hidden" id="isHomeroom" value="false" />
@@ -342,6 +360,109 @@
         if (role === 'vendor') return '/vendor_home';
         if (role === 'class_teacher') return '/class_teacher_home';
         return '/student_home';
+      }
+
+      /** 根據角色動態生成側邊選單 */
+      function renderMenu(role, isHomeroom) {
+        const menuContent = document.getElementById('menu-content');
+        if (!menuContent) return;
+
+        let menuItems = [];
+
+        if (role === 'student') {
+          menuItems = [
+            { href: '/student_home', text: '首頁' },
+            { href: '/profile', text: '個人資料' },
+            { href: '/resume_folders', text: '履歷管理' },
+            { href: '/fill_preferences', text: '填寫志願序' },
+            { href: '/look_company', text: '投遞履歷' },
+            { href: '/notifications', text: '通知' },
+            { href: '/interview_schedule', text: '行事曆' },
+            { href: '/intern_achievement', text: '學生媒合結果' },
+            { href: '/intern_experience', text: '實習心得' },
+            { href: '/login', text: '登出' }
+          ];
+        } else if (role === 'vendor') {
+          menuItems = [
+            { href: '/vendor_home', text: '首頁' },
+            { href: '/profile', text: '個人資料' },
+            { href: '/vendor_review_resume', text: '學生履歷審核' },
+            { href: '/manage_positions', text: '職位需求管理' },
+            { href: '/manage_positions/new', text: '新增職缺' },
+            { href: '/confirm_matching', text: '媒合結果' },
+            { href: '/publish_announcements', text: '發布公告' },
+            { href: '/notifications', text: '通知' },
+            { href: '/login', text: '登出' }
+          ];
+        } else if (role === 'class_teacher') {
+          menuItems = [
+            { href: '/class_teacher_home', text: '首頁' },
+            { href: '/profile', text: '個人資料' },
+            { href: '/review_resume', text: '查看學生履歷' },
+            { href: '/review_preferences', text: '審核志願序' },
+            { href: '/admission/results', text: '查詢學生錄取結果' },
+            { href: '/notifications', text: '通知' },
+            { href: '/login', text: '登出' }
+          ];
+        } else if (role === 'director') {
+          menuItems = [
+            { href: '/director_home', text: '首頁' },
+            { href: '/profile', text: '個人資料' },
+            { href: '/review_resume', text: '學生履歷審核' },
+            { href: '/upload_company', text: '建立實習機會' },
+            { href: '/admission_results', text: '查看錄取結果' },
+            { href: '/manage_vendor', text: '實習廠商管理' },
+            { href: '/notifications', text: '通知' },
+            { href: '/login', text: '登出' }
+          ];
+        } else if (role === 'teacher') {
+          menuItems = [
+            { href: '/teacher_home', text: '首頁' },
+            { href: '/profile', text: '個人資料' },
+            { href: '/notifications', text: '公告' },
+            { href: '/upload_company', text: '建立實習機會' },
+            { href: '/review_resume', text: '學生履歷審核' },
+            { href: '/manage_vendor', text: '實習廠商管理' },
+            { href: '/interview_schedule', text: '行事曆' },
+            { href: '/admission_results', text: '查看錄取結果' },
+            { href: '/review_experience', text: '審核實習心得' },
+            { href: '/login', text: '登出' }
+          ];
+        } else if (role === 'ta') {
+          menuItems = [
+            { href: '/ta_home', text: '首頁' },
+            { href: '/profile', text: '個人資料' },
+            { href: '/notifications', text: '通知' },
+            { href: '/ta/statistics/manage_companies', text: '實習廠商管理' },
+            { href: '/ta/interview_schedule', text: '行事曆' },
+            { href: '/admin/absence_default_range', text: '缺勤預設學期範圍設定' },
+            { href: '/ta/upload_standard_courses', text: '專業核心科目管理' },
+            { href: '/ta_assistant_dashboard', text: '媒合結果管理中心' },
+            { href: '/login', text: '登出' }
+          ];
+        } else if (role === 'admin') {
+          menuItems = [
+            { href: '/admin_home', text: '首頁' },
+            { href: '/profile', text: '個人資料' },
+            { href: '/ta/statistics/manage_companies', text: '實習廠商管理' },
+            { href: '/final_results', text: '志願序結果' },
+            { href: '/notifications', text: '通知' },
+            { href: '/admin/absence_default_range', text: '缺勤預設學期範圍設定' },
+            { href: '/ta/upload_standard_courses', text: '專業核心科目管理' },
+            { href: '/login', text: '登出' }
+          ];
+        } else {
+          // 預設選單
+          menuItems = [
+            { href: getHomeUrl(role, isHomeroom), text: '首頁' },
+            { href: '/profile', text: '個人資料' },
+            { href: '/login', text: '登出' }
+          ];
+        }
+
+        menuContent.innerHTML = menuItems.map(item => 
+          `<a href="${item.href}">${item.text}</a>`
+        ).join('');
       }
 
       const prevBtn = document.getElementById('prevBtn');
@@ -526,9 +647,8 @@
           // 根據使用者身分顯示相應的欄位
           showRoleSpecificFields(userRole, isHomeroom);
 
-          // 側拉選單：依角色設定首頁連結
-          const homeLink = document.getElementById('side-menu-home');
-          if (homeLink) homeLink.href = getHomeUrl(userRole, isHomeroom);
+          // 動態生成側邊選單
+          renderMenu(userRole, isHomeroom);
           
           // 如果是廠商，再次確認指導老師欄位已顯示
           if (userRole === 'vendor') {
