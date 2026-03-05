@@ -12,9 +12,11 @@
       background: #0454a3;
       color: white;
       padding: 1rem 2rem;
-      text-align: center;
       font-size: 1.5rem;
       position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
     }
 
     body {
@@ -33,9 +35,10 @@
 
     /* 選單按鈕樣式 */
     .top-bar-left {
-      position: fixed;
-      top: 1rem;
+      position: absolute;
+      top: 50%;
       left: 1rem;
+      transform: translateY(-50%);
       z-index: 1000;
     }
 
@@ -292,13 +295,14 @@
 </head>
 
 <body>
-  <header>履歷管理</header>
-
-  <div class="top-bar-left">
-    <div id="menu-btn" title="選單" role="button" tabindex="0">
-      <span></span><span></span><span></span>
+  <header>
+    <div class="top-bar-left">
+      <div id="menu-btn" title="選單" role="button" tabindex="0">
+        <span></span><span></span><span></span>
+      </div>
     </div>
-  </div>
+    履歷管理
+  </header>
 
   <nav id="side-menu" aria-hidden="true" role="navigation" aria-label="功能選單">
     <div class="menu-header">

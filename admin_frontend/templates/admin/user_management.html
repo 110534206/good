@@ -29,7 +29,9 @@
             height: 100%;
             padding: 0 16px;
             position: relative;
-
+            max-width: 1400px;
+            margin: 0 auto;
+            width: 100%;
         }
 
         .top-bar-title {
@@ -38,7 +40,7 @@
             top: 50%;
             transform: translate(-50%, -50%);
             color: white;
-            font-size: 1.5rem;
+            font-size: 1.7rem;
             pointer-events: none;
         }
 
@@ -315,7 +317,8 @@
 </head>
 
 <body>
-    <div class="top-bar">
+    <!-- 頂部欄（嵌入時隱藏） -->
+    <div class="top-bar embed-hide">
         <div class="container">
             <div class="top-bar-left">
                 <div id="menu-btn" title="選單" role="button" tabindex="0" aria-label="開啟側邊選單">
@@ -326,7 +329,8 @@
         </div>
     </div>
 
-    <nav id="side-menu" aria-hidden="true" role="navigation" aria-label="功能選單">
+    <!-- 側邊選單（嵌入時隱藏） -->
+    <nav id="side-menu" class="embed-hide" aria-hidden="true" role="navigation" aria-label="功能選單">
         <button id="close-btn" aria-label="關閉功能選單">×</button>
         <h2>功能選單</h2>
         <a href="/admin_home">首頁</a>
