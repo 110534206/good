@@ -336,14 +336,12 @@
       font-size: 0.85rem;
       font-weight: 500;
     }
-    .intern-status-active {
-      background: #06b6d4;
-      color: #fff;
-    }
-    .intern-status-exit {
-      background: #fee2e2;
-      color: #b91c1c;
-    }
+    .intern-status-active { background: #17a2b8; color: #fff; }
+    .intern-status-pending { background: #fef3c7; color: #92400e; }
+    .intern-status-completed { background: #d1fae5; color: #065f46; }
+    .intern-status-terminated { background: #fecaca; color: #b91c1c; }
+    .intern-status-pending-arrival { background: #e0e7ff; color: #3730a3; }
+    .intern-status-exit { background: #fecaca; color: #b91c1c; }
     .intern-table .btn-link {
       padding: 6px 14px;
       border-radius: 999px;
@@ -504,7 +502,7 @@
         </div>
         <div class="form-group">
           <label>具體說明 <span class="hint">（必填）</span></label>
-          <textarea name="reason_detail" id="reasonDetail" required placeholder="請簡述退實習原因，供老師與校方了解。"></textarea>
+          <textarea name="reason_detail" id="reasonDetail" required placeholder="請輸入退實習原因，供指導老師了解。"></textarea>
         </div>
         <button type="submit" class="btn-submit" id="submitBtn">送出</button>
       </form>
@@ -544,7 +542,7 @@
         <span id="successModalTitle">已送出退實習申請</span>
       </div>
       <div class="modal-card-body">
-        學生狀態已標記為「退出處理中」，此內容將同步給老師。<br>
+        學生狀態已標記為「退實習審核中」，已通知指導老師確認。<br>
       </div>
       <div class="modal-card-footer">
         <button type="button" class="btn-primary-green" id="successCloseBtn">確定</button>
@@ -596,22 +594,30 @@
           targetTbody.innerHTML = '<tr><td class="intern-table-empty" colspan="6">目前沒有實習生名單。</td></tr>';
           return;
         }
+        var statusMap = {
+          withdrawing: { text: '退實習審核中', class: 'intern-status-pending' },
+          confirmed: { text: '退實習', class: 'intern-status-terminated' },
+          completed: { text: '已完訓', class: 'intern-status-completed' },
+        };
         targetTbody.innerHTML = rows.map(function (row) {
           const name = (row.student_name || '—');
           const num = row.student_number || '—';
           const unit = row.company_name || '—';
           const title = row.job_title || '—';
-          const isWithdrawing = (row.status || '').toLowerCase() === 'withdrawing';
-          const statusText = isWithdrawing ? '退出' : '實習中';
-          const statusClass = isWithdrawing ? 'intern-status-exit' : 'intern-status-active';
+          var rawStatus = (row.status || '').toLowerCase();
+          var statusInfo = statusMap[rawStatus] || { text: '實習中', class: 'intern-status-active' };
           const url = '/vendor_remove_intern?student_id=' + row.student_id;
+          var showExitBtn = rawStatus !== 'withdrawing' && rawStatus !== 'confirmed' && rawStatus !== 'completed';
+          var actionCell = showExitBtn
+            ? '<a class="btn-link" href="' + url + '"><i class="bi bi-box-arrow-in-right"></i><span>申請退實習</span></a>'
+            : '—';
           return '<tr>' +
             '<td>' + escapeHtml(name) + '</td>' +
             '<td>' + escapeHtml(num) + '</td>' +
             '<td>' + escapeHtml(unit) + '</td>' +
             '<td>' + escapeHtml(title) + '</td>' +
-            '<td class="col-status"><span class="intern-status ' + statusClass + '">' + escapeHtml(statusText) + '</span></td>' +
-            '<td class="col-action"><a class="btn-link" href="' + url + '"><i class="bi bi-box-arrow-in-right"></i><span>退出</span></a></td>' +
+            '<td class="col-status"><span class="intern-status ' + statusInfo.class + '">' + escapeHtml(statusInfo.text) + '</span></td>' +
+            '<td class="col-action">' + actionCell + '</td>' +
             '</tr>';
         }).join('');
       }

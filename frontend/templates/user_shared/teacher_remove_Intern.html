@@ -62,8 +62,9 @@
     .data-table th, .data-table td {
       padding: 12px 16px; border-bottom: 1px solid #dee2e6; vertical-align: middle;
     }
-    .data-table th { font-weight: 600; color: #212529; text-align: center; border-top: 1px solid #dee2e6; }
+    .data-table th { font-weight: 600; color: #212529; text-align: left; border-top: 1px solid #dee2e6; }
     .data-table td { color: #212529; text-align: left; }
+    .data-table th.col-status, .data-table td.col-status { text-align: center; }
     .data-table th.col-action, .data-table td.col-action { text-align: center; }
     .data-table tbody tr:hover td { background: #f8f9fa; }
     .btn-view {
@@ -132,7 +133,7 @@
               <th>公司</th>
               <th>職缺</th>
               <th>原因類別</th>
-              <th>狀態</th>
+              <th class="col-status">狀態</th>
               <th class="col-action">操作</th>
             </tr>
           </thead>
@@ -145,10 +146,9 @@
     <!-- 詳情：解約報告、廠商原因、日誌、確認異動 -->
     <div id="detailCard" class="card" style="display: none;">
       <h2><i class="bi bi-file-text" style="margin-right: 8px; color: #0454a3;"></i>退實習案件詳情</h2>
-      <p class="card-desc">請確認解約報告與廠商填寫內容、該實習生日誌後，再按下「確認異動」。</p>
 
       <div class="detail-block">
-        <h3>解約報告預覽（廠商填寫）</h3>
+        <h3>解約報告</h3>
         <p class="label">原因類別</p>
         <p class="value" id="detailReasonCategory">—</p>
         <p class="label" style="margin-top: 12px;">具體說明</p>
@@ -163,12 +163,6 @@
         <p class="value" id="detailStudentNumber">—</p>
         <p class="label" style="margin-top: 8px;">實習單位／職缺</p>
         <p class="value" id="detailCompanyJob">—</p>
-      </div>
-
-      <div class="detail-block">
-        <h3>該實習生至今累積的日誌紀錄</h3>
-        <div id="detailLogs"></div>
-        <p id="detailLogsEmpty" class="empty-msg">尚無日誌紀錄。</p>
       </div>
 
       <div class="detail-block">
@@ -258,7 +252,7 @@
                 '<td>' + escapeHtml(row.company_name || '—') + '</td>' +
                 '<td>' + escapeHtml(row.job_title || '—') + '</td>' +
                 '<td>' + escapeHtml(row.reason_category || '—') + '</td>' +
-                '<td><span class="badge ' + statusClass + '">' + escapeHtml(statusText) + '</span></td>' +
+                '<td class="col-status"><span class="badge ' + statusClass + '">' + escapeHtml(statusText) + '</span></td>' +
                 '<td class="col-action"><a class="btn-view" href="' + viewUrl + '"><i class="bi bi-eye"></i> 查看</a></td>' +
                 '</tr>';
             }).join('');
@@ -277,10 +271,6 @@
         document.getElementById('detailStudentName').textContent = '—';
         document.getElementById('detailStudentNumber').textContent = '—';
         document.getElementById('detailCompanyJob').textContent = '—';
-        var logsEl = document.getElementById('detailLogs');
-        var logsEmpty = document.getElementById('detailLogsEmpty');
-        logsEl.innerHTML = '';
-        logsEmpty.style.display = 'block';
         confirmBtn.disabled = true;
 
         fetch('/teacher/api/withdraw_case_detail?id=' + encodeURIComponent(id), { credentials: 'same-origin' })
@@ -298,12 +288,6 @@
             document.getElementById('detailStudentNumber').textContent = d.student_number || '—';
             document.getElementById('detailCompanyJob').textContent = (d.company_name || '') + (d.job_title ? '／' + d.job_title : '') || '—';
 
-            if (d.logs && d.logs.length > 0) {
-              logsEmpty.style.display = 'none';
-              logsEl.innerHTML = '<ul style="list-style: none; padding: 0;">' + d.logs.map(function (log) {
-                return '<li style="padding: 8px 0; border-bottom: 1px solid #e2e8f0;">' + escapeHtml(log.content || log.title || JSON.stringify(log)) + '</li>';
-              }).join('') + '</ul>';
-            }
             confirmBtn.disabled = (d.status || '') === 'confirmed';
             confirmBtn.setAttribute('data-case-id', d.id);
             var notesEl = document.getElementById('teacherMeetingNotes');
@@ -316,10 +300,11 @@
       }
 
       if (caseId) {
-        listCard.style.display = 'block';
-        loadList();
+        // 從列表按「查看」進入時，只顯示詳情卡片，隱藏列表
+        listCard.style.display = 'none';
         loadDetail(caseId);
       } else {
+        // 直接進入頁面時，僅顯示列表
         detailCard.style.display = 'none';
         loadList();
       }

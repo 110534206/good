@@ -4720,7 +4720,7 @@ def submit_withdraw_intern():
                 (semester_id, vendor_id, company_id, student_id, job_title, status,
                  reason_category, reason_detail, created_at, updated_at)
                 VALUES (%s, %s, %s, %s, %s, 'withdrawing',
-                        %s, %s, 0, NOW(), NOW())
+                        %s, %s, NOW(), NOW())
             """, (
                 current_semester_id,
                 vendor_id,
@@ -4815,7 +4815,7 @@ def teacher_get_withdraw_cases():
                     JOIN internship_jobs ij ON ij.id = io.job_id AND ij.company_id = ir.company_id
                     WHERE io.student_id = ir.student_id
                     LIMIT 1) AS job_title
-            FROM internship_records ir1
+            FROM internship_records ir
             JOIN internship_companies ic ON ic.id = ir.company_id
             JOIN users u ON u.id = ir.student_id
             WHERE ic.advisor_user_id = %s
