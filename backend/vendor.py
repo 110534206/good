@@ -4977,3 +4977,63 @@ def class_teacher_intern_status():
     except Exception as e:
         traceback.print_exc()
         return jsonify({"success": False, "message": str(e)}), 500
+
+
+# =========================================================
+# 主任：查看全部學生實習狀況（是否被退出實習）
+# =========================================================
+@vendor_bp.route("/director/api/intern_status", methods=["GET"])
+def director_intern_status():
+    """主任：取得全部學生的實習狀況（實習中／退出／未實習）"""
+    if "user_id" not in session or session.get("role") not in ("director", "ta", "admin"):
+        return jsonify({"success": False, "message": "未授權"}), 403
+    try:
+        conn = get_db()
+        cursor = conn.cursor(dictionary=True)
+        current_semester_id = get_current_semester_id(cursor)
+        cursor.execute("""
+            SELECT u.id AS student_id, u.name AS student_name, u.username AS student_number,
+                   c.name AS class_name, c.department, c.admission_year,
+                   io.id AS offer_id, COALESCE(io.status, '') AS offer_status,
+                   ic.company_name, ij.title AS job_title,
+                   vri.id AS withdraw_id
+            FROM users u
+            LEFT JOIN classes c ON c.id = u.class_id
+            LEFT JOIN internship_offers io ON io.student_id = u.id
+            LEFT JOIN internship_jobs ij ON ij.id = io.job_id
+            LEFT JOIN internship_companies ic ON ic.id = ij.company_id
+            LEFT JOIN vendor_remove_intern vri ON vri.student_id = u.id AND vri.semester_id = %s
+            WHERE u.role = 'student'
+            ORDER BY c.name, u.username
+        """, (current_semester_id,))
+        rows = cursor.fetchall()
+        cursor.close()
+        conn.close()
+        seen = {}
+        for r in rows:
+            sid = r["student_id"]
+            if sid in seen:
+                if r.get("withdraw_id") or (r.get("offer_status") or "").lower() == "withdrawing":
+                    seen[sid]["status"] = "退出"
+                    seen[sid]["company_name"] = seen[sid]["company_name"] or r.get("company_name")
+                    seen[sid]["job_title"] = seen[sid]["job_title"] or r.get("job_title")
+                continue
+            if r.get("withdraw_id") or (r.get("offer_status") or "").lower() == "withdrawing":
+                status = "退出"
+            elif r.get("offer_id"):
+                status = "實習中"
+            else:
+                status = "未實習"
+            seen[sid] = {
+                "student_id": r["student_id"],
+                "student_name": r.get("student_name") or "",
+                "student_number": r.get("student_number") or "",
+                "class_name": r.get("class_name") or "",
+                "company_name": r.get("company_name") or "",
+                "job_title": r.get("job_title") or "",
+                "status": status,
+            }
+        return jsonify({"success": True, "data": list(seen.values())})
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"success": False, "message": str(e)}), 500
