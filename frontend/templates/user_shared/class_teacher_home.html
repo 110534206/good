@@ -71,7 +71,7 @@
       align-items: center;
       justify-content: flex-end;
       gap: 10px;
-      font-weight: bold;
+      font-weight: normal;
       margin-left: auto;
     }
 
@@ -126,7 +126,7 @@
       align-items: center;
       justify-content: center;
       font-size: 0.75rem;
-      font-weight: bold;
+      font-weight: normal;
       padding: 0 4px;
       box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
       z-index: 1;
@@ -160,11 +160,15 @@
     }
 
     #side-menu h2 {
-      width: 100%;
-      margin-bottom: 1.5rem;
+      margin: 0 0 1.5rem 0;
       font-weight: 700;
-      font-size: 1.5rem;
-      text-align: left;
+      font-size: 1.6rem;
+      color: #fff;
+      padding: 0;
+      line-height: 2.4rem;
+      height: 2.4rem;
+      display: flex;
+      align-items: center;
     }
 
     #side-menu.open {
@@ -175,33 +179,37 @@
       position: absolute;
       top: 2rem;
       right: 1.6rem;
-      font-size: 2.2rem;
+      font-size: 2.8rem;
+      font-weight: normal;
       background: none;
       border: none;
-      color: white;
+      color: #fff;
       cursor: pointer;
-      line-height: 1;
-      width: 2.5rem;
+      line-height: 2.4rem;
       height: 2.5rem;
+      width: 2.5rem;
       display: flex;
       align-items: center;
       justify-content: center;
+      z-index: 10;
+      padding: 0;
+      margin: 0;
     }
 
     #side-menu a {
       display: block;
       width: 100%;
-      padding: 0.5rem 0;
+      padding: 0.6rem 0;
       font-size: 1.1rem;
-      color: #ddd;
+      color: #e2e8f0;
       text-decoration: none;
       border-radius: 4px;
       transition: background-color 0.2s ease;
     }
 
     #side-menu a:hover {
-      background-color: rgba(255, 255, 255, 0.15);
-      color: white;
+      background-color: rgba(255, 255, 255, 0.18);
+      color: #fff;
     }
 
     /* Hero 區塊 */
@@ -309,33 +317,37 @@
       position: absolute;
       top: 2rem;
       right: 1.6rem;
-      font-size: 2.2rem;
+      font-size: 2.8rem;
+      font-weight: normal;
       background: none;
       border: none;
-      color: white;
+      color: #fff;
       cursor: pointer;
-      line-height: 1;
-      width: 2.5rem;
+      line-height: 2.4rem;
       height: 2.5rem;
+      width: 2.5rem;
       display: flex;
       align-items: center;
       justify-content: center;
+      z-index: 10;
+      padding: 0;
+      margin: 0;
     }
 
     #side-menu a {
       display: block;
       width: 100%;
-      padding: 0.5rem 0;
+      padding: 0.6rem 0;
       font-size: 1.1rem;
-      color: #ddd;
+      color: #e2e8f0;
       text-decoration: none;
       border-radius: 4px;
       transition: background-color 0.2s ease;
     }
 
     #side-menu a:hover {
-      background-color: rgba(255, 255, 255, 0.15);
-      color: white;
+      background-color: rgba(255, 255, 255, 0.18);
+      color: #fff;
     }
   </style>
 </head>
@@ -412,8 +424,8 @@
     <a href="/class_review_resume">查看學生履歷</a>
     <a href="/review_preferences">審核志願序</a>
     <a href="/interview_schedule">行事曆</a>
-    <a href="/notifications">通知</a>
     <a href="/admission/results">查詢學生錄取結果</a>
+    <a href="/notifications">通知</a>
   </nav>
 
   <!-- 選單開關邏輯 -->
