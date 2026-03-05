@@ -419,8 +419,8 @@
       color: #fff;
       cursor: pointer;
       line-height: 2.4rem;
-      height: 2.4rem;
-      width: 2.4rem;
+      height: 2.5rem;
+      width: 2.5rem;
       display: flex;
       align-items: center;
       justify-content: center;
@@ -2621,11 +2621,13 @@
             menuItems = [
               { href: '/class_teacher_home', text: '首頁' },
               { href: '/profile', text: '個人資料' },
-              { href: '/review_resume', text: '查看學生履歷' },
+              { href: '/class_review_resume', text: '查看學生履歷' },
               { href: '/review_preferences', text: '審核志願序' },
+              { href: '/interview_schedule', text: '行事曆' },
               { href: '/admission/results', text: '查詢學生錄取結果' },
+              { href: '/class_teacher_remove_intern', text: '學生實習狀況' },
               { href: '/notifications', text: '通知' },
-              { href: '/login', text: '登出' }
+              { href: '/logout', text: '登出' }
             ];
           } else if (userRole === 'director') {
             // 主任選單（主任有自己的主頁 /director_home）
