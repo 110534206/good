@@ -916,6 +916,16 @@ def intern_faq_2():
     return render_template('user_shared/intern_faq_2.html')
 
 # 使用者首頁 (主任前台)
+# -------------------------
+# 主任：查看全部學生實習狀況（是否被退出實習）
+# -------------------------
+@users_bp.route("/director_remove_intern")
+def director_remove_intern_page():
+    if "username" not in session or session.get("role") not in ["director", "ta", "admin"]:
+        return redirect(url_for("auth_bp.login_page"))
+    return render_template("user_shared/director_remove_lntern.html")
+
+
 @users_bp.route("/director_home")
 def director_home():
     if "username" not in session or session.get("role") != "director":
