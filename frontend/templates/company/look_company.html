@@ -19,15 +19,19 @@
             background: #0454a3;
             color: white;
             padding: 1rem 2rem;
-            text-align: center;
             font-size: 1.5rem;
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
 
         /* 三條線選單按鈕樣式 */
         .top-bar-left {
-            position: fixed;
-            top: 1rem;
+            position: absolute;
+            top: 50%;
             left: 1rem;
+            transform: translateY(-50%);
             z-index: 1100;
         }
 
@@ -457,12 +461,14 @@
 </head>
 
 <body>
-    <header>投遞履歷</header>
-    <div class="top-bar-left">
-        <div id="menu-btn" title="選單" role="button" tabindex="0">
-            <span></span><span></span><span></span>
+    <header>
+        <div class="top-bar-left">
+            <div id="menu-btn" title="選單" role="button" tabindex="0">
+                <span></span><span></span><span></span>
+            </div>
         </div>
-    </div>
+        投遞履歷
+    </header>
     <div class="container">
 
         <!-- 截止時間提示 -->
