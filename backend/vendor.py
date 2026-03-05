@@ -4571,12 +4571,15 @@ def get_withdraw_intern_list():
             SELECT io.student_id,
                    u.name AS student_name, u.username AS student_number,
                    ic.company_name, ij.title AS job_title,
-                   CASE WHEN vri.student_id IS NOT NULL THEN 'withdrawing' ELSE COALESCE(io.status, '') END AS status
+                   CASE WHEN ir.student_id IS NOT NULL THEN 'withdrawing' ELSE COALESCE(io.status, '') END AS status
             FROM internship_offers io
             JOIN users u ON u.id = io.student_id
             JOIN internship_jobs ij ON ij.id = io.job_id
             JOIN internship_companies ic ON ic.id = ij.company_id
-            LEFT JOIN vendor_remove_intern vri ON vri.student_id = io.student_id AND vri.semester_id = %s AND vri.company_id = ic.id
+            LEFT JOIN internship_records ir
+                   ON ir.student_id = io.student_id
+                  AND ir.semester_id = %s
+                  AND ir.company_id = ic.id
             WHERE ij.company_id IN (""" + placeholders + """)
             ORDER BY ic.company_name, ij.title, u.name
             """
@@ -4687,7 +4690,11 @@ def submit_withdraw_intern():
             return jsonify({"success": False, "message": "找不到廠商所屬的公司"}), 403
         placeholders = ",".join(["%s"] * len(company_ids))
         cursor.execute("""
-            SELECT io.id AS offer_id, io.student_id, io.job_id, ij.company_id
+            SELECT io.id AS offer_id,
+                   io.student_id,
+                   io.job_id,
+                   ij.company_id,
+                   ij.title AS job_title
             FROM internship_offers io
             JOIN internship_jobs ij ON ij.id = io.job_id
             WHERE io.student_id = %s AND ij.company_id IN (""" + placeholders + """)
@@ -4699,7 +4706,9 @@ def submit_withdraw_intern():
             conn.close()
             return jsonify({"success": False, "message": "該學生不在您的實習生名單中"}), 404
         company_id = offer["company_id"]
-        # 寫入退實習記錄至 vendor_remove_intern（欄位：semester_id, vendor_id, company_id, student_id, reason_category, reason_detail, final_hours, status, created_at）
+        # 寫入退實習記錄至 internship_records
+        # 欄位：semester_id, vendor_id, company_id, student_id, job_title, status,
+        #      reason_category, reason_detail, created_at, updated_at
         current_semester_id = get_current_semester_id(cursor)
         if not current_semester_id:
             cursor.close()
@@ -4707,16 +4716,26 @@ def submit_withdraw_intern():
             return jsonify({"success": False, "message": "目前沒有設定當前學期，無法寫入退實習記錄"}), 400
         try:
             cursor.execute("""
-                INSERT INTO vendor_remove_intern
-                (semester_id, vendor_id, company_id, student_id, reason_category, reason_detail, final_hours, status, created_at)
-                VALUES (%s, %s, %s, %s, %s, %s, 0, 'withdrawing', NOW())
-            """, (current_semester_id, vendor_id, company_id, int(student_id), reason_category, reason_detail))
+                INSERT INTO internship_records
+                (semester_id, vendor_id, company_id, student_id, job_title, status,
+                 reason_category, reason_detail, created_at, updated_at)
+                VALUES (%s, %s, %s, %s, %s, 'withdrawing',
+                        %s, %s, 0, NOW(), NOW())
+            """, (
+                current_semester_id,
+                vendor_id,
+                company_id,
+                int(student_id),
+                offer["job_title"],
+                reason_category,
+                reason_detail,
+            ))
             conn.commit()
         except Exception as create_err:
             if "doesn't exist" in str(create_err).lower() or "1146" in str(create_err):
                 return jsonify({
                     "success": False,
-                    "message": "系統尚未建立退實習記錄表（vendor_remove_intern），請聯絡管理員。",
+                    "message": "系統尚未建立退實習記錄表（internship_records），請聯絡管理員。",
                 }), 500
             raise create_err
         # 可選：更新 internship_offers 狀態欄位為「退出處理中」（若表有 status 欄）
@@ -4746,28 +4765,28 @@ def submit_withdraw_intern():
 def _teacher_can_access_withdraw_case(cursor, case_id, teacher_id):
     """檢查此退實習案件是否屬於該指導老師所屬公司。回傳 row 或 None。
     若表有 teacher_meeting_notes 欄位會一併讀出；若無請執行：
-    ALTER TABLE vendor_remove_intern ADD COLUMN teacher_meeting_notes TEXT NULL;
+    ALTER TABLE internship_records ADD COLUMN teacher_meeting_notes TEXT NULL;
     """
     try:
         cursor.execute("""
-            SELECT vri.id, vri.semester_id, vri.vendor_id, vri.company_id, vri.student_id,
-                   vri.reason_category, vri.reason_detail, vri.final_hours, vri.status, vri.created_at,
-                   vri.teacher_meeting_notes,
+            SELECT ir.id, ir.semester_id, ir.vendor_id, ir.company_id, ir.student_id,
+                   ir.reason_category, ir.reason_detail, ir.status, ir.created_at,
+                   ir.teacher_meeting_notes,
                    ic.company_name, ic.advisor_user_id
-            FROM vendor_remove_intern vri
-            JOIN internship_companies ic ON ic.id = vri.company_id
-            WHERE vri.id = %s AND ic.advisor_user_id = %s
+            FROM internship_records ir
+            JOIN internship_companies ic ON ic.id = ir.company_id
+            WHERE ir.id = %s AND ic.advisor_user_id = %s
         """, (case_id, teacher_id))
         return cursor.fetchone()
     except Exception as e:
         if "teacher_meeting_notes" in str(e) or "Unknown column" in str(e):
             cursor.execute("""
-                SELECT vri.id, vri.semester_id, vri.vendor_id, vri.company_id, vri.student_id,
-                       vri.reason_category, vri.reason_detail, vri.final_hours, vri.status, vri.created_at,
+                SELECT ir.id, ir.semester_id, ir.vendor_id, ir.company_id, ir.student_id,
+                       ir.reason_category, ir.reason_detail, ir.status, ir.created_at,
                        ic.company_name, ic.advisor_user_id
-                FROM vendor_remove_intern vri
-                JOIN internship_companies ic ON ic.id = vri.company_id
-                WHERE vri.id = %s AND ic.advisor_user_id = %s
+                FROM internship_records ir
+                JOIN internship_companies ic ON ic.id = ir.company_id
+                WHERE ir.id = %s AND ic.advisor_user_id = %s
             """, (case_id, teacher_id))
             row = cursor.fetchone()
             if row:
@@ -4787,20 +4806,22 @@ def teacher_get_withdraw_cases():
         cursor = conn.cursor(dictionary=True)
         current_semester_id = get_current_semester_id(cursor)
         cursor.execute("""
-            SELECT vri.id, vri.student_id, vri.company_id, vri.reason_category, vri.reason_detail,
-                   vri.status, vri.created_at,
+            SELECT ir.id, ir.student_id, ir.company_id, ir.reason_category, ir.reason_detail,
+                   ir.status, ir.created_at,
                    u.name AS student_name, u.username AS student_number,
                    ic.company_name,
-                   (SELECT ij.title FROM internship_offers io
-                    JOIN internship_jobs ij ON ij.id = io.job_id AND ij.company_id = vri.company_id
-                    WHERE io.student_id = vri.student_id LIMIT 1) AS job_title
-            FROM vendor_remove_intern vri
-            JOIN internship_companies ic ON ic.id = vri.company_id
-            JOIN users u ON u.id = vri.student_id
+                   (SELECT ij.title
+                    FROM internship_offers io
+                    JOIN internship_jobs ij ON ij.id = io.job_id AND ij.company_id = ir.company_id
+                    WHERE io.student_id = ir.student_id
+                    LIMIT 1) AS job_title
+            FROM internship_records ir1
+            JOIN internship_companies ic ON ic.id = ir.company_id
+            JOIN users u ON u.id = ir.student_id
             WHERE ic.advisor_user_id = %s
-              AND (vri.status = 'withdrawing' OR vri.status = 'confirmed')
-              AND (%s IS NULL OR vri.semester_id = %s)
-            ORDER BY vri.created_at DESC
+              AND (ir.status = 'withdrawing' OR ir.status = 'confirmed')
+              AND (%s IS NULL OR ir.semester_id = %s)
+            ORDER BY ir.created_at DESC
         """, (teacher_id, current_semester_id, current_semester_id))
         rows = cursor.fetchall()
         cursor.close()
@@ -4859,7 +4880,6 @@ def teacher_get_withdraw_case_detail():
                 "job_title": offer.get("job_title") if offer else "",
                 "reason_category": row.get("reason_category") or "",
                 "reason_detail": row.get("reason_detail") or "",
-                "final_hours": row.get("final_hours"),
                 "status": row.get("status") or "",
                 "created_at": row.get("created_at").isoformat() if row.get("created_at") else None,
                 "teacher_meeting_notes": (row.get("teacher_meeting_notes") or "").strip(),
@@ -4896,13 +4916,13 @@ def teacher_confirm_withdraw():
             return jsonify({"success": True, "message": "此案件已確認過"})
         try:
             cursor.execute(
-                "UPDATE vendor_remove_intern SET status = 'confirmed', teacher_meeting_notes = %s WHERE id = %s",
+                "UPDATE internship_records SET status = 'confirmed', teacher_meeting_notes = %s, updated_at = NOW() WHERE id = %s",
                 (teacher_meeting_notes, row["id"])
             )
         except Exception as upd_err:
             if "teacher_meeting_notes" in str(upd_err) or "Unknown column" in str(upd_err):
                 cursor.execute(
-                    "UPDATE vendor_remove_intern SET status = 'confirmed' WHERE id = %s",
+                    "UPDATE internship_records SET status = 'confirmed', updated_at = NOW() WHERE id = %s",
                     (row["id"],)
                 )
             else:
@@ -4941,7 +4961,7 @@ def class_teacher_intern_status():
             LEFT JOIN internship_offers io ON io.student_id = u.id
             LEFT JOIN internship_jobs ij ON ij.id = io.job_id
             LEFT JOIN internship_companies ic ON ic.id = ij.company_id
-            LEFT JOIN vendor_remove_intern vri ON vri.student_id = u.id AND vri.semester_id = %s
+            LEFT JOIN internship_records vri ON vri.student_id = u.id AND vri.semester_id = %s
             WHERE u.role = 'student'
             ORDER BY c.name, u.username
         """, (teacher_id, current_semester_id))
@@ -5002,7 +5022,7 @@ def director_intern_status():
             LEFT JOIN internship_offers io ON io.student_id = u.id
             LEFT JOIN internship_jobs ij ON ij.id = io.job_id
             LEFT JOIN internship_companies ic ON ic.id = ij.company_id
-            LEFT JOIN vendor_remove_intern vri ON vri.student_id = u.id AND vri.semester_id = %s
+            LEFT JOIN internship_records vri ON vri.student_id = u.id AND vri.semester_id = %s
             WHERE u.role = 'student'
             ORDER BY c.name, u.username
         """, (current_semester_id,))
