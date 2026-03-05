@@ -134,6 +134,12 @@
       align-items: center;
     }
 
+    #menu-content {
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+    }
+
     #side-menu a {
       display: block;
       width: 100%;
@@ -342,16 +348,11 @@
   <nav id="side-menu" aria-hidden="true" role="navigation" aria-label="功能選單">
     <button id="close-btn" aria-label="關閉功能選單">×</button>
     <h2>功能選單</h2>
-    <a id="menu-link-home" href="{% if user_role == 'teacher' %}/teacher_home{% elif user_role == 'director' %}/director_home{% elif user_role == 'ta' %}/ta_home{% elif user_role == 'admin' %}/admin_home{% else %}/class_teacher_home{% endif %}">首頁</a>
-    <a href="/profile">個人資料</a>
-    <a href="/notifications">公告</a>
-    <a href="/upload_company">建立實習機會</a>
-    <a href="/review_resume">學生履歷審核</a>
-    <a href="/manage_vendor">實習廠商管理</a>
-    <a href="/interview_schedule">行事曆</a>
-    <a href="/admission_results">查看錄取結果</a>
-    <a href="/review_experience">審核實習心得</a>
-    <a href="/login">登出</a>
+    <div id="menu-content">
+      <div id="menu-links">
+        <!-- 選單連結將根據用戶角色動態載入 -->
+      </div>
+    </div>
   </nav>
 
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
@@ -367,15 +368,107 @@
       return map[role] || '/class_teacher_home';
     }
 
+    // 根據用戶角色載入側邊選單
+    async function loadMenuByRole() {
+      try {
+        const res = await fetch('/api/profile');
+        const data = await res.json();
+        const role = data.user?.role || '';
+        const menuContent = document.getElementById('menu-content');
+        
+        let menuItems = '';
+        
+        if (role === 'director') {
+          // 主任的選單
+          menuItems = `
+            <a href="/director_home">首頁</a>
+            <a href="/profile">個人資料</a>
+            <a href="/approve_company">審核實習單位</a>
+            <a href="/review_resume?mode=director">審核實習履歷</a>
+            <a href="/interview_schedule">行事曆</a>
+            <a href="/notifications">管理公告</a>
+            <a href="/admin_statistics">查詢統計資料</a>
+            <a href="/admission/manage_director">媒合結果</a>
+            <a href="/logout">登出</a>
+          `;
+        } else if (role === 'teacher') {
+          // 指導老師的選單
+          menuItems = `
+            <a href="/teacher_home">首頁</a>
+            <a href="/profile">個人資料</a>
+            <a href="/notifications">通知</a>
+            <a href="/upload_company">建立實習機會</a>
+            <a href="/review_resume">學生履歷審核</a>
+            <a href="/manage_vendor">實習廠商管理</a>
+            <a href="/interview_schedule">行事曆</a>
+            <a href="/admission_results">查看錄取結果</a>
+            <a href="/review_experience">審核實習心得</a>
+            <a href="/logout">登出</a>
+          `;
+        } else if (role === 'student') {
+          // 學生的選單
+          menuItems = `
+            <a href="/student_home">首頁</a>
+            <a href="/profile">個人資料</a>
+            <a href="/resume_folders">履歷管理</a>
+            <a href="/fill_preferences">填寫志願序</a>
+            <a href="/look_company">投遞履歷</a>
+            <a href="/interview_schedule">行事曆</a>
+            <a href="/intern_achievement">學生媒合結果</a>
+            <a href="/intern_experience">實習心得</a>
+            <a href="/notifications">通知</a>
+            <a href="/logout">登出</a>
+          `;
+        } else if (role === 'class_teacher') {
+          // 班導的選單（與 class_teacher_home 一致）
+          menuItems = `
+            <a href="/class_teacher_home">首頁</a>
+            <a href="/profile">個人資料</a>
+            <a href="/class_review_resume">查看學生履歷</a>
+            <a href="/review_preferences">審核志願序</a>
+            <a href="/interview_schedule">行事曆</a>
+            <a href="/admission/results">查詢學生錄取結果</a>
+            <a href="/class_teacher_remove_intern">學生實習狀況</a>
+            <a href="/notifications">通知</a>
+            <a href="/logout">登出</a>
+          `;
+        } else {
+          // 科助的選單（預設）
+          menuItems = `
+            <a href="/ta_home">首頁</a>
+            <a href="/profile">個人資料</a>
+            <a href="/notifications">通知</a>
+            <a href="/ta/statistics/manage_companies">實習廠商管理</a>
+            <a href="/ta/interview_schedule">行事曆</a>
+            <a href="/admin/absence_default_range">缺勤預設學期範圍設定</a>
+            <a href="/ta/upload_standard_courses">專業核心科目管理</a>
+            <a href="/ta_assistant_dashboard">媒合結果管理中心</a>
+            <a href="/logout">登出</a>
+          `;
+        }
+        
+        menuContent.innerHTML = menuItems;
+      } catch (err) {
+        console.error('載入選單失敗:', err);
+        // 如果載入失敗，使用預設的科助選單
+        document.getElementById('menu-content').innerHTML = `
+          <a href="/ta_home">首頁</a>
+          <a href="/profile">個人資料</a>
+          <a href="/notifications">通知</a>
+          <a href="/ta/statistics/manage_companies">實習廠商管理</a>
+          <a href="/ta/interview_schedule">行事曆</a>
+          <a href="/final_results">媒合結果確認</a>
+          <a href="/admin/absence_default_range">缺勤預設學期範圍設定</a>
+          <a href="/ta/upload_standard_courses">專業核心科目管理</a>
+          <a href="/logout">登出</a>
+        `;
+      }
+    }
+
     // 頁面載入時初始化
     document.addEventListener('DOMContentLoaded', function() {
-      // 依目前登入身分設定側邊選單「首頁」連結（指導老師→/teacher_home，班導→/class_teacher_home 等）
-      fetch('/api/profile').then(function(r) { return r.json(); }).then(function(data) {
-        if (data.success && data.user && data.user.role) {
-          var link = document.getElementById('menu-link-home');
-          if (link) link.href = getHomeUrlByRole(data.user.role);
-        }
-      }).catch(function() {});
+      // 根據用戶角色載入側邊選單
+      loadMenuByRole();
 
       initSemesterFilter();
       loadClasses();

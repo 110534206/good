@@ -172,7 +172,7 @@
       top: 0;
       left: 0;
       height: 100vh;
-      width: 275px;
+      width: 270px;
       max-width: 80vw;
       background-color: rgba(10, 10, 10, 0.95);
       backdrop-filter: blur(6px);
@@ -217,6 +217,7 @@
       top: 2rem;
       right: 1.6rem;
       font-size: 2.8rem;
+      font-weight: normal;
       background: none;
       border: none;
       color: #fff;
@@ -228,12 +229,14 @@
       align-items: center;
       justify-content: center;
       z-index: 10;
+      padding: 0;
+      margin: 0;
     }
 
     #side-menu a {
       display: block;
       width: 100%;
-      padding: 0.6rem 5rem 0.6rem 0;
+      padding: 0.6rem 4rem 0.6rem 0;
       font-size: 1.1rem;
       color: #e2e8f0;
       text-decoration: none;
@@ -403,11 +406,13 @@
           menuItems = [
             { href: '/class_teacher_home', text: '首頁' },
             { href: '/profile', text: '個人資料' },
-            { href: '/review_resume', text: '查看學生履歷' },
+            { href: '/class_review_resume', text: '查看學生履歷' },
             { href: '/review_preferences', text: '審核志願序' },
+            { href: '/interview_schedule', text: '行事曆' },
             { href: '/admission/results', text: '查詢學生錄取結果' },
+            { href: '/class_teacher_remove_intern', text: '學生實習狀況' },
             { href: '/notifications', text: '通知' },
-            { href: '/login', text: '登出' }
+            { href: '/logout', text: '登出' }
           ];
         } else if (role === 'director') {
           menuItems = [
