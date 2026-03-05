@@ -4563,17 +4563,37 @@ def get_withdraw_intern_list():
             conn.close()
             return jsonify({"success": False, "message": "找不到廠商所屬的公司"}), 403
         placeholders = ",".join(["%s"] * len(company_ids))
-        cursor.execute("""
+        current_semester_id = get_current_semester_id(cursor)
+        args = list(company_ids)
+        if current_semester_id is not None:
+            args.insert(0, current_semester_id)
+            status_sql = """
             SELECT io.student_id,
                    u.name AS student_name, u.username AS student_number,
-                   ic.company_name, ij.title AS job_title
+                   ic.company_name, ij.title AS job_title,
+                   CASE WHEN vri.student_id IS NOT NULL THEN 'withdrawing' ELSE COALESCE(io.status, '') END AS status
+            FROM internship_offers io
+            JOIN users u ON u.id = io.student_id
+            JOIN internship_jobs ij ON ij.id = io.job_id
+            JOIN internship_companies ic ON ic.id = ij.company_id
+            LEFT JOIN vendor_remove_intern vri ON vri.student_id = io.student_id AND vri.semester_id = %s AND vri.company_id = ic.id
+            WHERE ij.company_id IN (""" + placeholders + """)
+            ORDER BY ic.company_name, ij.title, u.name
+            """
+        else:
+            status_sql = """
+            SELECT io.student_id,
+                   u.name AS student_name, u.username AS student_number,
+                   ic.company_name, ij.title AS job_title,
+                   COALESCE(io.status, '') AS status
             FROM internship_offers io
             JOIN users u ON u.id = io.student_id
             JOIN internship_jobs ij ON ij.id = io.job_id
             JOIN internship_companies ic ON ic.id = ij.company_id
             WHERE ij.company_id IN (""" + placeholders + """)
             ORDER BY ic.company_name, ij.title, u.name
-        """, company_ids)
+            """
+        cursor.execute(status_sql, args)
         rows = cursor.fetchall()
         cursor.close()
         conn.close()
@@ -4714,6 +4734,246 @@ def submit_withdraw_intern():
             "success": True,
             "message": "已送出。學生的「新增日誌」將隱藏，狀態為「退出處理中」。此內容將同步給老師。",
         })
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"success": False, "message": str(e)}), 500
+
+
+# =========================================================
+# 指導老師端：退實習確認（解約報告預覽、廠商原因、日誌、確認異動）
+# =========================================================
+
+def _teacher_can_access_withdraw_case(cursor, case_id, teacher_id):
+    """檢查此退實習案件是否屬於該指導老師所屬公司。回傳 row 或 None。
+    若表有 teacher_meeting_notes 欄位會一併讀出；若無請執行：
+    ALTER TABLE vendor_remove_intern ADD COLUMN teacher_meeting_notes TEXT NULL;
+    """
+    try:
+        cursor.execute("""
+            SELECT vri.id, vri.semester_id, vri.vendor_id, vri.company_id, vri.student_id,
+                   vri.reason_category, vri.reason_detail, vri.final_hours, vri.status, vri.created_at,
+                   vri.teacher_meeting_notes,
+                   ic.company_name, ic.advisor_user_id
+            FROM vendor_remove_intern vri
+            JOIN internship_companies ic ON ic.id = vri.company_id
+            WHERE vri.id = %s AND ic.advisor_user_id = %s
+        """, (case_id, teacher_id))
+        return cursor.fetchone()
+    except Exception as e:
+        if "teacher_meeting_notes" in str(e) or "Unknown column" in str(e):
+            cursor.execute("""
+                SELECT vri.id, vri.semester_id, vri.vendor_id, vri.company_id, vri.student_id,
+                       vri.reason_category, vri.reason_detail, vri.final_hours, vri.status, vri.created_at,
+                       ic.company_name, ic.advisor_user_id
+                FROM vendor_remove_intern vri
+                JOIN internship_companies ic ON ic.id = vri.company_id
+                WHERE vri.id = %s AND ic.advisor_user_id = %s
+            """, (case_id, teacher_id))
+            row = cursor.fetchone()
+            if row:
+                row["teacher_meeting_notes"] = None
+            return row
+        raise
+
+
+@vendor_bp.route("/teacher/api/withdraw_cases", methods=["GET"])
+def teacher_get_withdraw_cases():
+    """指導老師：取得待確認的退實習案件列表（僅自己擔任指導老師的公司）"""
+    if "user_id" not in session or session.get("role") not in ("teacher", "director", "class_teacher"):
+        return jsonify({"success": False, "message": "未授權"}), 403
+    teacher_id = session.get("user_id")
+    try:
+        conn = get_db()
+        cursor = conn.cursor(dictionary=True)
+        current_semester_id = get_current_semester_id(cursor)
+        cursor.execute("""
+            SELECT vri.id, vri.student_id, vri.company_id, vri.reason_category, vri.reason_detail,
+                   vri.status, vri.created_at,
+                   u.name AS student_name, u.username AS student_number,
+                   ic.company_name,
+                   (SELECT ij.title FROM internship_offers io
+                    JOIN internship_jobs ij ON ij.id = io.job_id AND ij.company_id = vri.company_id
+                    WHERE io.student_id = vri.student_id LIMIT 1) AS job_title
+            FROM vendor_remove_intern vri
+            JOIN internship_companies ic ON ic.id = vri.company_id
+            JOIN users u ON u.id = vri.student_id
+            WHERE ic.advisor_user_id = %s
+              AND (vri.status = 'withdrawing' OR vri.status = 'confirmed')
+              AND (%s IS NULL OR vri.semester_id = %s)
+            ORDER BY vri.created_at DESC
+        """, (teacher_id, current_semester_id, current_semester_id))
+        rows = cursor.fetchall()
+        cursor.close()
+        conn.close()
+        return jsonify({"success": True, "data": rows or []})
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"success": False, "message": str(e)}), 500
+
+
+@vendor_bp.route("/teacher/api/withdraw_case_detail", methods=["GET"])
+def teacher_get_withdraw_case_detail():
+    """指導老師：取得單一退實習案件詳情（解約報告、廠商填寫原因、實習生日誌）"""
+    if "user_id" not in session or session.get("role") not in ("teacher", "director", "class_teacher"):
+        return jsonify({"success": False, "message": "未授權"}), 403
+    case_id = request.args.get("id") or request.args.get("case_id")
+    if not case_id:
+        return jsonify({"success": False, "message": "缺少案件 id"}), 400
+    teacher_id = session.get("user_id")
+    try:
+        conn = get_db()
+        cursor = conn.cursor(dictionary=True)
+        row = _teacher_can_access_withdraw_case(cursor, int(case_id), teacher_id)
+        if not row:
+            cursor.close()
+            conn.close()
+            return jsonify({"success": False, "message": "無權限或案件不存在"}), 404
+        # 學生資訊
+        cursor.execute("""
+            SELECT u.id, u.name AS student_name, u.username AS student_number
+            FROM users u WHERE u.id = %s
+        """, (row["student_id"],))
+        student = cursor.fetchone()
+        # 職缺／公司（從 internship_offers 取該生目前錄取）
+        cursor.execute("""
+            SELECT ij.title AS job_title, ic.company_name
+            FROM internship_offers io
+            JOIN internship_jobs ij ON ij.id = io.job_id
+            JOIN internship_companies ic ON ic.id = ij.company_id
+            WHERE io.student_id = %s
+            ORDER BY io.id DESC LIMIT 1
+        """, (row["student_id"],))
+        offer = cursor.fetchone()
+        # 實習生日誌：若系統有日誌表可在此查詢；目前無則回傳空陣列
+        logs = []
+        cursor.close()
+        conn.close()
+        return jsonify({
+            "success": True,
+            "data": {
+                "id": row["id"],
+                "student_id": row["student_id"],
+                "student_name": student.get("student_name") if student else "",
+                "student_number": student.get("student_number") if student else "",
+                "company_name": offer.get("company_name") if offer else row.get("company_name"),
+                "job_title": offer.get("job_title") if offer else "",
+                "reason_category": row.get("reason_category") or "",
+                "reason_detail": row.get("reason_detail") or "",
+                "final_hours": row.get("final_hours"),
+                "status": row.get("status") or "",
+                "created_at": row.get("created_at").isoformat() if row.get("created_at") else None,
+                "teacher_meeting_notes": (row.get("teacher_meeting_notes") or "").strip(),
+                "logs": logs,
+            },
+        })
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"success": False, "message": str(e)}), 500
+
+
+@vendor_bp.route("/teacher/api/withdraw_confirm", methods=["POST"])
+def teacher_confirm_withdraw():
+    """指導老師：確認異動（將退實習案件標記為已確認）"""
+    if "user_id" not in session or session.get("role") not in ("teacher", "director", "class_teacher"):
+        return jsonify({"success": False, "message": "未授權"}), 403
+    data = request.get_json() or {}
+    case_id = data.get("id") or data.get("case_id")
+    teacher_meeting_notes = (data.get("teacher_meeting_notes") or "").strip()
+    if not case_id:
+        return jsonify({"success": False, "message": "缺少案件 id"}), 400
+    teacher_id = session.get("user_id")
+    try:
+        conn = get_db()
+        cursor = conn.cursor(dictionary=True)
+        row = _teacher_can_access_withdraw_case(cursor, int(case_id), teacher_id)
+        if not row:
+            cursor.close()
+            conn.close()
+            return jsonify({"success": False, "message": "無權限或案件不存在"}), 404
+        if row.get("status") == "confirmed":
+            cursor.close()
+            conn.close()
+            return jsonify({"success": True, "message": "此案件已確認過"})
+        try:
+            cursor.execute(
+                "UPDATE vendor_remove_intern SET status = 'confirmed', teacher_meeting_notes = %s WHERE id = %s",
+                (teacher_meeting_notes, row["id"])
+            )
+        except Exception as upd_err:
+            if "teacher_meeting_notes" in str(upd_err) or "Unknown column" in str(upd_err):
+                cursor.execute(
+                    "UPDATE vendor_remove_intern SET status = 'confirmed' WHERE id = %s",
+                    (row["id"],)
+                )
+            else:
+                raise
+        conn.commit()
+        cursor.close()
+        conn.close()
+        return jsonify({"success": True, "message": "已確認異動"})
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"success": False, "message": str(e)}), 500
+
+
+# =========================================================
+# 班導：查看該班學生實習狀況（是否被退出實習）
+# =========================================================
+@vendor_bp.route("/class_teacher/api/intern_status", methods=["GET"])
+def class_teacher_intern_status():
+    """班導：取得所帶班級學生的實習狀況（實習中／退出／未實習）"""
+    if "user_id" not in session or session.get("role") != "class_teacher":
+        return jsonify({"success": False, "message": "未授權"}), 403
+    teacher_id = session.get("user_id")
+    try:
+        conn = get_db()
+        cursor = conn.cursor(dictionary=True)
+        current_semester_id = get_current_semester_id(cursor)
+        cursor.execute("""
+            SELECT u.id AS student_id, u.name AS student_name, u.username AS student_number,
+                   c.name AS class_name, c.department, c.admission_year,
+                   io.id AS offer_id, COALESCE(io.status, '') AS offer_status,
+                   ic.company_name, ij.title AS job_title,
+                   vri.id AS withdraw_id
+            FROM users u
+            JOIN classes c ON c.id = u.class_id
+            JOIN classes_teacher ct ON ct.class_id = c.id AND ct.teacher_id = %s AND ct.role = 'classteacher'
+            LEFT JOIN internship_offers io ON io.student_id = u.id
+            LEFT JOIN internship_jobs ij ON ij.id = io.job_id
+            LEFT JOIN internship_companies ic ON ic.id = ij.company_id
+            LEFT JOIN vendor_remove_intern vri ON vri.student_id = u.id AND vri.semester_id = %s
+            WHERE u.role = 'student'
+            ORDER BY c.name, u.username
+        """, (teacher_id, current_semester_id))
+        rows = cursor.fetchall()
+        cursor.close()
+        conn.close()
+        # 依 student_id 去重（一名學生只保留一列），並決定狀態
+        seen = {}
+        for r in rows:
+            sid = r["student_id"]
+            if sid in seen:
+                if r.get("withdraw_id") or (r.get("offer_status") or "").lower() == "withdrawing":
+                    seen[sid]["status"] = "退出"
+                    seen[sid]["company_name"] = seen[sid]["company_name"] or r.get("company_name")
+                    seen[sid]["job_title"] = seen[sid]["job_title"] or r.get("job_title")
+                continue
+            if r.get("withdraw_id") or (r.get("offer_status") or "").lower() == "withdrawing":
+                status = "退出"
+            elif r.get("offer_id"):
+                status = "實習中"
+            else:
+                status = "未實習"
+            seen[sid] = {
+                "student_id": r["student_id"],
+                "student_name": r.get("student_name") or "",
+                "student_number": r.get("student_number") or "",
+                "class_name": r.get("class_name") or "",
+                "company_name": r.get("company_name") or "",
+                "job_title": r.get("job_title") or "",
+                "status": status,
+            }
+        return jsonify({"success": True, "data": list(seen.values())})
     except Exception as e:
         traceback.print_exc()
         return jsonify({"success": False, "message": str(e)}), 500

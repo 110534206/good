@@ -186,6 +186,26 @@ def class_review_resume():
                            username=session.get("username"),
                            original_role=session.get("original_role"))
 
+
+# -------------------------
+# 班導：查看該班學生實習狀況（是否被退出實習）
+# -------------------------
+@users_bp.route("/class_teacher_remove_intern")
+def class_teacher_remove_intern_page():
+    current_role = session.get("role")
+    if "username" not in session or current_role not in ["teacher", "director", "class_teacher"]:
+        return redirect(url_for("auth_bp.login_page"))
+    if current_role == "class_teacher":
+        original_role = session.get("original_role")
+        session["role"] = "director" if original_role == "director" else "teacher"
+    if not session.get("is_homeroom"):
+        r = session.get("role")
+        return redirect(url_for("users_bp.director_home") if r == "director" else url_for("users_bp.teacher_home"))
+    session["role"] = "class_teacher"
+    return render_template("user_shared/class_teacher_remove_Intern.html",
+                           username=session.get("username"),
+                           original_role=session.get("original_role"))
+
 # -------------------------
 # Helper - 取得所有學期代碼
 # -------------------------
@@ -742,7 +762,15 @@ def vendor_remove_intern_page():
     """廠商退實習生頁面（需帶 query: student_id=, 可選 match_id=）"""
     if 'username' not in session or session.get('role') != 'vendor':
         return redirect(url_for('auth_bp.login_page'))
-    return render_template('user_shared/vendor_remove_Intern.html') 
+    return render_template('user_shared/vendor_remove_Intern.html')
+
+
+@users_bp.route('/teacher_remove_intern')
+def teacher_remove_intern_page():
+    """指導老師：退實習確認頁面（解約報告預覽、廠商填寫原因、實習生日誌、確認異動）"""
+    if 'username' not in session or session.get('role') not in ['teacher', 'director', 'class_teacher']:
+        return redirect(url_for('auth_bp.login_page'))
+    return render_template('user_shared/teacher_remove_Intern.html') 
 
 
 @users_bp.route('/manage_positions')

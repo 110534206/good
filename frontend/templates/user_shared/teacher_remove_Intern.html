@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>智慧實習平台 | 指導老師－退實習確認</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Inter', 'Noto Sans TC', sans-serif;
+      background: linear-gradient(160deg, #eef4fc 0%, #f0f4f8 50%, #e8f0fa 100%);
+      color: #1e293b;
+      min-height: 100vh;
+    }
+    header.page-header {
+      background: linear-gradient(135deg, #0454a3 0%, #0369a1 100%);
+      color: white;
+      padding: 1.25rem 2rem;
+      text-align: center;
+      font-size: 1.5rem;
+      font-weight: 600;
+      box-shadow: 0 2px 12px rgba(4, 84, 163, 0.25);
+    }
+    .top-bar-left { position: fixed; top: 1rem; left: 1rem; z-index: 1100; }
+    .top-bar-left #menu-btn {
+      width: 30px; height: 22px; cursor: pointer;
+      display: flex; flex-direction: column; justify-content: space-between;
+      background: none; border: none; padding: 0;
+    }
+    .top-bar-left #menu-btn span {
+      display: block; width: 100%; height: 3px; background: white; border-radius: 2px;
+    }
+    #side-menu {
+      position: fixed; top: 0; left: 0; height: 100vh; width: 320px; max-width: 80vw;
+      background: rgba(10,10,10,0.95); backdrop-filter: blur(6px);
+      box-shadow: 3px 0 12px rgba(0,0,0,0.7); padding: 2rem 1.5rem;
+      transform: translateX(-100%); transition: transform 0.3s ease; z-index: 1200;
+      display: flex; flex-direction: column; color: white;
+    }
+    #side-menu.open { transform: translateX(0); }
+    #side-menu .menu-header { display: flex; align-items: center; justify-content: space-between; width: 100%; margin-bottom: 1.5rem; }
+    #side-menu h2 { margin: 0; font-size: 1.5rem; color: white; }
+    #side-menu #close-btn { font-size: 1.5rem; background: none; border: none; color: white; cursor: pointer; }
+    #side-menu a { display: block; padding: 0.5rem 0; color: #ddd; text-decoration: none; border-radius: 4px; }
+    #side-menu a:hover { background: rgba(255,255,255,0.15); color: white; }
+    .container { max-width: 1160px; margin: 0 auto; padding: 24px; margin-top: 1.5rem; }
+    .card {
+      background: #fff; border-radius: 16px; box-shadow: 0 4px 24px rgba(0,0,0,0.06);
+      padding: 32px; margin-bottom: 24px; border: 1px solid rgba(255,255,255,0.8);
+    }
+    .card h2 {
+      font-size: 1.2rem; color: #0f172a; margin-bottom: 12px; padding-bottom: 12px;
+      border-bottom: 2px solid #e2e8f0; font-weight: 700;
+    }
+    .card .card-desc { color: #64748b; font-size: 0.95rem; margin-bottom: 20px; line-height: 1.5; }
+    .table-wrap { overflow-x: auto; }
+    .data-table {
+      width: 100%; border-collapse: collapse; font-size: 0.9rem; background: #fff;
+    }
+    .data-table thead { background: #f8f9fa; }
+    .data-table th, .data-table td {
+      padding: 12px 16px; border-bottom: 1px solid #dee2e6; vertical-align: middle;
+    }
+    .data-table th { font-weight: 600; color: #212529; text-align: center; border-top: 1px solid #dee2e6; }
+    .data-table td { color: #212529; text-align: left; }
+    .data-table th.col-action, .data-table td.col-action { text-align: center; }
+    .data-table tbody tr:hover td { background: #f8f9fa; }
+    .btn-view {
+      display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; border-radius: 999px;
+      border: none; background: #0454a3; color: #fff; font-size: 0.85rem; cursor: pointer; text-decoration: none;
+    }
+    .btn-view:hover { background: #0369a1; color: #fff; }
+    .badge { display: inline-block; padding: 5px 12px; border-radius: 999px; font-size: 0.85rem; font-weight: 500; }
+    .badge-withdrawing { background: #fef3c7; color: #92400e; }
+    .badge-confirmed { background: #d1fae5; color: #065f46; }
+    .detail-block {
+      background: #f8fafc; border-radius: 12px; padding: 18px 20px; margin-bottom: 20px;
+      border: 1px solid #e2e8f0;
+    }
+    .detail-block h3 { font-size: 1rem; color: #334155; margin-bottom: 10px; }
+    .detail-block .label { color: #64748b; font-size: 0.9rem; }
+    .detail-block .value { color: #1e293b; margin-top: 4px; white-space: pre-wrap; word-break: break-word; }
+    .meeting-notes-input {
+      width: 100%; margin-top: 8px; padding: 12px 14px; border: 1px solid #e2e8f0; border-radius: 8px;
+      font-size: 1rem; color: #1e293b; resize: vertical; min-height: 120px;
+    }
+    .meeting-notes-input:focus { outline: none; border-color: #0454a3; box-shadow: 0 0 0 2px rgba(4, 84, 163, 0.2); }
+    .btn-confirm {
+      padding: 12px 24px; border-radius: 8px; border: none; background: #dc2626; color: #fff;
+      font-size: 1rem; font-weight: 600; cursor: pointer;
+    }
+    .btn-confirm:hover { background: #b91c1c; }
+    .btn-confirm:disabled { background: #94a3b8; cursor: not-allowed; }
+    .empty-msg { text-align: center; padding: 24px; color: #64748b; }
+    .alert { padding: 14px 16px; border-radius: 8px; margin-bottom: 20px; }
+    .alert-success { background: #f0fdf4; border: 1px solid #bbf7d0; color: #166534; }
+    .alert-danger { background: #fef2f2; border: 1px solid #fecaca; color: #b91c1c; }
+    #successMessage, #errorMessage { display: none; }
+    #successMessage.show, #errorMessage.show { display: block; }
+  </style>
+</head>
+<body>
+  <header class="page-header">退實習確認</header>
+  <div class="top-bar-left">
+    <div id="menu-btn" title="選單" role="button" tabindex="0"><span></span><span></span><span></span></div>
+  </div>
+  <nav id="side-menu" aria-hidden="true">
+    <div class="menu-header">
+      <h2>功能選單</h2>
+      <button id="close-btn" aria-label="關閉">×</button>
+    </div>
+    <a href="/teacher_home">首頁</a>
+    <a href="/profile">個人資料</a>
+    <a href="/teacher_remove_intern">退實習確認</a>
+    <a href="/logout">登出</a>
+  </nav>
+
+  <div class="container">
+    <div id="successMessage" class="alert alert-success" role="alert"></div>
+    <div id="errorMessage" class="alert alert-danger" role="alert"></div>
+
+    <!-- 列表：待確認的退實習案件 -->
+    <div id="listCard" class="card">
+      <h2><i class="bi bi-list-ul" style="margin-right: 8px; color: #0454a3;"></i>待確認的退實習案件</h2>
+      <div class="table-wrap">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>學生姓名</th>
+              <th>學號</th>
+              <th>公司</th>
+              <th>職缺</th>
+              <th>原因類別</th>
+              <th>狀態</th>
+              <th class="col-action">操作</th>
+            </tr>
+          </thead>
+          <tbody id="caseListBody"></tbody>
+        </table>
+      </div>
+      <p id="listEmpty" class="empty-msg" style="display: none;">目前沒有待確認的退實習案件。</p>
+    </div>
+
+    <!-- 詳情：解約報告、廠商原因、日誌、確認異動 -->
+    <div id="detailCard" class="card" style="display: none;">
+      <h2><i class="bi bi-file-text" style="margin-right: 8px; color: #0454a3;"></i>退實習案件詳情</h2>
+      <p class="card-desc">請確認解約報告與廠商填寫內容、該實習生日誌後，再按下「確認異動」。</p>
+
+      <div class="detail-block">
+        <h3>解約報告預覽（廠商填寫）</h3>
+        <p class="label">原因類別</p>
+        <p class="value" id="detailReasonCategory">—</p>
+        <p class="label" style="margin-top: 12px;">具體說明</p>
+        <p class="value" id="detailReasonDetail">—</p>
+      </div>
+
+      <div class="detail-block">
+        <h3>實習生資訊</h3>
+        <p class="label">學生姓名</p>
+        <p class="value" id="detailStudentName">—</p>
+        <p class="label" style="margin-top: 8px;">學號</p>
+        <p class="value" id="detailStudentNumber">—</p>
+        <p class="label" style="margin-top: 8px;">實習單位／職缺</p>
+        <p class="value" id="detailCompanyJob">—</p>
+      </div>
+
+      <div class="detail-block">
+        <h3>該實習生至今累積的日誌紀錄</h3>
+        <div id="detailLogs"></div>
+        <p id="detailLogsEmpty" class="empty-msg">尚無日誌紀錄。</p>
+      </div>
+
+      <div class="detail-block">
+        <h3>與學生訪談紀錄</h3>
+        <p class="label">請填寫與該生的面談／訪談紀錄，確認異動時一併儲存。</p>
+        <textarea id="teacherMeetingNotes" class="meeting-notes-input" rows="6" placeholder="請輸入與學生面談的內容、結論或備註…"></textarea>
+      </div>
+
+      <div style="margin-top: 24px;">
+        <button type="button" class="btn-confirm" id="confirmBtn">確認異動</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      const menuBtn = document.getElementById('menu-btn');
+      const sideMenu = document.getElementById('side-menu');
+      const closeBtn = document.getElementById('close-btn');
+      if (menuBtn) menuBtn.addEventListener('click', function () {
+        sideMenu.classList.add('open');
+        sideMenu.setAttribute('aria-hidden', 'false');
+      });
+      if (closeBtn) closeBtn.addEventListener('click', function () {
+        sideMenu.classList.remove('open');
+        sideMenu.setAttribute('aria-hidden', 'true');
+      });
+    })();
+
+    (function () {
+      const params = new URLSearchParams(window.location.search);
+      const caseId = params.get('id') || params.get('case_id');
+      const listCard = document.getElementById('listCard');
+      const detailCard = document.getElementById('detailCard');
+      const caseListBody = document.getElementById('caseListBody');
+      const listEmpty = document.getElementById('listEmpty');
+      const successMessage = document.getElementById('successMessage');
+      const errorMessage = document.getElementById('errorMessage');
+      const confirmBtn = document.getElementById('confirmBtn');
+
+      function showError(msg) {
+        errorMessage.textContent = msg || '發生錯誤';
+        errorMessage.classList.add('show');
+        successMessage.classList.remove('show');
+      }
+      function showSuccess(msg) {
+        successMessage.textContent = msg || '已處理';
+        successMessage.classList.add('show');
+        errorMessage.classList.remove('show');
+      }
+      function hideMessages() {
+        successMessage.classList.remove('show');
+        errorMessage.classList.remove('show');
+      }
+
+      function escapeHtml(s) {
+        if (!s) return '';
+        var d = document.createElement('div');
+        d.textContent = s;
+        return d.innerHTML;
+      }
+
+      // 載入列表
+      function loadList() {
+        fetch('/teacher/api/withdraw_cases', { credentials: 'same-origin' })
+          .then(function (r) { return r.json(); })
+          .then(function (res) {
+            if (!res.success || !Array.isArray(res.data)) {
+              caseListBody.innerHTML = '<tr><td colspan="7" class="empty-msg">無法載入列表</td></tr>';
+              listEmpty.style.display = 'none';
+              return;
+            }
+            var rows = res.data;
+            if (rows.length === 0) {
+              caseListBody.innerHTML = '';
+              listEmpty.style.display = 'block';
+              return;
+            }
+            listEmpty.style.display = 'none';
+            caseListBody.innerHTML = rows.map(function (row) {
+              var statusClass = (row.status || '') === 'confirmed' ? 'badge-confirmed' : 'badge-withdrawing';
+              var statusText = (row.status || '') === 'confirmed' ? '已確認' : '待確認';
+              var viewUrl = '/teacher_remove_intern?id=' + row.id;
+              return '<tr>' +
+                '<td>' + escapeHtml(row.student_name || '—') + '</td>' +
+                '<td>' + escapeHtml(row.student_number || '—') + '</td>' +
+                '<td>' + escapeHtml(row.company_name || '—') + '</td>' +
+                '<td>' + escapeHtml(row.job_title || '—') + '</td>' +
+                '<td>' + escapeHtml(row.reason_category || '—') + '</td>' +
+                '<td><span class="badge ' + statusClass + '">' + escapeHtml(statusText) + '</span></td>' +
+                '<td class="col-action"><a class="btn-view" href="' + viewUrl + '"><i class="bi bi-eye"></i> 查看</a></td>' +
+                '</tr>';
+            }).join('');
+          })
+          .catch(function () {
+            caseListBody.innerHTML = '<tr><td colspan="7" class="empty-msg">載入失敗，請重新整理</td></tr>';
+            listEmpty.style.display = 'none';
+          });
+      }
+
+      // 載入詳情
+      function loadDetail(id) {
+        detailCard.style.display = 'block';
+        document.getElementById('detailReasonCategory').textContent = '載入中…';
+        document.getElementById('detailReasonDetail').textContent = '';
+        document.getElementById('detailStudentName').textContent = '—';
+        document.getElementById('detailStudentNumber').textContent = '—';
+        document.getElementById('detailCompanyJob').textContent = '—';
+        var logsEl = document.getElementById('detailLogs');
+        var logsEmpty = document.getElementById('detailLogsEmpty');
+        logsEl.innerHTML = '';
+        logsEmpty.style.display = 'block';
+        confirmBtn.disabled = true;
+
+        fetch('/teacher/api/withdraw_case_detail?id=' + encodeURIComponent(id), { credentials: 'same-origin' })
+          .then(function (r) { return r.json(); })
+          .then(function (res) {
+            if (!res.success || !res.data) {
+              document.getElementById('detailReasonCategory').textContent = '無法載入';
+              confirmBtn.disabled = false;
+              return;
+            }
+            var d = res.data;
+            document.getElementById('detailReasonCategory').textContent = d.reason_category || '—';
+            document.getElementById('detailReasonDetail').textContent = d.reason_detail || '—';
+            document.getElementById('detailStudentName').textContent = d.student_name || '—';
+            document.getElementById('detailStudentNumber').textContent = d.student_number || '—';
+            document.getElementById('detailCompanyJob').textContent = (d.company_name || '') + (d.job_title ? '／' + d.job_title : '') || '—';
+
+            if (d.logs && d.logs.length > 0) {
+              logsEmpty.style.display = 'none';
+              logsEl.innerHTML = '<ul style="list-style: none; padding: 0;">' + d.logs.map(function (log) {
+                return '<li style="padding: 8px 0; border-bottom: 1px solid #e2e8f0;">' + escapeHtml(log.content || log.title || JSON.stringify(log)) + '</li>';
+              }).join('') + '</ul>';
+            }
+            confirmBtn.disabled = (d.status || '') === 'confirmed';
+            confirmBtn.setAttribute('data-case-id', d.id);
+            var notesEl = document.getElementById('teacherMeetingNotes');
+            if (notesEl) notesEl.value = d.teacher_meeting_notes || '';
+          })
+          .catch(function () {
+            document.getElementById('detailReasonCategory').textContent = '載入失敗';
+            confirmBtn.disabled = false;
+          });
+      }
+
+      if (caseId) {
+        listCard.style.display = 'block';
+        loadList();
+        loadDetail(caseId);
+      } else {
+        detailCard.style.display = 'none';
+        loadList();
+      }
+
+      confirmBtn.addEventListener('click', function () {
+        var id = confirmBtn.getAttribute('data-case-id');
+        if (!id) return;
+        hideMessages();
+        confirmBtn.disabled = true;
+        var notesEl = document.getElementById('teacherMeetingNotes');
+        var notes = notesEl ? notesEl.value.trim() : '';
+        fetch('/teacher/api/withdraw_confirm', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: id, teacher_meeting_notes: notes }),
+          credentials: 'same-origin'
+        })
+          .then(function (r) { return r.json(); })
+          .then(function (res) {
+            if (res.success) {
+              window.location.href = '/teacher_remove_intern';
+            } else {
+              showError(res.message || '確認失敗');
+              confirmBtn.disabled = false;
+            }
+          })
+          .catch(function () {
+            showError('網路錯誤，請稍後再試');
+            confirmBtn.disabled = false;
+          });
+      });
+    })();
+  </script>
+</body>
+</html>

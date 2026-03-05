@@ -271,7 +271,7 @@
     }
     .alert-danger { background: #fef2f2; border: 1px solid #fecaca; color: #b91c1c; }
     .alert-info { background: #eff6ff; border: 1px solid #bfdbfe; color: #1e40af; }
-    /* 管理實習生表格樣式 */
+    /* 管理實習生表格樣式（與履歷審核列表一致） */
     .intern-table-wrapper {
       margin-top: 8px;
       overflow-x: auto;
@@ -281,45 +281,86 @@
       border-collapse: collapse;
       font-size: 0.9rem;
       min-width: 520px;
+      background: #fff;
     }
     .intern-table thead {
-      background: #f8fafc;
+      background: #f8f9fa;
     }
     .intern-table th,
     .intern-table td {
-      padding: 10px 12px;
-      border-bottom: 1px solid #e2e8f0;
-      text-align: left;
+      padding: 12px 16px;
+      border-bottom: 1px solid #dee2e6;
+      vertical-align: middle;
       white-space: nowrap;
     }
     .intern-table th {
       font-weight: 600;
-      color: #475569;
-      border-top: 1px solid #e2e8f0;
+      color: #212529;
+      text-align: center;
+      border-top: 1px solid #dee2e6;
     }
-    .intern-table tbody tr:hover {
-      background-color: #f1f5f9;
+    .intern-table td {
+      background: #fff;
+      color: #212529;
+      text-align: left;
     }
-    .intern-table .col-name { width: 22%; }
-    .intern-table .col-number { width: 18%; }
-    .intern-table .col-company { width: 26%; }
-    .intern-table .col-title { width: 20%; }
-    .intern-table .col-action { width: 14%; text-align: right; }
-    .intern-table .btn-link {
-      padding: 6px 12px;
+    .intern-table th.col-name,
+    .intern-table td.col-name,
+    .intern-table th.col-number,
+    .intern-table td.col-number,
+    .intern-table th.col-company,
+    .intern-table td.col-company,
+    .intern-table th.col-title,
+    .intern-table td.col-title {
+      text-align: left;
+    }
+    .intern-table th.col-status,
+    .intern-table td.col-status,
+    .intern-table th.col-action,
+    .intern-table td.col-action {
+      text-align: center;
+    }
+    .intern-table tbody tr:hover td {
+      background-color: #f8f9fa;
+    }
+    .intern-table .col-name { width: 18%; }
+    .intern-table .col-number { width: 14%; }
+    .intern-table .col-company { width: 22%; }
+    .intern-table .col-title { width: 18%; }
+    .intern-table .col-status { width: 12%; }
+    .intern-table .col-action { width: 16%; }
+    .intern-status {
+      display: inline-block;
+      padding: 5px 12px;
       border-radius: 999px;
-      border: 1px solid #dc2626;
-      background: white;
+      font-size: 0.85rem;
+      font-weight: 500;
+    }
+    .intern-status-active {
+      background: #06b6d4;
+      color: #fff;
+    }
+    .intern-status-exit {
+      background: #fee2e2;
       color: #b91c1c;
-      font-size: 0.8rem;
+    }
+    .intern-table .btn-link {
+      padding: 6px 14px;
+      border-radius: 999px;
+      border: none;
+      background: #dc2626;
+      color: #fff;
+      font-size: 0.85rem;
       cursor: pointer;
       text-decoration: none;
       display: inline-flex;
       align-items: center;
-      gap: 4px;
+      justify-content: center;
+      gap: 6px;
     }
     .intern-table .btn-link:hover {
-      background: #fee2e2;
+      background: #b91c1c;
+      color: #fff;
     }
     .intern-table-empty {
       text-align: center;
@@ -484,6 +525,7 @@
               <th class="col-number">學號</th>
               <th class="col-company">實習單位</th>
               <th class="col-title">職稱</th>
+              <th class="col-status">狀態</th>
               <th class="col-action">操作</th>
             </tr>
           </thead>
@@ -502,7 +544,7 @@
         <span id="successModalTitle">已送出退實習申請</span>
       </div>
       <div class="modal-card-body">
-        學生狀態已標記為「退出處理中」，此內容將同步給老師。
+        學生狀態已標記為「退出處理中」，此內容將同步給老師。<br>
       </div>
       <div class="modal-card-footer">
         <button type="button" class="btn-primary-green" id="successCloseBtn">確定</button>
@@ -551,7 +593,7 @@
       function renderInternTable(targetTbody, rows) {
         if (!targetTbody) return;
         if (!rows || rows.length === 0) {
-          targetTbody.innerHTML = '<tr><td class="intern-table-empty" colspan="5">目前沒有實習生名單。</td></tr>';
+          targetTbody.innerHTML = '<tr><td class="intern-table-empty" colspan="6">目前沒有實習生名單。</td></tr>';
           return;
         }
         targetTbody.innerHTML = rows.map(function (row) {
@@ -559,12 +601,16 @@
           const num = row.student_number || '—';
           const unit = row.company_name || '—';
           const title = row.job_title || '—';
+          const isWithdrawing = (row.status || '').toLowerCase() === 'withdrawing';
+          const statusText = isWithdrawing ? '退出' : '實習中';
+          const statusClass = isWithdrawing ? 'intern-status-exit' : 'intern-status-active';
           const url = '/vendor_remove_intern?student_id=' + row.student_id;
           return '<tr>' +
             '<td>' + escapeHtml(name) + '</td>' +
             '<td>' + escapeHtml(num) + '</td>' +
             '<td>' + escapeHtml(unit) + '</td>' +
             '<td>' + escapeHtml(title) + '</td>' +
+            '<td class="col-status"><span class="intern-status ' + statusClass + '">' + escapeHtml(statusText) + '</span></td>' +
             '<td class="col-action"><a class="btn-link" href="' + url + '"><i class="bi bi-box-arrow-in-right"></i><span>退出</span></a></td>' +
             '</tr>';
         }).join('');
@@ -600,11 +646,11 @@
               renderInternTable(allInternTbody, data.data);
             } else {
               allInternRows = [];
-              if (allInternTbody) allInternTbody.innerHTML = '<tr><td class="intern-table-empty" colspan="5">無法載入名單，請稍後再試。</td></tr>';
+              if (allInternTbody) allInternTbody.innerHTML = '<tr><td class="intern-table-empty" colspan="6">無法載入名單，請稍後再試。</td></tr>';
             }
           } catch (e) {
             allInternRows = [];
-            if (allInternTbody) allInternTbody.innerHTML = '<tr><td class="intern-table-empty" colspan="5">載入失敗，請重新整理。</td></tr>';
+            if (allInternTbody) allInternTbody.innerHTML = '<tr><td class="intern-table-empty" colspan="6">載入失敗，請重新整理。</td></tr>';
           }
         })();
         return;
@@ -669,11 +715,11 @@
               renderInternTable(allInternTbody, data.data);
             } else {
               allInternRows = [];
-              allInternTbody.innerHTML = '<tr><td class="intern-table-empty" colspan="5">無法載入名單，請稍後再試。</td></tr>';
+              allInternTbody.innerHTML = '<tr><td class="intern-table-empty" colspan="6">無法載入名單，請稍後再試。</td></tr>';
             }
           } catch (e) {
             allInternRows = [];
-            allInternTbody.innerHTML = '<tr><td class="intern-table-empty" colspan="5">載入失敗，請重新整理。</td></tr>';
+            allInternTbody.innerHTML = '<tr><td class="intern-table-empty" colspan="6">載入失敗，請重新整理。</td></tr>';
           }
         })();
       }
