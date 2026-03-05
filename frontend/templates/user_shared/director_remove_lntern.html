@@ -93,6 +93,13 @@
     .search-wrap input:focus {
       outline: none; border-color: #0454a3; box-shadow: 0 0 0 2px rgba(4, 84, 163, 0.2);
     }
+    .search-wrap select {
+      padding: 10px 14px; border: 1px solid #e2e8f0; border-radius: 8px;
+      font-size: 1rem; background: #fff; color: #334155; min-width: 120px;
+    }
+    .search-wrap select:focus {
+      outline: none; border-color: #0454a3; box-shadow: 0 0 0 2px rgba(4, 84, 163, 0.2);
+    }
     .empty-msg { text-align: center; padding: 24px; color: #64748b; }
     .alert { padding: 14px 16px; border-radius: 8px; margin-bottom: 20px; }
     .alert-danger { background: #fef2f2; border: 1px solid #fecaca; color: #b91c1c; }
@@ -122,6 +129,12 @@
     <div id="listCard" class="card">
       <h2><i class="bi bi-people-fill" style="margin-right: 8px; color: #0454a3;"></i>學生實習狀況</h2>
       <div class="search-wrap">
+        <label for="classFilter">班級</label>
+        <select id="classFilter" aria-label="篩選班級">
+          <option value="">全部班級</option>
+          <option value="忠">忠班</option>
+          <option value="孝">孝班</option>
+        </select>
         <label for="searchInput">搜尋</label>
         <input type="text" id="searchInput" placeholder="輸入姓名或學號" autocomplete="off" aria-label="搜尋學生姓名或學號">
       </div>
@@ -164,6 +177,7 @@
       const listEmpty = document.getElementById('listEmpty');
       const errorMessage = document.getElementById('errorMessage');
       const searchInput = document.getElementById('searchInput');
+      const classFilter = document.getElementById('classFilter');
       var allRows = [];
 
       function showError(msg) {
@@ -207,20 +221,27 @@
 
       function applySearch() {
         var q = (searchInput && searchInput.value) ? searchInput.value.trim().toLowerCase() : '';
-        if (!q) {
-          renderTable(allRows);
-          listEmpty.style.display = allRows.length === 0 ? 'block' : 'none';
-          return;
+        var classVal = (classFilter && classFilter.value) ? classFilter.value.trim() : '';
+        var filtered = allRows;
+        if (classVal) {
+          filtered = filtered.filter(function (row) {
+            var cn = (row.class_name || '').toString();
+            return cn.indexOf(classVal) !== -1;
+          });
         }
-        var filtered = allRows.filter(function (row) {
-          var name = (row.student_name || '').toLowerCase();
-          var num = (row.student_number || '').toLowerCase();
-          return name.indexOf(q) !== -1 || num.indexOf(q) !== -1;
-        });
+        if (q) {
+          filtered = filtered.filter(function (row) {
+            var name = (row.student_name || '').toLowerCase();
+            var num = (row.student_number || '').toLowerCase();
+            return name.indexOf(q) !== -1 || num.indexOf(q) !== -1;
+          });
+        }
         renderTable(filtered);
+        listEmpty.style.display = allRows.length === 0 ? 'block' : 'none';
       }
 
       if (searchInput) searchInput.addEventListener('input', applySearch);
+      if (classFilter) classFilter.addEventListener('change', applySearch);
 
       fetch('/director/api/intern_status', { credentials: 'same-origin' })
         .then(function (r) { return r.json(); })
