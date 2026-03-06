@@ -4517,7 +4517,7 @@ def _get_vendor_own_company_ids(cursor, vendor_id):
     """
     取得「廠商自己所屬公司」的 company_id，只回傳一間公司，僅顯示該公司實習生。
     優先：internship_companies.vendor_id = vendor_id 或 company_vendor_relations；
-    若無則不沿用多公司，回傳空（請在後台設定公司與廠商對應，否則不顯示名單）。
+    若無則取指導老師底下第一間公司。
     """
     try:
         cursor.execute("""
@@ -4563,7 +4563,7 @@ def get_withdraw_intern_list():
         if not company_ids:
             cursor.close()
             conn.close()
-            return jsonify({"success": False, "message": "找不到廠商所屬的公司"}), 403
+            return jsonify({"success": True, "data": [], "message": "尚無所屬公司，請聯絡管理員設定廠商與公司的對應。"})
         placeholders = ",".join(["%s"] * len(company_ids))
         current_semester_id = get_current_semester_id(cursor)
         args = list(company_ids)
@@ -5079,6 +5079,30 @@ def class_teacher_intern_status():
         conn = get_db()
         cursor = conn.cursor(dictionary=True)
         current_semester_id = get_current_semester_id(cursor)
+        current_semester_code = get_current_semester_code(cursor) or ""
+        try:
+            current_year = int(str(current_semester_code)[:3]) if (current_semester_code and len(str(current_semester_code)) >= 3) else None
+        except (ValueError, TypeError):
+            current_year = None
+        grade_chars = ("", "一", "二", "三", "四", "五", "六")
+
+        def class_display(row):
+            dept = (row.get("department") or "").strip()
+            name = (row.get("class_name") or "").strip()
+            base = (dept + " " + name).strip() if (dept or name) else (name or "")
+            ay = row.get("admission_year")
+            if current_year is not None and ay is not None and str(ay).strip() != "":
+                try:
+                    ay_int = int(ay)
+                    grade_num = current_year - ay_int + 1
+                    if 1 <= grade_num <= 6:
+                        return dept + grade_chars[grade_num] + name
+                except (ValueError, TypeError):
+                    pass
+            if ay is not None and str(ay).strip() != "" and base:
+                return base + " (" + str(ay).strip() + "屆)"
+            return base or ""
+
         try:
             cursor.execute("""
                 SELECT u.id AS student_id, u.name AS student_name, u.username AS student_number,
@@ -5102,10 +5126,15 @@ def class_teacher_intern_status():
                 LEFT JOIN internship_companies ic ON ic.id = ij.company_id
                 LEFT JOIN internship_records vri ON vri.student_id = u.id AND vri.semester_id = %s
                 WHERE u.role = 'student'
+                AND EXISTS (
+                    SELECT 1 FROM internship_configs cfg
+                    WHERE cfg.semester_id = %s
+                    AND (cfg.user_id = u.id OR (cfg.user_id IS NULL AND cfg.admission_year = c.admission_year))
+                )
                 ORDER BY c.name, u.username
-            """, (teacher_id, current_semester_id, current_semester_id, current_semester_id))
+            """, (teacher_id, current_semester_id, current_semester_id, current_semester_id, current_semester_id))
         except Exception as sem_err:
-            if "semester_id" in str(sem_err) or "Unknown column" in str(sem_err):
+            if "semester_id" in str(sem_err) or "Unknown column" in str(sem_err) or "internship_configs" in str(sem_err):
                 cursor.execute("""
                     SELECT u.id AS student_id, u.name AS student_name, u.username AS student_number,
                            c.name AS class_name, c.department, c.admission_year,
@@ -5125,8 +5154,13 @@ def class_teacher_intern_status():
                     LEFT JOIN internship_companies ic ON ic.id = ij.company_id
                     LEFT JOIN internship_records vri ON vri.student_id = u.id AND vri.semester_id = %s
                     WHERE u.role = 'student'
+                    AND EXISTS (
+                        SELECT 1 FROM internship_configs cfg
+                        WHERE cfg.semester_id = %s
+                        AND (cfg.user_id = u.id OR (cfg.user_id IS NULL AND cfg.admission_year = c.admission_year))
+                    )
                     ORDER BY c.name, u.username
-                """, (teacher_id, current_semester_id))
+                """, (teacher_id, current_semester_id, current_semester_id))
             else:
                 raise
         rows = cursor.fetchall()
@@ -5153,6 +5187,7 @@ def class_teacher_intern_status():
                 "student_name": r.get("student_name") or "",
                 "student_number": r.get("student_number") or "",
                 "class_name": r.get("class_name") or "",
+                "class_display": class_display(r),
                 "company_name": r.get("company_name") or "",
                 "job_title": r.get("job_title") or "",
                 "status": status,
@@ -5177,6 +5212,30 @@ def director_intern_status():
         conn = get_db()
         cursor = conn.cursor(dictionary=True)
         current_semester_id = get_current_semester_id(cursor)
+        current_semester_code = get_current_semester_code(cursor) or ""
+        try:
+            current_year = int(str(current_semester_code)[:3]) if (current_semester_code and len(str(current_semester_code)) >= 3) else None
+        except (ValueError, TypeError):
+            current_year = None
+        grade_chars = ("", "一", "二", "三", "四", "五", "六")
+
+        def class_display(row):
+            dept = (row.get("department") or "").strip()
+            name = (row.get("class_name") or "").strip()
+            base = (dept + " " + name).strip() if (dept or name) else (name or "")
+            ay = row.get("admission_year")
+            if current_year is not None and ay is not None and str(ay).strip() != "":
+                try:
+                    ay_int = int(ay)
+                    grade_num = current_year - ay_int + 1
+                    if 1 <= grade_num <= 6:
+                        return dept + grade_chars[grade_num] + name
+                except (ValueError, TypeError):
+                    pass
+            if ay is not None and str(ay).strip() != "" and base:
+                return base + " (" + str(ay).strip() + "屆)"
+            return base or ""
+
         # 每位學生只取一筆錄取（當前學期且 id 最大），避免多筆錄取造成錯誤顯示
         try:
             cursor.execute("""
@@ -5200,10 +5259,15 @@ def director_intern_status():
                 LEFT JOIN internship_companies ic ON ic.id = ij.company_id
                 LEFT JOIN internship_records vri ON vri.student_id = u.id AND vri.semester_id = %s
                 WHERE u.role = 'student'
+                AND EXISTS (
+                    SELECT 1 FROM internship_configs cfg
+                    WHERE cfg.semester_id = %s
+                    AND (cfg.user_id = u.id OR (cfg.user_id IS NULL AND cfg.admission_year = c.admission_year))
+                )
                 ORDER BY c.name, u.username
-            """, (current_semester_id, current_semester_id, current_semester_id))
+            """, (current_semester_id, current_semester_id, current_semester_id, current_semester_id))
         except Exception as sem_err:
-            if "semester_id" in str(sem_err) or "Unknown column" in str(sem_err):
+            if "semester_id" in str(sem_err) or "Unknown column" in str(sem_err) or "internship_configs" in str(sem_err):
                 # 無 semester_id 時：每位學生只取一筆錄取（id 最大＝最新）
                 cursor.execute("""
                     SELECT u.id AS student_id, u.name AS student_name, u.username AS student_number,
@@ -5223,8 +5287,13 @@ def director_intern_status():
                     LEFT JOIN internship_companies ic ON ic.id = ij.company_id
                     LEFT JOIN internship_records vri ON vri.student_id = u.id AND vri.semester_id = %s
                     WHERE u.role = 'student'
+                    AND EXISTS (
+                        SELECT 1 FROM internship_configs cfg
+                        WHERE cfg.semester_id = %s
+                        AND (cfg.user_id = u.id OR (cfg.user_id IS NULL AND cfg.admission_year = c.admission_year))
+                    )
                     ORDER BY c.name, u.username
-                """, (current_semester_id,))
+                """, (current_semester_id, current_semester_id))
             else:
                 raise
         rows = cursor.fetchall()
@@ -5250,6 +5319,7 @@ def director_intern_status():
                 "student_name": r.get("student_name") or "",
                 "student_number": r.get("student_number") or "",
                 "class_name": r.get("class_name") or "",
+                "class_display": class_display(r),
                 "company_name": r.get("company_name") or "",
                 "job_title": r.get("job_title") or "",
                 "status": status,

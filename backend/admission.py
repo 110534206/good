@@ -4671,6 +4671,150 @@ def ta_confirm_matching():
         conn.close()
 
 # =========================================================
+# API: 查詢二輪媒合是否開啟（廠商/主任首頁用，不需 TA 權限）
+# =========================================================
+@admission_bp.route("/api/second_round/status", methods=["GET"])
+def second_round_status():
+    """Return whether second-round matching is enabled for current semester. Used by vendor_home, director_home."""
+    if 'user_id' not in session:
+        return jsonify({"success": False, "is_enabled": False}), 403
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        current_semester_id = get_current_semester_id(cursor)
+        if not current_semester_id:
+            return jsonify({"success": True, "is_enabled": False, "semester_id": None})
+        is_enabled = False
+        try:
+            cursor.execute("""
+                SELECT value AS is_enabled FROM system_config
+                WHERE config_key = 'second_interview_enabled' AND semester_id = %s
+            """, (current_semester_id,))
+            config = cursor.fetchone()
+            if config and config.get('is_enabled') is not None:
+                try:
+                    is_enabled = bool(int(config['is_enabled']))
+                except (ValueError, TypeError):
+                    pass
+        except Exception:
+            pass
+        return jsonify({"success": True, "is_enabled": is_enabled, "semester_id": current_semester_id})
+    finally:
+        cursor.close()
+        conn.close()
+
+
+def _vendor_company_ids_for_second_round(cursor, vendor_id):
+    """Get company IDs the vendor can manage (via teacher_id -> advisor_user_id, all companies under same teacher)."""
+    cursor.execute("SELECT teacher_id FROM users WHERE id = %s AND role = 'vendor'", (vendor_id,))
+    row = cursor.fetchone()
+    if not row or not row.get("teacher_id"):
+        return []
+    teacher_id = row["teacher_id"]
+    cursor.execute(
+        "SELECT id FROM internship_companies WHERE advisor_user_id = %s AND status = 'approved' ORDER BY company_name",
+        (teacher_id,),
+    )
+    return [r["id"] for r in (cursor.fetchall() or [])]
+
+
+# =========================================================
+# API: 廠商二輪意願 - 列表（GET）
+# =========================================================
+@admission_bp.route("/api/second_round/vendor/participation", methods=["GET"])
+def vendor_second_round_participation_list():
+    """List vendor's companies with second-round participation for current semester."""
+    if "user_id" not in session or session.get("role") != "vendor":
+        return jsonify({"success": False, "message": "未授權"}), 403
+    vendor_id = session.get("user_id")
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        sid = get_current_semester_id(cursor)
+        if not sid:
+            return jsonify({"success": False, "message": "無法取得當前學期"}), 500
+        company_ids = _vendor_company_ids_for_second_round(cursor, vendor_id)
+        if not company_ids:
+            return jsonify({"success": True, "companies": [], "semester_id": sid})
+        placeholders = ",".join(["%s"] * len(company_ids))
+        cursor.execute(
+            "SELECT company_id, agree, quota, salary_note, job_title, updated_at FROM second_round_participation WHERE semester_id = %s AND company_id IN (" + placeholders + ")",
+            [sid] + company_ids,
+        )
+        part_map = {r["company_id"]: r for r in (cursor.fetchall() or [])}
+        cursor.execute(
+            "SELECT id, company_name FROM internship_companies WHERE id IN (" + placeholders + ") ORDER BY company_name",
+            company_ids,
+        )
+        companies = cursor.fetchall() or []
+        result = []
+        for c in companies:
+            pid = c["id"]
+            p = part_map.get(pid) or {}
+            result.append({
+                "company_id": pid,
+                "company_name": c.get("company_name") or "",
+                "agree": 1 if p.get("agree") else 0,
+                "quota": p.get("quota") or 0,
+                "salary_note": (p.get("salary_note") or "").strip(),
+                "job_title": (p.get("job_title") or "").strip(),
+                "updated_at": p.get("updated_at"),
+            })
+        return jsonify({"success": True, "companies": result, "semester_id": sid})
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"success": False, "message": str(e)}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+
+# =========================================================
+# API: 廠商二輪意願 - 儲存單一公司（POST）
+# =========================================================
+@admission_bp.route("/api/second_round/vendor/participation", methods=["POST"])
+def vendor_second_round_participation_save():
+    """Save one company's second-round participation (agree, quota, salary_note, job_title)."""
+    if "user_id" not in session or session.get("role") != "vendor":
+        return jsonify({"success": False, "message": "未授權"}), 403
+    vendor_id = session.get("user_id")
+    data = request.get_json() or {}
+    company_id = data.get("company_id")
+    agree = data.get("agree", 0)
+    quota = max(0, int(data.get("quota") or 0))
+    salary_note = (data.get("salary_note") or "")[:500]
+    job_title = (data.get("job_title") or "")[:200]
+    if company_id is None:
+        return jsonify({"success": False, "message": "缺少 company_id"}), 400
+    try:
+        company_id = int(company_id)
+    except (TypeError, ValueError):
+        return jsonify({"success": False, "message": "company_id 格式錯誤"}), 400
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        sid = get_current_semester_id(cursor)
+        if not sid:
+            return jsonify({"success": False, "message": "無法取得當前學期"}), 500
+        allowed = _vendor_company_ids_for_second_round(cursor, vendor_id)
+        if company_id not in allowed:
+            return jsonify({"success": False, "message": "無權限操作此公司"}), 403
+        cursor.execute(
+            "INSERT INTO second_round_participation (semester_id, company_id, agree, quota, salary_note, job_title, updated_at) VALUES (%s, %s, %s, %s, %s, %s, NOW()) ON DUPLICATE KEY UPDATE agree = VALUES(agree), quota = VALUES(quota), salary_note = VALUES(salary_note), job_title = VALUES(job_title), updated_at = NOW()",
+            (sid, company_id, 1 if agree else 0, quota, salary_note or None, job_title or None),
+        )
+        conn.commit()
+        return jsonify({"success": True, "message": "已儲存二輪意願"})
+    except Exception as e:
+        traceback.print_exc()
+        conn.rollback()
+        return jsonify({"success": False, "message": str(e)}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+
+# =========================================================
 # API: 查詢二面流程狀態
 # =========================================================
 @admission_bp.route("/api/ta/second_interview_status", methods=["GET"])
