@@ -334,6 +334,46 @@
     .modal-overlay.hidden {
       display: none !important;
     }
+
+    /* AI OCR Split View */
+    .ocr-split-container {
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+    }
+    @media (min-width: 992px) {
+        .ocr-split-container {
+            flex-direction: row;
+            align-items: flex-start;
+        }
+        .ocr-image-panel {
+            flex: 1;
+            position: sticky;
+            top: 1rem;
+            max-height: 80vh;
+            overflow: auto;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            background: #f8f9fa;
+        }
+        .ocr-result-panel {
+            flex: 1;
+        }
+    }
+    .ocr-image-panel img {
+        width: 100%;
+        height: auto;
+        display: block;
+    }
+    
+    /* Row Highlight Animation */
+    @keyframes highlightFade {
+        0% { background-color: #ffeeba; }
+        100% { background-color: transparent; }
+    }
+    .table-row-highlight {
+        animation: highlightFade 3s ease-out;
+    }
   </style>
 </head>
 
@@ -4520,7 +4560,12 @@
                         let grade = rawCols[gradeIdx];
                         
                         // 簡單清理數據
-                        if (credits) credits = credits.replace(/[^\d.]/g, ''); // 只留數字和小數點
+                        // 🟢 [修正] 如果學分包含米字號 (*)，則視為 0 學分
+                        if (credits && credits.includes('*')) {
+                            credits = '0';
+                        } else if (credits) {
+                            credits = credits.replace(/[^\d.]/g, ''); // 只留數字和小數點
+                        }
                         
                         if (name && grade) {
                             courses.push({
@@ -4536,61 +4581,121 @@
             return courses;
         }
 
-        // 🟢 [新增] 匯入 OCR 課程資料 (使用模糊比對)
+        // 🟢 [升級版] 匯入 OCR 課程資料 (含智慧比對預覽 - 讓老師心服口服)
         function importOcrCourses(ocrCourses) {
-            // 先詢問使用者是否只更新相似課程
-            Swal.fire({
-                title: '匯入選項',
-                html: `找到 ${ocrCourses.length} 筆識別結果。<br>請問您要如何匯入？`,
-                icon: 'question',
-                showDenyButton: true,
-                showCancelButton: true,
-                confirmButtonText: '僅更新現有課程 (模糊比對)',
-                denyButtonText: '更新現有 + 新增未知課程',
-                cancelButtonText: '取消'
-            }).then((result) => {
-                if (result.isDismissed) return;
-
-                const onlyUpdateExisting = result.isConfirmed;
-                let updatedCount = 0;
-                let newCount = 0;
+            // 1. 預先計算比對結果
+            const matchResults = ocrCourses.map(ocrCourse => {
+                let bestMatchIndex = -1;
+                let bestSimilarity = 0;
                 const SIMILARITY_THRESHOLD = 0.6; // 相似度門檻
 
-                ocrCourses.forEach(ocrCourse => {
-                    let bestMatchIndex = -1;
-                    let bestSimilarity = 0;
+                // 尋找最佳匹配
+                allCoursesData.forEach((course, index) => {
+                    const similarity = calculateSimilarity(course.name, ocrCourse.name);
+                    if (similarity > bestSimilarity) {
+                        bestSimilarity = similarity;
+                        bestMatchIndex = index;
+                    }
+                });
 
-                    // 尋找最佳匹配
-                    allCoursesData.forEach((course, index) => {
-                        const similarity = calculateSimilarity(course.name, ocrCourse.name);
-                        if (similarity > bestSimilarity) {
-                            bestSimilarity = similarity;
-                            bestMatchIndex = index;
-                        }
-                    });
+                const isMatch = bestMatchIndex > -1 && bestSimilarity >= SIMILARITY_THRESHOLD;
+                return {
+                    ocrCourse,
+                    matchIndex: bestMatchIndex,
+                    matchName: isMatch ? allCoursesData[bestMatchIndex].name : null,
+                    similarity: bestSimilarity,
+                    action: isMatch ? 'update' : 'add'
+                };
+            });
 
-                    // 判斷是否匹配成功
-                    if (bestMatchIndex > -1 && bestSimilarity >= SIMILARITY_THRESHOLD) {
-                        // 更新現有課程
+            // 2. 建構預覽表格 HTML
+            let tableRows = matchResults.map(item => {
+                const score = Math.round(item.similarity * 100);
+                
+                if (item.action === 'update') {
+                    return `
+                        <tr>
+                            <td class="text-center"><span class="badge bg-success">更新</span></td>
+                            <td>
+                                <div>${item.ocrCourse.name}</div>
+                                <div class="small text-muted">⬇ 比對成功 (${score}%)</div>
+                                <div><strong>${item.matchName}</strong></div>
+                            </td>
+                            <td class="text-end">
+                                <span class="text-decoration-line-through text-muted small">${allCoursesData[item.matchIndex].grade || '-'}</span>
+                                <br>
+                                <strong class="text-primary">${item.ocrCourse.grade}</strong>
+                            </td>
+                        </tr>
+                    `;
+                } else {
+                    return `
+                        <tr>
+                            <td class="text-center"><span class="badge bg-primary">新增</span></td>
+                            <td>${item.ocrCourse.name}</td>
+                            <td class="text-end"><strong>${item.ocrCourse.grade}</strong></td>
+                        </tr>
+                    `;
+                }
+            }).join('');
+
+            const previewHtml = `
+                <div class="text-start">
+                    <p class="small text-muted mb-2">系統已自動比對課程名稱，請確認以下變更：</p>
+                    <div class="table-responsive" style="max-height: 300px; overflow-y: auto;">
+                        <table class="table table-sm table-bordered align-middle">
+                            <thead class="table-light sticky-top">
+                                <tr>
+                                    <th width="15%">動作</th>
+                                    <th>課程比對 (OCR ⮕ 系統)</th>
+                                    <th width="20%" class="text-end">成績</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${tableRows}
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="form-check mt-2">
+                        <input class="form-check-input" type="checkbox" id="onlyUpdateCheck">
+                        <label class="form-check-label small" for="onlyUpdateCheck">
+                            僅執行「更新」操作 (忽略新增課程)
+                        </label>
+                    </div>
+                </div>
+            `;
+
+            // 3. 顯示預覽並確認
+            Swal.fire({
+                title: `識別出 ${ocrCourses.length} 筆課程`,
+                html: previewHtml,
+                icon: 'info',
+                showCancelButton: true,
+                confirmButtonText: '確認匯入',
+                cancelButtonText: '取消',
+                width: '600px'
+            }).then((result) => {
+                if (!result.isConfirmed) return;
+
+                const onlyUpdate = document.getElementById('onlyUpdateCheck').checked;
+                let updatedCount = 0;
+                let newCount = 0;
+
+                matchResults.forEach(item => {
+                    const { ocrCourse, matchIndex, action } = item;
+
+                    if (action === 'update') {
+                        // 更新現有
                         if (ocrCourse.grade && ocrCourse.grade.toLowerCase() !== 'null') {
-                             const originalName = allCoursesData[bestMatchIndex].name;
-                             
-                             // 如果相似度不是 100%，可以在 console log 顯示匹配結果供除錯
-                             if (bestSimilarity < 1) {
-                                console.log(`🔗 模糊匹配成功: OCR[${ocrCourse.name}] -> DB[${originalName}] (相似度: ${bestSimilarity.toFixed(2)})`);
-                             }
-
-                             allCoursesData[bestMatchIndex].grade = ocrCourse.grade;
-                             if (ocrCourse.credits) allCoursesData[bestMatchIndex].credits = ocrCourse.credits;
-                             allCoursesData[bestMatchIndex].isNotTaken = false; 
-                             updatedCount++;
+                            allCoursesData[matchIndex].grade = ocrCourse.grade;
+                            if (ocrCourse.credits) allCoursesData[matchIndex].credits = ocrCourse.credits;
+                            allCoursesData[matchIndex].isNotTaken = false;
+                            updatedCount++;
                         }
-                    } else {
-                        // 如果選擇「更新現有 + 新增未知」，才新增
-                        if (!onlyUpdateExisting) {
-                            allCoursesData.push(ocrCourse);
-                            newCount++;
-                        }
+                    } else if (action === 'add' && !onlyUpdate) {
+                        // 新增
+                        allCoursesData.push(ocrCourse);
+                        newCount++;
                     }
                 });
 
@@ -4602,9 +4707,8 @@
                 renderPagination();
                 saveFormData(); 
 
-                Swal.fire('匯入完成', `更新現有課程: ${updatedCount} 筆<br>新增額外課程: ${newCount} 筆`, 'success');
+                Swal.fire('匯入完成', `更新現有: ${updatedCount} 筆<br>新增課程: ${newCount} 筆`, 'success');
                 
-                // 捲動到表格
                 const table = document.querySelector('table');
                 if(table) table.scrollIntoView({ behavior: 'smooth' });
             });
@@ -4655,6 +4759,29 @@
                     return;
                 }
 
+                // 🟢 [新增] 執行前先顯示免責聲明彈窗
+                const disclaimerResult = await Swal.fire({
+                    title: '即將開始 AI 辨識',
+                    html: `
+                        <div class="text-start">
+                            <p class="mb-2">您即將使用 AI 自動辨識成績單功能。請注意：</p>
+                            <ul class="mb-0 small text-muted">
+                                <li><strong>辨識結果僅供參考</strong>：準確度受圖片清晰度影響。</li>
+                                <li><strong>需人工核對</strong>：請務必檢查並修正辨識出的成績。</li>
+                                <li><strong>非正式證明</strong>：此功能僅輔助輸入，不代表學校正式紀錄。</li>
+                            </ul>
+                        </div>
+                    `,
+                    icon: 'info',
+                    showCancelButton: true,
+                    confirmButtonText: '了解並開始辨識',
+                    cancelButtonText: '取消',
+                    reverseButtons: true,
+                    confirmButtonColor: '#0d6efd'
+                });
+
+                if (!disclaimerResult.isConfirmed) return;
+
                 const file = transcriptFile.files[0];
                 const formData = new FormData();
                 formData.append('image', file);
@@ -4662,7 +4789,7 @@
                 // 顯示 Loading
                 const originalBtnContent = btnTranscriptOcr.innerHTML;
                 btnTranscriptOcr.disabled = true;
-                btnTranscriptOcr.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> 辨識中...';
+                btnTranscriptOcr.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> 🚀 上傳圖片中...';
                 resultContainer.classList.add('d-none');
                 
                 // 清除舊的匯入按鈕
@@ -4670,6 +4797,13 @@
                 if (oldBtn) oldBtn.remove();
 
                 try {
+                    // 模擬第二階段提示 (因為 fetch 無法中途更新，這裡用 timeout 模擬 UX)
+                    setTimeout(() => {
+                        if(btnTranscriptOcr.disabled) { // 確保還在處理中
+                            btnTranscriptOcr.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> 🧠 AI 正在分析...';
+                        }
+                    }, 1500);
+
                     const response = await fetch('/api/student/image_recognize', {
                         method: 'POST',
                         body: formData
@@ -4680,14 +4814,9 @@
                     if (data.success) {
                         resultContainer.classList.remove('d-none');
                         
-                        let msg = '';
-                        if (data.text && data.text.trim()) {
-                             msg = data.text;
-                        } else {
-                             msg = '(未偵測到明顯文字)';
-                        }
-
-                        // 判斷是否為「無法辨識」
+                        let msg = data.text && data.text.trim() ? data.text : '(未偵測到明顯文字)';
+                        
+                        // Check for failure keywords
                         if (msg.includes('無法辨識') || msg.includes('請重新拍攝')) {
                             Swal.fire({
                                 title: '圖片無法辨識',
@@ -4699,28 +4828,54 @@
                             resultContent.innerHTML = `<div class="alert alert-warning"><i class="bi bi-exclamation-triangle"></i> AI 無法辨識此圖片，請嘗試重新拍攝上傳。</div>`;
                             return; // 終止後續處理
                         }
+
+                        // Build Split View HTML
+                        const imageUrl = URL.createObjectURL(file); // Create URL for the uploaded file
                         
-                        // 使用 marked 解析 Markdown
+                        let resultHtml = '';
                         if (typeof marked !== 'undefined') {
-                             resultContent.innerHTML = marked.parse(msg);
+                            resultHtml = marked.parse(msg);
                         } else {
-                             resultContent.innerText = msg; // Fallback
+                            resultHtml = msg;
                         }
 
-                        // 顯示信心度與免責聲明
+                        // Confidence & Disclaimer
                         const confidence = data.confidence ? Math.round(data.confidence) : '未知';
                         const disclaimerHtml = `
                             <div class="mt-3 pt-3 border-top">
                                 <div class="d-flex justify-content-between align-items-center mb-2">
                                     <small class="text-muted"><i class="bi bi-robot"></i> AI 信心度：<span class="badge ${confidence >= 80 ? 'bg-success' : (confidence >= 60 ? 'bg-warning' : 'bg-danger')}">${confidence}%</span></small>
-                                </div>
-                                <div class="alert alert-light border small text-muted mb-0">
-                                    <i class="bi bi-info-circle"></i> <strong>免責聲明：</strong>
-                                    AI 辨識結果僅供參考，可能因圖片清晰度或格式而有誤差。請務必核對原始成績單，如有錯誤請手動修正。
+                                    <a href="#" class="small text-muted text-decoration-none" id="show-ocr-disclaimer"><i class="bi bi-info-circle"></i> 免責聲明</a>
                                 </div>
                             </div>
                         `;
-                        resultContent.insertAdjacentHTML('beforeend', disclaimerHtml);
+
+                        // Combine into split view
+                        resultContent.innerHTML = `
+                            <div class="ocr-split-container">
+                                <div class="ocr-image-panel">
+                                    <img src="${imageUrl}" alt="Uploaded Transcript" class="img-fluid">
+                                </div>
+                                <div class="ocr-result-panel">
+                                    <div id="ocr-markdown-content">${resultHtml}</div>
+                                    ${disclaimerHtml}
+                                </div>
+                            </div>
+                        `;
+
+                        // 綁定免責聲明點擊事件
+                        const disclaimerLink = document.getElementById('show-ocr-disclaimer');
+                        if (disclaimerLink) {
+                            disclaimerLink.addEventListener('click', function(e) {
+                                e.preventDefault();
+                                Swal.fire({
+                                    title: '免責聲明',
+                                    html: 'AI 辨識結果僅供參考，可能因圖片清晰度、拍攝角度或檔案格式而有誤差。<br><br><strong>請務必核對原始成績單，如有錯誤請手動修正。</strong><br><br>本系統不保證辨識內容的完全正確性。',
+                                    icon: 'info',
+                                    confirmButtonText: '我了解了'
+                                });
+                            });
+                        }
                         
                         // 簡單的表格樣式美化與分頁
                         const tables = resultContent.querySelectorAll('table');
@@ -4736,13 +4891,21 @@
                             importBtn.id = 'btn-import-ocr-courses';
                             importBtn.className = 'btn btn-success btn-sm mt-3 w-100';
                             importBtn.innerHTML = `<i class="bi bi-file-earmark-arrow-up"></i> 識別出 ${parsedCourses.length} 筆成績，點此匯入至上方「已修習專業核心科目」表格`;
-                            importBtn.onclick = () => importOcrCourses(parsedCourses);
-                            // 插入在免責聲明之前
-                            const disclaimerDiv = resultContent.lastElementChild; 
-                            if (disclaimerDiv && disclaimerDiv.classList.contains('mt-3')) {
-                                resultContent.insertBefore(importBtn, disclaimerDiv);
-                            } else {
-                                resultContent.appendChild(importBtn);
+                            importBtn.onclick = () => importOcrCourses_v2(parsedCourses);
+                            
+                            // Insert button before disclaimer logic (modified for split view)
+                            // In split view, disclaimer is inside .ocr-result-panel
+                            const resultPanel = resultContent.querySelector('.ocr-result-panel');
+                            if (resultPanel) {
+                                 // Find the disclaimer div
+                                 // The disclaimerHtml structure is <div class="mt-3 pt-3 border-top">...</div>
+                                 // It is the last child of resultPanel based on my construction above.
+                                 const disclaimerDiv = resultPanel.lastElementChild;
+                                 if (disclaimerDiv && disclaimerDiv.classList.contains('border-top')) {
+                                     resultPanel.insertBefore(importBtn, disclaimerDiv);
+                                 } else {
+                                     resultPanel.appendChild(importBtn);
+                                 }
                             }
                         }
 
@@ -4760,6 +4923,158 @@
             });
         }
     });
+
+
+        // 🟢 [升級版] 匯入 OCR 課程資料 (含智慧比對預覽)
+        function importOcrCourses_v2(ocrCourses) {
+            // 1. 預先計算比對結果
+            const matchResults = ocrCourses.map(ocrCourse => {
+                let bestMatchIndex = -1;
+                let bestSimilarity = 0;
+                const SIMILARITY_THRESHOLD = 0.6; // 相似度門檻
+
+                // 尋找最佳匹配
+                allCoursesData.forEach((course, index) => {
+                    const similarity = calculateSimilarity(course.name, ocrCourse.name);
+                    if (similarity > bestSimilarity) {
+                        bestSimilarity = similarity;
+                        bestMatchIndex = index;
+                    }
+                });
+
+                const isMatch = bestMatchIndex > -1 && bestSimilarity >= SIMILARITY_THRESHOLD;
+                return {
+                    ocrCourse,
+                    matchIndex: bestMatchIndex,
+                    matchName: isMatch ? allCoursesData[bestMatchIndex].name : null,
+                    similarity: bestSimilarity,
+                    action: isMatch ? 'update' : 'add'
+                };
+            });
+
+            // 2. 建構預覽表格 HTML
+            let tableRows = matchResults.map(item => {
+                const score = Math.round(item.similarity * 100);
+                
+                if (item.action === 'update') {
+                    return `
+                        <tr>
+                            <td class="text-center"><span class="badge bg-success">更新</span></td>
+                            <td>
+                                <div>${item.ocrCourse.name}</div>
+                                <div class="small text-muted">⬇ 比對成功 (${score}%)</div>
+                                <div><strong>${item.matchName}</strong></div>
+                            </td>
+                            <td class="text-end">
+                                <span class="text-decoration-line-through text-muted small">${allCoursesData[item.matchIndex].grade || '-'}</span>
+                                <br>
+                                <strong class="text-primary">${item.ocrCourse.grade}</strong>
+                            </td>
+                        </tr>
+                    `;
+                } else {
+                    return `
+                        <tr>
+                            <td class="text-center"><span class="badge bg-primary">新增</span></td>
+                            <td>${item.ocrCourse.name}</td>
+                            <td class="text-end"><strong>${item.ocrCourse.grade}</strong></td>
+                        </tr>
+                    `;
+                }
+            }).join('');
+
+            const previewHtml = `
+                <div class="text-start">
+                    <p class="small text-muted mb-2">系統已自動比對課程名稱，請確認以下變更：</p>
+                    <div class="table-responsive" style="max-height: 300px; overflow-y: auto;">
+                        <table class="table table-sm table-bordered align-middle">
+                            <thead class="table-light sticky-top">
+                                <tr>
+                                    <th width="15%">動作</th>
+                                    <th>課程比對 (OCR ⮕ 系統)</th>
+                                    <th width="20%" class="text-end">成績</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${tableRows}
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="form-check mt-2">
+                        <input class="form-check-input" type="checkbox" id="onlyUpdateCheck">
+                        <label class="form-check-label small" for="onlyUpdateCheck">
+                            僅執行「更新」操作 (忽略新增課程)
+                        </label>
+                    </div>
+                </div>
+            `;
+
+            // 3. 顯示預覽並確認
+            Swal.fire({
+                title: `識別出 ${ocrCourses.length} 筆課程`,
+                html: previewHtml,
+                icon: 'info',
+                showCancelButton: true,
+                confirmButtonText: '確認匯入',
+                cancelButtonText: '取消',
+                width: '600px'
+            }).then((result) => {
+                if (!result.isConfirmed) return;
+
+                const onlyUpdate = document.getElementById('onlyUpdateCheck').checked;
+                let updatedCount = 0;
+                let newCount = 0;
+
+                matchResults.forEach(item => {
+                    const { ocrCourse, matchIndex, action } = item;
+
+                    if (action === 'update') {
+                        // 更新現有
+                        if (ocrCourse.grade && ocrCourse.grade.toLowerCase() !== 'null') {
+                            allCoursesData[matchIndex].grade = ocrCourse.grade;
+                            if (ocrCourse.credits) allCoursesData[matchIndex].credits = ocrCourse.credits;
+                            allCoursesData[matchIndex].isNotTaken = false;
+                            updatedCount++;
+                        }
+                    } else if (action === 'add' && !onlyUpdate) {
+                        // 新增
+                        allCoursesData.push(ocrCourse);
+                        newCount++;
+                    }
+                });
+
+                // 重新排序與渲染
+                allCoursesData.sort((a, b) => a.name.localeCompare(b.name, 'zh-TW', { sensitivity: 'base' }));
+                filteredCoursesCache = [...allCoursesData];
+                currentPage = 1;
+                renderPagedCourses();
+                renderPagination();
+                saveFormData(); 
+
+                Swal.fire('匯入完成', `更新現有: ${updatedCount} 筆<br>新增課程: ${newCount} 筆`, 'success');
+                
+                // Highlight updated rows
+                const table = document.querySelector('table');
+                if(table) {
+                    table.scrollIntoView({ behavior: 'smooth' });
+                    
+                    const rows = table.querySelectorAll('tbody tr');
+                    rows.forEach(row => {
+                        const nameCell = row.cells[1]; // Assuming 2nd column is name
+                        if (nameCell) {
+                            const name = nameCell.textContent.trim();
+                            // Check if this name was in ocrCourses that were matched/added
+                            const wasUpdated = ocrCourses.some(ocr => calculateSimilarity(ocr.name, name) >= 0.8); // approximate check
+                            if (wasUpdated) {
+                                row.classList.add('table-row-highlight');
+                                setTimeout(() => row.classList.remove('table-row-highlight'), 3000);
+                            }
+                        }
+                    });
+                }
+            });
+        }
+        
 
   </script>
 
