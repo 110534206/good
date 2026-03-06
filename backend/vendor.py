@@ -4517,7 +4517,7 @@ def _get_vendor_own_company_ids(cursor, vendor_id):
     """
     取得「廠商自己所屬公司」的 company_id，只回傳一間公司，僅顯示該公司實習生。
     優先：internship_companies.vendor_id = vendor_id 或 company_vendor_relations；
-    若無則不沿用多公司，回傳空（請在後台設定公司與廠商對應，否則不顯示名單）。
+    若無則取指導老師底下第一間公司。
     """
     try:
         cursor.execute("""
@@ -4540,7 +4540,10 @@ def _get_vendor_own_company_ids(cursor, vendor_id):
             return [row["company_id"]]
     except Exception:
         pass
-    # 不再用「指導老師底下第一間公司」當 fallback，避免 A 廠商看到 B 公司（碩方看到卓航、艾訊/威策看到優捷勝等）
+    # 若未設定 vendor_id / company_vendor_relations，僅取指導老師底下「第一間」公司，只顯示該公司實習生（不顯示其他公司）
+    _, companies, _ = _get_vendor_scope(cursor, vendor_id)
+    if companies:
+        return [companies[0]["id"]]
     return []
 
 
@@ -4560,7 +4563,7 @@ def get_withdraw_intern_list():
         if not company_ids:
             cursor.close()
             conn.close()
-            return jsonify({"success": False, "message": "找不到廠商所屬的公司"}), 403
+            return jsonify({"success": True, "data": [], "message": "尚無所屬公司，請聯絡管理員設定廠商與公司的對應。"})
         placeholders = ",".join(["%s"] * len(company_ids))
         current_semester_id = get_current_semester_id(cursor)
         args = list(company_ids)

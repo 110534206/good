@@ -4705,31 +4705,17 @@ def second_round_status():
 
 
 def _vendor_company_ids_for_second_round(cursor, vendor_id):
-    """Get company IDs this vendor account can manage: only companies linked to this vendor (vendor_id or company_vendor_relations), not all companies under the same teacher."""
-    # 1. Companies where internship_companies.vendor_id = this vendor
-    try:
-        cursor.execute(
-            "SELECT id FROM internship_companies WHERE status = 'approved' AND vendor_id = %s ORDER BY company_name",
-            (vendor_id,),
-        )
-        rows = cursor.fetchall() or []
-        if rows:
-            return [r["id"] for r in rows]
-    except Exception:
-        pass
-    # 2. Companies linked via company_vendor_relations
-    try:
-        cursor.execute(
-            "SELECT company_id FROM company_vendor_relations WHERE vendor_id = %s ORDER BY company_id",
-            (vendor_id,),
-        )
-        rows = cursor.fetchall() or []
-        if rows:
-            return [r["company_id"] for r in rows]
-    except Exception:
-        pass
-    # 不再用「指導老師底下第一間公司」當 fallback，避免 A 廠商看到 B 公司（如威策看到優捷勝）
-    return []
+    """Get company IDs the vendor can manage (via teacher_id -> advisor_user_id, all companies under same teacher)."""
+    cursor.execute("SELECT teacher_id FROM users WHERE id = %s AND role = 'vendor'", (vendor_id,))
+    row = cursor.fetchone()
+    if not row or not row.get("teacher_id"):
+        return []
+    teacher_id = row["teacher_id"]
+    cursor.execute(
+        "SELECT id FROM internship_companies WHERE advisor_user_id = %s AND status = 'approved' ORDER BY company_name",
+        (teacher_id,),
+    )
+    return [r["id"] for r in (cursor.fetchall() or [])]
 
 
 # =========================================================
