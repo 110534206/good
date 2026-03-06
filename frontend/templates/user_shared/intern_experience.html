@@ -325,7 +325,8 @@ body {
       <div class="tab-pane fade" id="my-experiences" role="tabpanel" aria-labelledby="my-tab">
         <div class="filter-card"><div class="row g-3">
           <div class="col-md-12 text-end">
-            <button class="btn btn-success" data-bs-toggle="modal" data-bs-target="#addModal">+ 上傳心得</button>
+            <button id="btnAddExperience" class="btn btn-success" data-bs-toggle="modal" data-bs-target="#addModal">+ 上傳心得</button>
+            <p id="withdrawnNotice" class="text-muted mb-0 mt-2" style="display: none;">您已退實習，無法新增心得；以下為既有心得（僅供檢視）。</p>
           </div>
         </div></div>
         <div id="myExperienceList" class="row g-3 mt-3"></div>
@@ -421,6 +422,8 @@ body {
     
     // 儲存學生的錄取資訊
     let studentAdmissionInfo = null;
+    // 是否已退實習（退實習後不可新增心得，既有心得唯讀）
+    let isWithdrawn = false;
     
     // 分頁狀態
     let allExperiencesPage = 1;
@@ -450,9 +453,11 @@ body {
         const data = await res.json();
         if (!data.success) throw new Error(data.message || '查詢失敗');
         
+        isWithdrawn = data.is_withdrawn === true;
         studentAdmissionInfo = {
           admission: data.admission,
-          final_preference: data.final_preference
+          final_preference: data.final_preference,
+          is_withdrawn: isWithdrawn
         };
         
         return studentAdmissionInfo;
@@ -543,7 +548,15 @@ body {
         
         if (!admissionInfo || !admissionInfo.admission) {
           // 如果沒有錄取資訊，顯示提示
-          document.getElementById('company_name_display').value = '您尚未有錄取紀錄，無法新增心得';
+          document.getElementById('company_name_display').value = admissionInfo && admissionInfo.is_withdrawn ? '您已退實習，無法新增心得' : '您尚未有錄取紀錄，無法新增心得';
+          document.getElementById('company_id').value = '';
+          document.getElementById('job_title_display').value = '';
+          document.getElementById('job_id').value = '';
+          document.getElementById('year').value = '';
+          return;
+        }
+        if (admissionInfo.is_withdrawn) {
+          document.getElementById('company_name_display').value = '您已退實習，無法新增心得';
           document.getElementById('company_id').value = '';
           document.getElementById('job_title_display').value = '';
           document.getElementById('job_id').value = '';
@@ -793,7 +806,7 @@ body {
                 is_rejected: item.is_rejected
               });
             }
-            renderExperienceCard(item, list, true); // 在「我的心得」分頁中，所有心得都顯示刪除按鈕
+            renderExperienceCard(item, list, !isWithdrawn); // 已退實習時不顯示刪除按鈕（唯讀）
           });
           
           // 渲染分頁控件
@@ -1079,7 +1092,14 @@ body {
     }
 
     // 初始載入
-    window.onload = function () {
+    window.onload = async function () {
+      const admissionInfo = await loadStudentAdmission();
+      const btnAdd = document.getElementById('btnAddExperience');
+      const withdrawnNotice = document.getElementById('withdrawnNotice');
+      if (isWithdrawn && btnAdd && withdrawnNotice) {
+        btnAdd.style.display = 'none';
+        withdrawnNotice.style.display = 'block';
+      }
       loadCompanies();
       loadExperiences();
     };

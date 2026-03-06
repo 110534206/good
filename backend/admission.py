@@ -300,6 +300,19 @@ def get_my_admission():
     cursor = conn.cursor(dictionary=True)
     
     try:
+        # 檢查是否已被退實習（internship_records 有 withdrawing 或 confirmed）
+        is_withdrawn = False
+        try:
+            cursor.execute("""
+                SELECT 1 FROM internship_records
+                WHERE student_id = %s AND status IN ('withdrawing', 'confirmed')
+                LIMIT 1
+            """, (student_id,))
+            if cursor.fetchone():
+                is_withdrawn = True
+        except Exception:
+            pass
+        
         # 從 internship_offers 表獲取錄取資料（正式錄取結果）
         # 若已執行 migration 新增 semester_id，可於 SELECT 中加入 io.semester_id AS offer_semester_id，以對應實習學期
         cursor.execute("""
@@ -678,6 +691,9 @@ def get_my_admission():
                 return jsonify({
                     "success": True,
                     "admission": None,
+                    "final_preference": None,
+                    "experiences": [],
+                    "is_withdrawn": is_withdrawn,
                     "message": "目前尚未錄取任何實習公司"
                 })
             
@@ -925,7 +941,8 @@ def get_my_admission():
             "success": True,
             "admission": admission,
             "final_preference": final_preference,
-            "experiences": experiences
+            "experiences": experiences,
+            "is_withdrawn": is_withdrawn
         })
     
     except Exception as e:
