@@ -4540,10 +4540,7 @@ def _get_vendor_own_company_ids(cursor, vendor_id):
             return [row["company_id"]]
     except Exception:
         pass
-    # 若未設定 vendor_id / company_vendor_relations，僅取指導老師底下「第一間」公司，只顯示該公司實習生（不顯示其他公司）
-    _, companies, _ = _get_vendor_scope(cursor, vendor_id)
-    if companies:
-        return [companies[0]["id"]]
+    # 不再用「指導老師底下第一間公司」當 fallback，避免 A 廠商看到 B 公司（碩方看到卓航、艾訊/威策看到優捷勝等）
     return []
 
 
