@@ -283,14 +283,44 @@ def record_admission():
         if not advisor:
             return jsonify({"success": False, "message": "找不到該指導老師"}), 404
         
-        # 3. 獲取當前學期（代碼與 ID）
+        # 3. 如果 job_id 為 NULL，嘗試從 student_preferences 或 student_job_applications 獲取
+        if not job_id:
+            # 優先從 student_preferences 獲取（根據 company_id 和 preference_order）
+            if preference_order:
+                cursor.execute("""
+                    SELECT job_id
+                    FROM student_preferences
+                    WHERE student_id = %s AND company_id = %s AND preference_order = %s
+                    ORDER BY submitted_at DESC
+                    LIMIT 1
+                """, (student_id, company_id, preference_order))
+                pref_result = cursor.fetchone()
+                if pref_result and pref_result.get('job_id'):
+                    job_id = pref_result.get('job_id')
+                    print(f"✅ [DEBUG] 從 student_preferences 獲取 job_id: {job_id}")
+            
+            # 如果還是沒有 job_id，從 student_job_applications 獲取
+            if not job_id:
+                cursor.execute("""
+                    SELECT job_id
+                    FROM student_job_applications
+                    WHERE student_id = %s AND company_id = %s
+                    ORDER BY applied_at DESC
+                    LIMIT 1
+                """, (student_id, company_id))
+                sja_result = cursor.fetchone()
+                if sja_result and sja_result.get('job_id'):
+                    job_id = sja_result.get('job_id')
+                    print(f"✅ [DEBUG] 從 student_job_applications 獲取 job_id: {job_id}")
+        
+        # 4. 獲取當前學期（代碼與 ID）
         semester_code = get_current_semester_code(cursor)
         current_semester_id = get_current_semester_id(cursor)
         if not semester_code and not current_semester_id:
             return jsonify({"success": False, "message": "目前沒有設定當前學期"}), 400
         current_datetime_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         
-        # 3.1 偵測 teacher_student_relations 表是否有 semester_id 或 semester 欄位
+        # 4.1 偵測 teacher_student_relations 表是否有 semester_id 或 semester 欄位
         cursor.execute("""
             SELECT COLUMN_NAME FROM information_schema.COLUMNS
             WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'teacher_student_relations'
@@ -301,7 +331,7 @@ def record_admission():
         has_semester = 'semester' in tsr_columns
         has_company_id = 'company_id' in tsr_columns
         
-        # 4. 檢查是否已經存在該關係（避免重複）
+        # 5. 檢查是否已經存在該關係（避免重複）
         if has_semester_id and current_semester_id:
             cursor.execute("""
                 SELECT id FROM teacher_student_relations
@@ -355,7 +385,20 @@ def record_admission():
                     VALUES (%s, %s, '指導老師', NOW())
                 """, (advisor_user_id, student_id))
         
-        # 6. 在 internship_offers 表中記錄錄取結果 (新增的邏輯)
+        # 6. 確保 job_id 不為 NULL（如果還是 NULL，嘗試從 internship_jobs 獲取該公司的第一個職缺）
+        if not job_id:
+            cursor.execute("""
+                SELECT id FROM internship_jobs
+                WHERE company_id = %s AND is_active = 1
+                ORDER BY id ASC
+                LIMIT 1
+            """, (company_id,))
+            job_result = cursor.fetchone()
+            if job_result and job_result.get('id'):
+                job_id = job_result.get('id')
+                print(f"✅ [DEBUG] 從 internship_jobs 獲取該公司的第一個職缺 job_id: {job_id}")
+        
+        # 7. 在 internship_offers 表中記錄錄取結果 (新增的邏輯)
         # 這是 get_my_admission API 優先讀取的資料來源
         print(f"🔍 [DEBUG] record_admission - 準備寫入 internship_offers: student_id={student_id}, job_id={job_id}")
         
@@ -391,8 +434,12 @@ def record_admission():
             """, (student_id, job_id, 'accepted', current_datetime_str, current_datetime_str))
             inserted_id = cursor.lastrowid
             print(f"✅ [DEBUG] 插入新 internship_offers 記錄: id={inserted_id}, student_id={student_id}, job_id={job_id}")
+        
+        # 如果 job_id 仍然為 NULL，記錄警告
+        if not job_id:
+            print(f"⚠️ [WARNING] internship_offers 記錄的 job_id 為 NULL，這可能導致 withdraw_intern_list 無法正確顯示")
             
-        # 7. 更新學生的志願序狀態
+        # 8. 更新學生的志願序狀態
         if preference_order:
             cursor.execute("""
                 UPDATE student_preferences

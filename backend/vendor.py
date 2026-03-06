@@ -4515,36 +4515,44 @@ def test_email():
 
 def _get_vendor_own_company_ids(cursor, vendor_id):
     """
-    取得「廠商自己所屬公司」的 company_id，只回傳一間公司，僅顯示該公司實習生。
+    取得「廠商自己所屬公司」的 company_id，回傳該廠商（通過指導老師）對接的所有公司。
     優先：internship_companies.vendor_id = vendor_id 或 company_vendor_relations；
-    若無則不沿用多公司，回傳空（請在後台設定公司與廠商對應，否則不顯示名單）。
+    若無則通過指導老師獲取所有對接的公司（與 vendor_matching_results 邏輯一致）。
     """
+    company_ids = []
+    
+    # 1. 優先從 internship_companies.vendor_id 獲取
     try:
         cursor.execute("""
             SELECT id FROM internship_companies
             WHERE status = 'approved' AND vendor_id = %s
-            LIMIT 1
         """, (vendor_id,))
-        row = cursor.fetchone()
-        if row:
-            return [row["id"]]
+        rows = cursor.fetchall()
+        if rows:
+            company_ids.extend([row["id"] for row in rows])
     except Exception:
         pass
-    try:
-        cursor.execute("""
-            SELECT company_id FROM company_vendor_relations WHERE vendor_id = %s
-            LIMIT 1
-        """, (vendor_id,))
-        row = cursor.fetchone()
-        if row:
-            return [row["company_id"]]
-    except Exception:
-        pass
-    # 若未設定 vendor_id / company_vendor_relations，僅取指導老師底下「第一間」公司，只顯示該公司實習生（不顯示其他公司）
-    _, companies, _ = _get_vendor_scope(cursor, vendor_id)
-    if companies:
-        return [companies[0]["id"]]
-    return []
+    
+    # 2. 從 company_vendor_relations 獲取
+    if not company_ids:
+        try:
+            cursor.execute("""
+                SELECT company_id FROM company_vendor_relations WHERE vendor_id = %s
+            """, (vendor_id,))
+            rows = cursor.fetchall()
+            if rows:
+                company_ids.extend([row["company_id"] for row in rows])
+        except Exception:
+            pass
+    
+    # 3. 若未設定 vendor_id / company_vendor_relations，通過指導老師獲取所有對接的公司
+    if not company_ids:
+        _, companies, _ = _get_vendor_scope(cursor, vendor_id)
+        if companies:
+            company_ids.extend([c["id"] for c in companies])
+    
+    # 去重並返回
+    return list(set(company_ids)) if company_ids else []
 
 
 # =========================================================
@@ -4566,40 +4574,100 @@ def get_withdraw_intern_list():
             return jsonify({"success": False, "message": "找不到廠商所屬的公司"}), 403
         placeholders = ",".join(["%s"] * len(company_ids))
         current_semester_id = get_current_semester_id(cursor)
-        args = list(company_ids)
+        
+        # 簡化查詢：直接從 internship_offers 和 internship_jobs 獲取資料
+        # 因為 record_admission 已經確保 job_id 不為 NULL，所以可以直接 JOIN
         if current_semester_id is not None:
-            args.insert(0, current_semester_id)
             status_sql = """
             SELECT io.student_id,
-                   u.name AS student_name, u.username AS student_number,
-                   ic.company_name, ij.title AS job_title,
+                   u.name AS student_name, 
+                   u.username AS student_number,
+                   ic.company_name, 
+                   COALESCE(ij.title, '未指定職缺') AS job_title,
                    CASE WHEN ir.student_id IS NOT NULL THEN 'withdrawing' ELSE COALESCE(io.status, '') END AS status
             FROM internship_offers io
             JOIN users u ON u.id = io.student_id
-            JOIN internship_jobs ij ON ij.id = io.job_id
-            JOIN internship_companies ic ON ic.id = ij.company_id
+            LEFT JOIN internship_jobs ij ON ij.id = io.job_id
+            LEFT JOIN internship_companies ic ON ic.id = ij.company_id
             LEFT JOIN internship_records ir
                    ON ir.student_id = io.student_id
                   AND ir.semester_id = %s
                   AND ir.company_id = ic.id
-            WHERE ij.company_id IN (""" + placeholders + """)
-            ORDER BY ic.company_name, ij.title, u.name
+            WHERE io.status = 'accepted'
+              AND ic.id IN (""" + placeholders + """)
+            ORDER BY ic.company_name, COALESCE(ij.title, '未指定職缺'), u.name
             """
+            args = [current_semester_id] + company_ids
         else:
             status_sql = """
             SELECT io.student_id,
-                   u.name AS student_name, u.username AS student_number,
-                   ic.company_name, ij.title AS job_title,
+                   u.name AS student_name, 
+                   u.username AS student_number,
+                   ic.company_name, 
+                   COALESCE(ij.title, '未指定職缺') AS job_title,
                    COALESCE(io.status, '') AS status
             FROM internship_offers io
             JOIN users u ON u.id = io.student_id
-            JOIN internship_jobs ij ON ij.id = io.job_id
-            JOIN internship_companies ic ON ic.id = ij.company_id
-            WHERE ij.company_id IN (""" + placeholders + """)
-            ORDER BY ic.company_name, ij.title, u.name
+            LEFT JOIN internship_jobs ij ON ij.id = io.job_id
+            LEFT JOIN internship_companies ic ON ic.id = ij.company_id
+            WHERE io.status = 'accepted'
+              AND ic.id IN (""" + placeholders + """)
+            ORDER BY ic.company_name, COALESCE(ij.title, '未指定職缺'), u.name
             """
+            args = company_ids
         cursor.execute(status_sql, args)
         rows = cursor.fetchall()
+        
+        # 調試信息：記錄查詢結果
+        print(f"🔍 [withdraw_intern_list] vendor_id={vendor_id}, company_ids={company_ids}, found {len(rows)} records")
+        if len(rows) == 0:
+            # 檢查是否有任何 internship_offers 記錄
+            cursor.execute("""
+                SELECT COUNT(*) as count
+                FROM internship_offers io
+                WHERE io.status = 'accepted'
+            """)
+            total_offers = cursor.fetchone()
+            print(f"⚠️ [withdraw_intern_list] 總共有 {total_offers.get('count', 0) if total_offers else 0} 筆 accepted 的 internship_offers 記錄")
+            
+            # 檢查所有 accepted 的 internship_offers 記錄及其對應的公司
+            cursor.execute("""
+                SELECT io.id, io.student_id, io.job_id, io.status,
+                       ij.company_id, ic.company_name
+                FROM internship_offers io
+                LEFT JOIN internship_jobs ij ON ij.id = io.job_id
+                LEFT JOIN internship_companies ic ON ic.id = ij.company_id
+                WHERE io.status = 'accepted'
+                LIMIT 10
+            """)
+            all_offers = cursor.fetchall()
+            print(f"⚠️ [withdraw_intern_list] accepted 的 internship_offers 記錄詳情：")
+            for offer in all_offers:
+                company_id = offer.get('company_id')
+                is_match = company_id in company_ids if company_id else False
+                print(f"   - id={offer.get('id')}, student_id={offer.get('student_id')}, job_id={offer.get('job_id')}, company_id={company_id}, company_name={offer.get('company_name')}, 是否匹配={is_match}")
+            
+            # 檢查是否有該公司的 internship_jobs
+            cursor.execute("""
+                SELECT COUNT(*) as count
+                FROM internship_jobs ij
+                WHERE ij.company_id IN (""" + placeholders + """)
+            """, company_ids)
+            total_jobs = cursor.fetchone()
+            print(f"⚠️ [withdraw_intern_list] 該公司有 {total_jobs.get('count', 0) if total_jobs else 0} 個職缺")
+            
+            # 檢查該公司的所有職缺
+            cursor.execute("""
+                SELECT ij.id, ij.title, ij.company_id, ic.company_name
+                FROM internship_jobs ij
+                LEFT JOIN internship_companies ic ON ic.id = ij.company_id
+                WHERE ij.company_id IN (""" + placeholders + """)
+            """, company_ids)
+            company_jobs = cursor.fetchall()
+            print(f"⚠️ [withdraw_intern_list] 該公司的職缺詳情：")
+            for job in company_jobs:
+                print(f"   - job_id={job.get('id')}, title={job.get('title')}, company_id={job.get('company_id')}, company_name={job.get('company_name')}")
+        
         cursor.close()
         conn.close()
         return jsonify({"success": True, "data": rows})
