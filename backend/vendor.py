@@ -4515,13 +4515,14 @@ def test_email():
 
 def _get_vendor_own_company_ids(cursor, vendor_id):
     """
-    取得「廠商自己所屬公司」的 company_id，回傳該廠商（通過指導老師）對接的所有公司。
-    優先：internship_companies.vendor_id = vendor_id 或 company_vendor_relations；
-    若無則通過指導老師獲取所有對接的公司（與 vendor_matching_results 邏輯一致）。
+    取得「廠商自己所屬公司」的 company_id，回傳該廠商可操作的所有公司（聯集）。
+    與 confirm_matching 使用的廠商公司範圍一致，確保廠商在「確認媒合結果」後，
+    同一批實習生會出現在「廠商退實習生」名單中。
+    來源：(1) internship_companies.vendor_id (2) company_vendor_relations (3) 指導老師對接公司。
     """
     company_ids = []
     
-    # 1. 優先從 internship_companies.vendor_id 獲取
+    # 1. 從 internship_companies.vendor_id 獲取
     try:
         cursor.execute("""
             SELECT id FROM internship_companies
@@ -4534,24 +4535,22 @@ def _get_vendor_own_company_ids(cursor, vendor_id):
         pass
     
     # 2. 從 company_vendor_relations 獲取
-    if not company_ids:
-        try:
-            cursor.execute("""
-                SELECT company_id FROM company_vendor_relations WHERE vendor_id = %s
-            """, (vendor_id,))
-            rows = cursor.fetchall()
-            if rows:
-                company_ids.extend([row["company_id"] for row in rows])
-        except Exception:
-            pass
+    try:
+        cursor.execute("""
+            SELECT company_id FROM company_vendor_relations WHERE vendor_id = %s
+        """, (vendor_id,))
+        rows = cursor.fetchall()
+        if rows:
+            company_ids.extend([row["company_id"] for row in rows])
+    except Exception:
+        pass
     
-    # 3. 若未設定 vendor_id / company_vendor_relations，通過指導老師獲取所有對接的公司
-    if not company_ids:
-        _, companies, _ = _get_vendor_scope(cursor, vendor_id)
-        if companies:
-            company_ids.extend([c["id"] for c in companies])
+    # 3. 透過指導老師取得對接公司（與 vendor_matching_results / confirm_matching 一致）
+    _, companies, _ = _get_vendor_scope(cursor, vendor_id)
+    if companies:
+        company_ids.extend([c["id"] for c in companies])
     
-    # 去重並返回
+    # 去重並返回（聯集，確保三種來源的公司都會出現在退實習名單）
     return list(set(company_ids)) if company_ids else []
 
 
