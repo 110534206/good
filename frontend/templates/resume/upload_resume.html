@@ -4560,8 +4560,8 @@
                         let grade = rawCols[gradeIdx];
                         
                         // 簡單清理數據
-                        // 🟢 [修正] 如果學分包含米字號 (*)，則視為 0 學分
-                        if (credits && credits.includes('*')) {
+                        // 🟢 [修正] 如果學分或成績包含米字號 (*)，則視為 0 學分
+                        if ((credits && credits.includes('*')) || (grade && grade.includes('*'))) {
                             credits = '0';
                         } else if (credits) {
                             credits = credits.replace(/[^\d.]/g, ''); // 只留數字和小數點
