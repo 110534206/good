@@ -274,8 +274,7 @@ def record_admission():
         return jsonify({"success": False, "message": "請提供學生ID和公司ID"}), 400
     
     conn = get_db()
-    # 使用 buffered=True，避免前一次查詢有未讀取完的結果時，出現 "Unread result found" 錯誤
-    cursor = conn.cursor(dictionary=True, buffered=True)
+    cursor = conn.cursor(dictionary=True)
     
     try:
         # 1. 驗證學生和公司是否存在
@@ -4334,7 +4333,6 @@ def director_confirm_matching():
             if not student_id or not job_id:
                 continue
 
-            # 確保至多只回傳一筆，避免有重複紀錄時產生「Unread result found」
             cursor.execute("""
                 SELECT id FROM internship_offers
                 WHERE student_id = %s AND job_id = %s
@@ -4600,20 +4598,15 @@ def ta_confirm_matching():
             if not student_id or not company_id:
                 continue
 
-            # 主鍵查詢理論上只會有一筆，但加上 LIMIT 1 更保險
             cursor.execute("""
-                SELECT id, advisor_user_id FROM internship_companies
-                WHERE id = %s
-                LIMIT 1
+                SELECT id, advisor_user_id FROM internship_companies WHERE id = %s
             """, (company_id,))
             company_row = cursor.fetchone()
             if not company_row or not company_row.get('advisor_user_id'):
                 continue
             advisor_user_id = company_row['advisor_user_id']
             cursor.execute("""
-                SELECT id, name FROM users
-                WHERE id = %s AND role IN ('teacher', 'director')
-                LIMIT 1
+                SELECT id, name FROM users WHERE id = %s AND role IN ('teacher', 'director')
             """, (advisor_user_id,))
             if not cursor.fetchone():
                 continue
@@ -4621,7 +4614,6 @@ def ta_confirm_matching():
                 cursor.execute("""
                     SELECT id FROM teacher_student_relations
                     WHERE teacher_id = %s AND student_id = %s AND semester_id = %s
-                    LIMIT 1
                 """, (advisor_user_id, student_id, current_semester_id))
                 existing_tsr = cursor.fetchone()
                 if existing_tsr:
@@ -4639,7 +4631,6 @@ def ta_confirm_matching():
                 cursor.execute("""
                     SELECT id FROM teacher_student_relations
                     WHERE teacher_id = %s AND student_id = %s AND semester = %s
-                    LIMIT 1
                 """, (advisor_user_id, student_id, current_semester_code or ''))
                 existing_tsr = cursor.fetchone()
                 if existing_tsr:
@@ -4716,17 +4707,58 @@ def second_round_status():
 
 
 def _vendor_company_ids_for_second_round(cursor, vendor_id):
-    """Get company IDs the vendor can manage (via teacher_id -> advisor_user_id, all companies under same teacher)."""
+    """
+    Get company IDs this vendor can manage for second-round page.
+    Order: 1) internship_companies.vendor_id, 2) company_vendor_relations,
+    3) internship_jobs.created_by_vendor_id, 4) fallback one company under teacher.
+    So A company account only sees A company, not B (same teacher).
+    """
+    # 1) internship_companies.vendor_id
+    try:
+        cursor.execute(
+            "SELECT id FROM internship_companies WHERE status = 'approved' AND vendor_id = %s ORDER BY company_name",
+            (vendor_id,),
+        )
+        rows = cursor.fetchall() or []
+        if rows:
+            return [r["id"] for r in rows]
+    except Exception:
+        pass
+    # 2) company_vendor_relations
+    try:
+        cursor.execute(
+            "SELECT company_id FROM company_vendor_relations WHERE vendor_id = %s ORDER BY company_id",
+            (vendor_id,),
+        )
+        rows = cursor.fetchall() or []
+        if rows:
+            return [r["company_id"] for r in rows]
+    except Exception:
+        pass
+    # 3) internship_jobs.created_by_vendor_id（該廠商建立過職缺的公司）
+    try:
+        cursor.execute(
+            "SELECT DISTINCT ij.company_id FROM internship_jobs ij "
+            "JOIN internship_companies ic ON ic.id = ij.company_id AND ic.status = 'approved' "
+            "WHERE ij.created_by_vendor_id = %s ORDER BY ij.company_id",
+            (vendor_id,),
+        )
+        rows = cursor.fetchall() or []
+        if rows:
+            return [r["company_id"] for r in rows]
+    except Exception:
+        pass
+    # 4) Fallback: 指導老師底下「一間」公司（避免所有人看到「尚無可填寫的公司」）
     cursor.execute("SELECT teacher_id FROM users WHERE id = %s AND role = 'vendor'", (vendor_id,))
     row = cursor.fetchone()
     if not row or not row.get("teacher_id"):
         return []
-    teacher_id = row["teacher_id"]
     cursor.execute(
-        "SELECT id FROM internship_companies WHERE advisor_user_id = %s AND status = 'approved' ORDER BY company_name",
-        (teacher_id,),
+        "SELECT id FROM internship_companies WHERE advisor_user_id = %s AND status = 'approved' ORDER BY company_name LIMIT 1",
+        (row["teacher_id"],),
     )
-    return [r["id"] for r in (cursor.fetchall() or [])]
+    one = cursor.fetchone()
+    return [one["id"]] if one else []
 
 
 # =========================================================
@@ -4816,6 +4848,186 @@ def vendor_second_round_participation_save():
         )
         conn.commit()
         return jsonify({"success": True, "message": "已儲存二輪意願"})
+    except Exception as e:
+        traceback.print_exc()
+        conn.rollback()
+        return jsonify({"success": False, "message": str(e)}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+
+# =========================================================
+# API: 主任二輪 - 未錄取學生列表（GET）
+# =========================================================
+@admission_bp.route("/api/second_round/director/unadmitted", methods=["GET"])
+def director_second_round_unadmitted():
+    """List students not matched in first round and not yet assigned in second round (for director page)."""
+    if "user_id" not in session or session.get("role") != "director":
+        return jsonify({"success": False, "message": "未授權"}), 403
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        sid = get_current_semester_id(cursor)
+        if not sid:
+            return jsonify({"success": False, "message": "無法取得當前學期"}), 500
+        # 本學期有志願的學生
+        cursor.execute("""
+            SELECT DISTINCT sp.student_id
+            FROM student_preferences sp
+            WHERE sp.semester_id = %s
+        """, (sid,))
+        pref_student_ids = [r["student_id"] for r in (cursor.fetchall() or [])]
+        if not pref_student_ids:
+            return jsonify({"success": True, "students": [], "semester_id": sid})
+        # 一輪已媒合（主任 Approved/Pending）
+        cursor.execute("""
+            SELECT DISTINCT md.student_id
+            FROM manage_director md
+            INNER JOIN student_job_applications sja ON md.preference_id = sja.id
+            INNER JOIN student_preferences sp ON sja.student_id = sp.student_id
+                AND sja.company_id = sp.company_id AND sja.job_id = sp.job_id AND sp.semester_id = %s
+            WHERE md.director_decision IN ('Approved', 'Pending')
+        """, (sid,))
+        matched_ids = {r["student_id"] for r in (cursor.fetchall() or [])}
+        # 二輪已指派
+        cursor.execute("""
+            SELECT DISTINCT student_id FROM second_round_assignments WHERE semester_id = %s
+        """, (sid,))
+        assigned_second = {r["student_id"] for r in (cursor.fetchall() or [])}
+        unadmitted_ids = [i for i in pref_student_ids if i not in matched_ids and i not in assigned_second]
+        unadmitted_ids = list(dict.fromkeys(unadmitted_ids))
+        if not unadmitted_ids:
+            return jsonify({"success": True, "students": [], "semester_id": sid})
+        ph = ",".join(["%s"] * len(unadmitted_ids))
+        cursor.execute(
+            "SELECT id, name, username FROM users WHERE id IN (" + ph + ") AND role = 'student' ORDER BY username",
+            unadmitted_ids,
+        )
+        rows = cursor.fetchall() or []
+        students = [{"id": r["id"], "name": r.get("name") or "", "username": r.get("username") or ""} for r in rows]
+        return jsonify({"success": True, "students": students, "semester_id": sid})
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"success": False, "message": str(e)}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+
+# =========================================================
+# API: 主任二輪 - 參與廠商列表（GET）
+# =========================================================
+@admission_bp.route("/api/second_round/director/companies", methods=["GET"])
+def director_second_round_companies():
+    """List companies in second round with quota and assigned count (for director page)."""
+    if "user_id" not in session or session.get("role") != "director":
+        return jsonify({"success": False, "message": "未授權"}), 403
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        sid = get_current_semester_id(cursor)
+        if not sid:
+            return jsonify({"success": False, "message": "無法取得當前學期"}), 500
+        cursor.execute("""
+            SELECT srp.company_id, srp.quota, ic.company_name
+            FROM second_round_participation srp
+            JOIN internship_companies ic ON ic.id = srp.company_id AND ic.status = 'approved'
+            WHERE srp.semester_id = %s AND srp.agree = 1 AND srp.quota > 0
+            ORDER BY ic.company_name
+        """, (sid,))
+        rows = cursor.fetchall() or []
+        company_ids = [r["company_id"] for r in rows]
+        if not company_ids:
+            return jsonify({"success": True, "companies": [], "semester_id": sid})
+        ph = ",".join(["%s"] * len(company_ids))
+        cursor.execute(
+            "SELECT company_id, COUNT(*) AS assigned_count FROM second_round_assignments WHERE semester_id = %s AND company_id IN (" + ph + ") GROUP BY company_id",
+            [sid] + company_ids,
+        )
+        count_map = {r["company_id"]: r["assigned_count"] for r in (cursor.fetchall() or [])}
+        companies = []
+        for r in rows:
+            cid = r["company_id"]
+            companies.append({
+                "company_id": cid,
+                "company_name": r.get("company_name") or "",
+                "quota": r.get("quota") or 0,
+                "assigned_count": count_map.get(cid, 0),
+            })
+        return jsonify({"success": True, "companies": companies, "semester_id": sid})
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"success": False, "message": str(e)}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+
+# =========================================================
+# API: 主任二輪 - 指派學生到廠商（POST）
+# =========================================================
+@admission_bp.route("/api/second_round/director/assign", methods=["POST"])
+def director_second_round_assign():
+    """Assign one unadmitted student to a company in second round."""
+    if "user_id" not in session or session.get("role") != "director":
+        return jsonify({"success": False, "message": "未授權"}), 403
+    director_id = session.get("user_id")
+    data = request.get_json() or {}
+    student_id = data.get("student_id")
+    company_id = data.get("company_id")
+    if student_id is None or company_id is None:
+        return jsonify({"success": False, "message": "缺少 student_id 或 company_id"}), 400
+    try:
+        student_id = int(student_id)
+        company_id = int(company_id)
+    except (TypeError, ValueError):
+        return jsonify({"success": False, "message": "參數格式錯誤"}), 400
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        sid = get_current_semester_id(cursor)
+        if not sid:
+            return jsonify({"success": False, "message": "無法取得當前學期"}), 500
+        # 檢查該學生是否為未錄取且未在二輪指派
+        cursor.execute("""
+            SELECT DISTINCT sp.student_id FROM student_preferences sp WHERE sp.semester_id = %s AND sp.student_id = %s
+        """, (sid, student_id))
+        if not cursor.fetchone():
+            return jsonify({"success": False, "message": "該學生非本學期志願學生"}), 400
+        cursor.execute("""
+            SELECT DISTINCT md.student_id FROM manage_director md
+            INNER JOIN student_job_applications sja ON md.preference_id = sja.id
+            INNER JOIN student_preferences sp ON sja.student_id = sp.student_id AND sja.company_id = sp.company_id AND sja.job_id = sp.job_id AND sp.semester_id = %s
+            WHERE md.director_decision IN ('Approved', 'Pending') AND md.student_id = %s
+        """, (sid, student_id))
+        if cursor.fetchone():
+            return jsonify({"success": False, "message": "該學生已於一輪錄取"}), 400
+        cursor.execute("SELECT 1 FROM second_round_assignments WHERE semester_id = %s AND student_id = %s", (sid, student_id))
+        if cursor.fetchone():
+            return jsonify({"success": False, "message": "該學生已於二輪指派"}), 400
+        # 檢查公司是否參與二輪且有名額
+        cursor.execute("""
+            SELECT srp.quota FROM second_round_participation srp
+            JOIN internship_companies ic ON ic.id = srp.company_id AND ic.status = 'approved'
+            WHERE srp.semester_id = %s AND srp.company_id = %s AND srp.agree = 1
+        """, (sid, company_id))
+        row = cursor.fetchone()
+        if not row:
+            return jsonify({"success": False, "message": "該公司未參與二輪或無效"}), 400
+        cursor.execute(
+            "SELECT COUNT(*) AS n FROM second_round_assignments WHERE semester_id = %s AND company_id = %s",
+            (sid, company_id),
+        )
+        assigned = (cursor.fetchone() or {}).get("n") or 0
+        if assigned >= (row.get("quota") or 0):
+            return jsonify({"success": False, "message": "該公司二輪名額已滿"}), 400
+        cursor.execute(
+            "INSERT INTO second_round_assignments (semester_id, student_id, company_id, job_id, status, assigned_by, assigned_at) VALUES (%s, %s, %s, NULL, 'pending', %s, NOW())",
+            (sid, student_id, company_id, director_id),
+        )
+        conn.commit()
+        return jsonify({"success": True, "message": "已指派"})
     except Exception as e:
         traceback.print_exc()
         conn.rollback()
