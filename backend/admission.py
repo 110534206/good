@@ -274,7 +274,8 @@ def record_admission():
         return jsonify({"success": False, "message": "請提供學生ID和公司ID"}), 400
     
     conn = get_db()
-    cursor = conn.cursor(dictionary=True)
+    # 使用 buffered=True，避免前一次查詢有未讀取完的結果時，出現 "Unread result found" 錯誤
+    cursor = conn.cursor(dictionary=True, buffered=True)
     
     try:
         # 1. 驗證學生和公司是否存在
@@ -4332,10 +4333,12 @@ def director_confirm_matching():
             job_id = match_result.get('job_id')
             if not student_id or not job_id:
                 continue
-            
+
+            # 確保至多只回傳一筆，避免有重複紀錄時產生「Unread result found」
             cursor.execute("""
                 SELECT id FROM internship_offers
                 WHERE student_id = %s AND job_id = %s
+                LIMIT 1
             """, (student_id, job_id))
             existing = cursor.fetchone()
             
@@ -4596,15 +4599,21 @@ def ta_confirm_matching():
             company_id = match_result.get('company_id')
             if not student_id or not company_id:
                 continue
+
+            # 主鍵查詢理論上只會有一筆，但加上 LIMIT 1 更保險
             cursor.execute("""
-                SELECT id, advisor_user_id FROM internship_companies WHERE id = %s
+                SELECT id, advisor_user_id FROM internship_companies
+                WHERE id = %s
+                LIMIT 1
             """, (company_id,))
             company_row = cursor.fetchone()
             if not company_row or not company_row.get('advisor_user_id'):
                 continue
             advisor_user_id = company_row['advisor_user_id']
             cursor.execute("""
-                SELECT id, name FROM users WHERE id = %s AND role IN ('teacher', 'director')
+                SELECT id, name FROM users
+                WHERE id = %s AND role IN ('teacher', 'director')
+                LIMIT 1
             """, (advisor_user_id,))
             if not cursor.fetchone():
                 continue
@@ -4612,6 +4621,7 @@ def ta_confirm_matching():
                 cursor.execute("""
                     SELECT id FROM teacher_student_relations
                     WHERE teacher_id = %s AND student_id = %s AND semester_id = %s
+                    LIMIT 1
                 """, (advisor_user_id, student_id, current_semester_id))
                 existing_tsr = cursor.fetchone()
                 if existing_tsr:
@@ -4629,6 +4639,7 @@ def ta_confirm_matching():
                 cursor.execute("""
                     SELECT id FROM teacher_student_relations
                     WHERE teacher_id = %s AND student_id = %s AND semester = %s
+                    LIMIT 1
                 """, (advisor_user_id, student_id, current_semester_code or ''))
                 existing_tsr = cursor.fetchone()
                 if existing_tsr:
