@@ -506,16 +506,22 @@
         </ul>
         <div class="process-flow" style="margin-top: 16px; padding: 16px; background: #f8f9fa; border-radius: 8px; border-left: 4px solid var(--brand-blue);">
           <div style="font-size: 0.85rem; font-weight: 600; color: var(--brand-blue-dark); margin-bottom: 12px;">
-            <i class="fa-solid fa-diagram-project"></i> 二面流程說明
+            <i class="fa-solid fa-diagram-project"></i> 二輪媒合（二面）流程說明
           </div>
           <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 0.9rem; color: var(--text-muted);">
             <span style="padding: 6px 12px; background: #fff; border: 1px solid var(--border-light); border-radius: 6px;">一面結束</span>
             <i class="fa-solid fa-arrow-right" style="color: var(--brand-blue);"></i>
             <span style="padding: 6px 12px; background: #fff; border: 1px solid var(--border-light); border-radius: 6px;">科助統整未錄取名單</span>
             <i class="fa-solid fa-arrow-right" style="color: var(--brand-blue);"></i>
-            <span style="padding: 6px 12px; background: #fff; border: 1px solid var(--border-light); border-radius: 6px;">指導老師詢問二面意願</span>
+            <span style="padding: 6px 12px; background: #fff; border: 1px solid var(--border-light); border-radius: 6px;">廠商填寫二輪意願</span>
+            <i class="fa-solid fa-arrow-right" style="color: var(--brand-blue);"></i>
+            <span style="padding: 6px 12px; background: #fff; border: 1px solid var(--border-light); border-radius: 6px;">主任指派未錄取學生</span>
             <i class="fa-solid fa-arrow-right" style="color: var(--brand-blue);"></i>
             <span style="padding: 6px 12px; background: #fff; border: 1px solid var(--border-light); border-radius: 6px;">進行二面流程</span>
+          </div>
+          <div id="secondRoundStatusWrap" style="margin-top: 12px; padding: 10px; background: #fff; border-radius: 6px; border: 1px solid var(--border-light);">
+            <span id="secondRoundStatusText">二輪媒合：載入中…</span>
+            <button type="button" id="btnToggleSecondRound" class="btn btn-sm btn-primary ms-2" style="display: none;">開啟二輪媒合</button>
           </div>
         </div>
       </div>
@@ -604,6 +610,58 @@
       div.textContent = text;
       return div.innerHTML;
     }
+
+    // 二輪媒合狀態與開關
+    async function loadSecondRoundStatus() {
+      const wrap = document.getElementById('secondRoundStatusWrap');
+      const statusText = document.getElementById('secondRoundStatusText');
+      const btn = document.getElementById('btnToggleSecondRound');
+      if (!wrap || !statusText || !btn) return;
+      try {
+        const res = await fetch('/admission/api/second_round/status', { credentials: 'include' });
+        const data = await res.json();
+        if (!data.success) {
+          statusText.textContent = '二輪媒合：無法取得狀態';
+          btn.style.display = 'none';
+          return;
+        }
+        const isEnabled = !!data.is_enabled;
+        statusText.textContent = '二輪媒合：' + (isEnabled ? '已開啟' : '未開啟');
+        btn.style.display = 'inline-block';
+        btn.textContent = isEnabled ? '關閉二輪媒合' : '開啟二輪媒合';
+        btn.dataset.enable = isEnabled ? '0' : '1';
+      } catch (e) {
+        statusText.textContent = '二輪媒合：載入失敗';
+        btn.style.display = 'none';
+      }
+    }
+    async function toggleSecondRound() {
+      const btn = document.getElementById('btnToggleSecondRound');
+      const statusText = document.getElementById('secondRoundStatusText');
+      if (!btn || !statusText) return;
+      const enable = btn.dataset.enable === '1';
+      btn.disabled = true;
+      try {
+        const res = await fetch('/admission/api/ta/toggle_second_interview', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ enable: enable })
+        });
+        const data = await res.json();
+        if (data.success) {
+          await loadSecondRoundStatus();
+          if (statusText) statusText.textContent = '二輪媒合：' + (enable ? '已開啟' : '未開啟');
+        } else {
+          alert(data.message || '操作失敗');
+        }
+      } catch (e) {
+        alert('連線失敗');
+      }
+      btn.disabled = false;
+    }
+    document.getElementById('btnToggleSecondRound')?.addEventListener('click', toggleSecondRound);
+    loadSecondRoundStatus();
 
     if (menuBtn) {
       menuBtn.addEventListener('click', () => {

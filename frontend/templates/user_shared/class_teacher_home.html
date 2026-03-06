@@ -412,7 +412,7 @@
         <p>查看學生的實習錄取狀況與結果。</p>
         <a href="/admission/results">查看結果</a>
       </div>
-      <div class="card" onclick="location.href='/class_teacher_remove_intern'">
+      <div class="card" id="internStatusCardWrap" style="display: none;" onclick="location.href='/class_teacher_remove_intern'">
         <h3>學生實習狀況</h3>
         <p>查看學生的實習狀況。</p>
         <a href="/class_teacher_remove_intern">查看狀況</a>
@@ -458,6 +458,19 @@
     }
     loadUnreadNotificationCount();
     setInterval(loadUnreadNotificationCount, 30000);
+
+    // 實習學期開始後才顯示「學生實習狀況」
+    fetch('/semester/api/internship_semester_started', { credentials: 'include' })
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        if (data.success && data.started) {
+          var wrap = document.getElementById('internStatusCardWrap');
+          var link = document.getElementById('internStatusMenuLink');
+          if (wrap) wrap.style.display = '';
+          if (link) link.style.display = 'block';
+        }
+      })
+      .catch(function() {});
 
     const menuBtn = document.getElementById("menu-btn");
     const sideMenu = document.getElementById("side-menu");

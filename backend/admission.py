@@ -13,7 +13,7 @@ import re
 admission_bp = Blueprint("admission_bp", __name__, url_prefix="/admission")
 
 def _get_active_semester_year(cursor):
-    """取得當前啟用學期學年（semesters 表 is_active=1 的 code 前三碼，如 1132->113）"""
+    '''取得當前啟用學期學年（semesters 表 is_active=1 的 code 前三碼，如 1132->113）'''
     cursor.execute("SELECT code FROM semesters WHERE is_active = 1 LIMIT 1")
     row = cursor.fetchone()
     if not row or row.get('code') is None:
@@ -235,6 +235,22 @@ def manage_director_page():
         return "無權限訪問此頁面", 403
     
     return render_template('user_shared/manage_director.html')
+
+
+@admission_bp.route("/second_round/vendor", methods=["GET"])
+def second_round_vendor_page():
+    """Vendor second-round participation form page."""
+    if 'user_id' not in session or session.get('role') != 'vendor':
+        return redirect('/login')
+    return render_template('user_shared/second_round_vendor.html')
+
+
+@admission_bp.route("/second_round/director", methods=["GET"])
+def second_round_director_page():
+    """Director second-round assignment page."""
+    if 'user_id' not in session or session.get('role') != 'director':
+        return redirect('/login')
+    return render_template('user_shared/second_round_director.html')
 
 # =========================================================
 # API: 記錄實習錄取結果（錄取後自動綁定指導老師與學生）

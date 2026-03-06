@@ -366,7 +366,12 @@
           <p>確認系統自動媒合的學生名單與結果。</p>
           <a href="/admission/manage_director">查看結果</a>
         </div>
-        <div class="card" onclick="location.href='/director_remove_intern'">
+        <div class="card" id="secondRoundCardWrap" style="display: none;">
+          <h3>二輪分發</h3>
+          <p>指派未錄取學生至參與二輪媒合的廠商。</p>
+          <a href="/admission/second_round/director">前往分發</a>
+        </div>
+        <div class="card" id="internStatusCardWrap" style="display: none;" onclick="location.href='/director_remove_intern'">
           <h3>學生實習狀況</h3>
           <p>查看學生的實習狀況。</p>
           <a href="/director_remove_intern">查看狀況</a>
@@ -386,6 +391,7 @@
     <a href="/notifications">管理公告</a>
     <a href="/admin_statistics">查詢統計資料</a>
     <a href="/admission/manage_director">媒合結果</a>
+    <a href="/admission/second_round/director" id="secondRoundMenuLink" style="display: none;">二輪分發</a>
     <a href="/login">登出</a>
   </nav>
 
@@ -413,6 +419,30 @@
     }
     loadUnreadNotificationCount();
     setInterval(loadUnreadNotificationCount, 30000);
+
+    // 二輪媒合開啟時才顯示「二輪分發」
+    fetch('/admission/api/second_round/status', { credentials: 'include' })
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        if (data.success && data.is_enabled) {
+          var card = document.getElementById('secondRoundCardWrap');
+          var link = document.getElementById('secondRoundMenuLink');
+          if (card) card.style.display = '';
+          if (link) link.style.display = 'block';
+        }
+      })
+      .catch(function() {});
+
+    // 實習學期開始後才顯示「學生實習狀況」
+    fetch('/semester/api/internship_semester_started', { credentials: 'include' })
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        if (data.success && data.started) {
+          var wrap = document.getElementById('internStatusCardWrap');
+          if (wrap) wrap.style.display = '';
+        }
+      })
+      .catch(function() {});
 
     const menuBtn = document.getElementById("menu-btn");
     const sideMenu = document.getElementById("side-menu");

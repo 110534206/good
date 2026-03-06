@@ -2,7 +2,7 @@ from flask import Blueprint, render_template, session, redirect, url_for, reques
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 from config import get_db
-from semester import is_student_in_application_phase, should_show_intern_experience, should_show_image_recognize
+from semester import is_student_in_application_phase, should_show_intern_experience, should_show_image_recognize, is_internship_semester_started
 import os
 import re 
 from ai_tools import perform_ocr_on_file, create_ocr_docx # Import new helpers
@@ -201,6 +201,15 @@ def class_teacher_remove_intern_page():
     if not session.get("is_homeroom"):
         r = session.get("role")
         return redirect(url_for("users_bp.director_home") if r == "director" else url_for("users_bp.teacher_home"))
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+    if not is_internship_semester_started(cursor):
+        cursor.close()
+        conn.close()
+        session["role"] = "class_teacher"
+        return redirect(url_for("users_bp.class_teacher_home"))
+    cursor.close()
+    conn.close()
     session["role"] = "class_teacher"
     return render_template("user_shared/class_teacher_remove_Intern.html",
                            username=session.get("username"),
@@ -759,9 +768,17 @@ def vendor_home():
 
 @users_bp.route('/vendor_remove_intern')
 def vendor_remove_intern_page():
-    """廠商退實習生頁面（需帶 query: student_id=, 可選 match_id=）"""
+    """廠商退實習生頁面（需帶 query: student_id=, 可選 match_id=）。僅實習學期開始後可進入。"""
     if 'username' not in session or session.get('role') != 'vendor':
         return redirect(url_for('auth_bp.login_page'))
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+    if not is_internship_semester_started(cursor):
+        cursor.close()
+        conn.close()
+        return redirect(url_for('users_bp.vendor_home'))
+    cursor.close()
+    conn.close()
     return render_template('user_shared/vendor_remove_Intern.html')
 
 
@@ -923,6 +940,14 @@ def intern_faq_2():
 def director_remove_intern_page():
     if "username" not in session or session.get("role") not in ["director", "ta", "admin"]:
         return redirect(url_for("auth_bp.login_page"))
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+    if not is_internship_semester_started(cursor):
+        cursor.close()
+        conn.close()
+        return redirect(url_for("users_bp.director_home"))
+    cursor.close()
+    conn.close()
     return render_template("user_shared/director_remove_lntern.html")
 
 

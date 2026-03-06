@@ -350,12 +350,17 @@
           <p>確認系統自動媒合的學生名單與結果。</p>
           <a href="/confirm_matching">查看結果</a>
         </div>
+        <div class="card" id="secondRoundCardWrap" style="display: none;">
+          <h3>二輪媒合意願</h3>
+          <p>填寫是否參與二輪媒合、名額與福利（薪資、職缺）。</p>
+          <a href="/admission/second_round/vendor">填寫意願</a>
+        </div>
         <div class="card">
           <h3>公告發布</h3>
           <p>向學生發布重要的實習資訊與消息。</p>
           <a href="/publish_announcements">發布公告</a>
         </div>
-        <div class="card">
+        <div class="card" id="vendorRemoveInternCardWrap" style="display: none;">
           <h3>實習異動確認</h3>
           <p>發起的退案申請資訊與最終時數結算結果。</p>
           <a href="/vendor_remove_intern">查看明細</a>
@@ -372,6 +377,7 @@
     <a href="/manage_positions">職位需求管理</a>
     <a href="/manage_positions/new">新增職缺</a>
     <a href="/confirm_matching">媒合結果</a>
+    <a href="/admission/second_round/vendor" id="secondRoundMenuLink" style="display: none;">二輪媒合意願</a>
     <a href="/publish_announcements">發布公告</a>
     <a href="/notifications">通知</a>
     <a href="/logout">登出</a>
@@ -409,6 +415,30 @@
     }
     loadUnreadNotificationCount();
     setInterval(loadUnreadNotificationCount, 30000);
+
+    // 二輪媒合開啟時才顯示「二輪媒合意願」
+    fetch('/admission/api/second_round/status', { credentials: 'include' })
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        if (data.success && data.is_enabled) {
+          var card = document.getElementById('secondRoundCardWrap');
+          var link = document.getElementById('secondRoundMenuLink');
+          if (card) card.style.display = '';
+          if (link) link.style.display = 'block';
+        }
+      })
+      .catch(function() {});
+
+    // 實習學期開始後才顯示「實習異動確認」
+    fetch('/semester/api/internship_semester_started', { credentials: 'include' })
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        if (data.success && data.started) {
+          var wrap = document.getElementById('vendorRemoveInternCardWrap');
+          if (wrap) wrap.style.display = '';
+        }
+      })
+      .catch(function() {});
 
     // 公告輪播內容
     let notification = [];

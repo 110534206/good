@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>智慧實習平台 | 二輪分發</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    body { font-family: "Noto Sans TC", sans-serif; background: #f5f8ff; min-height: 100vh; padding-top: 60px; }
+    .top-bar { background: linear-gradient(135deg, #0055a8 0%, #006acb 100%); color: #fff; padding: 1rem 2rem; position: fixed; top: 0; left: 0; right: 0; z-index: 1000; }
+    .card { border: none; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
+    .list-group-item { display: flex; align-items: center; justify-content: space-between; }
+    .assign-row { border: 1px solid #e2e8f0; border-radius: 8px; padding: 0.75rem 1rem; margin-bottom: 0.5rem; background: #fff; }
+  </style>
+</head>
+<body>
+  <div class="top-bar d-flex align-items-center justify-content-between">
+    <a href="/admission/manage_director" class="text-white text-decoration-none"><i class="fas fa-arrow-left me-2"></i>返回主任媒合</a>
+    <h5 class="mb-0">二輪分發（指派未錄取學生）</h5>
+    <span></span>
+  </div>
+
+  <div class="container py-4">
+    <div id="alertPlace" class="mb-3"></div>
+    <div id="notOpenMsg" class="alert alert-info d-none">二輪媒合尚未開啟，請由科助先開啟二輪媒合並由廠商填寫意願後再進行分發。</div>
+    <div id="contentArea" class="d-none">
+      <div class="row">
+        <div class="col-md-5">
+          <div class="card p-3 mb-3">
+            <h6 class="mb-3"><i class="fas fa-user-graduate me-2"></i>未錄取學生</h6>
+            <div id="studentList" class="list-group list-group-flush"></div>
+          </div>
+        </div>
+        <div class="col-md-5">
+          <div class="card p-3 mb-3">
+            <h6 class="mb-3"><i class="fas fa-building me-2"></i>參與二輪廠商（名額／已指派）</h6>
+            <div id="companyList" class="list-group list-group-flush"></div>
+          </div>
+        </div>
+      </div>
+      <div class="card p-3">
+        <h6 class="mb-3">指派</h6>
+        <div class="row g-2 align-items-end">
+          <div class="col-auto"><label class="form-label small mb-0">學生</label><select id="selStudent" class="form-select form-select-sm" style="min-width:180px"></select></div>
+          <div class="col-auto"><label class="form-label small mb-0">廠商</label><select id="selCompany" class="form-select form-select-sm" style="min-width:200px"></select></div>
+          <div class="col-auto"><button type="button" class="btn btn-primary btn-sm" id="btnAssign"><i class="fas fa-plus me-1"></i>指派</button></div>
+        </div>
+      </div>
+    </div>
+    <div id="loading" class="text-center py-5 text-muted">
+      <div class="spinner-border" role="status"></div>
+      <p class="mt-2">載入中…</p>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script>
+    (function() {
+      const alertPlace = document.getElementById('alertPlace');
+      const notOpenMsg = document.getElementById('notOpenMsg');
+      const contentArea = document.getElementById('contentArea');
+      const studentList = document.getElementById('studentList');
+      const companyList = document.getElementById('companyList');
+      const selStudent = document.getElementById('selStudent');
+      const selCompany = document.getElementById('selCompany');
+      const btnAssign = document.getElementById('btnAssign');
+      const loading = document.getElementById('loading');
+
+      function showAlert(msg, type) {
+        alertPlace.innerHTML = '<div class="alert alert-' + type + ' alert-dismissible fade show">' + msg + '<button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>';
+      }
+
+      async function load() {
+        try {
+          const statusRes = await fetch('/admission/api/second_round/status', { credentials: 'include' });
+          const statusData = await statusRes.json();
+          if (!statusData.success || !statusData.is_enabled) {
+            loading.classList.add('d-none');
+            notOpenMsg.classList.remove('d-none');
+            return;
+          }
+          const [unadmittedRes, companiesRes] = await Promise.all([
+            fetch('/admission/api/second_round/director/unadmitted', { credentials: 'include' }),
+            fetch('/admission/api/second_round/director/companies', { credentials: 'include' })
+          ]);
+          const unadmittedData = await unadmittedRes.json();
+          const companiesData = await companiesRes.json();
+          loading.classList.add('d-none');
+          notOpenMsg.classList.add('d-none');
+          contentArea.classList.remove('d-none');
+
+          const students = (unadmittedData.success && unadmittedData.students) ? unadmittedData.students : [];
+          const companies = (companiesData.success && companiesData.companies) ? companiesData.companies : [];
+
+          studentList.innerHTML = students.length ? students.map(function(s) {
+            return '<div class="list-group-item py-2">' + (s.name || '') + '（' + (s.username || '') + '）</div>';
+          }).join('') : '<div class="list-group-item text-muted">目前無未錄取學生</div>';
+
+          companyList.innerHTML = companies.length ? companies.map(function(c) {
+            const left = (c.quota || 0) - (c.assigned_count || 0);
+            return '<div class="list-group-item py-2 d-flex justify-content-between"><span>' + (c.company_name || '') + '</span><span class="text-muted">' + (c.assigned_count || 0) + ' / ' + (c.quota || 0) + (left > 0 ? '（剩 ' + left + '）' : '') + '</span></div>';
+          }).join('') : '<div class="list-group-item text-muted">尚無廠商參與二輪或名額為 0</div>';
+
+          selStudent.innerHTML = '<option value="">請選擇學生</option>' + students.map(function(s) {
+            return '<option value="' + s.id + '">' + (s.name || '') + '（' + (s.username || '') + '）</option>';
+          }).join('');
+          selCompany.innerHTML = '<option value="">請選擇廠商</option>' + companies.filter(function(c) {
+            return ((c.quota || 0) - (c.assigned_count || 0)) > 0;
+          }).map(function(c) {
+            return '<option value="' + c.company_id + '">' + (c.company_name || '') + '（剩 ' + ((c.quota || 0) - (c.assigned_count || 0)) + '）</option>';
+          }).join('');
+        } catch (e) {
+          loading.classList.add('d-none');
+          showAlert('載入失敗：' + (e.message || '連線錯誤'), 'danger');
+        }
+      }
+
+      btnAssign.addEventListener('click', async function() {
+        const studentId = selStudent.value;
+        const companyId = selCompany.value;
+        if (!studentId || !companyId) {
+          showAlert('請選擇學生與廠商', 'warning');
+          return;
+        }
+        btnAssign.disabled = true;
+        try {
+          const res = await fetch('/admission/api/second_round/director/assign', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({ student_id: studentId, company_id: companyId })
+          });
+          const data = await res.json();
+          if (data.success) {
+            showAlert('已指派', 'success');
+            load();
+          } else {
+            showAlert(data.message || '指派失敗', 'danger');
+          }
+        } catch (e) {
+          showAlert('連線失敗', 'danger');
+        }
+        btnAssign.disabled = false;
+      });
+
+      load();
+    })();
+  </script>
+</body>
+</html>
