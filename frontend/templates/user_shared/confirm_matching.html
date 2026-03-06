@@ -816,6 +816,25 @@
           const studentId = String(match.student_id);
           const sortInfo = matchingSortMap.get(studentId);
           
+          // 如果使用媒合排序中的 job_id，需要確保 company_id 也對應正確
+          // 因為不同的 job_id 可能對應不同的 company_id
+          let finalJobId = match.job_id || null;
+          let finalCompanyId = match.company_id;
+          let finalJobTitle = match.job_title || '未指定職缺';
+          
+          // 只有在媒合排序中的 job_id 屬於當前廠商的公司時，才使用它
+          if (sortInfo && sortInfo.job_id) {
+            const jobInfo = vendorJobs.find(job => job.id === sortInfo.job_id);
+            if (jobInfo && jobInfo.company_id === match.company_id) {
+              // 媒合排序中的 job_id 屬於同一公司，可以使用
+              finalJobId = sortInfo.job_id;
+              finalJobTitle = sortInfo.job_title || finalJobTitle;
+            } else if (jobInfo && jobInfo.company_id !== match.company_id) {
+              // 媒合排序中的 job_id 屬於不同公司，不使用，保持原來的 job_id
+              console.warn(`⚠️ [confirm_matching] 學生 ${match.student_name} 的媒合排序 job_id=${sortInfo.job_id} 屬於公司 ${jobInfo.company_id}，但學生屬於公司 ${match.company_id}，忽略媒合排序資訊`);
+            }
+          }
+          
           return {
             student_id: match.student_id,
             student_name: match.student_name,
@@ -823,11 +842,11 @@
             student_email: match.student_email || '',
             class_name: match.class_name || '',
             class_department: match.class_department || '',
-            company_id: match.company_id,
+            company_id: finalCompanyId,
             company_name: match.company_name,
-            // 優先使用媒合排序中的職缺資訊，否則使用 match 中的職缺資訊
-            job_id: sortInfo ? sortInfo.job_id : (match.job_id || null),
-            job_title: sortInfo ? sortInfo.job_title : (match.job_title || '未指定職缺'),
+            // 使用確認後的職缺資訊
+            job_id: finalJobId,
+            job_title: finalJobTitle,
             preference_order: match.preference_order || null,
             admitted_at: match.admitted_at || null,
             semester: match.semester || '1132'
