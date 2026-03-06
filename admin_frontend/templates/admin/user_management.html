@@ -1147,14 +1147,79 @@
                 if (userListIsSearch) doSearchUsers(1); else loadUsers(1);
             });
 
+            /** 依目前學年與入學年度計算年級顯示（一年級～六年級） */
+            function getGradeLabel(admissionYear, currentSemesterYear) {
+                if (admissionYear == null || admissionYear === '' || currentSemesterYear == null) return null;
+                const ay = parseInt(admissionYear, 10);
+                const sy = parseInt(currentSemesterYear, 10);
+                if (isNaN(ay) || isNaN(sy)) return null;
+                const gradeNum = sy - ay + 1;
+                const labels = ['', '一年級', '二年級', '三年級', '四年級', '五年級', '六年級'];
+                if (gradeNum >= 1 && gradeNum <= 6) return labels[gradeNum];
+                if (gradeNum > 0) return gradeNum + '年級';
+                return null;
+            }
+
+            /** 回傳年級單字（一～六）用於「資管科三孝」格式，無法計算則回傳 null */
+            function getGradeChar(admissionYear, currentSemesterYear) {
+                if (admissionYear == null || admissionYear === '' || currentSemesterYear == null) return null;
+                const ay = parseInt(admissionYear, 10);
+                const sy = parseInt(currentSemesterYear, 10);
+                if (isNaN(ay) || isNaN(sy)) return null;
+                const gradeNum = sy - ay + 1;
+                const chars = ['', '一', '二', '三', '四', '五', '六'];
+                if (gradeNum >= 1 && gradeNum <= 6) return chars[gradeNum];
+                return null;
+            }
+
+            /** 班級顯示：有年級時為「資管科三孝」，無年級但有屆時為「資管科 忠 (110屆)」，否則「資管科 忠」 */
+            function formatClassDisplay(c, currentYear) {
+                const dept = (c.department || '').trim();
+                const name = (c.name || '').trim();
+                const base = dept && name ? dept + ' ' + name : (dept || name || '未命名班級');
+                const gradeChar = getGradeChar(c.admission_year, currentYear);
+                if (gradeChar) return dept + gradeChar + name;
+                if (c.admission_year != null && c.admission_year !== '') return base + ' (' + c.admission_year + '屆)';
+                return base;
+            }
+
+            /** 班級列表排序：科系 → 入學年度(降序) → 班名依忠孝順序(忠、孝、仁、愛…) */
+            const CLASS_NAME_ORDER = ['忠', '孝', '仁', '愛', '信', '義', '和', '平'];
+            function sortClassesForDisplay(classes) {
+                return [...classes].sort((a, b) => {
+                    const deptA = (a.department || '').trim();
+                    const deptB = (b.department || '').trim();
+                    if (deptA !== deptB) return deptA.localeCompare(deptB);
+                    const ayA = a.admission_year != null && a.admission_year !== '' ? parseInt(a.admission_year, 10) : 0;
+                    const ayB = b.admission_year != null && b.admission_year !== '' ? parseInt(b.admission_year, 10) : 0;
+                    if (ayA !== ayB) return ayB - ayA;
+                    const nameA = (a.name || '').trim();
+                    const nameB = (b.name || '').trim();
+                    const iA = CLASS_NAME_ORDER.indexOf(nameA);
+                    const iB = CLASS_NAME_ORDER.indexOf(nameB);
+                    if (iA !== -1 && iB !== -1) return iA - iB;
+                    if (iA !== -1) return -1;
+                    if (iB !== -1) return 1;
+                    return nameA.localeCompare(nameB);
+                });
+            }
+
             /**
-             * 載入班級列表到 Select 元素中
+             * 載入班級列表到 Select 元素中（顯示班級 + 年級，年級依目前學年與入學年度計算）
              * @param {HTMLElement} selectEl - 要填充班級選項的 <select> 元素
              * @param {boolean} allowEmpty - 是否允許空值選項 (例如：老師/主任可不選班級)
              */
             async function loadClasses(selectEl, allowEmpty = true) {
                 try {
                     selectEl.innerHTML = '<option value="">載入中...</option>';
+                    let currentYear = lastActiveSemesterYear;
+                    if (currentYear == null) {
+                        try {
+                            const yr = await fetch('/admin/api/current_semester_year');
+                            const yrData = await yr.json();
+                            if (yrData.success && yrData.active_semester_year != null) currentYear = yrData.active_semester_year;
+                        } catch (e) { /* 忽略 */ }
+                    }
                     const res = await fetch('/admin/api/get_classes');
                     const data = await res.json();
                     if (!data.success) {
@@ -1162,11 +1227,12 @@
                         return;
                     }
 
+                    const sortedClasses = sortClassesForDisplay(data.classes);
                     selectEl.innerHTML = allowEmpty ? '<option value="">請選擇</option>' : '';
-                    data.classes.forEach(c => {
+                    sortedClasses.forEach(c => {
                         const opt = document.createElement('option');
                         opt.value = c.id;
-                        opt.textContent = `${c.department || ''} ${c.name}`.trim();
+                        opt.textContent = formatClassDisplay(c, currentYear);
                         selectEl.appendChild(opt);
                     });
                 } catch (e) {
@@ -1467,10 +1533,18 @@
                 }
             };
 
-            // 載入班級checkbox列表
+            // 載入班級checkbox列表（顯示班級 + 年級，年級依目前學年與入學年度計算）
             async function loadClassCheckboxes(containerEl, selectedClassIds = []) {
                 try {
                     containerEl.innerHTML = '<div class="text-muted text-center">載入中...</div>';
+                    let currentYear = lastActiveSemesterYear;
+                    if (currentYear == null) {
+                        try {
+                            const yr = await fetch('/admin/api/current_semester_year');
+                            const yrData = await yr.json();
+                            if (yrData.success && yrData.active_semester_year != null) currentYear = yrData.active_semester_year;
+                        } catch (e) { /* 忽略 */ }
+                    }
                     const res = await fetch('/admin/api/get_classes');
                     const data = await res.json();
                     if (!data.success) {
@@ -1478,13 +1552,14 @@
                         return;
                     }
 
+                    const sortedClasses = sortClassesForDisplay(data.classes);
                     containerEl.innerHTML = '';
-                    if (data.classes.length === 0) {
+                    if (sortedClasses.length === 0) {
                         containerEl.innerHTML = '<div class="text-muted text-center">暫無班級資料</div>';
                         return;
                     }
 
-                    data.classes.forEach(c => {
+                    sortedClasses.forEach(c => {
                         const div = document.createElement('div');
                         div.className = 'form-check mb-2';
                         const checkbox = document.createElement('input');
@@ -1500,7 +1575,7 @@
                         const label = document.createElement('label');
                         label.className = 'form-check-label';
                         label.htmlFor = `class-checkbox-${c.id}`;
-                        label.textContent = `${c.department || ''} ${c.name}`.trim();
+                        label.textContent = formatClassDisplay(c, currentYear);
 
                         div.appendChild(checkbox);
                         div.appendChild(label);
