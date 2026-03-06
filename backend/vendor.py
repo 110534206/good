@@ -4626,9 +4626,11 @@ def get_withdraw_intern_list():
               AND io.status = 'accepted'
         """
 
-        # 若 internship_offers 有 semester_id，且目前學期存在，就只顯示當前學期的錄取
+        # 若 internship_offers 有 semester_id，且目前學期存在：
+        # - 以「當前學期」為主，但同時保留舊資料（semester_id 為 NULL）一起顯示，
+        #   以避免舊紀錄因未填入 semester_id 而完全看不到。
         if has_semester_id and current_semester_id is not None:
-            base_sql += " AND io.semester_id = %s"
+            base_sql += " AND (io.semester_id = %s OR io.semester_id IS NULL)"
             args.extend(company_ids)
             args.append(current_semester_id)
         else:
@@ -5202,6 +5204,48 @@ def class_teacher_intern_status():
             else:
                 raise
         rows = cursor.fetchall()
+
+        # 若因 internship_configs 沒有任何設定而查無資料，改用不依賴 internship_configs 的簡化查詢，
+        # 以避免主任頁面完全沒有任何學生資料可看。
+        if not rows:
+            try:
+                cursor.execute(
+                    """
+                    SELECT u.id AS student_id,
+                           u.name AS student_name,
+                           u.username AS student_number,
+                           c.name AS class_name,
+                           c.department,
+                           c.admission_year,
+                           io.id AS offer_id,
+                           COALESCE(io.status, '') AS offer_status,
+                           ic.company_name,
+                           ij.title AS job_title,
+                           vri.id AS withdraw_id
+                    FROM users u
+                    LEFT JOIN classes c ON c.id = u.class_id
+                    LEFT JOIN (
+                        SELECT io1.*
+                        FROM internship_offers io1
+                        INNER JOIN (
+                            SELECT student_id, MAX(id) AS max_id
+                            FROM internship_offers
+                            GROUP BY student_id
+                        ) io2
+                        ON io1.student_id = io2.student_id AND io1.id = io2.max_id
+                    ) io ON io.student_id = u.id
+                    LEFT JOIN internship_jobs ij ON ij.id = io.job_id
+                    LEFT JOIN internship_companies ic ON ic.id = ij.company_id
+                    LEFT JOIN internship_records vri ON vri.student_id = u.id
+                    WHERE u.role = 'student'
+                    ORDER BY c.name, u.username
+                    """
+                )
+                rows = cursor.fetchall()
+            except Exception:
+                # 若簡化查詢失敗，維持原本（可能為空）的 rows，讓前端至少能看到錯誤訊息
+                pass
+
         cursor.close()
         conn.close()
         # 每位學生已只對應一筆錄取，依 student_id 決定狀態
@@ -5274,67 +5318,41 @@ def director_intern_status():
                 return base + " (" + str(ay).strip() + "屆)"
             return base or ""
 
-        # 每位學生只取一筆錄取（當前學期且 id 最大），避免多筆錄取造成錯誤顯示
-        try:
-            cursor.execute("""
-                SELECT u.id AS student_id, u.name AS student_name, u.username AS student_number,
-                       c.name AS class_name, c.department, c.admission_year,
-                       io.id AS offer_id, COALESCE(io.status, '') AS offer_status,
-                       ic.company_name, ij.title AS job_title,
-                       vri.id AS withdraw_id
-                FROM users u
-                LEFT JOIN classes c ON c.id = u.class_id
-                LEFT JOIN (
-                    SELECT io1.* FROM internship_offers io1
-                    INNER JOIN (
-                        SELECT student_id, MAX(io0.id) AS max_id
-                        FROM internship_offers io0
-                        WHERE %s IS NULL OR io0.semester_id = %s
-                        GROUP BY student_id
-                    ) io2 ON io1.student_id = io2.student_id AND io1.id = io2.max_id
-                ) io ON io.student_id = u.id
-                LEFT JOIN internship_jobs ij ON ij.id = io.job_id
-                LEFT JOIN internship_companies ic ON ic.id = ij.company_id
-                LEFT JOIN internship_records vri ON vri.student_id = u.id AND vri.semester_id = %s
-                WHERE u.role = 'student'
-                AND EXISTS (
-                    SELECT 1 FROM internship_configs cfg
-                    WHERE cfg.semester_id = %s
-                    AND (cfg.user_id = u.id OR (cfg.user_id IS NULL AND cfg.admission_year = c.admission_year))
-                )
-                ORDER BY c.name, u.username
-            """, (current_semester_id, current_semester_id, current_semester_id, current_semester_id))
-        except Exception as sem_err:
-            if "semester_id" in str(sem_err) or "Unknown column" in str(sem_err) or "internship_configs" in str(sem_err):
-                # 無 semester_id 時：每位學生只取一筆錄取（id 最大＝最新）
-                cursor.execute("""
-                    SELECT u.id AS student_id, u.name AS student_name, u.username AS student_number,
-                           c.name AS class_name, c.department, c.admission_year,
-                           io.id AS offer_id, COALESCE(io.status, '') AS offer_status,
-                           ic.company_name, ij.title AS job_title,
-                           vri.id AS withdraw_id
-                    FROM users u
-                    LEFT JOIN classes c ON c.id = u.class_id
-                    LEFT JOIN (
-                        SELECT io1.* FROM internship_offers io1
-                        INNER JOIN (
-                            SELECT student_id, MAX(id) AS max_id FROM internship_offers GROUP BY student_id
-                        ) io2 ON io1.student_id = io2.student_id AND io1.id = io2.max_id
-                    ) io ON io.student_id = u.id
-                    LEFT JOIN internship_jobs ij ON ij.id = io.job_id
-                    LEFT JOIN internship_companies ic ON ic.id = ij.company_id
-                    LEFT JOIN internship_records vri ON vri.student_id = u.id AND vri.semester_id = %s
-                    WHERE u.role = 'student'
-                    AND EXISTS (
-                        SELECT 1 FROM internship_configs cfg
-                        WHERE cfg.semester_id = %s
-                        AND (cfg.user_id = u.id OR (cfg.user_id IS NULL AND cfg.admission_year = c.admission_year))
-                    )
-                    ORDER BY c.name, u.username
-                """, (current_semester_id, current_semester_id))
-            else:
-                raise
-        rows = cursor.fetchall()
+        # 直接以「每位學生最新一筆 internship_offers」為準，不再依賴 internship_configs，
+        # 以確保就算尚未建好 internship_configs，主任也能看到目前的實習／退出狀況。
+        cursor.execute(
+            """
+            SELECT u.id AS student_id,
+                   u.name AS student_name,
+                   u.username AS student_number,
+                   c.name AS class_name,
+                   c.department,
+                   c.admission_year,
+                   io.id AS offer_id,
+                   COALESCE(io.status, '') AS offer_status,
+                   ic.company_name,
+                   ij.title AS job_title,
+                   vri.id AS withdraw_id
+            FROM users u
+            LEFT JOIN classes c ON c.id = u.class_id
+            LEFT JOIN (
+                SELECT io1.*
+                FROM internship_offers io1
+                INNER JOIN (
+                    SELECT student_id, MAX(id) AS max_id
+                    FROM internship_offers
+                    GROUP BY student_id
+                ) io2
+                ON io1.student_id = io2.student_id AND io1.id = io2.max_id
+            ) io ON io.student_id = u.id
+            LEFT JOIN internship_jobs ij ON ij.id = io.job_id
+            LEFT JOIN internship_companies ic ON ic.id = ij.company_id
+            LEFT JOIN internship_records vri ON vri.student_id = u.id
+            WHERE u.role = 'student'
+            ORDER BY c.name, u.username
+            """
+        )
+        rows = cursor.fetchall() or []
         cursor.close()
         conn.close()
         seen = {}
