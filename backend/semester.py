@@ -266,6 +266,25 @@ def should_show_image_recognize(cursor, user_id):
 
 
 # =========================================================
+# Helper: 實習學期是否已開始（當前學期有 internship_config 且 intern_start_date <= 今天）
+# =========================================================
+def is_internship_semester_started(cursor):
+    """實習學期開始後才顯示「學生實習狀況」「退實習」等頁面。任一屆的實習開始日已過即視為已開始。"""
+    current_semester_id = get_current_semester_id(cursor)
+    if not current_semester_id:
+        return False
+    today = date.today().isoformat()
+    try:
+        cursor.execute(
+            "SELECT 1 FROM internship_configs WHERE semester_id = %s AND intern_start_date IS NOT NULL AND intern_start_date <= %s LIMIT 1",
+            (current_semester_id, today),
+        )
+        return cursor.fetchone() is not None
+    except Exception:
+        return False
+
+
+# =========================================================
 # Helper: 從 internship_flows 取得當前學期之繳交/審核截止（供 check_deadline、履歷/志願序邏輯使用）
 # =========================================================
 def get_current_semester_deadline(cursor, deadline_type):
@@ -336,6 +355,27 @@ def get_current():
     finally:
         cursor.close()
         conn.close()
+
+
+# =========================================================
+# API: 實習學期是否已開始（供主任/班導/廠商首頁決定是否顯示「學生實習狀況」「退實習」入口）
+# =========================================================
+@semester_bp.route("/api/internship_semester_started", methods=["GET"])
+def api_internship_semester_started():
+    """Return { success: true, started: true|false }. When started, show director/class_teacher/vendor remove_intern cards."""
+    if "user_id" not in session:
+        return jsonify({"success": False, "started": False}), 403
+    try:
+        conn = get_db()
+        cursor = conn.cursor(dictionary=True)
+        started = is_internship_semester_started(cursor)
+        cursor.close()
+        conn.close()
+        return jsonify({"success": True, "started": started})
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"success": False, "started": False}), 500
+
 
 # =========================================================
 # API: 取得所有學期列表

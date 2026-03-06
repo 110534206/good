@@ -13,7 +13,7 @@ import re
 admission_bp = Blueprint("admission_bp", __name__, url_prefix="/admission")
 
 def _get_active_semester_year(cursor):
-    """取得當前啟用學期學年（semesters 表 is_active=1 的 code 前三碼，如 1132->113）"""
+    '''取得當前啟用學期學年（semesters 表 is_active=1 的 code 前三碼，如 1132->113）'''
     cursor.execute("SELECT code FROM semesters WHERE is_active = 1 LIMIT 1")
     row = cursor.fetchone()
     if not row or row.get('code') is None:
@@ -36,6 +36,142 @@ def _get_active_semester_year(cursor):
         except (TypeError, ValueError):
             pass
     return None
+
+def _resolve_duplicate_students(cursor, semester_id):
+    """
+    自動處理重複學生：如果有重複的學生，選擇志願序最高的記錄（preference_order 最小），
+    將其他記錄的 director_decision 更新為 Pending。
+    
+    Args:
+        cursor: 資料庫游標
+        semester_id: 學期ID
+    """
+    try:
+        # 檢查是否有 semester_id 欄位
+        cursor.execute("""
+            SELECT COLUMN_NAME
+            FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = 'manage_director'
+            AND COLUMN_NAME = 'semester_id'
+        """)
+        has_semester_id = cursor.fetchone() is not None
+        cursor.fetchall()
+        
+        # 查詢同一學期內，同一學生有多筆記錄的情況（只考慮 Approved 或 Pending 的記錄）
+        if has_semester_id:
+            cursor.execute("""
+                SELECT 
+                    md.match_id,
+                    md.student_id,
+                    md.preference_id,
+                    md.director_decision,
+                    sp.preference_order
+                FROM manage_director md
+                LEFT JOIN student_job_applications sja ON md.preference_id = sja.id
+                LEFT JOIN student_preferences sp ON sja.student_id = sp.student_id
+                    AND sja.company_id = sp.company_id
+                    AND sja.job_id = sp.job_id
+                    AND sp.semester_id = %s
+                WHERE md.semester_id = %s
+                    AND md.director_decision IN ('Approved', 'Pending')
+                ORDER BY md.student_id, COALESCE(sp.preference_order, 999), md.match_id
+            """, (semester_id, semester_id))
+        else:
+            cursor.execute("""
+                SELECT 
+                    md.match_id,
+                    md.student_id,
+                    md.preference_id,
+                    md.director_decision,
+                    sp.preference_order
+                FROM manage_director md
+                LEFT JOIN student_job_applications sja ON md.preference_id = sja.id
+                LEFT JOIN student_preferences sp ON sja.student_id = sp.student_id
+                    AND sja.company_id = sp.company_id
+                    AND sja.job_id = sp.job_id
+                WHERE md.director_decision IN ('Approved', 'Pending')
+                ORDER BY md.student_id, COALESCE(sp.preference_order, 999), md.match_id
+            """)
+        
+        all_records = cursor.fetchall()
+        print(f"🔍 [resolve_duplicate_students] 查詢到 {len(all_records)} 筆記錄")
+        
+        # 按學生分組
+        student_records = {}
+        for record in all_records:
+            student_id = record.get('student_id')
+            if student_id:
+                if student_id not in student_records:
+                    student_records[student_id] = []
+                student_records[student_id].append(record)
+        
+        # 處理每個有重複記錄的學生
+        updated_count = 0
+        for student_id, records in student_records.items():
+            if len(records) <= 1:
+                continue  # 沒有重複，跳過
+            
+            print(f"🔍 [resolve_duplicate_students] 發現重複學生 student_id={student_id}，有 {len(records)} 筆記錄")
+            
+            # 選擇志願序最高的記錄（preference_order 最小）
+            # 如果志願序相同，選擇 match_id 較小的（較早創建的）
+            best_record = None
+            best_order = 999
+            best_match_id = None
+            
+            for record in records:
+                preference_order = record.get('preference_order')
+                match_id = record.get('match_id')
+                print(f"  - match_id={match_id}, preference_order={preference_order}, director_decision={record.get('director_decision')}")
+                
+                if preference_order is None:
+                    preference_order = 999  # 沒有志願序的排在最後
+                
+                match_id_int = int(match_id) if match_id and str(match_id).isdigit() else 999999
+                
+                # 優先考慮志願序，如果志願序相同則考慮 match_id
+                if preference_order < best_order or (preference_order == best_order and match_id_int < (int(best_match_id) if best_match_id and str(best_match_id).isdigit() else 999999)):
+                    best_record = record
+                    best_order = preference_order
+                    best_match_id = match_id
+            
+            if not best_record:
+                print(f"  ⚠️ 無法選擇最佳記錄，跳過")
+                continue
+            
+            print(f"  ✅ 選擇最佳記錄: match_id={best_match_id}, preference_order={best_order}")
+            
+            # 將其他記錄的 director_decision 更新為 Pending
+            best_match_id_str = str(best_record.get('match_id'))
+            for record in records:
+                match_id = str(record.get('match_id'))
+                if match_id != best_match_id_str:
+                    # 更新為 Pending（但保持 Approved 的記錄不變，除非志願序更低）
+                    current_decision = record.get('director_decision')
+                    if current_decision == 'Approved':
+                        # 如果當前是 Approved 但志願序更低，更新為 Pending
+                        print(f"  🔄 更新 match_id={match_id} 為 Pending（志願序較低）")
+                        cursor.execute("""
+                            UPDATE manage_director
+                            SET director_decision = 'Pending',
+                                updated_at = CURRENT_TIMESTAMP
+                            WHERE match_id = %s
+                        """, (match_id,))
+                        updated_count += cursor.rowcount
+                    elif current_decision == 'Pending':
+                        # 已經是 Pending，不需要更新
+                        print(f"  ℹ️ match_id={match_id} 已經是 Pending，跳過")
+                        pass
+        
+        if updated_count > 0:
+            print(f"✅ 自動處理重複學生：已將 {updated_count} 筆記錄更新為 Pending")
+        
+        return updated_count
+    except Exception as e:
+        print(f"⚠️ 處理重複學生時發生錯誤: {str(e)}")
+        traceback.print_exc()
+        return 0
 
 # =========================================================
 # 頁面路由：查看錄取結果
@@ -100,6 +236,22 @@ def manage_director_page():
     
     return render_template('user_shared/manage_director.html')
 
+
+@admission_bp.route("/second_round/vendor", methods=["GET"])
+def second_round_vendor_page():
+    """Vendor second-round participation form page."""
+    if 'user_id' not in session or session.get('role') != 'vendor':
+        return redirect('/login')
+    return render_template('user_shared/second_round_vendor.html')
+
+
+@admission_bp.route("/second_round/director", methods=["GET"])
+def second_round_director_page():
+    """Director second-round assignment page."""
+    if 'user_id' not in session or session.get('role') != 'director':
+        return redirect('/login')
+    return render_template('user_shared/second_round_director.html')
+
 # =========================================================
 # API: 記錄實習錄取結果（錄取後自動綁定指導老師與學生）
 # =========================================================
@@ -147,14 +299,44 @@ def record_admission():
         if not advisor:
             return jsonify({"success": False, "message": "找不到該指導老師"}), 404
         
-        # 3. 獲取當前學期（代碼與 ID）
+        # 3. 如果 job_id 為 NULL，嘗試從 student_preferences 或 student_job_applications 獲取
+        if not job_id:
+            # 優先從 student_preferences 獲取（根據 company_id 和 preference_order）
+            if preference_order:
+                cursor.execute("""
+                    SELECT job_id
+                    FROM student_preferences
+                    WHERE student_id = %s AND company_id = %s AND preference_order = %s
+                    ORDER BY submitted_at DESC
+                    LIMIT 1
+                """, (student_id, company_id, preference_order))
+                pref_result = cursor.fetchone()
+                if pref_result and pref_result.get('job_id'):
+                    job_id = pref_result.get('job_id')
+                    print(f"✅ [DEBUG] 從 student_preferences 獲取 job_id: {job_id}")
+            
+            # 如果還是沒有 job_id，從 student_job_applications 獲取
+            if not job_id:
+                cursor.execute("""
+                    SELECT job_id
+                    FROM student_job_applications
+                    WHERE student_id = %s AND company_id = %s
+                    ORDER BY applied_at DESC
+                    LIMIT 1
+                """, (student_id, company_id))
+                sja_result = cursor.fetchone()
+                if sja_result and sja_result.get('job_id'):
+                    job_id = sja_result.get('job_id')
+                    print(f"✅ [DEBUG] 從 student_job_applications 獲取 job_id: {job_id}")
+        
+        # 4. 獲取當前學期（代碼與 ID）
         semester_code = get_current_semester_code(cursor)
         current_semester_id = get_current_semester_id(cursor)
         if not semester_code and not current_semester_id:
             return jsonify({"success": False, "message": "目前沒有設定當前學期"}), 400
         current_datetime_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         
-        # 3.1 偵測 teacher_student_relations 表是否有 semester_id 或 semester 欄位
+        # 4.1 偵測 teacher_student_relations 表是否有 semester_id 或 semester 欄位
         cursor.execute("""
             SELECT COLUMN_NAME FROM information_schema.COLUMNS
             WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'teacher_student_relations'
@@ -165,7 +347,7 @@ def record_admission():
         has_semester = 'semester' in tsr_columns
         has_company_id = 'company_id' in tsr_columns
         
-        # 4. 檢查是否已經存在該關係（避免重複）
+        # 5. 檢查是否已經存在該關係（避免重複）
         if has_semester_id and current_semester_id:
             cursor.execute("""
                 SELECT id FROM teacher_student_relations
@@ -219,7 +401,20 @@ def record_admission():
                     VALUES (%s, %s, '指導老師', NOW())
                 """, (advisor_user_id, student_id))
         
-        # 6. 在 internship_offers 表中記錄錄取結果 (新增的邏輯)
+        # 6. 確保 job_id 不為 NULL（如果還是 NULL，嘗試從 internship_jobs 獲取該公司的第一個職缺）
+        if not job_id:
+            cursor.execute("""
+                SELECT id FROM internship_jobs
+                WHERE company_id = %s AND is_active = 1
+                ORDER BY id ASC
+                LIMIT 1
+            """, (company_id,))
+            job_result = cursor.fetchone()
+            if job_result and job_result.get('id'):
+                job_id = job_result.get('id')
+                print(f"✅ [DEBUG] 從 internship_jobs 獲取該公司的第一個職缺 job_id: {job_id}")
+        
+        # 7. 在 internship_offers 表中記錄錄取結果 (新增的邏輯)
         # 這是 get_my_admission API 優先讀取的資料來源
         print(f"🔍 [DEBUG] record_admission - 準備寫入 internship_offers: student_id={student_id}, job_id={job_id}")
         
@@ -255,8 +450,12 @@ def record_admission():
             """, (student_id, job_id, 'accepted', current_datetime_str, current_datetime_str))
             inserted_id = cursor.lastrowid
             print(f"✅ [DEBUG] 插入新 internship_offers 記錄: id={inserted_id}, student_id={student_id}, job_id={job_id}")
+        
+        # 如果 job_id 仍然為 NULL，記錄警告
+        if not job_id:
+            print(f"⚠️ [WARNING] internship_offers 記錄的 job_id 為 NULL，這可能導致 withdraw_intern_list 無法正確顯示")
             
-        # 7. 更新學生的志願序狀態
+        # 8. 更新學生的志願序狀態
         if preference_order:
             cursor.execute("""
                 UPDATE student_preferences
@@ -300,6 +499,19 @@ def get_my_admission():
     cursor = conn.cursor(dictionary=True)
     
     try:
+        # 檢查是否已被退實習（internship_records 有 withdrawing 或 confirmed）
+        is_withdrawn = False
+        try:
+            cursor.execute("""
+                SELECT 1 FROM internship_records
+                WHERE student_id = %s AND status IN ('withdrawing', 'confirmed')
+                LIMIT 1
+            """, (student_id,))
+            if cursor.fetchone():
+                is_withdrawn = True
+        except Exception:
+            pass
+        
         # 從 internship_offers 表獲取錄取資料（正式錄取結果）
         # 若已執行 migration 新增 semester_id，可於 SELECT 中加入 io.semester_id AS offer_semester_id，以對應實習學期
         cursor.execute("""
@@ -678,6 +890,9 @@ def get_my_admission():
                 return jsonify({
                     "success": True,
                     "admission": None,
+                    "final_preference": None,
+                    "experiences": [],
+                    "is_withdrawn": is_withdrawn,
                     "message": "目前尚未錄取任何實習公司"
                 })
             
@@ -925,7 +1140,8 @@ def get_my_admission():
             "success": True,
             "admission": admission,
             "final_preference": final_preference,
-            "experiences": experiences
+            "experiences": experiences,
+            "is_withdrawn": is_withdrawn
         })
     
     except Exception as e:
@@ -1710,37 +1926,167 @@ def vendor_matching_results():
                 "message": "您尚未上傳任何公司或沒有關聯的公司"
             })
         
-        # 獲取所有狀態為 approved 的學生履歷（選擇了該廠商公司的學生）
+        # 獲取科助確認後的媒合結果（從 internship_offers 表讀取，只有科助確認後才會寫入此表）
+        # 使用子查詢確保每個 (student_id, company_id, job_id) 組合只取一筆記錄
         placeholders = ','.join(['%s'] * len(company_ids))
-        cursor.execute(f"""
-            SELECT DISTINCT
-                u.id AS student_id,
-                u.name AS student_name,
-                u.username AS student_number,
-                u.email AS student_email,
-                c.name AS class_name,
-                c.department AS class_department,
-                ic.id AS company_id,
-                ic.company_name,
-                ij.id AS job_id,
-                ij.title AS job_title,
-                sp.preference_order,
-                sp.submitted_at AS preference_submitted_at,
-                sp.status AS preference_status,
-                COALESCE(tsr.created_at, CURDATE()) AS admitted_at,
-                COALESCE(tsr.semester, '1132') AS semester
-            FROM student_preferences sp
-            JOIN users u ON sp.student_id = u.id
-            LEFT JOIN classes c ON u.class_id = c.id
-            JOIN internship_companies ic ON sp.company_id = ic.id
-            LEFT JOIN internship_jobs ij ON sp.job_id = ij.id
-            LEFT JOIN teacher_student_relations tsr ON tsr.student_id = u.id AND tsr.semester = '1132'
-            WHERE sp.company_id IN ({placeholders})
-              AND sp.status = 'approved'
-            ORDER BY ic.company_name, sp.preference_order, u.name
-        """, tuple(company_ids))
+        try:
+            cursor.execute(f"""
+                SELECT DISTINCT
+                    u.id AS student_id,
+                    u.name AS student_name,
+                    u.username AS student_number,
+                    u.email AS student_email,
+                    c.name AS class_name,
+                    c.department AS class_department,
+                    ic.id AS company_id,
+                    ic.company_name,
+                    COALESCE(ij.id, ra.job_id) AS job_id,
+                    COALESCE(ij.title, '未指定職缺') AS job_title,
+                    sp.preference_order,
+                    sp.submitted_at AS preference_submitted_at,
+                    ra.apply_status AS preference_status,
+                    COALESCE(io.offered_at, tsr.created_at, ra.updated_at, CURDATE()) AS admitted_at,
+                    '1132' AS semester,
+                    ra.is_reserve,
+                    ra.slot_index
+                FROM internship_offers io
+                INNER JOIN users u ON io.student_id = u.id
+                INNER JOIN student_job_applications sja ON u.id = sja.student_id AND io.job_id = sja.job_id
+                INNER JOIN (
+                    SELECT ra1.*
+                    FROM resume_applications ra1
+                    INNER JOIN (
+                        SELECT application_id, MAX(updated_at) AS max_updated_at
+                        FROM resume_applications
+                        WHERE apply_status = 'approved'
+                        GROUP BY application_id
+                    ) ra2 ON ra1.application_id = ra2.application_id 
+                        AND ra1.updated_at = ra2.max_updated_at
+                        AND ra1.apply_status = 'approved'
+                ) ra ON ra.application_id = sja.id
+                LEFT JOIN classes c ON u.class_id = c.id
+                INNER JOIN internship_companies ic ON sja.company_id = ic.id
+                LEFT JOIN internship_jobs ij ON COALESCE(ra.job_id, sja.job_id) = ij.id
+                LEFT JOIN (
+                    SELECT sp1.*
+                    FROM student_preferences sp1
+                    INNER JOIN (
+                        SELECT student_id, company_id, job_id, MAX(submitted_at) AS max_submitted_at
+                        FROM student_preferences
+                        GROUP BY student_id, company_id, job_id
+                    ) sp2 ON sp1.student_id = sp2.student_id 
+                        AND sp1.company_id = sp2.company_id 
+                        AND sp1.job_id = sp2.job_id
+                        AND sp1.submitted_at = sp2.max_submitted_at
+                ) sp ON sja.student_id = sp.student_id 
+                    AND sja.company_id = sp.company_id 
+                    AND sja.job_id = sp.job_id
+                LEFT JOIN (
+                    SELECT tsr1.*
+                    FROM teacher_student_relations tsr1
+                    INNER JOIN (
+                        SELECT student_id, MAX(created_at) AS max_created_at
+                        FROM teacher_student_relations
+                        GROUP BY student_id
+                    ) tsr2 ON tsr1.student_id = tsr2.student_id 
+                        AND tsr1.created_at = tsr2.max_created_at
+                ) tsr ON tsr.student_id = u.id
+                WHERE sja.company_id IN ({placeholders})
+                  AND ra.apply_status = 'approved'
+                  AND io.status = 'accepted'
+                ORDER BY ic.company_name, COALESCE(ra.slot_index, 999), ra.is_reserve, sp.preference_order, u.name
+            """, tuple(company_ids))
+        except Exception as qerr:
+            err_str = str(qerr).lower()
+            if "unknown column" in err_str or "1054" in str(qerr) or "1146" in str(qerr):
+                # resume_applications 可能無 job_id / slot_index / is_reserve 或缺少 teacher_student_relations 等，改用精簡查詢
+                # 但仍需從 internship_offers 表讀取，確保只返回科助確認後的資料
+                cursor.execute(f"""
+                    SELECT DISTINCT
+                        u.id AS student_id,
+                        u.name AS student_name,
+                        u.username AS student_number,
+                        u.email AS student_email,
+                        c.name AS class_name,
+                        c.department AS class_department,
+                        ic.id AS company_id,
+                        ic.company_name,
+                        COALESCE(ij.id, sja.job_id) AS job_id,
+                        COALESCE(ij.title, '未指定職缺') AS job_title,
+                        sp.preference_order,
+                        sp.submitted_at AS preference_submitted_at,
+                        ra.apply_status AS preference_status,
+                        COALESCE(io.offered_at, ra.updated_at, CURDATE()) AS admitted_at,
+                        '1132' AS semester,
+                        NULL AS is_reserve,
+                        NULL AS slot_index
+                    FROM internship_offers io
+                    INNER JOIN users u ON io.student_id = u.id
+                    INNER JOIN student_job_applications sja ON u.id = sja.student_id AND io.job_id = sja.job_id
+                    INNER JOIN resume_applications ra ON ra.application_id = sja.id
+                    LEFT JOIN classes c ON u.class_id = c.id
+                    INNER JOIN internship_companies ic ON sja.company_id = ic.id
+                    LEFT JOIN internship_jobs ij ON sja.job_id = ij.id
+                    LEFT JOIN student_preferences sp ON sja.student_id = sp.student_id 
+                        AND sja.company_id = sp.company_id 
+                        AND sja.job_id = sp.job_id
+                    WHERE sja.company_id IN ({placeholders})
+                      AND ra.apply_status = 'approved'
+                      AND io.status = 'accepted'
+                    ORDER BY ic.company_name, sp.preference_order, u.name
+                """, tuple(company_ids))
+            else:
+                raise
         
         matches = cursor.fetchall()
+        
+        # 去重：確保每個學生只出現一次（科助確認後，一個學生只會有一個職缺）
+        # 使用 student_id 作為唯一鍵
+        # 如果有多筆記錄，優先保留有媒合排序的（有 slot_index 或 is_reserve），然後保留最新的
+        seen_students = {}
+        unique_matches = []
+        
+        for match in matches:
+            student_id = match.get('student_id')
+            if not student_id:
+                continue
+            
+            if student_id not in seen_students:
+                seen_students[student_id] = match
+                unique_matches.append(match)
+            else:
+                # 如果已存在，比較兩筆記錄，保留更合適的
+                existing_match = seen_students[student_id]
+                current_has_sorting = match.get('slot_index') is not None or match.get('is_reserve') is not None
+                existing_has_sorting = existing_match.get('slot_index') is not None or existing_match.get('is_reserve') is not None
+                
+                # 優先保留有媒合排序的記錄
+                if current_has_sorting and not existing_has_sorting:
+                    # 當前記錄有媒合排序，替換舊記錄
+                    index = unique_matches.index(existing_match)
+                    unique_matches[index] = match
+                    seen_students[student_id] = match
+                elif not current_has_sorting and existing_has_sorting:
+                    # 舊記錄有媒合排序，保留舊記錄
+                    pass
+                else:
+                    # 兩筆都有或都沒有媒合排序，保留最新的（admitted_at 較新的）
+                    current_updated = match.get('admitted_at') or ''
+                    existing_updated = existing_match.get('admitted_at') or ''
+                    if current_updated and existing_updated:
+                        try:
+                            # 使用外層已導入的 datetime
+                            current_dt = datetime.strptime(str(current_updated), '%Y-%m-%d') if isinstance(current_updated, str) else current_updated
+                            existing_dt = datetime.strptime(str(existing_updated), '%Y-%m-%d') if isinstance(existing_updated, str) else existing_updated
+                            if isinstance(current_dt, datetime) and isinstance(existing_dt, datetime) and current_dt > existing_dt:
+                                index = unique_matches.index(existing_match)
+                                unique_matches[index] = match
+                                seen_students[student_id] = match
+                        except:
+                            # 如果日期解析失敗，保留舊記錄
+                            pass
+        
+        matches = unique_matches
         
         # 格式化日期
         for match in matches:
@@ -3539,6 +3885,9 @@ def director_add_student():
                     final_rank
                 ))
         
+        # 自動處理重複學生：選擇志願序最高的記錄，將其他記錄標記為 Pending
+        _resolve_duplicate_students(cursor, current_semester_id)
+        
         conn.commit()
         
         type_name = '正取' if type == 'regular' else '備取'
@@ -3769,6 +4118,44 @@ def director_swap_positions():
         conn.close()
 
 # =========================================================
+# API: 手動處理重複學生（管理員/主任可用）
+# =========================================================
+@admission_bp.route("/api/resolve_duplicate_students", methods=["POST"])
+def resolve_duplicate_students():
+    """手動處理重複學生：選擇志願序最高的記錄，將其他記錄標記為 Pending"""
+    if 'user_id' not in session or session.get('role') not in ['director', 'admin', 'ta']:
+        return jsonify({"success": False, "message": "未授權"}), 403
+    
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+    
+    try:
+        # 獲取當前學期ID
+        current_semester_id = get_current_semester_id(cursor)
+        if not current_semester_id:
+            return jsonify({"success": False, "message": "無法取得當前學期"}), 500
+        
+        # 執行處理重複學生的邏輯
+        updated_count = _resolve_duplicate_students(cursor, current_semester_id)
+        
+        conn.commit()
+        
+        return jsonify({
+            "success": True,
+            "message": f"已處理重複學生，更新了 {updated_count} 筆記錄",
+            "updated_count": updated_count
+        })
+    
+    except Exception as e:
+        traceback.print_exc()
+        if conn:
+            conn.rollback()
+        return jsonify({"success": False, "message": f"處理失敗: {str(e)}"}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+# =========================================================
 # API: 主任確認媒合結果
 # =========================================================
 @admission_bp.route("/api/director_confirm_matching", methods=["POST"])
@@ -3808,6 +4195,9 @@ def director_confirm_matching():
         """, (current_semester_id,))
         updated_count = cursor.rowcount
         print(f"✅ 主任確認：已將 {updated_count} 筆 Pending 記錄更新為 Approved")
+        
+        # 0.05. 自動處理重複學生：選擇志願序最高的記錄，將其他記錄標記為 Pending
+        _resolve_duplicate_students(cursor, current_semester_id)
         
         # 0.1. 為來自 resume_applications 但還沒有 manage_director 記錄的學生創建記錄
         # 這些學生是廠商已排序但主任還沒有處理的
@@ -3896,6 +4286,9 @@ def director_confirm_matching():
         
         inserted_count = cursor.rowcount
         print(f"✅ 主任確認：已為 {inserted_count} 筆來自 resume_applications 的記錄創建 manage_director 記錄")
+        
+        # 0.15. 再次自動處理重複學生（插入新記錄後可能產生新的重複）
+        _resolve_duplicate_students(cursor, current_semester_id)
         
         # 主任確認：只通知科助（指導老師、班導、學生、廠商由科助確認時一併通知）
         cursor.execute("SELECT id, name FROM users WHERE role = 'ta'")

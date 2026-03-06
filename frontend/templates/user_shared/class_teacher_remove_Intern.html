@@ -95,11 +95,36 @@
       border-bottom: 2px solid #e2e8f0; font-weight: 700;
     }
     .card .card-desc { color: #64748b; font-size: 0.95rem; margin-bottom: 20px; line-height: 1.5; }
-    .table-wrap { overflow-x: auto; }
+    .table-wrap {
+      overflow-x: auto;
+      overflow-y: auto;
+      max-height: 70vh;
+      border: 1px solid #dee2e6;
+      border-radius: 8px;
+    }
+    .search-wrap {
+      margin-bottom: 16px; display: flex; align-items: center; gap: 12px;
+    }
+    .search-wrap label { font-weight: 600; color: #334155; font-size: 0.95rem; }
+    .search-wrap input {
+      flex: 1; max-width: 280px; padding: 10px 14px 10px 36px;
+      border: 1px solid #e2e8f0; border-radius: 8px; font-size: 1rem;
+      background: #fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='%2394a3b8' viewBox='0 0 16 16'%3E%3Cpath d='M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001c.03.04.062.078.098.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1.007 1.007 0 0 0-.115-.1zM12 6.5a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0z'/%3E%3C/svg%3E") no-repeat 12px center;
+    }
+    .search-wrap input:focus {
+      outline: none; border-color: #0454a3; box-shadow: 0 0 0 2px rgba(4, 84, 163, 0.2);
+    }
+    .search-wrap select {
+      padding: 10px 14px; border: 1px solid #e2e8f0; border-radius: 8px;
+      font-size: 1rem; background: #fff; color: #334155; min-width: 120px;
+    }
+    .search-wrap select:focus {
+      outline: none; border-color: #0454a3; box-shadow: 0 0 0 2px rgba(4, 84, 163, 0.2);
+    }
     .data-table {
       width: 100%; border-collapse: collapse; font-size: 0.9rem; background: #fff;
     }
-    .data-table thead { background: #f8f9fa; }
+    .data-table thead { background: #f8f9fa; position: sticky; top: 0; z-index: 1; }
     .data-table th, .data-table td {
       padding: 12px 16px; border-bottom: 1px solid #dee2e6; vertical-align: middle;
     }
@@ -144,6 +169,14 @@
 
     <div id="listCard" class="card">
       <h2><i class="bi bi-people-fill" style="margin-right: 8px; color: #0454a3;"></i>該班學生實習狀況</h2>
+      <div class="search-wrap">
+        <label for="classFilter">班級</label>
+        <select id="classFilter" aria-label="篩選班級">
+          <option value="">全部班級</option>
+        </select>
+        <label for="searchInput">搜尋</label>
+        <input type="text" id="searchInput" placeholder="輸入姓名或學號" autocomplete="off" aria-label="搜尋學生姓名或學號">
+      </div>
       <div class="table-wrap">
         <table class="data-table">
           <thead>
@@ -191,6 +224,9 @@
       const tableBody = document.getElementById('tableBody');
       const listEmpty = document.getElementById('listEmpty');
       const errorMessage = document.getElementById('errorMessage');
+      const searchInput = document.getElementById('searchInput');
+      const classFilter = document.getElementById('classFilter');
+      var allRows = [];
 
       function showError(msg) {
         errorMessage.textContent = msg || '發生錯誤';
@@ -210,6 +246,78 @@
         return 'badge-none';
       }
 
+      function renderTable(rows) {
+        if (!rows || rows.length === 0) {
+          tableBody.innerHTML = '<tr><td colspan="6" class="empty-msg">查無符合條件的學生</td></tr>';
+          listEmpty.style.display = 'none';
+          return;
+        }
+        listEmpty.style.display = 'none';
+        tableBody.innerHTML = rows.map(function (row) {
+          var status = row.status || '未實習';
+          var cls = statusClass(status);
+          var classDisplay = row.class_display || row.class_name || '—';
+          return '<tr>' +
+            '<td>' + escapeHtml(row.student_name || '—') + '</td>' +
+            '<td>' + escapeHtml(row.student_number || '—') + '</td>' +
+            '<td>' + escapeHtml(classDisplay) + '</td>' +
+            '<td>' + escapeHtml(row.company_name || '—') + '</td>' +
+            '<td>' + escapeHtml(row.job_title || '—') + '</td>' +
+            '<td class="col-status"><span class="badge ' + cls + '">' + escapeHtml(status) + '</span></td>' +
+            '</tr>';
+        }).join('');
+      }
+
+      function applySearch() {
+        var q = (searchInput && searchInput.value) ? searchInput.value.trim().toLowerCase() : '';
+        var classVal = (classFilter && classFilter.value) ? classFilter.value.trim() : '';
+        var filtered = allRows;
+        if (classVal) {
+          filtered = filtered.filter(function (row) {
+            var cd = (row.class_display || row.class_name || '').toString();
+            return cd === classVal;
+          });
+        }
+        if (q) {
+          filtered = filtered.filter(function (row) {
+            var name = (row.student_name || '').toLowerCase();
+            var num = (row.student_number || '').toLowerCase();
+            return name.indexOf(q) !== -1 || num.indexOf(q) !== -1;
+          });
+        }
+        renderTable(filtered);
+        listEmpty.style.display = allRows.length === 0 ? 'block' : 'none';
+      }
+
+      function fillClassFilter() {
+        var seen = {};
+        var list = [];
+        allRows.forEach(function (row) {
+          var cd = row.class_display || row.class_name || '';
+          if (cd && !seen[cd]) { seen[cd] = true; list.push(cd); }
+        });
+        var order = ['忠', '孝', '仁', '愛', '信', '義', '和', '平'];
+        list.sort(function (a, b) {
+          var ia = order.findIndex(function (c) { return a.indexOf(c) !== -1; });
+          var ib = order.findIndex(function (c) { return b.indexOf(c) !== -1; });
+          if (ia !== -1 && ib !== -1) return ia - ib;
+          if (ia !== -1) return -1;
+          if (ib !== -1) return 1;
+          return a.localeCompare(b);
+        });
+        if (!classFilter) return;
+        classFilter.innerHTML = '<option value="">全部班級</option>';
+        list.forEach(function (label) {
+          var opt = document.createElement('option');
+          opt.value = label;
+          opt.textContent = label;
+          classFilter.appendChild(opt);
+        });
+      }
+
+      if (searchInput) searchInput.addEventListener('input', applySearch);
+      if (classFilter) classFilter.addEventListener('change', applySearch);
+
       fetch('/class_teacher/api/intern_status', { credentials: 'same-origin' })
         .then(function (r) { return r.json(); })
         .then(function (res) {
@@ -218,25 +326,15 @@
             tableBody.innerHTML = '<tr><td colspan="6" class="empty-msg">載入失敗</td></tr>';
             return;
           }
-          var rows = res.data || [];
-          if (rows.length === 0) {
+          allRows = res.data || [];
+          if (allRows.length === 0) {
             tableBody.innerHTML = '';
             listEmpty.style.display = 'block';
             return;
           }
           listEmpty.style.display = 'none';
-          tableBody.innerHTML = rows.map(function (row) {
-            var status = row.status || '未實習';
-            var cls = statusClass(status);
-            return '<tr>' +
-              '<td>' + escapeHtml(row.student_name || '—') + '</td>' +
-              '<td>' + escapeHtml(row.student_number || '—') + '</td>' +
-              '<td>' + escapeHtml(row.class_name || '—') + '</td>' +
-              '<td>' + escapeHtml(row.company_name || '—') + '</td>' +
-              '<td>' + escapeHtml(row.job_title || '—') + '</td>' +
-              '<td class="col-status"><span class="badge ' + cls + '">' + escapeHtml(status) + '</span></td>' +
-              '</tr>';
-          }).join('');
+          fillClassFilter();
+          renderTable(allRows);
         })
         .catch(function () {
           showError('網路錯誤，請稍後再試');

@@ -132,8 +132,6 @@
         <label for="classFilter">班級</label>
         <select id="classFilter" aria-label="篩選班級">
           <option value="">全部班級</option>
-          <option value="忠">忠班</option>
-          <option value="孝">孝班</option>
         </select>
         <label for="searchInput">搜尋</label>
         <input type="text" id="searchInput" placeholder="輸入姓名或學號" autocomplete="off" aria-label="搜尋學生姓名或學號">
@@ -208,10 +206,11 @@
         tableBody.innerHTML = rows.map(function (row) {
           var status = row.status || '未實習';
           var cls = statusClass(status);
+          var classDisplay = row.class_display || row.class_name || '—';
           return '<tr>' +
             '<td>' + escapeHtml(row.student_name || '—') + '</td>' +
             '<td>' + escapeHtml(row.student_number || '—') + '</td>' +
-            '<td>' + escapeHtml(row.class_name || '—') + '</td>' +
+            '<td>' + escapeHtml(classDisplay) + '</td>' +
             '<td>' + escapeHtml(row.company_name || '—') + '</td>' +
             '<td>' + escapeHtml(row.job_title || '—') + '</td>' +
             '<td class="col-status"><span class="badge ' + cls + '">' + escapeHtml(status) + '</span></td>' +
@@ -225,8 +224,8 @@
         var filtered = allRows;
         if (classVal) {
           filtered = filtered.filter(function (row) {
-            var cn = (row.class_name || '').toString();
-            return cn.indexOf(classVal) !== -1;
+            var cd = (row.class_display || row.class_name || '').toString();
+            return cd === classVal;
           });
         }
         if (q) {
@@ -243,6 +242,32 @@
       if (searchInput) searchInput.addEventListener('input', applySearch);
       if (classFilter) classFilter.addEventListener('change', applySearch);
 
+      function fillClassFilter() {
+        var seen = {};
+        var list = [];
+        allRows.forEach(function (row) {
+          var cd = row.class_display || row.class_name || '';
+          if (cd && !seen[cd]) { seen[cd] = true; list.push(cd); }
+        });
+        var order = ['忠', '孝', '仁', '愛', '信', '義', '和', '平'];
+        list.sort(function (a, b) {
+          var ia = order.findIndex(function (c) { return a.indexOf(c) !== -1; });
+          var ib = order.findIndex(function (c) { return b.indexOf(c) !== -1; });
+          if (ia !== -1 && ib !== -1) return ia - ib;
+          if (ia !== -1) return -1;
+          if (ib !== -1) return 1;
+          return a.localeCompare(b);
+        });
+        if (!classFilter) return;
+        classFilter.innerHTML = '<option value="">全部班級</option>';
+        list.forEach(function (label) {
+          var opt = document.createElement('option');
+          opt.value = label;
+          opt.textContent = label;
+          classFilter.appendChild(opt);
+        });
+      }
+
       fetch('/director/api/intern_status', { credentials: 'same-origin' })
         .then(function (r) { return r.json(); })
         .then(function (res) {
@@ -258,6 +283,7 @@
             return;
           }
           listEmpty.style.display = 'none';
+          fillClassFilter();
           renderTable(allRows);
         })
         .catch(function () {

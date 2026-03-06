@@ -759,289 +759,120 @@
 
     async function loadMatchingResults() {
       try {
-        // 使用與科助 /ta/match_results 相同的資料來源
-        // 1. 獲取所有已審核的公司
-        const companiesRes = await fetch('/api/get_reviewed_companies', {
+        // 使用 vendor_matching_results API 獲取當前廠商的媒合結果
+        // 這個 API 會返回該廠商審核通過的學生，並包含媒合排序資訊
+        const res = await fetch('/admission/api/vendor_matching_results', {
           headers: { 'Accept': 'application/json' },
           credentials: 'include'
         });
 
-        if (!companiesRes.ok) {
-          throw new Error('無法載入公司列表');
+        if (!res.ok) {
+          throw new Error('無法載入媒合結果');
         }
 
-        const companiesData = await companiesRes.json();
-        if (!companiesData.success || !companiesData.companies || companiesData.companies.length === 0) {
+        const data = await res.json();
+        if (!data.success) {
           tableContainer.innerHTML = `
             <div class="empty-state">
               <i class="fa-solid fa-circle-info"></i>
-              <div>目前沒有已審核的公司</div>
+              <div>${data.message || '目前沒有媒合結果'}</div>
             </div>
           `;
           renderSummary({ total_jobs: 0, total_students: 0, by_company: [] });
           return;
         }
 
-        const companies = companiesData.companies;
-        const allMatches = [];
-        const companyBreakdown = [];
-
-        // 2. 對於每個公司，獲取他們審核通過的學生和職缺
-        for (const company of companies) {
-          let approvedStudents = [];
-          let jobs = [];
+        // 獲取媒合排序結果（用於排序和職缺資訊）
+        let matchingSortMap = new Map(); // key: student_id, value: {job_id, job_title, slot_index, is_reserve}
+        try {
+          const matchingSortRes = await fetch('/vendor/api/get_matching_sort', {
+            headers: { 'Accept': 'application/json' },
+            credentials: 'include'
+          });
           
-          // 獲取職缺列表
-          try {
-            const jobsRes = await fetch(`/intern_experience/api/jobs/${company.id}`, {
-              headers: { 'Accept': 'application/json' },
-              credentials: 'include'
-            });
-
-            if (jobsRes.ok) {
-              const jobsData = await jobsRes.json();
-              if (jobsData.success && jobsData.data) {
-                jobs = jobsData.data;
-              }
-            }
-          } catch (error) {
-            console.error(`載入公司 ${company.company_name} 的職缺失敗:`, error);
-          }
-          
-          // 獲取審核通過的學生
-          try {
-            const studentsRes = await fetch(`/api/public/company/${company.id}/vendor-reviewed-students`, {
-              headers: { 'Accept': 'application/json' },
-              credentials: 'include'
-            });
-
-            if (studentsRes.ok) {
-              const studentsData = await studentsRes.json();
-              if (studentsData.success && studentsData.students && studentsData.students.length > 0) {
-                // 只保留審核通過的學生
-                approvedStudents = studentsData.students.filter(s => s.vendor_review_status === 'approved');
-              }
-            }
-          } catch (error) {
-            console.error(`載入公司 ${company.company_name} 的學生失敗:`, error);
-          }
-          
-          // 獲取媒合排序結果（如果有）
-          try {
-            console.log(`🔍 正在為公司 ${company.company_name} (ID: ${company.id}) 獲取媒合排序結果...`);
-            const matchingSortRes = await fetch('/vendor/api/get_matching_sort', {
-              headers: { 'Accept': 'application/json' },
-              credentials: 'include'
-            });
-            
-            if (matchingSortRes.ok) {
-              const matchingSortData = await matchingSortRes.json();
-              console.log('📊 媒合排序API回應:', matchingSortData);
-              
-              if (matchingSortData.success && matchingSortData.results && matchingSortData.results.length > 0) {
-                console.log(`📋 找到 ${matchingSortData.results.length} 筆媒合排序記錄`);
-                // 過濾出該公司的媒合排序結果
-                const companyMatchingSort = matchingSortData.results.filter(r => {
-                  const match = (r.company_id === company.id) || (String(r.company_id) === String(company.id));
-                  return match;
-                });
-                console.log(`📋 公司 ${company.company_name} (ID: ${company.id}) 的媒合排序記錄: ${companyMatchingSort.length} 筆`);
-                
-                if (companyMatchingSort.length > 0) {
-                  // 建立媒合排序映射表（按職缺分組）
-                  const matchingSortMap = new Map(); // key: job_id, value: {正取: [], 候補: []}
-                  
-                  companyMatchingSort.forEach(item => {
-                    const jobId = item.job_id || 'no_job';
-                    if (!matchingSortMap.has(jobId)) {
-                      matchingSortMap.set(jobId, {正取: [], 候補: []});
-                    }
-                    
-                    if (item.is_reserve) {
-                      matchingSortMap.get(jobId).候補.push(item);
-                    } else {
-                      matchingSortMap.get(jobId).正取.push(item);
-                    }
-                  });
-                  
-                  // 按職缺和排序結果重新組織學生列表
-                  const sortedStudents = [];
-                  const matchedStudentIds = new Set();
-                  
-                  // 先添加有媒合排序的學生（按職缺和排序）
-                  matchingSortMap.forEach((sortData, jobId) => {
-                    // 先添加正取學生（按 slot_index 排序）
-                    sortData.正取.sort((a, b) => {
-                      const slotA = a.slot_index || 999;
-                      const slotB = b.slot_index || 999;
-                      return slotA - slotB;
-                    });
-                    
-                    sortData.正取.forEach(item => {
-                      // 嘗試多種方式匹配學生
-                      let student = approvedStudents.find(s => {
-                        if (s.student_id && item.student_id && String(s.student_id) === String(item.student_id)) {
-                          return true;
-                        }
-                        if (s.id && item.student_id && String(s.id) === String(item.student_id)) {
-                          return true;
-                        }
-                        if (s.student_number && item.student_number && s.student_number === item.student_number) {
-                          return true;
-                        }
-                        if (s.username && item.student_number && s.username === item.student_number) {
-                          return true;
-                        }
-                        return false;
-                      });
-                      
-                      if (student) {
-                        // 更新學生的職缺信息為媒合排序中的職缺
-                        if (item.job_title) {
-                          student.job_title = item.job_title;
-                          student.job_id = item.job_id;
-                        }
-                        sortedStudents.push(student);
-                        matchedStudentIds.add(String(item.student_id));
-                      } else {
-                        // 如果找不到匹配的學生，從媒合排序數據創建學生對象
-                        console.warn(`⚠️ 無法在審核列表中匹配正取學生，從媒合排序數據創建:`, item);
-                        const newStudent = {
-                          student_id: item.student_id,
-                          student_name: item.student_name || '未知',
-                          student_number: item.student_number || '',
-                          student_email: item.student_email || '',
-                          class_name: item.class_name || '',
-                          class_department: item.class_department || '',
-                          vendor_review_status: 'approved',
-                          job_title: item.job_title || '',
-                          job_id: item.job_id || null
-                        };
-                        sortedStudents.push(newStudent);
-                        matchedStudentIds.add(String(item.student_id));
-                      }
-                    });
-                    
-                    // 再添加候補學生
-                    sortData.候補.forEach(item => {
-                      let student = approvedStudents.find(s => {
-                        if (s.student_id && item.student_id && String(s.student_id) === String(item.student_id)) {
-                          return true;
-                        }
-                        if (s.id && item.student_id && String(s.id) === String(item.student_id)) {
-                          return true;
-                        }
-                        if (s.student_number && item.student_number && s.student_number === item.student_number) {
-                          return true;
-                        }
-                        if (s.username && item.student_number && s.username === item.student_number) {
-                          return true;
-                        }
-                        return false;
-                      });
-                      
-                      const studentIdStr = String(item.student_id);
-                      if (student && !matchedStudentIds.has(studentIdStr)) {
-                        // 更新學生的職缺信息為媒合排序中的職缺
-                        if (item.job_title) {
-                          student.job_title = item.job_title;
-                          student.job_id = item.job_id;
-                        }
-                        sortedStudents.push(student);
-                        matchedStudentIds.add(studentIdStr);
-                      } else if (!student && !matchedStudentIds.has(studentIdStr)) {
-                        // 如果找不到匹配的學生，從媒合排序數據創建學生對象
-                        console.warn(`⚠️ 無法在審核列表中匹配候補學生，從媒合排序數據創建:`, item);
-                        const newStudent = {
-                          student_id: item.student_id,
-                          student_name: item.student_name || '未知',
-                          student_number: item.student_number || '',
-                          student_email: item.student_email || '',
-                          class_name: item.class_name || '',
-                          class_department: item.class_department || '',
-                          vendor_review_status: 'approved',
-                          job_title: item.job_title || '',
-                          job_id: item.job_id || null
-                        };
-                        sortedStudents.push(newStudent);
-                        matchedStudentIds.add(studentIdStr);
-                      }
-                    });
-                  });
-                  
-                  // 添加沒有媒合排序的學生（按審核時間排序）
-                  approvedStudents.forEach(student => {
-                    const studentIdStr = String(student.student_id || student.id || '');
-                    if (!matchedStudentIds.has(studentIdStr)) {
-                      sortedStudents.push(student);
-                    }
-                  });
-                  
-                  approvedStudents = sortedStudents;
-                  console.log(`✅ 使用媒合排序結果，共 ${approvedStudents.length} 位學生`);
-                } else {
-                  console.log(`⚠️ 公司 ${company.company_name} 沒有媒合排序記錄，使用審核時間排序`);
-                  // 如果沒有媒合排序結果，按審核時間排序（最新的在前）
-                  approvedStudents.sort((a, b) => {
-                    const timeA = new Date(a.vendor_reviewed_at || 0);
-                    const timeB = new Date(b.vendor_reviewed_at || 0);
-                    return timeB - timeA; // 降序：最新的在前
+          if (matchingSortRes.ok) {
+            const matchingSortData = await matchingSortRes.json();
+            if (matchingSortData.success && matchingSortData.results && matchingSortData.results.length > 0) {
+              // 建立學生ID到媒合排序的映射
+              matchingSortData.results.forEach(item => {
+                const studentId = item.student_id;
+                if (studentId) {
+                  matchingSortMap.set(String(studentId), {
+                    job_id: item.job_id,
+                    job_title: item.job_title,
+                    slot_index: item.slot_index,
+                    is_reserve: item.is_reserve
                   });
                 }
-              } else {
-                console.log(`⚠️ 媒合排序API返回空結果，使用審核時間排序`);
-                // 如果沒有媒合排序結果，按審核時間排序（最新的在前）
-                approvedStudents.sort((a, b) => {
-                  const timeA = new Date(a.vendor_reviewed_at || 0);
-                  const timeB = new Date(b.vendor_reviewed_at || 0);
-                  return timeB - timeA; // 降序：最新的在前
-                });
-              }
+              });
             }
-          } catch (error) {
-            console.error(`❌ 載入媒合排序結果失敗:`, error);
-            // 如果獲取媒合排序失敗，按審核時間排序（最新的在前）
-            approvedStudents.sort((a, b) => {
-              const timeA = new Date(a.vendor_reviewed_at || 0);
-              const timeB = new Date(b.vendor_reviewed_at || 0);
-              return timeB - timeA; // 降序：最新的在前
-            });
           }
-
-          // 將學生資料轉換成 matches 格式
-          approvedStudents.forEach(student => {
-            allMatches.push({
-              student_id: student.student_id,
-              student_name: student.student_name,
-              student_number: student.student_number,
-              student_email: student.student_email || '',
-              class_name: student.class_name || '',
-              class_department: student.class_department || '',
-              company_id: company.id,
-              company_name: company.company_name,
-              job_id: student.job_id || null,
-              job_title: student.job_title || '未指定職缺',
-              preference_order: student.preference_order || null,
-              admitted_at: student.vendor_reviewed_at || null,
-              semester: '1132' // 預設學期
-            });
-          });
-
-          // 建立公司摘要
-          if (approvedStudents.length > 0) {
-            companyBreakdown.push({
-              company_name: company.company_name,
-              matched_students: approvedStudents.length
-            });
-          }
+        } catch (error) {
+          console.error('載入媒合排序結果失敗:', error);
         }
 
-        // 3. 更新快取和摘要
+        // 將 API 返回的 matches 轉換為顯示格式，並應用媒合排序資訊
+        const allMatches = (data.matches || []).map(match => {
+          const studentId = String(match.student_id);
+          const sortInfo = matchingSortMap.get(studentId);
+          
+          // 如果使用媒合排序中的 job_id，需要確保 company_id 也對應正確
+          // 因為不同的 job_id 可能對應不同的 company_id
+          let finalJobId = match.job_id || null;
+          let finalCompanyId = match.company_id;
+          let finalJobTitle = match.job_title || '未指定職缺';
+          
+          // 只有在媒合排序中的 job_id 屬於當前廠商的公司時，才使用它
+          if (sortInfo && sortInfo.job_id) {
+            const jobInfo = vendorJobs.find(job => job.id === sortInfo.job_id);
+            if (jobInfo && jobInfo.company_id === match.company_id) {
+              // 媒合排序中的 job_id 屬於同一公司，可以使用
+              finalJobId = sortInfo.job_id;
+              finalJobTitle = sortInfo.job_title || finalJobTitle;
+            } else if (jobInfo && jobInfo.company_id !== match.company_id) {
+              // 媒合排序中的 job_id 屬於不同公司，不使用，保持原來的 job_id
+              console.warn(`⚠️ [confirm_matching] 學生 ${match.student_name} 的媒合排序 job_id=${sortInfo.job_id} 屬於公司 ${jobInfo.company_id}，但學生屬於公司 ${match.company_id}，忽略媒合排序資訊`);
+            }
+          }
+          
+          return {
+            student_id: match.student_id,
+            student_name: match.student_name,
+            student_number: match.student_number,
+            student_email: match.student_email || '',
+            class_name: match.class_name || '',
+            class_department: match.class_department || '',
+            company_id: finalCompanyId,
+            company_name: match.company_name,
+            // 使用確認後的職缺資訊
+            job_id: finalJobId,
+            job_title: finalJobTitle,
+            preference_order: match.preference_order || null,
+            admitted_at: match.admitted_at || null,
+            semester: match.semester || '1132'
+          };
+        });
+
+        // 按公司、職缺和媒合排序排序
+        allMatches.sort((a, b) => {
+          // 先按公司名稱排序
+          if (a.company_name !== b.company_name) {
+            return (a.company_name || '').localeCompare(b.company_name || '');
+          }
+          // 再按職缺名稱排序
+          if (a.job_title !== b.job_title) {
+            return (a.job_title || '').localeCompare(b.job_title || '');
+          }
+          // 最後按學生姓名排序
+          return (a.student_name || '').localeCompare(b.student_name || '');
+        });
+
+        // 更新快取和摘要
         cachedMatches = allMatches;
         const summary = {
           total_jobs: totalJobCount || 0,
-          total_students: allMatches.length,
-          by_company: companyBreakdown
+          total_students: data.summary ? data.summary.total_students : allMatches.length,
+          by_company: data.summary ? data.summary.by_company : []
         };
         renderSummary(summary);
 

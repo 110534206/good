@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>智慧實習平台 | 二輪媒合意願</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    body { font-family: "Noto Sans TC", sans-serif; background: #f5f8ff; min-height: 100vh; padding-top: 60px; }
+    .top-bar { background: linear-gradient(135deg, #0055a8 0%, #006acb 100%); color: #fff; padding: 1rem 2rem; position: fixed; top: 0; left: 0; right: 0; z-index: 1000; }
+    .card { border: none; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
+    .company-block { border: 1px solid #e2e8f0; border-radius: 10px; padding: 1.25rem; margin-bottom: 1rem; background: #fff; }
+    .company-block h6 { margin-bottom: 1rem; color: #1e293b; }
+  </style>
+</head>
+<body>
+  <div class="top-bar d-flex align-items-center justify-content-between">
+    <a href="/vendor_home" class="text-white text-decoration-none"><i class="fas fa-arrow-left me-2"></i>返回廠商首頁</a>
+    <h5 class="mb-0">二輪媒合意願填寫</h5>
+    <span></span>
+  </div>
+
+  <div class="container py-4">
+    <div id="alertPlace" class="mb-3"></div>
+    <div id="notOpenMsg" class="alert alert-info d-none">
+      目前二輪媒合尚未開啟，請待科助公告第一輪錄取結果並開啟二輪後再填寫。
+    </div>
+    <div id="contentCard" class="card p-4 d-none">
+      <p class="text-muted mb-4">請勾選是否參與二輪媒合，並填寫名額、薪資說明與職缺名稱（可與第一輪不同）。</p>
+      <div id="companyList"></div>
+      <div class="mt-3">
+        <button type="button" class="btn btn-primary" id="btnSaveAll"><i class="fas fa-save me-1"></i>全部儲存</button>
+      </div>
+    </div>
+    <div id="loading" class="text-center py-5 text-muted">
+      <div class="spinner-border" role="status"></div>
+      <p class="mt-2">載入中…</p>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script>
+    (function() {
+      const alertPlace = document.getElementById('alertPlace');
+      const notOpenMsg = document.getElementById('notOpenMsg');
+      const contentCard = document.getElementById('contentCard');
+      const companyList = document.getElementById('companyList');
+      const loading = document.getElementById('loading');
+      const btnSaveAll = document.getElementById('btnSaveAll');
+
+      function showAlert(msg, type) {
+        alertPlace.innerHTML = '<div class="alert alert-' + type + ' alert-dismissible fade show">' + msg + '<button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>';
+      }
+
+      async function load() {
+        try {
+          const [statusRes, partRes] = await Promise.all([
+            fetch('/admission/api/second_round/status', { credentials: 'include' }),
+            fetch('/admission/api/second_round/vendor/participation', { credentials: 'include' })
+          ]);
+          const statusData = await statusRes.json();
+          const partData = await partRes.json();
+          loading.classList.add('d-none');
+          if (!statusData.success || !statusData.is_enabled) {
+            notOpenMsg.classList.remove('d-none');
+            contentCard.classList.add('d-none');
+            return;
+          }
+          notOpenMsg.classList.add('d-none');
+          contentCard.classList.remove('d-none');
+          if (!partData.success || !partData.companies || !partData.companies.length) {
+            companyList.innerHTML = '<p class="text-muted">尚無可填寫的公司，或您尚未關聯任何已審核通過的公司。</p>';
+            return;
+          }
+          companyList.innerHTML = partData.companies.map(function(c) {
+            return '<div class="company-block" data-company-id="' + c.company_id + '">'
+              + '<h6><i class="fas fa-building me-2"></i>' + (c.company_name || '') + '</h6>'
+              + '<div class="form-check mb-2">'
+              + '<input class="form-check-input sr-agree" type="checkbox" id="agree_' + c.company_id + '" ' + (c.agree ? 'checked' : '') + '>'
+              + '<label class="form-check-label" for="agree_' + c.company_id + '">參與二輪媒合</label></div>'
+              + '<div class="mb-2"><label class="form-label small">名額</label><input type="number" class="form-control form-control-sm sr-quota" min="0" value="' + (c.quota || 0) + '" style="max-width:100px"></div>'
+              + '<div class="mb-2"><label class="form-label small">薪資說明（可標示無薪、時薪等）</label><input type="text" class="form-control form-control-sm sr-salary" value="' + (c.salary_note || '').replace(/"/g, '&quot;') + '" placeholder="例：無薪、時薪 200"></div>'
+              + '<div class="mb-2"><label class="form-label small">二輪職缺名稱（可與第一輪不同）</label><input type="text" class="form-control form-control-sm sr-jobtitle" value="' + (c.job_title || '').replace(/"/g, '&quot;') + '" placeholder="例：實習生"></div>'
+              + '</div>';
+          }).join('');
+        } catch (e) {
+          loading.classList.add('d-none');
+          showAlert('載入失敗：' + (e.message || '連線錯誤'), 'danger');
+        }
+      }
+
+      async function saveAll() {
+        const blocks = contentCard.querySelectorAll('.company-block');
+        let ok = 0;
+        for (const block of blocks) {
+          const companyId = block.dataset.companyId;
+          const agree = block.querySelector('.sr-agree').checked ? 1 : 0;
+          const quota = parseInt(block.querySelector('.sr-quota').value, 10) || 0;
+          const salary = (block.querySelector('.sr-salary').value || '').trim();
+          const jobTitle = (block.querySelector('.sr-jobtitle').value || '').trim();
+          const res = await fetch('/admission/api/second_round/vendor/participation', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({ company_id: companyId, agree: agree, quota: quota, salary_note: salary, job_title: jobTitle })
+          });
+          const data = await res.json();
+          if (data.success) ok++;
+        }
+        showAlert('已儲存 ' + ok + ' 筆二輪意願。', 'success');
+      }
+
+      btnSaveAll.addEventListener('click', saveAll);
+      load();
+    })();
+  </script>
+</body>
+</html>
