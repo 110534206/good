@@ -5089,7 +5089,15 @@ def class_teacher_intern_status():
                 FROM users u
                 JOIN classes c ON c.id = u.class_id
                 JOIN classes_teacher ct ON ct.class_id = c.id AND ct.teacher_id = %s AND ct.role = 'classteacher'
-                LEFT JOIN internship_offers io ON io.student_id = u.id AND (%s IS NULL OR io.semester_id = %s)
+                LEFT JOIN (
+                    SELECT io1.* FROM internship_offers io1
+                    INNER JOIN (
+                        SELECT student_id, MAX(io0.id) AS max_id
+                        FROM internship_offers io0
+                        WHERE %s IS NULL OR io0.semester_id = %s
+                        GROUP BY student_id
+                    ) io2 ON io1.student_id = io2.student_id AND io1.id = io2.max_id
+                ) io ON io.student_id = u.id
                 LEFT JOIN internship_jobs ij ON ij.id = io.job_id
                 LEFT JOIN internship_companies ic ON ic.id = ij.company_id
                 LEFT JOIN internship_records vri ON vri.student_id = u.id AND vri.semester_id = %s
@@ -5107,7 +5115,12 @@ def class_teacher_intern_status():
                     FROM users u
                     JOIN classes c ON c.id = u.class_id
                     JOIN classes_teacher ct ON ct.class_id = c.id AND ct.teacher_id = %s AND ct.role = 'classteacher'
-                    LEFT JOIN internship_offers io ON io.student_id = u.id
+                    LEFT JOIN (
+                        SELECT io1.* FROM internship_offers io1
+                        INNER JOIN (
+                            SELECT student_id, MAX(id) AS max_id FROM internship_offers GROUP BY student_id
+                        ) io2 ON io1.student_id = io2.student_id AND io1.id = io2.max_id
+                    ) io ON io.student_id = u.id
                     LEFT JOIN internship_jobs ij ON ij.id = io.job_id
                     LEFT JOIN internship_companies ic ON ic.id = ij.company_id
                     LEFT JOIN internship_records vri ON vri.student_id = u.id AND vri.semester_id = %s
@@ -5119,7 +5132,7 @@ def class_teacher_intern_status():
         rows = cursor.fetchall()
         cursor.close()
         conn.close()
-        # 依 student_id 去重（一名學生只保留一列），並決定狀態
+        # 每位學生已只對應一筆錄取，依 student_id 決定狀態
         seen = {}
         for r in rows:
             sid = r["student_id"]
@@ -5164,7 +5177,7 @@ def director_intern_status():
         conn = get_db()
         cursor = conn.cursor(dictionary=True)
         current_semester_id = get_current_semester_id(cursor)
-        # 僅抓當前學期之錄取與退實習，避免顯示舊學期錯誤資料
+        # 每位學生只取一筆錄取（當前學期且 id 最大），避免多筆錄取造成錯誤顯示
         try:
             cursor.execute("""
                 SELECT u.id AS student_id, u.name AS student_name, u.username AS student_number,
@@ -5174,7 +5187,15 @@ def director_intern_status():
                        vri.id AS withdraw_id
                 FROM users u
                 LEFT JOIN classes c ON c.id = u.class_id
-                LEFT JOIN internship_offers io ON io.student_id = u.id AND (%s IS NULL OR io.semester_id = %s)
+                LEFT JOIN (
+                    SELECT io1.* FROM internship_offers io1
+                    INNER JOIN (
+                        SELECT student_id, MAX(io0.id) AS max_id
+                        FROM internship_offers io0
+                        WHERE %s IS NULL OR io0.semester_id = %s
+                        GROUP BY student_id
+                    ) io2 ON io1.student_id = io2.student_id AND io1.id = io2.max_id
+                ) io ON io.student_id = u.id
                 LEFT JOIN internship_jobs ij ON ij.id = io.job_id
                 LEFT JOIN internship_companies ic ON ic.id = ij.company_id
                 LEFT JOIN internship_records vri ON vri.student_id = u.id AND vri.semester_id = %s
@@ -5183,6 +5204,7 @@ def director_intern_status():
             """, (current_semester_id, current_semester_id, current_semester_id))
         except Exception as sem_err:
             if "semester_id" in str(sem_err) or "Unknown column" in str(sem_err):
+                # 無 semester_id 時：每位學生只取一筆錄取（id 最大＝最新）
                 cursor.execute("""
                     SELECT u.id AS student_id, u.name AS student_name, u.username AS student_number,
                            c.name AS class_name, c.department, c.admission_year,
@@ -5191,7 +5213,12 @@ def director_intern_status():
                            vri.id AS withdraw_id
                     FROM users u
                     LEFT JOIN classes c ON c.id = u.class_id
-                    LEFT JOIN internship_offers io ON io.student_id = u.id
+                    LEFT JOIN (
+                        SELECT io1.* FROM internship_offers io1
+                        INNER JOIN (
+                            SELECT student_id, MAX(id) AS max_id FROM internship_offers GROUP BY student_id
+                        ) io2 ON io1.student_id = io2.student_id AND io1.id = io2.max_id
+                    ) io ON io.student_id = u.id
                     LEFT JOIN internship_jobs ij ON ij.id = io.job_id
                     LEFT JOIN internship_companies ic ON ic.id = ij.company_id
                     LEFT JOIN internship_records vri ON vri.student_id = u.id AND vri.semester_id = %s
