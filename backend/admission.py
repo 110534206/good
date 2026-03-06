@@ -2529,7 +2529,8 @@ def director_matching_results():
 # =========================================================
 @admission_bp.route("/api/final_matching_results", methods=["GET"])
 def final_matching_results():
-    """查看主任確認後的媒合結果（只顯示 Approved 狀態），允許 TA、admin、director 等角色訪問"""
+    """查看主任確認後的媒合結果（只顯示 Approved 狀態），允許 TA、admin、director 等角色訪問
+    使用與 director_matching_results 相同的邏輯，但只過濾出 director_decision = 'Approved' 的記錄"""
     if 'user_id' not in session:
         return jsonify({"success": False, "message": "未登入"}), 401
     
@@ -2548,67 +2549,61 @@ def final_matching_results():
         if not current_semester_id or not current_semester_code:
             return jsonify({"success": False, "message": "無法取得當前學期"}), 500
         
-        # 從 manage_director 表讀取資料，只顯示主任已確認（Approved）的記錄
-        # 注意：manage_director.preference_id 對應的是 resume_applications.application_id（即 student_job_applications.id）
-        # 需要通過 resume_applications 和 student_job_applications 來 JOIN 到 student_preferences
+        # 使用與 director_matching_results 相同的查詢邏輯
+        # 但只過濾出 director_decision = 'Approved' 的記錄
         query = """
             SELECT 
-                md.match_id,
-                md.vendor_id,
-                md.student_id,
-                md.preference_id,
-                md.original_type,
-                md.original_rank,
-                md.director_decision,
+                COALESCE(md.match_id, CONCAT('ra_', ra.id)) AS match_id,
+                COALESCE(md.vendor_id, sja.company_id) AS vendor_id,
+                COALESCE(md.student_id, sja.student_id) AS student_id,
+                COALESCE(sp.id, NULL) AS preference_id,
+                COALESCE(md.original_type, CASE WHEN ra.is_reserve = 0 THEN 'Regular' ELSE 'Backup' END) AS original_type,
+                COALESCE(md.original_rank, ra.slot_index) AS original_rank,
+                COALESCE(md.is_conflict, 0) AS is_conflict,
+                COALESCE(md.director_decision, 'Pending') AS director_decision,
                 md.final_rank,
-                md.updated_at,
-                COALESCE(sp.company_id, sja.company_id, md.vendor_id) AS company_id,
+                COALESCE(md.is_adjusted, 0) AS is_adjusted,
+                COALESCE(md.updated_at, ra.updated_at, ra.created_at) AS updated_at,
+                COALESCE(sp.company_id, sja.company_id, md.vendor_id, ra.job_id) AS company_id,
                 sp.preference_order,
-                COALESCE(sp.job_id, sja.job_id, (
-                    SELECT id FROM internship_jobs 
-                    WHERE company_id = COALESCE(sp.company_id, sja.company_id, md.vendor_id) 
-                    ORDER BY id ASC LIMIT 1
-                )) AS job_id,
-                COALESCE(ic.company_name, v.name) AS company_name,
+                COALESCE(sp.job_id, sja.job_id, ra.job_id) AS job_id,
+                ic.company_name,
                 u.name AS student_name,
                 u.username AS student_number,
                 u.email AS student_email,
                 u.admission_year AS admission_year,
                 c.name AS class_name,
                 c.department AS class_department,
-                v.name AS vendor_name,
-                COALESCE(ij.title, (
-                    SELECT title FROM internship_jobs 
-                    WHERE company_id = COALESCE(sp.company_id, sja.company_id, md.vendor_id) 
-                    ORDER BY id ASC LIMIT 1
-                )) AS job_title,
-                COALESCE(ij.slots, (
-                    SELECT slots FROM internship_jobs 
-                    WHERE company_id = COALESCE(sp.company_id, sja.company_id, md.vendor_id) 
-                    ORDER BY id ASC LIMIT 1
-                )) AS job_slots
-            FROM manage_director md
-            INNER JOIN student_job_applications sja ON md.preference_id = sja.id
-            INNER JOIN student_preferences sp ON sja.student_id = sp.student_id 
+                COALESCE(v.name, ic.company_name) AS vendor_name,
+                ij.title AS job_title,
+                ij.slots AS job_slots,
+                ra.is_reserve AS vendor_is_reserve,
+                ra.slot_index AS vendor_slot_index
+            FROM resume_applications ra
+            LEFT JOIN student_job_applications sja ON ra.application_id = sja.id
+            LEFT JOIN student_preferences sp ON (sja.student_id = sp.student_id 
                 AND sja.company_id = sp.company_id 
                 AND sja.job_id = sp.job_id
-                AND sp.semester_id = %s
+                AND (sp.semester_id = %s OR sp.semester_id IS NULL))
+            LEFT JOIN manage_director md ON ra.application_id = md.preference_id
             LEFT JOIN internship_companies ic ON COALESCE(sp.company_id, sja.company_id, md.vendor_id) = ic.id
-            LEFT JOIN internship_jobs ij ON COALESCE(sp.job_id, sja.job_id) = ij.id
-            LEFT JOIN users u ON md.student_id = u.id
+            LEFT JOIN internship_jobs ij ON COALESCE(sp.job_id, sja.job_id, ra.job_id) = ij.id
+            LEFT JOIN users u ON COALESCE(md.student_id, sja.student_id) = u.id
             LEFT JOIN classes c ON u.class_id = c.id
             LEFT JOIN users v ON md.vendor_id = v.id
-            WHERE md.director_decision = 'Approved'  -- 只顯示主任已確認的記錄
+            WHERE ra.apply_status = 'approved'  -- 廠商必須已通過履歷審核
+            AND (
+                (ra.is_reserve = 0 AND ra.slot_index IS NOT NULL)  -- 正取學生：is_reserve=0且slot_index有值
+                OR (ra.is_reserve = 1)  -- 候補學生：is_reserve=1
+            )  -- 必須已完成媒合排序
+            AND (md.director_decision = 'Approved')  -- 只顯示主任已確認的記錄
+            AND (ic.status = 'approved' OR ic.status IS NULL)  -- 公司狀態必須是已審核
             ORDER BY 
                 COALESCE(sp.company_id, sja.company_id, md.vendor_id), 
-                COALESCE(sp.job_id, sja.job_id, (
-                    SELECT id FROM internship_jobs 
-                    WHERE company_id = COALESCE(sp.company_id, sja.company_id, md.vendor_id) 
-                    ORDER BY id ASC LIMIT 1
-                ), 0), 
+                COALESCE(sp.job_id, sja.job_id, ra.job_id), 
                 CASE WHEN md.final_rank IS NOT NULL THEN 0 ELSE 1 END,
-                COALESCE(md.final_rank, 999) ASC,
-                md.original_rank ASC
+                COALESCE(md.final_rank, md.original_rank, ra.slot_index, 999) ASC,
+                COALESCE(md.original_rank, ra.slot_index, 999) ASC
         """
         cursor.execute(query, (current_semester_id,))
         all_results = cursor.fetchall() or []
@@ -2618,30 +2613,137 @@ def final_matching_results():
         
         # 格式化結果並組織資料結構（與 director_matching_results 相同）
         formatted_results = []
+        student_company_map = {}  # 用於檢測重複中選：{student_id: [company_ids]}
+        
+        # 使用字典去重：同一學生在同一公司/職缺只保留一條記錄
+        seen_students = {}
         
         for result in all_results:
-            # 判斷是否為正取或備取
-            # 邏輯：
-            # 因為查詢條件已經限制了 director_decision = 'Approved'，所以所有記錄都應該是正取
-            # 1. 如果有 final_rank，使用 final_rank 作為 slot_index（主任已設置最終排序）
-            # 2. 如果沒有 final_rank，但有 original_rank，使用 original_rank 作為 slot_index
-            # 3. 無論如何，都應該是正取（is_reserve = False）
+            student_id = result.get("student_id")
+            company_id = result.get("company_id")
+            job_id = result.get("job_id")
+            
+            # 檢查是否已存在（同一學生在同一公司/職缺）
+            key = (student_id, company_id, job_id)
+            if key in seen_students:
+                # 如果已存在，優先保留有 manage_director 記錄的（match_id 不以 'ra_' 開頭）
+                existing_match_id = seen_students[key].get("match_id", "")
+                current_match_id = result.get("match_id", "")
+                if isinstance(existing_match_id, str) and existing_match_id.startswith("ra_") and not (isinstance(current_match_id, str) and current_match_id.startswith("ra_")):
+                    # 當前記錄有 manage_director，替換舊記錄
+                    seen_students[key] = result
+                # 否則保留已存在的記錄（跳過當前重複記錄）
+                continue
+            
+            # 記錄已看到的學生
+            seen_students[key] = result
+        
+        # 處理去重後的記錄，並檢測重複中選
+        for key, result in seen_students.items():
+            student_id, company_id, job_id = key
+            
+            # 記錄每個學生被哪些公司選中（用於檢測重複中選）
+            if student_id not in student_company_map:
+                student_company_map[student_id] = []
+            if company_id not in student_company_map[student_id]:
+                student_company_map[student_id].append(company_id)
+        
+        # 標記重複中選的學生
+        duplicate_students = {}
+        for sid, companies in student_company_map.items():
+            if len(companies) > 1:
+                duplicate_students[sid] = companies
+        
+        # 對於重複中選的學生，選擇志願序最高的記錄
+        student_best_match_id = {}  # key: student_id, value: (match_id, preference_order, has_sorting)
+        
+        for key, result in seen_students.items():
+            student_id, company_id, job_id = key
+            
+            if student_id in duplicate_students:
+                # 這是重複中選的學生，需要選擇最合適的記錄
+                preference_order = result.get("preference_order")
+                if preference_order is None:
+                    preference_order = 999  # 沒有志願序的排在最後
+                
+                # 判斷是否有媒合排序結果（廠商已排序）
+                vendor_slot_index = result.get("vendor_slot_index")
+                original_rank = result.get("original_rank")
+                has_sorting = (vendor_slot_index is not None) or (original_rank is not None)
+                
+                match_id = result.get("match_id") or result.get("id")
+                match_id_str = str(match_id) if match_id is not None else None
+                
+                if student_id not in student_best_match_id:
+                    student_best_match_id[student_id] = (match_id_str, preference_order, has_sorting)
+                else:
+                    # 優先考慮志願序（志願序越小，優先級越高）
+                    current_has_sorting = student_best_match_id[student_id][2]
+                    current_order = student_best_match_id[student_id][1]
+                    
+                    # 如果當前記錄的志願序更小（優先級更高），則替換
+                    if preference_order < current_order:
+                        student_best_match_id[student_id] = (match_id_str, preference_order, has_sorting)
+                    # 如果志願序相同，則優先選擇有媒合排序的記錄
+                    elif preference_order == current_order:
+                        if has_sorting and not current_has_sorting:
+                            student_best_match_id[student_id] = (match_id_str, preference_order, has_sorting)
+        
+        # 過濾 formatted_results：重複中選的學生只保留志願序最高的記錄
+        filtered_seen_students = {}
+        for key, result in seen_students.items():
+            student_id, company_id, job_id = key
+            
+            if student_id in duplicate_students:
+                # 只保留志願序最高的記錄
+                match_id = result.get("match_id") or result.get("id")
+                match_id_str = str(match_id) if match_id is not None else None
+                if student_id in student_best_match_id and student_best_match_id[student_id][0] == match_id_str:
+                    filtered_seen_students[key] = result
+            else:
+                # 不是重複中選的學生，直接保留
+                filtered_seen_students[key] = result
+        
+        # 處理過濾後的記錄
+        for key, result in filtered_seen_students.items():
+            student_id, company_id, job_id = key
+            
+            # 判斷是否為正取或備取（使用與 director_matching_results 相同的邏輯）
+            # 優先使用廠商的媒合排序資料（resume_applications 表的 is_reserve 和 slot_index）
+            # 如果沒有廠商排序資料，則根據 director_decision 和 original_type 判斷
             is_reserve = False
             slot_index = None
             
-            if result.get("final_rank") is not None:
-                # 有 final_rank 表示正取（主任已設置最終排序）
+            # 優先使用廠商的媒合排序資料
+            vendor_is_reserve = result.get("vendor_is_reserve")
+            vendor_slot_index = result.get("vendor_slot_index")
+            original_rank = result.get("original_rank")
+            original_type = result.get("original_type")
+            
+            # 如果 resume_applications 表中有記錄（vendor_is_reserve 或 vendor_slot_index 不是 NULL），表示廠商已經排序
+            if vendor_is_reserve is not None or vendor_slot_index is not None:
+                # 有廠商的媒合排序資料，優先使用
+                # is_reserve: 0=正取, 1=備取
+                is_reserve = bool(vendor_is_reserve) if vendor_is_reserve is not None else False
+                # 優先使用 final_rank（主任調整後的排序），如果沒有則使用 original_rank，最後使用 vendor_slot_index
+                if result.get("final_rank") is not None:
+                    slot_index = result.get("final_rank")
+                else:
+                    slot_index = original_rank if original_rank is not None else (vendor_slot_index if vendor_slot_index is not None else None)
+            elif result.get("director_decision") == "Approved" and result.get("final_rank") is not None:
+                # 主任已核定為正取
                 is_reserve = False
                 slot_index = result.get("final_rank")
-            elif result.get("original_rank") is not None:
-                # 沒有 final_rank，但 original_rank 不為 NULL，使用 original_rank 作為 slot_index
-                # 主任已確認（Approved），所以是正取
-                is_reserve = False
-                slot_index = result.get("original_rank")
+            elif result.get("director_decision") == "Approved":
+                # 主任已確認，根據原始設定判斷
+                if original_type == "Regular" and original_rank is not None:
+                    is_reserve = False
+                    slot_index = original_rank
+                else:
+                    is_reserve = True
+                    slot_index = None
             else:
-                # 沒有 final_rank 也沒有 original_rank，但主任已確認（Approved），仍然是正取
-                # slot_index 為 None，但 is_reserve = False
-                is_reserve = False
+                is_reserve = True
                 slot_index = None
             
             # 計算年級
@@ -2678,19 +2780,25 @@ def final_matching_results():
             
             formatted_result = {
                 "id": result.get("match_id"),
-                "student_id": result.get("student_id"),
+                "match_id": result.get("match_id"),
+                "student_id": student_id,
                 "student_name": result.get("student_name"),
                 "student_number": result.get("student_number"),
                 "class_name": result.get("class_name"),
                 "grade_display": grade_display,
-                "company_id": result.get("company_id"),
+                "company_id": company_id,
                 "company_name": result.get("company_name"),
                 "job_id": result.get("job_id"),
-                "job_title": result.get("job_title"),
+                "job_title": result.get("job_title") or "未指定職缺",
                 "job_slots": result.get("job_slots") or 1,
                 "preference_order": result.get("preference_order"),
                 "slot_index": slot_index,
-                "is_reserve": is_reserve
+                "is_reserve": is_reserve,
+                # 添加主任媒合結果的原始信息，用於顯示「原正取2」等標籤
+                "original_rank": original_rank,
+                "original_type": original_type,
+                "final_rank": result.get("final_rank"),
+                "is_adjusted": bool(result.get("is_adjusted", False))
             }
             formatted_results.append(formatted_result)
         

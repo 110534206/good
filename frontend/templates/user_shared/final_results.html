@@ -797,6 +797,8 @@
                   job_title: job.job_title,
                   job_id: job.job_id,
                   rank: index + 1,
+                  // 保留原始字段：original_rank, original_type, final_rank, is_adjusted
+                  // 這些字段來自 manage_director 表，用於顯示主任的排序結果
                   matching_sort: {
                     slot_index: student.slot_index,
                     is_reserve: false,
@@ -815,6 +817,8 @@
                   job_title: job.job_title,
                   job_id: job.job_id,
                   rank: job.regulars ? job.regulars.length + index + 1 : index + 1,
+                  // 保留原始字段：original_rank, original_type, final_rank, is_adjusted
+                  // 這些字段來自 manage_director 表，用於顯示主任的排序結果
                   matching_sort: {
                     slot_index: null,
                     is_reserve: true,
@@ -1132,24 +1136,32 @@
 
                 const studentsHtml = jobStudents.length > 0
                   ? jobStudents.map(student => {
-                      // 檢查是否有媒合排序結果
-                      const matchingSort = student.matching_sort;
+                      // 顯示主任的媒合排序結果（當前狀態）
                       let sortLabel = '';
-                      if (matchingSort) {
-                        if (matchingSort.is_reserve) {
-                          sortLabel = '<span style="background-color: #fbbf24; color: white; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; margin-left: 8px;">候補</span>';
-                        } else if (matchingSort.slot_index !== null && matchingSort.slot_index !== undefined) {
-                          sortLabel = `<span style="background-color: #10b981; color: white; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; margin-left: 8px;">正取${matchingSort.slot_index}</span>`;
-                        } else {
-                          // 沒有 slot_index 但也不是備取，顯示為正取（沒有序號）
-                          sortLabel = '<span style="background-color: #10b981; color: white; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; margin-left: 8px;">正取</span>';
+                      let originalLabel = '';
+                      
+                      // 當前狀態：根據 is_reserve 和 slot_index 顯示
+                      if (student.is_reserve) {
+                        sortLabel = '<span style="background-color: #fbbf24; color: white; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; margin-left: 8px;">遞補</span>';
+                      } else if (student.slot_index !== null && student.slot_index !== undefined) {
+                        sortLabel = `<span style="background-color: #10b981; color: white; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; margin-left: 8px;">正取${student.slot_index}</span>`;
+                      } else {
+                        sortLabel = '<span style="background-color: #10b981; color: white; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; margin-left: 8px;">正取</span>';
+                      }
+                      
+                      // 原始狀態：如果主任有調整（is_adjusted），顯示原始狀態
+                      if (student.is_adjusted && student.original_type && student.original_rank !== null && student.original_rank !== undefined) {
+                        if (student.original_type === 'Regular') {
+                          originalLabel = `<span style="color: #6b7280; font-size: 0.75rem; margin-left: 4px;">(原正取${student.original_rank})</span>`;
+                        } else if (student.original_type === 'Backup') {
+                          originalLabel = '<span style="color: #6b7280; font-size: 0.75rem; margin-left: 4px;">(原候補)</span>';
                         }
                       }
                       
                       return `
                         <div class="student-item">
                           <div class="student-info">
-                            <div class="student-name">${student.student_name || '-'}${sortLabel}</div>
+                            <div class="student-name">${student.student_name || '-'}${sortLabel}${originalLabel}</div>
                             <div class="student-details">
                               <span><i class="fa-solid fa-id-card"></i> ${student.student_number || '-'}</span>
                               ${student.grade_display ? `<span><i class="fa-solid fa-graduation-cap"></i> ${student.grade_display}</span>` : ''}
@@ -1189,21 +1201,32 @@
             const otherJobId = `job-${companyIndex}-other`;
             const otherStudentsHtml = otherStudents.length > 0
               ? otherStudents.map(student => {
-                  // 檢查是否有媒合排序結果
-                  const matchingSort = student.matching_sort;
+                  // 顯示主任的媒合排序結果（當前狀態）
                   let sortLabel = '';
-                  if (matchingSort) {
-                    if (matchingSort.is_reserve) {
-                      sortLabel = '<span style="background-color: #fbbf24; color: white; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; margin-left: 8px;">候補</span>';
-                    } else if (matchingSort.slot_index !== null && matchingSort.slot_index !== undefined) {
-                      sortLabel = `<span style="background-color: #10b981; color: white; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; margin-left: 8px;">正取${matchingSort.slot_index}</span>`;
+                  let originalLabel = '';
+                  
+                  // 當前狀態：根據 is_reserve 和 slot_index 顯示
+                  if (student.is_reserve) {
+                    sortLabel = '<span style="background-color: #fbbf24; color: white; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; margin-left: 8px;">遞補</span>';
+                  } else if (student.slot_index !== null && student.slot_index !== undefined) {
+                    sortLabel = `<span style="background-color: #10b981; color: white; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; margin-left: 8px;">正取${student.slot_index}</span>`;
+                  } else {
+                    sortLabel = '<span style="background-color: #10b981; color: white; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; margin-left: 8px;">正取</span>';
+                  }
+                  
+                  // 原始狀態：如果主任有調整（is_adjusted），顯示原始狀態
+                  if (student.is_adjusted && student.original_type && student.original_rank !== null && student.original_rank !== undefined) {
+                    if (student.original_type === 'Regular') {
+                      originalLabel = `<span style="color: #6b7280; font-size: 0.75rem; margin-left: 4px;">(原正取${student.original_rank})</span>`;
+                    } else if (student.original_type === 'Backup') {
+                      originalLabel = '<span style="color: #6b7280; font-size: 0.75rem; margin-left: 4px;">(原候補)</span>';
                     }
                   }
                   
                   return `
                     <div class="student-item">
                       <div class="student-info">
-                        <div class="student-name">${student.student_name || '-'}${sortLabel}</div>
+                        <div class="student-name">${student.student_name || '-'}${sortLabel}${originalLabel}</div>
                         <div class="student-details">
                           <span><i class="fa-solid fa-id-card"></i> ${student.student_number || '-'}</span>
                           ${student.grade_display ? `<span><i class="fa-solid fa-graduation-cap"></i> ${student.grade_display}</span>` : ''}
@@ -1214,24 +1237,32 @@
                 }).join('')
               : (company.students && company.students.length > 0
                   ? company.students.map((student, index) => {
-                      // 檢查是否有媒合排序結果
-                      const matchingSort = student.matching_sort;
+                      // 顯示主任的媒合排序結果（當前狀態）
                       let sortLabel = '';
-                      if (matchingSort) {
-                        if (matchingSort.is_reserve) {
-                          sortLabel = '<span style="background-color: #fbbf24; color: white; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; margin-left: 8px;">候補</span>';
-                        } else if (matchingSort.slot_index !== null && matchingSort.slot_index !== undefined) {
-                          sortLabel = `<span style="background-color: #10b981; color: white; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; margin-left: 8px;">正取${matchingSort.slot_index}</span>`;
-                        } else {
-                          // 沒有 slot_index 但也不是備取，顯示為正取（沒有序號）
-                          sortLabel = '<span style="background-color: #10b981; color: white; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; margin-left: 8px;">正取</span>';
+                      let originalLabel = '';
+                      
+                      // 當前狀態：根據 is_reserve 和 slot_index 顯示
+                      if (student.is_reserve) {
+                        sortLabel = '<span style="background-color: #fbbf24; color: white; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; margin-left: 8px;">遞補</span>';
+                      } else if (student.slot_index !== null && student.slot_index !== undefined) {
+                        sortLabel = `<span style="background-color: #10b981; color: white; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; margin-left: 8px;">正取${student.slot_index}</span>`;
+                      } else {
+                        sortLabel = '<span style="background-color: #10b981; color: white; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; margin-left: 8px;">正取</span>';
+                      }
+                      
+                      // 原始狀態：如果主任有調整（is_adjusted），顯示原始狀態
+                      if (student.is_adjusted && student.original_type && student.original_rank !== null && student.original_rank !== undefined) {
+                        if (student.original_type === 'Regular') {
+                          originalLabel = `<span style="color: #6b7280; font-size: 0.75rem; margin-left: 4px;">(原正取${student.original_rank})</span>`;
+                        } else if (student.original_type === 'Backup') {
+                          originalLabel = '<span style="color: #6b7280; font-size: 0.75rem; margin-left: 4px;">(原候補)</span>';
                         }
                       }
                       
                       return `
                         <div class="student-item">
                           <div class="student-info">
-                            <div class="student-name">${student.student_name || '-'}${sortLabel}</div>
+                            <div class="student-name">${student.student_name || '-'}${sortLabel}${originalLabel}</div>
                             <div class="student-details">
                               <span><i class="fa-solid fa-id-card"></i> ${student.student_number || '-'}</span>
                               ${student.grade_display ? `<span><i class="fa-solid fa-graduation-cap"></i> ${student.grade_display}</span>` : ''}
