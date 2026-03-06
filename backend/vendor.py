@@ -4515,36 +4515,32 @@ def test_email():
 
 def _get_vendor_own_company_ids(cursor, vendor_id):
     """
-    取得「廠商自己所屬公司」的 company_id，只回傳一間公司，僅顯示該公司實習生。
-    優先：internship_companies.vendor_id = vendor_id 或 company_vendor_relations；
-    若無則取指導老師底下第一間公司。
+    取得「廠商自己所屬公司」的 company_id 聯集，與 confirm_matching 使用的公司範圍一致，
+    確保廠商在「確認媒合結果」後，該批實習生會出現在「廠商退實習生」名單。
+    來源：(1) internship_companies.vendor_id (2) company_vendor_relations (3) 指導老師對接公司。
     """
+    company_ids = []
     try:
         cursor.execute("""
             SELECT id FROM internship_companies
             WHERE status = 'approved' AND vendor_id = %s
-            LIMIT 1
         """, (vendor_id,))
-        row = cursor.fetchone()
-        if row:
-            return [row["id"]]
+        for row in cursor.fetchall() or []:
+            company_ids.append(row["id"])
     except Exception:
         pass
     try:
         cursor.execute("""
             SELECT company_id FROM company_vendor_relations WHERE vendor_id = %s
-            LIMIT 1
         """, (vendor_id,))
-        row = cursor.fetchone()
-        if row:
-            return [row["company_id"]]
+        for row in cursor.fetchall() or []:
+            company_ids.append(row["company_id"])
     except Exception:
         pass
-    # 若未設定 vendor_id / company_vendor_relations，僅取指導老師底下「第一間」公司，只顯示該公司實習生（不顯示其他公司）
     _, companies, _ = _get_vendor_scope(cursor, vendor_id)
     if companies:
-        return [companies[0]["id"]]
-    return []
+        company_ids.extend([c["id"] for c in companies])
+    return list(set(company_ids))
 
 
 # =========================================================
@@ -4582,7 +4578,7 @@ def get_withdraw_intern_list():
                    ON ir.student_id = io.student_id
                   AND ir.semester_id = %s
                   AND ir.company_id = ic.id
-            WHERE ij.company_id IN (""" + placeholders + """)
+            WHERE io.status = 'accepted' AND ij.company_id IN (""" + placeholders + """)
             ORDER BY ic.company_name, ij.title, u.name
             """
         else:
@@ -4595,7 +4591,7 @@ def get_withdraw_intern_list():
             JOIN users u ON u.id = io.student_id
             JOIN internship_jobs ij ON ij.id = io.job_id
             JOIN internship_companies ic ON ic.id = ij.company_id
-            WHERE ij.company_id IN (""" + placeholders + """)
+            WHERE io.status = 'accepted' AND ij.company_id IN (""" + placeholders + """)
             ORDER BY ic.company_name, ij.title, u.name
             """
         cursor.execute(status_sql, args)
