@@ -87,12 +87,14 @@
       font-size: 1rem; color: #1e293b; resize: vertical; min-height: 120px;
     }
     .meeting-notes-input:focus { outline: none; border-color: #0454a3; box-shadow: 0 0 0 2px rgba(4, 84, 163, 0.2); }
+    .meeting-notes-input.meeting-notes-readonly { background: #f8fafc; cursor: default; color: #475569; }
     .btn-confirm {
       padding: 12px 24px; border-radius: 8px; border: none; background: #dc2626; color: #fff;
       font-size: 1rem; font-weight: 600; cursor: pointer;
     }
     .btn-confirm:hover { background: #b91c1c; }
     .btn-confirm:disabled { background: #94a3b8; cursor: not-allowed; }
+    .detail-actions { margin-top: 24px; text-align: center; }
     .empty-msg { text-align: center; padding: 24px; color: #64748b; }
     .alert { padding: 14px 16px; border-radius: 8px; margin-bottom: 20px; }
     .alert-success { background: #f0fdf4; border: 1px solid #bbf7d0; color: #166534; }
@@ -165,13 +167,13 @@
         <p class="value" id="detailCompanyJob">—</p>
       </div>
 
-      <div class="detail-block">
+      <div class="detail-block" id="detailMeetingBlock">
         <h3>與學生訪談紀錄</h3>
-        <p class="label">請填寫與該生的面談／訪談紀錄，確認異動時一併儲存。</p>
-        <textarea id="teacherMeetingNotes" class="meeting-notes-input" rows="6" placeholder="請輸入與學生面談的內容、結論或備註…"></textarea>
+        <p class="label" id="detailMeetingLabel">請填寫與該學生的訪談紀錄。</p>
+        <textarea id="teacherMeetingNotes" class="meeting-notes-input" rows="6" placeholder="請輸入與學生面談的內容。"></textarea>
       </div>
 
-      <div style="margin-top: 24px;">
+      <div class="detail-actions">
         <button type="button" class="btn-confirm" id="confirmBtn">確認異動</button>
       </div>
     </div>
@@ -288,10 +290,17 @@
             document.getElementById('detailStudentNumber').textContent = d.student_number || '—';
             document.getElementById('detailCompanyJob').textContent = (d.company_name || '') + (d.job_title ? '／' + d.job_title : '') || '—';
 
-            confirmBtn.disabled = (d.status || '') === 'confirmed';
+            var isConfirmed = (d.status || '') === 'confirmed';
+            confirmBtn.disabled = isConfirmed;
             confirmBtn.setAttribute('data-case-id', d.id);
             var notesEl = document.getElementById('teacherMeetingNotes');
-            if (notesEl) notesEl.value = d.teacher_meeting_notes || '';
+            var meetingLabel = document.getElementById('detailMeetingLabel');
+            if (notesEl) {
+              notesEl.value = d.teacher_meeting_notes || '';
+              notesEl.readOnly = isConfirmed;
+              notesEl.classList.toggle('meeting-notes-readonly', isConfirmed);
+            }
+            if (meetingLabel) meetingLabel.textContent = isConfirmed ? '（已確認，以下為指導老師當時填寫的訪談紀錄，僅供檢視）' : '請填寫與該生的面談／訪談紀錄，確認異動時一併儲存。';
           })
           .catch(function () {
             document.getElementById('detailReasonCategory').textContent = '載入失敗';

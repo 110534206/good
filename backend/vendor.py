@@ -4523,19 +4523,21 @@ def _get_vendor_own_company_ids(cursor, vendor_id):
         cursor.execute("""
             SELECT id FROM internship_companies
             WHERE status = 'approved' AND vendor_id = %s
+            LIMIT 1
         """, (vendor_id,))
-        rows = cursor.fetchall()
-        if rows:
-            return [r["id"] for r in rows]
+        row = cursor.fetchone()
+        if row:
+            return [row["id"]]
     except Exception:
         pass
     try:
         cursor.execute("""
             SELECT company_id FROM company_vendor_relations WHERE vendor_id = %s
+            LIMIT 1
         """, (vendor_id,))
-        rows = cursor.fetchall()
-        if rows:
-            return [r["company_id"] for r in rows]
+        row = cursor.fetchone()
+        if row:
+            return [row["company_id"]]
     except Exception:
         pass
     # 若未設定 vendor_id / company_vendor_relations，僅取指導老師底下「第一間」公司，只顯示該公司實習生（不顯示其他公司）
@@ -4793,9 +4795,7 @@ def submit_withdraw_intern():
 
 def _teacher_can_access_withdraw_case(cursor, case_id, teacher_id):
     """檢查此退實習案件是否屬於該指導老師所屬公司。回傳 row 或 None。
-    case_id 可為數字 (ir.id) 或複合鍵字串 "semester_id_vendor_id_company_id_student_id"。
-    若表有 teacher_meeting_notes 欄位會一併讀出；若無請執行：
-    ALTER TABLE internship_records ADD COLUMN teacher_meeting_notes TEXT NULL;
+    學生訪談紀錄與 teacher_reason（指導老師原因）連動：讀出 teacher_reason 並填入 row['teacher_meeting_notes'] 供前端「與學生訪談紀錄」顯示；確認異動時寫入 teacher_reason。
     """
     use_composite = isinstance(case_id, str) and "_" in case_id
     if use_composite:
@@ -4811,14 +4811,17 @@ def _teacher_can_access_withdraw_case(cursor, case_id, teacher_id):
                 SELECT CONCAT(ir.semester_id, '_', ir.vendor_id, '_', ir.company_id, '_', ir.student_id) AS id,
                        ir.semester_id, ir.vendor_id, ir.company_id, ir.student_id,
                        ir.reason_category, ir.reason_detail, ir.status, ir.created_at,
-                       ir.teacher_meeting_notes,
+                       ir.teacher_reason, ir.teacher_meeting_notes,
                        ic.company_name, ic.advisor_user_id
                 FROM internship_records ir
                 JOIN internship_companies ic ON ic.id = ir.company_id
                 WHERE ir.semester_id = %s AND ir.vendor_id = %s AND ir.company_id = %s AND ir.student_id = %s
                   AND ic.advisor_user_id = %s
             """, (semester_id, vendor_id, company_id, student_id, teacher_id))
-            return cursor.fetchone()
+            row = cursor.fetchone()
+            if row:
+                row["teacher_meeting_notes"] = (row.get("teacher_reason") or row.get("teacher_meeting_notes") or "").strip()
+            return row
         except Exception:
             cursor.execute("""
                 SELECT CONCAT(ir.semester_id, '_', ir.vendor_id, '_', ir.company_id, '_', ir.student_id) AS id,
@@ -4838,15 +4841,18 @@ def _teacher_can_access_withdraw_case(cursor, case_id, teacher_id):
         cursor.execute("""
             SELECT ir.id, ir.semester_id, ir.vendor_id, ir.company_id, ir.student_id,
                    ir.reason_category, ir.reason_detail, ir.status, ir.created_at,
-                   ir.teacher_meeting_notes,
+                   ir.teacher_reason, ir.teacher_meeting_notes,
                    ic.company_name, ic.advisor_user_id
             FROM internship_records ir
             JOIN internship_companies ic ON ic.id = ir.company_id
             WHERE ir.id = %s AND ic.advisor_user_id = %s
         """, (int(case_id), teacher_id))
-        return cursor.fetchone()
+        row = cursor.fetchone()
+        if row:
+            row["teacher_meeting_notes"] = (row.get("teacher_reason") or row.get("teacher_meeting_notes") or "").strip()
+        return row
     except Exception as e:
-        if "teacher_meeting_notes" in str(e) or "Unknown column" in str(e):
+        if "teacher_reason" in str(e) or "teacher_meeting_notes" in str(e) or "Unknown column" in str(e):
             cursor.execute("""
                 SELECT ir.id, ir.semester_id, ir.vendor_id, ir.company_id, ir.student_id,
                        ir.reason_category, ir.reason_detail, ir.status, ir.created_at,
@@ -5012,29 +5018,41 @@ def teacher_confirm_withdraw():
             sid, vid, cid, stid = row["semester_id"], row["vendor_id"], row["company_id"], row["student_id"]
             try:
                 cursor.execute(
-                    "UPDATE internship_records SET status = 'confirmed', teacher_meeting_notes = %s, updated_at = NOW() WHERE semester_id = %s AND vendor_id = %s AND company_id = %s AND student_id = %s",
+                    "UPDATE internship_records SET status = 'confirmed', teacher_reason = %s, updated_at = NOW() WHERE semester_id = %s AND vendor_id = %s AND company_id = %s AND student_id = %s",
                     (teacher_meeting_notes, sid, vid, cid, stid)
                 )
             except Exception as upd_err:
-                if "teacher_meeting_notes" in str(upd_err) or "Unknown column" in str(upd_err):
-                    cursor.execute(
-                        "UPDATE internship_records SET status = 'confirmed', updated_at = NOW() WHERE semester_id = %s AND vendor_id = %s AND company_id = %s AND student_id = %s",
-                        (sid, vid, cid, stid)
-                    )
+                if "teacher_reason" in str(upd_err) or "Unknown column" in str(upd_err):
+                    try:
+                        cursor.execute(
+                            "UPDATE internship_records SET status = 'confirmed', teacher_meeting_notes = %s, updated_at = NOW() WHERE semester_id = %s AND vendor_id = %s AND company_id = %s AND student_id = %s",
+                            (teacher_meeting_notes, sid, vid, cid, stid)
+                        )
+                    except Exception:
+                        cursor.execute(
+                            "UPDATE internship_records SET status = 'confirmed', updated_at = NOW() WHERE semester_id = %s AND vendor_id = %s AND company_id = %s AND student_id = %s",
+                            (sid, vid, cid, stid)
+                        )
                 else:
                     raise
         else:
             try:
                 cursor.execute(
-                    "UPDATE internship_records SET status = 'confirmed', teacher_meeting_notes = %s, updated_at = NOW() WHERE id = %s",
+                    "UPDATE internship_records SET status = 'confirmed', teacher_reason = %s, updated_at = NOW() WHERE id = %s",
                     (teacher_meeting_notes, row["id"])
                 )
             except Exception as upd_err:
-                if "teacher_meeting_notes" in str(upd_err) or "Unknown column" in str(upd_err):
-                    cursor.execute(
-                        "UPDATE internship_records SET status = 'confirmed', updated_at = NOW() WHERE id = %s",
-                        (row["id"],)
-                    )
+                if "teacher_reason" in str(upd_err) or "Unknown column" in str(upd_err):
+                    try:
+                        cursor.execute(
+                            "UPDATE internship_records SET status = 'confirmed', teacher_meeting_notes = %s, updated_at = NOW() WHERE id = %s",
+                            (teacher_meeting_notes, row["id"])
+                        )
+                    except Exception:
+                        cursor.execute(
+                            "UPDATE internship_records SET status = 'confirmed', updated_at = NOW() WHERE id = %s",
+                            (row["id"],)
+                        )
                 else:
                     raise
         conn.commit()
@@ -5051,7 +5069,9 @@ def teacher_confirm_withdraw():
 # =========================================================
 @vendor_bp.route("/class_teacher/api/intern_status", methods=["GET"])
 def class_teacher_intern_status():
-    """班導：取得所帶班級學生的實習狀況（實習中／退出／未實習）"""
+    """班導：取得所帶班級學生的實習狀況（實習中／退出／未實習）。
+    資料來源：users、classes、classes_teacher（帶班）、internship_offers（當前學期錄取）、internship_jobs / internship_companies、internship_records。僅顯示當前學期實習與退實習狀態。
+    """
     if "user_id" not in session or session.get("role") != "class_teacher":
         return jsonify({"success": False, "message": "未授權"}), 403
     teacher_id = session.get("user_id")
@@ -5059,22 +5079,43 @@ def class_teacher_intern_status():
         conn = get_db()
         cursor = conn.cursor(dictionary=True)
         current_semester_id = get_current_semester_id(cursor)
-        cursor.execute("""
-            SELECT u.id AS student_id, u.name AS student_name, u.username AS student_number,
-                   c.name AS class_name, c.department, c.admission_year,
-                   io.id AS offer_id, COALESCE(io.status, '') AS offer_status,
-                   ic.company_name, ij.title AS job_title,
-                   vri.id AS withdraw_id
-            FROM users u
-            JOIN classes c ON c.id = u.class_id
-            JOIN classes_teacher ct ON ct.class_id = c.id AND ct.teacher_id = %s AND ct.role = 'classteacher'
-            LEFT JOIN internship_offers io ON io.student_id = u.id
-            LEFT JOIN internship_jobs ij ON ij.id = io.job_id
-            LEFT JOIN internship_companies ic ON ic.id = ij.company_id
-            LEFT JOIN internship_records vri ON vri.student_id = u.id AND vri.semester_id = %s
-            WHERE u.role = 'student'
-            ORDER BY c.name, u.username
-        """, (teacher_id, current_semester_id))
+        try:
+            cursor.execute("""
+                SELECT u.id AS student_id, u.name AS student_name, u.username AS student_number,
+                       c.name AS class_name, c.department, c.admission_year,
+                       io.id AS offer_id, COALESCE(io.status, '') AS offer_status,
+                       ic.company_name, ij.title AS job_title,
+                       vri.id AS withdraw_id
+                FROM users u
+                JOIN classes c ON c.id = u.class_id
+                JOIN classes_teacher ct ON ct.class_id = c.id AND ct.teacher_id = %s AND ct.role = 'classteacher'
+                LEFT JOIN internship_offers io ON io.student_id = u.id AND (%s IS NULL OR io.semester_id = %s)
+                LEFT JOIN internship_jobs ij ON ij.id = io.job_id
+                LEFT JOIN internship_companies ic ON ic.id = ij.company_id
+                LEFT JOIN internship_records vri ON vri.student_id = u.id AND vri.semester_id = %s
+                WHERE u.role = 'student'
+                ORDER BY c.name, u.username
+            """, (teacher_id, current_semester_id, current_semester_id, current_semester_id))
+        except Exception as sem_err:
+            if "semester_id" in str(sem_err) or "Unknown column" in str(sem_err):
+                cursor.execute("""
+                    SELECT u.id AS student_id, u.name AS student_name, u.username AS student_number,
+                           c.name AS class_name, c.department, c.admission_year,
+                           io.id AS offer_id, COALESCE(io.status, '') AS offer_status,
+                           ic.company_name, ij.title AS job_title,
+                           vri.id AS withdraw_id
+                    FROM users u
+                    JOIN classes c ON c.id = u.class_id
+                    JOIN classes_teacher ct ON ct.class_id = c.id AND ct.teacher_id = %s AND ct.role = 'classteacher'
+                    LEFT JOIN internship_offers io ON io.student_id = u.id
+                    LEFT JOIN internship_jobs ij ON ij.id = io.job_id
+                    LEFT JOIN internship_companies ic ON ic.id = ij.company_id
+                    LEFT JOIN internship_records vri ON vri.student_id = u.id AND vri.semester_id = %s
+                    WHERE u.role = 'student'
+                    ORDER BY c.name, u.username
+                """, (teacher_id, current_semester_id))
+            else:
+                raise
         rows = cursor.fetchall()
         cursor.close()
         conn.close()
@@ -5114,28 +5155,51 @@ def class_teacher_intern_status():
 # =========================================================
 @vendor_bp.route("/director/api/intern_status", methods=["GET"])
 def director_intern_status():
-    """主任：取得全部學生的實習狀況（實習中／退出／未實習）"""
+    """主任：取得全部學生的實習狀況（實習中／退出／未實習）。
+    資料來源：users（學生）、classes（班級）、internship_offers（當前學期錄取）、internship_jobs / internship_companies（職缺與實習單位）、internship_records（退實習紀錄）。僅顯示「當前學期」的實習與退實習狀態。
+    """
     if "user_id" not in session or session.get("role") not in ("director", "ta", "admin"):
         return jsonify({"success": False, "message": "未授權"}), 403
     try:
         conn = get_db()
         cursor = conn.cursor(dictionary=True)
         current_semester_id = get_current_semester_id(cursor)
-        cursor.execute("""
-            SELECT u.id AS student_id, u.name AS student_name, u.username AS student_number,
-                   c.name AS class_name, c.department, c.admission_year,
-                   io.id AS offer_id, COALESCE(io.status, '') AS offer_status,
-                   ic.company_name, ij.title AS job_title,
-                   vri.id AS withdraw_id
-            FROM users u
-            LEFT JOIN classes c ON c.id = u.class_id
-            LEFT JOIN internship_offers io ON io.student_id = u.id
-            LEFT JOIN internship_jobs ij ON ij.id = io.job_id
-            LEFT JOIN internship_companies ic ON ic.id = ij.company_id
-            LEFT JOIN internship_records vri ON vri.student_id = u.id AND vri.semester_id = %s
-            WHERE u.role = 'student'
-            ORDER BY c.name, u.username
-        """, (current_semester_id,))
+        # 僅抓當前學期之錄取與退實習，避免顯示舊學期錯誤資料
+        try:
+            cursor.execute("""
+                SELECT u.id AS student_id, u.name AS student_name, u.username AS student_number,
+                       c.name AS class_name, c.department, c.admission_year,
+                       io.id AS offer_id, COALESCE(io.status, '') AS offer_status,
+                       ic.company_name, ij.title AS job_title,
+                       vri.id AS withdraw_id
+                FROM users u
+                LEFT JOIN classes c ON c.id = u.class_id
+                LEFT JOIN internship_offers io ON io.student_id = u.id AND (%s IS NULL OR io.semester_id = %s)
+                LEFT JOIN internship_jobs ij ON ij.id = io.job_id
+                LEFT JOIN internship_companies ic ON ic.id = ij.company_id
+                LEFT JOIN internship_records vri ON vri.student_id = u.id AND vri.semester_id = %s
+                WHERE u.role = 'student'
+                ORDER BY c.name, u.username
+            """, (current_semester_id, current_semester_id, current_semester_id))
+        except Exception as sem_err:
+            if "semester_id" in str(sem_err) or "Unknown column" in str(sem_err):
+                cursor.execute("""
+                    SELECT u.id AS student_id, u.name AS student_name, u.username AS student_number,
+                           c.name AS class_name, c.department, c.admission_year,
+                           io.id AS offer_id, COALESCE(io.status, '') AS offer_status,
+                           ic.company_name, ij.title AS job_title,
+                           vri.id AS withdraw_id
+                    FROM users u
+                    LEFT JOIN classes c ON c.id = u.class_id
+                    LEFT JOIN internship_offers io ON io.student_id = u.id
+                    LEFT JOIN internship_jobs ij ON ij.id = io.job_id
+                    LEFT JOIN internship_companies ic ON ic.id = ij.company_id
+                    LEFT JOIN internship_records vri ON vri.student_id = u.id AND vri.semester_id = %s
+                    WHERE u.role = 'student'
+                    ORDER BY c.name, u.username
+                """, (current_semester_id,))
+            else:
+                raise
         rows = cursor.fetchall()
         cursor.close()
         conn.close()
