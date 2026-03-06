@@ -274,7 +274,8 @@ def record_admission():
         return jsonify({"success": False, "message": "請提供學生ID和公司ID"}), 400
     
     conn = get_db()
-    cursor = conn.cursor(dictionary=True)
+    # 使用 buffered=True，確保每次查詢結果都完整讀取，避免後續再 execute 時出現 "Unread result found"
+    cursor = conn.cursor(dictionary=True, buffered=True)
     
     try:
         # 1. 驗證學生和公司是否存在
@@ -496,7 +497,8 @@ def get_my_admission():
     
     student_id = session.get('user_id')
     conn = get_db()
-    cursor = conn.cursor(dictionary=True)
+    # 使用 buffered=True，避免多次 execute 時出現 "Unread result found"
+    cursor = conn.cursor(dictionary=True, buffered=True)
     
     try:
         # 檢查是否已被退實習（internship_records 有 withdrawing 或 confirmed）
@@ -4400,10 +4402,11 @@ def ta_confirm_matching():
     """
     if 'user_id' not in session or session.get('role') not in ['ta', 'admin']:
         return jsonify({"success": False, "message": "未授權"}), 403
-    
+
     conn = get_db()
-    cursor = conn.cursor(dictionary=True)
-    
+    # 使用 buffered=True，避免多次 execute 時出現 "Unread result found"
+    cursor = conn.cursor(dictionary=True, buffered=True)
+
     try:
         # 獲取當前學期ID和學期代碼
         current_semester_id = get_current_semester_id(cursor)
