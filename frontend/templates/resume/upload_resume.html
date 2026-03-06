@@ -4889,6 +4889,7 @@
                         if (parsedCourses.length > 0) {
                             const importBtn = document.createElement('button');
                             importBtn.id = 'btn-import-ocr-courses';
+                            importBtn.type = 'button'; // 🟢 [修正] 明確指定 type="button" 防止觸發表單提交
                             importBtn.className = 'btn btn-success btn-sm mt-3 w-100';
                             importBtn.innerHTML = `<i class="bi bi-file-earmark-arrow-up"></i> 識別出 ${parsedCourses.length} 筆成績，點此匯入至上方「已修習專業核心科目」表格`;
                             importBtn.onclick = () => importOcrCourses_v2(parsedCourses);
@@ -5054,23 +5055,30 @@
                 Swal.fire('匯入完成', `更新現有: ${updatedCount} 筆<br>新增課程: ${newCount} 筆`, 'success');
                 
                 // Highlight updated rows
-                const table = document.querySelector('table');
-                if(table) {
-                    table.scrollIntoView({ behavior: 'smooth' });
-                    
-                    const rows = table.querySelectorAll('tbody tr');
-                    rows.forEach(row => {
-                        const nameCell = row.cells[1]; // Assuming 2nd column is name
-                        if (nameCell) {
-                            const name = nameCell.textContent.trim();
-                            // Check if this name was in ocrCourses that were matched/added
-                            const wasUpdated = ocrCourses.some(ocr => calculateSimilarity(ocr.name, name) >= 0.8); // approximate check
-                            if (wasUpdated) {
-                                row.classList.add('table-row-highlight');
-                                setTimeout(() => row.classList.remove('table-row-highlight'), 3000);
-                            }
-                        }
-                    });
+                // 🟢 [修正] 明確指定要捲動到的課程表格 (courseTableBody 的父表格)
+                const courseTableBody = document.getElementById('courseTableBody');
+                if(courseTableBody) {
+                    const table = courseTableBody.closest('table');
+                    if (table) {
+                        // 使用 setTimeout 確保在 Swal 彈窗關閉後再執行捲動，避免視覺衝突或 DOM 更新延遲
+                        setTimeout(() => {
+                            table.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                            
+                            const rows = courseTableBody.querySelectorAll('tr');
+                            rows.forEach(row => {
+                                const nameCell = row.cells[0]; // 課程名稱在第 1 欄 (index 0)
+                                if (nameCell) {
+                                    const name = nameCell.textContent.trim();
+                                    // Check if this name was in ocrCourses that were matched/added
+                                    const wasUpdated = ocrCourses.some(ocr => calculateSimilarity(ocr.name, name) >= 0.8); // approximate check
+                                    if (wasUpdated) {
+                                        row.classList.add('table-row-highlight');
+                                        setTimeout(() => row.classList.remove('table-row-highlight'), 3000);
+                                    }
+                                }
+                            });
+                        }, 300); // 延遲 300 毫秒
+                    }
                 }
             });
         }
