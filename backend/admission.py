@@ -1713,73 +1713,109 @@ def vendor_matching_results():
         # 獲取所有狀態為 approved 的學生履歷（從 resume_applications 表讀取，這是廠商審核的結果）
         # 使用子查詢確保每個 (student_id, company_id, job_id) 組合只取一筆記錄
         placeholders = ','.join(['%s'] * len(company_ids))
-        cursor.execute(f"""
-            SELECT DISTINCT
-                u.id AS student_id,
-                u.name AS student_name,
-                u.username AS student_number,
-                u.email AS student_email,
-                c.name AS class_name,
-                c.department AS class_department,
-                ic.id AS company_id,
-                ic.company_name,
-                COALESCE(ij.id, ra.job_id) AS job_id,
-                COALESCE(ij.title, '未指定職缺') AS job_title,
-                sp.preference_order,
-                sp.submitted_at AS preference_submitted_at,
-                ra.apply_status AS preference_status,
-                COALESCE(tsr.created_at, ra.updated_at, CURDATE()) AS admitted_at,
-                '1132' AS semester,
-                ra.is_reserve,
-                ra.slot_index
-            FROM (
-                -- 只取每個 application_id 的最新一筆 resume_applications 記錄（狀態為 approved）
-                SELECT ra1.*
-                FROM resume_applications ra1
-                INNER JOIN (
-                    SELECT application_id, MAX(updated_at) AS max_updated_at
-                    FROM resume_applications
-                    WHERE apply_status = 'approved'
-                    GROUP BY application_id
-                ) ra2 ON ra1.application_id = ra2.application_id 
-                    AND ra1.updated_at = ra2.max_updated_at
-                    AND ra1.apply_status = 'approved'
-            ) ra
-            INNER JOIN student_job_applications sja ON ra.application_id = sja.id
-            INNER JOIN users u ON sja.student_id = u.id
-            LEFT JOIN classes c ON u.class_id = c.id
-            INNER JOIN internship_companies ic ON sja.company_id = ic.id
-            LEFT JOIN internship_jobs ij ON COALESCE(ra.job_id, sja.job_id) = ij.id
-            LEFT JOIN (
-                -- 只取每個學生、公司、職缺組合的最新一筆 student_preferences
-                SELECT sp1.*
-                FROM student_preferences sp1
-                INNER JOIN (
-                    SELECT student_id, company_id, job_id, MAX(submitted_at) AS max_submitted_at
-                    FROM student_preferences
-                    GROUP BY student_id, company_id, job_id
-                ) sp2 ON sp1.student_id = sp2.student_id 
-                    AND sp1.company_id = sp2.company_id 
-                    AND sp1.job_id = sp2.job_id
-                    AND sp1.submitted_at = sp2.max_submitted_at
-            ) sp ON sja.student_id = sp.student_id 
-                AND sja.company_id = sp.company_id 
-                AND sja.job_id = sp.job_id
-            LEFT JOIN (
-                -- 只取每個學生的最新一筆 teacher_student_relations
-                SELECT tsr1.*
-                FROM teacher_student_relations tsr1
-                INNER JOIN (
-                    SELECT student_id, MAX(created_at) AS max_created_at
-                    FROM teacher_student_relations
-                    GROUP BY student_id
-                ) tsr2 ON tsr1.student_id = tsr2.student_id 
-                    AND tsr1.created_at = tsr2.max_created_at
-            ) tsr ON tsr.student_id = u.id
-            WHERE sja.company_id IN ({placeholders})
-              AND ra.apply_status = 'approved'
-            ORDER BY ic.company_name, COALESCE(ra.slot_index, 999), ra.is_reserve, sp.preference_order, u.name
-        """, tuple(company_ids))
+        try:
+            cursor.execute(f"""
+                SELECT DISTINCT
+                    u.id AS student_id,
+                    u.name AS student_name,
+                    u.username AS student_number,
+                    u.email AS student_email,
+                    c.name AS class_name,
+                    c.department AS class_department,
+                    ic.id AS company_id,
+                    ic.company_name,
+                    COALESCE(ij.id, ra.job_id) AS job_id,
+                    COALESCE(ij.title, '未指定職缺') AS job_title,
+                    sp.preference_order,
+                    sp.submitted_at AS preference_submitted_at,
+                    ra.apply_status AS preference_status,
+                    COALESCE(tsr.created_at, ra.updated_at, CURDATE()) AS admitted_at,
+                    '1132' AS semester,
+                    ra.is_reserve,
+                    ra.slot_index
+                FROM (
+                    SELECT ra1.*
+                    FROM resume_applications ra1
+                    INNER JOIN (
+                        SELECT application_id, MAX(updated_at) AS max_updated_at
+                        FROM resume_applications
+                        WHERE apply_status = 'approved'
+                        GROUP BY application_id
+                    ) ra2 ON ra1.application_id = ra2.application_id 
+                        AND ra1.updated_at = ra2.max_updated_at
+                        AND ra1.apply_status = 'approved'
+                ) ra
+                INNER JOIN student_job_applications sja ON ra.application_id = sja.id
+                INNER JOIN users u ON sja.student_id = u.id
+                LEFT JOIN classes c ON u.class_id = c.id
+                INNER JOIN internship_companies ic ON sja.company_id = ic.id
+                LEFT JOIN internship_jobs ij ON COALESCE(ra.job_id, sja.job_id) = ij.id
+                LEFT JOIN (
+                    SELECT sp1.*
+                    FROM student_preferences sp1
+                    INNER JOIN (
+                        SELECT student_id, company_id, job_id, MAX(submitted_at) AS max_submitted_at
+                        FROM student_preferences
+                        GROUP BY student_id, company_id, job_id
+                    ) sp2 ON sp1.student_id = sp2.student_id 
+                        AND sp1.company_id = sp2.company_id 
+                        AND sp1.job_id = sp2.job_id
+                        AND sp1.submitted_at = sp2.max_submitted_at
+                ) sp ON sja.student_id = sp.student_id 
+                    AND sja.company_id = sp.company_id 
+                    AND sja.job_id = sp.job_id
+                LEFT JOIN (
+                    SELECT tsr1.*
+                    FROM teacher_student_relations tsr1
+                    INNER JOIN (
+                        SELECT student_id, MAX(created_at) AS max_created_at
+                        FROM teacher_student_relations
+                        GROUP BY student_id
+                    ) tsr2 ON tsr1.student_id = tsr2.student_id 
+                        AND tsr1.created_at = tsr2.max_created_at
+                ) tsr ON tsr.student_id = u.id
+                WHERE sja.company_id IN ({placeholders})
+                  AND ra.apply_status = 'approved'
+                ORDER BY ic.company_name, COALESCE(ra.slot_index, 999), ra.is_reserve, sp.preference_order, u.name
+            """, tuple(company_ids))
+        except Exception as qerr:
+            err_str = str(qerr).lower()
+            if "unknown column" in err_str or "1054" in str(qerr) or "1146" in str(qerr):
+                # resume_applications 可能無 job_id / slot_index / is_reserve 或缺少 teacher_student_relations 等，改用精簡查詢
+                cursor.execute(f"""
+                    SELECT DISTINCT
+                        u.id AS student_id,
+                        u.name AS student_name,
+                        u.username AS student_number,
+                        u.email AS student_email,
+                        c.name AS class_name,
+                        c.department AS class_department,
+                        ic.id AS company_id,
+                        ic.company_name,
+                        COALESCE(ij.id, sja.job_id) AS job_id,
+                        COALESCE(ij.title, '未指定職缺') AS job_title,
+                        sp.preference_order,
+                        sp.submitted_at AS preference_submitted_at,
+                        ra.apply_status AS preference_status,
+                        COALESCE(ra.updated_at, CURDATE()) AS admitted_at,
+                        '1132' AS semester,
+                        NULL AS is_reserve,
+                        NULL AS slot_index
+                    FROM resume_applications ra
+                    INNER JOIN student_job_applications sja ON ra.application_id = sja.id
+                    INNER JOIN users u ON sja.student_id = u.id
+                    LEFT JOIN classes c ON u.class_id = c.id
+                    INNER JOIN internship_companies ic ON sja.company_id = ic.id
+                    LEFT JOIN internship_jobs ij ON sja.job_id = ij.id
+                    LEFT JOIN student_preferences sp ON sja.student_id = sp.student_id 
+                        AND sja.company_id = sp.company_id 
+                        AND sja.job_id = sp.job_id
+                    WHERE sja.company_id IN ({placeholders})
+                      AND ra.apply_status = 'approved'
+                    ORDER BY ic.company_name, sp.preference_order, u.name
+                """, tuple(company_ids))
+            else:
+                raise
         
         matches = cursor.fetchall()
         
