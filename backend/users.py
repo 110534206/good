@@ -1139,6 +1139,17 @@ def get_public_positions():
         if user_role == 'teacher':
             where_clauses.append("ic.advisor_user_id = %s")
             params.append(user_id)
+        # 廠商只能看到自己所屬公司的職缺
+        elif user_role == 'vendor':
+            cursor.execute(
+                "SELECT company_id FROM vendor WHERE user_id = %s LIMIT 1",
+                (user_id,)
+            )
+            vendor_row = cursor.fetchone()
+            if not vendor_row:
+                return jsonify({"success": True, "items": []}), 200
+            where_clauses.append("ij.company_id = %s")
+            params.append(vendor_row["company_id"])
 
         # 科助 (ta) 可以看到所有已審核通過的公司，不需要額外過濾
         if company_filter:

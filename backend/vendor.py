@@ -1,8 +1,10 @@
 from datetime import datetime, timedelta
 from decimal import Decimal
+import os
 import traceback
 
-from flask import Blueprint, jsonify, render_template, request, session
+from flask import Blueprint, current_app, jsonify, render_template, request, session
+from werkzeug.utils import secure_filename
 
 from config import get_db
 from semester import get_current_semester_id, get_current_semester_code
@@ -4578,7 +4580,7 @@ def get_withdraw_intern_list():
                    ON ir.student_id = io.student_id
                   AND ir.semester_id = %s
                   AND ir.company_id = ic.id
-            WHERE io.status = 'accepted' AND ij.company_id IN (""" + placeholders + """)
+            WHERE io.status IN ('accepted', 'withdrawing', 'confirmed') AND ij.company_id IN (""" + placeholders + """)
             ORDER BY ic.company_name, ij.title, u.name
             """
         else:
@@ -4591,11 +4593,34 @@ def get_withdraw_intern_list():
             JOIN users u ON u.id = io.student_id
             JOIN internship_jobs ij ON ij.id = io.job_id
             JOIN internship_companies ic ON ic.id = ij.company_id
-            WHERE io.status = 'accepted' AND ij.company_id IN (""" + placeholders + """)
+            WHERE io.status IN ('accepted', 'withdrawing', 'confirmed') AND ij.company_id IN (""" + placeholders + """)
             ORDER BY ic.company_name, ij.title, u.name
             """
         cursor.execute(status_sql, args)
         rows = cursor.fetchall()
+        # 合併「僅在 internship_records 有記錄、但 offer 可能缺漏或不同學期」的學生，避免前端沒資料
+        seen_keys = {(r["student_id"], r.get("company_name"), r.get("job_title")) for r in rows}
+        if current_semester_id is not None:
+            try:
+                cursor.execute("""
+                    SELECT ir.student_id,
+                           u.name AS student_name, u.username AS student_number,
+                           ic.company_name, ir.job_title,
+                           ir.status AS status
+                    FROM internship_records ir
+                    JOIN users u ON u.id = ir.student_id
+                    JOIN internship_companies ic ON ic.id = ir.company_id
+                    WHERE ir.vendor_id = %s AND ir.semester_id = %s
+                      AND ir.company_id IN (""" + placeholders + """)
+                    ORDER BY ic.company_name, ir.job_title, u.name
+                """, [vendor_id, current_semester_id] + company_ids)
+                for r in cursor.fetchall() or []:
+                    key = (r["student_id"], r.get("company_name"), r.get("job_title"))
+                    if key not in seen_keys:
+                        seen_keys.add(key)
+                        rows.append(r)
+            except Exception:
+                pass
         cursor.close()
         conn.close()
         return jsonify({"success": True, "data": rows})
@@ -4662,15 +4687,32 @@ def get_withdraw_intern_info():
 # 廠商退實習生：送出退實習申請（學生狀態標記為「退出處理中」）
 # 送出後需隱藏該學生的「新增日誌」按鈕（由學生端依 status 判斷）
 # =========================================================
+# 退實習佐證：允許的副檔名
+WITHDRAW_EVIDENCE_IMAGE_EXT = {"png", "jpg", "jpeg", "gif", "webp"}
+WITHDRAW_EVIDENCE_FILE_EXT = {"pdf", "doc", "docx", "xls", "xlsx", "odt", "ods", "txt"}
+
+
 @vendor_bp.route("/vendor/api/withdraw_intern", methods=["POST"])
 def submit_withdraw_intern():
-    """廠商送出退實習申請：寫入原因、最終時數，並將學生標記為退出處理中"""
+    """廠商送出退實習申請：寫入原因、可選佐證圖片/檔案，並將學生標記為退出處理中"""
     if "user_id" not in session or session.get("role") != "vendor":
         return jsonify({"success": False, "message": "未授權"}), 403
-    data = request.get_json() or {}
-    student_id = data.get("student_id")
-    reason_category = (data.get("reason_category") or "").strip()
-    reason_detail = (data.get("reason_detail") or "").strip()
+    # 支援 application/json 或 multipart/form-data（表單＋佐證檔）
+    if request.content_type and "multipart/form-data" in request.content_type:
+        student_id = request.form.get("student_id")
+        reason_category = (request.form.get("reason_category") or "").strip()
+        reason_detail = (request.form.get("reason_detail") or "").strip()
+        evidence_image = request.files.get("evidence_image")
+        evidence_file = request.files.get("evidence_file")
+        # 表單送出時至少須上傳一張圖片或一個檔案
+        if (not evidence_image or not evidence_image.filename) and (not evidence_file or not evidence_file.filename):
+            return jsonify({"success": False, "message": "請至少上傳一張圖片或一個檔案作為佐證。"}), 400
+    else:
+        data = request.get_json() or {}
+        student_id = data.get("student_id")
+        reason_category = (data.get("reason_category") or "").strip()
+        reason_detail = (data.get("reason_detail") or "").strip()
+        evidence_image = evidence_file = None
     if not student_id:
         return jsonify({"success": False, "message": "缺少學生 ID"}), 400
     if not reason_category:
@@ -4704,14 +4746,40 @@ def submit_withdraw_intern():
             conn.close()
             return jsonify({"success": False, "message": "該學生不在您的實習生名單中"}), 404
         company_id = offer["company_id"]
-        # 寫入退實習記錄至 internship_records
-        # 欄位：semester_id, vendor_id, company_id, student_id, job_title, status,
-        #      reason_category, reason_detail, created_at, updated_at
         current_semester_id = get_current_semester_id(cursor)
         if not current_semester_id:
             cursor.close()
             conn.close()
             return jsonify({"success": False, "message": "目前沒有設定當前學期，無法寫入退實習記錄"}), 400
+        # 儲存佐證檔（可選）
+        upload_base = current_app.config.get("UPLOAD_FOLDER") or os.path.join(os.path.dirname(__file__), "uploads")
+        subdir = "withdraw_evidence"
+        evidence_dir = os.path.join(upload_base, subdir, f"{current_semester_id}_{vendor_id}_{company_id}_{student_id}")
+        saved_paths = []
+        ts = datetime.now().strftime("%Y%m%d%H%M%S")
+        if evidence_image and evidence_image.filename:
+            ext = (evidence_image.filename.rsplit(".", 1)[-1] or "").lower()
+            if ext in WITHDRAW_EVIDENCE_IMAGE_EXT:
+                os.makedirs(evidence_dir, exist_ok=True)
+                safe = secure_filename(evidence_image.filename) or "image"
+                base, _ = os.path.splitext(safe)
+                save_name = f"img_{ts}_{base[:20]}.{ext}"
+                abs_path = os.path.join(evidence_dir, save_name)
+                evidence_image.save(abs_path)
+                rel = os.path.join(subdir, f"{current_semester_id}_{vendor_id}_{company_id}_{student_id}", save_name).replace("\\", "/")
+                saved_paths.append(("image", rel, evidence_image.filename))
+        if evidence_file and evidence_file.filename:
+            ext = (evidence_file.filename.rsplit(".", 1)[-1] or "").lower()
+            if ext in WITHDRAW_EVIDENCE_FILE_EXT:
+                os.makedirs(evidence_dir, exist_ok=True)
+                safe = secure_filename(evidence_file.filename) or "file"
+                base, _ = os.path.splitext(safe)
+                save_name = f"file_{ts}_{base[:20]}.{ext}"
+                abs_path = os.path.join(evidence_dir, save_name)
+                evidence_file.save(abs_path)
+                rel = os.path.join(subdir, f"{current_semester_id}_{vendor_id}_{company_id}_{student_id}", save_name).replace("\\", "/")
+                saved_paths.append(("file", rel, evidence_file.filename))
+        # 寫入退實習記錄至 internship_records
         insert_params = (
             current_semester_id,
             vendor_id,
@@ -4739,7 +4807,6 @@ def submit_withdraw_intern():
                     "success": False,
                     "message": "系統尚未建立退實習記錄表（internship_records），請聯絡管理員。",
                 }), 500
-            # 1136: 欄位數與值數不符時，改為只插入必填欄位（不含 created_at/updated_at，依表預設）
             if "1136" in err_str or "Column count doesn't match" in err_str:
                 try:
                     cursor.execute("""
@@ -4765,7 +4832,37 @@ def submit_withdraw_intern():
                     }), 500
             else:
                 raise create_err
-        # 可選：更新 internship_offers 狀態欄位為「退出處理中」（若表有 status 欄）
+        # 建立佐證附件表並寫入
+        try:
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS internship_withdraw_attachments (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    semester_id INT NOT NULL,
+                    vendor_id INT NOT NULL,
+                    company_id INT NOT NULL,
+                    student_id INT NOT NULL,
+                    file_type VARCHAR(20) NOT NULL,
+                    file_path VARCHAR(500) NOT NULL,
+                    original_filename VARCHAR(255),
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    INDEX idx_withdraw (semester_id, vendor_id, company_id, student_id)
+                )
+            """)
+            conn.commit()
+            for ft, fp, orig in saved_paths:
+                cursor.execute("""
+                    INSERT INTO internship_withdraw_attachments
+                    (semester_id, vendor_id, company_id, student_id, file_type, file_path, original_filename)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s)
+                """, (current_semester_id, vendor_id, company_id, int(student_id), ft, fp, orig))
+                conn.commit()
+        except Exception as att_err:
+            traceback.print_exc()
+            # 不因附件寫入失敗而整筆失敗，主流程已成功
+            try:
+                conn.rollback()
+            except Exception:
+                pass
         try:
             cursor.execute("""
                 UPDATE internship_offers SET status = 'withdrawing'
@@ -4962,6 +5059,42 @@ def teacher_get_withdraw_case_detail():
         offer = cursor.fetchone()
         # 實習生日誌：若系統有日誌表可在此查詢；目前無則回傳空陣列
         logs = []
+        # 廠商上傳的退實習佐證（圖片/檔案）
+        attachments = []
+        sid, vid, cid, stid = row["semester_id"], row["vendor_id"], row["company_id"], row["student_id"]
+        try:
+            cursor.execute("""
+                SELECT file_type, file_path, original_filename
+                FROM internship_withdraw_attachments
+                WHERE semester_id = %s AND vendor_id = %s AND company_id = %s AND student_id = %s
+                ORDER BY id
+            """, (sid, vid, cid, stid))
+            upload_base = current_app.config.get("UPLOAD_FOLDER") or os.path.join(os.path.dirname(__file__), "uploads")
+            for a in cursor.fetchall():
+                fp = (a.get("file_path") or "").lstrip("/")
+                url = "/uploads/" + fp
+                file_size_str = ""
+                if fp:
+                    try:
+                        full_path = os.path.join(upload_base, fp.replace("/", os.sep))
+                        if os.path.isfile(full_path):
+                            sz = os.path.getsize(full_path)
+                            if sz < 1024:
+                                file_size_str = f"{sz} B"
+                            elif sz < 1024 * 1024:
+                                file_size_str = f"{sz // 1024} KB"
+                            else:
+                                file_size_str = f"{sz / (1024 * 1024):.2f} MB"
+                    except Exception:
+                        pass
+                attachments.append({
+                    "file_type": a.get("file_type") or "file",
+                    "url": url,
+                    "original_filename": a.get("original_filename") or "",
+                    "file_size": file_size_str or None,
+                })
+        except Exception:
+            pass
         cursor.close()
         conn.close()
         return jsonify({
@@ -4979,6 +5112,7 @@ def teacher_get_withdraw_case_detail():
                 "created_at": row.get("created_at").isoformat() if row.get("created_at") else None,
                 "teacher_meeting_notes": (row.get("teacher_meeting_notes") or "").strip(),
                 "logs": logs,
+                "attachments": attachments,
             },
         })
     except Exception as e:
