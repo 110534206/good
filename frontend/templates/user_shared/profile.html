@@ -106,7 +106,7 @@
 
   /* 頂端列 */
     header {
-      background: linear-gradient(135deg, #0055a8 0%, #006acb 50%, #004f94 100%);
+      background: #0454a3;
       border-bottom: none;
       position: sticky;
       top: 0;
@@ -277,7 +277,7 @@
 
   <div class="container" style="margin-top: 24px;">
 
-    <img id="avatarPreview" class="avatar-preview" src="https://via.placeholder.com/100?text=頭像" alt="頭像預覽" />
+    <img id="avatarPreview" class="avatar-preview" src="/static/images/avatar.png" alt="頭像預覽" />
     <input type="hidden" id="isHomeroom" value="false" />
     <input type="hidden" id="userClassId" />
     <div id="page1" class="page active">
@@ -616,7 +616,7 @@
           }
           document.getElementById('avatarPreview').src = user.avatar_url
             ? user.avatar_url + '?t=' + Date.now()
-            : 'https://via.placeholder.com/100?text=頭像';
+            : '/static/images/avatar.png';
 
           userClassIdInput.value = user.class_id || ''; // 儲存 class_id 供儲存時使用
 

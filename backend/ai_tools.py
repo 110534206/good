@@ -45,6 +45,11 @@ SYSTEM_PROMPT = """
 8. **只輸出修改後的文本內容**，直接從修改後的文本開始，不要有任何說明或介紹。
 """
 
+# 履歷修改輸出格式規則（避免 AI 輸出 * ** # 等符號）
+REVISE_OUTPUT_FORMAT_RULE = """
+【輸出格式】必須為純文字：禁止使用星號(*)、雙星號(**)、井字號(#)、底線(_)等任何 Markdown 或項目符號。條列時請用換行與數字（如 1. 2.）或頓號、破折號，切勿使用 * 或 ** 標記。標題或重點請直接以文字呈現，不要加粗或裝飾符號。
+"""
+
 # ==========================================================
 # AI 處理的 API 端點
 # ==========================================================
@@ -54,12 +59,13 @@ def revise_resume():
     if not api_key or not model:
         return jsonify({"error": "AI 服務未正確配置 API Key。"}), 500
 
-    # 接收履歷文本、任務風格、語氣風格
+    # 接收履歷文本、任務風格、語氣風格、關鍵字（選填）
     try:
         data = request.get_json()
         user_resume_text = data.get('resumeText')
         edit_style = data.get('style', 'polish')
         tone_style = data.get('tone', 'professional')
+        user_keywords = (data.get('keywords') or '').strip()
 
         # 🌟 [新功能] 如果用戶沒有提供 resumeText，自動從資料庫讀取自傳
         if not user_resume_text or not user_resume_text.strip():
@@ -133,27 +139,40 @@ def revise_resume():
 7. 修改比例不得超過原文字數的30%
 8. {tone_prompt}
 9. 只輸出修改後文本，不要任何說明
+{REVISE_OUTPUT_FORMAT_RULE}
 [原始文本] {user_resume_text}
 [修改後的文本]"""
 
         elif edit_style == 'keyword_focus':
-            # --- 選項 1: 關鍵字導向 (兩步驟) ---
-            keyword_prompt = f"[任務] 從以下履歷文本中提取 5-7 個最核心的技能和成就關鍵字。[規則] 以逗號 (,) 分隔所有關鍵字，並在**一行中**輸出。[原始文本] {user_resume_text} [關鍵字列表]"
-            keyword_response = model.generate_content(keyword_prompt)
-            keywords = keyword_response.text.strip()
-            print(f"偵測任務: 關鍵字導向 (關鍵字: {keywords}), 語氣: {tone_style}")
-
-            final_prompt = f"[任務] 你是一位頂尖的人力資源專家。請根據 [核心關鍵字] 重寫 [原始文本]。[關鍵規則] 1. **必須**突出並強調 [核心關鍵字] 相關的技能和成就。 2. **{tone_prompt}** [規則] 1. 使用強動詞開頭的行動句。 2. 量化成果。 3. **絕對禁止**包含任何解釋性文字、前綴說明、後綴註解或評論。 4. **只輸出修改後的文本內容**，不要有任何「這是為您改寫的...」、「以下是...」等說明文字。 5. 直接從修改後的文本開始輸出，不要有任何前綴。[核心關鍵字] {keywords} [原始文本] {user_resume_text} [修改後的文本]"
+            # --- 關鍵字導向：若使用者有提供關鍵字則直接使用，否則從原文提取 ---
+            if user_keywords:
+                keywords = user_keywords
+                print(f"偵測任務: 關鍵字導向 (使用者關鍵字: {keywords}), 語氣: {tone_style}")
+                final_prompt = f"[任務] 你是一位頂尖的人力資源專家。請根據使用者指定的 [目標關鍵字／偏好類別] 改寫以下自傳，使內容更貼合該方向（例如：行銷、數據分析、業務、軟體開發等）。[關鍵規則] 1. **必須**在改寫中自然突出與 [目標關鍵字／偏好類別] 相關的經驗、技能與動機。 2. 若原文已有相關經歷，請強化表述；若可合理延伸，可適度連結到目標關鍵字，但不得捏造經歷。 3. **{tone_prompt}** 4. 使用強動詞開頭的行動句，盡可能量化成果。 5. **絕對禁止**包含任何解釋性文字、前綴說明、後綴註解或評論。 6. **只輸出修改後的文本內容**，直接從修改後的文本開始。{REVISE_OUTPUT_FORMAT_RULE}[目標關鍵字／偏好類別] {keywords} [原始文本] {user_resume_text} [修改後的文本]"
+            else:
+                keyword_prompt = f"[任務] 從以下履歷文本中提取 5-7 個最核心的技能和成就關鍵字。[規則] 以逗號 (,) 分隔所有關鍵字，並在**一行中**輸出。[原始文本] {user_resume_text} [關鍵字列表]"
+                keyword_response = model.generate_content(keyword_prompt)
+                keywords = keyword_response.text.strip()
+                print(f"偵測任務: 關鍵字導向 (自動提取關鍵字: {keywords}), 語氣: {tone_style}")
+                final_prompt = f"[任務] 你是一位頂尖的人力資源專家。請根據 [核心關鍵字] 重寫 [原始文本]。[關鍵規則] 1. **必須**突出並強調 [核心關鍵字] 相關的技能和成就。 2. **{tone_prompt}** [規則] 1. 使用強動詞開頭的行動句。 2. 量化成果。 3. **絕對禁止**包含任何解釋性文字、前綴說明、後綴註解或評論。 4. **只輸出修改後的文本內容**，不要有任何「這是為您改寫的...」、「以下是...」等說明文字。 5. 直接從修改後的文本開始輸出，不要有任何前綴。{REVISE_OUTPUT_FORMAT_RULE}[核心關鍵字] {keywords} [原始文本] {user_resume_text} [修改後的文本]"
         
         elif edit_style == 'concise':
             # --- 選項 2: 文案精簡 (一步驟) ---
-            print(f"偵測任務: 文案精簡, 語氣: {tone_style}")
-            final_prompt = f"[任務] 將以下 [原始文本] 改寫得**極度精簡、清楚明瞭且成就導向**。[規則] 1. **{tone_prompt}** 2. **每句話必須以行動動詞開頭**。 3. 刪除所有贅字、口語化和非成就型描述。 4. 保留並強化核心資訊。 5. **絕對禁止**包含任何解釋性文字、前綴說明、後綴註解或評論。 6. **只輸出修改後的文本內容**，不要有任何「這是為您改寫的...」、「以下是...」等說明文字。 7. 直接從修改後的文本開始輸出，不要有任何前綴。[原始文本] {user_resume_text} [修改後的文本]"
+            keyword_instruction = " 此外，若以下有提供 [目標關鍵字]，請在精簡時特別保留或強化與之相關的表述。" if user_keywords else ""
+            print(f"偵測任務: 文案精簡, 語氣: {tone_style}" + (f", 關鍵字: {user_keywords}" if user_keywords else ""))
+            final_prompt = f"[任務] 將以下 [原始文本] 改寫得**極度精簡、清楚明瞭且成就導向**。[規則] 1. **{tone_prompt}** 2. **每句話必須以行動動詞開頭**。 3. 刪除所有贅字、口語化和非成就型描述。 4. 保留並強化核心資訊。 5. **絕對禁止**包含任何解釋性文字、前綴說明、後綴註解或評論。 6. **只輸出修改後的文本內容**，不要有任何「這是為您改寫的...」、「以下是...」等說明文字。 7. 直接從修改後的文本開始輸出，不要有任何前綴。{keyword_instruction} {REVISE_OUTPUT_FORMAT_RULE}[原始文本] {user_resume_text}"
+            if user_keywords:
+                final_prompt += f" [目標關鍵字] {user_keywords}"
+            final_prompt += " [修改後的文本]"
 
         else: # 'polish' (預設)
             # --- 選項 3: 履歷美化 (預設) (一步驟) ---
-            print(f"偵測任務: 履歷美化, 語氣: {tone_style}")
-            final_prompt = f"[任務] 專業地**美化並潤飾**以下 [原始文本]。[規則] 1. **{tone_prompt}** 2. 使用強動詞開頭的行動句。 3. 盡可能量化成果。 4. 修正文法。 5. **絕對禁止**包含任何解釋性文字、前綴說明、後綴註解或評論。 6. **只輸出修改後的文本內容**，不要有任何「這是為您改寫的...」、「以下是...」等說明文字。 7. 直接從修改後的文本開始輸出，不要有任何前綴。[原始文本] {user_resume_text} [修改後的文本]"
+            keyword_instruction = " 此外，若以下有提供 [目標關鍵字]，請在美化時自然突出與之相關的經驗與動機。" if user_keywords else ""
+            print(f"偵測任務: 履歷美化, 語氣: {tone_style}" + (f", 關鍵字: {user_keywords}" if user_keywords else ""))
+            final_prompt = f"[任務] 專業地**美化並潤飾**以下 [原始文本]。[規則] 1. **{tone_prompt}** 2. 使用強動詞開頭的行動句。 3. 盡可能量化成果。 4. 修正文法。 5. **絕對禁止**包含任何解釋性文字、前綴說明、後綴註解或評論。 6. **只輸出修改後的文本內容**，不要有任何「這是為您改寫的...」、「以下是...」等說明文字。 7. 直接從修改後的文本開始輸出，不要有任何前綴。{keyword_instruction} {REVISE_OUTPUT_FORMAT_RULE}[原始文本] {user_resume_text}"
+            if user_keywords:
+                final_prompt += f" [目標關鍵字] {user_keywords}"
+            final_prompt += " [修改後的文本]"
 
         # --- 統一的串流輸出 ---
         def generate_stream():

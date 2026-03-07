@@ -13,38 +13,136 @@
       color: #1e293b;
       min-height: 100vh;
     }
-    header.page-header {
-      background: linear-gradient(135deg, #0454a3 0%, #0369a1 100%);
+    /* 頂部欄樣式 */
+    .top-bar {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 60px;
+      background-color: #0454a3;
+      z-index: 1100;
+      display: flex;
+      align-items: center;
+      box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
+    }
+
+    .top-bar-content {
+      max-width: 1400px;
+      width: 100%;
+      margin: 0 auto;
+      padding: 0 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      height: 100%;
+    }
+
+    .top-bar-left #menu-btn {
+      width: 30px;
+      height: 22px;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      background: none;
+      border: none;
+      padding: 0;
+    }
+
+    .top-bar-left #menu-btn span {
+      display: block;
+      width: 100%;
+      height: 3px;
+      background-color: white;
+      border-radius: 2px;
+      transition: all 0.3s ease;
+    }
+
+    .top-bar-title {
       color: white;
-      padding: 1.25rem 2rem;
-      text-align: center;
       font-size: 1.5rem;
       font-weight: 600;
-      box-shadow: 0 2px 12px rgba(4, 84, 163, 0.25);
-    }
-    .top-bar-left { position: fixed; top: 1rem; left: 1rem; z-index: 1100; }
-    .top-bar-left #menu-btn {
-      width: 30px; height: 22px; cursor: pointer;
-      display: flex; flex-direction: column; justify-content: space-between;
-      background: none; border: none; padding: 0;
-    }
-    .top-bar-left #menu-btn span {
-      display: block; width: 100%; height: 3px; background: white; border-radius: 2px;
+      flex: 1;
+      text-align: center;
     }
     #side-menu {
-      position: fixed; top: 0; left: 0; height: 100vh; width: 320px; max-width: 80vw;
-      background: rgba(10,10,10,0.95); backdrop-filter: blur(6px);
-      box-shadow: 3px 0 12px rgba(0,0,0,0.7); padding: 2rem 1.5rem;
-      transform: translateX(-100%); transition: transform 0.3s ease; z-index: 1200;
-      display: flex; flex-direction: column; color: white;
+      position: fixed;
+      top: 0;
+      left: 0;
+      height: 100vh;
+      width: 320px;
+      max-width: 80vw;
+      background-color: rgba(10, 10, 10, 0.95);
+      backdrop-filter: blur(6px);
+      box-shadow: 3px 0 12px rgba(0, 0, 0, 0.6);
+      padding: 2rem 1.5rem;
+      transform: translateX(-100%);
+      transition: transform 0.3s ease-in-out;
+      z-index: 1300;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      color: #fff;
+      user-select: none;
     }
-    #side-menu.open { transform: translateX(0); }
-    #side-menu .menu-header { display: flex; align-items: center; justify-content: space-between; width: 100%; margin-bottom: 1.5rem; }
-    #side-menu h2 { margin: 0; font-size: 1.5rem; color: white; }
-    #side-menu #close-btn { font-size: 1.5rem; background: none; border: none; color: white; cursor: pointer; }
-    #side-menu a { display: block; padding: 0.5rem 0; color: #ddd; text-decoration: none; border-radius: 4px; }
-    #side-menu a:hover { background: rgba(255,255,255,0.15); color: white; }
-    .container { max-width: 1160px; margin: 0 auto; padding: 24px; margin-top: 1.5rem; }
+
+    #side-menu.open {
+      transform: translateX(0);
+    }
+
+    #side-menu h2 {
+      margin: 0 0 1.5rem 0;
+      font-weight: 700;
+      font-size: 1.6rem;
+      color: #fff;
+      padding: 0;
+      line-height: 2.4rem;
+      height: 2.4rem;
+      display: flex;
+      align-items: center;
+    }
+
+    #close-btn {
+      position: absolute;
+      top: 2rem;
+      right: 1.6rem;
+      font-size: 2.8rem;
+      font-weight: normal;
+      background: none;
+      border: none;
+      color: #fff;
+      cursor: pointer;
+      line-height: 2.4rem;
+      height: 2.5rem;
+      width: 2.5rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 10;
+      padding: 0;
+      margin: 0;
+    }
+
+    #side-menu a {
+      display: block;
+      width: 100%;
+      padding: 0.6rem 0;
+      font-size: 1.1rem;
+      color: #e2e8f0;
+      text-decoration: none;
+      border-radius: 4px;
+      transition: background-color 0.2s ease;
+    }
+
+    #side-menu a:hover {
+      background-color: rgba(255, 255, 255, 0.18);
+      color: #fff;
+    }
+    body {
+      padding-top: 60px;
+    }
+    .container { max-width: 1160px; margin: 0 auto; padding: 24px; }
     .card {
       background: #fff; border-radius: 16px; box-shadow: 0 4px 24px rgba(0,0,0,0.06);
       padding: 32px; margin-bottom: 24px; border: 1px solid rgba(255,255,255,0.8);
@@ -286,17 +384,33 @@
   </style>
 </head>
 <body>
-  <header class="page-header">退實習確認</header>
-  <div class="top-bar-left">
-    <div id="menu-btn" title="選單" role="button" tabindex="0"><span></span><span></span><span></span></div>
-  </div>
-  <nav id="side-menu" aria-hidden="true">
-    <div class="menu-header">
-      <h2>功能選單</h2>
-      <button id="close-btn" aria-label="關閉">×</button>
+  <!-- 頂部欄 -->
+  <div class="top-bar">
+    <div class="top-bar-content">
+      <div class="top-bar-left">
+        <button id="menu-btn" title="選單" role="button" tabindex="0" aria-label="開啟側邊選單">
+          <span></span>
+          <span></span>
+          <span></span>
+        </button>
+      </div>
+      <div class="top-bar-title">退實習確認</div>
+      <div style="width: 30px;"></div> <!-- 佔位元素，保持標題置中 -->
     </div>
+  </div>
+  <!-- 側邊選單 -->
+  <nav id="side-menu" aria-hidden="true" role="navigation" aria-label="功能選單">
+    <button id="close-btn" aria-label="關閉功能選單">×</button>
+    <h2>功能選單</h2>
     <a href="/teacher_home">首頁</a>
     <a href="/profile">個人資料</a>
+    <a href="/notifications">通知</a>
+    <a href="/upload_company">建立實習機會</a>
+    <a href="/review_resume">學生履歷審核</a>
+    <a href="/manage_vendor">實習廠商管理</a>
+    <a href="/interview_schedule">行事曆</a>
+    <a href="/admission_results">查看錄取結果</a>
+    <a href="/review_experience">審核實習心得</a>
     <a href="/teacher_remove_intern">退實習確認</a>
     <a href="/logout">登出</a>
   </nav>
@@ -378,19 +492,14 @@
   </div>
 
   <script>
-    (function () {
-      const menuBtn = document.getElementById('menu-btn');
-      const sideMenu = document.getElementById('side-menu');
-      const closeBtn = document.getElementById('close-btn');
-      if (menuBtn) menuBtn.addEventListener('click', function () {
-        sideMenu.classList.add('open');
-        sideMenu.setAttribute('aria-hidden', 'false');
-      });
-      if (closeBtn) closeBtn.addEventListener('click', function () {
-        sideMenu.classList.remove('open');
-        sideMenu.setAttribute('aria-hidden', 'true');
-      });
-    })();
+    // 側邊選單控制
+    document.getElementById('menu-btn').addEventListener('click', () => {
+      document.getElementById('side-menu').classList.add('open');
+    });
+
+    document.getElementById('close-btn').addEventListener('click', () => {
+      document.getElementById('side-menu').classList.remove('open');
+    });
 
     (function () {
       const params = new URLSearchParams(window.location.search);

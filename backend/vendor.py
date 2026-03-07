@@ -62,46 +62,27 @@ def _get_vendor_profile(cursor, vendor_id):
 def _get_vendor_companies(cursor, vendor_id):
     """
     獲取廠商對應的公司列表。
-    邏輯：廠商通過指導老師（teacher_id）關聯到公司。
-    分組規則：
-    - vendor、vendorA 的指導老師是 teacherA，只能看到 advisor_user_id = teacherA_id 的公司
-    - vendorB、vendorD 的指導老師是 directorB，只能看到 advisor_user_id = directorB_id 的公司
+    邏輯：只返回該廠商自己創建過職缺的公司（通過 internship_jobs.created_by_vendor_id 反向查找），
+    這樣可以確保每個廠商只看到自己的公司，而不是同一指導老師下的所有公司。
+    如果該廠商還沒有創建過任何職缺，則返回空列表（需要先由指導老師建立職缺，或通過其他方式建立關聯）。
     """
-    # 1. 獲取廠商的 teacher_id
-    cursor.execute("SELECT teacher_id FROM users WHERE id = %s", (vendor_id,))
-    vendor_row = cursor.fetchone()
-    if not vendor_row or not vendor_row.get("teacher_id"):
-        print(f"⚠️ 廠商 {vendor_id} 沒有設定 teacher_id")
-        return []
-    
-    teacher_id = vendor_row.get("teacher_id")
-    if not teacher_id:
-        print(f"⚠️ 廠商 {vendor_id} 的 teacher_id 為空")
-        return []
-    
-    # 2. 驗證該 ID 是否為有效的指導老師
-    cursor.execute("SELECT id, name FROM users WHERE id = %s AND role IN ('teacher', 'director')", (teacher_id,))
-    teacher_row = cursor.fetchone()
-    if not teacher_row:
-        print(f"⚠️ 找不到指導老師 ID {teacher_id} (廠商 {vendor_id})")
-        return []
-    
-    teacher_name = teacher_row.get("name", "")
-    print(f"✅ 廠商 {vendor_id} 的指導老師: {teacher_name} (ID: {teacher_id})")
-    
-    # 3. 找到該指導老師對接的公司（只回傳已審核通過的公司）
-    # 根據 advisor_user_id 來過濾，確保只有該指導老師的公司才會被返回
-    query = """
-        SELECT id, company_name, contact_email, advisor_user_id
-        FROM internship_companies
-        WHERE advisor_user_id = %s AND status = 'approved'
-        ORDER BY company_name
-    """
-    params = [teacher_id]
-    
-    cursor.execute(query, tuple(params))
+    # 通過該廠商創建的職缺來反向查找公司
+    # 只返回該廠商創建過職缺的公司（created_by_vendor_id = vendor_id）
+    cursor.execute("""
+        SELECT DISTINCT
+            ic.id, ic.company_name, ic.contact_email, ic.advisor_user_id
+        FROM internship_jobs ij
+        JOIN internship_companies ic ON ij.company_id = ic.id
+        WHERE ij.created_by_vendor_id = %s
+          AND ic.status = 'approved'
+        ORDER BY ic.company_name
+    """, (vendor_id,))
     companies = cursor.fetchall() or []
-    print(f"📋 廠商 {vendor_id} 找到 {len(companies)} 家公司 (指導老師 ID: {teacher_id})")
+    
+    if companies:
+        print(f"📋 廠商 {vendor_id} 找到 {len(companies)} 家自己創建過職缺的公司")
+    else:
+        print(f"⚠️ 廠商 {vendor_id} 還沒有創建過任何職缺，公司列表為空")
     
     return companies
 
@@ -1824,24 +1805,21 @@ def get_next_position_code():
         roc_year = now.year - 1911
         year_prefix = str(roc_year).zfill(3)
         
-        # 計算該年度內創建的職缺數量（根據創建時間）
-        # 計算該年度的起始和結束日期（西元年）
-        gregorian_year_start = roc_year + 1911
-        gregorian_year_end = gregorian_year_start + 1
-        
+        # 計算該年度內創建的職缺數量
+        # 由於 internship_jobs 表沒有 created_at 字段，我們使用 id 來估算
+        # 或者直接計算所有職缺的數量（如果不需要按年度重置）
+        # 這裡我們使用一個簡單的方法：計算所有職缺的數量 + 1
+        # 如果未來需要按年度重置，可以考慮在表中添加 created_at 字段
         cursor.execute("""
             SELECT COUNT(*) as count
-            FROM internship_jobs 
-            WHERE created_at >= %s AND created_at < %s
-        """, (
-            datetime(gregorian_year_start, 1, 1),
-            datetime(gregorian_year_end, 1, 1)
-        ))
+            FROM internship_jobs
+        """)
         
         result = cursor.fetchone()
         count = result.get("count", 0) if result else 0
         
-        # 下一個序號 = 該年度的職缺數量 + 1
+        # 下一個序號 = 所有職缺數量 + 1
+        # 注意：這會導致編號不按年度重置，如果需要按年度重置，需要在表中添加 created_at 字段
         next_sequence = count + 1
         
         # 生成完整編號
@@ -1866,6 +1844,59 @@ def get_next_position_code():
             "year": year_prefix,
             "sequence": 1
         })
+    finally:
+        cursor.close()
+        conn.close()
+
+
+@vendor_bp.route("/vendor/api/positions/<int:job_id>/code", methods=["GET"])
+def get_position_code_by_id(job_id):
+    """根據職缺ID獲取該職缺的編號（基於職缺的創建順序）"""
+    if "user_id" not in session or session.get("role") != "vendor":
+        return jsonify({"success": False, "message": "未授權"}), 403
+    
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        # 獲取當前民國年度（前3碼）
+        now = datetime.now()
+        roc_year = now.year - 1911
+        year_prefix = str(roc_year).zfill(3)
+        
+        # 計算該職缺在所有職缺中的創建順序（比數）
+        # 使用 id 來判斷順序（假設 id 越小，創建時間越早）
+        cursor.execute("""
+            SELECT COUNT(*) + 1 as sequence
+            FROM internship_jobs
+            WHERE id < %s
+        """, (job_id,))
+        
+        result = cursor.fetchone()
+        sequence = result.get("sequence", 1) if result else 1
+        
+        # 生成完整編號
+        sequence_suffix = str(sequence).zfill(3)
+        full_code = year_prefix + sequence_suffix
+        
+        return jsonify({
+            "success": True,
+            "code": full_code,
+            "year": year_prefix,
+            "sequence": sequence
+        })
+    except Exception as exc:
+        traceback.print_exc()
+        # 如果出錯，返回預設值
+        now = datetime.now()
+        roc_year = now.year - 1911
+        year_prefix = str(roc_year).zfill(3)
+        return jsonify({
+            "success": False,
+            "message": f"獲取編號失敗：{exc}",
+            "code": year_prefix + "001",
+            "year": year_prefix,
+            "sequence": 1
+        }), 500
     finally:
         cursor.close()
         conn.close()
@@ -1967,6 +1998,7 @@ def create_position_for_vendor():
     title = (data.get("title") or "").strip()
     company_id_raw = data.get("company_id")
     slots_raw = data.get("slots")
+    code = (data.get("code") or "").strip()
 
     if not company_id_raw:
         return jsonify({"success": False, "message": "請選擇公司"}), 400
