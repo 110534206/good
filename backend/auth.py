@@ -14,7 +14,7 @@ auth_bp = Blueprint("auth_bp", __name__)
 def check_is_homeroom(user_id):
     """查詢用戶是否在 classes_teacher 中擔任班導師角色（role = 'classteacher'）"""
     conn = get_db()
-    cursor = conn.cursor()
+    cursor = conn.cursor(dictionary=True)
     is_homeroom = False
     try:
         cursor.execute("""
@@ -22,7 +22,7 @@ def check_is_homeroom(user_id):
             WHERE teacher_id = %s AND role = 'classteacher'
         """, (user_id,))
         result = cursor.fetchone()
-        is_homeroom = result[0] > 0 if result else False
+        is_homeroom = result['count'] > 0 if result else False
     except Exception as e:
         current_app.logger.error(f"Error checking homeroom status for user {user_id}: {e}")
         # 如果發生錯誤，預設為 False
