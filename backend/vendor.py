@@ -133,6 +133,14 @@ def _serialize_job(row):
         "salary": salary_val,
         "remark": row.get("remark") or "",
         "is_active": bool(row.get("is_active")),
+        # 公司相關欄位（用於編輯時填充表單）
+        "company_intro": row.get("company_intro") or "",
+        "address": row.get("address") or "",
+        "contact": row.get("contact") or "",
+        "contact_title": row.get("contact_title") or "",
+        "email": row.get("email") or "",
+        "phone": row.get("phone") or "",
+        "transport": row.get("transport") or "",
     }
 
 
@@ -168,11 +176,19 @@ def _fetch_job_for_vendor(cursor, job_id, vendor_id, allow_teacher_created=False
         params = (job_id, teacher_id, vendor_id)
     
     # 使用參數化查詢，防止 SQL 注入
+    # 同時獲取職缺和公司相關的欄位，以便編輯時填充表單
     query = f"""
         SELECT
             ij.id, ij.company_id, ic.company_name, ij.title, ij.slots, ij.description,
             ij.period, ij.work_time, ij.salary, ij.remark, ij.is_active,
-            ij.created_by_vendor_id
+            ij.created_by_vendor_id,
+            ic.description AS company_intro,
+            ic.location AS address,
+            ic.contact_person AS contact,
+            ic.contact_title,
+            ic.contact_email AS email,
+            ic.contact_phone AS phone,
+            COALESCE(ic.transport, '') AS transport
         FROM internship_jobs ij
         JOIN internship_companies ic ON ij.company_id = ic.id
         WHERE ij.id = %s AND ic.advisor_user_id = %s AND {created_condition}
@@ -2025,6 +2041,9 @@ def create_position_for_vendor():
     salary = None
     if salary_value not in (None, "", "null"):
         salary = str(salary_value).strip() if salary_value else None
+    
+    # 獲取交通說明（公司級別的資料）
+    transport = (data.get("transport") or "").strip()
 
     is_active = True
     if "is_active" in data:
@@ -2045,6 +2064,8 @@ def create_position_for_vendor():
             return jsonify({"success": False, "message": "無權限操作此公司"}), 403
 
         vendor_id = session["user_id"]
+        
+        # 插入職缺資料（transport 欄位在 internship_companies 表中，不在 internship_jobs 表中）
         cursor.execute(
             """
             INSERT INTO internship_jobs
@@ -2065,6 +2086,14 @@ def create_position_for_vendor():
                 vendor_id,
             ),
         )
+        
+        # 更新公司的交通說明（transport 欄位在 internship_companies 表中）
+        if transport:
+            cursor.execute(
+                "UPDATE internship_companies SET transport = %s WHERE id = %s",
+                (transport, company_id)
+            )
+        
         conn.commit()
         job_row = _fetch_job_for_vendor(cursor, cursor.lastrowid, session["user_id"])
         return jsonify({"success": True, "item": _serialize_job(job_row)})
@@ -2135,6 +2164,9 @@ def update_position_for_vendor(job_id):
     salary = None
     if salary_value not in (None, "", "null"):
         salary = str(salary_value).strip() if salary_value else None
+    
+    # 獲取交通說明（公司級別的資料）
+    transport = (data.get("transport") or "").strip()
 
     try:
         is_active = _to_bool(data.get("is_active", True))
@@ -2153,6 +2185,9 @@ def update_position_for_vendor(job_id):
         if not job_row:
             return jsonify({"success": False, "message": "找不到職缺或無權限編輯"}), 404
 
+        company_id = job_row.get("company_id")
+        
+        # 更新職缺資料（transport 欄位在 internship_companies 表中，不在 internship_jobs 表中）
         cursor.execute(
             """
             UPDATE internship_jobs
@@ -2178,6 +2213,14 @@ def update_position_for_vendor(job_id):
                 job_id,
             ),
         )
+        
+        # 更新公司的交通說明（transport 欄位在 internship_companies 表中）
+        if transport and company_id:
+            cursor.execute(
+                "UPDATE internship_companies SET transport = %s WHERE id = %s",
+                (transport, company_id)
+            )
+        
         conn.commit()
         updated = _fetch_job_for_vendor(cursor, job_id, session["user_id"])
         return jsonify({"success": True, "item": _serialize_job(updated)})
