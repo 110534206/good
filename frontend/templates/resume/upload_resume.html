@@ -374,6 +374,17 @@
     .table-row-highlight {
         animation: highlightFade 3s ease-out;
     }
+    .course-row-diff-updated td {
+      background-color: #fff3cd !important;
+    }
+    .course-row-diff-added td {
+      background-color: #d1e7dd !important;
+    }
+    .course-diff-badge {
+      margin-left: 0.4rem;
+      font-size: 0.72rem;
+      vertical-align: middle;
+    }
   </style>
 </head>
 
@@ -506,13 +517,18 @@
                         <input type="text" id="course-search" class="form-control form-control-sm"
                           placeholder="🔍 查詢課程名稱">
                       </div>
-                      <div class="col-md-6">
+                      <div class="col-md-3">
                         <select id="credit-filter" class="form-select form-select-sm">
                           <option value="">所有學分數</option>
                           <option value="1">1 學分</option>
                           <option value="2">2 學分</option>
                           <option value="3">3 學分</option>
                         </select>
+                      </div>
+                      <div class="col-md-3">
+                        <button type="button" class="btn btn-outline-danger btn-sm w-100" id="toggle-diff-courses-btn">
+                          只看差異課程：關
+                        </button>
                       </div>
                     </div>
                   </th>
@@ -769,6 +785,38 @@
                   </select>
                 </div>
               </div>
+              <div class="mt-2">
+                <label class="form-label small text-muted mb-1">偏好類別（單選，選填）</label>
+                <div class="d-flex flex-wrap gap-2 align-items-center mb-1">
+                  <div class="form-check form-check-inline">
+                    <input class="form-check-input ai-keyword-radio" type="radio" name="ai-keyword-category" id="kw-hardware" value="硬體">
+                    <label class="form-check-label" for="kw-hardware">硬體</label>
+                  </div>
+                  <div class="form-check form-check-inline">
+                    <input class="form-check-input ai-keyword-radio" type="radio" name="ai-keyword-category" id="kw-software" value="軟體">
+                    <label class="form-check-label" for="kw-software">軟體</label>
+                  </div>
+                  <div class="form-check form-check-inline">
+                    <input class="form-check-input ai-keyword-radio" type="radio" name="ai-keyword-category" id="kw-marketing" value="行銷">
+                    <label class="form-check-label" for="kw-marketing">行銷</label>
+                  </div>
+                  <div class="form-check form-check-inline">
+                    <input class="form-check-input ai-keyword-radio" type="radio" name="ai-keyword-category" id="kw-service" value="客服">
+                    <label class="form-check-label" for="kw-service">客服</label>
+                  </div>
+                  <div class="form-check form-check-inline">
+                    <input class="form-check-input ai-keyword-radio" type="radio" name="ai-keyword-category" id="kw-accounting" value="會計">
+                    <label class="form-check-label" for="kw-accounting">會計</label>
+                  </div>
+                </div>
+                <div class="input-group input-group-sm mt-1">
+                  <span class="input-group-text">其他：</span>
+                  <input type="text" id="ai-keywords-input" class="form-control" 
+                    placeholder="可輸入其他類別"
+                    maxlength="200">
+                </div>
+                <small class="text-muted">選擇或填寫一項後，AI 會針對該類別調整自傳內容。</small>
+              </div>
             </div>
 
             <div class="d-grid gap-2 mb-3">
@@ -914,6 +962,42 @@
     let currentPage = 1;
     const PAGE_SIZE = 10;
     let filteredCoursesCache = [];
+    let showOnlyDiffCourses = false;
+
+    window.calculateSimilarity = function(str1, str2) {
+      if (!str1 || !str2) return 0;
+      const s1 = str1.replace(/\s+/g, '').toLowerCase();
+      const s2 = str2.replace(/\s+/g, '').toLowerCase();
+
+      if (s1 === s2) return 1;
+      if (s1.includes(s2) || s2.includes(s1)) return 0.9;
+
+      function getBigrams(string) {
+        const bigrams = [];
+        for (let i = 0; i < string.length - 1; i++) {
+          bigrams.push(string.substring(i, i + 2));
+        }
+        return bigrams;
+      }
+
+      const bigrams1 = getBigrams(s1);
+      const bigrams2 = getBigrams(s2);
+
+      if (bigrams1.length === 0 || bigrams2.length === 0) return 0;
+
+      let intersection = 0;
+      const bigrams2Copy = [...bigrams2];
+
+      for (let i = 0; i < bigrams1.length; i++) {
+        const index = bigrams2Copy.indexOf(bigrams1[i]);
+        if (index !== -1) {
+          intersection++;
+          bigrams2Copy.splice(index, 1);
+        }
+      }
+
+      return (2.0 * intersection) / (bigrams1.length + bigrams2.length);
+    };
 
     // 🧩 將儲存路徑轉為前端可顯示的 URL（支援反斜線路徑）
     // 確保 uploads/absence_proofs/ 等路徑正確指向 /uploads/absence_proofs/xxx
@@ -1122,13 +1206,29 @@
       const buttonText = isNotTaken ? "未修課" : "已修課";
 
       const tr = document.createElement("tr");
+      if (course.diffStatus === 'updated') {
+        tr.classList.add('course-row-diff-updated');
+      } else if (course.diffStatus === 'added') {
+        tr.classList.add('course-row-diff-added');
+      }
       // 儲存原始學分數在 data-original-credits 屬性中
       tr.dataset.originalCredits = creditsDisplay;
       // 儲存未修課狀態
       tr.dataset.isNotTaken = isNotTaken;
 
+      const diffBadgeHtml = course.diffStatus === 'updated'
+        ? '<span class="badge bg-warning text-dark course-diff-badge">不一樣</span>'
+        : (course.diffStatus === 'added'
+          ? '<span class="badge bg-success course-diff-badge">AI 新增</span>'
+          : '');
+
       tr.innerHTML = `
-      <td><input type="text" name="course_name[]" class="form-control form-control-sm" value="${course.name || ""}" placeholder="輸入課程名稱"></td>
+      <td>
+        <div class="d-flex align-items-center">
+          <input type="text" name="course_name[]" class="form-control form-control-sm" value="${course.name || ""}" placeholder="輸入課程名稱">
+          ${diffBadgeHtml}
+        </div>
+      </td>
       <td><input type="text" name="course_credits[]" class="form-control form-control-sm course-credits-input" value="${displayCredits}" placeholder="學分"></td>
       <td><input type="text" name="course_grade[]" class="form-control form-control-sm course-grade-input" value="${course.grade || ""}" placeholder="輸入成績"></td>
       <td><button type="button" class="btn ${buttonClass} btn-sm toggle-not-taken">${buttonText}</button></td>
@@ -1148,6 +1248,21 @@
       }
 
       return tr;
+    }
+
+    function updateDiffFilterButton() {
+      const btn = document.getElementById("toggle-diff-courses-btn");
+      if (!btn) return;
+      btn.textContent = `只看差異課程：${showOnlyDiffCourses ? '開' : '關'}`;
+      btn.className = showOnlyDiffCourses
+        ? 'btn btn-danger btn-sm w-100'
+        : 'btn btn-outline-danger btn-sm w-100';
+    }
+
+    function clearCourseDiffMarkers() {
+      allCoursesData.forEach(course => {
+        delete course.diffStatus;
+      });
     }
 
     // 🧩 渲染課程表格
@@ -1198,6 +1313,9 @@
           default:
             return true;
         }
+      }).filter(course => {
+        if (!showOnlyDiffCourses) return true;
+        return course.diffStatus === 'updated' || course.diffStatus === 'added';
       });
 
       // 【關鍵修正】確保過濾後的列表總是按照課程名稱排序
@@ -3717,6 +3835,16 @@
         saveTemplateBtn.addEventListener('click', savePersonalTemplate);
       }
 
+      const toggleDiffCoursesBtn = document.getElementById('toggle-diff-courses-btn');
+      if (toggleDiffCoursesBtn) {
+        updateDiffFilterButton();
+        toggleDiffCoursesBtn.addEventListener('click', () => {
+          showOnlyDiffCourses = !showOnlyDiffCourses;
+          updateDiffFilterButton();
+          applyFilterAndSearch();
+        });
+      }
+
       const form = document.getElementById("resumeForm");
 
       // 綁定圖片預覽：個人照片、成績單、缺勤佐證（選擇檔案時即時顯示）
@@ -4319,6 +4447,19 @@
       const loadingSpinner = document.getElementById('ai-loading-spinner');
       const editStyle = document.getElementById('ai-edit-style').value;
       const toneStyle = document.getElementById('ai-tone-style').value;
+      let keywords = '';
+      const checkedRadio = document.querySelector('input[name="ai-keyword-category"]:checked');
+      if (checkedRadio && checkedRadio.value) {
+        keywords = checkedRadio.value.trim();
+      } else {
+        const keywordsInput = document.getElementById('ai-keywords-input');
+        if (keywordsInput && keywordsInput.value.trim()) {
+          keywords = keywordsInput.value.trim().split(/[,，、]/)[0].trim();
+        }
+      }
+
+      // 若已選關鍵字，可在主控台確認有送出（方便除錯）
+      if (keywords) console.log('📌 送出關鍵字:', keywords);
 
       // 如果輸入框為空，後端會自動從資料庫讀取自傳
       if (resumeInput.trim() === "") {
@@ -4338,7 +4479,8 @@
           body: JSON.stringify({
             resumeText: resumeInput,
             style: editStyle,
-            tone: toneStyle
+            tone: toneStyle,
+            keywords: keywords
           })
         });
 
@@ -4380,6 +4522,16 @@
         for (const prefix of prefixesToRemove) {
           cleanedText = cleanedText.replace(prefix, '').trim();
         }
+        
+        // 移除 AI 可能輸出的 Markdown 星號／米字號（* **），改為純文字
+        cleanedText = cleanedText
+          .replace(/\*\*([^*]+)\*\*/g, '$1')  // **粗體** → 粗體
+          .replace(/\*([^*]+)\*/g, '$1')       // *斜體* → 斜體
+          .replace(/^\s*\*\s+/gm, '・ ')       // 行首 * 項目符 → ・
+          .replace(/^\s*#+\s*/gm, '')          // 行首 # 標題
+          .replace(/\*\*/g, '')                // 殘留 **
+          .replace(/\n\s*\*\s+/g, '\n・ ')     // 換行後 * 項目
+          .trim();
         
         if (!cleanedText) {
           cleanedText = fullText.trim();
@@ -4591,7 +4743,7 @@
 
                 // 尋找最佳匹配
                 allCoursesData.forEach((course, index) => {
-                    const similarity = calculateSimilarity(course.name, ocrCourse.name);
+                    const similarity = window.calculateSimilarity(course.name, ocrCourse.name);
                     if (similarity > bestSimilarity) {
                         bestSimilarity = similarity;
                         bestMatchIndex = index;
@@ -4712,44 +4864,6 @@
                 const table = document.querySelector('table');
                 if(table) table.scrollIntoView({ behavior: 'smooth' });
             });
-        }
-
-        // 🟢 [新增] 計算兩個字串的相似度 (Dice's Coefficient)
-        function calculateSimilarity(str1, str2) {
-            if (!str1 || !str2) return 0;
-            const s1 = str1.replace(/\s+/g, '').toLowerCase();
-            const s2 = str2.replace(/\s+/g, '').toLowerCase();
-            
-            if (s1 === s2) return 1;
-            if (s1.includes(s2) || s2.includes(s1)) return 0.9; // 包含關係給予高分
-
-            // Bigram 計算
-            function getBigrams(string) {
-                const bigrams = [];
-                for (let i = 0; i < string.length - 1; i++) {
-                    bigrams.push(string.substring(i, i + 2));
-                }
-                return bigrams;
-            }
-
-            const bigrams1 = getBigrams(s1);
-            const bigrams2 = getBigrams(s2);
-            
-            if (bigrams1.length === 0 || bigrams2.length === 0) return 0;
-
-            let intersection = 0;
-            // 修正：這裡應該用副本來避免修改原始陣列
-            const bigrams2Copy = [...bigrams2]; 
-            
-            for (let i = 0; i < bigrams1.length; i++) {
-                const index = bigrams2Copy.indexOf(bigrams1[i]);
-                if (index !== -1) {
-                    intersection++;
-                    bigrams2Copy.splice(index, 1);
-                }
-            }
-
-            return (2.0 * intersection) / (bigrams1.length + bigrams2.length);
         }
 
         if(btnTranscriptOcr) {
@@ -4891,7 +5005,7 @@
                             importBtn.id = 'btn-import-ocr-courses';
                             importBtn.type = 'button'; // 🟢 [修正] 明確指定 type="button" 防止觸發表單提交
                             importBtn.className = 'btn btn-success btn-sm mt-3 w-100';
-                            importBtn.innerHTML = `<i class="bi bi-file-earmark-arrow-up"></i> 識別出 ${parsedCourses.length} 筆成績，點此匯入至上方「已修習專業核心科目」表格`;
+                            importBtn.innerHTML = `<i class="bi bi-search"></i> AI 成績單比對：以 Excel 為正確來源，檢查 AI 識別與成績檔的差異（可手動修改）`;
                             importBtn.onclick = () => importOcrCourses_v2(parsedCourses);
                             
                             // Insert button before disclaimer logic (modified for split view)
@@ -4926,17 +5040,50 @@
     });
 
 
-        // 🟢 [升級版] 匯入 OCR 課程資料 (含智慧比對預覽)
+        function normalizeCompareText(value) {
+            return String(value || '').replace(/\s+/g, '').trim().toLowerCase();
+        }
+
+        function normalizeCompareCredits(value) {
+            const raw = String(value || '').trim();
+            if (!raw) return '';
+            if (raw.includes('*')) return '0';
+            const normalized = raw.replace(/[^\d.]/g, '');
+            return normalized || raw;
+        }
+
+        function escapeHtml(value) {
+            return String(value || '')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
+        // 🟢 [升級版] AI 成績單比對 + 套用差異
         function importOcrCourses_v2(ocrCourses) {
-            // 1. 預先計算比對結果
+            if (!allCoursesData || allCoursesData.length === 0) {
+                Swal.fire({
+                    title: '請先匯入成績檔',
+                    text: 'Excel 成績檔為正確來源。請先匯入 Excel，再上傳成績單圖片，由 AI 識別課程與成績並比對差異，若有不同可手動修改。',
+                    icon: 'warning',
+                    confirmButtonText: '我知道了'
+                });
+                return;
+            }
+
+            const SIMILARITY_THRESHOLD = 0.6;
+            const matchedImportedIndices = new Set();
+            const reservedImportedIndices = new Set();
+
             const matchResults = ocrCourses.map(ocrCourse => {
                 let bestMatchIndex = -1;
                 let bestSimilarity = 0;
-                const SIMILARITY_THRESHOLD = 0.6; // 相似度門檻
 
-                // 尋找最佳匹配
                 allCoursesData.forEach((course, index) => {
-                    const similarity = calculateSimilarity(course.name, ocrCourse.name);
+                    if (reservedImportedIndices.has(index)) return;
+                    const similarity = window.calculateSimilarity(course.name, ocrCourse.name);
                     if (similarity > bestSimilarity) {
                         bestSimilarity = similarity;
                         bestMatchIndex = index;
@@ -4944,115 +5091,242 @@
                 });
 
                 const isMatch = bestMatchIndex > -1 && bestSimilarity >= SIMILARITY_THRESHOLD;
+                const importedCourse = isMatch ? allCoursesData[bestMatchIndex] : null;
+                const importedGrade = normalizeCompareText(importedCourse ? importedCourse.grade : '');
+                const importedCredits = normalizeCompareCredits(importedCourse ? importedCourse.credits : '');
+                const ocrGrade = normalizeCompareText(ocrCourse.grade);
+                const ocrCredits = normalizeCompareCredits(ocrCourse.credits);
+                const gradeDiff = Boolean(importedCourse) && importedGrade !== ocrGrade;
+                const creditsDiff = Boolean(importedCourse) && importedCredits !== ocrCredits;
+                const action = !isMatch ? 'add' : (gradeDiff || creditsDiff ? 'update' : 'same');
+
+                if (isMatch) {
+                    matchedImportedIndices.add(bestMatchIndex);
+                    reservedImportedIndices.add(bestMatchIndex);
+                }
+
                 return {
                     ocrCourse,
+                    importedCourse,
                     matchIndex: bestMatchIndex,
                     matchName: isMatch ? allCoursesData[bestMatchIndex].name : null,
                     similarity: bestSimilarity,
-                    action: isMatch ? 'update' : 'add'
+                    action,
+                    gradeDiff,
+                    creditsDiff
                 };
             });
 
-            // 2. 建構預覽表格 HTML
-            let tableRows = matchResults.map(item => {
+            const missingImportedCourses = allCoursesData
+                .map((course, index) => ({ course, index }))
+                .filter(item => !matchedImportedIndices.has(item.index));
+
+            const diffRows = [];
+
+            matchResults.forEach(item => {
                 const score = Math.round(item.similarity * 100);
-                
-                if (item.action === 'update') {
-                    return `
-                        <tr>
-                            <td class="text-center"><span class="badge bg-success">更新</span></td>
-                            <td>
-                                <div>${item.ocrCourse.name}</div>
-                                <div class="small text-muted">⬇ 比對成功 (${score}%)</div>
-                                <div><strong>${item.matchName}</strong></div>
-                            </td>
-                            <td class="text-end">
-                                <span class="text-decoration-line-through text-muted small">${allCoursesData[item.matchIndex].grade || '-'}</span>
-                                <br>
-                                <strong class="text-primary">${item.ocrCourse.grade}</strong>
-                            </td>
-                        </tr>
-                    `;
-                } else {
-                    return `
-                        <tr>
-                            <td class="text-center"><span class="badge bg-primary">新增</span></td>
-                            <td>${item.ocrCourse.name}</td>
-                            <td class="text-end"><strong>${item.ocrCourse.grade}</strong></td>
-                        </tr>
-                    `;
+
+                if (item.action === 'same') {
+                    return;
                 }
-            }).join('');
+
+                if (item.action === 'update') {
+                    const importedGrade = item.importedCourse?.grade || '-';
+                    const importedCredits = item.importedCourse?.credits || '-';
+                    const ocrGrade = item.ocrCourse.grade || '-';
+                    const ocrCredits = item.ocrCourse.credits || '-';
+                    const diffBadges = [
+                        item.gradeDiff ? '<span class="badge bg-warning text-dark me-1">成績不同</span>' : '',
+                        item.creditsDiff ? '<span class="badge bg-info text-dark">學分不同</span>' : ''
+                    ].join('');
+
+                    diffRows.push(`
+                        <tr>
+                            <td class="text-center"><span class="badge bg-warning text-dark">不一樣</span></td>
+                            <td>
+                                <div><strong>${escapeHtml(item.matchName)}</strong></div>
+                                <div class="small text-muted">OCR：${escapeHtml(item.ocrCourse.name)} (${score}%)</div>
+                                <div class="mt-1">${diffBadges}</div>
+                            </td>
+                            <td class="small">
+                                <div>Excel：<span class="text-muted">${escapeHtml(importedCredits)}</span></div>
+                                <div>AI：<strong class="text-primary">${escapeHtml(ocrCredits)}</strong></div>
+                            </td>
+                            <td class="small">
+                                <div>Excel：<span class="text-muted">${escapeHtml(importedGrade)}</span></div>
+                                <div>AI：<strong class="text-primary">${escapeHtml(ocrGrade)}</strong></div>
+                            </td>
+                        </tr>
+                    `);
+                } else if (item.action === 'add') {
+                    diffRows.push(`
+                        <tr>
+                            <td class="text-center"><span class="badge bg-primary">AI 多抓的</span></td>
+                            <td>
+                                <div><strong>${escapeHtml(item.ocrCourse.name)}</strong></div>
+                                <div class="small text-muted">Excel 裡沒有這門課</div>
+                            </td>
+                            <td class="small">
+                                <div>Excel：<span class="text-muted">-</span></div>
+                                <div>AI：<strong class="text-primary">${escapeHtml(item.ocrCourse.credits || '-')}</strong></div>
+                            </td>
+                            <td class="small">
+                                <div>Excel：<span class="text-muted">-</span></div>
+                                <div>AI：<strong class="text-primary">${escapeHtml(item.ocrCourse.grade || '-')}</strong></div>
+                            </td>
+                        </tr>
+                    `);
+                }
+            });
+
+            missingImportedCourses.forEach(item => {
+                diffRows.push(`
+                    <tr>
+                        <td class="text-center"><span class="badge bg-secondary">Excel 才有</span></td>
+                        <td>
+                            <div><strong>${escapeHtml(item.course.name)}</strong></div>
+                            <div class="small text-muted">AI 沒辨識到這門課</div>
+                        </td>
+                        <td class="small">
+                            <div>Excel：<strong>${escapeHtml(item.course.credits || '-')}</strong></div>
+                            <div>AI：<span class="text-muted">-</span></div>
+                        </td>
+                        <td class="small">
+                            <div>Excel：<strong>${escapeHtml(item.course.grade || '-')}</strong></div>
+                            <div>AI：<span class="text-muted">-</span></div>
+                        </td>
+                    </tr>
+                `);
+            });
+
+            const updateCount = matchResults.filter(item => item.action === 'update').length;
+            const addCount = matchResults.filter(item => item.action === 'add').length;
+            const sameCount = matchResults.filter(item => item.action === 'same').length;
+            const missingCount = missingImportedCourses.length;
+            const applicableDiffCount = updateCount + addCount;
+            const totalDiffCount = applicableDiffCount + missingCount;
 
             const previewHtml = `
                 <div class="text-start">
-                    <p class="small text-muted mb-2">系統已自動比對課程名稱，請確認以下變更：</p>
-                    <div class="table-responsive" style="max-height: 300px; overflow-y: auto;">
-                        <table class="table table-sm table-bordered align-middle">
-                            <thead class="table-light sticky-top">
-                                <tr>
-                                    <th width="15%">動作</th>
-                                    <th>課程比對 (OCR ⮕ 系統)</th>
-                                    <th width="20%" class="text-end">成績</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                ${tableRows}
-                            </tbody>
-                        </table>
+                    <div class="row g-2 mb-3 text-center">
+                        <div class="col-6 col-md-3">
+                            <div class="border rounded p-2 bg-light">
+                                <div class="small text-muted">相符</div>
+                                <div class="fw-bold text-success">${sameCount}</div>
+                                <div class="small text-muted">筆</div>
+                            </div>
+                        </div>
+                        <div class="col-6 col-md-3">
+                            <div class="border rounded p-2 bg-light">
+                                <div class="small text-muted">不一樣</div>
+                                <div class="fw-bold text-warning">${updateCount}</div>
+                                <div class="small text-muted">筆</div>
+                            </div>
+                        </div>
+                        <div class="col-6 col-md-3">
+                            <div class="border rounded p-2 bg-light">
+                                <div class="small text-muted">AI 多抓的</div>
+                                <div class="fw-bold text-primary">${addCount}</div>
+                                <div class="small text-muted">筆</div>
+                            </div>
+                        </div>
+                        <div class="col-6 col-md-3">
+                            <div class="border rounded p-2 bg-light">
+                                <div class="small text-muted">Excel 才有</div>
+                                <div class="fw-bold text-secondary">${missingCount}</div>
+                                <div class="small text-muted">筆</div>
+                            </div>
+                        </div>
                     </div>
+                    <p class="small text-muted mb-2">Excel 是正確答案，AI 只是幫忙比對。有不一樣的地方可以在下面課程表手動改，或按「套用」一次更新。</p>
+                    ${totalDiffCount > 0 ? `
+                        <div class="table-responsive" style="max-height: 320px; overflow-y: auto;">
+                            <table class="table table-sm table-bordered align-middle">
+                                <thead class="table-light sticky-top">
+                                    <tr>
+                                        <th width="15%">狀態</th>
+                                        <th>課程</th>
+                                        <th width="18%">學分</th>
+                                        <th width="18%">成績</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${diffRows.join('')}
+                                </tbody>
+                            </table>
+                        </div>
+                        <div class="small text-muted mt-2">
+                            說明：<strong>Excel</strong>＝正確資料；<strong>不一樣</strong>＝AI 和 Excel 不同，可手動改或按套用；<strong>Excel 才有</strong>＝只有 Excel 有、AI 沒認到，不會被刪掉。
+                        </div>
+                    ` : `
+                        <div class="alert alert-success mb-2">
+                            <i class="bi bi-check-circle"></i> AI 辨識結果和 Excel 完全一樣，沒有需要修正的。
+                        </div>
+                    `}
                     <div class="form-check mt-2">
                         <input class="form-check-input" type="checkbox" id="onlyUpdateCheck">
                         <label class="form-check-label small" for="onlyUpdateCheck">
-                            僅執行「更新」操作 (忽略新增課程)
+                            只修正「不一樣」的（以 Excel 為準），不加入 AI 多抓的課
                         </label>
                     </div>
                 </div>
             `;
 
-            // 3. 顯示預覽並確認
             Swal.fire({
-                title: `識別出 ${ocrCourses.length} 筆課程`,
+                title: `AI 成績單比對結果`,
                 html: previewHtml,
                 icon: 'info',
                 showCancelButton: true,
-                confirmButtonText: '確認匯入',
+                confirmButtonText: applicableDiffCount > 0 ? '套用（也可先手動改）' : '關閉',
                 cancelButtonText: '取消',
-                width: '600px'
+                width: '900px'
             }).then((result) => {
                 if (!result.isConfirmed) return;
 
                 const onlyUpdate = document.getElementById('onlyUpdateCheck').checked;
                 let updatedCount = 0;
                 let newCount = 0;
+                clearCourseDiffMarkers();
 
                 matchResults.forEach(item => {
-                    const { ocrCourse, matchIndex, action } = item;
+                    const { ocrCourse, matchIndex, action, gradeDiff, creditsDiff } = item;
 
                     if (action === 'update') {
-                        // 更新現有
-                        if (ocrCourse.grade && ocrCourse.grade.toLowerCase() !== 'null') {
+                        let changed = false;
+
+                        if (gradeDiff && ocrCourse.grade && ocrCourse.grade.toLowerCase() !== 'null') {
                             allCoursesData[matchIndex].grade = ocrCourse.grade;
-                            if (ocrCourse.credits) allCoursesData[matchIndex].credits = ocrCourse.credits;
+                            changed = true;
+                        }
+
+                        if (creditsDiff && ocrCourse.credits !== undefined && ocrCourse.credits !== null && String(ocrCourse.credits).trim() !== '') {
+                            allCoursesData[matchIndex].credits = ocrCourse.credits;
+                            changed = true;
+                        }
+
+                        if (changed) {
                             allCoursesData[matchIndex].isNotTaken = false;
+                            allCoursesData[matchIndex].diffStatus = 'updated';
                             updatedCount++;
                         }
                     } else if (action === 'add' && !onlyUpdate) {
-                        // 新增
+                        ocrCourse.diffStatus = 'added';
                         allCoursesData.push(ocrCourse);
                         newCount++;
                     }
                 });
 
-                // 重新排序與渲染
+                if (applicableDiffCount === 0) {
+                    return;
+                }
+
                 allCoursesData.sort((a, b) => a.name.localeCompare(b.name, 'zh-TW', { sensitivity: 'base' }));
                 filteredCoursesCache = [...allCoursesData];
                 currentPage = 1;
-                renderPagedCourses();
-                renderPagination();
+                applyFilterAndSearch();
                 saveFormData(); 
 
-                Swal.fire('匯入完成', `更新現有: ${updatedCount} 筆<br>新增課程: ${newCount} 筆`, 'success');
+                Swal.fire('比對完成', `已套用：修正 ${updatedCount} 筆、新增 AI 辨識的 ${newCount} 筆。Excel 才有 ${missingCount} 筆僅供參考，可隨時在課程表手動改。`, 'success');
                 
                 // Highlight updated rows
                 // 🟢 [修正] 明確指定要捲動到的課程表格 (courseTableBody 的父表格)
@@ -5070,7 +5344,7 @@
                                 if (nameCell) {
                                     const name = nameCell.textContent.trim();
                                     // Check if this name was in ocrCourses that were matched/added
-                                    const wasUpdated = ocrCourses.some(ocr => calculateSimilarity(ocr.name, name) >= 0.8); // approximate check
+                                    const wasUpdated = ocrCourses.some(ocr => window.calculateSimilarity(ocr.name, name) >= 0.8); // approximate check
                                     if (wasUpdated) {
                                         row.classList.add('table-row-highlight');
                                         setTimeout(() => row.classList.remove('table-row-highlight'), 3000);
