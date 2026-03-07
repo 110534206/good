@@ -75,18 +75,75 @@
       transition: all 0.3s ease;
     }
     #side-menu {
-      position: fixed; top: 0; left: 0; height: 100vh; width: 320px; max-width: 80vw;
-      background: rgba(10,10,10,0.95); backdrop-filter: blur(6px);
-      box-shadow: 3px 0 12px rgba(0,0,0,0.7); padding: 2rem 1.5rem;
-      transform: translateX(-100%); transition: transform 0.3s ease; z-index: 1200;
-      display: flex; flex-direction: column; color: white;
+      position: fixed;
+      top: 0;
+      left: 0;
+      height: 100vh;
+      width: 320px;
+      max-width: 80vw;
+      background-color: rgba(10, 10, 10, 0.95);
+      backdrop-filter: blur(6px);
+      box-shadow: 3px 0 12px rgb(0 0 0 / 0.7);
+      padding: 2rem 1.5rem;
+      transform: translateX(-100%);
+      transition: transform 0.3s ease-in-out;
+      z-index: 1100;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      color: white;
+      user-select: none;
     }
-    #side-menu.open { transform: translateX(0); }
-    #side-menu .menu-header { display: flex; align-items: center; justify-content: space-between; width: 100%; margin-bottom: 1.5rem; }
-    #side-menu h2 { margin: 0; font-size: 1.5rem; color: white; }
-    #side-menu #close-btn { font-size: 1.5rem; background: none; border: none; color: white; cursor: pointer; }
-    #side-menu a { display: block; padding: 0.5rem 0; color: #ddd; text-decoration: none; border-radius: 4px; }
-    #side-menu a:hover { background: rgba(255,255,255,0.15); color: white; }
+
+    #side-menu.open {
+      transform: translateX(0);
+    }
+
+    #close-btn {
+      position: absolute;
+      top: 2rem;
+      right: 1.6rem;
+      font-size: 2.8rem;
+      background: none;
+      border: none;
+      color: #fff;
+      cursor: pointer;
+      line-height: 2.4rem;
+      height: 2.5rem;
+      width: 2.5rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 10;
+    }
+
+    #side-menu h2 {
+      margin: 0 0 1.5rem 0;
+      font-weight: 700;
+      font-size: 1.6rem;
+      color: #fff;
+      padding: 0;
+      line-height: 2.4rem;
+      height: 2.4rem;
+      display: flex;
+      align-items: center;
+    }
+
+    #side-menu a {
+      display: block;
+      width: 100%;
+      padding: 0.6rem 0;
+      font-size: 1.1rem;
+      color: #e2e8f0;
+      text-decoration: none;
+      border-radius: 4px;
+      transition: background-color 0.2s ease;
+    }
+
+    #side-menu a:hover {
+      background-color: rgba(255, 255, 255, 0.18);
+      color: #fff;
+    }
     .container { max-width: 1160px; margin: 0 auto; padding: 24px; margin-top: 1.5rem; }
     .card {
       background: #fff; border-radius: 16px; box-shadow: 0 4px 24px rgba(0,0,0,0.06);
@@ -164,15 +221,20 @@
       </h1>
     </div>
   </header>
+  <!-- 側邊選單 -->
   <nav id="side-menu" aria-hidden="true">
-    <div class="menu-header">
-      <h2>功能選單</h2>
-      <button id="close-btn" aria-label="關閉">×</button>
-    </div>
-    <a href="/director_home">主任首頁</a>
-    <a href="/director_remove_intern">全部學生實習狀況</a>
+    <button id="close-btn" aria-label="關閉選單">×</button>
+    <h2>功能選單</h2>
+    <a href="/director_home">首頁</a>
     <a href="/profile">個人資料</a>
-    <a href="/logout">登出</a>
+    <a href="/approve_company">審核實習單位</a>
+    <a href="/review_resume?mode=director">審核實習履歷</a>
+    <a href="/interview_schedule">行事曆</a>
+    <a href="/notifications">管理公告</a>
+    <a href="/admin_statistics">查詢統計資料</a>
+    <a href="/admission/manage_director">媒合結果</a>
+    <a href="/admission/second_round/director" id="secondRoundMenuLink" style="display: none;">二輪分發</a>
+    <a href="/login">登出</a>
   </nav>
 
   <div class="container">
@@ -208,19 +270,42 @@
   </div>
 
   <script>
-    (function () {
-      const menuBtn = document.getElementById('menu-btn');
-      const sideMenu = document.getElementById('side-menu');
-      const closeBtn = document.getElementById('close-btn');
-      if (menuBtn) menuBtn.addEventListener('click', function () {
-        sideMenu.classList.add('open');
-        sideMenu.setAttribute('aria-hidden', 'false');
-      });
-      if (closeBtn) closeBtn.addEventListener('click', function () {
+    // 選單開關邏輯
+    const menuBtn = document.getElementById('menu-btn');
+    const sideMenu = document.getElementById('side-menu');
+    const closeBtn = document.getElementById('close-btn');
+
+    menuBtn.addEventListener('click', () => {
+      sideMenu.classList.add('open');
+      sideMenu.setAttribute('aria-hidden', 'false');
+    });
+
+    closeBtn.addEventListener('click', () => {
+      sideMenu.classList.remove('open');
+      sideMenu.setAttribute('aria-hidden', 'true');
+    });
+
+    // 如果點擊 menu 以外的地方就關閉選單
+    document.addEventListener('click', (e) => {
+      if (
+        !sideMenu.contains(e.target) &&
+        !menuBtn.contains(e.target)
+      ) {
         sideMenu.classList.remove('open');
         sideMenu.setAttribute('aria-hidden', 'true');
-      });
-    })();
+      }
+    });
+
+    // 二輪媒合開啟時才顯示「二輪分發」
+    fetch('/admission/api/second_round/status', { credentials: 'include' })
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        if (data.success && data.is_enabled) {
+          var link = document.getElementById('secondRoundMenuLink');
+          if (link) link.style.display = 'block';
+        }
+      })
+      .catch(function() {});
 
     (function () {
       const tableBody = document.getElementById('tableBody');

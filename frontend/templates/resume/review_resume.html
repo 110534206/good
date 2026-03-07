@@ -10,26 +10,66 @@
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     header {
-      background: linear-gradient(135deg, #0055a8 0%, #006acb 50%, #004f94 100%);
-      border-bottom: none; position: sticky; top: 0; z-index: 10;
+      background: #0454a3;
+      border-bottom: none;
+      position: sticky;
+      top: 0;
+      z-index: 10;
       box-shadow: 0 8px 20px rgba(0, 68, 148, 0.35);
     }
+
     .topbar {
-      max-width: 1800px; margin: 0 auto; padding: 18px 24px;
-      display: flex; align-items: center; justify-content: space-between; color: #fff;
+      max-width: 1800px;
+      margin: 0 auto;
+      padding: 18px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #fff;
+      position: relative;
     }
-    .topbar-left {
-      display: flex; align-items: center; gap: 16px;
+
+    .topbar h1 {
+      font-size: 1.5rem;
+      margin: 0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      color: #fff;
+      flex: 1;
     }
-    .topbar-left #menu-btn {
-      width: 30px; height: 22px; cursor: pointer; display: flex; flex-direction: column;
-      justify-content: space-between; background: none; border: none; padding: 0;
+
+    .topbar h1 .header-title {
+      flex: 1;
+      text-align: center;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
     }
-    .topbar-left #menu-btn span {
-      display: block; width: 100%; height: 3px; background-color: white;
-      border-radius: 2px; transition: all 0.3s ease;
+
+    /* 選單按鈕樣式 */
+    #menu-btn {
+      width: 30px;
+      height: 22px;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      background: none;
+      border: none;
+      padding: 0;
     }
-    .topbar h1 { font-size: 1.5rem; margin: 0; text-align: center; color: #fff; flex: 1; }
+
+    #menu-btn span {
+      display: block;
+      width: 100%;
+      height: 3px;
+      background-color: white;
+      border-radius: 2px;
+      transition: all 0.3s ease;
+    }
     body { font-family: "Noto Sans TC", sans-serif; background: #ffffff; margin: 0; padding: 0; }
     main { max-width: 1800px; margin: 24px auto 60px; padding: 0 24px; display: flex; flex-direction: column; gap: 24px; }
     .panel {
@@ -140,13 +180,15 @@
 <body>
   <header>
     <div class="topbar">
-      <div class="topbar-left">
+      <h1>
         <button id="menu-btn" title="選單" role="button" tabindex="0" aria-label="開啟側邊選單">
-          <span></span><span></span><span></span>
+          <span></span>
+          <span></span>
+          <span></span>
         </button>
-      </div>
-      <h1>審核履歷</h1>
-      <div style="width: 30px;"></div>
+        <div class="header-title">審核履歷</div>
+        <div style="width: 30px;"></div> <!-- 佔位元素，保持標題置中 -->
+      </h1>
     </div>
   </header>
   <main>
