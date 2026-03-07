@@ -813,25 +813,77 @@ def get_my_admission():
         else:
             # 如果沒有從 internship_offers 獲取到，則使用舊的邏輯（向後兼容）
             print(f"⚠️ [DEBUG] 未找到 internship_offers 記錄，使用舊邏輯")
-            # 獲取學生的錄取結果（從 teacher_student_relations）
+            
+            # 檢測 teacher_student_relations 表的結構
             cursor.execute("""
-                SELECT 
-                    tsr.id AS relation_id,
-                    tsr.semester,
-                    tsr.created_at AS admitted_at,
-                    u_teacher.id AS teacher_id,
-                    u_teacher.name AS teacher_name,
-                    u_teacher.email AS teacher_email
-                FROM teacher_student_relations tsr
-                LEFT JOIN users u_teacher ON tsr.teacher_id = u_teacher.id
-                WHERE tsr.student_id = %s
-                ORDER BY tsr.created_at DESC
-                LIMIT 1
-            """, (student_id,))
+                SELECT COLUMN_NAME FROM information_schema.COLUMNS
+                WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'teacher_student_relations'
+                AND COLUMN_NAME IN ('semester_id', 'semester')
+            """)
+            tsr_columns = {row['COLUMN_NAME'] for row in cursor.fetchall()}
+            has_semester_id = 'semester_id' in tsr_columns
+            has_semester = 'semester' in tsr_columns
+            
+            # 獲取學生的錄取結果（從 teacher_student_relations）
+            if has_semester_id:
+                cursor.execute("""
+                    SELECT 
+                        tsr.id AS relation_id,
+                        tsr.semester_id,
+                        tsr.created_at AS admitted_at,
+                        u_teacher.id AS teacher_id,
+                        u_teacher.name AS teacher_name,
+                        u_teacher.email AS teacher_email
+                    FROM teacher_student_relations tsr
+                    LEFT JOIN users u_teacher ON tsr.teacher_id = u_teacher.id
+                    WHERE tsr.student_id = %s
+                    ORDER BY tsr.created_at DESC
+                    LIMIT 1
+                """, (student_id,))
+            elif has_semester:
+                cursor.execute("""
+                    SELECT 
+                        tsr.id AS relation_id,
+                        tsr.semester,
+                        tsr.created_at AS admitted_at,
+                        u_teacher.id AS teacher_id,
+                        u_teacher.name AS teacher_name,
+                        u_teacher.email AS teacher_email
+                    FROM teacher_student_relations tsr
+                    LEFT JOIN users u_teacher ON tsr.teacher_id = u_teacher.id
+                    WHERE tsr.student_id = %s
+                    ORDER BY tsr.created_at DESC
+                    LIMIT 1
+                """, (student_id,))
+            else:
+                cursor.execute("""
+                    SELECT 
+                        tsr.id AS relation_id,
+                        tsr.created_at AS admitted_at,
+                        u_teacher.id AS teacher_id,
+                        u_teacher.name AS teacher_name,
+                        u_teacher.email AS teacher_email
+                    FROM teacher_student_relations tsr
+                    LEFT JOIN users u_teacher ON tsr.teacher_id = u_teacher.id
+                    WHERE tsr.student_id = %s
+                    ORDER BY tsr.created_at DESC
+                    LIMIT 1
+                """, (student_id,))
             admission = cursor.fetchone()
             
             # 實習期間：優先從 internship_configs 取得（實習學期 1132 的起訖），否則用 semesters
-            semester_code = admission.get('semester') if admission else None
+            if has_semester_id and admission:
+                semester_id = admission.get('semester_id')
+                if semester_id:
+                    cursor.execute("SELECT code FROM semesters WHERE id = %s", (semester_id,))
+                    semester_row = cursor.fetchone()
+                    semester_code = semester_row.get('code') if semester_row else None
+                else:
+                    semester_code = None
+            elif has_semester:
+                semester_code = admission.get('semester') if admission else None
+            else:
+                semester_code = None
             semester_start_date = None
             semester_end_date = None
             cursor.execute("SELECT role, admission_year, username FROM users WHERE id = %s", (student_id,))
@@ -1258,12 +1310,30 @@ def get_company_students():
     cursor = conn.cursor(dictionary=True)
     
     try:
+        # 檢測 teacher_student_relations 表的結構
+        cursor.execute("""
+            SELECT COLUMN_NAME FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'teacher_student_relations'
+            AND COLUMN_NAME IN ('semester_id', 'semester')
+        """)
+        tsr_columns = {row['COLUMN_NAME'] for row in cursor.fetchall()}
+        has_semester_id = 'semester_id' in tsr_columns
+        has_semester = 'semester' in tsr_columns
+        
+        # 構建 SELECT 語句的字段列表
+        if has_semester_id:
+            semester_field = "tsr.semester_id"
+        elif has_semester:
+            semester_field = "tsr.semester"
+        else:
+            semester_field = "NULL AS semester"
+        
         # 如果提供了 company_id，只查詢該公司的學生
         if company_id:
-            cursor.execute("""
+            cursor.execute(f"""
                 SELECT 
                     tsr.id AS relation_id,
-                    tsr.semester,
+                    {semester_field},
                     tsr.created_at AS admitted_at,
                     u_student.id AS student_id,
                     u_student.name AS student_name,
@@ -1282,10 +1352,10 @@ def get_company_students():
             """, (teacher_id, company_id))
         else:
             # 查詢所有該指導老師的學生
-            cursor.execute("""
+            cursor.execute(f"""
                 SELECT 
                     tsr.id AS relation_id,
-                    tsr.semester,
+                    {semester_field},
                     tsr.created_at AS admitted_at,
                     u_student.id AS student_id,
                     u_student.name AS student_name,
