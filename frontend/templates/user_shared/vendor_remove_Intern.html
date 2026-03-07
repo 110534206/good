@@ -189,6 +189,28 @@
     .submit-hint {
       font-size: 0.85rem; color: #64748b; margin-bottom: 14px; line-height: 1.5;
     }
+    .upload-group { margin-bottom: 20px; }
+    .upload-label {
+      display: flex; align-items: center; gap: 6px;
+      font-size: 1rem; color: #0454a3; font-weight: 600; margin-bottom: 8px;
+    }
+    .upload-label i { font-size: 1.1rem; }
+    .upload-box {
+      border: 2px dashed #cbd5e1;
+      border-radius: 12px;
+      padding: 14px 16px;
+      background: #fff;
+      display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+    }
+    .upload-box input[type="file"] {
+      font-size: 0.9rem; color: #334155;
+    }
+    .upload-hint {
+      font-size: 0.9rem; color: #64748b;
+    }
+    .upload-desc {
+      display: block; font-size: 0.8rem; color: #94a3b8; margin-top: 6px;
+    }
     /* 實習生名單：可點選卡片 */
     .intern-list {
       list-style: none; padding: 0; margin: 0;
@@ -555,7 +577,7 @@
         載入中…
       </div>
       <h2>填寫退實習原因</h2>
-      <form id="withdrawForm">
+      <form id="withdrawForm" enctype="multipart/form-data">
         <div class="form-group">
           <label>原因類別 <span class="hint">（必填）</span></label>
           <select name="reason_category" id="reasonCategory" required>
@@ -568,6 +590,18 @@
         <div class="form-group">
           <label>具體說明 <span class="hint">（必填）</span></label>
           <textarea name="reason_detail" id="reasonDetail" required placeholder="請輸入退實習原因，供指導老師了解。"></textarea>
+        </div>
+        <div class="form-group upload-group">
+          <label class="upload-label"><i class="bi bi-image" aria-hidden="true"></i> 上傳圖片</label>
+          <div class="upload-box">
+            <input type="file" id="evidenceImage" name="evidence_image" accept=".png,.jpg,.jpeg,.gif,.webp" aria-label="選擇圖片佐證">
+          </div>
+        </div>
+        <div class="form-group upload-group">
+          <label class="upload-label"><i class="bi bi-file-earmark-arrow-up" aria-hidden="true"></i> 上傳檔案</label>
+          <div class="upload-box">
+            <input type="file" id="evidenceFile" name="evidence_file" accept=".pdf,.doc,.docx,.xls,.xlsx,.odt,.ods,.txt" aria-label="選擇檔案佐證">
+          </div>
         </div>
         <button type="submit" class="btn-submit" id="submitBtn">送出</button>
       </form>
@@ -742,7 +776,7 @@
               renderInternTable(allInternTbody, data.data);
             } else {
               allInternRows = [];
-              if (allInternTbody) allInternTbody.innerHTML = '<tr><td class="intern-table-empty" colspan="6">無法載入名單，請稍後再試。</td></tr>';
+              if (allInternTbody) allInternTbody.innerHTML = '<tr><td class="intern-table-empty" colspan="6">' + (data.message || '無法載入名單，請稍後再試。') + '</td></tr>';
             }
           } catch (e) {
             allInternRows = [];
@@ -811,7 +845,7 @@
               renderInternTable(allInternTbody, data.data);
             } else {
               allInternRows = [];
-              allInternTbody.innerHTML = '<tr><td class="intern-table-empty" colspan="6">無法載入名單，請稍後再試。</td></tr>';
+              allInternTbody.innerHTML = '<tr><td class="intern-table-empty" colspan="6">' + (data.message || '無法載入名單，請稍後再試。') + '</td></tr>';
             }
           } catch (e) {
             allInternRows = [];
@@ -820,22 +854,31 @@
         })();
       }
 
+      const evidenceImageInput = document.getElementById('evidenceImage');
+      const evidenceFileInput = document.getElementById('evidenceFile');
+
       withdrawForm.addEventListener('submit', async function (e) {
         e.preventDefault();
         hideError();
+        const hasImage = evidenceImageInput && evidenceImageInput.files.length > 0;
+        const hasFile = evidenceFileInput && evidenceFileInput.files.length > 0;
+        if (!hasImage && !hasFile) {
+          showError('請至少上傳一張圖片或一個檔案作為佐證。');
+          return;
+        }
         submitBtn.disabled = true;
         submitBtn.textContent = '送出中…';
         try {
-          const body = {
-            student_id: parseInt(studentId, 10),
-            reason_category: document.getElementById('reasonCategory').value.trim(),
-            reason_detail: document.getElementById('reasonDetail').value.trim()
-          };
-          if (matchId) body.match_id = matchId;
+          const formData = new FormData();
+          formData.append('student_id', studentId);
+          formData.append('reason_category', document.getElementById('reasonCategory').value.trim());
+          formData.append('reason_detail', document.getElementById('reasonDetail').value.trim());
+          if (matchId) formData.append('match_id', matchId);
+          if (hasImage) formData.append('evidence_image', evidenceImageInput.files[0]);
+          if (hasFile) formData.append('evidence_file', evidenceFileInput.files[0]);
           const res = await fetch('/vendor/api/withdraw_intern', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(body),
+            body: formData,
             credentials: 'same-origin'
           });
           const data = await res.json();

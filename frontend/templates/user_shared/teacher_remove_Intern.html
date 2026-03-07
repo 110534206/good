@@ -199,6 +199,188 @@
     .alert-danger { background: #fef2f2; border: 1px solid #fecaca; color: #b91c1c; }
     #successMessage, #errorMessage { display: none; }
     #successMessage.show, #errorMessage.show { display: block; }
+    .attachment-card {
+      background: #f8fafc;
+      border-radius: 12px;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+      border: 1px solid #e2e8f0;
+    }
+    .attachment-title {
+      font-size: 1.15rem;
+      font-weight: 700;
+      color: #334155;
+      margin-bottom: 4px;
+    }
+    .attachment-block-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 16px;
+    }
+    .attachment-block-header h3 { margin-bottom: 4px; }
+    .attachment-subtitle {
+      font-size: 0.9rem;
+      color: #64748b;
+      margin: 0;
+      line-height: 1.5;
+    }
+    .attachment-download-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 14px;
+      border-radius: 6px;
+      border: 1px solid #3b82f6;
+      background: transparent;
+      color: #2563eb;
+      font-size: 0.85rem;
+      font-weight: 500;
+      text-decoration: none;
+      transition: color 0.2s, background 0.2s;
+    }
+    .attachment-download-btn:hover {
+      color: #1d4ed8;
+      background: rgba(59, 130, 246, 0.08);
+    }
+    .attachment-file-size {
+      font-size: 0.85rem;
+      color: #94a3b8;
+      margin-left: 4px;
+    }
+    .attachment-file-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      width: 100%;
+    }
+    .attachment-file-row .file-info { display: flex; align-items: center; gap: 10px; min-width: 0; }
+    .attachment-file-row .file-info a { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .attachment-links { list-style: none; padding: 0; margin: 0; }
+    .attachment-links li {
+      margin-bottom: 16px;
+      padding: 14px 16px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      background: #fff;
+      border: 1px solid #cbd5e1;
+      border-radius: 10px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+    }
+    .attachment-links li:last-child { margin-bottom: 0; }
+    .attachment-links li.attachment-item-file-excel {
+      background: rgba(33, 115, 70, 0.05);
+    }
+    .attachment-links li.attachment-item-image {
+      flex-direction: column;
+      align-items: stretch;
+    }
+    .attachment-img-wrap {
+      position: relative;
+      height: 250px;
+      width: 100%;
+      overflow: hidden;
+      border-radius: 14px;
+      background: linear-gradient(145deg, #fafbfc 0%, #f1f5f9 100%);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.04), 0 8px 24px rgba(0,0,0,0.06);
+      border: 1px solid rgba(226, 232, 240, 0.8);
+      transition: box-shadow 0.25s ease, transform 0.2s ease;
+    }
+    .attachment-img-wrap:hover {
+      box-shadow: 0 4px 16px rgba(0,0,0,0.06), 0 12px 32px rgba(0,0,0,0.08);
+      transform: translateY(-1px);
+    }
+    .attachment-img-wrap img {
+      max-height: 250px;
+      width: auto;
+      max-width: 100%;
+      object-fit: contain;
+      display: block;
+      border-radius: 12px;
+    }
+    .attachment-img-pill {
+      position: absolute;
+      right: 14px;
+      bottom: 14px;
+      padding: 8px 16px;
+      border-radius: 999px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+      color: #1e40af;
+      background: rgba(255,255,255,0.88);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid rgba(255,255,255,0.95);
+      box-shadow: 0 2px 10px rgba(0,0,0,0.08);
+      pointer-events: none;
+    }
+    .attachment-img-caption {
+      margin-top: 12px;
+      padding-left: 2px;
+    }
+    .attachment-img-caption a {
+      color: #475569;
+      font-size: 0.9rem;
+    }
+    .attachment-img-caption a:hover {
+      color: #0454a3;
+    }
+    .file-type-icon {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 32px;
+      height: 32px;
+      flex-shrink: 0;
+      font-size: 1.25rem;
+      border-radius: 8px;
+    }
+    .file-type-icon.excel {
+      color: #217346;
+      background: rgba(33, 115, 70, 0.08);
+    }
+    .file-type-icon.pdf {
+      color: #b91c1c;
+      background: rgba(185, 28, 28, 0.08);
+    }
+    .file-type-icon.other {
+      color: #64748b;
+      background: rgba(100, 116, 139, 0.08);
+    }
+    .attachment-links a {
+      display: inline-flex; align-items: center; gap: 6px;
+      color: #0454a3; text-decoration: none; font-size: 0.95rem;
+    }
+    .attachment-links a:hover { text-decoration: underline; }
+    .attachment-preview-btn { margin-left: 8px; color: #64748b; font-size: 0.85rem; }
+    .attachment-preview-btn:hover { color: #0454a3; }
+    .preview-backdrop {
+      position: fixed; inset: 0; background: rgba(15,23,42,0.4); z-index: 2000;
+      display: none; align-items: center; justify-content: center; padding: 24px;
+    }
+    .preview-backdrop.show { display: flex; }
+    .preview-content {
+      max-width: min(720px, 88vw); max-height: 82vh; background: #fff; border-radius: 14px;
+      box-shadow: 0 16px 48px rgba(0,0,0,0.2); position: relative;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .preview-content img {
+      display: block; max-width: 100%; max-height: 75vh; width: auto; height: auto;
+      border-radius: 10px; object-fit: contain;
+    }
+    .preview-close {
+      position: absolute; top: -12px; right: -12px; width: 36px; height: 36px;
+      border-radius: 50%; border: none; background: #1e293b; color: #fff;
+      font-size: 1.4rem; line-height: 1; cursor: pointer; display: flex; align-items: center; justify-content: center;
+    }
+    .preview-close:hover { background: #475569; }
   </style>
 </head>
 <body>
@@ -269,6 +451,22 @@
         <p class="value" id="detailReasonCategory">—</p>
         <p class="label" style="margin-top: 12px;">具體說明</p>
         <p class="value" id="detailReasonDetail">—</p>
+      </div>
+
+      <div class="detail-block attachment-card" id="detailAttachmentsBlock" style="display: none;">
+        <div class="attachment-block-header">
+          <div>
+            <h3 class="attachment-title">廠商佐證 (圖片/檔案)</h3>
+          </div>
+        </div>
+        <ul id="detailAttachmentsList" class="attachment-links"></ul>
+      </div>
+      <!-- 圖片即時預覽彈窗 -->
+      <div id="previewBackdrop" class="preview-backdrop" role="dialog" aria-modal="true" aria-label="預覽圖片">
+        <div class="preview-content">
+          <button type="button" class="preview-close" id="previewCloseBtn" aria-label="關閉預覽">×</button>
+          <img id="previewImg" src="" alt="佐證圖片預覽">
+        </div>
       </div>
 
       <div class="detail-block">
@@ -398,6 +596,58 @@
             document.getElementById('detailStudentName').textContent = d.student_name || '—';
             document.getElementById('detailStudentNumber').textContent = d.student_number || '—';
             document.getElementById('detailCompanyJob').textContent = (d.company_name || '') + (d.job_title ? '／' + d.job_title : '') || '—';
+
+            var attBlock = document.getElementById('detailAttachmentsBlock');
+            var attList = document.getElementById('detailAttachmentsList');
+            if (d.attachments && d.attachments.length && attBlock && attList) {
+              var subEl = document.getElementById('attachmentSubtitle');
+              if (subEl) subEl.textContent = '您可以檢視圖片與下載檔案佐證 (總計: ' + d.attachments.length + ' 個檔案)';
+              attList.innerHTML = d.attachments.map(function (a) {
+                var isImg = (a.file_type || '') === 'image';
+                var text = a.original_filename || '佐證檔案';
+                var url = (a.url || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;');
+                var rawUrl = (a.url || '').replace(/"/g, '&quot;');
+                if (isImg) {
+                  return '<li class="attachment-item-image">' +
+                    '<div class="attachment-img-wrap" data-preview-url="' + url + '" role="button" tabindex="0" title="查看全圖">' +
+                    '<img src="' + rawUrl + '" alt="" loading="lazy">' +
+                    '<span class="attachment-img-pill">🔍 查看全圖</span></div>' +
+                    '<div class="attachment-img-caption"><a href="' + url + '" target="_blank" rel="noopener" data-preview="image" data-preview-url="' + url + '">' + escapeHtml(text) + '</a></div></li>';
+                }
+                var ext = (a.original_filename || '').split('.').pop().toLowerCase();
+                var iconClass = 'file-type-icon other';
+                var iconBi = 'bi-file-earmark';
+                var liClass = '';
+                if (ext === 'pdf') { iconClass = 'file-type-icon pdf'; iconBi = 'bi-file-earmark-pdf'; }
+                else if (ext === 'xls' || ext === 'xlsx') { iconClass = 'file-type-icon excel'; iconBi = 'bi-file-earmark-excel'; liClass = 'attachment-item-file-excel'; }
+                var sizeHtml = (a.file_size ? ' <span class="attachment-file-size">(' + escapeHtml(a.file_size) + ')</span>' : '');
+                return '<li class="' + liClass + '"><div class="attachment-file-row">' +
+                  '<div class="file-info"><span class="' + iconClass + '" aria-hidden="true"><i class="bi ' + iconBi + '"></i></span> <a href="' + url + '" target="_blank" rel="noopener">' + escapeHtml(text) + '</a>' + sizeHtml + '</div>' +
+                  '<a href="' + url + '" target="_blank" rel="noopener" download class="attachment-download-btn"><i class="bi bi-download"></i>下載檔案</a></div></li>';
+              }).join('');
+              attBlock.style.display = 'block';
+              // 圖片點擊展開即時預覽
+              var previewBackdrop = document.getElementById('previewBackdrop');
+              var previewImg = document.getElementById('previewImg');
+              var previewCloseBtn = document.getElementById('previewCloseBtn');
+              function showPreview(u) {
+                if (u && previewImg) previewImg.src = u.replace(/&amp;/g, '&');
+                if (previewBackdrop) { previewBackdrop.classList.add('show'); previewBackdrop.setAttribute('aria-hidden', 'false'); }
+              }
+              attList.querySelectorAll('[data-preview="image"], .attachment-preview-btn, .attachment-img-wrap').forEach(function (el) {
+                el.addEventListener('click', function (e) {
+                  e.preventDefault();
+                  var u = el.getAttribute('data-preview-url');
+                  if (u) showPreview(u);
+                });
+              });
+              if (previewCloseBtn && previewBackdrop) {
+                previewCloseBtn.onclick = function () { previewBackdrop.classList.remove('show'); previewBackdrop.setAttribute('aria-hidden', 'true'); };
+              }
+              if (previewBackdrop) {
+                previewBackdrop.onclick = function (ev) { if (ev.target === previewBackdrop) { previewBackdrop.classList.remove('show'); previewBackdrop.setAttribute('aria-hidden', 'true'); } };
+              }
+            } else if (attBlock) attBlock.style.display = 'none';
 
             var isConfirmed = (d.status || '') === 'confirmed';
             confirmBtn.disabled = isConfirmed;
