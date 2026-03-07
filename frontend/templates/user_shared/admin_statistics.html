@@ -17,10 +17,11 @@
 
     header {
       background: #0454a3;
-      color: white;
-      padding: 1rem 2rem;
-      text-align: center;
-      font-size: 1.5rem;
+      border-bottom: none;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      box-shadow: 0 8px 20px rgba(0, 68, 148, 0.35);
     }
 
     body {
@@ -30,15 +31,39 @@
       padding: 0;
     }
 
-    /* 三條線選單按鈕樣式 */
-    .top-bar-left {
-      position: fixed;
-      top: 1rem;
-      left: 1rem;
-      z-index: 1100;
+    .topbar {
+      max-width: 1800px;
+      margin: 0 auto;
+      padding: 18px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #fff;
+      position: relative;
     }
 
-    .top-bar-left #menu-btn {
+    .topbar h1 {
+      font-size: 1.5rem;
+      margin: 0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      color: #fff;
+      flex: 1;
+    }
+
+    .topbar h1 .header-title {
+      flex: 1;
+      text-align: center;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+    }
+
+    /* 選單按鈕樣式 */
+    #menu-btn {
       width: 30px;
       height: 22px;
       cursor: pointer;
@@ -50,7 +75,7 @@
       padding: 0;
     }
 
-    .top-bar-left #menu-btn span {
+    #menu-btn span {
       display: block;
       width: 100%;
       height: 3px;
@@ -231,12 +256,19 @@
 </head>
 
 <body>
-  <header>查詢統計資料</header>
-  <div class="top-bar-left">
-    <div id="menu-btn" title="選單" role="button" tabindex="0">
-      <span></span><span></span><span></span>
+  <header>
+    <div class="topbar">
+      <h1>
+        <button id="menu-btn" title="選單" role="button" tabindex="0" aria-label="開啟側邊選單">
+          <span></span>
+          <span></span>
+          <span></span>
+        </button>
+        <div class="header-title">查詢統計資料</div>
+        <div style="width: 30px;"></div> <!-- 佔位元素，保持標題置中 -->
+      </h1>
     </div>
-  </div>
+  </header>
     <div class="container my-5 pt-1">
       <div class="card shadow-sm p-4">
         <div class="d-flex justify-content-between align-items-center mb-3">
