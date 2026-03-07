@@ -13,23 +13,54 @@
       color: #1e293b;
       min-height: 100vh;
     }
-    header.page-header {
-      background: linear-gradient(135deg, #0454a3 0%, #0369a1 100%);
-      color: white;
-      padding: 1.25rem 2rem;
-      text-align: center;
+    /* Header - 與 review_preferences 一致 */
+    header {
+      background: #0454a3;
+      border-bottom: none;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      box-shadow: 0 8px 20px rgba(0, 68, 148, 0.35);
+    }
+    .topbar {
+      max-width: 1800px;
+      margin: 0 auto;
+      padding: 18px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      color: #fff;
+    }
+    .topbar-left {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+    .topbar-left #menu-btn {
+      width: 30px;
+      height: 22px;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      background: none;
+      border: none;
+      padding: 0;
+    }
+    .topbar-left #menu-btn span {
+      display: block;
+      width: 100%;
+      height: 3px;
+      background-color: white;
+      border-radius: 2px;
+      transition: all 0.3s ease;
+    }
+    .topbar h1 {
       font-size: 1.5rem;
-      font-weight: 600;
-      box-shadow: 0 2px 12px rgba(4, 84, 163, 0.25);
-    }
-    .top-bar-left { position: fixed; top: 1rem; left: 1rem; z-index: 1100; }
-    .top-bar-left #menu-btn {
-      width: 30px; height: 22px; cursor: pointer;
-      display: flex; flex-direction: column; justify-content: space-between;
-      background: none; border: none; padding: 0;
-    }
-    .top-bar-left #menu-btn span {
-      display: block; width: 100%; height: 3px; background: white; border-radius: 2px;
+      margin: 0;
+      text-align: center;
+      color: #fff;
+      flex: 1;
     }
     #side-menu {
       position: fixed; top: 0; left: 0; height: 100vh; width: 320px; max-width: 80vw;
@@ -146,10 +177,17 @@
   </style>
 </head>
 <body>
-  <header class="page-header">學生實習狀況</header>
-  <div class="top-bar-left">
-    <div id="menu-btn" title="選單" role="button" tabindex="0"><span></span><span></span><span></span></div>
-  </div>
+  <header>
+    <div class="topbar">
+      <div class="topbar-left">
+        <button id="menu-btn" title="選單" role="button" tabindex="0" aria-label="開啟側邊選單">
+          <span></span><span></span><span></span>
+        </button>
+      </div>
+      <h1>學生實習狀況</h1>
+      <div style="width: 30px;"></div>
+    </div>
+  </header>
   <nav id="side-menu" aria-hidden="true" role="navigation" aria-label="功能選單">
     <button id="close-btn" aria-label="關閉功能選單">×</button>
     <h2>功能選單</h2>

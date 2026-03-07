@@ -552,7 +552,7 @@ def save_profile():
                 WHERE teacher_id = %s AND role = 'classteacher'
             """, (user_id,))
             result = cursor.fetchone()
-            is_homeroom = result[0] > 0 if result else False
+            is_homeroom = result['count'] > 0 if result else False
 
         return jsonify({
             "success": True,
@@ -714,13 +714,13 @@ def change_password():
 
         is_homeroom = False
         if user["role"] in ("teacher", "director"):
-            check_cursor = conn.cursor() 
+            check_cursor = conn.cursor(dictionary=True) 
             check_cursor.execute("""
                 SELECT COUNT(*) as count FROM classes_teacher 
                 WHERE teacher_id = %s AND role = 'classteacher'
             """, (user_id,))
             result = check_cursor.fetchone()
-            is_homeroom = result[0] > 0 if result else False
+            is_homeroom = result['count'] > 0 if result else False
             check_cursor.close()
             
         hashed_pw = generate_password_hash(new_password)

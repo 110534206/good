@@ -4515,36 +4515,32 @@ def test_email():
 
 def _get_vendor_own_company_ids(cursor, vendor_id):
     """
-    取得「廠商自己所屬公司」的 company_id，只回傳一間公司，僅顯示該公司實習生。
-    優先：internship_companies.vendor_id = vendor_id 或 company_vendor_relations；
-    若無則取指導老師底下第一間公司。
+    取得「廠商自己所屬公司」的 company_id 聯集，與 confirm_matching 使用的公司範圍一致，
+    確保廠商在「確認媒合結果」後，該批實習生會出現在「廠商退實習生」名單。
+    來源：(1) internship_companies.vendor_id (2) company_vendor_relations (3) 指導老師對接公司。
     """
+    company_ids = []
     try:
         cursor.execute("""
             SELECT id FROM internship_companies
             WHERE status = 'approved' AND vendor_id = %s
-            LIMIT 1
         """, (vendor_id,))
-        row = cursor.fetchone()
-        if row:
-            return [row["id"]]
+        for row in cursor.fetchall() or []:
+            company_ids.append(row["id"])
     except Exception:
         pass
     try:
         cursor.execute("""
             SELECT company_id FROM company_vendor_relations WHERE vendor_id = %s
-            LIMIT 1
         """, (vendor_id,))
-        row = cursor.fetchone()
-        if row:
-            return [row["company_id"]]
+        for row in cursor.fetchall() or []:
+            company_ids.append(row["company_id"])
     except Exception:
         pass
-    # 若未設定 vendor_id / company_vendor_relations，僅取指導老師底下「第一間」公司，只顯示該公司實習生（不顯示其他公司）
     _, companies, _ = _get_vendor_scope(cursor, vendor_id)
     if companies:
-        return [companies[0]["id"]]
-    return []
+        company_ids.extend([c["id"] for c in companies])
+    return list(set(company_ids))
 
 
 # =========================================================
@@ -4582,7 +4578,7 @@ def get_withdraw_intern_list():
                    ON ir.student_id = io.student_id
                   AND ir.semester_id = %s
                   AND ir.company_id = ic.id
-            WHERE ij.company_id IN (""" + placeholders + """)
+            WHERE io.status = 'accepted' AND ij.company_id IN (""" + placeholders + """)
             ORDER BY ic.company_name, ij.title, u.name
             """
         else:
@@ -4595,7 +4591,7 @@ def get_withdraw_intern_list():
             JOIN users u ON u.id = io.student_id
             JOIN internship_jobs ij ON ij.id = io.job_id
             JOIN internship_companies ic ON ic.id = ij.company_id
-            WHERE ij.company_id IN (""" + placeholders + """)
+            WHERE io.status = 'accepted' AND ij.company_id IN (""" + placeholders + """)
             ORDER BY ic.company_name, ij.title, u.name
             """
         cursor.execute(status_sql, args)
@@ -5251,7 +5247,7 @@ def director_intern_status():
                     INNER JOIN (
                         SELECT student_id, MAX(io0.id) AS max_id
                         FROM internship_offers io0
-                        WHERE %s IS NULL OR io0.semester_id = %s
+                        WHERE %s IS NULL OR io0.semester_id = %s OR io0.semester_id IS NULL
                         GROUP BY student_id
                     ) io2 ON io1.student_id = io2.student_id AND io1.id = io2.max_id
                 ) io ON io.student_id = u.id
@@ -5268,7 +5264,7 @@ def director_intern_status():
             """, (current_semester_id, current_semester_id, current_semester_id, current_semester_id))
         except Exception as sem_err:
             if "semester_id" in str(sem_err) or "Unknown column" in str(sem_err) or "internship_configs" in str(sem_err):
-                # 無 semester_id 時：每位學生只取一筆錄取（id 最大＝最新）
+                # 無 semester_id 或 internship_configs 表時：每位學生只取一筆錄取（id 最大＝最新）
                 cursor.execute("""
                     SELECT u.id AS student_id, u.name AS student_name, u.username AS student_number,
                            c.name AS class_name, c.department, c.admission_year,
@@ -5287,16 +5283,42 @@ def director_intern_status():
                     LEFT JOIN internship_companies ic ON ic.id = ij.company_id
                     LEFT JOIN internship_records vri ON vri.student_id = u.id AND vri.semester_id = %s
                     WHERE u.role = 'student'
-                    AND EXISTS (
-                        SELECT 1 FROM internship_configs cfg
-                        WHERE cfg.semester_id = %s
-                        AND (cfg.user_id = u.id OR (cfg.user_id IS NULL AND cfg.admission_year = c.admission_year))
-                    )
                     ORDER BY c.name, u.username
-                """, (current_semester_id, current_semester_id))
+                """, (current_semester_id,))
             else:
                 raise
-        rows = cursor.fetchall()
+
+        rows = cursor.fetchall() or []
+
+        # 如果有 internship_configs 但沒有任何符合條件的學生，為了避免畫面完全沒資料，
+        # 再做一次「不依賴 internship_configs」的簡化查詢，至少顯示目前 internship_offers 的最新狀態。
+        if not rows:
+            try:
+                cursor.execute("""
+                    SELECT u.id AS student_id, u.name AS student_name, u.username AS student_number,
+                           c.name AS class_name, c.department, c.admission_year,
+                           io.id AS offer_id, COALESCE(io.status, '') AS offer_status,
+                           ic.company_name, ij.title AS job_title,
+                           vri.id AS withdraw_id
+                    FROM users u
+                    LEFT JOIN classes c ON c.id = u.class_id
+                    LEFT JOIN (
+                        SELECT io1.* FROM internship_offers io1
+                        INNER JOIN (
+                            SELECT student_id, MAX(id) AS max_id FROM internship_offers GROUP BY student_id
+                        ) io2 ON io1.student_id = io2.student_id AND io1.id = io2.max_id
+                    ) io ON io.student_id = u.id
+                    LEFT JOIN internship_jobs ij ON ij.id = io.job_id
+                    LEFT JOIN internship_companies ic ON ic.id = ij.company_id
+                    LEFT JOIN internship_records vri ON vri.student_id = u.id AND vri.semester_id = %s
+                    WHERE u.role = 'student'
+                    ORDER BY c.name, u.username
+                """, (current_semester_id,))
+                rows = cursor.fetchall() or []
+            except Exception:
+                # fallback 查詢失敗時，維持原本 rows（可能為空），避免整個 API 失敗
+                pass
+
         cursor.close()
         conn.close()
         seen = {}

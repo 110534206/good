@@ -51,7 +51,7 @@
     }
 
     header {
-      background: linear-gradient(135deg, #0055a8 0%, #006acb 50%, #004f94 100%);
+      background: linear-gradient(135deg, #0454a3 0%, #0369a1 100%);
       border-bottom: none;
       position: sticky;
       top: 0;
@@ -286,6 +286,40 @@
 
     .link-button:hover {
       text-decoration: underline;
+    }
+
+    .btn-edit {
+      background: #fff;
+      border: 1px solid var(--color-primary);
+      color: var(--color-primary);
+      font-weight: 600;
+      cursor: pointer;
+      padding: 6px 14px;
+      border-radius: 6px;
+      font-size: 0.9rem;
+      transition: all 0.2s ease;
+    }
+
+    .btn-edit:hover {
+      background: var(--color-primary);
+      color: #fff;
+    }
+
+    .btn-delete {
+      background: #fff;
+      border: 1px solid var(--color-danger);
+      color: var(--color-danger);
+      font-weight: 600;
+      cursor: pointer;
+      padding: 6px 14px;
+      border-radius: 6px;
+      font-size: 0.9rem;
+      transition: all 0.2s ease;
+    }
+
+    .btn-delete:hover {
+      background: var(--color-danger);
+      color: #fff;
     }
 
     /* 同一筆資料使用相同背景色 */
@@ -804,8 +838,8 @@
                   ${job.is_created_by_vendor === false ? `
                     <span style="color:var(--color-muted); font-size:0.85rem;">由指導老師建立</span>
                   ` : ''}
-                  <button class="link-button" data-action="edit" data-id="${job.id}" style="color:var(--color-primary);">修改</button>
-                  <button class="link-button" data-action="delete" data-id="${job.id}" style="color:var(--color-danger);">刪除</button>
+                  <button class="btn-edit" data-action="edit" data-id="${job.id}">修改</button>
+                  <button class="btn-delete" data-action="delete" data-id="${job.id}">刪除</button>
                 </div>
               </td>
             </tr>
