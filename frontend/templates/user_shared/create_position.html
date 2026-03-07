@@ -840,7 +840,28 @@
           
           const job = result.item;
           if (job) {
-            if (els.formCode) els.formCode.value = job.code || '';
+            // 編輯模式下，根據職缺的創建順序（比數）獲取編號
+            if (els.formCode && job.id) {
+              try {
+                const codeResponse = await fetch(`/vendor/api/positions/${job.id}/code`, {
+                  headers: { 'Accept': 'application/json' },
+                  credentials: 'include'
+                });
+                const codeResult = await codeResponse.json();
+                if (codeResult.success && codeResult.code) {
+                  els.formCode.value = codeResult.code;
+                } else {
+                  // 如果獲取失敗，使用預設格式
+                  els.formCode.value = await generatePositionCode();
+                }
+              } catch (error) {
+                console.error('獲取職缺編號失敗:', error);
+                // 如果請求失敗，使用預設格式
+                els.formCode.value = await generatePositionCode();
+              }
+            } else if (els.formCode) {
+              els.formCode.value = await generatePositionCode();
+            }
             els.formCompany.value = job.company_id || '';
             if (els.formResponsible) els.formResponsible.value = job.responsible || '';
             if (els.formTaxId) els.formTaxId.value = job.tax_id || '';
