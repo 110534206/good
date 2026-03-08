@@ -1322,6 +1322,16 @@
             const isMatching = n.category === 'matching' || 
               n.title.includes('媒合') || n.message.includes('媒合');
             if (!isMatching) return false;
+          } else if (currentCategoryFilter === 'resume') {
+            // 履歷類別：顯示履歷相關的通知（兼容包含履歷關鍵字的通知）
+            const isResume = n.category === 'resume' ||
+              n.title.includes('履歷') || n.message.includes('履歷');
+            if (!isResume) return false;
+          } else if (currentCategoryFilter === 'ranking') {
+            // 志願序類別：顯示志願序相關的通知（兼容包含志願序關鍵字的通知）
+            const isRanking = n.category === 'ranking' ||
+              n.title.includes('志願序') || n.message.includes('志願序');
+            if (!isRanking) return false;
           } else if (currentCategoryFilter === 'experience') {
             // 實習心得類別：只顯示實習心得相關的通知
             const isExperience = n.category === 'experience' || n.category === 'intern_experience' ||
@@ -1512,18 +1522,32 @@
 
           const left = document.createElement('div'); left.className = 'notif-left';
           const avatar = document.createElement('div'); avatar.className = 'avatar';
-          // 根據標題內容決定顯示的字：錄取通知顯示「錄」，履歷相關顯示「履」，面試通知顯示「面」，媒合相關顯示「媒」
+          // 根據類別和標題內容決定顯示的字：優先根據 category，其次根據標題關鍵字
           let avatarText = '';
           const title = n.title || '';
           const category = n.category || '';
-          if (title.includes('錄取')) {
+          
+          // 優先根據 category 判斷
+          if (category === 'experience' || category === 'intern_experience') {
+            avatarText = '心得';
+          } else if (category === 'resume') {
+            avatarText = '履';
+          } else if (category === 'ranking') {
+            avatarText = '志';
+          } else if (category === 'matching') {
+            avatarText = '媒';
+          } else if (category === 'company') {
+            avatarText = '公司';
+          } else if (title.includes('錄取')) {
             avatarText = '錄';
           } else if (title.includes('履歷')) {
             avatarText = '履';
           } else if (title.includes('面試')) {
             avatarText = '面';
-          } else if (title.includes('媒合') || category === 'matching') {
+          } else if (title.includes('媒合')) {
             avatarText = '媒';
+          } else if (title.includes('實習心得') || title.includes('心得退件') || title.includes('心得審核')) {
+            avatarText = '心得';
           } else {
             // 其他情況取第一個非符號的字
             const firstChar = title.replace(/^[【\[\]()（）\s]+/, '').slice(0, 1);

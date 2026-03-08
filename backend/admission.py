@@ -4416,7 +4416,34 @@ def ta_confirm_matching():
                     tsr_inserted += 1
         print(f"✅ [DEBUG] 寫入 teacher_student_relations: 新增 {tsr_inserted} 筆，更新 {tsr_updated} 筆")
         
-        # 6. 提交事務，確保所有更新都保存
+        # 6. 發送通知給所有使用者（所有人）
+        cursor.execute("SELECT id FROM users")
+        all_users = cursor.fetchall() or []
+        
+        # 發送統一的通知給所有用戶
+        all_users_title = f"{semester_prefix} 媒合結果已發布"
+        all_users_message = f"{semester_prefix}媒合結果已由科助確認並發布，請前往查看。"
+        all_users_link_url = "/admission/results"
+        
+        all_users_notified_count = 0
+        for user in all_users:
+            user_id = user.get('id')
+            if user_id:
+                try:
+                    create_notification(
+                        user_id=user_id,
+                        title=all_users_title,
+                        message=all_users_message,
+                        category="matching",
+                        link_url=all_users_link_url
+                    )
+                    all_users_notified_count += 1
+                except Exception as e:
+                    print(f"⚠️ [警告] 為用戶 {user_id} 發送通知失敗: {e}")
+        
+        print(f"✅ [DEBUG] 已通知所有用戶，共 {all_users_notified_count} 位")
+        
+        # 7. 提交事務，確保所有更新都保存
         conn.commit()
         
         return jsonify({
@@ -4426,7 +4453,8 @@ def ta_confirm_matching():
                 "teachers_and_class_teachers": len(notified_user_ids),
                 "students": len(matched_students),
                 "vendors": len(vendors),
-                "admins_directors": len(admins_directors)
+                "admins_directors": len(admins_directors),
+                "all_users": all_users_notified_count
             },
             "approved_count": approved_count,
             "match_results": {

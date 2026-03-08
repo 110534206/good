@@ -706,13 +706,14 @@ def check_and_push_scheduled_announcements(conn):
     now_tw = get_taiwan_time()
     cursor = conn.cursor(dictionary=True)
     # 尋找：已勾選發布、時間已到、但在通知頁面還沒出現的公告
+    # 注意：需要檢查所有類別的通知（announcement、experience、ranking、resume等），不只是 announcement
     cursor.execute("""
         SELECT id, title, content, target_role FROM announcement 
         WHERE is_published = 1 AND start_time <= %s
         AND id NOT IN (
             SELECT DISTINCT CAST(SUBSTRING_INDEX(link_url, '/', -1) AS UNSIGNED) 
             FROM notifications 
-            WHERE category = 'announcement' AND link_url LIKE '/view_announcement/%'
+            WHERE link_url LIKE '/view_announcement/%'
         )
     """, (now_tw,))
     pending = cursor.fetchall() or []

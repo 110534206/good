@@ -4362,13 +4362,107 @@ def save_matching_sort():
                 traceback.print_exc()
                 continue
         
+        # 發送通知給指導老師和主任
+        notified_teachers = set()
+        notified_directors = set()
+        
+        # 收集所有相關的指導老師（通過公司找到 advisor_user_id）
+        for company_id in company_ids:
+            cursor.execute("""
+                SELECT DISTINCT advisor_user_id 
+                FROM internship_companies 
+                WHERE id = %s AND advisor_user_id IS NOT NULL
+            """, (company_id,))
+            advisor_rows = cursor.fetchall() or []
+            for row in advisor_rows:
+                advisor_id = row.get('advisor_user_id')
+                if advisor_id:
+                    # 確認是指導老師或主任
+                    cursor.execute("""
+                        SELECT id, role FROM users 
+                        WHERE id = %s AND role IN ('teacher', 'director')
+                    """, (advisor_id,))
+                    user_row = cursor.fetchone()
+                    if user_row:
+                        if user_row.get('role') == 'teacher':
+                            notified_teachers.add(advisor_id)
+                        elif user_row.get('role') == 'director':
+                            notified_directors.add(advisor_id)
+        
+        # 收集所有主任
+        cursor.execute("SELECT id FROM users WHERE role = 'director'")
+        all_directors = cursor.fetchall() or []
+        for director in all_directors:
+            director_id = director.get('id')
+            if director_id:
+                notified_directors.add(director_id)
+        
+        # 獲取廠商名稱
+        vendor_name = profile.get('name', '廠商') if profile else '廠商'
+        
+        # 獲取公司名稱列表
+        company_names = [c.get('company_name', '') for c in companies if c.get('company_name')]
+        company_names_str = '、'.join(company_names[:3])  # 最多顯示3個公司名稱
+        if len(company_names) > 3:
+            company_names_str += f'等{len(company_names)}家公司'
+        
+        # 發送通知給指導老師
+        teacher_title = "廠商媒合排序已送出"
+        teacher_message = f"{vendor_name}已送出{company_names_str}的媒合排序，請前往查看並審核。"
+        teacher_link_url = "/admission/manage_director"
+        
+        # 導入通知函數
+        try:
+            from notification import create_notification
+        except ImportError:
+            print("⚠️ [警告] 無法導入 create_notification 函數")
+            create_notification = None
+        
+        # 發送通知給指導老師
+        for teacher_id in notified_teachers:
+            if create_notification:
+                try:
+                    create_notification(
+                        user_id=teacher_id,
+                        title=teacher_title,
+                        message=teacher_message,
+                        category="matching",
+                        link_url=teacher_link_url
+                    )
+                except Exception as e:
+                    print(f"⚠️ [警告] 為指導老師 {teacher_id} 發送通知失敗: {e}")
+        
+        # 發送通知給主任
+        director_title = "廠商媒合排序已送出"
+        director_message = f"{vendor_name}已送出{company_names_str}的媒合排序，請前往查看並審核。"
+        director_link_url = "/admission/manage_director"
+        
+        for director_id in notified_directors:
+            if create_notification:
+                try:
+                    create_notification(
+                        user_id=director_id,
+                        title=director_title,
+                        message=director_message,
+                        category="matching",
+                        link_url=director_link_url
+                    )
+                except Exception as e:
+                    print(f"⚠️ [警告] 為主任 {director_id} 發送通知失敗: {e}")
+        
+        print(f"✅ [DEBUG] 已通知 {len(notified_teachers)} 位指導老師和 {len(notified_directors)} 位主任")
+        
         conn.commit()
         cursor.close()
         conn.close()
         
         return jsonify({
             "success": True,
-            "message": f"已成功保存 {inserted_count} 筆媒合排序資料"
+            "message": f"已成功保存 {inserted_count} 筆媒合排序資料",
+            "notified": {
+                "teachers": len(notified_teachers),
+                "directors": len(notified_directors)
+            }
         })
         
     except Exception as exc:
