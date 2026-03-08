@@ -420,7 +420,7 @@
     loadUnreadNotificationCount();
     setInterval(loadUnreadNotificationCount, 30000);
 
-    // 二輪媒合開啟時才顯示「二輪分發」
+    // 僅在二輪開啟時顯示「二輪分發」
     fetch('/admission/api/second_round/status', { credentials: 'include' })
       .then(function(r) { return r.json(); })
       .then(function(data) {

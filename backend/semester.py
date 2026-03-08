@@ -127,6 +127,37 @@ def get_previous_semester_code(cursor):
 
 
 # =========================================================
+# Helper: 流程學期 ID（一面／志願序／媒合／時間管理用；1132 時沿用 1131 的紀錄）
+# =========================================================
+def get_flow_semester_id(cursor):
+    """
+    回傳「操作流程學期」的學期 ID。
+    一面流程、志願序、媒合結果、時間管理都在「上學期」(1131) 完成，實習與退實習生在「下學期」(1132)。
+    當系統當前學期為下學期(1132)時，仍使用上學期(1131)的資料，讓主任可查志願序、科助可看媒合人數與時間管理。
+    例：當前 1131 → 1131；當前 1132 → 1131。
+    """
+    current = get_current_semester(cursor)
+    if not current:
+        return None
+    code = (current.get('code') or '').strip()
+    # 學期代碼末位 2 表示下學期（1132、1142…），流程學期為上一學期
+    if len(code) >= 1 and code[-1] == '2':
+        prev_id = get_previous_semester_id(cursor, current['id'])
+        return prev_id if prev_id is not None else current['id']
+    return current['id']
+
+
+def get_flow_semester_code(cursor):
+    """回傳流程學期的學期代碼（如 '1131'）。"""
+    flow_id = get_flow_semester_id(cursor)
+    if not flow_id:
+        return get_current_semester_code(cursor)
+    cursor.execute("SELECT code FROM semesters WHERE id = %s", (flow_id,))
+    row = cursor.fetchone()
+    return row['code'] if row else get_current_semester_code(cursor)
+
+
+# =========================================================
 # Helper: 公司開放狀態使用的學期代碼（實習在下學期，媒合在上學期完成，故下學期沿用上學期開放）
 # =========================================================
 def get_semester_code_for_company_openings(cursor):

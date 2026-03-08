@@ -625,11 +625,14 @@
           btn.style.display = 'none';
           return;
         }
-        const isEnabled = !!data.is_enabled;
+        const allowToggle = data.allow_toggle !== false;
+        const isEnabled = allowToggle ? !!data.is_enabled : false;
         statusText.textContent = '二輪媒合：' + (isEnabled ? '已開啟' : '未開啟');
         btn.style.display = 'inline-block';
         btn.textContent = isEnabled ? '關閉二輪媒合' : '開啟二輪媒合';
         btn.dataset.enable = isEnabled ? '0' : '1';
+        btn.disabled = !allowToggle;
+        btn.title = allowToggle ? '' : '目前為實習學期(1132)，二輪開關僅能於流程學期(1131)操作';
       } catch (e) {
         statusText.textContent = '二輪媒合：載入失敗';
         btn.style.display = 'none';

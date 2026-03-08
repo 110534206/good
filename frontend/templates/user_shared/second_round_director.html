@@ -363,7 +363,12 @@
         try {
           const statusRes = await fetch('/admission/api/second_round/status', { credentials: 'include' });
           const statusData = await statusRes.json();
-          if (!statusData.success || !statusData.is_enabled) {
+          if (!statusData.success) {
+            loading.classList.add('d-none');
+            notOpenMsg.classList.remove('d-none');
+            return;
+          }
+          if (!statusData.show_on_director_home) {
             loading.classList.add('d-none');
             notOpenMsg.classList.remove('d-none');
             return;
@@ -377,6 +382,14 @@
           loading.classList.add('d-none');
           notOpenMsg.classList.add('d-none');
           contentArea.classList.remove('d-none');
+          var assignDisabled = !statusData.is_enabled;
+          if (btnAssign) btnAssign.disabled = assignDisabled;
+          if (selStudent) selStudent.disabled = assignDisabled;
+          if (selCompany) selCompany.disabled = assignDisabled;
+          if (statusData.is_enabled && alertPlace) alertPlace.innerHTML = '';
+          else if (!statusData.is_enabled && alertPlace) {
+            alertPlace.innerHTML = '<div class="alert alert-info alert-dismissible fade show">二輪尚未開啟，目前僅可查看名單（與科助未錄取名單一致）；科助開啟二輪後即可指派。<button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>';
+          }
 
           const students = (unadmittedData.success && unadmittedData.students) ? unadmittedData.students : [];
           const companies = (companiesData.success && companiesData.companies) ? companiesData.companies : [];

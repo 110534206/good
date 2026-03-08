@@ -1,7 +1,7 @@
 from flask import Blueprint, request, jsonify, session
 from config import get_db
 from datetime import datetime
-from semester import get_current_semester_code
+from semester import get_current_semester_code, get_flow_semester_id, get_flow_semester_code
 import traceback
 
 director_overview_bp = Blueprint("director_overview_bp", __name__, url_prefix="/director")
@@ -378,11 +378,9 @@ def get_statistics():
         if not department:
             return jsonify({"success": False, "message": "無法取得主任所屬科系"}), 403
         
-        # 獲取當前學期
-        current_semester_code = get_current_semester_code(cursor)
-        cursor.execute("SELECT id FROM semesters WHERE is_active = 1 LIMIT 1")
-        current_semester = cursor.fetchone()
-        semester_id = current_semester['id'] if current_semester else None
+        # 使用流程學期（與媒合/志願操作一致，1132 時統計仍為 1131，結果同步）
+        semester_id = get_flow_semester_id(cursor)
+        current_semester_code = get_flow_semester_code(cursor) if semester_id else get_current_semester_code(cursor)
         
         # 1. 全系學生總數
         cursor.execute("""
