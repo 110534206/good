@@ -472,7 +472,7 @@ def approve_experience(exp_id):
         
         # 先獲取心得和學生資訊（在更新之前）
         cursor.execute("""
-            SELECT ie.user_id, ie.company_id, c.company_name, u.name AS student_name, u.email AS student_email
+            SELECT ie.user_id, ie.company_id, c.company_name, c.advisor_user_id, u.name AS student_name, u.email AS student_email
             FROM internship_experiences ie
             LEFT JOIN users u ON ie.user_id = u.id
             LEFT JOIN internship_companies c ON ie.company_id = c.id
@@ -487,6 +487,7 @@ def approve_experience(exp_id):
         student_name = exp_info.get('student_name') or '同學'
         student_email = exp_info.get('student_email')
         company_name = exp_info.get('company_name') or '實習公司'
+        company_id = exp_info.get('company_id')
         
         # 更新心得狀態：設置為已通過
         cursor.execute("""
@@ -504,6 +505,9 @@ def approve_experience(exp_id):
         cursor.execute("SELECT name FROM users WHERE id = %s", (reviewer_id,))
         reviewer_info = cursor.fetchone()
         reviewer_name = reviewer_info.get('name', '指導老師') if reviewer_info else '指導老師'
+        
+        # 初始化 link_url 變數
+        link_url = None
         
         # 創建公告並發送通知給學生
         if student_id:
@@ -530,10 +534,11 @@ def approve_experience(exp_id):
             start_time = now.strftime('%Y-%m-%d %H:%M:%S')
             end_time = (now + timedelta(days=30)).strftime('%Y-%m-%d %H:%M:%S')
             
+            # 創建公告，設置 target_role 為 "student"，確保只發送給學生
             cursor.execute("""
-                INSERT INTO announcement (title, content, start_time, end_time, is_published, created_at)
-                VALUES (%s, %s, %s, %s, %s, %s)
-            """, (ann_title, ann_content, start_time, end_time, 1, now))
+                INSERT INTO announcement (title, content, start_time, end_time, is_published, target_role, created_at)
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
+            """, (ann_title, ann_content, start_time, end_time, 1, "student", now))
             ann_id = cursor.lastrowid
             db.commit()
             
@@ -545,7 +550,7 @@ def approve_experience(exp_id):
                 cursor.execute("""
                     INSERT INTO notifications (user_id, title, message, category, link_url, is_read, created_at)
                     VALUES (%s, %s, %s, %s, %s, 0, NOW())
-                """, (student_id, notification_title, notification_message, "company", link_url))
+                """, (student_id, notification_title, notification_message, "experience", link_url))
                 db.commit()
                 print(f"[成功] 為學生 {student_id} 創建通知成功，公告ID: {ann_id}, 通知標題: {notification_title}")
             except Exception as e:
