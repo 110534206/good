@@ -17,10 +17,13 @@ app = Flask(
     template_folder='../frontend/templates'
 )
 
-# secret_key 與檔案設定
+# secret_key 與檔案設定（上傳目錄使用專案根目錄 good/uploads，便於 evidence_image / evidence_file / announcements）
 app.secret_key = os.getenv("SECRET_KEY", "your_secret_key")
-app.config['UPLOAD_FOLDER'] = os.path.join(os.path.dirname(__file__), "uploads")
+_project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+app.config['UPLOAD_FOLDER'] = os.path.join(_project_root, "uploads")
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
+for sub in ("evidence_image", "evidence_file", "announcements"):
+    os.makedirs(os.path.join(app.config['UPLOAD_FOLDER'], sub), exist_ok=True)
 
 # 提供上傳檔案（圖片）供前端顯示，路徑如 /uploads/resumes/photos/xxx
 @app.route('/uploads/<path:filename>')

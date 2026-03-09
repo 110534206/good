@@ -1903,7 +1903,8 @@
 
       if (certImagePath && certImagePath.trim()) {
         fileInput.setAttribute('data-image-path', certImagePath);
-        // 移除舊的提示（如果存在）
+        const boxId = 'cert_photo_preview_' + entryId;
+        updateImagePreviewBox(boxId, imagePathToUrl(certImagePath));
         const oldHint = fileInput.parentElement.querySelector('.cert-photo-hint');
         if (oldHint) oldHint.remove();
       } else {
@@ -2756,14 +2757,16 @@
           }
         }
 
-        // 2. 填充課程資料
+        // 2. 填充課程資料（含 proof_image 供送出時保留成績單路徑，避免編輯後被清空）
         if (data.courses && Array.isArray(data.courses) && data.courses.length > 0) {
+          const transcriptPath = data.transcript_path || '';
           // 將課程資料轉換為 allCoursesData 格式
           allCoursesData = data.courses.map(course => ({
             name: course.name || '',
             credits: course.credits || '0',
             grade: course.grade || '',
-            isNotTaken: course.isNotTaken || false  // 使用後端返回的 isNotTaken 狀態
+            isNotTaken: course.isNotTaken || false,
+            proof_image: course.proof_image || course.transcript_path || transcriptPath || ''
           }));
 
           // 排序
@@ -2851,17 +2854,18 @@
           initializeCertificatesUI([]);
         }
 
-        // 3.5 填充成績單路徑（從 course_grades.ProofImage 獲取）
-        const transcriptPath = data.transcript_path || '';
+        // 3.5 填充成績單路徑（從 data.transcript_path 或第一門有 proof_image 的課程）
+        let transcriptPath = (data.transcript_path || '').replace(/\\/g, '/').trim();
+        if (!transcriptPath && data.courses && data.courses.length > 0) {
+          const firstWithProof = data.courses.find(c => (c.proof_image || c.transcript_path || '').trim());
+          transcriptPath = (firstWithProof && (firstWithProof.proof_image || firstWithProof.transcript_path || '').trim()) || '';
+        }
         if (transcriptPath) {
           console.log("📄 成績單路徑:", transcriptPath);
           const transcriptInput = form.querySelector('input[name="transcript_file"]');
           if (transcriptInput && transcriptInput.parentElement) {
-            // 移除舊的提示（如果存在）
             const oldHint = transcriptInput.parentElement.querySelector('.transcript-hint');
             if (oldHint) oldHint.remove();
-
-            // 保存圖片路徑到 data 屬性，用於瀏覽和下載
             transcriptInput.setAttribute('data-image-path', transcriptPath);
             transcriptInput.removeAttribute('required');
             updateImagePreviewBox('transcriptPreviewBox', imagePathToUrl(transcriptPath));
@@ -4270,11 +4274,11 @@
         };
         if (entry.certId) cert.id = entry.certId;
         return cert;
-      }).filter(cert => cert.name || cert.cert_code);
+      }).filter(cert => cert.name || cert.cert_code || cert.job_category || cert.level);
 
       const selectedCertIds = structuredCertifications.filter(c => c.id).map(c => c.id);
       const resumeIdFromQuery = new URLSearchParams(window.location.search).get('resume_id');
-      if (resumeIdFromQuery && selectedCertIds.length) {
+      if (resumeIdFromQuery) {
         formData.append("selected_certification_ids", JSON.stringify(selectedCertIds));
       }
 
@@ -5390,11 +5394,14 @@
     <h2>功能選單</h2>
     <a href="/student_home">首頁</a>
     <a href="/profile">個人資料</a>
+    <a href="/resume_folders">履歷管理</a>
     <a href="/look_company">投遞履歷</a>
     <a href="/fill_preferences">填寫志願序</a>
     <a href="/notifications">通知</a>
     <a href="/intern_achievement">實習成果</a>
     <a href="/intern_experience">實習心得</a>
+    <a href="/logout">登出</a>
+
   </nav>
 </body>
 

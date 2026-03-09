@@ -655,33 +655,26 @@
       
       const classSelect = document.getElementById("classFilter");
       if (isDirectorMode) {
-          // 主任模式：與 class_review_resume.html 一樣的邏輯
-          classSelect.innerHTML = `
-            <option value="">所有班級</option>
-            <option value="忠班">忠班</option>
-            <option value="孝班">孝班</option>
-          `;
-          
-          // 動態添加其他班級（如果有的話）
+          // 主任模式：只顯示「所有班級」、固定顯示「忠」「孝」、以及資料中實際出現的班級
+          classSelect.innerHTML = `<option value="">所有班級</option>`;
           const classSet = new Set();
+          classSet.add('忠');
+          classSet.add('孝');
           data.forEach(r => { 
-            if(r.className && r.className !== "忠班" && r.className !== "孝班") {
-              classSet.add(r.className);
-            }
+            if (r.className && r.className.trim()) classSet.add(r.className.trim());
           });
-          
-          // 將其他班級按字母順序排序後加入選單
           Array.from(classSet).sort().forEach(c => {
             classSelect.innerHTML += `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`;
           });
       } else {
-          // 一般模式：維持原有邏輯
+          // 指導老師模式：只顯示「所有班級」與資料中實際出現的班級（有用到的才顯示）
           classSelect.innerHTML = `<option value="">所有班級</option>`;
           const classSet = new Set();
-          data.forEach(r => { if(r.className) classSet.add(r.className); });
-          classSet.add("忠班"); classSet.add("孝班");
+          data.forEach(r => {
+            if (r.className && r.className.trim()) classSet.add(r.className.trim());
+          });
           Array.from(classSet).sort().forEach(c => {
-             if(c !== '五孝') classSelect.innerHTML += `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`;
+            classSelect.innerHTML += `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`;
           });
       }
 

@@ -2336,14 +2336,14 @@ def get_deadlines():
             resume_deadline_date = resume_deadline_dt.strftime('%Y-%m-%d')
             resume_deadline_time = resume_deadline_dt.strftime('%H:%M')
         
-        # 媒合結果通知日（行事曆顯示用）：取 internship_offers 最近一筆 offered_at 的日期
+        # 媒合結果通知日（行事曆顯示用）：取 matching_results 最近一筆 matched_at 的日期
         matching_result_date = None
         matching_result_time = None
         try:
             cursor.execute("""
-                SELECT MAX(offered_at) AS latest_offered_at
-                FROM internship_offers
-                WHERE offered_at IS NOT NULL
+                SELECT MAX(matched_at) AS latest_offered_at
+                FROM matching_results
+                WHERE matched_at IS NOT NULL
             """)
             row = cursor.fetchone()
             if row and row.get('latest_offered_at'):
