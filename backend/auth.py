@@ -231,9 +231,13 @@ def register_student():
         conn = get_db()
         cursor = conn.cursor()
 
-        cursor.execute("SELECT id FROM users WHERE username=%s AND role='student'", (username,))
+        cursor.execute("SELECT id, role FROM users WHERE username = %s", (username,))
+        existing = cursor.fetchone()
+        if existing:
+            return jsonify({"success": False, "message": "該帳號已被使用，學生與廠商不可使用相同帳號"}), 400
+        cursor.execute("SELECT id FROM users WHERE email = %s", (email,))
         if cursor.fetchone():
-            return jsonify({"success": False, "message": "該學生帳號已存在"}), 400
+            return jsonify({"success": False, "message": "該 Email 已被使用，學生與廠商不可使用相同 Email"}), 400
 
         cursor.execute("""
             INSERT INTO users (username, password, email, role)
@@ -292,10 +296,13 @@ def register_company():
         conn = get_db()
         cursor = conn.cursor()
 
-        # 3. 檢查帳號 (username) 是否已存在
-        cursor.execute("SELECT id FROM users WHERE username=%s AND role=%s", (username, role))
+        # 3. 檢查帳號 (username) / Email 是否已被任何身分使用（學生與廠商不可重複）
+        cursor.execute("SELECT id, role FROM users WHERE username = %s", (username,))
         if cursor.fetchone():
-            return jsonify({"success": False, "message": "該廠商帳號已存在"}), 400
+            return jsonify({"success": False, "message": "該帳號已被使用，學生與廠商不可使用相同帳號"}), 400
+        cursor.execute("SELECT id FROM users WHERE email = %s", (email,))
+        if cursor.fetchone():
+            return jsonify({"success": False, "message": "該 Email 已被使用，學生與廠商不可使用相同 Email"}), 400
         
         # 4. 將廠商資料寫入 users 資料表，並將 status 設為 'active'
         cursor.execute("""

@@ -351,10 +351,18 @@
           <div class="card shadow-sm">
             <div class="card-body p-4">
               <div id="calendarContainer">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-                  <button id="prevMonthBtn" class="btn btn-outline-secondary" style="padding: 8px 16px;">‹ 上個月</button>
+                <div style="position: relative; display: flex; justify-content: center; align-items: center; margin-bottom: 20px;">
                   <h4 id="currentMonthYear" style="margin: 0; font-weight: 600;"></h4>
-                  <button id="nextMonthBtn" class="btn btn-outline-secondary" style="padding: 8px 16px;">下個月 ›</button>
+                  <div style="position: absolute; right: 16px; display: flex; align-items: center; gap: 8px;">
+                    <button id="prevMonthBtn"
+                            style="border: none; background: transparent; padding: 0; line-height: 1; font-size: 13px; color: #666; cursor: pointer;">
+                      ▲
+                    </button>
+                    <button id="nextMonthBtn"
+                            style="border: none; background: transparent; padding: 0; line-height: 1; font-size: 13px; color: #666; cursor: pointer;">
+                      ▼
+                    </button>
+                  </div>
                 </div>
                 <div id="calendar"></div>
               </div>

@@ -301,6 +301,9 @@
         <label for="combinedClass">班級/年級</label>
         <input id="combinedClass" type="text" readonly />
 
+        <label for="homeroomTeacher">班導</label>
+        <input id="homeroomTeacher" type="text" readonly />
+
         <div id="managedClassesContainer" class="role-specific-fields" style="display: none;">
           <label for="managedClasses">管理班級</label>
           <input id="managedClasses" type="text" readonly />
@@ -642,6 +645,12 @@
               }
             }
             document.getElementById('combinedClass').value = classDisplay || '';
+
+            // 填入班導老師名稱（若有）
+            const homeroomInput = document.getElementById('homeroomTeacher');
+            if (homeroomInput) {
+              homeroomInput.value = user.homeroom_teacher_name || '';
+            }
           } else if (isHomeroom) {
             document.getElementById('managedClasses').value = user.class_display_name || '';
           } else if (userRole === 'vendor') {

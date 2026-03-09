@@ -402,6 +402,25 @@ def get_profile():
                 user["class_display_name"] = f"{dept} {grade_char}{cname}".strip() or dept or cname
             else:
                 user["class_display_name"] = '-'
+
+            # 取得班導老師名稱（classes_teacher.role = 'classteacher'）
+            user["homeroom_teacher_name"] = ""
+            if user.get("class_id"):
+                try:
+                    cursor.execute("""
+                        SELECT u.name AS teacher_name
+                        FROM classes_teacher ct
+                        JOIN users u ON u.id = ct.teacher_id
+                        WHERE ct.class_id = %s AND ct.role = 'classteacher'
+                        ORDER BY ct.id ASC
+                        LIMIT 1
+                    """, (user["class_id"],))
+                    trow = cursor.fetchone()
+                    if trow and trow.get("teacher_name"):
+                        user["homeroom_teacher_name"] = trow["teacher_name"]
+                except Exception:
+                    # 若班導資訊查詢失敗，不影響其餘個人資料回傳
+                    user["homeroom_teacher_name"] = user.get("homeroom_teacher_name", "")
         else:
             user["class_display_name"] = ""
 
