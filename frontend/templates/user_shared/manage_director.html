@@ -3993,7 +3993,8 @@
         const displayText = escapeHtml(option.displayText);
         
         optionsHtml += `
-          <div style="padding: 10px; margin-bottom: 8px; border: 1px solid #ddd; border-radius: 6px; cursor: pointer; background: #f8f9fa; transition: background 0.2s;"
+          <div class="student-option"
+               style="padding: 10px; margin-bottom: 8px; border: 1px solid #ddd; border-radius: 6px; cursor: pointer; background: #f8f9fa; transition: background 0.2s;"
                onclick="this.style.background='#e3f2fd'; setTimeout(() => { this.closest('.modal').remove(); handleStudentSelection(${companyId}, ${jobId}, ${slotIndex}, '${option.type}', ${option.index}); }, 200);"
                onmouseover="this.style.background='#e3f2fd'"
                onmouseout="this.style.background='#f8f9fa'">
@@ -4008,19 +4009,47 @@
       modal.className = 'modal';
       modal.style.cssText = 'position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 2000; display: flex; align-items: center; justify-content: center;';
       modal.innerHTML = `
-        <div style="background: white; border-radius: 12px; padding: 24px; max-width: 500px; width: 90%; max-height: 80vh; box-shadow: 0 4px 20px rgba(0,0,0,0.3);">
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; border-bottom: 2px solid #e2e8f0; padding-bottom: 12px;">
-            <h3 style="margin: 0; color: var(--color-text);">
+        <div style="background: white; border-radius: 12px; padding: 24px; max-width: 520px; width: 90%; max-height: 80vh; box-shadow: 0 4px 20px rgba(0,0,0,0.3); display: flex; flex-direction: column;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; border-bottom: 2px solid #e2e8f0; padding-bottom: 12px;">
+            <h3 style="margin: 0; color: var(--color-text); font-size: 1.15rem;">
               <i class="fas fa-user-plus" style="margin-right: 8px; color: var(--color-primary);"></i>
               選擇學生填入正取 ${slotIndex}${hasReserves ? '（優先從備取名單選擇）' : ''}
             </h3>
             <button onclick="this.closest('.modal').remove()" style="background: none; border: none; font-size: 24px; cursor: pointer; color: #666; padding: 0; width: 30px; height: 30px; display: flex; align-items: center; justify-content: center;">&times;</button>
           </div>
-          ${optionsHtml}
+          <div style="margin-bottom: 12px;">
+            <input 
+              id="selectStudentSearchInput"
+              type="text" 
+              placeholder="搜尋學生姓名或學號…" 
+              style="width: 100%; padding: 8px 12px; border-radius: 6px; border: 1px solid #e2e8f0; font-size: 0.95rem; outline: none;"
+            />
+          </div>
+          <div id="selectStudentOptionsWrapper" style="flex: 1 1 auto; min-height: 0; overflow-y: auto;">
+            ${optionsHtml}
+          </div>
         </div>
       `;
       
       document.body.appendChild(modal);
+      
+      // 搜尋功能：即時篩選學生按鈕（依姓名或學號）
+      const searchInput = modal.querySelector('#selectStudentSearchInput');
+      if (searchInput) {
+        const normalize = (str) => (str || '').toString().toLowerCase().trim();
+        searchInput.addEventListener('input', (e) => {
+          const keyword = normalize(e.target.value);
+          const buttons = modal.querySelectorAll('.student-option');
+          buttons.forEach(btn => {
+            const text = normalize(btn.textContent);
+            if (!keyword || text.includes(keyword)) {
+              btn.style.display = '';
+            } else {
+              btn.style.display = 'none';
+            }
+          });
+        });
+      }
       
       // 點擊背景關閉
       modal.addEventListener('click', (e) => {
@@ -4268,17 +4297,6 @@
         existingModal.remove();
       }
 
-      // 構建警告訊息
-      let warningHtml = '';
-      if (duplicateStudents && duplicateStudents.length > 0) {
-        warningHtml = `
-          <div class="warning">
-            <i class="fas fa-exclamation-triangle"></i>
-            <strong>注意：</strong>發現 ${duplicateStudents.length} 位重複中選的學生
-          </div>
-        `;
-      }
-
       // 創建彈跳視窗
       const modalOverlay = document.createElement('div');
       modalOverlay.id = 'confirmMatchingModal';
@@ -4293,8 +4311,7 @@
             <button class="confirm-modal-close" onclick="closeConfirmMatchingModal()">&times;</button>
           </div>
           <div class="confirm-modal-body">
-            <p>確定要確認媒合結果嗎？</p>
-            ${warningHtml}
+            <p>已送出媒合排序，確定要送出嗎？</p>
           </div>
           <div class="confirm-modal-footer">
             <button class="confirm-modal-btn confirm-modal-btn-cancel" onclick="closeConfirmMatchingModal()">取消</button>
@@ -4340,13 +4357,63 @@
       }
     }
 
-    // 處理確認媒合結果
+    // 處理確認媒合結果（防止重複點擊）
     async function handleConfirmMatching() {
-      // 關閉彈跳視窗
-      closeConfirmMatchingModal();
+      const modal = document.getElementById('confirmMatchingModal');
+      if (modal) {
+        const btn = modal.querySelector('.confirm-modal-btn-confirm');
+        if (btn) {
+          btn.disabled = true;
+        }
+      }
       
-      // 執行確認邏輯
+      // 關閉彈跳視窗並執行確認邏輯
+      closeConfirmMatchingModal();
       await confirmMatching();
+    }
+
+    // 本學期已送出時的提示彈窗
+    function showAlreadyConfirmedModal() {
+      const existing = document.getElementById('alreadyConfirmedModal');
+      if (existing) {
+        existing.remove();
+      }
+      const overlay = document.createElement('div');
+      overlay.id = 'alreadyConfirmedModal';
+      overlay.className = 'confirm-modal-overlay';
+      overlay.innerHTML = `
+        <div class="confirm-modal">
+          <div class="confirm-modal-header">
+            <h3>提示</h3>
+            <button class="confirm-modal-close" onclick="closeAlreadyConfirmedModal()">&times;</button>
+          </div>
+          <div class="confirm-modal-body">
+            <p>本學期已送出已送出媒合排序。</p>
+          </div>
+          <div class="confirm-modal-footer">
+            <button class="confirm-modal-btn confirm-modal-btn-confirm" onclick="closeAlreadyConfirmedModal()">
+              確定
+            </button>
+          </div>
+        </div>
+      `;
+      document.body.appendChild(overlay);
+      setTimeout(() => {
+        overlay.classList.add('show');
+      }, 10);
+      overlay.addEventListener('click', (e) => {
+        if (e.target === overlay) {
+          closeAlreadyConfirmedModal();
+        }
+      });
+    }
+
+    function closeAlreadyConfirmedModal() {
+      const modal = document.getElementById('alreadyConfirmedModal');
+      if (modal) {
+        modal.classList.remove('show');
+        setTimeout(() => modal.remove(), 200);
+      }
     }
 
     // 切換公司卡片展開/收合
@@ -4833,13 +4900,18 @@
         
         const data = await res.json();
         
-        // 恢復按鈕狀態
-        if (confirmBtn) {
-          confirmBtn.disabled = false;
-          confirmBtn.innerHTML = originalText;
-        }
-        
         if (data.success) {
+          // 成功後：更新按鈕文字，但保留可點擊（之後只顯示提示彈窗，不再送出）
+          if (confirmBtn) {
+            confirmBtn.disabled = false;
+            confirmBtn.innerHTML = '<i class="fas fa-check"></i> 已送出最終媒合結果';
+          }
+          // 將狀態記錄在 localStorage，供之後判斷只顯示提示彈窗
+          try {
+            localStorage.setItem('director_matching_confirmed', 'true');
+          } catch (e) {
+            console.warn('無法寫入 localStorage：', e);
+          }
           // 顯示成功訊息，留在當前頁（主任無科助工作台權限，不跳轉以免被導向登入頁）
           showToast(data.message || '確認成功', 'success');
           // 重新載入本頁資料以更新畫面（不顯示載入中）
@@ -4979,7 +5051,22 @@
       }
       
       if (confirmBtn) {
-        confirmBtn.addEventListener('click', showConfirmMatchingModal);
+        // 按鈕點擊時：若本學期已送出，只顯示提示彈窗；否則顯示確認彈窗並真正送出
+        confirmBtn.addEventListener('click', () => {
+          let alreadyConfirmed = false;
+          try {
+            alreadyConfirmed = localStorage.getItem('director_matching_confirmed') === 'true';
+          } catch (e) {
+            alreadyConfirmed = false;
+          }
+          
+          if (alreadyConfirmed) {
+            // 本學期已送出，僅提示，不再送出
+            showAlreadyConfirmedModal();
+          } else {
+            showConfirmMatchingModal();
+          }
+        });
       }
       
       // 統一的過濾和重新渲染函數
