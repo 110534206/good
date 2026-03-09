@@ -361,7 +361,7 @@
           <p>查看學生的實習公司心得審核狀況與結果。</p>
           <a href="/review_experience">查看結果</a>
         </div>
-        <div class="card">
+        <div class="card" id="teacherRemoveInternCardWrap" style="display: none;">
           <h3>退實習案件管理</h3>
           <p>查看並管理退實習案件。</p>
           <a href="/teacher_remove_intern">查看案件</a>
@@ -382,6 +382,7 @@
     <a href="/interview_schedule">行事曆</a>
     <a href="/admission_results">查看錄取結果</a>
     <a href="/review_experience">審核實習心得</a>
+    <a href="/teacher_remove_intern" id="teacherRemoveInternMenuLink" style="display: none;">退實習確認</a>
   </nav>
 
   <!-- JS 控制開關 -->
@@ -408,6 +409,19 @@
     }
     loadUnreadNotificationCount();
     setInterval(loadUnreadNotificationCount, 30000);
+
+    // 實習學期（1132）開始後才顯示「退實習案件管理」
+    fetch('/semester/api/internship_semester_started', { credentials: 'include' })
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        if (data.success && data.started) {
+          var wrap = document.getElementById('teacherRemoveInternCardWrap');
+          var link = document.getElementById('teacherRemoveInternMenuLink');
+          if (wrap) wrap.style.display = '';
+          if (link) link.style.display = 'block';
+        }
+      })
+      .catch(function() {});
 
     // 檢查班導師身分，顯示切換按鈕（頭像已取消）
     document.addEventListener('DOMContentLoaded', () => {

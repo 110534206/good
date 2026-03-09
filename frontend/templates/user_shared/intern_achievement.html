@@ -601,9 +601,11 @@
 
         const updateContact = (admission) => {
             const blocks = [];
-            if (admission.contact_name) blocks.push(`聯絡人：${admission.contact_name}`);
-            if (admission.contact_email) blocks.push(`Email：${admission.contact_email}`);
-            if (admission.contact_phone) blocks.push(`電話：${admission.contact_phone}`);
+            if (admission) {
+                if (admission.contact_name) blocks.push(`聯絡人：${admission.contact_name}`);
+                if (admission.contact_email) blocks.push(`Email：${admission.contact_email}`);
+                if (admission.contact_phone) blocks.push(`電話：${admission.contact_phone}`);
+            }
             contactBlock.textContent = blocks.length ? blocks.join(" ｜ ") : "";
         };
 
@@ -641,7 +643,7 @@
                 }
 
                 // 顯示實習期間：優先從學期資料表獲取時間（根據學期代碼）
-                if (admission.semester_start_date && admission.semester_end_date) {
+                if (admission && admission.semester_start_date && admission.semester_end_date) {
                     // 格式化日期：將各種日期格式轉換為 YYYY年MM月 格式
                     const formatDateForDisplay = (dateValue) => {
                         if (!dateValue) return '';

@@ -133,6 +133,14 @@ def _serialize_job(row):
         "salary": salary_val,
         "remark": row.get("remark") or "",
         "is_active": bool(row.get("is_active")),
+        # 公司相關欄位（用於編輯時填充表單）
+        "company_intro": row.get("company_intro") or "",
+        "address": row.get("address") or "",
+        "contact": row.get("contact") or "",
+        "contact_title": row.get("contact_title") or "",
+        "email": row.get("email") or "",
+        "phone": row.get("phone") or "",
+        "transport": row.get("transport") or "",
     }
 
 
@@ -168,11 +176,19 @@ def _fetch_job_for_vendor(cursor, job_id, vendor_id, allow_teacher_created=False
         params = (job_id, teacher_id, vendor_id)
     
     # 使用參數化查詢，防止 SQL 注入
+    # 同時獲取職缺和公司相關的欄位，以便編輯時填充表單
     query = f"""
         SELECT
             ij.id, ij.company_id, ic.company_name, ij.title, ij.slots, ij.description,
             ij.period, ij.work_time, ij.salary, ij.remark, ij.is_active,
-            ij.created_by_vendor_id
+            ij.created_by_vendor_id,
+            ic.description AS company_intro,
+            ic.location AS address,
+            ic.contact_person AS contact,
+            ic.contact_title,
+            ic.contact_email AS email,
+            ic.contact_phone AS phone,
+            COALESCE(ic.transport, '') AS transport
         FROM internship_jobs ij
         JOIN internship_companies ic ON ij.company_id = ic.id
         WHERE ij.id = %s AND ic.advisor_user_id = %s AND {created_condition}
@@ -2025,6 +2041,9 @@ def create_position_for_vendor():
     salary = None
     if salary_value not in (None, "", "null"):
         salary = str(salary_value).strip() if salary_value else None
+    
+    # 獲取交通說明（公司級別的資料）
+    transport = (data.get("transport") or "").strip()
 
     is_active = True
     if "is_active" in data:
@@ -2045,6 +2064,8 @@ def create_position_for_vendor():
             return jsonify({"success": False, "message": "無權限操作此公司"}), 403
 
         vendor_id = session["user_id"]
+        
+        # 插入職缺資料（transport 欄位在 internship_companies 表中，不在 internship_jobs 表中）
         cursor.execute(
             """
             INSERT INTO internship_jobs
@@ -2065,6 +2086,14 @@ def create_position_for_vendor():
                 vendor_id,
             ),
         )
+        
+        # 更新公司的交通說明（transport 欄位在 internship_companies 表中）
+        if transport:
+            cursor.execute(
+                "UPDATE internship_companies SET transport = %s WHERE id = %s",
+                (transport, company_id)
+            )
+        
         conn.commit()
         job_row = _fetch_job_for_vendor(cursor, cursor.lastrowid, session["user_id"])
         return jsonify({"success": True, "item": _serialize_job(job_row)})
@@ -2135,6 +2164,9 @@ def update_position_for_vendor(job_id):
     salary = None
     if salary_value not in (None, "", "null"):
         salary = str(salary_value).strip() if salary_value else None
+    
+    # 獲取交通說明（公司級別的資料）
+    transport = (data.get("transport") or "").strip()
 
     try:
         is_active = _to_bool(data.get("is_active", True))
@@ -2153,6 +2185,9 @@ def update_position_for_vendor(job_id):
         if not job_row:
             return jsonify({"success": False, "message": "找不到職缺或無權限編輯"}), 404
 
+        company_id = job_row.get("company_id")
+        
+        # 更新職缺資料（transport 欄位在 internship_companies 表中，不在 internship_jobs 表中）
         cursor.execute(
             """
             UPDATE internship_jobs
@@ -2178,6 +2213,14 @@ def update_position_for_vendor(job_id):
                 job_id,
             ),
         )
+        
+        # 更新公司的交通說明（transport 欄位在 internship_companies 表中）
+        if transport and company_id:
+            cursor.execute(
+                "UPDATE internship_companies SET transport = %s WHERE id = %s",
+                (transport, company_id)
+            )
+        
         conn.commit()
         updated = _fetch_job_for_vendor(cursor, job_id, session["user_id"])
         return jsonify({"success": True, "item": _serialize_job(updated)})
@@ -4319,13 +4362,107 @@ def save_matching_sort():
                 traceback.print_exc()
                 continue
         
+        # 發送通知給指導老師和主任
+        notified_teachers = set()
+        notified_directors = set()
+        
+        # 收集所有相關的指導老師（通過公司找到 advisor_user_id）
+        for company_id in company_ids:
+            cursor.execute("""
+                SELECT DISTINCT advisor_user_id 
+                FROM internship_companies 
+                WHERE id = %s AND advisor_user_id IS NOT NULL
+            """, (company_id,))
+            advisor_rows = cursor.fetchall() or []
+            for row in advisor_rows:
+                advisor_id = row.get('advisor_user_id')
+                if advisor_id:
+                    # 確認是指導老師或主任
+                    cursor.execute("""
+                        SELECT id, role FROM users 
+                        WHERE id = %s AND role IN ('teacher', 'director')
+                    """, (advisor_id,))
+                    user_row = cursor.fetchone()
+                    if user_row:
+                        if user_row.get('role') == 'teacher':
+                            notified_teachers.add(advisor_id)
+                        elif user_row.get('role') == 'director':
+                            notified_directors.add(advisor_id)
+        
+        # 收集所有主任
+        cursor.execute("SELECT id FROM users WHERE role = 'director'")
+        all_directors = cursor.fetchall() or []
+        for director in all_directors:
+            director_id = director.get('id')
+            if director_id:
+                notified_directors.add(director_id)
+        
+        # 獲取廠商名稱
+        vendor_name = profile.get('name', '廠商') if profile else '廠商'
+        
+        # 獲取公司名稱列表
+        company_names = [c.get('company_name', '') for c in companies if c.get('company_name')]
+        company_names_str = '、'.join(company_names[:3])  # 最多顯示3個公司名稱
+        if len(company_names) > 3:
+            company_names_str += f'等{len(company_names)}家公司'
+        
+        # 發送通知給指導老師
+        teacher_title = "廠商媒合排序已送出"
+        teacher_message = f"{vendor_name}已送出{company_names_str}的媒合排序，請前往查看並審核。"
+        teacher_link_url = "/admission/manage_director"
+        
+        # 導入通知函數
+        try:
+            from notification import create_notification
+        except ImportError:
+            print("⚠️ [警告] 無法導入 create_notification 函數")
+            create_notification = None
+        
+        # 發送通知給指導老師
+        for teacher_id in notified_teachers:
+            if create_notification:
+                try:
+                    create_notification(
+                        user_id=teacher_id,
+                        title=teacher_title,
+                        message=teacher_message,
+                        category="matching",
+                        link_url=teacher_link_url
+                    )
+                except Exception as e:
+                    print(f"⚠️ [警告] 為指導老師 {teacher_id} 發送通知失敗: {e}")
+        
+        # 發送通知給主任
+        director_title = "廠商媒合排序已送出"
+        director_message = f"{vendor_name}已送出{company_names_str}的媒合排序，請前往查看並審核。"
+        director_link_url = "/admission/manage_director"
+        
+        for director_id in notified_directors:
+            if create_notification:
+                try:
+                    create_notification(
+                        user_id=director_id,
+                        title=director_title,
+                        message=director_message,
+                        category="matching",
+                        link_url=director_link_url
+                    )
+                except Exception as e:
+                    print(f"⚠️ [警告] 為主任 {director_id} 發送通知失敗: {e}")
+        
+        print(f"✅ [DEBUG] 已通知 {len(notified_teachers)} 位指導老師和 {len(notified_directors)} 位主任")
+        
         conn.commit()
         cursor.close()
         conn.close()
         
         return jsonify({
             "success": True,
-            "message": f"已成功保存 {inserted_count} 筆媒合排序資料"
+            "message": f"已成功保存 {inserted_count} 筆媒合排序資料",
+            "notified": {
+                "teachers": len(notified_teachers),
+                "directors": len(notified_directors)
+            }
         })
         
     except Exception as exc:

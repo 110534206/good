@@ -1594,10 +1594,12 @@ def update_public_company_job(company_id, job_id):
         update_values = []
 
         if 'title' in data:
-            title = data.get('title', '').strip()
-            if title:
-                update_fields.append("title = %s")
-                update_values.append(title)
+            title_value = data.get('title')
+            if title_value is not None:
+                title = str(title_value).strip()
+                if title:
+                    update_fields.append("title = %s")
+                    update_values.append(title)
 
         if 'slots' in data:
             try:
@@ -1610,24 +1612,44 @@ def update_public_company_job(company_id, job_id):
 
         if 'period' in data:
             update_fields.append("period = %s")
-            update_values.append(data.get('period', '').strip() or None)
+            period_value = data.get('period')
+            if period_value is None:
+                update_values.append(None)
+            else:
+                update_values.append(str(period_value).strip() or None)
 
         if 'work_time' in data:
             update_fields.append("work_time = %s")
-            update_values.append(data.get('work_time', '').strip() or None)
+            work_time_value = data.get('work_time')
+            if work_time_value is None:
+                update_values.append(None)
+            else:
+                update_values.append(str(work_time_value).strip() or None)
 
         if 'salary' in data:
             update_fields.append("salary = %s")
-            salary_value = data.get('salary', '').strip()
-            update_values.append(salary_value if salary_value else None)
+            salary_value = data.get('salary')
+            if salary_value is None:
+                update_values.append(None)
+            else:
+                salary_str = str(salary_value).strip()
+                update_values.append(salary_str if salary_str else None)
 
         if 'description' in data:
             update_fields.append("description = %s")
-            update_values.append(data.get('description', '').strip() or None)
+            description_value = data.get('description')
+            if description_value is None:
+                update_values.append(None)
+            else:
+                update_values.append(str(description_value).strip() or None)
 
         if 'remark' in data:
             update_fields.append("remark = %s")
-            update_values.append(data.get('remark', '').strip() or None)
+            remark_value = data.get('remark')
+            if remark_value is None:
+                update_values.append(None)
+            else:
+                update_values.append(str(remark_value).strip() or None)
 
         if not update_fields:
             return jsonify({"success": False, "message": "沒有要更新的欄位"}), 400

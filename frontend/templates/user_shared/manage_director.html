@@ -37,7 +37,7 @@
       border-bottom: none;
       position: sticky;
       top: 0;
-      z-index: 10;
+      z-index: 1100;
       box-shadow: 0 8px 20px rgba(0, 68, 148, 0.35);
     }
 
@@ -1928,6 +1928,9 @@
         <input type="text" id="studentNameFilter" placeholder="輸入學生姓名或學號">
       </div>
       <div class="filter-buttons">
+        <a href="/admission/unadmitted_list" class="btn-unadmitted" title="查看未錄取學生名單">
+          <i class="fas fa-users"></i> 查看未錄取名單
+        </a>
         <button id="exportExcelBtn" class="btn-excel">
           <i class="fas fa-file-excel"></i> 匯出媒合名單
         </button>

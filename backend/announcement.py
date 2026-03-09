@@ -706,18 +706,26 @@ def check_and_push_scheduled_announcements(conn):
     now_tw = get_taiwan_time()
     cursor = conn.cursor(dictionary=True)
     # 尋找：已勾選發布、時間已到、但在通知頁面還沒出現的公告
+    # 注意：需要檢查所有類別的通知（announcement、experience、ranking、resume等），不只是 announcement
     cursor.execute("""
-        SELECT id, title, content FROM announcement 
+        SELECT id, title, content, target_role FROM announcement 
         WHERE is_published = 1 AND start_time <= %s
         AND id NOT IN (
             SELECT DISTINCT CAST(SUBSTRING_INDEX(link_url, '/', -1) AS UNSIGNED) 
             FROM notifications 
-            WHERE category = 'announcement' AND link_url LIKE '/view_announcement/%'
+            WHERE link_url LIKE '/view_announcement/%'
         )
     """, (now_tw,))
     pending = cursor.fetchall() or []
     for ann in pending:
-        push_announcement_notifications(conn, ann['title'], ann['content'], ann['id'])
+        # 根據公告的 target_role 決定發送對象
+        target_roles = None
+        if ann.get('target_role'):
+            # 如果 target_role 是 "all"，則發送給所有人（None）
+            # 否則只發送給指定角色
+            if ann['target_role'] != 'all':
+                target_roles = [ann['target_role']]
+        push_announcement_notifications(conn, ann['title'], ann['content'], ann['id'], target_roles=target_roles)
     cursor.close()
 
 # --- API：儲存作業截止時間 ---
