@@ -2057,6 +2057,7 @@
     let allCompaniesData = [];
     let vendorOriginalCompaniesData = [];  // 廠商原始排序（唯讀對照用），載入時深拷貝
     let directorReadOnly = false;  // 實習學期（如 1132）時主任僅可檢視，不可送出／指派
+    let directorAlreadyConfirmed = false;  // 本學期主任是否已送出最終媒合結果（由後端判斷）
     let duplicateStudents = [];
     let duplicateStudentsPreferences = {};  // 儲存重複學生的完整志願序 {studentId: [{preference_order, company_id, job_id, ...}]}
     let currentCompanyIndex = 0;  // 當前顯示的廠商索引（單公司切換模式）
@@ -2230,13 +2231,19 @@
           allCompaniesData = data.companies || [];  // 主任排序結果（已過濾重複學生）
           vendorOriginalCompaniesData = data.vendor_companies || data.companies || [];  // 廠商原始排序（不過濾，保持原樣）
           directorReadOnly = data.director_read_only === true;  // 實習學期時僅可檢視
+          directorAlreadyConfirmed = data.already_confirmed === true;  // 是否已由主任送出最終媒合結果
           duplicateStudents = data.duplicate_students || [];
           currentCompanyIndex = 0;
           expandedJobId = null;
           directorPage = 1;
           // 實習學期時隱藏「送出最終媒合結果」並顯示唯讀提示
           const confirmBtn = document.getElementById('confirmBtn');
-          if (confirmBtn) confirmBtn.style.display = directorReadOnly ? 'none' : '';
+          if (confirmBtn) {
+            confirmBtn.style.display = directorReadOnly ? 'none' : '';
+            if (directorAlreadyConfirmed) {
+              confirmBtn.innerHTML = '<i class="fas fa-check"></i> 已送出最終媒合結果';
+            }
+          }
           const readOnlyBanner = document.getElementById('directorReadOnlyBanner');
           if (readOnlyBanner) {
             readOnlyBanner.style.display = directorReadOnly ? 'block' : 'none';
@@ -5054,11 +5061,14 @@
       if (confirmBtn) {
         // 按鈕點擊時：若本學期已送出，只顯示提示彈窗；否則顯示確認彈窗並真正送出
         confirmBtn.addEventListener('click', () => {
-          let alreadyConfirmed = false;
-          try {
-            alreadyConfirmed = localStorage.getItem('director_matching_confirmed') === 'true';
-          } catch (e) {
-            alreadyConfirmed = false;
+          let alreadyConfirmed = directorAlreadyConfirmed;
+          if (!alreadyConfirmed) {
+            try {
+              // 兼容舊的 localStorage 判斷（若有）
+              alreadyConfirmed = localStorage.getItem('director_matching_confirmed') === 'true';
+            } catch (e) {
+              alreadyConfirmed = false;
+            }
           }
           
           if (alreadyConfirmed) {

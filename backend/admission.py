@@ -2134,7 +2134,34 @@ def director_matching_results():
             ar = cursor.fetchone()
             active_semester_code = (ar.get('code') or '') if ar else ''
         director_read_only = bool(active_semester_code and len(active_semester_code) >= 4 and active_semester_code[-1] == '2')
-        
+
+        # 檢查本學期是否已產生最終媒合結果（matching_results），供前端控制「送出最終媒合結果」按鈕行為
+        already_confirmed = False
+        try:
+            cursor.execute("""
+                SELECT COLUMN_NAME
+                FROM information_schema.COLUMNS
+                WHERE TABLE_SCHEMA = DATABASE()
+                  AND TABLE_NAME = 'matching_results'
+                  AND COLUMN_NAME = 'semester_id'
+            """)
+            has_mr_semester_id = cursor.fetchone() is not None
+            cursor.fetchall()
+
+            target_semester_id = active_semester_id or current_semester_id
+            if has_mr_semester_id and target_semester_id:
+                cursor.execute(
+                    "SELECT COUNT(*) AS cnt FROM matching_results WHERE semester_id = %s",
+                    (target_semester_id,),
+                )
+            else:
+                # 舊資料庫沒有 semester_id 時，只要表內已有資料就視為已送出
+                cursor.execute("SELECT COUNT(*) AS cnt FROM matching_results")
+            mr_row = cursor.fetchone() or {}
+            already_confirmed = bool(mr_row.get("cnt") or 0)
+        except Exception as check_err:
+            print(f"⚠️ 檢查 matching_results 是否已存在時發生錯誤（director_matching_results）: {check_err}")
+
         # 優先從 resume_applications 讀取廠商的媒合排序資料
         # 如果 manage_director 表有資料，則合併兩者的資料
         # 這樣即使 manage_director 表為空，也能顯示廠商的排序結果
@@ -2740,7 +2767,8 @@ def director_matching_results():
             "vendor_companies": companies_list_vendor,  # 廠商原始排序（不過濾，保持原樣）
             "duplicate_students": list(duplicate_students.keys()),
             "total_matches": len(formatted_results),
-            "director_read_only": director_read_only  # 實習學期（如 1132）時主任僅可檢視
+            "director_read_only": director_read_only,  # 實習學期（如 1132）時主任僅可檢視
+            "already_confirmed": already_confirmed,    # 是否已產生最終媒合結果
         })
     
     except Exception as e:
@@ -4059,7 +4087,38 @@ def director_confirm_matching():
         current_semester_code = get_current_semester_code(cursor)
         semester_prefix = f"{current_semester_code}學期" if current_semester_code else "本學期"
         
-        # 0. 將所有 Pending 狀態的記錄更新為 Approved（主任確認後，所有待定的記錄都變為已確認）
+        # 0. 檢查本學期是否已經產生最終媒合結果（寫入 matching_results）
+        #    若已產生，則不允許主任重複送出，避免科助端結果被覆蓋
+        try:
+            cursor.execute("""
+                SELECT COLUMN_NAME
+                FROM information_schema.COLUMNS
+                WHERE TABLE_SCHEMA = DATABASE()
+                  AND TABLE_NAME = 'matching_results'
+                  AND COLUMN_NAME = 'semester_id'
+            """)
+            has_mr_semester_id = cursor.fetchone() is not None
+            cursor.fetchall()
+            
+            if has_mr_semester_id:
+                cursor.execute(
+                    "SELECT COUNT(*) AS cnt FROM matching_results WHERE semester_id = %s",
+                    (current_semester_id,),
+                )
+            else:
+                # 舊資料庫沒有 semester_id 欄位時，只要表內已有資料就視為已送出
+                cursor.execute("SELECT COUNT(*) AS cnt FROM matching_results")
+            row_cnt = cursor.fetchone() or {}
+            if (row_cnt.get("cnt") or 0) > 0:
+                msg = f"{semester_prefix}媒合結果已送出，無法重複送出。"
+                print(f"⚠️ 主任重複送出媒合結果被阻擋：{msg}")
+                return jsonify({"success": False, "message": msg}), 400
+        except Exception as check_err:
+            # 若檢查發生錯誤，不影響後續流程，但記錄日誌以便追蹤
+            print(f"⚠️ 檢查 matching_results 是否已存在時發生錯誤：{check_err}")
+        
+        # 0.1 將所有 Pending 狀態的記錄更新為 Approved（主任確認後，所有待定的記錄都變為已確認）
+        #    但「備取」(Backup) 資料維持 Pending，不視為主任已最終確認
         # md.preference_id 引用的是 student_job_applications.id（即 resume_applications.application_id）
         # 需要通過 student_job_applications 來 JOIN student_preferences
         cursor.execute("""
@@ -4072,6 +4131,7 @@ def director_confirm_matching():
             SET md.director_decision = 'Approved',
                 md.updated_at = CURRENT_TIMESTAMP
             WHERE md.director_decision = 'Pending'
+              AND (md.original_type IS NULL OR md.original_type = 'Regular')
         """, (current_semester_id,))
         updated_count = cursor.rowcount
         print(f"✅ 主任確認：已將 {updated_count} 筆 Pending 記錄更新為 Approved")
@@ -4108,7 +4168,7 @@ def director_confirm_matching():
                     CASE WHEN ra.is_reserve = 0 THEN 'Regular' ELSE 'Backup' END AS original_type,
                     ra.slot_index AS original_rank,
                     0 AS is_conflict,
-                    'Approved' AS director_decision,
+                    CASE WHEN ra.is_reserve = 0 THEN 'Approved' ELSE 'Pending' END AS director_decision,
                     ra.slot_index AS final_rank,
                     0 AS is_adjusted,
                     CURRENT_TIMESTAMP AS updated_at
@@ -4143,7 +4203,7 @@ def director_confirm_matching():
                     CASE WHEN ra.is_reserve = 0 THEN 'Regular' ELSE 'Backup' END AS original_type,
                     ra.slot_index AS original_rank,
                     0 AS is_conflict,
-                    'Approved' AS director_decision,
+                    CASE WHEN ra.is_reserve = 0 THEN 'Approved' ELSE 'Pending' END AS director_decision,
                     ra.slot_index AS final_rank,
                     0 AS is_adjusted,
                     CURRENT_TIMESTAMP AS updated_at
@@ -4204,6 +4264,7 @@ def director_confirm_matching():
             LEFT JOIN internship_jobs ij ON sja.job_id = ij.id
             LEFT JOIN internship_companies ic ON sja.company_id = ic.id
             WHERE md.director_decision = 'Approved'
+              AND (md.original_type IS NULL OR md.original_type = 'Regular')
         """, (current_semester_id, current_semester_id))
         match_results = cursor.fetchall() or []
         
