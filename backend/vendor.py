@@ -4200,10 +4200,47 @@ def save_matching_sort():
                         print(f"    ⚠️ 跳過：公司ID {company_id} 不屬於該廠商（允許的公司ID：{company_ids}）")
                         continue
             
+            # 如果缺少 preference_id，嘗試從 student_preferences 裡推回來（以 student_id + job_id (+ company_id) 為條件）
+            if not preference_id and student_id and job_id:
+                try:
+                    # 若尚未有 company_id，先依 job_id 取得
+                    if not company_id:
+                        cursor.execute("""
+                            SELECT company_id FROM internship_jobs WHERE id = %s
+                        """, (job_id,))
+                        job_row = cursor.fetchone()
+                        cursor.fetchall()
+                        if job_row:
+                            company_id = job_row.get("company_id")
+
+                    # 依 student_id + job_id (+ company_id) 找出對應的志願序（僅取一筆最新 approved）
+                    if company_id:
+                        cursor.execute("""
+                            SELECT id FROM student_preferences
+                            WHERE student_id = %s AND job_id = %s AND company_id = %s AND status = 'approved'
+                            ORDER BY id DESC
+                            LIMIT 1
+                        """, (student_id, job_id, company_id))
+                    else:
+                        cursor.execute("""
+                            SELECT id FROM student_preferences
+                            WHERE student_id = %s AND job_id = %s AND status = 'approved'
+                            ORDER BY id DESC
+                            LIMIT 1
+                        """, (student_id, job_id))
+                    pref = cursor.fetchone()
+                    cursor.fetchall()
+                    if pref and pref.get("id"):
+                        preference_id = pref["id"]
+                        print(f"    🔄 自動補上 preference_id={preference_id} (student_id={student_id}, job_id={job_id}, company_id={company_id})")
+                except Exception as pref_err:
+                    print(f"    ⚠️ 嘗試自動推回 preference_id 失敗: {pref_err}")
+                    traceback.print_exc()
+
             if not preference_id:
                 print(f"    ⚠️ 跳過學生 {student_name}：缺少 preference_id")
                 continue
-            
+
             if not student_id:
                 print(f"    ⚠️ 跳過 preference_id {preference_id}：缺少 student_id")
                 continue
@@ -4344,15 +4381,15 @@ def save_matching_sort():
                             cursor.execute("""
                                 INSERT INTO manage_director
                                 (semester_id, vendor_id, student_id, preference_id, original_type, original_rank, 
-                                 is_conflict, director_decision, final_rank, is_adjusted, created_at, updated_at)
-                                VALUES (%s, %s, %s, %s, %s, %s, 0, 'Pending', %s, 0, NOW(), NOW())
+                                 is_conflict, director_decision, final_rank, is_adjusted, updated_at)
+                                VALUES (%s, %s, %s, %s, %s, %s, 0, 'Pending', %s, 0, NOW())
                             """, (current_semester_id, company_id, student_id, application_id, original_type, original_rank, original_rank))
                         else:
                             cursor.execute("""
                                 INSERT INTO manage_director
                                 (vendor_id, student_id, preference_id, original_type, original_rank, 
-                                 is_conflict, director_decision, final_rank, is_adjusted, created_at, updated_at)
-                                VALUES (%s, %s, %s, %s, %s, 0, 'Pending', %s, 0, NOW(), NOW())
+                                 is_conflict, director_decision, final_rank, is_adjusted, updated_at)
+                                VALUES (%s, %s, %s, %s, %s, 0, 'Pending', %s, 0, NOW())
                             """, (company_id, student_id, application_id, original_type, original_rank, original_rank))
                         print(f"    ✅ 創建 manage_director: preference_id={application_id}, student_id={student_id}, original_rank={original_rank}, original_type={original_type}")
                 except Exception as md_error:

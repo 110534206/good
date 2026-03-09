@@ -833,10 +833,14 @@
       const classSelect = document.getElementById("classFilter");
       classSelect.innerHTML = `<option value="">所有班級</option>`;
       const classSet = new Set();
-      data.forEach(r => { if(r.className) classSet.add(r.className); });
-      classSet.add("忠班"); classSet.add("孝班");
+      // 廠商模式：只顯示實際有履歷的班級（有用到的才出現在選單）
+      data.forEach(r => {
+        if (r.className && r.className.trim()) {
+          classSet.add(r.className.trim());
+        }
+      });
       Array.from(classSet).sort().forEach(c => {
-         if(c !== '五孝') classSelect.innerHTML += `<option value="${c}">${c}</option>`;
+        classSelect.innerHTML += `<option value="${c}">${c}</option>`;
       });
 
       const companyNameSelect = document.getElementById("companyNameFilter");
@@ -2259,7 +2263,8 @@
         
         if (resumeForThisJob) {
           const interviewStatus = resumeForThisJob.interview_status || 'none';
-          isJobScheduled = interviewStatus === 'scheduled' || interviewStatus === 'finished';
+          // 只有已面試完成的學生（finished）才視為「已面試」，在新增排程時設為唯讀
+          isJobScheduled = interviewStatus === 'finished';
         }
         
         // 方法2: 從 allVendorSchedules 中檢查該職缺是否已被安排（如果排程數據包含職缺信息）
@@ -2302,10 +2307,10 @@
           }
         }
         
-        // 只有該職缺被安排了面試才設為唯讀，且只在新增模式下
-        // 在編輯模式下，如果該學生已經在當前編輯的排程中，則不設為唯讀（因為這是編輯現有排程）
+        // 只有該職缺已完成面試才設為唯讀
+        // 在編輯模式下，如果該學生已經在「當前編輯的排程」中，則可操作；否則維持唯讀
         const isInCurrentSchedule = isEditMode && currentScheduleStudents.includes(String(item.studentId));
-        const isDisabled = !isEditMode && isJobScheduled && !isInCurrentSchedule;
+        const isDisabled = isJobScheduled && !isInCurrentSchedule;
         
         // 獲取面試日期和時間信息（用於顯示）
         let interviewDateDisplay = null;
@@ -2845,6 +2850,8 @@
                   alert(`錯誤：學生 ${resume.name || resume.student_name} 缺少 student_id`);
                   return;
                 }
+                const preferenceId = resume.preference_id || resume.preferenceId || null;
+                const preferenceOrder = resume.preference_order || resume.preferenceOrder || null;
                 selectedStudents.push({
                   slot_index: slotIndex + 1,
                   job_title: jobData.job_title,
@@ -2854,8 +2861,8 @@
                   student_number: resume.username || resume.student_number,
                   company_name: resume.company_name,
                   job_title_display: resume.job_title || resume.jobTitle,
-                  preference_id: resume.preference_id,
-                  preference_order: resume.preference_order || resume.preferenceOrder,
+                  preference_id: preferenceId,
+                  preference_order: preferenceOrder,
                   is_reserve: false
                 });
               }
@@ -2877,6 +2884,8 @@
                   alert(`錯誤：學生 ${resume.name || resume.student_name} 缺少 student_id`);
                   return;
                 }
+                const preferenceId = resume.preference_id || resume.preferenceId || null;
+                const preferenceOrder = resume.preference_order || resume.preferenceOrder || null;
                 selectedStudents.push({
                   slot_index: null,
                   job_title: jobData.job_title,
@@ -2886,8 +2895,8 @@
                   student_number: resume.username || resume.student_number,
                   company_name: resume.company_name,
                   job_title_display: resume.job_title || resume.jobTitle,
-                  preference_id: resume.preference_id,
-                  preference_order: resume.preference_order || resume.preferenceOrder,
+                  preference_id: preferenceId,
+                  preference_order: preferenceOrder,
                   is_reserve: true
                 });
               }
