@@ -25,24 +25,25 @@
         }
 
         header {
-            background: linear-gradient(135deg, #0454a3 0%, #034080 100%);
-            color: white;
-            padding: 1.5rem 2rem;
-            text-align: center;
-            font-size: 1.5rem;
-            box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15);
             position: fixed;
             top: 0;
             left: 0;
             right: 0;
             z-index: 1000;
+            background: #0454a3;
+            color: white;
+            padding: 1rem 2rem;
+            text-align: center;
+            font-size: 1.5rem;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
         }
 
         /* 三條線選單按鈕樣式 */
         .top-bar-left {
-            position: fixed;
-            top: 1.8rem;
-            left: 10rem;
+            position: absolute;
+            top: 50%;
+            left: 2rem;
+            transform: translateY(-50%);
             z-index: 1100;
         }
 
@@ -361,12 +362,14 @@
 </head>
 
 <body>
-    <header>缺勤預設學期範圍設定</header>
-    <div class="top-bar-left">
-        <div id="menu-btn" title="選單" role="button" tabindex="0">
-            <span></span><span></span><span></span>
+    <header>
+        缺勤預設學期範圍設定
+        <div class="top-bar-left">
+            <div id="menu-btn" title="選單" role="button" tabindex="0">
+                <span></span><span></span><span></span>
+            </div>
         </div>
-    </div>
+    </header>
 
     <!-- 側邊選單 -->
     <nav id="side-menu">
