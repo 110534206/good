@@ -36,13 +36,15 @@
       padding: 1rem 2rem;
       text-align: center;
       font-size: 1.5rem;
+      position: relative;
     }
 
     /* 三條線選單按鈕樣式 */
     .top-bar-left {
-      position: fixed;
-      top: 1rem;
+      position: absolute;
+      top: 50%;
       left: 1rem;
+      transform: translateY(-50%);
       z-index: 1100;
     }
 
@@ -111,6 +113,7 @@
 
     #close-btn {
       font-size: 1.5rem;
+      font-weight: bold;
       background: none;
       border: none;
       color: white;
@@ -609,12 +612,14 @@
 </head>
 
 <body>
-  <header>媒合結果確認</header>
-  <div class="top-bar-left">
-    <div id="menu-btn" title="選單" role="button" tabindex="0">
-      <span></span><span></span><span></span>
+  <header>
+    <div class="top-bar-left">
+      <div id="menu-btn" title="選單" role="button" tabindex="0">
+        <span></span><span></span><span></span>
+      </div>
     </div>
-  </div>
+    媒合結果確認
+  </header>
 
   <!-- 側邊選單 -->
   <nav id="side-menu" aria-hidden="true" role="navigation" aria-label="功能選單">
