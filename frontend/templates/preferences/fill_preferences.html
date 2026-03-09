@@ -326,8 +326,8 @@
                 </div>
                 <div class="row g-3">
                     <div class="col-md-6">
-                        <label class="form-label"><i class="bi bi-building me-1"></i> 選擇公司</label>
-                        <select class="form-select company-select" required
+                        <label class="form-label"><i class="bi bi-building me-1"></i> 選擇公司（可留白）</label>
+                        <select class="form-select company-select"
                             data-initial-company="{{ submitted.get(rank, {}).company_id or '' }}">
                             <option value="">-- 請選擇公司 --</option>
                             {% for company in companies %}
@@ -342,8 +342,8 @@
                         </button>
                     </div>
                     <div class="col-md-6">
-                        <label class="form-label"><i class="bi bi-briefcase me-1"></i> 選擇職缺</label>
-                        <select class="form-select job-select" required
+                        <label class="form-label"><i class="bi bi-briefcase me-1"></i> 選擇職缺（可留白）</label>
+                        <select class="form-select job-select"
                             data-initial-job="{{ submitted.get(rank, {}).job_id or '' }}">
                             <option value="">
                                 {% if submitted.get(rank, {}).company_id %}-- 載入中... --{% else %}-- 請先選擇公司
