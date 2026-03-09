@@ -2850,6 +2850,8 @@
                   alert(`錯誤：學生 ${resume.name || resume.student_name} 缺少 student_id`);
                   return;
                 }
+                const preferenceId = resume.preference_id || resume.preferenceId || null;
+                const preferenceOrder = resume.preference_order || resume.preferenceOrder || null;
                 selectedStudents.push({
                   slot_index: slotIndex + 1,
                   job_title: jobData.job_title,
@@ -2859,8 +2861,8 @@
                   student_number: resume.username || resume.student_number,
                   company_name: resume.company_name,
                   job_title_display: resume.job_title || resume.jobTitle,
-                  preference_id: resume.preference_id,
-                  preference_order: resume.preference_order || resume.preferenceOrder,
+                  preference_id: preferenceId,
+                  preference_order: preferenceOrder,
                   is_reserve: false
                 });
               }
@@ -2882,6 +2884,8 @@
                   alert(`錯誤：學生 ${resume.name || resume.student_name} 缺少 student_id`);
                   return;
                 }
+                const preferenceId = resume.preference_id || resume.preferenceId || null;
+                const preferenceOrder = resume.preference_order || resume.preferenceOrder || null;
                 selectedStudents.push({
                   slot_index: null,
                   job_title: jobData.job_title,
@@ -2891,8 +2895,8 @@
                   student_number: resume.username || resume.student_number,
                   company_name: resume.company_name,
                   job_title_display: resume.job_title || resume.jobTitle,
-                  preference_id: resume.preference_id,
-                  preference_order: resume.preference_order || resume.preferenceOrder,
+                  preference_id: preferenceId,
+                  preference_order: preferenceOrder,
                   is_reserve: true
                 });
               }
