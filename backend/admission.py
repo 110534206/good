@@ -9,6 +9,10 @@ from openpyxl.utils import get_column_letter
 import io
 import traceback
 import re
+try:
+    from mysql.connector.errors import ProgrammingError as MySQL_ProgrammingError
+except ImportError:
+    MySQL_ProgrammingError = None
 
 admission_bp = Blueprint("admission_bp", __name__, url_prefix="/admission")
 
@@ -4539,7 +4543,14 @@ def ta_confirm_matching():
         traceback.print_exc()
         if conn:
             conn.rollback()
-        return jsonify({"success": False, "message": f"確認失敗: {str(e)}"}), 500
+        err_msg = str(e)
+        # 1146: 表不存在。若錯誤提到 internship_offers，表示 DB 的 VIEW/TRIGGER 仍引用舊表，應改用 matching_results
+        if MySQL_ProgrammingError and isinstance(e, MySQL_ProgrammingError) and "1146" in err_msg and "internship_offers" in err_msg:
+            return jsonify({
+                "success": False,
+                "message": "資料庫設定錯誤：請使用 matching_results 表。若 matching_results 為 VIEW，請改為以 matching_results 實體表為來源或聯絡管理員檢查。"
+            }), 500
+        return jsonify({"success": False, "message": f"確認失敗: {err_msg}"}), 500
     finally:
         cursor.close()
         conn.close()
