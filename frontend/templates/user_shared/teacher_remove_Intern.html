@@ -224,7 +224,33 @@
       gap: 16px;
       margin-bottom: 16px;
     }
+    .attachment-header-left {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 8px;
+    }
     .attachment-block-header h3 { margin-bottom: 4px; }
+    .attachment-select-all-wrap {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      cursor: pointer;
+      font-size: 0.95rem;
+      color: #334155;
+      user-select: none;
+    }
+    .attachment-select-all-wrap input[type="checkbox"] {
+      width: 18px;
+      height: 18px;
+      cursor: pointer;
+    }
+    .btn-download-all {
+      display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 4px;
+      border: 1px solid #2563eb; background: #fff; color: #2563eb; font-size: 0.8rem; font-weight: 600;
+      cursor: pointer; flex-shrink: 0;
+    }
+    .btn-download-all:hover { background: #2563eb; color: #fff; border-color: #2563eb; }
     .attachment-subtitle {
       font-size: 0.9rem;
       color: #64748b;
@@ -255,19 +281,33 @@
       color: #94a3b8;
       margin-left: 4px;
     }
+    .attachment-check-wrap {
+      flex-shrink: 0;
+      display: inline-flex;
+      align-items: center;
+      padding-right: 10px;
+    }
+    .attachment-check-wrap input[type="checkbox"] {
+      width: 18px;
+      height: 18px;
+      cursor: pointer;
+    }
+    .attachment-links li.attachment-item-image {
+      display: flex;
+      flex-direction: row;
+      align-items: flex-start;
+      gap: 12px;
+    }
     .attachment-file-row {
       display: flex;
       align-items: center;
-      justify-content: space-between;
       gap: 12px;
       width: 100%;
     }
-    .attachment-file-row .file-info { display: flex; align-items: center; gap: 10px; min-width: 0; }
+    .attachment-file-row .file-info { display: flex; align-items: center; gap: 10px; min-width: 0; flex: 1; }
     .attachment-file-row .file-info a { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .attachment-links { list-style: none; padding: 0; margin: 0; }
     .attachment-links li.attachment-item-image {
-      flex-direction: column;
-      align-items: stretch;
       margin-bottom: 20px;
       padding: 0;
       background: transparent;
@@ -490,10 +530,16 @@
 
       <div class="detail-block attachment-card" id="detailAttachmentsBlock" style="display: none;">
         <div class="attachment-block-header">
-          <div>
+          <div class="attachment-header-left">
             <h3 class="attachment-title">廠商佐證 (圖片/檔案)</h3>
+            <label class="attachment-select-all-wrap">
+              <input type="checkbox" id="attachmentSelectAll" aria-label="全選">
+              <span>全選</span>
+            </label>
           </div>
+          <button type="button" id="downloadAllAttachmentsBtn" class="btn-download-all" title="下載已選佐證"><i class="bi bi-download"></i> 下載</button>
         </div>
+        <div id="attachmentDownloadHint" class="alert alert-danger attachment-download-hint" role="alert" style="display: none; margin-top: 10px;"></div>
         <ul id="detailAttachmentsList" class="attachment-links"></ul>
       </div>
       <!-- 圖片即時預覽彈窗 -->
@@ -570,6 +616,8 @@
         successMessage.classList.remove('show');
         errorMessage.classList.remove('show');
         if (meetingNotesErrorEl) { meetingNotesErrorEl.style.display = 'none'; meetingNotesErrorEl.textContent = ''; }
+        var attachmentHint = document.getElementById('attachmentDownloadHint');
+        if (attachmentHint) { attachmentHint.style.display = 'none'; attachmentHint.textContent = ''; }
       }
       function showMeetingNotesError(msg) {
         hideMessages();
@@ -665,28 +713,46 @@
                 var rawUrl = (a.url || '').replace(/"/g, '&quot;');
                 if (isImg) {
                   images.push('<li class="attachment-item-image">' +
+                    '<span class="attachment-check-wrap"><input type="checkbox" class="attachment-download-checkbox" data-download-url="' + url + '" aria-label="勾選下載"></span>' +
                     '<div class="attachment-img-card">' +
                     '<div class="attachment-img-wrap" data-preview-url="' + url + '" role="button" tabindex="0" title="點擊查看全圖">' +
                     '<img src="' + rawUrl + '" alt="" loading="lazy">' +
                     '</div>' +
                     '<div class="attachment-img-caption">' +
                     '<a href="' + url + '" target="_blank" rel="noopener" class="caption-filename" data-preview="image" data-preview-url="' + url + '">' + escapeHtml(text) + '</a>' +
-                    '<a href="' + url + '" download class="attachment-img-download" title="下載圖片"><i class="bi bi-download"></i>下載</a>' +
                     '</div></div></li>');
                 } else {
-                  var ext = (a.original_filename || '').split('.').pop().toLowerCase();
-                  var iconClass = 'file-type-icon other';
-                  var iconBi = 'bi-file-earmark';
-                  if (ext === 'pdf') { iconClass = 'file-type-icon pdf'; iconBi = 'bi-file-earmark-pdf'; }
-                  else if (ext === 'xls' || ext === 'xlsx') { iconClass = 'file-type-icon excel'; iconBi = 'bi-file-earmark-excel'; }
                   var sizeHtml = (a.file_size ? ' <span class="attachment-file-size">(' + escapeHtml(a.file_size) + ')</span>' : '');
                   fileRows.push('<div class="attachment-file-row">' +
-                    '<div class="file-info"><span class="' + iconClass + '" aria-hidden="true"><i class="bi ' + iconBi + '"></i></span> <a href="' + url + '" target="_blank" rel="noopener">' + escapeHtml(text) + '</a>' + sizeHtml + '</div>' +
-                    '<a href="' + url + '" target="_blank" rel="noopener" download class="attachment-download-btn"><i class="bi bi-download"></i>下載檔案</a></div>');
+                    '<span class="attachment-check-wrap"><input type="checkbox" class="attachment-download-checkbox" data-download-url="' + url + '" aria-label="勾選下載"></span>' +
+                    '<div class="file-info"><a href="' + url + '" target="_blank" rel="noopener">' + escapeHtml(text) + '</a>' + sizeHtml + '</div>' +
+                    '</div>');
                 }
               });
               attList.innerHTML = images.join('') + (fileRows.length ? '<li class="attachment-item-file"><div class="attachment-files-section">' + fileRows.join('') + '</div></li>' : '');
               attBlock.style.display = 'block';
+
+              // 全選框：預設全選，勾選/取消全選會同步所有項目
+              var selectAllCb = document.getElementById('attachmentSelectAll');
+              var itemCheckboxes = attList.querySelectorAll('.attachment-download-checkbox');
+              if (selectAllCb) {
+                selectAllCb.checked = true;
+                itemCheckboxes.forEach(function (cb) { cb.checked = true; });
+                selectAllCb.onchange = function () {
+                  var v = selectAllCb.checked;
+                  attList.querySelectorAll('.attachment-download-checkbox').forEach(function (cb) { cb.checked = v; });
+                  var h = document.getElementById('attachmentDownloadHint'); if (h) h.style.display = 'none';
+                };
+                itemCheckboxes.forEach(function (cb) {
+                  cb.addEventListener('change', function () {
+                    var all = attList.querySelectorAll('.attachment-download-checkbox');
+                    var checked = attList.querySelectorAll('.attachment-download-checkbox:checked');
+                    selectAllCb.checked = (all.length > 0 && all.length === checked.length);
+                    var h = document.getElementById('attachmentDownloadHint'); if (h) h.style.display = 'none';
+                  });
+                });
+              }
+
               // 圖片點擊展開即時預覽
               var previewBackdrop = document.getElementById('previewBackdrop');
               var previewImg = document.getElementById('previewImg');
@@ -709,6 +775,44 @@
                 previewBackdrop.onclick = function (ev) { if (ev.target === previewBackdrop) { previewBackdrop.classList.remove('show'); previewBackdrop.setAttribute('aria-hidden', 'true'); } };
               }
             } else if (attBlock) attBlock.style.display = 'none';
+
+            // 一鍵下載：綁定一次即可，每次點擊依目前列表下載
+            var downloadAllBtn = document.getElementById('downloadAllAttachmentsBtn');
+            if (downloadAllBtn && !downloadAllBtn._bound) {
+              downloadAllBtn._bound = true;
+              downloadAllBtn.addEventListener('click', function () {
+                var list = document.getElementById('detailAttachmentsList');
+                if (!list) return;
+                var checked = list.querySelectorAll('.attachment-download-checkbox:checked');
+                if (checked.length === 0) {
+                  hideMessages();
+                  var hintEl = document.getElementById('attachmentDownloadHint');
+                  if (hintEl) {
+                    hintEl.textContent = '請至少勾選一個項目再下載。';
+                    hintEl.style.display = 'block';
+                  }
+                  return;
+                }
+                var hintEl = document.getElementById('attachmentDownloadHint');
+                if (hintEl) hintEl.style.display = 'none';
+                var urls = [];
+                checked.forEach(function (cb) {
+                  var h = cb.getAttribute('data-download-url');
+                  if (h) urls.push(h.replace(/&amp;/g, '&'));
+                });
+                urls.forEach(function (url, i) {
+                  setTimeout(function () {
+                    var a = document.createElement('a');
+                    a.href = url;
+                    a.download = '';
+                    a.target = '_blank';
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                  }, 200 * i);
+                });
+              });
+            }
 
             var isConfirmed = (d.status || '') === 'confirmed';
             confirmBtn.disabled = isConfirmed;
