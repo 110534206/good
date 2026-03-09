@@ -2126,6 +2126,14 @@ def director_matching_results():
         cursor.execute("SELECT code FROM semesters WHERE id = %s", (current_semester_id,))
         row = cursor.fetchone()
         current_semester_code = (row.get('code') or '') if row else ''
+        # 主任切換到實習學期（如 1132）時僅可檢視，不可操作（送出、指派等）
+        active_semester_id = get_current_semester_id(cursor)
+        active_semester_code = ''
+        if active_semester_id:
+            cursor.execute("SELECT code FROM semesters WHERE id = %s", (active_semester_id,))
+            ar = cursor.fetchone()
+            active_semester_code = (ar.get('code') or '') if ar else ''
+        director_read_only = bool(active_semester_code and len(active_semester_code) >= 4 and active_semester_code[-1] == '2')
         
         # 優先從 resume_applications 讀取廠商的媒合排序資料
         # 如果 manage_director 表有資料，則合併兩者的資料
@@ -2731,7 +2739,8 @@ def director_matching_results():
             "companies": companies_list,  # 主任排序結果（已過濾重複學生）
             "vendor_companies": companies_list_vendor,  # 廠商原始排序（不過濾，保持原樣）
             "duplicate_students": list(duplicate_students.keys()),
-            "total_matches": len(formatted_results)
+            "total_matches": len(formatted_results),
+            "director_read_only": director_read_only  # 實習學期（如 1132）時主任僅可檢視
         })
     
     except Exception as e:
@@ -4794,12 +4803,18 @@ def second_round_status():
         show_on_director_home = (flow_semester_id == current_semester_id) or is_enabled
         # 僅在流程學期（1131）允許科助切換開關；1132 時按鈕唯讀
         allow_toggle = (flow_semester_id == current_semester_id)
+        # 主任切換到實習學期（如 1132）時僅可檢視二輪名單，不可指派
+        cursor.execute("SELECT code FROM semesters WHERE id = %s", (current_semester_id,))
+        code_row = cursor.fetchone()
+        current_semester_code = (code_row.get('code') or '') if code_row else ''
+        director_read_only = bool(current_semester_code and len(current_semester_code) >= 4 and current_semester_code[-1] == '2')
         return jsonify({
             "success": True,
             "is_enabled": is_enabled,
             "show_on_director_home": show_on_director_home,
             "allow_toggle": allow_toggle,
-            "semester_id": current_semester_id
+            "semester_id": current_semester_id,
+            "director_read_only": director_read_only
         })
     finally:
         cursor.close()

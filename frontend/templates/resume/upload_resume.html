@@ -448,15 +448,17 @@
 
             <div class="row g-3">
               <div class="col-md-4">
-                <label class="form-label">姓名</label>
+                <label class="form-label">姓名 <span class="text-danger">*</span></label>
                 <input type="text" name="name" class="form-control" required />
               </div>
               <div class="col-md-4">
-                <label class="form-label">出生日期</label>
-                <input type="date" name="birth_date" class="form-control" required />
+                <label class="form-label">出生日期 <span class="text-danger">*</span></label>
+                <input type="date" name="birth_date" id="birth_date_input" class="form-control" required
+                       max="" title="請選擇過去日期，且須為就讀高中年級可有的出生日期（至少 15 歲，不可選今天或未來）。" />
+                <div class="invalid-feedback">請選擇過去的出生日期（至少 15 歲，不可選今天或未來）。</div>
               </div>
               <div class="col-md-4">
-                <label for="gender" class="form-label">性別</label>
+                <label for="gender" class="form-label">性別 <span class="text-danger">*</span></label>
                 <select class="form-select" id="gender" name="gender" required>
                   <option value="">選擇...</option>
                   <option value="男">男</option>
@@ -465,27 +467,32 @@
                 </select>
               </div>
               <div class="col-md-6">
-                <label class="form-label">聯絡電話</label>
-                <input type="tel" name="phone" class="form-control" required />
+                <label class="form-label">聯絡電話 <span class="text-danger">*</span></label>
+                <input type="tel" name="phone" id="phone_input" class="form-control" required
+                       pattern="0[0-9]-?[0-9]{7,8}"
+                       placeholder="09XXXXXXXX 或 0X-XXXXXXXX"
+                       title="請輸入 9～10 碼有效電話（例如：0912345678 或 02-12345678）"
+                       maxlength="11" />
+                <div class="invalid-feedback">請輸入有效的電話號碼（9～10 碼，開頭為 0，例如：0912345678）。</div>
               </div>
               <div class="col-md-6">
-                <label class="form-label">電子信箱</label>
+                <label class="form-label">電子信箱 <span class="text-danger">*</span></label>
                 <input type="email" name="email" class="form-control" required />
               </div>
               <div class="col-12">
-                <label class="form-label">地址</label>
+                <label class="form-label">地址 <span class="text-danger">*</span></label>
                 <input type="text" name="address" class="form-control" required />
               </div>
               <div class="col-md-6 mt-3">
-                <label class="form-label">操行成績分數 (0-100)</label>
+                <label class="form-label">操行成績分數 (0-100) <span class="text-danger">*</span></label>
                 <input type="number" name="conduct_score_numeric" class="form-control" min="0" max="100" required>
               </div>
               <div class="col-md-6 mt-3">
-                <label for="photo" class="form-label">個人大頭照 (JPG/PNG)</label>
+                <label for="photo" class="form-label">個人大頭照 (JPG/PNG) <span class="text-danger">*</span></label>
                 <div class="image-preview-box" id="photoPreviewBox">
                   <span class="placeholder-text">選擇或上傳後顯示預覽</span>
                 </div>
-                <input class="form-control mt-2" type="file" id="photo" name="photo" accept="image/*" />
+                <input class="form-control mt-2" type="file" id="photo" name="photo" accept="image/*" required />
               </div>
             </div>
 
@@ -622,16 +629,16 @@
             <div class="mb-4"></div>
 
             <div class="card p-4 mb-3">
-              <h5 class="mb-3">自傳</h5>
+              <h5 class="mb-3">自傳 <span class="text-danger">*</span></h5>
               <textarea name="autobiography" rows="6" class="form-control" placeholder="請描述家庭生活、求學經過、個人專長、未來規劃等..."
                 required></textarea>
             </div>
 
             <div class="card p-4 mb-3">
-              <h5 class="text-secondary">成績單上傳</h5>
+              <h5 class="text-secondary">成績單上傳 <span class="text-danger">*</span></h5>
               <div class="row g-3">
                 <div class="col-12">
-                  <label class="form-label">上傳學期成績單 (JPG/PNG)</label>
+                  <label class="form-label">上傳學期成績單 (JPG/PNG) <span class="text-danger">*</span></label>
                   <div class="image-preview-box" id="transcriptPreviewBox">
                     <span class="placeholder-text">選擇或上傳後顯示預覽</span>
                   </div>
@@ -2694,6 +2701,13 @@
 
         const birthDateInput = form.querySelector('input[name="birth_date"]');
         if (birthDateInput) {
+          const today = new Date();
+          const maxBirth = new Date(today);
+          maxBirth.setFullYear(maxBirth.getFullYear() - 15);
+          birthDateInput.setAttribute('max', maxBirth.toISOString().split('T')[0]);
+          const minBirth = new Date(today);
+          minBirth.setFullYear(minBirth.getFullYear() - 50);
+          birthDateInput.setAttribute('min', minBirth.toISOString().split('T')[0]);
           const formattedDate = formatDateForInput(studentInfo.birth_date);
           birthDateInput.value = formattedDate;
           console.log('✅ 出生日期:', studentInfo.birth_date, '→', formattedDate);
@@ -3585,6 +3599,43 @@
     }
     // 🧩 頁面載入時初始化
     document.addEventListener('DOMContentLoaded', function () {
+      // 出生日期：僅能選擇過去，不可選今天或未來；且須為就讀高中年級可有的出生日期（至少 15 歲）
+      const birthDateInput = document.getElementById('birth_date_input');
+      if (birthDateInput) {
+        const today = new Date();
+        const maxBirth = new Date(today);
+        maxBirth.setFullYear(maxBirth.getFullYear() - 15);
+        birthDateInput.setAttribute('max', maxBirth.toISOString().split('T')[0]);
+        const minBirth = new Date(today);
+        minBirth.setFullYear(minBirth.getFullYear() - 50);
+        birthDateInput.setAttribute('min', minBirth.toISOString().split('T')[0]);
+      }
+      // 電話格式：失焦時檢查，格式不符則跳出提示
+      const phoneInput = document.getElementById('phone_input') || document.querySelector('input[name="phone"]');
+      if (phoneInput) {
+        phoneInput.addEventListener('blur', function () {
+          const v = (this.value || '').trim();
+          if (!v) {
+            this.classList.remove('is-invalid');
+            this.setCustomValidity('');
+            return;
+          }
+          const digitsOnly = v.replace(/\D/g, '');
+          if (digitsOnly.length < 9 || digitsOnly.length > 10 || digitsOnly[0] !== '0') {
+            this.classList.add('is-invalid');
+            this.setCustomValidity('請輸入有效的電話號碼（9～10 碼，開頭為 0，例如：0912345678）。');
+            Swal.fire({
+              icon: 'warning',
+              title: '電話格式不正確',
+              text: '請輸入 9～10 碼有效電話，開頭為 0（例如：0912345678 或 02-12345678）。',
+              confirmButtonText: '我知道了'
+            });
+          } else {
+            this.classList.remove('is-invalid');
+            this.setCustomValidity('');
+          }
+        });
+      }
       // 載入學期列表
       loadSemesters();
 
@@ -4120,6 +4171,54 @@
     // 🧩 表單送出 (提交成功後清除 LocalStorage 並切換頁籤)
     document.getElementById("resumeForm").addEventListener("submit", async e => {
       e.preventDefault();
+
+      // 出生日期：不可選今天或未來，且須至少 15 歲（就讀高中年級可有的出生日期）
+      const birthDateEl = document.getElementById('birth_date_input') || document.querySelector('input[name="birth_date"]');
+      if (birthDateEl && birthDateEl.value) {
+        const today = new Date();
+        const todayStr = today.toISOString().split('T')[0];
+        const maxBirth = new Date(today);
+        maxBirth.setFullYear(maxBirth.getFullYear() - 15);
+        const maxBirthStr = maxBirth.toISOString().split('T')[0];
+        if (birthDateEl.value >= todayStr) {
+          birthDateEl.setCustomValidity('請選擇過去的日期，不可選擇今天或未來。');
+          birthDateEl.reportValidity();
+          return;
+        }
+        if (birthDateEl.value > maxBirthStr) {
+          birthDateEl.setCustomValidity('請選擇就讀高中年級可有的出生日期（至少 15 歲）。');
+          birthDateEl.reportValidity();
+          return;
+        }
+        birthDateEl.setCustomValidity('');
+      }
+
+      // 電話：9～10 碼、開頭為 0，可含一個連字號
+      const phoneEl = document.getElementById('phone_input') || document.querySelector('input[name="phone"]');
+      if (phoneEl) {
+        const trimmed = (phoneEl.value || '').trim();
+        if (trimmed) {
+          const digitsOnly = trimmed.replace(/\D/g, '');
+          if (digitsOnly.length < 9 || digitsOnly.length > 10 || digitsOnly[0] !== '0') {
+            phoneEl.setCustomValidity('請輸入有效的電話號碼（9～10 碼，開頭為 0，例如：0912345678）。');
+            phoneEl.reportValidity();
+            phoneEl.classList.add('is-invalid');
+            phoneEl.focus();
+            Swal.fire({
+              icon: 'warning',
+              title: '電話格式不正確',
+              text: '請輸入 9～10 碼有效電話，開頭為 0（例如：0912345678 或 02-12345678）。',
+              confirmButtonText: '我知道了'
+            });
+            return;
+          }
+          phoneEl.setCustomValidity('');
+          phoneEl.classList.remove('is-invalid');
+          if (phoneEl.value !== digitsOnly) {
+            phoneEl.value = digitsOnly;
+          }
+        }
+      }
 
       const submitBtn = e.submitter;
       const originalText = submitBtn.textContent;

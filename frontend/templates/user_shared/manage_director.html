@@ -1939,6 +1939,9 @@
         </button>
       </div>
     </div>
+    <div id="directorReadOnlyBanner" class="alert alert-info mb-3" style="display: none;" role="alert">
+      <i class="fas fa-eye"></i> 目前為實習學期，僅可檢視紀錄，無法進行送出或指派學生等操作。
+    </div>
 
     <!-- 媒合結果載入狀態（框架一直存在） -->
     <div id="loadingState" class="loading" style="display: none;">
@@ -2053,6 +2056,7 @@
   <script>
     let allCompaniesData = [];
     let vendorOriginalCompaniesData = [];  // 廠商原始排序（唯讀對照用），載入時深拷貝
+    let directorReadOnly = false;  // 實習學期（如 1132）時主任僅可檢視，不可送出／指派
     let duplicateStudents = [];
     let duplicateStudentsPreferences = {};  // 儲存重複學生的完整志願序 {studentId: [{preference_order, company_id, job_id, ...}]}
     let currentCompanyIndex = 0;  // 當前顯示的廠商索引（單公司切換模式）
@@ -2225,11 +2229,18 @@
         if (data.success) {
           allCompaniesData = data.companies || [];  // 主任排序結果（已過濾重複學生）
           vendorOriginalCompaniesData = data.vendor_companies || data.companies || [];  // 廠商原始排序（不過濾，保持原樣）
+          directorReadOnly = data.director_read_only === true;  // 實習學期時僅可檢視
           duplicateStudents = data.duplicate_students || [];
           currentCompanyIndex = 0;
           expandedJobId = null;
           directorPage = 1;
-          
+          // 實習學期時隱藏「送出最終媒合結果」並顯示唯讀提示
+          const confirmBtn = document.getElementById('confirmBtn');
+          if (confirmBtn) confirmBtn.style.display = directorReadOnly ? 'none' : '';
+          const readOnlyBanner = document.getElementById('directorReadOnlyBanner');
+          if (readOnlyBanner) {
+            readOnlyBanner.style.display = directorReadOnly ? 'block' : 'none';
+          }
           if (allCompaniesData.length > 0) {
             console.log('📋 公司資料範例:', allCompaniesData[0]);
             const totalJobs = allCompaniesData.reduce((sum, company) => sum + (company.jobs ? company.jobs.length : 0), 0);
@@ -2794,12 +2805,12 @@
             ? `<span class="badge badge-reserve" style="margin-left: 8px;">備取${reserveInfo.reserveOrder}</span>`
             : '';
           
-          // 如果學生已在媒合結果中（正取），添加 matched class 並禁用拖放
-          // 備取學生不應該被視為已錄取，所以他們仍然可以拖放和選取
+          // 如果學生已在媒合結果中（正取），或實習學期唯讀，添加 matched class／禁用拖放
           const matchedClass = isMatched ? 'matched' : '';
-          const draggableAttr = isMatched ? 'draggable="false"' : 'draggable="true"';
-          const dragStartHandler = isMatched ? '' : 'ondragstart="handleDragStart(event)"';
-          const dragEndHandler = isMatched ? '' : 'ondragend="handleDragEnd(event)"';
+          const noDrag = isMatched || directorReadOnly;
+          const draggableAttr = noDrag ? 'draggable="false"' : 'draggable="true"';
+          const dragStartHandler = noDrag ? '' : 'ondragstart="handleDragStart(event)"';
+          const dragEndHandler = noDrag ? '' : 'ondragend="handleDragEnd(event)"';
           const titleText = isMatched 
             ? '此學生已在媒合結果中（正取）' 
             : (isReserve 
@@ -3248,7 +3259,7 @@
                       </div>
                     </div>
                   </div>
-                  <div class="student-actions">
+                  ${directorReadOnly ? '' : `<div class="student-actions">
                     <button class="btn btn-sm" onclick="movePosition('${String(student.id || student.match_id || '')}', ${job.job_id}, 'up')" 
                             style="background: #f3f4f6; color: #374151; padding: 4px 8px; margin-right: 4px;"
                             title="向上移動">
@@ -3262,7 +3273,7 @@
                     <button class="btn btn-danger" onclick="removeStudent('${String(student.id || student.match_id || '')}', '${escapeHtml(student.student_name)}')">
                       <i class="fas fa-times"></i> 移除
                     </button>
-                  </div>
+                  </div>`}
                 </div>
               `;
           };
@@ -3275,19 +3286,14 @@
             if (student) {
               return renderRegularCard(student, slotIndex);
             } else {
-              // 該位置沒有學生，渲染空位
+              // 該位置沒有學生，渲染空位（實習學期唯讀時不提供點擊／拖放）
+              const slotAttrs = directorReadOnly
+                ? `data-company-id="${company.company_id}" data-job-id="${job.job_id}" data-type="regular" data-slot-index="${slotIndex}"`
+                : `data-company-id="${company.company_id}" data-job-id="${job.job_id}" data-type="regular" data-slot-index="${slotIndex}" onclick="selectStudentForSlot(${company.company_id}, ${job.job_id}, ${slotIndex})" ondrop="handleDrop(event)" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)"`;
               return `
-                <div class="empty-slot" 
-                     data-company-id="${company.company_id}"
-                     data-job-id="${job.job_id}"
-                     data-type="regular"
-                     data-slot-index="${slotIndex}"
-                     onclick="selectStudentForSlot(${company.company_id}, ${job.job_id}, ${slotIndex})"
-                     ondrop="handleDrop(event)"
-                     ondragover="handleDragOver(event)"
-                     ondragleave="handleDragLeave(event)">
+                <div class="empty-slot" ${slotAttrs}>
                   <i class="fas fa-plus-circle"></i>
-                  <div>正取 ${slotIndex}（點擊或拖放學生至此）</div>
+                  <div>正取 ${slotIndex}${directorReadOnly ? '' : '（點擊或拖放學生至此）'}</div>
                 </div>
               `;
             }
@@ -3307,11 +3313,11 @@
                     </div>
                     <div class="student-details"></div>
                   </div>
-                  <div class="student-actions">
+                  ${directorReadOnly ? '' : `<div class="student-actions">
                     <button class="btn btn-danger" onclick="removeStudent('${String(student.id || student.match_id || '')}', '${escapeHtml(student.student_name)}')">
                       <i class="fas fa-times"></i> 移除
                     </button>
-                  </div>
+                  </div>`}
                 </div>`;
           }).join('');
           
@@ -3321,13 +3327,11 @@
           const isJobExpanded = expandedJobId === job.job_id;
           const jobSectionClass = isJobExpanded ? 'job-section-expanded' : 'job-section-collapsed';
 
+          const jobDropAttrs = directorReadOnly ? '' : ' ondrop="handleDrop(event)" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)"';
           return `
             <div class="job-section ${jobSectionClass}" 
                  data-company-id="${company.company_id}"
-                 data-job-id="${job.job_id}"
-                 ondrop="handleDrop(event)"
-                 ondragover="handleDragOver(event)"
-                 ondragleave="handleDragLeave(event)">
+                 data-job-id="${job.job_id}"${jobDropAttrs}>
               <div class="job-title" onclick="toggleJob(${job.job_id})" role="button">
                 <div style="display: flex; align-items: center; justify-content: space-between;">
                   <span>${job.job_title || '未指定職缺'}</span>
@@ -3341,10 +3345,7 @@
               <div class="regular-list"
                    data-company-id="${company.company_id}"
                    data-job-id="${job.job_id}"
-                   data-type="regular"
-                   ondrop="handleDrop(event)"
-                   ondragover="handleDragOver(event)"
-                   ondragleave="handleDragLeave(event)">
+                   data-type="regular"${directorReadOnly ? '' : ' ondrop="handleDrop(event)" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)"'}>
                 <div class="list-label">正取名單</div>
                 ${regularSlotsHtml}
                 ${invalidRetainedHtml}
@@ -3602,7 +3603,7 @@
               </div>
             </div>
             <div class="student-actions">
-              ${type === 'regular' ? `
+              ${!directorReadOnly ? `${type === 'regular' ? `
                 <button class="btn btn-sm" onclick="movePosition('${String(student.id || student.match_id || '')}', ${job.job_id}, 'up')" 
                         style="background: #f3f4f6; color: #374151; padding: 4px 8px; margin-right: 4px;"
                         title="向上移動">
@@ -3621,7 +3622,7 @@
                 <button class="btn btn-success" onclick="promoteToRegular('${String(student.id || student.match_id || '')}', ${job.job_id})">
                   <i class="fas fa-arrow-up"></i> 提升為正取
                 </button>
-              ` : ''}
+              ` : ''}` : ''}
             </div>
           </div>
         `;

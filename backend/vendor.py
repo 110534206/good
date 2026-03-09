@@ -5925,7 +5925,7 @@ def director_intern_status():
                     AND (cfg.user_id = u.id OR (cfg.user_id IS NULL AND cfg.admission_year = c.admission_year))
                 )
                 ORDER BY c.name, u.username
-            """, (current_semester_id, current_semester_id, current_semester_id))
+            """, (current_semester_id, current_semester_id))
         except Exception as sem_err:
             if "semester_id" in str(sem_err) or "Unknown column" in str(sem_err) or "internship_configs" in str(sem_err):
                 cursor.execute("""
