@@ -2210,7 +2210,6 @@ def director_matching_results():
                 (ra.is_reserve = 0 AND ra.slot_index IS NOT NULL)  -- 正取學生：is_reserve=0且slot_index有值
                 OR (ra.is_reserve = 1)  -- 候補學生：is_reserve=1
             )  -- 必須已完成媒合排序
-            AND (md.director_decision IS NULL OR md.director_decision != 'Rejected')  -- 排除已被主任移除的記錄（如果 manage_director 中有記錄且是 Rejected，則不顯示）
             AND (ic.status = 'approved' OR ic.status IS NULL)  -- 公司狀態必須是已審核（如果公司不存在則也顯示）
             ORDER BY 
                 CASE COALESCE(md.director_decision, 'Pending')
@@ -2547,7 +2546,7 @@ def director_matching_results():
         # 不需要等待第一志願完成媒合排序，只要廠商有做媒合排序並選擇了該學生，就應該顯示
         # 邏輯已在上面完成：優先考慮志願序，如果志願序相同則優先選擇有媒合排序的記錄
         
-        # 先建立廠商原始排序的資料（不過濾重複學生，保持原樣）
+        # 先建立廠商原始排序的資料（不過濾重複學生，保持原樣；不受 director_decision 影響）
         # 使用集合追蹤已添加的學生，確保同一學生在同一公司/職缺只出現一次
         added_students_vendor = {}  # key: (company_id, job_id, student_id)
         companies_data_vendor = {}
@@ -2578,7 +2577,7 @@ def director_matching_results():
                     "reserves": []
                 }
         
-        # 將所有媒合結果分配到廠商原始排序（不過濾）
+        # 將所有媒合結果分配到廠商原始排序（不過濾 director_decision，保持廠商原始狀態）
         for result in formatted_results:
             company_id = result["company_id"]
             job_id = result.get("job_id") or 0
@@ -2616,6 +2615,9 @@ def director_matching_results():
         # 過濾 formatted_results：重複中選的學生只保留志願序最高的記錄（主任排序結果）
         filtered_results = []
         for result in formatted_results:
+            # 主任已「移除」(Rejected) 的記錄，不應再出現在主任排序結果中
+            if result.get("director_decision") == "Rejected":
+                continue
             student_id = result.get("student_id")
             if student_id in duplicate_students:
                 # 只保留志願序最高的記錄

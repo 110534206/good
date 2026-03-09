@@ -1803,6 +1803,10 @@
       border-left: 4px solid var(--color-primary);
       font-weight: 600;
     }
+    .company-list-panel .company-list-item.empty-company {
+      background: #fef9c3;
+      color: #854d0e;
+    }
     .job-match-panel {
       flex: 1;
       min-width: 0;
@@ -2119,9 +2123,33 @@
       const cardsEl = document.getElementById('unsortedCompaniesCards');
       const browseBtn = document.getElementById('unsortedBrowseBtn');
       if (!cardsEl) return;
-      const unsetCount = unsortedCompaniesData.length;
-      const sortedCount = (allCompaniesData && allCompaniesData.length) ? getCompaniesWithCompletedSorting(allCompaniesData).length : 0;
-      const totalCount = sortedCount + unsetCount;
+      
+      // 已填寫：有廠商「實際排過學生」的公司
+      const vendorList = vendorOriginalCompaniesData || [];
+      const vendorIdSet = new Set();
+      vendorList.forEach(c => {
+        const jobs = c.jobs || [];
+        const hasAnyStudent = jobs.some(job => {
+          const regulars = job.regulars || [];
+          const reserves = job.reserves || [];
+          return regulars.length > 0 || reserves.length > 0;
+        });
+        if (hasAnyStudent) {
+          vendorIdSet.add(String(c.company_id));
+        }
+      });
+      const sortedCount = vendorIdSet.size;
+
+      // 未填寫：後端回傳的尚未排序廠商（unsortedCompaniesData 中的唯一公司數）
+      const unsortedList = unsortedCompaniesData || [];
+      const unsortedIdSet = new Set(unsortedList.map(c => String(c.company_id)));
+
+      // 共有：兩者聯集（避免同一公司被算兩次）
+      const allIds = new Set([...vendorIdSet, ...unsortedIdSet]);
+      const totalCount = allIds.size;
+
+      // 未填寫 = 共有 − 已填寫（若有重疊，也不會被重複計算）
+      const unsetCount = Math.max(0, totalCount - sortedCount);
       if (totalCount === 0 && unsetCount === 0) {
         cardsEl.innerHTML = '';
         if (browseBtn) { browseBtn.classList.add('hidden'); browseBtn.style.display = 'none'; }
@@ -3051,22 +3079,32 @@
       if (nextBtn) nextBtn.disabled = currentCompanyIndex >= list.length - 1;
     }
 
-    // 過濾公司數據
+    // 過濾公司數據：只顯示「廠商有送出媒合排序」的公司
     function filterCompanies() {
-      return getFilteredCompanies(getCompaniesWithCompletedSorting(allCompaniesData));
+      return getFilteredCompanies(getCompaniesWithCompletedSorting(allCompaniesData || []));
     }
 
-    // 只保留「有排序完成」的公司（至少一個職缺有正取或備取學生）
+    // 只保留「有廠商排序資料」的公司
+    // 判斷依據：在 vendorOriginalCompaniesData 中，
+    // 至少一個職缺的 regulars/reserves 有學生（代表廠商真的有排過人）
+    // 即使主任把學生全部移除（正取／備取為 0），vendorOriginalCompaniesData 仍保留原始排序，
+    // 所以這家公司會被視為「已填寫」並出現在上方列表。
     function getCompaniesWithCompletedSorting(source) {
       const data = source || [];
-      return data.filter(company => {
-        const jobs = company.jobs || [];
-        return jobs.some(job => {
+      const vendorList = vendorOriginalCompaniesData || [];
+      const vendorIdSet = new Set();
+      vendorList.forEach(c => {
+        const jobs = c.jobs || [];
+        const hasAnyStudent = jobs.some(job => {
           const regulars = job.regulars || [];
           const reserves = job.reserves || [];
           return regulars.length > 0 || reserves.length > 0;
         });
+        if (hasAnyStudent) {
+          vendorIdSet.add(String(c.company_id));
+        }
       });
+      return data.filter(company => vendorIdSet.has(String(company.company_id)));
     }
 
     function getFilteredCompanies(source) {
@@ -3408,9 +3446,16 @@
           </div>
         `;
       })(company);
-      const leftListHtml = companiesToRender.map((c, i) =>
-        `<div class="company-list-item ${i === currentCompanyIndex ? 'active' : ''}" onclick="selectCompanyByIndex(${i})" role="button">${escapeHtml(c.company_name || '')}</div>`
-      ).join('');
+
+      const leftListHtml = companiesToRender.map((c, i) => {
+        const hasAnyStudent = (c.jobs || []).some(job => {
+          const regulars = job.regulars || [];
+          const reserves = job.reserves || [];
+          return regulars.length > 0 || reserves.length > 0;
+        });
+        const extraClass = hasAnyStudent ? '' : 'empty-company';
+        return `<div class="company-list-item ${extraClass} ${i === currentCompanyIndex ? 'active' : ''}" onclick="selectCompanyByIndex(${i})" role="button">${escapeHtml(c.company_name || '')}</div>`;
+      }).join('');
       container.innerHTML = `
         <div class="two-col-layout">
           <div class="company-list-panel" id="directorCompanyList">${leftListHtml}</div>
