@@ -3376,26 +3376,12 @@
         // 即使沒有職缺，也顯示廠商框架
         const jobsContent = jobsHtml || '<div class="job-section"><div style="padding: 20px; text-align: center; color: var(--color-muted);">目前沒有職缺</div></div>';
         
-        // 檢查公司是否有正取名單（任何職缺有正取學生）
-        const hasRegulars = jobs.some(job => job.regulars && job.regulars.length > 0);
-        
-        // 檢查公司是否所有職缺都已滿（正取滿且備取有學生）
-        const isCompanyFull = jobs.length > 0 && jobs.every(job => {
-          const key = `${company.company_id}_${job.job_id}`;
-          const maxSlots = jobSlotsMap[key] || job.job_slots || 1;
-          const filledSlots = (job.regulars || []).length;
-          const hasReserves = (job.reserves || []).length > 0;
-          // 正取名額已滿 且 備取名單有學生
-          return filledSlots >= maxSlots && hasReserves;
-        });
-        
         // 單公司模式：公司卡片一律展開，收合僅在職缺層級
         const companyCardId = `company-card-${company.company_id}`;
         const collapsedClass = '';
-        const fullClass = isCompanyFull ? 'full' : '';
         
         return `
-          <div class="company-card ${collapsedClass} ${fullClass}" 
+          <div class="company-card ${collapsedClass}" 
                id="${companyCardId}"
                data-company-id="${company.company_id}"
                ondrop="handleDrop(event)"
