@@ -211,6 +211,7 @@
           </tbody>
         </table>
       </div>
+      <nav><ul class="pagination justify-content-center mt-3" id="pagination"></ul></nav>
     </section>
   </main>
 
@@ -249,6 +250,8 @@
     let allResumes = [];
     let currentResumeId = null;
     let currentPreferenceId = null; 
+    let currentPage = 1;
+    const rowsPerPage = 10;
     let userRole = null;
     let isHomeroom = false;
     let currentUserId = null;
@@ -296,11 +299,14 @@
           Promise.all([
             fetch(apiUrl).then(res => res.ok ? res.json() : {success:false}),
             fetch('/api/get_reviewed_companies').then(res => res.ok ? res.json() : {success:true, companies:[]}),
-            targetCompanyId ? fetch(`/api/public/company/${targetCompanyId}`).then(async res => {
-               if(!res.ok) return {success:true, items:[]};
-               const r = await res.json();
-               return {success:true, items: (r.jobs||[]).map(j=>({id:j.id, title:j.title}))};
-            }) : fetch('/api/public/positions').then(res => res.ok ? res.json() : {success:true, items:[]})
+            // 職缺資料：班導只需要顯示公司與職缺名稱，沒有必要呼叫公開職缺 API 以避免 403
+            targetCompanyId
+              ? fetch(`/api/public/company/${targetCompanyId}`).then(async res => {
+                  if(!res.ok) return {success:true, items:[]};
+                  const r = await res.json();
+                  return {success:true, items: (r.jobs||[]).map(j=>({id:j.id, title:j.title}))};
+                })
+              : Promise.resolve({success:true, items:[]})
           ]).then(([resumeResponse, companyData, positionData]) => {
             if (resumeResponse.success) {
               // 處理履歷數據和截止時間信息（與 review_resume.html 一致）
@@ -537,7 +543,10 @@
       });
     }
 
-    function applyFilters() {
+    function applyFilters(resetPage = true) {
+      if (resetPage) {
+        currentPage = 1;
+      }
       const dept = document.getElementById("departmentFilter").value.trim();
       const cls = document.getElementById("classFilter").value.trim();
       const companyName = document.getElementById("companyNameFilter").value.trim();
@@ -598,6 +607,8 @@
       if (resumes.length === 0) {
         const colspan = isViewOnlyMode ? 9 : 10;
         tbody.innerHTML = `<tr><td colspan="${colspan}" style="text-align: center; color: #64748b; padding: 16px;">目前沒有資料</td></tr>`;
+        const pagination = document.getElementById("pagination");
+        if (pagination) pagination.innerHTML = "";
         return;
       } 
 
@@ -650,7 +661,11 @@
         });
       });
 
-      allRowsData.forEach(row => {
+      const start = (currentPage - 1) * rowsPerPage;
+      const end = start + rowsPerPage;
+      const pageData = allRowsData.slice(start, end);
+
+      pageData.forEach(row => {
         const pid = row.preference_id || null;
         
         // 渲染每一行，statusColor(row.display_status) 會決定背景色，mapStatus 決定文字
@@ -680,6 +695,8 @@
         `;
         tbody.appendChild(tr);
       });
+
+      renderPagination(allRowsData.length);
     }
 
     function renderCommentBtn(row, isViewOnly, pid) {
@@ -719,6 +736,25 @@
         btns += rejectBtn;
         btns += `</div>`;
         return btns;
+    }
+
+    function renderPagination(totalItems) {
+      const totalPages = Math.ceil(totalItems / rowsPerPage);
+      const pagination = document.getElementById("pagination");
+      if (!pagination) return;
+      pagination.innerHTML = "";
+      if (totalPages <= 1) return;
+      for (let i = 1; i <= totalPages; i++) {
+        const li = document.createElement("li");
+        li.className = `page-item ${i === currentPage ? "active" : ""}`;
+        li.innerHTML = `<a class="page-link" href="#">${i}</a>`;
+        li.onclick = (e) => {
+          e.preventDefault();
+          currentPage = i;
+          applyFilters(false);
+        };
+        pagination.appendChild(li);
+      }
     }
 
     // 更新狀態函式
