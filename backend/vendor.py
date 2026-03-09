@@ -4740,7 +4740,7 @@ def get_withdraw_intern_list():
             SELECT io.student_id,
                    u.name AS student_name, u.username AS student_number,
                    ic.company_name, ij.title AS job_title,
-                   CASE WHEN ir.student_id IS NOT NULL THEN 'withdrawing' ELSE COALESCE(io.status, '') END AS status
+                   CASE WHEN ir.student_id IS NOT NULL THEN COALESCE(ir.status, 'withdrawing') ELSE COALESCE(io.status, '') END AS status
             FROM internship_offers io
             JOIN users u ON u.id = io.student_id
             JOIN internship_jobs ij ON ij.id = io.job_id
@@ -5085,6 +5085,43 @@ def _teacher_can_access_withdraw_case(cursor, case_id, teacher_id):
                 row["teacher_meeting_notes"] = (row.get("teacher_reason") or row.get("teacher_meeting_notes") or "").strip()
             return row
         except Exception:
+            row = None
+            try:
+                cursor.execute("""
+                    SELECT CONCAT(ir.semester_id, '_', ir.vendor_id, '_', ir.company_id, '_', ir.student_id) AS id,
+                           ir.semester_id, ir.vendor_id, ir.company_id, ir.student_id,
+                           ir.reason_category, ir.reason_detail, ir.status, ir.created_at,
+                           ir.teacher_reason,
+                           ic.company_name, ic.advisor_user_id
+                    FROM internship_records ir
+                    JOIN internship_companies ic ON ic.id = ir.company_id
+                    WHERE ir.semester_id = %s AND ir.vendor_id = %s AND ir.company_id = %s AND ir.student_id = %s
+                      AND ic.advisor_user_id = %s
+                """, (semester_id, vendor_id, company_id, student_id, teacher_id))
+                row = cursor.fetchone()
+                if row:
+                    row["teacher_meeting_notes"] = (row.get("teacher_reason") or "").strip()
+                return row
+            except Exception:
+                pass
+            try:
+                cursor.execute("""
+                    SELECT CONCAT(ir.semester_id, '_', ir.vendor_id, '_', ir.company_id, '_', ir.student_id) AS id,
+                           ir.semester_id, ir.vendor_id, ir.company_id, ir.student_id,
+                           ir.reason_category, ir.reason_detail, ir.status, ir.created_at,
+                           ir.teacher_meeting_notes,
+                           ic.company_name, ic.advisor_user_id
+                    FROM internship_records ir
+                    JOIN internship_companies ic ON ic.id = ir.company_id
+                    WHERE ir.semester_id = %s AND ir.vendor_id = %s AND ir.company_id = %s AND ir.student_id = %s
+                      AND ic.advisor_user_id = %s
+                """, (semester_id, vendor_id, company_id, student_id, teacher_id))
+                row = cursor.fetchone()
+                if row:
+                    row["teacher_meeting_notes"] = (row.get("teacher_meeting_notes") or "").strip()
+                return row
+            except Exception:
+                pass
             cursor.execute("""
                 SELECT CONCAT(ir.semester_id, '_', ir.vendor_id, '_', ir.company_id, '_', ir.student_id) AS id,
                        ir.semester_id, ir.vendor_id, ir.company_id, ir.student_id,
@@ -5115,6 +5152,38 @@ def _teacher_can_access_withdraw_case(cursor, case_id, teacher_id):
         return row
     except Exception as e:
         if "teacher_reason" in str(e) or "teacher_meeting_notes" in str(e) or "Unknown column" in str(e):
+            try:
+                cursor.execute("""
+                    SELECT ir.id, ir.semester_id, ir.vendor_id, ir.company_id, ir.student_id,
+                           ir.reason_category, ir.reason_detail, ir.status, ir.created_at,
+                           ir.teacher_reason,
+                           ic.company_name, ic.advisor_user_id
+                    FROM internship_records ir
+                    JOIN internship_companies ic ON ic.id = ir.company_id
+                    WHERE ir.id = %s AND ic.advisor_user_id = %s
+                """, (int(case_id), teacher_id))
+                row = cursor.fetchone()
+                if row:
+                    row["teacher_meeting_notes"] = (row.get("teacher_reason") or "").strip()
+                return row
+            except Exception:
+                pass
+            try:
+                cursor.execute("""
+                    SELECT ir.id, ir.semester_id, ir.vendor_id, ir.company_id, ir.student_id,
+                           ir.reason_category, ir.reason_detail, ir.status, ir.created_at,
+                           ir.teacher_meeting_notes,
+                           ic.company_name, ic.advisor_user_id
+                    FROM internship_records ir
+                    JOIN internship_companies ic ON ic.id = ir.company_id
+                    WHERE ir.id = %s AND ic.advisor_user_id = %s
+                """, (int(case_id), teacher_id))
+                row = cursor.fetchone()
+                if row:
+                    row["teacher_meeting_notes"] = (row.get("teacher_meeting_notes") or "").strip()
+                return row
+            except Exception:
+                pass
             cursor.execute("""
                 SELECT ir.id, ir.semester_id, ir.vendor_id, ir.company_id, ir.student_id,
                        ir.reason_category, ir.reason_detail, ir.status, ir.created_at,
